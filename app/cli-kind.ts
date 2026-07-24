@@ -22,6 +22,7 @@ import {
   formatZodError,
   inspirationAppEntrySchema,
   inspirationAppsSchema,
+  MERGE_POLICIES,
 } from "./server/schemas.js";
 import { isSupportingDocKey } from "./server/services/supporting-docs.js";
 
@@ -646,7 +647,7 @@ export function registerKindGetSet(
   const cmd = program.command(kind);
   if (kind === "project") {
     cmd.description(
-      "Project container — set workspace, trunk (default main), mergePolicy, supportingDocs, labels",
+      `Project container — set workspace, trunk (default main), mergePolicy (${MERGE_POLICIES.join("|")}), supportingDocs, labels`,
     );
   }
 

@@ -90,5 +90,10 @@ describe("projectMetaValue", () => {
     expect(projectMetaValue(project, "mergePolicy")).toEqual({
       text: "Pull request",
     });
+    expect(
+      projectMetaValue({ ...project, mergePolicy: "fast-forward" }, "mergePolicy"),
+    ).toEqual({
+      text: "Fast-forward",
+    });
   });
 });

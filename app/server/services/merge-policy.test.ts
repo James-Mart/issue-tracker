@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { MERGE_POLICIES } from "@server/schemas";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const AT = "2026-07-09T14:00:00.000Z";
@@ -67,7 +68,7 @@ describe("project mergePolicy", () => {
 
   it("round-trips each policy through update and read", async () => {
     const { update, read } = await loadService();
-    for (const policy of ["merge", "pull-request", "manual"] as const) {
+    for (const policy of MERGE_POLICIES) {
       await update("p", { mergePolicy: policy });
       const detail = read("p");
       expect(detail.kind).toBe("project");

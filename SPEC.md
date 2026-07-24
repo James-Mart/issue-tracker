@@ -147,9 +147,10 @@ it in another): keep it in one Story as multiple Tasks.
 
 Under `pull-request` / `manual` [merge policies](#project-merge-policy), each
 finished Story is planned as a PR against its derived `mergeBase` (after
-parent merge, usually the Project trunk). The local `merge` policy integrates each
-finished Story directly into that same derived `mergeBase` with no PR, so a
-stack still lands bottom-up but never touches a remote PR.
+parent merge, usually the Project trunk). The local `merge` and `fast-forward`
+policies integrate each finished Story directly into that same derived
+`mergeBase` with no PR, so a stack still lands bottom-up but never touches a
+remote PR.
 
 ### Derived terms
 
@@ -418,7 +419,7 @@ Project — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `workspace` | string? | absolute path to the local git checkout this Project covers; the cwd repo-touching agents run in (see [Project workspace](#project-workspace)) |
 | `trunk` | string | git ref root Stories fork from and unstacked Stories target for derived `mergeBase`; defaults `main` (see [Project trunk](#project-trunk)) |
-| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` | what integration steps `finish-branch` runs after pushing the Story branch; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
+| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"` | what integration steps `finish-branch` runs after pushing the Story branch; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
 | `supportingDocs` | `{ vision?, codingStandards?, designSystem? }`? | optional pointers to vision / coding standards / design system docs (see [Project supporting docs](#project-supporting-docs)) |
 
@@ -595,21 +596,32 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
   [stacked-PR merge model](#the-stacked-pr-merge-model)). When a parent lands,
   **GitHub retargets** open child PRs; the tracker only updates metadata —
   finish-branch never runs `gh pr edit --base` (or any PR retarget CLI).
+- **`fast-forward`** — after the push, fast-forward the derived `mergeBase` to
+  the Story's tip (`git merge --ff-only <branchName>`), push that ref, and set
+  `merged` via `issue story set <storyId> merged true` (same end state as
+  `merge`). Unlike `merge`, this lands the Story's commits directly on the base
+  with no merge commit. If the base has advanced so a fast-forward is
+  impossible, escalate (`needsAttention`) rather than force-merging — see
+  **Failure and recovery**. Ranks highest on the merge-policy danger order (Epic
+  **work-on-existing-branches**).
 
 **Resumable / idempotent.** The work loop is resumable, so finish-branch may run
 twice for the same Story. Before acting, the git subagent reads the Story's
 `prUrl` / `merged` (via `issue story get <storyId> prUrl` /
 `issue story get <storyId> merged`) and no-ops when the policy's end state
-already holds — `merged` set for `merge`, `prUrl` set for `pull-request` — so a
-re-run never opens a duplicate PR or re-merges. **`manual`** has no metadata
-end state; a re-run just re-pushes the Story branch (harmless).
+already holds — `merged` set for `merge` or `fast-forward`, `prUrl` set for
+`pull-request` — so a re-run never opens a duplicate PR or re-merges.
+**`manual`** has no metadata end state; a re-run just re-pushes the Story branch
+(harmless).
 
 **Failure and recovery.** On failure the git subagent raises attention on the
 Story (`issue story set <storyId> needsAttention true --reason "…"`) and
 stops. A `merge` conflict is aborted (`git merge --abort`) so the `mergeBase`
 ref is never left half-merged; but a *completed* local merge whose `push`
 failed is left in place — with `merged` still unset it is exactly the resumable
-state above, so the retry just re-pushes.
+state above, so the retry just re-pushes. A `fast-forward` that cannot proceed
+because the base advanced leaves the base untouched and escalates with a reason
+that rebase is needed — never partial state.
 
 ### Project labels
 
