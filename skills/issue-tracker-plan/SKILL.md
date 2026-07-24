@@ -76,8 +76,32 @@ Before grilling:
    only the summary blurb (`idea`, `epic`, or `story` from step 3).
 5. If the source is an **Epic** or **project-level Story**, also
    `issue tree <id>` so the existing subtree is in context before grilling.
+6. `issue project get <projectId> trunk` — default merge-base for the
+   mandatory first grill question (`<projectId>` from step 1).
 
 ## Grill-me protocol (inline)
+
+### Merge-base (mandatory first)
+
+Before any product or dependency questions, ask **one** merge-base question:
+
+which git ref the plan should be built on. Recommend the Project **trunk**
+from bootstrap step 6 via `(recommended)` in the answer list.
+
+- **Trunk** — proceed with the rest of the grill. Focused codebase research
+  uses the workspace working tree only (omit `Ref` in spawn stubs).
+- **Non-trunk branch** — two follow-ons before continuing the grill:
+  1. Ask **one** merge-policy question for the resulting root (Epic or
+     project-level Story). Recommend **`pull-request`** via `(recommended)`
+     in the answer list. Valid values: `pull-request`, `merge`, `manual`,
+     `fast-forward`
+     ([SPEC.md § Project merge policy](../../SPEC.md#project-merge-policy)).
+  2. For every **Focused codebase research** spawn during the rest of the
+     grill, pass the chosen branch as `Ref` so research reads at that ref
+     (see Spawn stubs).
+
+Carry the chosen merge-base and merge-policy (when non-trunk) through to
+outline and migrate — a sibling migrate step records them on the root.
 
 Interview the user relentlessly about every aspect of the plan until you reach
 a **shared understanding**. Walk down each branch of the design tree, resolving
@@ -179,7 +203,10 @@ workflow instructions here.
 (`model: composer-2.5`)
 
 > Research: `<focused question>`. Workspace: `<absolute workspace path>`.
-> Seed paths (if any): `<paths>`. Return a concise factual summary only.
+> Seed paths (if any): `<paths>`. Ref: `<git ref>` (optional). When set,
+> read files at that ref via `git show <ref>:<path>` / `git ls-tree <ref>`
+> only — no checkout, no mutation.
+> Return a concise factual summary only.
 
 **Retro** — `subagent_type: issue-tracker-retro`
 (`model: cursor-grok-4.5-high-fast`)
