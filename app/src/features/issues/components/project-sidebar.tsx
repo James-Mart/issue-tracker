@@ -91,6 +91,7 @@ export function ProjectSidebar() {
   );
 
   const isCockpit = pathname === "/";
+  const isAgents = pathname === "/agents" || pathname.startsWith("/agents/");
 
   return (
     <Sidebar collapsible="icon">
@@ -119,6 +120,12 @@ export function ProjectSidebar() {
                 isActive={isCockpit}
                 tooltip="Cockpit"
                 label="Cockpit"
+              />
+              <BusNavItem
+                to="/agents"
+                isActive={isAgents}
+                tooltip="Agents"
+                label="Agents"
               />
             </SidebarMenu>
 
