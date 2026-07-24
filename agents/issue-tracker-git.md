@@ -24,7 +24,7 @@ every `git`/`gh` with it as the working directory, and honor the unset
 escalation, per **SPEC § Project workspace**. **Never** probe or run git —
 including the first `git status` — in the ambient Cursor cwd.
 
-Summary is for ancestry, titles, and Project id only. Load git facts via kind
+Summary is for ancestry and titles only. Load git facts via kind
 get per **## Git facts** below — never from the spawn prompt, `issue tree`,
 `issue list`, or product-repo `issues/` trees.
 
@@ -43,11 +43,10 @@ or `branchName` in the prompt.
 |------|--------|----------------|
 | Workspace | `issue summary <id>` → `Workspace:` | all modes |
 | ancestry / titles | `issue summary <id>` | all modes |
-| Project id | `issue summary <id>` → `Project: <id> — …` | finish-branch |
 | Story `mergeBase` (derived on read) | `issue story get <storyId> mergeBase` | start-branch, finish-branch |
 | Story `branchName` | `issue story get <storyId> branchName` | finish-branch |
 | Story `prUrl` / `merged` | `issue story get <storyId> prUrl` / `merged` | finish-branch |
-| Project `mergePolicy` | `issue project get <projectId> mergePolicy` | finish-branch |
+| Story effective `mergePolicy` (derived on read) | `issue story get <storyId> mergePolicy` | finish-branch |
 | Task `noDiff` | `issue task get <taskId> noDiff` | finish-commit |
 
 Finish-branch idempotent end states: `merged` for `merge` and `fast-forward`;
