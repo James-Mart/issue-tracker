@@ -400,3 +400,198 @@ export function parseChatMessageInput(raw: unknown): ChatInputParseResult {
   if (result.success) return { ok: true, input: result.data };
   return { ok: false, message: formatZodError(result.error, "invalid issue.json") };
 }
+
+// --- Conversations (durable agent transcript store; peer of issues/) ---
+
+export const conversationMetaSchema = z.object({
+  id: nonEmpty,
+  title: nonEmpty,
+  projectId: nonEmpty,
+  agentId: nonEmpty.optional(),
+  model: nonEmpty,
+  createdAt: nonEmpty,
+  updatedAt: nonEmpty,
+});
+
+export type ConversationMeta = z.infer<typeof conversationMetaSchema>;
+
+const toolCallStatus = z.enum(["running", "completed", "error"]);
+
+/** Shared tool-call envelope fields (nested step + top-level event). */
+const toolCallFields = {
+  callId: nonEmpty,
+  name: z.string().optional(),
+  status: toolCallStatus,
+  args: z.unknown().optional(),
+  result: z.unknown().optional(),
+};
+
+const usageMetricsSchema = z.object({
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
+  reasoningTokens: z.number().optional(),
+});
+
+/**
+ * One step in a sub-agent nested thread. Shared by the persisted
+ * `subagent_update` event, the sub-agent view-model, and the UI. v1 stores a
+ * single nesting level; the union is the extension point for deeper levels
+ * later without renaming this type.
+ */
+export const nestedStepSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("text"),
+    text: z.string(),
+  }),
+  z.object({
+    kind: z.literal("thinking"),
+    text: z.string(),
+  }),
+  z.object({
+    kind: z.literal("tool_call"),
+    ...toolCallFields,
+  }),
+  z.object({
+    kind: z.literal("step"),
+    stepId: z.number().int(),
+    status: z.enum(["started", "completed"]),
+  }),
+]);
+
+export type NestedStep = z.infer<typeof nestedStepSchema>;
+
+// Write-time variants (no `at`). Stored schemas merge each with `{ at }`.
+const promptEventInput = z.object({
+  type: z.literal("prompt"),
+  text: z.string(),
+});
+const assistantEventInput = z.object({
+  type: z.literal("assistant"),
+  text: z.string(),
+});
+const thinkingEventInput = z.object({
+  type: z.literal("thinking"),
+  text: z.string(),
+});
+const toolCallEventInput = z.object({
+  type: z.literal("tool_call"),
+  ...toolCallFields,
+  // Optional post-completion hints from a Task/Agent tool_call.result.
+  resultAgentId: nonEmpty.optional(),
+  transcriptPath: nonEmpty.optional(),
+});
+const taskEventInput = z.object({
+  type: z.literal("task"),
+  status: z.string().optional(),
+  text: z.string().optional(),
+});
+const statusEventInput = z.object({
+  type: z.literal("status"),
+  status: z.string(),
+  message: z.string().optional(),
+});
+const usageEventInput = z.object({
+  type: z.literal("usage"),
+  usage: usageMetricsSchema,
+});
+const requestEventInput = z.object({
+  type: z.literal("request"),
+  requestId: nonEmpty,
+});
+const subagentUpdateEventInput = z.object({
+  type: z.literal("subagent_update"),
+  parentCallId: nonEmpty,
+  step: nestedStepSchema,
+});
+
+/** Write-time input: stored shape minus the server-stamped `at`. */
+export const transcriptEventInputSchema = z.discriminatedUnion("type", [
+  promptEventInput,
+  assistantEventInput,
+  thinkingEventInput,
+  toolCallEventInput,
+  taskEventInput,
+  statusEventInput,
+  usageEventInput,
+  requestEventInput,
+  subagentUpdateEventInput,
+]);
+
+export type TranscriptEventInput = z.infer<typeof transcriptEventInputSchema>;
+
+const withTranscriptAt = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
+  schema.merge(z.object({ at: nonEmpty }));
+
+export const transcriptEventSchema = z.discriminatedUnion("type", [
+  withTranscriptAt(promptEventInput),
+  withTranscriptAt(assistantEventInput),
+  withTranscriptAt(thinkingEventInput),
+  withTranscriptAt(toolCallEventInput),
+  withTranscriptAt(taskEventInput),
+  withTranscriptAt(statusEventInput),
+  withTranscriptAt(usageEventInput),
+  withTranscriptAt(requestEventInput),
+  withTranscriptAt(subagentUpdateEventInput),
+]);
+
+export type TranscriptEvent = z.infer<typeof transcriptEventSchema>;
+
+export type CreateConversationInput = {
+  title: string;
+  projectId: string;
+  model: string;
+  agentId?: string;
+};
+
+export type ConversationMetaPatch = Partial<
+  Pick<ConversationMeta, "title" | "agentId" | "model">
+>;
+
+export type ConversationDetail = {
+  meta: ConversationMeta;
+  transcript: TranscriptEvent[];
+};
+
+export type ConversationMetaParseResult =
+  | { ok: true; meta: ConversationMeta }
+  | { ok: false; message: string };
+
+export function parseConversationMeta(raw: unknown): ConversationMetaParseResult {
+  const result = conversationMetaSchema.safeParse(raw);
+  if (result.success) return { ok: true, meta: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid meta.json"),
+  };
+}
+
+export type TranscriptEventParseResult =
+  | { ok: true; event: TranscriptEvent }
+  | { ok: false; message: string };
+
+export function parseTranscriptEvent(raw: unknown): TranscriptEventParseResult {
+  const result = transcriptEventSchema.safeParse(raw);
+  if (result.success) return { ok: true, event: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid transcript event"),
+  };
+}
+
+export type TranscriptEventInputParseResult =
+  | { ok: true; input: TranscriptEventInput }
+  | { ok: false; message: string };
+
+export function parseTranscriptEventInput(
+  raw: unknown,
+): TranscriptEventInputParseResult {
+  const result = transcriptEventInputSchema.safeParse(raw);
+  if (result.success) return { ok: true, input: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid transcript event"),
+  };
+}

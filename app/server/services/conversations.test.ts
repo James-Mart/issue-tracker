@@ -1,0 +1,243 @@
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
+import { tmpdir } from "os";
+import { dirname, join } from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+let root: string;
+let issuesDir: string;
+
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), "issue-tracker-conversations-"));
+  issuesDir = join(root, "issues");
+  mkdirSync(issuesDir, { recursive: true });
+  vi.resetModules();
+  vi.stubEnv("ISSUES_DIR", issuesDir);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  rmSync(root, { recursive: true, force: true });
+});
+
+async function loadService() {
+  return import("./conversations.js");
+}
+
+async function loadConfig() {
+  return import("../config.js");
+}
+
+describe("conversations store", () => {
+  it("stores conversations as a peer of issues/, never under the issues service", async () => {
+    const { conversationsDir } = await loadConfig();
+    const { createConversation } = await loadService();
+
+    expect(conversationsDir).toBe(join(root, "conversations"));
+    expect(dirname(conversationsDir)).toBe(dirname(issuesDir));
+    expect(conversationsDir).not.toBe(issuesDir);
+
+    const meta = await createConversation({
+      title: "Hello World",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    expect(existsSync(join(conversationsDir, meta.id, "meta.json"))).toBe(true);
+    expect(existsSync(join(conversationsDir, meta.id, "transcript.jsonl"))).toBe(
+      true,
+    );
+    // Peer of issues/ — not nested inside the issues store.
+    expect(existsSync(join(issuesDir, meta.id))).toBe(false);
+    expect(readdirSync(issuesDir)).toEqual([]);
+  });
+
+  it("creates, appends, reads in order, updates meta, and deletes", async () => {
+    const { conversationsDir } = await loadConfig();
+    const {
+      createConversation,
+      appendEvent,
+      readConversation,
+      updateMeta,
+      listConversations,
+      deleteConversation,
+    } = await loadService();
+
+    const created = await createConversation({
+      title: "Explore auth",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    expect(created.id).toBe("explore-auth");
+    expect(created.projectId).toBe("platform");
+    expect(created.model).toBe("composer-2.5");
+    expect(created.agentId).toBeUndefined();
+    expect(Number.isNaN(Date.parse(created.createdAt))).toBe(false);
+
+    const prompt = await appendEvent(created.id, {
+      type: "prompt",
+      text: "How does login work?",
+    });
+    const assistant = await appendEvent(created.id, {
+      type: "assistant",
+      text: "Looking at the auth routes.",
+    });
+    const thinking = await appendEvent(created.id, {
+      type: "thinking",
+      text: "Check middleware next.",
+    });
+    const toolCall = await appendEvent(created.id, {
+      type: "tool_call",
+      callId: "call-1",
+      name: "read",
+      status: "completed",
+      args: { path: "auth.ts" },
+      result: { content: "export function login() {}" },
+    });
+    const subagent = await appendEvent(created.id, {
+      type: "subagent_update",
+      parentCallId: "call-task-1",
+      step: { kind: "text", text: "Nested note." },
+    });
+    const withHints = await appendEvent(created.id, {
+      type: "tool_call",
+      callId: "call-task-1",
+      name: "Task",
+      status: "completed",
+      resultAgentId: "bc-nested-1",
+      transcriptPath: "/tmp/agent-transcripts/bc-nested-1",
+    });
+
+    for (const event of [
+      prompt,
+      assistant,
+      thinking,
+      toolCall,
+      subagent,
+      withHints,
+    ]) {
+      expect(Number.isNaN(Date.parse(event.at))).toBe(false);
+    }
+
+    const detail = readConversation(created.id);
+    expect(detail.transcript.map((e) => e.type)).toEqual([
+      "prompt",
+      "assistant",
+      "thinking",
+      "tool_call",
+      "subagent_update",
+      "tool_call",
+    ]);
+    expect(detail.transcript[0]).toMatchObject({
+      type: "prompt",
+      text: "How does login work?",
+    });
+    expect(detail.transcript[3]).toMatchObject({
+      type: "tool_call",
+      callId: "call-1",
+      status: "completed",
+    });
+    expect(detail.transcript[4]).toMatchObject({
+      type: "subagent_update",
+      parentCallId: "call-task-1",
+      step: { kind: "text", text: "Nested note." },
+    });
+    expect(detail.transcript[5]).toMatchObject({
+      type: "tool_call",
+      resultAgentId: "bc-nested-1",
+      transcriptPath: "/tmp/agent-transcripts/bc-nested-1",
+    });
+
+    const raw = readFileSync(
+      join(conversationsDir, created.id, "transcript.jsonl"),
+      "utf8",
+    );
+    expect(raw.endsWith("\n")).toBe(true);
+    expect(raw.trim().split("\n")).toHaveLength(6);
+
+    const updated = await updateMeta(created.id, {
+      title: "Auth deep dive",
+      agentId: "agent-123",
+      model: "auto",
+    });
+    expect(updated.title).toBe("Auth deep dive");
+    expect(updated.agentId).toBe("agent-123");
+    expect(updated.model).toBe("auto");
+    expect(updated.updatedAt >= created.updatedAt).toBe(true);
+
+    const listed = listConversations();
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.id).toBe(created.id);
+    expect(listed[0]?.title).toBe("Auth deep dive");
+
+    await deleteConversation(created.id);
+    expect(existsSync(join(conversationsDir, created.id))).toBe(false);
+    expect(listConversations()).toEqual([]);
+  });
+
+  it("mints collision suffixes for duplicate titles", async () => {
+    const { createConversation } = await loadService();
+    const a = await createConversation({
+      title: "Notes",
+      projectId: "p",
+      model: "auto",
+    });
+    const b = await createConversation({
+      title: "Notes",
+      projectId: "p",
+      model: "auto",
+    });
+    expect(a.id).toBe("notes");
+    expect(b.id).toBe("notes-2");
+  });
+
+  it("skips malformed transcript lines on read", async () => {
+    const { conversationsDir } = await loadConfig();
+    const { createConversation, appendEvent, readConversation } =
+      await loadService();
+
+    const meta = await createConversation({
+      title: "Skip bad",
+      projectId: "p",
+      model: "auto",
+    });
+    await appendEvent(meta.id, { type: "prompt", text: "first" });
+    const path = join(conversationsDir, meta.id, "transcript.jsonl");
+    writeFileSync(
+      path,
+      [
+        JSON.stringify({ type: "prompt", text: "first", at: "2026-07-24T00:00:00.000Z" }),
+        "not-json",
+        JSON.stringify({ type: "assistant", text: "ok", at: "2026-07-24T00:00:01.000Z" }),
+        JSON.stringify({ type: "unknown", at: "2026-07-24T00:00:02.000Z" }),
+        "",
+      ].join("\n") + "\n",
+    );
+
+    const detail = readConversation(meta.id);
+    expect(detail.transcript.map((e) => e.type)).toEqual(["prompt", "assistant"]);
+  });
+
+  it("throws for unknown conversation ids", async () => {
+    const { readConversation, appendEvent, updateMeta, deleteConversation } =
+      await loadService();
+
+    expect(() => readConversation("ghost")).toThrow(/unknown conversation/);
+    await expect(
+      appendEvent("ghost", { type: "prompt", text: "x" }),
+    ).rejects.toThrow(/unknown conversation/);
+    await expect(updateMeta("ghost", { title: "x" })).rejects.toThrow(
+      /unknown conversation/,
+    );
+    await expect(deleteConversation("ghost")).rejects.toThrow(
+      /unknown conversation/,
+    );
+  });
+});

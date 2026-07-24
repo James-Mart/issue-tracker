@@ -1,5 +1,5 @@
 import { existsSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
 export const PORT = Number(process.env.PORT ?? 8061);
@@ -9,6 +9,8 @@ const serverDir = fileURLToPath(new URL(".", import.meta.url));
 export const appDir = join(serverDir, "..");
 export const pluginDir = join(appDir, "..");
 export const issuesDir = process.env.ISSUES_DIR ?? join(pluginDir, "issues");
+/** Peer of `issuesDir` — never nested under or written through the issues store. */
+export const conversationsDir = join(dirname(issuesDir), "conversations");
 
 // Cursor SDK credential. Read once here so every `@cursor/sdk` call can pass it
 // explicitly (see `services/agent-sdk.ts`) rather than relying on the SDK's
