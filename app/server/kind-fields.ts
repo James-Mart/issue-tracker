@@ -26,6 +26,7 @@ export type SetFieldSpec = FieldCoerce;
 export const PROJECT_SET_FIELDS = {
   title: { type: "string" },
   workspace: { type: "string" },
+  trunk: { type: "string" },
   mergePolicy: { type: "enum", values: MERGE_POLICIES },
   labels: { type: "labelCatalog" },
   supportingDocs: { type: "supportingDocs" },
@@ -103,6 +104,7 @@ export const PROJECT_GET_FIELDS = {
   kind: STORED,
   title: STORED,
   workspace: STORED,
+  trunk: STORED,
   mergePolicy: STORED,
   labels: STORED,
   supportingDocs: STORED,

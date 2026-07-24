@@ -27,6 +27,8 @@ export function projectMetaValue(
       return issue.workspace
         ? { text: issue.workspace, mono: true }
         : { text: "not set", muted: true };
+    case "trunk":
+      return { text: issue.trunk, mono: true };
     case "mergePolicy":
       return { text: MERGE_POLICY_LABELS[issue.mergePolicy] };
   }

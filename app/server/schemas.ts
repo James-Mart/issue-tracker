@@ -167,6 +167,7 @@ export const projectSchema = z.object({
   kind: z.literal("project"),
   title: nonEmpty,
   workspace: z.string().optional(),
+  trunk: nonEmpty.default("main"),
   mergePolicy: z.enum(MERGE_POLICIES).default("manual"),
   // Closed catalog of attachable labels (imperative; apply preserves).
   labels: projectLabelsSchema,

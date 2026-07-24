@@ -3,7 +3,6 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  EPIC_BASE,
   branchNameRenameError,
   stackedChildren,
 } from "./merge-base";
@@ -138,7 +137,7 @@ describe("ensureMergeBaseStripped (via list)", () => {
     expect(readIssue("root").mergeBase).toBeUndefined();
     expect(readIssue("child-named").mergeBase).toBeUndefined();
     expect(readIssue("child-unnamed").mergeBase).toBeUndefined();
-    expect(first.derived.root?.mergeBase).toBe(EPIC_BASE);
+    expect(first.derived.root?.mergeBase).toBe("main");
     expect(first.derived["child-named"]?.mergeBase).toBe("feat/root");
     expect(first.derived["child-unnamed"]?.mergeBase).toBeUndefined();
 

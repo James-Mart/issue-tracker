@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { EPIC_BASE } from "./fields";
 import { resolveMergeBase } from "./resolve-merge-base";
 import type { Issue } from "./schemas";
 
@@ -26,7 +25,11 @@ function branch(
 
 describe("resolveMergeBase", () => {
   it("defaults a root Branch to main", () => {
-    expect(resolveMergeBase(undefined, [])).toBe(EPIC_BASE);
+    expect(resolveMergeBase(undefined, [])).toBe("main");
+  });
+
+  it("uses a custom trunk for a root Branch", () => {
+    expect(resolveMergeBase(undefined, [], undefined, "develop")).toBe("develop");
   });
 
   it("uses the parent's branchName when the parent is already named", () => {
@@ -58,7 +61,7 @@ describe("resolveMergeBase", () => {
         merged: true,
       }),
     ];
-    expect(resolveMergeBase("parent", issues)).toBe(EPIC_BASE);
+    expect(resolveMergeBase("parent", issues)).toBe("main");
   });
 
   it("uses branchName when the parent is unmerged", () => {

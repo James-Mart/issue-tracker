@@ -40,6 +40,7 @@ const project: Extract<IssueDetail, { kind: "project" }> = {
   kind: "project",
   title: "Platform",
   workspace: "/tmp/repo",
+  trunk: "main",
   mergePolicy: "pull-request",
   order: 0,
   createdAt: "2026-07-09T14:00:00.000Z",
@@ -71,6 +72,17 @@ describe("projectMetaValue", () => {
     expect(projectMetaValue(unset, "workspace")).toEqual({
       text: "not set",
       muted: true,
+    });
+  });
+
+  it("returns mono trunk branch name", () => {
+    expect(projectMetaValue(project, "trunk")).toEqual({
+      text: "main",
+      mono: true,
+    });
+    expect(projectMetaValue({ ...project, trunk: "develop" }, "trunk")).toEqual({
+      text: "develop",
+      mono: true,
     });
   });
 

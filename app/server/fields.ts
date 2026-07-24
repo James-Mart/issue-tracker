@@ -4,9 +4,6 @@ import {
   type MergePolicy,
 } from "./schemas.js";
 
-/** Default git base for a root Story (no `stackedOn`). */
-export const EPIC_BASE = "main";
-
 /** Display token for an unset tree/detail chip (`mergeBase=(unset)`, `branch=(unset)`). */
 export const CHIP_UNSET = "(unset)";
 
@@ -21,7 +18,7 @@ export const COMMON_MERGEABLE_KEYS = [
 ] as const;
 
 // Project mergeable meta keys (labels has a dedicated catalog editor).
-export const PROJECT_FORM_FIELD_KEYS = ["workspace", "mergePolicy"] as const;
+export const PROJECT_FORM_FIELD_KEYS = ["workspace", "trunk", "mergePolicy"] as const;
 
 export const PROJECT_FIELD_KEYS = [
   ...PROJECT_FORM_FIELD_KEYS,
@@ -121,6 +118,7 @@ export type NonClearableMergeableKey = (typeof NON_CLEARABLE_MERGEABLE_KEYS)[num
 /** Operator-facing UI labels (sentence case). Never surface schema keys. */
 export const FIELD_LABELS = {
   workspace: "Workspace",
+  trunk: "Trunk",
   mergePolicy: "Merge policy",
   title: "Title",
   assignee: "Assignee",
