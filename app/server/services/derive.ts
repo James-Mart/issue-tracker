@@ -9,6 +9,7 @@ import type {
 import { bySequence } from "../order.js";
 import { resolveMergeBase } from "../resolve-merge-base.js";
 import { checkIntegrity } from "./integrity.js";
+import { effectiveMergePolicy } from "./merge-policy.js";
 import { projectContaining } from "./subtree.js";
 
 export interface DeriveResult {
@@ -101,43 +102,6 @@ export function derive(issues: Issue[]): DeriveResult {
   };
 
   const effectivePolicyCache = new Map<string, MergePolicy>();
-  const effectivePolicyFor = (
-    id: string,
-    visiting = new Set<string>(),
-  ): MergePolicy => {
-    const cached = effectivePolicyCache.get(id);
-    if (cached !== undefined) return cached;
-    if (visiting.has(id)) return "manual";
-
-    const issue = byId.get(id);
-    if (!issue) {
-      effectivePolicyCache.set(id, "manual");
-      return "manual";
-    }
-
-    visiting.add(id);
-
-    let policy: MergePolicy;
-    if (issue.kind === "project") {
-      policy = issue.mergePolicy;
-    } else if (issue.kind === "epic") {
-      policy =
-        issue.mergePolicy !== undefined
-          ? issue.mergePolicy
-          : effectivePolicyFor(issue.partOf, visiting);
-    } else if (issue.kind === "story") {
-      policy =
-        issue.mergePolicy !== undefined
-          ? issue.mergePolicy
-          : effectivePolicyFor(issue.stackedOn ?? issue.partOf, visiting);
-    } else {
-      policy = "manual";
-    }
-
-    visiting.delete(id);
-    effectivePolicyCache.set(id, policy);
-    return policy;
-  };
 
   for (const story of storiesById.values()) {
     const storyStatus = storyStatusOf(story);
@@ -189,7 +153,7 @@ export function derive(issues: Issue[]): DeriveResult {
     if (issue.kind !== "project" && issue.kind !== "epic" && issue.kind !== "story") {
       continue;
     }
-    const mergePolicy = effectivePolicyFor(issue.id);
+    const mergePolicy = effectiveMergePolicy(issue.id, byId, effectivePolicyCache);
     const prior = state[issue.id];
     if (prior) {
       prior.mergePolicy = mergePolicy;

@@ -170,3 +170,92 @@ describe("project mergePolicy", () => {
     await expect(update("t", { mergePolicy: "merge" })).rejects.toThrow(/mergePolicy/i);
   });
 });
+
+describe("mergePolicy ceiling", () => {
+  it("rejects raising a trunk Story above the Project ceiling", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "S",
+      partOf: "p",
+      order: 0,
+      merged: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { update } = await loadService();
+    await update("p", { mergePolicy: "pull-request" });
+    await expect(update("s", { mergePolicy: "merge" })).rejects.toThrow(
+      /mergePolicy "merge" exceeds ceiling "pull-request" from parent "p"/,
+    );
+    const raw = JSON.parse(readFileSync(join(dir, "s", "issue.json"), "utf8"));
+    expect(raw).not.toHaveProperty("mergePolicy");
+  });
+
+  it("accepts any mergePolicy on a non-trunk root Story", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "S",
+      partOf: "p",
+      mergeBaseOverride: "feat/existing",
+      order: 0,
+      merged: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { update, list } = await loadService();
+    await update("p", { mergePolicy: "manual" });
+    await update("s", { mergePolicy: "fast-forward" });
+    const raw = JSON.parse(readFileSync(join(dir, "s", "issue.json"), "utf8"));
+    expect(raw.mergePolicy).toBe("fast-forward");
+    expect(list().derived.s?.mergePolicy).toBe("fast-forward");
+  });
+
+  it("rejects a first-layer Epic Story above a non-trunk Epic's policy", async () => {
+    writeIssue("e", {
+      kind: "epic",
+      title: "E",
+      partOf: "p",
+      mergeBaseOverride: "feat/epic-base",
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("s", {
+      kind: "story",
+      title: "S",
+      partOf: "e",
+      order: 0,
+      merged: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { update } = await loadService();
+    await update("p", { mergePolicy: "manual" });
+    await update("e", { mergePolicy: "pull-request" });
+    await expect(update("s", { mergePolicy: "merge" })).rejects.toThrow(
+      /mergePolicy "merge" exceeds ceiling "pull-request" from parent "e"/,
+    );
+    const raw = JSON.parse(readFileSync(join(dir, "s", "issue.json"), "utf8"));
+    expect(raw).not.toHaveProperty("mergePolicy");
+  });
+
+  it("rejects lowering a parent below a child", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "S",
+      partOf: "p",
+      order: 0,
+      merged: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { update } = await loadService();
+    await update("p", { mergePolicy: "merge" });
+    await update("s", { mergePolicy: "merge" });
+    await expect(update("p", { mergePolicy: "manual" })).rejects.toThrow(
+      /mergePolicy "merge" exceeds ceiling "manual" from parent "p"/,
+    );
+    const raw = JSON.parse(readFileSync(join(dir, "p", "issue.json"), "utf8"));
+    expect(raw.mergePolicy).toBe("merge");
+  });
+});

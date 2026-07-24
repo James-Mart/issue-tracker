@@ -52,6 +52,7 @@ import { planDeletion, type DeletionResult } from "./deletion.js";
 import { uniqueSlug } from "./slug.js";
 import { validateNonClearablePatch } from "./patch.js";
 import { validateCommitShaPatch } from "./commit-sha.js";
+import { validateMergePolicyPatch } from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
 import { validateSupportingDocsPatch } from "./supporting-docs.js";
 import { validateInspirationAppsPatch } from "./inspiration-apps.js";
@@ -516,6 +517,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     validateInspirationAppsPatch(existing, jsonPatch);
     validateCommitShaPatch(jsonPatch);
     validateNonClearablePatch(existing, jsonPatch);
+    validateMergePolicyPatch(existing, jsonPatch, issues);
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);
