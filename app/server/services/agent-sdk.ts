@@ -1,6 +1,7 @@
 import {
   Agent,
   Cursor,
+  CursorAgentError,
   type AgentOptions,
   type CursorRequestOptions,
   type InteractionUpdate,
@@ -13,6 +14,8 @@ import {
   type SendOptions,
 } from "@cursor/sdk";
 import { cursorApiKey } from "../config.js";
+
+export { CursorAgentError };
 
 /**
  * The single seam every SDK consumer in the app goes through. Consumers depend
