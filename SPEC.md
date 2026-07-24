@@ -418,7 +418,7 @@ Project — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `workspace` | string? | absolute path to the local git checkout this Project covers; the cwd repo-touching agents run in (see [Project workspace](#project-workspace)) |
 | `trunk` | string | git ref root Stories fork from and unstacked Stories target for derived `mergeBase`; defaults `main` (see [Project trunk](#project-trunk)) |
-| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` | what git `finish-branch` does after a Story's last Task is done; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
+| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` | what integration steps `finish-branch` runs after pushing the Story branch; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
 | `supportingDocs` | `{ vision?, codingStandards?, designSystem? }`? | optional pointers to vision / coding standards / design system docs (see [Project supporting docs](#project-supporting-docs)) |
 
@@ -577,29 +577,32 @@ The work loop **always** finishes a Story by spawning the git subagent in
 Only the git subagent interprets it, from
 `issue project get <projectId> mergePolicy`, so there is exactly one reader and
 the skill can never contradict the field. `finish-branch` runs in the Project
-workspace (same cwd rules as above) and applies:
+workspace (same cwd rules as above). **Push is always safe** — saving work on
+the Story's own branch is harmless — so finish-branch **always pushes the Story
+branch first**; `mergePolicy` selects only what happens beyond that push:
 
-- **`manual`** — no-op. Nothing is pushed, opened, or merged; a human handles
-  the PR later. (Default.)
-- **`pull-request`** — push the Story's git branch and open a **draft** PR
-  against its derived `mergeBase`, then record the url via
-  `issue story set <storyId> prUrl <url>`. It does **not** wait for merge or
-  set `merged`, so the Story derives to `pr-open`.
-- **`merge`** — merge the Story's git branch into its derived `mergeBase`, push
-  that ref, and set `merged` via `issue story set <storyId> merged true` (Story
-  derives to `merged`). This is the local, no-PR integration path. Setting
-  `merged` does not write child `mergeBase` keys — children re-derive on the
-  next read (see [stacked-PR merge model](#the-stacked-pr-merge-model)). When a
-  parent lands, **GitHub retargets** open child PRs; the tracker only updates
-  metadata — finish-branch never runs `gh pr edit --base` (or any PR
-  retarget CLI).
+- **`manual`** — push the Story branch, then stop (no PR, no merge). A human
+  opens and merges the PR later. (Default.)
+- **`pull-request`** — after the push, open a **draft** PR against its derived
+  `mergeBase`, then record the url via `issue story set <storyId> prUrl <url>`.
+  It does **not** wait for merge or set `merged`, so the Story derives to
+  `pr-open`.
+- **`merge`** — after the push, merge the Story's git branch into its derived
+  `mergeBase`, push that ref, and set `merged` via
+  `issue story set <storyId> merged true` (Story derives to `merged`). This is
+  the local, no-PR integration path. Setting `merged` does not write child
+  `mergeBase` keys — children re-derive on the next read (see
+  [stacked-PR merge model](#the-stacked-pr-merge-model)). When a parent lands,
+  **GitHub retargets** open child PRs; the tracker only updates metadata —
+  finish-branch never runs `gh pr edit --base` (or any PR retarget CLI).
 
 **Resumable / idempotent.** The work loop is resumable, so finish-branch may run
 twice for the same Story. Before acting, the git subagent reads the Story's
 `prUrl` / `merged` (via `issue story get <storyId> prUrl` /
 `issue story get <storyId> merged`) and no-ops when the policy's end state
 already holds — `merged` set for `merge`, `prUrl` set for `pull-request` — so a
-re-run never opens a duplicate PR or re-merges.
+re-run never opens a duplicate PR or re-merges. **`manual`** has no metadata
+end state; a re-run just re-pushes the Story branch (harmless).
 
 **Failure and recovery.** On failure the git subagent raises attention on the
 Story (`issue story set <storyId> needsAttention true --reason "…"`) and
