@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/features/issues/components/markdown";
 import { cn } from "@/lib/utils/cn";
+import { useConversationsQuery } from "../api/queries";
 import { useConversationEvents } from "../hooks/use-conversation-events";
+import { Composer } from "./composer";
 
 function formatUnknown(value: unknown): string {
   if (typeof value === "string") return value;
@@ -247,16 +249,20 @@ function TranscriptEventRow({
   }
 }
 
-export function ConversationThread({
-  conversationId,
+function ThreadBody({
+  events,
+  ready,
 }: {
-  conversationId: string;
+  events: TranscriptEvent[];
+  ready: boolean;
 }) {
-  const { events, ready } = useConversationEvents(conversationId);
-
   if (!ready) {
     return (
-      <div className="space-y-3 p-4" aria-busy="true" aria-label="Loading transcript">
+      <div
+        className="space-y-3 p-4"
+        aria-busy="true"
+        aria-label="Loading transcript"
+      >
         <Skeleton className="ml-auto h-16 w-2/3" />
         <Skeleton className="h-8 w-1/2" />
         <Skeleton className="h-24 w-full" />
@@ -271,7 +277,7 @@ export function ConversationThread({
         className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
         eyebrow="Empty"
         title="No transcript yet."
-        detail="This conversation has no turns yet. New prompts stream here live."
+        detail="Type below to start a turn — responses stream here live."
       />
     );
   }
@@ -293,6 +299,31 @@ export function ConversationThread({
           }
         />
       ))}
+    </div>
+  );
+}
+
+export function ConversationThread({
+  conversationId,
+}: {
+  conversationId: string;
+}) {
+  const { events, ready } = useConversationEvents(conversationId);
+  const { data: conversations } = useConversationsQuery();
+  const meta = conversations?.find((c) => c.id === conversationId);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ThreadBody events={events} ready={ready} />
+      </div>
+      {meta ? (
+        <Composer
+          conversationId={conversationId}
+          model={meta.model}
+          events={events}
+        />
+      ) : null}
     </div>
   );
 }

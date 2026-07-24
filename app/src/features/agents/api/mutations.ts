@@ -2,10 +2,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { ConversationMeta } from "@server/schemas";
 import {
+  cancelConversationRun,
   createConversation,
   deleteConversation,
+  sendConversationMessage,
   updateConversation,
   type CreateConversationBody,
+  type SendConversationMessageBody,
+  type SendConversationMessageResult,
   type UpdateConversationBody,
 } from "./client";
 import { agentsKeys } from "./keys";
@@ -46,5 +50,23 @@ export function useDeleteConversation() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: agentsKeys.conversations() });
     },
+  });
+}
+
+export function useSendConversationMessage() {
+  return useMutation<
+    SendConversationMessageResult,
+    Error,
+    { id: string; body: SendConversationMessageBody }
+  >({
+    mutationFn: ({ id, body }) => sendConversationMessage(id, body),
+    onError: (err) => toast.error(messageOf(err)),
+  });
+}
+
+export function useCancelConversationRun() {
+  return useMutation<void, Error, string>({
+    mutationFn: cancelConversationRun,
+    onError: (err) => toast.error(messageOf(err)),
   });
 }
