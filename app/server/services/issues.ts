@@ -372,6 +372,12 @@ export function create(input: CreateInput): Promise<IssueRecord> {
       }
       if (input.mergePolicy) draft.mergePolicy = input.mergePolicy;
     }
+    if (
+      (input.kind === "epic" || input.kind === "story") &&
+      input.mergePolicy
+    ) {
+      draft.mergePolicy = input.mergePolicy;
+    }
 
     const parsed = parseIssue(draft);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
@@ -509,7 +515,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     validateSupportingDocsPatch(existing, jsonPatch);
     validateInspirationAppsPatch(existing, jsonPatch);
     validateCommitShaPatch(jsonPatch);
-    validateNonClearablePatch(jsonPatch);
+    validateNonClearablePatch(existing, jsonPatch);
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);

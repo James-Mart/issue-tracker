@@ -186,6 +186,7 @@ export const epicSchema = z.object({
   blockedBy: z.array(z.string()).default([]),
   // Imperative override for first-layer Stories' derived mergeBase.
   mergeBaseOverride: z.string().optional(),
+  mergePolicy: z.enum(MERGE_POLICIES).optional(),
   retro: z.enum(RETRO_STATUSES).optional(),
   // Catalog id assignments (imperative; apply preserves).
   labels: assignmentLabelsSchema,
@@ -215,6 +216,7 @@ export const storySchema = z.object({
   stackedOn: z.string().optional(),
   // Imperative override for root (project-level) Stories' derived mergeBase.
   mergeBaseOverride: z.string().optional(),
+  mergePolicy: z.enum(MERGE_POLICIES).optional(),
   prUrl: z.string().optional(),
   merged: z.boolean().default(false),
   specReview: z.enum(SPEC_REVIEW_STATUSES).optional(),
@@ -345,6 +347,8 @@ export interface DerivedState {
   epicStatus?: EpicStatus;
   /** Derived git fork-point ref (see resolveMergeBase). */
   mergeBase?: string;
+  /** Effective merge policy (stored override else inherited from parent). */
+  mergePolicy?: MergePolicy;
 }
 
 export interface IssuesResponse {

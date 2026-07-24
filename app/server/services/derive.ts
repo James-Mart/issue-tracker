@@ -3,6 +3,7 @@ import type {
   DerivedState,
   EpicStatus,
   Issue,
+  MergePolicy,
   Problem,
 } from "../schemas.js";
 import { bySequence } from "../order.js";
@@ -99,6 +100,45 @@ export function derive(issues: Issue[]): DeriveResult {
     return value;
   };
 
+  const effectivePolicyCache = new Map<string, MergePolicy>();
+  const effectivePolicyFor = (
+    id: string,
+    visiting = new Set<string>(),
+  ): MergePolicy => {
+    const cached = effectivePolicyCache.get(id);
+    if (cached !== undefined) return cached;
+    if (visiting.has(id)) return "manual";
+
+    const issue = byId.get(id);
+    if (!issue) {
+      effectivePolicyCache.set(id, "manual");
+      return "manual";
+    }
+
+    visiting.add(id);
+
+    let policy: MergePolicy;
+    if (issue.kind === "project") {
+      policy = issue.mergePolicy;
+    } else if (issue.kind === "epic") {
+      policy =
+        issue.mergePolicy !== undefined
+          ? issue.mergePolicy
+          : effectivePolicyFor(issue.partOf, visiting);
+    } else if (issue.kind === "story") {
+      policy =
+        issue.mergePolicy !== undefined
+          ? issue.mergePolicy
+          : effectivePolicyFor(issue.stackedOn ?? issue.partOf, visiting);
+    } else {
+      policy = "manual";
+    }
+
+    visiting.delete(id);
+    effectivePolicyCache.set(id, policy);
+    return policy;
+  };
+
   for (const story of storiesById.values()) {
     const storyStatus = storyStatusOf(story);
     const mergeBase = mergeBaseFor(story);
@@ -143,6 +183,19 @@ export function derive(issues: Issue[]): DeriveResult {
     const derived = state[epic.id];
     if (derived)
       derived.blocked = epic.blockedBy.some((dep) => !epicIsDone(state[dep]));
+  }
+
+  for (const issue of issues) {
+    if (issue.kind !== "project" && issue.kind !== "epic" && issue.kind !== "story") {
+      continue;
+    }
+    const mergePolicy = effectivePolicyFor(issue.id);
+    const prior = state[issue.id];
+    if (prior) {
+      prior.mergePolicy = mergePolicy;
+    } else {
+      state[issue.id] = { blocked: false, mergePolicy };
+    }
   }
 
   return { byId: state, problems };
