@@ -1,5 +1,5 @@
 import { request } from "@/lib/api/client";
-import type { ConversationDetail, ConversationMeta } from "@server/schemas";
+import type { ConversationMeta } from "@server/schemas";
 
 export type AgentModel = {
   id: string;
@@ -23,10 +23,6 @@ export type UpdateConversationBody = {
 
 export function listConversations(): Promise<ConversationMeta[]> {
   return request<ConversationMeta[]>("/api/conversations");
-}
-
-export function getConversation(id: string): Promise<ConversationDetail> {
-  return request<ConversationDetail>(`/api/conversations/${id}`);
 }
 
 export function createConversation(

@@ -33,12 +33,6 @@ export function useUpdateConversation() {
   >({
     mutationFn: ({ id, patch }) => updateConversation(id, patch),
     onError: (err) => toast.error(messageOf(err)),
-    onSuccess: (data) =>
-      qc.setQueryData(agentsKeys.conversation(data.id), (prev) =>
-        prev && typeof prev === "object" && "meta" in prev
-          ? { ...prev, meta: data }
-          : prev,
-      ),
     onSettled: () =>
       qc.invalidateQueries({ queryKey: agentsKeys.conversations() }),
   });
@@ -49,9 +43,8 @@ export function useDeleteConversation() {
   return useMutation<void, Error, string>({
     mutationFn: deleteConversation,
     onError: (err) => toast.error(messageOf(err)),
-    onSettled: (_data, _err, id) => {
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: agentsKeys.conversations() });
-      qc.removeQueries({ queryKey: agentsKeys.conversation(id) });
     },
   });
 }

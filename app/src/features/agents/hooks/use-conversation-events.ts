@@ -10,6 +10,16 @@ const RECONNECT_DELAY_MS = 2_000;
 // restart, which never fires an `error`) and forcibly reconnected.
 const HEARTBEAT_TIMEOUT_MS = 25_000;
 
+export type ConversationEventsState = {
+  events: TranscriptEvent[];
+  /**
+   * True after at least one successful connect+replay (server `ping` after
+   * replay). Stays true across reconnects so the thread keeps painting the
+   * last good transcript instead of flashing the loading skeleton.
+   */
+  ready: boolean;
+};
+
 /**
  * Fold one SSE frame into local thread state.
  *
@@ -55,15 +65,21 @@ export function applyTranscriptEvent(
  * Subscribe to `GET /api/conversations/:id/events`. Replays persisted
  * history on connect, then folds live frames into local thread state.
  * Tears down (and clears) when `conversationId` changes or the hook unmounts.
+ *
+ * On (re)connect, frames are staged into a replay buffer and committed on
+ * the first `ping` (server emits that after replay). Prior React state is
+ * left alone until that commit, so reconnect does not blank the thread.
  */
 export function useConversationEvents(
   conversationId: string | null | undefined,
-): TranscriptEvent[] {
+): ConversationEventsState {
   const [events, setEvents] = useState<TranscriptEvent[]>([]);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (!conversationId) {
       setEvents([]);
+      setReady(false);
       return;
     }
     const id = conversationId;
@@ -72,8 +88,11 @@ export function useConversationEvents(
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
+    let replaying = false;
+    let replayBuffer: TranscriptEvent[] = [];
 
     setEvents([]);
+    setReady(false);
 
     const closeSource = () => {
       if (watchdog) {
@@ -86,6 +105,9 @@ export function useConversationEvents(
 
     const scheduleReconnect = () => {
       closeSource();
+      replaying = false;
+      replayBuffer = [];
+      // Keep `events` + `ready` so the UI keeps the last good transcript.
       if (disposed || reconnectTimer) return;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
@@ -98,18 +120,28 @@ export function useConversationEvents(
       watchdog = setTimeout(scheduleReconnect, HEARTBEAT_TIMEOUT_MS);
     };
 
+    const onPing = () => {
+      armWatchdog();
+      if (replaying) {
+        replaying = false;
+        setEvents(replayBuffer);
+        replayBuffer = [];
+      }
+      setReady(true);
+    };
+
     function connect() {
       source = new EventSource(
         `/api/conversations/${encodeURIComponent(id)}/events`,
       );
       armWatchdog();
       source.addEventListener("open", () => {
-        // Reconnect / first open: drop any prior frames so the replay is
-        // authoritative (avoids duplicating history after a reconnect).
-        setEvents([]);
+        // Stage the authoritative replay; do not clear painted events yet.
+        replaying = true;
+        replayBuffer = [];
         armWatchdog();
       });
-      source.addEventListener("ping", armWatchdog);
+      source.addEventListener("ping", onPing);
       source.onmessage = (raw) => {
         armWatchdog();
         let data: unknown;
@@ -136,6 +168,10 @@ export function useConversationEvents(
           }
           return;
         }
+        if (replaying) {
+          replayBuffer = applyTranscriptEvent(replayBuffer, parsed.event);
+          return;
+        }
         setEvents((prev) => applyTranscriptEvent(prev, parsed.event));
       };
       source.onerror = scheduleReconnect;
@@ -148,8 +184,9 @@ export function useConversationEvents(
       if (reconnectTimer) clearTimeout(reconnectTimer);
       closeSource();
       setEvents([]);
+      setReady(false);
     };
   }, [conversationId]);
 
-  return events;
+  return { events, ready };
 }

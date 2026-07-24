@@ -1,13 +1,12 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import type { TranscriptEvent } from "@server/schemas";
-import { ShellInlineFault, ShellState } from "@/app/shell-state";
+import { ShellState } from "@/app/shell-state";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/features/issues/components/markdown";
 import { cn } from "@/lib/utils/cn";
-import { useConversationQuery } from "../api/queries";
+import { useConversationEvents } from "../hooks/use-conversation-events";
 
 function formatUnknown(value: unknown): string {
   if (typeof value === "string") return value;
@@ -24,6 +23,13 @@ function toolStatusVariant(
   if (status === "running") return "inProgress";
   if (status === "completed") return "done";
   return "blocked";
+}
+
+function eventKey(event: TranscriptEvent, index: number): string {
+  if (event.type === "tool_call") return `tool_call-${event.callId}`;
+  // Index-stable for in-place assistant delta updates (avoid remounting
+  // Markdown on every token). `at` changes each delta and is not usable.
+  return `${index}-${event.type}`;
 }
 
 function InfoLine({
@@ -121,7 +127,7 @@ function AssistantEvent({ text }: { text: string }) {
   );
 }
 
-function ThinkingEvent({ text }: { text: string }) {
+function ThinkingEvent({ text, open }: { text: string; open?: boolean }) {
   return (
     <CollapsibleDetails
       label="Thinking"
@@ -129,6 +135,9 @@ function ThinkingEvent({ text }: { text: string }) {
       summaryClassName="px-3 py-2"
       bodyClassName="px-3 py-2"
       data-event="thinking"
+      // Only force-open while this block is still the live tip of the stream;
+      // omit the attr otherwise so users can toggle historical thinking freely.
+      {...(open ? { open: true } : {})}
     >
       <p className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground">
         {text}
@@ -143,17 +152,24 @@ function ToolCallEvent({
   event: Extract<TranscriptEvent, { type: "tool_call" }>;
 }) {
   const name = event.name?.trim() || "tool";
+  const running = event.status === "running";
   return (
     <div
       className="rounded-md border border-border bg-card px-3 py-2.5"
       data-event="tool_call"
       data-call-id={event.callId}
+      data-status={event.status}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs font-medium text-foreground">
           {name}
         </span>
-        <Badge variant={toolStatusVariant(event.status)}>{event.status}</Badge>
+        <Badge
+          variant={toolStatusVariant(event.status)}
+          className={running ? "animate-pulse" : undefined}
+        >
+          {event.status}
+        </Badge>
         <span className="font-mono text-[10px] text-muted-foreground">
           {event.callId}
         </span>
@@ -164,14 +180,31 @@ function ToolCallEvent({
   );
 }
 
-function TranscriptEventRow({ event }: { event: TranscriptEvent }) {
+/** True when no later event has superseded this thinking block in the stream. */
+function isLiveThinking(events: TranscriptEvent[], index: number): boolean {
+  for (let i = index + 1; i < events.length; i++) {
+    const t = events[i]?.type;
+    if (t === "thinking" || t === "assistant" || t === "tool_call") {
+      return false;
+    }
+  }
+  return true;
+}
+
+function TranscriptEventRow({
+  event,
+  thinkingOpen,
+}: {
+  event: TranscriptEvent;
+  thinkingOpen?: boolean;
+}) {
   switch (event.type) {
     case "prompt":
       return <PromptEvent text={event.text} />;
     case "assistant":
       return <AssistantEvent text={event.text} />;
     case "thinking":
-      return <ThinkingEvent text={event.text} />;
+      return <ThinkingEvent text={event.text} open={thinkingOpen} />;
     case "tool_call":
       return <ToolCallEvent event={event} />;
     case "task": {
@@ -203,9 +236,10 @@ function TranscriptEventRow({ event }: { event: TranscriptEvent }) {
       );
     }
     case "request":
+      // Informational only — Epic auto-run posture; never a blocking prompt.
       return <InfoLine label="Request">{event.requestId}</InfoLine>;
     case "subagent_update":
-      // Nested sub-agent thread lands in a later Story; ignore for now.
+      // Accumulated in the stream hook; nested card lands in a later Story.
       return null;
     default:
       // Tolerate unknown future kinds without crashing.
@@ -218,10 +252,9 @@ export function ConversationThread({
 }: {
   conversationId: string;
 }) {
-  const { data, isLoading, error, refetch, isFetching } =
-    useConversationQuery(conversationId);
+  const { events, ready } = useConversationEvents(conversationId);
 
-  if (isLoading) {
+  if (!ready) {
     return (
       <div className="space-y-3 p-4" aria-busy="true" aria-label="Loading transcript">
         <Skeleton className="ml-auto h-16 w-2/3" />
@@ -232,34 +265,13 @@ export function ConversationThread({
     );
   }
 
-  if (error) {
-    return (
-      <div className="p-4">
-        <ShellInlineFault
-          message={error.message}
-          hint="Check the server, then reload the transcript."
-        />
-        <Button
-          variant="primary"
-          size="sm"
-          className="mt-3"
-          disabled={isFetching}
-          onClick={() => refetch()}
-        >
-          Reload
-        </Button>
-      </div>
-    );
-  }
-
-  const transcript = data?.transcript ?? [];
-  if (transcript.length === 0) {
+  if (events.length === 0) {
     return (
       <ShellState
         className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
         eyebrow="Empty"
         title="No transcript yet."
-        detail="This conversation has no persisted turns. Live prompting arrives in a later story."
+        detail="This conversation has no turns yet. New prompts stream here live."
       />
     );
   }
@@ -269,12 +281,16 @@ export function ConversationThread({
       className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
       role="log"
       aria-label="Conversation transcript"
-      aria-relevant="additions"
+      aria-live="polite"
+      aria-relevant="additions text"
     >
-      {transcript.map((event, index) => (
+      {events.map((event, index) => (
         <TranscriptEventRow
-          key={`${event.type}-${event.at}-${index}`}
+          key={eventKey(event, index)}
           event={event}
+          thinkingOpen={
+            event.type === "thinking" && isLiveThinking(events, index)
+          }
         />
       ))}
     </div>
