@@ -59,6 +59,7 @@ export const EPIC_SET_FIELDS = {
   partOf: { type: "string" },
   blockedBy: { type: "array" },
   mergeBase: { type: "string", storeAs: "mergeBaseOverride" },
+  mergePolicy: { type: "enum", values: MERGE_POLICIES },
   labels: { type: "array" },
   retro: { type: "enum", values: RETRO_STATUSES },
   description: { type: "description" },
@@ -80,6 +81,7 @@ export const STORY_SET_FIELDS = {
   branchName: { type: "string" },
   stackedOn: { type: "string" },
   mergeBase: { type: "string", storeAs: "mergeBaseOverride" },
+  mergePolicy: { type: "enum", values: MERGE_POLICIES },
   prUrl: { type: "string" },
   merged: { type: "boolean" },
   specReview: { type: "enum", values: SPEC_REVIEW_STATUSES },
@@ -151,6 +153,7 @@ export const EPIC_GET_FIELDS = {
   updatedAt: STORED,
   description: DESCRIPTION,
   epicStatus: DERIVED,
+  mergePolicy: DERIVED,
   blocked: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
@@ -188,6 +191,7 @@ export const STORY_GET_FIELDS = {
   updatedAt: STORED,
   description: DESCRIPTION,
   storyStatus: DERIVED,
+  mergePolicy: DERIVED,
   blocked: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 

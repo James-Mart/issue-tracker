@@ -31,6 +31,7 @@ export const EPIC_FIELD_KEYS = ["blockedBy"] as const;
 
 export const EPIC_IMPERATIVE_ONLY_KEYS = [
   "mergeBaseOverride",
+  "mergePolicy",
   "retro",
   "labels",
 ] as const;
@@ -48,6 +49,7 @@ export const STORY_FORM_FIELD_KEYS = [
 
 export const STORY_IMPERATIVE_ONLY_KEYS = [
   "mergeBaseOverride",
+  "mergePolicy",
   "specReview",
   "retro",
   "labels",
@@ -62,6 +64,7 @@ export const STORY_FIELD_KEYS = [
 export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "branchName",
   "mergeBaseOverride",
+  "mergePolicy",
   "prUrl",
   "specReview",
   "retro",
@@ -101,6 +104,7 @@ export const CLEARABLE_KEYS = [
   "qa",
   "retro",
   "mergeBaseOverride",
+  "mergePolicy",
 ] as const;
 
 export type ClearableKey = (typeof CLEARABLE_KEYS)[number];
@@ -157,6 +161,14 @@ export const MERGE_POLICY_LABELS = {
   manual: "Manual",
   "fast-forward": "Fast-forward",
 } as const satisfies Record<MergePolicy, string>;
+
+/** Danger order: manual(0) < pull-request(1) < merge(2) < fast-forward(3). */
+export const MERGE_POLICY_RANK = {
+  manual: 0,
+  "pull-request": 1,
+  merge: 2,
+  "fast-forward": 3,
+} as const satisfies Record<MergePolicy, number>;
 
 export const MERGE_POLICY_OPTIONS = MERGE_POLICIES.map((value) => ({
   value,

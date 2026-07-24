@@ -303,8 +303,8 @@ Repeat until finish-branch:
    its report. Then continue from step 1.
 4. **Finish and advance.** All Tasks are `done` and `specReview` is set
    (`passed` or `failed`) — do **not** run the validator again. Spawn
-   `issue-tracker-git` with the finish-branch stub. Git applies the Project
-   merge policy — see SPEC § Project merge policy. Advance to the next Story.
+   `issue-tracker-git` with the finish-branch stub. Git applies the Story's
+   effective merge policy — see SPEC § Project merge policy. Advance to the next Story.
 
 ### Escalation
 
@@ -420,8 +420,9 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 - Never let a validator edit workspace source (write scopes: Models table).
   Code-quality may write Task `qa` / `needsAttention` and comments only.
 - Never set status on a Story or Epic. Do not decide whether to open or merge a
-  PR — that is the Project's `mergePolicy`, applied by `issue-tracker-git` on
-  finish-branch. Always spawn finish-branch; never read or branch on the policy.
+  PR — that is the Story's effective `mergePolicy`, applied by
+  `issue-tracker-git` on finish-branch. Always spawn finish-branch; never read
+  or branch on the policy.
 - Act only through the CLI for tracker writes; never hand-edit `issue.json`.
 - Workspace is a subagent concern, not yours (SPEC § Project workspace): you never
   resolve or pass it — each repo-touching subagent and the model discriminator

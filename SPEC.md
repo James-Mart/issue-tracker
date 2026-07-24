@@ -343,9 +343,9 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | kind | settable fields |
 | --- | --- |
 | project | `title`, `workspace`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
-| epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `mergeBase`, `retro`, `labels`, `description` |
+| epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
 | idea | `title`, `archived`, `partOf`, `labels`, `description` |
-| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `mergeBase`, `prUrl`, `merged`, `specReview`, `retro`, `labels`, `description` |
+| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `specReview`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commitSha`, `noDiff`, `description` |
 
 ##### Value parsing
@@ -448,7 +448,7 @@ Project — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `workspace` | string? | absolute path to the local git checkout this Project covers; the cwd repo-touching agents run in (see [Project workspace](#project-workspace)) |
 | `trunk` | string | default git ref for derived `mergeBase` when no `mergeBaseOverride` applies; defaults `main` (see [Project trunk](#project-trunk)) |
-| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"` | what integration steps `finish-branch` runs after pushing the Story branch; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
+| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"` | Project default for derived policy; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
 | `supportingDocs` | `{ vision?, codingStandards?, designSystem? }`? | optional pointers to vision / coding standards / design system docs (see [Project supporting docs](#project-supporting-docs)) |
 
@@ -552,10 +552,7 @@ coordinator must not pass one, but if one leaks in, ignore it). From that output
 
 - the workspace is the `Workspace:` line under the Project;
 - the project id is the id on the `Project: <id> — <title>` line (used to build
-  the attention message and, for git finish-branch, to look up the Project's
-  [merge policy](#project-merge-policy) via
-  `issue project get <projectId> mergePolicy`; do not re-derive ancestry any
-  other way).
+  workspace-related attention messages).
 
 **Use as cwd.** Run **every** repo command — git, builds, tests, and any
 file-edit / diff-inspection — with the workspace path as the shell working
@@ -599,15 +596,38 @@ across the tree) is not capped when needed to score accurately.
 
 ### Project merge policy
 
-A Project's `mergePolicy` decides what happens to a Story once its last Task
-is `done`. It is set with `issue project set <projectId> mergePolicy <policy>`
-and read with `issue project get <projectId> mergePolicy`. It defaults to
-**`manual`**, matching today's posture where a human opens and merges PRs.
+`mergePolicy` decides what happens to a Story once its last Task is `done` —
+the integration steps `finish-branch` runs after pushing the Story branch. It
+can be set on **Project**, **Epic**, and **Story** nodes (not Task). Project
+`mergePolicy` defaults to **`manual`**, matching today's posture where a human
+opens and merges PRs.
+
+**Per-node storage.** Set with `issue project set <projectId> mergePolicy
+<policy>`, `issue epic set <epicId> mergePolicy <policy>`, or `issue story set
+<storyId> mergePolicy <policy>`. Project stores a required value; Epic and Story
+store an optional override (absent means inherit).
+
+**Effective policy.** Each node has an **effective** policy: its stored value
+when set, otherwise inherited from its parent — Epic → Project; root Story →
+Epic or Project; stacked Story → parent Story. On **get**, `issue story get
+<storyId> mergePolicy` and `issue epic get <epicId> mergePolicy` return the
+derived effective value; `issue project get <projectId> mergePolicy` returns
+the stored Project default.
+
+**Ceiling lattice.** At set time, `mergePolicy` patches are hard-rejected when
+a node's effective policy would exceed its **ceiling** (the parent's effective
+policy), or when lowering a parent would leave a descendant above the new
+ceiling. The danger order is `manual < pull-request < merge < fast-forward`
+(`MERGE_POLICY_RANK` in `app/server/fields.ts`). A root-level Epic or Story
+with an explicit non-trunk `mergeBaseOverride` has no ceiling and instead
+becomes the ceiling for its descendants; first-layer Epic Stories inherit the
+Epic's base rather than carrying their own override, so they stay ceilinged by
+the Epic.
 
 The work loop **always** finishes a Story by spawning the git subagent in
 `finish-branch` mode; the coordinator never reads or branches on `mergePolicy`.
-Only the git subagent interprets it, from
-`issue project get <projectId> mergePolicy`, so there is exactly one reader and
+Only the git subagent interprets it, from `issue story get <storyId>
+mergePolicy` (the Story's effective policy), so there is exactly one reader and
 the skill can never contradict the field. `finish-branch` runs in the Project
 workspace (same cwd rules as above). **Push is always safe** — saving work on
 the Story's own branch is harmless — so finish-branch **always pushes the Story
@@ -703,6 +723,7 @@ Epic — the Epic/Story/Task needs-attention common fields plus:
 | `partOf` | string | the Project id (required) |
 | `blockedBy` | string[] | other Epic ids in the same Project that must finish first; defaults `[]`; the only cross-Epic edge |
 | `mergeBaseOverride` | string? | optional; set via imperative `mergeBase`; first-layer Stories inherit this as their derived `mergeBase` (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
+| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get (see [Project merge policy](#project-merge-policy)) |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; machine-readable retro gate |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
@@ -725,6 +746,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `branchName` | string? | set once the git branch is created; rename refused while stacked children exist |
 | `stackedOn` | string? | single fork-point Story id (must be in the same Epic, or same Project for project-level Stories); absent => root |
 | `mergeBaseOverride` | string? | optional; meaningful on project-level root Stories only; set via imperative `mergeBase` (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
+| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get — this is what `finish-branch` reads (see [Project merge policy](#project-merge-policy)) |
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
 | `specReview` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
@@ -1195,6 +1217,7 @@ preserves everything else from the existing same-kind issue.
 | `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `workspace` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `mergePolicy` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `mergePolicy` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; effective value derived on get |
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Project catalog) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Epic / Idea / Story assignments) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |

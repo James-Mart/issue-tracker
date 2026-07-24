@@ -3,11 +3,13 @@ import type {
   DerivedState,
   EpicStatus,
   Issue,
+  MergePolicy,
   Problem,
 } from "../schemas.js";
 import { bySequence } from "../order.js";
 import { resolveMergeBase } from "../resolve-merge-base.js";
 import { checkIntegrity } from "./integrity.js";
+import { effectiveMergePolicy } from "./merge-policy.js";
 import { projectContaining } from "./subtree.js";
 
 export interface DeriveResult {
@@ -99,6 +101,8 @@ export function derive(issues: Issue[]): DeriveResult {
     return value;
   };
 
+  const effectivePolicyCache = new Map<string, MergePolicy>();
+
   for (const story of storiesById.values()) {
     const storyStatus = storyStatusOf(story);
     const mergeBase = mergeBaseFor(story);
@@ -143,6 +147,19 @@ export function derive(issues: Issue[]): DeriveResult {
     const derived = state[epic.id];
     if (derived)
       derived.blocked = epic.blockedBy.some((dep) => !epicIsDone(state[dep]));
+  }
+
+  for (const issue of issues) {
+    if (issue.kind !== "project" && issue.kind !== "epic" && issue.kind !== "story") {
+      continue;
+    }
+    const mergePolicy = effectiveMergePolicy(issue.id, byId, effectivePolicyCache);
+    const prior = state[issue.id];
+    if (prior) {
+      prior.mergePolicy = mergePolicy;
+    } else {
+      state[issue.id] = { blocked: false, mergePolicy };
+    }
   }
 
   return { byId: state, problems };

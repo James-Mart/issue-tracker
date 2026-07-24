@@ -52,6 +52,7 @@ import { planDeletion, type DeletionResult } from "./deletion.js";
 import { uniqueSlug } from "./slug.js";
 import { validateNonClearablePatch } from "./patch.js";
 import { validateCommitShaPatch } from "./commit-sha.js";
+import { validateMergePolicyPatch } from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
 import { validateSupportingDocsPatch } from "./supporting-docs.js";
 import { validateInspirationAppsPatch } from "./inspiration-apps.js";
@@ -372,6 +373,12 @@ export function create(input: CreateInput): Promise<IssueRecord> {
       }
       if (input.mergePolicy) draft.mergePolicy = input.mergePolicy;
     }
+    if (
+      (input.kind === "epic" || input.kind === "story") &&
+      input.mergePolicy
+    ) {
+      draft.mergePolicy = input.mergePolicy;
+    }
 
     const parsed = parseIssue(draft);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
@@ -509,7 +516,8 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     validateSupportingDocsPatch(existing, jsonPatch);
     validateInspirationAppsPatch(existing, jsonPatch);
     validateCommitShaPatch(jsonPatch);
-    validateNonClearablePatch(jsonPatch);
+    validateNonClearablePatch(existing, jsonPatch);
+    validateMergePolicyPatch(existing, jsonPatch, issues);
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);

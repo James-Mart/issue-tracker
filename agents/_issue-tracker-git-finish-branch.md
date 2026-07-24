@@ -8,8 +8,9 @@ Absolute path for this file (Read this exact path):
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-git-finish-branch.md`
 
 `mergePolicy` selects *how* only — merge/PR always targets derived `mergeBase`
-using the stored `branchName`. Apply the Project's merge policy to a Story,
-per **SPEC § Project merge policy** (the authoritative contract — semantics,
+using the stored `branchName`. Apply the Story's effective merge policy
+(`issue story get <storyId> mergePolicy`), per **SPEC § Project merge policy**
+(the authoritative contract — semantics,
 idempotency, and recovery live there). This section is only the concrete
 `git`/`gh` steps; all run in the workspace cwd.
 

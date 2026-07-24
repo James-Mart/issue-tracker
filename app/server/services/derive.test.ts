@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MERGE_POLICY_RANK } from "../fields";
 import { derive } from "./derive";
 import type { Issue } from "../schemas";
 
@@ -369,5 +370,70 @@ describe("derive - problems", () => {
     const problems = derive(issues).problems;
     expect(problems.filter((p) => /cycle/i.test(p.message)).map((p) => p.id).sort()).toEqual(["a", "b"]);
     expect(problems.some((p) => p.id === "c" && /must be a story/.test(p.message))).toBe(true);
+  });
+});
+
+describe("derive - effective mergePolicy", () => {
+  it("orders policies by the danger rank map", () => {
+    expect(MERGE_POLICY_RANK.manual).toBeLessThan(MERGE_POLICY_RANK["pull-request"]);
+    expect(MERGE_POLICY_RANK["pull-request"]).toBeLessThan(MERGE_POLICY_RANK.merge);
+    expect(MERGE_POLICY_RANK.merge).toBeLessThan(MERGE_POLICY_RANK["fast-forward"]);
+  });
+
+  it("inherits project mergePolicy on an unset Epic and first-layer Story", () => {
+    const issues = [
+      project("p", 0, { mergePolicy: "pull-request" }),
+      epic("e"),
+      branch("b", "e"),
+    ];
+    const { byId } = derive(issues);
+    expect(byId.p.mergePolicy).toBe("pull-request");
+    expect(byId.e.mergePolicy).toBe("pull-request");
+    expect(byId.b.mergePolicy).toBe("pull-request");
+  });
+
+  it("uses a stored Epic override over the Project default", () => {
+    const issues = [
+      project("p", 0, { mergePolicy: "pull-request" }),
+      epic("e", "p", 0, { mergePolicy: "manual" }),
+      branch("b", "e"),
+    ];
+    const { byId } = derive(issues);
+    expect(byId.e.mergePolicy).toBe("manual");
+    expect(byId.b.mergePolicy).toBe("manual");
+  });
+
+  it("uses a stored Story override over its parent Epic", () => {
+    const issues = [
+      project("p", 0, { mergePolicy: "manual" }),
+      epic("e", "p", 0, { mergePolicy: "pull-request" }),
+      branch("b", "e", { mergePolicy: "merge" }),
+    ];
+    const { byId } = derive(issues);
+    expect(byId.b.mergePolicy).toBe("merge");
+  });
+
+  it("inherits parent Story effective policy down a stack", () => {
+    const issues = [
+      project("p", 0, { mergePolicy: "manual" }),
+      epic("e"),
+      branch("base", "e", { branchName: "feat/base", mergePolicy: "fast-forward" }),
+      branch("child", "e", { stackedOn: "base" }),
+    ];
+    const { byId } = derive(issues);
+    expect(byId.base.mergePolicy).toBe("fast-forward");
+    expect(byId.child.mergePolicy).toBe("fast-forward");
+  });
+
+  it("inherits stacked parent effective policy when the child is unset", () => {
+    const issues = [
+      project("p", 0, { mergePolicy: "merge" }),
+      epic("e"),
+      branch("base", "e", { branchName: "feat/base" }),
+      branch("child", "e", { stackedOn: "base" }),
+    ];
+    const { byId } = derive(issues);
+    expect(byId.base.mergePolicy).toBe("merge");
+    expect(byId.child.mergePolicy).toBe("merge");
   });
 });

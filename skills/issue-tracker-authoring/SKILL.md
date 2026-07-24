@@ -220,9 +220,9 @@ consistent with the new version.
 
 ## Merge-policy delivery prose
 
-Phrase delivery and merge language in issue prose according to the Project's
-`mergePolicy` ([SPEC.md § Project merge policy](../../SPEC.md#project-merge-policy);
-read with `issue project get <projectId> mergePolicy`):
+Phrase delivery and merge language in issue prose according to the Story's
+effective `mergePolicy` ([SPEC.md § Project merge policy](../../SPEC.md#project-merge-policy);
+read with `issue story get <storyId> mergePolicy`):
 
 - **`pull-request`** — PR phrasing is correct ("in the PR", "open a PR", etc.).
 - **`merge`** or **`manual`** — no pull request exists at Story finish. Do not
@@ -272,7 +272,7 @@ Before done:
 - Every Task Change that updates content also updates every place that still
   describes or depends on the prior version (see
   [Prior-content consistency](#prior-content-consistency)).
-- Delivery/merge phrasing matches the Project's `mergePolicy` (see
+- Delivery/merge phrasing matches the Story's effective `mergePolicy` (see
   [Merge-policy delivery prose](#merge-policy-delivery-prose)).
 - Non-trunk bases use imperative `mergeBase` on the root Story or Epic after
   `apply` (see [Merge-base override](#merge-base-override)) — never invent a
