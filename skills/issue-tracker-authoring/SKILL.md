@@ -140,13 +140,13 @@ For each resulting root, still choose Epic vs project-level Story by
   in the doc** (top-to-bottom); authors never specify `order` — array position
   is implementation order.
 
-**Each Story must be independently mergeable to `main`.** Stories merge to
-`main` (stacked children after their fork-point Story, in stack order), and only
-Stories merge — Tasks are internal steps that ship together as one Story. So
-never split one cohesive change across Stories such that merging one leaves
-`main` broken (e.g. a schema change in one Story and the code that consumes it
-in another): keep it in a single Story as multiple Tasks. See the stacked merge
-model in [SPEC.md](../../SPEC.md).
+**Each Story must be independently mergeable into its derived `mergeBase`.**
+Stories merge into their merge base (stacked children after their fork-point
+Story, in stack order), and only Stories merge — Tasks are internal steps that
+ship together as one Story. So never split one cohesive change across Stories
+such that merging one leaves the merge base broken (e.g. a schema change in one
+Story and the code that consumes it in another): keep it in a single Story as
+multiple Tasks. See the stacked merge model in [SPEC.md](../../SPEC.md).
 
 ### Task shape: vertical slices, not horizontal layers
 
@@ -224,7 +224,7 @@ read with `issue project get <projectId> mergePolicy`):
 - **`pull-request`** — PR phrasing is correct ("in the PR", "open a PR", etc.).
 - **`merge`** or **`manual`** — no pull request exists at Story finish. Do not
   write "in the PR" or other pull-request-assuming language; phrase in terms of
-  merging or delivery instead (e.g. "merge to main", "land the Story").
+  merging or delivery instead (e.g. "merge to trunk", "land the Story").
 
 ## Completeness pass
 

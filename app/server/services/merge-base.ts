@@ -2,14 +2,14 @@ import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { issuesDir } from "../config.js";
 import type { Issue, IssuePatch } from "../schemas.js";
-import { CHIP_UNSET, EPIC_BASE } from "../fields.js";
+import { CHIP_UNSET } from "../fields.js";
 import { resolveMergeBase } from "../resolve-merge-base.js";
 import { forEachOnDiskIssue } from "./scan-disk.js";
 
 // Re-exported from the client-safe `fields` / resolve modules so callers that
 // already import this service keep a stable surface. Browser code must import
 // the pure helpers from `fields` / `resolve-merge-base` instead.
-export { CHIP_UNSET, EPIC_BASE, resolveMergeBase };
+export { CHIP_UNSET, resolveMergeBase };
 
 const STRIP_FLAG = ".merge-base-stripped";
 

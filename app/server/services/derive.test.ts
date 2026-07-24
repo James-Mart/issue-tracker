@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { derive } from "./derive";
-import { EPIC_BASE } from "./merge-base";
 import type { Issue } from "../schemas";
 
 let clock = 0;
@@ -66,13 +65,18 @@ const commit = (
   ...extra,
 });
 
-const project = (id: string, order = 0): Issue => ({
+const project = (
+  id: string,
+  order = 0,
+  extra: Partial<Extract<Issue, { kind: "project" }>> = {},
+): Issue => ({
   id,
   kind: "project",
   title: id,
   order,
   createdAt: nextAt(),
   updatedAt: nextAt(),
+  ...extra,
 });
 
 describe("derive - commit blocked", () => {
@@ -142,8 +146,17 @@ describe("derive - branch mergeBase resolution", () => {
   });
 
   it("surfaces a root Branch's derived mergeBase as main", () => {
-    const issues = [epic("e"), branch("b", "e")];
-    expect(derive(issues).byId.b.mergeBase).toBe(EPIC_BASE);
+    const issues = [project("p"), epic("e"), branch("b", "e")];
+    expect(derive(issues).byId.b.mergeBase).toBe("main");
+  });
+
+  it("surfaces a root Branch's derived mergeBase from the project trunk", () => {
+    const issues = [
+      project("p", 0, { trunk: "develop" }),
+      epic("e"),
+      branch("b", "e"),
+    ];
+    expect(derive(issues).byId.b.mergeBase).toBe("develop");
   });
 
   it("omits mergeBase when stacked on an unnamed parent", () => {
@@ -157,11 +170,22 @@ describe("derive - branch mergeBase resolution", () => {
 
   it("derives mergeBase from a merged parent's resolve", () => {
     const issues = [
+      project("p"),
       epic("e"),
       branch("parent", "e", { branchName: "feat/parent", merged: true }),
       branch("b", "e", { stackedOn: "parent" }),
     ];
-    expect(derive(issues).byId.b.mergeBase).toBe(EPIC_BASE);
+    expect(derive(issues).byId.b.mergeBase).toBe("main");
+  });
+
+  it("derives mergeBase from a merged parent using the project trunk", () => {
+    const issues = [
+      project("p", 0, { trunk: "develop" }),
+      epic("e"),
+      branch("parent", "e", { branchName: "feat/parent", merged: true }),
+      branch("b", "e", { stackedOn: "parent" }),
+    ];
+    expect(derive(issues).byId.b.mergeBase).toBe("develop");
   });
 });
 
@@ -206,7 +230,7 @@ describe("derive - branch status", () => {
 });
 
 describe("derive - branch start gating", () => {
-  it("is not blocked when it has no stackedOn (a root branch forks main)", () => {
+  it("is not blocked when it has no stackedOn (a root branch forks project trunk)", () => {
     const issues = [epic("e"), branch("b", "e")];
     const d = derive(issues).byId.b;
     expect(d.blocked).toBe(false);

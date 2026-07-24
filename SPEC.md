@@ -31,7 +31,9 @@ Every issue has a `kind`, one of:
   (derived or stored) and none of the assignee/needs-attention fields — a
   `title`, a `description.md` overview, an optional `workspace` (the absolute
   path to the local git checkout this Project covers; repo-touching agents run
-  there — see [workspace](#project-workspace)), and an optional closed `labels`
+  there — see [workspace](#project-workspace)), a `trunk` git ref (the branch
+  root Stories fork from and unstacked Stories target for `mergeBase`; defaults
+  `main` — see [Project trunk](#project-trunk)), and an optional closed `labels`
   catalog (see [Project labels](#project-labels)). Has no `partOf`.
 - **Epic** — a body of work (replaces a giant plan/spec). Contains Stories; its
   `description.md` holds the spec. Carries `blockedBy` (a list of other Epic ids
@@ -84,7 +86,8 @@ Three relationships, each with a distinct, non-overlapping role:
 - **stackedOn** — *the single git fork point* of a Story: which one Story it
   forks from. Story-only, always singular, and strictly within one container
   (same Epic, or same Project for project-level Stories). Absent means it forks
-  off the container's base (`main`). It is the **sole** inter-Story edge, so
+  off the Project's **trunk** (see [Project trunk](#project-trunk)). It is the
+  **sole** inter-Story edge, so
   within a container the Stories form a forest of independent stacks — a tree,
   never a DAG, with no internal merge gate. Authoring preference: stacks belong
   under an Epic; a lone project-level Story is the usual Project-child form.
@@ -97,7 +100,7 @@ Three relationships, each with a distinct, non-overlapping role:
 
 The one thing a single `stackedOn` fork point cannot express is a unit that needs
 code from **two** parallel Stories at once (the classic diamond: Stories A and
-B both fork `main`, worked in parallel, and C needs both). Rather than
+B both fork the Project trunk, worked in parallel, and C needs both). Rather than
 reintroduce a Story-level multi-parent edge — which would force a merge gate
 *inside* an Epic and break the "one Epic run = one clean, bottom-up-mergeable
 stack of PRs" property — we resolve it at the Epic boundary: split the dependent
@@ -118,13 +121,13 @@ a public setter. Call sites use `issue story get <storyId> mergeBase`.
 
 - **Resolver** — canonical algorithm (same as `derive()` /
   `issue story get … mergeBase`):
-  - no `stackedOn` (root or unstack) → `main`
+  - no `stackedOn` (root or unstack) → that Project's `trunk` (defaults `main`)
   - stacked on a merged parent → `resolve(parent)` (walk the parent's stack)
   - else parent's `branchName` when set; else unset
 - **No cascades.** Changing a parent's `branchName` or `merged` does not write
   child `mergeBase` keys; the next read sees the new topology. After a parent
-  lands (`merged` → `true`), children typically resolve to `main` (or further
-  up the stack). Open GitHub PRs are retargeted by GitHub itself; the tracker
+  lands (`merged` → `true`), children typically resolve to the Project trunk
+  (or further up the stack). Open GitHub PRs are retargeted by GitHub itself; the tracker
   does not run PR-base CLI — see [Project merge policy](#project-merge-policy).
 - **Rename guard**: once a Story has a `branchName` and any child is stacked
   on it, a real `branchName` rename is refused (same-value no-op still
@@ -144,7 +147,7 @@ it in another): keep it in one Story as multiple Tasks.
 
 Under `pull-request` / `manual` [merge policies](#project-merge-policy), each
 finished Story is planned as a PR against its derived `mergeBase` (after
-parent merge, usually `main`). The local `merge` policy integrates each
+parent merge, usually the Project trunk). The local `merge` policy integrates each
 finished Story directly into that same derived `mergeBase` with no PR, so a
 stack still lands bottom-up but never touches a remote PR.
 
@@ -309,7 +312,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 
 | kind | settable fields |
 | --- | --- |
-| project | `title`, `workspace`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
+| project | `title`, `workspace`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `retro`, `labels`, `description` |
 | idea | `title`, `archived`, `partOf`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `prUrl`, `merged`, `specReview`, `retro`, `labels`, `description` |
@@ -414,6 +417,7 @@ Project — the common-to-every-kind fields plus:
 | field | type | notes |
 | --- | --- | --- |
 | `workspace` | string? | absolute path to the local git checkout this Project covers; the cwd repo-touching agents run in (see [Project workspace](#project-workspace)) |
+| `trunk` | string | git ref root Stories fork from and unstacked Stories target for derived `mergeBase`; defaults `main` (see [Project trunk](#project-trunk)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` | what git `finish-branch` does after a Story's last Task is done; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
 | `supportingDocs` | `{ vision?, codingStandards?, designSystem? }`? | optional pointers to vision / coding standards / design system docs (see [Project supporting docs](#project-supporting-docs)) |
@@ -540,6 +544,15 @@ Project carries no needs-attention fields, so it is never the target.
 surfaces once a repo subagent is spawned, the work-loop coordinator checks for
 the `Workspace:` line up front (in Setup) and hands back to the user before
 spawning anything if it is absent.
+
+### Project trunk
+
+A Project's `trunk` is the git ref that root Stories (no `stackedOn`) and
+unstacked Stories resolve to for their derived `mergeBase`. It is set with
+`issue project set <projectId> trunk <ref>` and read with
+`issue project get <projectId> trunk`. It defaults to **`main`** so existing
+Projects are unaffected. The merge-base resolver uses `project.trunk` for root /
+unstack — see [stacked-PR merge model](#the-stacked-pr-merge-model).
 
 ### Model discriminator (read-only peek)
 
@@ -873,7 +886,7 @@ into it, and each edge type resolves deterministically:
 | edge into delete set | resolution |
 | --- | --- |
 | `partOf` | Cannot survive — the referrer is itself contained, so it is already in the delete set. No repair needed. |
-| `stackedOn` (a deleted Story; always same container) | **Splice**: repoint the surviving Story to the deleted story's own `stackedOn`, walking up until a surviving Story, or absent (forks `main`) if none. The next read re-derives `mergeBase` from the new topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)). Preserves the stack minus the removed node. |
+| `stackedOn` (a deleted Story; always same container) | **Splice**: repoint the surviving Story to the deleted story's own `stackedOn`, walking up until a surviving Story, or absent (forks the Project trunk) if none. The next read re-derives `mergeBase` from the new topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)). Preserves the stack minus the removed node. |
 | `blockedBy` (a deleted Epic; cross-Epic, same Project) | **Drop**: remove the deleted Epic id from the blocked Epic's list, with no inheritance. This is the case that matters for Epic deletion, since `blockedBy` is the only edge that crosses an Epic boundary. |
 | `stackedOn` → a deleted Task/Epic, or `blockedBy` → a deleted Story/Task | Impossible — `stackedOn` only ever references a Story, and `blockedBy` only ever references an Epic. |
 
@@ -981,7 +994,7 @@ project:
       blockedBy: [other-epic]  # other Epics (same Project) that must finish first
       children:
         - kind: story
-          id: base-story       # root Story (no stackedOn) -> forks main
+          id: base-story       # root Story (no stackedOn) -> forks Project trunk
           title: Base Story
           description: |
             This unit's full prose.
@@ -1018,7 +1031,7 @@ project:
   in the doc.
 - **Inferred `stackedOn`.** A Story nested under another Story's `children:`
   with `kind: story` forks from it; a Story directly under a Project or Epic
-  `children:` list is a root Story (forks the container's base, `main`). Never
+  `children:` list is a root Story (forks the Project's `trunk`). Never
   written in the doc.
 - **Order groups stay separate.** Under a Story, Task `order` and stacked-Story
   `order` renumber independently (YAML interleaving does not create one shared

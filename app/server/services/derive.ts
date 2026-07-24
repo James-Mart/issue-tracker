@@ -8,6 +8,7 @@ import type {
 import { bySequence } from "../order.js";
 import { resolveMergeBase } from "../resolve-merge-base.js";
 import { checkIntegrity } from "./integrity.js";
+import { projectContaining } from "./subtree.js";
 
 export interface DeriveResult {
   byId: Record<string, DerivedState>;
@@ -73,20 +74,30 @@ export function derive(issues: Issue[]): DeriveResult {
   for (const issue of issues) {
     if (issue.kind === "story") storiesById.set(issue.id, issue);
   }
-  // Cache by fork-point id so siblings sharing a parent don't re-walk chains.
-  const mergeBaseByStackedOn = new Map<string | undefined, string | undefined>();
-  const mergeBaseFor = (stackedOn: string | undefined): string | undefined => {
-    if (mergeBaseByStackedOn.has(stackedOn)) {
-      return mergeBaseByStackedOn.get(stackedOn);
+  const trunkByProject = new Map<string, string>();
+  for (const issue of issues) {
+    if (issue.kind === "project") trunkByProject.set(issue.id, issue.trunk);
+  }
+  const trunkForStory = (story: Story): string => {
+    const projectId = projectContaining(story, byId);
+    return (projectId && trunkByProject.get(projectId)) || "main";
+  };
+  // Cache by fork-point + trunk so siblings sharing a parent don't re-walk chains.
+  const mergeBaseCache = new Map<string, string | undefined>();
+  const mergeBaseFor = (story: Story): string | undefined => {
+    const trunk = trunkForStory(story);
+    const cacheKey = `${story.stackedOn ?? ""}\0${trunk}`;
+    if (mergeBaseCache.has(cacheKey)) {
+      return mergeBaseCache.get(cacheKey);
     }
-    const value = resolveMergeBase(stackedOn, issues, storiesById);
-    mergeBaseByStackedOn.set(stackedOn, value);
+    const value = resolveMergeBase(story.stackedOn, issues, storiesById, trunk);
+    mergeBaseCache.set(cacheKey, value);
     return value;
   };
 
   for (const story of storiesById.values()) {
     const storyStatus = storyStatusOf(story);
-    const mergeBase = mergeBaseFor(story.stackedOn);
+    const mergeBase = mergeBaseFor(story);
     state[story.id] = {
       blocked: storyStatus === "not-started" && !parentTipDone(story),
       storyStatus,

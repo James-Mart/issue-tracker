@@ -58,6 +58,21 @@ describe("parseIssue - valid per kind", () => {
     }
   });
 
+  it("defaults project trunk to main and rejects an empty trunk", () => {
+    const defaulted = parseIssue(project);
+    expect(defaulted.ok).toBe(true);
+    if (defaulted.ok && defaulted.issue.kind === "project") {
+      expect(defaulted.issue.trunk).toBe("main");
+    }
+    const custom = parseIssue({ ...project, trunk: "develop" });
+    expect(custom.ok).toBe(true);
+    if (custom.ok && custom.issue.kind === "project") {
+      expect(custom.issue.trunk).toBe("develop");
+    }
+    const empty = parseIssue({ ...project, trunk: "" });
+    expect(empty.ok).toBe(false);
+  });
+
   it("defaults mergePolicy to manual for a project", () => {
     const result = parseIssue(project);
     expect(result.ok).toBe(true);

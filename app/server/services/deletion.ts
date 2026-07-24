@@ -3,7 +3,7 @@ import type { Issue } from "../schemas.js";
 export interface Repoint {
   id: string;
   // The deleted branch's own fork point that this branch inherits; absent means
-  // it now forks the Epic base (`main`).
+  // it now forks the Project trunk (no `stackedOn`).
   to?: string;
 }
 
@@ -35,7 +35,7 @@ export interface DeletionResult {
 // surviving foreign reference into that set resolves:
 //   - Branch `stackedOn` (always within one Epic): spliced to the deleted
 //     branch's own fork point, walking up until a surviving branch (or
-//     `undefined` = `main`).
+//     `undefined` = Project trunk).
 //   - Epic `blockedBy` (the only cross-container edge): the deleted ids are
 //     dropped, no inheritance.
 // `partOf` never needs repair: anything that points into the delete set via
@@ -61,7 +61,7 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
   }
 
   // Follow `stackedOn` up from a deleted branch until a surviving branch is
-  // found (the spliced fork point) or the chain ends (forks `main`).
+  // found (the spliced fork point) or the chain ends (no `stackedOn` → Project trunk).
   const survivingForkPoint = (deletedBranchId: string): string | undefined => {
     let cursor: string | undefined = deletedBranchId;
     const seen = new Set<string>();
