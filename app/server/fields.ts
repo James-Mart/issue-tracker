@@ -29,7 +29,11 @@ export const PROJECT_FIELD_KEYS = [
 
 export const EPIC_FIELD_KEYS = ["blockedBy"] as const;
 
-export const EPIC_IMPERATIVE_ONLY_KEYS = ["retro", "labels"] as const;
+export const EPIC_IMPERATIVE_ONLY_KEYS = [
+  "mergeBaseOverride",
+  "retro",
+  "labels",
+] as const;
 
 export const EPIC_RUNTIME_OPTIONAL_KEYS = EPIC_IMPERATIVE_ONLY_KEYS;
 
@@ -43,6 +47,7 @@ export const STORY_FORM_FIELD_KEYS = [
 ] as const;
 
 export const STORY_IMPERATIVE_ONLY_KEYS = [
+  "mergeBaseOverride",
   "specReview",
   "retro",
   "labels",
@@ -56,6 +61,7 @@ export const STORY_FIELD_KEYS = [
 // Optional story runtime state preserved by apply when already set on disk.
 export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "branchName",
+  "mergeBaseOverride",
   "prUrl",
   "specReview",
   "retro",
@@ -94,6 +100,7 @@ export const CLEARABLE_KEYS = [
   "workspace",
   "qa",
   "retro",
+  "mergeBaseOverride",
 ] as const;
 
 export type ClearableKey = (typeof CLEARABLE_KEYS)[number];

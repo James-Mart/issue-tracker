@@ -240,6 +240,26 @@ describe("parseIssue - valid per kind", () => {
     }
   });
 
+  it("parses optional mergeBaseOverride on story and epic", () => {
+    const storyResult = parseIssue({
+      ...branch,
+      mergeBaseOverride: "feat/existing",
+    });
+    expect(storyResult.ok).toBe(true);
+    if (storyResult.ok && storyResult.issue.kind === "story") {
+      expect(storyResult.issue.mergeBaseOverride).toBe("feat/existing");
+    }
+
+    const epicResult = parseIssue({
+      ...epic,
+      mergeBaseOverride: "feat/epic-base",
+    });
+    expect(epicResult.ok).toBe(true);
+    if (epicResult.ok && epicResult.issue.kind === "epic") {
+      expect(epicResult.issue.mergeBaseOverride).toBe("feat/epic-base");
+    }
+  });
+
   it("parses a branch with an optional specReview", () => {
     const passed = parseIssue({ ...branch, specReview: "passed" });
     expect(passed.ok).toBe(true);

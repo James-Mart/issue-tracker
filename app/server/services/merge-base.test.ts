@@ -154,4 +154,34 @@ describe("ensureMergeBaseStripped (via list)", () => {
     expect(readIssue("fresh-child").mergeBase).toBeUndefined();
     expect(list().derived["fresh-child"]?.mergeBase).toBe("feat/root");
   });
+
+  it("does not strip mergeBaseOverride when stripping legacy mergeBase", async () => {
+    writeIssue("root", {
+      kind: "story",
+      title: "Root",
+      partOf: "e",
+      branchName: "feat/root",
+      mergeBase: "stale",
+      mergeBaseOverride: "feat/keep",
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("e", {
+      kind: "epic",
+      title: "E",
+      partOf: "p",
+      mergeBaseOverride: "feat/epic-keep",
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const { list } = await import("./issues.js");
+    list();
+
+    expect(readIssue("root").mergeBase).toBeUndefined();
+    expect(readIssue("root").mergeBaseOverride).toBe("feat/keep");
+    expect(readIssue("e").mergeBaseOverride).toBe("feat/epic-keep");
+  });
 });

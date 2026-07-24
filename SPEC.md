@@ -31,17 +31,19 @@ Every issue has a `kind`, one of:
   (derived or stored) and none of the assignee/needs-attention fields — a
   `title`, a `description.md` overview, an optional `workspace` (the absolute
   path to the local git checkout this Project covers; repo-touching agents run
-  there — see [workspace](#project-workspace)), a `trunk` git ref (the branch
-  root Stories fork from and unstacked Stories target for `mergeBase`; defaults
-  `main` — see [Project trunk](#project-trunk)), and an optional closed `labels`
-  catalog (see [Project labels](#project-labels)). Has no `partOf`.
+  there — see [workspace](#project-workspace)), a `trunk` git ref (default for
+  derived `mergeBase` when no `mergeBaseOverride` applies; defaults `main` —
+  see [Project trunk](#project-trunk)), and an optional closed `labels` catalog
+  (see [Project labels](#project-labels)). Has no `partOf`.
 - **Epic** — a body of work (replaces a giant plan/spec). Contains Stories; its
   `description.md` holds the spec. Carries `blockedBy` (a list of other Epic ids
-  in the same Project that must finish first), an optional `retro` gate
-  (`in-progress` / `done`), and optional `labels` assignments from the Project
-  catalog (see [Project labels](#project-labels)). Has **no stored status** —
-  its status is fully derived from descendants. Is `partOf` a Project
-  (required). Prefer an Epic when the plan needs sibling root Stories,
+  in the same Project that must finish first), an optional `mergeBaseOverride`
+  (redirects first-layer Stories' derived `mergeBase` away from `trunk` — see
+  [stacked-PR merge model](#the-stacked-pr-merge-model)), an optional `retro`
+  gate (`in-progress` / `done`), and optional `labels` assignments from the
+  Project catalog (see [Project labels](#project-labels)). Has **no stored
+  status** — its status is fully derived from descendants. Is `partOf` a
+  Project (required). Prefer an Epic when the plan needs sibling root Stories,
   stacking, or Epic `blockedBy`.
 - **Idea** — a Project-level capture item (title, description, attachments,
   archive, and optional `labels` assignments from the Project catalog — see
@@ -61,7 +63,9 @@ Every issue has a `kind`, one of:
   (`in-progress` / `done`; same enum as Epic; unused by the work loop unless
   the Story is the top-level work root), and optional `labels` assignments from
   the containing Project catalog (see [Project labels](#project-labels)).
-  Status and `mergeBase` are derived, never stored.
+  Status and derived `mergeBase` are never stored. A project-level root Story
+  may also store `mergeBaseOverride` (set via imperative `mergeBase` — see
+  [stacked-PR merge model](#the-stacked-pr-merge-model)).
 - **Task** — an atomic, story-point-sized unit under a Story. Each Task is a
   **small but standalone cross-section** of the work: after it lands on the
   Story tip, the package must still **build** and tests must remain
@@ -85,12 +89,13 @@ Three relationships, each with a distinct, non-overlapping role:
   Projects have none.
 - **stackedOn** — *the single git fork point* of a Story: which one Story it
   forks from. Story-only, always singular, and strictly within one container
-  (same Epic, or same Project for project-level Stories). Absent means it forks
-  off the Project's **trunk** (see [Project trunk](#project-trunk)). It is the
-  **sole** inter-Story edge, so
-  within a container the Stories form a forest of independent stacks — a tree,
-  never a DAG, with no internal merge gate. Authoring preference: stacks belong
-  under an Epic; a lone project-level Story is the usual Project-child form.
+  (same Epic, or same Project for project-level Stories). Absent means
+  unstacked — derived `mergeBase` follows
+  [stacked-PR merge model](#the-stacked-pr-merge-model) (override or Project
+  **trunk**). It is the **sole** inter-Story edge, so within a container the
+  Stories form a forest of independent stacks — a tree, never a DAG, with no
+  internal merge gate. Authoring preference: stacks belong under an Epic; a
+  lone project-level Story is the usual Project-child form.
 - **blockedBy** — *cross-Epic ordering*: a list of other Epic ids **in the same
   Project** that must finish (all their Stories merged) before this Epic can
   start. Epic-only, and the only edge that crosses an Epic boundary. This is what
@@ -116,19 +121,42 @@ of stalling a stack mid-flight.
 
 Every Story has a derived **`mergeBase`**: the git ref that `start-branch`
 checks out from and that `finish-branch` targets for PR/merge. It is
-resolved on read — never stored on disk, never written by cascades, and not
-a public setter. Call sites use `issue story get <storyId> mergeBase`.
+resolved on read — never stored on disk, never written by cascades. Call
+sites use `issue story get <storyId> mergeBase`.
+
+An optional stored **`mergeBaseOverride`** on a **project-level root Story**
+(`partOf` the Project, no `stackedOn`) or an **Epic** redirects unstacked
+resolution away from `project.trunk`. The CLI setter is named `mergeBase`
+and writes that stored key (same alias pattern as other imperative sets):
+
+```
+issue story set <rootStoryId> mergeBase <branch>
+issue epic set <epicId> mergeBase <branch>
+```
+
+`issue story get <storyId> mergeBase` stays the **derived** value (override
+already layered in). Setting `mergeBase` on a stacked Story or a first-layer
+Epic Story is refused (`mergeBase can only be set on a root-level Story or an
+Epic`). First-layer Epic Stories inherit the Epic's base and cannot carry
+their own override (keeps one base per Epic). `apply` never reads or writes
+`mergeBaseOverride`.
 
 - **Resolver** — canonical algorithm (same as `derive()` /
-  `issue story get … mergeBase`):
-  - no `stackedOn` (root or unstack) → that Project's `trunk` (defaults `main`)
+  `issue story get … mergeBase` / `app/server/resolve-merge-base.ts`):
+  - no `stackedOn`, `partOf` a Project (root Story) → that Story's
+    `mergeBaseOverride` if set, else the Project's `trunk` (defaults `main`)
+  - no `stackedOn`, `partOf` an Epic (first-layer Story) → the Epic's
+    `mergeBaseOverride` if set, else the Project's `trunk` (any override on
+    the Story itself is ignored)
   - stacked on a merged parent → `resolve(parent)` (walk the parent's stack)
   - else parent's `branchName` when set; else unset
-- **No cascades.** Changing a parent's `branchName` or `merged` does not write
-  child `mergeBase` keys; the next read sees the new topology. After a parent
-  lands (`merged` → `true`), children typically resolve to the Project trunk
-  (or further up the stack). Open GitHub PRs are retargeted by GitHub itself; the tracker
-  does not run PR-base CLI — see [Project merge policy](#project-merge-policy).
+- **No cascades.** Changing a parent's `branchName`, `merged`, or
+  `mergeBaseOverride` does not write child `mergeBase` keys; the next read
+  sees the new topology. After a parent lands (`merged` → `true`), children
+  typically resolve to the parent's resolved base (override or Project trunk,
+  or further up the stack). Open GitHub PRs are retargeted by GitHub itself;
+  the tracker does not run PR-base CLI — see
+  [Project merge policy](#project-merge-policy).
 - **Rename guard**: once a Story has a `branchName` and any child is stacked
   on it, a real `branchName` rename is refused (same-value no-op still
   allowed), even though tracker metadata would otherwise re-derive. That keeps
@@ -147,10 +175,10 @@ it in another): keep it in one Story as multiple Tasks.
 
 Under `pull-request` / `manual` [merge policies](#project-merge-policy), each
 finished Story is planned as a PR against its derived `mergeBase` (after
-parent merge, usually the Project trunk). The local `merge` and `fast-forward`
-policies integrate each finished Story directly into that same derived
-`mergeBase` with no PR, so a stack still lands bottom-up but never touches a
-remote PR.
+parent merge, usually the Project trunk or an explicit override). The local
+`merge` and `fast-forward` policies integrate each finished Story directly into
+that same derived `mergeBase` with no PR, so a stack still lands bottom-up but
+never touches a remote PR.
 
 ### Derived terms
 
@@ -302,7 +330,8 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   `apply` / `add`.
 - Per-kind **set** allowlists (not a flat shared allowlist). Shared machinery is
   only coerce/dispatch (bool/enum/JSON/array/`--clear`/`--file`/`--reason`).
-- `order` is not settable. `mergeBase` is not settable (see
+- `order` is not settable. Story `mergeBase` on **get** is derived; on **set**
+  it writes `mergeBaseOverride` on eligible nodes only (see
   [stacked-PR merge model](#the-stacked-pr-merge-model)).
 - `attentionReason` is not directly settable (see
   [`needsAttention`](#needsattention)).
@@ -314,9 +343,9 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | kind | settable fields |
 | --- | --- |
 | project | `title`, `workspace`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
-| epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `retro`, `labels`, `description` |
+| epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `mergeBase`, `retro`, `labels`, `description` |
 | idea | `title`, `archived`, `partOf`, `labels`, `description` |
-| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `prUrl`, `merged`, `specReview`, `retro`, `labels`, `description` |
+| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `mergeBase`, `prUrl`, `merged`, `specReview`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commitSha`, `noDiff`, `description` |
 
 ##### Value parsing
@@ -418,7 +447,7 @@ Project — the common-to-every-kind fields plus:
 | field | type | notes |
 | --- | --- | --- |
 | `workspace` | string? | absolute path to the local git checkout this Project covers; the cwd repo-touching agents run in (see [Project workspace](#project-workspace)) |
-| `trunk` | string | git ref root Stories fork from and unstacked Stories target for derived `mergeBase`; defaults `main` (see [Project trunk](#project-trunk)) |
+| `trunk` | string | default git ref for derived `mergeBase` when no `mergeBaseOverride` applies; defaults `main` (see [Project trunk](#project-trunk)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"` | what integration steps `finish-branch` runs after pushing the Story branch; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
 | `supportingDocs` | `{ vision?, codingStandards?, designSystem? }`? | optional pointers to vision / coding standards / design system docs (see [Project supporting docs](#project-supporting-docs)) |
@@ -548,12 +577,14 @@ spawning anything if it is absent.
 
 ### Project trunk
 
-A Project's `trunk` is the git ref that root Stories (no `stackedOn`) and
-unstacked Stories resolve to for their derived `mergeBase`. It is set with
+A Project's `trunk` is the default git ref for derived `mergeBase` when no
+`mergeBaseOverride` applies. It is set with
 `issue project set <projectId> trunk <ref>` and read with
 `issue project get <projectId> trunk`. It defaults to **`main`** so existing
-Projects are unaffected. The merge-base resolver uses `project.trunk` for root /
-unstack — see [stacked-PR merge model](#the-stacked-pr-merge-model).
+Projects are unaffected. Root Stories and Epics may override it via
+imperative `mergeBase` (stored as `mergeBaseOverride`); first-layer Epic
+Stories inherit the Epic's override — see
+[stacked-PR merge model](#the-stacked-pr-merge-model).
 
 ### Model discriminator (read-only peek)
 
@@ -671,6 +702,7 @@ Epic — the Epic/Story/Task needs-attention common fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Project id (required) |
 | `blockedBy` | string[] | other Epic ids in the same Project that must finish first; defaults `[]`; the only cross-Epic edge |
+| `mergeBaseOverride` | string? | optional; set via imperative `mergeBase`; first-layer Stories inherit this as their derived `mergeBase` (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; machine-readable retro gate |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
@@ -692,6 +724,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `partOf` | string | the Epic id **or** Project id (required) |
 | `branchName` | string? | set once the git branch is created; rename refused while stacked children exist |
 | `stackedOn` | string? | single fork-point Story id (must be in the same Epic, or same Project for project-level Stories); absent => root |
+| `mergeBaseOverride` | string? | optional; meaningful on project-level root Stories only; set via imperative `mergeBase` (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
 | `specReview` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
@@ -1009,7 +1042,7 @@ project:
       blockedBy: [other-epic]  # other Epics (same Project) that must finish first
       children:
         - kind: story
-          id: base-story       # root Story (no stackedOn) -> forks Project trunk
+          id: base-story       # root Story (no stackedOn) -> trunk or Epic mergeBaseOverride
           title: Base Story
           description: |
             This unit's full prose.
@@ -1046,8 +1079,10 @@ project:
   in the doc.
 - **Inferred `stackedOn`.** A Story nested under another Story's `children:`
   with `kind: story` forks from it; a Story directly under a Project or Epic
-  `children:` list is a root Story (forks the Project's `trunk`). Never
-  written in the doc.
+  `children:` list is a root / first-layer Story (derived `mergeBase` =
+  `mergeBaseOverride` or Project `trunk` — see
+  [stacked-PR merge model](#the-stacked-pr-merge-model)). Never written in the
+  doc.
 - **Order groups stay separate.** Under a Story, Task `order` and stacked-Story
   `order` renumber independently (YAML interleaving does not create one shared
   sequence). UI still shows tasks then stacked Stories.
@@ -1168,7 +1203,8 @@ preserves everything else from the existing same-kind issue.
 | `id`, `createdAt` | set on create; `apply` preserves them, never rewrites |
 | `status`, `qa`, `commitSha`, `noDiff` (Task) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `branchName`, `prUrl`, `merged`, `specReview`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
-| `mergeBase` (Story) | derived only — never stored, never set via [`set`](#kind-scoped-get--set) or `apply` (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
+| `mergeBaseOverride` (Epic / Story) | imperative only via kind [`set`](#kind-scoped-get--set) field `mergeBase` (stores as `mergeBaseOverride`); `apply` preserves |
+| `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `assignee` (Task) | imperative write (kind [`set`](#kind-scoped-get--set)); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |
 | `needsAttention`/`attentionReason` (Epic / Story / Task) | imperative write (kind [`set`](#kind-scoped-get--set); `attentionReason` only via `needsAttention` + `--reason`); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |
 | `chat.jsonl` | imperative only (`issue epic|story|task comment`); `apply` never reads or writes it |

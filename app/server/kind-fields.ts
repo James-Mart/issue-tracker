@@ -1,3 +1,4 @@
+import { CLEARABLE_KEYS } from "./fields.js";
 import {
   TASK_STATUSES,
   QA_STATUSES,
@@ -6,10 +7,22 @@ import {
   SPEC_REVIEW_STATUSES,
   type IssueKind,
 } from "./schemas.js";
-import { CLEARABLE_KEYS } from "./fields.js";
+
+export const MERGE_BASE_SET_ERROR =
+  "mergeBase can only be set on a root-level Story or an Epic";
+
+/** Reject story mergeBase sets on stacked or first-layer Epic Stories. */
+export function assertStoryCanSetMergeBase(
+  story: { stackedOn?: string },
+  parentKind: IssueKind,
+): void {
+  if (story.stackedOn || parentKind === "epic") {
+    throw new Error(MERGE_BASE_SET_ERROR);
+  }
+}
 
 export type FieldCoerce =
-  | { type: "string" }
+  | { type: "string"; storeAs?: string }
   | { type: "boolean" }
   | { type: "enum"; values: readonly string[] }
   | { type: "json" }
@@ -22,6 +35,11 @@ export type FieldCoerce =
   | { type: "commitSha" };
 
 export type SetFieldSpec = FieldCoerce;
+
+/** Stored patch key for a set field (CLI name may alias a different key). */
+export function setFieldStoreKey(field: string, spec: SetFieldSpec): string {
+  return spec.type === "string" && spec.storeAs ? spec.storeAs : field;
+}
 
 export const PROJECT_SET_FIELDS = {
   title: { type: "string" },
@@ -40,6 +58,7 @@ export const EPIC_SET_FIELDS = {
   archived: { type: "boolean" },
   partOf: { type: "string" },
   blockedBy: { type: "array" },
+  mergeBase: { type: "string", storeAs: "mergeBaseOverride" },
   labels: { type: "array" },
   retro: { type: "enum", values: RETRO_STATUSES },
   description: { type: "description" },
@@ -60,6 +79,7 @@ export const STORY_SET_FIELDS = {
   partOf: { type: "string" },
   branchName: { type: "string" },
   stackedOn: { type: "string" },
+  mergeBase: { type: "string", storeAs: "mergeBaseOverride" },
   prUrl: { type: "string" },
   merged: { type: "boolean" },
   specReview: { type: "enum", values: SPEC_REVIEW_STATUSES },

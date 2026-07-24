@@ -1395,7 +1395,7 @@ describe("story get/set", () => {
     expect(runCli(["story", "get", "a", "merged"]).stdout).toBe("true\n");
   });
 
-  it("refuses kind mismatch, unknown fields, and unsettable mergeBase", () => {
+  it("refuses kind mismatch and unknown fields; mergeBase sets override", () => {
     const mismatch = runCli(["story", "get", "e", "title"]);
     expect(mismatch.status).toBe(1);
     expect(mismatch.stderr).toContain('"e" is an epic, not a story');
@@ -1412,10 +1412,42 @@ describe("story get/set", () => {
     expect(removedReady.status).toBe(1);
     expect(removedReady.stderr).toContain('unknown field "ready" for story');
 
-    const unknownSet = runCli(["story", "set", "a", "mergeBase", "main"]);
-    expect(unknownSet.status).toBe(1);
-    expect(unknownSet.stderr).toContain(
-      'unknown or unsettable field "mergeBase" for story',
+    const epicStorySet = runCli(["story", "set", "a", "mergeBase", "feat/existing"]);
+    expect(epicStorySet.status).toBe(1);
+    expect(epicStorySet.stderr).toContain(
+      "mergeBase can only be set on a root-level Story or an Epic",
+    );
+
+    const stackedSet = runCli(["story", "set", "b", "mergeBase", "feat/stacked"]);
+    expect(stackedSet.status).toBe(1);
+    expect(stackedSet.stderr).toContain(
+      "mergeBase can only be set on a root-level Story or an Epic",
+    );
+
+    writeIssue("root", {
+      kind: "story",
+      title: "Root story",
+      partOf: "p",
+      merged: false,
+      order: 2,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    expect(runCli(["story", "set", "root", "mergeBase", "feat/existing"]).status).toBe(
+      0,
+    );
+    expect(issueJsonField("root", "mergeBaseOverride")).toBe("feat/existing");
+    expect(issueJsonField("root", "mergeBase")).toBeUndefined();
+    expect(runCli(["story", "get", "root", "mergeBase"]).stdout).toBe(
+      "feat/existing\n",
+    );
+
+    expect(runCli(["epic", "set", "e", "mergeBase", "feat/epic-base"]).status).toBe(
+      0,
+    );
+    expect(issueJsonField("e", "mergeBaseOverride")).toBe("feat/epic-base");
+    expect(runCli(["story", "get", "a", "mergeBase"]).stdout).toBe(
+      "feat/epic-base\n",
     );
 
     writeIssue("c1", {

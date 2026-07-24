@@ -146,7 +146,10 @@ Story, in stack order), and only Stories merge — Tasks are internal steps that
 ship together as one Story. So never split one cohesive change across Stories
 such that merging one leaves the merge base broken (e.g. a schema change in one
 Story and the code that consumes it in another): keep it in a single Story as
-multiple Tasks. See the stacked merge model in [SPEC.md](../../SPEC.md).
+multiple Tasks. See the stacked merge model in
+[SPEC.md](../../SPEC.md#the-stacked-pr-merge-model). To target an existing
+non-trunk branch, set a merge-base override after `apply` (see
+[Merge-base override](#merge-base-override)).
 
 ### Task shape: vertical slices, not horizontal layers
 
@@ -226,6 +229,20 @@ read with `issue project get <projectId> mergePolicy`):
   write "in the PR" or other pull-request-assuming language; phrase in terms of
   merging or delivery instead (e.g. "merge to trunk", "land the Story").
 
+## Merge-base override
+
+To build on an existing non-trunk branch, set an explicit merge-base **after**
+`apply` (imperative only — not in the YAML doc):
+
+- Project-level root Story: `issue story set <id> mergeBase <branch>`
+- Epic: `issue epic set <id> mergeBase <branch>` — every first-layer Story
+  inherits that base; those Stories cannot set their own override
+- Stacked Stories always derive from the parent Story's branch — unchanged
+
+Derived `mergeBase` (`issue story get … mergeBase`) already reflects the
+override. Rules:
+[SPEC.md § The stacked-PR merge model](../../SPEC.md#the-stacked-pr-merge-model).
+
 ## Completeness pass
 
 Before done:
@@ -257,3 +274,6 @@ Before done:
   [Prior-content consistency](#prior-content-consistency)).
 - Delivery/merge phrasing matches the Project's `mergePolicy` (see
   [Merge-policy delivery prose](#merge-policy-delivery-prose)).
+- Non-trunk bases use imperative `mergeBase` on the root Story or Epic after
+  `apply` (see [Merge-base override](#merge-base-override)) — never invent a
+  base in YAML or Task prose for the git agent.

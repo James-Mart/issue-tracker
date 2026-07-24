@@ -187,6 +187,33 @@ describe("derive - branch mergeBase resolution", () => {
     ];
     expect(derive(issues).byId.b.mergeBase).toBe("develop");
   });
+
+  it("derives mergeBase from a root Story's mergeBaseOverride", () => {
+    const issues = [
+      project("p"),
+      branch("b", "p", { mergeBaseOverride: "feat/existing" }),
+    ];
+    expect(derive(issues).byId.b.mergeBase).toBe("feat/existing");
+  });
+
+  it("derives first-layer Epic Story mergeBase from the Epic override", () => {
+    const issues = [
+      project("p"),
+      epic("e", "p", 0, { mergeBaseOverride: "feat/epic-base" }),
+      branch("b", "e"),
+    ];
+    expect(derive(issues).byId.b.mergeBase).toBe("feat/epic-base");
+  });
+
+  it("keeps stacked mergeBase on the parent branch when an Epic override is set", () => {
+    const issues = [
+      project("p"),
+      epic("e", "p", 0, { mergeBaseOverride: "feat/epic-base" }),
+      branch("base", "e", { branchName: "feat/base" }),
+      branch("b", "e", { stackedOn: "base" }),
+    ];
+    expect(derive(issues).byId.b.mergeBase).toBe("feat/base");
+  });
 });
 
 describe("derive - branch status", () => {
