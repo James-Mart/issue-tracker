@@ -1,0 +1,12 @@
+plans/
+
+# Tracker runtime store (not app/src/features/issues/)
+/issues/
+
+# Logs
+*.log
+
+# Local env
+.env
+.env.local
+.env.*.local

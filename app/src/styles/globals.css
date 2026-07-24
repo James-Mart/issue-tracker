@@ -1,0 +1,353 @@
+@import "./fonts.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-display: "Martian Mono", ui-monospace, monospace;
+    --font-body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+      Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  /* Mainline palette (HSL components) → shadcn slots via aliases.
+     Dark is canonical; light is derived. Ready ports carry no hue
+     (hollow ink outline) — no dedicated token. */
+  :root,
+  [data-theme="dark"] {
+    --void: 217.5 25% 6.3%;
+    --panel: 218.6 25.9% 10.6%;
+    --panel-2: 216.7 25% 14.1%;
+    --rail: 216 19.6% 20%;
+    --rail-lit: 216 20.5% 28.6%;
+    --mut: 216 13.2% 55.3%;
+    --ink: 220 23.1% 92.4%;
+    --current: 180 65% 54.1%;
+    --current-dim: 182.4 54.3% 36.1%;
+    --blocked: 352 68.5% 61.4%;
+    --merged: 147.8 50.5% 57.3%;
+    --warn: 40 75% 60.8%;
+    /* Live emphasis only — spreads match design-system dark --glow. */
+    --glow: 0 0 0 1px hsl(var(--current) / 0.35),
+      0 0 18px -2px hsl(var(--current) / 0.45);
+
+    --background: var(--void);
+    --foreground: var(--ink);
+    --card: var(--panel);
+    --card-foreground: var(--ink);
+    --popover: var(--panel);
+    --popover-foreground: var(--ink);
+    --primary: var(--current);
+    --primary-foreground: var(--void);
+    --secondary: var(--panel-2);
+    --secondary-foreground: var(--ink);
+    --muted: var(--panel-2);
+    --muted-foreground: var(--mut);
+    --accent: var(--panel-2);
+    --accent-foreground: var(--ink);
+    --destructive: var(--blocked);
+    --destructive-foreground: var(--ink);
+    --success: var(--merged);
+    --success-foreground: var(--void);
+    --warning: var(--warn);
+    --warning-foreground: var(--void);
+    --border: var(--rail);
+    --input: var(--rail);
+    --ring: var(--current);
+    --radius: 0.5rem;
+    --sidebar-background: var(--panel);
+    --sidebar-foreground: var(--ink);
+    --sidebar-primary: var(--current);
+    --sidebar-primary-foreground: var(--void);
+    --sidebar-accent: var(--panel-2);
+    --sidebar-accent-foreground: var(--ink);
+    --sidebar-border: var(--rail);
+    --sidebar-ring: var(--current);
+  }
+
+  [data-theme="light"] {
+    --void: 46.7 27.3% 93.5%;
+    --panel: 48 38.5% 97.5%;
+    --panel-2: 0 0% 100%;
+    --rail: 45 16.3% 80.8%;
+    --rail-lit: 45.7 12.7% 67.6%;
+    --mut: 40 10.9% 37.8%;
+    --ink: 220 14.3% 12.4%;
+    --current: 182.8 84.4% 35.3%;
+    --current-dim: 182.3 44.6% 65.3%;
+    --blocked: 350.8 53.7% 50%;
+    --merged: 150.5 54.9% 40%;
+    --warn: 38.7 81.1% 39.4%;
+    /* Live emphasis only — spreads match design-system light --glow. */
+    --glow: 0 0 0 1px hsl(var(--current) / 0.35),
+      0 0 16px -4px hsl(var(--current) / 0.4);
+
+    --background: var(--void);
+    --foreground: var(--ink);
+    --card: var(--panel);
+    --card-foreground: var(--ink);
+    --popover: var(--panel-2);
+    --popover-foreground: var(--ink);
+    --primary: var(--current);
+    --primary-foreground: var(--panel-2);
+    --secondary: var(--panel-2);
+    --secondary-foreground: var(--ink);
+    --muted: var(--panel);
+    --muted-foreground: var(--mut);
+    --accent: var(--panel);
+    --accent-foreground: var(--ink);
+    --destructive: var(--blocked);
+    --destructive-foreground: var(--panel-2);
+    --success: var(--merged);
+    --success-foreground: var(--panel-2);
+    --warning: var(--warn);
+    --warning-foreground: var(--panel-2);
+    --border: var(--rail);
+    --input: var(--rail);
+    --ring: var(--current);
+    --radius: 0.5rem;
+    --sidebar-background: var(--panel);
+    --sidebar-foreground: var(--ink);
+    --sidebar-primary: var(--current);
+    --sidebar-primary-foreground: var(--panel-2);
+    --sidebar-accent: var(--void);
+    --sidebar-accent-foreground: var(--ink);
+    --sidebar-border: var(--rail);
+    --sidebar-ring: var(--current);
+  }
+
+  * {
+    @apply border-border;
+    /* All scrollports (viewport + nested overflow), not just html —
+       WebKit scrollbar pseudos do not inherit. */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--rail-lit));
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    background: hsl(var(--background));
+    color-scheme: dark;
+  }
+
+  html[data-theme="light"] {
+    color-scheme: light;
+  }
+
+  body {
+    margin: 0;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+    font-feature-settings: "ss01";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.35);
+    color: hsl(var(--foreground));
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Generic reduced-motion guard — motion layers opt into animation;
+     this collapses duration/iteration under prefers-reduced-motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@keyframes chat-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@layer components {
+  /* Live agent label: static current ink by default; shimmer only when motion ok. */
+  .chat-shimmer {
+    color: hsl(var(--current));
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .chat-shimmer {
+      background: linear-gradient(
+        90deg,
+        hsl(var(--current-dim)) 0%,
+        hsl(var(--current)) 45%,
+        hsl(var(--current-dim)) 100%
+      );
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: chat-shimmer 1.6s linear infinite;
+    }
+  }
+
+  /* GFM prose — Mainline type scale, code/quote/list, issue-link. */
+  .prose-issue {
+    max-width: 720px;
+    font-size: 15px;
+    line-height: 1.55;
+    color: hsl(var(--foreground));
+  }
+  .prose-issue > :first-child {
+    margin-top: 0;
+  }
+  .prose-issue > :last-child {
+    margin-bottom: 0;
+  }
+  .prose-issue h1 {
+    margin: 1.75rem 0 0.75rem;
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+  .prose-issue h2,
+  .prose-issue h3 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  .prose-issue h2 {
+    margin: 1.625rem 0 0.5rem;
+  }
+  .prose-issue h3 {
+    margin: 1.375rem 0 0.5rem;
+  }
+  .prose-issue p {
+    margin: 0 0 14px;
+  }
+  .prose-issue strong {
+    font-weight: 600;
+  }
+  .prose-issue ul {
+    margin: 0 0 14px;
+    padding-left: 1.375rem;
+    list-style: disc;
+  }
+  .prose-issue ol {
+    margin: 0 0 14px;
+    padding-left: 1.375rem;
+    list-style: decimal;
+  }
+  .prose-issue li {
+    margin: 4px 0;
+  }
+  .prose-issue li > ul,
+  .prose-issue li > ol {
+    margin: 4px 0 0;
+  }
+  .prose-issue a {
+    color: hsl(var(--primary));
+    text-decoration: none;
+  }
+  .prose-issue a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  /* issue: links — mono id treatment within prose */
+  .prose-issue .issue-md-link {
+    font-family: var(--font-mono);
+    font-size: 0.93em;
+    font-variant-numeric: tabular-nums;
+  }
+  .prose-issue code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    font-variant-numeric: tabular-nums;
+    background: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .prose-issue pre {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-left: 2px solid hsl(var(--primary));
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin: 12px 0;
+    overflow-x: auto;
+  }
+  .prose-issue pre code {
+    font-size: inherit;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+  }
+  .prose-issue blockquote {
+    margin: 12px 0;
+    padding: 2px 0 2px 14px;
+    border-left: 2px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+  }
+  .prose-issue blockquote p:last-child {
+    margin-bottom: 0;
+  }
+  .prose-issue table {
+    width: 100%;
+    margin: 12px 0;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+  }
+  .prose-issue th,
+  .prose-issue td {
+    padding: 8px 10px;
+    border-bottom: 1px solid hsl(var(--border));
+    vertical-align: top;
+  }
+  .prose-issue th {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .prose-issue hr {
+    margin: 1.25rem 0;
+    border: none;
+    border-top: 1px solid hsl(var(--border));
+  }
+}

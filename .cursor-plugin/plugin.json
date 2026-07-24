@@ -1,0 +1,9 @@
+{
+  "name": "issue-tracker",
+  "version": "0.1.0",
+  "description": "A dark-themed shadcn/ui web app plus CLI over a file-backed, hierarchical work tracker (Project > Epic > Branch > Commit) that maps onto git stacked PRs. A directory-per-issue on disk is the source of truth.",
+  "author": {
+    "name": "James Mart"
+  },
+  "keywords": ["issues", "tracker", "epics", "stacked-prs", "git"]
+}
