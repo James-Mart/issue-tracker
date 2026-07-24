@@ -76,6 +76,7 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
     if (detail.prUrl) lines.push(`prUrl: ${detail.prUrl}`);
     lines.push(`merged: ${detail.merged}`);
     if (detail.specReview) lines.push(`specReview: ${detail.specReview}`);
+    if (detail.needsRebase) lines.push(`needsRebase: ${detail.needsRebase}`);
   }
   if (detail.kind === "task") {
     lines.push(`status: ${detail.status}`);

@@ -220,6 +220,7 @@ export const storySchema = z.object({
   prUrl: z.string().optional(),
   merged: z.boolean().default(false),
   specReview: z.enum(SPEC_REVIEW_STATUSES).optional(),
+  needsRebase: z.string().optional(),
   retro: z.enum(RETRO_STATUSES).optional(),
   labels: assignmentLabelsSchema,
   ...mutableCommon,
