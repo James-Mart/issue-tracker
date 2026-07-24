@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { coerceBoolean, coerceEnum, coerceJson } from "./cli-coerce.js";
 import { readCliFileArg } from "./cli-io.js";
 import {
+  assertStoryCanSetMergeBase,
   isClearableSetField,
   KIND_GET_FIELDS,
   KIND_SET_FIELDS,
@@ -633,6 +634,11 @@ export function kindSet(
       id,
       resolveInspirationAppsSet(value, opts, currentInspirationApps(detail)),
     );
+  }
+
+  if (kind === "story" && field === "mergeBase") {
+    const parent = read(detail.partOf);
+    assertStoryCanSetMergeBase(detail, parent.kind);
   }
 
   const currentArray =

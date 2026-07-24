@@ -1,3 +1,4 @@
+import { CLEARABLE_KEYS } from "./fields.js";
 import {
   TASK_STATUSES,
   QA_STATUSES,
@@ -6,7 +7,19 @@ import {
   SPEC_REVIEW_STATUSES,
   type IssueKind,
 } from "./schemas.js";
-import { CLEARABLE_KEYS } from "./fields.js";
+
+export const MERGE_BASE_SET_ERROR =
+  "mergeBase can only be set on a root-level Story or an Epic";
+
+/** Reject story mergeBase sets on stacked or first-layer Epic Stories. */
+export function assertStoryCanSetMergeBase(
+  story: { stackedOn?: string },
+  parentKind: IssueKind,
+): void {
+  if (story.stackedOn || parentKind === "epic") {
+    throw new Error(MERGE_BASE_SET_ERROR);
+  }
+}
 
 export type FieldCoerce =
   | { type: "string"; storeAs?: string }

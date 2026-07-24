@@ -1412,15 +1412,36 @@ describe("story get/set", () => {
     expect(removedReady.status).toBe(1);
     expect(removedReady.stderr).toContain('unknown field "ready" for story');
 
-    // Setting mergeBase stores mergeBaseOverride; get stays derived.
-    expect(runCli(["story", "set", "a", "mergeBase", "feat/existing"]).status).toBe(
+    const epicStorySet = runCli(["story", "set", "a", "mergeBase", "feat/existing"]);
+    expect(epicStorySet.status).toBe(1);
+    expect(epicStorySet.stderr).toContain(
+      "mergeBase can only be set on a root-level Story or an Epic",
+    );
+
+    const stackedSet = runCli(["story", "set", "b", "mergeBase", "feat/stacked"]);
+    expect(stackedSet.status).toBe(1);
+    expect(stackedSet.stderr).toContain(
+      "mergeBase can only be set on a root-level Story or an Epic",
+    );
+
+    writeIssue("root", {
+      kind: "story",
+      title: "Root story",
+      partOf: "p",
+      merged: false,
+      order: 2,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    expect(runCli(["story", "set", "root", "mergeBase", "feat/existing"]).status).toBe(
       0,
     );
-    expect(issueJsonField("a", "mergeBaseOverride")).toBe("feat/existing");
-    expect(issueJsonField("a", "mergeBase")).toBeUndefined();
-    // Story a is first-layer under epic e — derived mergeBase uses Epic override
-    // (unset here), so get still reflects trunk until the Epic carries one.
-    expect(runCli(["story", "get", "a", "mergeBase"]).stdout).toBe("main\n");
+    expect(issueJsonField("root", "mergeBaseOverride")).toBe("feat/existing");
+    expect(issueJsonField("root", "mergeBase")).toBeUndefined();
+    expect(runCli(["story", "get", "root", "mergeBase"]).stdout).toBe(
+      "feat/existing\n",
+    );
+
     expect(runCli(["epic", "set", "e", "mergeBase", "feat/epic-base"]).status).toBe(
       0,
     );
