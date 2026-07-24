@@ -1,8 +1,9 @@
-import { Router, type RequestHandler } from "express";
+import { Router, type RequestHandler, type Response } from "express";
 import {
   agentSessions,
   type AgentSessions,
 } from "../services/agent-sessions.js";
+import { subscribeFrames } from "../services/conversation-stream.js";
 import {
   appendEvent,
   createConversation,
@@ -12,10 +13,27 @@ import {
   updateMeta,
 } from "../services/conversations.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
-import type { ConversationMetaPatch } from "../schemas.js";
+import type { ConversationMetaPatch, TranscriptEvent } from "../schemas.js";
 
 const DEFAULT_TITLE = "New conversation";
 const DEFAULT_MODEL = "auto";
+const HEARTBEAT_MS = 10_000;
+const HEARTBEAT_PAYLOAD = "event: ping\ndata: {}\n\n";
+
+function sendSse(res: Response, payload: string): boolean {
+  if (res.writableEnded) return false;
+  try {
+    res.write(payload);
+    return true;
+  } catch (err) {
+    console.error("dropping unwritable conversation SSE client:", err);
+    return false;
+  }
+}
+
+function sseDataFrame(event: TranscriptEvent): string {
+  return `data: ${JSON.stringify(event)}\n\n`;
+}
 
 const asyncRoute =
   (handler: RequestHandler): RequestHandler =>
@@ -104,6 +122,47 @@ export function createConversationsRouter(
       await sessions.dispose(req.params.id);
       await deleteConversation(req.params.id);
       res.status(204).end();
+    }),
+  );
+
+  router.get(
+    "/:id/events",
+    asyncRoute(async (req, res) => {
+      const { meta, transcript } = readConversation(req.params.id);
+
+      res.set({
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      res.flushHeaders();
+
+      for (const event of transcript) {
+        if (!sendSse(res, sseDataFrame(event))) return;
+      }
+
+      const unsubscribe = subscribeFrames(meta.id, (frame) => {
+        sendSse(
+          res,
+          `data: ${JSON.stringify({
+            ...frame.event,
+            at: new Date().toISOString(),
+          })}\n\n`,
+        );
+      });
+
+      sendSse(res, HEARTBEAT_PAYLOAD);
+      const heartbeat = setInterval(
+        () => sendSse(res, HEARTBEAT_PAYLOAD),
+        HEARTBEAT_MS,
+      );
+
+      req.on("close", () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+        res.end();
+      });
     }),
   );
 
