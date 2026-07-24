@@ -17,13 +17,17 @@ idempotency, and recovery live there). This section is only the concrete
    `merge`, `issue story get <storyId> merged` stdout is exactly `true`; for
    `pull-request`, `issue story get <storyId> prUrl` stdout is non-empty —
    do nothing and stop (success).
-2. Otherwise run the policy's steps:
-   - **manual** — nothing.
-   - **pull-request** — `git push -u origin <branchName>`, then
-     `gh pr create --draft --base <mergeBase> --head <branchName> --title
-     "<Story title>" --body "<body>"`, where `<body>` is the Story's
-     rendered `description.md` (`issue story view <storyId>`; a one-line default if
-     empty). Record it: `issue story set <storyId> prUrl <url>`.
-   - **merge** — `git checkout <mergeBase>`, `git merge --no-ff <branchName>`,
-     `git push origin <mergeBase>`, `issue story set <storyId> merged true`.
+2. Otherwise push the Story branch first, then apply the policy:
+   - `git push -u origin <branchName>`. On failure, **Read**
+     `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-git-escalation.md`
+     and follow it (Story `needsAttention`) — stop.
+   - Then:
+     - **manual** — stop (success).
+     - **pull-request** — `gh pr create --draft --base <mergeBase> --head
+       <branchName> --title "<Story title>" --body "<body>"`, where `<body>`
+       is the Story's rendered `description.md` (`issue story view <storyId>`;
+       a one-line default if empty). Record it:
+       `issue story set <storyId> prUrl <url>`.
+     - **merge** — `git checkout <mergeBase>`, `git merge --no-ff <branchName>`,
+       `git push origin <mergeBase>`, `issue story set <storyId> merged true`.
 3. Finish and stop. Do not start Tasks, finish other Stories, or spawn agents.
