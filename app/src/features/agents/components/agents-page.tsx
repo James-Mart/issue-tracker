@@ -2,6 +2,10 @@ import { PageShell } from "@/components/page-shell";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ShellState } from "@/app/shell-state";
 import { cn } from "@/lib/utils/cn";
+import { useAgentsUiStore } from "../store/use-agents-ui-store";
+import { ConversationListSidebar } from "./conversation-list-sidebar";
+import { CreateConversationDialog } from "./create-conversation-dialog";
+import { DeleteConversationDialog } from "./delete-conversation-dialog";
 
 const AGENTS_PAGE_SHELL_CLASS = "max-w-6xl gap-4 py-6";
 
@@ -45,6 +49,10 @@ function AgentsPane({
 
 /** Glass-style two-pane agents surface: conversation list + thread. */
 export function AgentsPage() {
+  const selectedConversationId = useAgentsUiStore(
+    (s) => s.selectedConversationId,
+  );
+
   return (
     <PageShell
       className={cn(
@@ -61,22 +69,28 @@ export function AgentsPage() {
           title="Conversations"
           className="w-72 shrink-0 border-r border-border"
         >
-          <ShellState
-            className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
-            eyebrow="Empty"
-            title="No conversations yet."
-            detail="Start a new conversation to run an agent against a project workspace."
-          />
+          <ConversationListSidebar />
         </AgentsPane>
         <AgentsPane title="Thread" className="flex-1">
-          <ShellState
-            className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
-            eyebrow="Idle"
-            title="Select a conversation."
-            detail="Choose a conversation from the list to view its transcript."
-          />
+          {selectedConversationId ? (
+            <ShellState
+              className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
+              eyebrow="Selected"
+              title="Conversation selected."
+              detail="Transcript rendering arrives in the next task."
+            />
+          ) : (
+            <ShellState
+              className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
+              eyebrow="Idle"
+              title="Select a conversation."
+              detail="Choose a conversation from the list to view its transcript."
+            />
+          )}
         </AgentsPane>
       </div>
+      <CreateConversationDialog />
+      <DeleteConversationDialog />
     </PageShell>
   );
 }
