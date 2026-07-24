@@ -50,6 +50,9 @@ or `branchName` in the prompt.
 | Project `mergePolicy` | `issue project get <projectId> mergePolicy` | finish-branch |
 | Task `noDiff` | `issue task get <taskId> noDiff` | finish-commit |
 
+Finish-branch idempotent end states: `merged` for `merge` and `fast-forward`;
+non-empty `prUrl` for `pull-request`; none for `manual`.
+
 Do not invent `mergeBase` or `branchName` from titles, `stackedOn`, or
 tree/list chips (`mergeBase=` on the tree is derived on read — never copy it
 from the prompt). If `mergeBase` is unset
