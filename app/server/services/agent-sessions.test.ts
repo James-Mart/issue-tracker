@@ -17,6 +17,7 @@ import {
   PRIMARY_TOOL_CALL_ID,
   TASK_TOOL_CALL_ID,
 } from "./agent-sdk.fake.js";
+import type { ConversationFrame } from "./conversation-stream.js";
 
 const AT = "2026-07-24T12:00:00.000Z";
 
@@ -52,7 +53,8 @@ afterEach(() => {
 async function load() {
   const conversations = await import("./conversations.js");
   const { createAgentSessions } = await import("./agent-sessions.js");
-  return { ...conversations, createAgentSessions };
+  const { subscribeFrames } = await import("./conversation-stream.js");
+  return { ...conversations, createAgentSessions, subscribeFrames };
 }
 
 describe("agent sessions manager", () => {
@@ -211,6 +213,194 @@ describe("agent sessions manager", () => {
       status: "completed",
       resultAgentId: NESTED_AGENT_ID,
     });
+  });
+
+  it("live tap delivers deltas/transitions/nested frames while disk holds only finalized events", async () => {
+    const {
+      createConversation,
+      readConversation,
+      createAgentSessions,
+      subscribeFrames,
+    } = await load();
+
+    // Hold the stream so the subscriber attaches mid-run, before any event is
+    // pumped, and deterministically observes every live frame.
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fake = createFakeAgentSdk({
+      hold,
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Live tap",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const frames: ConversationFrame[] = [];
+    const unsubscribe = subscribeFrames(meta.id, (frame) => {
+      frames.push(frame);
+    });
+    release();
+    await result.run.wait();
+    unsubscribe();
+
+    const isAssistant = (
+      f: ConversationFrame,
+    ): f is ConversationFrame & { event: { type: "assistant" } } =>
+      f.event.type === "assistant";
+    const isToolCall = (
+      f: ConversationFrame,
+    ): f is ConversationFrame & { event: { type: "tool_call" } } =>
+      f.event.type === "tool_call";
+    const isSubagent = (
+      f: ConversationFrame,
+    ): f is ConversationFrame & { event: { type: "subagent_update" } } =>
+      f.event.type === "subagent_update";
+
+    // Incremental assistant delta reaches subscribers but never persists.
+    const assistantLive = frames
+      .filter(isAssistant)
+      .filter((f) => !f.persist);
+    expect(assistantLive.map((f) => f.event.text)).toEqual(["On it."]);
+
+    // tool_call running -> completed transition for the primary call.
+    const primaryStatuses = frames
+      .filter(isToolCall)
+      .filter((f) => f.event.callId === PRIMARY_TOOL_CALL_ID)
+      .map((f) => ({ status: f.event.status, persist: f.persist }));
+    expect(primaryStatuses).toEqual([
+      { status: "running", persist: false },
+      { status: "completed", persist: true },
+    ]);
+
+    // Nested subagent_update frames — all tagged with the parent Task call —
+    // include the live-only text/thinking/tool-call-running deltas.
+    const nested = frames.filter(isSubagent);
+    expect(nested.length).toBeGreaterThan(0);
+    expect(
+      nested.every((f) => f.event.parentCallId === TASK_TOOL_CALL_ID),
+    ).toBe(true);
+    const nestedLive = nested
+      .filter((f) => !f.persist)
+      .map((f) => ({ kind: f.event.step.kind, status: f.event.step.status }));
+    expect(nestedLive).toEqual([
+      { kind: "text", status: undefined },
+      { kind: "thinking", status: undefined },
+      { kind: "tool_call", status: "running" },
+    ]);
+
+    // Persistence semantics unchanged: disk holds only the finalized events in
+    // order — one coalesced assistant, one terminal tool_call per call_id, and
+    // the finalized nested subagent_update events.
+    const { transcript } = readConversation(meta.id);
+    expect(transcript.map((e) => e.type)).toEqual([
+      "assistant",
+      "thinking",
+      "tool_call",
+      "task",
+      "status",
+      "usage",
+      "request",
+      "subagent_update",
+      "subagent_update",
+      "subagent_update",
+      "subagent_update",
+      "subagent_update",
+      "tool_call",
+    ]);
+    expect(transcript[0]).toMatchObject({ type: "assistant", text: "On it." });
+    expect(
+      transcript.filter(
+        (e) => e.type === "tool_call" && e.callId === PRIMARY_TOOL_CALL_ID,
+      ),
+    ).toHaveLength(1);
+    expect(
+      transcript.filter(
+        (e) => e.type === "tool_call" && e.callId === TASK_TOOL_CALL_ID,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("a throwing live subscriber disrupts neither persistence nor other subscribers", async () => {
+    const {
+      createConversation,
+      readConversation,
+      createAgentSessions,
+      subscribeFrames,
+    } = await load();
+
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fake = createFakeAgentSdk({
+      hold,
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Faulty subscriber",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // A subscriber that throws on every frame (e.g. a broken SSE writer).
+    let thrown = 0;
+    const unsubBad = subscribeFrames(meta.id, () => {
+      thrown += 1;
+      throw new Error("broken SSE writer");
+    });
+    // A healthy subscriber that must keep receiving frames regardless.
+    const healthy: ConversationFrame[] = [];
+    const unsubGood = subscribeFrames(meta.id, (frame) => {
+      healthy.push(frame);
+    });
+
+    release();
+    // The pump must settle normally — a listener fault never rejects the run.
+    expect(await result.run.wait()).toEqual({
+      id: FAKE_RUN_ID,
+      status: "finished",
+    });
+    unsubBad();
+    unsubGood();
+
+    // The faulty subscriber was invoked, but its throws were isolated: the
+    // healthy subscriber still saw the same frames.
+    expect(thrown).toBeGreaterThan(0);
+    expect(healthy).toHaveLength(thrown);
+
+    // Persistence is intact: all finalized events reached disk in order.
+    const { transcript } = readConversation(meta.id);
+    expect(transcript.map((e) => e.type)).toEqual([
+      "assistant",
+      "thinking",
+      "tool_call",
+      "task",
+      "status",
+      "usage",
+      "request",
+      "subagent_update",
+      "subagent_update",
+      "subagent_update",
+      "subagent_update",
+      "subagent_update",
+      "tool_call",
+    ]);
   });
 
   it("reports CursorAgentError as never_started, distinct from an errored wait result", async () => {
