@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Bot, Plus } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -15,11 +15,20 @@ import { FlowRow } from "./flow-row";
 
 function CockpitHeader() {
   return (
-    <header className="flex items-center gap-2">
-      <SidebarTrigger className="-ml-1" />
-      <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
-        Cockpit
-      </p>
+    <header className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <SidebarTrigger className="-ml-1" />
+        <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
+          Cockpit
+        </p>
+      </div>
+      <Link
+        to="/agents"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[hsl(var(--rail-lit))] hover:text-foreground"
+      >
+        <Bot className="h-3.5 w-3.5" />
+        Agents
+      </Link>
     </header>
   );
 }
