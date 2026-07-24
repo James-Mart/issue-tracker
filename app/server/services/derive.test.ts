@@ -230,7 +230,7 @@ describe("derive - branch status", () => {
 });
 
 describe("derive - branch start gating", () => {
-  it("is not blocked when it has no stackedOn (a root branch forks main)", () => {
+  it("is not blocked when it has no stackedOn (a root branch forks project trunk)", () => {
     const issues = [epic("e"), branch("b", "e")];
     const d = derive(issues).byId.b;
     expect(d.blocked).toBe(false);

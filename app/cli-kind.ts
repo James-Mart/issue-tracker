@@ -644,6 +644,11 @@ export function registerKindGetSet(
   run: (action: () => unknown) => Promise<void>,
 ): Command {
   const cmd = program.command(kind);
+  if (kind === "project") {
+    cmd.description(
+      "Project container — set workspace, trunk (default main), mergePolicy, supportingDocs, labels",
+    );
+  }
 
   cmd
     .command("get")

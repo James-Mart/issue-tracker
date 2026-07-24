@@ -2333,6 +2333,7 @@ describe("kind-scoped view / delete / comment / attach", () => {
   it("does not register comment under project", () => {
     const help = runCli(["project", "--help"]);
     expect(help.status).toBe(0);
+    expect(help.stdout).toContain("trunk");
     expect(help.stdout).not.toMatch(/\n {2}comment\b/);
     const { stderr, status } = runCli([
       "project",

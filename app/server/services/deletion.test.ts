@@ -164,7 +164,7 @@ describe("planDeletion - stackedOn splice", () => {
     expect(plan.repoint).toEqual([{ id: "c", to: "a" }]);
   });
 
-  it("splices to main (undefined) when the deleted branch forked main", () => {
+  it("splices to project trunk (undefined stackedOn) when the deleted branch was rooted on trunk", () => {
     const plan = planDeletion(
       [epic("e"), branch("a", "e"), branch("b", "e", { stackedOn: "a" })],
       "a",
