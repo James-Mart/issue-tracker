@@ -6,7 +6,7 @@ export const KINDS = ["project", "epic", "idea", "story", "task"] as const;
 export const TASK_STATUSES = ["todo", "in-progress", "fixing", "done"] as const;
 export const QA_STATUSES = ["reviewing", "changes-requested", "passed"] as const;
 export const RETRO_STATUSES = ["in-progress", "done"] as const;
-export const MERGE_POLICIES = ["merge", "pull-request", "manual"] as const;
+export const MERGE_POLICIES = ["merge", "pull-request", "manual", "fast-forward"] as const;
 export const SPEC_REVIEW_STATUSES = ["passed", "failed"] as const;
 export const SUPPORTING_DOC_KEYS = [
   "vision",

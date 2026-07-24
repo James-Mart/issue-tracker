@@ -148,6 +148,7 @@ export const MERGE_POLICY_LABELS = {
   merge: "Merge",
   "pull-request": "Pull request",
   manual: "Manual",
+  "fast-forward": "Fast-forward",
 } as const satisfies Record<MergePolicy, string>;
 
 export const MERGE_POLICY_OPTIONS = MERGE_POLICIES.map((value) => ({
