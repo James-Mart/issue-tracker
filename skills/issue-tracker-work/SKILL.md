@@ -90,10 +90,11 @@ Run these commands in order (use `<rootId>` throughout):
    (coordinator use):**
    - Walk order and Task sequence — top-to-bottom from this output; do not
      reorder by hand.
-   - `mergeBase=<ref>` — derived git fork-point for the Story (or
+   - `mergeBase=<ref>` — derived git fork-point for the Story (Project
+     `trunk`, a root Story/Epic `mergeBaseOverride`, or a parent branch — or
      `mergeBase=(unset)` when empty). Informational only; do not copy into git
      spawn stubs — the git agent reads `mergeBase` from
-     `issue story get <storyId> mergeBase`.
+     `issue story get <storyId> mergeBase` (already layers override vs trunk).
    - `branch=<name>` — git branch name once recorded; do not copy into spawn
      stubs.
    - `branch=(unset)` — no git branch recorded yet; spawn start-branch (see

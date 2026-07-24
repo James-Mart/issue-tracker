@@ -53,11 +53,13 @@ or `branchName` in the prompt.
 Finish-branch idempotent end states: `merged` for `merge` and `fast-forward`;
 non-empty `prUrl` for `pull-request`; none for `manual`.
 
-Do not invent `mergeBase` or `branchName` from titles, `stackedOn`, or
-tree/list chips (`mergeBase=` on the tree is derived on read — never copy it
-from the prompt). If `mergeBase` is unset
-(empty stdout), `issue story set <storyId> needsAttention true --reason "..."`
-and stop — do not fall back to `stackedOn`.
+Do not invent `mergeBase` or `branchName` from titles, `stackedOn`, trunk,
+overrides, or tree/list chips (`mergeBase=` on the tree is derived on read —
+never copy it from the prompt). The derived `mergeBase` from
+`issue story get` already layers `mergeBaseOverride` vs Project `trunk` and
+stack topology — never recompute it. If `mergeBase` is unset (empty stdout),
+`issue story set <storyId> needsAttention true --reason "..."` and stop — do
+not fall back to `stackedOn`.
 
 ## Mode
 
