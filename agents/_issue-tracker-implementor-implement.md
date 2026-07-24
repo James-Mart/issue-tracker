@@ -14,14 +14,15 @@ Absolute path for this file (Read this exact path):
    Task builds on a prior Task's tests, keep verification focused on this
    Task's surface — do not re-run the prior Task's full matrix by default.
    When the Task appears UI-related (same judgment as the `designSystem`
-   consult — Task prose and changed paths), also do a **best-effort** browser
-   check the way a human implementer would: drive the running app with Cursor
-   browser tools (`browser_navigate`, `browser_snapshot` /
-   `browser_take_screenshot`, and interaction tools as needed) and confirm the
-   Task's visible behavior. If browser tools fail or are unavailable, note that
-   in an `issue task comment <id> --role <comment-role>` and continue with the
-   Task's non-browser Verify steps — do not raise `needsAttention` solely
-   because the harness could not screenshot. This browser check never weakens
+   consult — Task prose and changed paths), also do a **best-effort** UI check
+   the way a human implementer would: with `npm run dev` already running, run
+   `cd app && npm run screenshots -- <path-or-dialog>` and read the PNGs under
+   the output dir (default `/tmp/issue-tracker-screenshots`) to confirm the
+   Task's visible behavior. Use Cursor browser MCP tools only for interaction
+   needed to reach a state (not for screenshot capture). If capture fails or is
+   unavailable, note that in an `issue task comment <id> --role <comment-role>`
+   and continue with the Task's non-screenshot Verify steps — do not raise
+   `needsAttention` solely because capture failed. This UI check never weakens
    the hard gates (tests/build) the Task already requires.
 4. **Intentional no-op.** If correctly satisfying the spec means there are **no
    source-controlled file changes**, signal it explicitly:

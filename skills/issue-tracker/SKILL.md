@@ -35,6 +35,26 @@ This starts:
 
 Tell the user the UI is available at http://localhost:8060.
 
+## UI screenshots
+
+For agents validating or attaching UI state, use the Playwright capture script
+(not Cursor IDE browser screenshot tools). The dev server must already be
+running (`npm run dev` above).
+
+```bash
+cd app && npm run screenshots -- [options] <path-or-dialog>...
+```
+
+- **Pages** — path targets starting with `/` (e.g. `/`,
+  `/projects/issue-tracker?lens=structure`).
+- **Dialogs** — named ids (e.g. `new-project`, `delete-issue`); run
+  `npm run screenshots -- --list` to print names.
+- **Output** — defaults to `/tmp/issue-tracker-screenshots`; copy PNGs out of
+  `/tmp` when attaching to issues.
+- **Discovery** — `npm run screenshots -- --help` for flags; `--all` captures
+  common paths plus all dialogs for a project. Full contract: Story
+  `agent-ui-screenshot-capture`.
+
 ## What it shows
 
 - **Project sidebar** — a collapsible sidebar lists Projects; selecting one
