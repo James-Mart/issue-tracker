@@ -5,6 +5,19 @@ apply-doc shape and prune-by-default scope. Choose **story-form** or
 **epic-form** per root by issue-tracker-authoring **Epic grain** (do not
 restate that rule here).
 
+### Merge-base and policy
+
+After **each** successful root `apply`, record the merge-base and policy from
+the grill (**Merge-base** in the parent skill):
+
+| Grill merge-base | Post-apply |
+| --- | --- |
+| **Trunk** | (none) |
+| **Non-trunk branch** | `issue <rootKind> set <rootId> mergeBase <branch>` then `issue <rootKind> set <rootId> mergePolicy <policy>` |
+
+`<rootKind>` is `story` or `epic` matching the apply shape; `<rootId>` is the
+resulting root id from that apply. Imperative only — not in the YAML doc.
+
 ### Idea source backlink
 
 When the source is an **Idea**, each new root authored in the migrate apply
