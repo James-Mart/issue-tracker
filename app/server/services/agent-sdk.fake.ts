@@ -5,6 +5,8 @@ import type {
 } from "@cursor/sdk";
 import type {
   AgentHandle,
+  AgentRun,
+  AgentRunResult,
   AgentSdk,
   AgentSendOptions,
   AgentStreamEvent,
@@ -182,6 +184,18 @@ export interface FakeAgentSdkOptions {
   models?: SDKModel[];
   /** Events every `send(...)` yields. Defaults to {@link buildScriptedStream}. */
   stream?: AgentStreamEvent[];
+  /**
+   * When set, every `send(...)` rejects with this error before returning a run
+   * (the never-started failure class).
+   */
+  sendError?: Error;
+  /** Terminal result every run's `wait()` resolves to. Default `finished`. */
+  waitResult?: AgentRunResult;
+  /**
+   * When set, each run's event iterator awaits this promise before yielding
+   * any events (keeps the run active for cancel/dispose tests).
+   */
+  hold?: Promise<void>;
 }
 
 export interface FakeAgentSdk extends AgentSdk {
@@ -209,19 +223,45 @@ export function createFakeAgentSdk(
   const handles: FakeAgentHandle[] = [];
 
   function makeHandle(agentId: string): FakeAgentHandle {
+    let abortHold: ((err: Error) => void) | undefined;
     const handle: FakeAgentHandle = {
       agentId,
       sends: [],
       cancelled: false,
       disposed: false,
-      send(prompt, sendOptions = {}) {
+      async send(prompt, sendOptions = {}) {
         handle.sends.push({ prompt, options: sendOptions });
-        return (async function* () {
-          for (const event of stream) yield event;
-        })();
+        if (options.sendError) throw options.sendError;
+        const runId = options.waitResult?.id ?? FAKE_RUN_ID;
+        const run: AgentRun = {
+          id: runId,
+          wait: async () => {
+            if (options.waitResult) return options.waitResult;
+            if (handle.cancelled) {
+              return { id: runId, status: "cancelled" };
+            }
+            return { id: runId, status: "finished" };
+          },
+          async *[Symbol.asyncIterator]() {
+            if (options.hold) {
+              await Promise.race([
+                options.hold,
+                new Promise<never>((_, reject) => {
+                  abortHold = reject;
+                }),
+              ]);
+            }
+            for (const event of stream) yield event;
+          },
+        };
+        return run;
       },
       async cancel() {
         handle.cancelled = true;
+        // Abort a held stream so the manager's pump takes the catch path and
+        // must still surface `wait()`'s cancelled status (not a synthesized error).
+        abortHold?.(new Error("run cancelled"));
+        abortHold = undefined;
       },
       async [Symbol.asyncDispose]() {
         handle.disposed = true;

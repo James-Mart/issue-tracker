@@ -170,7 +170,9 @@ describe("send (merged stream)", () => {
     });
 
     const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
-    const events = await drain(handle.send("go"));
+    const run = await handle.send("go");
+    const events = await drain(run);
+    expect(await run.wait()).toMatchObject({ id: "run-1", status: "finished" });
 
     expect(events).toEqual([
       { kind: "message", message: msgA },
@@ -206,7 +208,7 @@ describe("send (merged stream)", () => {
     });
 
     const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
-    const events = await drain(handle.send("go"));
+    const events = await drain(await handle.send("go"));
 
     expect(events).toEqual([{ kind: "message", message: msg }]);
   });
@@ -217,12 +219,51 @@ describe("send (merged stream)", () => {
     const sdk = createAgentSdk({ createSdkAgent: async () => sdkAgent });
 
     const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
-    await drain(handle.send("go", { model: { id: "auto" } }));
+    await drain(await handle.send("go", { model: { id: "auto" } }));
 
     expect(sdkSend).toHaveBeenCalledWith(
       "go",
       expect.objectContaining({ model: { id: "auto" } }),
     );
+  });
+
+  it("surfaces a started-then-errored wait result", async () => {
+    const base = makeFakeSdkAgent([]);
+    const sdkAgent: SDKAgent = {
+      ...base,
+      async send() {
+        const run: FakeRun = {
+          id: "run-err",
+          agentId: "agent-1",
+          status: "error",
+          supports: () => true,
+          unsupportedReason: () => undefined,
+          async *stream() {},
+          async conversation() {
+            return [];
+          },
+          async wait(): Promise<RunResult> {
+            return {
+              id: "run-err",
+              status: "error",
+              error: { message: "boom", code: "X" },
+            };
+          },
+          cancel: vi.fn(async () => {}),
+          onDidChangeStatus: () => () => {},
+        };
+        return run;
+      },
+    };
+    const sdk = createAgentSdk({ createSdkAgent: async () => sdkAgent });
+    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
+    const run = await handle.send("go");
+    await drain(run);
+    expect(await run.wait()).toEqual({
+      id: "run-err",
+      status: "error",
+      error: { message: "boom", code: "X" },
+    });
   });
 });
 
@@ -242,8 +283,9 @@ describe("cancel / dispose", () => {
     const sdk = createAgentSdk({ createSdkAgent: async () => sdkAgent });
 
     const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
-    const iterator = handle.send("go")[Symbol.asyncIterator]();
-    await iterator.next(); // start the run so `activeRun` is set
+    const agentRun = await handle.send("go");
+    const iterator = agentRun[Symbol.asyncIterator]();
+    await iterator.next(); // consume one event so the pump is live
 
     await handle.cancel();
     expect(run?.cancel).toHaveBeenCalledTimes(1);

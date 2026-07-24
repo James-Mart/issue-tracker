@@ -47,16 +47,38 @@ export interface AgentSendOptions {
 }
 
 /**
- * A live agent conversation. `send` merges the two SDK event sources into one
- * stream (see {@link AgentStreamEvent}); `cancel` stops the active run; disposing
- * releases the underlying SDK handle.
+ * Terminal outcome of one `send`. Mirrors the SDK's `RunResult` status so
+ * callers can distinguish a finished run from a started-then-errored one
+ * without importing `@cursor/sdk` types.
+ */
+export type AgentRunStatus = "finished" | "error" | "cancelled";
+
+export interface AgentRunResult {
+  id: string;
+  status: AgentRunStatus;
+  error?: { message: string; code?: string };
+}
+
+/**
+ * A started run: its id is available immediately, the merged event stream is
+ * async-iterable, and `wait()` resolves to the terminal {@link AgentRunResult}.
+ * A thrown {@link CursorAgentError} from `send` means the run never started;
+ * an `error` status from `wait()` means it started and failed.
+ */
+export interface AgentRun extends AsyncIterable<AgentStreamEvent> {
+  readonly id: string;
+  wait(): Promise<AgentRunResult>;
+}
+
+/**
+ * A live agent conversation. `send` starts a run (eagerly — so never-started
+ * failures reject the promise), merges the two SDK event sources into one
+ * stream (see {@link AgentStreamEvent}), and returns the run handle; `cancel`
+ * stops the active run; disposing releases the underlying SDK handle.
  */
 export interface AgentHandle extends AsyncDisposable {
   readonly agentId: string;
-  send(
-    prompt: string,
-    options?: AgentSendOptions,
-  ): AsyncIterable<AgentStreamEvent>;
+  send(prompt: string, options?: AgentSendOptions): Promise<AgentRun>;
   cancel(): Promise<void>;
 }
 
@@ -141,7 +163,7 @@ function wrapAgent(sdkAgent: SDKAgent): AgentHandle {
     agentId: sdkAgent.agentId,
 
     send(prompt, options = {}) {
-      return mergeSend(sdkAgent, prompt, options, (run) => {
+      return startSend(sdkAgent, prompt, options, (run) => {
         activeRun = run;
       });
     },
@@ -159,18 +181,17 @@ function wrapAgent(sdkAgent: SDKAgent): AgentHandle {
 }
 
 /**
- * Drive one send to completion, merging `run.stream()` messages and `onDelta`
- * nested updates into one ordered async stream. `onDelta` pushes nested events
- * into a queue as the SDK fires them; a background pump forwards each
- * `run.stream()` message into the same queue. The queue closes once the stream
- * is exhausted and the run has reached a terminal state.
+ * Start one send: await the SDK run (so auth/config failures reject before a
+ * handle exists), then merge `run.stream()` messages and `onDelta` nested
+ * updates into one ordered async stream. `wait()` resolves with the SDK's
+ * terminal result once the stream is exhausted.
  */
-async function* mergeSend(
+async function startSend(
   sdkAgent: SDKAgent,
   prompt: string,
   options: AgentSendOptions,
   onRun: (run: Run) => void,
-): AsyncGenerator<AgentStreamEvent, void> {
+): Promise<AgentRun> {
   const queue = new EventQueue<AgentStreamEvent>();
 
   const sendOptions: SendOptions = {
@@ -184,22 +205,55 @@ async function* mergeSend(
   const run = await sdkAgent.send(prompt, sendOptions);
   onRun(run);
 
+  let settleWait!: (result: AgentRunResult) => void;
+  const waitPromise = new Promise<AgentRunResult>((resolve) => {
+    settleWait = resolve;
+  });
+
   const pump = (async () => {
+    let result: AgentRunResult = { id: run.id, status: "finished" };
     try {
       for await (const message of run.stream()) {
         queue.push({ kind: "message", message });
       }
-      await run.wait();
+      const waited = await run.wait();
+      result = {
+        id: waited.id,
+        status: waited.status,
+        ...(waited.error
+          ? {
+              error: {
+                message: waited.error.message,
+                ...(waited.error.code ? { code: waited.error.code } : {}),
+              },
+            }
+          : {}),
+      };
+    } catch (err) {
+      result = {
+        id: run.id,
+        status: "error",
+        error: {
+          message: err instanceof Error ? err.message : String(err),
+        },
+      };
     } finally {
       queue.close();
+      settleWait(result);
     }
   })();
 
-  try {
-    yield* queue;
-  } finally {
-    await pump;
-  }
+  return {
+    id: run.id,
+    wait: () => waitPromise,
+    async *[Symbol.asyncIterator]() {
+      try {
+        yield* queue;
+      } finally {
+        await pump;
+      }
+    },
+  };
 }
 
 /**

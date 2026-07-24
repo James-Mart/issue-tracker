@@ -18,11 +18,14 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("agent-sdk (live)", () => {
       model: { id: "composer-2.5" },
     });
 
+    const run = await agent.send('Reply with the single word "pong".');
     const events: AgentStreamEvent[] = [];
-    for await (const event of agent.send('Reply with the single word "pong".')) {
+    for await (const event of run) {
       events.push(event);
     }
+    const result = await run.wait();
 
     expect(events.some((e) => e.kind === "message")).toBe(true);
+    expect(result.status).toBe("finished");
   });
 });
