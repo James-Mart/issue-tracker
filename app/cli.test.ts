@@ -1296,6 +1296,11 @@ describe("story get/set", () => {
     expect(runCli(["story", "set", "a", "specReview", "passed"]).status).toBe(0);
     expect(runCli(["story", "get", "a", "specReview"]).stdout).toBe("passed\n");
 
+    expect(runCli(["story", "set", "a", "needsRebase", "main"]).status).toBe(0);
+    expect(runCli(["story", "get", "a", "needsRebase"]).stdout).toBe("main\n");
+    expect(runCli(["story", "set", "a", "needsRebase", "--clear"]).status).toBe(0);
+    expect(runCli(["story", "get", "a", "needsRebase"]).stdout).toBe("");
+
     expect(runCli(["story", "set", "a", "retro", "in-progress"]).status).toBe(0);
     expect(runCli(["story", "get", "a", "retro"]).stdout).toBe("in-progress\n");
     expect(runCli(["story", "set", "a", "retro", "done"]).status).toBe(0);
@@ -1977,6 +1982,24 @@ describe("tree", () => {
     expect(cleared.stdout).not.toMatch(/^ {2}epic e\b.*\bretro=/m);
     expect(cleared.stdout).not.toMatch(/^ {4}story a\b.*\bretro=/m);
     expect(cleared.stdout).toMatch(/^ {4}story a\b.*\bspecReview=passed\b/m);
+  });
+
+  it("shows needsRebase chip on story lines only when set", () => {
+    const unset = runCli(["tree", "p"]);
+    expect(unset.status).toBe(0);
+    expect(unset.stdout).not.toMatch(/^ {4}story a\b.*\bneedsRebase=/m);
+
+    expect(runCli(["story", "set", "a", "needsRebase", "feat/base"]).status).toBe(0);
+
+    const set = runCli(["tree", "p"]);
+    expect(set.status).toBe(0);
+    expect(set.stdout).toMatch(/^ {4}story a\b.*\bneedsRebase=feat\/base\b/m);
+
+    expect(runCli(["story", "set", "a", "needsRebase", "--clear"]).status).toBe(0);
+
+    const cleared = runCli(["tree", "p"]);
+    expect(cleared.status).toBe(0);
+    expect(cleared.stdout).not.toMatch(/^ {4}story a\b.*\bneedsRebase=/m);
   });
 });
 

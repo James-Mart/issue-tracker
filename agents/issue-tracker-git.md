@@ -24,8 +24,8 @@ every `git`/`gh` with it as the working directory, and honor the unset
 escalation, per **SPEC § Project workspace**. **Never** probe or run git —
 including the first `git status` — in the ambient Cursor cwd.
 
-Summary is for ancestry and titles only. Load git facts via kind
-get per **## Git facts** below — never from the spawn prompt, `issue tree`,
+Summary is for ancestry and titles only. Load this Story/Task's git facts
+via kind get per **## Git facts** below — never from the spawn prompt,
 `issue list`, or product-repo `issues/` trees.
 
 ## Inputs (from invoking prompt)

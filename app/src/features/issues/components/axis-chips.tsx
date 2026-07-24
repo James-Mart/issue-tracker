@@ -54,19 +54,22 @@ export function storyAxesVisible(
   storyStatus?: StoryStatus,
   specReview?: SpecReviewStatus,
   retro?: RetroStatus,
+  needsRebase?: string,
 ) {
-  return Boolean(storyStatus || specReview || retro);
+  return Boolean(storyStatus || specReview || retro || needsRebase);
 }
 
 export function StoryAxisChips({
   storyStatus,
   specReview,
   retro,
+  needsRebase,
   className,
 }: {
   storyStatus?: StoryStatus;
   specReview?: SpecReviewStatus;
   retro?: RetroStatus;
+  needsRebase?: string;
   className?: string;
 }) {
   const chips: AxisChip[] = [];
@@ -81,6 +84,13 @@ export function StoryAxisChips({
       variant: SPEC_REVIEW_BADGE_VARIANT[specReview],
       label: SPEC_REVIEW_LABEL[specReview],
       prefix: "specReview",
+    });
+  }
+  if (needsRebase) {
+    chips.push({
+      variant: "warn",
+      label: needsRebase,
+      prefix: "needsRebase",
     });
   }
   if (retro) {

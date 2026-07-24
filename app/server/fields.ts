@@ -51,6 +51,7 @@ export const STORY_IMPERATIVE_ONLY_KEYS = [
   "mergeBaseOverride",
   "mergePolicy",
   "specReview",
+  "needsRebase",
   "retro",
   "labels",
 ] as const;
@@ -67,6 +68,7 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "mergePolicy",
   "prUrl",
   "specReview",
+  "needsRebase",
   "retro",
   "labels",
 ] as const;
@@ -100,6 +102,7 @@ export const CLEARABLE_KEYS = [
   "branchName",
   "stackedOn",
   "prUrl",
+  "needsRebase",
   "workspace",
   "qa",
   "retro",
@@ -145,6 +148,7 @@ export const FIELD_LABELS = {
   prUrl: "Pull request",
   merged: "Merged",
   specReview: "Spec review",
+  needsRebase: "Needs rebase",
   status: "Status",
   qa: "QA",
   retro: "Retro",
