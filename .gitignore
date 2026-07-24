@@ -3,6 +3,9 @@ plans/
 # Tracker runtime store (not app/src/features/issues/)
 /issues/
 
+# Conversation runtime store (peer of issues/)
+/conversations/
+
 # Logs
 *.log
 

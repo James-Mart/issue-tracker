@@ -1,0 +1,206 @@
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
+import { join } from "path";
+import { conversationsDir } from "../config.js";
+import {
+  parseConversationMeta,
+  parseTranscriptEvent,
+  parseTranscriptEventInput,
+  type ConversationDetail,
+  type ConversationMeta,
+  type ConversationMetaPatch,
+  type CreateConversationInput,
+  type TranscriptEvent,
+  type TranscriptEventInput,
+} from "../schemas.js";
+import { IssueError } from "./errors.js";
+import { uniqueSlug } from "./slug.js";
+
+let writeChain: Promise<unknown> = Promise.resolve();
+
+/** Serialize conversation writes on a single in-process promise chain. */
+function serialize<T>(fn: () => T): Promise<T> {
+  const run = writeChain.then(fn, fn);
+  writeChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+function dirOf(id: string): string {
+  return join(conversationsDir, id);
+}
+
+function metaPathOf(id: string): string {
+  return join(dirOf(id), "meta.json");
+}
+
+function transcriptPathOf(id: string): string {
+  return join(dirOf(id), "transcript.jsonl");
+}
+
+function scanIds(): string[] {
+  if (!existsSync(conversationsDir)) return [];
+  return readdirSync(conversationsDir).filter((entry) =>
+    statSync(dirOf(entry)).isDirectory(),
+  );
+}
+
+function readMetaRaw(id: string): ConversationMeta {
+  const path = metaPathOf(id);
+  if (!existsSync(path)) {
+    throw new IssueError("not_found", `unknown conversation "${id}"`);
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(path, "utf8"));
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new IssueError("validation", `invalid meta.json: ${detail}`);
+  }
+  const parsed = parseConversationMeta(raw);
+  if (!parsed.ok) throw new IssueError("validation", parsed.message);
+  if (parsed.meta.id !== id) {
+    throw new IssueError(
+      "validation",
+      `meta.json id "${parsed.meta.id}" does not match directory name`,
+    );
+  }
+  return parsed.meta;
+}
+
+function writeMeta(meta: ConversationMeta): void {
+  writeFileSync(metaPathOf(meta.id), `${JSON.stringify(meta, null, 2)}\n`);
+}
+
+function readTranscriptLines(id: string): TranscriptEvent[] {
+  const path = transcriptPathOf(id);
+  if (!existsSync(path)) return [];
+  const events: TranscriptEvent[] = [];
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const parsed = parseTranscriptEvent(raw);
+    if (parsed.ok) events.push(parsed.event);
+  }
+  return events;
+}
+
+export function createConversation(
+  input: CreateConversationInput,
+): Promise<ConversationMeta> {
+  return serialize(() => {
+    const title = input.title.trim();
+    if (!title) throw new IssueError("validation", "title is required");
+    const projectId = input.projectId.trim();
+    if (!projectId) throw new IssueError("validation", "projectId is required");
+    const model = input.model.trim();
+    if (!model) throw new IssueError("validation", "model is required");
+
+    const id = uniqueSlug(title, scanIds());
+    const now = new Date().toISOString();
+    const meta: ConversationMeta = {
+      id,
+      title,
+      projectId,
+      model,
+      createdAt: now,
+      updatedAt: now,
+    };
+    if (input.agentId?.trim()) meta.agentId = input.agentId.trim();
+
+    mkdirSync(dirOf(id), { recursive: true });
+    writeMeta(meta);
+    writeFileSync(transcriptPathOf(id), "");
+    return meta;
+  });
+}
+
+export function listConversations(): ConversationMeta[] {
+  const metas: ConversationMeta[] = [];
+  for (const id of scanIds()) {
+    try {
+      metas.push(readMetaRaw(id));
+    } catch {
+      // Skip unreadable / malformed conversation dirs.
+    }
+  }
+  metas.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return metas;
+}
+
+export function readConversation(id: string): ConversationDetail {
+  const meta = readMetaRaw(id);
+  return { meta, transcript: readTranscriptLines(id) };
+}
+
+export function appendEvent(
+  id: string,
+  event: TranscriptEventInput,
+): Promise<TranscriptEvent> {
+  return serialize(() => {
+    const meta = readMetaRaw(id);
+    const parsed = parseTranscriptEventInput(event);
+    if (!parsed.ok) throw new IssueError("validation", parsed.message);
+    const stamped: TranscriptEvent = {
+      ...parsed.input,
+      at: new Date().toISOString(),
+    };
+    appendFileSync(transcriptPathOf(id), `${JSON.stringify(stamped)}\n`);
+    writeMeta({ ...meta, updatedAt: new Date().toISOString() });
+    return stamped;
+  });
+}
+
+export function updateMeta(
+  id: string,
+  patch: ConversationMetaPatch,
+): Promise<ConversationMeta> {
+  return serialize(() => {
+    const meta = readMetaRaw(id);
+    const next: ConversationMeta = { ...meta };
+
+    if (patch.title !== undefined) {
+      const title = patch.title.trim();
+      if (!title) throw new IssueError("validation", "title is required");
+      next.title = title;
+    }
+    if (patch.model !== undefined) {
+      const model = patch.model.trim();
+      if (!model) throw new IssueError("validation", "model is required");
+      next.model = model;
+    }
+    if (patch.agentId !== undefined) {
+      const agentId = patch.agentId.trim();
+      if (!agentId) throw new IssueError("validation", "agentId is required");
+      next.agentId = agentId;
+    }
+
+    next.updatedAt = new Date().toISOString();
+    writeMeta(next);
+    return next;
+  });
+}
+
+export function deleteConversation(id: string): Promise<void> {
+  return serialize(() => {
+    if (!existsSync(dirOf(id))) {
+      throw new IssueError("not_found", `unknown conversation "${id}"`);
+    }
+    rmSync(dirOf(id), { recursive: true, force: true });
+  });
+}
