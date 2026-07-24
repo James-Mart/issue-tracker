@@ -4,6 +4,7 @@ import { ShellState } from "@/app/shell-state";
 import { cn } from "@/lib/utils/cn";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 import { ConversationListSidebar } from "./conversation-list-sidebar";
+import { ConversationThread } from "./conversation-thread";
 import { CreateConversationDialog } from "./create-conversation-dialog";
 import { DeleteConversationDialog } from "./delete-conversation-dialog";
 
@@ -73,11 +74,9 @@ export function AgentsPage() {
         </AgentsPane>
         <AgentsPane title="Thread" className="flex-1">
           {selectedConversationId ? (
-            <ShellState
-              className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
-              eyebrow="Selected"
-              title="Conversation selected."
-              detail="Transcript rendering arrives in the next task."
+            <ConversationThread
+              key={selectedConversationId}
+              conversationId={selectedConversationId}
             />
           ) : (
             <ShellState
