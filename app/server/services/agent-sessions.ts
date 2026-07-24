@@ -10,12 +10,11 @@ import {
   readConversation,
   updateMeta,
 } from "./conversations.js";
-import { IssueError } from "./errors.js";
 import {
   EventPipeline,
   type NormalizedStep,
 } from "./event-pipeline.js";
-import { readIssueOrThrow } from "./issues.js";
+import { requireProjectWorkspace } from "./project-workspace.js";
 
 export type { NormalizedStep };
 
@@ -41,6 +40,7 @@ export interface AgentSessions {
   ): Promise<SendPromptResult>;
   getActiveRun(conversationId: string): ActiveRun | undefined;
   cancel(conversationId: string): Promise<boolean>;
+  dispose(conversationId: string): Promise<void>;
   disposeAll(): Promise<void>;
 }
 
@@ -65,7 +65,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     if (existing) return { handle: existing.handle, entry: existing };
 
     const { meta } = readConversation(conversationId);
-    const cwd = resolveProjectWorkspace(meta.projectId);
+    const cwd = requireProjectWorkspace(meta.projectId);
     const model = { id: meta.model };
 
     let handle: AgentHandle;
@@ -79,6 +79,26 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const entry: SessionEntry = { handle };
     sessions.set(conversationId, entry);
     return { handle, entry };
+  }
+
+  async function tearDownEntry(entry: SessionEntry): Promise<void> {
+    try {
+      if (entry.activeRun) await entry.handle.cancel();
+    } catch {
+      // Continue disposing even if cancel fails.
+    }
+    if (entry.pump) {
+      try {
+        await entry.pump;
+      } catch {
+        // Best-effort — pump errors are handled internally.
+      }
+    }
+    try {
+      await entry.handle[Symbol.asyncDispose]();
+    } catch {
+      // Best-effort dispose.
+    }
   }
 
   return {
@@ -166,37 +186,20 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       return true;
     },
 
+    async dispose(conversationId) {
+      const entry = sessions.get(conversationId);
+      if (!entry) return;
+      sessions.delete(conversationId);
+      await tearDownEntry(entry);
+    },
+
     async disposeAll() {
       const entries = [...sessions.values()];
       sessions.clear();
-      await Promise.all(
-        entries.map(async (entry) => {
-          try {
-            if (entry.activeRun) await entry.handle.cancel();
-          } catch {
-            // Continue disposing even if cancel fails.
-          }
-          try {
-            await entry.handle[Symbol.asyncDispose]();
-          } catch {
-            // Best-effort dispose on shutdown.
-          }
-        }),
-      );
+      await Promise.all(entries.map((entry) => tearDownEntry(entry)));
     },
   };
 }
 
 /** Production singleton — wired into server shutdown via {@link disposeAll}. */
 export const agentSessions: AgentSessions = createAgentSessions();
-
-function resolveProjectWorkspace(projectId: string): string {
-  const issue = readIssueOrThrow(projectId);
-  if (issue.kind !== "project") {
-    throw new IssueError("validation", `issue "${projectId}" is not a project`);
-  }
-  if (!issue.workspace) {
-    throw new IssueError("validation", "Project workspace is not set");
-  }
-  return issue.workspace;
-}

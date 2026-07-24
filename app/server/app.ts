@@ -8,6 +8,7 @@ import { join } from "path";
 import { distDir, hasBuiltClient, isProdEnv } from "./config.js";
 import { errorHandler } from "./errors.js";
 import { agentModelsRouter } from "./routes/agent-models.js";
+import { conversationsRouter } from "./routes/conversations.js";
 import { eventsRouter } from "./routes/events.js";
 import { issuesRouter } from "./routes/issues.js";
 import { projectsRouter } from "./routes/projects.js";
@@ -36,6 +37,7 @@ export function createApp(): Express {
 
   app.use("/api/issues", issuesRouter);
   app.use("/api/projects", projectsRouter);
+  app.use("/api/conversations", conversationsRouter);
   app.use("/api/events", eventsRouter);
   app.use("/api/agent-models", agentModelsRouter);
 

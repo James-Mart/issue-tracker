@@ -1,0 +1,224 @@
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
+import type { Server } from "http";
+import { tmpdir } from "os";
+import { dirname, join } from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import express from "express";
+import {
+  buildScriptedStreamWithAgentIdHint,
+  createFakeAgentSdk,
+  FAKE_RUN_ID,
+} from "../services/agent-sdk.fake.js";
+
+const AT = "2026-07-24T12:00:00.000Z";
+
+let issuesRoot: string;
+let workspaceDir: string;
+let server: Server;
+let baseUrl: string;
+
+function writeIssue(id: string, body: Record<string, unknown>): void {
+  mkdirSync(join(issuesRoot, id), { recursive: true });
+  writeFileSync(join(issuesRoot, id, "issue.json"), JSON.stringify({ id, ...body }));
+}
+
+function conversationsDir(): string {
+  return join(dirname(issuesRoot), "conversations");
+}
+
+beforeEach(async () => {
+  issuesRoot = mkdtempSync(join(tmpdir(), "issue-tracker-conversations-route-"));
+  workspaceDir = mkdtempSync(join(tmpdir(), "issue-conv-ws-"));
+  mkdirSync(join(workspaceDir, ".git"));
+  vi.resetModules();
+  vi.stubEnv("ISSUES_DIR", issuesRoot);
+
+  writeIssue("platform", {
+    kind: "project",
+    title: "Platform",
+    workspace: workspaceDir,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("no-ws", {
+    kind: "project",
+    title: "No workspace",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+
+  const { createApp } = await import("../app.js");
+  const app = createApp();
+  await new Promise<void>((resolve) => {
+    server = app.listen(0, "127.0.0.1", () => resolve());
+  });
+  const addr = server.address();
+  if (!addr || typeof addr === "string") {
+    throw new Error("expected TCP listen address");
+  }
+  baseUrl = `http://127.0.0.1:${addr.port}`;
+});
+
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await new Promise<void>((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()));
+  });
+  rmSync(issuesRoot, { recursive: true, force: true });
+  rmSync(workspaceDir, { recursive: true, force: true });
+  const convDir = conversationsDir();
+  if (existsSync(convDir)) rmSync(convDir, { recursive: true, force: true });
+});
+
+describe("conversations HTTP API (CRUD)", () => {
+  it("POST creates a conversation for a workspace-backed project", async () => {
+    const res = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "platform",
+        title: "SDK chat",
+        model: "composer-2.5",
+      }),
+    });
+    expect(res.status).toBe(201);
+    const meta = await res.json();
+    expect(meta.projectId).toBe("platform");
+    expect(meta.title).toBe("SDK chat");
+    expect(meta.model).toBe("composer-2.5");
+    expect(existsSync(join(conversationsDir(), meta.id, "meta.json"))).toBe(true);
+  });
+
+  it("POST rejects a workspaceless project with 400", async () => {
+    const res = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "no-ws" }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "Project workspace is not set",
+    });
+  });
+
+  it("GET lists conversations and GET /:id returns meta + transcript", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Listed" }),
+    }).then((r) => r.json());
+
+    const list = await fetch(`${baseUrl}/api/conversations`).then((r) => r.json());
+    expect(list.some((m: { id: string }) => m.id === created.id)).toBe(true);
+
+    const detail = await fetch(`${baseUrl}/api/conversations/${created.id}`).then(
+      (r) => r.json(),
+    );
+    expect(detail.meta.id).toBe(created.id);
+    expect(detail.transcript).toEqual([]);
+  });
+
+  it("PATCH renames and updates the model", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Before" }),
+    }).then((r) => r.json());
+
+    const patched = await fetch(`${baseUrl}/api/conversations/${created.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "After", model: "composer-2.5" }),
+    });
+    expect(patched.status).toBe(200);
+    const meta = await patched.json();
+    expect(meta.title).toBe("After");
+    expect(meta.model).toBe("composer-2.5");
+  });
+
+  it("DELETE removes the conversation directory", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Delete me" }),
+    }).then((r) => r.json());
+
+    const res = await fetch(`${baseUrl}/api/conversations/${created.id}`, {
+      method: "DELETE",
+    });
+    expect(res.status).toBe(204);
+    expect(existsSync(join(conversationsDir(), created.id))).toBe(false);
+  });
+});
+
+describe("POST /api/conversations/:id/messages", () => {
+  let msgServer: Server;
+  let msgBaseUrl: string;
+
+  beforeEach(async () => {
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const { createAgentSessions } = await import("../services/agent-sessions.js");
+    const { createConversationsRouter } = await import("./conversations.js");
+    const { errorHandler } = await import("../errors.js");
+    const sessions = createAgentSessions(fake);
+    const app = express();
+    app.use(express.json());
+    app.use("/api/conversations", createConversationsRouter(sessions));
+    app.use(errorHandler);
+
+    await new Promise<void>((resolve) => {
+      msgServer = app.listen(0, "127.0.0.1", () => resolve());
+    });
+    const addr = msgServer.address();
+    if (!addr || typeof addr === "string") {
+      throw new Error("expected TCP listen address");
+    }
+    msgBaseUrl = `http://127.0.0.1:${addr.port}`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve, reject) => {
+      msgServer.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("returns 202 with runId and persists prompt + assistant after finalize", async () => {
+    const created = await fetch(`${msgBaseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Prompt run" }),
+    }).then((r) => r.json());
+
+    const send = await fetch(`${msgBaseUrl}/api/conversations/${created.id}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "hello agent" }),
+    });
+    expect(send.status).toBe(202);
+    expect(await send.json()).toEqual({ runId: FAKE_RUN_ID });
+
+    // Poll until the assistant response is persisted.
+    let detail: { transcript: { type: string; text?: string }[] };
+    for (let i = 0; i < 50; i += 1) {
+      detail = await fetch(`${msgBaseUrl}/api/conversations/${created.id}`).then(
+        (r) => r.json(),
+      );
+      const assistant = detail.transcript.find((e) => e.type === "assistant");
+      if (assistant) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    const prompt = detail!.transcript.find((e) => e.type === "prompt");
+    const assistant = detail!.transcript.find((e) => e.type === "assistant");
+    expect(prompt?.text).toBe("hello agent");
+    expect(assistant?.text).toBeTruthy();
+  });
+});

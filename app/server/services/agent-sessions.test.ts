@@ -296,4 +296,59 @@ describe("agent sessions manager", () => {
     await sessions.disposeAll();
     expect(fake.handles[0]?.disposed).toBe(true);
   });
+
+  it("dispose awaits the background pump before returning", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Dispose during run",
+      projectId: "platform",
+      model: "auto",
+    });
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    await Promise.resolve();
+    expect(sessions.getActiveRun(meta.id)?.id).toBe(FAKE_RUN_ID);
+
+    let disposed = false;
+    const disposePromise = sessions.dispose(meta.id).then(() => {
+      disposed = true;
+    });
+
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    release();
+    await disposePromise;
+    expect(disposed).toBe(true);
+    expect(fake.handles[0]?.disposed).toBe(true);
+  });
+
+  it("dispose tears down a single live agent session", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Dispose one",
+      projectId: "platform",
+      model: "auto",
+    });
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    await sessions.dispose(meta.id);
+    expect(fake.handles[0]?.disposed).toBe(true);
+    expect(sessions.getActiveRun(meta.id)).toBeUndefined();
+  });
 });
