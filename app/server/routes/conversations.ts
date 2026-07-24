@@ -167,6 +167,18 @@ export function createConversationsRouter(
   );
 
   router.post(
+    "/:id/cancel",
+    asyncRoute(async (req, res) => {
+      const cancelled = await sessions.cancel(req.params.id);
+      if (!cancelled) {
+        res.status(409).json({ error: "No active run to cancel" });
+        return;
+      }
+      res.sendStatus(200);
+    }),
+  );
+
+  router.post(
     "/:id/messages",
     asyncRoute(async (req, res) => {
       const body = req.body as { prompt?: unknown; model?: unknown };
