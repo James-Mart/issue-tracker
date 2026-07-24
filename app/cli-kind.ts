@@ -5,6 +5,7 @@ import {
   isClearableSetField,
   KIND_GET_FIELDS,
   KIND_SET_FIELDS,
+  setFieldStoreKey,
   type SetFieldSpec,
 } from "./server/kind-fields.js";
 import { list, read, renameProjectLabel, update } from "./server/services/issues.js";
@@ -460,6 +461,7 @@ export function coerceSetPatch(
   }
 
   const modes = countSetModes(value, opts);
+  const storeKey = setFieldStoreKey(field, spec);
   if (opts.clear) {
     if (modes.length > 1) {
       throw new Error(
@@ -469,10 +471,10 @@ export function coerceSetPatch(
     if (spec.type === "needsAttention") {
       return { needsAttention: false, attentionReason: null };
     }
-    if (!isClearableSetField(field)) {
+    if (!isClearableSetField(storeKey)) {
       throw new Error(`field "${field}" cannot be cleared`);
     }
-    return { [field]: null } as IssuePatch;
+    return { [storeKey]: null } as IssuePatch;
   }
 
   if (spec.type === "needsAttention") {
@@ -505,16 +507,16 @@ export function coerceSetPatch(
 
   switch (spec.type) {
     case "string":
-      return { [field]: raw } as IssuePatch;
+      return { [storeKey]: raw } as IssuePatch;
     case "commitSha":
       validateFullCommitSha(raw);
       return { commitSha: raw };
     case "boolean":
-      return { [field]: coerceBoolean(raw, field) } as IssuePatch;
+      return { [storeKey]: coerceBoolean(raw, field) } as IssuePatch;
     case "enum":
-      return { [field]: coerceEnum(raw, field, spec.values) } as IssuePatch;
+      return { [storeKey]: coerceEnum(raw, field, spec.values) } as IssuePatch;
     case "json":
-      return { [field]: coerceJson(raw, field) } as IssuePatch;
+      return { [storeKey]: coerceJson(raw, field) } as IssuePatch;
   }
 }
 

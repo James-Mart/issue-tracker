@@ -1395,7 +1395,7 @@ describe("story get/set", () => {
     expect(runCli(["story", "get", "a", "merged"]).stdout).toBe("true\n");
   });
 
-  it("refuses kind mismatch, unknown fields, and unsettable mergeBase", () => {
+  it("refuses kind mismatch and unknown fields; mergeBase sets override", () => {
     const mismatch = runCli(["story", "get", "e", "title"]);
     expect(mismatch.status).toBe(1);
     expect(mismatch.stderr).toContain('"e" is an epic, not a story');
@@ -1412,10 +1412,21 @@ describe("story get/set", () => {
     expect(removedReady.status).toBe(1);
     expect(removedReady.stderr).toContain('unknown field "ready" for story');
 
-    const unknownSet = runCli(["story", "set", "a", "mergeBase", "main"]);
-    expect(unknownSet.status).toBe(1);
-    expect(unknownSet.stderr).toContain(
-      'unknown or unsettable field "mergeBase" for story',
+    // Setting mergeBase stores mergeBaseOverride; get stays derived.
+    expect(runCli(["story", "set", "a", "mergeBase", "feat/existing"]).status).toBe(
+      0,
+    );
+    expect(issueJsonField("a", "mergeBaseOverride")).toBe("feat/existing");
+    expect(issueJsonField("a", "mergeBase")).toBeUndefined();
+    // Story a is first-layer under epic e — derived mergeBase uses Epic override
+    // (unset here), so get still reflects trunk until the Epic carries one.
+    expect(runCli(["story", "get", "a", "mergeBase"]).stdout).toBe("main\n");
+    expect(runCli(["epic", "set", "e", "mergeBase", "feat/epic-base"]).status).toBe(
+      0,
+    );
+    expect(issueJsonField("e", "mergeBaseOverride")).toBe("feat/epic-base");
+    expect(runCli(["story", "get", "a", "mergeBase"]).stdout).toBe(
+      "feat/epic-base\n",
     );
 
     writeIssue("c1", {

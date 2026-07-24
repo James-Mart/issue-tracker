@@ -82,15 +82,19 @@ export function derive(issues: Issue[]): DeriveResult {
     const projectId = projectContaining(story, byId);
     return (projectId && trunkByProject.get(projectId)) || "main";
   };
-  // Cache by fork-point + trunk so siblings sharing a parent don't re-walk chains.
+  // Cache stacked walks only (siblings share stackedOn + trunk). Unstacked is a
+  // single override/trunk lookup — resolve directly so the cache cannot drift.
   const mergeBaseCache = new Map<string, string | undefined>();
   const mergeBaseFor = (story: Story): string | undefined => {
     const trunk = trunkForStory(story);
-    const cacheKey = `${story.stackedOn ?? ""}\0${trunk}`;
+    if (!story.stackedOn) {
+      return resolveMergeBase(story, issues, storiesById, trunk, byId);
+    }
+    const cacheKey = `${story.stackedOn}\0${trunk}`;
     if (mergeBaseCache.has(cacheKey)) {
       return mergeBaseCache.get(cacheKey);
     }
-    const value = resolveMergeBase(story.stackedOn, issues, storiesById, trunk);
+    const value = resolveMergeBase(story, issues, storiesById, trunk, byId);
     mergeBaseCache.set(cacheKey, value);
     return value;
   };

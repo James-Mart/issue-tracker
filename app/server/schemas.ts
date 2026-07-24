@@ -184,6 +184,8 @@ export const epicSchema = z.object({
   kind: z.literal("epic"),
   partOf: nonEmpty,
   blockedBy: z.array(z.string()).default([]),
+  // Imperative override for first-layer Stories' derived mergeBase.
+  mergeBaseOverride: z.string().optional(),
   retro: z.enum(RETRO_STATUSES).optional(),
   // Catalog id assignments (imperative; apply preserves).
   labels: assignmentLabelsSchema,
@@ -211,6 +213,8 @@ export const storySchema = z.object({
   partOf: nonEmpty,
   branchName: z.string().optional(),
   stackedOn: z.string().optional(),
+  // Imperative override for root (project-level) Stories' derived mergeBase.
+  mergeBaseOverride: z.string().optional(),
   prUrl: z.string().optional(),
   merged: z.boolean().default(false),
   specReview: z.enum(SPEC_REVIEW_STATUSES).optional(),
