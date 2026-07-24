@@ -1,11 +1,13 @@
 import type { NestedStep, TranscriptEventInput } from "../schemas.js";
 import { type AgentStreamEvent } from "./agent-sdk.js";
+import { publishFrame } from "./conversation-stream.js";
 import { appendEvent } from "./conversations.js";
 
 /**
  * One step out of the session manager's single normalize pass. Persistence
- * writes only when `persist` is true (finalized events). A later Story adds a
- * live-subscriber tap onto every step without changing that rule.
+ * writes only when `persist` is true (finalized events); every step is also
+ * published to the live-subscriber tap, so `persist: false` steps surface the
+ * incremental deltas that never touch disk.
  */
 export type NormalizedStep = {
   event: TranscriptEventInput;
@@ -13,9 +15,9 @@ export type NormalizedStep = {
 };
 
 /**
- * Normalize + persist finalized events for one conversation turn. Live
- * subscribers are intentionally absent here; {@link emit} is the seam the
- * streaming Story will tap.
+ * Normalize + persist finalized events for one conversation turn, and publish
+ * every normalized step to the live-subscriber tap ({@link emit}). Persistence
+ * semantics are unchanged: only `persist: true` steps land on disk.
  */
 export class EventPipeline {
   private assistantText = "";
@@ -48,9 +50,15 @@ export class EventPipeline {
     switch (message.type) {
       case "assistant": {
         const chunk = textFromAssistant(message);
-        if (chunk) this.assistantText += chunk;
-        // Live deltas later; finalized coalesced text flushes on the next
-        // non-assistant event or at end-of-turn.
+        if (chunk) {
+          this.assistantText += chunk;
+          // Live-only delta for subscribers; the coalesced finalized text
+          // flushes to disk on the next non-assistant event or end-of-turn.
+          await this.emit({
+            event: { type: "assistant", text: chunk },
+            persist: false,
+          });
+        }
         return;
       }
       case "thinking": {
@@ -146,6 +154,14 @@ export class EventPipeline {
             parentCallId,
             (this.nestedText.get(parentCallId) ?? "") + u.text,
           );
+          await this.emit({
+            event: {
+              type: "subagent_update",
+              parentCallId,
+              step: { kind: "text", text: u.text },
+            },
+            persist: false,
+          });
         }
         return;
       }
@@ -156,6 +172,14 @@ export class EventPipeline {
             parentCallId,
             (this.nestedThinking.get(parentCallId) ?? "") + u.text,
           );
+          await this.emit({
+            event: {
+              type: "subagent_update",
+              parentCallId,
+              step: { kind: "thinking", text: u.text },
+            },
+            persist: false,
+          });
         }
         return;
       }
@@ -280,6 +304,7 @@ export class EventPipeline {
   }
 
   private async emit(step: NormalizedStep): Promise<void> {
+    publishFrame(this.conversationId, step);
     if (step.persist) {
       await appendEvent(this.conversationId, step.event);
     }

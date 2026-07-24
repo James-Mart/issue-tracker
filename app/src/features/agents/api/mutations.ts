@@ -2,10 +2,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { ConversationMeta } from "@server/schemas";
 import {
+  cancelConversationRun,
   createConversation,
   deleteConversation,
+  sendConversationMessage,
   updateConversation,
   type CreateConversationBody,
+  type SendConversationMessageBody,
+  type SendConversationMessageResult,
   type UpdateConversationBody,
 } from "./client";
 import { agentsKeys } from "./keys";
@@ -33,12 +37,6 @@ export function useUpdateConversation() {
   >({
     mutationFn: ({ id, patch }) => updateConversation(id, patch),
     onError: (err) => toast.error(messageOf(err)),
-    onSuccess: (data) =>
-      qc.setQueryData(agentsKeys.conversation(data.id), (prev) =>
-        prev && typeof prev === "object" && "meta" in prev
-          ? { ...prev, meta: data }
-          : prev,
-      ),
     onSettled: () =>
       qc.invalidateQueries({ queryKey: agentsKeys.conversations() }),
   });
@@ -49,9 +47,26 @@ export function useDeleteConversation() {
   return useMutation<void, Error, string>({
     mutationFn: deleteConversation,
     onError: (err) => toast.error(messageOf(err)),
-    onSettled: (_data, _err, id) => {
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: agentsKeys.conversations() });
-      qc.removeQueries({ queryKey: agentsKeys.conversation(id) });
     },
+  });
+}
+
+export function useSendConversationMessage() {
+  return useMutation<
+    SendConversationMessageResult,
+    Error,
+    { id: string; body: SendConversationMessageBody }
+  >({
+    mutationFn: ({ id, body }) => sendConversationMessage(id, body),
+    onError: (err) => toast.error(messageOf(err)),
+  });
+}
+
+export function useCancelConversationRun() {
+  return useMutation<void, Error, string>({
+    mutationFn: cancelConversationRun,
+    onError: (err) => toast.error(messageOf(err)),
   });
 }

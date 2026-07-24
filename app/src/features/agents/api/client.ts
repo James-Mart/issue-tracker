@@ -1,5 +1,5 @@
 import { request } from "@/lib/api/client";
-import type { ConversationDetail, ConversationMeta } from "@server/schemas";
+import type { ConversationMeta } from "@server/schemas";
 
 export type AgentModel = {
   id: string;
@@ -23,10 +23,6 @@ export type UpdateConversationBody = {
 
 export function listConversations(): Promise<ConversationMeta[]> {
   return request<ConversationMeta[]>("/api/conversations");
-}
-
-export function getConversation(id: string): Promise<ConversationDetail> {
-  return request<ConversationDetail>(`/api/conversations/${id}`);
 }
 
 export function createConversation(
@@ -54,4 +50,27 @@ export function deleteConversation(id: string): Promise<void> {
 
 export function listAgentModels(): Promise<AgentModelsResponse> {
   return request<AgentModelsResponse>("/api/agent-models");
+}
+
+export type SendConversationMessageBody = {
+  prompt: string;
+  model?: string;
+};
+
+export type SendConversationMessageResult = {
+  runId: string;
+};
+
+export function sendConversationMessage(
+  id: string,
+  body: SendConversationMessageBody,
+): Promise<SendConversationMessageResult> {
+  return request<SendConversationMessageResult>(
+    `/api/conversations/${id}/messages`,
+    { method: "POST", body },
+  );
+}
+
+export function cancelConversationRun(id: string): Promise<void> {
+  return request<void>(`/api/conversations/${id}/cancel`, { method: "POST" });
 }

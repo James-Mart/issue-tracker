@@ -58,7 +58,8 @@ export function AgentsPage() {
     <PageShell
       className={cn(
         AGENTS_PAGE_SHELL_CLASS,
-        "min-h-[calc(100svh-3rem)]",
+        // Bound height so the thread scrolls and the composer stays pinned.
+        "h-[calc(100svh-3rem)] min-h-0 overflow-hidden",
       )}
     >
       <AgentsHeader />

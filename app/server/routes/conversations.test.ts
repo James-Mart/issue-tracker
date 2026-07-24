@@ -157,6 +157,252 @@ describe("conversations HTTP API (CRUD)", () => {
   });
 });
 
+describe("GET /api/conversations/:id/events", () => {
+  it("replays persisted transcript then holds the stream with pings", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "SSE replay" }),
+    }).then((r) => r.json());
+
+    const { appendEvent } = await import("../services/conversations.js");
+    await appendEvent(created.id, { type: "prompt", text: "hello sse" });
+
+    const controller = new AbortController();
+    const res = await fetch(`${baseUrl}/api/conversations/${created.id}/events`, {
+      signal: controller.signal,
+      headers: { accept: "text/event-stream" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/text\/event-stream/);
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (buf.includes("hello sse") && buf.includes("event: ping")) break;
+    }
+    controller.abort();
+    try {
+      await reader.cancel();
+    } catch {
+      // abort may already have torn the stream down
+    }
+
+    expect(buf).toContain("hello sse");
+    expect(buf).toMatch(/event: ping/);
+    const dataLine = buf
+      .split("\n")
+      .find((line) => line.startsWith("data: ") && line.includes("prompt"));
+    expect(dataLine).toBeTruthy();
+    const event = JSON.parse(dataLine!.slice("data: ".length));
+    expect(event).toMatchObject({ type: "prompt", text: "hello sse" });
+    expect(typeof event.at).toBe("string");
+  });
+
+  it("forwards live normalized frames while a run is active", async () => {
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const { createAgentSessions } = await import("../services/agent-sessions.js");
+    const { createConversationsRouter } = await import("./conversations.js");
+    const { errorHandler } = await import("../errors.js");
+    const sessions = createAgentSessions(fake);
+    const app = express();
+    app.use(express.json());
+    app.use("/api/conversations", createConversationsRouter(sessions));
+    app.use(errorHandler);
+
+    let liveServer: Server;
+    await new Promise<void>((resolve) => {
+      liveServer = app.listen(0, "127.0.0.1", () => resolve());
+    });
+    const addr = liveServer!.address();
+    if (!addr || typeof addr === "string") {
+      throw new Error("expected TCP listen address");
+    }
+    const liveBase = `http://127.0.0.1:${addr.port}`;
+
+    try {
+      const created = await fetch(`${liveBase}/api/conversations`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId: "platform", title: "SSE live" }),
+      }).then((r) => r.json());
+
+      const controller = new AbortController();
+      const eventsRes = await fetch(
+        `${liveBase}/api/conversations/${created.id}/events`,
+        {
+          signal: controller.signal,
+          headers: { accept: "text/event-stream" },
+        },
+      );
+      expect(eventsRes.status).toBe(200);
+
+      const send = await fetch(`${liveBase}/api/conversations/${created.id}/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "stream please" }),
+      });
+      expect(send.status).toBe(202);
+
+      const reader = eventsRes.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      const deadline = Date.now() + 5_000;
+      while (Date.now() < deadline) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        if (buf.includes('"type":"assistant"') && buf.includes("event: ping")) {
+          break;
+        }
+      }
+      controller.abort();
+      try {
+        await reader.cancel();
+      } catch {
+        // abort may already have torn the stream down
+      }
+
+      expect(buf).toContain('"type":"assistant"');
+      expect(buf).toMatch(/event: ping/);
+      // Connection must stay open for heartbeats; we only closed via client abort.
+      expect(buf).not.toMatch(/event: end/);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        liveServer!.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
+  });
+});
+
+describe("POST /api/conversations/:id/cancel", () => {
+  let cancelServer: Server;
+  let cancelBaseUrl: string;
+  let releaseHold: () => void;
+
+  beforeEach(async () => {
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    releaseHold = release;
+
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+      hold,
+    });
+    const { createAgentSessions } = await import("../services/agent-sessions.js");
+    const { createConversationsRouter } = await import("./conversations.js");
+    const { errorHandler } = await import("../errors.js");
+    const sessions = createAgentSessions(fake);
+    const app = express();
+    app.use(express.json());
+    app.use("/api/conversations", createConversationsRouter(sessions));
+    app.use(errorHandler);
+
+    await new Promise<void>((resolve) => {
+      cancelServer = app.listen(0, "127.0.0.1", () => resolve());
+    });
+    const addr = cancelServer.address();
+    if (!addr || typeof addr === "string") {
+      throw new Error("expected TCP listen address");
+    }
+    cancelBaseUrl = `http://127.0.0.1:${addr.port}`;
+  });
+
+  afterEach(async () => {
+    releaseHold();
+    await new Promise<void>((resolve, reject) => {
+      cancelServer.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("returns 409 when there is no active run", async () => {
+    const created = await fetch(`${cancelBaseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Idle cancel" }),
+    }).then((r) => r.json());
+
+    const res = await fetch(
+      `${cancelBaseUrl}/api/conversations/${created.id}/cancel`,
+      { method: "POST" },
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "No active run to cancel" });
+  });
+
+  it("returns 200 and stops an in-flight run while SSE stays open", async () => {
+    const created = await fetch(`${cancelBaseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Cancel run" }),
+    }).then((r) => r.json());
+
+    const controller = new AbortController();
+    const eventsRes = await fetch(
+      `${cancelBaseUrl}/api/conversations/${created.id}/events`,
+      {
+        signal: controller.signal,
+        headers: { accept: "text/event-stream" },
+      },
+    );
+    expect(eventsRes.status).toBe(200);
+
+    const send = await fetch(
+      `${cancelBaseUrl}/api/conversations/${created.id}/messages`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "long turn" }),
+      },
+    );
+    expect(send.status).toBe(202);
+
+    await Promise.resolve();
+
+    const cancel = await fetch(
+      `${cancelBaseUrl}/api/conversations/${created.id}/cancel`,
+      { method: "POST" },
+    );
+    expect(cancel.status).toBe(200);
+
+    const reader = eventsRes.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (buf.includes("event: ping")) break;
+    }
+    controller.abort();
+    try {
+      await reader.cancel();
+    } catch {
+      // abort may already have torn the stream down
+    }
+
+    expect(buf).toMatch(/event: ping/);
+    expect(buf).not.toContain('"type":"assistant"');
+    expect(buf).not.toMatch(/event: end/);
+
+    const secondCancel = await fetch(
+      `${cancelBaseUrl}/api/conversations/${created.id}/cancel`,
+      { method: "POST" },
+    );
+    expect(secondCancel.status).toBe(409);
+  });
+});
+
 describe("POST /api/conversations/:id/messages", () => {
   let msgServer: Server;
   let msgBaseUrl: string;
