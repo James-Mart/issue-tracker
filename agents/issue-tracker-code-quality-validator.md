@@ -65,14 +65,18 @@ and confirm each actionable item was addressed (or declined with reasoning by
 the implementor). Unfixed prior findings remain actionable.
 
 Do **not** post the comment or stop from the review include. After the review
-include prepares the comment body, do a **best-effort** browser look for
-UI-related Tasks (same UI-related judgment as the `designSystem` consult): open
-the running app with Cursor browser tools and confirm the Task's visible
-behavior is acceptable, the way a good reviewer would. A visible problem is an
-actionable `changes-requested` finding — fold it into the comment body before
-the Outcome. If browser tools fail or are unavailable, note that in the comment
-body and proceed with the static review — do not fail `qa` solely because the
-harness could not screenshot. Leave non-UI Tasks on the static-only path.
+include prepares the comment body, do a **best-effort** UI look for UI-related
+Tasks (same UI-related judgment as the `designSystem` consult): with
+`npm run dev` already running, run
+`cd app && npm run screenshots -- <path-or-dialog>` and read the PNGs under the
+output dir (default
+`/tmp/issue-tracker-screenshots`) to confirm the Task's visible behavior is
+acceptable, the way a good reviewer would. Use Cursor browser MCP tools only
+for interaction needed to reach a state (not for screenshot capture). A visible
+problem is an actionable `changes-requested` finding — fold it into the comment
+body before the Outcome. If capture fails or is unavailable, note that in the
+comment body and proceed with the static review — do not fail `qa` solely
+because capture failed. Leave non-UI Tasks on the static-only path.
 
 Then **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-code-quality-outcome.md`
