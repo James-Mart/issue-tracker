@@ -1,7 +1,12 @@
 import { join } from "path";
 import type { AgentDefinition } from "@cursor/sdk";
 import { describe, expect, it } from "vitest";
-import { agentSdk, type AgentStreamEvent } from "./agent-sdk.js";
+import {
+  agentSdk,
+  type AgentHandle,
+  type AgentSendOptions,
+  type AgentStreamEvent,
+} from "./agent-sdk.js";
 
 // Live SDK suite: authored and preserved, but excluded from the default
 // `npm test` (which must never contact the SDK/network or spend tokens).
@@ -51,6 +56,33 @@ function taskCallModel(event: AgentStreamEvent): string | undefined {
 }
 
 /**
+ * Spawn `role` with no spawn-time model from `agent` and report every distinct
+ * effective nested model observed on the Task call.
+ */
+async function nestedModelsFrom(
+  agent: AgentHandle,
+  role: string,
+  sendOptions?: AgentSendOptions,
+): Promise<string[]> {
+  const run = await agent.send(
+    `Call the Task tool exactly once, with subagent_type "${role}", ` +
+      `description "model probe", and prompt "${PROBE_PROMPT}". ` +
+      "Pass no model argument on that call. " +
+      "Then reply with the single word done.",
+    sendOptions,
+  );
+
+  const models = new Set<string>();
+  for await (const event of run) {
+    const model = taskCallModel(event);
+    if (model) models.add(model);
+  }
+  await run.wait();
+
+  return [...models];
+}
+
+/**
  * Spawn `role` from an `agents` map with no spawn-time model and report every
  * distinct effective nested model observed.
  */
@@ -64,22 +96,42 @@ async function nestedModelsFor(
     storeDir: STORE_DIR,
     agents,
   });
+  return nestedModelsFrom(agent, role);
+}
 
-  const run = await agent.send(
-    `Call the Task tool exactly once, with subagent_type "${role}", ` +
-      `description "model probe", and prompt "${PROBE_PROMPT}". ` +
-      "Pass no model argument on that call. " +
-      "Then reply with the single word done.",
-  );
-
-  const models = new Set<string>();
-  for await (const event of run) {
-    const model = taskCallModel(event);
-    if (model) models.add(model);
+/**
+ * Same measurement as {@link nestedModelsFor}, but after disposing the create
+ * handle and rehydrating via `resumeAgent` — the path the app takes after a
+ * process restart. Resume gets the map only (no `cwd` / `settingSources`);
+ * the parent model is supplied on `send`, since local resume does not restore
+ * the create-time model for subsequent turns.
+ */
+async function nestedModelsAfterResume(
+  role: string,
+  agents: Record<string, AgentDefinition>,
+): Promise<string[]> {
+  const created = await agentSdk.createAgent({
+    cwd: process.cwd(),
+    model: PARENT_MODEL,
+    storeDir: STORE_DIR,
+    agents,
+  });
+  const agentId = created.agentId;
+  // Persist a turn so resume has real stored state, matching a conversation
+  // that already ran before the process died.
+  {
+    const warm = await created.send('Reply with the single word "hi".');
+    for await (const _ of warm) {
+      // Drain; content unused.
+    }
+    await warm.wait();
   }
-  await run.wait();
+  await created[Symbol.asyncDispose]();
 
-  return [...models];
+  await using agent = await agentSdk.resumeAgent(agentId, STORE_DIR, {
+    agents,
+  });
+  return nestedModelsFrom(agent, role, { model: PARENT_MODEL });
 }
 
 describe.skipIf(!process.env.CURSOR_SDK_LIVE)("agent-sdk (live)", () => {
@@ -120,6 +172,23 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("agent-sdk (live)", () => {
     async (pin) => {
       const role = "model-pin-probe";
       const models = await nestedModelsFor(role, {
+        [role]: probeDefinition(pin),
+      });
+
+      expect(models).toEqual([pin]);
+    },
+    LIVE_TIMEOUT_MS,
+  );
+
+  // Boundary tests only prove the map reaches Agent.resume. This measures
+  // whether resume still resolves the pin when cwd / settingSources are absent
+  // — the options this Story deliberately does not forward.
+  it(
+    "pins a nested model from the agents map after resume",
+    async () => {
+      const role = "model-pin-probe";
+      const pin = COMPOSER_PIN;
+      const models = await nestedModelsAfterResume(role, {
         [role]: probeDefinition(pin),
       });
 
