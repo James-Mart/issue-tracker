@@ -90,6 +90,8 @@ describe("agent sessions manager", () => {
       model: { id: "composer-2.5" },
       storeDir: join(dirname(issuesRoot), "conversations", meta.id, "agent-state"),
     });
+    expect(fake.created[0]?.customTools?.delegate).toBeDefined();
+    expect(fake.created[0]?.agents).toEqual(expect.any(Object));
     expect(fake.resumed).toHaveLength(0);
     expect(fake.handles[0]?.sends).toEqual([
       { prompt: "go", options: {} },
@@ -131,7 +133,12 @@ describe("agent sessions manager", () => {
           meta.id,
           "agent-state",
         ),
-        options: { agents: expect.any(Object) },
+        options: {
+          agents: expect.any(Object),
+          customTools: expect.objectContaining({
+            delegate: expect.any(Object),
+          }),
+        },
       },
     ]);
     expect(fake.handles[0]?.sends).toEqual([
@@ -179,7 +186,12 @@ describe("agent sessions manager", () => {
           meta.id,
           "agent-state",
         ),
-        options: { agents: expect.any(Object) },
+        options: {
+          agents: expect.any(Object),
+          customTools: expect.objectContaining({
+            delegate: expect.any(Object),
+          }),
+        },
       },
     ]);
     expect(fake.created).toHaveLength(1);
@@ -193,6 +205,7 @@ describe("agent sessions manager", () => {
         "agent-state",
       ),
     });
+    expect(fake.created[0]?.customTools?.delegate).toBeDefined();
     expect(readConversation(meta.id).meta.agentId).toBe(FAKE_AGENT_ID);
     expect(fake.handles[0]?.sends).toEqual([{ prompt: "continue", options: {} }]);
 

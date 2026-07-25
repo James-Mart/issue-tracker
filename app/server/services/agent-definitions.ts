@@ -4,13 +4,13 @@ import type { AgentDefinition } from "@cursor/sdk";
 import { parse as parseYaml } from "yaml";
 import { pluginDir } from "../config.js";
 
-interface AgentFrontmatter {
+export interface AgentFrontmatter {
   name?: unknown;
   description?: unknown;
   model?: unknown;
 }
 
-function splitFrontmatter(
+export function splitFrontmatter(
   src: string,
 ): { frontmatter: AgentFrontmatter; prompt: string } | null {
   if (!src.startsWith("---\n") && !src.startsWith("---\r\n")) return null;

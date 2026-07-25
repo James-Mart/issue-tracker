@@ -1,6 +1,9 @@
 import { createApp } from "./app.js";
 import { listenPort } from "./config.js";
 import { agentSessions } from "./services/agent-sessions.js";
+import { validateRoleBodies } from "./services/role-bodies.js";
+
+validateRoleBodies();
 
 const app = createApp();
 
