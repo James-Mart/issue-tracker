@@ -59,10 +59,10 @@ score from the **## Bootstrap** CLI context alone (unchanged).
 
 ## Decision rule
 
-Return `claude-opus-4-8-thinking-high` if novelty is **high** OR blast radius
+Return `claude-opus-5-thinking-high` if novelty is **high** OR blast radius
 is **broad**; otherwise return `cursor-grok-4.5-high-fast`. On genuine doubt
 or when blocked (cannot read the issue via CLI), return
-`claude-opus-4-8-thinking-high`. Only these two planner models — never any
+`claude-opus-5-thinking-high`. Only these two planner models — never any
 other slug.
 
 ## What you do

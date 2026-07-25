@@ -65,8 +65,8 @@ Map to a single model id; persist and confirm per **Allowed writes**:
 |                   | Low verification difficulty     | Mid                             | High                            |
 | ----------------- | ------------------------------- | ------------------------------- | ------------------------------- |
 | **Low judgment**  | `composer-2.5`                  | `composer-2.5`                  | `cursor-grok-4.5-high-fast`     |
-| **Mid judgment**  | `cursor-grok-4.5-high-fast`     | `cursor-grok-4.5-high-fast`     | `claude-opus-4-8-thinking-high` |
-| **High judgment** | `claude-opus-4-8-thinking-high` | `claude-opus-4-8-thinking-high` | `claude-opus-4-8-thinking-high` |
+| **Mid judgment**  | `cursor-grok-4.5-high-fast`     | `cursor-grok-4.5-high-fast`     | `claude-opus-5-thinking-high` |
+| **High judgment** | `claude-opus-5-thinking-high` | `claude-opus-5-thinking-high` | `claude-opus-5-thinking-high` |
 
 ## What you do
 
