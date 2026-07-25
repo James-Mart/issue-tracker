@@ -261,7 +261,7 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
    Task `status` is set on implementor *entry* (`in-progress` / `fixing`),
    not on exit, so it is **not** a completion signal and must not be used to
    infer “implementor finished.” Disk alone cannot uniquely recover these
-   windows; prefer staying in-cycle (agent ids + step flow) when possible:
+   windows; prefer staying in-cycle (`resumeId` + step flow) when possible:
    - `qa` unset while implementor may still be in flight → falls through to
      step 1 (may re-spawn Mode `implement`). Accept that window rather than
      treating `in-progress`/`fixing` as “ready for QA.”
@@ -270,31 +270,37 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
      re-review (step 2 → step 3) is unaffected; a skill re-run in the
      post-revise window may run an extra revise before code-quality.
 
-1. **Assign model.** Spawn `issue-tracker-model-discriminator` with the
+1. **Assign model.** Delegate `issue-tracker-model-discriminator` with the
    model-discriminator spawn stub. Wait until it finishes (or raises
    needsAttention). Do not read its result. Then step 2a.
 
 2. **Implementor (spawn or resume).** Resolve implementor family for `<task>`.
-   Remember the Cursor Task agent id whenever you spawn so later revises can
-   resume. Wait for finished or blocked (needsAttention on `<id>`). Do not
+   Wait for finished or blocked (needsAttention on `<id>`). Do not
    read its diff or ingest a report. When the implementor finishes, go to
    step 3 (including after revise — that is how in-cycle re-review runs).
    - **2a. Spawn (implement).** Delegate `issue-tracker-implementor-<family>`
-     with the implement spawn stub. Fresh path only (from step 1).
-   - **2b. Resume (revise).** Resume the remembered implementor agent with the
-     revise stub (same family role). If no agent id is available
-     (skill re-run), **spawn** with the revise stub (Mode `revise`) — never
-     Mode `implement` when entering from `qa=changes-requested`.
+     with the implement spawn stub. Fresh path only (from step 1). Keep the
+     returned nested agent id as `resumeId` for later revises.
+   - **2b. Resume (revise).** Re-enter that implementor with the revise stub
+     (same family role) and its `resumeId`. When the coordinator has lost
+     the `resumeId` (skill re-run), look it up with `delegations` — the
+     most recent entry whose `role` is `issue-tracker-implementor-<family>`
+     — rather than starting a second implementor. Never Mode `implement`
+     when entering from `qa=changes-requested`.
 
 3. **Validate (code quality).** Read `issue task get <task> qa`. Branch on
    the value (do not count QA rounds yourself):
-   - unset → **spawn** `issue-tracker-code-quality-validator` with the
-     code-quality spawn stub; remember its Cursor Task agent id.
-   - `changes-requested` or `reviewing` → **resume** that same code-quality
-     Cursor Task with the code-quality resume stub (`reviewing` means a prior
-     entry did not reach a terminal qa — resume, do not spawn a second agent).
-     If no agent id is available (skill re-run), **spawn** with the
-     code-quality resume stub instead.
+   - unset → **Delegate** `issue-tracker-code-quality-validator` with the
+     code-quality spawn stub; keep the returned nested agent id as
+     `resumeId`.
+   - `changes-requested` or `reviewing` → **re-enter** that same
+     code-quality agent with the code-quality resume stub and its
+     `resumeId` (`reviewing` means a prior entry did not reach a terminal
+     qa — resume, do not start a second agent). When the coordinator has
+     lost the `resumeId` (skill re-run), look it up with `delegations` —
+     the most recent entry whose `role` is
+     `issue-tracker-code-quality-validator` — rather than starting a
+     second code-quality agent.
    - `passed` → skip to step 5 (Finalize); do not spawn or resume
      code-quality again.
    Wait until a spawn/resume finishes (or raises needsAttention) before
@@ -310,7 +316,7 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
    - `qa` is `changes-requested` and `needsAttention` is `false` →
      step 2b (revise), which then continues at step 3.
 
-5. **Finalize.** Spawn `issue-tracker-git` with the finish-commit stub.
+5. **Finalize.** Delegate `issue-tracker-git` with the finish-commit stub.
 
 6. **Advance** to the next Task.
 
@@ -405,7 +411,7 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 > `spec-conformance-validator`.
 
 **Revise** — `role: issue-tracker-implementor-<family>`
-(resume when an agent id is available, else spawn)
+(re-enter with `resumeId`; look up that role via `delegations` when lost)
 
 > *(Issue context line.)* Mode: revise. Comment role:
 > `implementor`.
