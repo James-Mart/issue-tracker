@@ -552,9 +552,9 @@ describe("delegate publishes nested run frames", () => {
   });
 
   async function load() {
-    const { createConversation, readConversation } = await import(
-      "./conversations.js"
-    );
+    const { createConversation, readConversation, readDelegations } =
+      await import("./conversations.js");
+    const { conversationsDir } = await import("../config.js");
     const { subscribeFrames } = await import("./conversation-stream.js");
     const { createDelegateCustomTools: createTools } = await import(
       "./delegate-tool.js"
@@ -562,6 +562,8 @@ describe("delegate publishes nested run frames", () => {
     return {
       createConversation,
       readConversation,
+      readDelegations,
+      conversationsDir,
       subscribeFrames,
       createDelegateCustomTools: createTools,
     };
@@ -810,5 +812,118 @@ describe("delegate publishes nested run frames", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("appends a delegations.jsonl record on delegation start", async () => {
+    const {
+      createConversation,
+      readDelegations,
+      createDelegateCustomTools: createTools,
+    } = await load();
+    const meta = await createConversation({
+      title: "Persist ids",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    const result = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "remember me" },
+      { toolCallId: "call-persist-1" },
+    );
+
+    const expectedModel = formatEffectiveModel(
+      resolveModelSelection("cursor-grok-4.5-high-fast"),
+    );
+    const records = readDelegations(meta.id);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      agentId: result.agentId,
+      role: "pinned-role",
+      model: expectedModel,
+    });
+    expect(typeof records[0]!.delegationId).toBe("string");
+    expect(records[0]!.delegationId.length).toBeGreaterThan(0);
+    expect(records[0]).not.toHaveProperty("parentDelegationId");
+    expect(Number.isNaN(Date.parse(records[0]!.at))).toBe(false);
+  });
+
+  it("resumes from a persisted agent id after discarding in-memory session state", async () => {
+    const {
+      createConversation,
+      readDelegations,
+      conversationsDir,
+      createDelegateCustomTools: createTools,
+    } = await load();
+    const meta = await createConversation({
+      title: "Rehydrate resume",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const convStoreDir = join(conversationsDir, meta.id, "agent-state");
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const firstTools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir: convStoreDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+    const first = await firstTools.delegate!.execute(
+      { role: "pinned-role", prompt: "first turn" },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(0);
+
+    const persisted = readDelegations(meta.id);
+    expect(persisted).toHaveLength(1);
+    const agentId = persisted[0]!.agentId;
+    expect(agentId).toBe(first.agentId);
+
+    // Discard the tools factory (the only in-memory holder) and rehydrate
+    // via readDelegations + a fresh delegate bridge on the same store.
+    const secondTools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir: convStoreDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+    const second = await secondTools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "after restart",
+        resumeId: agentId,
+      },
+      {},
+    );
+
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toEqual([
+      {
+        agentId,
+        storeDir: join(convStoreDir, "nested", agentId),
+        options: {
+          agents: undefined,
+          customTools: expect.any(Object),
+        },
+      },
+    ]);
+    expect(second.agentId).toBe(agentId);
+    expect(fake.handles[1]!.sends[0]!.prompt).toBe("after restart");
+
+    const after = readDelegations(meta.id);
+    expect(after).toHaveLength(2);
+    expect(after[1]!.agentId).toBe(agentId);
   });
 });

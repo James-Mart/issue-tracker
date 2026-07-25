@@ -3,6 +3,10 @@ import { randomUUID } from "crypto";
 import { join } from "path";
 import type { AgentDefinition, SDKCustomTool } from "@cursor/sdk";
 import type { AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
+import {
+  appendDelegation,
+  conversationExists,
+} from "./conversations.js";
 import { EventPipeline } from "./event-pipeline.js";
 import {
   formatEffectiveModel,
@@ -384,6 +388,23 @@ export function createDelegateCustomTools(
           if (tracked.cancelled) {
             await handle.cancel();
             throw new Error("delegate: conversation cancelled");
+          }
+
+          // conversationId doubles as a concurrency key in tests; only
+          // persist when the conversation store is actually present.
+          if (
+            options.conversationId &&
+            conversationExists(options.conversationId)
+          ) {
+            await appendDelegation(options.conversationId, {
+              delegationId,
+              agentId: handle.agentId,
+              role,
+              model: stamp.model,
+              ...(parentDelegationId !== undefined
+                ? { parentDelegationId }
+                : {}),
+            });
           }
 
           const run = await handle.send(fullPrompt);

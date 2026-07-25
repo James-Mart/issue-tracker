@@ -54,6 +54,9 @@ describe("conversations store", () => {
     expect(existsSync(join(conversationsDir, meta.id, "transcript.jsonl"))).toBe(
       true,
     );
+    expect(
+      existsSync(join(conversationsDir, meta.id, "delegations.jsonl")),
+    ).toBe(true);
     // Peer of issues/ — not nested inside the issues store.
     expect(existsSync(join(issuesDir, meta.id))).toBe(false);
     expect(readdirSync(issuesDir)).toEqual([]);
@@ -226,18 +229,90 @@ describe("conversations store", () => {
   });
 
   it("throws for unknown conversation ids", async () => {
-    const { readConversation, appendEvent, updateMeta, deleteConversation } =
-      await loadService();
+    const {
+      readConversation,
+      appendEvent,
+      appendDelegation,
+      readDelegations,
+      updateMeta,
+      deleteConversation,
+    } = await loadService();
 
     expect(() => readConversation("ghost")).toThrow(/unknown conversation/);
+    expect(() => readDelegations("ghost")).toThrow(/unknown conversation/);
     await expect(
       appendEvent("ghost", { type: "prompt", text: "x" }),
+    ).rejects.toThrow(/unknown conversation/);
+    await expect(
+      appendDelegation("ghost", {
+        delegationId: "d1",
+        agentId: "a1",
+        role: "r",
+        model: "m",
+      }),
     ).rejects.toThrow(/unknown conversation/);
     await expect(updateMeta("ghost", { title: "x" })).rejects.toThrow(
       /unknown conversation/,
     );
     await expect(deleteConversation("ghost")).rejects.toThrow(
       /unknown conversation/,
+    );
+  });
+
+  it("appends and reads delegation records, omitting parent when root-delegated", async () => {
+    const { conversationsDir } = await loadConfig();
+    const { createConversation, appendDelegation, readDelegations } =
+      await loadService();
+
+    const meta = await createConversation({
+      title: "Delegations",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const root = await appendDelegation(meta.id, {
+      delegationId: "del-root",
+      agentId: "agent-nested-1",
+      role: "pinned-role",
+      model: '{"id":"grok-4.5","effort":"high","fast":true}',
+    });
+    expect(root.parentDelegationId).toBeUndefined();
+    expect(Number.isNaN(Date.parse(root.at))).toBe(false);
+
+    const child = await appendDelegation(meta.id, {
+      delegationId: "del-child",
+      agentId: "agent-nested-2",
+      role: "pinned-role",
+      model: '{"id":"grok-4.5","effort":"high","fast":true}',
+      parentDelegationId: "del-root",
+    });
+    expect(child.parentDelegationId).toBe("del-root");
+
+    const records = readDelegations(meta.id);
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({
+      delegationId: "del-root",
+      agentId: "agent-nested-1",
+      role: "pinned-role",
+    });
+    expect(records[0]).not.toHaveProperty("parentDelegationId");
+    expect(records[1]).toMatchObject({
+      delegationId: "del-child",
+      agentId: "agent-nested-2",
+      parentDelegationId: "del-root",
+    });
+
+    const raw = readFileSync(
+      join(conversationsDir, meta.id, "delegations.jsonl"),
+      "utf8",
+    );
+    expect(raw.endsWith("\n")).toBe(true);
+    const lines = raw.trim().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0]!)).not.toHaveProperty("parentDelegationId");
+    expect(JSON.parse(lines[1]!)).toHaveProperty(
+      "parentDelegationId",
+      "del-root",
     );
   });
 });
