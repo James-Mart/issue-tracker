@@ -1,6 +1,9 @@
+import { ArrowLeft } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
+import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ShellState } from "@/app/shell-state";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 import { ConversationListSidebar } from "./conversation-list-sidebar";
@@ -25,10 +28,12 @@ function AgentsPane({
   title,
   children,
   className,
+  onBack,
 }: {
   title: string;
   children: React.ReactNode;
   className?: string;
+  onBack?: () => void;
 }) {
   return (
     <section
@@ -39,7 +44,21 @@ function AgentsPane({
       aria-label={title}
     >
       <div className="shrink-0 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-medium text-foreground">{title}</h2>
+        <div className="flex items-center gap-2">
+          {onBack ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-2 h-7 gap-1 px-2"
+              onClick={onBack}
+              aria-label="Back to conversations"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+          ) : null}
+          <h2 className="text-sm font-medium text-foreground">{title}</h2>
+        </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {children}
@@ -52,6 +71,47 @@ function AgentsPane({
 export function AgentsPage() {
   const selectedConversationId = useAgentsUiStore(
     (s) => s.selectedConversationId,
+  );
+  const setSelectedConversationId = useAgentsUiStore(
+    (s) => s.setSelectedConversationId,
+  );
+  const isMobile = useIsMobile();
+
+  const conversationsPane = (
+    <AgentsPane
+      title="Conversations"
+      className={
+        isMobile ? "flex-1" : "w-72 shrink-0 border-r border-border"
+      }
+    >
+      <ConversationListSidebar />
+    </AgentsPane>
+  );
+
+  const threadPane = (
+    <AgentsPane
+      title="Thread"
+      className="flex-1"
+      onBack={
+        isMobile && selectedConversationId
+          ? () => setSelectedConversationId(null)
+          : undefined
+      }
+    >
+      {selectedConversationId ? (
+        <ConversationThread
+          key={selectedConversationId}
+          conversationId={selectedConversationId}
+        />
+      ) : (
+        <ShellState
+          className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
+          eyebrow="Idle"
+          title="Select a conversation."
+          detail="Choose a conversation from the list to view its transcript."
+        />
+      )}
+    </AgentsPane>
   );
 
   return (
@@ -67,27 +127,14 @@ export function AgentsPage() {
         className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-border"
         data-region="agents-window"
       >
-        <AgentsPane
-          title="Conversations"
-          className="w-72 shrink-0 border-r border-border"
-        >
-          <ConversationListSidebar />
-        </AgentsPane>
-        <AgentsPane title="Thread" className="flex-1">
-          {selectedConversationId ? (
-            <ConversationThread
-              key={selectedConversationId}
-              conversationId={selectedConversationId}
-            />
-          ) : (
-            <ShellState
-              className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
-              eyebrow="Idle"
-              title="Select a conversation."
-              detail="Choose a conversation from the list to view its transcript."
-            />
-          )}
-        </AgentsPane>
+        {isMobile ? (
+          selectedConversationId ? threadPane : conversationsPane
+        ) : (
+          <>
+            {conversationsPane}
+            {threadPane}
+          </>
+        )}
       </div>
       <CreateConversationDialog />
       <DeleteConversationDialog />
