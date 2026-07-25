@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Markdown } from "@/features/issues/components/markdown";
 import { useConversationsQuery } from "../api/queries";
 import { useConversationEvents } from "../hooks/use-conversation-events";
 import {
@@ -14,16 +12,18 @@ import {
 import { Composer } from "./composer";
 import { SubagentCard } from "./subagent-card";
 import {
-  CollapsibleDetails,
-  CollapsiblePayload,
-  toolStatusVariant,
+  indexedStreamKey,
+  toolCallRowKey,
+  TranscriptMarkdownText,
+  TranscriptThinking,
+  TranscriptToolCall,
 } from "./transcript-ui";
 
 function eventKey(event: TranscriptEvent, index: number): string {
-  if (event.type === "tool_call") return `tool_call-${event.callId}`;
+  if (event.type === "tool_call") return toolCallRowKey(event.callId);
   // Index-stable for in-place assistant delta updates (avoid remounting
   // Markdown on every token). `at` changes each delta and is not usable.
-  return `${index}-${event.type}`;
+  return indexedStreamKey(index, event.type);
 }
 
 function InfoLine({
@@ -58,31 +58,18 @@ function PromptEvent({ text }: { text: string }) {
 
 function AssistantEvent({ text }: { text: string }) {
   return (
-    <div className="min-w-0" data-event="assistant">
+    <div data-event="assistant">
       <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--current))]">
         Assistant
       </p>
-      <Markdown>{text}</Markdown>
+      <TranscriptMarkdownText text={text} />
     </div>
   );
 }
 
 function ThinkingEvent({ text, open }: { text: string; open?: boolean }) {
   return (
-    <CollapsibleDetails
-      label="Thinking"
-      className="rounded-md border border-border bg-card"
-      summaryClassName="px-3 py-2"
-      bodyClassName="px-3 py-2"
-      data-event="thinking"
-      // Only force-open while this block is still the live tip of the stream;
-      // omit the attr otherwise so users can toggle historical thinking freely.
-      {...(open ? { open: true } : {})}
-    >
-      <p className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground">
-        {text}
-      </p>
-    </CollapsibleDetails>
+    <TranscriptThinking text={text} open={open} data-event="thinking" />
   );
 }
 
@@ -91,32 +78,15 @@ function ToolCallEvent({
 }: {
   event: Extract<TranscriptEvent, { type: "tool_call" }>;
 }) {
-  const name = event.name?.trim() || "tool";
-  const running = event.status === "running";
   return (
-    <div
-      className="rounded-md border border-border bg-card px-3 py-2.5"
+    <TranscriptToolCall
+      callId={event.callId}
+      name={event.name}
+      status={event.status}
+      args={event.args}
+      result={event.result}
       data-event="tool_call"
-      data-call-id={event.callId}
-      data-status={event.status}
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-xs font-medium text-foreground">
-          {name}
-        </span>
-        <Badge
-          variant={toolStatusVariant(event.status)}
-          className={running ? "animate-pulse" : undefined}
-        >
-          {event.status}
-        </Badge>
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {event.callId}
-        </span>
-      </div>
-      <CollapsiblePayload label="Args" value={event.args} />
-      <CollapsiblePayload label="Result" value={event.result} />
-    </div>
+    />
   );
 }
 

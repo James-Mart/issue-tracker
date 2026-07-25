@@ -3,20 +3,11 @@ import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/cn";
 import type { SubAgent } from "../lib/subagent";
+import { SubagentThread } from "./subagent-thread";
 import {
   CollapsiblePayload,
   toolStatusVariant,
 } from "./transcript-ui";
-
-/**
- * Nested one-level thread body under an expanded sub-agent card.
- * Sibling Task `subagent-nested-thread` replaces this stub with the real
- * step timeline (`subagent-thread.tsx`).
- */
-function SubagentNestedThread({ agent }: { agent: SubAgent }) {
-  void agent;
-  return null;
-}
 
 /** At-rest sub-agent card; falls back to a standalone card when `steps` is empty. */
 export function SubagentCard({ agent }: { agent: SubAgent }) {
@@ -99,7 +90,7 @@ export function SubagentCard({ agent }: { agent: SubAgent }) {
           className="border-t border-border bg-[hsl(var(--panel-2))]"
           data-slot="subagent-nested-thread"
         >
-          <SubagentNestedThread agent={agent} />
+          <SubagentThread agent={agent} />
         </div>
       ) : null}
     </div>
