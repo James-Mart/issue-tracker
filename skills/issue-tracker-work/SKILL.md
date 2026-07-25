@@ -18,13 +18,13 @@ and git to plugin subagents (`agents/*.md`).
 
 The coordinator does no real reasoning — it reads tracker state, runs a thin set
 of CLI commands, and spawns subagents in a fixed order — so it should itself run
-on the cheap model, **Composer 2.5 (`composer-2.5`)**, not a premium model. The
-model discriminator assigns an implementor model onto each Task; the
-implementor writes code; the code-quality validator owns Task `qa` (writes the
-gate, resumes across rounds, three-strike escalate); the spec-conformance
-validator records the Story gate (`specReview`, optional remediation Task)
-without editing workspace source; the git subagent owns branch create, Task
-finalize, and Story finish.
+on the cheap model, **Composer 2.5**, not a premium model (see **Models and
+subagent roles**). The model discriminator assigns an implementor model onto
+each Task; the implementor writes code; the code-quality validator owns Task
+`qa` (writes the gate, resumes across rounds, three-strike escalate); the
+spec-conformance validator records the Story gate (`specReview`, optional
+remediation Task) without editing workspace source; the git subagent owns
+branch create, Task finalize, and Story finish.
 
 **You do not write code, run the app, or verify the work yourself.** You read the
 plan with `issue tree` and spawn subagents. Do **essentially no reasoning**:
@@ -34,14 +34,14 @@ on a Story or Epic — Story/Epic status derives automatically (see SPEC.md).
 Task `status` / `qa` and work-root `retro` writes are subagent-owned — see
 **Field ownership**. Git and git-fact recording are delegated — see Rules. Task
 `assignee` holds the implementor **family key** (or a legacy model slug).
-Before each implementor spawn, **Resolve implementor family** (below) and spawn
-`issue-tracker-implementor-<family>` with that wrapper's pin as Cursor Task
-`model`, subject to **## Delegation**.
+Before each implementor spawn, **Resolve implementor family** (below) and
+delegate `issue-tracker-implementor-<family>`; the pin comes from the role —
+see **## Delegation**.
 
-**Nomenclature:** **Task** / **Story** are issue-tracker kinds. **Cursor Task**
-is the subagent spawn/resume tool (`model`, `prompt`, `subagent_type`, resume).
-**Work root** means the Epic or project-level Story id this skill was invoked
-with — the top-level unit Completion and retro key to.
+**Nomenclature:** **Task** / **Story** are issue-tracker kinds. **Work root**
+means the Epic or project-level Story id this skill was invoked with — the
+top-level unit Completion and retro key to. Delegation (app `delegate` /
+IDE Cursor Task) is defined in **## Delegation**.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
@@ -72,10 +72,10 @@ human sees changes live in the UI.
 ## Preflight: confirm before starting
 
 Before doing anything else, stop and ask the user to confirm they want you to
-coordinate this work root now. State that **Composer 2.5 (`composer-2.5`) is the
-recommended coordinator**. Do not attempt to detect or print the current model
-id. If they do not confirm, stop — do not start coordinating. After they
-confirm, continue with the CLI checks below.
+coordinate this work root now. State that **Composer 2.5 is the recommended
+coordinator** (see **Models and subagent roles**). Do not attempt to detect or
+print the current model id. If they do not confirm, stop — do not start
+coordinating. After they confirm, continue with the CLI checks below.
 
 ### CLI checks
 
@@ -139,11 +139,10 @@ Run these commands in order (use `<rootId>` throughout):
    todo list so you can track progress; keep exactly one Task `in_progress` at
    a time. This mirror is a cache of the outline — re-sync it from a fresh
    `issue tree <rootId>` each time control returns to you (see The loop).
-2. Spawn via Cursor Task `subagent_type` for the plugin agents below. Pass
-   **only** the fields each spawn stub lists (see Spawn stubs). Never pass the
-   workspace — each repo subagent resolves it from its own `issue summary`
-   (SPEC § Project workspace). Do not gather descriptions, read diffs, or ingest
-   reports into your own context.
+2. Delegate the plugin roles below via the Spawn stubs. Pass **only** the
+   fields each stub lists. Never pass the workspace — each repo subagent
+   resolves it from its own `issue summary` (SPEC § Project workspace). Do not
+   gather descriptions, read diffs, or ingest reports into your own context.
 
 ### Resolve implementor family
 
@@ -163,17 +162,17 @@ Given a Task id: run `issue task get <taskId> assignee`. Trim stdout.
   (substitute the unrecognized value) and stop. Never fall back to a default
   family.
 
-Family → wrapper pin (Cursor Task `model`):
+Family → role:
 
-| family | `subagent_type` | `model` |
-|--------|-----------------|--------|
-| `composer` | `issue-tracker-implementor-composer` | `composer-2.5` |
-| `grok` | `issue-tracker-implementor-grok` | `cursor-grok-4.5-high-fast` |
-| `opus` | `issue-tracker-implementor-opus` | `claude-opus-5-thinking-high` |
+| family | `role` |
+|--------|--------|
+| `composer` | `issue-tracker-implementor-composer` |
+| `grok` | `issue-tracker-implementor-grok` |
+| `opus` | `issue-tracker-implementor-opus` |
 
-Never pass a model slug from `assignee` as Cursor Task `model` — always the
-wrapper pin for the resolved family, subject to **## Delegation**.
-Never `view|head`, never infer from discriminator chat or prior Tasks.
+Delegate that family's role; the pin comes from the role frontmatter — see
+**## Delegation**. Never pass a model slug from `assignee`. Never `view|head`,
+never infer from discriminator chat or prior Tasks.
 
 Because `issue tree` lists each Story after the Story it is stacked on,
 walking the outline top-to-bottom always reaches a stacked Story only after its
@@ -183,12 +182,15 @@ dependency is satisfied — and it may proceed — once its parent's Tasks are a
 
 ## Models and subagent roles
 
-| Role | `subagent_type` | When | Model | Mode |
-|------|-----------------|------|-------|------|
+Model pins come from each role's frontmatter (applied per **## Delegation**),
+not from a spawn-time argument.
+
+| Role | `role` | When | Model (role pin) | Mode |
+|------|--------|------|------------------|------|
 | Coordinator (you) | — | Drive the whole run: thin CLI + spawn subagents | Composer 2.5 (`composer-2.5`) | spawn/CLI only; Preflight `retro --clear` (Field ownership) |
 | Git | `issue-tracker-git` | Start a Story; finish a Task after `qa=passed`; finish a Story | `composer-2.5` | writes |
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
-| Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via Cursor Task **resume** | That family's wrapper pin (Resolve implementor family) | writes (see Field ownership) |
+| Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via **resume** | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.5-high-fast`; `opus`→`claude-opus-5-thinking-high` | writes (see Field ownership) |
 | Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `needsAttention`; `issue task comment`) |
 | Spec-conformance validator | `issue-tracker-spec-conformance-validator` | Close-Story when Story `specReview` is unset | `composer-2.5` | writes (`issue story set … specReview` / `issue task add` / `issue story|task comment`) |
 | Retro | `issue-tracker-retro` | Completion when every Story in the walk is `merged` and work-root `retro` is unset | `cursor-grok-4.5-high-fast` | writes (`issue <rootKind> comment` on source / `issue idea add` / `issue idea set` labels / `issue idea attach` / `issue <rootKind> set … retro` / `issue <rootKind> set … needsAttention`) |
@@ -259,7 +261,7 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
    Task `status` is set on implementor *entry* (`in-progress` / `fixing`),
    not on exit, so it is **not** a completion signal and must not be used to
    infer “implementor finished.” Disk alone cannot uniquely recover these
-   windows; prefer staying in-cycle (agent ids + step flow) when possible:
+   windows; prefer staying in-cycle (`resumeId` + step flow) when possible:
    - `qa` unset while implementor may still be in flight → falls through to
      step 1 (may re-spawn Mode `implement`). Accept that window rather than
      treating `in-progress`/`fixing` as “ready for QA.”
@@ -268,32 +270,37 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
      re-review (step 2 → step 3) is unaffected; a skill re-run in the
      post-revise window may run an extra revise before code-quality.
 
-1. **Assign model.** Spawn `issue-tracker-model-discriminator` with the
+1. **Assign model.** Delegate `issue-tracker-model-discriminator` with the
    model-discriminator spawn stub. Wait until it finishes (or raises
    needsAttention). Do not read its result. Then step 2a.
 
 2. **Implementor (spawn or resume).** Resolve implementor family for `<task>`.
-   Remember the Cursor Task agent id whenever you spawn so later revises can
-   resume. Wait for finished or blocked (needsAttention on `<id>`). Do not
+   Wait for finished or blocked (needsAttention on `<id>`). Do not
    read its diff or ingest a report. When the implementor finishes, go to
    step 3 (including after revise — that is how in-cycle re-review runs).
-   - **2a. Spawn (implement).** Spawn `issue-tracker-implementor-<family>` with
-     Cursor Task `model` set to that family's wrapper pin and the implement
-     spawn stub. Fresh path only (from step 1).
-   - **2b. Resume (revise).** Resume the remembered implementor agent with the
-     revise stub (same family wrapper and pin). If no agent id is available
-     (skill re-run), **spawn** with the revise stub (Mode `revise`) — never
-     Mode `implement` when entering from `qa=changes-requested`.
+   - **2a. Spawn (implement).** Delegate `issue-tracker-implementor-<family>`
+     with the implement spawn stub. Fresh path only (from step 1). Keep the
+     returned nested agent id as `resumeId` for later revises.
+   - **2b. Resume (revise).** Re-enter that implementor with the revise stub
+     (same family role) and its `resumeId`. When the coordinator has lost
+     the `resumeId` (skill re-run), look it up with `delegations` — the
+     most recent entry whose `role` is `issue-tracker-implementor-<family>`
+     — rather than starting a second implementor. Never Mode `implement`
+     when entering from `qa=changes-requested`.
 
 3. **Validate (code quality).** Read `issue task get <task> qa`. Branch on
    the value (do not count QA rounds yourself):
-   - unset → **spawn** `issue-tracker-code-quality-validator` with the
-     code-quality spawn stub; remember its Cursor Task agent id.
-   - `changes-requested` or `reviewing` → **resume** that same code-quality
-     Cursor Task with the code-quality resume stub (`reviewing` means a prior
-     entry did not reach a terminal qa — resume, do not spawn a second agent).
-     If no agent id is available (skill re-run), **spawn** with the
-     code-quality resume stub instead.
+   - unset → **Delegate** `issue-tracker-code-quality-validator` with the
+     code-quality spawn stub; keep the returned nested agent id as
+     `resumeId`.
+   - `changes-requested` or `reviewing` → **re-enter** that same
+     code-quality agent with the code-quality resume stub and its
+     `resumeId` (`reviewing` means a prior entry did not reach a terminal
+     qa — resume, do not start a second agent). When the coordinator has
+     lost the `resumeId` (skill re-run), look it up with `delegations` —
+     the most recent entry whose `role` is
+     `issue-tracker-code-quality-validator` — rather than starting a
+     second code-quality agent.
    - `passed` → skip to step 5 (Finalize); do not spawn or resume
      code-quality again.
    Wait until a spawn/resume finishes (or raises needsAttention) before
@@ -309,7 +316,7 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
    - `qa` is `changes-requested` and `needsAttention` is `false` →
      step 2b (revise), which then continues at step 3.
 
-5. **Finalize.** Spawn `issue-tracker-git` with the finish-commit stub.
+5. **Finalize.** Delegate `issue-tracker-git` with the finish-commit stub.
 
 6. **Advance** to the next Task.
 
@@ -348,14 +355,12 @@ and follow it.
 
 ## Spawn stubs
 
-Pass these as the Cursor Task `prompt`. Inline the fields each stub lists.
+Pass these as the delegation `prompt`. Inline the fields each stub lists.
 Id labels in spawn prompts must be `Issue:` (or `Work root:` where noted) —
 never kind nouns (`Task:`, `Story:`, `Commit:`, `Branch:`, `Epic:`). Children
 own static behavior via their `agents/*.md` files — do not paste workflow
-instructions here.
-
-Model literals below are pins — see **## Delegation** before passing
-one.
+instructions here. Channel rules: **## Delegation** (do not re-Read the
+include here).
 
 **Issue context line** — shared prefix for discriminator, implement,
 code-quality, spec-conformance, and revise stubs:
@@ -366,60 +371,52 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 **only** Mode + issue id — no work-root id, tree chips, or git facts
 (`mergeBase`, `branchName`).
 
-**Start branch** — `subagent_type: issue-tracker-git`
-(`model: composer-2.5`)
+**Start branch** — `role: issue-tracker-git`
 
 > Mode: start-branch. Issue: `<storyId>`.
 
-**Finish commit** — `subagent_type: issue-tracker-git`
-(`model: composer-2.5`)
+**Finish commit** — `role: issue-tracker-git`
 
 > Mode: finish-commit. Issue: `<taskId>`.
 
-**Finish branch** — `subagent_type: issue-tracker-git`
-(`model: composer-2.5`)
+**Finish branch** — `role: issue-tracker-git`
 
 > Mode: finish-branch. Issue: `<storyId>`.
 
-**Model discriminator** — `subagent_type: issue-tracker-model-discriminator`
-(`model: composer-2.5`)
+**Model discriminator** — `role: issue-tracker-model-discriminator`
 
 > *(Issue context line.)*
 
-**Implement** — `subagent_type: issue-tracker-implementor-<family>`
-(Cursor Task `model` = that family's wrapper pin)
+**Implement** — `role: issue-tracker-implementor-<family>`
 
 > *(Issue context line.)* Mode: implement. Comment role:
 > `implementor`.
 
-**Code-quality validator** — `subagent_type: issue-tracker-code-quality-validator`
-(`model: composer-2.5`; when to spawn vs resume: Per-Task cycle step 3)
+**Code-quality validator** — `role: issue-tracker-code-quality-validator`
+(when to spawn vs resume: Per-Task cycle step 3)
 
 > *(Issue context line.)* Mode: review. Comment role:
 > `code-quality-validator`.
 
-**Code-quality validator (resume)** — `subagent_type: issue-tracker-code-quality-validator`
-(`model: composer-2.5`; when to resume: Per-Task cycle step 3)
+**Code-quality validator (resume)** — `role: issue-tracker-code-quality-validator`
+(when to resume: Per-Task cycle step 3)
 
 > *(Issue context line.)* Mode: resume. Comment role:
 > `code-quality-validator`. Verify that previously requested changes were
 > fixed.
 
-**Spec-conformance validator** — `subagent_type: issue-tracker-spec-conformance-validator`
-(`model: composer-2.5`)
+**Spec-conformance validator** — `role: issue-tracker-spec-conformance-validator`
 
 > *(Issue context line.)* Comment role:
 > `spec-conformance-validator`.
 
-**Revise** — `subagent_type: issue-tracker-implementor-<family>`
-(Cursor Task `model` = that family's wrapper pin; resume when an agent id is
-available, else spawn)
+**Revise** — `role: issue-tracker-implementor-<family>`
+(re-enter with `resumeId`; look up that role via `delegations` when lost)
 
 > *(Issue context line.)* Mode: revise. Comment role:
 > `implementor`.
 
-**Retro** — `subagent_type: issue-tracker-retro`
-(`model: cursor-grok-4.5-high-fast`)
+**Retro** — `role: issue-tracker-retro`
 
 > Work root: `<rootId>` (`<title>`). Comment role: `retro`.
 
