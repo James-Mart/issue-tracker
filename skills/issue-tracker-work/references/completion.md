@@ -35,8 +35,8 @@ Re-read `issue tree <rootId>`. Spawn
    finished for this root. Do **not** check chat roles for this gate. Do
    **not** require promoting a project-level Story to an Epic before retro.
 
-**Model availability** — **Read**
-`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-model-availability.md`.
+**Delegation** — **Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
 When the gate holds, spawn **once** with the retro spawn stub
 (`model: cursor-grok-4.5-high-fast`; work-root id + title). Wait until the

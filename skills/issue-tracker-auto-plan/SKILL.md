@@ -42,9 +42,9 @@ A single **issue id** — an **Idea**, a **todo** Epic, or a **not-started
 project-level Story** (issue-id-only; the human authors the seed beforehand).
 If none is given, ask the user for the issue id; do not guess or run a picker.
 
-## Model availability
+## Delegation
 
-**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-model-availability.md`.
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
 ## Bootstrap
 
