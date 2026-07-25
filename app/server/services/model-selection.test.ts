@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveModelSelection } from "./model-selection.js";
+import {
+  formatEffectiveModel,
+  resolveModelSelection,
+} from "./model-selection.js";
 
 describe("resolveModelSelection", () => {
   it("maps composer-2.5 to the base catalog id", () => {
@@ -28,5 +31,15 @@ describe("resolveModelSelection", () => {
     expect(() => resolveModelSelection("unknown-pin")).toThrow(
       "Unknown model pin: unknown-pin",
     );
+  });
+});
+
+describe("formatEffectiveModel", () => {
+  it("serializes the base id plus parameters", () => {
+    expect(
+      formatEffectiveModel(
+        resolveModelSelection("cursor-grok-4.5-high-fast"),
+      ),
+    ).toBe('{"id":"grok-4.5","effort":"high","fast":true}');
   });
 });

@@ -459,6 +459,10 @@ export const nestedStepSchema = z.discriminatedUnion("kind", [
     stepId: z.number().int(),
     status: z.enum(["started", "completed"]),
   }),
+  z.object({
+    kind: z.literal("liveness"),
+    elapsedMs: z.number(),
+  }),
 ]);
 
 export type NestedStep = z.infer<typeof nestedStepSchema>;
@@ -505,6 +509,12 @@ const subagentUpdateEventInput = z.object({
   type: z.literal("subagent_update"),
   parentCallId: nonEmpty,
   step: nestedStepSchema,
+  /** Nested run this step belongs to; absent on pre-bridge transcripts. */
+  delegationId: nonEmpty.optional(),
+  /** Delegating run; unset when the conversation root delegated. */
+  parentDelegationId: nonEmpty.optional(),
+  /** Effective model: resolved base id plus parameters. */
+  model: nonEmpty.optional(),
 });
 const errorEventInput = z.object({
   type: z.literal("error"),

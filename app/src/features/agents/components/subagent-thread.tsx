@@ -1,8 +1,11 @@
 import type { NestedStep } from "@server/schemas";
-import type { SubAgent } from "../lib/subagent";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils/cn";
+import type { CollapsedDelegation, SubAgent } from "../lib/subagent";
 import {
   indexedStreamKey,
   toolCallRowKey,
+  toolStatusVariant,
   TranscriptMarkdownText,
   TranscriptThinking,
   TranscriptToolCall,
@@ -30,6 +33,14 @@ function isLiveNestedThinking(steps: NestedStep[], index: number): boolean {
   return true;
 }
 
+function formatElapsed(ms: number): string {
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return rem > 0 ? `${min}m ${rem}s` : `${min}m`;
+}
+
 function NestedStepMarker({
   step,
 }: {
@@ -50,13 +61,57 @@ function NestedStepMarker({
   );
 }
 
+/** One-line supervision summary for a depth-2+ nested run. */
+function CollapsedDelegationRow({ row }: { row: CollapsedDelegation }) {
+  const running = row.status === "running";
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border bg-card/60 px-2.5 py-1.5"
+      data-nested="collapsed-delegation"
+      data-delegation-id={row.delegationId}
+      data-status={row.status}
+    >
+      <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[hsl(var(--current))]">
+        Nested
+      </span>
+      <span className="min-w-0 truncate font-mono text-xs font-medium text-foreground">
+        {row.role ?? "delegation"}
+      </span>
+      {row.model ? (
+        <span className="min-w-0 break-all font-mono text-[10px] text-muted-foreground">
+          {row.model}
+        </span>
+      ) : null}
+      <Badge
+        variant={toolStatusVariant(row.status)}
+        className={cn("shrink-0", running && "animate-pulse")}
+      >
+        {row.status}
+      </Badge>
+      {row.elapsedMs !== undefined ? (
+        <span
+          className="font-mono text-[11px] tabular-nums text-[hsl(var(--mut))]"
+          data-elapsed-ms={row.elapsedMs}
+        >
+          {formatElapsed(row.elapsedMs)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function NestedStepRow({
   step,
   thinkingOpen,
+  collapsed,
 }: {
   step: NestedStep;
   thinkingOpen?: boolean;
+  collapsed?: CollapsedDelegation;
 }) {
+  if (step.kind === "tool_call" && collapsed) {
+    return <CollapsedDelegationRow row={collapsed} />;
+  }
   switch (step.kind) {
     case "text":
       return <TranscriptMarkdownText text={step.text} data-nested="text" />;
@@ -111,11 +166,25 @@ function ResumeAffordance({ agentId }: { agentId: string }) {
 
 /**
  * One-level nested thread for a sub-agent card: ordered `SubAgent.steps`
- * (text / thinking / tool_call / step). Same view-model for live stream and
- * history replay — do not nest a second level.
+ * (text / thinking / tool_call / step). Deeper runs render as collapsed
+ * summary rows via `collapsedDelegations` — not a second expanded level.
  */
 export function SubagentThread({ agent }: { agent: SubAgent }) {
-  if (agent.steps.length === 0) return null;
+  const collapsedByCallId = new Map(
+    agent.collapsedDelegations.map((row) => [row.parentCallId, row]),
+  );
+  const orphanCollapsed = agent.collapsedDelegations.filter(
+    (row) =>
+      !agent.steps.some(
+        (step) => step.kind === "tool_call" && step.callId === row.parentCallId,
+      ),
+  );
+  const hasBody =
+    agent.steps.length > 0 ||
+    orphanCollapsed.length > 0 ||
+    Boolean(agent.resumeAgentId);
+
+  if (!hasBody) return null;
 
   const running = agent.status === "running";
 
@@ -128,24 +197,38 @@ export function SubagentThread({ agent }: { agent: SubAgent }) {
       {agent.resumeAgentId ? (
         <ResumeAffordance agentId={agent.resumeAgentId} />
       ) : null}
-      <div
-        className="space-y-2 border-l-2 border-l-[hsl(var(--current)/0.45)] pl-3"
-        role="list"
-        aria-label="Sub-agent thread"
-      >
-        {agent.steps.map((step, index) => (
-          <div key={stepKey(step, index)} role="listitem">
-            <NestedStepRow
-              step={step}
-              thinkingOpen={
-                running &&
-                step.kind === "thinking" &&
-                isLiveNestedThinking(agent.steps, index)
-              }
-            />
-          </div>
-        ))}
-      </div>
+      {agent.steps.length > 0 || orphanCollapsed.length > 0 ? (
+        <div
+          className="space-y-2 border-l-2 border-l-[hsl(var(--current)/0.45)] pl-3"
+          role="list"
+          aria-label="Sub-agent thread"
+        >
+          {agent.steps.map((step, index) => {
+            const collapsed =
+              step.kind === "tool_call"
+                ? collapsedByCallId.get(step.callId)
+                : undefined;
+            return (
+              <div key={stepKey(step, index)} role="listitem">
+                <NestedStepRow
+                  step={step}
+                  collapsed={collapsed}
+                  thinkingOpen={
+                    running &&
+                    step.kind === "thinking" &&
+                    isLiveNestedThinking(agent.steps, index)
+                  }
+                />
+              </div>
+            );
+          })}
+          {orphanCollapsed.map((row) => (
+            <div key={row.delegationId} role="listitem">
+              <CollapsedDelegationRow row={row} />
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

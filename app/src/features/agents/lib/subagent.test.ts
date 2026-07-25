@@ -351,4 +351,148 @@ describe("deriveSubAgents", () => {
     ];
     expect(deriveSubAgent(events, "c1")?.name).toBe("explore");
   });
+
+  it("collapses a depth-2 run into one summary row with role, model, status, elapsed", () => {
+    const rootCallId = "call-root";
+    const innerCallId = "call-inner";
+    const rootDelegationId = "del-root";
+    const innerDelegationId = "del-inner";
+    const model = "composer-2.5";
+
+    const events: TranscriptEvent[] = [
+      at({
+        type: "tool_call",
+        callId: rootCallId,
+        name: "Task",
+        status: "running",
+        args: { description: "Coordinate", prompt: "fan out" },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: rootCallId,
+        delegationId: rootDelegationId,
+        model,
+        step: { kind: "text", text: "Starting children." },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: rootCallId,
+        delegationId: rootDelegationId,
+        model,
+        step: {
+          kind: "tool_call",
+          callId: innerCallId,
+          name: "delegate",
+          status: "running",
+          args: { role: "explore", prompt: "look deeper" },
+        },
+      }),
+      // Depth-2 frames — different parentCallId, parentDelegationId set.
+      at({
+        type: "subagent_update",
+        parentCallId: innerCallId,
+        delegationId: innerDelegationId,
+        parentDelegationId: rootDelegationId,
+        model: "cursor-grok-4.5-high-fast",
+        step: { kind: "liveness", elapsedMs: 5000 },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: innerCallId,
+        delegationId: innerDelegationId,
+        parentDelegationId: rootDelegationId,
+        model: "cursor-grok-4.5-high-fast",
+        step: { kind: "text", text: "Deep work (must not expand)." },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: innerCallId,
+        delegationId: innerDelegationId,
+        parentDelegationId: rootDelegationId,
+        model: "cursor-grok-4.5-high-fast",
+        step: { kind: "liveness", elapsedMs: 10000 },
+      }),
+    ];
+
+    const agent = deriveSubAgent(events, rootCallId)!;
+    expect(agent.steps.map((s) => s.kind)).toEqual(["text", "tool_call"]);
+    expect(agent.steps.some((s) => s.kind === "text" && s.text.includes("Deep"))).toBe(
+      false,
+    );
+    expect(agent.collapsedDelegations).toHaveLength(1);
+    expect(agent.collapsedDelegations[0]).toEqual({
+      delegationId: innerDelegationId,
+      parentCallId: innerCallId,
+      role: "explore",
+      model: "cursor-grok-4.5-high-fast",
+      status: "running",
+      elapsedMs: 10000,
+    });
+  });
+
+  it("updates elapsed on a depth-2 run that emits only liveness steps", () => {
+    const rootCallId = "call-root";
+    const innerCallId = "call-silent";
+    const rootDelegationId = "del-root";
+    const innerDelegationId = "del-silent";
+
+    const base: TranscriptEvent[] = [
+      at({
+        type: "tool_call",
+        callId: rootCallId,
+        name: "Task",
+        status: "running",
+        args: { description: "Wait", prompt: "hold" },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: rootCallId,
+        delegationId: rootDelegationId,
+        model: "composer-2.5",
+        step: {
+          kind: "tool_call",
+          callId: innerCallId,
+          name: "delegate",
+          status: "running",
+          args: { role: "pinned-role", prompt: "stay quiet" },
+        },
+      }),
+    ];
+
+    const afterFirst = [
+      ...base,
+      at({
+        type: "subagent_update",
+        parentCallId: innerCallId,
+        delegationId: innerDelegationId,
+        parentDelegationId: rootDelegationId,
+        model: "cursor-grok-4.5-high-fast",
+        step: { kind: "liveness", elapsedMs: 5000 },
+      }),
+    ];
+    const afterSecond = [
+      ...afterFirst,
+      at({
+        type: "subagent_update",
+        parentCallId: innerCallId,
+        delegationId: innerDelegationId,
+        parentDelegationId: rootDelegationId,
+        model: "cursor-grok-4.5-high-fast",
+        step: { kind: "liveness", elapsedMs: 10000 },
+      }),
+    ];
+
+    const first = deriveSubAgent(afterFirst, rootCallId)!;
+    expect(first.collapsedDelegations).toHaveLength(1);
+    expect(first.collapsedDelegations[0]).toMatchObject({
+      role: "pinned-role",
+      model: "cursor-grok-4.5-high-fast",
+      status: "running",
+      elapsedMs: 5000,
+    });
+
+    const second = deriveSubAgent(afterSecond, rootCallId)!;
+    expect(second.collapsedDelegations).toHaveLength(1);
+    expect(second.collapsedDelegations[0]?.elapsedMs).toBe(10000);
+  });
 });

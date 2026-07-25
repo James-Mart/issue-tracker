@@ -83,6 +83,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       sdk,
       cwd,
       storeDir,
+      conversationId,
       agents,
     });
 
