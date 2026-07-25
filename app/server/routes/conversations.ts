@@ -3,7 +3,7 @@ import {
   agentSessions,
   type AgentSessions,
 } from "../services/agent-sessions.js";
-import { subscribeFrames } from "../services/conversation-stream.js";
+import { publishFrame, subscribeFrames } from "../services/conversation-stream.js";
 import {
   appendEvent,
   createConversation,
@@ -201,7 +201,11 @@ export function createConversationsRouter(
         model,
       });
       if (!result.ok) {
-        res.status(502).json({ error: result.error.message });
+        const message = result.error.message;
+        const event = { type: "error" as const, message };
+        await appendEvent(req.params.id, event);
+        publishFrame(req.params.id, { event, persist: true });
+        res.status(502).json({ error: message });
         return;
       }
 
