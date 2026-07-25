@@ -659,11 +659,13 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
 
 **Flag stale children.** A successful `merge` or `fast-forward` advances the
 finishing Story's base branch `Bp`. After that push and `merged` write,
-finish-branch enumerates (via `issue tree` / `issue story get <id> mergeBase`)
-every not-yet-merged Story other than the finisher whose derived `mergeBase` is
-`Bp`, and sets `issue story set <childId> needsRebase <Bp>` on each. It never
-rebases those Stories. `manual` and `pull-request` do not advance a base and
-never flag.
+finish-branch enumerates (via `issue tree` / `issue story get <id> mergeBase`
+and `issue story get <id> storyStatus`) every not-yet-merged Story other than
+the finisher whose derived `storyStatus` is not `not-started` (started =
+non-empty `branchName` → `in-progress` or `pr-open`) and whose derived
+`mergeBase` is `Bp`, and sets `issue story set <childId> needsRebase <Bp>` on
+each. It never rebases those Stories. `manual` and `pull-request` do not
+advance a base and never flag.
 
 **Resumable / idempotent.** The work loop is resumable, so finish-branch may run
 twice for the same Story. Before acting, the git subagent reads the Story's
@@ -761,7 +763,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get — this is what `finish-branch` reads (see [Project merge policy](#project-merge-policy)) |
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
-| `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by finish-branch after `merge` / `fast-forward` (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
+| `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by finish-branch on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base after `merge` / `fast-forward` (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
 | `specReview` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; machine-readable retro gate |
 | `labels` | string[]? | assignment ids from the containing Project catalog; unique, order preserved (see [Project labels](#project-labels)) |

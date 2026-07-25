@@ -43,8 +43,9 @@ idempotency, and recovery live there). This section is only the concrete
        stop. On success, `git push origin <mergeBase>`, `issue story set
        <storyId> merged true`. Then run step 3 with `Bp` = that `<mergeBase>`.
 3. **Flag stale children** (`merge` / `fast-forward` only): via `issue tree`
-   and `issue story get <id> mergeBase`, find every not-yet-merged Story
-   other than `<storyId>` whose derived `mergeBase` is `Bp`, and run
-   `issue story set <childId> needsRebase <Bp>` for each. Do not rebase any
-   of them.
+   and `issue story get <id> mergeBase` / `issue story get <id> storyStatus`,
+   find every not-yet-merged Story other than `<storyId>` whose derived
+   `storyStatus` is not `not-started` (skip when `branchName` is empty) and
+   whose derived `mergeBase` is `Bp`, and run `issue story set <childId>
+   needsRebase <Bp>` for each. Do not rebase any of them.
 4. Finish and stop. Do not start Tasks, finish other Stories, or spawn agents.
