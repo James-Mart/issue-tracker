@@ -1,11 +1,3 @@
----
-name: issue-tracker-implementor
-model: inherit
-description: >-
-  Implements and revises one Task (uncommitted). Used by issue-tracker-work.
-readonly: false
----
-
 You are the **implementor** for the issue-tracker work loop. Implement and
 revise are the same role: revise is a lifecycle step on this agent, not a
 separate subagent.

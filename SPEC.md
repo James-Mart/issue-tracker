@@ -73,7 +73,8 @@ Every issue has a `kind`, one of:
   wire-up-later, or half-migrations that do not compile). The only kind with a
   **stored** `status` (`todo` / `in-progress` / `fixing` / `done`), an optional
   `assignee` (Task-only ownership; in the work loop, overloaded as the
-  implementor model slug), an optional `qa` gate (`reviewing` /
+  implementor model family key — `composer`, `grok`, or `opus`), an optional
+  `qa` gate (`reviewing` /
   `changes-requested` / `passed`), an optional `commitSha` (set when done with a
   real git commit), and an optional `noDiff` flag (set via kind
   [`set`](#kind-scoped-get--set) when the implementor deliberately lands no
@@ -201,7 +202,8 @@ These are computed by `derive()` and never written to disk (see
   orthogonal to status; Epic / Story / Task can carry it (Project and Idea
   cannot).
 - **assignee** — Task-only. Who currently owns the Task (e.g. `human` or an
-  agent id); in the work loop, overloaded as the implementor model slug.
+  agent id); in the work loop, overloaded as the implementor model family key
+  (`composer`, `grok`, or `opus`).
 - **specReview** — a Story-only machine-readable spec-review gate (`passed` /
   `failed`; absent until set via kind [`set`](#kind-scoped-get--set)). Surfaced
   in the detail panel when set; omitted from the tree outline.
@@ -772,7 +774,7 @@ Task — the Epic/Story/Task needs-attention common fields plus:
 
 | field | type | notes |
 | --- | --- | --- |
-| `assignee` | string? | optional; in the work loop, overloaded as the implementor model slug |
+| `assignee` | string? | optional; in the work loop, overloaded as the implementor model family key (`composer`, `grok`, or `opus`) |
 | `partOf` | string | the Story id (required) |
 | `status` | `"todo"` \| `"in-progress"` \| `"fixing"` \| `"done"` | defaults `todo`; the only stored status |
 | `qa` | `"reviewing"` \| `"changes-requested"` \| `"passed"`? | absent until set; machine-readable QA gate |

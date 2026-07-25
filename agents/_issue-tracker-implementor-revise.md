@@ -1,7 +1,7 @@
 # Implementor — Revise mode
 
 Not a spawnable agent (no frontmatter). Loaded only when Mode is `revise`.
-Used by `issue-tracker-implementor`.
+Used by the implementor family wrappers.
 
 Absolute path for this file (Read this exact path):
 

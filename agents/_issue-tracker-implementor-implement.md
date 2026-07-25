@@ -1,7 +1,7 @@
 # Implementor — Implement mode
 
 Not a spawnable agent (no frontmatter). Loaded only when Mode is
-`implement`. Used by `issue-tracker-implementor`.
+`implement`. Used by the implementor family wrappers.
 
 Absolute path for this file (Read this exact path):
 
