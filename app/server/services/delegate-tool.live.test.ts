@@ -1,6 +1,7 @@
 import { join } from "path";
 import type { ModelSelection } from "@cursor/sdk";
 import { describe, expect, it } from "vitest";
+import type { TranscriptEvent } from "../schemas.js";
 import { loadPluginAgentDefinitions } from "./agent-definitions.js";
 import {
   agentSdk,
@@ -8,6 +9,11 @@ import {
   type AgentSdk,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
+import {
+  createConversation,
+  deleteConversation,
+  readConversation,
+} from "./conversations.js";
 import { createDelegateCustomTools } from "./delegate-tool.js";
 import { extractTaskHints } from "./event-pipeline.js";
 import { resolveModelSelection } from "./model-selection.js";
@@ -37,9 +43,36 @@ const PARENT_CONVERSATION_MODEL: ModelSelection = { id: "claude-sonnet-4-5" };
  */
 const ROLE = "issue-tracker-plan-dependency-order";
 
+/**
+ * The role the depth-2 chain ends on — a second read-only plugin role, pinned
+ * to a slug that maps to a different selection than {@link ROLE}'s (and than
+ * {@link PARENT_CONVERSATION_MODEL}), so neither nested run could pass the
+ * other's model assertion.
+ */
+const NESTED_ROLE = "issue-tracker-research";
+
 const PROBE_PROMPT =
   "This is a wiring probe, not real work. Do not read files, run commands, " +
   "or start the checks described above. Reply with the single word ok.";
+
+/** {@link PROBE_PROMPT}'s guard, worded for a research role. */
+const NESTED_PROBE_PROMPT =
+  "This is a wiring probe, not real work. Do not read files, run commands, " +
+  "or research the question described above. Reply with the single word ok.";
+
+/**
+ * What turns {@link ROLE} into the middle of a depth-2 chain: it delegates
+ * once itself, through the `delegate` tool its own nested run was handed.
+ */
+const DELEGATING_STUB_PROMPT =
+  "This is a wiring probe, not real work. Do not read files, run commands, " +
+  "or start the checks described above. Call the delegate tool exactly once, " +
+  `with role "${NESTED_ROLE}" and prompt ` +
+  `${JSON.stringify(NESTED_PROBE_PROMPT)}. ` +
+  "Then reply with the single word ok.";
+
+/** Stands in for the conversation root's `delegate` tool call id. */
+const ROOT_CALL_ID = "call-depth-2-root";
 
 /**
  * What the migrated plan-polish coordinator hands a check role: the work-root
@@ -60,8 +93,21 @@ type ToolCallMessage = Extract<
   { type: "tool_call" }
 >;
 
+type SubagentUpdateEvent = Extract<
+  TranscriptEvent,
+  { type: "subagent_update" }
+>;
+
 /** The tool name the SDK reports for a Cursor Task call. */
 const TASK_TOOL_NAME = "task";
+
+/** The `subagent_update` events a conversation recorded, in transcript order. */
+function recordedNestedEvents(conversationId: string): SubagentUpdateEvent[] {
+  return readConversation(conversationId).transcript.filter(
+    (event): event is SubagentUpdateEvent =>
+      event.type === "subagent_update",
+  );
+}
 
 /**
  * What the delegated check replied, as it arrives on the Task call's result:
@@ -140,6 +186,82 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
       expect(nestedModel).toBeDefined();
       expect(nestedModel).not.toEqual(PARENT_CONVERSATION_MODEL);
       expect(nestedModel).toEqual(resolveModelSelection(loadRoleModelPin(ROLE)));
+    },
+    LIVE_TIMEOUT_MS,
+  );
+
+  // Depth 2 is the chain the bridge exists to carry, so it is measured rather
+  // than extrapolated from depth 1: the innermost run is started by a nested
+  // run's own tools, which is where a role's pin could collapse onto its
+  // delegator's model and where parentage could be lost. Recording the
+  // parentage needs a real conversation — the `subagent_update` frames are
+  // persisted against one.
+  it(
+    "runs a depth-2 chain on each role's pin and records the nested parentage",
+    async () => {
+      const conversation = await createConversation({
+        title: "Depth-2 delegation probe",
+        projectId: "issue-tracker",
+        model: PARENT_CONVERSATION_MODEL.id,
+      });
+
+      try {
+        const { sdk, runModels } = recordRunModels(agentSdk);
+        const customTools = createDelegateCustomTools({
+          sdk,
+          cwd: process.cwd(),
+          storeDir: STORE_DIR,
+          conversationId: conversation.id,
+        });
+
+        await customTools.delegate!.execute(
+          { role: ROLE, prompt: DELEGATING_STUB_PROMPT },
+          { toolCallId: ROOT_CALL_ID },
+        );
+
+        // Sends resolve in chain order: the intermediate run is already
+        // streaming when its own `delegate` call starts the innermost one.
+        expect(runModels).toHaveLength(2);
+        const [intermediateModel, innermostModel] = runModels;
+        expect(intermediateModel).toEqual(
+          resolveModelSelection(loadRoleModelPin(ROLE)),
+        );
+        expect(innermostModel).toEqual(
+          resolveModelSelection(loadRoleModelPin(NESTED_ROLE)),
+        );
+        expect(innermostModel).not.toEqual(intermediateModel);
+
+        // The intermediate run is the one keyed to the root's call id; the
+        // innermost hangs off the SDK call id of the intermediate's own
+        // `delegate` call.
+        const nested = recordedNestedEvents(conversation.id);
+        const intermediateEvents = nested.filter(
+          (event) => event.parentCallId === ROOT_CALL_ID,
+        );
+        const innermostEvents = nested.filter(
+          (event) => event.parentCallId !== ROOT_CALL_ID,
+        );
+        expect(intermediateEvents.length).toBeGreaterThan(0);
+        expect(innermostEvents.length).toBeGreaterThan(0);
+
+        const intermediateDelegationId = intermediateEvents[0]!.delegationId;
+        expect(intermediateDelegationId).toEqual(expect.any(String));
+        expect(
+          intermediateEvents.every(
+            (event) => event.parentDelegationId === undefined,
+          ),
+        ).toBe(true);
+        expect(
+          innermostEvents.every(
+            (event) => event.parentDelegationId === intermediateDelegationId,
+          ),
+        ).toBe(true);
+        expect(innermostEvents[0]!.delegationId).not.toBe(
+          intermediateDelegationId,
+        );
+      } finally {
+        await deleteConversation(conversation.id);
+      }
     },
     LIVE_TIMEOUT_MS,
   );
