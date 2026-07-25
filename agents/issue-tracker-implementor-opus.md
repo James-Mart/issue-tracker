@@ -1,6 +1,6 @@
 ---
-name: issue-tracker-implementor
-model: inherit
+name: issue-tracker-implementor-opus
+model: claude-opus-5-thinking-high
 description: >-
   Implements and revises one Task (uncommitted). Used by issue-tracker-work.
 readonly: false
