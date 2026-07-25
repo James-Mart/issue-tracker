@@ -1294,6 +1294,24 @@ so cannot drift:
   disagrees with its directory name, and malformed `chat.jsonl` lines — see the
   [writer contract](#writer-contract) and [glossary](#derived-terms)).
 
+## Agent model resolution
+
+**Canonical rule.** Subagent model resolution — frontmatter `model:` vs
+spawn-time selection, ID forms, and how to verify the effective model — is
+defined in the Project **`codingStandards`** supporting doc, section **Subagent
+model resolution** under **Skills and Subagents** (see [Project supporting
+docs](#project-supporting-docs)). That text is the standing rule; this SPEC does
+not restate it. Authoring or spawning code that touches model selection should
+consult that section rather than duplicating it.
+
+**`agents/` layout.**
+
+- A file under `agents/` with YAML frontmatter is a **Task-spawnable
+  subagent** — the kind coordinators spawn via Task / `subagent_type`.
+- A file whose basename starts with `_` and has **no** YAML frontmatter is a
+  **shared include**: not spawnable on its own. Spawnable agents **Read** it
+  from disk by absolute path; a markdown link alone is not enough.
+
 ## Design rationale
 
 **Directory-per-issue is the source of truth (no database).** Issues are plain
