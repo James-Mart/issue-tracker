@@ -459,6 +459,10 @@ export const nestedStepSchema = z.discriminatedUnion("kind", [
     stepId: z.number().int(),
     status: z.enum(["started", "completed"]),
   }),
+  z.object({
+    kind: z.literal("liveness"),
+    elapsedMs: z.number(),
+  }),
 ]);
 
 export type NestedStep = z.infer<typeof nestedStepSchema>;

@@ -10,6 +10,9 @@ import {
 } from "./model-selection.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 
+/** Interval for live-only nested-run liveness frames. */
+export const NESTED_RUN_HEARTBEAT_MS = 5000;
+
 export interface DelegateToolOptions {
   sdk: AgentSdk;
   cwd: string;
@@ -115,6 +118,14 @@ export function createDelegateCustomTools(
       try {
         const run = await handle.send(fullPrompt);
         let reply = "";
+        const startedAt = Date.now();
+        let heartbeat: ReturnType<typeof setInterval> | undefined;
+        if (pipeline && parentCallId) {
+          const callId = parentCallId;
+          heartbeat = setInterval(() => {
+            void pipeline.emitLiveness(callId, stamp, Date.now() - startedAt);
+          }, NESTED_RUN_HEARTBEAT_MS);
+        }
         try {
           for await (const event of run) {
             reply += assistantTextFromEvent(event);
@@ -123,6 +134,18 @@ export function createDelegateCustomTools(
             }
           }
           if (pipeline) await pipeline.flush();
+
+          const waited = await run.wait();
+          if (waited.status === "error") {
+            throw new Error(
+              waited.error?.message ??
+                `delegate: nested run ${waited.id} failed`,
+            );
+          }
+          if (waited.status === "cancelled") {
+            throw new Error(`delegate: nested run ${waited.id} was cancelled`);
+          }
+          return { agentId: handle.agentId, reply };
         } catch (err) {
           if (pipeline) {
             try {
@@ -132,18 +155,9 @@ export function createDelegateCustomTools(
             }
           }
           throw err;
+        } finally {
+          if (heartbeat !== undefined) clearInterval(heartbeat);
         }
-
-        const waited = await run.wait();
-        if (waited.status === "error") {
-          throw new Error(
-            waited.error?.message ?? `delegate: nested run ${waited.id} failed`,
-          );
-        }
-        if (waited.status === "cancelled") {
-          throw new Error(`delegate: nested run ${waited.id} was cancelled`);
-        }
-        return { agentId: handle.agentId, reply };
       } finally {
         delegationStack.pop();
         try {

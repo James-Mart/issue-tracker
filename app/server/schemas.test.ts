@@ -629,4 +629,16 @@ describe("subagent_update delegation fields", () => {
     });
     expect(stored.ok).toBe(true);
   });
+
+  it("round-trips a liveness nested step", () => {
+    const input = parseTranscriptEventInput({
+      ...base,
+      step: { kind: "liveness", elapsedMs: 5000 },
+      delegationId: "del-live",
+      model: "composer-2.5",
+    });
+    expect(input.ok).toBe(true);
+    if (!input.ok) return;
+    expect(input.input.step).toEqual({ kind: "liveness", elapsedMs: 5000 });
+  });
 });

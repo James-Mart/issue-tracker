@@ -59,6 +59,25 @@ export class EventPipeline {
     await this.handleDelegatedMessage(parentCallId, event.message);
   }
 
+  /**
+   * Live-only heartbeat for an in-flight nested run. Never persisted — keeps
+   * SSE subscribers aware the run is still alive without padding the transcript.
+   */
+  async emitLiveness(
+    parentCallId: string,
+    stamp: DelegationStamp,
+    elapsedMs: number,
+  ): Promise<void> {
+    this.delegationStamps.set(parentCallId, stamp);
+    await this.emit({
+      event: this.subagentUpdate(parentCallId, {
+        kind: "liveness",
+        elapsedMs,
+      }),
+      persist: false,
+    });
+  }
+
   async flush(): Promise<void> {
     await this.flushAssistant();
     for (const parentCallId of [...this.nestedText.keys()]) {

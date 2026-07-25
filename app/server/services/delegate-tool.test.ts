@@ -10,7 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentStreamEvent } from "./agent-sdk.js";
 import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import type { ConversationFrame } from "./conversation-stream.js";
-import { createDelegateCustomTools } from "./delegate-tool.js";
+import {
+  createDelegateCustomTools,
+  NESTED_RUN_HEARTBEAT_MS,
+} from "./delegate-tool.js";
 import {
   formatEffectiveModel,
   resolveModelSelection,
@@ -325,5 +328,104 @@ describe("delegate publishes nested run frames", () => {
       ),
     ).toBe(true);
     expect(innerFrames[0]!.event.delegationId).not.toBe(outerDelegationId);
+  });
+
+  it("emits live-only liveness heartbeats for a silent in-flight nested run", async () => {
+    vi.useFakeTimers();
+    try {
+      const {
+        createConversation,
+        readConversation,
+        subscribeFrames,
+        createDelegateCustomTools: createTools,
+      } = await load();
+      const meta = await createConversation({
+        title: "Liveness heartbeat",
+        projectId: "platform",
+        model: "composer-2.5",
+      });
+
+      let release!: () => void;
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const fake = createFakeAgentSdk({ hold, stream: [] });
+      const customTools = createTools({
+        sdk: fake,
+        cwd,
+        storeDir,
+        agentsDir,
+        conversationId: meta.id,
+      });
+
+      const frames: ConversationFrame[] = [];
+      const unsubscribe = subscribeFrames(meta.id, (frame) => {
+        frames.push(frame);
+      });
+
+      const executePromise = customTools.delegate!.execute(
+        { role: "pinned-role", prompt: "stay quiet" },
+        { toolCallId: "call-silent" },
+      );
+
+      for (let i = 0; i < 50; i++) {
+        if (fake.handles[0]?.sends.length === 1) break;
+        await Promise.resolve();
+      }
+      expect(fake.handles[0]?.sends.length).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(NESTED_RUN_HEARTBEAT_MS);
+      await vi.advanceTimersByTimeAsync(NESTED_RUN_HEARTBEAT_MS);
+
+      const livenessDuring = frames.filter(
+        (
+          f,
+        ): f is ConversationFrame & {
+          event: {
+            type: "subagent_update";
+            step: { kind: "liveness"; elapsedMs: number };
+          };
+        } =>
+          f.event.type === "subagent_update" &&
+          f.event.step.kind === "liveness",
+      );
+      expect(livenessDuring.length).toBeGreaterThanOrEqual(2);
+      expect(livenessDuring.every((f) => f.persist === false)).toBe(true);
+      expect(
+        livenessDuring.every(
+          (f) =>
+            f.event.parentCallId === "call-silent" &&
+            typeof f.event.delegationId === "string" &&
+            f.event.delegationId.length > 0,
+        ),
+      ).toBe(true);
+      const elapsed = livenessDuring.map((f) => f.event.step.elapsedMs);
+      for (let i = 1; i < elapsed.length; i++) {
+        expect(elapsed[i]!).toBeGreaterThan(elapsed[i - 1]!);
+      }
+
+      const countAtRelease = livenessDuring.length;
+      release();
+      await executePromise;
+      unsubscribe();
+
+      await vi.advanceTimersByTimeAsync(NESTED_RUN_HEARTBEAT_MS * 3);
+      const livenessAfter = frames.filter(
+        (f) =>
+          f.event.type === "subagent_update" &&
+          f.event.step.kind === "liveness",
+      );
+      expect(livenessAfter.length).toBe(countAtRelease);
+
+      const { transcript } = readConversation(meta.id);
+      expect(
+        transcript.some(
+          (e) =>
+            e.type === "subagent_update" && e.step.kind === "liveness",
+        ),
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
