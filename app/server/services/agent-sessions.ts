@@ -10,6 +10,7 @@ import {
   type AgentSdk,
 } from "./agent-sdk.js";
 import {
+  appendEvent,
   readConversation,
   updateMeta,
 } from "./conversations.js";
@@ -77,7 +78,17 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     let handle: AgentHandle;
     if (meta.agentId) {
-      handle = await sdk.resumeAgent(meta.agentId, storeDir);
+      try {
+        handle = await sdk.resumeAgent(meta.agentId, storeDir);
+      } catch {
+        handle = await sdk.createAgent({ cwd, model, storeDir });
+        await updateMeta(conversationId, { agentId: handle.agentId });
+        await appendEvent(conversationId, {
+          type: "error",
+          message:
+            "The previous agent session could not be resumed; earlier agent-side context was lost.",
+        });
+      }
     } else {
       handle = await sdk.createAgent({ cwd, model, storeDir });
       await updateMeta(conversationId, { agentId: handle.agentId });

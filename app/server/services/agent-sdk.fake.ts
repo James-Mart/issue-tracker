@@ -196,6 +196,8 @@ export interface FakeAgentSdkOptions {
    * any events (keeps the run active for cancel/dispose tests).
    */
   hold?: Promise<void>;
+  /** When set, every `resumeAgent(...)` rejects with this error. */
+  resumeError?: Error;
 }
 
 export interface FakeAgentSdk extends AgentSdk {
@@ -284,6 +286,7 @@ export function createFakeAgentSdk(
     },
     async resumeAgent(agentId, storeDir) {
       resumed.push({ agentId, storeDir });
+      if (options.resumeError) throw options.resumeError;
       return makeHandle(agentId);
     },
   };

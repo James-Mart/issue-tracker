@@ -138,6 +138,73 @@ describe("agent sessions manager", () => {
     ]);
   });
 
+  it("creates a fresh agent when resume fails, records an error event, and continues the send", async () => {
+    const {
+      createConversation,
+      readConversation,
+      appendEvent,
+      createAgentSessions,
+    } = await load();
+    const fake = createFakeAgentSdk({
+      resumeError: new Error("agent not found in store"),
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Stale agent",
+      projectId: "platform",
+      model: "composer-2.5",
+      agentId: "agent-stale",
+    });
+    await appendEvent(meta.id, { type: "prompt", text: "earlier turn" });
+    await appendEvent(meta.id, {
+      type: "assistant",
+      text: "Already answered.",
+    });
+    const priorTranscript = readConversation(meta.id).transcript;
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "continue" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    expect(fake.resumed).toEqual([
+      {
+        agentId: "agent-stale",
+        storeDir: join(
+          dirname(issuesRoot),
+          "conversations",
+          meta.id,
+          "agent-state",
+        ),
+      },
+    ]);
+    expect(fake.created).toHaveLength(1);
+    expect(fake.created[0]).toMatchObject({
+      cwd: workspaceDir,
+      model: { id: "composer-2.5" },
+      storeDir: join(
+        dirname(issuesRoot),
+        "conversations",
+        meta.id,
+        "agent-state",
+      ),
+    });
+    expect(readConversation(meta.id).meta.agentId).toBe(FAKE_AGENT_ID);
+    expect(fake.handles[0]?.sends).toEqual([{ prompt: "continue", options: {} }]);
+
+    const { transcript } = readConversation(meta.id);
+    expect(transcript.slice(0, priorTranscript.length)).toEqual(priorTranscript);
+    const errorEvent = transcript.find((e) => e.type === "error");
+    expect(errorEvent).toMatchObject({
+      type: "error",
+      message:
+        "The previous agent session could not be resumed; earlier agent-side context was lost.",
+    });
+    expect(transcript.at(-1)?.type).not.toBe("error");
+  });
+
   it("persists finalized transcript events including nested subagent_update", async () => {
     const { createConversation, readConversation, createAgentSessions } =
       await load();
