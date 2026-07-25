@@ -6,6 +6,7 @@ import { loadPluginAgentDefinitions } from "./agent-definitions.js";
 import {
   agentSdk,
   type AgentHandle,
+  type AgentRun,
   type AgentSdk,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
@@ -27,6 +28,9 @@ import { loadRoleModelPin } from "./role-bodies.js";
 
 /** A real turn outlives vitest's default per-test timeout many times over. */
 const LIVE_TIMEOUT_MS = 300_000;
+
+/** Room for an assertion that spends two full turns instead of one. */
+const TWO_TURN_TIMEOUT_MS = LIVE_TIMEOUT_MS * 2;
 
 const STORE_DIR = join(process.cwd(), ".agent-state-test");
 
@@ -88,6 +92,42 @@ const CHECK_STUB_PROMPT =
   "This is a wiring probe, not real work: do not read files or run " +
   "commands, and return the empty array [] as your entire reply.";
 
+/**
+ * A migrated work role, and the one the work skill re-enters rather than
+ * respawning: the code-quality validator is spawned once per Task and resumed
+ * on every later `qa` beat.
+ */
+const WORK_ROLE = "issue-tracker-code-quality-validator";
+
+/**
+ * The issue id the work stubs below carry. Deliberately not a tracked issue —
+ * unlike the read-only check role, code-quality writes `qa` on entry, and a
+ * wiring probe must not be able to move a real Task's gate even if a run
+ * ignores {@link WORK_PROBE_GUARD}.
+ */
+const PROBE_ISSUE_ID = "live-probe-no-such-issue";
+
+/** {@link PROBE_PROMPT}'s guard, worded for a role that writes the tracker. */
+const WORK_PROBE_GUARD =
+  "This is a wiring probe, not real work: do not read files, run commands " +
+  "(including `issue`), or set any tracker field, and reply with the single " +
+  "word ok.";
+
+/** The work skill's code-quality spawn stub, over its Issue context line. */
+const CODE_QUALITY_STUB_PROMPT =
+  `Work root: \`delegation-bridge\`. Issue: \`${PROBE_ISSUE_ID}\` ` +
+  "(live wiring probe). Mode: review. Comment role: " +
+  "`code-quality-validator`. " +
+  WORK_PROBE_GUARD;
+
+/** The work skill's code-quality resume stub — the re-entry beat. */
+const CODE_QUALITY_RESUME_STUB_PROMPT =
+  `Work root: \`delegation-bridge\`. Issue: \`${PROBE_ISSUE_ID}\` ` +
+  "(live wiring probe). Mode: resume. Comment role: " +
+  "`code-quality-validator`. Verify that previously requested changes were " +
+  "fixed. " +
+  WORK_PROBE_GUARD;
+
 type ToolCallMessage = Extract<
   Extract<AgentStreamEvent, { kind: "message" }>["message"],
   { type: "tool_call" }
@@ -107,6 +147,32 @@ function recordedNestedEvents(conversationId: string): SubagentUpdateEvent[] {
     (event): event is SubagentUpdateEvent =>
       event.type === "subagent_update",
   );
+}
+
+/** Every `tool_call` message one send reported, drained to completion. */
+async function toolCallsFrom(run: AgentRun): Promise<ToolCallMessage[]> {
+  const toolCalls: ToolCallMessage[] = [];
+  for await (const event of run) {
+    if (event.kind === "message" && event.message.type === "tool_call") {
+      toolCalls.push(event.message);
+    }
+  }
+  await run.wait();
+  return toolCalls;
+}
+
+/**
+ * The one completed Task call a send made — and, on the way, the IDE-channel
+ * claim itself: no `delegate` was attempted, and the delegation went out over
+ * Task exactly once.
+ */
+function soleCompletedTaskCall(toolCalls: ToolCallMessage[]): ToolCallMessage {
+  expect(toolCalls.map((call) => call.name)).not.toContain("delegate");
+  const completed = toolCalls.filter(
+    (call) => call.name === TASK_TOOL_NAME && call.status === "completed",
+  );
+  expect(completed).toHaveLength(1);
+  return completed[0]!;
 }
 
 /**
@@ -282,30 +348,17 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
         agents: loadPluginAgentDefinitions(),
       });
 
-      const run = await agent.send(
-        `Call the Task tool exactly once, with subagent_type "${ROLE}", ` +
-          'description "plan-polish check", and prompt ' +
-          `${JSON.stringify(CHECK_STUB_PROMPT)}. ` +
-          "Pass no model argument on that call. " +
-          "Then reply with the single word done.",
+      const toolCalls = await toolCallsFrom(
+        await agent.send(
+          `Call the Task tool exactly once, with subagent_type "${ROLE}", ` +
+            'description "plan-polish check", and prompt ' +
+            `${JSON.stringify(CHECK_STUB_PROMPT)}. ` +
+            "Pass no model argument on that call. " +
+            "Then reply with the single word done.",
+        ),
       );
 
-      const toolCalls: ToolCallMessage[] = [];
-      for await (const event of run) {
-        if (event.kind === "message" && event.message.type === "tool_call") {
-          toolCalls.push(event.message);
-        }
-      }
-      await run.wait();
-
-      expect(toolCalls.map((call) => call.name)).not.toContain("delegate");
-
-      const completed = toolCalls.filter(
-        (call) => call.name === TASK_TOOL_NAME && call.status === "completed",
-      );
-      expect(completed).toHaveLength(1);
-
-      const result = completed[0]!.result;
+      const result = soleCompletedTaskCall(toolCalls).result;
       expect(extractTaskHints(result).resultAgentId).toBeDefined();
 
       const findings = taskReplyText(result).trim();
@@ -313,5 +366,56 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
       expect(JSON.parse(findings)).toEqual([]);
     },
     LIVE_TIMEOUT_MS,
+  );
+
+  // The same IDE claim, re-proved against the work vocabulary: work holds ten
+  // of the call sites and is the skill that runs this plan, so it is measured
+  // rather than inherited from the plan-polish assertion above. Its re-entry
+  // beat is the part no earlier assertion reaches — a coordinator that resumes
+  // code-quality on `qa` has to land back inside the agent it already has.
+  it(
+    "re-enters a migrated work delegation over Task when no delegate tool exists",
+    async () => {
+      await using agent = await agentSdk.createAgent({
+        cwd: process.cwd(),
+        model: PARENT_CONVERSATION_MODEL,
+        storeDir: STORE_DIR,
+        agents: loadPluginAgentDefinitions(),
+      });
+
+      const spawned = soleCompletedTaskCall(
+        await toolCallsFrom(
+          await agent.send(
+            "Call the Task tool exactly once, with subagent_type " +
+              `"${WORK_ROLE}", description "code quality", and prompt ` +
+              `${JSON.stringify(CODE_QUALITY_STUB_PROMPT)}. ` +
+              "Pass no model argument on that call. " +
+              "Then reply with the single word done.",
+          ),
+        ),
+      );
+      const spawnedAgentId = extractTaskHints(spawned.result).resultAgentId;
+      expect(spawnedAgentId).toBeDefined();
+
+      const resumed = soleCompletedTaskCall(
+        await toolCallsFrom(
+          await agent.send(
+            "Call the Task tool exactly once, with subagent_type " +
+              `"${WORK_ROLE}", resume "${spawnedAgentId}", description ` +
+              '"code quality (resume)", and prompt ' +
+              `${JSON.stringify(CODE_QUALITY_RESUME_STUB_PROMPT)}. ` +
+              "Pass no model argument on that call. " +
+              "Then reply with the single word done.",
+          ),
+        ),
+      );
+
+      // A resume that missed would complete too — as a second subagent, under
+      // its own id. Equality is what says the re-entry landed on the first.
+      expect(extractTaskHints(resumed.result).resultAgentId).toBe(
+        spawnedAgentId,
+      );
+    },
+    TWO_TURN_TIMEOUT_MS,
   );
 });
