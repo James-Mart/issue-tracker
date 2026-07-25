@@ -3,6 +3,7 @@ import {
   Cursor,
   CursorAgentError,
   JsonlLocalAgentStore,
+  type AgentDefinition,
   type AgentOptions,
   type CursorRequestOptions,
   type InteractionUpdate,
@@ -44,6 +45,7 @@ export interface CreateAgentOptions {
   model: ModelSelection;
   agentId?: string;
   storeDir: string;
+  agents?: Record<string, AgentDefinition>;
 }
 
 export interface AgentSendOptions {
@@ -138,11 +140,12 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       return deps.listSdkModels({ apiKey: deps.apiKey });
     },
 
-    async createAgent({ cwd, model, agentId, storeDir }) {
+    async createAgent({ cwd, model, agentId, storeDir, agents }) {
       const sdkAgent = await deps.createSdkAgent({
         apiKey: deps.apiKey,
         model,
         agentId,
+        agents,
         local: {
           cwd,
           settingSources: ["user", "project", "plugins"],
