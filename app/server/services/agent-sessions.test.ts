@@ -131,6 +131,7 @@ describe("agent sessions manager", () => {
           meta.id,
           "agent-state",
         ),
+        options: { agents: expect.any(Object) },
       },
     ]);
     expect(fake.handles[0]?.sends).toEqual([
@@ -178,6 +179,7 @@ describe("agent sessions manager", () => {
           meta.id,
           "agent-state",
         ),
+        options: { agents: expect.any(Object) },
       },
     ]);
     expect(fake.created).toHaveLength(1);

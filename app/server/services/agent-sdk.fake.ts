@@ -11,6 +11,7 @@ import type {
   AgentSendOptions,
   AgentStreamEvent,
   CreateAgentOptions,
+  ResumeAgentOptions,
 } from "./agent-sdk.js";
 
 // Stable identifiers the scripted fixtures share, so tests can assert that
@@ -203,8 +204,12 @@ export interface FakeAgentSdkOptions {
 export interface FakeAgentSdk extends AgentSdk {
   /** Options passed to each `createAgent(...)`. */
   readonly created: CreateAgentOptions[];
-  /** Agent ids and store dirs passed to each `resumeAgent(...)`. */
-  readonly resumed: Array<{ agentId: string; storeDir: string }>;
+  /** Agent ids, store dirs, and options passed to each `resumeAgent(...)`. */
+  readonly resumed: Array<{
+    agentId: string;
+    storeDir: string;
+    options?: ResumeAgentOptions;
+  }>;
   /** Every handle this fake handed out. */
   readonly handles: FakeAgentHandle[];
 }
@@ -221,7 +226,11 @@ export function createFakeAgentSdk(
   const models = options.models ?? FAKE_MODELS;
   const stream = options.stream ?? buildScriptedStream();
   const created: CreateAgentOptions[] = [];
-  const resumed: Array<{ agentId: string; storeDir: string }> = [];
+  const resumed: Array<{
+    agentId: string;
+    storeDir: string;
+    options?: ResumeAgentOptions;
+  }> = [];
   const handles: FakeAgentHandle[] = [];
 
   function makeHandle(agentId: string): FakeAgentHandle {
@@ -284,8 +293,8 @@ export function createFakeAgentSdk(
       created.push(createOptions);
       return makeHandle(createOptions.agentId ?? FAKE_AGENT_ID);
     },
-    async resumeAgent(agentId, storeDir) {
-      resumed.push({ agentId, storeDir });
+    async resumeAgent(agentId, storeDir, resumeOptions = {}) {
+      resumed.push({ agentId, storeDir, options: resumeOptions });
       if (options.resumeError) throw options.resumeError;
       return makeHandle(agentId);
     },

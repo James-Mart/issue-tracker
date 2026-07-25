@@ -191,6 +191,30 @@ describe("resumeAgent", () => {
       STORE_DIR,
     );
   });
+
+  it("forwards the agents map unchanged to Agent.resume", async () => {
+    const agents: Record<string, AgentDefinition> = {
+      "issue-tracker-implementor-composer": {
+        description: "Implements one Task.",
+        prompt: "You implement tasks.",
+        model: { id: "composer-2.5" },
+      },
+      explore: {
+        description: "Explores the codebase.",
+        prompt: "You explore.",
+      },
+    };
+    const resumeSdkAgent = vi.fn(
+      async (_id: string, _options?: Partial<AgentOptions>) =>
+        makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-xyz" });
+
+    await sdk.resumeAgent("agent-1", STORE_DIR, { agents });
+
+    expect(resumeSdkAgent).toHaveBeenCalledTimes(1);
+    expect(resumeSdkAgent.mock.calls[0]![1]?.agents).toBe(agents);
+  });
 });
 
 describe("listModels", () => {
