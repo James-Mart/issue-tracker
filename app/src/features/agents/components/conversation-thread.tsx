@@ -1,31 +1,23 @@
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import type { ReactNode } from "react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/features/issues/components/markdown";
-import { cn } from "@/lib/utils/cn";
 import { useConversationsQuery } from "../api/queries";
 import { useConversationEvents } from "../hooks/use-conversation-events";
+import {
+  deriveSubAgents,
+  isSubAgentToolCall,
+  type SubAgent,
+} from "../lib/subagent";
 import { Composer } from "./composer";
-
-function formatUnknown(value: unknown): string {
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function toolStatusVariant(
-  status: "running" | "completed" | "error",
-): "inProgress" | "done" | "blocked" {
-  if (status === "running") return "inProgress";
-  if (status === "completed") return "done";
-  return "blocked";
-}
+import { SubagentCard } from "./subagent-card";
+import {
+  CollapsibleDetails,
+  CollapsiblePayload,
+  toolStatusVariant,
+} from "./transcript-ui";
 
 function eventKey(event: TranscriptEvent, index: number): string {
   if (event.type === "tool_call") return `tool_call-${event.callId}`;
@@ -48,60 +40,6 @@ function InfoLine({
       </span>
       <span className="min-w-0 text-foreground/80">{children}</span>
     </div>
-  );
-}
-
-function CollapsibleDetails({
-  label,
-  children,
-  className,
-  summaryClassName,
-  bodyClassName,
-  ...detailsProps
-}: {
-  label: ReactNode;
-  children: ReactNode;
-  className?: string;
-  summaryClassName?: string;
-  bodyClassName?: string;
-} & Omit<ComponentPropsWithoutRef<"details">, "className" | "children">) {
-  return (
-    <details className={cn("group", className)} {...detailsProps}>
-      <summary
-        className={cn(
-          "flex cursor-pointer list-none items-center gap-1.5 font-mono text-[11px] text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden",
-          summaryClassName,
-        )}
-      >
-        <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
-        {label}
-      </summary>
-      <div className={cn("border-t border-border", bodyClassName)}>
-        {children}
-      </div>
-    </details>
-  );
-}
-
-function CollapsiblePayload({
-  label,
-  value,
-}: {
-  label: string;
-  value: unknown;
-}) {
-  if (value === undefined) return null;
-  return (
-    <CollapsibleDetails
-      label={label}
-      className="mt-2 rounded-md border border-border bg-[hsl(var(--panel-2))]"
-      summaryClassName="px-2.5 py-1.5"
-      bodyClassName="px-2.5 py-2"
-    >
-      <pre className="max-h-64 overflow-auto font-mono text-[11px] leading-relaxed text-foreground/90">
-        {formatUnknown(value)}
-      </pre>
-    </CollapsibleDetails>
   );
 }
 
@@ -195,9 +133,11 @@ function isLiveThinking(events: TranscriptEvent[], index: number): boolean {
 
 function TranscriptEventRow({
   event,
+  subAgentsByCallId,
   thinkingOpen,
 }: {
   event: TranscriptEvent;
+  subAgentsByCallId: Map<string, SubAgent>;
   thinkingOpen?: boolean;
 }) {
   switch (event.type) {
@@ -207,8 +147,13 @@ function TranscriptEventRow({
       return <AssistantEvent text={event.text} />;
     case "thinking":
       return <ThinkingEvent text={event.text} open={thinkingOpen} />;
-    case "tool_call":
+    case "tool_call": {
+      if (isSubAgentToolCall(event)) {
+        const agent = subAgentsByCallId.get(event.callId);
+        if (agent) return <SubagentCard agent={agent} />;
+      }
       return <ToolCallEvent event={event} />;
+    }
     case "task": {
       const parts = [event.status, event.text].filter(Boolean);
       return (
@@ -241,7 +186,7 @@ function TranscriptEventRow({
       // Informational only — Epic auto-run posture; never a blocking prompt.
       return <InfoLine label="Request">{event.requestId}</InfoLine>;
     case "subagent_update":
-      // Accumulated in the stream hook; nested card lands in a later Story.
+      // Folded into SubagentCard via deriveSubAgents; not a top-level row.
       return null;
     default:
       // Tolerate unknown future kinds without crashing.
@@ -282,6 +227,10 @@ function ThreadBody({
     );
   }
 
+  const subAgentsByCallId = new Map(
+    deriveSubAgents(events).map((agent) => [agent.callId, agent]),
+  );
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
@@ -294,6 +243,7 @@ function ThreadBody({
         <TranscriptEventRow
           key={eventKey(event, index)}
           event={event}
+          subAgentsByCallId={subAgentsByCallId}
           thinkingOpen={
             event.type === "thinking" && isLiveThinking(events, index)
           }
