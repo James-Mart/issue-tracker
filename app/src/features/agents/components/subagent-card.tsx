@@ -11,7 +11,8 @@ import {
 
 /** At-rest sub-agent card; falls back to a standalone card when `steps` is empty. */
 export function SubagentCard({ agent }: { agent: SubAgent }) {
-  const hasSteps = agent.steps.length > 0;
+  const hasSteps =
+    agent.steps.length > 0 || agent.collapsedDelegations.length > 0;
   const [threadOpen, setThreadOpen] = useState(false);
   const running = agent.status === "running";
   const name = agent.name?.trim();
