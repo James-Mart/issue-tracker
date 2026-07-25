@@ -117,6 +117,128 @@ describe("createDelegateCustomTools", () => {
       agentId: fake.handles[0]!.agentId,
       reply: "On it.",
     });
+    expect(fake.created[0]!.agentId).toBe(fake.handles[0]!.agentId);
+    expect(fake.created[0]!.storeDir).toBe(
+      join(storeDir, "nested", fake.handles[0]!.agentId),
+    );
+  });
+
+  it("resumes an existing nested agent with resumeId instead of creating", async () => {
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+    const roleBody = loadRoleBody("pinned-role", agentsDir);
+
+    const first = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "first turn" },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(0);
+
+    const second = await customTools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "second turn",
+        resumeId: first.agentId as string,
+      },
+      {},
+    );
+
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toEqual([
+      {
+        agentId: first.agentId,
+        storeDir: join(storeDir, "nested", first.agentId as string),
+        options: {
+          agents: undefined,
+          customTools: expect.any(Object),
+        },
+      },
+    ]);
+    expect(fake.handles[1]!.sends).toHaveLength(1);
+    expect(fake.handles[1]!.sends[0]!.prompt).toBe("second turn");
+    expect(fake.handles[1]!.sends[0]!.prompt.startsWith(roleBody)).toBe(
+      false,
+    );
+    expect(second).toEqual({
+      agentId: first.agentId,
+      reply: "On it.",
+    });
+
+    const third = await customTools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "third turn",
+        resumeId: first.agentId as string,
+      },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(2);
+    expect(third.agentId).toBe(first.agentId);
+    expect(fake.handles[2]!.sends[0]!.prompt).toBe("third turn");
+  });
+
+  it("errors on an unknown resumeId without creating a fresh agent", async () => {
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    await expect(
+      customTools.delegate!.execute(
+        {
+          role: "pinned-role",
+          prompt: "orphan",
+          resumeId: "no-such-agent",
+        },
+        {},
+      ),
+    ).rejects.toThrow("delegate: unknown or unresumable agent no-such-agent");
+    expect(fake.created).toHaveLength(0);
+    expect(fake.resumed).toHaveLength(0);
+  });
+
+  it("errors when resumeAgent fails without falling back to create", async () => {
+    const fake = createFakeAgentSdk({
+      stream: ASSISTANT_STREAM,
+      resumeError: new Error("agent not found in store"),
+    });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    const first = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "first turn" },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+
+    await expect(
+      customTools.delegate!.execute(
+        {
+          role: "pinned-role",
+          prompt: "retry",
+          resumeId: first.agentId as string,
+        },
+        {},
+      ),
+    ).rejects.toThrow(
+      /delegate: unknown or unresumable agent .*agent not found in store/,
+    );
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(1);
   });
 
   it("passes a nesting-capable delegate tool to nested agents", async () => {
@@ -430,9 +552,9 @@ describe("delegate publishes nested run frames", () => {
   });
 
   async function load() {
-    const { createConversation, readConversation } = await import(
-      "./conversations.js"
-    );
+    const { createConversation, readConversation, readDelegations } =
+      await import("./conversations.js");
+    const { conversationsDir } = await import("../config.js");
     const { subscribeFrames } = await import("./conversation-stream.js");
     const { createDelegateCustomTools: createTools } = await import(
       "./delegate-tool.js"
@@ -440,6 +562,8 @@ describe("delegate publishes nested run frames", () => {
     return {
       createConversation,
       readConversation,
+      readDelegations,
+      conversationsDir,
       subscribeFrames,
       createDelegateCustomTools: createTools,
     };
@@ -688,5 +812,236 @@ describe("delegate publishes nested run frames", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("appends a delegations.jsonl record on delegation start", async () => {
+    const {
+      createConversation,
+      readDelegations,
+      createDelegateCustomTools: createTools,
+    } = await load();
+    const meta = await createConversation({
+      title: "Persist ids",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    const result = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "remember me" },
+      { toolCallId: "call-persist-1" },
+    );
+
+    const expectedModel = formatEffectiveModel(
+      resolveModelSelection("cursor-grok-4.5-high-fast"),
+    );
+    const records = readDelegations(meta.id);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      agentId: result.agentId,
+      role: "pinned-role",
+      model: expectedModel,
+    });
+    expect(typeof records[0]!.delegationId).toBe("string");
+    expect(records[0]!.delegationId.length).toBeGreaterThan(0);
+    expect(records[0]).not.toHaveProperty("parentDelegationId");
+    expect(Number.isNaN(Date.parse(records[0]!.at))).toBe(false);
+  });
+
+  it("resumes from a persisted agent id after discarding in-memory session state", async () => {
+    const {
+      createConversation,
+      readDelegations,
+      conversationsDir,
+      createDelegateCustomTools: createTools,
+    } = await load();
+    const meta = await createConversation({
+      title: "Rehydrate resume",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const convStoreDir = join(conversationsDir, meta.id, "agent-state");
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const firstTools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir: convStoreDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+    const first = await firstTools.delegate!.execute(
+      { role: "pinned-role", prompt: "first turn" },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(0);
+
+    const persisted = readDelegations(meta.id);
+    expect(persisted).toHaveLength(1);
+    const agentId = persisted[0]!.agentId;
+    expect(agentId).toBe(first.agentId);
+
+    // Discard the tools factory (the only in-memory holder) and rehydrate
+    // via readDelegations + a fresh delegate bridge on the same store.
+    const secondTools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir: convStoreDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+    const second = await secondTools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "after restart",
+        resumeId: agentId,
+      },
+      {},
+    );
+
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toEqual([
+      {
+        agentId,
+        storeDir: join(convStoreDir, "nested", agentId),
+        options: {
+          agents: undefined,
+          customTools: expect.any(Object),
+        },
+      },
+    ]);
+    expect(second.agentId).toBe(agentId);
+    expect(fake.handles[1]!.sends[0]!.prompt).toBe("after restart");
+
+    const after = readDelegations(meta.id);
+    expect(after).toHaveLength(2);
+    expect(after[1]!.agentId).toBe(agentId);
+  });
+
+  it("delegations returns this conversation's records most-recent-first and excludes others", async () => {
+    const { createConversation, createDelegateCustomTools: createTools } =
+      await load();
+
+    const metaA = await createConversation({
+      title: "Lookup A",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const metaB = await createConversation({
+      title: "Lookup B",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const toolsA = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: metaA.id,
+    });
+    const toolsB = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: metaB.id,
+    });
+
+    const first = await toolsA.delegate!.execute(
+      { role: "pinned-role", prompt: "first" },
+      {},
+    );
+    const second = await toolsA.delegate!.execute(
+      { role: "pinned-role", prompt: "second" },
+      {},
+    );
+    await toolsB.delegate!.execute(
+      { role: "pinned-role", prompt: "other conversation" },
+      {},
+    );
+
+    const expectedModel = formatEffectiveModel(
+      resolveModelSelection("cursor-grok-4.5-high-fast"),
+    );
+    const listed = await toolsA.delegations!.execute({}, {});
+    expect(listed).toHaveLength(2);
+    expect(listed[0]).toMatchObject({
+      agentId: second.agentId,
+      role: "pinned-role",
+      model: expectedModel,
+    });
+    expect(listed[1]).toMatchObject({
+      agentId: first.agentId,
+      role: "pinned-role",
+      model: expectedModel,
+    });
+    for (const row of listed) {
+      expect(typeof row.delegationId).toBe("string");
+      expect(row.delegationId.length).toBeGreaterThan(0);
+      expect(typeof row.at).toBe("string");
+      expect(Number.isNaN(Date.parse(row.at))).toBe(false);
+      expect(row).not.toHaveProperty("parentDelegationId");
+    }
+
+    const listedB = await toolsB.delegations!.execute({}, {});
+    expect(listedB).toHaveLength(1);
+  });
+
+  it("accepts an agentId from delegations as delegate resumeId", async () => {
+    const {
+      createConversation,
+      conversationsDir,
+      createDelegateCustomTools: createTools,
+    } = await load();
+    const meta = await createConversation({
+      title: "Resume via lookup",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const convStoreDir = join(conversationsDir, meta.id, "agent-state");
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const tools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir: convStoreDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    await tools.delegate!.execute(
+      { role: "pinned-role", prompt: "first turn" },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+
+    const [record] = await tools.delegations!.execute({}, {});
+    expect(record).toBeDefined();
+
+    const resumed = await tools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "after lookup",
+        resumeId: record!.agentId,
+      },
+      {},
+    );
+
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(1);
+    expect(fake.resumed[0]!.agentId).toBe(record!.agentId);
+    expect(resumed.agentId).toBe(record!.agentId);
+    expect(fake.handles[1]!.sends[0]!.prompt).toBe("after lookup");
   });
 });

@@ -1,8 +1,13 @@
-import { mkdirSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { join } from "path";
 import type { AgentDefinition, SDKCustomTool } from "@cursor/sdk";
 import type { AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
+import {
+  appendDelegation,
+  conversationExists,
+  readDelegations,
+} from "./conversations.js";
 import { EventPipeline } from "./event-pipeline.js";
 import {
   formatEffectiveModel,
@@ -209,6 +214,19 @@ function requireString(
   return value;
 }
 
+/** Optional `resumeId`; absent/undefined → create path; present but invalid → error. */
+function optionalResumeId(args: Record<string, unknown>): string | undefined {
+  if (!("resumeId" in args) || args.resumeId === undefined) return undefined;
+  if (typeof args.resumeId !== "string" || args.resumeId.length === 0) {
+    throw new Error("delegate: missing or invalid resumeId");
+  }
+  return args.resumeId;
+}
+
+function nestedStorePath(storeDir: string, agentId: string): string {
+  return join(storeDir, "nested", agentId);
+}
+
 function assistantTextFromEvent(event: AgentStreamEvent): string {
   if (event.kind !== "message") return "";
   if (event.message.type !== "assistant") return "";
@@ -241,6 +259,33 @@ export function createDelegateCustomTools(
   ): Record<string, SDKCustomTool> {
     const customTools: Record<string, SDKCustomTool> = {};
 
+    customTools.delegations = {
+      description:
+        "List nested delegations for this conversation, most recent first.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+      execute: async () => {
+        if (
+          !options.conversationId ||
+          !conversationExists(options.conversationId)
+        ) {
+          return [];
+        }
+        return readDelegations(options.conversationId)
+          .slice()
+          .reverse()
+          .map(({ delegationId, agentId, role, model, at }) => ({
+            delegationId,
+            agentId,
+            role,
+            model,
+            at,
+          }));
+      },
+    };
+
     customTools.delegate = {
       description:
         "Delegate work to a named role. The app selects the role's pinned model.",
@@ -255,12 +300,18 @@ export function createDelegateCustomTools(
             type: "string",
             description: "Task prompt for the nested agent.",
           },
+          resumeId: {
+            type: "string",
+            description:
+              "Existing nested agent id to re-enter. When set, resumes that agent instead of creating one.",
+          },
         },
         required: ["role", "prompt"],
       },
       execute: async (args, context) => {
         const role = requireString(args, "role");
         const prompt = requireString(args, "prompt");
+        const resumeId = optionalResumeId(args);
 
         const attemptedDepth = (parent?.depth ?? 0) + 1;
         if (attemptedDepth > MAX_DELEGATION_DEPTH) {
@@ -273,8 +324,12 @@ export function createDelegateCustomTools(
 
         const pin = loadRoleModelPin(role, agentsDir);
         const model = resolveModelSelection(pin);
-        const roleBody = loadRoleBody(role, agentsDir);
-        const fullPrompt = `${roleBody}\n\n${prompt}`;
+        // Fresh spawn injects the role body; resume skips it — the agent already
+        // carries those instructions from the first turn.
+        const fullPrompt =
+          resumeId === undefined
+            ? `${loadRoleBody(role, agentsDir)}\n\n${prompt}`
+            : prompt;
 
         const release = await acquireConcurrencySlot(concurrencyKey);
         const tracked: NestedRunTracker = {
@@ -287,9 +342,6 @@ export function createDelegateCustomTools(
           if (tracked.cancelled) {
             throw new Error("delegate: conversation cancelled");
           }
-
-          const nestedStoreDir = join(options.storeDir, "nested", randomUUID());
-          mkdirSync(nestedStoreDir, { recursive: true });
 
           const delegationId = randomUUID();
           const parentDelegationId = parent?.delegationId;
@@ -315,17 +367,72 @@ export function createDelegateCustomTools(
             depth: attemptedDepth,
           });
 
-          handle = await options.sdk.createAgent({
-            cwd: options.cwd,
-            model,
-            storeDir: nestedStoreDir,
-            agents: options.agents,
-            customTools: nestedCustomTools,
-          });
+          if (resumeId !== undefined) {
+            const nestedStoreDir = nestedStorePath(
+              options.storeDir,
+              resumeId,
+            );
+            if (!existsSync(nestedStoreDir)) {
+              throw new Error(
+                `delegate: unknown or unresumable agent ${resumeId}`,
+              );
+            }
+            try {
+              handle = await options.sdk.resumeAgent(
+                resumeId,
+                nestedStoreDir,
+                {
+                  agents: options.agents,
+                  customTools: nestedCustomTools,
+                },
+              );
+            } catch (err) {
+              const detail =
+                err instanceof Error ? err.message : String(err);
+              throw new Error(
+                `delegate: unknown or unresumable agent ${resumeId}: ${detail}`,
+              );
+            }
+          } else {
+            // Store path is keyed by agent id so a later resumeId can find it
+            // without a side registry (and so persistence can rehydrate by id).
+            const agentId = randomUUID();
+            const nestedStoreDir = nestedStorePath(
+              options.storeDir,
+              agentId,
+            );
+            mkdirSync(nestedStoreDir, { recursive: true });
+
+            handle = await options.sdk.createAgent({
+              cwd: options.cwd,
+              model,
+              agentId,
+              storeDir: nestedStoreDir,
+              agents: options.agents,
+              customTools: nestedCustomTools,
+            });
+          }
           tracked.cancel = () => handle!.cancel();
           if (tracked.cancelled) {
             await handle.cancel();
             throw new Error("delegate: conversation cancelled");
+          }
+
+          // conversationId doubles as a concurrency key in tests; only
+          // persist when the conversation store is actually present.
+          if (
+            options.conversationId &&
+            conversationExists(options.conversationId)
+          ) {
+            await appendDelegation(options.conversationId, {
+              delegationId,
+              agentId: handle.agentId,
+              role,
+              model: stamp.model,
+              ...(parentDelegationId !== undefined
+                ? { parentDelegationId }
+                : {}),
+            });
           }
 
           const run = await handle.send(fullPrompt);

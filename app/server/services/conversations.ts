@@ -12,12 +12,16 @@ import { join } from "path";
 import { conversationsDir } from "../config.js";
 import {
   parseConversationMeta,
+  parseDelegationRecord,
+  parseDelegationRecordInput,
   parseTranscriptEvent,
   parseTranscriptEventInput,
   type ConversationDetail,
   type ConversationMeta,
   type ConversationMetaPatch,
   type CreateConversationInput,
+  type DelegationRecord,
+  type DelegationRecordInput,
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
@@ -46,6 +50,10 @@ function metaPathOf(id: string): string {
 
 function transcriptPathOf(id: string): string {
   return join(dirOf(id), "transcript.jsonl");
+}
+
+function delegationsPathOf(id: string): string {
+  return join(dirOf(id), "delegations.jsonl");
 }
 
 function scanIds(): string[] {
@@ -126,6 +134,7 @@ export function createConversation(
     mkdirSync(dirOf(id), { recursive: true });
     writeMeta(meta);
     writeFileSync(transcriptPathOf(id), "");
+    writeFileSync(delegationsPathOf(id), "");
     return meta;
   });
 }
@@ -164,6 +173,54 @@ export function appendEvent(
     writeMeta({ ...meta, updatedAt: new Date().toISOString() });
     return stamped;
   });
+}
+
+function readDelegationLines(id: string): DelegationRecord[] {
+  const path = delegationsPathOf(id);
+  if (!existsSync(path)) return [];
+  const records: DelegationRecord[] = [];
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const parsed = parseDelegationRecord(raw);
+    if (parsed.ok) records.push(parsed.record);
+  }
+  return records;
+}
+
+/** Append a nested-agent delegation record (one JSON line). */
+export function appendDelegation(
+  id: string,
+  record: DelegationRecordInput,
+): Promise<DelegationRecord> {
+  return serialize(() => {
+    const meta = readMetaRaw(id);
+    const parsed = parseDelegationRecordInput(record);
+    if (!parsed.ok) throw new IssueError("validation", parsed.message);
+    const stamped: DelegationRecord = {
+      ...parsed.input,
+      at: new Date().toISOString(),
+    };
+    appendFileSync(delegationsPathOf(id), `${JSON.stringify(stamped)}\n`);
+    writeMeta({ ...meta, updatedAt: new Date().toISOString() });
+    return stamped;
+  });
+}
+
+/** Load persisted nested-agent ids for a conversation (append order). */
+export function readDelegations(id: string): DelegationRecord[] {
+  readMetaRaw(id);
+  return readDelegationLines(id);
+}
+
+/** True when `meta.json` exists for the conversation id. */
+export function conversationExists(id: string): boolean {
+  return existsSync(metaPathOf(id));
 }
 
 export function updateMeta(

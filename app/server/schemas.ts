@@ -571,6 +571,52 @@ export type ConversationDetail = {
   transcript: TranscriptEvent[];
 };
 
+/** Write-time input: stored shape minus the server-stamped `at`. */
+export const delegationRecordInputSchema = z.object({
+  delegationId: nonEmpty,
+  agentId: nonEmpty,
+  role: nonEmpty,
+  model: nonEmpty,
+  /** Delegating run; unset when the conversation root delegated. */
+  parentDelegationId: nonEmpty.optional(),
+});
+
+export type DelegationRecordInput = z.infer<typeof delegationRecordInputSchema>;
+
+export const delegationRecordSchema = delegationRecordInputSchema.merge(
+  z.object({ at: nonEmpty }),
+);
+
+export type DelegationRecord = z.infer<typeof delegationRecordSchema>;
+
+export type DelegationRecordParseResult =
+  | { ok: true; record: DelegationRecord }
+  | { ok: false; message: string };
+
+export function parseDelegationRecord(raw: unknown): DelegationRecordParseResult {
+  const result = delegationRecordSchema.safeParse(raw);
+  if (result.success) return { ok: true, record: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid delegation record"),
+  };
+}
+
+export type DelegationRecordInputParseResult =
+  | { ok: true; input: DelegationRecordInput }
+  | { ok: false; message: string };
+
+export function parseDelegationRecordInput(
+  raw: unknown,
+): DelegationRecordInputParseResult {
+  const result = delegationRecordInputSchema.safeParse(raw);
+  if (result.success) return { ok: true, input: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid delegation record"),
+  };
+}
+
 export type ConversationMetaParseResult =
   | { ok: true; meta: ConversationMeta }
   | { ok: false; message: string };
