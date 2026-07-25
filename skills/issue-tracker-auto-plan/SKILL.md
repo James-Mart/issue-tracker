@@ -184,6 +184,12 @@ specifics and stop; otherwise proceed to Flow.
 
 ## Flow
 
+**Model availability** — every spawn below names the model its target agent is
+pinned to. Pass it when that slug is among those your Task tool advertises;
+when it is not, pass no model at all — the pin travels with the agent
+definition and the host applies it. Never substitute a different slug, and do
+not treat an unavailable slug as a refusal.
+
 1. **Discriminator.** Before spawning, decide three labelled scope
    statements from bootstrap context + PM heuristics:
    - `Includes:` — what the idea covers

@@ -199,6 +199,12 @@ Pass these as the Cursor Task `prompt`. Inline the fields each stub lists.
 Children own static behavior via their `agents/*.md` files — do not paste
 workflow instructions here.
 
+**Model availability** — each stub names the model its target agent is pinned
+to. Pass it when that slug is among those your Task tool advertises; when it is
+not, pass no model at all — the pin travels with the agent definition and the
+host applies it. Never substitute a different slug, and do not treat an
+unavailable slug as a refusal.
+
 **Focused codebase research** — `subagent_type: issue-tracker-research`
 (`model: composer-2.5`)
 
