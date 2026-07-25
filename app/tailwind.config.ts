@@ -13,6 +13,9 @@ const config: Config = {
   		}
   	},
   	extend: {
+  		screens: {
+  			shell: "860px",
+  		},
   		fontFamily: {
   			sans: ["var(--font-body)"],
   			mono: ["var(--font-mono)"],
