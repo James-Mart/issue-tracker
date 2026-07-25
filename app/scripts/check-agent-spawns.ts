@@ -18,8 +18,15 @@ const ROOT_DIR = resolve(APP_DIR, "..");
 const AGENTS_DIR = resolve(ROOT_DIR, "agents");
 const SKILLS_DIR = resolve(ROOT_DIR, "skills");
 
-/** Cursor builtins — no `agents/*.md` file and no pin to agree with. */
-const BUILTIN_SUBAGENTS = new Set(["generalPurpose", "explore"]);
+/**
+ * Cursor builtins that may still appear in stubs — no `agents/*.md` and no
+ * pin to agree with. `generalPurpose` is forbidden (see below): a builtin
+ * cannot be given a model through the SDK agents map.
+ */
+const BUILTIN_SUBAGENTS = new Set(["explore"]);
+
+/** Builtins that must not be spawned — use a named plugin agent instead. */
+const FORBIDDEN_SUBAGENTS = new Set(["generalPurpose"]);
 
 /** Fixed spawn model slug (no placeholders). */
 const FIXED_MODEL_RE = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/i;
@@ -103,8 +110,7 @@ function lineAt(src: string, index: number): number {
  */
 function findStubs(file: string, src: string): Stub[] {
   const stubs: Stub[] = [];
-  // Allow the name on the next line inside the same code span, as in
-  // auto-plan's planner stub (`subagent_type:\n   generalPurpose`).
+  // Allow the name on the next line inside the same code span / stub block.
   const typeRe = /subagent_type:\s*([\w-]+)/g;
   let m: RegExpExecArray | null;
   while ((m = typeRe.exec(src))) {
@@ -160,6 +166,12 @@ for (const file of scanFiles) {
   const src = readFileSync(file, "utf8");
   for (const stub of findStubs(file, src)) {
     const loc = `${rel(stub.file)}:${stub.line}`;
+    if (FORBIDDEN_SUBAGENTS.has(stub.subagentType)) {
+      violations.push(
+        `${loc}: subagent_type '${stub.subagentType}' is forbidden — use a named plugin agent (builtins cannot be given a model through the SDK agents map)`,
+      );
+      continue;
+    }
     const builtin = BUILTIN_SUBAGENTS.has(stub.subagentType);
     const agent = agents.get(stub.subagentType);
 
@@ -197,14 +209,14 @@ for (const file of scanFiles) {
 
 if (violations.length === 0) {
   console.log(
-    "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve (builtins exempt).",
+    "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; generalPurpose forbidden.",
   );
   process.exit(0);
 }
 
 console.error(
   `agent-spawns: ${violations.length} spawn/pin agreement violation(s).\n` +
-    "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or a Cursor builtin).\n",
+    "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); generalPurpose is forbidden.\n",
 );
 for (const v of violations) {
   console.error(`  ${v}`);

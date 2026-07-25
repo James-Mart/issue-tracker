@@ -89,10 +89,11 @@ the product SHOULD be. Answer as the human PM would.
 ### Research delegation
 
 Whenever you need research — codebase investigation, online lookups,
-inspiration-app patterns, etc. — you MUST delegate to a Composer-2.5 Task
-(`subagent_type: generalPurpose`, `model: composer-2.5`). Prompt it to perform
-the research and return **only a concise summary**; ingest that summary for your
-judgment. Delegate work wherever possible to preserve your own context.
+inspiration-app patterns, etc. — you MUST delegate to an
+`issue-tracker-research` Task (`subagent_type: issue-tracker-research`,
+`model: composer-2.5`). Prompt it to perform the research and return **only a
+concise summary**; ingest that summary for your judgment. Delegate work wherever
+possible to preserve your own context.
 
 ### Subsystem vision consult
 
@@ -194,16 +195,22 @@ specifics and stop; otherwise proceed to Flow.
    (`subagent_type: issue-tracker-auto-plan-discriminator`,
    `model: composer-2.5`) with a prompt
    that is the source issue id followed by those three labelled statements.
-   Its entire final message is the planner model slug — capture it as
-   `<plannerModel>`. Unusable / errored → escalate per **## Refusals &
-   escalations**.
-2. **Vanilla planner.** Spawn a planner subagent (`subagent_type:
-   generalPurpose`, `model: <plannerModel>`) with a minimal prompt, e.g.:
+   Its entire final message is the planner family key (`grok` or `opus`) —
+   capture it as `<plannerFamily>`. Unusable / errored → escalate per
+   **## Refusals & escalations**.
+2. **Vanilla planner.** Spawn the matching planner wrapper for
+   `<plannerFamily>`:
+   - `grok` → `subagent_type: issue-tracker-planner-grok`
+     (`model: cursor-grok-4.5-high-fast`)
+   - `opus` → `subagent_type: issue-tracker-planner-opus`
+     (`model: claude-opus-5-thinking-high`)
+
+   Minimal prompt, e.g.:
 
    > Plan `<issue id>` in the issue tracker using the issue-tracker-plan skill.
 
    Do not over-instruct the grill mechanics — the planner owns them via the
-   skill.
+   agent body / skill.
 3. **Relay loop.** The planner asks one grill question and ends its turn; resume
    it (Task `resume`) with your answer, derived from the PM decision heuristics +
    vision + the source issue's theme + inspirationApps. Own any "shared understanding reached" / ready-for-
