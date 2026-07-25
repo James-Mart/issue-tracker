@@ -89,10 +89,11 @@ the product SHOULD be. Answer as the human PM would.
 ### Research delegation
 
 Whenever you need research — codebase investigation, online lookups,
-inspiration-app patterns, etc. — you MUST delegate to a Composer-2.5 Task
-(`subagent_type: generalPurpose`, `model: composer-2.5`). Prompt it to perform
-the research and return **only a concise summary**; ingest that summary for your
-judgment. Delegate work wherever possible to preserve your own context.
+inspiration-app patterns, etc. — you MUST delegate to an
+`issue-tracker-research` Task (`subagent_type: issue-tracker-research`,
+`model: composer-2.5`). Prompt it to perform the research and return **only a
+concise summary**; ingest that summary for your judgment. Delegate work wherever
+possible to preserve your own context.
 
 ### Subsystem vision consult
 
