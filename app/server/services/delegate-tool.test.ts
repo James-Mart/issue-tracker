@@ -12,8 +12,11 @@ import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import type { ConversationFrame } from "./conversation-stream.js";
 import {
   createDelegateCustomTools,
+  MAX_CONCURRENT_DELEGATIONS_GLOBAL,
+  MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION,
   MAX_DELEGATION_DEPTH,
   NESTED_RUN_HEARTBEAT_MS,
+  resetDelegationConcurrencyForTests,
 } from "./delegate-tool.js";
 import {
   formatEffectiveModel,
@@ -65,10 +68,23 @@ Follow the checklist.`,
 });
 
 afterEach(() => {
+  resetDelegationConcurrencyForTests();
   rmSync(agentsDir, { recursive: true, force: true });
   rmSync(storeDir, { recursive: true, force: true });
   rmSync(cwd, { recursive: true, force: true });
 });
+
+async function waitForHandleSend(
+  fake: ReturnType<typeof createFakeAgentSdk>,
+  handleIndex: number,
+): Promise<void> {
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    if (fake.handles[handleIndex]?.sends.length === 1) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error(`timed out waiting for handle[${handleIndex}] send`);
+}
 
 describe("createDelegateCustomTools", () => {
   it("creates a nested agent on the role's mapped pin with the role body prepended", async () => {
@@ -101,7 +117,7 @@ describe("createDelegateCustomTools", () => {
     });
   });
 
-  it("passes the same delegate tool to nested agents and handles nested delegation", async () => {
+  it("passes a nesting-capable delegate tool to nested agents", async () => {
     const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
     const customTools = createDelegateCustomTools({
       sdk: fake,
@@ -116,8 +132,7 @@ describe("createDelegateCustomTools", () => {
     );
 
     const nestedTools = fake.created[0]!.customTools;
-    expect(nestedTools).toBeDefined();
-    expect(nestedTools!.delegate).toBe(customTools.delegate);
+    expect(nestedTools?.delegate).toBeDefined();
 
     const nestedResult = await nestedTools!.delegate!.execute(
       { role: "pinned-role", prompt: "inner work" },
@@ -125,7 +140,7 @@ describe("createDelegateCustomTools", () => {
     );
 
     expect(fake.created).toHaveLength(2);
-    expect(fake.created[1]!.customTools?.delegate).toBe(customTools.delegate);
+    expect(fake.created[1]!.customTools?.delegate).toBeDefined();
     expect(fake.created[1]!.model).toEqual(
       resolveModelSelection("cursor-grok-4.5-high-fast"),
     );
@@ -150,34 +165,25 @@ describe("createDelegateCustomTools", () => {
     });
     const delegate = customTools.delegate!;
 
-    async function waitForSend(handleIndex: number): Promise<void> {
-      const deadline = Date.now() + 2000;
-      while (Date.now() < deadline) {
-        if (fake.handles[handleIndex]?.sends.length === 1) return;
-        await new Promise((r) => setTimeout(r, 10));
-      }
-      throw new Error(`timed out waiting for handle[${handleIndex}] send`);
-    }
-
     const depth1 = delegate.execute(
       { role: "pinned-role", prompt: "depth 1" },
       {},
     );
-    await waitForSend(0);
+    await waitForHandleSend(fake, 0);
 
     const delegate2 = fake.created[0]!.customTools!.delegate!;
     const depth2 = delegate2.execute(
       { role: "pinned-role", prompt: "depth 2" },
       {},
     );
-    await waitForSend(1);
+    await waitForHandleSend(fake, 1);
 
     const delegate3 = fake.created[1]!.customTools!.delegate!;
     const depth3 = delegate3.execute(
       { role: "pinned-role", prompt: "depth 3" },
       {},
     );
-    await waitForSend(2);
+    await waitForHandleSend(fake, 2);
 
     expect(fake.created).toHaveLength(MAX_DELEGATION_DEPTH);
 
@@ -191,6 +197,138 @@ describe("createDelegateCustomTools", () => {
 
     releaseHold();
     await Promise.all([depth1, depth2, depth3]);
+  });
+
+  it("starts up to the per-conversation concurrency cap and FIFO-queues the rest", async () => {
+    expect(MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION).toBe(6);
+    expect(MAX_CONCURRENT_DELEGATIONS_GLOBAL).toBe(24);
+
+    let releaseHold!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold, stream: [] });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: "conv-concurrency-a",
+    });
+    const delegate = customTools.delegate!;
+    const cap = MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION;
+
+    const running = Array.from({ length: cap }, (_, i) =>
+      delegate.execute({ role: "pinned-role", prompt: `slot ${i}` }, {}),
+    );
+    for (let i = 0; i < cap; i++) {
+      await waitForHandleSend(fake, i);
+    }
+    expect(fake.created).toHaveLength(cap);
+
+    const seventh = delegate.execute(
+      { role: "pinned-role", prompt: "queued" },
+      {},
+    );
+    // Give the 7th a chance to start if the cap were broken.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fake.created).toHaveLength(cap);
+
+    // Free one slot: complete the held runs, then only the first finisher
+    // releases before the others — releaseHold unblocks all iterators at once,
+    // so all six finish and the seventh starts as slots free.
+    releaseHold();
+    await Promise.all(running);
+    await waitForHandleSend(fake, cap);
+    expect(fake.created).toHaveLength(cap + 1);
+    await seventh;
+  });
+
+  it("does not let one conversation's concurrency limit queue another", async () => {
+    let releaseHold!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold, stream: [] });
+    const toolsA = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: "conv-cap-a",
+    });
+    const toolsB = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: "conv-cap-b",
+    });
+    const cap = MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION;
+
+    const fromA = Array.from({ length: cap }, (_, i) =>
+      toolsA.delegate!.execute(
+        { role: "pinned-role", prompt: `a-${i}` },
+        {},
+      ),
+    );
+    for (let i = 0; i < cap; i++) {
+      await waitForHandleSend(fake, i);
+    }
+    expect(fake.created).toHaveLength(cap);
+
+    const fromB = toolsB.delegate!.execute(
+      { role: "pinned-role", prompt: "b-unaffected" },
+      {},
+    );
+    await waitForHandleSend(fake, cap);
+    expect(fake.created).toHaveLength(cap + 1);
+
+    releaseHold();
+    await Promise.all([...fromA, fromB]);
+  });
+
+  it("releases the concurrency slot when nested-store setup fails", async () => {
+    let releaseHold!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold, stream: [] });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: "conv-slot-leak",
+    });
+    const delegate = customTools.delegate!;
+    const heldCount = MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION - 1;
+
+    const held = Array.from({ length: heldCount }, (_, i) =>
+      delegate.execute({ role: "pinned-role", prompt: `held-${i}` }, {}),
+    );
+    for (let i = 0; i < heldCount; i++) {
+      await waitForHandleSend(fake, i);
+    }
+
+    // Block mkdirSync(storeDir/nested/<uuid>) by making `nested` a file.
+    rmSync(join(storeDir, "nested"), { recursive: true, force: true });
+    writeFileSync(join(storeDir, "nested"), "not-a-directory");
+    await expect(
+      delegate.execute({ role: "pinned-role", prompt: "setup fails" }, {}),
+    ).rejects.toThrow();
+    expect(fake.created).toHaveLength(heldCount);
+
+    rmSync(join(storeDir, "nested"), { force: true });
+    const afterFailure = delegate.execute(
+      { role: "pinned-role", prompt: "slot freed" },
+      {},
+    );
+    await waitForHandleSend(fake, heldCount);
+    expect(fake.created).toHaveLength(heldCount + 1);
+
+    releaseHold();
+    await Promise.all([...held, afterFailure]);
   });
 });
 
@@ -221,6 +359,7 @@ describe("delegate publishes nested run frames", () => {
   });
 
   afterEach(() => {
+    resetDelegationConcurrencyForTests();
     vi.unstubAllEnvs();
     rmSync(issuesRoot, { recursive: true, force: true });
     rmSync(workspaceDir, { recursive: true, force: true });
@@ -350,10 +489,10 @@ describe("delegate publishes nested run frames", () => {
     );
     await waitForSend(fake, 0);
 
-    // Start the inner run while the outer is still on the delegation stack
-    // (held mid-stream). Both sends share the fake's hold, so await them
-    // only after release.
-    const innerPromise = customTools.delegate!.execute(
+    // Nest through the outer agent's bound delegate tools while the outer run
+    // is still held mid-stream. Both sends share the fake's hold, so await
+    // them only after release.
+    const innerPromise = fake.created[0]!.customTools!.delegate!.execute(
       { role: "pinned-role", prompt: "inner" },
       { toolCallId: "call-inner" },
     );

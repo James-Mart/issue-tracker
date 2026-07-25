@@ -16,6 +16,18 @@ export const NESTED_RUN_HEARTBEAT_MS = 5000;
 /** Maximum nested delegation depth (conversation root is 0). */
 export const MAX_DELEGATION_DEPTH = 3;
 
+/**
+ * Max in-flight nested runs in one conversation. Covers the widest known
+ * fan-out with headroom; further calls wait FIFO rather than failing.
+ */
+export const MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION = 6;
+
+/**
+ * Process-wide backstop on in-flight nested runs. High enough that normal
+ * multi-conversation use never hits it; only genuine runaway does.
+ */
+export const MAX_CONCURRENT_DELEGATIONS_GLOBAL = 24;
+
 export interface DelegateToolOptions {
   sdk: AgentSdk;
   cwd: string;
@@ -29,6 +41,77 @@ export interface DelegateToolOptions {
   agents?: Record<string, AgentDefinition>;
   /** Override agents directory (tests). Defaults to the plugin `agents/`. */
   agentsDir?: string;
+}
+
+type SlotGate = {
+  inFlight: number;
+  waiters: Array<() => void>;
+};
+
+const globalGate: SlotGate = { inFlight: 0, waiters: [] };
+const conversationGates = new Map<string, SlotGate>();
+
+/** Test helper: clear process-wide concurrency accounting. */
+export function resetDelegationConcurrencyForTests(): void {
+  globalGate.inFlight = 0;
+  globalGate.waiters.length = 0;
+  conversationGates.clear();
+}
+
+function conversationGate(key: string): SlotGate {
+  let gate = conversationGates.get(key);
+  if (!gate) {
+    gate = { inFlight: 0, waiters: [] };
+    conversationGates.set(key, gate);
+  }
+  return gate;
+}
+
+function tryAcquire(convGate: SlotGate): boolean {
+  if (convGate.inFlight >= MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION) {
+    return false;
+  }
+  if (globalGate.inFlight >= MAX_CONCURRENT_DELEGATIONS_GLOBAL) {
+    return false;
+  }
+  convGate.inFlight += 1;
+  globalGate.inFlight += 1;
+  return true;
+}
+
+function wakeNext(gate: SlotGate): void {
+  const next = gate.waiters.shift();
+  if (next) next();
+}
+
+function releaseSlot(convKey: string, convGate: SlotGate): void {
+  convGate.inFlight -= 1;
+  globalGate.inFlight -= 1;
+  wakeNext(convGate);
+  wakeNext(globalGate);
+  if (convGate.inFlight === 0 && convGate.waiters.length === 0) {
+    conversationGates.delete(convKey);
+  }
+}
+
+/**
+ * Acquire a per-conversation + global concurrency slot. Waits FIFO when either
+ * limit is saturated; never fails for concurrency.
+ */
+async function acquireConcurrencySlot(
+  convKey: string,
+): Promise<() => void> {
+  const convGate = conversationGate(convKey);
+  while (!tryAcquire(convGate)) {
+    await new Promise<void>((resolve) => {
+      if (convGate.inFlight >= MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION) {
+        convGate.waiters.push(resolve);
+      } else {
+        globalGate.waiters.push(resolve);
+      }
+    });
+  }
+  return () => releaseSlot(convKey, convGate);
 }
 
 function requireString(
@@ -52,133 +135,160 @@ function assistantTextFromEvent(event: AgentStreamEvent): string {
   return reply;
 }
 
+type ParentFrame = {
+  delegationId: string;
+  depth: number;
+};
+
 /**
  * Build the `customTools` map containing the app-hosted `delegate` bridge.
- * The same map is passed to every nested agent so delegation works at any depth.
+ * Each nested agent receives tools closed over its parent frame so concurrent
+ * siblings do not inflate depth or steal parentage from each other.
  */
 export function createDelegateCustomTools(
   options: DelegateToolOptions,
 ): Record<string, SDKCustomTool> {
-  const customTools: Record<string, SDKCustomTool> = {};
-  /** In-flight delegation ids; the top of the stack is the current parent. */
-  const delegationStack: string[] = [];
+  /** Cap key when `conversationId` is omitted (one gate per tools factory). */
+  const anonymousKey = `anonymous:${randomUUID()}`;
+  const concurrencyKey = options.conversationId ?? anonymousKey;
 
-  customTools.delegate = {
-    description:
-      "Delegate work to a named role. The app selects the role's pinned model.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        role: {
-          type: "string",
-          description: "Spawnable role name (agents/<role>.md).",
+  function buildCustomTools(
+    parent: ParentFrame | null,
+  ): Record<string, SDKCustomTool> {
+    const customTools: Record<string, SDKCustomTool> = {};
+
+    customTools.delegate = {
+      description:
+        "Delegate work to a named role. The app selects the role's pinned model.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          role: {
+            type: "string",
+            description: "Spawnable role name (agents/<role>.md).",
+          },
+          prompt: {
+            type: "string",
+            description: "Task prompt for the nested agent.",
+          },
         },
-        prompt: {
-          type: "string",
-          description: "Task prompt for the nested agent.",
-        },
+        required: ["role", "prompt"],
       },
-      required: ["role", "prompt"],
-    },
-    execute: async (args, context) => {
-      const role = requireString(args, "role");
-      const prompt = requireString(args, "prompt");
+      execute: async (args, context) => {
+        const role = requireString(args, "role");
+        const prompt = requireString(args, "prompt");
 
-      const attemptedDepth = delegationStack.length + 1;
-      if (attemptedDepth > MAX_DELEGATION_DEPTH) {
-        throw new Error(
-          `delegate: maximum delegation depth is ${MAX_DELEGATION_DEPTH} (attempted depth ${attemptedDepth})`,
-        );
-      }
-
-      const agentsDir = options.agentsDir;
-
-      const pin = loadRoleModelPin(role, agentsDir);
-      const model = resolveModelSelection(pin);
-      const roleBody = loadRoleBody(role, agentsDir);
-      const fullPrompt = `${roleBody}\n\n${prompt}`;
-
-      const nestedStoreDir = join(options.storeDir, "nested", randomUUID());
-      mkdirSync(nestedStoreDir, { recursive: true });
-
-      const delegationId = randomUUID();
-      const parentDelegationId = delegationStack[delegationStack.length - 1];
-      const parentCallId =
-        typeof context.toolCallId === "string" && context.toolCallId.length > 0
-          ? context.toolCallId
-          : undefined;
-      const pipeline =
-        options.conversationId && parentCallId
-          ? new EventPipeline(options.conversationId)
-          : undefined;
-      const stamp = {
-        delegationId,
-        ...(parentDelegationId !== undefined ? { parentDelegationId } : {}),
-        model: formatEffectiveModel(model),
-      };
-
-      const handle = await options.sdk.createAgent({
-        cwd: options.cwd,
-        model,
-        storeDir: nestedStoreDir,
-        agents: options.agents,
-        customTools,
-      });
-
-      delegationStack.push(delegationId);
-      try {
-        const run = await handle.send(fullPrompt);
-        let reply = "";
-        const startedAt = Date.now();
-        let heartbeat: ReturnType<typeof setInterval> | undefined;
-        if (pipeline && parentCallId) {
-          const callId = parentCallId;
-          heartbeat = setInterval(() => {
-            void pipeline.emitLiveness(callId, stamp, Date.now() - startedAt);
-          }, NESTED_RUN_HEARTBEAT_MS);
+        const attemptedDepth = (parent?.depth ?? 0) + 1;
+        if (attemptedDepth > MAX_DELEGATION_DEPTH) {
+          throw new Error(
+            `delegate: maximum delegation depth is ${MAX_DELEGATION_DEPTH} (attempted depth ${attemptedDepth})`,
+          );
         }
-        try {
-          for await (const event of run) {
-            reply += assistantTextFromEvent(event);
-            if (pipeline && parentCallId) {
-              await pipeline.handleDelegation(parentCallId, stamp, event);
-            }
-          }
-          if (pipeline) await pipeline.flush();
 
-          const waited = await run.wait();
-          if (waited.status === "error") {
-            throw new Error(
-              waited.error?.message ??
-                `delegate: nested run ${waited.id} failed`,
-            );
+        const agentsDir = options.agentsDir;
+
+        const pin = loadRoleModelPin(role, agentsDir);
+        const model = resolveModelSelection(pin);
+        const roleBody = loadRoleBody(role, agentsDir);
+        const fullPrompt = `${roleBody}\n\n${prompt}`;
+
+        const release = await acquireConcurrencySlot(concurrencyKey);
+        let handle: Awaited<ReturnType<AgentSdk["createAgent"]>> | undefined;
+        try {
+          const nestedStoreDir = join(options.storeDir, "nested", randomUUID());
+          mkdirSync(nestedStoreDir, { recursive: true });
+
+          const delegationId = randomUUID();
+          const parentDelegationId = parent?.delegationId;
+          const parentCallId =
+            typeof context.toolCallId === "string" &&
+            context.toolCallId.length > 0
+              ? context.toolCallId
+              : undefined;
+          const pipeline =
+            options.conversationId && parentCallId
+              ? new EventPipeline(options.conversationId)
+              : undefined;
+          const stamp = {
+            delegationId,
+            ...(parentDelegationId !== undefined
+              ? { parentDelegationId }
+              : {}),
+            model: formatEffectiveModel(model),
+          };
+
+          const nestedCustomTools = buildCustomTools({
+            delegationId,
+            depth: attemptedDepth,
+          });
+
+          handle = await options.sdk.createAgent({
+            cwd: options.cwd,
+            model,
+            storeDir: nestedStoreDir,
+            agents: options.agents,
+            customTools: nestedCustomTools,
+          });
+
+          const run = await handle.send(fullPrompt);
+          let reply = "";
+          const startedAt = Date.now();
+          let heartbeat: ReturnType<typeof setInterval> | undefined;
+          if (pipeline && parentCallId) {
+            const callId = parentCallId;
+            heartbeat = setInterval(() => {
+              void pipeline.emitLiveness(callId, stamp, Date.now() - startedAt);
+            }, NESTED_RUN_HEARTBEAT_MS);
           }
-          if (waited.status === "cancelled") {
-            throw new Error(`delegate: nested run ${waited.id} was cancelled`);
-          }
-          return { agentId: handle.agentId, reply };
-        } catch (err) {
-          if (pipeline) {
-            try {
-              await pipeline.flush();
-            } catch {
-              // Best-effort flush after a mid-run failure.
+          try {
+            for await (const event of run) {
+              reply += assistantTextFromEvent(event);
+              if (pipeline && parentCallId) {
+                await pipeline.handleDelegation(parentCallId, stamp, event);
+              }
             }
+            if (pipeline) await pipeline.flush();
+
+            const waited = await run.wait();
+            if (waited.status === "error") {
+              throw new Error(
+                waited.error?.message ??
+                  `delegate: nested run ${waited.id} failed`,
+              );
+            }
+            if (waited.status === "cancelled") {
+              throw new Error(
+                `delegate: nested run ${waited.id} was cancelled`,
+              );
+            }
+            return { agentId: handle.agentId, reply };
+          } catch (err) {
+            if (pipeline) {
+              try {
+                await pipeline.flush();
+              } catch {
+                // Best-effort flush after a mid-run failure.
+              }
+            }
+            throw err;
+          } finally {
+            if (heartbeat !== undefined) clearInterval(heartbeat);
           }
-          throw err;
         } finally {
-          if (heartbeat !== undefined) clearInterval(heartbeat);
+          release();
+          if (handle) {
+            try {
+              await handle[Symbol.asyncDispose]();
+            } catch {
+              // Best-effort dispose after the reply is collected.
+            }
+          }
         }
-      } finally {
-        delegationStack.pop();
-        try {
-          await handle[Symbol.asyncDispose]();
-        } catch {
-          // Best-effort dispose after the reply is collected.
-        }
-      }
-    },
-  };
+      },
+    };
 
-  return customTools;
+    return customTools;
+  }
+
+  return buildCustomTools(null);
 }
