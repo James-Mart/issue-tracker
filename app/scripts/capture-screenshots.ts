@@ -30,11 +30,14 @@ type IssueRecord = {
   title?: string;
 };
 
+type Viewport = { width: number; height: number };
+
 type Options = {
   baseUrl: string;
   out: string;
   project: string | null;
   theme: ThemeMode;
+  viewport: Viewport;
   all: boolean;
   list: boolean;
   targets: string[];
@@ -44,7 +47,7 @@ const THEME_STORAGE_KEY = "ui-theme";
 const DEFAULT_BASE_URL = "http://localhost:8060";
 const DEFAULT_OUT = "/tmp/issue-tracker-screenshots";
 const SETTLE_MS = 800;
-const VIEWPORT = { width: 1440, height: 900 } as const;
+const DEFAULT_VIEWPORT: Viewport = { width: 1440, height: 900 };
 
 const SUPPORTING_DOC_TABS = [
   { label: "Vision", filename: "project-vision" },
@@ -65,9 +68,25 @@ Options:
   --out <dir>        Output directory (default ${DEFAULT_OUT})
   --project <id>     Project for --all / dialog context (default: issue-tracker if present, else first project)
   --theme <mode>     light | dark | both (default dark)
+  --viewport <WxH>   Browser viewport (default ${DEFAULT_VIEWPORT.width}x${DEFAULT_VIEWPORT.height})
   --all              Capture common paths for --project plus all dialogs
   --list             Print dialog names and exit
 `;
+}
+
+function parseViewport(value: string): Viewport {
+  const match = /^(\d+)x(\d+)$/i.exec(value.trim());
+  if (!match) {
+    throw new Error(
+      `--viewport must be <width>x<height> (e.g. 1440x900), got: ${JSON.stringify(value)}`,
+    );
+  }
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (width < 1 || height < 1) {
+    throw new Error(`--viewport width and height must be positive integers, got: ${value}`);
+  }
+  return { width, height };
 }
 
 function isDialog(target: string): target is DialogId {
@@ -80,6 +99,7 @@ function parseArgs(argv: string[]): Options {
     out: DEFAULT_OUT,
     project: null,
     theme: "dark",
+    viewport: DEFAULT_VIEWPORT,
     all: false,
     list: false,
     targets: [],
@@ -105,6 +125,10 @@ function parseArgs(argv: string[]): Options {
         throw new Error("--theme must be light, dark, or both");
       }
       opts.theme = value;
+    } else if (arg === "--viewport" || arg.startsWith("--viewport=")) {
+      const value = arg.startsWith("--viewport=") ? arg.slice("--viewport=".length) : argv[++i];
+      if (!value) throw new Error("--viewport requires a value");
+      opts.viewport = parseViewport(value);
     } else if (arg === "--all") {
       opts.all = true;
     } else if (arg === "--list") {
@@ -440,7 +464,7 @@ async function main(): Promise<void> {
   const themeSuffix = opts.theme === "both";
 
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: VIEWPORT });
+  const page = await browser.newPage({ viewport: opts.viewport });
 
   let succeeded = 0;
   try {

@@ -59,12 +59,14 @@ function ErrorEvent({ message }: { message: string }) {
 
 function PromptEvent({ text }: { text: string }) {
   return (
-    <div className="flex justify-end" data-event="prompt">
-      <div className="max-w-[85%] rounded-lg border border-border bg-[hsl(var(--panel-2))] px-3.5 py-2.5">
+    <div className="flex min-w-0 justify-end" data-event="prompt">
+      <div className="min-w-0 max-w-[min(85%,100%)] rounded-lg border border-border bg-[hsl(var(--panel-2))] px-3.5 py-2.5">
         <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
           You
         </p>
-        <p className="whitespace-pre-wrap text-sm text-foreground">{text}</p>
+        <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+          {text}
+        </p>
       </div>
     </div>
   );
@@ -72,7 +74,7 @@ function PromptEvent({ text }: { text: string }) {
 
 function AssistantEvent({ text }: { text: string }) {
   return (
-    <div data-event="assistant">
+    <div className="min-w-0" data-event="assistant">
       <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--current))]">
         Assistant
       </p>
@@ -219,7 +221,7 @@ function ThreadBody({
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
+      className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto px-4 py-4"
       role="log"
       aria-label="Conversation transcript"
       aria-live="polite"

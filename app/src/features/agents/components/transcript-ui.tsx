@@ -102,7 +102,7 @@ export function CollapsibleDetails({
     >
       <summary
         className={cn(
-          "flex cursor-pointer list-none items-center gap-1.5 font-mono text-[11px] text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden",
+          "flex min-h-11 cursor-pointer list-none items-center gap-1.5 font-mono text-[11px] text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden",
           summaryClassName,
         )}
       >
@@ -129,12 +129,12 @@ export function CollapsiblePayload({
   return (
     <CollapsibleDetails
       label={label}
-      className="mt-2 rounded-md border border-border bg-[hsl(var(--panel-2))]"
+      className="mt-2 min-w-0 rounded-md border border-border bg-[hsl(var(--panel-2))]"
       summaryClassName="px-2.5 py-1.5"
-      bodyClassName="px-2.5 py-2"
+      bodyClassName="min-w-0 px-2.5 py-2"
       {...(initiallyOpen !== undefined ? { initiallyOpen } : {})}
     >
-      <pre className="max-h-64 overflow-auto font-mono text-[11px] leading-relaxed text-foreground/90">
+      <pre className="max-h-64 min-w-0 overflow-x-auto overflow-y-auto whitespace-pre font-mono text-[11px] leading-relaxed text-foreground/90">
         {formatUnknown(value)}
       </pre>
     </CollapsibleDetails>
@@ -151,7 +151,7 @@ export function TranscriptMarkdownText({
   className?: string;
 } & ComponentPropsWithoutRef<"div">) {
   return (
-    <div className={cn("min-w-0", className)} {...attrs}>
+    <div className={cn("min-w-0 break-words", className)} {...attrs}>
       <Markdown>{text}</Markdown>
     </div>
   );
@@ -172,7 +172,7 @@ export function TranscriptThinking({
   return (
     <CollapsibleDetails
       label="Thinking"
-      className="rounded-md border border-border bg-card"
+      className="min-w-0 rounded-md border border-border bg-card"
       summaryClassName={pad.thinkingSummary}
       bodyClassName={pad.thinkingBody}
       {...attrs}
@@ -180,7 +180,7 @@ export function TranscriptThinking({
       // omit the attr otherwise so users can toggle historical thinking freely.
       {...(open ? { open: true } : {})}
     >
-      <p className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground">
+      <p className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-muted-foreground">
         {text}
       </p>
     </CollapsibleDetails>
@@ -210,7 +210,7 @@ export function TranscriptToolCall({
   return (
     <div
       className={cn(
-        "rounded-md border border-border bg-card",
+        "min-w-0 rounded-md border border-border bg-card",
         densityPad[density].tool,
         className,
       )}
@@ -219,16 +219,16 @@ export function TranscriptToolCall({
       data-status={status}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-xs font-medium text-foreground">
+        <span className="min-w-0 font-mono text-xs font-medium text-foreground">
           {toolName}
         </span>
         <Badge
           variant={toolStatusVariant(status)}
-          className={running ? "animate-pulse" : undefined}
+          className={cn("shrink-0", running && "animate-pulse")}
         >
           {status}
         </Badge>
-        <span className="font-mono text-[10px] text-muted-foreground">
+        <span className="min-w-0 break-all font-mono text-[10px] text-muted-foreground">
           {callId}
         </span>
       </div>
