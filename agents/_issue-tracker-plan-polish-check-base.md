@@ -37,7 +37,7 @@ Load issue specs via `issue <kind> view <id>` (and `<kind> get` for scalars).
      polish roots). Set `<rootKind>` = `story`.
    - Any other kind → refuse.
    On refuse: check agents return `[]` and stop; the coordinator stops and
-   hands back to the user (does not spawn checks).
+   hands back to the user (does not delegate checks).
 3. **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
    Consult `vision` per that file using the step-1 summary output.
@@ -48,12 +48,12 @@ Load issue specs via `issue <kind> view <id>` (and `<kind> get` for scalars).
 ## Inputs (from invoking prompt)
 
 - **Work root** id (+ title) — Epic or project-level Story
-- Return findings **only** in this Cursor Task result to the parent (never
+- Return findings **only** in this delegation result to the parent (never
   `issue <kind> comment` or other writes).
 
 ## Output
 
-Return **only** a JSON array (empty `[]` if clean) as the Cursor Task result
+Return **only** a JSON array (empty `[]` if clean) as the delegation result
 body — no prose wrapper, no Markdown fences. Each element:
 
 ```json
