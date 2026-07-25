@@ -12,8 +12,9 @@
     "preview": "vite build && tsx server/index.ts",
     "cli": "tsx cli.ts",
     "lint:boundary": "tsx scripts/check-client-boundary.ts",
+    "lint:spawns": "tsx scripts/check-agent-spawns.ts",
     "screenshots": "tsx scripts/capture-screenshots.ts",
-    "test": "npm run lint:boundary && vitest run",
+    "test": "npm run lint:boundary && npm run lint:spawns && vitest run",
     "test:live": "CURSOR_SDK_LIVE=1 vitest run agent-sdk.live",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots"
