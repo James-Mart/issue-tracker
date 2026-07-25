@@ -44,12 +44,7 @@ If none is given, ask the user for the issue id; do not guess or run a picker.
 
 ## Model availability
 
-Every spawn in this skill — research during bootstrap, the discriminator, the
-planner wrapper — names the model its target agent is pinned to. Pass it when
-that slug is among those your Task tool advertises; when it is not, pass no
-model at all: the pin travels with the agent definition and the host applies
-it. Never substitute a different slug, and do not treat an unavailable slug as
-a refusal.
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-model-availability.md`.
 
 ## Bootstrap
 

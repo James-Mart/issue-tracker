@@ -10,6 +10,10 @@
 // Stubs parameterized by `<family>` expand to each family wrapper and validate
 // that every wrapper exists and carries a frontmatter pin.
 //
+// Files with spawn stubs or fixed `` `model: <slug>` `` literals must also
+// **Read** `agents/_issue-tracker-model-availability.md` (workspace-gate
+// style: tolerate `**Read**` and the path on adjacent lines).
+//
 // Run: `npm run lint:spawns` (also part of `npm test`).
 
 import { readdirSync, readFileSync, statSync } from "fs";
@@ -33,6 +37,12 @@ const FORBIDDEN_SUBAGENTS = new Set(["generalPurpose"]);
 
 /** Fixed spawn model slug (no placeholders). */
 const FIXED_MODEL_RE = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/i;
+
+/** Shared include every stub / fixed-model file must **Read**. */
+const MODEL_AVAILABILITY_SUFFIX = "_issue-tracker-model-availability.md";
+
+/** `` `model: <slug>` `` anywhere in a scanned file (not just stub windows). */
+const FIXED_MODEL_LITERAL_RE = /`model:\s*([^`;\n]+?)`/g;
 
 /** Families a `<family>`-parameterized stub must resolve against. */
 const FAMILIES = ["composer", "grok", "opus"] as const;
@@ -173,6 +183,39 @@ function findStubs(file: string, src: string): Stub[] {
   return stubs;
 }
 
+/** Fixed `` `model: <slug>` `` literals in the whole file. */
+function findFixedModelLiterals(
+  src: string,
+): { line: number; slug: string }[] {
+  const hits: { line: number; slug: string }[] = [];
+  let m: RegExpExecArray | null;
+  FIXED_MODEL_LITERAL_RE.lastIndex = 0;
+  while ((m = FIXED_MODEL_LITERAL_RE.exec(src))) {
+    const slug = m[1].trim();
+    if (FIXED_MODEL_RE.test(slug)) {
+      hits.push({ line: lineAt(src, m.index), slug });
+    }
+  }
+  return hits;
+}
+
+/**
+ * Workspace-gate-style **Read** of the shared Model availability include.
+ * Tolerates `**Read**` and the path on the same line or up to three lines
+ * above the path reference.
+ */
+function hasModelAvailabilityRead(src: string): boolean {
+  if (!src.includes(MODEL_AVAILABILITY_SUFFIX)) return false;
+  const lines = src.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].includes(MODEL_AVAILABILITY_SUFFIX)) continue;
+    for (let j = Math.max(0, i - 3); j <= i; j++) {
+      if (/\*\*Read\*\*/.test(lines[j])) return true;
+    }
+  }
+  return false;
+}
+
 const rel = (f: string) => relative(ROOT_DIR, f);
 
 const agents = loadSpawnableAgents();
@@ -185,7 +228,19 @@ const violations: string[] = [];
 
 for (const file of scanFiles) {
   const src = readFileSync(file, "utf8");
-  for (const stub of findStubs(file, src)) {
+  const stubs = findStubs(file, src);
+  const fixedModels = findFixedModelLiterals(src);
+
+  const readTriggers: string[] = [];
+  if (stubs.length > 0) readTriggers.push("spawn stub");
+  if (fixedModels.length > 0) readTriggers.push("fixed model literal");
+  if (readTriggers.length > 0 && !hasModelAvailabilityRead(src)) {
+    violations.push(
+      `${rel(file)}: missing **Read** of agents/_issue-tracker-model-availability.md (triggered by ${readTriggers.join(" and ")})`,
+    );
+  }
+
+  for (const stub of stubs) {
     const loc = `${rel(stub.file)}:${stub.line}`;
     if (FORBIDDEN_SUBAGENTS.has(stub.subagentType)) {
       violations.push(
@@ -252,14 +307,14 @@ for (const file of scanFiles) {
 
 if (violations.length === 0) {
   console.log(
-    "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; family-parameterized stubs expand to pinned wrappers; generalPurpose forbidden.",
+    "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; family-parameterized stubs expand to pinned wrappers; generalPurpose forbidden; stub/model-literal files **Read** Model availability.",
   );
   process.exit(0);
 }
 
 console.error(
   `agent-spawns: ${violations.length} spawn/pin agreement violation(s).\n` +
-    "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); family-parameterized stubs must expand to pinned family wrappers; generalPurpose is forbidden.\n",
+    "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); family-parameterized stubs must expand to pinned family wrappers; generalPurpose is forbidden; files with spawn stubs or fixed `model: <slug>` literals must **Read** agents/_issue-tracker-model-availability.md.\n",
 );
 for (const v of violations) {
   console.error(`  ${v}`);
