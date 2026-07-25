@@ -1,37 +1,29 @@
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import type { ReactNode } from "react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Markdown } from "@/features/issues/components/markdown";
-import { cn } from "@/lib/utils/cn";
 import { useConversationsQuery } from "../api/queries";
 import { useConversationEvents } from "../hooks/use-conversation-events";
+import {
+  deriveSubAgents,
+  isSubAgentToolCall,
+  type SubAgent,
+} from "../lib/subagent";
 import { Composer } from "./composer";
-
-function formatUnknown(value: unknown): string {
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function toolStatusVariant(
-  status: "running" | "completed" | "error",
-): "inProgress" | "done" | "blocked" {
-  if (status === "running") return "inProgress";
-  if (status === "completed") return "done";
-  return "blocked";
-}
+import { SubagentCard } from "./subagent-card";
+import {
+  indexedStreamKey,
+  toolCallRowKey,
+  TranscriptMarkdownText,
+  TranscriptThinking,
+  TranscriptToolCall,
+} from "./transcript-ui";
 
 function eventKey(event: TranscriptEvent, index: number): string {
-  if (event.type === "tool_call") return `tool_call-${event.callId}`;
+  if (event.type === "tool_call") return toolCallRowKey(event.callId);
   // Index-stable for in-place assistant delta updates (avoid remounting
   // Markdown on every token). `at` changes each delta and is not usable.
-  return `${index}-${event.type}`;
+  return indexedStreamKey(index, event.type);
 }
 
 function InfoLine({
@@ -51,60 +43,6 @@ function InfoLine({
   );
 }
 
-function CollapsibleDetails({
-  label,
-  children,
-  className,
-  summaryClassName,
-  bodyClassName,
-  ...detailsProps
-}: {
-  label: ReactNode;
-  children: ReactNode;
-  className?: string;
-  summaryClassName?: string;
-  bodyClassName?: string;
-} & Omit<ComponentPropsWithoutRef<"details">, "className" | "children">) {
-  return (
-    <details className={cn("group", className)} {...detailsProps}>
-      <summary
-        className={cn(
-          "flex cursor-pointer list-none items-center gap-1.5 font-mono text-[11px] text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden",
-          summaryClassName,
-        )}
-      >
-        <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
-        {label}
-      </summary>
-      <div className={cn("border-t border-border", bodyClassName)}>
-        {children}
-      </div>
-    </details>
-  );
-}
-
-function CollapsiblePayload({
-  label,
-  value,
-}: {
-  label: string;
-  value: unknown;
-}) {
-  if (value === undefined) return null;
-  return (
-    <CollapsibleDetails
-      label={label}
-      className="mt-2 rounded-md border border-border bg-[hsl(var(--panel-2))]"
-      summaryClassName="px-2.5 py-1.5"
-      bodyClassName="px-2.5 py-2"
-    >
-      <pre className="max-h-64 overflow-auto font-mono text-[11px] leading-relaxed text-foreground/90">
-        {formatUnknown(value)}
-      </pre>
-    </CollapsibleDetails>
-  );
-}
-
 function PromptEvent({ text }: { text: string }) {
   return (
     <div className="flex justify-end" data-event="prompt">
@@ -120,31 +58,18 @@ function PromptEvent({ text }: { text: string }) {
 
 function AssistantEvent({ text }: { text: string }) {
   return (
-    <div className="min-w-0" data-event="assistant">
+    <div data-event="assistant">
       <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--current))]">
         Assistant
       </p>
-      <Markdown>{text}</Markdown>
+      <TranscriptMarkdownText text={text} />
     </div>
   );
 }
 
 function ThinkingEvent({ text, open }: { text: string; open?: boolean }) {
   return (
-    <CollapsibleDetails
-      label="Thinking"
-      className="rounded-md border border-border bg-card"
-      summaryClassName="px-3 py-2"
-      bodyClassName="px-3 py-2"
-      data-event="thinking"
-      // Only force-open while this block is still the live tip of the stream;
-      // omit the attr otherwise so users can toggle historical thinking freely.
-      {...(open ? { open: true } : {})}
-    >
-      <p className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground">
-        {text}
-      </p>
-    </CollapsibleDetails>
+    <TranscriptThinking text={text} open={open} data-event="thinking" />
   );
 }
 
@@ -153,32 +78,15 @@ function ToolCallEvent({
 }: {
   event: Extract<TranscriptEvent, { type: "tool_call" }>;
 }) {
-  const name = event.name?.trim() || "tool";
-  const running = event.status === "running";
   return (
-    <div
-      className="rounded-md border border-border bg-card px-3 py-2.5"
+    <TranscriptToolCall
+      callId={event.callId}
+      name={event.name}
+      status={event.status}
+      args={event.args}
+      result={event.result}
       data-event="tool_call"
-      data-call-id={event.callId}
-      data-status={event.status}
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-xs font-medium text-foreground">
-          {name}
-        </span>
-        <Badge
-          variant={toolStatusVariant(event.status)}
-          className={running ? "animate-pulse" : undefined}
-        >
-          {event.status}
-        </Badge>
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {event.callId}
-        </span>
-      </div>
-      <CollapsiblePayload label="Args" value={event.args} />
-      <CollapsiblePayload label="Result" value={event.result} />
-    </div>
+    />
   );
 }
 
@@ -195,9 +103,11 @@ function isLiveThinking(events: TranscriptEvent[], index: number): boolean {
 
 function TranscriptEventRow({
   event,
+  subAgentsByCallId,
   thinkingOpen,
 }: {
   event: TranscriptEvent;
+  subAgentsByCallId: Map<string, SubAgent>;
   thinkingOpen?: boolean;
 }) {
   switch (event.type) {
@@ -207,8 +117,13 @@ function TranscriptEventRow({
       return <AssistantEvent text={event.text} />;
     case "thinking":
       return <ThinkingEvent text={event.text} open={thinkingOpen} />;
-    case "tool_call":
+    case "tool_call": {
+      if (isSubAgentToolCall(event)) {
+        const agent = subAgentsByCallId.get(event.callId);
+        if (agent) return <SubagentCard agent={agent} />;
+      }
       return <ToolCallEvent event={event} />;
+    }
     case "task": {
       const parts = [event.status, event.text].filter(Boolean);
       return (
@@ -241,7 +156,7 @@ function TranscriptEventRow({
       // Informational only — Epic auto-run posture; never a blocking prompt.
       return <InfoLine label="Request">{event.requestId}</InfoLine>;
     case "subagent_update":
-      // Accumulated in the stream hook; nested card lands in a later Story.
+      // Folded into SubagentCard via deriveSubAgents; not a top-level row.
       return null;
     default:
       // Tolerate unknown future kinds without crashing.
@@ -282,6 +197,10 @@ function ThreadBody({
     );
   }
 
+  const subAgentsByCallId = new Map(
+    deriveSubAgents(events).map((agent) => [agent.callId, agent]),
+  );
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
@@ -294,6 +213,7 @@ function ThreadBody({
         <TranscriptEventRow
           key={eventKey(event, index)}
           event={event}
+          subAgentsByCallId={subAgentsByCallId}
           thinkingOpen={
             event.type === "thinking" && isLiveThinking(events, index)
           }
