@@ -506,6 +506,10 @@ const subagentUpdateEventInput = z.object({
   parentCallId: nonEmpty,
   step: nestedStepSchema,
 });
+const errorEventInput = z.object({
+  type: z.literal("error"),
+  message: z.string(),
+});
 
 /** Write-time input: stored shape minus the server-stamped `at`. */
 export const transcriptEventInputSchema = z.discriminatedUnion("type", [
@@ -518,6 +522,7 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
   usageEventInput,
   requestEventInput,
   subagentUpdateEventInput,
+  errorEventInput,
 ]);
 
 export type TranscriptEventInput = z.infer<typeof transcriptEventInputSchema>;
@@ -535,6 +540,7 @@ export const transcriptEventSchema = z.discriminatedUnion("type", [
   withTranscriptAt(usageEventInput),
   withTranscriptAt(requestEventInput),
   withTranscriptAt(subagentUpdateEventInput),
+  withTranscriptAt(errorEventInput),
 ]);
 
 export type TranscriptEvent = z.infer<typeof transcriptEventSchema>;

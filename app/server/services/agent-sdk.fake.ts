@@ -196,13 +196,15 @@ export interface FakeAgentSdkOptions {
    * any events (keeps the run active for cancel/dispose tests).
    */
   hold?: Promise<void>;
+  /** When set, every `resumeAgent(...)` rejects with this error. */
+  resumeError?: Error;
 }
 
 export interface FakeAgentSdk extends AgentSdk {
   /** Options passed to each `createAgent(...)`. */
   readonly created: CreateAgentOptions[];
-  /** Agent ids passed to each `resumeAgent(...)`. */
-  readonly resumed: string[];
+  /** Agent ids and store dirs passed to each `resumeAgent(...)`. */
+  readonly resumed: Array<{ agentId: string; storeDir: string }>;
   /** Every handle this fake handed out. */
   readonly handles: FakeAgentHandle[];
 }
@@ -219,7 +221,7 @@ export function createFakeAgentSdk(
   const models = options.models ?? FAKE_MODELS;
   const stream = options.stream ?? buildScriptedStream();
   const created: CreateAgentOptions[] = [];
-  const resumed: string[] = [];
+  const resumed: Array<{ agentId: string; storeDir: string }> = [];
   const handles: FakeAgentHandle[] = [];
 
   function makeHandle(agentId: string): FakeAgentHandle {
@@ -282,8 +284,9 @@ export function createFakeAgentSdk(
       created.push(createOptions);
       return makeHandle(createOptions.agentId ?? FAKE_AGENT_ID);
     },
-    async resumeAgent(agentId) {
-      resumed.push(agentId);
+    async resumeAgent(agentId, storeDir) {
+      resumed.push({ agentId, storeDir });
+      if (options.resumeError) throw options.resumeError;
       return makeHandle(agentId);
     },
   };

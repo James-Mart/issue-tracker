@@ -1,3 +1,4 @@
+import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { agentSdk, type AgentStreamEvent } from "./agent-sdk.js";
 
@@ -16,6 +17,7 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("agent-sdk (live)", () => {
     await using agent = await agentSdk.createAgent({
       cwd: process.cwd(),
       model: { id: "composer-2.5" },
+      storeDir: join(process.cwd(), ".agent-state-test"),
     });
 
     const run = await agent.send('Reply with the single word "pong".');

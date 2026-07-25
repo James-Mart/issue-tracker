@@ -43,6 +43,20 @@ function InfoLine({
   );
 }
 
+function ErrorEvent({ message }: { message: string }) {
+  return (
+    <div
+      className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive-foreground"
+      data-event="error"
+    >
+      <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-destructive">
+        Send failed
+      </p>
+      <p className="whitespace-pre-wrap break-words">{message}</p>
+    </div>
+  );
+}
+
 function PromptEvent({ text }: { text: string }) {
   return (
     <div className="flex justify-end" data-event="prompt">
@@ -155,6 +169,8 @@ function TranscriptEventRow({
     case "request":
       // Informational only — Epic auto-run posture; never a blocking prompt.
       return <InfoLine label="Request">{event.requestId}</InfoLine>;
+    case "error":
+      return <ErrorEvent message={event.message} />;
     case "subagent_update":
       // Folded into SubagentCard via deriveSubAgents; not a top-level row.
       return null;

@@ -2,6 +2,7 @@ import {
   Agent,
   Cursor,
   CursorAgentError,
+  JsonlLocalAgentStore,
   type AgentOptions,
   type CursorRequestOptions,
   type InteractionUpdate,
@@ -33,13 +34,14 @@ export interface AgentSdk {
    */
   createAgent(options: CreateAgentOptions): Promise<AgentHandle>;
   /** Rehydrate a previously created agent by id and keep driving it. */
-  resumeAgent(agentId: string): Promise<AgentHandle>;
+  resumeAgent(agentId: string, storeDir: string): Promise<AgentHandle>;
 }
 
 export interface CreateAgentOptions {
   cwd: string;
   model: ModelSelection;
   agentId?: string;
+  storeDir: string;
 }
 
 export interface AgentSendOptions {
@@ -134,19 +136,24 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       return deps.listSdkModels({ apiKey: deps.apiKey });
     },
 
-    async createAgent({ cwd, model, agentId }) {
+    async createAgent({ cwd, model, agentId, storeDir }) {
       const sdkAgent = await deps.createSdkAgent({
         apiKey: deps.apiKey,
         model,
         agentId,
-        local: { cwd, settingSources: ["user", "project"] },
+        local: {
+          cwd,
+          settingSources: ["user", "project"],
+          store: new JsonlLocalAgentStore(storeDir),
+        },
       });
       return wrapAgent(sdkAgent);
     },
 
-    async resumeAgent(agentId) {
+    async resumeAgent(agentId, storeDir) {
       const sdkAgent = await deps.resumeSdkAgent(agentId, {
         apiKey: deps.apiKey,
+        local: { store: new JsonlLocalAgentStore(storeDir) },
       });
       return wrapAgent(sdkAgent);
     },
