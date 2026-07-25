@@ -1,4 +1,5 @@
 import type {
+  AgentDefinition,
   AgentOptions,
   InteractionUpdate,
   ModelSelection,
@@ -127,6 +128,34 @@ describe("createAgent", () => {
     expect((store as JsonlLocalAgentStore & { rootDir: string }).rootDir).toBe(
       STORE_DIR,
     );
+  });
+
+  it("forwards the agents map unchanged to Agent.create", async () => {
+    const agents: Record<string, AgentDefinition> = {
+      "issue-tracker-implementor": {
+        description: "Implements one Task.",
+        prompt: "You implement tasks.",
+        model: { id: "composer-2.5" },
+      },
+      explore: {
+        description: "Explores the codebase.",
+        prompt: "You explore.",
+      },
+    };
+    const createSdkAgent = vi.fn(
+      async (_options: AgentOptions) => makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key-abc" });
+
+    await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+      agents,
+    });
+
+    expect(createSdkAgent).toHaveBeenCalledTimes(1);
+    expect(createSdkAgent.mock.calls[0]![0].agents).toBe(agents);
   });
 });
 

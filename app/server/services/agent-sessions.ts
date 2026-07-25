@@ -9,6 +9,7 @@ import {
   type AgentRunResult,
   type AgentSdk,
 } from "./agent-sdk.js";
+import { loadPluginAgentDefinitions } from "./agent-definitions.js";
 import {
   appendEvent,
   readConversation,
@@ -76,12 +77,14 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       mkdirSync(storeDir, { recursive: true });
     }
 
+    const agents = loadPluginAgentDefinitions();
+
     let handle: AgentHandle;
     if (meta.agentId) {
       try {
         handle = await sdk.resumeAgent(meta.agentId, storeDir);
       } catch {
-        handle = await sdk.createAgent({ cwd, model, storeDir });
+        handle = await sdk.createAgent({ cwd, model, storeDir, agents });
         await updateMeta(conversationId, { agentId: handle.agentId });
         await appendEvent(conversationId, {
           type: "error",
@@ -90,7 +93,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         });
       }
     } else {
-      handle = await sdk.createAgent({ cwd, model, storeDir });
+      handle = await sdk.createAgent({ cwd, model, storeDir, agents });
       await updateMeta(conversationId, { agentId: handle.agentId });
     }
 
