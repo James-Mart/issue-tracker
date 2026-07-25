@@ -6,6 +6,7 @@ import type { AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
 import {
   appendDelegation,
   conversationExists,
+  readDelegations,
 } from "./conversations.js";
 import { EventPipeline } from "./event-pipeline.js";
 import {
@@ -257,6 +258,33 @@ export function createDelegateCustomTools(
     parent: ParentFrame | null,
   ): Record<string, SDKCustomTool> {
     const customTools: Record<string, SDKCustomTool> = {};
+
+    customTools.delegations = {
+      description:
+        "List nested delegations for this conversation, most recent first.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+      execute: async () => {
+        if (
+          !options.conversationId ||
+          !conversationExists(options.conversationId)
+        ) {
+          return [];
+        }
+        return readDelegations(options.conversationId)
+          .slice()
+          .reverse()
+          .map(({ delegationId, agentId, role, model, at }) => ({
+            delegationId,
+            agentId,
+            role,
+            model,
+            at,
+          }));
+      },
+    };
 
     customTools.delegate = {
       description:

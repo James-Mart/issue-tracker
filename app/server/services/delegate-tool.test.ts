@@ -926,4 +926,122 @@ describe("delegate publishes nested run frames", () => {
     expect(after).toHaveLength(2);
     expect(after[1]!.agentId).toBe(agentId);
   });
+
+  it("delegations returns this conversation's records most-recent-first and excludes others", async () => {
+    const { createConversation, createDelegateCustomTools: createTools } =
+      await load();
+
+    const metaA = await createConversation({
+      title: "Lookup A",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const metaB = await createConversation({
+      title: "Lookup B",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const toolsA = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: metaA.id,
+    });
+    const toolsB = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: metaB.id,
+    });
+
+    const first = await toolsA.delegate!.execute(
+      { role: "pinned-role", prompt: "first" },
+      {},
+    );
+    const second = await toolsA.delegate!.execute(
+      { role: "pinned-role", prompt: "second" },
+      {},
+    );
+    await toolsB.delegate!.execute(
+      { role: "pinned-role", prompt: "other conversation" },
+      {},
+    );
+
+    const expectedModel = formatEffectiveModel(
+      resolveModelSelection("cursor-grok-4.5-high-fast"),
+    );
+    const listed = await toolsA.delegations!.execute({}, {});
+    expect(listed).toHaveLength(2);
+    expect(listed[0]).toMatchObject({
+      agentId: second.agentId,
+      role: "pinned-role",
+      model: expectedModel,
+    });
+    expect(listed[1]).toMatchObject({
+      agentId: first.agentId,
+      role: "pinned-role",
+      model: expectedModel,
+    });
+    for (const row of listed) {
+      expect(typeof row.delegationId).toBe("string");
+      expect(row.delegationId.length).toBeGreaterThan(0);
+      expect(typeof row.at).toBe("string");
+      expect(Number.isNaN(Date.parse(row.at))).toBe(false);
+      expect(row).not.toHaveProperty("parentDelegationId");
+    }
+
+    const listedB = await toolsB.delegations!.execute({}, {});
+    expect(listedB).toHaveLength(1);
+  });
+
+  it("accepts an agentId from delegations as delegate resumeId", async () => {
+    const {
+      createConversation,
+      conversationsDir,
+      createDelegateCustomTools: createTools,
+    } = await load();
+    const meta = await createConversation({
+      title: "Resume via lookup",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const convStoreDir = join(conversationsDir, meta.id, "agent-state");
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const tools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir: convStoreDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    await tools.delegate!.execute(
+      { role: "pinned-role", prompt: "first turn" },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+
+    const [record] = await tools.delegations!.execute({}, {});
+    expect(record).toBeDefined();
+
+    const resumed = await tools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "after lookup",
+        resumeId: record!.agentId,
+      },
+      {},
+    );
+
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(1);
+    expect(fake.resumed[0]!.agentId).toBe(record!.agentId);
+    expect(resumed.agentId).toBe(record!.agentId);
+    expect(fake.handles[1]!.sends[0]!.prompt).toBe("after lookup");
+  });
 });
