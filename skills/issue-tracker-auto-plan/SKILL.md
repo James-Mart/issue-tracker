@@ -93,11 +93,9 @@ the product SHOULD be. Answer as the human PM would.
 ### Research delegation
 
 Whenever you need research — codebase investigation, online lookups,
-inspiration-app patterns, etc. — you MUST delegate to an
-`issue-tracker-research` Task (`subagent_type: issue-tracker-research`,
-`model: composer-2.5`). Prompt it to perform the research and return **only a
-concise summary**; ingest that summary for your judgment. Delegate work wherever
-possible to preserve your own context.
+inspiration-app patterns, etc. — you MUST delegate **Research** (Spawn stubs);
+wait for **only a concise summary**; ingest that summary for your judgment.
+Delegate work wherever possible to preserve your own context.
 
 ### Subsystem vision consult
 
@@ -195,26 +193,13 @@ specifics and stop; otherwise proceed to Flow.
    - `Blast radius:` — breadth of independent design surfaces the idea
      spans (discriminator blast-radius axis; not effort or time)
 
-   Spawn `issue-tracker-auto-plan-discriminator`
-   (`subagent_type: issue-tracker-auto-plan-discriminator`,
-   `model: composer-2.5`) with a prompt
-   that is the source issue id followed by those three labelled statements.
-   Its entire final message is the planner family key (`grok` or `opus`) —
-   capture it as `<plannerFamily>`. Unusable / errored → escalate per
-   **## Refusals & escalations**.
-2. **Vanilla planner.** Spawn the matching planner wrapper for
-   `<plannerFamily>`:
-   - `grok` → `subagent_type: issue-tracker-planner-grok`
-     (`model: cursor-grok-4.5-high-fast`)
-   - `opus` → `subagent_type: issue-tracker-planner-opus`
-     (`model: claude-opus-5-thinking-high`)
-
-   Minimal prompt, e.g.:
-
-   > Plan `<issue id>` in the issue tracker using the issue-tracker-plan skill.
-
-   Do not over-instruct the grill mechanics — the planner owns them via the
-   agent body / skill.
+   Delegate **Auto-plan discriminator** (Spawn stubs) with the source issue id
+   followed by those three labelled statements. Its entire final message is the
+   planner family key (`grok` or `opus`) — capture it as `<plannerFamily>`.
+   Unusable / errored → escalate per **## Refusals & escalations**.
+2. **Vanilla planner.** Delegate the matching **Vanilla planner** stub for
+   `<plannerFamily>` (Spawn stubs). Do not over-instruct the grill mechanics —
+   the planner owns them via the agent body / skill.
 3. **Relay loop.** The planner asks one grill question and ends its turn; resume
    it (Task `resume`) with your answer, derived from the PM decision heuristics +
    vision + the source issue's theme + inspirationApps. Own any "shared understanding reached" / ready-for-
@@ -239,6 +224,32 @@ specifics and stop; otherwise proceed to Flow.
    many planner resumes, reconstructing it later is lossy. This draft is the
    decision-summary attached at **## Finalize**.
 4. **Finalize** per **## Finalize** (target depends on source kind).
+
+## Spawn stubs
+
+Pass these as the delegation `prompt` (inline the fields each stub lists).
+Children own static behavior via their `agents/*.md` files — do not paste
+workflow instructions here.
+
+**Delegation** — **Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
+
+**Research** — `role: issue-tracker-research`
+
+> Research: `<focused question>`. Workspace: `<absolute workspace path>`.
+> Seed paths (if any): `<paths>`.
+
+**Auto-plan discriminator** — `role: issue-tracker-auto-plan-discriminator`
+
+> `<issueId>`. Includes: `<...>`. Excludes: `<...>`. Blast radius: `<...>`.
+
+**Vanilla planner (grok)** — `role: issue-tracker-planner-grok`
+
+> Plan `<issue id>` in the issue tracker using the issue-tracker-plan skill.
+
+**Vanilla planner (opus)** — `role: issue-tracker-planner-opus`
+
+> Plan `<issue id>` in the issue tracker using the issue-tracker-plan skill.
 
 ## Finalize
 
