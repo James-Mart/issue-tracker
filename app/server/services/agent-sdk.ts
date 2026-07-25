@@ -29,8 +29,10 @@ export interface AgentSdk {
   listModels(): Promise<SDKModel[]>;
   /**
    * Start a fresh local agent. `local` is always
-   * `{ cwd, settingSources: ["user", "project"] }` — consumers never re-specify
-   * the local runtime or which config layers load.
+   * `{ cwd, settingSources: ["user", "project", "plugins"] }` — consumers never
+   * re-specify the local runtime or which config layers load. `"plugins"` is
+   * required so plugin-packaged skills/agents (e.g. this issue-tracker plugin)
+   * register on the Task tool the same way IDE chats do.
    */
   createAgent(options: CreateAgentOptions): Promise<AgentHandle>;
   /** Rehydrate a previously created agent by id and keep driving it. */
@@ -143,7 +145,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
         agentId,
         local: {
           cwd,
-          settingSources: ["user", "project"],
+          settingSources: ["user", "project", "plugins"],
           store: new JsonlLocalAgentStore(storeDir),
         },
       });

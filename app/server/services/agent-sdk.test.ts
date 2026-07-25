@@ -106,7 +106,7 @@ describe("createAgent", () => {
     const options = createSdkAgent.mock.calls[0]![0];
     expect(options.local).toEqual({
       cwd: "/repo",
-      settingSources: ["user", "project"],
+      settingSources: ["user", "project", "plugins"],
       store: expect.any(JsonlLocalAgentStore),
     });
     expect(options.apiKey).toBe("key-abc");
