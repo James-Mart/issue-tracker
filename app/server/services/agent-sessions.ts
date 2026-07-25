@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync } from "fs";
+import { join } from "path";
+import { conversationsDir } from "../config.js";
 import {
   agentSdk,
   CursorAgentError,
@@ -67,12 +70,16 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const { meta } = readConversation(conversationId);
     const cwd = requireProjectWorkspace(meta.projectId);
     const model = { id: meta.model };
+    const storeDir = join(conversationsDir, conversationId, "agent-state");
+    if (!existsSync(storeDir)) {
+      mkdirSync(storeDir, { recursive: true });
+    }
 
     let handle: AgentHandle;
     if (meta.agentId) {
-      handle = await sdk.resumeAgent(meta.agentId);
+      handle = await sdk.resumeAgent(meta.agentId, storeDir);
     } else {
-      handle = await sdk.createAgent({ cwd, model });
+      handle = await sdk.createAgent({ cwd, model, storeDir });
       await updateMeta(conversationId, { agentId: handle.agentId });
     }
 

@@ -7,6 +7,7 @@ import type {
   SDKAgent,
   SDKMessage,
 } from "@cursor/sdk";
+import { JsonlLocalAgentStore } from "@cursor/sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAgentSdk,
@@ -22,6 +23,7 @@ import {
 } from "./agent-sdk.fake.js";
 
 const MODEL: ModelSelection = { id: "composer-2.5" };
+const STORE_DIR = "/data/conversations/my-conv/agent-state";
 
 // A step in a fake run: either a top-level stream message or an `onDelta`
 // interaction the run fires while streaming.
@@ -93,17 +95,38 @@ describe("createAgent", () => {
     );
     const sdk = createAgentSdk({ createSdkAgent, apiKey: "key-abc" });
 
-    await sdk.createAgent({ cwd: "/repo", model: MODEL, agentId: "resume-me" });
+    await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      agentId: "resume-me",
+      storeDir: STORE_DIR,
+    });
 
     expect(createSdkAgent).toHaveBeenCalledTimes(1);
     const options = createSdkAgent.mock.calls[0]![0];
     expect(options.local).toEqual({
       cwd: "/repo",
       settingSources: ["user", "project"],
+      store: expect.any(JsonlLocalAgentStore),
     });
     expect(options.apiKey).toBe("key-abc");
     expect(options.model).toEqual(MODEL);
     expect(options.agentId).toBe("resume-me");
+  });
+
+  it("passes a JsonlLocalAgentStore rooted at storeDir", async () => {
+    const createSdkAgent = vi.fn(
+      async (_options: AgentOptions) => makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key-abc" });
+
+    await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
+
+    const store = createSdkAgent.mock.calls[0]![0].local?.store;
+    expect(store).toBeInstanceOf(JsonlLocalAgentStore);
+    expect((store as JsonlLocalAgentStore & { rootDir: string }).rootDir).toBe(
+      STORE_DIR,
+    );
   });
 });
 
@@ -115,12 +138,29 @@ describe("resumeAgent", () => {
     );
     const sdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-xyz" });
 
-    const handle = await sdk.resumeAgent("agent-1");
+    const handle = await sdk.resumeAgent("agent-1", STORE_DIR);
 
     expect(handle.agentId).toBe("agent-1");
     expect(resumeSdkAgent).toHaveBeenCalledWith("agent-1", {
       apiKey: "key-xyz",
+      local: { store: expect.any(JsonlLocalAgentStore) },
     });
+  });
+
+  it("passes a JsonlLocalAgentStore rooted at storeDir", async () => {
+    const resumeSdkAgent = vi.fn(
+      async (_id: string, _options?: Partial<AgentOptions>) =>
+        makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-xyz" });
+
+    await sdk.resumeAgent("agent-1", STORE_DIR);
+
+    const store = resumeSdkAgent.mock.calls[0]![1]?.local?.store;
+    expect(store).toBeInstanceOf(JsonlLocalAgentStore);
+    expect((store as JsonlLocalAgentStore & { rootDir: string }).rootDir).toBe(
+      STORE_DIR,
+    );
   });
 });
 
@@ -169,7 +209,7 @@ describe("send (merged stream)", () => {
       createSdkAgent: async () => makeFakeSdkAgent(script),
     });
 
-    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
+    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
     const run = await handle.send("go");
     const events = await drain(run);
     expect(await run.wait()).toMatchObject({ id: "run-1", status: "finished" });
@@ -207,7 +247,7 @@ describe("send (merged stream)", () => {
       createSdkAgent: async () => makeFakeSdkAgent(script),
     });
 
-    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
+    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
     const events = await drain(await handle.send("go"));
 
     expect(events).toEqual([{ kind: "message", message: msg }]);
@@ -218,7 +258,7 @@ describe("send (merged stream)", () => {
     const sdkAgent = { ...makeFakeSdkAgent([]), send: sdkSend };
     const sdk = createAgentSdk({ createSdkAgent: async () => sdkAgent });
 
-    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
+    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
     await drain(await handle.send("go", { model: { id: "auto" } }));
 
     expect(sdkSend).toHaveBeenCalledWith(
@@ -256,7 +296,7 @@ describe("send (merged stream)", () => {
       },
     };
     const sdk = createAgentSdk({ createSdkAgent: async () => sdkAgent });
-    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
+    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
     const run = await handle.send("go");
     await drain(run);
     expect(await run.wait()).toEqual({
@@ -282,7 +322,7 @@ describe("cancel / dispose", () => {
     const sdkAgent: SDKAgent = { ...base, [Symbol.asyncDispose]: asyncDispose };
     const sdk = createAgentSdk({ createSdkAgent: async () => sdkAgent });
 
-    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL });
+    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
     const agentRun = await handle.send("go");
     const iterator = agentRun[Symbol.asyncIterator]();
     await iterator.next(); // consume one event so the pump is live

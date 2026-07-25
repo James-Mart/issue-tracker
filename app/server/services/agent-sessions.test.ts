@@ -5,7 +5,7 @@ import {
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CursorAgentError } from "./agent-sdk.js";
 import {
@@ -88,6 +88,7 @@ describe("agent sessions manager", () => {
     expect(fake.created[0]).toMatchObject({
       cwd: workspaceDir,
       model: { id: "composer-2.5" },
+      storeDir: join(dirname(issuesRoot), "conversations", meta.id, "agent-state"),
     });
     expect(fake.resumed).toHaveLength(0);
     expect(fake.handles[0]?.sends).toEqual([
@@ -121,7 +122,17 @@ describe("agent sessions manager", () => {
     await result.run.wait();
 
     expect(fake.created).toHaveLength(0);
-    expect(fake.resumed).toEqual(["agent-existing"]);
+    expect(fake.resumed).toEqual([
+      {
+        agentId: "agent-existing",
+        storeDir: join(
+          dirname(issuesRoot),
+          "conversations",
+          meta.id,
+          "agent-state",
+        ),
+      },
+    ]);
     expect(fake.handles[0]?.sends).toEqual([
       { prompt: "again", options: { model: { id: "composer-2.5" } } },
     ]);
