@@ -46,20 +46,17 @@ An **Epic** id (any `epicStatus` — not limited to `todo`) or a
 
 ## Parallel check agents
 
-Spawn **all five** agents **in parallel** (one Cursor Task each) via the
-**Spawn stubs** below. Pass **only** the fields each stub lists — children own
-static behavior in `agents/*.md`; do not paste agent workflow into the prompt.
+Delegate **all five** checks **in parallel** via the **Spawn stubs** below.
+Pass **only** the fields each stub lists — children own static behavior in
+`agents/*.md`; do not paste agent workflow into the prompt.
 
-| Agent (`subagent_type`) | Cursor Task `model` |
-| --- | --- |
-| `issue-tracker-plan-no-ambiguity` | `composer-2.5` |
-| `issue-tracker-plan-dry` | `composer-2.5` |
-| `issue-tracker-plan-authoring-conformance` | `composer-2.5` |
-| `issue-tracker-plan-dependency-order` | `cursor-grok-4.5-high-fast` |
-| `issue-tracker-plan-internal-consistency` | `composer-2.5` |
-
-Those slugs are pins, not always-available models — see **Delegation**
-under **## Spawn stubs** before passing one.
+| Role (`role`) |
+| --- |
+| `issue-tracker-plan-no-ambiguity` |
+| `issue-tracker-plan-dry` |
+| `issue-tracker-plan-authoring-conformance` |
+| `issue-tracker-plan-dependency-order` |
+| `issue-tracker-plan-internal-consistency` |
 
 Each agent template is `readonly: true`. Shared CLI/bootstrap/JSON output
 contract lives only in
@@ -76,9 +73,9 @@ and SPEC § Project supporting docs.
 
 ## Spawn stubs
 
-Pass these as the Cursor Task `prompt`. Inline the work-root id/title. Children
-own static behavior via their `agents/*.md` files — do not paste workflow
-instructions here.
+Pass these as the delegation `prompt` (inline the work-root id/title where
+noted). Children own static behavior via their `agents/*.md` files — do not
+paste workflow instructions here.
 
 **Delegation** — **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
@@ -94,30 +91,23 @@ are re-read each spawn while agent injection may be frozen):
 > `agents/_issue-tracker-plan-polish-check-base.md` (detection-only — no
 > fixes; no prose wrapper).
 
-**No-ambiguity** — `subagent_type: issue-tracker-plan-no-ambiguity`
-(`model: composer-2.5`)
+**No-ambiguity** — `role: issue-tracker-plan-no-ambiguity`
 
 > *(Work-root context line.)* *(Findings return line.)*
 
-**DRY** — `subagent_type: issue-tracker-plan-dry` (`model: composer-2.5`)
+**DRY** — `role: issue-tracker-plan-dry`
 
 > *(Work-root context line.)* *(Findings return line.)*
 
-**Authoring conformance** —
-`subagent_type: issue-tracker-plan-authoring-conformance`
-(`model: composer-2.5`)
+**Authoring conformance** — `role: issue-tracker-plan-authoring-conformance`
 
 > *(Work-root context line.)* *(Findings return line.)*
 
-**Dependency order** —
-`subagent_type: issue-tracker-plan-dependency-order`
-(`model: cursor-grok-4.5-high-fast`)
+**Dependency order** — `role: issue-tracker-plan-dependency-order`
 
 > *(Work-root context line.)* *(Findings return line.)*
 
-**Internal consistency** —
-`subagent_type: issue-tracker-plan-internal-consistency`
-(`model: composer-2.5`)
+**Internal consistency** — `role: issue-tracker-plan-internal-consistency`
 
 > *(Work-root context line.)* *(Findings return line.)*
 
