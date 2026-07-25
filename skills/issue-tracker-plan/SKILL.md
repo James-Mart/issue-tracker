@@ -199,14 +199,11 @@ Pass these as the Cursor Task `prompt`. Inline the fields each stub lists.
 Children own static behavior via their `agents/*.md` files — do not paste
 workflow instructions here.
 
-**Focused codebase research** — `subagent_type: generalPurpose`
+**Focused codebase research** — `subagent_type: issue-tracker-research`
 (`model: composer-2.5`)
 
 > Research: `<focused question>`. Workspace: `<absolute workspace path>`.
-> Seed paths (if any): `<paths>`. Ref: `<git ref>` (optional). When set,
-> read files at that ref via `git show <ref>:<path>` / `git ls-tree <ref>`
-> only — no checkout, no mutation.
-> Return a concise factual summary only.
+> Seed paths (if any): `<paths>`. Ref: `<git ref>` (optional).
 
 **Retro** — `subagent_type: issue-tracker-retro`
 (`model: cursor-grok-4.5-high-fast`)
