@@ -93,11 +93,9 @@ the product SHOULD be. Answer as the human PM would.
 ### Research delegation
 
 Whenever you need research — codebase investigation, online lookups,
-inspiration-app patterns, etc. — you MUST delegate to an
-`issue-tracker-research` Task (`subagent_type: issue-tracker-research`,
-`model: composer-2.5`). Prompt it to perform the research and return **only a
-concise summary**; ingest that summary for your judgment. Delegate work wherever
-possible to preserve your own context.
+inspiration-app patterns, etc. — you MUST delegate **Research** (Spawn stubs);
+wait for **only a concise summary**; ingest that summary for your judgment.
+Delegate work wherever possible to preserve your own context.
 
 ### Subsystem vision consult
 
@@ -195,33 +193,25 @@ specifics and stop; otherwise proceed to Flow.
    - `Blast radius:` — breadth of independent design surfaces the idea
      spans (discriminator blast-radius axis; not effort or time)
 
-   Spawn `issue-tracker-auto-plan-discriminator`
-   (`subagent_type: issue-tracker-auto-plan-discriminator`,
-   `model: composer-2.5`) with a prompt
-   that is the source issue id followed by those three labelled statements.
-   Its entire final message is the planner family key (`grok` or `opus`) —
-   capture it as `<plannerFamily>`. Unusable / errored → escalate per
-   **## Refusals & escalations**.
-2. **Vanilla planner.** Spawn the matching planner wrapper for
-   `<plannerFamily>`:
-   - `grok` → `subagent_type: issue-tracker-planner-grok`
-     (`model: cursor-grok-4.5-high-fast`)
-   - `opus` → `subagent_type: issue-tracker-planner-opus`
-     (`model: claude-opus-5-thinking-high`)
+   Delegate **Auto-plan discriminator** (Spawn stubs) with the source issue id
+   followed by those three labelled statements. Its entire final message is the
+   planner family key (`grok` or `opus`) — capture it as `<plannerFamily>`.
+   Unusable / errored → escalate per **## Refusals & escalations**.
+2. **Vanilla planner.** Delegate the matching **Vanilla planner** stub for
+   `<plannerFamily>` (Spawn stubs). Do not over-instruct the grill mechanics —
+   the planner owns them via the agent body / skill.
+3. **Relay loop.** The planner asks one grill question and ends its turn; re-enter
+   it with `resumeId` from the delegation that started the planner (step 2),
+   passing your answer derived from the PM decision heuristics + vision + the
+   source issue's theme + inspirationApps. Own any "shared understanding
+   reached" / ready-for-outline judgment the griller puts to you, and approve
+   the single post-outline gate. Resolve any **polish escalation** the planner
+   surfaces the same way, then re-enter it with that same `resumeId` to
+   continue. Repeat until the planner returns the resulting plan root id(s)
+   (it has already migrated / polished / spawned retro).
 
-   Minimal prompt, e.g.:
-
-   > Plan `<issue id>` in the issue tracker using the issue-tracker-plan skill.
-
-   Do not over-instruct the grill mechanics — the planner owns them via the
-   agent body / skill.
-3. **Relay loop.** The planner asks one grill question and ends its turn; resume
-   it (Task `resume`) with your answer, derived from the PM decision heuristics +
-   vision + the source issue's theme + inspirationApps. Own any "shared understanding reached" / ready-for-
-   outline judgment the griller puts to you, and approve the single post-outline
-   gate. Resolve any **polish escalation** the planner surfaces the same way,
-   then resume it to continue. Repeat until the planner returns the resulting
-   plan root id(s) (it has already migrated / polished / spawned retro).
+   When the coordinator has lost the `resumeId`, look it up with `delegations`
+   rather than starting a second planner.
 
    **Terse grill answers.** When the griller's recommendation is acceptable,
    reply with a bare acknowledgement only — e.g. "I agree" or "agreed with your
@@ -230,15 +220,41 @@ specifics and stop; otherwise proceed to Flow.
    document; the griller does not consult it. Add substance only when the
    decision is PM-only (product scope, dependency, or priority only the human
    can settle) or the griller lacks context you hold. Regardless of how terse
-   each resume reply is, keep the running decision-summary draft complete (see
-   below).
+   each re-entry reply is, keep the running decision-summary draft complete
+   (see below).
 
    As you answer, **append each resolved decision to a running draft** — one
    entry per decision: the decision, the answer you chose, and the rationale
    (distilled, not the raw transcript). Do not defer this to the end; across
-   many planner resumes, reconstructing it later is lossy. This draft is the
+   many planner re-entries, reconstructing it later is lossy. This draft is the
    decision-summary attached at **## Finalize**.
 4. **Finalize** per **## Finalize** (target depends on source kind).
+
+## Spawn stubs
+
+Pass these as the delegation `prompt` (inline the fields each stub lists).
+Children own static behavior via their `agents/*.md` files — do not paste
+workflow instructions here.
+
+**Delegation** — **Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
+
+**Research** — `role: issue-tracker-research`
+
+> Research: `<focused question>`. Workspace: `<absolute workspace path>`.
+> Seed paths (if any): `<paths>`.
+
+**Auto-plan discriminator** — `role: issue-tracker-auto-plan-discriminator`
+
+> `<issueId>`. Includes: `<...>`. Excludes: `<...>`. Blast radius: `<...>`.
+
+**Vanilla planner (grok)** — `role: issue-tracker-planner-grok`
+
+> Plan `<issue id>` in the issue tracker using the issue-tracker-plan skill.
+
+**Vanilla planner (opus)** — `role: issue-tracker-planner-opus`
+
+> Plan `<issue id>` in the issue tracker using the issue-tracker-plan skill.
 
 ## Finalize
 

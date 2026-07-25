@@ -4,10 +4,11 @@ Refusal and escalation are **resumable** (Story *"Refusal & escalation are
 resumable"* invariant). Recovery differs by kind. Never guess, fall back, or
 default a model — surface the gap directly to the human.
 
-What that forbids is substituting a **different** model for the pinned one —
-not the omit-when-unavailable path under **## IDE channel** (Read
-`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`).
-An unavailable slug is therefore never a reason to refuse or escalate.
+What that forbids is substituting a **different** model for the pinned one.
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`
+for how each channel applies the role pin — on the app channel the pin always
+selects; on the IDE channel an unadvertised slug is omitted, not substituted.
+Model availability is therefore never a reason to refuse or escalate.
 
 - **Preflight gate** — any **## Bootstrap** steps 2–4 refusal, raised before
   the discriminator is spawned. Nothing to resume: report the specific gap to
@@ -19,12 +20,10 @@ An unavailable slug is therefore never a reason to refuse or escalate.
   inspirationApps) and re-run **both** refuse checks. Proceed only if the gap
   is closed; otherwise refuse again with specifics.
 - **Subagent-failure escalation** (a discriminator / planner errored or returned
-  an unusable result) — report which subagent failed and how to the human with
-  no silent fallback and no model-defaulting. Once the human addresses the
-  cause, **resume this same agent**; then re-spawn the failed subagent and
-  continue. A pinned slug your Task tool does not advertise is **not** a
-  subagent failure: spawn it with no model per **## IDE channel** rather
-  than escalating.
+  an unusable result) — report which delegated role failed and how to the human
+  with no silent fallback and no model-defaulting. Once the human addresses the
+  cause, **resume this same agent**; then delegate that role again and
+  continue.
 - **Other blocked states** — cannot read the source issue / mandatory sources,
   unset `Workspace:` when file work is required, or a finalize `attach` /
   `comment` refusal — same contract: report the block to the human and stop.
