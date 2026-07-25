@@ -5,8 +5,8 @@ resumable"* invariant). Recovery differs by kind. Never guess, fall back, or
 default a model — surface the gap directly to the human.
 
 What that forbids is substituting a **different** model for the pinned one —
-not the omit-when-unavailable path under **## Model availability** (Read
-`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-model-availability.md`).
+not the omit-when-unavailable path under **## IDE channel** (Read
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`).
 An unavailable slug is therefore never a reason to refuse or escalate.
 
 - **Preflight gate** — any **## Bootstrap** steps 2–4 refusal, raised before
@@ -23,7 +23,7 @@ An unavailable slug is therefore never a reason to refuse or escalate.
   no silent fallback and no model-defaulting. Once the human addresses the
   cause, **resume this same agent**; then re-spawn the failed subagent and
   continue. A pinned slug your Task tool does not advertise is **not** a
-  subagent failure: spawn it with no model per **## Model availability** rather
+  subagent failure: spawn it with no model per **## IDE channel** rather
   than escalating.
 - **Other blocked states** — cannot read the source issue / mandatory sources,
   unset `Workspace:` when file work is required, or a finalize `attach` /

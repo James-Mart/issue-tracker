@@ -199,8 +199,8 @@ Pass these as the Cursor Task `prompt`. Inline the fields each stub lists.
 Children own static behavior via their `agents/*.md` files — do not paste
 workflow instructions here.
 
-**Model availability** — **Read**
-`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-model-availability.md`.
+**Delegation** — **Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
 **Focused codebase research** — `subagent_type: issue-tracker-research`
 (`model: composer-2.5`)

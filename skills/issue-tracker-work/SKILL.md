@@ -36,7 +36,7 @@ Task `status` / `qa` and work-root `retro` writes are subagent-owned — see
 `assignee` holds the implementor **family key** (or a legacy model slug).
 Before each implementor spawn, **Resolve implementor family** (below) and spawn
 `issue-tracker-implementor-<family>` with that wrapper's pin as Cursor Task
-`model`, subject to **## Model availability**.
+`model`, subject to **## Delegation**.
 
 **Nomenclature:** **Task** / **Story** are issue-tracker kinds. **Cursor Task**
 is the subagent spawn/resume tool (`model`, `prompt`, `subagent_type`, resume).
@@ -45,9 +45,9 @@ with — the top-level unit Completion and retro key to.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
-## Model availability
+## Delegation
 
-**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-model-availability.md`.
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
 ## Argument
 
@@ -172,7 +172,7 @@ Family → wrapper pin (Cursor Task `model`):
 | `opus` | `issue-tracker-implementor-opus` | `claude-opus-5-thinking-high` |
 
 Never pass a model slug from `assignee` as Cursor Task `model` — always the
-wrapper pin for the resolved family, subject to **## Model availability**.
+wrapper pin for the resolved family, subject to **## Delegation**.
 Never `view|head`, never infer from discriminator chat or prior Tasks.
 
 Because `issue tree` lists each Story after the Story it is stacked on,
@@ -354,7 +354,7 @@ never kind nouns (`Task:`, `Story:`, `Commit:`, `Branch:`, `Epic:`). Children
 own static behavior via their `agents/*.md` files — do not paste workflow
 instructions here.
 
-Model literals below are pins — see **## Model availability** before passing
+Model literals below are pins — see **## Delegation** before passing
 one.
 
 **Issue context line** — shared prefix for discriminator, implement,
