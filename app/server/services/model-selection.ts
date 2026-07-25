@@ -17,3 +17,8 @@ export function resolveModelSelection(pin: string): ModelSelection {
       throw new Error(`Unknown model pin: ${pin}`);
   }
 }
+
+/** Durable string form of a selection: base id plus its parameters. */
+export function formatEffectiveModel(selection: ModelSelection): string {
+  return JSON.stringify(selection);
+}

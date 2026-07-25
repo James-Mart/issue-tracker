@@ -14,6 +14,13 @@ export type NormalizedStep = {
   persist: boolean;
 };
 
+/** Identity stamped onto every `subagent_update` from a bridge-hosted nested run. */
+export type DelegationStamp = {
+  delegationId: string;
+  parentDelegationId?: string;
+  model: string;
+};
+
 /**
  * Normalize + persist finalized events for one conversation turn, and publish
  * every normalized step to the live-subscriber tap ({@link emit}). Persistence
@@ -23,6 +30,7 @@ export class EventPipeline {
   private assistantText = "";
   private nestedText = new Map<string, string>();
   private nestedThinking = new Map<string, string>();
+  private delegationStamps = new Map<string, DelegationStamp>();
 
   constructor(private readonly conversationId: string) {}
 
@@ -32,6 +40,23 @@ export class EventPipeline {
       return;
     }
     await this.handleNested(event.callId, event.update);
+  }
+
+  /**
+   * Feed one event from a bridge-hosted nested run as `subagent_update` steps
+   * keyed to the `delegate` tool call and stamped with the delegation fields.
+   */
+  async handleDelegation(
+    parentCallId: string,
+    stamp: DelegationStamp,
+    event: AgentStreamEvent,
+  ): Promise<void> {
+    this.delegationStamps.set(parentCallId, stamp);
+    if (event.kind === "nested") {
+      await this.handleNested(parentCallId, event.update);
+      return;
+    }
+    await this.handleDelegatedMessage(parentCallId, event.message);
   }
 
   async flush(): Promise<void> {
@@ -134,6 +159,79 @@ export class EventPipeline {
     }
   }
 
+  /**
+   * Translate a nested agent's top-level messages into nested-update shapes and
+   * route through {@link handleNested} so persist-versus-live stays in one place.
+   */
+  private async handleDelegatedMessage(
+    parentCallId: string,
+    message: Extract<AgentStreamEvent, { kind: "message" }>["message"],
+  ): Promise<void> {
+    type NestedUpdate = Extract<
+      AgentStreamEvent,
+      { kind: "nested" }
+    >["update"];
+
+    switch (message.type) {
+      case "assistant": {
+        const chunk = textFromAssistant(message);
+        if (!chunk) return;
+        await this.handleNested(parentCallId, {
+          type: "text-delta",
+          text: chunk,
+        } as NestedUpdate);
+        return;
+      }
+      case "thinking": {
+        await this.handleNested(parentCallId, {
+          type: "thinking-delta",
+          text: message.text,
+        } as NestedUpdate);
+        return;
+      }
+      case "tool_call": {
+        if (message.status === "running") {
+          await this.handleNested(parentCallId, {
+            type: "tool-call-started",
+            callId: message.call_id,
+            toolCall: {
+              ...(typeof message.name === "string"
+                ? { type: message.name }
+                : {}),
+              ...(message.args !== undefined ? { args: message.args } : {}),
+            },
+          } as NestedUpdate);
+          return;
+        }
+        // Preserve message-level error status when the result payload does not
+        // already carry `{ status: "error" }` for handleNested's check.
+        let result = message.result;
+        if (
+          message.status === "error" &&
+          !(
+            result &&
+            typeof result === "object" &&
+            (result as { status?: unknown }).status === "error"
+          )
+        ) {
+          result = { status: "error" };
+        }
+        await this.handleNested(parentCallId, {
+          type: "tool-call-completed",
+          callId: message.call_id,
+          toolCall: {
+            ...(typeof message.name === "string" ? { type: message.name } : {}),
+            ...(message.args !== undefined ? { args: message.args } : {}),
+            ...(result !== undefined ? { result } : {}),
+          },
+        } as NestedUpdate);
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
   private async handleNested(
     parentCallId: string,
     update: Extract<AgentStreamEvent, { kind: "nested" }>["update"],
@@ -155,11 +253,10 @@ export class EventPipeline {
             (this.nestedText.get(parentCallId) ?? "") + u.text,
           );
           await this.emit({
-            event: {
-              type: "subagent_update",
-              parentCallId,
-              step: { kind: "text", text: u.text },
-            },
+            event: this.subagentUpdate(parentCallId, {
+              kind: "text",
+              text: u.text,
+            }),
             persist: false,
           });
         }
@@ -173,11 +270,10 @@ export class EventPipeline {
             (this.nestedThinking.get(parentCallId) ?? "") + u.text,
           );
           await this.emit({
-            event: {
-              type: "subagent_update",
-              parentCallId,
-              step: { kind: "thinking", text: u.text },
-            },
+            event: this.subagentUpdate(parentCallId, {
+              kind: "thinking",
+              text: u.text,
+            }),
             persist: false,
           });
         }
@@ -202,7 +298,7 @@ export class EventPipeline {
           ...(u.toolCall?.args !== undefined ? { args: u.toolCall.args } : {}),
         };
         await this.emit({
-          event: { type: "subagent_update", parentCallId, step },
+          event: this.subagentUpdate(parentCallId, step),
           persist: false,
         });
         return;
@@ -229,7 +325,7 @@ export class EventPipeline {
           ...(result !== undefined ? { result } : {}),
         };
         await this.emit({
-          event: { type: "subagent_update", parentCallId, step },
+          event: this.subagentUpdate(parentCallId, step),
           persist: true,
         });
         return;
@@ -239,11 +335,11 @@ export class EventPipeline {
         await this.flushNestedThinking(parentCallId);
         if (typeof u.stepId !== "number") return;
         await this.emit({
-          event: {
-            type: "subagent_update",
-            parentCallId,
-            step: { kind: "step", stepId: u.stepId, status: "started" },
-          },
+          event: this.subagentUpdate(parentCallId, {
+            kind: "step",
+            stepId: u.stepId,
+            status: "started",
+          }),
           persist: true,
         });
         return;
@@ -253,11 +349,11 @@ export class EventPipeline {
         await this.flushNestedThinking(parentCallId);
         if (typeof u.stepId !== "number") return;
         await this.emit({
-          event: {
-            type: "subagent_update",
-            parentCallId,
-            step: { kind: "step", stepId: u.stepId, status: "completed" },
-          },
+          event: this.subagentUpdate(parentCallId, {
+            kind: "step",
+            stepId: u.stepId,
+            status: "completed",
+          }),
           persist: true,
         });
         return;
@@ -266,6 +362,27 @@ export class EventPipeline {
         // partial-tool-call and unknown shapes — drop for persistence.
         return;
     }
+  }
+
+  private subagentUpdate(
+    parentCallId: string,
+    step: NestedStep,
+  ): TranscriptEventInput {
+    const stamp = this.delegationStamps.get(parentCallId);
+    return {
+      type: "subagent_update",
+      parentCallId,
+      step,
+      ...(stamp
+        ? {
+            delegationId: stamp.delegationId,
+            ...(stamp.parentDelegationId !== undefined
+              ? { parentDelegationId: stamp.parentDelegationId }
+              : {}),
+            model: stamp.model,
+          }
+        : {}),
+    };
   }
 
   private async flushAssistant(): Promise<void> {
@@ -280,11 +397,7 @@ export class EventPipeline {
     if (!text) return;
     this.nestedText.delete(parentCallId);
     await this.emit({
-      event: {
-        type: "subagent_update",
-        parentCallId,
-        step: { kind: "text", text },
-      },
+      event: this.subagentUpdate(parentCallId, { kind: "text", text }),
       persist: true,
     });
   }
@@ -294,11 +407,7 @@ export class EventPipeline {
     if (!text) return;
     this.nestedThinking.delete(parentCallId);
     await this.emit({
-      event: {
-        type: "subagent_update",
-        parentCallId,
-        step: { kind: "thinking", text },
-      },
+      event: this.subagentUpdate(parentCallId, { kind: "thinking", text }),
       persist: true,
     });
   }

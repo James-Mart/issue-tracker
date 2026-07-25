@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseChatMessage, parseChatMessageInput, parseIssue } from "./schemas";
+import {
+  parseChatMessage,
+  parseChatMessageInput,
+  parseIssue,
+  parseTranscriptEvent,
+  parseTranscriptEventInput,
+} from "./schemas";
 
 const project = {
   id: "platform",
@@ -569,5 +575,58 @@ describe("parseChatMessageInput", () => {
     expect(parseChatMessageInput({ role: "agent", body: "" }).ok).toBe(false);
     expect(parseChatMessageInput(null).ok).toBe(false);
     expect(parseChatMessageInput(undefined).ok).toBe(false);
+  });
+});
+
+describe("subagent_update delegation fields", () => {
+  const base = {
+    type: "subagent_update" as const,
+    parentCallId: "call-delegate-1",
+    step: { kind: "text" as const, text: "Working." },
+  };
+
+  it("round-trips an event carrying delegationId, parentDelegationId, and model", () => {
+    const input = parseTranscriptEventInput({
+      ...base,
+      delegationId: "del-child",
+      parentDelegationId: "del-parent",
+      model: '{"id":"grok-4.5","effort":"high","fast":true}',
+    });
+    expect(input.ok).toBe(true);
+    if (!input.ok) return;
+    expect(input.input).toMatchObject({
+      type: "subagent_update",
+      delegationId: "del-child",
+      parentDelegationId: "del-parent",
+      model: '{"id":"grok-4.5","effort":"high","fast":true}',
+    });
+
+    const stored = parseTranscriptEvent({
+      ...input.input,
+      at: "2026-07-25T12:00:00.000Z",
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    expect(stored.event).toMatchObject({
+      delegationId: "del-child",
+      parentDelegationId: "del-parent",
+      model: '{"id":"grok-4.5","effort":"high","fast":true}',
+    });
+  });
+
+  it("still parses an event that omits the delegation fields", () => {
+    const input = parseTranscriptEventInput(base);
+    expect(input.ok).toBe(true);
+    if (!input.ok) return;
+    expect(input.input).toEqual(base);
+    expect("delegationId" in input.input).toBe(false);
+    expect("parentDelegationId" in input.input).toBe(false);
+    expect("model" in input.input).toBe(false);
+
+    const stored = parseTranscriptEvent({
+      ...base,
+      at: "2026-07-25T12:00:00.000Z",
+    });
+    expect(stored.ok).toBe(true);
   });
 });

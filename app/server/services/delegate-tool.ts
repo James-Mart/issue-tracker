@@ -2,8 +2,12 @@ import { mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { join } from "path";
 import type { AgentDefinition, SDKCustomTool } from "@cursor/sdk";
-import type { AgentRun, AgentSdk } from "./agent-sdk.js";
-import { resolveModelSelection } from "./model-selection.js";
+import type { AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
+import { EventPipeline } from "./event-pipeline.js";
+import {
+  formatEffectiveModel,
+  resolveModelSelection,
+} from "./model-selection.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 
 export interface DelegateToolOptions {
@@ -11,6 +15,11 @@ export interface DelegateToolOptions {
   cwd: string;
   /** Conversation agent-state directory; nested stores are created under it. */
   storeDir: string;
+  /**
+   * Conversation that receives nested-run `subagent_update` frames. When
+   * omitted, the handler still runs the nested agent but does not publish.
+   */
+  conversationId?: string;
   agents?: Record<string, AgentDefinition>;
   /** Override agents directory (tests). Defaults to the plugin `agents/`. */
   agentsDir?: string;
@@ -27,14 +36,12 @@ function requireString(
   return value;
 }
 
-async function collectAssistantText(run: AgentRun): Promise<string> {
+function assistantTextFromEvent(event: AgentStreamEvent): string {
+  if (event.kind !== "message") return "";
+  if (event.message.type !== "assistant") return "";
   let reply = "";
-  for await (const event of run) {
-    if (event.kind !== "message") continue;
-    if (event.message.type !== "assistant") continue;
-    for (const block of event.message.message.content) {
-      if (block.type === "text") reply += block.text;
-    }
+  for (const block of event.message.message.content) {
+    if (block.type === "text") reply += block.text;
   }
   return reply;
 }
@@ -47,6 +54,8 @@ export function createDelegateCustomTools(
   options: DelegateToolOptions,
 ): Record<string, SDKCustomTool> {
   const customTools: Record<string, SDKCustomTool> = {};
+  /** In-flight delegation ids; the top of the stack is the current parent. */
+  const delegationStack: string[] = [];
 
   customTools.delegate = {
     description:
@@ -65,7 +74,7 @@ export function createDelegateCustomTools(
       },
       required: ["role", "prompt"],
     },
-    execute: async (args) => {
+    execute: async (args, context) => {
       const role = requireString(args, "role");
       const prompt = requireString(args, "prompt");
       const agentsDir = options.agentsDir;
@@ -78,6 +87,22 @@ export function createDelegateCustomTools(
       const nestedStoreDir = join(options.storeDir, "nested", randomUUID());
       mkdirSync(nestedStoreDir, { recursive: true });
 
+      const delegationId = randomUUID();
+      const parentDelegationId = delegationStack[delegationStack.length - 1];
+      const parentCallId =
+        typeof context.toolCallId === "string" && context.toolCallId.length > 0
+          ? context.toolCallId
+          : undefined;
+      const pipeline =
+        options.conversationId && parentCallId
+          ? new EventPipeline(options.conversationId)
+          : undefined;
+      const stamp = {
+        delegationId,
+        ...(parentDelegationId !== undefined ? { parentDelegationId } : {}),
+        model: formatEffectiveModel(model),
+      };
+
       const handle = await options.sdk.createAgent({
         cwd: options.cwd,
         model,
@@ -86,9 +111,29 @@ export function createDelegateCustomTools(
         customTools,
       });
 
+      delegationStack.push(delegationId);
       try {
         const run = await handle.send(fullPrompt);
-        const reply = await collectAssistantText(run);
+        let reply = "";
+        try {
+          for await (const event of run) {
+            reply += assistantTextFromEvent(event);
+            if (pipeline && parentCallId) {
+              await pipeline.handleDelegation(parentCallId, stamp, event);
+            }
+          }
+          if (pipeline) await pipeline.flush();
+        } catch (err) {
+          if (pipeline) {
+            try {
+              await pipeline.flush();
+            } catch {
+              // Best-effort flush after a mid-run failure.
+            }
+          }
+          throw err;
+        }
+
         const waited = await run.wait();
         if (waited.status === "error") {
           throw new Error(
@@ -100,6 +145,7 @@ export function createDelegateCustomTools(
         }
         return { agentId: handle.agentId, reply };
       } finally {
+        delegationStack.pop();
         try {
           await handle[Symbol.asyncDispose]();
         } catch {
