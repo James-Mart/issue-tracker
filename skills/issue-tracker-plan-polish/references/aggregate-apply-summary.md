@@ -36,18 +36,20 @@ After all five return:
    (declarative apply) — epic-form or story-form per Bootstrap `<rootKind>`.
 5. **Re-check.** Enter this step only when the preceding step 4
    successfully applied a retained YAML. Then:
-   - **Resume flagging agents.** Resume (Cursor Task `resume`) each check
-     agent that returned one or more findings in the round whose fixes
-     were just applied — the same Task instances. Do not resume agents
-     that returned an empty array; do not spawn a second instance of any
-     check agent. Prompt each resumed agent to revalidate its prior
-     concerns against the updated tree and return only a JSON findings
-     array per
+   - **Re-enter flagging agents.** **Read**
+     [`agents/_issue-tracker-delegation.md`](../../../agents/_issue-tracker-delegation.md)
+     and re-enter each check agent that returned one or more findings in
+     the round whose fixes were just applied — the same nested instances
+     (`resumeId` on the app channel; Cursor Task `resume` on the IDE
+     channel). Do not re-enter agents that returned an empty array; do
+     not delegate a second instance of any check agent. Prompt each
+     re-entered agent to revalidate its prior concerns against the
+     updated tree and return only a JSON findings array per
      [`agents/_issue-tracker-plan-polish-check-base.md`](../../../agents/_issue-tracker-plan-polish-check-base.md).
-   - **Re-check.** When those resumed agents return, parse their JSON
+   - **Re-check.** When those re-entered agents return, parse their JSON
      findings arrays (same schema as step 1). Deduplicate overlapping
      findings among them.
-   - **Exit or continue.** When every resumed agent returned an empty
+   - **Exit or continue.** When every re-entered agent returned an empty
      findings array, continue to step 6. When findings remain and an
      escalate is unresolved, do not exit here — escalate (step 2) stays
      mandatory for unsafe auto-apply; resolve it, then continue. When
@@ -56,7 +58,7 @@ After all five return:
      step 6, or continue from step 2 through step 4. Veto grounds are
      planner judgment only (diminishing returns, checker conflict, good
      enough) — no iteration cap, no per-finding veto API, no
-     checker-precedence rules. Repeat this step from **Resume flagging
+     checker-precedence rules. Repeat this step from **Re-enter flagging
      agents** only when that step 4 applied a retained YAML; otherwise
      continue to step 6 (remaining findings, including warnings retained
      per step 3, appear in the summary).
