@@ -159,12 +159,12 @@ dependency is satisfied — and it may proceed — once its parent's Tasks are a
 | Role | `subagent_type` | When | Model | Mode |
 |------|-----------------|------|-------|------|
 | Coordinator (you) | — | Drive the whole run: thin CLI + spawn subagents | Composer 2.5 (`composer-2.5`) | spawn/CLI only; Preflight `retro --clear` (Field ownership) |
-| Git | `issue-tracker-git` | Start a Story; finish a Task after `qa=passed`; finish a Story | Composer 2.5 (pinned in agent frontmatter) | writes |
-| Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | Composer 2.5 (pinned in agent frontmatter) | writes (`issue task set … assignee` only) |
+| Git | `issue-tracker-git` | Start a Story; finish a Task after `qa=passed`; finish a Story | `composer-2.5` | writes |
+| Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
 | Implementor | `issue-tracker-implementor` | Implement a Task; per-task revise via Cursor Task **resume** | From Task `assignee` (Resolve implementor model) | writes (see Field ownership) |
-| Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | Composer 2.5 (pinned in agent frontmatter) | writes (`issue task set … qa` / `needsAttention`; `issue task comment`) |
-| Spec-conformance validator | `issue-tracker-spec-conformance-validator` | Close-Story when Story `specReview` is unset | Composer 2.5 (pinned in agent frontmatter) | writes (`issue story set … specReview` / `issue task add` / `issue story|task comment`) |
-| Retro | `issue-tracker-retro` | Completion when every Story in the walk is `merged` and work-root `retro` is unset | `cursor-grok-4.5-high-fast` (pass as Cursor Task `model`) | writes (`issue <rootKind> comment` on source / `issue idea add` / `issue idea set` labels / `issue idea attach` / `issue <rootKind> set … retro` / `issue <rootKind> set … needsAttention`) |
+| Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `needsAttention`; `issue task comment`) |
+| Spec-conformance validator | `issue-tracker-spec-conformance-validator` | Close-Story when Story `specReview` is unset | `composer-2.5` | writes (`issue story set … specReview` / `issue task add` / `issue story|task comment`) |
+| Retro | `issue-tracker-retro` | Completion when every Story in the walk is `merged` and work-root `retro` is unset | `cursor-grok-4.5-high-fast` | writes (`issue <rootKind> comment` on source / `issue idea add` / `issue idea set` labels / `issue idea attach` / `issue <rootKind> set … retro` / `issue <rootKind> set … needsAttention`) |
 
 ### Field ownership
 
@@ -337,50 +337,58 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 (`mergeBase`, `branchName`).
 
 **Start branch** — `subagent_type: issue-tracker-git`
+(`model: composer-2.5`)
 
 > Mode: start-branch. Issue: `<storyId>`.
 
 **Finish commit** — `subagent_type: issue-tracker-git`
+(`model: composer-2.5`)
 
 > Mode: finish-commit. Issue: `<taskId>`.
 
 **Finish branch** — `subagent_type: issue-tracker-git`
+(`model: composer-2.5`)
 
 > Mode: finish-branch. Issue: `<storyId>`.
 
 **Model discriminator** — `subagent_type: issue-tracker-model-discriminator`
+(`model: composer-2.5`)
 
 > *(Issue context line.)*
 
 **Implement** — `subagent_type: issue-tracker-implementor`
+(Cursor Task `model` from Resolve implementor model)
 
 > *(Issue context line.)* Mode: implement. Comment role:
 > `implementor`.
 
 **Code-quality validator** — `subagent_type: issue-tracker-code-quality-validator`
-(when to spawn vs resume: Per-Task cycle step 3)
+(`model: composer-2.5`; when to spawn vs resume: Per-Task cycle step 3)
 
 > *(Issue context line.)* Mode: review. Comment role:
 > `code-quality-validator`.
 
 **Code-quality validator (resume)** — `subagent_type: issue-tracker-code-quality-validator`
-(when to resume: Per-Task cycle step 3)
+(`model: composer-2.5`; when to resume: Per-Task cycle step 3)
 
 > *(Issue context line.)* Mode: resume. Comment role:
 > `code-quality-validator`. Verify that previously requested changes were
 > fixed.
 
 **Spec-conformance validator** — `subagent_type: issue-tracker-spec-conformance-validator`
+(`model: composer-2.5`)
 
 > *(Issue context line.)* Comment role:
 > `spec-conformance-validator`.
 
-**Revise** — resume implementor (per-task only)
+**Revise** — resume implementor (per-task only; Cursor Task `model` from
+Resolve implementor model)
 
 > *(Issue context line.)* Mode: revise. Comment role:
 > `implementor`.
 
 **Retro** — `subagent_type: issue-tracker-retro`
+(`model: cursor-grok-4.5-high-fast`)
 
 > Work root: `<rootId>` (`<title>`). Comment role: `retro`.
 
