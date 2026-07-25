@@ -42,6 +42,15 @@ A single **issue id** — an **Idea**, a **todo** Epic, or a **not-started
 project-level Story** (issue-id-only; the human authors the seed beforehand).
 If none is given, ask the user for the issue id; do not guess or run a picker.
 
+## Model availability
+
+Every spawn in this skill — research during bootstrap, the discriminator, the
+planner wrapper — names the model its target agent is pinned to. Pass it when
+that slug is among those your Task tool advertises; when it is not, pass no
+model at all: the pin travels with the agent definition and the host applies
+it. Never substitute a different slug, and do not treat an unavailable slug as
+a refusal.
+
 ## Bootstrap
 
 Complete this ordered phase **before** spawning the discriminator. Preflight
@@ -183,12 +192,6 @@ specifics and stop; otherwise proceed to Flow.
   human (→ human enriches the vision doc).
 
 ## Flow
-
-**Model availability** — every spawn below names the model its target agent is
-pinned to. Pass it when that slug is among those your Task tool advertises;
-when it is not, pass no model at all — the pin travels with the agent
-definition and the host applies it. Never substitute a different slug, and do
-not treat an unavailable slug as a refusal.
 
 1. **Discriminator.** Before spawning, decide three labelled scope
    statements from bootstrap context + PM heuristics:

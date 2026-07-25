@@ -58,6 +58,9 @@ static behavior in `agents/*.md`; do not paste agent workflow into the prompt.
 | `issue-tracker-plan-dependency-order` | `cursor-grok-4.5-high-fast` |
 | `issue-tracker-plan-internal-consistency` | `composer-2.5` |
 
+Those slugs are pins, not always-available models — see **Model availability**
+under **## Spawn stubs** before passing one.
+
 Each agent template is `readonly: true`. Shared CLI/bootstrap/JSON output
 contract lives only in
 [`agents/_issue-tracker-plan-polish-check-base.md`](../../agents/_issue-tracker-plan-polish-check-base.md)

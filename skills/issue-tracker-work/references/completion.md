@@ -36,7 +36,8 @@ Re-read `issue tree <rootId>`. Spawn
    **not** require promoting a project-level Story to an Epic before retro.
 
 When the gate holds, spawn **once** with the retro spawn stub
-(`model: cursor-grok-4.5-high-fast`; work-root id + title). Wait until the
+(`model: cursor-grok-4.5-high-fast`, subject to the skill's **## Model
+availability**; work-root id + title). Wait until the
 Cursor Task finishes (or raises needsAttention). Do **not** mine transcripts yourself, and do **not** expect
 or relay a retro summary into your context. If the gate fails only because some
 Story is not `merged` yet, skip the spawn; a later re-run of this skill on the

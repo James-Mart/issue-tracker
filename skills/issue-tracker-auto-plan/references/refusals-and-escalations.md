@@ -4,6 +4,13 @@ Refusal and escalation are **resumable** (Story *"Refusal & escalation are
 resumable"* invariant). Recovery differs by kind. Never guess, fall back, or
 default a model — surface the gap directly to the human.
 
+What that forbids is substituting a **different** model for the pinned one. It
+does not forbid passing no model when the pin is not among the slugs your Task
+tool advertises: the pin travels with the agent definition and the host applies
+it, which is the pinned model and not a default. See **## Model availability**
+in the skill. An unavailable slug is therefore never a reason to refuse or
+escalate.
+
 - **Preflight gate** — any **## Bootstrap** steps 2–4 refusal, raised before
   the discriminator is spawned. Nothing to resume: report the specific gap to
   the human; they fix the condition and **re-invoke** auto-plan.
@@ -17,7 +24,9 @@ default a model — surface the gap directly to the human.
   an unusable result) — report which subagent failed and how to the human with
   no silent fallback and no model-defaulting. Once the human addresses the
   cause, **resume this same agent**; then re-spawn the failed subagent and
-  continue.
+  continue. A pinned slug your Task tool does not advertise is **not** a
+  subagent failure: spawn it with no model per **## Model availability** rather
+  than escalating.
 - **Other blocked states** — cannot read the source issue / mandatory sources,
   unset `Workspace:` when file work is required, or a finalize `attach` /
   `comment` refusal — same contract: report the block to the human and stop.

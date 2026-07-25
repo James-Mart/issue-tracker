@@ -36,7 +36,7 @@ Task `status` / `qa` and work-root `retro` writes are subagent-owned — see
 `assignee` holds the implementor **family key** (or a legacy model slug).
 Before each implementor spawn, **Resolve implementor family** (below) and spawn
 `issue-tracker-implementor-<family>` with that wrapper's pin as Cursor Task
-`model`.
+`model`, subject to **## Model availability**.
 
 **Nomenclature:** **Task** / **Story** are issue-tracker kinds. **Cursor Task**
 is the subagent spawn/resume tool (`model`, `prompt`, `subagent_type`, resume).
@@ -44,6 +44,15 @@ is the subagent spawn/resume tool (`model`, `prompt`, `subagent_type`, resume).
 with — the top-level unit Completion and retro key to.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
+
+## Model availability
+
+Every model this skill names — the role table, the family → wrapper pin table,
+and each spawn stub — is the pin its target agent carries. Pass it as Cursor
+Task `model` when that slug is among those your Task tool advertises; when it is
+not, pass no model at all: the pin travels with the agent definition and the
+host applies it. Never substitute a different slug, and do not treat an
+unavailable slug as a refusal or as grounds for `needsAttention`.
 
 ## Argument
 
@@ -168,8 +177,8 @@ Family → wrapper pin (Cursor Task `model`):
 | `opus` | `issue-tracker-implementor-opus` | `claude-opus-5-thinking-high` |
 
 Never pass a model slug from `assignee` as Cursor Task `model` — always the
-wrapper pin for the resolved family. Never `view|head`, never infer from
-discriminator chat or prior Tasks.
+wrapper pin for the resolved family, subject to **## Model availability**.
+Never `view|head`, never infer from discriminator chat or prior Tasks.
 
 Because `issue tree` lists each Story after the Story it is stacked on,
 walking the outline top-to-bottom always reaches a stacked Story only after its
@@ -350,11 +359,8 @@ never kind nouns (`Task:`, `Story:`, `Commit:`, `Branch:`, `Epic:`). Children
 own static behavior via their `agents/*.md` files — do not paste workflow
 instructions here.
 
-**Model availability** — each stub names the model its target agent is pinned
-to. Pass it when that slug is among those your Task tool advertises; when it is
-not, pass no model at all — the pin travels with the agent definition and the
-host applies it. Never substitute a different slug, and do not treat an
-unavailable slug as a refusal.
+Model literals below are pins — see **## Model availability** before passing
+one.
 
 **Issue context line** — shared prefix for discriminator, implement,
 code-quality, spec-conformance, and revise stubs:
