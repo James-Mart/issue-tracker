@@ -13,6 +13,9 @@ import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 /** Interval for live-only nested-run liveness frames. */
 export const NESTED_RUN_HEARTBEAT_MS = 5000;
 
+/** Maximum nested delegation depth (conversation root is 0). */
+export const MAX_DELEGATION_DEPTH = 3;
+
 export interface DelegateToolOptions {
   sdk: AgentSdk;
   cwd: string;
@@ -80,6 +83,14 @@ export function createDelegateCustomTools(
     execute: async (args, context) => {
       const role = requireString(args, "role");
       const prompt = requireString(args, "prompt");
+
+      const attemptedDepth = delegationStack.length + 1;
+      if (attemptedDepth > MAX_DELEGATION_DEPTH) {
+        throw new Error(
+          `delegate: maximum delegation depth is ${MAX_DELEGATION_DEPTH} (attempted depth ${attemptedDepth})`,
+        );
+      }
+
       const agentsDir = options.agentsDir;
 
       const pin = loadRoleModelPin(role, agentsDir);

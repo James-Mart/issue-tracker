@@ -12,6 +12,7 @@ import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import type { ConversationFrame } from "./conversation-stream.js";
 import {
   createDelegateCustomTools,
+  MAX_DELEGATION_DEPTH,
   NESTED_RUN_HEARTBEAT_MS,
 } from "./delegate-tool.js";
 import {
@@ -133,6 +134,63 @@ describe("createDelegateCustomTools", () => {
       reply: "On it.",
     });
     expect(nestedResult.agentId).not.toBe(fake.handles[0]!.agentId);
+  });
+
+  it("allows delegation through depth 3 and refuses depth 4", async () => {
+    let releaseHold!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold, stream: [] });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+    const delegate = customTools.delegate!;
+
+    async function waitForSend(handleIndex: number): Promise<void> {
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline) {
+        if (fake.handles[handleIndex]?.sends.length === 1) return;
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      throw new Error(`timed out waiting for handle[${handleIndex}] send`);
+    }
+
+    const depth1 = delegate.execute(
+      { role: "pinned-role", prompt: "depth 1" },
+      {},
+    );
+    await waitForSend(0);
+
+    const delegate2 = fake.created[0]!.customTools!.delegate!;
+    const depth2 = delegate2.execute(
+      { role: "pinned-role", prompt: "depth 2" },
+      {},
+    );
+    await waitForSend(1);
+
+    const delegate3 = fake.created[1]!.customTools!.delegate!;
+    const depth3 = delegate3.execute(
+      { role: "pinned-role", prompt: "depth 3" },
+      {},
+    );
+    await waitForSend(2);
+
+    expect(fake.created).toHaveLength(MAX_DELEGATION_DEPTH);
+
+    const delegate4 = fake.created[2]!.customTools!.delegate!;
+    await expect(
+      delegate4.execute({ role: "pinned-role", prompt: "depth 4" }, {}),
+    ).rejects.toThrow(
+      `delegate: maximum delegation depth is ${MAX_DELEGATION_DEPTH} (attempted depth ${MAX_DELEGATION_DEPTH + 1})`,
+    );
+    expect(fake.created).toHaveLength(MAX_DELEGATION_DEPTH);
+
+    releaseHold();
+    await Promise.all([depth1, depth2, depth3]);
   });
 });
 
