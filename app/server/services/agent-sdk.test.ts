@@ -132,7 +132,7 @@ describe("createAgent", () => {
 
   it("forwards the agents map unchanged to Agent.create", async () => {
     const agents: Record<string, AgentDefinition> = {
-      "issue-tracker-implementor": {
+      "issue-tracker-implementor-composer": {
         description: "Implements one Task.",
         prompt: "You implement tasks.",
         model: { id: "composer-2.5" },

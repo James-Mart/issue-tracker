@@ -7,6 +7,9 @@
 // names a missing agent, omits a model expression, or (for fixed-model stubs)
 // disagrees with the target agent's pin.
 //
+// Stubs parameterized by `<family>` expand to each family wrapper and validate
+// that every wrapper exists and carries a frontmatter pin.
+//
 // Run: `npm run lint:spawns` (also part of `npm test`).
 
 import { readdirSync, readFileSync, statSync } from "fs";
@@ -30,6 +33,11 @@ const FORBIDDEN_SUBAGENTS = new Set(["generalPurpose"]);
 
 /** Fixed spawn model slug (no placeholders). */
 const FIXED_MODEL_RE = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/i;
+
+/** Families a `<family>`-parameterized stub must resolve against. */
+const FAMILIES = ["composer", "grok", "opus"] as const;
+
+const FAMILY_PLACEHOLDER = "<family>";
 
 function walkMd(dir: string): string[] {
   const out: string[] = [];
@@ -104,6 +112,17 @@ function lineAt(src: string, index: number): number {
   return src.slice(0, index).split(/\r?\n/).length;
 }
 
+/** Expand `…-<family>` to one concrete type per family; otherwise identity. */
+function expandSubagentTypes(subagentType: string): string[] {
+  if (!subagentType.endsWith(FAMILY_PLACEHOLDER)) return [subagentType];
+  const prefix = subagentType.slice(0, -FAMILY_PLACEHOLDER.length);
+  return FAMILIES.map((f) => `${prefix}${f}`);
+}
+
+function isFamilyParameterized(subagentType: string): boolean {
+  return subagentType.endsWith(FAMILY_PLACEHOLDER);
+}
+
 /**
  * Find `subagent_type: <name>` stubs and the nearest model expression in a
  * short forward window (same stub block).
@@ -111,7 +130,8 @@ function lineAt(src: string, index: number): number {
 function findStubs(file: string, src: string): Stub[] {
   const stubs: Stub[] = [];
   // Allow the name on the next line inside the same code span / stub block.
-  const typeRe = /subagent_type:\s*([\w-]+)/g;
+  // Capture optional `<family>` (or other angle-bracket placeholder).
+  const typeRe = /subagent_type:\s*([\w-]+(?:<[\w-]+>)?)/g;
   let m: RegExpExecArray | null;
   while ((m = typeRe.exec(src))) {
     const subagentType = m[1];
@@ -134,9 +154,10 @@ function findStubs(file: string, src: string): Stub[] {
       }
     } else if (
       /Cursor Task\s+`model`/.test(region) ||
-      /`model`\s+from\b/.test(region)
+      /`model`\s+from\b/.test(region) ||
+      /`model:`/.test(region)
     ) {
-      // Parameterized prose, e.g. Implement stub.
+      // Parameterized prose, e.g. Implement stub / family wrapper pin.
       hasModelExpression = true;
     }
 
@@ -172,6 +193,37 @@ for (const file of scanFiles) {
       );
       continue;
     }
+
+    if (!stub.hasModelExpression) {
+      violations.push(
+        `${loc}: spawn stub for '${stub.subagentType}' names no Cursor Task model`,
+      );
+      continue;
+    }
+
+    if (isFamilyParameterized(stub.subagentType)) {
+      if (stub.fixed) {
+        violations.push(
+          `${loc}: family-parameterized '${stub.subagentType}' must not pin a single fixed spawn model '${stub.modelToken}' — use each family's wrapper pin`,
+        );
+      }
+      for (const name of expandSubagentTypes(stub.subagentType)) {
+        const agent = agents.get(name);
+        if (!agent) {
+          violations.push(
+            `${loc}: family-parameterized '${stub.subagentType}' expands to '${name}' which has no matching spawnable agents/*.md file`,
+          );
+          continue;
+        }
+        if (agent.model === undefined) {
+          violations.push(
+            `${loc}: family wrapper '${name}' has no frontmatter model pin`,
+          );
+        }
+      }
+      continue;
+    }
+
     const builtin = BUILTIN_SUBAGENTS.has(stub.subagentType);
     const agent = agents.get(stub.subagentType);
 
@@ -181,18 +233,9 @@ for (const file of scanFiles) {
       );
     }
 
-    if (!stub.hasModelExpression) {
-      violations.push(
-        `${loc}: spawn stub for '${stub.subagentType}' names no Cursor Task model`,
-      );
-      continue;
-    }
-
     if (builtin || !stub.fixed || !agent) continue;
 
-    // Parameterized stubs (angle brackets / prose) skip pin equality.
-    // issue-tracker-implementor's call sites are parameterized while its pin
-    // is `inherit`, so they must not be flagged here.
+    // Parameterized stubs (prose / non-fixed tokens) skip pin equality.
     if (agent.model === undefined) {
       violations.push(
         `${loc}: agent '${stub.subagentType}' has no frontmatter model pin to agree with spawn model '${stub.modelToken}'`,
@@ -209,14 +252,14 @@ for (const file of scanFiles) {
 
 if (violations.length === 0) {
   console.log(
-    "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; generalPurpose forbidden.",
+    "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; family-parameterized stubs expand to pinned wrappers; generalPurpose forbidden.",
   );
   process.exit(0);
 }
 
 console.error(
   `agent-spawns: ${violations.length} spawn/pin agreement violation(s).\n` +
-    "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); generalPurpose is forbidden.\n",
+    "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); family-parameterized stubs must expand to pinned family wrappers; generalPurpose is forbidden.\n",
 );
 for (const v of violations) {
   console.error(`  ${v}`);
