@@ -43,19 +43,47 @@ export interface DelegateToolOptions {
   agentsDir?: string;
 }
 
+type SlotWaiter = {
+  convKey: string;
+  resolve: () => void;
+  reject: (err: Error) => void;
+};
+
 type SlotGate = {
   inFlight: number;
-  waiters: Array<() => void>;
+  waiters: SlotWaiter[];
+};
+
+type NestedRunTracker = {
+  cancelled: boolean;
+  cancel: () => Promise<void>;
 };
 
 const globalGate: SlotGate = { inFlight: 0, waiters: [] };
 const conversationGates = new Map<string, SlotGate>();
+const nestedRunsByConversation = new Map<string, Set<NestedRunTracker>>();
 
 /** Test helper: clear process-wide concurrency accounting. */
 export function resetDelegationConcurrencyForTests(): void {
   globalGate.inFlight = 0;
   globalGate.waiters.length = 0;
   conversationGates.clear();
+  nestedRunsByConversation.clear();
+}
+
+/** Test helper: outstanding nested work for a conversation concurrency key. */
+export function conversationDelegationOutstandingForTests(
+  conversationId: string,
+): { inFlight: number; queued: number; nestedTracked: number } {
+  const gate = conversationGates.get(conversationId);
+  const globalQueued = globalGate.waiters.filter(
+    (w) => w.convKey === conversationId,
+  ).length;
+  return {
+    inFlight: gate?.inFlight ?? 0,
+    queued: (gate?.waiters.length ?? 0) + globalQueued,
+    nestedTracked: nestedRunsByConversation.get(conversationId)?.size ?? 0,
+  };
 }
 
 function conversationGate(key: string): SlotGate {
@@ -81,7 +109,7 @@ function tryAcquire(convGate: SlotGate): boolean {
 
 function wakeNext(gate: SlotGate): void {
   const next = gate.waiters.shift();
-  if (next) next();
+  if (next) next.resolve();
 }
 
 function releaseSlot(convKey: string, convGate: SlotGate): void {
@@ -96,22 +124,78 @@ function releaseSlot(convKey: string, convGate: SlotGate): void {
 
 /**
  * Acquire a per-conversation + global concurrency slot. Waits FIFO when either
- * limit is saturated; never fails for concurrency.
+ * limit is saturated; never fails for concurrency. Rejects when the
+ * conversation's queued waiters are dropped by
+ * {@link cancelConversationDelegations}.
  */
 async function acquireConcurrencySlot(
   convKey: string,
 ): Promise<() => void> {
   const convGate = conversationGate(convKey);
   while (!tryAcquire(convGate)) {
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
+      const waiter: SlotWaiter = { convKey, resolve, reject };
       if (convGate.inFlight >= MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION) {
-        convGate.waiters.push(resolve);
+        convGate.waiters.push(waiter);
       } else {
-        globalGate.waiters.push(resolve);
+        globalGate.waiters.push(waiter);
       }
     });
   }
   return () => releaseSlot(convKey, convGate);
+}
+
+function trackNested(convKey: string, tracker: NestedRunTracker): void {
+  let set = nestedRunsByConversation.get(convKey);
+  if (!set) {
+    set = new Set();
+    nestedRunsByConversation.set(convKey, set);
+  }
+  set.add(tracker);
+}
+
+function untrackNested(convKey: string, tracker: NestedRunTracker): void {
+  const set = nestedRunsByConversation.get(convKey);
+  if (!set) return;
+  set.delete(tracker);
+  if (set.size === 0) nestedRunsByConversation.delete(convKey);
+}
+
+/**
+ * Cancel in-flight nested runs for a conversation and drop anything still
+ * queued on its concurrency gates. Intended to run before the parent run
+ * settles on conversation cancel.
+ */
+export async function cancelConversationDelegations(
+  conversationId: string,
+): Promise<void> {
+  const err = new Error("delegate: conversation cancelled");
+  const rejected: SlotWaiter[] = [];
+  const convGate = conversationGates.get(conversationId);
+  if (convGate) {
+    rejected.push(...convGate.waiters.splice(0));
+  }
+  for (let i = globalGate.waiters.length - 1; i >= 0; i--) {
+    if (globalGate.waiters[i]!.convKey === conversationId) {
+      rejected.push(globalGate.waiters.splice(i, 1)[0]!);
+    }
+  }
+  for (const waiter of rejected) {
+    waiter.reject(err);
+  }
+
+  const tracked = nestedRunsByConversation.get(conversationId);
+  const toCancel = tracked ? [...tracked] : [];
+  await Promise.all(
+    toCancel.map(async (entry) => {
+      entry.cancelled = true;
+      try {
+        await entry.cancel();
+      } catch {
+        // Best-effort cancel of each nested handle.
+      }
+    }),
+  );
 }
 
 function requireString(
@@ -193,8 +277,17 @@ export function createDelegateCustomTools(
         const fullPrompt = `${roleBody}\n\n${prompt}`;
 
         const release = await acquireConcurrencySlot(concurrencyKey);
+        const tracked: NestedRunTracker = {
+          cancelled: false,
+          cancel: async () => {},
+        };
+        trackNested(concurrencyKey, tracked);
         let handle: Awaited<ReturnType<AgentSdk["createAgent"]>> | undefined;
         try {
+          if (tracked.cancelled) {
+            throw new Error("delegate: conversation cancelled");
+          }
+
           const nestedStoreDir = join(options.storeDir, "nested", randomUUID());
           mkdirSync(nestedStoreDir, { recursive: true });
 
@@ -229,6 +322,11 @@ export function createDelegateCustomTools(
             agents: options.agents,
             customTools: nestedCustomTools,
           });
+          tracked.cancel = () => handle!.cancel();
+          if (tracked.cancelled) {
+            await handle.cancel();
+            throw new Error("delegate: conversation cancelled");
+          }
 
           const run = await handle.send(fullPrompt);
           let reply = "";
@@ -241,13 +339,38 @@ export function createDelegateCustomTools(
             }, NESTED_RUN_HEARTBEAT_MS);
           }
           try {
-            for await (const event of run) {
-              reply += assistantTextFromEvent(event);
-              if (pipeline && parentCallId) {
-                await pipeline.handleDelegation(parentCallId, stamp, event);
+            try {
+              for await (const event of run) {
+                reply += assistantTextFromEvent(event);
+                if (pipeline && parentCallId) {
+                  await pipeline.handleDelegation(parentCallId, stamp, event);
+                }
               }
+              if (pipeline) await pipeline.flush();
+            } catch (streamErr) {
+              if (pipeline) {
+                try {
+                  await pipeline.flush();
+                } catch {
+                  // Best-effort flush after a mid-run failure.
+                }
+              }
+              // Prefer wait()'s terminal status (e.g. cancelled) over an
+              // iterator abort error, matching the conversation pump.
+              const waitedAfterAbort = await run.wait();
+              if (waitedAfterAbort.status === "cancelled") {
+                throw new Error(
+                  `delegate: nested run ${waitedAfterAbort.id} was cancelled`,
+                );
+              }
+              if (waitedAfterAbort.status === "error") {
+                throw new Error(
+                  waitedAfterAbort.error?.message ??
+                    `delegate: nested run ${waitedAfterAbort.id} failed`,
+                );
+              }
+              throw streamErr;
             }
-            if (pipeline) await pipeline.flush();
 
             const waited = await run.wait();
             if (waited.status === "error") {
@@ -262,19 +385,11 @@ export function createDelegateCustomTools(
               );
             }
             return { agentId: handle.agentId, reply };
-          } catch (err) {
-            if (pipeline) {
-              try {
-                await pipeline.flush();
-              } catch {
-                // Best-effort flush after a mid-run failure.
-              }
-            }
-            throw err;
           } finally {
             if (heartbeat !== undefined) clearInterval(heartbeat);
           }
         } finally {
+          untrackNested(concurrencyKey, tracked);
           release();
           if (handle) {
             try {

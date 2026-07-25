@@ -15,7 +15,10 @@ import {
   readConversation,
   updateMeta,
 } from "./conversations.js";
-import { createDelegateCustomTools } from "./delegate-tool.js";
+import {
+  cancelConversationDelegations,
+  createDelegateCustomTools,
+} from "./delegate-tool.js";
 import {
   EventPipeline,
   type NormalizedStep,
@@ -125,7 +128,15 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     return { handle, entry };
   }
 
-  async function tearDownEntry(entry: SessionEntry): Promise<void> {
+  async function tearDownEntry(
+    conversationId: string,
+    entry: SessionEntry,
+  ): Promise<void> {
+    try {
+      await cancelConversationDelegations(conversationId);
+    } catch {
+      // Continue disposing even if nested cancel fails.
+    }
     try {
       if (entry.activeRun) await entry.handle.cancel();
     } catch {
@@ -226,6 +237,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     async cancel(conversationId) {
       const entry = sessions.get(conversationId);
       if (!entry?.activeRun) return false;
+      // Nested first so queued/in-flight delegations stop before the parent
+      // run settles from its own cancel.
+      await cancelConversationDelegations(conversationId);
       await entry.handle.cancel();
       return true;
     },
@@ -234,13 +248,17 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       const entry = sessions.get(conversationId);
       if (!entry) return;
       sessions.delete(conversationId);
-      await tearDownEntry(entry);
+      await tearDownEntry(conversationId, entry);
     },
 
     async disposeAll() {
-      const entries = [...sessions.values()];
+      const entries = [...sessions.entries()];
       sessions.clear();
-      await Promise.all(entries.map((entry) => tearDownEntry(entry)));
+      await Promise.all(
+        entries.map(([conversationId, entry]) =>
+          tearDownEntry(conversationId, entry),
+        ),
+      );
     },
   };
 }

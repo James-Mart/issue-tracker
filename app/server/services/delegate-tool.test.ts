@@ -11,6 +11,8 @@ import type { AgentStreamEvent } from "./agent-sdk.js";
 import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import type { ConversationFrame } from "./conversation-stream.js";
 import {
+  cancelConversationDelegations,
+  conversationDelegationOutstandingForTests,
   createDelegateCustomTools,
   MAX_CONCURRENT_DELEGATIONS_GLOBAL,
   MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION,
@@ -329,6 +331,68 @@ describe("createDelegateCustomTools", () => {
 
     releaseHold();
     await Promise.all([...held, afterFailure]);
+  });
+
+  it("cancels in-flight nested runs and drops queued waiters for the conversation", async () => {
+    let releaseHold!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold, stream: [] });
+    const conversationId = "conv-cascade-cancel";
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId,
+    });
+    const delegate = customTools.delegate!;
+    const cap = MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION;
+
+    const running = Array.from({ length: cap }, (_, i) =>
+      delegate.execute({ role: "pinned-role", prompt: `inflight-${i}` }, {}),
+    );
+    for (let i = 0; i < cap; i++) {
+      await waitForHandleSend(fake, i);
+    }
+
+    const queued = delegate.execute(
+      { role: "pinned-role", prompt: "queued" },
+      {},
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fake.created).toHaveLength(cap);
+    expect(conversationDelegationOutstandingForTests(conversationId)).toEqual(
+      {
+        inFlight: cap,
+        queued: 1,
+        nestedTracked: cap,
+      },
+    );
+
+    await cancelConversationDelegations(conversationId);
+
+    await expect(queued).rejects.toThrow("delegate: conversation cancelled");
+    await Promise.all(
+      running.map((p) =>
+        expect(p).rejects.toThrow(/delegate: nested run .* was cancelled/),
+      ),
+    );
+
+    for (let i = 0; i < cap; i++) {
+      expect(fake.handles[i]?.cancelled).toBe(true);
+    }
+    expect(fake.created).toHaveLength(cap);
+    expect(conversationDelegationOutstandingForTests(conversationId)).toEqual(
+      {
+        inFlight: 0,
+        queued: 0,
+        nestedTracked: 0,
+      },
+    );
+
+    releaseHold();
   });
 });
 

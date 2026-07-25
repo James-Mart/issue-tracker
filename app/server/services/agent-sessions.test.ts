@@ -44,7 +44,11 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  const { resetDelegationConcurrencyForTests } = await import(
+    "./delegate-tool.js"
+  );
+  resetDelegationConcurrencyForTests();
   vi.unstubAllEnvs();
   rmSync(issuesRoot, { recursive: true, force: true });
   rmSync(workspaceDir, { recursive: true, force: true });
@@ -54,7 +58,19 @@ async function load() {
   const conversations = await import("./conversations.js");
   const { createAgentSessions } = await import("./agent-sessions.js");
   const { subscribeFrames } = await import("./conversation-stream.js");
-  return { ...conversations, createAgentSessions, subscribeFrames };
+  const {
+    conversationDelegationOutstandingForTests,
+    MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION,
+    resetDelegationConcurrencyForTests,
+  } = await import("./delegate-tool.js");
+  return {
+    ...conversations,
+    createAgentSessions,
+    subscribeFrames,
+    conversationDelegationOutstandingForTests,
+    MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION,
+    resetDelegationConcurrencyForTests,
+  };
 }
 
 describe("agent sessions manager", () => {
@@ -578,6 +594,77 @@ describe("agent sessions manager", () => {
 
     await sessions.disposeAll();
     expect(fake.handles[0]?.disposed).toBe(true);
+  });
+
+  it("cancel cascades to in-flight and queued nested delegations before the parent settles", async () => {
+    const {
+      createConversation,
+      createAgentSessions,
+      conversationDelegationOutstandingForTests,
+      MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION,
+    } = await load();
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold, stream: [] });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Cascade cancel",
+      projectId: "platform",
+      model: "auto",
+    });
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    await Promise.resolve();
+    const delegate = fake.created[0]?.customTools?.delegate;
+    expect(delegate).toBeDefined();
+    if (!delegate) return;
+
+    const role = "issue-tracker-research";
+    const cap = MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION;
+    const nested = Array.from({ length: cap }, (_, i) =>
+      delegate.execute({ role, prompt: `nested-${i}` }, {}),
+    );
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline && fake.handles.length < cap + 1) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(fake.handles.length).toBe(cap + 1);
+
+    const queued = delegate.execute({ role, prompt: "queued" }, {});
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fake.handles.length).toBe(cap + 1);
+    expect(conversationDelegationOutstandingForTests(meta.id).queued).toBe(1);
+
+    // Nested cancel + queue drop run inside cancel() before parent handle.cancel().
+    expect(await sessions.cancel(meta.id)).toBe(true);
+
+    await expect(queued).rejects.toThrow("delegate: conversation cancelled");
+    await Promise.all(
+      nested.map((p) =>
+        expect(p).rejects.toThrow(/delegate: nested run .* was cancelled/),
+      ),
+    );
+    for (let i = 1; i <= cap; i++) {
+      expect(fake.handles[i]?.cancelled).toBe(true);
+    }
+    expect(conversationDelegationOutstandingForTests(meta.id)).toEqual({
+      inFlight: 0,
+      queued: 0,
+      nestedTracked: 0,
+    });
+
+    expect(fake.handles[0]?.cancelled).toBe(true);
+    expect(await result.run.wait()).toEqual({
+      id: FAKE_RUN_ID,
+      status: "cancelled",
+    });
+    release();
+    await sessions.disposeAll();
   });
 
   it("dispose awaits the background pump before returning", async () => {
