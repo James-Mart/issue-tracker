@@ -38,9 +38,8 @@ Re-read `issue tree <rootId>`. Spawn
 **Delegation** — **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
-When the gate holds, spawn **once** with the retro spawn stub
-(`model: cursor-grok-4.5-high-fast`; work-root id + title). Wait until the
-Cursor Task finishes (or raises needsAttention). Do **not** mine transcripts yourself, and do **not** expect
+When the gate holds, delegate **Retro** (Spawn stubs) once. Wait until it
+finishes (or raises needsAttention). Do **not** mine transcripts yourself, and do **not** expect
 or relay a retro summary into your context. If the gate fails only because some
 Story is not `merged` yet, skip the spawn; a later re-run of this skill on the
 same root re-evaluates Phase 2 once the chips show all merged (an unset
