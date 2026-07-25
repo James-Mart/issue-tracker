@@ -191,7 +191,8 @@ specifics and stop; otherwise proceed to Flow.
      spans (discriminator blast-radius axis; not effort or time)
 
    Spawn `issue-tracker-auto-plan-discriminator`
-   (`subagent_type: issue-tracker-auto-plan-discriminator`) with a prompt
+   (`subagent_type: issue-tracker-auto-plan-discriminator`,
+   `model: composer-2.5`) with a prompt
    that is the source issue id followed by those three labelled statements.
    Its entire final message is the planner model slug — capture it as
    `<plannerModel>`. Unusable / errored → escalate per **## Refusals &
