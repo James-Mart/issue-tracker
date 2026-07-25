@@ -1,0 +1,354 @@
+import { describe, expect, it } from "vitest";
+import type { TranscriptEvent } from "@server/schemas";
+import {
+  applyNestedStep,
+  deriveSubAgent,
+  deriveSubAgents,
+  isSubAgentToolName,
+} from "./subagent";
+
+const TASK_CALL_ID = "call-task-1";
+const NESTED_AGENT_ID = "bc-nested-1";
+const AT = "2026-07-24T00:00:00.000Z";
+
+function at(
+  event: Omit<TranscriptEvent, "at">,
+  stamp = AT,
+): TranscriptEvent {
+  return { ...event, at: stamp } as TranscriptEvent;
+}
+
+/** Persisted shape of the fixture nested sequence + completed Task tool_call. */
+function fixtureWithNested(): TranscriptEvent[] {
+  return [
+    at({
+      type: "subagent_update",
+      parentCallId: TASK_CALL_ID,
+      step: { kind: "text", text: "Reading the file." },
+    }),
+    at({
+      type: "subagent_update",
+      parentCallId: TASK_CALL_ID,
+      step: { kind: "thinking", text: "Considering options." },
+    }),
+    at({
+      type: "subagent_update",
+      parentCallId: TASK_CALL_ID,
+      step: {
+        kind: "tool_call",
+        callId: "nested-shell-1",
+        name: "shell",
+        status: "completed",
+        args: { command: "ls -a" },
+        result: {
+          status: "success",
+          value: {
+            exitCode: 0,
+            signal: "",
+            stdout: "README.md\n",
+            stderr: "",
+            executionTime: 4,
+          },
+        },
+      },
+    }),
+    at({
+      type: "subagent_update",
+      parentCallId: TASK_CALL_ID,
+      step: { kind: "step", stepId: 1, status: "started" },
+    }),
+    at({
+      type: "subagent_update",
+      parentCallId: TASK_CALL_ID,
+      step: { kind: "step", stepId: 1, status: "completed" },
+    }),
+    at({
+      type: "tool_call",
+      callId: TASK_CALL_ID,
+      name: "Task",
+      status: "completed",
+      args: { description: "Investigate", prompt: "look into it" },
+      result: { result: "delegation done", agentId: NESTED_AGENT_ID },
+      resultAgentId: NESTED_AGENT_ID,
+    }),
+  ];
+}
+
+/** No-delta fallback: parent Task only, no subagent_update events. */
+function fixtureWithoutNested(): TranscriptEvent[] {
+  return [
+    at({
+      type: "tool_call",
+      callId: TASK_CALL_ID,
+      name: "Task",
+      status: "completed",
+      args: { description: "Investigate", prompt: "look into it" },
+      result: { result: "delegation done", agentId: NESTED_AGENT_ID },
+      resultAgentId: NESTED_AGENT_ID,
+    }),
+  ];
+}
+
+describe("isSubAgentToolName", () => {
+  it("recognizes Agent and Task only", () => {
+    expect(isSubAgentToolName("Task")).toBe(true);
+    expect(isSubAgentToolName("Agent")).toBe(true);
+    expect(isSubAgentToolName("read")).toBe(false);
+    expect(isSubAgentToolName("task")).toBe(false);
+    expect(isSubAgentToolName(undefined)).toBe(false);
+    expect(isSubAgentToolName(null)).toBe(false);
+  });
+});
+
+describe("applyNestedStep", () => {
+  it("concatenates consecutive text deltas and skips the finalize duplicate", () => {
+    let steps = applyNestedStep([], { kind: "text", text: "Hel" });
+    steps = applyNestedStep(steps, { kind: "text", text: "lo" });
+    expect(steps).toEqual([{ kind: "text", text: "Hello" }]);
+    steps = applyNestedStep(steps, { kind: "text", text: "Hello" });
+    expect(steps).toEqual([{ kind: "text", text: "Hello" }]);
+  });
+
+  it("concatenates consecutive thinking deltas the same way", () => {
+    let steps = applyNestedStep([], {
+      kind: "thinking",
+      text: "Consider",
+    });
+    steps = applyNestedStep(steps, { kind: "thinking", text: "ing." });
+    steps = applyNestedStep(steps, {
+      kind: "thinking",
+      text: "Considering.",
+    });
+    expect(steps).toEqual([{ kind: "thinking", text: "Considering." }]);
+  });
+
+  it("replaces nested tool_call frames with the same callId", () => {
+    let steps = applyNestedStep([], {
+      kind: "tool_call",
+      callId: "n1",
+      name: "shell",
+      status: "running",
+    });
+    steps = applyNestedStep(steps, {
+      kind: "tool_call",
+      callId: "n1",
+      name: "shell",
+      status: "completed",
+      result: { ok: true },
+    });
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({
+      kind: "tool_call",
+      callId: "n1",
+      status: "completed",
+      result: { ok: true },
+    });
+  });
+});
+
+describe("deriveSubAgents", () => {
+  it("derives ordered steps, status, and resumeAgentId from the nested fixture", () => {
+    const agents = deriveSubAgents(fixtureWithNested());
+    expect(agents).toHaveLength(1);
+    const agent = agents[0]!;
+    expect(agent.callId).toBe(TASK_CALL_ID);
+    expect(agent.description).toBe("Investigate");
+    expect(agent.prompt).toBe("look into it");
+    expect(agent.status).toBe("completed");
+    expect(agent.resumeAgentId).toBe(NESTED_AGENT_ID);
+    expect(agent.result).toEqual({
+      result: "delegation done",
+      agentId: NESTED_AGENT_ID,
+    });
+    expect(agent.steps.map((s) => s.kind)).toEqual([
+      "text",
+      "thinking",
+      "tool_call",
+      "step",
+      "step",
+    ]);
+    expect(agent.steps[0]).toEqual({
+      kind: "text",
+      text: "Reading the file.",
+    });
+    expect(agent.steps[1]).toEqual({
+      kind: "thinking",
+      text: "Considering options.",
+    });
+    expect(agent.steps[2]).toMatchObject({
+      kind: "tool_call",
+      callId: "nested-shell-1",
+      name: "shell",
+      status: "completed",
+    });
+  });
+
+  it("yields empty steps for the no-delta fallback fixture", () => {
+    const agent = deriveSubAgent(fixtureWithoutNested(), TASK_CALL_ID);
+    expect(agent).toBeDefined();
+    expect(agent!.steps).toEqual([]);
+    expect(agent!.status).toBe("completed");
+    expect(agent!.resumeAgentId).toBe(NESTED_AGENT_ID);
+  });
+
+  it("coalesces live incremental nested frames to the same steps as replay", () => {
+    const live: TranscriptEvent[] = [
+      at({
+        type: "tool_call",
+        callId: TASK_CALL_ID,
+        name: "Task",
+        status: "running",
+        args: { description: "Investigate", prompt: "look into it" },
+      }),
+      // Live text delta + finalize (full coalesced text).
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "text", text: "Reading the file." },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "text", text: "Reading the file." },
+      }),
+      // Live thinking delta + finalize.
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "thinking", text: "Considering options." },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "thinking", text: "Considering options." },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: {
+          kind: "tool_call",
+          callId: "nested-shell-1",
+          name: "shell",
+          status: "running",
+        },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: {
+          kind: "tool_call",
+          callId: "nested-shell-1",
+          name: "shell",
+          status: "completed",
+          args: { command: "ls -a" },
+          result: {
+            status: "success",
+            value: {
+              exitCode: 0,
+              signal: "",
+              stdout: "README.md\n",
+              stderr: "",
+              executionTime: 4,
+            },
+          },
+        },
+      }),
+      at({
+        type: "tool_call",
+        callId: TASK_CALL_ID,
+        name: "Task",
+        status: "completed",
+        args: { description: "Investigate", prompt: "look into it" },
+        result: { result: "delegation done", agentId: NESTED_AGENT_ID },
+        resultAgentId: NESTED_AGENT_ID,
+      }),
+    ];
+
+    const liveAgent = deriveSubAgent(live, TASK_CALL_ID)!;
+    const replayAgent = deriveSubAgent(fixtureWithNested(), TASK_CALL_ID)!;
+
+    expect(liveAgent.steps).toEqual(
+      replayAgent.steps.filter((s) => s.kind !== "step"),
+    );
+    expect(liveAgent.resumeAgentId).toBe(NESTED_AGENT_ID);
+    expect(liveAgent.status).toBe("completed");
+  });
+
+  it("never throws on missing or oddly-shaped payloads", () => {
+    const weird: TranscriptEvent[] = [
+      at({
+        type: "tool_call",
+        callId: "c-odd",
+        name: "Task",
+        status: "running",
+        args: null as unknown as Record<string, unknown>,
+      }),
+      at({
+        type: "tool_call",
+        callId: "c-odd",
+        name: "Task",
+        status: "completed",
+        args: {
+          description: 42,
+          prompt: { nested: true },
+          subagentType: "explore",
+          name: ["not", "a", "string"],
+        } as unknown as Record<string, unknown>,
+        result: "plain-string-result",
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: "c-odd",
+        step: { kind: "text", text: "ok" },
+      }),
+      at({
+        type: "tool_call",
+        callId: "c-read",
+        name: "read",
+        status: "completed",
+      }),
+      at({
+        type: "tool_call",
+        callId: "c-agent",
+        name: "Agent",
+        status: "error",
+        args: undefined,
+      }),
+    ];
+
+    expect(() => deriveSubAgents(weird)).not.toThrow();
+    const agents = deriveSubAgents(weird);
+    expect(agents.map((a) => a.callId)).toEqual(["c-odd", "c-agent"]);
+    expect(agents[0]).toMatchObject({
+      callId: "c-odd",
+      status: "completed",
+      steps: [{ kind: "text", text: "ok" }],
+    });
+    expect(agents[0]!.name).toBeUndefined();
+    expect(agents[0]!.description).toBeUndefined();
+    expect(agents[0]!.prompt).toBeUndefined();
+    expect(agents[0]!.resumeAgentId).toBeUndefined();
+    expect(agents[1]).toMatchObject({
+      callId: "c-agent",
+      status: "error",
+      steps: [],
+    });
+  });
+
+  it("reads subagentType.name when present", () => {
+    const events = [
+      at({
+        type: "tool_call",
+        callId: "c1",
+        name: "Task",
+        status: "completed",
+        args: {
+          description: "Explore",
+          prompt: "go",
+          subagentType: { kind: "custom", name: "explore" },
+        },
+      }),
+    ];
+    expect(deriveSubAgent(events, "c1")?.name).toBe("explore");
+  });
+});
