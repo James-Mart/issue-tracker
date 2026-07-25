@@ -202,14 +202,12 @@ workflow instructions here.
 **Delegation** — **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
-**Focused codebase research** — `subagent_type: issue-tracker-research`
-(`model: composer-2.5`)
+**Focused codebase research** — `role: issue-tracker-research`
 
 > Research: `<focused question>`. Workspace: `<absolute workspace path>`.
 > Seed paths (if any): `<paths>`. Ref: `<git ref>` (optional).
 
-**Retro** — `subagent_type: issue-tracker-retro`
-(`model: cursor-grok-4.5-high-fast`)
+**Retro** — `role: issue-tracker-retro`
 
 > Work root: `<rootId>` (`<title>`). Comment role: `retro`.
 
