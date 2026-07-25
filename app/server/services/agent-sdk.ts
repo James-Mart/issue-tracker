@@ -37,7 +37,11 @@ export interface AgentSdk {
    */
   createAgent(options: CreateAgentOptions): Promise<AgentHandle>;
   /** Rehydrate a previously created agent by id and keep driving it. */
-  resumeAgent(agentId: string, storeDir: string): Promise<AgentHandle>;
+  resumeAgent(
+    agentId: string,
+    storeDir: string,
+    options?: ResumeAgentOptions,
+  ): Promise<AgentHandle>;
 }
 
 export interface CreateAgentOptions {
@@ -45,6 +49,10 @@ export interface CreateAgentOptions {
   model: ModelSelection;
   agentId?: string;
   storeDir: string;
+  agents?: Record<string, AgentDefinition>;
+}
+
+export interface ResumeAgentOptions {
   agents?: Record<string, AgentDefinition>;
 }
 
@@ -155,9 +163,10 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       return wrapAgent(sdkAgent);
     },
 
-    async resumeAgent(agentId, storeDir) {
+    async resumeAgent(agentId, storeDir, options = {}) {
       const sdkAgent = await deps.resumeSdkAgent(agentId, {
         apiKey: deps.apiKey,
+        agents: options.agents,
         local: { store: new JsonlLocalAgentStore(storeDir) },
       });
       return wrapAgent(sdkAgent);

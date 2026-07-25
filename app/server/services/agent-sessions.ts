@@ -82,7 +82,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     let handle: AgentHandle;
     if (meta.agentId) {
       try {
-        handle = await sdk.resumeAgent(meta.agentId, storeDir);
+        handle = await sdk.resumeAgent(meta.agentId, storeDir, { agents });
       } catch {
         handle = await sdk.createAgent({ cwd, model, storeDir, agents });
         await updateMeta(conversationId, { agentId: handle.agentId });
