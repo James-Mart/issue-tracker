@@ -246,6 +246,7 @@ export function createFakeAgentSdk(
         const runId = options.waitResult?.id ?? FAKE_RUN_ID;
         const run: AgentRun = {
           id: runId,
+          model: undefined,
           wait: async () => {
             if (options.waitResult) return options.waitResult;
             if (handle.cancelled) {

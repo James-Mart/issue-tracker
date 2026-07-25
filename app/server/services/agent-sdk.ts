@@ -11,6 +11,7 @@ import {
   type NestedTaskUpdate,
   type Run,
   type SDKAgent,
+  type SDKCustomTool,
   type SDKMessage,
   type SDKModel,
   type SendOptions,
@@ -50,10 +51,12 @@ export interface CreateAgentOptions {
   agentId?: string;
   storeDir: string;
   agents?: Record<string, AgentDefinition>;
+  customTools?: Record<string, SDKCustomTool>;
 }
 
 export interface ResumeAgentOptions {
   agents?: Record<string, AgentDefinition>;
+  customTools?: Record<string, SDKCustomTool>;
 }
 
 export interface AgentSendOptions {
@@ -81,6 +84,8 @@ export interface AgentRunResult {
  */
 export interface AgentRun extends AsyncIterable<AgentStreamEvent> {
   readonly id: string;
+  /** Model the SDK reported for this run, when available. */
+  readonly model: ModelSelection | undefined;
   wait(): Promise<AgentRunResult>;
 }
 
@@ -148,7 +153,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       return deps.listSdkModels({ apiKey: deps.apiKey });
     },
 
-    async createAgent({ cwd, model, agentId, storeDir, agents }) {
+    async createAgent({ cwd, model, agentId, storeDir, agents, customTools }) {
       const sdkAgent = await deps.createSdkAgent({
         apiKey: deps.apiKey,
         model,
@@ -158,6 +163,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
           cwd,
           settingSources: ["user", "project", "plugins"],
           store: new JsonlLocalAgentStore(storeDir),
+          customTools,
         },
       });
       return wrapAgent(sdkAgent);
@@ -167,7 +173,10 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       const sdkAgent = await deps.resumeSdkAgent(agentId, {
         apiKey: deps.apiKey,
         agents: options.agents,
-        local: { store: new JsonlLocalAgentStore(storeDir) },
+        local: {
+          store: new JsonlLocalAgentStore(storeDir),
+          customTools: options.customTools,
+        },
       });
       return wrapAgent(sdkAgent);
     },
@@ -266,6 +275,7 @@ async function startSend(
 
   return {
     id: run.id,
+    model: run.model,
     wait: () => waitPromise,
     async *[Symbol.asyncIterator]() {
       try {

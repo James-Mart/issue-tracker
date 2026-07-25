@@ -6,6 +6,7 @@ import type {
   Run,
   RunResult,
   SDKAgent,
+  SDKCustomTool,
   SDKMessage,
 } from "@cursor/sdk";
 import { JsonlLocalAgentStore } from "@cursor/sdk";
@@ -25,6 +26,14 @@ import {
 
 const MODEL: ModelSelection = { id: "composer-2.5" };
 const STORE_DIR = "/data/conversations/my-conv/agent-state";
+
+const SAMPLE_CUSTOM_TOOLS: Record<string, SDKCustomTool> = {
+  delegate: {
+    description: "Delegate to a nested agent",
+    inputSchema: { type: "object", properties: {} },
+    execute: async () => "done",
+  },
+};
 
 // A step in a fake run: either a top-level stream message or an `onDelta`
 // interaction the run fires while streaming.
@@ -157,6 +166,25 @@ describe("createAgent", () => {
     expect(createSdkAgent).toHaveBeenCalledTimes(1);
     expect(createSdkAgent.mock.calls[0]![0].agents).toBe(agents);
   });
+
+  it("forwards customTools as local.customTools to Agent.create", async () => {
+    const createSdkAgent = vi.fn(
+      async (_options: AgentOptions) => makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key-abc" });
+
+    await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+      customTools: SAMPLE_CUSTOM_TOOLS,
+    });
+
+    expect(createSdkAgent).toHaveBeenCalledTimes(1);
+    expect(createSdkAgent.mock.calls[0]![0].local?.customTools).toBe(
+      SAMPLE_CUSTOM_TOOLS,
+    );
+  });
 });
 
 describe("resumeAgent", () => {
@@ -215,6 +243,23 @@ describe("resumeAgent", () => {
     expect(resumeSdkAgent).toHaveBeenCalledTimes(1);
     expect(resumeSdkAgent.mock.calls[0]![1]?.agents).toBe(agents);
   });
+
+  it("forwards customTools as local.customTools to Agent.resume", async () => {
+    const resumeSdkAgent = vi.fn(
+      async (_id: string, _options?: Partial<AgentOptions>) =>
+        makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-xyz" });
+
+    await sdk.resumeAgent("agent-1", STORE_DIR, {
+      customTools: SAMPLE_CUSTOM_TOOLS,
+    });
+
+    expect(resumeSdkAgent).toHaveBeenCalledTimes(1);
+    expect(resumeSdkAgent.mock.calls[0]![1]?.local?.customTools).toBe(
+      SAMPLE_CUSTOM_TOOLS,
+    );
+  });
 });
 
 describe("listModels", () => {
@@ -266,6 +311,7 @@ describe("send (merged stream)", () => {
     const run = await handle.send("go");
     const events = await drain(run);
     expect(await run.wait()).toMatchObject({ id: "run-1", status: "finished" });
+    expect(run.model).toBeUndefined();
 
     expect(events).toEqual([
       { kind: "message", message: msgA },
@@ -318,6 +364,39 @@ describe("send (merged stream)", () => {
       "go",
       expect.objectContaining({ model: { id: "auto" } }),
     );
+  });
+
+  it("surfaces the SDK run model on AgentRun", async () => {
+    const runModel: ModelSelection = { id: "composer-2.5-fast" };
+    const base = makeFakeSdkAgent([]);
+    const sdkAgent: SDKAgent = {
+      ...base,
+      async send() {
+        const run: FakeRun = {
+          id: "run-model",
+          agentId: "agent-1",
+          status: "finished",
+          model: runModel,
+          supports: () => true,
+          unsupportedReason: () => undefined,
+          async *stream() {},
+          async conversation() {
+            return [];
+          },
+          async wait(): Promise<RunResult> {
+            return { id: "run-model", status: "finished", model: runModel };
+          },
+          cancel: vi.fn(async () => {}),
+          onDidChangeStatus: () => () => {},
+        };
+        return run;
+      },
+    };
+    const sdk = createAgentSdk({ createSdkAgent: async () => sdkAgent });
+    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
+    const run = await handle.send("go");
+    expect(run.model).toEqual(runModel);
+    await drain(run);
   });
 
   it("surfaces a started-then-errored wait result", async () => {
