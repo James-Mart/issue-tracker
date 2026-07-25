@@ -1,7 +1,10 @@
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { pluginDir } from "../config.js";
-import { splitFrontmatter } from "./agent-definitions.js";
+import {
+  splitFrontmatter,
+  type AgentFrontmatter,
+} from "./agent-definitions.js";
 
 function defaultAgentsDir(): string {
   return join(pluginDir, "agents");
@@ -13,18 +16,41 @@ function hasModelPin(model: unknown): boolean {
   );
 }
 
-/** Read a spawnable role's markdown body with YAML frontmatter stripped. */
-export function loadRoleBody(
+function readRoleFile(
   name: string,
-  agentsDir: string = defaultAgentsDir(),
-): string {
+  agentsDir: string,
+): { fileName: string; frontmatter: AgentFrontmatter; prompt: string } {
   const fileName = `${name}.md`;
   const source = readFileSync(join(agentsDir, fileName), "utf8");
   const parsed = splitFrontmatter(source);
   if (!parsed) {
     throw new Error(`${fileName}: failed to parse frontmatter`);
   }
-  return parsed.prompt;
+  return {
+    fileName,
+    frontmatter: parsed.frontmatter,
+    prompt: parsed.prompt,
+  };
+}
+
+/** Read a spawnable role's markdown body with YAML frontmatter stripped. */
+export function loadRoleBody(
+  name: string,
+  agentsDir: string = defaultAgentsDir(),
+): string {
+  return readRoleFile(name, agentsDir).prompt;
+}
+
+/** Read a spawnable role's frontmatter model pin. */
+export function loadRoleModelPin(
+  name: string,
+  agentsDir: string = defaultAgentsDir(),
+): string {
+  const { fileName, frontmatter } = readRoleFile(name, agentsDir);
+  if (!hasModelPin(frontmatter.model)) {
+    throw new Error(`${fileName}: missing model pin`);
+  }
+  return frontmatter.model as string;
 }
 
 /** Fail fast when a spawnable role is missing required frontmatter. */

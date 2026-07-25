@@ -232,6 +232,7 @@ export function createFakeAgentSdk(
     options?: ResumeAgentOptions;
   }> = [];
   const handles: FakeAgentHandle[] = [];
+  let nextAgentSeq = 0;
 
   function makeHandle(agentId: string): FakeAgentHandle {
     let abortHold: ((err: Error) => void) | undefined;
@@ -292,7 +293,11 @@ export function createFakeAgentSdk(
     },
     async createAgent(createOptions) {
       created.push(createOptions);
-      return makeHandle(createOptions.agentId ?? FAKE_AGENT_ID);
+      nextAgentSeq += 1;
+      const agentId =
+        createOptions.agentId ??
+        (nextAgentSeq === 1 ? FAKE_AGENT_ID : `agent-fake-${nextAgentSeq}`);
+      return makeHandle(agentId);
     },
     async resumeAgent(agentId, storeDir, resumeOptions = {}) {
       resumed.push({ agentId, storeDir, options: resumeOptions });

@@ -15,6 +15,7 @@ import {
   readConversation,
   updateMeta,
 } from "./conversations.js";
+import { createDelegateCustomTools } from "./delegate-tool.js";
 import {
   EventPipeline,
   type NormalizedStep,
@@ -78,13 +79,28 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     }
 
     const agents = loadPluginAgentDefinitions();
+    const customTools = createDelegateCustomTools({
+      sdk,
+      cwd,
+      storeDir,
+      agents,
+    });
 
     let handle: AgentHandle;
     if (meta.agentId) {
       try {
-        handle = await sdk.resumeAgent(meta.agentId, storeDir, { agents });
+        handle = await sdk.resumeAgent(meta.agentId, storeDir, {
+          agents,
+          customTools,
+        });
       } catch {
-        handle = await sdk.createAgent({ cwd, model, storeDir, agents });
+        handle = await sdk.createAgent({
+          cwd,
+          model,
+          storeDir,
+          agents,
+          customTools,
+        });
         await updateMeta(conversationId, { agentId: handle.agentId });
         await appendEvent(conversationId, {
           type: "error",
@@ -93,7 +109,13 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         });
       }
     } else {
-      handle = await sdk.createAgent({ cwd, model, storeDir, agents });
+      handle = await sdk.createAgent({
+        cwd,
+        model,
+        storeDir,
+        agents,
+        customTools,
+      });
       await updateMeta(conversationId, { agentId: handle.agentId });
     }
 

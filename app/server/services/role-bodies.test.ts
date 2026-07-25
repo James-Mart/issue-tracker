@@ -2,7 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadRoleBody, validateRoleBodies } from "./role-bodies.js";
+import {
+  loadRoleBody,
+  loadRoleModelPin,
+  validateRoleBodies,
+} from "./role-bodies.js";
 
 let agentsDir: string;
 
@@ -36,6 +40,25 @@ Follow the checklist.`,
 
     expect(loadRoleBody("pinned-role", agentsDir)).toBe(
       "You are the pinned role.\n\nFollow the checklist.",
+    );
+  });
+});
+
+describe("loadRoleModelPin", () => {
+  it("returns the frontmatter model pin for a well-formed role", () => {
+    writeAgent(
+      "pinned-role.md",
+      `---
+name: pinned-role
+model: cursor-grok-4.5-high-fast
+description: A pinned role.
+---
+
+Body.`,
+    );
+
+    expect(loadRoleModelPin("pinned-role", agentsDir)).toBe(
+      "cursor-grok-4.5-high-fast",
     );
   });
 });
