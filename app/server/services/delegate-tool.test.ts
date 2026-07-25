@@ -117,6 +117,128 @@ describe("createDelegateCustomTools", () => {
       agentId: fake.handles[0]!.agentId,
       reply: "On it.",
     });
+    expect(fake.created[0]!.agentId).toBe(fake.handles[0]!.agentId);
+    expect(fake.created[0]!.storeDir).toBe(
+      join(storeDir, "nested", fake.handles[0]!.agentId),
+    );
+  });
+
+  it("resumes an existing nested agent with resumeId instead of creating", async () => {
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+    const roleBody = loadRoleBody("pinned-role", agentsDir);
+
+    const first = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "first turn" },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(0);
+
+    const second = await customTools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "second turn",
+        resumeId: first.agentId as string,
+      },
+      {},
+    );
+
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toEqual([
+      {
+        agentId: first.agentId,
+        storeDir: join(storeDir, "nested", first.agentId as string),
+        options: {
+          agents: undefined,
+          customTools: expect.any(Object),
+        },
+      },
+    ]);
+    expect(fake.handles[1]!.sends).toHaveLength(1);
+    expect(fake.handles[1]!.sends[0]!.prompt).toBe("second turn");
+    expect(fake.handles[1]!.sends[0]!.prompt.startsWith(roleBody)).toBe(
+      false,
+    );
+    expect(second).toEqual({
+      agentId: first.agentId,
+      reply: "On it.",
+    });
+
+    const third = await customTools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "third turn",
+        resumeId: first.agentId as string,
+      },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(2);
+    expect(third.agentId).toBe(first.agentId);
+    expect(fake.handles[2]!.sends[0]!.prompt).toBe("third turn");
+  });
+
+  it("errors on an unknown resumeId without creating a fresh agent", async () => {
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    await expect(
+      customTools.delegate!.execute(
+        {
+          role: "pinned-role",
+          prompt: "orphan",
+          resumeId: "no-such-agent",
+        },
+        {},
+      ),
+    ).rejects.toThrow("delegate: unknown or unresumable agent no-such-agent");
+    expect(fake.created).toHaveLength(0);
+    expect(fake.resumed).toHaveLength(0);
+  });
+
+  it("errors when resumeAgent fails without falling back to create", async () => {
+    const fake = createFakeAgentSdk({
+      stream: ASSISTANT_STREAM,
+      resumeError: new Error("agent not found in store"),
+    });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    const first = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "first turn" },
+      {},
+    );
+    expect(fake.created).toHaveLength(1);
+
+    await expect(
+      customTools.delegate!.execute(
+        {
+          role: "pinned-role",
+          prompt: "retry",
+          resumeId: first.agentId as string,
+        },
+        {},
+      ),
+    ).rejects.toThrow(
+      /delegate: unknown or unresumable agent .*agent not found in store/,
+    );
+    expect(fake.created).toHaveLength(1);
+    expect(fake.resumed).toHaveLength(1);
   });
 
   it("passes a nesting-capable delegate tool to nested agents", async () => {
