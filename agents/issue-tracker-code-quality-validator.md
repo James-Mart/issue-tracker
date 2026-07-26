@@ -20,7 +20,8 @@ Do not run any other mutating `issue` command.
 ## Bootstrap
 
 1. On every entry (review or resume):
-   `issue task set <taskId> qa reviewing`
+   `issue task set <taskId> qa reviewing` (`<taskId>` is the spawn `Issue:`
+   id from Inputs)
 2. Run `issue summary <taskId>` for Project → … → Task context (Epic may be
    absent when the Task's Story / work root is project-level), then
    `issue task view <taskId>` for the Task spec when needed.
@@ -43,7 +44,8 @@ gate state before re-entering `reviewing`.
 - **Work root id** — Epic or project-level Story; context / escalation only;
   do not re-derive ancestry from it (`issue summary <taskId>` is the source
   of truth)
-- **Task id + title**
+- **Issue id + title** (Task) — the spawn `Issue:` value; pass it to
+  `issue summary` and the Task-scoped commands in this body
 - **Mode:** `review` (fresh spawn) or `resume` (Cursor Task resume after
   implementor fixed a prior `changes-requested`)
 

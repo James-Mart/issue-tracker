@@ -25,7 +25,8 @@ git-fact verbs, etc.).
 
 ## Bootstrap
 
-Run `issue summary <storyId>` for Project → … → Story context (Epic may be
+Run `issue summary <storyId>` (`<storyId>` is the spawn `Issue:` id from
+Inputs) for Project → … → Story context (Epic may be
 absent when the work root is a project-level Story). Use
 `issue tree <workRootId>` (Work root id from Inputs) and
 `issue task view <id>` on the Story's Tasks for their full specs (the
@@ -39,7 +40,8 @@ per **SPEC § Project workspace**.
 - **Work root id** — Epic or project-level Story; context / escalation only;
   do not re-derive ancestry from it (`issue summary <storyId>` is the source
   of truth)
-- **Story id + title**
+- **Issue id + title** (Story) — the spawn `Issue:` value; pass it to
+  `issue summary` and the Story-scoped commands in this body
 
 ## What you do
 
