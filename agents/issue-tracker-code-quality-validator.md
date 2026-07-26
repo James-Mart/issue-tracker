@@ -53,8 +53,9 @@ gate state before re-entering `reviewing`.
 
 Complete all of **## Bootstrap** (steps 1–4) first.
 
-Check the Task's `noDiff` flag (surfaced by `issue summary`/`issue task view`) and
-follow exactly one review include: when it is true, **Read**
+Check the Task's `noDiff` flag via `issue task get <taskId> noDiff` (empty stdout
+means unset — take the diff-review include) and follow exactly one review
+include: when it is `true`, **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-code-quality-no-diff-review.md`
 and follow it; otherwise **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-code-quality-diff-review.md`
