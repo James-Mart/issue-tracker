@@ -40,7 +40,7 @@ Absolute path for this file (Read this exact path):
    conclude the correct outcome is no source-controlled file changes, set it
    (`issue task set <id> noDiff true`) and say why in your reply.
 5. Post a succinct reply:
-   `issue task comment <id> --role <comment-role> --body "..."` (what you
+   `issue task comment <id> --role implementor --body "..."` (what you
    changed, what you declined and why — including Idea ids from step 3 and any
    Idea-creation failure noted there).
 6. Leave changes uncommitted.

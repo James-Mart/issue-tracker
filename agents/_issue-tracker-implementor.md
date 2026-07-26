@@ -13,7 +13,8 @@ separate subagent.
    - `revise` → `issue task set <id> status fixing` (on every revise entry)
 2. Run `issue summary <id>` to rebuild Project → … → Task context (Epic may be
    absent when the Task's Story / work root is project-level). Use
-   `issue task view <id>` when you need the full `description.md`.
+   `issue task view <id>` for the full `description.md`, and
+   `issue task view <id> --chat` for prior comments.
    Take `<projectId>` from the id token on `Project: <projectId> — <title>`.
 3. **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
@@ -33,7 +34,6 @@ separate subagent.
   of truth)
 - **Issue id + title** (Task for implement / revise)
 - **Mode:** `implement` or `revise`
-- **Comment role** — pass as `--role <role>` on every `issue task comment`
 
 ## Mode
 

@@ -661,13 +661,15 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
 
 **Flag stale children.** A successful `merge` or `fast-forward` advances the
 finishing Story's base branch `Bp`. After that push and `merged` write,
-finish-branch enumerates (via `issue tree` / `issue story get <id> mergeBase`
-and `issue story get <id> storyStatus`) every not-yet-merged Story other than
-the finisher whose derived `storyStatus` is not `not-started` (started =
-non-empty `branchName` → `in-progress` or `pr-open`) and whose derived
-`mergeBase` is `Bp`, and sets `issue story set <childId> needsRebase <Bp>` on
-each. It never rebases those Stories. `manual` and `pull-request` do not
-advance a base and never flag.
+finish-branch takes `<projectId>` from the `Project: <projectId> — <title>`
+line of `issue summary <storyId>`, enumerates candidate Story ids with
+`issue tree <projectId>`, and for each reads `issue story get <id> mergeBase`,
+`issue story get <id> storyStatus`, and `issue story get <id> merged`. It
+flags every not-yet-merged Story other than the finisher whose derived
+`storyStatus` is not `not-started` (started = non-empty `branchName` →
+`in-progress` or `pr-open`) and whose derived `mergeBase` is `Bp`, via
+`issue story set <childId> needsRebase <Bp>`. It never rebases those Stories.
+`manual` and `pull-request` do not advance a base and never flag.
 
 **Resumable / idempotent.** The work loop is resumable, so finish-branch may run
 twice for the same Story. Before acting, the git subagent reads the Story's

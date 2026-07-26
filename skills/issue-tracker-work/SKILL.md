@@ -389,36 +389,31 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 
 **Implement** — `role: issue-tracker-implementor-<family>`
 
-> *(Issue context line.)* Mode: implement. Comment role:
-> `implementor`.
+> *(Issue context line.)* Mode: implement.
 
 **Code-quality validator** — `role: issue-tracker-code-quality-validator`
 (when to spawn vs resume: Per-Task cycle step 3)
 
-> *(Issue context line.)* Mode: review. Comment role:
-> `code-quality-validator`.
+> *(Issue context line.)* Mode: review.
 
 **Code-quality validator (resume)** — `role: issue-tracker-code-quality-validator`
 (when to resume: Per-Task cycle step 3)
 
-> *(Issue context line.)* Mode: resume. Comment role:
-> `code-quality-validator`. Verify that previously requested changes were
+> *(Issue context line.)* Mode: resume. Verify that previously requested changes were
 > fixed.
 
 **Spec-conformance validator** — `role: issue-tracker-spec-conformance-validator`
 
-> *(Issue context line.)* Comment role:
-> `spec-conformance-validator`.
+> *(Issue context line.)*
 
 **Revise** — `role: issue-tracker-implementor-<family>`
 (re-enter with `resumeId`; look up that role via `delegations` when lost)
 
-> *(Issue context line.)* Mode: revise. Comment role:
-> `implementor`.
+> *(Issue context line.)* Mode: revise.
 
 **Retro** — `role: issue-tracker-retro`
 
-> Work root: `<rootId>` (`<title>`). Comment role: `retro`.
+> Work root: `<rootId>` (`<title>`).
 
 ## Rules
 

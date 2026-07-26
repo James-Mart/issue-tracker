@@ -54,6 +54,9 @@ const FIXED_MODEL_LITERAL_RE = /`model:\s*([^`;\n]+?)`/g;
  */
 const ROLE_STUB_RE = /`role:\s*([\w-]+(?:<[\w-]+>)?)`/g;
 
+/** Inputs bullet declaring a parameterized comment role (forbidden). */
+const COMMENT_ROLE_INPUT_RE = /^\s*-\s+\*\*Comment role\*\*/;
+
 /** Families a `<family>`-parameterized stub must resolve against. */
 const FAMILIES = ["composer", "grok", "opus"] as const;
 
@@ -121,6 +124,8 @@ interface Stub {
   file: string;
   line: number;
   subagentType: string;
+  /** Parsed stub window (same slice used for model expression). */
+  region: string;
   /** Raw model token from `model: …`, or null when only a non-literal expression. */
   modelToken: string | null;
   /** True when the stub names any Cursor Task model expression. */
@@ -132,6 +137,8 @@ interface Delegation {
   file: string;
   line: number;
   role: string;
+  /** Parsed stub window (same slice used for model expression). */
+  region: string;
   /** True when the stub window also names a model (forbidden). */
   hasModelExpression: boolean;
   modelToken: string | null;
@@ -181,7 +188,12 @@ function stubWindow(src: string, start: number): string {
   // Window: from match through ~2 blank-line-bounded paragraphs / 400 chars.
   const window = src.slice(start, start + 400);
   const endPara = window.search(/\n\s*\n/);
-  return endPara === -1 ? window : window.slice(0, endPara);
+  let region = endPara === -1 ? window : window.slice(0, endPara);
+  // Spawn/delegation prompts often live in a blockquote on the next paragraph.
+  const after = src.slice(start + region.length);
+  const bqMatch = after.match(/^\s*\n((?:>[^\n]*\n?)+)/);
+  if (bqMatch) region += bqMatch[0];
+  return region;
 }
 
 /**
@@ -204,6 +216,7 @@ function findStubs(file: string, src: string): Stub[] {
       file,
       line: lineAt(src, start),
       subagentType,
+      region,
       modelToken,
       hasModelExpression,
       fixed,
@@ -229,6 +242,7 @@ function findDelegations(file: string, src: string): Delegation[] {
       file,
       line: lineAt(src, start),
       role,
+      region,
       hasModelExpression,
       modelToken,
     });
@@ -298,8 +312,22 @@ export function collectSpawnViolations(rootDir: string): string[] {
       );
     }
 
+    const lines = src.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      if (COMMENT_ROLE_INPUT_RE.test(lines[i])) {
+        violations.push(
+          `${rel(file)}:${i + 1}: Inputs bullet declares a Comment role input — hardcode the role in the agent body`,
+        );
+      }
+    }
+
     for (const stub of stubs) {
       const loc = `${rel(stub.file)}:${stub.line}`;
+      if (stub.region.includes("Comment role")) {
+        violations.push(
+          `${loc}: spawn stub for '${stub.subagentType}' passes 'Comment role' — hardcode the role in the agent body`,
+        );
+      }
       if (FORBIDDEN_SUBAGENTS.has(stub.subagentType)) {
         violations.push(
           `${loc}: subagent_type '${stub.subagentType}' is forbidden — use a named plugin agent (builtins cannot be given a model through the SDK agents map)`,
@@ -365,6 +393,12 @@ export function collectSpawnViolations(rootDir: string): string[] {
     for (const del of delegations) {
       const loc = `${rel(del.file)}:${del.line}`;
 
+      if (del.region.includes("Comment role")) {
+        violations.push(
+          `${loc}: spawn stub for '${del.role}' passes 'Comment role' — hardcode the role in the agent body`,
+        );
+      }
+
       if (del.hasModelExpression) {
         violations.push(
           `${loc}: delegation role '${del.role}' names a model` +
@@ -406,14 +440,14 @@ function runCli(rootDir: string): void {
   const violations = collectSpawnViolations(rootDir);
   if (violations.length === 0) {
     console.log(
-      "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; family-parameterized stubs expand to pinned wrappers; generalPurpose forbidden; delegations name spawnable roles and no model; stub/model-literal/delegation files **Read** Delegation.",
+      "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; family-parameterized stubs expand to pinned wrappers; generalPurpose forbidden; spawn stubs and Inputs must not declare Comment role; delegations name spawnable roles and no model; stub/model-literal/delegation files **Read** Delegation.",
     );
     process.exit(0);
   }
 
   console.error(
     `agent-spawns: ${violations.length} spawn/pin agreement violation(s).\n` +
-      "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); family-parameterized stubs must expand to pinned family wrappers; generalPurpose is forbidden; `role:` delegations must name a spawnable agents/*.md role and must not name a model; files with spawn stubs, fixed `model: <slug>` literals, or `role:` delegations must **Read** agents/_issue-tracker-delegation.md.\n",
+      "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); family-parameterized stubs must expand to pinned family wrappers; generalPurpose is forbidden; spawn stubs and Inputs must not declare Comment role — hardcode the role in the agent body; `role:` delegations must name a spawnable agents/*.md role and must not name a model; files with spawn stubs, fixed `model: <slug>` literals, or `role:` delegations must **Read** agents/_issue-tracker-delegation.md.\n",
   );
   for (const v of violations) {
     console.error(`  ${v}`);

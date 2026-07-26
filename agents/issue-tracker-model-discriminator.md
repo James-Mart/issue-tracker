@@ -35,7 +35,8 @@ You **score and assign only** — then finish and stop.
 
 ## Bootstrap
 
-Run `issue summary <taskId>` for Project → … → Task context (Epic may be
+Run `issue summary <taskId>` (`<taskId>` is the spawn `Issue:` id from
+Inputs) for Project → … → Task context (Epic may be
 absent when the Task's Story / work root is project-level), then
 `issue task view <taskId>` (and `issue story view` / `issue epic view` when needed)
 to read the specs you score against. That summary also carries the Project
@@ -51,7 +52,8 @@ unset escalation, per **SPEC § Project workspace**.
 - **Work root id** — Epic or project-level Story; context / escalation only;
   do not re-derive ancestry from it (`issue summary <taskId>` is the source
   of truth)
-- **Task id + title**
+- **Issue id + title** (Task) — the spawn `Issue:` value; pass it to
+  `issue summary` and the Task-scoped commands in this body
 
 ## Scoring (2D matrix)
 

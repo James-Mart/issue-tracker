@@ -12,7 +12,7 @@ description: >-
 
 Spawned by `issue-tracker-work` Completion or `issue-tracker-plan` post-polish
 when work-root `retro` is unset. Callers own spawn timing. Pass source
-work-root id (+ title) — Epic or project-level Story — and comment role; do
+work-root id (+ title) — Epic or project-level Story; do
 not require promoting a Story to an Epic. Transcript resolution is in
 `agents/issue-tracker-retro.md` **## Transcript resolution**. Do not expect a
 confusion summary return value.
