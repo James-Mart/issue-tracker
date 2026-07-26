@@ -20,7 +20,7 @@ Absolute path for this file (Read this exact path):
 3. Story comment that links the new Task only — findings live on the Task
    description, not duplicated in the Story comment body. Use a GFM
    `issue:` link so the UI renders an `IssueLink`:
-   `issue story comment <storyId> --role <comment-role> --body "Spec review failed; remediation: [issue:<newTaskId>](issue:<newTaskId>)"`
+   `issue story comment <storyId> --role spec-conformance-validator --body "Spec review failed; remediation: [issue:<newTaskId>](issue:<newTaskId>)"`
 4. If any step after `specReview failed` fails, escalate with the error — do
    not leave `failed` with no remediation Task/link silently.
 

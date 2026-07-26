@@ -17,7 +17,7 @@ for the comment body:
 **Clean** (nothing actionable):
 
 ```bash
-issue task comment <taskId> --role <comment-role> --body "$(cat <<'EOF'
+issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
 <body prepared above>
 EOF
 )" && issue task set <taskId> qa passed
@@ -32,7 +32,7 @@ does not count.
 - **1st or 2nd** `changes-requested`:
 
 ```bash
-issue task comment <taskId> --role <comment-role> --body "$(cat <<'EOF'
+issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
 <body prepared above>
 EOF
 )" && issue task set <taskId> qa changes-requested
@@ -43,7 +43,7 @@ EOF
   again:
 
 ```bash
-issue task comment <taskId> --role <comment-role> --body "$(cat <<'EOF'
+issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
 <body prepared above>
 EOF
 )" && issue task set <taskId> qa changes-requested && issue task set <taskId> needsAttention true --reason "code-quality: 3rd changes-requested in this QA session — <short summary>"

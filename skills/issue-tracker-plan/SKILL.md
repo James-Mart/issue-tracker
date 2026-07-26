@@ -209,7 +209,7 @@ workflow instructions here.
 
 **Retro** — `role: issue-tracker-retro`
 
-> Work root: `<rootId>` (`<title>`). Comment role: `retro`.
+> Work root: `<rootId>` (`<title>`).
 
 ## Rules
 

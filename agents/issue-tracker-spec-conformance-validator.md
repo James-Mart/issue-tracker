@@ -40,7 +40,6 @@ per **SPEC § Project workspace**.
   do not re-derive ancestry from it (`issue summary <storyId>` is the source
   of truth)
 - **Story id + title**
-- **Comment role** — pass as `--role <role>` on `issue story comment`
 
 ## What you do
 

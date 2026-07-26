@@ -20,14 +20,14 @@ Absolute path for this file (Read this exact path):
    the output dir (default `/tmp/issue-tracker-screenshots`) to confirm the
    Task's visible behavior. Use Cursor browser MCP tools only for interaction
    needed to reach a state (not for screenshot capture). If capture fails or is
-   unavailable, note that in an `issue task comment <id> --role <comment-role>`
+   unavailable, note that in an `issue task comment <id> --role implementor`
    and continue with the Task's non-screenshot Verify steps — do not raise
    `needsAttention` solely because capture failed. This UI check never weakens
    the hard gates (tests/build) the Task already requires.
 4. **Intentional no-op.** If correctly satisfying the spec means there are **no
    source-controlled file changes**, signal it explicitly:
    `issue task set <id> noDiff true`, then `issue task comment <id> --role
-   <comment-role> --body "..."` explaining why no diff is the right outcome.
+   implementor --body "..."` explaining why no diff is the right outcome.
    A real edit that only touches non-source-controlled files (e.g. a Project
    attachment under the gitignored `issues/` store) still warrants `noDiff true`
    with that explanatory comment. That structured flag plus the chat rationale

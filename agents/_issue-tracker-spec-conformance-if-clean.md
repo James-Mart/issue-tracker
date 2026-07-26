@@ -9,6 +9,6 @@ Absolute path for this file (Read this exact path):
 
 1. `issue story set <storyId> specReview passed`
 2. Short Story comment:
-   `issue story comment <storyId> --role <comment-role> --body "Spec review passed; implementation matches the Task specs."`
+   `issue story comment <storyId> --role spec-conformance-validator --body "Spec review passed; implementation matches the Task specs."`
 
 Do not edit workspace source files. Finish and stop.

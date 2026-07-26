@@ -33,7 +33,6 @@ separate subagent.
   of truth)
 - **Issue id + title** (Task for implement / revise)
 - **Mode:** `implement` or `revise`
-- **Comment role** — pass as `--role <role>` on every `issue task comment`
 
 ## Mode
 

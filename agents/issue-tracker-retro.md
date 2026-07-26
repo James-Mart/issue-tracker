@@ -29,8 +29,6 @@ before Idea creation / comments.
 
 - **Source work root id + title** — the work root for the invoking run (Epic
   or project-level Story; do not require promoting a Story to an Epic)
-- **Comment role** — pass as `--role <role>` on every
-  `issue <kind> comment` on the source
 - Transcripts — resolve per Transcript resolution include; mine with your own
   live CoT
 
@@ -107,7 +105,7 @@ Always end by posting a comment on the source work root (Ideas have no
 `comment` — source comments stay on epic/story):
 
 ```bash
-issue <sourceKind> comment <sourceRootId> --role <comment-role> --body "<body>"
+issue <sourceKind> comment <sourceRootId> --role retro --body "<body>"
 ```
 
 - Clean run: `retro: no remaining confusion gaps`

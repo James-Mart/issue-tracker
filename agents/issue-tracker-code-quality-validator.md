@@ -46,7 +46,6 @@ gate state before re-entering `reviewing`.
 - **Task id + title**
 - **Mode:** `review` (fresh spawn) or `resume` (Cursor Task resume after
   implementor fixed a prior `changes-requested`)
-- **Comment role** — pass as `--role <role>` on `issue task comment`
 
 ## What you do
 
