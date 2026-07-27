@@ -208,7 +208,7 @@ export interface FakeAgentSdk extends AgentSdk {
   readonly resumed: Array<{
     agentId: string;
     storeDir: string;
-    options?: ResumeAgentOptions;
+    options: ResumeAgentOptions;
   }>;
   /** Every handle this fake handed out. */
   readonly handles: FakeAgentHandle[];
@@ -229,7 +229,7 @@ export function createFakeAgentSdk(
   const resumed: Array<{
     agentId: string;
     storeDir: string;
-    options?: ResumeAgentOptions;
+    options: ResumeAgentOptions;
   }> = [];
   const handles: FakeAgentHandle[] = [];
   let nextAgentSeq = 0;
@@ -299,7 +299,7 @@ export function createFakeAgentSdk(
         (nextAgentSeq === 1 ? FAKE_AGENT_ID : `agent-fake-${nextAgentSeq}`);
       return makeHandle(agentId);
     },
-    async resumeAgent(agentId, storeDir, resumeOptions = {}) {
+    async resumeAgent(agentId, storeDir, resumeOptions) {
       resumed.push({ agentId, storeDir, options: resumeOptions });
       if (options.resumeError) throw options.resumeError;
       return makeHandle(agentId);

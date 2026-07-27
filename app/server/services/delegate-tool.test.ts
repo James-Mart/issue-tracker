@@ -155,6 +155,11 @@ describe("createDelegateCustomTools", () => {
         agentId: first.agentId,
         storeDir: join(storeDir, "nested", first.agentId as string),
         options: {
+          // Re-entry names the same workspace the spawn ran in. The SDK files
+          // an agent under its workspace and looks it up the same way, so a
+          // resume that leaves this out lands outside the agent's scope and is
+          // told it does not exist.
+          cwd,
           agents: undefined,
           customTools: expect.any(Object),
         },
@@ -914,6 +919,7 @@ describe("delegate publishes nested run frames", () => {
         agentId,
         storeDir: join(convStoreDir, "nested", agentId),
         options: {
+          cwd,
           agents: undefined,
           customTools: expect.any(Object),
         },

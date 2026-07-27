@@ -37,11 +37,16 @@ export interface AgentSdk {
    * register on the Task tool the same way IDE chats do.
    */
   createAgent(options: CreateAgentOptions): Promise<AgentHandle>;
-  /** Rehydrate a previously created agent by id and keep driving it. */
+  /**
+   * Rehydrate a previously created agent by id and keep driving it. `cwd` is
+   * required and must be the workspace the agent was created in: the SDK scopes
+   * a store lookup to that path, so resuming under any other one reports the
+   * agent as missing.
+   */
   resumeAgent(
     agentId: string,
     storeDir: string,
-    options?: ResumeAgentOptions,
+    options: ResumeAgentOptions,
   ): Promise<AgentHandle>;
 }
 
@@ -55,6 +60,7 @@ export interface CreateAgentOptions {
 }
 
 export interface ResumeAgentOptions {
+  cwd: string;
   agents?: Record<string, AgentDefinition>;
   customTools?: Record<string, SDKCustomTool>;
 }
@@ -159,27 +165,41 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
         model,
         agentId,
         agents,
-        local: {
-          cwd,
-          settingSources: ["user", "project", "plugins"],
-          store: new JsonlLocalAgentStore(storeDir),
-          customTools,
-        },
+        local: localRuntime(cwd, storeDir, customTools),
       });
       return wrapAgent(sdkAgent);
     },
 
-    async resumeAgent(agentId, storeDir, options = {}) {
+    async resumeAgent(agentId, storeDir, { cwd, agents, customTools }) {
       const sdkAgent = await deps.resumeSdkAgent(agentId, {
         apiKey: deps.apiKey,
-        agents: options.agents,
-        local: {
-          store: new JsonlLocalAgentStore(storeDir),
-          customTools: options.customTools,
-        },
+        agents,
+        local: localRuntime(cwd, storeDir, customTools),
       });
       return wrapAgent(sdkAgent);
     },
+  };
+}
+
+/**
+ * The local runtime block both create and resume pass, built in one place so
+ * the two can never drift. `cwd` carries twice the weight it looks like it
+ * does: the SDK scopes store lookups to it (an agent persisted under one
+ * workspace is invisible from another, and resume reports it as not found),
+ * and it is also the directory the agent's tools run in. `settingSources` has
+ * no default worth inheriting — omit it and the SDK loads no config layers at
+ * all, which drops the plugin-packaged skills and agents this app relies on.
+ */
+function localRuntime(
+  cwd: string,
+  storeDir: string,
+  customTools: Record<string, SDKCustomTool> | undefined,
+): NonNullable<AgentOptions["local"]> {
+  return {
+    cwd,
+    settingSources: ["user", "project", "plugins"],
+    store: new JsonlLocalAgentStore(storeDir),
+    customTools,
   };
 }
 

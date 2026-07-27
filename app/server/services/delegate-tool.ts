@@ -382,6 +382,7 @@ export function createDelegateCustomTools(
                 resumeId,
                 nestedStoreDir,
                 {
+                  cwd: options.cwd,
                   agents: options.agents,
                   customTools: nestedCustomTools,
                 },
