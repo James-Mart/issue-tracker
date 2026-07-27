@@ -129,6 +129,8 @@ async function nestedModelsAfterResume(
   await created[Symbol.asyncDispose]();
 
   await using agent = await agentSdk.resumeAgent(agentId, STORE_DIR, {
+    cwd: process.cwd(),
+    model: PARENT_MODEL,
     agents,
   });
   return nestedModelsFrom(agent, role, { model: PARENT_MODEL });

@@ -17,12 +17,15 @@ import {
   PRIMARY_TOOL_CALL_ID,
   TASK_TOOL_CALL_ID,
 } from "./agent-sdk.fake.js";
+import type { AgentSessions } from "./agent-sessions.js";
 import type { ConversationFrame } from "./conversation-stream.js";
 
 const AT = "2026-07-24T12:00:00.000Z";
 
+let root: string;
 let issuesRoot: string;
 let workspaceDir: string;
+let openSessions: AgentSessions[] = [];
 
 function writeIssue(id: string, body: Record<string, unknown>): void {
   mkdirSync(join(issuesRoot, id), { recursive: true });
@@ -30,7 +33,12 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
 }
 
 beforeEach(() => {
-  issuesRoot = mkdtempSync(join(tmpdir(), "issue-tracker-sessions-"));
+  // Nest issues/ under a unique root so conversations/ (peer of issues/) is
+  // also unique. A mkdtemp used directly as ISSUES_DIR would put every worker
+  // on shared tmpdir()/conversations and flake under parallel npm test.
+  root = mkdtempSync(join(tmpdir(), "issue-tracker-sessions-"));
+  issuesRoot = join(root, "issues");
+  mkdirSync(issuesRoot, { recursive: true });
   workspaceDir = mkdtempSync(join(tmpdir(), "issue-session-ws-"));
   mkdirSync(join(workspaceDir, ".git"));
   vi.resetModules();
@@ -45,24 +53,31 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  await Promise.all(openSessions.map((s) => s.disposeAll()));
+  openSessions = [];
   const { resetDelegationConcurrencyForTests } = await import(
     "./delegate-tool.js"
   );
   resetDelegationConcurrencyForTests();
   vi.unstubAllEnvs();
-  rmSync(issuesRoot, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true });
   rmSync(workspaceDir, { recursive: true, force: true });
 });
 
 async function load() {
   const conversations = await import("./conversations.js");
-  const { createAgentSessions } = await import("./agent-sessions.js");
+  const { createAgentSessions: create } = await import("./agent-sessions.js");
   const { subscribeFrames } = await import("./conversation-stream.js");
   const {
     conversationDelegationOutstandingForTests,
     MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION,
     resetDelegationConcurrencyForTests,
   } = await import("./delegate-tool.js");
+  const createAgentSessions: typeof create = (...args) => {
+    const sessions = create(...args);
+    openSessions.push(sessions);
+    return sessions;
+  };
   return {
     ...conversations,
     createAgentSessions,
@@ -150,6 +165,11 @@ describe("agent sessions manager", () => {
           "agent-state",
         ),
         options: {
+          // The Project's workspace, not the server's own working directory:
+          // the SDK scopes the stored agent to the workspace it ran in, so
+          // resuming under anything else reports it as missing.
+          cwd: workspaceDir,
+          model: { id: "auto" },
           agents: expect.any(Object),
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
@@ -203,6 +223,8 @@ describe("agent sessions manager", () => {
           "agent-state",
         ),
         options: {
+          cwd: workspaceDir,
+          model: { id: "composer-2.5" },
           agents: expect.any(Object),
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
@@ -230,8 +252,12 @@ describe("agent sessions manager", () => {
     const errorEvent = transcript.find((e) => e.type === "error");
     expect(errorEvent).toMatchObject({
       type: "error",
+      // The reason travels with the notice: restarting is otherwise
+      // indistinguishable from a fresh conversation, which is how a resume
+      // that fails every time stays invisible.
       message:
-        "The previous agent session could not be resumed; earlier agent-side context was lost.",
+        "The previous agent session could not be resumed; earlier agent-side " +
+        "context was lost. Reason: agent not found in store",
     });
     expect(transcript.at(-1)?.type).not.toBe("error");
   });

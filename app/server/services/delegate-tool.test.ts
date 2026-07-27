@@ -155,6 +155,14 @@ describe("createDelegateCustomTools", () => {
         agentId: first.agentId,
         storeDir: join(storeDir, "nested", first.agentId as string),
         options: {
+          // Re-entry names the same workspace the spawn ran in. The SDK files
+          // an agent under its workspace and looks it up the same way, so a
+          // resume that leaves this out lands outside the agent's scope and is
+          // told it does not exist.
+          cwd,
+          // And it re-states the role's pin, which a resumed agent does not
+          // carry on its own.
+          model: resolveModelSelection("cursor-grok-4.5-high-fast"),
           agents: undefined,
           customTools: expect.any(Object),
         },
@@ -519,13 +527,18 @@ describe("createDelegateCustomTools", () => {
 });
 
 describe("delegate publishes nested run frames", () => {
+  let root: string;
   let issuesRoot: string;
   let workspaceDir: string;
 
   const AT = "2026-07-25T12:00:00.000Z";
 
   beforeEach(() => {
-    issuesRoot = mkdtempSync(join(tmpdir(), "issue-delegate-publish-"));
+    // Nest issues/ under a unique root so conversations/ is not shared at
+    // tmpdir()/conversations with other parallel Vitest workers.
+    root = mkdtempSync(join(tmpdir(), "issue-delegate-publish-"));
+    issuesRoot = join(root, "issues");
+    mkdirSync(issuesRoot, { recursive: true });
     workspaceDir = mkdtempSync(join(tmpdir(), "issue-delegate-ws-"));
     mkdirSync(join(workspaceDir, ".git"));
     vi.resetModules();
@@ -547,7 +560,7 @@ describe("delegate publishes nested run frames", () => {
   afterEach(() => {
     resetDelegationConcurrencyForTests();
     vi.unstubAllEnvs();
-    rmSync(issuesRoot, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
     rmSync(workspaceDir, { recursive: true, force: true });
   });
 
@@ -914,6 +927,8 @@ describe("delegate publishes nested run frames", () => {
         agentId,
         storeDir: join(convStoreDir, "nested", agentId),
         options: {
+          cwd,
+          model: resolveModelSelection("cursor-grok-4.5-high-fast"),
           agents: undefined,
           customTools: expect.any(Object),
         },

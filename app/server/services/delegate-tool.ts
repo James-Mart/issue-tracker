@@ -382,6 +382,11 @@ export function createDelegateCustomTools(
                 resumeId,
                 nestedStoreDir,
                 {
+                  cwd: options.cwd,
+                  // Re-entry re-applies the role's pin rather than trusting the
+                  // agent to carry it: the app names the model on every turn,
+                  // and a resumed local agent has no selection of its own.
+                  model,
                   agents: options.agents,
                   customTools: nestedCustomTools,
                 },

@@ -79,6 +79,28 @@ const DELEGATING_STUB_PROMPT =
 const ROOT_CALL_ID = "call-depth-2-root";
 
 /**
+ * A workspace that is not the directory this process was launched from. Every
+ * app-hosted delegation runs in its Project's workspace while the server runs
+ * out of `app/`, and the SDK files an agent under the workspace it ran in — so
+ * a re-entry probe that reuses `process.cwd()` proves nothing about the
+ * re-entry the app actually performs.
+ */
+const PROJECT_WORKSPACE = join(process.cwd(), "..");
+
+/** Carried across the re-entry, so continuity is measured and not assumed. */
+const CODE_WORD = "canary-7431";
+
+/** Cheap two-turn re-entry: one thing to remember, then one thing to recall. */
+const REMEMBER_PROMPT =
+  "This is a wiring probe, not real work. Do not read files, run commands, " +
+  `or research the question described above. Remember the code word ${CODE_WORD}. ` +
+  "Reply with the single word ok.";
+
+const RECALL_PROMPT =
+  "Still the same wiring probe. Do not read files or run commands. Reply " +
+  "with the code word you were given earlier and nothing else.";
+
+/**
  * What the migrated plan-polish coordinator hands a check role: the work-root
  * context line and the findings return line from the skill's spawn stubs,
  * closed with the same wiring-probe guard {@link PROBE_PROMPT} uses — so the
@@ -330,6 +352,46 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
       }
     },
     LIVE_TIMEOUT_MS,
+  );
+
+  // The app-channel counterpart to the Task re-entry probe below, and the beat
+  // every relay loop is built on: the auto-plan coordinator answers a grill
+  // question by re-entering the planner it already has. Resuming is not
+  // symmetric with spawning — the SDK looks a stored agent up under the
+  // workspace it ran in — so this runs against a workspace that is not
+  // `process.cwd()`, the condition the app is always in and no earlier
+  // assertion reproduced.
+  it(
+    "re-enters a nested agent through the bridge and keeps its context",
+    async () => {
+      const customTools = createDelegateCustomTools({
+        sdk: agentSdk,
+        cwd: PROJECT_WORKSPACE,
+        storeDir: STORE_DIR,
+      });
+
+      const spawned = (await customTools.delegate!.execute(
+        { role: NESTED_ROLE, prompt: REMEMBER_PROMPT },
+        {},
+      )) as { agentId: string; reply: string };
+      expect(spawned.agentId).toEqual(expect.any(String));
+
+      const resumed = (await customTools.delegate!.execute(
+        {
+          role: NESTED_ROLE,
+          prompt: RECALL_PROMPT,
+          resumeId: spawned.agentId,
+        },
+        {},
+      )) as { agentId: string; reply: string };
+
+      // Landing on the same agent is necessary but not sufficient: a resume
+      // that lost the first turn would answer under the same id and know
+      // nothing, which is the failure a grill relay cannot survive.
+      expect(resumed.agentId).toBe(spawned.agentId);
+      expect(resumed.reply.toLowerCase()).toContain(CODE_WORD);
+    },
+    TWO_TURN_TIMEOUT_MS,
   );
 
   // The IDE counterpart to the assertion above. `lint:spawns` proves the
