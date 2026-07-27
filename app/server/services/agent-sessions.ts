@@ -98,7 +98,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           agents,
           customTools,
         });
-      } catch {
+      } catch (err) {
         handle = await sdk.createAgent({
           cwd,
           model,
@@ -109,8 +109,12 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         await updateMeta(conversationId, { agentId: handle.agentId });
         await appendEvent(conversationId, {
           type: "error",
+          // Starting over is silent from the user's side, so the reason has to
+          // travel with it — a resume that fails every time looks like a fresh
+          // conversation rather than a bug.
           message:
-            "The previous agent session could not be resumed; earlier agent-side context was lost.",
+            "The previous agent session could not be resumed; earlier agent-side context was lost. " +
+            `Reason: ${err instanceof Error ? err.message : String(err)}`,
         });
       }
     } else {

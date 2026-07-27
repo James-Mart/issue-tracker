@@ -235,8 +235,12 @@ describe("agent sessions manager", () => {
     const errorEvent = transcript.find((e) => e.type === "error");
     expect(errorEvent).toMatchObject({
       type: "error",
+      // The reason travels with the notice: restarting is otherwise
+      // indistinguishable from a fresh conversation, which is how a resume
+      // that fails every time stays invisible.
       message:
-        "The previous agent session could not be resumed; earlier agent-side context was lost.",
+        "The previous agent session could not be resumed; earlier agent-side " +
+        "context was lost. Reason: agent not found in store",
     });
     expect(transcript.at(-1)?.type).not.toBe("error");
   });
