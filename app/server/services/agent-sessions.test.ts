@@ -150,6 +150,10 @@ describe("agent sessions manager", () => {
           "agent-state",
         ),
         options: {
+          // The Project's workspace, not the server's own working directory:
+          // the SDK scopes the stored agent to the workspace it ran in, so
+          // resuming under anything else reports it as missing.
+          cwd: workspaceDir,
           agents: expect.any(Object),
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
@@ -203,6 +207,7 @@ describe("agent sessions manager", () => {
           "agent-state",
         ),
         options: {
+          cwd: workspaceDir,
           agents: expect.any(Object),
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
