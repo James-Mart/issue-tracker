@@ -197,11 +197,13 @@ describe("resumeAgent", () => {
 
     const handle = await sdk.resumeAgent("agent-1", STORE_DIR, {
       cwd: "/repo",
+      model: MODEL,
     });
 
     expect(handle.agentId).toBe("agent-1");
     expect(resumeSdkAgent).toHaveBeenCalledWith("agent-1", {
       apiKey: "key-xyz",
+      model: MODEL,
       agents: undefined,
       local: {
         cwd: "/repo",
@@ -234,6 +236,7 @@ describe("resumeAgent", () => {
     });
     await sdk.resumeAgent("agent-1", STORE_DIR, {
       cwd: "/repo",
+      model: MODEL,
       customTools: SAMPLE_CUSTOM_TOOLS,
     });
 
@@ -249,7 +252,7 @@ describe("resumeAgent", () => {
     );
     const sdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-xyz" });
 
-    await sdk.resumeAgent("agent-1", STORE_DIR, { cwd: "/repo" });
+    await sdk.resumeAgent("agent-1", STORE_DIR, { cwd: "/repo", model: MODEL });
 
     const store = resumeSdkAgent.mock.calls[0]![1]?.local?.store;
     expect(store).toBeInstanceOf(JsonlLocalAgentStore);
@@ -276,7 +279,11 @@ describe("resumeAgent", () => {
     );
     const sdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-xyz" });
 
-    await sdk.resumeAgent("agent-1", STORE_DIR, { cwd: "/repo", agents });
+    await sdk.resumeAgent("agent-1", STORE_DIR, {
+      cwd: "/repo",
+      model: MODEL,
+      agents,
+    });
 
     expect(resumeSdkAgent).toHaveBeenCalledTimes(1);
     expect(resumeSdkAgent.mock.calls[0]![1]?.agents).toBe(agents);
@@ -291,6 +298,7 @@ describe("resumeAgent", () => {
 
     await sdk.resumeAgent("agent-1", STORE_DIR, {
       cwd: "/repo",
+      model: MODEL,
       customTools: SAMPLE_CUSTOM_TOOLS,
     });
 

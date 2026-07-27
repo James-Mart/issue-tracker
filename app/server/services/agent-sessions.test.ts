@@ -154,6 +154,7 @@ describe("agent sessions manager", () => {
           // the SDK scopes the stored agent to the workspace it ran in, so
           // resuming under anything else reports it as missing.
           cwd: workspaceDir,
+          model: { id: "auto" },
           agents: expect.any(Object),
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
@@ -208,6 +209,7 @@ describe("agent sessions manager", () => {
         ),
         options: {
           cwd: workspaceDir,
+          model: { id: "composer-2.5" },
           agents: expect.any(Object),
           customTools: expect.objectContaining({
             delegate: expect.any(Object),

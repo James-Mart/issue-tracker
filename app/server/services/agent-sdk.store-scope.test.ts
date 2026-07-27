@@ -71,9 +71,26 @@ describe("local agent store workspace scoping", () => {
 
     const handle = await sdk.resumeAgent(agentId, storeDir, {
       cwd: workspace,
+      model: MODEL,
     });
 
     expect(handle.agentId).toBe(agentId);
+    await handle[Symbol.asyncDispose]();
+  });
+
+  // A resumed local agent does not inherit the selection it was created with,
+  // and the SDK refuses the next send rather than falling back to one — so the
+  // boundary re-states the model on every re-entry.
+  it("refuses to drive a resumed agent that was given no model", async () => {
+    const agentId = await createStoredAgent();
+
+    const handle = await Agent.resume(agentId, {
+      local: { cwd: workspace, store: new JsonlLocalAgentStore(storeDir) },
+    });
+
+    await expect(handle.send("anything")).rejects.toThrow(
+      /require an explicit `model`/,
+    );
     await handle[Symbol.asyncDispose]();
   });
 
@@ -93,6 +110,7 @@ describe("local agent store workspace scoping", () => {
 
     const resumed = await sdk.resumeAgent(agentId, storeDir, {
       cwd: workspace,
+      model: MODEL,
     });
 
     expect(resumed.agentId).toBe(agentId);

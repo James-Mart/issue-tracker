@@ -41,7 +41,9 @@ export interface AgentSdk {
    * Rehydrate a previously created agent by id and keep driving it. `cwd` is
    * required and must be the workspace the agent was created in: the SDK scopes
    * a store lookup to that path, so resuming under any other one reports the
-   * agent as missing.
+   * agent as missing. `model` is required because a resumed local agent does
+   * not inherit the selection it was created with — without one, its next send
+   * fails rather than falling back.
    */
   resumeAgent(
     agentId: string,
@@ -61,6 +63,7 @@ export interface CreateAgentOptions {
 
 export interface ResumeAgentOptions {
   cwd: string;
+  model: ModelSelection;
   agents?: Record<string, AgentDefinition>;
   customTools?: Record<string, SDKCustomTool>;
 }
@@ -170,9 +173,10 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       return wrapAgent(sdkAgent);
     },
 
-    async resumeAgent(agentId, storeDir, { cwd, agents, customTools }) {
+    async resumeAgent(agentId, storeDir, { cwd, model, agents, customTools }) {
       const sdkAgent = await deps.resumeSdkAgent(agentId, {
         apiKey: deps.apiKey,
+        model,
         agents,
         local: localRuntime(cwd, storeDir, customTools),
       });

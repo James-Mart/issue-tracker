@@ -95,6 +95,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       try {
         handle = await sdk.resumeAgent(meta.agentId, storeDir, {
           cwd,
+          model,
           agents,
           customTools,
         });

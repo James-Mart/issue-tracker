@@ -160,6 +160,9 @@ describe("createDelegateCustomTools", () => {
           // resume that leaves this out lands outside the agent's scope and is
           // told it does not exist.
           cwd,
+          // And it re-states the role's pin, which a resumed agent does not
+          // carry on its own.
+          model: resolveModelSelection("cursor-grok-4.5-high-fast"),
           agents: undefined,
           customTools: expect.any(Object),
         },
@@ -920,6 +923,7 @@ describe("delegate publishes nested run frames", () => {
         storeDir: join(convStoreDir, "nested", agentId),
         options: {
           cwd,
+          model: resolveModelSelection("cursor-grok-4.5-high-fast"),
           agents: undefined,
           customTools: expect.any(Object),
         },
