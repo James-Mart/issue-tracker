@@ -15,10 +15,12 @@ import {
   createFakeAgentSdk,
   FAKE_RUN_ID,
 } from "../services/agent-sdk.fake.js";
+import type { AgentSessions } from "../services/agent-sessions.js";
 import { CursorAgentError } from "../services/agent-sdk.js";
 
 const AT = "2026-07-24T12:00:00.000Z";
 
+let root: string;
 let issuesRoot: string;
 let workspaceDir: string;
 let server: Server;
@@ -34,7 +36,12 @@ function conversationsDir(): string {
 }
 
 beforeEach(async () => {
-  issuesRoot = mkdtempSync(join(tmpdir(), "issue-tracker-conversations-route-"));
+  // Nest issues/ under a unique root so conversations/ stays per-test. Using a
+  // mkdtemp as ISSUES_DIR directly shared tmpdir()/conversations across workers
+  // and the old afterEach wiped that shared dir (flake under parallel npm test).
+  root = mkdtempSync(join(tmpdir(), "issue-tracker-conversations-route-"));
+  issuesRoot = join(root, "issues");
+  mkdirSync(issuesRoot, { recursive: true });
   workspaceDir = mkdtempSync(join(tmpdir(), "issue-conv-ws-"));
   mkdirSync(join(workspaceDir, ".git"));
   vi.resetModules();
@@ -67,14 +74,14 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  const { agentSessions } = await import("../services/agent-sessions.js");
+  await agentSessions.disposeAll();
   vi.unstubAllEnvs();
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));
   });
-  rmSync(issuesRoot, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true });
   rmSync(workspaceDir, { recursive: true, force: true });
-  const convDir = conversationsDir();
-  if (existsSync(convDir)) rmSync(convDir, { recursive: true, force: true });
 });
 
 describe("conversations HTTP API (CRUD)", () => {
@@ -276,6 +283,7 @@ describe("GET /api/conversations/:id/events", () => {
       // Connection must stay open for heartbeats; we only closed via client abort.
       expect(buf).not.toMatch(/event: end/);
     } finally {
+      await sessions.disposeAll();
       await new Promise<void>((resolve, reject) => {
         liveServer!.close((err) => (err ? reject(err) : resolve()));
       });
@@ -287,6 +295,7 @@ describe("POST /api/conversations/:id/cancel", () => {
   let cancelServer: Server;
   let cancelBaseUrl: string;
   let releaseHold: () => void;
+  let cancelSessions: AgentSessions;
 
   beforeEach(async () => {
     let release!: () => void;
@@ -302,10 +311,10 @@ describe("POST /api/conversations/:id/cancel", () => {
     const { createAgentSessions } = await import("../services/agent-sessions.js");
     const { createConversationsRouter } = await import("./conversations.js");
     const { errorHandler } = await import("../errors.js");
-    const sessions = createAgentSessions(fake);
+    cancelSessions = createAgentSessions(fake);
     const app = express();
     app.use(express.json());
-    app.use("/api/conversations", createConversationsRouter(sessions));
+    app.use("/api/conversations", createConversationsRouter(cancelSessions));
     app.use(errorHandler);
 
     await new Promise<void>((resolve) => {
@@ -320,6 +329,7 @@ describe("POST /api/conversations/:id/cancel", () => {
 
   afterEach(async () => {
     releaseHold();
+    await cancelSessions.disposeAll();
     await new Promise<void>((resolve, reject) => {
       cancelServer.close((err) => (err ? reject(err) : resolve()));
     });
@@ -408,6 +418,7 @@ describe("POST /api/conversations/:id/messages", () => {
   describe("successful send", () => {
     let msgServer: Server;
     let msgBaseUrl: string;
+    let msgSessions: AgentSessions;
 
     beforeEach(async () => {
       const fake = createFakeAgentSdk({
@@ -416,10 +427,10 @@ describe("POST /api/conversations/:id/messages", () => {
       const { createAgentSessions } = await import("../services/agent-sessions.js");
       const { createConversationsRouter } = await import("./conversations.js");
       const { errorHandler } = await import("../errors.js");
-      const sessions = createAgentSessions(fake);
+      msgSessions = createAgentSessions(fake);
       const app = express();
       app.use(express.json());
-      app.use("/api/conversations", createConversationsRouter(sessions));
+      app.use("/api/conversations", createConversationsRouter(msgSessions));
       app.use(errorHandler);
 
       await new Promise<void>((resolve) => {
@@ -433,6 +444,7 @@ describe("POST /api/conversations/:id/messages", () => {
     });
 
     afterEach(async () => {
+      await msgSessions.disposeAll();
       await new Promise<void>((resolve, reject) => {
         msgServer.close((err) => (err ? reject(err) : resolve()));
       });
@@ -474,6 +486,7 @@ describe("POST /api/conversations/:id/messages", () => {
   describe("when the agent never starts", () => {
     let msgServer: Server;
     let msgBaseUrl: string;
+    let msgSessions: AgentSessions;
 
     beforeEach(async () => {
       const fake = createFakeAgentSdk({
@@ -482,10 +495,10 @@ describe("POST /api/conversations/:id/messages", () => {
       const { createAgentSessions } = await import("../services/agent-sessions.js");
       const { createConversationsRouter } = await import("./conversations.js");
       const { errorHandler } = await import("../errors.js");
-      const sessions = createAgentSessions(fake);
+      msgSessions = createAgentSessions(fake);
       const app = express();
       app.use(express.json());
-      app.use("/api/conversations", createConversationsRouter(sessions));
+      app.use("/api/conversations", createConversationsRouter(msgSessions));
       app.use(errorHandler);
 
       await new Promise<void>((resolve) => {
@@ -499,6 +512,7 @@ describe("POST /api/conversations/:id/messages", () => {
     });
 
     afterEach(async () => {
+      await msgSessions.disposeAll();
       await new Promise<void>((resolve, reject) => {
         msgServer.close((err) => (err ? reject(err) : resolve()));
       });
