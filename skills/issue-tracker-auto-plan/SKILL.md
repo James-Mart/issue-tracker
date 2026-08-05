@@ -211,7 +211,7 @@ specifics and stop; otherwise proceed to Flow.
    (it has already migrated / polished / spawned retro).
 
    When the coordinator has lost the `resumeId`, look it up with `delegations`
-   rather than starting a second planner.
+   (the returned `delegations` array) rather than starting a second planner.
 
    **Terse grill answers.** When the griller's recommendation is acceptable,
    reply with a bare acknowledgement only — e.g. "I agree" or "agreed with your

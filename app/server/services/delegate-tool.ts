@@ -6,6 +6,7 @@ import type { AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
 import {
   appendDelegation,
   conversationExists,
+  readConversation,
   readDelegations,
 } from "./conversations.js";
 import { EventPipeline } from "./event-pipeline.js";
@@ -271,9 +272,13 @@ export function createDelegateCustomTools(
           !options.conversationId ||
           !conversationExists(options.conversationId)
         ) {
-          return [];
+          return { delegations: [] };
         }
-        return readDelegations(options.conversationId)
+        const { meta } = readConversation(options.conversationId);
+        if (!meta.agentId) {
+          return { delegations: [] };
+        }
+        const delegations = readDelegations(options.conversationId)
           .slice()
           .reverse()
           .map(({ delegationId, agentId, role, model, at }) => ({
@@ -283,6 +288,10 @@ export function createDelegateCustomTools(
             model,
             at,
           }));
+        return {
+          root: { agentId: meta.agentId },
+          delegations,
+        };
       },
     };
 

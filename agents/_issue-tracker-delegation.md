@@ -24,8 +24,11 @@ Use `CallMcpTool` against server `custom-user-tools`:
   (spawnable `agents/<role>.md` name), `prompt`, and optional `resumeId`
   (existing nested agent id to re-enter). The app selects the model from the
   role's frontmatter pin; do not pass a model.
-- **`delegations`** — list this conversation's nested delegations,
-  most-recent-first (use when looking up a `resumeId`).
+- **`delegations`** — return `{ root: { agentId }, delegations: [...] }`
+  where `root.agentId` is this conversation's session root agent and
+  `delegations` lists nested delegations most-recent-first (use when
+  looking up a `resumeId`). When the conversation is unknown or has no
+  root agent yet, `delegations` is empty and `root` is omitted.
 
 ## IDE channel
 

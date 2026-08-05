@@ -284,8 +284,9 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
    - **2b. Resume (revise).** Re-enter that implementor with the revise stub
      (same family role) and its `resumeId`. When the coordinator has lost
      the `resumeId` (skill re-run), look it up with `delegations` — the
-     most recent entry whose `role` is `issue-tracker-implementor-<family>`
-     — rather than starting a second implementor. Never Mode `implement`
+     most recent entry in its `delegations` array whose `role` is
+     `issue-tracker-implementor-<family>` — rather than starting a second
+     implementor. Never Mode `implement`
      when entering from `qa=changes-requested`.
 
 3. **Validate (code quality).** Read `issue task get <task> qa`. Branch on
@@ -298,8 +299,8 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
      `resumeId` (`reviewing` means a prior entry did not reach a terminal
      qa — resume, do not start a second agent). When the coordinator has
      lost the `resumeId` (skill re-run), look it up with `delegations` —
-     the most recent entry whose `role` is
-     `issue-tracker-code-quality-validator` — rather than starting a
+     the most recent entry in the returned `delegations` array whose `role`
+     is `issue-tracker-code-quality-validator` — rather than starting a
      second code-quality agent.
    - `passed` → skip to step 5 (Finalize); do not spawn or resume
      code-quality again.

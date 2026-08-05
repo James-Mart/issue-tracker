@@ -565,7 +565,7 @@ describe("delegate publishes nested run frames", () => {
   });
 
   async function load() {
-    const { createConversation, readConversation, readDelegations } =
+    const { createConversation, readConversation, readDelegations, updateMeta } =
       await import("./conversations.js");
     const { conversationsDir } = await import("../config.js");
     const { subscribeFrames } = await import("./conversation-stream.js");
@@ -576,6 +576,7 @@ describe("delegate publishes nested run frames", () => {
       createConversation,
       readConversation,
       readDelegations,
+      updateMeta,
       conversationsDir,
       subscribeFrames,
       createDelegateCustomTools: createTools,
@@ -943,8 +944,11 @@ describe("delegate publishes nested run frames", () => {
   });
 
   it("delegations returns this conversation's records most-recent-first and excludes others", async () => {
-    const { createConversation, createDelegateCustomTools: createTools } =
-      await load();
+    const {
+      createConversation,
+      updateMeta,
+      createDelegateCustomTools: createTools,
+    } = await load();
 
     const metaA = await createConversation({
       title: "Lookup A",
@@ -956,6 +960,8 @@ describe("delegate publishes nested run frames", () => {
       projectId: "platform",
       model: "composer-2.5",
     });
+    await updateMeta(metaA.id, { agentId: "root-agent-a" });
+    await updateMeta(metaB.id, { agentId: "root-agent-b" });
 
     const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
     const toolsA = createTools({
@@ -989,7 +995,9 @@ describe("delegate publishes nested run frames", () => {
     const expectedModel = formatEffectiveModel(
       resolveModelSelection("cursor-grok-4.5-high-fast"),
     );
-    const listed = await toolsA.delegations!.execute({}, {});
+    const listedA = await toolsA.delegations!.execute({}, {});
+    expect(listedA.root).toEqual({ agentId: "root-agent-a" });
+    const listed = listedA.delegations;
     expect(listed).toHaveLength(2);
     expect(listed[0]).toMatchObject({
       agentId: second.agentId,
@@ -1010,13 +1018,95 @@ describe("delegate publishes nested run frames", () => {
     }
 
     const listedB = await toolsB.delegations!.execute({}, {});
-    expect(listedB).toHaveLength(1);
+    expect(listedB.root).toEqual({ agentId: "root-agent-b" });
+    expect(listedB.delegations).toHaveLength(1);
+  });
+
+  it("delegations reports the session root agent id with nested rows in order", async () => {
+    const {
+      createConversation,
+      updateMeta,
+      createDelegateCustomTools: createTools,
+    } = await load();
+
+    const meta = await createConversation({
+      title: "Root lookup",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const rootAgentId = "session-root-xyz";
+    await updateMeta(meta.id, { agentId: rootAgentId });
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const tools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    const first = await tools.delegate!.execute(
+      { role: "pinned-role", prompt: "alpha" },
+      {},
+    );
+    const second = await tools.delegate!.execute(
+      { role: "pinned-role", prompt: "beta" },
+      {},
+    );
+
+    const result = await tools.delegations!.execute({}, {});
+    expect(result.root).toEqual({ agentId: rootAgentId });
+    expect(result.delegations).toHaveLength(2);
+    expect(result.delegations[0]).toMatchObject({
+      agentId: second.agentId,
+      role: "pinned-role",
+    });
+    expect(result.delegations[1]).toMatchObject({
+      agentId: first.agentId,
+      role: "pinned-role",
+    });
+    for (const row of result.delegations) {
+      expect(typeof row.delegationId).toBe("string");
+      expect(typeof row.model).toBe("string");
+      expect(typeof row.at).toBe("string");
+    }
+  });
+
+  it("delegations omits root and returns empty delegations when no session root is recorded", async () => {
+    const { createConversation, createDelegateCustomTools: createTools } =
+      await load();
+
+    const meta = await createConversation({
+      title: "No root yet",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const tools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    await tools.delegate!.execute(
+      { role: "pinned-role", prompt: "nested only" },
+      {},
+    );
+
+    const result = await tools.delegations!.execute({}, {});
+    expect(result).toEqual({ delegations: [] });
+    expect(result).not.toHaveProperty("root");
   });
 
   it("accepts an agentId from delegations as delegate resumeId", async () => {
     const {
       createConversation,
       conversationsDir,
+      updateMeta,
       createDelegateCustomTools: createTools,
     } = await load();
     const meta = await createConversation({
@@ -1024,6 +1114,7 @@ describe("delegate publishes nested run frames", () => {
       projectId: "platform",
       model: "composer-2.5",
     });
+    await updateMeta(meta.id, { agentId: "root-agent-resume" });
     const convStoreDir = join(conversationsDir, meta.id, "agent-state");
 
     const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
@@ -1041,7 +1132,8 @@ describe("delegate publishes nested run frames", () => {
     );
     expect(fake.created).toHaveLength(1);
 
-    const [record] = await tools.delegations!.execute({}, {});
+    const { delegations } = await tools.delegations!.execute({}, {});
+    const [record] = delegations;
     expect(record).toBeDefined();
 
     const resumed = await tools.delegate!.execute(
