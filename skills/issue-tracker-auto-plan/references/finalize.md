@@ -3,8 +3,8 @@
 Write the running draft accumulated during the relay loop (Flow step 3) to a
 temp file `decision-summary.md` — one entry per grill decision (decision,
 chosen answer, rationale; the distilled audit trail, **not** the raw
-back-and-forth transcript). Then resolve finalize target(s) from the **source
-kind** (known from Bootstrap):
+back-and-forth transcript). Run this after Flow step 4 (Retro) completes.
+Then resolve finalize target(s) from the **source kind** (known from Bootstrap):
 
 ### Idea source
 
