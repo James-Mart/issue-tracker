@@ -2,7 +2,7 @@
 name: issue-tracker-retro
 disable-model-invocation: true
 description: >-
-  Mine an invoking run's transcripts for tracker/work-loop meta-confusion
+  Mine the invoking session's transcripts for tracker/work-loop meta-confusion
   and land one Idea (or comment clean on the source work root). Use when
   spawned after work Completion or plan post-polish, or when running
   issue-tracker-retro.
