@@ -39,8 +39,10 @@ Every issue has a `kind`, one of:
   `description.md` holds the spec. Carries `blockedBy` (a list of other Epic ids
   in the same Project that must finish first), an optional `mergeBaseOverride`
   (redirects first-layer Stories' derived `mergeBase` away from `trunk` — see
-  [stacked-PR merge model](#the-stacked-pr-merge-model)), an optional `retro`
-  gate (`in-progress` / `done`), and optional `labels` assignments from the
+  [stacked-PR merge model](#the-stacked-pr-merge-model)), an optional
+  informational `retro` record (`in-progress` while mining, `done` once retro
+  posts its terminal comment; no workflow branches on it), and optional
+  `labels` assignments from the
   Project catalog (see [Project labels](#project-labels)). Has **no stored
   status** — its status is fully derived from descendants. Is `partOf` a
   Project (required). Prefer an Epic when the plan needs sibling root Stories,
@@ -59,9 +61,10 @@ Every issue has a `kind`, one of:
   *project-level Story* — use it when the plan is a single Story plus its
   Tasks. Prefer wrapping in an Epic when you need sibling root Stories,
   stacking, or Epic `blockedBy`. Carries `branchName`, `stackedOn`,
-  `prUrl`, `merged`, `specReview`, an optional `retro` gate
-  (`in-progress` / `done`; same enum as Epic; unused by the work loop unless
-  the Story is the top-level work root), and optional `labels` assignments from
+  `prUrl`, `merged`, `specReview`, an optional informational `retro` record
+  (`in-progress` while mining, `done` once retro posts its terminal comment;
+  same enum as Epic; no workflow branches on it), and optional `labels`
+  assignments from
   the containing Project catalog (see [Project labels](#project-labels)).
   Status and derived `mergeBase` are never stored. A project-level root Story
   may also store `mergeBaseOverride` (set via imperative `mergeBase` — see
@@ -742,7 +745,7 @@ Epic — the Epic/Story/Task needs-attention common fields plus:
 | `blockedBy` | string[] | other Epic ids in the same Project that must finish first; defaults `[]`; the only cross-Epic edge |
 | `mergeBaseOverride` | string? | optional; set via imperative `mergeBase`; first-layer Stories inherit this as their derived `mergeBase` (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get (see [Project merge policy](#project-merge-policy)) |
-| `retro` | `"in-progress"` \| `"done"`? | absent until set; machine-readable retro gate |
+| `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
 Idea — the common-to-every-kind fields plus:
@@ -769,7 +772,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `merged` | boolean | defaults `false` |
 | `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by finish-branch on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base after `merge` / `fast-forward` (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
 | `specReview` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
-| `retro` | `"in-progress"` \| `"done"`? | absent until set; machine-readable retro gate |
+| `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
 | `labels` | string[]? | assignment ids from the containing Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
 Task — the Epic/Story/Task needs-attention common fields plus:

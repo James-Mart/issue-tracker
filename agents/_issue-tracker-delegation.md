@@ -45,5 +45,3 @@ When the IDE channel applies and the Cursor Task tool is also unavailable, do
 not improvise a blanket inline run. Per beat:
 
 - **Research** and **plan-polish checks** — absorb inline.
-- **Retro** — do not run inline. Comment on the work root that retro is still
-  owed, and leave work-root `retro` unset so a later run can spawn it.

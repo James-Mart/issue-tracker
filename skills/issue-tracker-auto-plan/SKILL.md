@@ -208,7 +208,7 @@ specifics and stop; otherwise proceed to Flow.
    the single post-outline gate. Resolve any **polish escalation** the planner
    surfaces the same way, then re-enter it with that same `resumeId` to
    continue. Repeat until the planner returns the resulting plan root id(s)
-   (it has already migrated / polished / spawned retro).
+   (it has already migrated / polished).
 
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
@@ -228,7 +228,12 @@ specifics and stop; otherwise proceed to Flow.
    (distilled, not the raw transcript). Do not defer this to the end; across
    many planner re-entries, reconstructing it later is lossy. This draft is the
    decision-summary attached at **## Finalize**.
-4. **Finalize** per **## Finalize** (target depends on source kind).
+4. **Retro.** After the planner returns the resulting plan root id(s), re-enter
+   it once with the same `resumeId` from step 2, asking it to run a retro on
+   the planning session per
+   [issue-tracker-retro](../issue-tracker-retro/SKILL.md). Wait for that
+   re-entry to finish.
+5. **Finalize** per **## Finalize** (target depends on source kind).
 
 ## Spawn stubs
 
@@ -258,7 +263,7 @@ workflow instructions here.
 
 ## Finalize
 
-At the end of the relay loop, **Read**
+At the end of Flow steps 3–4, **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-auto-plan/references/finalize.md`
 and follow it.
 
@@ -275,8 +280,8 @@ When finalize is done, report per **## Finalize**. Then stop.
 ## Rules
 
 - You are the stakeholder-planner on opus 5: bootstrap, grill answers,
-  discriminator + planner spawns, finalize. Do not author the plan tree
-  yourself — the vanilla planner owns authoring / polish / retro via
+  discriminator + planner spawns, retro request, finalize. Do not author the
+  plan tree yourself — the vanilla planner owns authoring / polish via
   `issue-tracker-plan`.
 - Honor the intro **Allowed writes** contract (finalize attach/comment;
   subsystem-doc register `issue project attach` + vision `## Subsystem
