@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import type { ConversationMeta } from "@server/schemas";
+import type { ConversationListItem as ConversationRow } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,9 +9,30 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { currentGlow } from "@/components/ui/overlay-surfaces";
 import { cn } from "@/lib/utils/cn";
 import { useUpdateConversation } from "../api/mutations";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
+
+/** Pulsing current-hue dot for a roster row with an in-flight run. */
+export function RosterActiveRunIndicator({
+  activeRun,
+}: {
+  activeRun: boolean;
+}) {
+  if (!activeRun) return null;
+  return (
+    <span
+      role="status"
+      aria-label="Running"
+      data-testid="roster-active-run"
+      className={cn(
+        "ml-0.5 h-[7px] w-[7px] shrink-0 rounded-full bg-[hsl(var(--current))] motion-safe:animate-live-dot",
+        currentGlow,
+      )}
+    />
+  );
+}
 
 export function ConversationListItem({
   conversation,
@@ -19,7 +40,7 @@ export function ConversationListItem({
   isSelected,
   onSelect,
 }: {
-  conversation: ConversationMeta;
+  conversation: ConversationRow;
   projectTitle: string;
   isSelected: boolean;
   onSelect: () => void;
@@ -91,8 +112,11 @@ export function ConversationListItem({
             isSelected && "hover:bg-accent/60",
           )}
         >
-          <span className="block truncate text-sm font-medium text-foreground">
-            {conversation.title}
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+              {conversation.title}
+            </span>
+            <RosterActiveRunIndicator activeRun={conversation.activeRun} />
           </span>
           <span className="block truncate font-mono text-[11px] text-muted-foreground">
             {projectTitle} · {conversation.model}

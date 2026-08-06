@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   parseConversationFrame,
   type TranscriptEvent,
 } from "@server/schemas";
+import { agentsKeys } from "../api/keys";
 
 const RECONNECT_DELAY_MS = 2_000;
 // The server sends a `ping` every 10s; if none arrives within this window the
@@ -130,6 +132,7 @@ export function commitReplayStaging(replayBuffer: TranscriptEvent[]): {
 export function useConversationEvents(
   conversationId: string | null | undefined,
 ): ConversationEventsState {
+  const qc = useQueryClient();
   const [events, setEvents] = useState<TranscriptEvent[]>([]);
   const [ready, setReady] = useState(false);
   const [streamRunActive, setStreamRunActive] = useState<boolean | null>(null);
@@ -236,6 +239,9 @@ export function useConversationEvents(
         }
         if (parsed.event.type === "run") {
           setStreamRunActive(parsed.event.status === "started");
+          // SSE covers only the open conversation; refresh the roster so its
+          // `activeRun` flag tracks this thread's lifecycle immediately.
+          void qc.invalidateQueries({ queryKey: agentsKeys.conversations() });
           return;
         }
         if (replaying) {
@@ -258,7 +264,7 @@ export function useConversationEvents(
       setStreamRunActive(null);
       setRunResyncKey(0);
     };
-  }, [conversationId]);
+  }, [conversationId, qc]);
 
   return { events, ready, streamRunActive, runResyncKey };
 }
