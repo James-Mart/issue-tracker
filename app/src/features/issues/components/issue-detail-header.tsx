@@ -15,12 +15,12 @@ import { ProjectLabelChips } from "./project-label-chips";
 
 function CopyIssueIdButton({ id }: { id: string }) {
   const [copied, setCopied] = useState(false);
-  const resetCopiedRef = useRef<ReturnType<typeof window.setTimeout>>();
+  const resetCopiedRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     return () => {
       if (resetCopiedRef.current !== undefined) {
-        window.clearTimeout(resetCopiedRef.current);
+        clearTimeout(resetCopiedRef.current);
       }
     };
   }, []);
@@ -36,9 +36,9 @@ function CopyIssueIdButton({ id }: { id: string }) {
           await navigator.clipboard.writeText(id);
           setCopied(true);
           if (resetCopiedRef.current !== undefined) {
-            window.clearTimeout(resetCopiedRef.current);
+            clearTimeout(resetCopiedRef.current);
           }
-          resetCopiedRef.current = window.setTimeout(() => setCopied(false), 1500);
+          resetCopiedRef.current = setTimeout(() => setCopied(false), 1500);
         } catch {
           toast.error("Could not copy to clipboard");
         }
