@@ -172,6 +172,37 @@ describe("fileSdkBugReport", () => {
     expect(calls[1]!.body).toMatchObject({ category: 6, tags: ["cursor-sdk"] });
   });
 
+  it("posts untagged when the account may not apply tags", async () => {
+    const { deps, calls } = fakeForum([
+      { json: { topics: [] } },
+      {
+        status: 422,
+        json: { errors: ["You're not allowed to tag topics"] },
+      },
+      { json: { topic_id: 42, topic_slug: "agent-stream-stalls" } },
+    ]);
+
+    const result = await fileSdkBugReport(VALID, deps);
+
+    expect(result).toMatchObject({ status: "created", topicId: 42 });
+    expect(calls[1]!.body).toMatchObject({ tags: ["cursor-sdk"] });
+    // The retry drops only the tag; the report itself is unchanged.
+    expect(calls[2]!.body).not.toHaveProperty("tags");
+    expect(calls[2]!.body).toMatchObject({ title: VALID.title, category: 6 });
+  });
+
+  it("does not retry a rejection that has nothing to do with tags", async () => {
+    const { deps, calls } = fakeForum([
+      { json: { topics: [] } },
+      { status: 422, json: { errors: ["Title has already been used"] } },
+    ]);
+
+    await expect(fileSdkBugReport(VALID, deps)).rejects.toThrow(
+      /Forum post failed \(422\).*Title has already been used/s,
+    );
+    expect(calls).toHaveLength(2);
+  });
+
   it("skips the search when the caller asserts the matches are unrelated", async () => {
     const { deps, calls } = fakeForum([
       { json: { topic_id: 7, topic_slug: "fresh" } },

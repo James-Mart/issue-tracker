@@ -30,6 +30,9 @@ const PRODUCT_AREA = "Cursor SDK";
 /** Fixed tag, matching prior SDK reports. */
 const SDK_TAG = "cursor-sdk";
 
+/** Discourse's refusal when the account's trust level cannot apply tags. */
+const TAG_REJECTION = /not allowed to tag|error tagging/i;
+
 /**
  * Per-field word ceilings. Deliberately tight: a report that cannot be made
  * this short usually has not been diagnosed yet.
@@ -239,20 +242,29 @@ export async function fileSdkBugReport(
     }
   }
 
-  const { status, json } = await forumJson(
+  const apiKey = deps.readApiKey();
+  const topic = {
+    title: input.title,
+    category: BUG_REPORTS_CATEGORY,
+    raw: composeTopicBody(input),
+  };
+
+  let { status, json } = await forumJson(
     "/posts.json",
-    {
-      method: "POST",
-      apiKey: deps.readApiKey(),
-      body: {
-        title: input.title,
-        category: BUG_REPORTS_CATEGORY,
-        tags: [SDK_TAG],
-        raw: composeTopicBody(input),
-      },
-    },
+    { method: "POST", apiKey, body: { ...topic, tags: [SDK_TAG] } },
     deps,
   );
+
+  // Tagging needs a trust level the posting account may not have. The report
+  // is worth more than the tag, so retry untagged rather than lose it.
+  if (status !== 200 && TAG_REJECTION.test(JSON.stringify(json))) {
+    ({ status, json } = await forumJson(
+      "/posts.json",
+      { method: "POST", apiKey, body: topic },
+      deps,
+    ));
+  }
+
   if (status !== 200) {
     throw new Error(
       `Forum post failed (${status}): ${JSON.stringify(json).slice(0, 300)}`,
