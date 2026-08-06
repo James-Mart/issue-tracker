@@ -1,4 +1,5 @@
 import { request } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
 import {
   parseConversationActiveRun,
   parseConversationListItem,
@@ -96,6 +97,11 @@ export function sendConversationMessage(
   );
 }
 
-export function cancelConversationRun(id: string): Promise<void> {
-  return request<void>(`/api/conversations/${id}/cancel`, { method: "POST" });
+export async function cancelConversationRun(id: string): Promise<void> {
+  try {
+    await request<void>(`/api/conversations/${id}/cancel`, { method: "POST" });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) return;
+    throw err;
+  }
 }

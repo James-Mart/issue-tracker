@@ -7,6 +7,9 @@ import {
 } from "./client";
 import { agentsKeys } from "./keys";
 
+/** Poll so closed-thread runs clear without an open SSE subscription. */
+const CONVERSATIONS_REFETCH_INTERVAL_MS = 15_000;
+
 export function useConversationsQuery(): UseQueryResult<
   ConversationListItem[],
   Error
@@ -14,6 +17,8 @@ export function useConversationsQuery(): UseQueryResult<
   return useQuery({
     queryKey: agentsKeys.conversations(),
     queryFn: listConversations,
+    refetchOnWindowFocus: true,
+    refetchInterval: CONVERSATIONS_REFETCH_INTERVAL_MS,
   });
 }
 

@@ -4,7 +4,6 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Send, Square } from "lucide-react";
-import type { TranscriptEvent } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -20,24 +19,22 @@ import {
   useUpdateConversation,
 } from "../api/mutations";
 import { useAgentModelsQuery } from "../api/queries";
-import { useConversationRunActive } from "../hooks/use-conversation-run-active";
 
 export function Composer({
   conversationId,
   model: initialModel,
-  events,
+  runActive,
 }: {
   conversationId: string;
   /** Conversation meta model — remembered default for the picker. */
   model: string;
-  events: TranscriptEvent[];
+  /** Server-truth run-active flag from the open thread. */
+  runActive: boolean;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const sendMessage = useSendConversationMessage();
   const cancelRun = useCancelConversationRun();
   const updateConversation = useUpdateConversation();
-  const { runActive, markRunStarted, markRunStopped } =
-    useConversationRunActive(conversationId, events);
 
   const [draft, setDraft] = useState("");
   const [model, setModel] = useState(initialModel);
@@ -73,7 +70,6 @@ export function Composer({
       {
         onSuccess: () => {
           setDraft("");
-          markRunStarted(events.length);
         },
       },
     );
@@ -81,9 +77,7 @@ export function Composer({
 
   const stop = () => {
     if (!runActive || cancelRun.isPending) return;
-    cancelRun.mutate(conversationId, {
-      onSuccess: () => markRunStopped(),
-    });
+    cancelRun.mutate(conversationId);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
