@@ -58,7 +58,9 @@ Before grilling:
    and apply it using this summary output (codebase lookup during the grill
    needs cwd = `Workspace:`).
 2. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
-   then consult `vision` per that file using the step-1 summary output.
+   then consult `vision` and `codingStandards` per that file using the step-1
+   summary output (`codingStandards` to avoid locking a plan direction the
+   standards forbid — not for implementation detail in Task prose).
 3. Kind / status gates:
    - **Idea** — proceed.
    - **Epic** — run `issue epic get <id> epicStatus`.
@@ -84,28 +86,6 @@ Before grilling:
 
 ## Grill-me protocol (inline)
 
-### Merge-base (mandatory first)
-
-Before any product or dependency questions, ask **one** merge-base question:
-
-which git ref the plan should be built on. Recommend the Project **trunk**
-from bootstrap step 6 via `(recommended)` in the answer list.
-
-- **Trunk** — proceed with the rest of the grill. Focused codebase research
-  uses the workspace working tree only (omit `Ref` in spawn stubs).
-- **Non-trunk branch** — two follow-ons before continuing the grill:
-  1. Ask **one** merge-policy question for the resulting root (Epic or
-     project-level Story). Recommend **`pull-request`** via `(recommended)`
-     in the answer list. Valid values: `pull-request`, `merge`, `manual`,
-     `fast-forward`
-     ([SPEC.md § Project merge policy](../../SPEC.md#project-merge-policy)).
-  2. For every **Focused codebase research** spawn during the rest of the
-     grill, pass the chosen branch as `Ref` so research reads at that ref
-     (see Spawn stubs).
-
-Carry the chosen merge-base and merge-policy (when non-trunk) through to
-outline and migrate — a sibling migrate step records them on the root.
-
 Interview the user relentlessly about every aspect of the plan until you reach
 a **shared understanding**. Walk down each branch of the design tree, resolving
 dependencies between decisions one-by-one. For each question, provide your
@@ -121,6 +101,21 @@ mid-grill.
 
 **Rules (mandatory):**
 
+- **Merge-base first** — before any other grill question, ask **one**
+  question about which git ref the plan should be built on. Recommend the
+  Project **trunk** from Bootstrap step 6 via `(recommended)` in the answer
+  list. **Trunk** — proceed with the rest of the grill; Focused codebase
+  research uses the workspace working tree only (omit `Ref` in spawn stubs).
+  Carry the chosen merge-base and merge-policy (when non-trunk) through to
+  outline and migrate — a sibling migrate step records them on the root.
+  - **Non-trunk branch** — ask **one** merge-policy question for the
+    resulting root (Epic or project-level Story) next. Recommend
+    **`pull-request`** via `(recommended)` in the answer list. Valid values:
+    `pull-request`, `merge`, `manual`, `fast-forward`
+    ([SPEC.md § Project merge policy](../../SPEC.md#project-merge-policy)).
+  - **Non-trunk branch** — for every **Focused codebase research** spawn
+    during the rest of the grill, pass the chosen branch as `Ref` so research
+    reads at that ref (see Spawn stubs).
 - Ask **one question at a time**, waiting for feedback before continuing.
   Multiple questions at once is bewildering.
 - Each question should be **succinct**.
@@ -148,7 +143,8 @@ plugin-local grill-me skill.
 When the grill is ready (no extra pre-outline confirm):
 
 1. **Outline.** Show the proposed tree outline in chat with enough prose that
-   the user can judge scope. Match the chosen migrate shape(s):
+   the user can judge scope. Name the merge-base the plan will be built on,
+   and the merge-policy when non-trunk. Match the chosen migrate shape(s):
    - **Single root** — story-form → root Story title + Task titles; epic-form →
      Epic title + Story/Task hierarchy (implementation order).
    - **Multi-root** — list every resulting root (Epic or project-level Story),

@@ -8,7 +8,8 @@ restate that rule here).
 ### Merge-base and policy
 
 After **each** successful root `apply`, record the merge-base and policy from
-the grill (**Merge-base** in the parent skill):
+the grill (**Merge-base first** bullet in **Rules (mandatory):** in the parent
+skill):
 
 | Grill merge-base | Post-apply |
 | --- | --- |
@@ -17,6 +18,11 @@ the grill (**Merge-base** in the parent skill):
 
 `<rootKind>` is `story` or `epic` matching the apply shape; `<rootId>` is the
 resulting root id from that apply. Imperative only — not in the YAML doc.
+
+- Verification-only Tasks (intentionally no source-controlled edits): after
+  `apply`, `issue task set <taskId> noDiff true` per
+  [Verification-only Tasks (noDiff)](../../issue-tracker-authoring/SKILL.md#verification-only-tasks-nodiff)
+  — imperative only, not in the YAML doc.
 
 ### Idea source backlink
 
