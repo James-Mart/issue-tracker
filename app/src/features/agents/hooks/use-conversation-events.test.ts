@@ -15,6 +15,74 @@ function at(
 }
 
 describe("applyTranscriptEvent", () => {
+  it("concatenates consecutive thinking deltas and skips the finalize duplicate", () => {
+    let events: TranscriptEvent[] = [];
+    events = applyTranscriptEvent(
+      events,
+      at({ type: "thinking", text: "Con" }, "t1"),
+    );
+    events = applyTranscriptEvent(
+      events,
+      at({ type: "thinking", text: "sid" }, "t2"),
+    );
+    expect(events).toEqual([
+      { type: "thinking", text: "Consid", at: "t2" },
+    ]);
+    events = applyTranscriptEvent(
+      events,
+      at({ type: "thinking", text: "Consid" }, "t3"),
+    );
+    expect(events).toEqual([
+      { type: "thinking", text: "Consid", at: "t2" },
+    ]);
+  });
+
+  it("starts a new thinking block after an intervening assistant event", () => {
+    let events: TranscriptEvent[] = [];
+    events = applyTranscriptEvent(
+      events,
+      at({ type: "thinking", text: "first" }, "t1"),
+    );
+    events = applyTranscriptEvent(
+      events,
+      at({ type: "assistant", text: "reply" }, "t2"),
+    );
+    events = applyTranscriptEvent(
+      events,
+      at({ type: "thinking", text: "second" }, "t3"),
+    );
+    expect(events).toEqual([
+      { type: "thinking", text: "first", at: "t1" },
+      { type: "assistant", text: "reply", at: "t2" },
+      { type: "thinking", text: "second", at: "t3" },
+    ]);
+  });
+
+  it("starts a new thinking block after an intervening tool_call event", () => {
+    let events: TranscriptEvent[] = [];
+    events = applyTranscriptEvent(
+      events,
+      at({ type: "thinking", text: "plan" }, "t1"),
+    );
+    events = applyTranscriptEvent(
+      events,
+      at({
+        type: "tool_call",
+        callId: "c1",
+        status: "running",
+        name: "Shell",
+      }),
+    );
+    events = applyTranscriptEvent(
+      events,
+      at({ type: "thinking", text: "reflect" }, "t2"),
+    );
+    expect(events).toHaveLength(3);
+    expect(events[0]).toMatchObject({ type: "thinking", text: "plan" });
+    expect(events[1]).toMatchObject({ type: "tool_call", callId: "c1" });
+    expect(events[2]).toMatchObject({ type: "thinking", text: "reflect" });
+  });
+
   it("concatenates consecutive assistant deltas and skips the finalize duplicate", () => {
     let events: TranscriptEvent[] = [];
     events = applyTranscriptEvent(

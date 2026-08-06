@@ -35,10 +35,10 @@ export type ConversationEventsState = {
 /**
  * Fold one SSE frame into local thread state.
  *
- * Live assistant frames are incremental deltas followed by a coalesced
- * finalize with the same full text — concatenate deltas into the open
- * bubble and skip the duplicate finalize. `tool_call` frames for the same
- * `callId` replace in place (running → completed/error).
+ * Live assistant and thinking frames are incremental deltas followed by a
+ * coalesced finalize with the same full text — concatenate deltas into the
+ * open block and skip the duplicate finalize. `tool_call` frames for the
+ * same `callId` replace in place (running → completed/error).
  */
 export function applyTranscriptEvent(
   events: TranscriptEvent[],
@@ -56,9 +56,9 @@ export function applyTranscriptEvent(
     return [...events, event];
   }
 
-  if (event.type === "assistant") {
+  if (event.type === "assistant" || event.type === "thinking") {
     const last = events[events.length - 1];
-    if (last?.type === "assistant") {
+    if (last?.type === event.type) {
       if (event.text === last.text) return events;
       const next = events.slice();
       next[next.length - 1] = {
