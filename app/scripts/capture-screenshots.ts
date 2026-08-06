@@ -7,7 +7,7 @@
 
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
-import { chromium, type Page } from "playwright";
+import { chromium, type Page } from "@playwright/test";
 
 const DIALOGS = [
   "new-project",
@@ -187,13 +187,37 @@ async function gotoPath(page: Page, baseUrl: string, path: string): Promise<void
   await settle(page);
 }
 
+// Chromium needs its system shared libraries, not just its own build. Surface
+// the remedy here instead of leaving a raw loader error from the browser.
+async function launchBrowser() {
+  try {
+    return await chromium.launch();
+  } catch (err) {
+    throw new Error(
+      [
+        err instanceof Error ? err.message : String(err),
+        "",
+        "Chromium could not start. Provision it with:",
+        "  npx playwright install --with-deps chromium",
+        "`npm install` runs that for you via its postinstall step.",
+      ].join("\n"),
+    );
+  }
+}
+
 async function probeServer(baseUrl: string): Promise<IssueRecord[]> {
   let res: Response;
   try {
     res = await fetch(`${baseUrl}/api/issues`);
   } catch (err) {
     throw new Error(
-      `Server unreachable at ${baseUrl} (${err instanceof Error ? err.message : err}). Start it with: npm run dev`,
+      [
+        `App unreachable at ${baseUrl} (${err instanceof Error ? err.message : err}).`,
+        "Serve it however you like — `npm run dev`, or `npx vite` for the UI plus",
+        "`npm start` for the API. Vite proxies /api to the API port either way, so",
+        `only ${baseUrl} has to answer. Use --base-url for any other arrangement`,
+        "(e.g. a production server serving the built client on :8061).",
+      ].join("\n"),
     );
   }
   if (!res.ok) {
@@ -463,7 +487,7 @@ async function main(): Promise<void> {
   const themes: Theme[] = opts.theme === "both" ? ["dark", "light"] : [opts.theme];
   const themeSuffix = opts.theme === "both";
 
-  const browser = await chromium.launch();
+  const browser = await launchBrowser();
   const page = await browser.newPage({ viewport: opts.viewport });
 
   let succeeded = 0;

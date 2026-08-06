@@ -11,6 +11,7 @@
     "start": "tsx server/index.ts",
     "preview": "vite build && tsx server/index.ts",
     "cli": "tsx cli.ts",
+    "postinstall": "tsx scripts/ensure-playwright-browser.ts",
     "lint:boundary": "tsx scripts/check-client-boundary.ts",
     "lint:spawns": "tsx scripts/check-agent-spawns.ts",
     "screenshots": "tsx scripts/capture-screenshots.ts",

@@ -68,8 +68,7 @@ the implementor). Unfixed prior findings remain actionable.
 
 Do **not** post the comment or stop from the review include. After the review
 include prepares the comment body, do a **best-effort** UI look for UI-related
-Tasks (same UI-related judgment as the `designSystem` consult): with
-`npm run dev` already running, run
+Tasks (same UI-related judgment as the `designSystem` consult): run
 `cd app && npm run screenshots -- <path-or-dialog>` and read the PNGs under the
 output dir (default
 `/tmp/issue-tracker-screenshots`) to confirm the Task's visible behavior is

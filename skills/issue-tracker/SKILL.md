@@ -38,8 +38,7 @@ Tell the user the UI is available at http://localhost:8060.
 ## UI screenshots
 
 For agents validating or attaching UI state, use the Playwright capture script
-(not Cursor IDE browser screenshot tools). The dev server must already be
-running (`npm run dev` above).
+(not Cursor IDE browser screenshot tools).
 
 ```bash
 cd app && npm run screenshots -- [options] <path-or-dialog>...

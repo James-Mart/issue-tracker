@@ -15,7 +15,7 @@ Absolute path for this file (Read this exact path):
    Task's surface — do not re-run the prior Task's full matrix by default.
    When the Task appears UI-related (same judgment as the `designSystem`
    consult — Task prose and changed paths), also do a **best-effort** UI check
-   the way a human implementer would: with `npm run dev` already running, run
+   the way a human implementer would: run
    `cd app && npm run screenshots -- <path-or-dialog>` and read the PNGs under
    the output dir (default `/tmp/issue-tracker-screenshots`) to confirm the
    Task's visible behavior. Use Cursor browser MCP tools only for interaction
