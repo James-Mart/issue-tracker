@@ -157,6 +157,22 @@ export function buildScriptedStream(
   ];
 }
 
+/**
+ * The in-band shape the SDK uses when the access token behind a session has
+ * expired: a `status: "ERROR"` message inside a run that started normally.
+ */
+export function buildAuthFailureStream(): AgentStreamEvent[] {
+  return [
+    message({
+      type: "status",
+      ...ids,
+      status: "ERROR",
+      message:
+        "Authentication error. If you are logged in, try logging out and back in.",
+    }),
+  ];
+}
+
 /** Fallback path: a scripted stream with no nested `tool-call-delta` at all. */
 export function buildScriptedStreamWithoutNested(): AgentStreamEvent[] {
   return buildScriptedStream({ includeNested: false });
@@ -199,6 +215,18 @@ export interface FakeAgentSdkOptions {
   hold?: Promise<void>;
   /** When set, every `resumeAgent(...)` rejects with this error. */
   resumeError?: Error;
+  /**
+   * Per-send overrides consumed in order across every handle. Each entry
+   * replaces `stream` and `waitResult` for one `send(...)`; once the script runs
+   * out the defaults apply again. Lets a test script a first attempt that fails
+   * and a second that succeeds.
+   */
+  sendScript?: Array<{
+    stream?: AgentStreamEvent[];
+    waitResult?: AgentRunResult;
+    /** Holds just this run open, where `hold` would hold every one of them. */
+    hold?: Promise<void>;
+  }>;
 }
 
 export interface FakeAgentSdk extends AgentSdk {
@@ -232,6 +260,7 @@ export function createFakeAgentSdk(
     options: ResumeAgentOptions;
   }> = [];
   const handles: FakeAgentHandle[] = [];
+  const sendScript = [...(options.sendScript ?? [])];
   let nextAgentSeq = 0;
 
   function makeHandle(agentId: string): FakeAgentHandle {
@@ -244,27 +273,31 @@ export function createFakeAgentSdk(
       async send(prompt, sendOptions = {}) {
         handle.sends.push({ prompt, options: sendOptions });
         if (options.sendError) throw options.sendError;
-        const runId = options.waitResult?.id ?? FAKE_RUN_ID;
+        const scripted = sendScript.shift();
+        const runStream = scripted?.stream ?? stream;
+        const runResult = scripted?.waitResult ?? options.waitResult;
+        const runHold = scripted?.hold ?? options.hold;
+        const runId = runResult?.id ?? FAKE_RUN_ID;
         const run: AgentRun = {
           id: runId,
           model: undefined,
           wait: async () => {
-            if (options.waitResult) return options.waitResult;
+            if (runResult) return runResult;
             if (handle.cancelled) {
               return { id: runId, status: "cancelled" };
             }
             return { id: runId, status: "finished" };
           },
           async *[Symbol.asyncIterator]() {
-            if (options.hold) {
+            if (runHold) {
               await Promise.race([
-                options.hold,
+                runHold,
                 new Promise<never>((_, reject) => {
                   abortHold = reject;
                 }),
               ]);
             }
-            for (const event of stream) yield event;
+            for (const event of runStream) yield event;
           },
         };
         return run;

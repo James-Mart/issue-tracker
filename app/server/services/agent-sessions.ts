@@ -8,6 +8,7 @@ import {
   type AgentRun,
   type AgentRunResult,
   type AgentSdk,
+  type AgentStreamEvent,
 } from "./agent-sdk.js";
 import { loadPluginAgentDefinitions } from "./agent-definitions.js";
 import {
@@ -57,10 +58,41 @@ export interface AgentSessions {
 
 type SessionEntry = {
   handle: AgentHandle;
+  /** Workspace the handle was built in; the SDK keys its executor cache on it. */
+  cwd: string;
   activeRun?: ActiveRun;
   /** Background streaming + persistence; settles when the run finishes. */
   pump?: Promise<void>;
 };
+
+/**
+ * Text the SDK uses when the access token behind a session has expired. It
+ * arrives in-band, as a `status: "ERROR"` message inside a run that otherwise
+ * started normally, so it never reaches the SDK's transport-level re-auth path
+ * — that one only fires on a `ConnectError` with an `Unauthenticated` code.
+ */
+const AUTH_FAILURE_TEXT =
+  /authentication error|unauthenticated|invalid api key|logging out and back in/i;
+
+/** Breathing room before replaying, in case the rejection was a server-side blip. */
+const AUTH_RETRY_DELAY_MS = 1000;
+
+function isAuthFailureEvent(event: AgentStreamEvent): boolean {
+  if (event.kind !== "message") return false;
+  const { message } = event;
+  return (
+    message.type === "status" &&
+    message.status === "ERROR" &&
+    AUTH_FAILURE_TEXT.test(message.message ?? "")
+  );
+}
+
+function isAuthFailureResult(result: AgentRunResult): boolean {
+  return (
+    result.status === "error" &&
+    AUTH_FAILURE_TEXT.test(result.error?.message ?? "")
+  );
+}
 
 /**
  * Build a session manager. Tests inject a fake {@link AgentSdk}; production
@@ -131,7 +163,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       await updateMeta(conversationId, { agentId: handle.agentId });
     }
 
-    const entry: SessionEntry = { handle };
+    const entry: SessionEntry = { handle, cwd };
     sessions.set(conversationId, entry);
     return { handle, entry };
   }
@@ -164,92 +196,182 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     }
   }
 
-  return {
-    async sendPrompt(conversationId, { prompt, model }) {
-      let handle: AgentHandle;
-      let entry: SessionEntry;
-      try {
-        ({ handle, entry } = await ensureHandle(conversationId));
-      } catch (err) {
-        if (err instanceof CursorAgentError) {
-          return { ok: false, cause: "never_started", error: err };
-        }
-        throw err;
+  /** Stream one run into the transcript, reporting any in-band auth failure. */
+  async function pumpEvents(
+    conversationId: string,
+    agentRun: AgentRun,
+  ): Promise<{ sawAuthFailure: boolean }> {
+    const pipeline = new EventPipeline(conversationId);
+    let sawAuthFailure = false;
+    try {
+      for await (const event of agentRun) {
+        if (!sawAuthFailure && isAuthFailureEvent(event)) sawAuthFailure = true;
+        await pipeline.handle(event);
       }
-
-      let agentRun: AgentRun;
+      await pipeline.flush();
+    } catch {
       try {
-        agentRun = await handle.send(
-          prompt,
-          model ? { model: { id: model } } : {},
-        );
-      } catch (err) {
-        if (err instanceof CursorAgentError) {
-          return { ok: false, cause: "never_started", error: err };
-        }
-        throw err;
+        await pipeline.flush();
+      } catch {
+        // Best-effort flush after a mid-run failure.
       }
+    }
+    return { sawAuthFailure };
+  }
 
-      let settleWait!: (result: AgentRunResult) => void;
-      const waitPromise = new Promise<AgentRunResult>((resolve) => {
-        settleWait = resolve;
-      });
-
-      const activeRun: ActiveRun = {
+  /**
+   * Prefer the boundary's terminal result (finished / error / cancelled) over a
+   * synthesized status — the iterator aborting must not mask e.g. `cancelled`
+   * after cancel().
+   */
+  async function settleResult(agentRun: AgentRun): Promise<AgentRunResult> {
+    try {
+      return await agentRun.wait();
+    } catch (err) {
+      return {
         id: agentRun.id,
-        startedAt: new Date().toISOString(),
-        wait: () => waitPromise,
+        status: "error",
+        error: { message: err instanceof Error ? err.message : String(err) },
       };
-      entry.activeRun = activeRun;
+    }
+  }
+
+  /**
+   * Recover from an expired access token, then replay the prompt once.
+   *
+   * The SDK caches one local executor per workspace + API key + setting-source
+   * tuple, mints an access token when it builds one, and tears the executor
+   * down only after every handle sharing that tuple is disposed. This app keeps
+   * a handle per conversation for the life of the process, so the token is
+   * never re-minted and every send past its expiry fails — which is why
+   * restarting the server is otherwise the only thing that clears it.
+   * Reported upstream: https://forum.cursor.com/t/164755
+   *
+   * Dropping the handles is the part of a restart that matters, so do only
+   * that, and only for the affected workspace: sessions elsewhere key a
+   * different executor holding a different token. A sibling with a run still in
+   * flight is left alone too — cancelling live work to repair another
+   * conversation is not a trade worth making. Such a sibling keeps the refcount
+   * above zero, so the replay fails and the original error surfaces exactly as
+   * it does today.
+   */
+  async function recoverFromAuthFailure(
+    conversationId: string,
+    entry: SessionEntry,
+    options: SendPromptOptions,
+  ): Promise<ActiveRun | undefined> {
+    // This runs inside `entry.pump`; dropping the reference keeps the teardown
+    // below from awaiting the promise it is already executing inside.
+    entry.pump = undefined;
+    entry.activeRun = undefined;
+    sessions.delete(conversationId);
+    await tearDownEntry(conversationId, entry);
+
+    const idleSiblings = [...sessions.entries()].filter(
+      ([, other]) => other.cwd === entry.cwd && !other.activeRun,
+    );
+    for (const [id] of idleSiblings) sessions.delete(id);
+    await Promise.all(
+      idleSiblings.map(([id, other]) => tearDownEntry(id, other)),
+    );
+
+    const notice = {
+      type: "status" as const,
+      status: "RETRYING",
+      message:
+        "The agent session's access token had expired. Reconnected and resent the last prompt.",
+    };
+    publishFrame(conversationId, { event: notice, persist: true });
+    await appendEvent(conversationId, notice);
+
+    await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
+
+    const replayed = await sendPromptInternal(conversationId, options, true);
+    return replayed.ok ? replayed.run : undefined;
+  }
+
+  async function sendPromptInternal(
+    conversationId: string,
+    options: SendPromptOptions,
+    isReplay: boolean,
+  ): Promise<SendPromptResult> {
+    const { prompt, model } = options;
+
+    let handle: AgentHandle;
+    let entry: SessionEntry;
+    try {
+      ({ handle, entry } = await ensureHandle(conversationId));
+    } catch (err) {
+      if (err instanceof CursorAgentError) {
+        return { ok: false, cause: "never_started", error: err };
+      }
+      throw err;
+    }
+
+    let agentRun: AgentRun;
+    try {
+      agentRun = await handle.send(
+        prompt,
+        model ? { model: { id: model } } : {},
+      );
+    } catch (err) {
+      if (err instanceof CursorAgentError) {
+        return { ok: false, cause: "never_started", error: err };
+      }
+      throw err;
+    }
+
+    let settleWait!: (result: AgentRunResult) => void;
+    const waitPromise = new Promise<AgentRunResult>((resolve) => {
+      settleWait = resolve;
+    });
+
+    const activeRun: ActiveRun = {
+      id: agentRun.id,
+      startedAt: new Date().toISOString(),
+      wait: () => waitPromise,
+    };
+    entry.activeRun = activeRun;
+
+    publishFrame(conversationId, {
+      event: { type: "run", status: "started", runId: agentRun.id },
+      persist: false,
+    });
+
+    entry.pump = (async () => {
+      const { sawAuthFailure } = await pumpEvents(conversationId, agentRun);
 
       publishFrame(conversationId, {
-        event: { type: "run", status: "started", runId: agentRun.id },
+        event: { type: "run", status: "finished", runId: agentRun.id },
         persist: false,
       });
 
-      entry.pump = (async () => {
-        const pipeline = new EventPipeline(conversationId);
-        try {
-          for await (const event of agentRun) {
-            await pipeline.handle(event);
-          }
-          await pipeline.flush();
-        } catch {
-          try {
-            await pipeline.flush();
-          } catch {
-            // Best-effort flush after a mid-run failure.
-          }
-        } finally {
-          publishFrame(conversationId, {
-            event: {
-              type: "run",
-              status: "finished",
-              runId: agentRun.id,
-            },
-            persist: false,
-          });
-          // Prefer the boundary's terminal result (finished / error / cancelled)
-          // over a synthesized status — the iterator aborting must not mask
-          // e.g. `cancelled` after cancel().
-          try {
-            settleWait(await agentRun.wait());
-          } catch (err) {
-            settleWait({
-              id: agentRun.id,
-              status: "error",
-              error: {
-                message: err instanceof Error ? err.message : String(err),
-              },
-            });
-          }
-          if (entry.activeRun === activeRun) {
-            entry.activeRun = undefined;
-          }
-        }
-      })();
+      const result = await settleResult(agentRun);
+      if (entry.activeRun === activeRun) {
+        entry.activeRun = undefined;
+      }
 
-      return { ok: true, run: activeRun };
+      if (!isReplay && (sawAuthFailure || isAuthFailureResult(result))) {
+        const replacement = await recoverFromAuthFailure(
+          conversationId,
+          entry,
+          options,
+        );
+        if (replacement) {
+          settleWait(await replacement.wait());
+          return;
+        }
+      }
+
+      settleWait(result);
+    })();
+
+    return { ok: true, run: activeRun };
+  }
+
+  return {
+    sendPrompt(conversationId, options) {
+      return sendPromptInternal(conversationId, options, false);
     },
 
     getActiveRun(conversationId) {
