@@ -213,7 +213,8 @@ async function probeServer(baseUrl: string): Promise<IssueRecord[]> {
     throw new Error(
       [
         `App unreachable at ${baseUrl} (${err instanceof Error ? err.message : err}).`,
-        "Serve it however you like — `npm run dev`, or `npx vite` for the UI plus",
+        "Serve it however you like — `npm run serve` (UI + API, no server reload),",
+        "`npm run dev` (reloads the API on file changes), or `npx vite` for the UI plus",
         "`npm start` for the API. Vite proxies /api to the API port either way, so",
         `only ${baseUrl} has to answer. Use --base-url for any other arrangement`,
         "(e.g. a production server serving the built client on :8061).",

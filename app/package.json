@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "concurrently \"vite\" \"tsx watch server/index.ts\"",
+    "serve": "concurrently \"vite\" \"tsx server/index.ts\"",
     "build": "vite build",
     "start": "tsx server/index.ts",
     "preview": "vite build && tsx server/index.ts",
