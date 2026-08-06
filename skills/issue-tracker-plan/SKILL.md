@@ -58,7 +58,9 @@ Before grilling:
    and apply it using this summary output (codebase lookup during the grill
    needs cwd = `Workspace:`).
 2. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
-   then consult `vision` per that file using the step-1 summary output.
+   then consult `vision` and `codingStandards` per that file using the step-1
+   summary output (`codingStandards` to avoid locking a plan direction the
+   standards forbid — not for implementation detail in Task prose).
 3. Kind / status gates:
    - **Idea** — proceed.
    - **Epic** — run `issue epic get <id> epicStatus`.
