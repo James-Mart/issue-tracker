@@ -16,11 +16,11 @@ export function issuesById(
   return new Map(issues.map((issue) => [issue.id, issue]));
 }
 
-export function listProjects(issues: IssueRecord[]): IssueRecord[] {
+export type ProjectRecord = Extract<IssueRecord, { kind: "project" }>;
+
+export function listProjects(issues: IssueRecord[]): ProjectRecord[] {
   return issues
-    .filter((issue): issue is IssueRecord & { kind: "project" } =>
-      issue.kind === "project",
-    )
+    .filter((issue): issue is ProjectRecord => issue.kind === "project")
     .sort(bySequence);
 }
 
