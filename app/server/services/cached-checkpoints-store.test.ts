@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { JsonlLocalAgentStore } from "@cursor/sdk";
@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createCachedCheckpointsStore,
   evictCachedCheckpointsStore,
+  evictConversationCheckpointCaches,
+  isCachedCheckpointsStore,
 } from "./cached-checkpoints-store.js";
 
 const AGENT_A = "agent-a";
@@ -177,6 +179,75 @@ describe("createCachedCheckpointsStore", () => {
     expect(await a.get({ agentId: AGENT_A, blobId: "shared" })).toEqual(
       new Uint8Array([8]),
     );
+  });
+
+  it("marks wrappers from createCachedCheckpointsStore", () => {
+    const { jsonl, cached } = openCached();
+    expect(isCachedCheckpointsStore(cached)).toBe(true);
+    expect(isCachedCheckpointsStore(jsonl.checkpoints)).toBe(false);
+  });
+
+  it("evictConversationCheckpointCaches evicts storeDir and each nested child", async () => {
+    const nestedA = join(storeDir, "nested", "agent-a");
+    const nestedB = join(storeDir, "nested", "agent-b");
+    mkdirSync(nestedA, { recursive: true });
+    mkdirSync(nestedB, { recursive: true });
+    writeFileSync(join(storeDir, "nested", "not-a-dir"), "x");
+
+    const root = openCached(storeDir);
+    const childA = openCached(nestedA);
+    const childB = openCached(nestedB);
+    await root.cached.create({
+      agentId: AGENT_A,
+      blobId: "r",
+      data: new Uint8Array([1]),
+    });
+    await childA.cached.create({
+      agentId: AGENT_A,
+      blobId: "a",
+      data: new Uint8Array([2]),
+    });
+    // Build indexes before sneaking so later gets serve the stale cache.
+    expect(await root.cached.get({ agentId: AGENT_A, blobId: "r" })).toEqual(
+      new Uint8Array([1]),
+    );
+    expect(await childA.cached.get({ agentId: AGENT_A, blobId: "a" })).toEqual(
+      new Uint8Array([2]),
+    );
+    expect(await childB.cached.list()).toMatchObject({ items: [] });
+
+    // Stale the indexes via the underlying Jsonl writers.
+    await root.jsonl.checkpoints.create({
+      agentId: AGENT_A,
+      blobId: "sneak-root",
+      data: new Uint8Array([9]),
+    });
+    await childA.jsonl.checkpoints.create({
+      agentId: AGENT_A,
+      blobId: "sneak-a",
+      data: new Uint8Array([8]),
+    });
+    expect(
+      await root.cached.get({ agentId: AGENT_A, blobId: "sneak-root" }),
+    ).toBeNull();
+    expect(
+      await childA.cached.get({ agentId: AGENT_A, blobId: "sneak-a" }),
+    ).toBeNull();
+
+    evictConversationCheckpointCaches(storeDir);
+
+    // After eviction, indexes rebuild and see the sneaked blobs.
+    expect(
+      await root.cached.get({ agentId: AGENT_A, blobId: "sneak-root" }),
+    ).toEqual(new Uint8Array([9]));
+    expect(
+      await childA.cached.get({ agentId: AGENT_A, blobId: "sneak-a" }),
+    ).toEqual(new Uint8Array([8]));
+
+    // Safe when nested/ is absent.
+    const lonely = mkdtempSync(join(tmpdir(), "cached-ckpt-lonely-"));
+    dirs.push(lonely);
+    evictConversationCheckpointCaches(lonely);
   });
 
   it("evictCachedCheckpointsStore drops the entry so the next access rebuilds", async () => {

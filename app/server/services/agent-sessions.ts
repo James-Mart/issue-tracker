@@ -11,6 +11,7 @@ import {
   type AgentStreamEvent,
 } from "./agent-sdk.js";
 import { loadPluginAgentDefinitions } from "./agent-definitions.js";
+import { evictConversationCheckpointCaches } from "./cached-checkpoints-store.js";
 import {
   appendEvent,
   readConversation,
@@ -194,6 +195,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     } catch {
       // Best-effort dispose.
     }
+    evictConversationCheckpointCaches(
+      join(conversationsDir, conversationId, "agent-state"),
+    );
   }
 
   /** Stream one run into the transcript, reporting any in-band auth failure. */

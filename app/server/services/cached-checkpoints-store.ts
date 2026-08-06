@@ -1,5 +1,6 @@
+import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import {
   JSONL_LOCAL_AGENT_STORE_FILES,
   paginateCheckpointBlobIds,
@@ -22,8 +23,18 @@ interface CacheRecord {
 
 const caches = new Map<string, CacheRecord>();
 
+/** Tracks wrappers returned by {@link createCachedCheckpointsStore}. */
+const cachedWrappers = new WeakSet<object>();
+
 function resolveStoreDir(storeDir: string): string {
   return resolve(storeDir);
+}
+
+/** True when `checkpoints` was produced by {@link createCachedCheckpointsStore}. */
+export function isCachedCheckpointsStore(
+  checkpoints: LocalAgentStoreCheckpoints,
+): boolean {
+  return cachedWrappers.has(checkpoints);
 }
 
 function blobKey(agentId: string, blobId: string): string {
@@ -128,6 +139,22 @@ export function evictCachedCheckpointsStore(storeDir: string): void {
 }
 
 /**
+ * Evict a conversation's `agent-state` storeDir and every immediate child
+ * directory under `agent-state/nested/`. Safe when a path was never cached;
+ * walks the nested listing even when individual children have no entry.
+ */
+export function evictConversationCheckpointCaches(storeDir: string): void {
+  evictCachedCheckpointsStore(storeDir);
+  const nestedRoot = join(storeDir, "nested");
+  if (!existsSync(nestedRoot)) return;
+  for (const ent of readdirSync(nestedRoot, { withFileTypes: true })) {
+    if (ent.isDirectory()) {
+      evictCachedCheckpointsStore(join(nestedRoot, ent.name));
+    }
+  }
+}
+
+/**
  * Wrap a Jsonl checkpoints substore with a `storeDir`-keyed in-memory index.
  * Mutators write through to `underlying`, then update the shared index when it
  * is already built (or mid-build).
@@ -138,7 +165,7 @@ export function createCachedCheckpointsStore(
 ): LocalAgentStoreCheckpoints {
   const resolved = resolveStoreDir(storeDir);
 
-  return {
+  const wrapper: LocalAgentStoreCheckpoints = {
     async get(input) {
       const index = await ensureIndex(resolved);
       const data = index.get(blobKey(input.agentId, input.blobId));
@@ -190,4 +217,6 @@ export function createCachedCheckpointsStore(
       });
     },
   };
+  cachedWrappers.add(wrapper);
+  return wrapper;
 }
