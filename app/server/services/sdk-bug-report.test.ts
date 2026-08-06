@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   composeReplyBody,
   composeTopicBody,
+  distinctiveTerms,
   fileSdkBugReport,
   FORUM_BASE,
   searchExistingReports,
@@ -24,21 +25,32 @@ type Recorded = {
   body: Record<string, unknown> | undefined;
 };
 
-/** Stubs the forum so no test touches the network or the real credential. */
-function fakeForum(queued: { status?: number; json: unknown }[]) {
+type Queued = { status?: number; json: unknown };
+
+/**
+ * Stubs the forum so no test touches the network or the real credential.
+ * Reads and writes draw from separate queues, so a test's post response cannot
+ * be swallowed by a search pass — the search runs several queries per filing.
+ */
+function fakeForum({
+  searches = [],
+  writes = [],
+}: { searches?: Queued[]; writes?: Queued[] } = {}) {
   const calls: Recorded[] = [];
   let keyReads = 0;
 
   const deps: ForumDeps = {
     fetchImpl: (async (url: unknown, init?: RequestInit) => {
       const headers = (init?.headers ?? {}) as Record<string, string>;
+      const method = init?.method ?? "GET";
       calls.push({
         url: String(url),
-        method: init?.method ?? "GET",
+        method,
         apiKey: headers["User-Api-Key"],
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
       });
-      const next = queued.shift() ?? { json: {} };
+      const queue = method === "GET" ? searches : writes;
+      const next = queue.shift() ?? { json: {} };
       return new Response(JSON.stringify(next.json), {
         status: next.status ?? 200,
       });
@@ -49,7 +61,9 @@ function fakeForum(queued: { status?: number; json: unknown }[]) {
     },
   };
 
-  return { deps, calls, keyReads: () => keyReads };
+  const searchCalls = () => calls.filter((call) => call.method === "GET");
+  const writeCalls = () => calls.filter((call) => call.method !== "GET");
+  return { deps, calls, searchCalls, writeCalls, keyReads: () => keyReads };
 }
 
 describe("validateSdkBugReport", () => {
@@ -94,8 +108,22 @@ describe("composeTopicBody", () => {
     );
   });
 
+  it("marks every label as a heading so it renders like the template", () => {
+    const body = composeTopicBody({ ...VALID, versionInfo: "sdk 1.0.24" });
+
+    expect(body.split("\n").filter((line) => line.startsWith("### "))).toEqual([
+      "### Where does the bug appear (feature/product)?",
+      "### Describe the Bug",
+      "### Steps to Reproduce",
+      "### Expected Behavior",
+      "### Version Information",
+    ]);
+    // The prose must not be swept into the heading line above it.
+    expect(body).toContain(`### Describe the Bug\n${VALID.description}`);
+  });
+
   it("includes version info only when supplied", () => {
-    expect(composeTopicBody(VALID)).not.toContain("Version info");
+    expect(composeTopicBody(VALID)).not.toContain("Version Information");
     expect(
       composeTopicBody({ ...VALID, versionInfo: "sdk 0.9.1, node 20" }),
     ).toContain("sdk 0.9.1, node 20");
@@ -112,17 +140,33 @@ describe("composeReplyBody", () => {
   });
 });
 
+describe("distinctiveTerms", () => {
+  it("keeps the rarest-looking words and drops the filler", () => {
+    expect(
+      distinctiveTerms(
+        "ModelSelection silently ignores unrecognized fields in the SDK",
+      ),
+    ).toEqual(["modelselection", "unrecognized"]);
+  });
+
+  it("drops words that appear in the title of half the bug reports", () => {
+    expect(distinctiveTerms("The SDK agent error is a cursor bug")).toEqual([]);
+  });
+});
+
 describe("searchExistingReports", () => {
   it("maps topics to dated, linkable matches", async () => {
-    const { deps } = fakeForum([
-      {
-        json: {
-          topics: [
-            { id: 164755, title: "SDK auth expires", created_at: "2026-01-02T03:04:05.000Z" },
-          ],
+    const { deps } = fakeForum({
+      searches: [
+        {
+          json: {
+            topics: [
+              { id: 164755, title: "SDK auth expires", created_at: "2026-01-02T03:04:05.000Z" },
+            ],
+          },
         },
-      },
-    ]);
+      ],
+    });
 
     expect(await searchExistingReports("auth", deps)).toEqual([
       {
@@ -133,13 +177,44 @@ describe("searchExistingReports", () => {
       },
     ]);
   });
+
+  it("widens past the verbatim title, since Discourse ands the terms", async () => {
+    const { deps, searchCalls } = fakeForum({
+      searches: [
+        { json: { topics: [] } },
+        { json: { topics: [{ id: 9, title: "Params dropped", created_at: "2026-02-03" }] } },
+      ],
+    });
+
+    const matches = await searchExistingReports(
+      "ModelSelection silently ignores unrecognized fields",
+      deps,
+    );
+
+    // The exact title found nothing; a distinctive term still surfaced a report.
+    expect(matches.map((m) => m.id)).toEqual([9]);
+    const urls = searchCalls().map((call) => decodeURIComponent(call.url));
+    expect(urls[0]).toContain("q=ModelSelection silently ignores");
+    expect(urls[1]).toContain("q=modelselection category:6");
+  });
+
+  it("reports each topic once even when several queries return it", async () => {
+    const hit = { json: { topics: [{ id: 9, title: "Dup", created_at: "2026-02-03" }] } };
+    const { deps } = fakeForum({ searches: [hit, { ...hit }, { ...hit }] });
+
+    const matches = await searchExistingReports("params dropped silently", deps);
+
+    expect(matches.map((m) => m.id)).toEqual([9]);
+  });
 });
 
 describe("fileSdkBugReport", () => {
   it("refuses to post while plausible duplicates exist", async () => {
-    const { deps, calls, keyReads } = fakeForum([
-      { json: { topics: [{ id: 1, title: "Same bug", created_at: "2026-01-02" }] } },
-    ]);
+    const { deps, writeCalls, keyReads } = fakeForum({
+      searches: [
+        { json: { topics: [{ id: 1, title: "Same bug", created_at: "2026-01-02" }] } },
+      ],
+    });
 
     const result = await fileSdkBugReport(VALID, deps);
 
@@ -150,15 +225,14 @@ describe("fileSdkBugReport", () => {
       ],
     });
     // Search only: nothing was posted and the credential was never read.
-    expect(calls).toHaveLength(1);
+    expect(writeCalls()).toHaveLength(0);
     expect(keyReads()).toBe(0);
   });
 
   it("opens a topic in the bug category with the SDK tag when the search is empty", async () => {
-    const { deps, calls } = fakeForum([
-      { json: { topics: [] } },
-      { json: { topic_id: 42, topic_slug: "agent-stream-stalls" } },
-    ]);
+    const { deps, writeCalls } = fakeForum({
+      writes: [{ json: { topic_id: 42, topic_slug: "agent-stream-stalls" } }],
+    });
 
     const result = await fileSdkBugReport(VALID, deps);
 
@@ -167,46 +241,45 @@ describe("fileSdkBugReport", () => {
       topicId: 42,
       url: `${FORUM_BASE}/t/agent-stream-stalls/42`,
     });
-    expect(calls[1]!.method).toBe("POST");
-    expect(calls[1]!.apiKey).toBe("test-key");
-    expect(calls[1]!.body).toMatchObject({ category: 6, tags: ["cursor-sdk"] });
+    const [post] = writeCalls();
+    expect(post!.method).toBe("POST");
+    expect(post!.apiKey).toBe("test-key");
+    expect(post!.body).toMatchObject({ category: 6, tags: ["cursor-sdk"] });
   });
 
   it("posts untagged when the account may not apply tags", async () => {
-    const { deps, calls } = fakeForum([
-      { json: { topics: [] } },
-      {
-        status: 422,
-        json: { errors: ["You're not allowed to tag topics"] },
-      },
-      { json: { topic_id: 42, topic_slug: "agent-stream-stalls" } },
-    ]);
+    const { deps, writeCalls } = fakeForum({
+      writes: [
+        { status: 422, json: { errors: ["You're not allowed to tag topics"] } },
+        { json: { topic_id: 42, topic_slug: "agent-stream-stalls" } },
+      ],
+    });
 
     const result = await fileSdkBugReport(VALID, deps);
 
     expect(result).toMatchObject({ status: "created", topicId: 42 });
-    expect(calls[1]!.body).toMatchObject({ tags: ["cursor-sdk"] });
+    const [tagged, retry] = writeCalls();
+    expect(tagged!.body).toMatchObject({ tags: ["cursor-sdk"] });
     // The retry drops only the tag; the report itself is unchanged.
-    expect(calls[2]!.body).not.toHaveProperty("tags");
-    expect(calls[2]!.body).toMatchObject({ title: VALID.title, category: 6 });
+    expect(retry!.body).not.toHaveProperty("tags");
+    expect(retry!.body).toMatchObject({ title: VALID.title, category: 6 });
   });
 
   it("does not retry a rejection that has nothing to do with tags", async () => {
-    const { deps, calls } = fakeForum([
-      { json: { topics: [] } },
-      { status: 422, json: { errors: ["Title has already been used"] } },
-    ]);
+    const { deps, writeCalls } = fakeForum({
+      writes: [{ status: 422, json: { errors: ["Title has already been used"] } }],
+    });
 
     await expect(fileSdkBugReport(VALID, deps)).rejects.toThrow(
       /Forum post failed \(422\).*Title has already been used/s,
     );
-    expect(calls).toHaveLength(2);
+    expect(writeCalls()).toHaveLength(1);
   });
 
   it("skips the search when the caller asserts the matches are unrelated", async () => {
-    const { deps, calls } = fakeForum([
-      { json: { topic_id: 7, topic_slug: "fresh" } },
-    ]);
+    const { deps, calls } = fakeForum({
+      writes: [{ json: { topic_id: 7, topic_slug: "fresh" } }],
+    });
 
     await fileSdkBugReport({ ...VALID, unrelatedToExisting: true }, deps);
 
@@ -215,9 +288,9 @@ describe("fileSdkBugReport", () => {
   });
 
   it("replies to an existing topic instead of searching", async () => {
-    const { deps, calls } = fakeForum([
-      { json: { topic_id: 7, topic_slug: "existing", post_number: 3 } },
-    ]);
+    const { deps, calls } = fakeForum({
+      writes: [{ json: { topic_id: 7, topic_slug: "existing", post_number: 3 } }],
+    });
 
     const result = await fileSdkBugReport({ ...VALID, replyToTopicId: 7 }, deps);
 
@@ -231,7 +304,9 @@ describe("fileSdkBugReport", () => {
   });
 
   it("surfaces a forum rejection instead of reporting success", async () => {
-    const { deps } = fakeForum([{ status: 422, json: { errors: ["Title too short"] } }]);
+    const { deps } = fakeForum({
+      writes: [{ status: 422, json: { errors: ["Title too short"] } }],
+    });
 
     await expect(
       fileSdkBugReport({ ...VALID, replyToTopicId: 7 }, deps),
@@ -239,7 +314,7 @@ describe("fileSdkBugReport", () => {
   });
 
   it("validates before reading the credential or calling out", async () => {
-    const { deps, calls, keyReads } = fakeForum([]);
+    const { deps, calls, keyReads } = fakeForum();
 
     await expect(
       fileSdkBugReport({ ...VALID, title: "" }, deps),

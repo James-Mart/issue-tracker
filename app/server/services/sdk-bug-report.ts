@@ -135,22 +135,22 @@ export function validateSdkBugReport(input: SdkBugReportInput): void {
   }
 }
 
-/** Body for a new topic, matching the category's form-template field order. */
+/**
+ * Body for a new topic, matching the category's form-template field order.
+ * The labels are `###` headings, which is how the template renders them and
+ * how every other report in the category reads.
+ */
 export function composeTopicBody(input: SdkBugReportInput): string {
-  const sections = [
-    "Where does the bug appear (feature/product)?",
-    PRODUCT_AREA,
-    "Describe the Bug",
-    input.description.trim(),
-    "Steps to Reproduce",
-    input.reproduction.trim(),
-    "Expected Behavior",
-    input.expected.trim(),
+  const sections: Array<[string, string]> = [
+    ["Where does the bug appear (feature/product)?", PRODUCT_AREA],
+    ["Describe the Bug", input.description.trim()],
+    ["Steps to Reproduce", input.reproduction.trim()],
+    ["Expected Behavior", input.expected.trim()],
   ];
   if (input.versionInfo?.trim()) {
-    sections.push("Version info", input.versionInfo.trim());
+    sections.push(["Version Information", input.versionInfo.trim()]);
   }
-  return sections.join("\n\n");
+  return sections.map(([heading, body]) => `### ${heading}\n${body}`).join("\n\n");
 }
 
 /** Body for a reply — no template headers, just the substance. */
@@ -185,26 +185,72 @@ async function forumJson(
   return { status: res.status, json };
 }
 
-/** Topics plausibly covering the same bug, most relevant first. */
-export async function searchExistingReports(
+/** Too common to narrow a search, so they only make the query stricter. */
+const SEARCH_STOPWORDS = new Set([
+  "the", "and", "for", "with", "when", "that", "this", "from", "into", "than",
+  "then", "but", "not", "its", "are", "was", "does", "doesn", "isn", "have",
+  "has", "bug", "issue", "error", "fails", "failing", "sdk", "cursor", "agent",
+]);
+
+/**
+ * Distinctive words from a title, longest first. Discourse ANDs the terms in a
+ * query, so passing a whole sentence matches almost nothing — a differently
+ * worded report of the same bug slips straight through.
+ */
+export function distinctiveTerms(title: string, max = 2): string[] {
+  const words = title.toLowerCase().match(/[a-z][a-z0-9._]{3,}/g) ?? [];
+  return [...new Set(words)]
+    .filter((word) => !SEARCH_STOPWORDS.has(word))
+    .sort((a, b) => b.length - a.length)
+    .slice(0, max);
+}
+
+async function searchOnce(
   query: string,
-  deps: ForumDeps = defaultDeps,
-  limit = 5,
-): Promise<ForumTopicMatch[]> {
+  deps: ForumDeps,
+): Promise<Record<string, unknown>[]> {
   const { json } = await forumJson(
     `/search.json?q=${encodeURIComponent(query)}`,
     {},
     deps,
   );
-  const topics = Array.isArray(json.topics)
+  return Array.isArray(json.topics)
     ? (json.topics as Record<string, unknown>[])
     : [];
-  return topics.slice(0, limit).map((topic) => ({
-    id: Number(topic.id),
-    title: String(topic.title),
-    createdAt: String(topic.created_at ?? "").slice(0, 10),
-    url: `${FORUM_BASE}/t/${topic.id}`,
-  }));
+}
+
+/**
+ * Topics plausibly covering the same bug, most relevant first. Runs the title
+ * verbatim and then each distinctive term scoped to the bug category, because
+ * the verbatim pass alone only ever catches a near-identical title.
+ */
+export async function searchExistingReports(
+  query: string,
+  deps: ForumDeps = defaultDeps,
+  limit = 8,
+): Promise<ForumTopicMatch[]> {
+  const queries = [
+    query,
+    ...distinctiveTerms(query).map(
+      (term) => `${term} category:${BUG_REPORTS_CATEGORY}`,
+    ),
+  ];
+
+  const byId = new Map<number, ForumTopicMatch>();
+  for (const q of queries) {
+    for (const topic of await searchOnce(q, deps)) {
+      const id = Number(topic.id);
+      if (byId.has(id)) continue;
+      byId.set(id, {
+        id,
+        title: String(topic.title),
+        createdAt: String(topic.created_at ?? "").slice(0, 10),
+        url: `${FORUM_BASE}/t/${id}`,
+      });
+    }
+    if (byId.size >= limit) break;
+  }
+  return [...byId.values()].slice(0, limit);
 }
 
 export async function fileSdkBugReport(
