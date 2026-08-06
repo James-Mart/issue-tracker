@@ -1,13 +1,15 @@
 import { EventEmitter } from "events";
-import type { NormalizedStep } from "./event-pipeline.js";
+import type { ConversationFrameInput } from "../schemas.js";
 
 /**
- * A single live frame off the event pipeline. It carries the same normalized
- * step the persistence path sees, so subscribers can tell the incremental
- * live-only deltas (`persist: false`) apart from the finalized events that also
- * land on disk (`persist: true`).
+ * One live frame on the in-process subscriber tap. Carries a normalized
+ * transcript step or live-only run signalling; `persist` distinguishes
+ * incremental deltas from finalized events that also land on disk.
  */
-export type ConversationFrame = NormalizedStep;
+export type ConversationFrame = {
+  event: ConversationFrameInput;
+  persist: boolean;
+};
 
 export type ConversationFrameListener = (frame: ConversationFrame) => void;
 

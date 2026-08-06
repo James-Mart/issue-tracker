@@ -19,6 +19,7 @@ import {
   cancelConversationDelegations,
   createDelegateCustomTools,
 } from "./delegate-tool.js";
+import { publishFrame } from "./conversation-stream.js";
 import {
   EventPipeline,
   type NormalizedStep,
@@ -201,6 +202,11 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       };
       entry.activeRun = activeRun;
 
+      publishFrame(conversationId, {
+        event: { type: "run", status: "started", runId: agentRun.id },
+        persist: false,
+      });
+
       entry.pump = (async () => {
         const pipeline = new EventPipeline(conversationId);
         try {
@@ -215,6 +221,14 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
             // Best-effort flush after a mid-run failure.
           }
         } finally {
+          publishFrame(conversationId, {
+            event: {
+              type: "run",
+              status: "finished",
+              runId: agentRun.id,
+            },
+            persist: false,
+          });
           // Prefer the boundary's terminal result (finished / error / cancelled)
           // over a synthesized status — the iterator aborting must not mask
           // e.g. `cancelled` after cancel().
