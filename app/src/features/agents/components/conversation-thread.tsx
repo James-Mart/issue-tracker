@@ -246,7 +246,8 @@ export function ConversationThread({
 }: {
   conversationId: string;
 }) {
-  const { events, ready } = useConversationEvents(conversationId);
+  const { events, ready, streamRunActive, runResyncKey } =
+    useConversationEvents(conversationId);
   const { data: conversations } = useConversationsQuery();
   const meta = conversations?.find((c) => c.id === conversationId);
 
@@ -259,7 +260,8 @@ export function ConversationThread({
         <Composer
           conversationId={conversationId}
           model={meta.model}
-          events={events}
+          streamRunActive={streamRunActive}
+          runResyncKey={runResyncKey}
         />
       ) : null}
     </div>

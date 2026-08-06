@@ -18,6 +18,16 @@ export type ConversationEventsState = {
    * last good transcript instead of flashing the loading skeleton.
    */
   ready: boolean;
+  /**
+   * Live run lifecycle from SSE `run` frames. `null` until the first frame
+   * on this subscription (including catch-up replay).
+   */
+  streamRunActive: boolean | null;
+  /**
+   * Increments on each SSE reconnect so run-active state can re-seed from
+   * `GET /run` when a missed `finished` frame would otherwise stick Stop on.
+   */
+  runResyncKey: number;
 };
 
 /**
@@ -75,11 +85,15 @@ export function useConversationEvents(
 ): ConversationEventsState {
   const [events, setEvents] = useState<TranscriptEvent[]>([]);
   const [ready, setReady] = useState(false);
+  const [streamRunActive, setStreamRunActive] = useState<boolean | null>(null);
+  const [runResyncKey, setRunResyncKey] = useState(0);
 
   useEffect(() => {
     if (!conversationId) {
       setEvents([]);
       setReady(false);
+      setStreamRunActive(null);
+      setRunResyncKey(0);
       return;
     }
     const id = conversationId;
@@ -93,6 +107,8 @@ export function useConversationEvents(
 
     setEvents([]);
     setReady(false);
+    setStreamRunActive(null);
+    setRunResyncKey(0);
 
     const closeSource = () => {
       if (watchdog) {
@@ -107,6 +123,10 @@ export function useConversationEvents(
       closeSource();
       replaying = false;
       replayBuffer = [];
+      // Drop stale stream run state and re-seed from GET /run — a run may have
+      // finished while disconnected and its `finished` frame is no longer buffered.
+      setStreamRunActive(null);
+      setRunResyncKey((key) => key + 1);
       // Keep `events` + `ready` so the UI keeps the last good transcript.
       if (disposed || reconnectTimer) return;
       reconnectTimer = setTimeout(() => {
@@ -169,6 +189,7 @@ export function useConversationEvents(
           return;
         }
         if (parsed.event.type === "run") {
+          setStreamRunActive(parsed.event.status === "started");
           return;
         }
         if (replaying) {
@@ -188,8 +209,10 @@ export function useConversationEvents(
       closeSource();
       setEvents([]);
       setReady(false);
+      setStreamRunActive(null);
+      setRunResyncKey(0);
     };
   }, [conversationId]);
 
-  return { events, ready };
+  return { events, ready, streamRunActive, runResyncKey };
 }
