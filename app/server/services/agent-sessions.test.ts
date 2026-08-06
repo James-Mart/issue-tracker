@@ -848,4 +848,45 @@ describe("agent sessions manager", () => {
       },
     ]);
   });
+
+  it("dispose and disposeAll always clear the catch-up buffer", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const { publishFrame, getBufferedFrames } = await import(
+      "./conversation-stream.js"
+    );
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Catch-up teardown",
+      projectId: "platform",
+      model: "auto",
+    });
+    publishFrame(meta.id, {
+      event: { type: "assistant", text: "buffered" },
+      persist: false,
+    });
+    expect(getBufferedFrames(meta.id)).toHaveLength(1);
+
+    await sessions.dispose(meta.id);
+    expect(getBufferedFrames(meta.id)).toEqual([]);
+
+    publishFrame(meta.id, {
+      event: { type: "assistant", text: "buffered again" },
+      persist: false,
+    });
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    publishFrame(meta.id, {
+      event: { type: "run", status: "started", runId: "run-2" },
+      persist: false,
+    });
+    expect(getBufferedFrames(meta.id).length).toBeGreaterThan(0);
+
+    await sessions.disposeAll();
+    expect(getBufferedFrames(meta.id)).toEqual([]);
+  });
 });

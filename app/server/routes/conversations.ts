@@ -3,7 +3,11 @@ import {
   agentSessions,
   type AgentSessions,
 } from "../services/agent-sessions.js";
-import { publishFrame, subscribeFrames } from "../services/conversation-stream.js";
+import {
+  getBufferedFrames,
+  publishFrame,
+  subscribeFrames,
+} from "../services/conversation-stream.js";
 import {
   appendEvent,
   createConversation,
@@ -15,6 +19,7 @@ import {
 import { requireProjectWorkspace } from "../services/project-workspace.js";
 import type {
   ConversationActiveRun,
+  ConversationFrameInput,
   ConversationMetaPatch,
   TranscriptEvent,
 } from "../schemas.js";
@@ -37,6 +42,10 @@ function sendSse(res: Response, payload: string): boolean {
 
 function sseDataFrame(event: TranscriptEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
+}
+
+function sseLiveDataFrame(event: ConversationFrameInput): string {
+  return `data: ${JSON.stringify({ ...event, at: new Date().toISOString() })}\n\n`;
 }
 
 const asyncRoute =
@@ -170,14 +179,12 @@ export function createConversationsRouter(
         if (!sendSse(res, sseDataFrame(event))) return;
       }
 
+      for (const frame of getBufferedFrames(meta.id)) {
+        if (!sendSse(res, sseLiveDataFrame(frame.event))) return;
+      }
+
       const unsubscribe = subscribeFrames(meta.id, (frame) => {
-        sendSse(
-          res,
-          `data: ${JSON.stringify({
-            ...frame.event,
-            at: new Date().toISOString(),
-          })}\n\n`,
-        );
+        sendSse(res, sseLiveDataFrame(frame.event));
       });
 
       sendSse(res, HEARTBEAT_PAYLOAD);

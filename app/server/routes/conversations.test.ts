@@ -284,6 +284,112 @@ describe("GET /api/conversations/:id/events", () => {
     expect(typeof event.at).toBe("string");
   });
 
+  it("replays buffered unpersisted frames to a late SSE subscriber", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Catch-up replay" }),
+    }).then((r) => r.json());
+
+    const { publishFrame } = await import("../services/conversation-stream.js");
+    publishFrame(created.id, {
+      event: { type: "assistant", text: "live-only delta" },
+      persist: false,
+    });
+    publishFrame(created.id, {
+      event: { type: "run", status: "started", runId: "run-catchup" },
+      persist: false,
+    });
+
+    const controller = new AbortController();
+    const res = await fetch(`${baseUrl}/api/conversations/${created.id}/events`, {
+      signal: controller.signal,
+      headers: { accept: "text/event-stream" },
+    });
+    expect(res.status).toBe(200);
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (
+        buf.includes("live-only delta") &&
+        buf.includes("run-catchup") &&
+        buf.includes("event: ping")
+      ) {
+        break;
+      }
+    }
+    controller.abort();
+    try {
+      await reader.cancel();
+    } catch {
+      // abort may already have torn the stream down
+    }
+
+    expect(buf).toContain("live-only delta");
+    expect(buf).toContain("run-catchup");
+    expect(buf).toMatch(/event: ping/);
+  });
+
+  it("does not replay superseded unpersisted frames after a persisted append", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Catch-up cleared" }),
+    }).then((r) => r.json());
+
+    const { publishFrame } = await import("../services/conversation-stream.js");
+    publishFrame(created.id, {
+      event: { type: "assistant", text: "superseded chunk" },
+      persist: false,
+    });
+    publishFrame(created.id, {
+      event: { type: "assistant", text: "final on disk" },
+      persist: true,
+    });
+
+    const { appendEvent } = await import("../services/conversations.js");
+    await appendEvent(created.id, {
+      type: "assistant",
+      text: "final on disk",
+    });
+
+    const controller = new AbortController();
+    const res = await fetch(`${baseUrl}/api/conversations/${created.id}/events`, {
+      signal: controller.signal,
+      headers: { accept: "text/event-stream" },
+    });
+    expect(res.status).toBe(200);
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (buf.includes("event: ping")) break;
+    }
+    controller.abort();
+    try {
+      await reader.cancel();
+    } catch {
+      // abort may already have torn the stream down
+    }
+
+    expect(buf).toContain("final on disk");
+    expect(buf).not.toContain("superseded chunk");
+    expect(
+      buf.split("\n").filter((line) => line.includes("final on disk")).length,
+    ).toBe(1);
+  });
+
   it("forwards live normalized frames while a run is active", async () => {
     const fake = createFakeAgentSdk({
       stream: buildScriptedStreamWithAgentIdHint(),

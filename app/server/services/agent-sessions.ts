@@ -19,7 +19,7 @@ import {
   cancelConversationDelegations,
   createDelegateCustomTools,
 } from "./delegate-tool.js";
-import { publishFrame } from "./conversation-stream.js";
+import { clearCatchupBuffer, publishFrame } from "./conversation-stream.js";
 import {
   EventPipeline,
   type NormalizedStep,
@@ -268,9 +268,11 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     async dispose(conversationId) {
       const entry = sessions.get(conversationId);
-      if (!entry) return;
-      sessions.delete(conversationId);
-      await tearDownEntry(conversationId, entry);
+      if (entry) {
+        sessions.delete(conversationId);
+        await tearDownEntry(conversationId, entry);
+      }
+      clearCatchupBuffer(conversationId);
     },
 
     async disposeAll() {
@@ -281,6 +283,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           tearDownEntry(conversationId, entry),
         ),
       );
+      for (const [conversationId] of entries) {
+        clearCatchupBuffer(conversationId);
+      }
     },
   };
 }
