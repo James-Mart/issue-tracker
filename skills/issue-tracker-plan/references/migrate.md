@@ -8,7 +8,8 @@ restate that rule here).
 ### Merge-base and policy
 
 After **each** successful root `apply`, record the merge-base and policy from
-the grill (**Merge-base** in the parent skill):
+the grill (**Merge-base first** bullet in **Rules (mandatory):** in the parent
+skill):
 
 | Grill merge-base | Post-apply |
 | --- | --- |
