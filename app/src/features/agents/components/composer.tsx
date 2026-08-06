@@ -90,10 +90,7 @@ export function Composer({
   };
 
   const canSend =
-    draft.trim().length > 0 &&
-    !sendMessage.isPending &&
-    !runActive &&
-    model.length > 0;
+    draft.trim().length > 0 && !sendMessage.isPending && !runActive;
 
   return (
     <div

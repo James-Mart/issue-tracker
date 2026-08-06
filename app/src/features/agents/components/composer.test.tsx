@@ -35,7 +35,9 @@ vi.mock("@/hooks/use-coarse-pointer", () => ({
   useIsCoarsePointer: () => coarsePointer.value,
 }))
 
-function mountComposer(): {
+function mountComposer(
+  overrides: { model?: string; runActive?: boolean } = {},
+): {
   container: HTMLDivElement
   root: Root
 } {
@@ -46,8 +48,8 @@ function mountComposer(): {
     root.render(
       <Composer
         conversationId="conv-1"
-        model="composer-2.5-fast"
-        runActive={false}
+        model={overrides.model ?? "composer-2.5-fast"}
+        runActive={overrides.runActive ?? false}
       />,
     )
   })
@@ -81,6 +83,12 @@ function pressEnter(input: HTMLTextAreaElement): KeyboardEvent {
     input.dispatchEvent(event)
   })
   return event
+}
+
+function sendButton(container: ParentNode): HTMLButtonElement {
+  const el = container.querySelector('button[aria-label="Send"]')
+  expect(el).toBeTruthy()
+  return el as HTMLButtonElement
 }
 
 describe("Composer Enter key", () => {
@@ -135,5 +143,67 @@ describe("Composer Enter key", () => {
     expect(textarea(container!).title).toBe(
       "Enter to send, Shift+Enter for a newline",
     )
+  })
+})
+
+describe("Composer send affordance", () => {
+  let container: HTMLDivElement | undefined
+  let root: Root | undefined
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount())
+    container?.remove()
+    container = undefined
+    root = undefined
+    sendMutate.mockClear()
+    coarsePointer.value = false
+  })
+
+  it("enables Send with a draft under a coarse pointer", () => {
+    coarsePointer.value = true
+    ;({ container, root } = mountComposer())
+
+    expect(sendButton(container!).disabled).toBe(true)
+
+    setDraft(textarea(container!), "Line one\nLine two")
+
+    expect(sendButton(container!).disabled).toBe(false)
+  })
+
+  it("submits via Send when the pointer is coarse", () => {
+    coarsePointer.value = true
+    ;({ container, root } = mountComposer())
+
+    setDraft(textarea(container!), "Line one\nLine two")
+    act(() => {
+      sendButton(container!).click()
+    })
+
+    expect(sendMutate).toHaveBeenCalledTimes(1)
+    expect(sendMutate).toHaveBeenCalledWith(
+      {
+        id: "conv-1",
+        body: { prompt: "Line one\nLine two", model: "composer-2.5-fast" },
+      },
+      expect.any(Object),
+    )
+  })
+
+  it("keeps Send at a touch target size on narrow viewports", () => {
+    coarsePointer.value = true
+    ;({ container, root } = mountComposer())
+
+    const button = sendButton(container!)
+    expect(button.className).toMatch(/\bh-11\b/)
+    expect(button.className).toMatch(/\bw-11\b/)
+  })
+
+  it("enables Send with a draft even when the model picker is empty", () => {
+    coarsePointer.value = true
+    ;({ container, root } = mountComposer({ model: "" }))
+
+    setDraft(textarea(container!), "Hello")
+
+    expect(sendButton(container!).disabled).toBe(false)
   })
 })
