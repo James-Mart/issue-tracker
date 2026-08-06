@@ -1,5 +1,5 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import type { ConversationMeta } from "@server/schemas";
+import type { ConversationListItem } from "@server/schemas";
 import {
   listAgentModels,
   listConversations,
@@ -8,7 +8,7 @@ import {
 import { agentsKeys } from "./keys";
 
 export function useConversationsQuery(): UseQueryResult<
-  ConversationMeta[],
+  ConversationListItem[],
   Error
 > {
   return useQuery({

@@ -13,7 +13,11 @@ import {
   updateMeta,
 } from "../services/conversations.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
-import type { ConversationMetaPatch, TranscriptEvent } from "../schemas.js";
+import type {
+  ConversationActiveRun,
+  ConversationMetaPatch,
+  TranscriptEvent,
+} from "../schemas.js";
 
 const DEFAULT_TITLE = "New conversation";
 const DEFAULT_MODEL = "auto";
@@ -40,13 +44,29 @@ const asyncRoute =
   (req, res, next) =>
     Promise.resolve(handler(req, res, next)).catch(next);
 
+function activeRunState(
+  sessions: AgentSessions,
+  conversationId: string,
+): ConversationActiveRun {
+  const run = sessions.getActiveRun(conversationId);
+  if (!run) {
+    return { active: false, runId: null, startedAt: null };
+  }
+  return { active: true, runId: run.id, startedAt: run.startedAt };
+}
+
 export function createConversationsRouter(
   sessions: AgentSessions = agentSessions,
 ): Router {
   const router = Router();
 
   router.get("/", (_req, res) => {
-    res.json(listConversations());
+    res.json(
+      listConversations().map((meta) => ({
+        ...meta,
+        activeRun: activeRunState(sessions, meta.id).active,
+      })),
+    );
   });
 
   router.get(
@@ -122,6 +142,14 @@ export function createConversationsRouter(
       await sessions.dispose(req.params.id);
       await deleteConversation(req.params.id);
       res.status(204).end();
+    }),
+  );
+
+  router.get(
+    "/:id/run",
+    asyncRoute(async (req, res) => {
+      readConversation(req.params.id);
+      res.json(activeRunState(sessions, req.params.id));
     }),
   );
 

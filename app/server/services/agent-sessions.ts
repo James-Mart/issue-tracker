@@ -29,6 +29,7 @@ export type { NormalizedStep };
 
 export interface ActiveRun {
   readonly id: string;
+  readonly startedAt: string;
   wait(): Promise<AgentRunResult>;
 }
 
@@ -195,6 +196,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
       const activeRun: ActiveRun = {
         id: agentRun.id,
+        startedAt: new Date().toISOString(),
         wait: () => waitPromise,
       };
       entry.activeRun = activeRun;

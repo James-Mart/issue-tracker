@@ -35,6 +35,50 @@ function conversationsDir(): string {
   return join(dirname(issuesRoot), "conversations");
 }
 
+type HeldConversationRouter = {
+  server: Server;
+  baseUrl: string;
+  sessions: AgentSessions;
+  releaseHold: () => void;
+};
+
+/** Router + sessions with a held in-flight run (shared by cancel and run-state tests). */
+async function startHeldConversationRouter(): Promise<HeldConversationRouter> {
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  const fake = createFakeAgentSdk({
+    stream: buildScriptedStreamWithAgentIdHint(),
+    hold,
+  });
+  const { createAgentSessions } = await import("../services/agent-sessions.js");
+  const { createConversationsRouter } = await import("./conversations.js");
+  const { errorHandler } = await import("../errors.js");
+  const sessions = createAgentSessions(fake);
+  const app = express();
+  app.use(express.json());
+  app.use("/api/conversations", createConversationsRouter(sessions));
+  app.use(errorHandler);
+
+  let heldServer: Server;
+  await new Promise<void>((resolve) => {
+    heldServer = app.listen(0, "127.0.0.1", () => resolve());
+  });
+  const addr = heldServer!.address();
+  if (!addr || typeof addr === "string") {
+    throw new Error("expected TCP listen address");
+  }
+
+  return {
+    server: heldServer!,
+    baseUrl: `http://127.0.0.1:${addr.port}`,
+    sessions,
+    releaseHold: release,
+  };
+}
+
 beforeEach(async () => {
   // Nest issues/ under a unique root so conversations/ stays per-test. Using a
   // mkdtemp as ISSUES_DIR directly shared tmpdir()/conversations across workers
@@ -162,6 +206,34 @@ describe("conversations HTTP API (CRUD)", () => {
     });
     expect(res.status).toBe(204);
     expect(existsSync(join(conversationsDir(), created.id))).toBe(false);
+  });
+
+  it("GET /:id/run reports idle state and list includes activeRun: false", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Idle run state" }),
+    }).then((r) => r.json());
+
+    const runRes = await fetch(`${baseUrl}/api/conversations/${created.id}/run`);
+    expect(runRes.status).toBe(200);
+    expect(await runRes.json()).toEqual({
+      active: false,
+      runId: null,
+      startedAt: null,
+    });
+
+    const list = await fetch(`${baseUrl}/api/conversations`).then((r) => r.json());
+    const item = list.find((m: { id: string }) => m.id === created.id);
+    expect(item?.activeRun).toBe(false);
+  });
+
+  it("GET /:id/run returns 404 for an unknown conversation id", async () => {
+    const res = await fetch(`${baseUrl}/api/conversations/unknown-conversation/run`);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({
+      error: 'unknown conversation "unknown-conversation"',
+    });
   });
 });
 
@@ -298,33 +370,11 @@ describe("POST /api/conversations/:id/cancel", () => {
   let cancelSessions: AgentSessions;
 
   beforeEach(async () => {
-    let release!: () => void;
-    const hold = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    releaseHold = release;
-
-    const fake = createFakeAgentSdk({
-      stream: buildScriptedStreamWithAgentIdHint(),
-      hold,
-    });
-    const { createAgentSessions } = await import("../services/agent-sessions.js");
-    const { createConversationsRouter } = await import("./conversations.js");
-    const { errorHandler } = await import("../errors.js");
-    cancelSessions = createAgentSessions(fake);
-    const app = express();
-    app.use(express.json());
-    app.use("/api/conversations", createConversationsRouter(cancelSessions));
-    app.use(errorHandler);
-
-    await new Promise<void>((resolve) => {
-      cancelServer = app.listen(0, "127.0.0.1", () => resolve());
-    });
-    const addr = cancelServer.address();
-    if (!addr || typeof addr === "string") {
-      throw new Error("expected TCP listen address");
-    }
-    cancelBaseUrl = `http://127.0.0.1:${addr.port}`;
+    const held = await startHeldConversationRouter();
+    cancelServer = held.server;
+    cancelBaseUrl = held.baseUrl;
+    cancelSessions = held.sessions;
+    releaseHold = held.releaseHold;
   });
 
   afterEach(async () => {
@@ -411,6 +461,36 @@ describe("POST /api/conversations/:id/cancel", () => {
       { method: "POST" },
     );
     expect(secondCancel.status).toBe(409);
+  });
+
+  it("reports active: true from /run and list while a run is in flight", async () => {
+    const created = await fetch(`${cancelBaseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Active run state" }),
+    }).then((r) => r.json());
+
+    const send = await fetch(`${cancelBaseUrl}/api/conversations/${created.id}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "hold please" }),
+    });
+    expect(send.status).toBe(202);
+
+    await Promise.resolve();
+
+    const runRes = await fetch(`${cancelBaseUrl}/api/conversations/${created.id}/run`);
+    expect(runRes.status).toBe(200);
+    const runState = await runRes.json();
+    expect(runState).toMatchObject({
+      active: true,
+      runId: FAKE_RUN_ID,
+    });
+    expect(typeof runState.startedAt).toBe("string");
+
+    const list = await fetch(`${cancelBaseUrl}/api/conversations`).then((r) => r.json());
+    const item = list.find((m: { id: string }) => m.id === created.id);
+    expect(item?.activeRun).toBe(true);
   });
 });
 
