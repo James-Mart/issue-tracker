@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useIsCoarsePointer } from "@/hooks/use-coarse-pointer";
 import {
   useCancelConversationRun,
   useSendConversationMessage,
@@ -38,6 +39,7 @@ export function Composer({
 
   const [draft, setDraft] = useState("");
   const [model, setModel] = useState(initialModel);
+  const isCoarsePointer = useIsCoarsePointer();
 
   const models = modelsData?.models ?? [];
 
@@ -81,7 +83,7 @@ export function Composer({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !isCoarsePointer) {
       e.preventDefault();
       send();
     }
@@ -137,7 +139,11 @@ export function Composer({
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Message the agent"
-            title="Enter to send, Shift+Enter for a newline"
+            title={
+              isCoarsePointer
+                ? "Enter for a new line"
+                : "Enter to send, Shift+Enter for a newline"
+            }
             aria-label="Message the agent"
             disabled={sendMessage.isPending}
             className="min-h-[44px] min-w-0 max-h-40 flex-1 resize-none"
