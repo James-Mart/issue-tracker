@@ -17,6 +17,12 @@ export const conversationsDir = join(dirname(issuesDir), "conversations");
 // ambient `CURSOR_API_KEY` fallback.
 export const cursorApiKey = process.env.CURSOR_API_KEY;
 
+// Forum credential store for `file_cursor_sdk_bug`. Deliberately outside the
+// plugin: this directory has a git remote, and `~/.cursor/skills_and_plugins.zip`
+// archives the whole plugin tree regardless of `.gitignore`.
+export const forumCredDir =
+  process.env.FORUM_CRED_DIR ?? "/root/.cursor/credentials/issue-tracker-forum";
+
 export const isProdEnv = process.env.NODE_ENV === "production";
 export const distDir = join(appDir, "dist");
 export const hasBuiltClient = existsSync(distDir);
