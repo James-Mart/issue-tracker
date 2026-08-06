@@ -1,14 +1,24 @@
 import type { ReactNode } from "react";
+import { ArrowLeft } from "lucide-react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
+import { Button } from "@/components/ui/button";
+import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils/cn";
 import { useConversationsQuery } from "../api/queries";
 import { useConversationEvents } from "../hooks/use-conversation-events";
+import { useConversationRunActive } from "../hooks/use-conversation-run-active";
 import {
   deriveSubAgents,
   isSubAgentToolCall,
   type SubAgent,
 } from "../lib/subagent";
+import {
+  formatUsageTotals,
+  sumUsageTotals,
+  threadRunLabel,
+} from "../lib/thread-status";
 import { Composer } from "./composer";
 import { SubagentCard } from "./subagent-card";
 import {
@@ -241,18 +251,111 @@ function ThreadBody({
   );
 }
 
+function ThreadStatusStrip({
+  runActive,
+  events,
+}: {
+  runActive: boolean;
+  events: TranscriptEvent[];
+}) {
+  const label = threadRunLabel(runActive);
+  const totals = sumUsageTotals(events);
+  const usageText = formatUsageTotals(totals);
+
+  return (
+    <div
+      className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"
+      data-testid="thread-status-strip"
+    >
+      <span
+        className={liveChip}
+        data-run-active={runActive ? "true" : "false"}
+        aria-live="polite"
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "h-[7px] w-[7px] shrink-0 rounded-full",
+            runActive
+              ? cn(
+                  "bg-[hsl(var(--current))] motion-safe:animate-live-dot",
+                  currentGlow,
+                )
+              : "bg-[hsl(var(--rail-lit))]",
+          )}
+        />
+        {label}
+      </span>
+      <span className="min-w-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+        {usageText}
+      </span>
+    </div>
+  );
+}
+
+function ThreadHeader({
+  title,
+  onBack,
+  runActive,
+  events,
+}: {
+  title: string;
+  onBack?: () => void;
+  runActive: boolean;
+  events: TranscriptEvent[];
+}) {
+  return (
+    <div className="shrink-0 border-b border-border px-4 py-3">
+      <div className="flex items-center gap-2">
+        {onBack ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2 h-7 gap-1 px-2"
+            onClick={onBack}
+            aria-label="Back to conversations"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+        ) : null}
+        <h2 className="min-w-0 truncate text-sm font-medium text-foreground">
+          {title}
+        </h2>
+      </div>
+      <div className="mt-2">
+        <ThreadStatusStrip runActive={runActive} events={events} />
+      </div>
+    </div>
+  );
+}
+
 export function ConversationThread({
   conversationId,
+  onBack,
 }: {
   conversationId: string;
+  onBack?: () => void;
 }) {
   const { events, ready, streamRunActive, runResyncKey } =
     useConversationEvents(conversationId);
+  const { runActive } = useConversationRunActive(
+    conversationId,
+    streamRunActive,
+    runResyncKey,
+  );
   const { data: conversations } = useConversationsQuery();
   const meta = conversations?.find((c) => c.id === conversationId);
+  const title = meta?.title?.trim() || "Thread";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <ThreadHeader
+        title={title}
+        onBack={onBack}
+        runActive={runActive}
+        events={events}
+      />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ThreadBody events={events} ready={ready} />
       </div>
@@ -260,8 +363,7 @@ export function ConversationThread({
         <Composer
           conversationId={conversationId}
           model={meta.model}
-          streamRunActive={streamRunActive}
-          runResyncKey={runResyncKey}
+          runActive={runActive}
         />
       ) : null}
     </div>
