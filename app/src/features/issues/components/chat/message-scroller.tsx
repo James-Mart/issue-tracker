@@ -2,6 +2,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ComponentPropsWithoutRef,
   type ReactNode,
   type UIEvent,
 } from "react";
@@ -38,11 +39,12 @@ export function MessageScroller({
   children,
   bottomKey,
   className,
+  ...rest
 }: {
   children: ReactNode;
   bottomKey: unknown;
   className?: string;
-}) {
+} & Omit<ComponentPropsWithoutRef<"div">, "children" | "className" | "onScroll">) {
   const ref = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
   const [pinned, setPinned] = useState(true);
@@ -69,6 +71,7 @@ export function MessageScroller({
         "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-2",
         className,
       )}
+      {...rest}
     >
       {children}
     </div>
