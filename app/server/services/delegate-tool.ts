@@ -15,6 +15,7 @@ import {
   resolveModelSelection,
 } from "./model-selection.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
+import { createSdkBugReportTools } from "./sdk-bug-report.js";
 
 /** Interval for live-only nested-run liveness frames. */
 export const NESTED_RUN_HEARTBEAT_MS = 5000;
@@ -258,7 +259,12 @@ export function createDelegateCustomTools(
   function buildCustomTools(
     parent: ParentFrame | null,
   ): Record<string, SDKCustomTool> {
-    const customTools: Record<string, SDKCustomTool> = {};
+    // Bug filing rides along with delegation so every agent — root and nested
+    // alike — can report an SDK defect it trips over, without each spawn site
+    // having to assemble its own tool map.
+    const customTools: Record<string, SDKCustomTool> = {
+      ...createSdkBugReportTools(),
+    };
 
     customTools.delegations = {
       description:

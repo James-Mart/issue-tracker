@@ -89,6 +89,21 @@ async function waitForHandleSend(
 }
 
 describe("createDelegateCustomTools", () => {
+  it("exposes the bug-filing tool alongside the delegation tools", () => {
+    const customTools = createDelegateCustomTools({
+      sdk: createFakeAgentSdk({ stream: ASSISTANT_STREAM }),
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    expect(Object.keys(customTools).sort()).toEqual([
+      "delegate",
+      "delegations",
+      "file_cursor_sdk_bug",
+    ]);
+  });
+
   it("creates a nested agent on the role's mapped pin with the role body prepended", async () => {
     const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
     const customTools = createDelegateCustomTools({
