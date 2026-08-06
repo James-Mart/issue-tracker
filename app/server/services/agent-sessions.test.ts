@@ -850,6 +850,51 @@ describe("agent sessions manager", () => {
     ]);
   });
 
+  it("dispose and disposeAll evict agent-state and nested checkpoint caches", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const cachedMod = await import("./cached-checkpoints-store.js");
+    const evictSpy = vi.spyOn(cachedMod, "evictConversationCheckpointCaches");
+
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Evict on dispose",
+      projectId: "platform",
+      model: "auto",
+    });
+    const storeDir = join(
+      dirname(issuesRoot),
+      "conversations",
+      meta.id,
+      "agent-state",
+    );
+    mkdirSync(join(storeDir, "nested", "nested-one"), { recursive: true });
+    mkdirSync(join(storeDir, "nested", "nested-two"), { recursive: true });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    evictSpy.mockClear();
+    await sessions.dispose(meta.id);
+    expect(evictSpy).toHaveBeenCalledTimes(1);
+    expect(evictSpy).toHaveBeenCalledWith(storeDir);
+
+    // Rebuild a session and verify disposeAll also evicts.
+    const result2 = await sessions.sendPrompt(meta.id, { prompt: "again" });
+    expect(result2.ok).toBe(true);
+    if (!result2.ok) return;
+    await result2.run.wait();
+
+    evictSpy.mockClear();
+    await sessions.disposeAll();
+    expect(evictSpy).toHaveBeenCalledTimes(1);
+    expect(evictSpy).toHaveBeenCalledWith(storeDir);
+    evictSpy.mockRestore();
+  });
+
   it("dispose and disposeAll always clear the catch-up buffer", async () => {
     const { createConversation, createAgentSessions } = await load();
     const { publishFrame, getBufferedFrames } = await import(

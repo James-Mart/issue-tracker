@@ -3,6 +3,7 @@ import {
   Cursor,
   CursorAgentError,
   JsonlLocalAgentStore,
+  composeLocalAgentStore,
   type AgentDefinition,
   type AgentOptions,
   type CursorRequestOptions,
@@ -17,6 +18,7 @@ import {
   type SendOptions,
 } from "@cursor/sdk";
 import { cursorApiKey } from "../config.js";
+import { createCachedCheckpointsStore } from "./cached-checkpoints-store.js";
 
 export { CursorAgentError };
 
@@ -199,10 +201,16 @@ function localRuntime(
   storeDir: string,
   customTools: Record<string, SDKCustomTool> | undefined,
 ): NonNullable<AgentOptions["local"]> {
+  const jsonl = new JsonlLocalAgentStore(storeDir);
   return {
     cwd,
     settingSources: ["user", "project", "plugins"],
-    store: new JsonlLocalAgentStore(storeDir),
+    store: composeLocalAgentStore({
+      agents: jsonl.agents,
+      runs: jsonl.runs,
+      runEvents: jsonl.runEvents,
+      checkpoints: createCachedCheckpointsStore(storeDir, jsonl.checkpoints),
+    }),
     customTools,
   };
 }

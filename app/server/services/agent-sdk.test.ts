@@ -2,6 +2,7 @@ import type {
   AgentDefinition,
   AgentOptions,
   InteractionUpdate,
+  LocalAgentStore,
   ModelSelection,
   Run,
   RunResult,
@@ -23,6 +24,23 @@ import {
   NESTED_AGENT_ID,
   TASK_TOOL_CALL_ID,
 } from "./agent-sdk.fake.js";
+import { isCachedCheckpointsStore } from "./cached-checkpoints-store.js";
+
+function expectCachedComposedStore(
+  store: LocalAgentStore | undefined,
+): asserts store is LocalAgentStore {
+  expect(store).toBeDefined();
+  expect(store).not.toBeInstanceOf(JsonlLocalAgentStore);
+  expect(store).toEqual(
+    expect.objectContaining({
+      agents: expect.anything(),
+      runs: expect.anything(),
+      runEvents: expect.anything(),
+      checkpoints: expect.anything(),
+    }),
+  );
+  expect(isCachedCheckpointsStore(store!.checkpoints)).toBe(true);
+}
 
 const MODEL: ModelSelection = { id: "composer-2.5" };
 const STORE_DIR = "/data/conversations/my-conv/agent-state";
@@ -114,17 +132,19 @@ describe("createAgent", () => {
 
     expect(createSdkAgent).toHaveBeenCalledTimes(1);
     const options = createSdkAgent.mock.calls[0]![0];
-    expect(options.local).toEqual({
-      cwd: "/repo",
-      settingSources: ["user", "project", "plugins"],
-      store: expect.any(JsonlLocalAgentStore),
-    });
+    expect(options.local?.cwd).toBe("/repo");
+    expect(options.local?.settingSources).toEqual([
+      "user",
+      "project",
+      "plugins",
+    ]);
+    expectCachedComposedStore(options.local?.store);
     expect(options.apiKey).toBe("key-abc");
     expect(options.model).toEqual(MODEL);
     expect(options.agentId).toBe("resume-me");
   });
 
-  it("passes a JsonlLocalAgentStore rooted at storeDir", async () => {
+  it("wires a composed store with a cached checkpoints substore", async () => {
     const createSdkAgent = vi.fn(
       async (_options: AgentOptions) => makeFakeSdkAgent([]),
     );
@@ -132,11 +152,7 @@ describe("createAgent", () => {
 
     await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
 
-    const store = createSdkAgent.mock.calls[0]![0].local?.store;
-    expect(store).toBeInstanceOf(JsonlLocalAgentStore);
-    expect((store as JsonlLocalAgentStore & { rootDir: string }).rootDir).toBe(
-      STORE_DIR,
-    );
+    expectCachedComposedStore(createSdkAgent.mock.calls[0]![0].local?.store);
   });
 
   it("forwards the agents map unchanged to Agent.create", async () => {
@@ -201,17 +217,20 @@ describe("resumeAgent", () => {
     });
 
     expect(handle.agentId).toBe("agent-1");
-    expect(resumeSdkAgent).toHaveBeenCalledWith("agent-1", {
-      apiKey: "key-xyz",
-      model: MODEL,
-      agents: undefined,
-      local: {
-        cwd: "/repo",
-        settingSources: ["user", "project", "plugins"],
-        store: expect.any(JsonlLocalAgentStore),
-        customTools: undefined,
-      },
-    });
+    expect(resumeSdkAgent).toHaveBeenCalledWith(
+      "agent-1",
+      expect.objectContaining({
+        apiKey: "key-xyz",
+        model: MODEL,
+        agents: undefined,
+        local: expect.objectContaining({
+          cwd: "/repo",
+          settingSources: ["user", "project", "plugins"],
+          customTools: undefined,
+        }),
+      }),
+    );
+    expectCachedComposedStore(resumeSdkAgent.mock.calls[0]![1]?.local?.store);
   });
 
   // The workspace an agent runs in is also the workspace the SDK filed it
@@ -240,12 +259,16 @@ describe("resumeAgent", () => {
       customTools: SAMPLE_CUSTOM_TOOLS,
     });
 
-    expect(resumeSdkAgent.mock.calls[0]![1]?.local).toEqual(
-      createSdkAgent.mock.calls[0]![0].local,
-    );
+    const createdLocal = createSdkAgent.mock.calls[0]![0].local;
+    const resumedLocal = resumeSdkAgent.mock.calls[0]![1]?.local;
+    expect(resumedLocal?.cwd).toEqual(createdLocal?.cwd);
+    expect(resumedLocal?.settingSources).toEqual(createdLocal?.settingSources);
+    expect(resumedLocal?.customTools).toBe(createdLocal?.customTools);
+    expectCachedComposedStore(createdLocal?.store);
+    expectCachedComposedStore(resumedLocal?.store);
   });
 
-  it("passes a JsonlLocalAgentStore rooted at storeDir", async () => {
+  it("wires a composed store with a cached checkpoints substore", async () => {
     const resumeSdkAgent = vi.fn(
       async (_id: string, _options?: Partial<AgentOptions>) =>
         makeFakeSdkAgent([]),
@@ -254,11 +277,7 @@ describe("resumeAgent", () => {
 
     await sdk.resumeAgent("agent-1", STORE_DIR, { cwd: "/repo", model: MODEL });
 
-    const store = resumeSdkAgent.mock.calls[0]![1]?.local?.store;
-    expect(store).toBeInstanceOf(JsonlLocalAgentStore);
-    expect((store as JsonlLocalAgentStore & { rootDir: string }).rootDir).toBe(
-      STORE_DIR,
-    );
+    expectCachedComposedStore(resumeSdkAgent.mock.calls[0]![1]?.local?.store);
   });
 
   it("forwards the agents map unchanged to Agent.resume", async () => {
