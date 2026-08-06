@@ -20,6 +20,8 @@ import {
   sumUsageTotals,
   threadRunLabel,
 } from "../lib/thread-status";
+import { MessageScroller } from "@/features/issues/components/chat/message-scroller";
+import { transcriptScrollerBottomKey } from "../lib/transcript-scroller";
 import { Composer } from "./composer";
 import { SubagentCard } from "./subagent-card";
 import {
@@ -32,8 +34,10 @@ import {
 
 function eventKey(event: TranscriptEvent, index: number): string {
   if (event.type === "tool_call") return toolCallRowKey(event.callId);
-  // Index-stable for in-place assistant delta updates (avoid remounting
-  // Markdown on every token). `at` changes each delta and is not usable.
+  // Index-stable for in-place assistant/thinking delta updates (avoid
+  // remounting Markdown / details on every token). `at` changes each delta
+  // and is not usable. Consecutive thinking merges in applyTranscriptEvent,
+  // so one stream chain maps to one index.
   return indexedStreamKey(index, event.type);
 }
 
@@ -208,8 +212,9 @@ function ThreadBody({
   );
 
   return (
-    <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto px-4 py-4"
+    <MessageScroller
+      bottomKey={transcriptScrollerBottomKey(events)}
+      className="min-w-0 overflow-x-hidden px-4 py-4"
       role="log"
       aria-label="Conversation transcript"
       aria-live="polite"
@@ -225,7 +230,7 @@ function ThreadBody({
           }
         />
       ))}
-    </div>
+    </MessageScroller>
   );
 }
 
