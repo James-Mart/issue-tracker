@@ -243,6 +243,17 @@ Derived `mergeBase` (`issue story get … mergeBase`) already reflects the
 override. Rules:
 [SPEC.md § The stacked-PR merge model](../../SPEC.md#the-stacked-pr-merge-model).
 
+## Verification-only Tasks (noDiff)
+
+When a Task's Change intentionally makes no source-controlled edits, describe
+the check in the Task's Change and `### Verify`, then set the flag **after**
+successful `apply` (imperative only — not in the YAML doc):
+
+`issue task set <taskId> noDiff true`
+
+`apply` never writes `noDiff`; it preserves an existing value. Rules:
+[SPEC.md § Finish commit](../../SPEC.md#finish-commit).
+
 ## Completeness pass
 
 Before done:
@@ -277,3 +288,6 @@ Before done:
 - Non-trunk bases use imperative `mergeBase` on the root Story or Epic after
   `apply` (see [Merge-base override](#merge-base-override)) — never invent a
   base in YAML or Task prose for the git agent.
+- Verification-only Tasks use imperative `noDiff` after `apply` (see
+  [Verification-only Tasks (noDiff)](#verification-only-tasks-nodiff)) — never
+  put the flag in the YAML doc.
