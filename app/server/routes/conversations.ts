@@ -3,7 +3,11 @@ import {
   agentSessions,
   type AgentSessions,
 } from "../services/agent-sessions.js";
-import { publishFrame, subscribeFrames } from "../services/conversation-stream.js";
+import {
+  getBufferedFrames,
+  publishFrame,
+  subscribeFrames,
+} from "../services/conversation-stream.js";
 import {
   appendEvent,
   createConversation,
@@ -13,7 +17,12 @@ import {
   updateMeta,
 } from "../services/conversations.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
-import type { ConversationMetaPatch, TranscriptEvent } from "../schemas.js";
+import type {
+  ConversationActiveRun,
+  ConversationFrameInput,
+  ConversationMetaPatch,
+  TranscriptEvent,
+} from "../schemas.js";
 
 const DEFAULT_TITLE = "New conversation";
 const DEFAULT_MODEL = "auto";
@@ -35,10 +44,25 @@ function sseDataFrame(event: TranscriptEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
+function sseLiveDataFrame(event: ConversationFrameInput): string {
+  return `data: ${JSON.stringify({ ...event, at: new Date().toISOString() })}\n\n`;
+}
+
 const asyncRoute =
   (handler: RequestHandler): RequestHandler =>
   (req, res, next) =>
     Promise.resolve(handler(req, res, next)).catch(next);
+
+function activeRunState(
+  sessions: AgentSessions,
+  conversationId: string,
+): ConversationActiveRun {
+  const run = sessions.getActiveRun(conversationId);
+  if (!run) {
+    return { active: false, runId: null, startedAt: null };
+  }
+  return { active: true, runId: run.id, startedAt: run.startedAt };
+}
 
 export function createConversationsRouter(
   sessions: AgentSessions = agentSessions,
@@ -46,7 +70,12 @@ export function createConversationsRouter(
   const router = Router();
 
   router.get("/", (_req, res) => {
-    res.json(listConversations());
+    res.json(
+      listConversations().map((meta) => ({
+        ...meta,
+        activeRun: activeRunState(sessions, meta.id).active,
+      })),
+    );
   });
 
   router.get(
@@ -126,6 +155,14 @@ export function createConversationsRouter(
   );
 
   router.get(
+    "/:id/run",
+    asyncRoute(async (req, res) => {
+      readConversation(req.params.id);
+      res.json(activeRunState(sessions, req.params.id));
+    }),
+  );
+
+  router.get(
     "/:id/events",
     asyncRoute(async (req, res) => {
       const { meta, transcript } = readConversation(req.params.id);
@@ -142,14 +179,12 @@ export function createConversationsRouter(
         if (!sendSse(res, sseDataFrame(event))) return;
       }
 
+      for (const frame of getBufferedFrames(meta.id)) {
+        if (!sendSse(res, sseLiveDataFrame(frame.event))) return;
+      }
+
       const unsubscribe = subscribeFrames(meta.id, (frame) => {
-        sendSse(
-          res,
-          `data: ${JSON.stringify({
-            ...frame.event,
-            at: new Date().toISOString(),
-          })}\n\n`,
-        );
+        sendSse(res, sseLiveDataFrame(frame.event));
       });
 
       sendSse(res, HEARTBEAT_PAYLOAD);

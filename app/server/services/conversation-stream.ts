@@ -1,22 +1,30 @@
 import { EventEmitter } from "events";
-import type { NormalizedStep } from "./event-pipeline.js";
+import type { ConversationFrameInput } from "../schemas.js";
 
 /**
- * A single live frame off the event pipeline. It carries the same normalized
- * step the persistence path sees, so subscribers can tell the incremental
- * live-only deltas (`persist: false`) apart from the finalized events that also
- * land on disk (`persist: true`).
+ * One live frame on the in-process subscriber tap. Carries a normalized
+ * transcript step or live-only run signalling; `persist` distinguishes
+ * incremental deltas from finalized events that also land on disk.
  */
-export type ConversationFrame = NormalizedStep;
+export type ConversationFrame = {
+  event: ConversationFrameInput;
+  persist: boolean;
+};
 
 export type ConversationFrameListener = (frame: ConversationFrame) => void;
 
 const FRAME_EVENT = "frame";
 
+/** Max unpersisted frames retained per conversation for late SSE subscribers. */
+export const CATCHUP_BUFFER_MAX_FRAMES = 256;
+
 // In-process per-conversation subscriber registry. An emitter exists only while
-// something is subscribed; publishing to a conversation with no subscribers is
-// a no-op (the live tap never buffers).
+// something is subscribed.
 const emitters = new Map<string, EventEmitter>();
+
+// Unpersisted frames since the last persisted append — replayed to subscribers
+// that connect mid-run before live delivery begins.
+const catchupBuffers = new Map<string, ConversationFrame[]>();
 
 function emitterFor(conversationId: string): EventEmitter {
   let emitter = emitters.get(conversationId);
@@ -35,10 +43,43 @@ function emitterFor(conversationId: string): EventEmitter {
  * writer) can never propagate into the event pipeline's persistence path or
  * disrupt the other subscribers.
  */
+function retainForCatchup(conversationId: string, frame: ConversationFrame): void {
+  if (frame.persist) {
+    catchupBuffers.delete(conversationId);
+    return;
+  }
+  let buffer = catchupBuffers.get(conversationId);
+  if (!buffer) {
+    buffer = [];
+    catchupBuffers.set(conversationId, buffer);
+  }
+  buffer.push(frame);
+  if (buffer.length > CATCHUP_BUFFER_MAX_FRAMES) {
+    buffer.splice(0, buffer.length - CATCHUP_BUFFER_MAX_FRAMES);
+  }
+}
+
+/**
+ * Snapshot of unpersisted frames buffered since the last persisted append.
+ * Used by the SSE handler to catch up late subscribers before live delivery.
+ */
+export function getBufferedFrames(
+  conversationId: string,
+): readonly ConversationFrame[] {
+  return catchupBuffers.get(conversationId) ?? [];
+}
+
+/** Drop a conversation's catch-up buffer (session teardown or delete). */
+export function clearCatchupBuffer(conversationId: string): void {
+  catchupBuffers.delete(conversationId);
+}
+
 export function publishFrame(
   conversationId: string,
   frame: ConversationFrame,
 ): void {
+  retainForCatchup(conversationId, frame);
+
   const emitter = emitters.get(conversationId);
   if (!emitter) return;
   // `listeners()` returns a snapshot, so a listener that unsubscribes during

@@ -19,6 +19,7 @@ import {
   cancelConversationDelegations,
   createDelegateCustomTools,
 } from "./delegate-tool.js";
+import { clearCatchupBuffer, publishFrame } from "./conversation-stream.js";
 import {
   EventPipeline,
   type NormalizedStep,
@@ -29,6 +30,7 @@ export type { NormalizedStep };
 
 export interface ActiveRun {
   readonly id: string;
+  readonly startedAt: string;
   wait(): Promise<AgentRunResult>;
 }
 
@@ -195,9 +197,15 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
       const activeRun: ActiveRun = {
         id: agentRun.id,
+        startedAt: new Date().toISOString(),
         wait: () => waitPromise,
       };
       entry.activeRun = activeRun;
+
+      publishFrame(conversationId, {
+        event: { type: "run", status: "started", runId: agentRun.id },
+        persist: false,
+      });
 
       entry.pump = (async () => {
         const pipeline = new EventPipeline(conversationId);
@@ -213,6 +221,14 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
             // Best-effort flush after a mid-run failure.
           }
         } finally {
+          publishFrame(conversationId, {
+            event: {
+              type: "run",
+              status: "finished",
+              runId: agentRun.id,
+            },
+            persist: false,
+          });
           // Prefer the boundary's terminal result (finished / error / cancelled)
           // over a synthesized status — the iterator aborting must not mask
           // e.g. `cancelled` after cancel().
@@ -252,9 +268,11 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     async dispose(conversationId) {
       const entry = sessions.get(conversationId);
-      if (!entry) return;
-      sessions.delete(conversationId);
-      await tearDownEntry(conversationId, entry);
+      if (entry) {
+        sessions.delete(conversationId);
+        await tearDownEntry(conversationId, entry);
+      }
+      clearCatchupBuffer(conversationId);
     },
 
     async disposeAll() {
@@ -265,6 +283,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           tearDownEntry(conversationId, entry),
         ),
       );
+      for (const [conversationId] of entries) {
+        clearCatchupBuffer(conversationId);
+      }
     },
   };
 }

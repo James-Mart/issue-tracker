@@ -747,4 +747,146 @@ describe("agent sessions manager", () => {
     expect(fake.handles[0]?.disposed).toBe(true);
     expect(sessions.getActiveRun(meta.id)).toBeUndefined();
   });
+
+  it("publishes exactly one started and one finished run frame for a scripted run", async () => {
+    const {
+      createConversation,
+      readConversation,
+      createAgentSessions,
+      subscribeFrames,
+    } = await load();
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Run lifecycle",
+      projectId: "platform",
+      model: "auto",
+    });
+
+    const frames: ConversationFrame[] = [];
+    const unsubscribe = subscribeFrames(meta.id, (frame) => {
+      frames.push(frame);
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    await result.run.wait();
+    unsubscribe();
+
+    expect(frames[0]).toEqual({
+      event: { type: "run", status: "started", runId: FAKE_RUN_ID },
+      persist: false,
+    });
+
+    const runFrames = frames.filter(
+      (f): f is ConversationFrame & { event: { type: "run" } } =>
+        f.event.type === "run",
+    );
+    expect(runFrames).toEqual([
+      {
+        event: { type: "run", status: "started", runId: FAKE_RUN_ID },
+        persist: false,
+      },
+      {
+        event: { type: "run", status: "finished", runId: FAKE_RUN_ID },
+        persist: false,
+      },
+    ]);
+
+    const { transcript } = readConversation(meta.id);
+    expect(transcript.some((e) => e.type === "run")).toBe(false);
+  });
+
+  it("publishes finished when a run is cancelled mid-flight", async () => {
+    const { createConversation, createAgentSessions, subscribeFrames } =
+      await load();
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Run cancel lifecycle",
+      projectId: "platform",
+      model: "auto",
+    });
+
+    const frames: ConversationFrame[] = [];
+    const unsubscribe = subscribeFrames(meta.id, (frame) => {
+      frames.push(frame);
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    await Promise.resolve();
+    expect(await sessions.cancel(meta.id)).toBe(true);
+    await result.run.wait();
+    release();
+    unsubscribe();
+
+    const runFrames = frames.filter(
+      (f): f is ConversationFrame & { event: { type: "run" } } =>
+        f.event.type === "run",
+    );
+    expect(runFrames).toEqual([
+      {
+        event: { type: "run", status: "started", runId: FAKE_RUN_ID },
+        persist: false,
+      },
+      {
+        event: { type: "run", status: "finished", runId: FAKE_RUN_ID },
+        persist: false,
+      },
+    ]);
+  });
+
+  it("dispose and disposeAll always clear the catch-up buffer", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const { publishFrame, getBufferedFrames } = await import(
+      "./conversation-stream.js"
+    );
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Catch-up teardown",
+      projectId: "platform",
+      model: "auto",
+    });
+    publishFrame(meta.id, {
+      event: { type: "assistant", text: "buffered" },
+      persist: false,
+    });
+    expect(getBufferedFrames(meta.id)).toHaveLength(1);
+
+    await sessions.dispose(meta.id);
+    expect(getBufferedFrames(meta.id)).toEqual([]);
+
+    publishFrame(meta.id, {
+      event: { type: "assistant", text: "buffered again" },
+      persist: false,
+    });
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    publishFrame(meta.id, {
+      event: { type: "run", status: "started", runId: "run-2" },
+      persist: false,
+    });
+    expect(getBufferedFrames(meta.id).length).toBeGreaterThan(0);
+
+    await sessions.disposeAll();
+    expect(getBufferedFrames(meta.id)).toEqual([]);
+  });
 });

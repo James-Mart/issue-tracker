@@ -1,5 +1,11 @@
 import { request } from "@/lib/api/client";
-import type { ConversationMeta } from "@server/schemas";
+import {
+  parseConversationActiveRun,
+  parseConversationListItem,
+  type ConversationActiveRun,
+  type ConversationListItem,
+  type ConversationMeta,
+} from "@server/schemas";
 
 export type AgentModel = {
   id: string;
@@ -21,8 +27,19 @@ export type UpdateConversationBody = {
   model?: string;
 };
 
-export function listConversations(): Promise<ConversationMeta[]> {
-  return request<ConversationMeta[]>("/api/conversations");
+function parseConversationList(raw: unknown): ConversationListItem[] {
+  if (!Array.isArray(raw)) {
+    throw new Error("invalid conversations list");
+  }
+  return raw.map((entry) => {
+    const parsed = parseConversationListItem(entry);
+    if (!parsed.ok) throw new Error(parsed.message);
+    return parsed.item;
+  });
+}
+
+export function listConversations(): Promise<ConversationListItem[]> {
+  return request<unknown>("/api/conversations").then(parseConversationList);
 }
 
 export function createConversation(
@@ -46,6 +63,14 @@ export function updateConversation(
 
 export function deleteConversation(id: string): Promise<void> {
   return request<void>(`/api/conversations/${id}`, { method: "DELETE" });
+}
+
+export function getConversationRun(id: string): Promise<ConversationActiveRun> {
+  return request<unknown>(`/api/conversations/${id}/run`).then((raw) => {
+    const parsed = parseConversationActiveRun(raw);
+    if (!parsed.ok) throw new Error(parsed.message);
+    return parsed.state;
+  });
 }
 
 export function listAgentModels(): Promise<AgentModelsResponse> {

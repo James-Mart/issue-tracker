@@ -415,6 +415,22 @@ export const conversationMetaSchema = z.object({
 
 export type ConversationMeta = z.infer<typeof conversationMetaSchema>;
 
+/** List API item: persisted meta plus in-process active-run flag. */
+export const conversationListItemSchema = conversationMetaSchema.extend({
+  activeRun: z.boolean(),
+});
+
+export type ConversationListItem = z.infer<typeof conversationListItemSchema>;
+
+/** GET /api/conversations/:id/run response. */
+export const conversationActiveRunSchema = z.object({
+  active: z.boolean(),
+  runId: z.string().nullable(),
+  startedAt: z.string().nullable(),
+});
+
+export type ConversationActiveRun = z.infer<typeof conversationActiveRunSchema>;
+
 const toolCallStatus = z.enum(["running", "completed", "error"]);
 
 /** Shared tool-call envelope fields (nested step + top-level event). */
@@ -537,6 +553,25 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
 
 export type TranscriptEventInput = z.infer<typeof transcriptEventInputSchema>;
 
+/** Live-only run lifecycle signalling on the event stream (never persisted). */
+const runFrameInput = z.object({
+  type: z.literal("run"),
+  status: z.enum(["started", "finished"]),
+  runId: nonEmpty,
+});
+
+export type RunFrameInput = z.infer<typeof runFrameInput>;
+
+/** Write-time frame union: transcript events plus live-only run signalling. */
+export const conversationFrameInputSchema = z.union([
+  transcriptEventInputSchema,
+  runFrameInput,
+]);
+
+export type ConversationFrameInput = z.infer<
+  typeof conversationFrameInputSchema
+>;
+
 const withTranscriptAt = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
   schema.merge(z.object({ at: nonEmpty }));
 
@@ -554,6 +589,16 @@ export const transcriptEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export type TranscriptEvent = z.infer<typeof transcriptEventSchema>;
+
+/** Wire-format event on the SSE stream (transcript events or live run signalling). */
+export const conversationStreamEventSchema = z.union([
+  transcriptEventSchema,
+  runFrameInput.merge(z.object({ at: nonEmpty })),
+]);
+
+export type ConversationStreamEvent = z.infer<
+  typeof conversationStreamEventSchema
+>;
 
 export type CreateConversationInput = {
   title: string;
@@ -630,6 +675,36 @@ export function parseConversationMeta(raw: unknown): ConversationMetaParseResult
   };
 }
 
+export type ConversationListItemParseResult =
+  | { ok: true; item: ConversationListItem }
+  | { ok: false; message: string };
+
+export function parseConversationListItem(
+  raw: unknown,
+): ConversationListItemParseResult {
+  const result = conversationListItemSchema.safeParse(raw);
+  if (result.success) return { ok: true, item: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid conversation list item"),
+  };
+}
+
+export type ConversationActiveRunParseResult =
+  | { ok: true; state: ConversationActiveRun }
+  | { ok: false; message: string };
+
+export function parseConversationActiveRun(
+  raw: unknown,
+): ConversationActiveRunParseResult {
+  const result = conversationActiveRunSchema.safeParse(raw);
+  if (result.success) return { ok: true, state: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid conversation run state"),
+  };
+}
+
 export type TranscriptEventParseResult =
   | { ok: true; event: TranscriptEvent }
   | { ok: false; message: string };
@@ -655,5 +730,35 @@ export function parseTranscriptEventInput(
   return {
     ok: false,
     message: formatZodError(result.error, "invalid transcript event"),
+  };
+}
+
+export type ConversationFrameInputParseResult =
+  | { ok: true; input: ConversationFrameInput }
+  | { ok: false; message: string };
+
+export function parseConversationFrameInput(
+  raw: unknown,
+): ConversationFrameInputParseResult {
+  const result = conversationFrameInputSchema.safeParse(raw);
+  if (result.success) return { ok: true, input: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid conversation frame"),
+  };
+}
+
+export type ConversationStreamEventParseResult =
+  | { ok: true; event: ConversationStreamEvent }
+  | { ok: false; message: string };
+
+export function parseConversationFrame(
+  raw: unknown,
+): ConversationStreamEventParseResult {
+  const result = conversationStreamEventSchema.safeParse(raw);
+  if (result.success) return { ok: true, event: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid conversation frame"),
   };
 }

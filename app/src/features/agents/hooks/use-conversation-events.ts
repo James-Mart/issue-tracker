@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  parseTranscriptEvent,
+  parseConversationFrame,
   type TranscriptEvent,
 } from "@server/schemas";
 
@@ -157,7 +157,7 @@ export function useConversationEvents(
           }
           return;
         }
-        const parsed = parseTranscriptEvent(data);
+        const parsed = parseConversationFrame(data);
         if (!parsed.ok) {
           if (import.meta.env.DEV) {
             console.warn(
@@ -166,6 +166,9 @@ export function useConversationEvents(
               parsed.message,
             );
           }
+          return;
+        }
+        if (parsed.event.type === "run") {
           return;
         }
         if (replaying) {
