@@ -14,6 +14,7 @@ import {
   isSubAgentToolCall,
   type SubAgent,
 } from "../lib/subagent";
+import { transcriptInfoLine } from "../lib/transcript-rows";
 import {
   formatUsageTotals,
   sumUsageTotals,
@@ -150,37 +151,14 @@ function TranscriptEventRow({
       }
       return <ToolCallEvent event={event} />;
     }
-    case "task": {
-      const parts = [event.status, event.text].filter(Boolean);
-      return (
-        <InfoLine label="Task">
-          {parts.length > 0 ? parts.join(" · ") : "update"}
-        </InfoLine>
-      );
-    }
+    case "task":
     case "status":
-      return (
-        <InfoLine label="Status">
-          {event.status}
-          {event.message ? ` — ${event.message}` : ""}
-        </InfoLine>
-      );
-    case "usage": {
-      const u = event.usage;
-      return (
-        <InfoLine label="Usage">
-          {u.totalTokens.toLocaleString()} tokens
-          {` · in ${u.inputTokens.toLocaleString()}`}
-          {` · out ${u.outputTokens.toLocaleString()}`}
-          {u.reasoningTokens !== undefined
-            ? ` · reason ${u.reasoningTokens.toLocaleString()}`
-            : ""}
-        </InfoLine>
-      );
+    case "usage":
+    case "request": {
+      const info = transcriptInfoLine(event);
+      if (!info) return null;
+      return <InfoLine label={info.label}>{info.text}</InfoLine>;
     }
-    case "request":
-      // Informational only — Epic auto-run posture; never a blocking prompt.
-      return <InfoLine label="Request">{event.requestId}</InfoLine>;
     case "error":
       return <ErrorEvent message={event.message} />;
     case "subagent_update":
