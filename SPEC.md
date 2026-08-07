@@ -246,6 +246,9 @@ per-command.
   override.
 - **`issue` bin.** Prefer `issue <verb> …`. One-time setup: `npm link` in this
   plugin's `app/` directory (`/root/.cursor/plugins/local/issue-tracker/app`).
+- **Print after durable write.** Mutating CLI commands must finish all durable
+  writes before writing to stdout or stderr. That ordering is what makes a hard
+  exit on EPIPE safe when the consumer closes the pipe early.
 
 ## CLI surface
 

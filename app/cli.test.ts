@@ -1,4 +1,4 @@
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
@@ -45,6 +45,34 @@ function runCli(
   };
 }
 
+/** Spawn the real CLI and close stdout after the first chunk (broken pipe). */
+function runCliWithEarlyStdoutClose(
+  args: string[],
+): Promise<{ status: number | null; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(tsx, [cliPath, ...args], {
+      cwd: appDir,
+      env: { ...process.env, ISSUES_DIR: dir },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stderr = "";
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+
+    child.stdout?.once("data", () => {
+      child.stdout?.destroy();
+    });
+
+    child.on("error", reject);
+    child.on("close", (status) => {
+      resolve({ status, stderr });
+    });
+  });
+}
+
 function makeGitWorkspace(): string {
   const ws = mkdtempSync(join(tmpdir(), "issue-cli-workspace-"));
   mkdirSync(join(ws, ".git"));
@@ -71,6 +99,52 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
+});
+
+describe("EPIPE on stdout", () => {
+  beforeEach(() => {
+    writeIssue("p", {
+      kind: "project",
+      title: "Proj",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("e", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      order: 0,
+      blockedBy: [],
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("a", {
+      kind: "story",
+      title: "Branch A",
+      partOf: "e",
+      merged: false,
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("c1", {
+      kind: "task",
+      title: "C1",
+      partOf: "a",
+      status: "todo",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+  });
+
+  it("exits 0 quietly when stdout is closed early during verbose read-only output", async () => {
+    const { status, stderr } = await runCliWithEarlyStdoutClose(["tree", "p"]);
+    expect(status).toBe(0);
+    expect(stderr).not.toMatch(/EPIPE/i);
+    expect(stderr).not.toMatch(/Unhandled 'error' event/i);
+  });
 });
 
 describe("removed commands", () => {
