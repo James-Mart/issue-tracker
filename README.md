@@ -51,6 +51,21 @@ otherwise it runs API-only on `:8061` (use `npm run dev` for the full UI, or
 `npm run build && NODE_ENV=production npm start` to serve the built client). Run
 the CLI with `npx tsx cli.ts <command>` (see `issue --help` or SPEC.md).
 
+### Cursor commit attribution hook
+
+Run once per machine from `app/`:
+
+```bash
+cd app && npm run install-hooks
+```
+
+This writes (or updates) `~/.cursor/hooks.json` with a `hooks.preToolUse` entry
+that runs `app/hooks/strip-cursor-attribution.mjs` before every Shell tool call. The
+hook strips Cursor's `Co-authored-by: Cursor <cursoragent@cursor.com>` trailer
+from `git commit` commands so agent-driven commits stay clean. The server
+refuses to start until this hook is registered for the current checkout. Re-run
+after moving the checkout; the command is idempotent and preserves unrelated hooks.
+
 ## How the pieces fit
 
 The **service layer** (`services/issues.ts`) is the only writer of `issues/`. It

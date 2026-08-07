@@ -16,6 +16,7 @@
     "lint:boundary": "tsx scripts/check-client-boundary.ts",
     "lint:spawns": "tsx scripts/check-agent-spawns.ts",
     "screenshots": "tsx scripts/capture-screenshots.ts",
+    "install-hooks": "tsx scripts/install-cursor-hooks.ts",
     "test": "npm run lint:boundary && npm run lint:spawns && vitest run",
     "test:live": "CURSOR_SDK_LIVE=1 vitest run live.test",
     "test:e2e": "playwright test",
