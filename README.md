@@ -59,8 +59,8 @@ Run once per machine from `app/`:
 cd app && npm run install-hooks
 ```
 
-This writes (or updates) `~/.cursor/hooks.json` with a `preToolUse` entry that
-runs `app/hooks/strip-cursor-attribution.mjs` before every Shell tool call. The
+This writes (or updates) `~/.cursor/hooks.json` with a `hooks.preToolUse` entry
+that runs `app/hooks/strip-cursor-attribution.mjs` before every Shell tool call. The
 hook strips Cursor's `Co-authored-by: Cursor <cursoragent@cursor.com>` trailer
 from `git commit` commands so agent-driven commits stay clean. Re-run after
 moving the checkout; the command is idempotent and preserves unrelated hooks.

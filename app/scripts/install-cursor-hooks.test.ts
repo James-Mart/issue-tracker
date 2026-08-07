@@ -12,24 +12,30 @@ const entry = (scriptPath: string) => ({
 });
 
 describe("ensureHookRegistration", () => {
-  it("creates version 1 and preToolUse when config is undefined", () => {
+  it("creates version 1 and hooks.preToolUse when config is undefined", () => {
     expect(ensureHookRegistration(undefined, SCRIPT_PATH)).toEqual({
       version: 1,
-      preToolUse: [entry(SCRIPT_PATH)],
+      hooks: {
+        preToolUse: [entry(SCRIPT_PATH)],
+      },
     });
   });
 
-  it("creates version 1 and preToolUse when config is an empty object", () => {
+  it("creates version 1 and hooks.preToolUse when config is an empty object", () => {
     expect(ensureHookRegistration({}, SCRIPT_PATH)).toEqual({
       version: 1,
-      preToolUse: [entry(SCRIPT_PATH)],
+      hooks: {
+        preToolUse: [entry(SCRIPT_PATH)],
+      },
     });
   });
 
   it("does not duplicate an existing entry for the same script path", () => {
     const config = {
       version: 1,
-      preToolUse: [entry(SCRIPT_PATH)],
+      hooks: {
+        preToolUse: [entry(SCRIPT_PATH)],
+      },
     };
 
     expect(ensureHookRegistration(config, SCRIPT_PATH)).toEqual(config);
@@ -38,12 +44,16 @@ describe("ensureHookRegistration", () => {
   it("replaces a stale script path in place", () => {
     const config = {
       version: 1,
-      preToolUse: [entry(STALE_SCRIPT_PATH)],
+      hooks: {
+        preToolUse: [entry(STALE_SCRIPT_PATH)],
+      },
     };
 
     expect(ensureHookRegistration(config, SCRIPT_PATH)).toEqual({
       version: 1,
-      preToolUse: [entry(SCRIPT_PATH)],
+      hooks: {
+        preToolUse: [entry(SCRIPT_PATH)],
+      },
     });
   });
 
@@ -56,16 +66,36 @@ describe("ensureHookRegistration", () => {
     const postToolUse = [{ type: "command", command: "echo done", matcher: "Shell" }];
     const config = {
       version: 2,
-      preToolUse: [otherPreToolUse, entry(STALE_SCRIPT_PATH)],
-      postToolUse,
+      hooks: {
+        preToolUse: [otherPreToolUse, entry(STALE_SCRIPT_PATH)],
+        postToolUse,
+      },
       custom: { keep: true },
     };
 
     expect(ensureHookRegistration(config, SCRIPT_PATH)).toEqual({
       version: 1,
-      preToolUse: [otherPreToolUse, entry(SCRIPT_PATH)],
-      postToolUse,
+      hooks: {
+        preToolUse: [otherPreToolUse, entry(SCRIPT_PATH)],
+        postToolUse,
+      },
       custom: { keep: true },
     });
+  });
+
+  it("migrates a stale top-level preToolUse into hooks and drops the top-level key", () => {
+    const config = {
+      version: 1,
+      hooks: {},
+      preToolUse: [entry(STALE_SCRIPT_PATH)],
+    };
+
+    expect(ensureHookRegistration(config, SCRIPT_PATH)).toEqual({
+      version: 1,
+      hooks: {
+        preToolUse: [entry(SCRIPT_PATH)],
+      },
+    });
+    expect(ensureHookRegistration(config, SCRIPT_PATH)).not.toHaveProperty("preToolUse");
   });
 });

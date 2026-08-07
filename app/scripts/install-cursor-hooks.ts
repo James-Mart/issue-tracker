@@ -16,7 +16,9 @@ export type HookEntry = {
 
 export type HooksConfig = Record<string, unknown> & {
   version: number;
-  preToolUse: HookEntry[];
+  hooks: Record<string, unknown> & {
+    preToolUse: HookEntry[];
+  };
 };
 
 function hookEntry(scriptPath: string): HookEntry {
@@ -36,6 +38,13 @@ function isOurHookEntry(entry: unknown, scriptBasename: string): entry is HookEn
   );
 }
 
+function asHooksObject(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return { ...(value as Record<string, unknown>) };
+  }
+  return {};
+}
+
 /**
  * Merge strip-cursor-attribution registration into parsed hooks.json contents.
  * Idempotent: replaces an existing entry for the same script, never duplicates.
@@ -47,9 +56,13 @@ export function ensureHookRegistration(
   const scriptBasename = basename(scriptPath);
   const entry = hookEntry(scriptPath);
   const base = config ?? {};
-  const result: Record<string, unknown> = { ...base, version: 1 };
+  const { preToolUse: staleTopLevelPreToolUse, hooks: existingHooks, ...rest } = base;
+  const result: Record<string, unknown> = { ...rest, version: 1 };
 
-  const existingPreToolUse = base.preToolUse;
+  const hooks = asHooksObject(existingHooks);
+  const existingPreToolUse =
+    hooks.preToolUse !== undefined ? hooks.preToolUse : staleTopLevelPreToolUse;
+
   let preToolUse: HookEntry[];
 
   if (existingPreToolUse === undefined) {
@@ -69,7 +82,8 @@ export function ensureHookRegistration(
     }
   }
 
-  result.preToolUse = preToolUse;
+  hooks.preToolUse = preToolUse;
+  result.hooks = hooks;
   return result as HooksConfig;
 }
 
