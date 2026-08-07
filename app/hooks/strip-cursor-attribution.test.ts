@@ -101,7 +101,22 @@ describe("stripCursorAttribution", () => {
 });
 
 describe("strip-cursor-attribution.mjs stdout contract", () => {
-  it("prints allow with updated_input.command for a matching payload", () => {
+  it("prints allow with updated_input.command for a matching tool_input payload", () => {
+    const { stdout, status } = runHook(
+      JSON.stringify({
+        tool_input: {
+          command: `git commit --trailer "${CURSOR_TRAILER}" -m "x"`,
+        },
+      }),
+    );
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout)).toEqual({
+      permission: "allow",
+      updated_input: { command: 'git commit -m "x"' },
+    });
+  });
+
+  it("also accepts input.command when tool_input is absent", () => {
     const { stdout, status } = runHook(
       JSON.stringify({
         input: {
@@ -118,7 +133,7 @@ describe("strip-cursor-attribution.mjs stdout contract", () => {
 
   it("prints allow with no updated_input for a non-matching payload", () => {
     const { stdout, status } = runHook(
-      JSON.stringify({ input: { command: 'git commit -m "x"' } }),
+      JSON.stringify({ tool_input: { command: 'git commit -m "x"' } }),
     );
     expect(status).toBe(0);
     expect(JSON.parse(stdout)).toEqual({ permission: "allow" });
@@ -130,15 +145,15 @@ describe("strip-cursor-attribution.mjs stdout contract", () => {
     expect(JSON.parse(stdout)).toEqual({ permission: "allow" });
   });
 
-  it("prints allow and exits 0 when input.command is absent", () => {
-    const { stdout, status } = runHook(JSON.stringify({ input: {} }));
+  it("prints allow and exits 0 when tool_input.command is absent", () => {
+    const { stdout, status } = runHook(JSON.stringify({ tool_input: {} }));
     expect(status).toBe(0);
     expect(JSON.parse(stdout)).toEqual({ permission: "allow" });
   });
 
-  it("prints allow and exits 0 when input.command is not a string", () => {
+  it("prints allow and exits 0 when tool_input.command is not a string", () => {
     const { stdout, status } = runHook(
-      JSON.stringify({ input: { command: 42 } }),
+      JSON.stringify({ tool_input: { command: 42 } }),
     );
     expect(status).toBe(0);
     expect(JSON.parse(stdout)).toEqual({ permission: "allow" });

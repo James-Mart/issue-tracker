@@ -27,6 +27,25 @@ export function stripCursorAttribution(command) {
   return rewritten.replace(/ {2,}/g, " ").trim();
 }
 
+/**
+ * Prefer the live preToolUse field (`tool_input.command`); also accept
+ * `input.command` so older/alternate shapes keep working.
+ * @param {unknown} payload
+ * @returns {string | undefined}
+ */
+function commandFromPayload(payload) {
+  if (payload == null || typeof payload !== "object") return undefined;
+  const record = /** @type {Record<string, unknown>} */ (payload);
+  for (const key of ["tool_input", "input"]) {
+    const nested = record[key];
+    if (nested != null && typeof nested === "object") {
+      const command = /** @type {Record<string, unknown>} */ (nested).command;
+      if (typeof command === "string") return command;
+    }
+  }
+  return undefined;
+}
+
 function printAllow(updatedCommand) {
   if (typeof updatedCommand === "string") {
     process.stdout.write(
@@ -43,7 +62,7 @@ function printAllow(updatedCommand) {
 function runAsHook() {
   try {
     const payload = JSON.parse(readFileSync(0, "utf8"));
-    const command = payload?.input?.command;
+    const command = commandFromPayload(payload);
     if (typeof command !== "string") {
       printAllow(null);
       return;
