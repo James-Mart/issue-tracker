@@ -7,6 +7,10 @@ import {
 import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Markdown } from "@/features/issues/components/markdown";
+import {
+  summarizeToolCall,
+  thinkingPreview,
+} from "@/features/agents/lib/tool-summary";
 import { cn } from "@/lib/utils/cn";
 
 export type TranscriptDensity = "default" | "compact";
@@ -169,11 +173,23 @@ export function TranscriptThinking({
   density?: TranscriptDensity;
 } & Omit<ComponentPropsWithoutRef<"details">, "children" | "open">) {
   const pad = densityPad[density];
+  const preview = thinkingPreview(text);
   return (
     <CollapsibleDetails
-      label="Thinking"
+      label={
+        <>
+          <span className="shrink-0 font-mono text-xs font-medium text-foreground">
+            Thinking
+          </span>
+          {preview ? (
+            <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+              {preview}
+            </span>
+          ) : null}
+        </>
+      }
       className="min-w-0 rounded-md border border-border bg-card"
-      summaryClassName={pad.thinkingSummary}
+      summaryClassName={cn("min-h-0 gap-2", pad.thinkingSummary)}
       bodyClassName={pad.thinkingBody}
       {...attrs}
       // Only force-open while this block is still the live tip of the stream;
@@ -184,6 +200,26 @@ export function TranscriptThinking({
         {text}
       </p>
     </CollapsibleDetails>
+  );
+}
+
+function ToolCallPayloadSection({
+  label,
+  value,
+}: {
+  label: string;
+  value: unknown;
+}) {
+  if (value === undefined) return null;
+  return (
+    <div className="min-w-0">
+      <div className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <pre className="mt-1 max-h-64 min-w-0 overflow-x-auto overflow-y-auto whitespace-pre font-mono text-[11px] leading-relaxed text-foreground/90">
+        {formatUnknown(value)}
+      </pre>
+    </div>
   );
 }
 
@@ -204,36 +240,47 @@ export function TranscriptToolCall({
   result?: unknown;
   density?: TranscriptDensity;
   className?: string;
-} & Omit<ComponentPropsWithoutRef<"div">, "children">) {
-  const toolName = name?.trim() || "tool";
+} & Omit<ComponentPropsWithoutRef<"details">, "children">) {
+  const { label, detail } = summarizeToolCall(name, args);
   const running = status === "running";
+  const pad = densityPad[density];
   return (
-    <div
-      className={cn(
-        "min-w-0 rounded-md border border-border bg-card",
-        densityPad[density].tool,
-        className,
+    <CollapsibleDetails
+      className={cn("min-w-0 rounded-md border border-border bg-card", className)}
+      summaryClassName={cn(
+        "min-h-0 gap-2",
+        pad.tool,
+        density === "compact" && "py-1.5",
       )}
+      bodyClassName={cn("space-y-2 px-3 py-2", density === "compact" && "px-2.5 py-1.5")}
+      initiallyOpen={status === "error"}
+      label={
+        <>
+          <Badge
+            variant={toolStatusVariant(status)}
+            className={cn("shrink-0 text-[10px]", running && "animate-pulse")}
+          >
+            {status}
+          </Badge>
+          <span className="shrink-0 font-mono text-xs font-medium text-foreground">
+            {label}
+          </span>
+          {detail ? (
+            <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+              {detail}
+            </span>
+          ) : null}
+        </>
+      }
       {...attrs}
       data-call-id={callId}
       data-status={status}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="min-w-0 font-mono text-xs font-medium text-foreground">
-          {toolName}
-        </span>
-        <Badge
-          variant={toolStatusVariant(status)}
-          className={cn("shrink-0", running && "animate-pulse")}
-        >
-          {status}
-        </Badge>
-        <span className="min-w-0 break-all font-mono text-[10px] text-muted-foreground">
-          {callId}
-        </span>
-      </div>
-      <CollapsiblePayload label="Args" value={args} />
-      <CollapsiblePayload label="Result" value={result} />
-    </div>
+      <ToolCallPayloadSection label="Args" value={args} />
+      <ToolCallPayloadSection label="Result" value={result} />
+      <span className="block min-w-0 break-all font-mono text-[10px] text-muted-foreground">
+        {callId}
+      </span>
+    </CollapsibleDetails>
   );
 }

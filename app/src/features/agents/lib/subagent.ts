@@ -17,6 +17,10 @@ export type SubAgent = {
   name?: string;
   description?: string;
   prompt?: string;
+  /** Delegation role from tool args (`role` or subagent type name). */
+  role?: string;
+  model?: string;
+  elapsedMs?: number;
   status: Extract<TranscriptEvent, { type: "tool_call" }>["status"];
   result?: unknown;
   resumeAgentId?: string;
@@ -25,19 +29,33 @@ export type SubAgent = {
   collapsedDelegations: CollapsedDelegation[];
 };
 
-const SUBAGENT_TOOL_NAMES = new Set(["Agent", "Task"]);
+const SUBAGENT_TOOL_NAMES = new Set(["agent", "task"]);
 
 /** True when a tool_call `name` is the sub-agent spawn tool. */
 export function isSubAgentToolName(
   name: string | undefined | null,
 ): boolean {
-  return typeof name === "string" && SUBAGENT_TOOL_NAMES.has(name);
+  return typeof name === "string" && SUBAGENT_TOOL_NAMES.has(name.toLowerCase());
+}
+
+function isMcpDelegateArgs(args: unknown): boolean {
+  if (!args || typeof args !== "object") return false;
+  const a = args as Record<string, unknown>;
+  return (
+    optionalString(a.providerIdentifier) === "custom-user-tools" &&
+    optionalString(a.toolName) === "delegate" &&
+    a.args !== undefined &&
+    typeof a.args === "object"
+  );
 }
 
 export function isSubAgentToolCall(
   event: TranscriptEvent,
 ): event is Extract<TranscriptEvent, { type: "tool_call" }> {
-  return event.type === "tool_call" && isSubAgentToolName(event.name);
+  return (
+    event.type === "tool_call" &&
+    (isSubAgentToolName(event.name) || isMcpDelegateArgs(event.args))
+  );
 }
 
 /**
@@ -82,6 +100,28 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+/** Flat Task/Agent args, or nested `args` on an app-channel MCP delegate call. */
+function unwrapDelegateArgs(args: unknown): Record<string, unknown> | undefined {
+  if (!args || typeof args !== "object") return undefined;
+  const a = args as Record<string, unknown>;
+  if (isMcpDelegateArgs(args)) {
+    return a.args as Record<string, unknown>;
+  }
+  return a;
+}
+
+function normalizeModel(model: string): string {
+  if (model.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(model) as { id?: string };
+      if (typeof parsed.id === "string") return parsed.id;
+    } catch {
+      // Keep the raw string when JSON parsing fails.
+    }
+  }
+  return model;
+}
+
 /**
  * Defensively lift optional card fields from unstable tool_call `args`.
  * Only string scalars (and `subagentType.name` / `subagentType.kind`) are
@@ -91,8 +131,8 @@ function parseSubAgentArgs(args: unknown): Pick<
   SubAgent,
   "name" | "description" | "prompt"
 > {
-  if (!args || typeof args !== "object") return {};
-  const a = args as Record<string, unknown>;
+  const a = unwrapDelegateArgs(args);
+  if (!a) return {};
   const description = optionalString(a.description);
   const prompt = optionalString(a.prompt);
 
@@ -112,9 +152,31 @@ function parseSubAgentArgs(args: unknown): Pick<
 
 /** Role label for a deeper run: `delegate` args.role, else Task/Agent name. */
 function roleFromToolArgs(args: unknown): string | undefined {
-  if (!args || typeof args !== "object") return undefined;
-  const a = args as Record<string, unknown>;
+  const a = unwrapDelegateArgs(args);
+  if (!a) return undefined;
   return optionalString(a.role) ?? parseSubAgentArgs(args).name;
+}
+
+/** Latest model and elapsed time from depth-1 `subagent_update` frames. */
+function deriveRootDelegationMeta(
+  events: TranscriptEvent[],
+  rootCallId: string,
+): Pick<SubAgent, "model" | "elapsedMs"> {
+  let model: string | undefined;
+  let elapsedMs: number | undefined;
+  for (const event of events) {
+    if (event.type !== "subagent_update") continue;
+    if (event.parentCallId !== rootCallId) continue;
+    if (event.parentDelegationId) continue;
+    if (event.model) model = normalizeModel(event.model);
+    if (event.step.kind === "liveness") {
+      elapsedMs = event.step.elapsedMs;
+    }
+  }
+  return {
+    ...(model ? { model } : {}),
+    ...(elapsedMs !== undefined ? { elapsedMs } : {}),
+  };
 }
 
 /**
@@ -221,9 +283,12 @@ export function deriveSubAgents(events: TranscriptEvent[]): SubAgent[] {
       }
     }
     const fields = parseSubAgentArgs(toolCall.args);
+    const role = roleFromToolArgs(toolCall.args);
     return {
       callId,
       ...fields,
+      ...(role ? { role } : {}),
+      ...deriveRootDelegationMeta(events, callId),
       status: toolCall.status,
       ...(toolCall.result !== undefined ? { result: toolCall.result } : {}),
       ...(toolCall.resultAgentId

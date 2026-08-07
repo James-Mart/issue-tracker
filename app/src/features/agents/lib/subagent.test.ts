@@ -4,10 +4,12 @@ import {
   applyNestedStep,
   deriveSubAgent,
   deriveSubAgents,
+  isSubAgentToolCall,
   isSubAgentToolName,
 } from "./subagent";
 
 const TASK_CALL_ID = "call-task-1";
+const MCP_CALL_ID = "tool_mcp-delegate-1";
 const NESTED_AGENT_ID = "bc-nested-1";
 const AT = "2026-07-24T00:00:00.000Z";
 
@@ -90,11 +92,12 @@ function fixtureWithoutNested(): TranscriptEvent[] {
 }
 
 describe("isSubAgentToolName", () => {
-  it("recognizes Agent and Task only", () => {
+  it("recognizes Agent and Task case-insensitively", () => {
     expect(isSubAgentToolName("Task")).toBe(true);
     expect(isSubAgentToolName("Agent")).toBe(true);
+    expect(isSubAgentToolName("task")).toBe(true);
+    expect(isSubAgentToolName("agent")).toBe(true);
     expect(isSubAgentToolName("read")).toBe(false);
-    expect(isSubAgentToolName("task")).toBe(false);
     expect(isSubAgentToolName(undefined)).toBe(false);
     expect(isSubAgentToolName(null)).toBe(false);
   });
@@ -494,5 +497,94 @@ describe("deriveSubAgents", () => {
     const second = deriveSubAgent(afterSecond, rootCallId)!;
     expect(second.collapsedDelegations).toHaveLength(1);
     expect(second.collapsedDelegations[0]?.elapsedMs).toBe(10000);
+  });
+
+  it("recognizes app-channel MCP delegate tool calls and attaches nested steps", () => {
+    const events: TranscriptEvent[] = [
+      at({
+        type: "subagent_update",
+        parentCallId: MCP_CALL_ID,
+        delegationId: "del-mcp-1",
+        model: '{"id":"composer-2.5"}',
+        step: { kind: "text", text: "Reading the git subagent docs." },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: MCP_CALL_ID,
+        delegationId: "del-mcp-1",
+        model: '{"id":"composer-2.5"}',
+        step: {
+          kind: "tool_call",
+          callId: "nested-read-1",
+          name: "read",
+          status: "completed",
+          args: { path: "/agents/_issue-tracker-cli.md" },
+        },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: MCP_CALL_ID,
+        delegationId: "del-mcp-1",
+        model: '{"id":"composer-2.5"}',
+        step: { kind: "liveness", elapsedMs: 8500 },
+      }),
+      at({
+        type: "tool_call",
+        callId: MCP_CALL_ID,
+        name: "mcp",
+        status: "completed",
+        args: {
+          providerIdentifier: "custom-user-tools",
+          toolName: "delegate",
+          args: {
+            role: "issue-tracker-git",
+            prompt: "Mode: start-branch. Issue: compact-transcript-rows.",
+          },
+        },
+        result: { status: "success", value: { reply: "Branch created." } },
+      }),
+    ];
+
+    const toolCall = events.find(
+      (e): e is Extract<TranscriptEvent, { type: "tool_call" }> =>
+        e.type === "tool_call" && e.callId === MCP_CALL_ID,
+    )!;
+    expect(isSubAgentToolCall(toolCall)).toBe(true);
+
+    const agent = deriveSubAgent(events, MCP_CALL_ID)!;
+    expect(agent.role).toBe("issue-tracker-git");
+    expect(agent.prompt).toBe(
+      "Mode: start-branch. Issue: compact-transcript-rows.",
+    );
+    expect(agent.model).toBe("composer-2.5");
+    expect(agent.elapsedMs).toBe(8500);
+    expect(agent.status).toBe("completed");
+    expect(agent.steps.map((s) => s.kind)).toEqual([
+      "text",
+      "tool_call",
+      "liveness",
+    ]);
+    expect(agent.steps[0]).toEqual({
+      kind: "text",
+      text: "Reading the git subagent docs.",
+    });
+  });
+
+  it("derives a lowercase task tool call the same as Task", () => {
+    const events = [
+      at({
+        type: "tool_call",
+        callId: "call-lower",
+        name: "task",
+        status: "completed",
+        args: { description: "Do work", prompt: "go" },
+      }),
+    ];
+    expect(deriveSubAgents(events)).toHaveLength(1);
+    expect(deriveSubAgent(events, "call-lower")).toMatchObject({
+      description: "Do work",
+      prompt: "go",
+      status: "completed",
+    });
   });
 });
