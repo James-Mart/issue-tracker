@@ -226,6 +226,8 @@ export interface FakeAgentSdkOptions {
     waitResult?: AgentRunResult;
     /** Holds just this run open, where `hold` would hold every one of them. */
     hold?: Promise<void>;
+    /** When set, this send rejects before returning a run. */
+    sendError?: Error;
   }>;
 }
 
@@ -272,8 +274,9 @@ export function createFakeAgentSdk(
       disposed: false,
       async send(prompt, sendOptions = {}) {
         handle.sends.push({ prompt, options: sendOptions });
-        if (options.sendError) throw options.sendError;
         const scripted = sendScript.shift();
+        if (scripted?.sendError) throw scripted.sendError;
+        if (options.sendError) throw options.sendError;
         const runStream = scripted?.stream ?? stream;
         const runResult = scripted?.waitResult ?? options.waitResult;
         const runHold = scripted?.hold ?? options.hold;

@@ -25,6 +25,7 @@ import {
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
+import { publishFrame } from "./conversation-stream.js";
 import { IssueError } from "./errors.js";
 import { uniqueSlug } from "./slug.js";
 
@@ -223,6 +224,22 @@ export function conversationExists(id: string): boolean {
   return existsSync(metaPathOf(id));
 }
 
+/** Write pending message meta and publish the matching live-only frame. */
+export async function setPendingMessage(
+  id: string,
+  text: string | null,
+): Promise<ConversationMeta> {
+  const meta = await updateMeta(id, {
+    pendingMessage:
+      text === null ? null : { text, at: new Date().toISOString() },
+  });
+  publishFrame(id, {
+    event: { type: "pending", text },
+    persist: false,
+  });
+  return meta;
+}
+
 export function updateMeta(
   id: string,
   patch: ConversationMetaPatch,
@@ -245,6 +262,13 @@ export function updateMeta(
       const agentId = patch.agentId.trim();
       if (!agentId) throw new IssueError("validation", "agentId is required");
       next.agentId = agentId;
+    }
+    if (patch.pendingMessage !== undefined) {
+      if (patch.pendingMessage === null) {
+        delete next.pendingMessage;
+      } else {
+        next.pendingMessage = patch.pendingMessage;
+      }
     }
 
     next.updatedAt = new Date().toISOString();

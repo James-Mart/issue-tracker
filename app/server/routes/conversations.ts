@@ -14,6 +14,7 @@ import {
   deleteConversation,
   listConversations,
   readConversation,
+  setPendingMessage,
   updateMeta,
 } from "../services/conversations.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
@@ -213,6 +214,29 @@ export function createConversationsRouter(
     }),
   );
 
+  router.patch(
+    "/:id/pending",
+    asyncRoute(async (req, res) => {
+      const body = req.body as { text?: unknown };
+      const text = typeof body.text === "string" ? body.text.trim() : "";
+      if (!text) {
+        res.status(400).json({ error: "text is required" });
+        return;
+      }
+
+      const meta = await setPendingMessage(req.params.id, text);
+      res.json(meta);
+    }),
+  );
+
+  router.delete(
+    "/:id/pending",
+    asyncRoute(async (req, res) => {
+      await setPendingMessage(req.params.id, null);
+      res.status(204).end();
+    }),
+  );
+
   router.post(
     "/:id/messages",
     asyncRoute(async (req, res) => {
@@ -224,22 +248,35 @@ export function createConversationsRouter(
         return;
       }
 
+      const conversationId = req.params.id;
+      const activeRun = sessions.getActiveRun(conversationId);
+      if (activeRun) {
+        await setPendingMessage(conversationId, prompt);
+        res.status(202).json({ pending: true });
+        return;
+      }
+
       const model =
         typeof body.model === "string" && body.model.trim()
           ? body.model.trim()
           : undefined;
 
-      await appendEvent(req.params.id, { type: "prompt", text: prompt });
+      const { meta } = readConversation(conversationId);
+      if (meta.pendingMessage) {
+        await setPendingMessage(conversationId, null);
+      }
 
-      const result = await sessions.sendPrompt(req.params.id, {
+      await appendEvent(conversationId, { type: "prompt", text: prompt });
+
+      const result = await sessions.sendPrompt(conversationId, {
         prompt,
         model,
       });
       if (!result.ok) {
         const message = result.error.message;
         const event = { type: "error" as const, message };
-        await appendEvent(req.params.id, event);
-        publishFrame(req.params.id, { event, persist: true });
+        await appendEvent(conversationId, event);
+        publishFrame(conversationId, { event, persist: true });
         res.status(502).json({ error: message });
         return;
       }

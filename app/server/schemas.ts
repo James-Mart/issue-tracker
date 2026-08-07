@@ -409,6 +409,7 @@ export const conversationMetaSchema = z.object({
   projectId: nonEmpty,
   agentId: nonEmpty.optional(),
   model: nonEmpty,
+  pendingMessage: z.object({ text: nonEmpty, at: nonEmpty }).optional(),
   createdAt: nonEmpty,
   updatedAt: nonEmpty,
 });
@@ -562,10 +563,19 @@ const runFrameInput = z.object({
 
 export type RunFrameInput = z.infer<typeof runFrameInput>;
 
+/** Live-only pending-message signalling on the event stream (never persisted). */
+const pendingFrameInput = z.object({
+  type: z.literal("pending"),
+  text: z.string().nullable(),
+});
+
+export type PendingFrameInput = z.infer<typeof pendingFrameInput>;
+
 /** Write-time frame union: transcript events plus live-only run signalling. */
 export const conversationFrameInputSchema = z.union([
   transcriptEventInputSchema,
   runFrameInput,
+  pendingFrameInput,
 ]);
 
 export type ConversationFrameInput = z.infer<
@@ -594,6 +604,7 @@ export type TranscriptEvent = z.infer<typeof transcriptEventSchema>;
 export const conversationStreamEventSchema = z.union([
   transcriptEventSchema,
   runFrameInput.merge(z.object({ at: nonEmpty })),
+  pendingFrameInput.merge(z.object({ at: nonEmpty })),
 ]);
 
 export type ConversationStreamEvent = z.infer<
@@ -609,7 +620,9 @@ export type CreateConversationInput = {
 
 export type ConversationMetaPatch = Partial<
   Pick<ConversationMeta, "title" | "agentId" | "model">
->;
+> & {
+  pendingMessage?: NonNullable<ConversationMeta["pendingMessage"]> | null;
+};
 
 export type ConversationDetail = {
   meta: ConversationMeta;

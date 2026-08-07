@@ -937,6 +937,167 @@ describe("agent sessions manager", () => {
   });
 });
 
+describe("pending message firing", () => {
+  it("fires a pending message as a new run after a clean finish", async () => {
+    const {
+      createConversation,
+      readConversation,
+      updateMeta,
+      createAgentSessions,
+    } = await load();
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Fire pending",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    await updateMeta(meta.id, {
+      pendingMessage: { text: "follow up", at: AT },
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "first turn" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    // Give the fired run time to settle.
+    for (let i = 0; i < 50; i += 1) {
+      const { transcript } = readConversation(meta.id);
+      if (transcript.some((e) => e.type === "assistant")) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    const { meta: nextMeta, transcript } = readConversation(meta.id);
+    expect(nextMeta.pendingMessage).toBeUndefined();
+    expect(
+      transcript.filter((e) => e.type === "prompt").map((e) => e.text),
+    ).toEqual(["follow up"]);
+    expect(fake.handles[0]?.sends).toEqual([
+      { prompt: "first turn", options: {} },
+      { prompt: "follow up", options: {} },
+    ]);
+  });
+
+  it("restores pending and surfaces an error when firing fails to start a run", async () => {
+    const {
+      createConversation,
+      readConversation,
+      updateMeta,
+      createAgentSessions,
+    } = await load();
+    const fake = createFakeAgentSdk({
+      sendScript: [
+        { stream: buildScriptedStreamWithAgentIdHint() },
+        { sendError: new CursorAgentError("Invalid API key") },
+      ],
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Fire pending failure",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    await updateMeta(meta.id, {
+      pendingMessage: { text: "follow up", at: AT },
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "first turn" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    const { meta: nextMeta, transcript } = readConversation(meta.id);
+    expect(nextMeta.pendingMessage?.text).toBe("follow up");
+    expect(
+      transcript.filter((e) => e.type === "prompt").map((e) => e.text),
+    ).toEqual(["follow up"]);
+    expect(transcript.at(-1)).toMatchObject({
+      type: "error",
+      message: "Invalid API key",
+    });
+    expect(fake.handles[0]?.sends).toEqual([
+      { prompt: "first turn", options: {} },
+      { prompt: "follow up", options: {} },
+    ]);
+  });
+
+  it("leaves a pending message in place after an errored run", async () => {
+    const {
+      createConversation,
+      readConversation,
+      updateMeta,
+      createAgentSessions,
+    } = await load();
+    const fake = createFakeAgentSdk({
+      waitResult: {
+        id: "run-err",
+        status: "error",
+        error: { message: "model failed", code: "MODEL" },
+      },
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Error keeps pending",
+      projectId: "platform",
+      model: "auto",
+    });
+    await updateMeta(meta.id, {
+      pendingMessage: { text: "still waiting", at: AT },
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "fail me" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    const { meta: nextMeta, transcript } = readConversation(meta.id);
+    expect(nextMeta.pendingMessage?.text).toBe("still waiting");
+    expect(transcript.some((e) => e.type === "prompt")).toBe(false);
+    expect(fake.handles[0]?.sends).toEqual([{ prompt: "fail me", options: {} }]);
+  });
+
+  it("leaves a pending message in place after a cancelled run", async () => {
+    const {
+      createConversation,
+      readConversation,
+      updateMeta,
+      createAgentSessions,
+    } = await load();
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Cancel keeps pending",
+      projectId: "platform",
+      model: "auto",
+    });
+    await updateMeta(meta.id, {
+      pendingMessage: { text: "still waiting", at: AT },
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "cancel me" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await Promise.resolve();
+    expect(await sessions.cancel(meta.id)).toBe(true);
+    await result.run.wait();
+    release();
+
+    const { meta: nextMeta } = readConversation(meta.id);
+    expect(nextMeta.pendingMessage?.text).toBe("still waiting");
+  });
+});
+
 const AUTH_ERROR_TEXT =
   "Authentication error. If you are logged in, try logging out and back in.";
 
