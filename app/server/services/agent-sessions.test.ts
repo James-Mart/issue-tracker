@@ -850,10 +850,10 @@ describe("agent sessions manager", () => {
     ]);
   });
 
-  it("dispose and disposeAll evict agent-state and nested checkpoint caches", async () => {
+  it("dispose and disposeAll evict agent-state and nested store caches", async () => {
     const { createConversation, createAgentSessions } = await load();
-    const cachedMod = await import("./cached-checkpoints-store.js");
-    const evictSpy = vi.spyOn(cachedMod, "evictConversationCheckpointCaches");
+    const cachedMod = await import("./agent-state-caches.js");
+    const evictSpy = vi.spyOn(cachedMod, "evictConversationStoreCaches");
 
     const fake = createFakeAgentSdk();
     const sessions = createAgentSessions(fake);

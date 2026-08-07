@@ -18,6 +18,7 @@ import {
   type SendOptions,
 } from "@cursor/sdk";
 import { cursorApiKey } from "../config.js";
+import { createAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { createCachedCheckpointsStore } from "./cached-checkpoints-store.js";
 
 export { CursorAgentError };
@@ -208,7 +209,7 @@ function localRuntime(
     store: composeLocalAgentStore({
       agents: jsonl.agents,
       runs: jsonl.runs,
-      runEvents: jsonl.runEvents,
+      runEvents: createAppendingRunEventsStore(storeDir, jsonl.runEvents),
       checkpoints: createCachedCheckpointsStore(storeDir, jsonl.checkpoints),
     }),
     customTools,

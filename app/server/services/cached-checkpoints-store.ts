@@ -1,17 +1,22 @@
-import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
   JSONL_LOCAL_AGENT_STORE_FILES,
   paginateCheckpointBlobIds,
   type LocalAgentCheckpointFilter,
   type LocalAgentStoreCheckpoints,
 } from "@cursor/sdk";
+import { appendJsonlRecord, withJsonlFile } from "./jsonl-append.js";
 
 /**
  * In-memory index over a Jsonl checkpoints substore, keyed by resolved
  * `storeDir` so every `JsonlLocalAgentStore` instance for the same directory
  * shares one cache (fresh stores are constructed on each create/resume).
+ *
+ * The index serves reads; `create` appends one line rather than calling the
+ * SDK's writer, which would reparse and rewrite the whole file (see
+ * {@link appendJsonlRecord}). `update` and `delete` still delegate — both must
+ * rewrite by nature, and neither is on a hot path.
  */
 
 type BlobIndex = Map<string, Uint8Array>;
@@ -28,6 +33,10 @@ const cachedWrappers = new WeakSet<object>();
 
 function resolveStoreDir(storeDir: string): string {
   return resolve(storeDir);
+}
+
+function checkpointsPath(resolved: string): string {
+  return resolve(resolved, JSONL_LOCAL_AGENT_STORE_FILES.checkpoints);
 }
 
 /** True when `checkpoints` was produced by {@link createCachedCheckpointsStore}. */
@@ -70,7 +79,7 @@ function getOrCreateRecord(resolved: string): CacheRecord {
 
 async function readIndexFromDisk(resolved: string): Promise<BlobIndex> {
   const index: BlobIndex = new Map();
-  const filePath = resolve(resolved, JSONL_LOCAL_AGENT_STORE_FILES.checkpoints);
+  const filePath = checkpointsPath(resolved);
   let text: string;
   try {
     text = await readFile(filePath, "utf8");
@@ -139,22 +148,6 @@ export function evictCachedCheckpointsStore(storeDir: string): void {
 }
 
 /**
- * Evict a conversation's `agent-state` storeDir and every immediate child
- * directory under `agent-state/nested/`. Safe when a path was never cached;
- * walks the nested listing even when individual children have no entry.
- */
-export function evictConversationCheckpointCaches(storeDir: string): void {
-  evictCachedCheckpointsStore(storeDir);
-  const nestedRoot = join(storeDir, "nested");
-  if (!existsSync(nestedRoot)) return;
-  for (const ent of readdirSync(nestedRoot, { withFileTypes: true })) {
-    if (ent.isDirectory()) {
-      evictCachedCheckpointsStore(join(nestedRoot, ent.name));
-    }
-  }
-}
-
-/**
  * Wrap a Jsonl checkpoints substore with a `storeDir`-keyed in-memory index.
  * Mutators write through to `underlying`, then update the shared index when it
  * is already built (or mid-build).
@@ -187,17 +180,32 @@ export function createCachedCheckpointsStore(
     },
 
     async create(input) {
-      await underlying.create(input);
-      await withBuiltIndex(resolved, (index) => {
-        index.set(
-          blobKey(input.agentId, input.blobId),
-          Uint8Array.from(input.data),
+      const index = await ensureIndex(resolved);
+      const key = blobKey(input.agentId, input.blobId);
+      if (index.has(key)) {
+        throw new Error(
+          `Checkpoint blob ${input.blobId} already exists for agent ${input.agentId}`,
         );
-      });
+      }
+      // Claimed before the append so two concurrent creates of one blob cannot
+      // both pass the check above and write the key twice.
+      index.set(key, Uint8Array.from(input.data));
+      try {
+        await appendJsonlRecord(checkpointsPath(resolved), {
+          agentId: input.agentId,
+          blobId: input.blobId,
+          dataBase64: Buffer.from(input.data).toString("base64"),
+        });
+      } catch (err) {
+        index.delete(key);
+        throw err;
+      }
     },
 
     async update(input) {
-      await underlying.update(input);
+      await withJsonlFile(checkpointsPath(resolved), () =>
+        underlying.update(input),
+      );
       await withBuiltIndex(resolved, (index) => {
         index.set(
           blobKey(input.agentId, input.blobId),
@@ -207,7 +215,9 @@ export function createCachedCheckpointsStore(
     },
 
     async delete(input) {
-      await underlying.delete(input);
+      await withJsonlFile(checkpointsPath(resolved), () =>
+        underlying.delete(input),
+      );
       await withBuiltIndex(resolved, (index) => {
         for (const key of [...index.keys()]) {
           if (matchesCheckpointFilter(parseBlobKey(key), input.filter)) {

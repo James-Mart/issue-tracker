@@ -11,7 +11,7 @@ import {
   type AgentStreamEvent,
 } from "./agent-sdk.js";
 import { loadPluginAgentDefinitions } from "./agent-definitions.js";
-import { evictConversationCheckpointCaches } from "./cached-checkpoints-store.js";
+import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import {
   appendEvent,
   readConversation,
@@ -195,7 +195,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     } catch {
       // Best-effort dispose.
     }
-    evictConversationCheckpointCaches(
+    evictConversationStoreCaches(
       join(conversationsDir, conversationId, "agent-state"),
     );
   }

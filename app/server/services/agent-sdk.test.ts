@@ -24,6 +24,7 @@ import {
   NESTED_AGENT_ID,
   TASK_TOOL_CALL_ID,
 } from "./agent-sdk.fake.js";
+import { isAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { isCachedCheckpointsStore } from "./cached-checkpoints-store.js";
 
 function expectCachedComposedStore(
@@ -40,6 +41,7 @@ function expectCachedComposedStore(
     }),
   );
   expect(isCachedCheckpointsStore(store!.checkpoints)).toBe(true);
+  expect(isAppendingRunEventsStore(store!.runEvents)).toBe(true);
 }
 
 const MODEL: ModelSelection = { id: "composer-2.5" };

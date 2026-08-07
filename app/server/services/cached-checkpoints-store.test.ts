@@ -1,12 +1,20 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { JsonlLocalAgentStore } from "@cursor/sdk";
+import {
+  JSONL_LOCAL_AGENT_STORE_FILES,
+  JsonlLocalAgentStore,
+} from "@cursor/sdk";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createCachedCheckpointsStore,
   evictCachedCheckpointsStore,
-  evictConversationCheckpointCaches,
   isCachedCheckpointsStore,
 } from "./cached-checkpoints-store.js";
 
@@ -38,8 +46,23 @@ function openCached(dir = storeDir) {
   };
 }
 
+function newDir(prefix = "cached-ckpt-"): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  dirs.push(dir);
+  return dir;
+}
+
+function checkpointsFile(dir: string): string {
+  return join(dir, JSONL_LOCAL_AGENT_STORE_FILES.checkpoints);
+}
+
+function median(xs: number[]): number {
+  const sorted = [...xs].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)]!;
+}
+
 async function seedBlobs(
-  checkpoints: ReturnType<typeof openCached>["jsonl"]["checkpoints"],
+  checkpoints: ReturnType<typeof openCached>["cached"],
   count: number,
   agentId = AGENT_A,
 ): Promise<string[]> {
@@ -58,7 +81,7 @@ describe("createCachedCheckpointsStore", () => {
     "serves get and list from a one-pass index after the first access",
     async () => {
       const { jsonl, cached } = openCached();
-      const ids = await seedBlobs(jsonl.checkpoints, BLOB_COUNT);
+      const ids = await seedBlobs(cached, BLOB_COUNT);
 
       // Warm the index.
       expect(await cached.get({ agentId: AGENT_A, blobId: ids[0]! })).toEqual(
@@ -82,10 +105,6 @@ describe("createCachedCheckpointsStore", () => {
         rawGets.push(performance.now() - t0);
       }
 
-      const median = (xs: number[]) => {
-        const sorted = [...xs].sort((a, b) => a - b);
-        return sorted[Math.floor(sorted.length / 2)]!;
-      };
       // Cached lookups must stay far below a full-file rescan; require at least
       // a 5× improvement so the assertion fails if the wrapper still scans.
       expect(median(warmGets) * 5).toBeLessThan(median(rawGets));
@@ -154,6 +173,117 @@ describe("createCachedCheckpointsStore", () => {
     expect([...byAgent.items].sort()).toEqual(["b1", "b2", "b3"]);
   });
 
+  it("create writes the same bytes the SDK's rewrite would have", async () => {
+    const appendDir = newDir();
+    const rewriteDir = newDir();
+    const { cached } = openCached(appendDir);
+    const raw = new JsonlLocalAgentStore(rewriteDir);
+
+    for (let i = 0; i < 5; i++) {
+      const input = {
+        agentId: i % 2 === 0 ? AGENT_A : AGENT_B,
+        blobId: `blob-${i}`,
+        data: new Uint8Array([i, i + 1, i + 2]),
+      };
+      await cached.create(input);
+      await raw.checkpoints.create(input);
+    }
+
+    expect(readFileSync(checkpointsFile(appendDir), "utf8")).toBe(
+      readFileSync(checkpointsFile(rewriteDir), "utf8"),
+    );
+    // And the SDK's own reader agrees about what is in the appended file.
+    const reader = new JsonlLocalAgentStore(appendDir);
+    expect(await reader.checkpoints.list({ filter: { limit: 100 } })).toEqual(
+      await raw.checkpoints.list({ filter: { limit: 100 } }),
+    );
+    expect(
+      await reader.checkpoints.get({ agentId: AGENT_B, blobId: "blob-1" }),
+    ).toEqual(Buffer.from([1, 2, 3]));
+  });
+
+  it("create appends in place where the SDK's create replaces the file", async () => {
+    const appendDir = newDir();
+    const { cached } = openCached(appendDir);
+    const data = new Uint8Array([1]);
+
+    await cached.create({ agentId: AGENT_A, blobId: "first", data });
+    const appendInode = statSync(checkpointsFile(appendDir)).ino;
+    await cached.create({ agentId: AGENT_A, blobId: "second", data });
+    expect(statSync(checkpointsFile(appendDir)).ino).toBe(appendInode);
+
+    // The SDK writes through a temp file and renames, so its inode changes.
+    const rewriteDir = newDir();
+    const raw = new JsonlLocalAgentStore(rewriteDir);
+    await raw.checkpoints.create({ agentId: AGENT_A, blobId: "first", data });
+    const rewriteInode = statSync(checkpointsFile(rewriteDir)).ino;
+    await raw.checkpoints.create({ agentId: AGENT_A, blobId: "second", data });
+    expect(statSync(checkpointsFile(rewriteDir)).ino).not.toBe(rewriteInode);
+  });
+
+  it("create rejects a duplicate blob the way the SDK does", async () => {
+    const { jsonl, cached } = openCached();
+    const data = new Uint8Array([1]);
+    await cached.create({ agentId: AGENT_A, blobId: "dup", data });
+
+    await expect(
+      cached.create({ agentId: AGENT_A, blobId: "dup", data }),
+    ).rejects.toThrow(
+      `Checkpoint blob dup already exists for agent ${AGENT_A}`,
+    );
+    // A different agent may hold the same blobId.
+    await cached.create({ agentId: AGENT_B, blobId: "dup", data });
+
+    // One row per (agent, blob) — the rejected create appended nothing.
+    expect(
+      readFileSync(checkpointsFile(storeDir), "utf8")
+        .split("\n")
+        .filter((line) => line.trim()),
+    ).toHaveLength(2);
+    await expect(
+      jsonl.checkpoints.create({ agentId: AGENT_A, blobId: "dup", data }),
+    ).rejects.toThrow(
+      `Checkpoint blob dup already exists for agent ${AGENT_A}`,
+    );
+  });
+
+  // The point of appending: cost per create must not track file size. Timed
+  // rather than inferred, but compared against this wrapper on a small file
+  // instead of against the SDK, so the bound does not depend on how expensive
+  // fsync happens to be on the host.
+  it(
+    "create cost does not grow with the file",
+    async () => {
+      const dir = newDir();
+      const { cached } = openCached(dir);
+      const payload = new Uint8Array(64 * 1024).fill(3);
+      let blob = 0;
+
+      const timeCreates = async (count: number): Promise<number> => {
+        const times: number[] = [];
+        for (let i = 0; i < count; i++) {
+          const t0 = performance.now();
+          await cached.create({
+            agentId: AGENT_A,
+            blobId: `blob-${String(blob++).padStart(5, "0")}`,
+            data: payload,
+          });
+          times.push(performance.now() - t0);
+        }
+        return median(times);
+      };
+
+      const small = await timeCreates(20);
+      await timeCreates(40);
+      // Large enough that a rewrite of it would dominate any fsync.
+      expect(statSync(checkpointsFile(dir)).size).toBeGreaterThan(4_000_000);
+      const large = await timeCreates(20);
+
+      expect(large).toBeLessThan(small * 4);
+    },
+    30_000,
+  );
+
   it("shares one index across wrappers for the same resolved storeDir", async () => {
     const { cached: a } = openCached();
     const { cached: b } = openCached(resolve(storeDir));
@@ -185,69 +315,6 @@ describe("createCachedCheckpointsStore", () => {
     const { jsonl, cached } = openCached();
     expect(isCachedCheckpointsStore(cached)).toBe(true);
     expect(isCachedCheckpointsStore(jsonl.checkpoints)).toBe(false);
-  });
-
-  it("evictConversationCheckpointCaches evicts storeDir and each nested child", async () => {
-    const nestedA = join(storeDir, "nested", "agent-a");
-    const nestedB = join(storeDir, "nested", "agent-b");
-    mkdirSync(nestedA, { recursive: true });
-    mkdirSync(nestedB, { recursive: true });
-    writeFileSync(join(storeDir, "nested", "not-a-dir"), "x");
-
-    const root = openCached(storeDir);
-    const childA = openCached(nestedA);
-    const childB = openCached(nestedB);
-    await root.cached.create({
-      agentId: AGENT_A,
-      blobId: "r",
-      data: new Uint8Array([1]),
-    });
-    await childA.cached.create({
-      agentId: AGENT_A,
-      blobId: "a",
-      data: new Uint8Array([2]),
-    });
-    // Build indexes before sneaking so later gets serve the stale cache.
-    expect(await root.cached.get({ agentId: AGENT_A, blobId: "r" })).toEqual(
-      new Uint8Array([1]),
-    );
-    expect(await childA.cached.get({ agentId: AGENT_A, blobId: "a" })).toEqual(
-      new Uint8Array([2]),
-    );
-    expect(await childB.cached.list()).toMatchObject({ items: [] });
-
-    // Stale the indexes via the underlying Jsonl writers.
-    await root.jsonl.checkpoints.create({
-      agentId: AGENT_A,
-      blobId: "sneak-root",
-      data: new Uint8Array([9]),
-    });
-    await childA.jsonl.checkpoints.create({
-      agentId: AGENT_A,
-      blobId: "sneak-a",
-      data: new Uint8Array([8]),
-    });
-    expect(
-      await root.cached.get({ agentId: AGENT_A, blobId: "sneak-root" }),
-    ).toBeNull();
-    expect(
-      await childA.cached.get({ agentId: AGENT_A, blobId: "sneak-a" }),
-    ).toBeNull();
-
-    evictConversationCheckpointCaches(storeDir);
-
-    // After eviction, indexes rebuild and see the sneaked blobs.
-    expect(
-      await root.cached.get({ agentId: AGENT_A, blobId: "sneak-root" }),
-    ).toEqual(new Uint8Array([9]));
-    expect(
-      await childA.cached.get({ agentId: AGENT_A, blobId: "sneak-a" }),
-    ).toEqual(new Uint8Array([8]));
-
-    // Safe when nested/ is absent.
-    const lonely = mkdtempSync(join(tmpdir(), "cached-ckpt-lonely-"));
-    dirs.push(lonely);
-    evictConversationCheckpointCaches(lonely);
   });
 
   it("evictCachedCheckpointsStore drops the entry so the next access rebuilds", async () => {
