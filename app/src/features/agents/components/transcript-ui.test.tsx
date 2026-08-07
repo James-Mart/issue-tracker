@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { act, type ComponentProps } from "react";
+import { act, type ComponentProps, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { TranscriptToolCall } from "./transcript-ui";
+import { TranscriptThinking, TranscriptToolCall } from "./transcript-ui";
 
-function mountToolCall(
-  props: ComponentProps<typeof TranscriptToolCall>,
+function mount(
+  node: ReactElement,
 ): {
   container: HTMLDivElement;
   root: Root;
@@ -14,9 +14,27 @@ function mountToolCall(
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<TranscriptToolCall {...props} />);
+    root.render(node);
   });
   return { container, root };
+}
+
+function mountToolCall(
+  props: ComponentProps<typeof TranscriptToolCall>,
+): {
+  container: HTMLDivElement;
+  root: Root;
+} {
+  return mount(<TranscriptToolCall {...props} />);
+}
+
+function mountThinking(
+  props: ComponentProps<typeof TranscriptThinking>,
+): {
+  container: HTMLDivElement;
+  root: Root;
+} {
+  return mount(<TranscriptThinking {...props} />);
 }
 
 afterEach(() => {
@@ -78,5 +96,58 @@ describe("TranscriptToolCall", () => {
     expect(summary!.textContent).toContain("Grep");
     expect(summary!.textContent).toContain("TranscriptToolCall");
     expect(summary!.textContent).not.toContain("call-compact");
+  });
+});
+
+describe("TranscriptThinking", () => {
+  it("shows first-line preview in collapsed summary", () => {
+    const { container } = mountThinking({
+      text: "\n\nI need to read the implementor file first.\nMore detail below.",
+    });
+
+    const row = container.querySelector("details");
+    expect(row).toBeTruthy();
+    expect((row as HTMLDetailsElement).open).toBe(false);
+
+    const summary = row!.querySelector("summary");
+    expect(summary!.textContent).toContain("Thinking");
+    expect(summary!.textContent).toContain(
+      "I need to read the implementor file first.",
+    );
+    expect(summary!.textContent).not.toContain("More detail below.");
+  });
+
+  it("shows full text when forced open for the live stream tip", () => {
+    const body =
+      "Streaming reasoning in progress.\nWith a second line.";
+    const { container } = mountThinking({
+      text: body,
+      open: true,
+    });
+
+    const row = container.querySelector("details");
+    expect((row as HTMLDetailsElement).open).toBe(true);
+    expect(container.textContent).toContain(body);
+  });
+
+  it("updates preview in place when text deltas stream", () => {
+    const { container, root } = mountThinking({ text: "Hel" });
+    const row = container.querySelector("details")!;
+
+    act(() => {
+      root.render(<TranscriptThinking text="Hello world" />);
+    });
+
+    expect(container.querySelector("details")).toBe(row);
+    expect(row.querySelector("summary")!.textContent).toContain("Hello world");
+  });
+
+  it("truncates preview to 80 characters", () => {
+    const long = "x".repeat(100);
+    const { container } = mountThinking({ text: long });
+
+    const summary = container.querySelector("summary");
+    expect(summary!.textContent).toContain("x".repeat(80));
+    expect(summary!.textContent).not.toContain("x".repeat(81));
   });
 });

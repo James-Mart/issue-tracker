@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeToolCall } from "./tool-summary";
+import { summarizeToolCall, thinkingPreview } from "./tool-summary";
 
 describe("summarizeToolCall", () => {
   it('uses "tool" when the name is missing or blank', () => {
@@ -146,5 +146,21 @@ describe("summarizeToolCall", () => {
   it("returns null detail when args is not an object", () => {
     expect(summarizeToolCall("Grep", "pattern").detail).toBeNull();
     expect(summarizeToolCall("Grep", 42).detail).toBeNull();
+  });
+});
+
+describe("thinkingPreview", () => {
+  it("uses the first non-empty line", () => {
+    expect(
+      thinkingPreview("\n\nNeed to inspect transcript-ui.tsx\nMore here."),
+    ).toBe("Need to inspect transcript-ui.tsx");
+  });
+
+  it("returns null for whitespace-only text", () => {
+    expect(thinkingPreview("\n\n  \n")).toBeNull();
+  });
+
+  it("truncates to 80 characters", () => {
+    expect(thinkingPreview("x".repeat(100))).toHaveLength(80);
   });
 });

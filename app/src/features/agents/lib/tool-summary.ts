@@ -6,6 +6,20 @@ function truncateDetail(value: string): string {
   return value.length <= DETAIL_MAX ? value : value.slice(0, DETAIL_MAX);
 }
 
+function firstNonEmptyLine(text: string): string | null {
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+/** One-line preview for collapsed thinking blocks (same 80-char budget as tool detail). */
+export function thinkingPreview(text: string): string | null {
+  const line = firstNonEmptyLine(text);
+  return line ? truncateDetail(line) : null;
+}
+
 function shortenPath(path: string): string {
   const segments = path.split("/").filter(Boolean);
   if (segments.length <= 2) return path;

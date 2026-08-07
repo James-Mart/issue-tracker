@@ -7,7 +7,10 @@ import {
 import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Markdown } from "@/features/issues/components/markdown";
-import { summarizeToolCall } from "@/features/agents/lib/tool-summary";
+import {
+  summarizeToolCall,
+  thinkingPreview,
+} from "@/features/agents/lib/tool-summary";
 import { cn } from "@/lib/utils/cn";
 
 export type TranscriptDensity = "default" | "compact";
@@ -170,11 +173,23 @@ export function TranscriptThinking({
   density?: TranscriptDensity;
 } & Omit<ComponentPropsWithoutRef<"details">, "children" | "open">) {
   const pad = densityPad[density];
+  const preview = thinkingPreview(text);
   return (
     <CollapsibleDetails
-      label="Thinking"
+      label={
+        <>
+          <span className="shrink-0 font-mono text-xs font-medium text-foreground">
+            Thinking
+          </span>
+          {preview ? (
+            <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+              {preview}
+            </span>
+          ) : null}
+        </>
+      }
       className="min-w-0 rounded-md border border-border bg-card"
-      summaryClassName={pad.thinkingSummary}
+      summaryClassName={cn("min-h-0 gap-2", pad.thinkingSummary)}
       bodyClassName={pad.thinkingBody}
       {...attrs}
       // Only force-open while this block is still the live tip of the stream;
