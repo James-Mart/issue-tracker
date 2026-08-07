@@ -435,4 +435,17 @@ for (const verb of DELETED_FIELD_VERBS) {
   }
 }
 
-program.parseAsync(process.argv);
+function handleStreamError(err: NodeJS.ErrnoException): void {
+  if (err.code === "EPIPE") {
+    process.exit(0);
+  }
+  throw err;
+}
+
+process.stdout.on("error", handleStreamError);
+process.stderr.on("error", handleStreamError);
+
+program.parseAsync(process.argv).catch((err) => {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exitCode = 1;
+});
