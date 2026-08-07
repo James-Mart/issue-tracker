@@ -445,4 +445,7 @@ function handleStreamError(err: NodeJS.ErrnoException): void {
 process.stdout.on("error", handleStreamError);
 process.stderr.on("error", handleStreamError);
 
-program.parseAsync(process.argv);
+program.parseAsync(process.argv).catch((err) => {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exitCode = 1;
+});
