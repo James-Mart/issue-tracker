@@ -1,9 +1,11 @@
 import { createApp } from "./app.js";
 import { listenPort } from "./config.js";
 import { agentSessions } from "./services/agent-sessions.js";
+import { validateHookRegistration } from "./services/hook-registration.js";
 import { validateRoleBodies } from "./services/role-bodies.js";
 
 validateRoleBodies();
+validateHookRegistration();
 
 const app = createApp();
 
