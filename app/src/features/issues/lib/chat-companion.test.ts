@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseChatCompanionPreference,
   resolveChatCompanionExpanded,
+  showsChatCompanion,
   writeChatCompanionParam,
 } from "./chat-companion";
 
@@ -72,5 +73,18 @@ describe("resolveChatCompanionExpanded", () => {
         agentLive: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe("showsChatCompanion", () => {
+  it("is false for project (chat storage without detail companion)", () => {
+    expect(showsChatCompanion("project")).toBe(false);
+  });
+
+  it("is true for steerable issue kinds", () => {
+    expect(showsChatCompanion("idea")).toBe(true);
+    expect(showsChatCompanion("epic")).toBe(true);
+    expect(showsChatCompanion("story")).toBe(true);
+    expect(showsChatCompanion("task")).toBe(true);
   });
 });

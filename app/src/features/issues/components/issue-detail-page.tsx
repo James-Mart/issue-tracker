@@ -17,16 +17,16 @@ import {
   useIssueDetailFileUpload,
   type UploadAttachmentMutation,
 } from "../hooks/use-issue-detail-file-upload";
-import { kindHas } from "../lib/kind";
+import { kindHasOwnFlow } from "../lib/own-flow";
 import { issueBelongsToProject, issuesById } from "../lib/build-tree";
 import { projectPath } from "../lib/links";
 import {
   parseChatCompanionPreference,
   resolveChatCompanionExpanded,
+  showsChatCompanion,
   writeChatCompanionParam,
 } from "../lib/chat-companion";
 import { isInFlight } from "../lib/derived";
-import { kindHasOwnFlow } from "../lib/own-flow";
 import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
@@ -117,15 +117,8 @@ function CompanionSlot({
   );
 }
 
-function IssueDetailBody({
-  issue,
-  upload,
-  catalog,
-}: {
-  issue: IssueDetail;
-  upload?: UploadAttachmentMutation;
-  catalog: ProjectLabel[];
-}) {
+/** Owns chat fetch + `?chat=` companion state; mount only when the companion shows. */
+function IssueDetailCompanion({ issue }: { issue: IssueDetail }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: chat } = useChatQuery(issue.id);
   const attach = supportsAttachments(issue.kind);
@@ -145,6 +138,25 @@ function IssueDetailBody({
   };
 
   return (
+    <CompanionSlot
+      issueId={issue.id}
+      attachmentsIssueId={attach ? issue.id : undefined}
+      expanded={companionExpanded}
+      onExpandedChange={setCompanionExpanded}
+    />
+  );
+}
+
+function IssueDetailBody({
+  issue,
+  upload,
+  catalog,
+}: {
+  issue: IssueDetail;
+  upload?: UploadAttachmentMutation;
+  catalog: ProjectLabel[];
+}) {
+  return (
     <div className="flex min-h-0 flex-1 gap-4">
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <IssueDetailHeader issue={issue} catalog={catalog} />
@@ -156,13 +168,8 @@ function IssueDetailBody({
         />
       </div>
 
-      {kindHas(issue.kind, "chat") ? (
-        <CompanionSlot
-          issueId={issue.id}
-          attachmentsIssueId={attach ? issue.id : undefined}
-          expanded={companionExpanded}
-          onExpandedChange={setCompanionExpanded}
-        />
+      {showsChatCompanion(issue.kind) ? (
+        <IssueDetailCompanion issue={issue} />
       ) : null}
     </div>
   );

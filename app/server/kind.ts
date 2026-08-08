@@ -19,6 +19,8 @@ export const KIND_CAPABILITIES = {
     attention: false,
     attachments: true,
     chat: true,
+    // Detail companion is narrower than chat storage (project has chat, not companion).
+    chatCompanion: false,
     // CLI `comment` is narrower than chat storage (project has chat, not comment).
     comment: false,
   },
@@ -31,6 +33,7 @@ export const KIND_CAPABILITIES = {
     attention: false,
     attachments: true,
     chat: true,
+    chatCompanion: true,
     comment: true,
   },
   epic: {
@@ -41,6 +44,7 @@ export const KIND_CAPABILITIES = {
     attention: true,
     attachments: true,
     chat: true,
+    chatCompanion: true,
     comment: true,
   },
   story: {
@@ -51,6 +55,7 @@ export const KIND_CAPABILITIES = {
     attention: true,
     attachments: true,
     chat: true,
+    chatCompanion: true,
     comment: true,
   },
   task: {
@@ -61,6 +66,7 @@ export const KIND_CAPABILITIES = {
     attention: true,
     attachments: true,
     chat: true,
+    chatCompanion: true,
     comment: true,
   },
 } as const satisfies Record<
@@ -73,6 +79,7 @@ export const KIND_CAPABILITIES = {
     attention: boolean;
     attachments: boolean;
     chat: boolean;
+    chatCompanion: boolean;
     comment: boolean;
   }
 >;

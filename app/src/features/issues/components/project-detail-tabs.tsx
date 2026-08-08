@@ -39,7 +39,7 @@ export function ProjectDetailTabs({
       <div
         role="tablist"
         aria-label="Project detail"
-        className="flex flex-wrap gap-1 border-b border-border"
+        className="flex flex-wrap gap-1 border-b border-border shell:flex-nowrap"
       >
         <TabButton
           selected={overviewSelected}

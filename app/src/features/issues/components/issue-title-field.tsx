@@ -9,7 +9,11 @@ export function IssueTitleField({ issue }: { issue: IssueDetail }) {
     <InlineField
       value={issue.title}
       issue={issue}
-      displayClassName="break-words text-xl font-semibold tracking-tight text-foreground"
+      displayClassName={
+        issue.kind === "project"
+          ? "break-normal text-xl font-semibold tracking-tight text-foreground"
+          : "break-words text-xl font-semibold tracking-tight text-foreground"
+      }
       inputClassName="h-auto py-1 text-xl font-semibold tracking-tight"
       validate={(next) => (next.trim() ? null : "Title cannot be empty")}
       onSave={async (next) => {
