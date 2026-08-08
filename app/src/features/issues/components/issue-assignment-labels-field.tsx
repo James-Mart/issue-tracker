@@ -11,9 +11,11 @@ import { AssignmentLabelsEditor } from "./assignment-labels-editor";
 export function IssueAssignmentLabelsField({
   issue,
   catalog,
+  embedded = false,
 }: {
   issue: LabelAssignableIssue;
   catalog: ProjectLabel[];
+  embedded?: boolean;
 }) {
   const update = useUpdateIssue();
   const { error, saving, run } = useIssuePatchAction();
@@ -25,6 +27,7 @@ export function IssueAssignmentLabelsField({
       selected={selected}
       disabled={saving}
       error={error}
+      embedded={embedded}
       onChange={(next) => {
         const sanitized = sanitizeAssignmentIds(next, catalog);
         if (assignmentLabelsEqual(issue.labels, sanitized)) return;

@@ -12,8 +12,10 @@ import { ProjectLabelsEditor } from "./project-labels-editor";
 
 export function IssueProjectLabelsField({
   issue,
+  embedded = false,
 }: {
   issue: Extract<IssueDetail, { kind: "project" }>;
+  embedded?: boolean;
 }) {
   const update = useUpdateIssue();
   const { error, saving, run } = useIssuePatchAction();
@@ -55,6 +57,7 @@ export function IssueProjectLabelsField({
       drafts={drafts}
       disabled={saving}
       error={labelsError ?? error}
+      embedded={embedded}
       onChange={(next) => {
         setDrafts(next);
         setLabelsError(null);

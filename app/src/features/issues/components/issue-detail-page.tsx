@@ -27,19 +27,13 @@ import {
 } from "../lib/chat-companion";
 import { isInFlight } from "../lib/derived";
 import { kindHasOwnFlow } from "../lib/own-flow";
-import {
-  isLabelAssignableIssue,
-  projectCatalogLabels,
-} from "../lib/project-labels";
+import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
-import { GitStackPanel } from "./git-stack-panel";
 import { StoryTaskRail } from "./story-task-rail";
 import { EpicDepsPanel } from "./epic-deps-panel";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
-import { IssueAssignmentLabelsField } from "./issue-assignment-labels-field";
-import { IssueProjectLabelsField } from "./issue-project-labels-field";
 import { IssueSupportingDocsField } from "./issue-supporting-docs-field";
 import { IssueInspirationAppsField } from "./issue-inspiration-apps-field";
 import { ChatPanel } from "./chat-panel";
@@ -185,16 +179,7 @@ function IssueDetailView({
 }) {
   const overview = (
     <>
-      <IssueMetaPanel issue={issue} />
-      {issue.kind === "project" ? (
-        <IssueProjectLabelsField issue={issue} />
-      ) : null}
-      {isLabelAssignableIssue(issue) ? (
-        <IssueAssignmentLabelsField issue={issue} catalog={catalog} />
-      ) : null}
-      {issue.kind === "story" || issue.kind === "task" ? (
-        <GitStackPanel issue={issue} />
-      ) : null}
+      <IssueMetaPanel issue={issue} catalog={catalog} />
       <OwnFlowSlot issue={issue} />
       <IssueAttachmentsSection issue={issue} upload={upload} />
       <IssueDescriptionField issue={issue} upload={upload} />

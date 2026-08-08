@@ -2,6 +2,7 @@ import { FIELD_LABELS } from "@server/fields";
 import type { ProjectLabel } from "@server/schemas";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils/cn";
 import { toggleAssignmentId } from "../lib/project-labels";
 import { ProjectLabelChip } from "./project-label-chip";
 
@@ -11,16 +12,24 @@ export function AssignmentLabelsEditor({
   onChange,
   disabled,
   error,
+  /** When true, omit card chrome and the Labels heading (parent MetaRow supplies it). */
+  embedded = false,
 }: {
   catalog: ProjectLabel[];
   selected: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
   error?: string | null;
+  embedded?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-md border p-3">
-      <Label>{FIELD_LABELS.labels}</Label>
+    <div
+      className={cn(
+        "flex flex-col gap-2",
+        !embedded && "gap-3 rounded-md border p-3",
+      )}
+    >
+      {embedded ? null : <Label>{FIELD_LABELS.labels}</Label>}
       {catalog.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No labels in project catalog.
