@@ -89,11 +89,13 @@ This writes (or updates) `~/.cursor/hooks.json` with `hooks.preToolUse` entries
 for `app/hooks/strip-cursor-attribution.mjs` and `app/hooks/port-kill-guard.mjs`
 before every Shell tool call. The attribution hook strips Cursor's
 `Co-authored-by: Cursor <cursoragent@cursor.com>` trailer from `git commit`
-commands so agent-driven commits stay clean. The kill-guard refuses kill-shaped
-commands aimed at ports this conversation does not currently own and redirects
-the agent to `agent_stack_start`. The server refuses to start until both hooks
-are registered for the current checkout. Re-run after moving the checkout; the
-command is idempotent and preserves unrelated hooks.
+commands and the trailing `Made with [Cursor](https://cursor.com)` footer from
+agent `gh pr create` `--body` / HEREDOC bodies so agent-driven commits and PRs
+stay clean. The kill-guard refuses kill-shaped commands aimed at ports this
+conversation does not currently own and redirects the agent to
+`agent_stack_start`. The server refuses to start until both hooks are registered
+for the current checkout. Re-run after moving the checkout; the command is
+idempotent and preserves unrelated hooks.
 
 ## How the pieces fit
 

@@ -12,6 +12,7 @@ const scriptPath = join(
 const CURSOR_TRAILER =
   'Co-authored-by: Cursor <cursoragent@cursor.com>';
 const OTHER_TRAILER = "Co-authored-by: Ada <ada@example.com>";
+const PR_FOOTER = "Made with [Cursor](https://cursor.com)";
 
 function runHook(stdin: string): {
   stdout: string;
@@ -97,6 +98,76 @@ describe("stripCursorAttribution", () => {
         `git commit --trailer "${OTHER_TRAILER}" --trailer "${CURSOR_TRAILER}" -m "x"`,
       ),
     ).toBe(`git commit --trailer "${OTHER_TRAILER}" -m "x"`);
+  });
+
+  it("removes trailing Made-with-Cursor footer from quoted --body", () => {
+    expect(
+      stripCursorAttribution(
+        `gh pr create --title "t" --body "## Summary\n\nHello\n\n${PR_FOOTER}"`,
+      ),
+    ).toBe('gh pr create --title "t" --body "## Summary\n\nHello"');
+  });
+
+  it("removes footer after literal \\n\\n escapes in a one-line --body", () => {
+    expect(
+      stripCursorAttribution(
+        'gh pr create --title "t" --body "## Summary\\n\\nHello\\n\\n' +
+          PR_FOOTER +
+          '"',
+      ),
+    ).toBe('gh pr create --title "t" --body "## Summary\\n\\nHello"');
+  });
+
+  it("removes trailing Made-with-Cursor footer from HEREDOC --body", () => {
+    const input = `gh pr create --draft --title "t" --body "$(cat <<'EOF'
+## Summary
+
+Hello
+
+${PR_FOOTER}
+EOF
+)"`;
+    const expected = `gh pr create --draft --title "t" --body "$(cat <<'EOF'
+## Summary
+
+Hello
+EOF
+)"`;
+    expect(stripCursorAttribution(input)).toBe(expected);
+  });
+
+  it("returns null when gh pr create body does not end with the footer", () => {
+    expect(
+      stripCursorAttribution(
+        `gh pr create --title "t" --body "## Summary\n\nHello"`,
+      ),
+    ).toBeNull();
+  });
+
+  it("leaves --body-file commands untouched", () => {
+    expect(
+      stripCursorAttribution(
+        `gh pr create --title "t" --body-file /tmp/pr.md`,
+      ),
+    ).toBeNull();
+  });
+
+  it("applies both trailer and PR-footer transforms in one pass", () => {
+    const input = `git commit --trailer "${CURSOR_TRAILER}" -m "x" && gh pr create --title "t" --body "$(cat <<'EOF'
+## Summary
+
+Hello
+
+${PR_FOOTER}
+EOF
+)"`;
+    const expected = `git commit -m "x" && gh pr create --title "t" --body "$(cat <<'EOF'
+## Summary
+
+Hello
+EOF
+)"`;
+    expect(stripCursorAttribution(input)).toBe(expected);
   });
 });
 
