@@ -3,7 +3,6 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
 export const PORT = Number(process.env.PORT ?? 8061);
-export const PROD_PORT = 8061;
 
 const serverDir = fileURLToPath(new URL(".", import.meta.url));
 export const appDir = join(serverDir, "..");
@@ -26,4 +25,4 @@ export const forumCredDir =
 export const isProdEnv = process.env.NODE_ENV === "production";
 export const distDir = join(appDir, "dist");
 export const hasBuiltClient = existsSync(distDir);
-export const listenPort = isProdEnv ? PROD_PORT : PORT;
+export const listenPort = PORT;
