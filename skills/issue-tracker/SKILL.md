@@ -62,8 +62,9 @@ cd app && npm run agent-stack -- stop <conversationId>
 ## UI screenshots
 
 For agents validating or attaching UI state, use the Playwright capture script
-(not Cursor IDE browser screenshot tools). Prefer an agent stack base URL over
-the human defaults when verifying your own server changes.
+(not Cursor IDE browser screenshot tools). Call `agent_stack_start` when
+needed and export `AGENT_STACK_BASE_URL` into the shell; the script uses that
+env as its default base URL (still overridable with `--base-url`).
 
 ```bash
 cd app && npm run screenshots -- [options] <path-or-dialog>...

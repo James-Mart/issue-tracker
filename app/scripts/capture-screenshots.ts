@@ -7,6 +7,7 @@
 
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
+import { pathToFileURL } from "url";
 import { chromium, type Page } from "@playwright/test";
 
 const DIALOGS = [
@@ -44,8 +45,16 @@ type Options = {
 };
 
 const THEME_STORAGE_KEY = "ui-theme";
-const DEFAULT_BASE_URL = "http://localhost:8060";
+export const DEFAULT_BASE_URL = "http://localhost:8060";
 const DEFAULT_OUT = "/tmp/issue-tracker-screenshots";
+
+export function resolveDefaultBaseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const fromEnv = env.AGENT_STACK_BASE_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+  return DEFAULT_BASE_URL;
+}
 const SETTLE_MS = 800;
 const DEFAULT_VIEWPORT: Viewport = { width: 1440, height: 900 };
 
@@ -64,7 +73,7 @@ Pages: path targets starting with / (e.g. /, /projects/issue-tracker?lens=struct
 Dialogs: ${DIALOGS.join(", ")}
 
 Options:
-  --base-url <url>   Base URL (default ${DEFAULT_BASE_URL})
+  --base-url <url>   Base URL (default AGENT_STACK_BASE_URL or ${DEFAULT_BASE_URL})
   --out <dir>        Output directory (default ${DEFAULT_OUT})
   --project <id>     Project for --all / dialog context (default: issue-tracker if present, else first project)
   --theme <mode>     light | dark | both (default dark)
@@ -93,9 +102,9 @@ function isDialog(target: string): target is DialogId {
   return (DIALOGS as readonly string[]).includes(target);
 }
 
-function parseArgs(argv: string[]): Options {
+export function parseArgs(argv: string[]): Options {
   const opts: Options = {
-    baseUrl: DEFAULT_BASE_URL,
+    baseUrl: resolveDefaultBaseUrl(),
     out: DEFAULT_OUT,
     project: null,
     theme: "dark",
@@ -523,7 +532,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error(err instanceof Error ? err.message : err);
-  process.exit(1);
-});
+const isMain =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+
+if (isMain) {
+  main().catch((err) => {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+}

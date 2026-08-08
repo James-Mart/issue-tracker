@@ -68,7 +68,10 @@ the implementor). Unfixed prior findings remain actionable.
 
 Do **not** post the comment or stop from the review include. After the review
 include prepares the comment body, do a **best-effort** UI look for UI-related
-Tasks (same UI-related judgment as the `designSystem` consult): run
+Tasks (same UI-related judgment as the `designSystem` consult): when verifying
+server/UI changes from agents-chat, call `agent_stack_start` first (or export
+`AGENT_STACK_BASE_URL` from an existing stack); `npm run screenshots` uses that
+env as its default base URL. Run
 `cd app && npm run screenshots -- <path-or-dialog>` and read the PNGs under the
 output dir (default
 `/tmp/issue-tracker-screenshots`) to confirm the Task's visible behavior is
