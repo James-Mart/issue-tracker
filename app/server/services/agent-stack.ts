@@ -45,11 +45,24 @@ const agentStackStateSchema = z.object({
   baseUrl: z.string().min(1),
   startedAt: z.string().min(1),
   processes: z.array(agentStackProcessSchema),
+  /**
+   * Cursor runtime `conversation_id` values (each session's agentId) that have
+   * an `agent-stack-cursor-index` entry pointing at this app conversation.
+   */
+  cursorConversationIds: z.array(z.string().min(1)).default([]),
 });
 
 export type AgentStackRole = z.infer<typeof agentStackProcessSchema>["role"];
 export type AgentStackProcess = z.infer<typeof agentStackProcessSchema>;
 export type AgentStackState = z.infer<typeof agentStackStateSchema>;
+
+export interface AgentStackStartOptions {
+  /**
+   * Cursor `conversation_id` for the calling session — the same value
+   * `preToolUse` hooks receive on stdin. Required for the kill-guard index.
+   */
+  cursorConversationId?: string;
+}
 
 export interface AgentStackHandle {
   state: AgentStackState;
@@ -72,6 +85,14 @@ function assertConversationId(conversationId: string): void {
   }
 }
 
+function assertCursorConversationId(cursorConversationId: string): void {
+  if (!isSlugSafe(cursorConversationId)) {
+    throw new Error(
+      `agent stack cursorConversationId must be a slug, got ${JSON.stringify(cursorConversationId)}`,
+    );
+  }
+}
+
 /** Peer of the conversation's `agent-state/`. */
 export function agentStackDir(conversationId: string): string {
   assertConversationId(conversationId);
@@ -80,6 +101,58 @@ export function agentStackDir(conversationId: string): string {
 
 export function agentStackStatePath(conversationId: string): string {
   return join(agentStackDir(conversationId), "state.json");
+}
+
+/** Disk index the kill-guard reads without talking to the live server. */
+export function agentStackCursorIndexDir(): string {
+  return join(conversationsDir, "agent-stack-cursor-index");
+}
+
+export function agentStackCursorIndexPath(cursorConversationId: string): string {
+  assertCursorConversationId(cursorConversationId);
+  return join(agentStackCursorIndexDir(), `${cursorConversationId}.json`);
+}
+
+function writeCursorIndex(
+  cursorConversationId: string,
+  appConversationId: string,
+): void {
+  assertCursorConversationId(cursorConversationId);
+  assertConversationId(appConversationId);
+  mkdirSync(agentStackCursorIndexDir(), { recursive: true });
+  writeFileSync(
+    agentStackCursorIndexPath(cursorConversationId),
+    `${JSON.stringify({ appConversationId }, null, 2)}\n`,
+  );
+}
+
+function removeCursorIndex(cursorConversationId: string): void {
+  assertCursorConversationId(cursorConversationId);
+  rmSync(agentStackCursorIndexPath(cursorConversationId), { force: true });
+}
+
+function rememberCursorConversationId(
+  state: AgentStackState,
+  cursorConversationId: string,
+): AgentStackState {
+  assertCursorConversationId(cursorConversationId);
+  if (state.cursorConversationIds.includes(cursorConversationId)) {
+    writeCursorIndex(cursorConversationId, state.conversationId);
+    return state;
+  }
+  const next: AgentStackState = {
+    ...state,
+    cursorConversationIds: [...state.cursorConversationIds, cursorConversationId],
+  };
+  writeAgentStackState(next);
+  writeCursorIndex(cursorConversationId, state.conversationId);
+  return next;
+}
+
+function clearCursorIndexes(state: AgentStackState): void {
+  for (const cursorConversationId of state.cursorConversationIds) {
+    removeCursorIndex(cursorConversationId);
+  }
 }
 
 function logPath(conversationId: string, role: AgentStackRole): string {
@@ -273,16 +346,28 @@ async function waitForReady(
  * Start (or adopt) this conversation's stack and return the env contract.
  * A recorded stack whose processes are gone — a crash, or a machine restart —
  * is torn down first, so its state never squats the conversation.
+ *
+ * When `cursorConversationId` is set, also writes the kill-guard disk index
+ * entry for that Cursor session after `state.json`.
  */
 export async function startAgentStack(
   conversationId: string,
+  options: AgentStackStartOptions = {},
 ): Promise<AgentStackHandle> {
   assertConversationId(conversationId);
+  const { cursorConversationId } = options;
+  if (cursorConversationId !== undefined) {
+    assertCursorConversationId(cursorConversationId);
+  }
 
   const existing = readAgentStackState(conversationId);
   if (existing) {
     if (isStackLive(existing)) {
-      return { state: existing, env: agentStackEnv(existing), reused: true };
+      const state =
+        cursorConversationId === undefined
+          ? existing
+          : rememberCursorConversationId(existing, cursorConversationId);
+      return { state, env: agentStackEnv(state), reused: true };
     }
     await stopAgentStack(conversationId);
   }
@@ -312,15 +397,19 @@ export async function startAgentStack(
     throw err;
   }
 
-  const state: AgentStackState = {
+  let state: AgentStackState = {
     conversationId,
     apiPort,
     vitePort,
     baseUrl,
     startedAt: new Date().toISOString(),
     processes: spawned.map(({ record }) => record),
+    cursorConversationIds: [],
   };
   writeAgentStackState(state);
+  if (cursorConversationId !== undefined) {
+    state = rememberCursorConversationId(state, cursorConversationId);
+  }
 
   try {
     await waitForReady(conversationId, baseUrl, spawned);
@@ -379,6 +468,7 @@ export async function stopAgentStack(
     );
   }
 
+  clearCursorIndexes(state);
   rmSync(agentStackStatePath(conversationId), { force: true });
   return { stopped: true, state };
 }

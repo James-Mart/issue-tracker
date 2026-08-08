@@ -123,6 +123,8 @@ describe("agent sessions manager", () => {
       storeDir: join(dirname(issuesRoot), "conversations", meta.id, "agent-state"),
     });
     expect(fake.created[0]?.customTools?.delegate).toBeDefined();
+    expect(fake.created[0]?.customTools?.agent_stack_start).toBeDefined();
+    expect(fake.created[0]?.customTools?.agent_stack_stop).toBeDefined();
     expect(fake.created[0]?.agents).toEqual(expect.any(Object));
     expect(fake.resumed).toHaveLength(0);
     expect(fake.handles[0]?.sends).toEqual([
@@ -130,6 +132,57 @@ describe("agent sessions manager", () => {
     ]);
 
     expect(readConversation(meta.id).meta.agentId).toBe(FAKE_AGENT_ID);
+
+    // Cursor conversation_id for hooks is the runtime agentId; the tool must
+    // see it after create without taking it as an argument.
+    const { agentStackDir, agentStackStatePath, agentStackCursorIndexPath } =
+      await import("./agent-stack.js");
+    const { spawn } = await import("node:child_process");
+    const { writeFileSync, mkdirSync, readFileSync, existsSync } =
+      await import("node:fs");
+    const child = spawn("sh", ["-c", "sleep 300"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    const pid = child.pid!;
+    child.unref();
+    const procStat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const startTok = procStat
+      .slice(procStat.lastIndexOf(")") + 2)
+      .split(" ")[19]!;
+    mkdirSync(agentStackDir(meta.id), { recursive: true });
+    writeFileSync(
+      agentStackStatePath(meta.id),
+      JSON.stringify({
+        conversationId: meta.id,
+        apiPort: 43001,
+        vitePort: 43002,
+        baseUrl: "http://127.0.0.1:43002",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        processes: [{ role: "api", pid, startTime: startTok }],
+      }),
+    );
+    try {
+      const started = (await fake.created[0]!.customTools!.agent_stack_start!.execute(
+        {},
+        {},
+      )) as { reused: boolean };
+      expect(started.reused).toBe(true);
+      expect(
+        JSON.parse(
+          readFileSync(agentStackCursorIndexPath(FAKE_AGENT_ID), "utf8"),
+        ),
+      ).toEqual({ appConversationId: meta.id });
+      await fake.created[0]!.customTools!.agent_stack_stop!.execute({}, {});
+      expect(existsSync(agentStackStatePath(meta.id))).toBe(false);
+      expect(existsSync(agentStackCursorIndexPath(FAKE_AGENT_ID))).toBe(false);
+    } finally {
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {
+        // Already gone.
+      }
+    }
   });
 
   it("resumes when meta.agentId is set", async () => {

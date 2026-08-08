@@ -104,6 +104,25 @@ describe("createDelegateCustomTools", () => {
     ]);
   });
 
+  it("exposes agent-stack tools when the conversation and cursor id getter are set", () => {
+    const customTools = createDelegateCustomTools({
+      sdk: createFakeAgentSdk({ stream: ASSISTANT_STREAM }),
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: "app-conv",
+      getCursorConversationId: () => "cursor-1",
+    });
+
+    expect(Object.keys(customTools).sort()).toEqual([
+      "agent_stack_start",
+      "agent_stack_stop",
+      "delegate",
+      "delegations",
+      "file_cursor_sdk_bug",
+    ]);
+  });
+
   it("creates a nested agent on the role's mapped pin with the role body prepended", async () => {
     const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
     const customTools = createDelegateCustomTools({
@@ -271,6 +290,8 @@ describe("createDelegateCustomTools", () => {
       cwd,
       storeDir,
       agentsDir,
+      conversationId: "app-conv",
+      getCursorConversationId: () => "root-cursor",
     });
 
     await customTools.delegate!.execute(
@@ -280,6 +301,8 @@ describe("createDelegateCustomTools", () => {
 
     const nestedTools = fake.created[0]!.customTools;
     expect(nestedTools?.delegate).toBeDefined();
+    expect(nestedTools?.agent_stack_start).toBeDefined();
+    expect(nestedTools?.agent_stack_stop).toBeDefined();
 
     const nestedResult = await nestedTools!.delegate!.execute(
       { role: "pinned-role", prompt: "inner work" },
@@ -288,6 +311,7 @@ describe("createDelegateCustomTools", () => {
 
     expect(fake.created).toHaveLength(2);
     expect(fake.created[1]!.customTools?.delegate).toBeDefined();
+    expect(fake.created[1]!.customTools?.agent_stack_start).toBeDefined();
     expect(fake.created[1]!.model).toEqual(
       resolveModelSelection("cursor-grok-4.5-high-fast"),
     );

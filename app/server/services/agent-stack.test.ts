@@ -136,12 +136,120 @@ describe("agent stack durable state", () => {
         baseUrl: "http://127.0.0.1:41002",
         startedAt: "2026-01-01T00:00:00.000Z",
         processes: [],
+        cursorConversationIds: [],
       }),
     ).toEqual({
       AGENT_STACK_API_PORT: "41001",
       AGENT_STACK_VITE_PORT: "41002",
       AGENT_STACK_BASE_URL: "http://127.0.0.1:41002",
     });
+  });
+});
+
+describe("agent stack cursor index", () => {
+  it("maps cursor conversation id to the app conversation under conversations/", async () => {
+    const { agentStackCursorIndexPath } = await loadService();
+    const { conversationsDir } = await loadConfig();
+
+    expect(agentStackCursorIndexPath("cursor-session-1")).toBe(
+      join(
+        conversationsDir,
+        "agent-stack-cursor-index",
+        "cursor-session-1.json",
+      ),
+    );
+  });
+
+  it("writes and clears the index with start/stop when cursor id is provided", async () => {
+    const {
+      agentStackCursorIndexPath,
+      agentStackDir,
+      agentStackStatePath,
+      readAgentStackState,
+      startAgentStack,
+      stopAgentStack,
+    } = await loadService();
+    const pid = spawnGroupLeader(join(root, "child.pid"));
+    mkdirSync(agentStackDir("my-conversation"), { recursive: true });
+    writeFileSync(
+      agentStackStatePath("my-conversation"),
+      JSON.stringify({
+        conversationId: "my-conversation",
+        apiPort: 41001,
+        vitePort: 41002,
+        baseUrl: "http://127.0.0.1:41002",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        processes: [{ role: "api", pid, startTime: procStartTime(pid) }],
+      }),
+    );
+
+    const handle = await startAgentStack("my-conversation", {
+      cursorConversationId: "cursor-session-1",
+    });
+
+    expect(handle.reused).toBe(true);
+    expect(readAgentStackState("my-conversation")?.cursorConversationIds).toEqual([
+      "cursor-session-1",
+    ]);
+    expect(
+      JSON.parse(readFileSync(agentStackCursorIndexPath("cursor-session-1"), "utf8")),
+    ).toEqual({ appConversationId: "my-conversation" });
+
+    await stopAgentStack("my-conversation");
+
+    expect(existsSync(agentStackStatePath("my-conversation"))).toBe(false);
+    expect(existsSync(agentStackCursorIndexPath("cursor-session-1"))).toBe(false);
+  });
+
+  it("indexes a second concurrent conversation under a different cursor id", async () => {
+    const {
+      agentStackCursorIndexPath,
+      agentStackDir,
+      agentStackStatePath,
+      startAgentStack,
+      stopAgentStack,
+    } = await loadService();
+
+    const pidA = spawnGroupLeader(join(root, "child-a.pid"));
+    const pidB = spawnGroupLeader(join(root, "child-b.pid"));
+    for (const [conversationId, pid, apiPort, vitePort] of [
+      ["conv-a", pidA, 41001, 41002],
+      ["conv-b", pidB, 41003, 41004],
+    ] as const) {
+      mkdirSync(agentStackDir(conversationId), { recursive: true });
+      writeFileSync(
+        agentStackStatePath(conversationId),
+        JSON.stringify({
+          conversationId,
+          apiPort,
+          vitePort,
+          baseUrl: `http://127.0.0.1:${vitePort}`,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          processes: [{ role: "api", pid, startTime: procStartTime(pid) }],
+        }),
+      );
+    }
+
+    const a = await startAgentStack("conv-a", {
+      cursorConversationId: "cursor-a",
+    });
+    const b = await startAgentStack("conv-b", {
+      cursorConversationId: "cursor-b",
+    });
+
+    expect(a.state.apiPort).not.toBe(b.state.apiPort);
+    expect(a.state.vitePort).not.toBe(b.state.vitePort);
+    expect(
+      JSON.parse(readFileSync(agentStackCursorIndexPath("cursor-a"), "utf8")),
+    ).toEqual({ appConversationId: "conv-a" });
+    expect(
+      JSON.parse(readFileSync(agentStackCursorIndexPath("cursor-b"), "utf8")),
+    ).toEqual({ appConversationId: "conv-b" });
+
+    await stopAgentStack("conv-a");
+    await stopAgentStack("conv-b");
+    expect(existsSync(agentStackCursorIndexPath("cursor-a"))).toBe(false);
+    expect(existsSync(agentStackCursorIndexPath("cursor-b"))).toBe(false);
   });
 });
 

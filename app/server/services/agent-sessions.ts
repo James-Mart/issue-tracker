@@ -118,11 +118,17 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     }
 
     const agents = loadPluginAgentDefinitions();
+    // Local SDK sessionId === agentId; preToolUse stdin conversation_id is that
+    // value. Tools close over this ref so create can fill it after Agent.create.
+    const cursorConversationIdRef: { current: string | undefined } = {
+      current: meta.agentId,
+    };
     const customTools = createDelegateCustomTools({
       sdk,
       cwd,
       storeDir,
       conversationId,
+      getCursorConversationId: () => cursorConversationIdRef.current,
       agents,
     });
 
@@ -143,6 +149,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           agents,
           customTools,
         });
+        cursorConversationIdRef.current = handle.agentId;
         await updateMeta(conversationId, { agentId: handle.agentId });
         await appendEvent(conversationId, {
           type: "error",
@@ -162,6 +169,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         agents,
         customTools,
       });
+      cursorConversationIdRef.current = handle.agentId;
       await updateMeta(conversationId, { agentId: handle.agentId });
     }
 

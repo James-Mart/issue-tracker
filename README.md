@@ -58,7 +58,9 @@ the CLI with `npx tsx cli.ts <command>` (see `issue --help` or SPEC.md).
 ### Agent verification stack
 
 Agents verify server/UI changes on their own stack rather than restarting the
-one you are using:
+one you are using. In agents-chat, call the custom tools `agent_stack_start`
+and `agent_stack_stop` (session-scoped; no conversation-id argument). From a
+shell:
 
 ```bash
 cd app && npm run agent-stack -- start <conversationId>
@@ -67,11 +69,13 @@ cd app && npm run agent-stack -- stop <conversationId>
 
 `start` picks two free ports, brings up the API and Vite in watch mode against
 them, records the ports and pids at
-`conversations/<conversationId>/agent-stack/state.json`, and prints the env
-contract callers use — `AGENT_STACK_API_PORT`, `AGENT_STACK_VITE_PORT`, and
-`AGENT_STACK_BASE_URL`. Starting again while that conversation's stack is live
-returns the running one. `stop` frees the ports and clears the state; child
-output stays in `api.log` / `vite.log` next to it.
+`conversations/<conversationId>/agent-stack/state.json`, indexes the Cursor
+session under `conversations/agent-stack-cursor-index/` for the kill-guard, and
+prints the env contract callers use — `AGENT_STACK_API_PORT`,
+`AGENT_STACK_VITE_PORT`, and `AGENT_STACK_BASE_URL`. Starting again while that
+conversation's stack is live returns the running one. `stop` frees the ports
+and clears state plus the cursor index; child output stays in `api.log` /
+`vite.log` next to the state file.
 
 ### Cursor commit attribution hook
 
