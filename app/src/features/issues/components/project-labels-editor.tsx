@@ -1,32 +1,37 @@
-import { useRef } from "react";
+import { useId, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { FIELD_LABELS } from "@server/fields";
 import { LABEL_COLOR_RE } from "@server/schemas";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils/cn";
 import {
   LABEL_DESCRIPTION_MAX,
   newCatalogDraft,
+  normalizeCatalogLabel,
+  validateCatalogDraft,
   type CatalogDraft,
 } from "../lib/project-labels";
-import { DetailEyebrow } from "./detail-section";
+import { SettingsCard } from "./detail-section";
 import { ProjectLabelChip } from "./project-label-chip";
 
 function ColorField({
   id,
   value,
-  disabled,
   onChange,
-  onCommit,
 }: {
   id: string;
   value: string;
-  disabled?: boolean;
   onChange: (value: string) => void;
-  onCommit?: () => void;
 }) {
   const pickerValue = LABEL_COLOR_RE.test(value) ? value : "#64748b";
   return (
@@ -35,20 +40,14 @@ function ColorField({
         id={`${id}-picker`}
         type="color"
         value={pickerValue}
-        disabled={disabled}
-        onChange={(e) => {
-          onChange(e.target.value.toLowerCase());
-          onCommit?.();
-        }}
+        onChange={(e) => onChange(e.target.value.toLowerCase())}
         className="h-9 w-10 cursor-pointer rounded border border-border bg-transparent p-1"
         title="Pick color"
       />
       <Input
         id={id}
         value={value}
-        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        onBlur={() => onCommit?.()}
         className="font-mono"
         placeholder="#rrggbb"
         spellCheck={false}
@@ -57,162 +56,201 @@ function ColorField({
   );
 }
 
+/** Focused editor for one catalog label; the chip row stays quiet behind it. */
+function LabelDialog({
+  draft,
+  isNew,
+  siblingIds,
+  onCancel,
+  onSave,
+  onRemove,
+}: {
+  draft: CatalogDraft;
+  isNew: boolean;
+  siblingIds: string[];
+  onCancel: () => void;
+  onSave: (draft: CatalogDraft) => void;
+  onRemove: () => void;
+}) {
+  const fieldId = useId();
+  const [edited, setEdited] = useState(draft);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = () => {
+    const invalid = validateCatalogDraft(edited);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    const id = edited.id.trim();
+    if (siblingIds.includes(id)) {
+      setError(`Duplicate label id "${id}"`);
+      return;
+    }
+    onSave(edited);
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent data-testid="project-label-dialog">
+        <DialogHeader>
+          <DialogTitle>{isNew ? "New label" : "Edit label"}</DialogTitle>
+          <DialogDescription>
+            Labels in this catalog are the ones you can assign on epics, ideas,
+            and stories.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor={`${fieldId}-id`}>Id</Label>
+            <Input
+              id={`${fieldId}-id`}
+              value={edited.id}
+              autoFocus
+              className="font-mono"
+              placeholder="kebab-case"
+              spellCheck={false}
+              onChange={(e) => setEdited({ ...edited, id: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+            />
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor={`${fieldId}-color`}>Color</Label>
+            <ColorField
+              id={`${fieldId}-color`}
+              value={edited.color}
+              onChange={(color) => setEdited({ ...edited, color })}
+            />
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor={`${fieldId}-description`}>
+              Description (optional)
+            </Label>
+            <Input
+              id={`${fieldId}-description`}
+              value={edited.description}
+              maxLength={LABEL_DESCRIPTION_MAX}
+              placeholder="Shown as chip tooltip"
+              onChange={(e) =>
+                setEdited({ ...edited, description: e.target.value })
+              }
+              onKeyDown={(e) => e.key === "Enter" && save()}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            {LABEL_COLOR_RE.test(edited.color.trim()) && edited.id.trim() ? (
+              <ProjectLabelChip label={normalizeCatalogLabel(edited)} />
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Preview appears after id and color are set.
+              </span>
+            )}
+            <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+              {edited.description.length}/{LABEL_DESCRIPTION_MAX}
+            </span>
+          </div>
+
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        </div>
+
+        <DialogFooter className="sm:justify-between">
+          {isNew ? (
+            <span />
+          ) : (
+            <Button variant="ghost" onClick={onRemove}>
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              Remove
+            </Button>
+          )}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={save}>
+              Save
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * The Project label catalog as a chip row: each chip opens a focused editor,
+ * so the settings surface shows the labels themselves rather than a form per
+ * label.
+ */
 export function ProjectLabelsEditor({
   drafts,
-  onChange,
   onCommit,
   error,
   disabled,
-  /** When true, omit card chrome and eyebrow (parent MetaRow supplies Labels). */
-  embedded = false,
 }: {
   drafts: CatalogDraft[];
-  onChange: (drafts: CatalogDraft[]) => void;
-  /** Persist after an atomic change (remove, color pick, or text blur). */
-  onCommit?: (drafts: CatalogDraft[]) => void;
+  /** Persist the whole catalog after an add, edit, or remove. */
+  onCommit: (drafts: CatalogDraft[]) => void;
   error?: string | null;
   disabled?: boolean;
-  embedded?: boolean;
 }) {
-  const draftsRef = useRef(drafts);
-  draftsRef.current = drafts;
+  const [editing, setEditing] = useState<{
+    draft: CatalogDraft;
+    isNew: boolean;
+  } | null>(null);
 
-  const setDraft = (key: string, patch: Partial<CatalogDraft>) => {
-    const next = draftsRef.current.map((draft) =>
-      draft.key === key ? { ...draft, ...patch } : draft,
+  const close = () => setEditing(null);
+
+  const save = (edited: CatalogDraft) => {
+    onCommit(
+      editing?.isNew
+        ? [...drafts, edited]
+        : drafts.map((draft) => (draft.key === edited.key ? edited : draft)),
     );
-    draftsRef.current = next;
-    onChange(next);
+    close();
   };
 
-  const removeDraft = (key: string) => {
-    const next = draftsRef.current.filter((draft) => draft.key !== key);
-    draftsRef.current = next;
-    onChange(next);
-    onCommit?.(next);
+  const remove = (key: string) => {
+    onCommit(drafts.filter((draft) => draft.key !== key));
+    close();
   };
-
-  const commit = () => {
-    onCommit?.(draftsRef.current);
-  };
-
-  const addButton = (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled={disabled}
-      onClick={() => {
-        const next = [...draftsRef.current, newCatalogDraft()];
-        draftsRef.current = next;
-        onChange(next);
-      }}
-    >
-      <Plus className="h-3.5 w-3.5" />
-      Add label
-    </Button>
-  );
 
   return (
-    <section
-      className={cn(
-        embedded ? "min-w-0" : "rounded-lg border border-border bg-card p-5",
-      )}
+    <SettingsCard
+      title={FIELD_LABELS.labels}
+      action={
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          onClick={() => setEditing({ draft: newCatalogDraft(), isNew: true })}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add label
+        </Button>
+      }
     >
-      <div
-        className={cn(
-          "mb-3 flex items-center gap-2",
-          embedded ? "justify-end" : "justify-between",
-        )}
-      >
-        {embedded ? null : <DetailEyebrow>{FIELD_LABELS.labels}</DetailEyebrow>}
-        {addButton}
-      </div>
-
       {drafts.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No labels in the catalog. Add a label to assign on issues.
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-wrap items-center gap-1.5">
           {drafts.map((draft) => (
-            <li
-              key={draft.key}
-              className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3"
-            >
-              <div className="flex items-center justify-between gap-2">
-                {LABEL_COLOR_RE.test(draft.color.trim()) && draft.id.trim() ? (
-                  <ProjectLabelChip
-                    label={{
-                      id: draft.id.trim() || "label",
-                      color: draft.color.trim(),
-                      ...(draft.description.trim()
-                        ? { description: draft.description.trim() }
-                        : {}),
-                    }}
-                  />
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    Preview appears after id and color are set.
-                  </span>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  title="Remove label"
-                  disabled={disabled}
-                  onClick={() => removeDraft(draft.key)}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </Button>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="grid gap-1.5">
-                  <Label htmlFor={`label-id-${draft.key}`}>Id</Label>
-                  <Input
-                    id={`label-id-${draft.key}`}
-                    value={draft.id}
-                    disabled={disabled}
-                    onChange={(e) => setDraft(draft.key, { id: e.target.value })}
-                    onBlur={commit}
-                    className="font-mono"
-                    placeholder="kebab-case"
-                    spellCheck={false}
-                  />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor={`label-color-${draft.key}`}>Color</Label>
-                  <ColorField
-                    id={`label-color-${draft.key}`}
-                    value={draft.color}
-                    disabled={disabled}
-                    onChange={(color) => setDraft(draft.key, { color })}
-                    onCommit={commit}
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor={`label-desc-${draft.key}`}>
-                  Description (optional)
-                </Label>
-                <Input
-                  id={`label-desc-${draft.key}`}
-                  value={draft.description}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    setDraft(draft.key, { description: e.target.value })
-                  }
-                  onBlur={commit}
-                  maxLength={LABEL_DESCRIPTION_MAX}
-                  placeholder="Shown as chip tooltip"
-                />
-                <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                  {draft.description.length}/{LABEL_DESCRIPTION_MAX}
-                </p>
-              </div>
+            <li key={draft.key}>
+              <button
+                type="button"
+                disabled={disabled}
+                aria-label={`Edit label ${draft.id}`}
+                className="rounded-md transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:opacity-50"
+                onClick={() => setEditing({ draft, isNew: false })}
+              >
+                <ProjectLabelChip label={normalizeCatalogLabel(draft)} />
+              </button>
             </li>
           ))}
         </ul>
@@ -220,11 +258,24 @@ export function ProjectLabelsEditor({
 
       {error ? (
         <ShellInlineFault
-          className="mt-3"
+          className="mt-2"
           message={error}
           hint="Fix the label fields, then save again."
         />
       ) : null}
-    </section>
+
+      {editing ? (
+        <LabelDialog
+          draft={editing.draft}
+          isNew={editing.isNew}
+          siblingIds={drafts
+            .filter((draft) => draft.key !== editing.draft.key)
+            .map((draft) => draft.id.trim())}
+          onCancel={close}
+          onSave={save}
+          onRemove={() => remove(editing.draft.key)}
+        />
+      ) : null}
+    </SettingsCard>
   );
 }

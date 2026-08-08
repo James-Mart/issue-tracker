@@ -1,3 +1,11 @@
+import type { IssueKind } from "@server/schemas";
+import { kindHas } from "@server/kind";
+
+/** Kinds that show the docked chat companion on the detail page. */
+export function showsChatCompanion(kind: IssueKind): boolean {
+  return kindHas(kind, "chatCompanion");
+}
+
 /** Detail companion collapse override, persisted as `?chat=`. */
 export const CHAT_COMPANION_STATES = ["expanded", "collapsed"] as const;
 

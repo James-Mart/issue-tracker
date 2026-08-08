@@ -29,17 +29,19 @@ export function ProjectDetailTabs({
       : "overview";
 
   if (previewTabs.length === 0) {
-    return <>{overview}</>;
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto">{overview}</div>
+    );
   }
 
   const overviewSelected = resolvedActive === "overview";
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div
         role="tablist"
         aria-label="Project detail"
-        className="flex flex-wrap gap-1 border-b border-border"
+        className="flex shrink-0 flex-wrap gap-1 border-b border-border shell:flex-nowrap"
       >
         <TabButton
           selected={overviewSelected}
@@ -59,18 +61,28 @@ export function ProjectDetailTabs({
       </div>
       <div
         role="tabpanel"
-        className={cn("flex flex-col gap-4", !overviewSelected && "hidden")}
+        className={cn(
+          "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto",
+          !overviewSelected && "hidden",
+        )}
         {...tabPanelVisibility(overviewSelected)}
       >
         {overview}
       </div>
       {previewTabs.map((tab) => {
         const selected = resolvedActive === tab.key;
+        const fillsReadingArea = tab.format === "html";
         return (
           <div
             key={tab.key}
             role="tabpanel"
-            className={cn(!selected && "hidden")}
+            className={cn(
+              "min-h-0 min-w-0 flex-1",
+              fillsReadingArea
+                ? "flex flex-col"
+                : "overflow-y-auto",
+              !selected && "hidden",
+            )}
             {...tabPanelVisibility(selected)}
           >
             <SupportingDocPreview projectId={projectId} tab={tab} />

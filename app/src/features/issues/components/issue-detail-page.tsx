@@ -17,16 +17,16 @@ import {
   useIssueDetailFileUpload,
   type UploadAttachmentMutation,
 } from "../hooks/use-issue-detail-file-upload";
-import { kindHas } from "../lib/kind";
+import { kindHasOwnFlow } from "../lib/own-flow";
 import { issueBelongsToProject, issuesById } from "../lib/build-tree";
 import { projectPath } from "../lib/links";
 import {
   parseChatCompanionPreference,
   resolveChatCompanionExpanded,
+  showsChatCompanion,
   writeChatCompanionParam,
 } from "../lib/chat-companion";
 import { isInFlight } from "../lib/derived";
-import { kindHasOwnFlow } from "../lib/own-flow";
 import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
@@ -34,11 +34,10 @@ import { StoryTaskRail } from "./story-task-rail";
 import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
-import { IssueSupportingDocsField } from "./issue-supporting-docs-field";
-import { IssueInspirationAppsField } from "./issue-inspiration-apps-field";
 import { ChatPanel } from "./chat-panel";
 import { DetailEyebrow } from "./detail-section";
 import { ProjectDetailTabs } from "./project-detail-tabs";
+import { ProjectSettingsOverview } from "./project-settings-overview";
 import { supportsAttachments } from "../lib/attachments";
 
 /**
@@ -117,15 +116,8 @@ function CompanionSlot({
   );
 }
 
-function IssueDetailBody({
-  issue,
-  upload,
-  catalog,
-}: {
-  issue: IssueDetail;
-  upload?: UploadAttachmentMutation;
-  catalog: ProjectLabel[];
-}) {
+/** Owns chat fetch + `?chat=` companion state; mount only when the companion shows. */
+function IssueDetailCompanion({ issue }: { issue: IssueDetail }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: chat } = useChatQuery(issue.id);
   const attach = supportsAttachments(issue.kind);
@@ -145,9 +137,30 @@ function IssueDetailBody({
   };
 
   return (
+    <CompanionSlot
+      issueId={issue.id}
+      attachmentsIssueId={attach ? issue.id : undefined}
+      expanded={companionExpanded}
+      onExpandedChange={setCompanionExpanded}
+    />
+  );
+}
+
+function IssueDetailBody({
+  issue,
+  upload,
+  catalog,
+}: {
+  issue: IssueDetail;
+  upload?: UploadAttachmentMutation;
+  catalog: ProjectLabel[];
+}) {
+  return (
     <div className="flex min-h-0 flex-1 gap-4">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        <IssueDetailHeader issue={issue} catalog={catalog} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+        <div className="shrink-0">
+          <IssueDetailHeader issue={issue} catalog={catalog} />
+        </div>
 
         <IssueDetailView
           issue={issue}
@@ -156,13 +169,8 @@ function IssueDetailBody({
         />
       </div>
 
-      {kindHas(issue.kind, "chat") ? (
-        <CompanionSlot
-          issueId={issue.id}
-          attachmentsIssueId={attach ? issue.id : undefined}
-          expanded={companionExpanded}
-          onExpandedChange={setCompanionExpanded}
-        />
+      {showsChatCompanion(issue.kind) ? (
+        <IssueDetailCompanion issue={issue} />
       ) : null}
     </div>
   );
@@ -177,31 +185,23 @@ function IssueDetailView({
   catalog: ProjectLabel[];
   upload?: UploadAttachmentMutation;
 }) {
-  const overview = (
+  if (issue.kind === "project") {
+    return (
+      <ProjectDetailTabs
+        projectId={issue.id}
+        supportingDocs={issue.supportingDocs}
+        overview={<ProjectSettingsOverview issue={issue} upload={upload} />}
+      />
+    );
+  }
+
+  return (
     <>
       <IssueMetaPanel issue={issue} catalog={catalog} />
       <OwnFlowSlot issue={issue} />
       <IssueAttachmentsSection issue={issue} upload={upload} />
       <IssueDescriptionField issue={issue} upload={upload} />
-      {issue.kind === "project" ? (
-        <>
-          <IssueSupportingDocsField issue={issue} />
-          <IssueInspirationAppsField issue={issue} />
-        </>
-      ) : null}
     </>
-  );
-
-  if (issue.kind !== "project") {
-    return overview;
-  }
-
-  return (
-    <ProjectDetailTabs
-      projectId={issue.id}
-      supportingDocs={issue.supportingDocs}
-      overview={overview}
-    />
   );
 }
 
@@ -221,8 +221,18 @@ function IssueDetailAttachable({
   const { rootProps } = useIssueDetailFileUpload(upload);
 
   return (
-    <PageShell {...rootProps}>
-      {backLink}
+    <PageShell
+      {...rootProps}
+      className={cn(
+        // Project docs (esp. Design system iframe) need a bounded shell so the
+        // reading area can fill and scroll internally. Match agents page:
+        // subtract the app top bar (3rem), not raw 100svh.
+        issue.kind === "project" &&
+          "h-[calc(100svh-3rem)] min-h-0 overflow-hidden",
+        rootProps.className,
+      )}
+    >
+      <div className="shrink-0">{backLink}</div>
       <IssueDetailBody issue={issue} upload={upload} catalog={catalog} />
     </PageShell>
   );

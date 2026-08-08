@@ -12,7 +12,7 @@ import {
   formatAttachmentSize,
   supportsAttachments,
 } from "../lib/attachments";
-import { DetailEyebrow } from "./detail-section";
+import { SettingsCard } from "./detail-section";
 
 export function IssueAttachmentsSection({
   issue,
@@ -51,27 +51,29 @@ export function AttachmentsPanel({
   };
 
   return (
-    <section className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <DetailEyebrow>Attachments</DetailEyebrow>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onPick}
-          disabled={upload.isPending}
-        >
-          <Upload className="h-3.5 w-3.5" />
-          Upload
-        </Button>
-        <input
-          ref={inputRef}
-          type="file"
-          className="hidden"
-          onChange={(e) => onFileChange(e.target.files)}
-        />
-      </div>
-
+    <SettingsCard
+      title="Attachments"
+      action={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onPick}
+            disabled={upload.isPending}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Upload
+          </Button>
+          <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => onFileChange(e.target.files)}
+          />
+        </>
+      }
+    >
       {error ? (
         <ShellInlineFault
           message={error.message}
@@ -149,6 +151,6 @@ export function AttachmentsPanel({
           hint="Pick the file again, or check the server."
         />
       ) : null}
-    </section>
+    </SettingsCard>
   );
 }

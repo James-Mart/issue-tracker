@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ShellFaultDetail } from "@/app/shell-state";
+import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { requestText } from "@/lib/api/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
@@ -9,24 +10,24 @@ import { supportingDocContentUrl } from "../lib/supporting-docs";
 import { DetailEyebrow } from "./detail-section";
 import { Markdown } from "./markdown";
 
+/** Restrictive sandbox: no scripts, forms, or same-origin access. */
 const HTML_SANDBOX = "";
 
-function PreviewSection({
-  label,
+function StatusSurface({
   tone = "neutral",
   role,
   children,
 }: {
-  label: string;
   tone?: "neutral" | "blocked";
   role?: "status" | "alert";
   children: ReactNode;
 }) {
   const isFault = tone === "blocked";
   return (
-    <section
+    <div
       className={cn(
-        "rounded-lg border p-5",
+        "min-w-0 rounded-lg border p-5",
+        READING_MEASURE_CLASS,
         isFault
           ? "border-[hsl(var(--blocked)/0.45)] bg-[hsl(var(--blocked)/0.08)]"
           : "border-border bg-card",
@@ -34,9 +35,8 @@ function PreviewSection({
       role={role ?? (isFault ? "alert" : undefined)}
       aria-live={role === "status" ? "polite" : undefined}
     >
-      <DetailEyebrow className="mb-3">{label}</DetailEyebrow>
       {children}
-    </section>
+    </div>
   );
 }
 
@@ -55,7 +55,8 @@ function SupportingDocMarkdown({
 
   if (isLoading) {
     return (
-      <PreviewSection label={tab.label} role="status">
+      <StatusSurface role="status">
+        <DetailEyebrow className="mb-3">{tab.label}</DetailEyebrow>
         <p className="mb-3 font-mono text-[11px] text-muted-foreground">
           Loading document…
         </p>
@@ -63,13 +64,14 @@ function SupportingDocMarkdown({
           <Skeleton className="h-6 w-1/3" />
           <Skeleton className="h-24 w-full" />
         </div>
-      </PreviewSection>
+      </StatusSurface>
     );
   }
 
   if (error) {
     return (
-      <PreviewSection label={tab.label} tone="blocked">
+      <StatusSurface tone="blocked">
+        <DetailEyebrow className="mb-3">{tab.label}</DetailEyebrow>
         <div className="text-sm text-muted-foreground">
           <ShellFaultDetail
             message={
@@ -78,27 +80,28 @@ function SupportingDocMarkdown({
             hint="Check the pointer, then reopen this tab."
           />
         </div>
-      </PreviewSection>
+      </StatusSurface>
     );
   }
 
   const body = data ?? "";
   if (!body.trim()) {
     return (
-      <PreviewSection label={tab.label}>
+      <StatusSurface>
+        <DetailEyebrow className="mb-3">{tab.label}</DetailEyebrow>
         <p className="text-sm text-muted-foreground">
           Document is empty. Edit the source file, then reopen this tab.
         </p>
-      </PreviewSection>
+      </StatusSurface>
     );
   }
 
   return (
-    <PreviewSection label={tab.label}>
+    <article className="min-w-0">
       <Markdown issueId={tab.ref.type === "attachment" ? projectId : undefined}>
         {body}
       </Markdown>
-    </PreviewSection>
+    </article>
   );
 }
 
@@ -111,14 +114,14 @@ function SupportingDocHtmlFrame({
 }) {
   const src = supportingDocContentUrl(projectId, tab.ref);
   return (
-    <PreviewSection label={tab.label}>
+    <div className="relative min-h-0 w-full flex-1">
       <iframe
         title={tab.label}
         src={src}
         sandbox={HTML_SANDBOX}
-        className="h-[70vh] w-full rounded-md border border-border bg-[hsl(var(--void))]"
+        className="absolute inset-0 h-full w-full rounded-lg border border-border bg-[hsl(var(--void))]"
       />
-    </PreviewSection>
+    </div>
   );
 }
 
