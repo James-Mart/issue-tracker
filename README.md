@@ -55,6 +55,24 @@ otherwise it runs API-only on `:8061` (use `npm run dev` for the full UI, or
 `npm run build && NODE_ENV=production npm start` to serve the built client). Run
 the CLI with `npx tsx cli.ts <command>` (see `issue --help` or SPEC.md).
 
+### Agent verification stack
+
+Agents verify server/UI changes on their own stack rather than restarting the
+one you are using:
+
+```bash
+cd app && npm run agent-stack -- start <conversationId>
+cd app && npm run agent-stack -- stop <conversationId>
+```
+
+`start` picks two free ports, brings up the API and Vite in watch mode against
+them, records the ports and pids at
+`conversations/<conversationId>/agent-stack/state.json`, and prints the env
+contract callers use — `AGENT_STACK_API_PORT`, `AGENT_STACK_VITE_PORT`, and
+`AGENT_STACK_BASE_URL`. Starting again while that conversation's stack is live
+returns the running one. `stop` frees the ports and clears the state; child
+output stays in `api.log` / `vite.log` next to it.
+
 ### Cursor commit attribution hook
 
 Run once per machine from `app/`:
