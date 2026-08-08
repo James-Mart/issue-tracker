@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -10,10 +9,13 @@ import {
   Lightbulb,
   Plus,
   Trash2,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { assigneeOf } from "@server/assignee";
 import { hasAttention } from "@server/kind";
+import { isArchived } from "@server/services/archived-visibility";
 import {
   CHILD_KIND,
   type DerivedState,
@@ -25,12 +27,12 @@ import { cn } from "@/lib/utils/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { OverviewRow } from "@/components/ui/overview-row";
-import { ProgressRail } from "@/components/ui/rail";
-import { Separator } from "@/components/ui/separator";
+import { StateIcon } from "@/components/ui/rail";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -40,13 +42,28 @@ import {
 } from "../hooks/use-story-tree-dnd";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import type { IssueNode } from "../lib/build-tree";
-import { isIssueComplete } from "../lib/derived";
+import {
+  EPIC_STATUS_LABEL,
+  isInFlight,
+  leafTaskProgressCount,
+  QA_STATUS_LABEL,
+  RETRO_LABEL,
+  SPEC_REVIEW_LABEL,
+  STORY_STATUS_LABEL,
+  TASK_STATUS_LABEL,
+} from "../lib/derived";
 import { issuePath } from "../lib/links";
+import {
+  isLabelAssignableIssue,
+  resolveAssignedLabels,
+} from "../lib/project-labels";
+import { issueRailNodeState } from "../lib/rail-state";
 import { isRowDraggable } from "../lib/story-tree-dnd-logic";
 import { ArchiveIssueButton } from "./archive-issue-button";
 import { EpicAxisChips, StoryAxisChips } from "./axis-chips";
 import { TaskStatusChips } from "./task-status-chips";
 import { ProjectLabelChips } from "./project-label-chips";
+import { useUpdateIssue } from "../api/mutations";
 
 const KIND_ICON: Record<IssueKind, typeof Layers> = {
   project: FolderKanban,
@@ -101,19 +118,6 @@ function TreeRowDerivedMeta({
     );
   }
   return null;
-}
-
-/** Tabular child progress (`done/total`) for OverviewRow count slot. */
-function childProgressCount(
-  node: IssueNode,
-  derived: DerivedMap,
-): string | undefined {
-  const total = node.children.length;
-  if (total === 0) return undefined;
-  const done = node.children.filter((child) =>
-    isIssueComplete(child.issue, derived[child.issue.id]),
-  ).length;
-  return `${done}/${total}`;
 }
 
 function RowActions({ issue }: { issue: IssueRecord }) {
@@ -189,6 +193,176 @@ function RowActions({ issue }: { issue: IssueRecord }) {
   );
 }
 
+/** Read-only chip labels mirrored from the fine-pointer hover overlay. */
+function treeRowTouchChipLabels(
+  issue: IssueRecord,
+  derived: DerivedState | undefined,
+  catalog: ProjectLabel[],
+): string[] {
+  const labels: string[] = [];
+
+  if (isLabelAssignableIssue(issue)) {
+    for (const label of resolveAssignedLabels(issue.labels, catalog)) {
+      labels.push(label.name);
+    }
+  }
+
+  if (issue.kind === "story") {
+    if (derived?.storyStatus) {
+      labels.push(STORY_STATUS_LABEL[derived.storyStatus]);
+    }
+    if (issue.specReview) {
+      labels.push(`specReview: ${SPEC_REVIEW_LABEL[issue.specReview]}`);
+    }
+    if (issue.needsRebase) {
+      labels.push(`needsRebase: ${issue.needsRebase}`);
+    }
+    if (issue.retro) {
+      labels.push(`retro: ${RETRO_LABEL[issue.retro]}`);
+    }
+  }
+
+  if (issue.kind === "epic") {
+    if (derived?.epicStatus) {
+      labels.push(EPIC_STATUS_LABEL[derived.epicStatus]);
+    }
+    if (issue.retro) {
+      labels.push(`retro: ${RETRO_LABEL[issue.retro]}`);
+    }
+  }
+
+  if (issue.kind === "task") {
+    labels.push(TASK_STATUS_LABEL[issue.status]);
+    if (issue.qa) {
+      labels.push(`qa: ${QA_STATUS_LABEL[issue.qa]}`);
+    }
+    if (issue.commitSha) {
+      labels.push(issue.commitSha.slice(0, 7));
+    }
+  }
+
+  return labels;
+}
+
+function TreeRowTouchMenuMeta({ chipLabels }: { chipLabels: string[] }) {
+  if (chipLabels.length === 0) return null;
+
+  return (
+    <>
+      {chipLabels.map((label, index) => (
+        <DropdownMenuItem
+          key={`${label}-${index}`}
+          disabled
+          className="cursor-default opacity-100 focus:bg-transparent"
+          onSelect={(event) => event.preventDefault()}
+        >
+          {label}
+        </DropdownMenuItem>
+      ))}
+      <DropdownMenuSeparator />
+    </>
+  );
+}
+
+/** Flat overflow menu for coarse pointers — no nested dropdown triggers. */
+function TreeRowTouchMenu({
+  issue,
+  derived,
+  catalog,
+}: {
+  issue: IssueRecord;
+  derived?: DerivedState;
+  catalog: ProjectLabel[];
+}) {
+  const openNew = useIssueUiStore((s) => s.openNew);
+  const requestDelete = useIssueUiStore((s) => s.requestDelete);
+  const update = useUpdateIssue();
+  const childKind = CHILD_KIND[issue.kind];
+  const archived = isArchived(issue);
+  const chipLabels = treeRowTouchChipLabels(issue, derived, catalog);
+
+  const toggleArchive = () => {
+    if (issue.kind === "project") return;
+    update.mutate({
+      id: issue.id,
+      patch: { archived: !archived },
+    });
+  };
+
+  return (
+    <>
+      <TreeRowTouchMenuMeta chipLabels={chipLabels} />
+      {issue.kind === "story" && issue.prUrl ? (
+        <DropdownMenuItem asChild>
+          <a href={issue.prUrl} target="_blank" rel="noreferrer">
+            <GitPullRequest className="h-4 w-4" />
+            Open PR
+          </a>
+        </DropdownMenuItem>
+      ) : null}
+      {issue.kind === "story" ? (
+        <>
+          <DropdownMenuItem
+            onSelect={() =>
+              openNew({ presetKind: "task", presetParent: issue.id })
+            }
+          >
+            <Plus className="h-4 w-4" />
+            Add task
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() =>
+              openNew({
+                presetKind: "story",
+                presetParent: issue.partOf,
+                presetStackedOn: issue.id,
+              })
+            }
+          >
+            <Plus className="h-4 w-4" />
+            Add stacked story
+          </DropdownMenuItem>
+        </>
+      ) : childKind ? (
+        <DropdownMenuItem
+          onSelect={() =>
+            openNew({ presetKind: childKind, presetParent: issue.id })
+          }
+        >
+          <Plus className="h-4 w-4" />
+          Add {childKind}
+        </DropdownMenuItem>
+      ) : null}
+      {issue.kind !== "project" ? (
+        archived ? (
+          <DropdownMenuItem
+            disabled={update.isPending}
+            onSelect={toggleArchive}
+          >
+            <ArchiveRestore className="h-4 w-4" />
+            Unarchive
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            disabled={update.isPending}
+            onSelect={toggleArchive}
+          >
+            <Archive className="h-4 w-4" />
+            Archive
+          </DropdownMenuItem>
+        )
+      ) : null}
+      <DropdownMenuItem
+        className="text-destructive focus:text-destructive"
+        onSelect={() => requestDelete(issue.id)}
+      >
+        <Trash2 className="h-4 w-4" />
+        Delete
+      </DropdownMenuItem>
+    </>
+  );
+}
+
 type DerivedMap = Record<string, DerivedState>;
 
 function TreeRow({
@@ -214,7 +388,9 @@ function TreeRow({
   const { isDragging, isDropTarget, ...rowDnDHandlers } = getRowDnDProps(issue);
   const assignee = assigneeOf(issue);
   const attention = hasAttention(issue) && issue.needsAttention;
-  const count = childProgressCount(node, derived);
+  const count = leafTaskProgressCount(issue, issues);
+  const railState = issueRailNodeState(issue, state);
+  const live = isInFlight(issue, state);
 
   return (
     <div>
@@ -247,6 +423,7 @@ function TreeRow({
         </span>
         <OverviewRow
           className="min-w-0 flex-1"
+          overlayGroup={false}
           avatar={
             assignee ? (
               <Avatar name={assignee} size="sm" />
@@ -257,10 +434,30 @@ function TreeRow({
               />
             )
           }
-          sparkline={<ProgressRail issue={issue} state={state} />}
+          stateIcon={<StateIcon state={railState} live={live} />}
           attention={attention}
           blocked={Boolean(state?.blocked)}
           count={count}
+          overlay={
+            <>
+              <ProjectLabelChips issue={issue} catalog={catalog} />
+              {issue.kind === "story" && issue.prUrl ? (
+                <PrLink url={issue.prUrl} />
+              ) : null}
+              <TreeRowDerivedMeta issue={issue} derived={state} />
+              {issue.kind === "task" ? (
+                <TaskStatusChips status={issue.status} qa={issue.qa} />
+              ) : null}
+              <RowActions issue={issue} />
+            </>
+          }
+          touchMenu={
+            <TreeRowTouchMenu
+              issue={issue}
+              derived={state}
+              catalog={catalog}
+            />
+          }
         >
           <Link
             to={issuePath(projectId, issue.id)}
@@ -271,24 +468,6 @@ function TreeRow({
             {issue.title}
           </Link>
         </OverviewRow>
-        <span
-          className={cn(
-            "flex shrink-0 items-center gap-2",
-            "opacity-0 transition-opacity",
-            "group-hover:opacity-100 group-focus-within:opacity-100",
-            "focus-within:opacity-100",
-          )}
-        >
-          <ProjectLabelChips issue={issue} catalog={catalog} />
-          {issue.kind === "story" && issue.prUrl ? (
-            <PrLink url={issue.prUrl} />
-          ) : null}
-          <TreeRowDerivedMeta issue={issue} derived={state} />
-          {issue.kind === "task" ? (
-            <TaskStatusChips status={issue.status} qa={issue.qa} />
-          ) : null}
-          <RowActions issue={issue} />
-        </span>
       </div>
       {hasChildren && expanded ? (
         <div className="ml-4 border-l border-border/60 pl-2">
@@ -352,7 +531,7 @@ export function IssueTree({
   if (nodes.length === 0) {
     return (
       <StoryTreeDnDProvider value={dnd}>
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-1.5">
           {projectId ? (
             <ProjectUnstackDropZone projectId={projectId} issues={issues} />
           ) : null}
@@ -365,20 +544,18 @@ export function IssueTree({
   }
   return (
     <StoryTreeDnDProvider value={dnd}>
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-1.5">
         {projectId ? (
           <ProjectUnstackDropZone projectId={projectId} issues={issues} />
         ) : null}
-        {nodes.map((node, index) => (
-          <Fragment key={node.issue.id}>
-            {index > 0 ? <Separator className="my-3" /> : null}
-            <TreeRow
-              node={node}
-              derived={derived}
-              catalog={catalog}
-              issues={issues}
-            />
-          </Fragment>
+        {nodes.map((node) => (
+          <TreeRow
+            key={node.issue.id}
+            node={node}
+            derived={derived}
+            catalog={catalog}
+            issues={issues}
+          />
         ))}
       </div>
     </StoryTreeDnDProvider>

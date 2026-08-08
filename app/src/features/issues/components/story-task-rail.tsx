@@ -1,9 +1,8 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
+import type { IssueDetail, IssueRecord } from "@server/schemas";
 import { Rail, RailNode } from "@/components/ui/rail";
 import { useIssuesQuery } from "../api/queries";
-import { isInFlight } from "../lib/derived";
 import { issuePath } from "../lib/links";
 import {
   storyTasksForRail,
@@ -38,11 +37,9 @@ function TaskRailLabel({
 function StoryTaskRailView({
   issue,
   issues,
-  derived,
 }: {
   issue: Extract<IssueDetail, { kind: "story" }>;
   issues: IssueRecord[];
-  derived: Record<string, DerivedState>;
 }) {
   const { projectId = "" } = useParams();
   const tasks = useMemo(
@@ -51,11 +48,8 @@ function StoryTaskRailView({
   );
   if (tasks.length === 0) return null;
 
-  // Story-level in-flight, or a spine node mapped in-flight (seed can have an
-  // in-progress task before the Story has branchName / derived in-progress).
-  const live =
-    isInFlight(issue, derived[issue.id]) ||
-    tasks.some((task) => taskRailNodeState(task) === "in-flight");
+  // A task on the spine is in-flight when an agent is actively working it.
+  const live = tasks.some((task) => taskRailNodeState(task) === "in-flight");
 
   return (
     <Rail live={live} data-testid="story-task-rail">
@@ -81,10 +75,6 @@ export function StoryTaskRail({
   const issues = useMemo(() => data?.issues ?? [], [data?.issues]);
   if (!data) return null;
   return (
-    <StoryTaskRailView
-      issue={issue}
-      issues={issues}
-      derived={data.derived}
-    />
+    <StoryTaskRailView issue={issue} issues={issues} />
   );
 }

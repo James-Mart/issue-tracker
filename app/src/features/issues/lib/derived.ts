@@ -1,6 +1,4 @@
 import {
-  EPIC_STATUSES,
-  STORY_STATUSES,
   type StoryStatus,
   type TaskStatus,
   type EpicStatus,
@@ -11,17 +9,6 @@ import {
   type DerivedState,
 } from "@server/schemas";
 import type { BadgeProps } from "@/components/ui/badge";
-
-/** Sparkline stage visual state — idle ahead, current active, done behind/complete. */
-export type StatusStageState = "done" | "current" | "idle";
-
-export interface StatusStage {
-  label: string;
-  state: StatusStageState;
-}
-
-/** Task sparkline sequence — fixing is not a stage (dot stays on in-progress). */
-const TASK_SPARKLINE_STATUSES = ["todo", "in-progress", "done"] as const;
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   todo: "todo",
@@ -113,20 +100,14 @@ export const RETRO_BADGE_VARIANT: Record<
   done: "done",
 };
 
-/** True when work is actively in flight on this issue. */
+/** True when an agent is actively working this task (status in-progress or fixing). */
 export function isInFlight(
   issue: IssueRecord,
-  state: DerivedState | undefined,
+  _state?: DerivedState | undefined,
 ): boolean {
-  if (
+  return (
     issue.kind === "task" &&
     (issue.status === "in-progress" || issue.status === "fixing")
-  ) {
-    return true;
-  }
-  return (
-    state?.storyStatus === "in-progress" ||
-    state?.epicStatus === "in-progress"
   );
 }
 
@@ -154,47 +135,40 @@ export function isIssueComplete(
   return false;
 }
 
-function stagesForIndex(
-  labels: readonly string[],
-  currentIndex: number,
-  completed: boolean,
-): StatusStage[] {
-  return labels.map((label, i) => {
-    if (completed || i < currentIndex) return { label, state: "done" as const };
-    if (i === currentIndex) return { label, state: "current" as const };
-    return { label, state: "idle" as const };
-  });
-}
+type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
 
-/**
- * Sparkline stage list for an issue's primary status enum.
- * Task: todo → in-progress → done (fixing keeps the current dot on in-progress).
- * Story: not-started → in-progress → pr-open → merged.
- * Epic: todo → in-progress → done.
- * Other kinds: [].
- */
-export function statusStages(
+/** Leaf tasks under a Story or Epic; empty for other kinds. */
+export function leafTasksOf(
   issue: IssueRecord,
-  state: DerivedState | undefined,
-): StatusStage[] {
-  if (issue.kind === "task") {
-    const labels = TASK_SPARKLINE_STATUSES.map((s) => TASK_STATUS_LABEL[s]);
-    const status =
-      issue.status === "fixing" ? "in-progress" : issue.status;
-    const currentIndex = TASK_SPARKLINE_STATUSES.indexOf(status);
-    return stagesForIndex(labels, currentIndex, status === "done");
-  }
+  issues: IssueRecord[],
+): TaskRecord[] {
   if (issue.kind === "story") {
-    const labels = STORY_STATUSES.map((s) => STORY_STATUS_LABEL[s]);
-    const status = state?.storyStatus ?? "not-started";
-    const currentIndex = STORY_STATUSES.indexOf(status);
-    return stagesForIndex(labels, currentIndex, status === "merged");
+    return issues.filter(
+      (candidate): candidate is TaskRecord =>
+        candidate.kind === "task" && candidate.partOf === issue.id,
+    );
   }
   if (issue.kind === "epic") {
-    const labels = EPIC_STATUSES.map((s) => EPIC_STATUS_LABEL[s]);
-    const status = state?.epicStatus ?? "todo";
-    const currentIndex = EPIC_STATUSES.indexOf(status);
-    return stagesForIndex(labels, currentIndex, status === "done");
+    const storyIds = new Set(
+      issues
+        .filter((candidate) => candidate.kind === "story" && candidate.partOf === issue.id)
+        .map((candidate) => candidate.id),
+    );
+    return issues.filter(
+      (candidate): candidate is TaskRecord =>
+        candidate.kind === "task" && storyIds.has(candidate.partOf),
+    );
   }
   return [];
+}
+
+/** Tabular leaf-task progress (`done/total`) for row count slots; undefined when none. */
+export function leafTaskProgressCount(
+  issue: IssueRecord,
+  issues: IssueRecord[],
+): string | undefined {
+  const tasks = leafTasksOf(issue, issues);
+  if (tasks.length === 0) return undefined;
+  const done = tasks.filter((task) => task.status === "done").length;
+  return `${done}/${tasks.length}`;
 }

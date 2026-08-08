@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Bot, Plus } from "lucide-react";
+import type { IssueRecord } from "@server/schemas";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
@@ -31,17 +32,19 @@ function CockpitHeader() {
 
 function CockpitFlowRow({
   item,
+  issues,
   projectId,
   projectTitle,
 }: {
   item: FlowItem;
+  issues: IssueRecord[];
   projectId: string;
   projectTitle: string;
 }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
       <div className="min-w-0 flex-1">
-        <FlowRow item={item} to={issuePath(projectId, item.issue.id)} />
+        <FlowRow item={item} issues={issues} to={issuePath(projectId, item.issue.id)} />
       </div>
       <Link
         to={projectPath(projectId)}
@@ -107,6 +110,7 @@ export function CockpitPage() {
               return (
                 <CockpitFlowRow
                   item={item}
+                  issues={issues}
                   projectId={projectId}
                   projectTitle={projectTitle}
                 />

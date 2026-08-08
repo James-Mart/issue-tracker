@@ -12,18 +12,16 @@ import {
 import { BADGE_VARIANTS } from "@/components/ui/badge";
 import {
   EPIC_STATUS_BADGE_VARIANT,
-  EPIC_STATUS_LABEL,
   QA_STATUS_BADGE_VARIANT,
   RETRO_BADGE_VARIANT,
   SPEC_REVIEW_BADGE_VARIANT,
   STORY_STATUS_BADGE_VARIANT,
-  STORY_STATUS_LABEL,
   TASK_STATUS_BADGE_VARIANT,
-  TASK_STATUS_LABEL,
   hasInFlightWork,
   isInFlight,
   isIssueComplete,
-  statusStages,
+  leafTaskProgressCount,
+  leafTasksOf,
 } from "./derived";
 
 const timestamps = {
@@ -65,10 +63,6 @@ function epic(id: string): IssueRecord {
     partOf: "project",
     ...timestamps,
   };
-}
-
-function stageStates(issue: IssueRecord, state?: DerivedState) {
-  return statusStages(issue, state).map((s) => s.state);
 }
 
 const badgeVariantSet = new Set<string>(BADGE_VARIANTS);
@@ -120,17 +114,14 @@ describe("liveness helpers", () => {
     expect(isInFlight(task("b", "fixing"), undefined)).toBe(true);
   });
 
-  it("treats todo and done tasks as not in flight without derived state", () => {
+  it("treats todo and done tasks as not in flight", () => {
     expect(isInFlight(task("a", "todo"), undefined)).toBe(false);
     expect(isInFlight(task("b", "done"), undefined)).toBe(false);
   });
 
-  it("treats derived in-progress story or epic status as in flight", () => {
+  it("does not treat derived in-progress story or epic status as in flight", () => {
     const s = story("s");
     expect(isInFlight(s, { blocked: false, storyStatus: "in-progress" })).toBe(
-      true,
-    );
-    expect(isInFlight(s, { blocked: false, storyStatus: "pr-open" })).toBe(
       false,
     );
     expect(
@@ -138,7 +129,7 @@ describe("liveness helpers", () => {
         { id: "e", kind: "epic", title: "e", partOf: "p", ...timestamps },
         { blocked: false, epicStatus: "in-progress" },
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("detects in-flight work across a set", () => {
@@ -150,118 +141,48 @@ describe("liveness helpers", () => {
     };
     expect(hasInFlightWork(issues, idle)).toBe(false);
 
-    const active = {
+    const storyOnlyActive = {
       ...idle,
       s: { blocked: false, storyStatus: "in-progress" as const },
     };
-    expect(hasInFlightWork(issues, active)).toBe(true);
+    expect(hasInFlightWork(issues, storyOnlyActive)).toBe(false);
 
-    const taskActive = {
-      ...idle,
-      a: { blocked: false },
-      b: { blocked: false },
-      s: { blocked: false, storyStatus: "not-started" as const },
-    };
-    expect(hasInFlightWork([task("t", "fixing")], taskActive)).toBe(true);
+    expect(hasInFlightWork([task("t", "fixing")], idle)).toBe(true);
+    expect(hasInFlightWork([task("t", "in-progress")], idle)).toBe(true);
   });
 });
 
-describe("statusStages", () => {
-  it("emits todo → in-progress → done for tasks", () => {
-    const stages = statusStages(task("t", "todo"), undefined);
-    expect(stages.map((s) => s.label)).toEqual([
-      TASK_STATUS_LABEL.todo,
-      TASK_STATUS_LABEL["in-progress"],
-      TASK_STATUS_LABEL.done,
-    ]);
-    expect(stageStates(task("t", "todo"))).toEqual([
-      "current",
-      "idle",
-      "idle",
-    ]);
-    expect(stageStates(task("t", "in-progress"))).toEqual([
-      "done",
-      "current",
-      "idle",
-    ]);
-    expect(stageStates(task("t", "done"))).toEqual(["done", "done", "done"]);
+describe("leafTaskProgressCount", () => {
+  it("returns done/total for story leaf tasks", () => {
+    const s = story("s1");
+    const issues = [
+      s,
+      { ...task("t1", "done"), partOf: "s1" },
+      { ...task("t2", "todo"), partOf: "s1" },
+      { ...task("t3", "done"), partOf: "s1" },
+    ];
+    expect(leafTasksOf(s, issues)).toHaveLength(3);
+    expect(leafTaskProgressCount(s, issues)).toBe("2/3");
   });
 
-  it("keeps the current dot on in-progress for a fixing task", () => {
-    expect(statusStages(task("a", "fixing"), undefined)).toEqual(
-      statusStages(task("b", "in-progress"), undefined),
+  it("aggregates tasks across stories under an epic", () => {
+    const e = epic("e1");
+    const issues = [
+      e,
+      { ...story("s1"), partOf: "e1" },
+      { ...story("s2"), partOf: "e1" },
+      { ...task("t1", "done"), partOf: "s1" },
+      { ...task("t2", "done"), partOf: "s1" },
+      { ...task("t3", "todo"), partOf: "s2" },
+    ];
+    expect(leafTaskProgressCount(e, issues)).toBe("2/3");
+  });
+
+  it("returns undefined when there are no leaf tasks", () => {
+    expect(leafTaskProgressCount(task("t", "todo"), [task("t", "todo")])).toBe(
+      undefined,
     );
-    expect(stageStates(task("a", "fixing"))).toEqual([
-      "done",
-      "current",
-      "idle",
-    ]);
-  });
-
-  it("lights the right story stage for each status", () => {
-    const s = story("s");
-    for (const status of STORY_STATUSES) {
-      const stages = statusStages(s, { blocked: false, storyStatus: status });
-      expect(stages.map((st) => st.label)).toEqual(
-        STORY_STATUSES.map((id) => STORY_STATUS_LABEL[id]),
-      );
-      const idx = STORY_STATUSES.indexOf(status);
-      if (status === "merged") {
-        expect(stages.every((st) => st.state === "done")).toBe(true);
-      } else {
-        expect(stages.map((st) => st.state)).toEqual(
-          STORY_STATUSES.map((_, i) =>
-            i < idx ? "done" : i === idx ? "current" : "idle",
-          ),
-        );
-      }
-    }
-  });
-
-  it("lights the right epic stage for each status", () => {
-    const e = epic("e");
-    for (const status of EPIC_STATUSES) {
-      const stages = statusStages(e, { blocked: false, epicStatus: status });
-      expect(stages.map((st) => st.label)).toEqual(
-        EPIC_STATUSES.map((id) => EPIC_STATUS_LABEL[id]),
-      );
-      const idx = EPIC_STATUSES.indexOf(status);
-      if (status === "done") {
-        expect(stages.every((st) => st.state === "done")).toBe(true);
-      } else {
-        expect(stages.map((st) => st.state)).toEqual(
-          EPIC_STATUSES.map((_, i) =>
-            i < idx ? "done" : i === idx ? "current" : "idle",
-          ),
-        );
-      }
-    }
-  });
-
-  it("returns [] for kinds with no stage sequence", () => {
-    expect(
-      statusStages(
-        {
-          id: "p",
-          kind: "project",
-          title: "p",
-          ...timestamps,
-        },
-        undefined,
-      ),
-    ).toEqual([]);
-    expect(
-      statusStages(
-        {
-          id: "i",
-          kind: "idea",
-          title: "i",
-          partOf: "p",
-          ...timestamps,
-        },
-        undefined,
-      ),
-    ).toEqual([]);
+    expect(leafTaskProgressCount(epic("e"), [epic("e")])).toBe(undefined);
   });
 });
 

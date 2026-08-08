@@ -1,47 +1,55 @@
 import * as React from "react";
-import type { DerivedState, IssueRecord } from "@server/schemas";
-import {
-  statusStages,
-  type StatusStage,
-  type StatusStageState,
-} from "@/features/issues/lib/derived";
 import type { RailNodeState } from "@/features/issues/lib/rail-state";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/cn";
 
 export type { RailNodeState };
 
-/** Current-hue live glow on a port — arbitrary property so Tailwind emits box-shadow, not a shadow color. */
-const portGlow = "[box-shadow:var(--glow)]";
+/**
+ * Live in-flight emphasis: `--glow` plus the livedot pulse. Arbitrary box-shadow
+ * so Tailwind emits the property, not a shadow color. Pulse respects reduced-motion.
+ */
+const portLive =
+  "[box-shadow:var(--glow)] motion-safe:animate-live-dot";
 
 /** Edge into a node: solid = satisfied/landed hop; dashed = waiting on a dependency. */
 export type RailEdge = "solid" | "dashed";
 
-/** Port ring/fill per state — border color encodes state; the void base keeps ports hollow. */
+/**
+ * Single state→appearance map for RailPort and StateIcon.
+ * ready = hollow ink; in-flight = filled current + glow/pulse; merged = filled
+ * merged (dim); blocked = blocked outline; needs-attention = warn outline.
+ */
 const portStateClasses: Record<RailNodeState, string> = {
   ready: "border-[hsl(var(--ink))] bg-[hsl(var(--void))]",
   "in-flight": "border-[hsl(var(--current))] bg-[hsl(var(--current))]",
   blocked: "border-[hsl(var(--blocked))] bg-[hsl(var(--void))]",
   merged:
     "border-[hsl(var(--merged))] bg-[color-mix(in_srgb,hsl(var(--merged))_22%,hsl(var(--void)))]",
+  "needs-attention": "border-[hsl(var(--warn))] bg-[hsl(var(--void))]",
 };
 
-/** Label ink per state — in-flight lifts to current, blocked recedes to mut. */
+/** Label ink per state — in-flight lifts to current, blocked/attention recede to mut. */
 const labelStateClasses: Record<RailNodeState, string> = {
   ready: "text-foreground",
   "in-flight": "text-[hsl(var(--current))]",
   blocked: "text-muted-foreground",
   merged: "text-foreground",
+  "needs-attention": "text-[hsl(var(--warn))]",
+};
+
+/** Accessible name for the label-free StateIcon (color+shape carry the state visually). */
+const stateIconLabel: Record<RailNodeState, string> = {
+  ready: "ready",
+  "in-flight": "in flight",
+  blocked: "blocked",
+  merged: "done",
+  "needs-attention": "needs attention",
 };
 
 export interface RailPortProps {
   state: RailNodeState;
   label?: React.ReactNode;
-  /** Force the current-hue glow; defaults to on for in-flight ports. */
+  /** When true, apply the current-hue live glow/pulse. */
   glow?: boolean;
   className?: string;
   portClassName?: string;
@@ -57,16 +65,18 @@ export function RailPort({
   portClassName,
   labelClassName,
 }: RailPortProps) {
-  const showGlow = glow ?? state === "in-flight";
+  const showLive = glow === true;
 
   return (
     <span className={cn(className)}>
       <span
         aria-hidden="true"
+        data-testid="rail-port"
+        data-state={state}
         className={cn(
           "h-3 w-3 shrink-0 rounded-full border-2",
           portStateClasses[state],
-          showGlow && portGlow,
+          showLive && portLive,
           portClassName,
         )}
       />
@@ -81,6 +91,32 @@ export function RailPort({
           {label}
         </span>
       )}
+    </span>
+  );
+}
+
+export interface StateIconProps {
+  state: RailNodeState;
+  /** When true, apply the live glow/pulse reserved for active in-flight work. */
+  live?: boolean;
+  className?: string;
+}
+
+/**
+ * Row-level state disc — same appearance map as RailPort, never a text label.
+ * Glow/pulse is opt-in via `live`; lifecycle in-flight fill does not imply it.
+ */
+export function StateIcon({ state, live, className }: StateIconProps) {
+  return (
+    <span
+      role="img"
+      aria-label={stateIconLabel[state]}
+      data-testid="state-icon"
+      data-state={state}
+      data-live={live ? "true" : "false"}
+      className={cn("inline-flex shrink-0", className)}
+    >
+      <RailPort state={state} glow={live} className="contents" />
     </span>
   );
 }
@@ -152,7 +188,7 @@ export interface RailNodeProps extends React.HTMLAttributes<HTMLDivElement> {
   state: RailNodeState;
   edge: RailEdge;
   label?: React.ReactNode;
-  /** Force the current-hue glow; defaults to on for in-flight ports. */
+  /** When true, apply the current-hue live glow/pulse. */
   glow?: boolean;
 }
 
@@ -181,117 +217,11 @@ export function RailNode({
       <RailPort
         state={state}
         label={label}
-        glow={glow}
+        glow={glow ?? state === "in-flight"}
         className="contents"
         portClassName="absolute left-[-23px] top-3"
       />
       {children}
-    </div>
-  );
-}
-
-const sparkDotClasses: Record<StatusStageState, string> = {
-  idle: "border-[hsl(var(--rail-lit))] bg-[hsl(var(--void))]",
-  done: "border-[hsl(var(--merged))] bg-[color-mix(in_srgb,hsl(var(--merged))_32%,hsl(var(--void)))]",
-  current:
-    "border-[hsl(var(--current))] bg-[hsl(var(--current))] [box-shadow:var(--glow)]",
-};
-
-const sparkSegClasses: Record<StatusStageState, string> = {
-  idle: "bg-[hsl(var(--rail))]",
-  done: "bg-[hsl(var(--merged))]",
-  current:
-    "bg-[linear-gradient(90deg,hsl(var(--merged)),hsl(var(--current)))]",
-};
-
-/** Segment state from the two dots it joins — single source for class + data-state. */
-export function sparkSegState(
-  prev: StatusStageState,
-  next: StatusStageState,
-): StatusStageState {
-  if (next === "current") return "current";
-  if (prev === "done" && next === "done") return "done";
-  return "idle";
-}
-
-function progressRailAriaLabel(stages: readonly StatusStage[]): string {
-  if (stages.every((s) => s.state === "done")) {
-    return `Pipeline: ${stages.map((s) => s.label).join(", ")} complete`;
-  }
-  const done = stages.filter((s) => s.state === "done").map((s) => s.label);
-  const current = stages.find((s) => s.state === "current");
-  const remaining = stages
-    .filter((s) => s.state === "idle")
-    .map((s) => s.label);
-  const parts: string[] = [];
-  if (done.length > 0) parts.push(`${done.join(" and ")} done`);
-  if (current) parts.push(`${current.label} now`);
-  if (remaining.length > 0) parts.push(`${remaining.join(" and ")} remaining`);
-  return `Pipeline: ${parts.join(", ")}`;
-}
-
-export interface ProgressRailProps
-  extends React.HTMLAttributes<HTMLDivElement> {
-  issue: IssueRecord;
-  state?: DerivedState;
-}
-
-/**
- * Inline lifecycle sparkline — one dot per primary status stage.
- * Returns null when the issue kind has no stage sequence.
- */
-export function ProgressRail({
-  issue,
-  state,
-  className,
-  ...props
-}: ProgressRailProps) {
-  const stages = statusStages(issue, state);
-  if (stages.length === 0) return null;
-
-  return (
-    <div
-      role="group"
-      aria-label={progressRailAriaLabel(stages)}
-      className={cn("inline-flex items-center", className)}
-      {...props}
-    >
-      {stages.map((stage, i) => {
-        const segState =
-          i > 0
-            ? sparkSegState(stages[i - 1]!.state, stages[i]!.state)
-            : null;
-        return (
-          <React.Fragment key={stage.label}>
-            {segState != null && (
-              <span
-                aria-hidden="true"
-                data-testid="progress-rail-seg"
-                data-state={segState}
-                className={cn(
-                  "h-0.5 w-[26px] shrink-0",
-                  sparkSegClasses[segState],
-                )}
-              />
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={stage.label}
-                  data-testid="progress-rail-dot"
-                  data-state={stage.state}
-                  className={cn(
-                    "inline-block h-2.5 w-2.5 shrink-0 appearance-none rounded-full border-2 p-0",
-                    sparkDotClasses[stage.state],
-                  )}
-                />
-              </TooltipTrigger>
-              <TooltipContent>{stage.label}</TooltipContent>
-            </Tooltip>
-          </React.Fragment>
-        );
-      })}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import type { BoardKindFilter } from "./board-kind-filter";
 import { filterToProject, issuesById, projectIdOf } from "./build-tree";
 import { isInFlight, isIssueComplete } from "./derived";
 import { filterIssuesBySearchAndLabels } from "./filter-by-search-labels";
-import type { RailNodeState } from "./rail-state";
+import { issueRailNodeState, type RailNodeState } from "./rail-state";
 
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
 
@@ -216,13 +216,6 @@ export function projectEpics(
   );
 }
 
-function depGraphNodeState(derived: DerivedState | undefined): RailNodeState {
-  if (derived?.blocked) return "blocked";
-  if (derived?.epicStatus === "done") return "merged";
-  if (derived?.epicStatus === "in-progress") return "in-flight";
-  return "ready";
-}
-
 /**
  * An Epic plus its direct `blockedBy` / blocking neighbors — the detail
  * own-flow neighborhood (not the full project DAG).
@@ -265,7 +258,7 @@ export function depGraphModel(
   const nodes: DepGraphNode[] = epicRecords.map((issue) => ({
     id: issue.id,
     label: issue.title,
-    state: depGraphNodeState(derived[issue.id]),
+    state: issueRailNodeState(issue, derived[issue.id]),
   }));
 
   const edgeKeys = new Set<string>();

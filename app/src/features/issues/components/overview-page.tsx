@@ -35,7 +35,7 @@ import {
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { FlowBucketsSections } from "./flow-buckets-sections";
 import { FlowRow } from "./flow-row";
-import { FlowRowActions } from "./flow-row-actions";
+import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
 import { IssueTree } from "./issue-tree";
 import { OverviewFlowFilters } from "./overview-flow-filters";
 import { OverviewDependenciesLens } from "./overview-dependencies-lens";
@@ -183,9 +183,17 @@ function OverviewFlowLens({
           renderRow={(item: FlowItem) => (
             <FlowRow
               item={item}
+              issues={visible}
               to={issuePath(projectId, item.issue.id)}
               actions={
                 <FlowRowActions
+                  item={item}
+                  projectId={projectId}
+                  task={inFlightTaskOf(item.issue, visible, byId)}
+                />
+              }
+              touchMenu={
+                <FlowRowTouchMenu
                   item={item}
                   projectId={projectId}
                   task={inFlightTaskOf(item.issue, visible, byId)}
