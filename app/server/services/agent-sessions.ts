@@ -15,6 +15,7 @@ import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import {
   appendEvent,
   readConversation,
+  setPendingMessage,
   updateMeta,
 } from "./conversations.js";
 import {
@@ -364,6 +365,30 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         if (replacement) {
           settleWait(await replacement.wait());
           return;
+        }
+      }
+
+      if (result.status === "finished") {
+        const { meta } = readConversation(conversationId);
+        const pending = meta.pendingMessage;
+        if (pending) {
+          await setPendingMessage(conversationId, null);
+          await appendEvent(conversationId, {
+            type: "prompt",
+            text: pending.text,
+          });
+          const fired = await sendPromptInternal(
+            conversationId,
+            { prompt: pending.text },
+            false,
+          );
+          if (!fired.ok) {
+            await setPendingMessage(conversationId, pending.text);
+            const message = fired.error.message;
+            const event = { type: "error" as const, message };
+            await appendEvent(conversationId, event);
+            publishFrame(conversationId, { event, persist: true });
+          }
         }
       }
 

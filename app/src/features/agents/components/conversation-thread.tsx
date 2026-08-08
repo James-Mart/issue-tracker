@@ -1,12 +1,19 @@
 import type { ReactNode } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Send, X } from "lucide-react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
 import { useConversationsQuery } from "../api/queries";
+import {
+  useClearConversationPending,
+  useSendConversationMessage,
+  useUpdateConversationPending,
+} from "../api/mutations";
 import { useConversationEvents } from "../hooks/use-conversation-events";
 import { useConversationRunActive } from "../hooks/use-conversation-run-active";
 import {
@@ -174,12 +181,148 @@ function TranscriptEventRow({
   }
 }
 
+function PendingMessageRow({
+  conversationId,
+  text,
+  runActive,
+  model,
+}: {
+  conversationId: string;
+  text: string;
+  runActive: boolean;
+  model: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const updatePending = useUpdateConversationPending();
+  const clearPending = useClearConversationPending();
+  const sendMessage = useSendConversationMessage();
+
+  useEffect(() => {
+    if (!editing) setDraft(text);
+  }, [text, editing]);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const commitEdit = () => {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === text) {
+      setEditing(false);
+      return;
+    }
+    updatePending.mutate(
+      { id: conversationId, text: trimmed },
+      { onSettled: () => setEditing(false) },
+    );
+  };
+
+  const sendNow = () => {
+    if (sendMessage.isPending) return;
+    sendMessage.mutate({
+      id: conversationId,
+      body: {
+        prompt: text,
+        ...(model.trim() ? { model: model.trim() } : {}),
+      },
+    });
+  };
+
+  return (
+    <div
+      className="mt-3 flex min-w-0 flex-col gap-2 rounded-lg border border-dashed border-border/70 bg-muted/30 px-3.5 py-2.5 opacity-70"
+      data-testid="pending-message-row"
+      data-run-active={runActive ? "true" : "false"}
+    >
+      <div className="flex min-w-0 items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            {runActive ? "Queued" : "Not sent"}
+          </p>
+          {editing ? (
+            <form
+              className="min-w-0"
+              onSubmit={(event) => {
+                event.preventDefault();
+                commitEdit();
+              }}
+            >
+              <Input
+                ref={inputRef}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setEditing(false);
+                }}
+                className="h-8 text-sm"
+                disabled={updatePending.isPending}
+                aria-label="Edit queued message"
+              />
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="block w-full min-w-0 rounded-md text-left text-sm text-foreground hover:bg-accent/40"
+            >
+              <span className="whitespace-pre-wrap break-words">{text}</span>
+            </button>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 text-muted-foreground"
+          onClick={() => clearPending.mutate(conversationId)}
+          disabled={clearPending.isPending}
+          title="Remove queued message"
+          aria-label="Remove queued message"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      {!runActive ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="min-w-0 text-xs text-muted-foreground">
+            The run ended before this message could send.
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-7 gap-1 px-2"
+            onClick={sendNow}
+            disabled={sendMessage.isPending}
+            data-testid="pending-send-now"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Send now
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ThreadBody({
   events,
   ready,
+  pendingMessageText,
+  runActive,
+  conversationId,
+  model,
 }: {
   events: TranscriptEvent[];
   ready: boolean;
+  pendingMessageText: string | null;
+  runActive: boolean;
+  conversationId: string;
+  model: string;
 }) {
   if (!ready) {
     return (
@@ -196,7 +339,7 @@ function ThreadBody({
     );
   }
 
-  if (events.length === 0) {
+  if (events.length === 0 && !pendingMessageText) {
     return (
       <ShellState
         className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
@@ -213,7 +356,7 @@ function ThreadBody({
 
   return (
     <MessageScroller
-      bottomKey={transcriptScrollerBottomKey(events)}
+      bottomKey={transcriptScrollerBottomKey(events, pendingMessageText)}
       className="min-w-0 overflow-x-hidden px-4 py-4"
       role="log"
       aria-label="Conversation transcript"
@@ -230,6 +373,14 @@ function ThreadBody({
           }
         />
       ))}
+      {pendingMessageText ? (
+        <PendingMessageRow
+          conversationId={conversationId}
+          text={pendingMessageText}
+          runActive={runActive}
+          model={model}
+        />
+      ) : null}
     </MessageScroller>
   );
 }
@@ -320,7 +471,7 @@ export function ConversationThread({
   conversationId: string;
   onBack?: () => void;
 }) {
-  const { events, ready, streamRunActive, runResyncKey } =
+  const { events, ready, streamRunActive, runResyncKey, pendingText } =
     useConversationEvents(conversationId);
   const { runActive } = useConversationRunActive(
     conversationId,
@@ -330,6 +481,10 @@ export function ConversationThread({
   const { data: conversations } = useConversationsQuery();
   const meta = conversations?.find((c) => c.id === conversationId);
   const title = meta?.title?.trim() || "Thread";
+  const pendingMessageText =
+    pendingText !== undefined
+      ? pendingText
+      : (meta?.pendingMessage?.text ?? null);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -340,7 +495,14 @@ export function ConversationThread({
         events={events}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <ThreadBody events={events} ready={ready} />
+        <ThreadBody
+          events={events}
+          ready={ready}
+          pendingMessageText={pendingMessageText}
+          runActive={runActive}
+          conversationId={conversationId}
+          model={meta?.model ?? ""}
+        />
       </div>
       {meta ? (
         <Composer

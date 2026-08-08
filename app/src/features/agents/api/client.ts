@@ -84,8 +84,27 @@ export type SendConversationMessageBody = {
 };
 
 export type SendConversationMessageResult = {
-  runId: string;
+  runId?: string;
+  pending?: boolean;
 };
+
+export type UpdateConversationPendingBody = {
+  text: string;
+};
+
+export function updateConversationPending(
+  id: string,
+  body: UpdateConversationPendingBody,
+): Promise<ConversationMeta> {
+  return request<ConversationMeta>(`/api/conversations/${id}/pending`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+export function clearConversationPending(id: string): Promise<void> {
+  return request<void>(`/api/conversations/${id}/pending`, { method: "DELETE" });
+}
 
 export function sendConversationMessage(
   id: string,
@@ -104,4 +123,20 @@ export async function cancelConversationRun(id: string): Promise<void> {
     if (err instanceof ApiError && err.status === 409) return;
     throw err;
   }
+}
+
+export type InterruptConversationRunBody = SendConversationMessageBody;
+
+export type InterruptConversationRunResult = {
+  runId: string;
+};
+
+export function interruptConversationRun(
+  id: string,
+  body: InterruptConversationRunBody,
+): Promise<InterruptConversationRunResult> {
+  return request<InterruptConversationRunResult>(
+    `/api/conversations/${id}/interrupt`,
+    { method: "POST", body },
+  );
 }
