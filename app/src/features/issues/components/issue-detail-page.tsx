@@ -157,8 +157,10 @@ function IssueDetailBody({
 }) {
   return (
     <div className="flex min-h-0 flex-1 gap-4">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        <IssueDetailHeader issue={issue} catalog={catalog} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+        <div className="shrink-0">
+          <IssueDetailHeader issue={issue} catalog={catalog} />
+        </div>
 
         <IssueDetailView
           issue={issue}
@@ -219,8 +221,18 @@ function IssueDetailAttachable({
   const { rootProps } = useIssueDetailFileUpload(upload);
 
   return (
-    <PageShell {...rootProps}>
-      {backLink}
+    <PageShell
+      {...rootProps}
+      className={cn(
+        // Project docs (esp. Design system iframe) need a bounded shell so the
+        // reading area can fill and scroll internally. Match agents page:
+        // subtract the app top bar (3rem), not raw 100svh.
+        issue.kind === "project" &&
+          "h-[calc(100svh-3rem)] min-h-0 overflow-hidden",
+        rootProps.className,
+      )}
+    >
+      <div className="shrink-0">{backLink}</div>
       <IssueDetailBody issue={issue} upload={upload} catalog={catalog} />
     </PageShell>
   );
