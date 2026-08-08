@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { currentGlow } from "@/components/ui/overlay-surfaces";
+import { useIsCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { cn } from "@/lib/utils/cn";
 import { useUpdateConversation } from "../api/mutations";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
@@ -50,6 +51,7 @@ export function ConversationListItem({
   const clearRename = useAgentsUiStore((s) => s.clearRename);
   const requestDelete = useAgentsUiStore((s) => s.requestDelete);
   const updateConversation = useUpdateConversation();
+  const isCoarsePointer = useIsCoarsePointer();
 
   const isRenaming = renamingId === conversation.id;
   const [draft, setDraft] = useState(conversation.title);
@@ -129,8 +131,13 @@ export function ConversationListItem({
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              size="icon-sm"
-              className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100"
+              size={isCoarsePointer ? "icon" : "icon-sm"}
+              className={cn(
+                "shrink-0 transition-opacity",
+                isCoarsePointer
+                  ? "h-11 w-11 opacity-100"
+                  : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100",
+              )}
               title="Conversation actions"
               onClick={(event) => event.stopPropagation()}
             >
