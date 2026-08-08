@@ -31,7 +31,7 @@ import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
 import { StoryTaskRail } from "./story-task-rail";
-import { EpicDepsPanel } from "./epic-deps-panel";
+import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
 import { IssueSupportingDocsField } from "./issue-supporting-docs-field";
@@ -43,15 +43,15 @@ import { supportsAttachments } from "../lib/attachments";
 
 /**
  * Own-flow area for `surfaces-detail-flow`. Story: single-spine task Rail.
- * Epic: dependency neighborhood DAG + blockedBy edit. Idea / Task / Project
- * leave the slot empty.
+ * Epic: single-spine child-Story Rail. Idea / Task / Project leave the slot
+ * empty.
  */
 function OwnFlowSlot({ issue }: { issue: IssueDetail }) {
   if (!kindHasOwnFlow(issue.kind)) return null;
   return (
     <div data-region="own-flow">
       {issue.kind === "story" ? <StoryTaskRail issue={issue} /> : null}
-      {issue.kind === "epic" ? <EpicDepsPanel issue={issue} /> : null}
+      {issue.kind === "epic" ? <EpicStoryRail issue={issue} /> : null}
     </div>
   );
 }
