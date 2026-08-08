@@ -5,6 +5,12 @@ import { cn } from "@/lib/utils/cn";
 export const PAGE_SHELL_CLASS =
   "flex min-h-svh w-full min-w-0 flex-col gap-4 px-6 py-8";
 
+/**
+ * Comfortable reading measure for long prose and form bodies only
+ * (~68–76ch). Do not apply to lists, overviews, or dense metadata.
+ */
+export const READING_MEASURE_CLASS = "max-w-[72ch]";
+
 export function PageShell({
   className,
   children,

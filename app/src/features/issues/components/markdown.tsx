@@ -1,6 +1,7 @@
 import { useMemo, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { cn } from "@/lib/utils/cn";
 import {
   attachmentDownloadName,
@@ -60,7 +61,7 @@ export function Markdown({
   }, [issueId]);
 
   return (
-    <div className="prose-issue">
+    <div className={cn("prose-issue", READING_MEASURE_CLASS)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={urlTransform}
