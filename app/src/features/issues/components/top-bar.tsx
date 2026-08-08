@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
 import { cn } from "@/lib/utils/cn";
@@ -19,26 +20,31 @@ export function TopBar() {
   }, [data?.derived, data?.issues, projectId]);
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border px-4">
-      <span
-        className={liveChip}
-        data-live={live ? "true" : "false"}
-        aria-live="polite"
-      >
+    <header className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-3 shell:px-4">
+      <div className="flex min-w-0 items-center gap-2">
+        <SidebarTrigger />
         <span
-          aria-hidden
-          className={cn(
-            "h-[7px] w-[7px] shrink-0 rounded-full",
-            live
-              ? cn(
-                  "bg-[hsl(var(--current))] motion-safe:animate-live-dot",
-                  currentGlow,
-                )
-              : "bg-[hsl(var(--rail-lit))]",
-          )}
-        />
-        {live ? "agents on the line" : "all quiet"}
-      </span>
+          className={cn(liveChip, "min-w-0")}
+          data-live={live ? "true" : "false"}
+          aria-live="polite"
+        >
+          <span
+            aria-hidden
+            className={cn(
+              "h-[7px] w-[7px] shrink-0 rounded-full",
+              live
+                ? cn(
+                    "bg-[hsl(var(--current))] motion-safe:animate-live-dot",
+                    currentGlow,
+                  )
+                : "bg-[hsl(var(--rail-lit))]",
+            )}
+          />
+          <span className="truncate">
+            {live ? "agents on the line" : "all quiet"}
+          </span>
+        </span>
+      </div>
       <ThemeToggle />
     </header>
   );

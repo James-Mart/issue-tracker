@@ -24,12 +24,14 @@ const buttonVariants = cva(
         destructive:
           "border border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/90",
       },
+      // `touch:` lifts every control to a ~44px tap target on touch pointers
+      // and at mobile-shell widths; the instrument stays dense on a mouse.
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-6",
-        icon: "h-9 w-9",
-        "icon-sm": "h-7 w-7",
+        default: "h-9 px-4 py-2 touch:h-11",
+        sm: "h-8 rounded-md px-3 text-xs touch:h-11",
+        lg: "h-10 rounded-md px-6 touch:h-11",
+        icon: "h-9 w-9 touch:size-11",
+        "icon-sm": "h-7 w-7 touch:size-11",
       },
     },
     defaultVariants: {

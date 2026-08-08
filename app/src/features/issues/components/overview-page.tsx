@@ -9,7 +9,6 @@ import type {
 } from "@server/schemas";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
 import { cn } from "@/lib/utils/cn";
 import { useIssuesQuery } from "../api/queries";
@@ -44,16 +43,13 @@ import { StructureIdeaCapture } from "./structure-idea-capture";
 
 function OverviewHeader({ title }: { title: string }) {
   return (
-    <header className="flex items-center gap-2">
-      <SidebarTrigger className="-ml-1" />
-      <div className="min-w-0">
-        <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
-          Overview
-        </p>
-        <h1 className="truncate text-base font-semibold tracking-tight text-foreground">
-          {title}
-        </h1>
-      </div>
+    <header>
+      <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
+        Overview
+      </p>
+      <h1 className="truncate text-base font-semibold tracking-tight text-foreground">
+        {title}
+      </h1>
     </header>
   );
 }

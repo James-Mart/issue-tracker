@@ -46,8 +46,6 @@ import { DetailEyebrow } from "./detail-section";
 import { ProjectDetailTabs } from "./project-detail-tabs";
 import { supportsAttachments } from "../lib/attachments";
 
-const DETAIL_PAGE_SHELL_CLASS = "max-w-6xl";
-
 /**
  * Own-flow area for `surfaces-detail-flow`. Story: single-spine task Rail.
  * Epic: dependency neighborhood DAG + blockedBy edit. Idea / Task / Project
@@ -241,7 +239,7 @@ function IssueDetailAttachable({
   const { rootProps } = useIssueDetailFileUpload(upload);
 
   return (
-    <PageShell className={DETAIL_PAGE_SHELL_CLASS} {...rootProps}>
+    <PageShell {...rootProps}>
       {backLink}
       <IssueDetailBody
         issue={issue}
@@ -302,7 +300,7 @@ export function IssueDetailPage() {
   }
 
   return (
-    <PageShell className={DETAIL_PAGE_SHELL_CLASS}>
+    <PageShell>
       {backLink}
 
       {error && !missing ? (

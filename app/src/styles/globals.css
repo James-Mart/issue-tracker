@@ -219,9 +219,9 @@
     }
   }
 
-  /* GFM prose — Mainline type scale, code/quote/list, issue-link. */
+  /* GFM prose — Mainline type scale, code/quote/list, issue-link.
+     Width capped by READING_MEASURE_CLASS at call sites. */
   .prose-issue {
-    max-width: 720px;
     font-size: 15px;
     line-height: 1.55;
     color: hsl(var(--foreground));

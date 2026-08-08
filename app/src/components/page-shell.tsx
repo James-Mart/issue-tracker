@@ -1,9 +1,15 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 
-/** Shared centered page chrome for route-level shells (detail, overview, cockpit). */
+/** Shared page chrome for route-level shells (detail, overview, cockpit). */
 export const PAGE_SHELL_CLASS =
-  "mx-auto flex min-h-svh w-full max-w-3xl flex-col gap-4 px-6 py-8";
+  "flex min-h-svh w-full min-w-0 flex-col gap-4 px-4 py-8 shell:px-6";
+
+/**
+ * Comfortable reading measure for long prose and form bodies only
+ * (~68–76ch). Do not apply to lists, overviews, or dense metadata.
+ */
+export const READING_MEASURE_CLASS = "max-w-[72ch]";
 
 export function PageShell({
   className,

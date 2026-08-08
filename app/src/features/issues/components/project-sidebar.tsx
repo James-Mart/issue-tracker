@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FolderKanban, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import {
@@ -16,6 +16,7 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils/cn";
 import { useIssuesQuery } from "../api/queries";
@@ -77,10 +78,25 @@ function BusNavItem({
   );
 }
 
+/**
+ * On mobile the bus lives in an off-canvas sheet that covers the page, so any
+ * navigation out of it has to hand the screen back to the destination. Keyed on
+ * the location `key` rather than the pathname so re-tapping the current route
+ * dismisses the sheet too.
+ */
+function useDismissMobileSidebarOnNavigate(locationKey: string) {
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [locationKey, isMobile, setOpenMobile]);
+}
+
 export function ProjectSidebar() {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, key: locationKey } = useLocation();
   const selectedProjectId = useRouteProjectId();
+  useDismissMobileSidebarOnNavigate(locationKey);
   const { data } = useIssuesQuery();
   const openProjectDialog = useIssueUiStore((s) => s.openProjectDialog);
   const requestDelete = useIssueUiStore((s) => s.requestDelete);
@@ -98,7 +114,7 @@ export function ProjectSidebar() {
       <SidebarHeader>
         <Link
           to="/"
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2 touch:min-h-11"
         >
           <FolderKanban className="h-5 w-5 shrink-0 text-primary" />
           <span className="truncate font-semibold group-data-[collapsible=icon]:hidden">
@@ -137,7 +153,7 @@ export function ProjectSidebar() {
                 type="button"
                 title="New project"
                 onClick={() => openProjectDialog()}
-                className="flex aspect-square w-5 items-center justify-center rounded-md text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
+                className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2 touch:h-11 touch:w-11"
               >
                 <Plus className="h-4 w-4" />
                 <span className="sr-only">New project</span>

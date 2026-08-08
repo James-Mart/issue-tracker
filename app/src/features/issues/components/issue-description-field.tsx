@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { IssueDetail } from "@server/schemas";
+import { READING_MEASURE_CLASS } from "@/components/page-shell";
+import { cn } from "@/lib/utils/cn";
 import { useUpdateIssue } from "../api/mutations";
 import { useDescriptionEditorUpload } from "../hooks/use-description-editor-upload";
 import type { UploadAttachmentMutation } from "../hooks/use-issue-detail-file-upload";
@@ -32,7 +34,12 @@ export function IssueDescriptionField({
   );
 
   return (
-    <section className="rounded-lg border border-border bg-card p-5">
+    <section
+      className={cn(
+        "rounded-lg border border-border bg-card p-5",
+        READING_MEASURE_CLASS,
+      )}
+    >
       <p className="mb-3 font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
         Description
       </p>
