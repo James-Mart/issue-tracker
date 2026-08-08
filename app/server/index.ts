@@ -2,7 +2,11 @@ import { createApp } from "./app.js";
 import { listenPort } from "./config.js";
 import { agentSessions } from "./services/agent-sessions.js";
 import { validateHookRegistration } from "./services/hook-registration.js";
+import { installHttp2Diagnostics } from "./services/http2-diagnostics.js";
 import { validateRoleBodies } from "./services/role-bodies.js";
+
+// Before anything can open an agent stream, so the patch lands first.
+await installHttp2Diagnostics();
 
 validateRoleBodies();
 validateHookRegistration();
