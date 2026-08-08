@@ -6,7 +6,6 @@ import type { Issue } from "../schemas.js";
 import {
   buildSummary,
   formatSummary,
-  summarizeDescription,
   type SummaryAttachment,
 } from "./summary.js";
 
@@ -72,32 +71,9 @@ const nestedIssues: Issue[] = [
   },
 ];
 
-const descriptions: Record<string, string> = {
-  p: "# Proj\n\nProject overview.\n",
-  e: "# Epic\n\nEpic body of work.\n",
-  root: "# Root\n\nRoot branch work.\n",
-  stacked: "# Stacked\n\nStacked branch work.\n",
-  c1: "# Do the thing\n\nImplement the feature.\n\n## Verify\n\n- tests\n",
-};
-
-const descriptionOf = (id: string) => descriptions[id] ?? "";
-
-describe("summarizeDescription", () => {
-  it("strips a leading heading and returns the first paragraph", () => {
-    expect(
-      summarizeDescription("# Title\n\nFirst para.\n\nSecond para.\n"),
-    ).toBe("First para.");
-  });
-
-  it("returns empty string for blank or heading-only markdown", () => {
-    expect(summarizeDescription("")).toBe("");
-    expect(summarizeDescription("# Only heading\n")).toBe("");
-  });
-});
-
 describe("buildSummary", () => {
   it("walks partOf for a commit on a nested stacked branch", () => {
-    const result = buildSummary("c1", nestedIssues, descriptionOf);
+    const result = buildSummary("c1", nestedIssues);
 
     expect(result.nodes.map((n) => n.id)).toEqual([
       "p",
@@ -113,18 +89,16 @@ describe("buildSummary", () => {
     ]);
     // Containment only — stackedOn parent is not in the chain.
     expect(result.nodes.map((n) => n.id)).not.toContain("root");
-    expect(result.nodes[3].descriptionSummary).toBe("Implement the feature.");
-    expect(result.nodes[2].descriptionSummary).toBe("Stacked branch work.");
   });
 
   it("throws not_found for a missing id", () => {
-    expect(() => buildSummary("ghost", nestedIssues, descriptionOf)).toThrow(
+    expect(() => buildSummary("ghost", nestedIssues)).toThrow(
       /unknown issue "ghost"/,
     );
   });
 
   it("stops at a branch when summarizing a branch id", () => {
-    const result = buildSummary("stacked", nestedIssues, descriptionOf);
+    const result = buildSummary("stacked", nestedIssues);
     expect(result.nodes.map((n) => n.id)).toEqual(["p", "e", "stacked"]);
   });
 
@@ -165,9 +139,7 @@ describe("buildSummary", () => {
         updatedAt: AT,
       },
     ];
-    const result = buildSummary("t1", projectLevel, (id) =>
-      id === "t1" ? "# Task\n\nDo it.\n" : "",
-    );
+    const result = buildSummary("t1", projectLevel);
     expect(result.nodes.map((n) => n.kind)).toEqual([
       "project",
       "story",
@@ -182,15 +154,15 @@ describe("buildSummary", () => {
 
 describe("formatSummary", () => {
   it("renders the agent-oriented outline with a show pointer", () => {
-    const text = formatSummary(buildSummary("c1", nestedIssues, descriptionOf));
+    const text = formatSummary(buildSummary("c1", nestedIssues));
 
     expect(text).toContain("This is an issue in the Proj Project. Here are the details:");
     expect(text).toContain("Project: p — Proj");
     expect(text).toContain("Epic: e — Epic");
     expect(text).toContain("Story: stacked — Stacked Branch");
     expect(text).toContain("Task: c1 — Do the thing");
-    expect(text).toContain("Description: Implement the feature.");
     expect(text).toContain("For more details, try `issue <kind> view <id>` or `issue tree`.");
+    expect(text).not.toContain("Description:");
     expect(text).not.toContain("Workspace:");
   });
 
@@ -198,14 +170,14 @@ describe("formatSummary", () => {
     const withNoDiff = nestedIssues.map((issue) =>
       issue.id === "c1" ? { ...issue, noDiff: true } : issue,
     );
-    const text = formatSummary(buildSummary("c1", withNoDiff, descriptionOf));
+    const text = formatSummary(buildSummary("c1", withNoDiff));
 
     expect(text).toContain("Task: c1 — Do the thing");
     expect(text).toContain("  noDiff: true");
   });
 
   it("omits noDiff from summary when unset", () => {
-    const text = formatSummary(buildSummary("c1", nestedIssues, descriptionOf));
+    const text = formatSummary(buildSummary("c1", nestedIssues));
     expect(text).not.toContain("noDiff:");
   });
 
@@ -213,7 +185,7 @@ describe("formatSummary", () => {
     const withWorkspace = nestedIssues.map((issue) =>
       issue.id === "p" ? { ...issue, workspace: "/tmp/repo" } : issue,
     );
-    const summary = buildSummary("c1", withWorkspace, descriptionOf);
+    const summary = buildSummary("c1", withWorkspace);
     expect(summary.workspace).toBe("/tmp/repo");
     const text = formatSummary(summary);
 
@@ -230,7 +202,6 @@ describe("formatSummary", () => {
     const summary = buildSummary(
       "c1",
       nestedIssues,
-      descriptionOf,
       attachmentsOf,
     );
     expect(summary.nodes[3].attachments).toEqual([
@@ -241,7 +212,7 @@ describe("formatSummary", () => {
     expect(text).toContain("  mock.tsx (6 bytes) — ");
     expect(text).toMatch(/attachments\/mock\.tsx/);
 
-    const empty = formatSummary(buildSummary("c1", nestedIssues, descriptionOf));
+    const empty = formatSummary(buildSummary("c1", nestedIssues));
     expect(empty).not.toContain("Attachments:");
   });
 });
@@ -309,7 +280,6 @@ describe("summarize I/O wrapper", () => {
     const { summarize } = await import("./summary.js");
     const result = summarize("c1");
     expect(result.nodes.map((n) => n.id)).toEqual(["p", "e", "b", "c1"]);
-    expect(result.nodes[3].descriptionSummary).toBe("Implement the feature.");
     expect(() => summarize("ghost")).toThrow(/unknown issue "ghost"/);
   });
 });

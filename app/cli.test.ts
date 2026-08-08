@@ -1042,7 +1042,7 @@ describe("tree / list / summary include Ideas", () => {
     expect(status).toBe(0);
     expect(stdout).toContain("Project: p — Proj");
     expect(stdout).toContain("Idea: idea-a — Capture first");
-    expect(stdout).toContain("Description: first capture");
+    expect(stdout).not.toContain("Description:");
     expect(stdout).not.toContain("Epic:");
   });
 
