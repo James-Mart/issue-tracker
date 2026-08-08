@@ -1,8 +1,10 @@
-import { visibleIssues } from "@server/services/archived-visibility";
 import { bySequence, epicsBlockedBy, isProjectBoardChild } from "@server/order";
 import type { DerivedState, IssueRecord } from "@server/schemas";
-import type { BoardKindFilter } from "./board-kind-filter";
-import { filterToProject, issuesById, projectIdOf } from "./build-tree";
+import {
+  boardKindAllows,
+  type BoardKindFilter,
+} from "./board-kind-filter";
+import { issuesById, projectIdOf } from "./build-tree";
 import { isInFlight, isIssueComplete } from "./derived";
 import { filterIssuesBySearchAndLabels } from "./filter-by-search-labels";
 import { issueRailNodeState, type RailNodeState } from "./rail-state";
@@ -55,22 +57,14 @@ export function flowFiltersActive(filters: FlowFilters): boolean {
   return (
     filters.search.trim().length > 0 ||
     filters.labelIds.length > 0 ||
-    filters.kind !== "both"
+    filters.kind.length > 0
   );
-}
-
-function flowKindAllows(
-  kind: IssueRecord["kind"],
-  filter: BoardKindFilter,
-): boolean {
-  if (filter === "both") return kind === "epic" || kind === "story";
-  return kind === filter;
 }
 
 /**
  * Story/Epic ids kept under Flow filters. Search/label via shared
  * `filterIssuesBySearchAndLabels` (ancestor retention), then kind via
- * `flowKindAllows`.
+ * `boardKindAllows`.
  */
 export function matchingFlowIssueIds(
   issues: IssueRecord[],
@@ -86,7 +80,7 @@ export function matchingFlowIssueIds(
   for (const issue of next) {
     if (
       isFlowTopLevelRow(issue, byId) &&
-      flowKindAllows(issue.kind, filters.kind)
+      boardKindAllows(issue.kind, filters.kind)
     ) {
       keep.add(issue.id);
     }
@@ -206,21 +200,6 @@ export function flowBuckets(
   );
 
   return { ready, inFlight, blocked, recentlyMerged };
-}
-
-/** Visible epics under a project (archive filter applied). */
-export function projectEpics(
-  issues: IssueRecord[],
-  projectId: string,
-  showArchived: boolean,
-): IssueRecord[] {
-  const scoped = visibleIssues(
-    filterToProject(issues, projectId),
-    showArchived,
-  );
-  return scoped.filter(
-    (issue): issue is IssueRecord & { kind: "epic" } => issue.kind === "epic",
-  );
 }
 
 /**

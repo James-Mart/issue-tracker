@@ -74,7 +74,7 @@ export const useIssueUiStore = create<IssueUiState>((set) => ({
   setSearch: (value) => set({ search: value }),
   labelFilter: [],
   setLabelFilter: (ids) => set({ labelFilter: ids }),
-  boardKindFilter: "both",
+  boardKindFilter: [],
   setBoardKindFilter: (value) => set({ boardKindFilter: value }),
   showArchived: false,
   setShowArchived: (value) => set({ showArchived: value }),

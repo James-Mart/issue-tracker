@@ -75,26 +75,33 @@ describe("structureTreeNodes", () => {
     const nodes = structureTreeNodes(scoped, {
       search: "",
       labelIds: [],
-      kind: "both",
+      kind: [],
     });
     expect(nodes.map((n) => n.issue.id)).toEqual(["e1", "i1", "e2"]);
     expect(nodes[0]!.children.map((c) => c.issue.id)).toEqual(["s1"]);
   });
 
-  it("filters by kind", () => {
+  it("filters by kind (OR multi-select)", () => {
     const ideas = structureTreeNodes(scoped, {
       search: "",
       labelIds: [],
-      kind: "idea",
+      kind: ["idea"],
     });
     expect(ideas.map((n) => n.issue.id)).toEqual(["i1"]);
+
+    const epicsAndStories = structureTreeNodes(scoped, {
+      search: "",
+      labelIds: [],
+      kind: ["epic", "story"],
+    });
+    expect(epicsAndStories.map((n) => n.issue.id)).toEqual(["e1", "e2"]);
   });
 
   it("filters by search while keeping ancestors", () => {
     const nodes = structureTreeNodes(scoped, {
       search: "s1",
       labelIds: [],
-      kind: "both",
+      kind: [],
     });
     expect(nodes.map((n) => n.issue.id)).toEqual(["e1"]);
     expect(nodes[0]!.children.map((c) => c.issue.id)).toEqual(["s1"]);

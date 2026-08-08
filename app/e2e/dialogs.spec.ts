@@ -4,10 +4,8 @@ import { gotoOverviewStructure } from "./seed-navigation";
 import { snapshotBothThemes } from "./snapshot-both-themes";
 
 async function openNewEpicDialog(page: Page): Promise<void> {
-  await page
-    .getByRole("tabpanel", { name: "Structure" })
-    .getByRole("button", { name: "New epic" })
-    .click();
+  await page.getByRole("main").getByRole("button", { name: "New" }).click();
+  await page.getByRole("menuitem", { name: "New epic" }).click();
   const dialog = page.getByTestId("new-issue-dialog");
   await expect(dialog).toBeVisible();
   await expect(

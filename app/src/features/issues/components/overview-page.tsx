@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { GitBranch, Plus } from "lucide-react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { visibleIssues } from "@server/services/archived-visibility";
 import type {
@@ -38,8 +37,6 @@ import { FlowRow } from "./flow-row";
 import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
 import { IssueTree } from "./issue-tree";
 import { OverviewFlowFilters } from "./overview-flow-filters";
-import { OverviewDependenciesLens } from "./overview-dependencies-lens";
-import { StructureIdeaCapture } from "./structure-idea-capture";
 
 function OverviewHeader({ title }: { title: string }) {
   return (
@@ -109,17 +106,15 @@ function flowBucketsEmpty(buckets: {
   );
 }
 
-/** Project-scoped Flow lens with search / label / kind / archived filters. */
+/** Project-scoped Flow lens content (shared toolbar lives on OverviewPage). */
 function OverviewFlowLens({
   projectId,
   issues,
   derived,
-  catalog,
 }: {
   projectId: string;
   issues: IssueRecord[];
   derived: Record<string, DerivedState>;
-  catalog: ProjectLabel[];
 }) {
   const search = useIssueUiStore((s) => s.search);
   const setSearch = useIssueUiStore((s) => s.setSearch);
@@ -153,7 +148,7 @@ function OverviewFlowLens({
   const clearFilters = () => {
     setSearch("");
     setLabelFilter([]);
-    setBoardKindFilter("both");
+    setBoardKindFilter([]);
   };
 
   return (
@@ -163,8 +158,6 @@ function OverviewFlowLens({
       aria-labelledby="overview-lens-tab-flow"
       className="flex flex-col gap-6"
     >
-      <OverviewFlowFilters catalog={catalog} />
-
       {filtersOn && flowBucketsEmpty(buckets) ? (
         <ShellState
           eyebrow="Filtered"
@@ -207,7 +200,7 @@ function OverviewFlowLens({
   );
 }
 
-/** Project-scoped Structure lens: containment tree + authoring create entry points. */
+/** Project-scoped Structure lens content (shared toolbar lives on OverviewPage). */
 function OverviewStructureLens({
   projectId,
   issues,
@@ -219,7 +212,6 @@ function OverviewStructureLens({
   derived: Record<string, DerivedState>;
   catalog: ProjectLabel[];
 }) {
-  const openNew = useIssueUiStore((s) => s.openNew);
   const search = useIssueUiStore((s) => s.search);
   const setSearch = useIssueUiStore((s) => s.setSearch);
   const labelFilter = useIssueUiStore((s) => s.labelFilter);
@@ -250,13 +242,8 @@ function OverviewStructureLens({
   const clearFilters = () => {
     setSearch("");
     setLabelFilter([]);
-    setBoardKindFilter("both");
+    setBoardKindFilter([]);
   };
-
-  const hasIdeas = useMemo(
-    () => scoped.some((issue) => issue.kind === "idea"),
-    [scoped],
-  );
 
   return (
     <div
@@ -265,33 +252,6 @@ function OverviewStructureLens({
       aria-labelledby="overview-lens-tab-structure"
       className="flex flex-col gap-6"
     >
-      <StructureIdeaCapture projectId={projectId} empty={!hasIdeas} />
-
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            openNew({ presetKind: "story", presetParent: projectId })
-          }
-        >
-          <GitBranch className="h-4 w-4" />
-          New story
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            openNew({ presetKind: "epic", presetParent: projectId })
-          }
-        >
-          <Plus className="h-4 w-4" />
-          New epic
-        </Button>
-      </div>
-
-      <OverviewFlowFilters catalog={catalog} />
-
       {filtersOn && nodes.length === 0 ? (
         <ShellState
           eyebrow="Filtered"
@@ -316,7 +276,7 @@ function OverviewStructureLens({
   );
 }
 
-/** Per-project overview shell: lens switcher (`?lens=`) + Flow / Structure / Dependencies lenses. */
+/** Per-project overview shell: shared toolbar + Flow / Structure lenses (`?lens=`). */
 export function OverviewPage() {
   const { projectId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -367,13 +327,13 @@ export function OverviewPage() {
         <PageShell>
           <OverviewHeader title={project.title} />
           <LensSwitcher value={lens} onChange={setLens} />
+          <OverviewFlowFilters projectId={projectId} catalog={catalog} />
 
           {lens === "flow" ? (
             <OverviewFlowLens
               projectId={projectId}
               issues={issues}
               derived={derived}
-              catalog={catalog}
             />
           ) : null}
 
@@ -383,14 +343,6 @@ export function OverviewPage() {
               issues={issues}
               derived={derived}
               catalog={catalog}
-            />
-          ) : null}
-
-          {lens === "dependencies" ? (
-            <OverviewDependenciesLens
-              projectId={projectId}
-              issues={issues}
-              derived={derived}
             />
           ) : null}
         </PageShell>

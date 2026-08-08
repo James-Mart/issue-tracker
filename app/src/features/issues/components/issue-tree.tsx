@@ -300,37 +300,14 @@ function TreeRowTouchMenu({
           </a>
         </DropdownMenuItem>
       ) : null}
-      {issue.kind === "story" ? (
-        <>
-          <DropdownMenuItem
-            onSelect={() =>
-              openNew({ presetKind: "task", presetParent: issue.id })
-            }
-          >
-            <Plus className="h-4 w-4" />
-            Add task
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() =>
-              openNew({
-                presetKind: "story",
-                presetParent: issue.partOf,
-                presetStackedOn: issue.id,
-              })
-            }
-          >
-            <Plus className="h-4 w-4" />
-            Add stacked story
-          </DropdownMenuItem>
-        </>
-      ) : childKind ? (
+      {childKind ? (
         <DropdownMenuItem
           onSelect={() =>
             openNew({ presetKind: childKind, presetParent: issue.id })
           }
         >
           <Plus className="h-4 w-4" />
-          Add {childKind}
+          Add child…
         </DropdownMenuItem>
       ) : null}
       {issue.kind !== "project" ? (
