@@ -378,4 +378,25 @@
     border: none;
     border-top: 1px solid hsl(var(--border));
   }
+  .prose-issue .issue-md-image-trigger {
+    display: inline-block;
+    max-width: 100%;
+    margin: 0.75rem 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: zoom-in;
+    border-radius: var(--radius);
+  }
+  .prose-issue .issue-md-image-trigger:focus-visible {
+    outline: 2px solid hsl(var(--current));
+    outline-offset: 2px;
+  }
+  .prose-issue .issue-md-image {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+  }
 }

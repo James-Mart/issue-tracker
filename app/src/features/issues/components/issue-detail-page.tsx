@@ -3,9 +3,9 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, MessageSquare, PanelRightClose } from "lucide-react";
 import type { IssueDetail, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
+import { ShellLoadingState } from "@/app/shell-state";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
 import {
   useChatQuery,
@@ -247,7 +247,7 @@ export function IssueDetailPage() {
   const { projectId = "", id = "" } = useParams();
 
   const { data: issue, isLoading, error } = useIssueDetailQuery(id);
-  const { data: list, isLoading: listLoading } = useIssuesQuery();
+  const { data: list } = useIssuesQuery();
 
   const byId = useMemo(
     () => issuesById(list?.issues ?? []),
@@ -263,7 +263,9 @@ export function IssueDetailPage() {
   const wrongProject =
     Boolean(list) && Boolean(issue) && !issueBelongsToProject(id, projectId, byId);
   const showScopeError = missing || wrongProject;
-  const loading = isLoading || (Boolean(issue) && listLoading);
+  // Gate only on the detail query. Waiting on the issues list kept hard
+  // navigations on bare skeletons until the slower list settled.
+  const loading = isLoading && !issue;
 
   const backLink = (
     <Link
@@ -275,12 +277,7 @@ export function IssueDetailPage() {
     </Link>
   );
 
-  if (
-    issue &&
-    !showScopeError &&
-    !loading &&
-    supportsAttachments(issue.kind)
-  ) {
+  if (issue && !showScopeError && supportsAttachments(issue.kind)) {
     return (
       <IssueDetailAttachable
         issue={issue}
@@ -301,12 +298,7 @@ export function IssueDetailPage() {
         </div>
       ) : null}
 
-      {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-8 w-2/3" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      ) : null}
+      {loading ? <ShellLoadingState label="Loading issue…" /> : null}
 
       {showScopeError && !loading ? (
         <div className="rounded-lg border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
