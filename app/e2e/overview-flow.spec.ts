@@ -106,15 +106,15 @@ test.describe("overview Flow lens", () => {
     const main = await gotoOverviewFlow(page, seededApp.baseURL);
 
     // Seed → project-scoped flowBuckets (see e2e/fixtures.ts): Ready has Epic A
-    // and the not-started "Story in flight"; B/C/D are blocked; merged story is
-    // recently merged; In flight is empty until a Story has branchName / pr-open.
+    // only; B/C/D are blocked (child story state rolls into Epic B); In flight
+    // is empty until a top-level Story has branchName / pr-open.
     // Heading accessible names concatenate label + count without a space.
     const ready = bucketSection(main, "ready");
-    await expect(ready.getByRole("heading", { name: "Ready2" })).toBeVisible();
+    await expect(ready.getByRole("heading", { name: "Ready1" })).toBeVisible();
     await expect(ready.getByRole("link", { name: /^Epic A\b/ })).toBeVisible();
     await expect(
       ready.getByRole("link", { name: /^Story in flight\b/ }),
-    ).toBeVisible();
+    ).toHaveCount(0);
 
     const inFlight = bucketSection(main, "inFlight");
     await expect(
@@ -136,10 +136,10 @@ test.describe("overview Flow lens", () => {
 
     const merged = bucketSection(main, "recentlyMerged");
     await expect(
-      merged.getByRole("heading", { name: "Recently merged1" }),
+      merged.getByRole("heading", { name: "Recently merged0" }),
     ).toBeVisible();
     await expect(
-      merged.getByRole("link", { name: /^Merged story\b/ }),
+      merged.getByText("Nothing merged recently. Merged Stories land here."),
     ).toBeVisible();
   });
 
@@ -151,7 +151,7 @@ test.describe("overview Flow lens", () => {
 
     const row = main
       .getByRole("listitem")
-      .filter({ hasText: "Story in flight" });
+      .filter({ hasText: "Epic A" });
     await row.hover();
 
     const flag = row.getByRole("button", { name: "Flag needs attention" });
@@ -167,7 +167,7 @@ test.describe("overview Flow lens", () => {
     const rowAfter = page
       .getByRole("main")
       .getByRole("listitem")
-      .filter({ hasText: "Story in flight" });
+      .filter({ hasText: "Epic A" });
     await rowAfter.hover();
     await expect(
       rowAfter.getByRole("button", { name: "Clear needs attention" }),
@@ -219,9 +219,7 @@ test.describe("overview Flow lens", () => {
   test("both-theme Flow key-surface snapshot", async ({ page, seededApp }) => {
     await gotoOverviewFlow(page, seededApp.baseURL);
     await expect(
-      page
-        .getByRole("main")
-        .getByRole("link", { name: /^Story in flight\b/ }),
+      page.getByRole("main").getByRole("link", { name: /^Epic A\b/ }),
     ).toBeVisible();
     await snapshotBothThemes(page, "overview-flow");
   });

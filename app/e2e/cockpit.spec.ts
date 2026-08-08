@@ -6,7 +6,10 @@ async function gotoCockpitReady(page: Page, baseURL: string): Promise<Locator> {
   await page.goto(baseURL);
   const main = page.getByRole("main");
   await expect(main.getByText("Cockpit")).toBeVisible();
-  await expect(main.getByText("Story in flight").first()).toBeVisible();
+  await expect(main.getByRole("link", { name: /^Epic B\b/ })).toBeVisible();
+  await expect(main.getByRole("link", { name: /^Story in flight\b/ })).toHaveCount(
+    0,
+  );
   return main;
 }
 
@@ -20,15 +23,22 @@ test.describe("cockpit", () => {
     // Row secondary link → project overview (one row among many project links).
     await main
       .getByRole("listitem")
-      .filter({ hasText: "Story in flight" })
+      .filter({ hasText: "Epic B" })
       .getByRole("link", { name: "Seed Project" })
       .click();
     await expect(page).toHaveURL(/\/projects\/seed-proj\/?$/);
     await expect(
-      page.getByRole("main").getByRole("link", { name: "Story in flight" }),
+      page.getByRole("main").getByRole("link", { name: /^Epic B\b/ }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /^Story in flight\b/ }),
+    ).toHaveCount(0);
 
-    // Project tree → issue detail.
+    // Structure lens → child story detail.
+    await page
+      .getByRole("tablist", { name: "Overview lens" })
+      .getByRole("tab", { name: "Structure" })
+      .click();
     await page
       .getByRole("main")
       .getByRole("link", { name: "Story in flight" })

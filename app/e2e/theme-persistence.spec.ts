@@ -3,7 +3,7 @@ import { expectThemeState } from "./snapshot-both-themes";
 
 test("theme toggle persists across reload", async ({ page, seededApp }) => {
   await page.goto(seededApp.baseURL);
-  await expect(page.getByText("Story in flight").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Epic B\b/ })).toBeVisible();
 
   await expectThemeState(page, { dataTheme: "dark", storage: null });
 

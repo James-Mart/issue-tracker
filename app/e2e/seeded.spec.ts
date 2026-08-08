@@ -1,6 +1,9 @@
 import { expect, test } from "./fixtures";
 
-test("seeded overview shows the story in flight", async ({ page, seededApp }) => {
+test("seeded cockpit shows top-level work roots only", async ({ page, seededApp }) => {
   await page.goto(seededApp.baseURL);
-  await expect(page.getByText("Story in flight").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Epic B\b/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Story in flight\b/ })).toHaveCount(
+    0,
+  );
 });

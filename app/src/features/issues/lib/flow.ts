@@ -1,5 +1,5 @@
 import { visibleIssues } from "@server/services/archived-visibility";
-import { bySequence, epicsBlockedBy } from "@server/order";
+import { bySequence, epicsBlockedBy, isProjectBoardChild } from "@server/order";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import type { BoardKindFilter } from "./board-kind-filter";
 import { filterToProject, issuesById, projectIdOf } from "./build-tree";
@@ -76,6 +76,7 @@ export function matchingFlowIssueIds(
   issues: IssueRecord[],
   filters: FlowFilters,
 ): Set<string> {
+  const byId = issuesById(issues);
   const next = filterIssuesBySearchAndLabels(
     issues,
     filters.search,
@@ -84,7 +85,7 @@ export function matchingFlowIssueIds(
   const keep = new Set<string>();
   for (const issue of next) {
     if (
-      (issue.kind === "story" || issue.kind === "epic") &&
+      isFlowTopLevelRow(issue, byId) &&
       flowKindAllows(issue.kind, filters.kind)
     ) {
       keep.add(issue.id);
@@ -111,10 +112,16 @@ export function filterFlowBuckets(
   };
 }
 
-function isStoryOrEpic(
+/** Epic or project-level Story — the only kinds that appear as Flow rows. */
+function isFlowTopLevelRow(
   issue: IssueRecord,
+  byId: Map<string, IssueRecord>,
 ): issue is IssueRecord & { kind: "story" | "epic" } {
-  return issue.kind === "story" || issue.kind === "epic";
+  if (issue.kind !== "epic" && issue.kind !== "story") return false;
+  if (!isProjectBoardChild(issue, byId)) return false;
+  // `isProjectBoardChild` keys off the immediate parent id; require a Project
+  // parent so an epic nested under another epic (writable via the API) stays out.
+  return byId.get(issue.partOf)?.kind === "project";
 }
 
 /**
@@ -170,7 +177,7 @@ export function flowBuckets(
 ): FlowBuckets {
   const byId = issuesById(issues);
   const candidates = issues.filter((issue) => {
-    if (!isStoryOrEpic(issue)) return false;
+    if (!isFlowTopLevelRow(issue, byId)) return false;
     if (scope.projectId === undefined) return true;
     return projectIdOf(issue.id, byId) === scope.projectId;
   }) as Array<IssueRecord & { kind: "story" | "epic" }>;
