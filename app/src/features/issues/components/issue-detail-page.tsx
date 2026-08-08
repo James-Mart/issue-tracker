@@ -125,12 +125,10 @@ function CompanionSlot({
 
 function IssueDetailBody({
   issue,
-  projectId,
   upload,
   catalog,
 }: {
   issue: IssueDetail;
-  projectId: string;
   upload?: UploadAttachmentMutation;
   catalog: ProjectLabel[];
 }) {
@@ -155,11 +153,7 @@ function IssueDetailBody({
   return (
     <div className="flex min-h-0 flex-1 gap-4">
       <div className="flex min-w-0 flex-1 flex-col gap-4">
-        <IssueDetailHeader
-          issue={issue}
-          projectId={projectId}
-          catalog={catalog}
-        />
+        <IssueDetailHeader issue={issue} catalog={catalog} />
 
         <IssueDetailView
           issue={issue}
@@ -244,12 +238,7 @@ function IssueDetailAttachable({
   return (
     <PageShell {...rootProps}>
       {backLink}
-      <IssueDetailBody
-        issue={issue}
-        projectId={projectId}
-        upload={upload}
-        catalog={catalog}
-      />
+      <IssueDetailBody issue={issue} upload={upload} catalog={catalog} />
     </PageShell>
   );
 }
@@ -335,11 +324,7 @@ export function IssueDetailPage() {
       ) : null}
 
       {issue && !showScopeError ? (
-        <IssueDetailBody
-          issue={issue}
-          projectId={projectId}
-          catalog={catalog}
-        />
+        <IssueDetailBody issue={issue} catalog={catalog} />
       ) : null}
     </PageShell>
   );

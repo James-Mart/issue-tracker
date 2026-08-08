@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Check, Copy, Trash2 } from "lucide-react";
+import { Check, Copy, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import type { IssueDetail, ProjectLabel } from "@server/schemas";
 import { Button } from "@/components/ui/button";
-import { useIssueUiStore } from "../store/use-issue-ui-store";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { KIND_LABEL } from "../lib/kind";
-import { projectPath } from "../lib/links";
-import { ArchiveIssueButton } from "./archive-issue-button";
+import { IssueArchiveDeleteMenuItems } from "./issue-archive-delete-menu-items";
 import { IssueBadges } from "./issue-badges";
 import { IssueDetailStatusChips } from "./issue-detail-status-chips";
 import { IssueTitleField } from "./issue-title-field";
@@ -55,19 +57,15 @@ function CopyIssueIdButton({ id }: { id: string }) {
 
 /**
  * Mainline detail header: kind eyebrow, title, Foundations status chips,
- * needs-attention (via IssueBadges), labels, and archive/delete.
+ * needs-attention (via IssueBadges), labels, and a quiet overflow menu.
  */
 export function IssueDetailHeader({
   issue,
-  projectId,
   catalog,
 }: {
   issue: IssueDetail;
-  projectId: string;
   catalog: ProjectLabel[];
 }) {
-  const navigate = useNavigate();
-  const requestDelete = useIssueUiStore((s) => s.requestDelete);
   // Stories carry specReview/retro on axis chips — keep badges compact to avoid dupes.
   const badgesCompact = issue.kind === "story";
 
@@ -90,19 +88,21 @@ export function IssueDetailHeader({
           <IssueBadges issue={issue} compact={badgesCompact} />
         </div>
       </div>
-      <div className="flex shrink-0 gap-2">
-        <ArchiveIssueButton issue={issue} />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            requestDelete(issue.id);
-            navigate(projectPath(projectId));
-          }}
-        >
-          <Trash2 className="h-4 w-4 text-destructive" />
-        </Button>
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground"
+            title="Issue actions"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <IssueArchiveDeleteMenuItems issue={issue} />
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   );
 }

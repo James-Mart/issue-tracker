@@ -8,13 +8,10 @@ import {
   Lightbulb,
   Plus,
   Trash2,
-  Archive,
-  ArchiveRestore,
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { assigneeOf } from "@server/assignee";
 import { hasAttention } from "@server/kind";
-import { isArchived } from "@server/services/archived-visibility";
 import {
   CHILD_KIND,
   type DerivedState,
@@ -62,7 +59,7 @@ import { ArchiveIssueButton } from "./archive-issue-button";
 import { EpicAxisChips, StoryAxisChips } from "./axis-chips";
 import { TaskStatusChips } from "./task-status-chips";
 import { ProjectLabelChips } from "./project-label-chips";
-import { useUpdateIssue } from "../api/mutations";
+import { IssueArchiveDeleteMenuItems } from "./issue-archive-delete-menu-items";
 
 const KIND_ICON: Record<IssueKind, typeof Layers> = {
   project: FolderKanban,
@@ -376,19 +373,8 @@ function TreeRowTouchMenu({
   catalog: ProjectLabel[];
 }) {
   const openNew = useIssueUiStore((s) => s.openNew);
-  const requestDelete = useIssueUiStore((s) => s.requestDelete);
-  const update = useUpdateIssue();
   const childKind = CHILD_KIND[issue.kind];
-  const archived = isArchived(issue);
   const chipLabels = treeRowTouchChipLabels(issue, derived, catalog);
-
-  const toggleArchive = () => {
-    if (issue.kind === "project") return;
-    update.mutate({
-      id: issue.id,
-      patch: { archived: !archived },
-    });
-  };
 
   return (
     <>
@@ -411,32 +397,7 @@ function TreeRowTouchMenu({
           Add child…
         </DropdownMenuItem>
       ) : null}
-      {issue.kind !== "project" ? (
-        archived ? (
-          <DropdownMenuItem
-            disabled={update.isPending}
-            onSelect={toggleArchive}
-          >
-            <ArchiveRestore className="h-4 w-4" />
-            Unarchive
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem
-            disabled={update.isPending}
-            onSelect={toggleArchive}
-          >
-            <Archive className="h-4 w-4" />
-            Archive
-          </DropdownMenuItem>
-        )
-      ) : null}
-      <DropdownMenuItem
-        className="text-destructive focus:text-destructive"
-        onSelect={() => requestDelete(issue.id)}
-      >
-        <Trash2 className="h-4 w-4" />
-        Delete
-      </DropdownMenuItem>
+      <IssueArchiveDeleteMenuItems issue={issue} />
     </>
   );
 }
