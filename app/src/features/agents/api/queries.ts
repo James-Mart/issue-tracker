@@ -10,13 +10,12 @@ import { agentsKeys } from "./keys";
 /** Poll so closed-thread runs clear without an open SSE subscription. */
 const CONVERSATIONS_REFETCH_INTERVAL_MS = 15_000;
 
-export function useConversationsQuery(): UseQueryResult<
-  ConversationListItem[],
-  Error
-> {
+export function useConversationsQuery(
+  showArchived = false,
+): UseQueryResult<ConversationListItem[], Error> {
   return useQuery({
-    queryKey: agentsKeys.conversations(),
-    queryFn: listConversations,
+    queryKey: agentsKeys.conversations(showArchived),
+    queryFn: () => listConversations(showArchived),
     refetchOnWindowFocus: true,
     refetchInterval: CONVERSATIONS_REFETCH_INTERVAL_MS,
   });

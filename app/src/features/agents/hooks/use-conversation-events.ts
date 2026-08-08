@@ -252,12 +252,12 @@ export function useConversationEvents(
           setStreamRunActive(parsed.event.status === "started");
           // SSE covers only the open conversation; refresh the roster so its
           // `activeRun` flag tracks this thread's lifecycle immediately.
-          void qc.invalidateQueries({ queryKey: agentsKeys.conversations() });
+          void qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
           return;
         }
         if (parsed.event.type === "pending") {
           setPendingText(parsed.event.text);
-          void qc.invalidateQueries({ queryKey: agentsKeys.conversations() });
+          void qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
           return;
         }
         if (replaying) {

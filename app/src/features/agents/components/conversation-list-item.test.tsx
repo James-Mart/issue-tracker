@@ -42,6 +42,7 @@ const sampleConversation: ConversationRow = {
   projectId: "issue-tracker",
   model: "composer-2.5-fast",
   activeRun: false,
+  archived: false,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
@@ -90,7 +91,15 @@ function openActionsMenu(trigger: HTMLButtonElement) {
 
 function archiveMenuItem(): HTMLElement {
   const item = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
-    (entry) => entry.textContent?.includes("Archive"),
+    (entry) => entry.textContent?.includes("Archive") && !entry.textContent?.includes("Unarchive"),
+  );
+  expect(item).toBeTruthy();
+  return item as HTMLElement;
+}
+
+function unarchiveMenuItem(): HTMLElement {
+  const item = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+    (entry) => entry.textContent?.includes("Unarchive"),
   );
   expect(item).toBeTruthy();
   return item as HTMLElement;
@@ -155,6 +164,27 @@ describe("ConversationListItem", () => {
     expect(updateMutate).toHaveBeenCalledWith(
       { id: "conv-1", patch: { archived: true } },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("patches archived back to false when Unarchive is chosen from the menu", () => {
+    const { container, root } = mountListItem({
+      conversation: { ...sampleConversation, archived: true },
+    });
+    const trigger = actionsButton(container);
+
+    openActionsMenu(trigger);
+
+    act(() => {
+      unarchiveMenuItem().click();
+    });
+
+    expect(updateMutate).toHaveBeenCalledWith(
+      { id: "conv-1", patch: { archived: false } },
     );
 
     act(() => {

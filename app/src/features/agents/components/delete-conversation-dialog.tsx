@@ -21,7 +21,7 @@ export function DeleteConversationDialog() {
     (s) => s.setSelectedConversationId,
   );
   const deleteConversation = useDeleteConversation();
-  const { data } = useConversationsQuery();
+  const { data } = useConversationsQuery(true);
 
   const target = targetId
     ? data?.find((conversation) => conversation.id === targetId)

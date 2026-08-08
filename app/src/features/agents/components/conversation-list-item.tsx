@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Archive, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { ConversationListItem as ConversationRow } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -84,6 +84,13 @@ export function ConversationListItem({
     );
   };
 
+  const unarchiveConversation = () => {
+    updateConversation.mutate({
+      id: conversation.id,
+      patch: { archived: false },
+    });
+  };
+
   const commitRename = () => {
     const trimmed = draft.trim();
     if (!trimmed || trimmed === conversation.title) {
@@ -101,6 +108,7 @@ export function ConversationListItem({
       className={cn(
         "group flex items-center gap-1 border-b border-border px-2 py-1",
         isSelected && "bg-accent/40",
+        conversation.archived && "opacity-60",
       )}
     >
       {isRenaming ? (
@@ -134,13 +142,19 @@ export function ConversationListItem({
           )}
         >
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-sm font-medium text-foreground",
+                conversation.archived && "text-muted-foreground",
+              )}
+            >
               {conversation.title}
             </span>
             <RosterActiveRunIndicator activeRun={conversation.activeRun} />
           </span>
           <span className="block truncate font-mono text-[11px] text-muted-foreground">
             {projectTitle} · {conversation.model}
+            {conversation.archived ? " · archived" : ""}
           </span>
         </button>
       )}
@@ -168,10 +182,17 @@ export function ConversationListItem({
               <Pencil className="h-4 w-4" />
               Rename
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={archiveConversation}>
-              <Archive className="h-4 w-4" />
-              Archive
-            </DropdownMenuItem>
+            {conversation.archived ? (
+              <DropdownMenuItem onClick={unarchiveConversation}>
+                <ArchiveRestore className="h-4 w-4" />
+                Unarchive
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={archiveConversation}>
+                <Archive className="h-4 w-4" />
+                Archive
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
               onClick={() => requestDelete(conversation.id)}

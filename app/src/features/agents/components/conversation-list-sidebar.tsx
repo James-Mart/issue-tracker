@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Plus } from "lucide-react";
+import { Archive, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShellInlineFault, ShellState } from "@/app/shell-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,13 +17,15 @@ export function ConversationListSidebar() {
     (s) => s.setSelectedConversationId,
   );
   const openCreateDialog = useAgentsUiStore((s) => s.openCreateDialog);
+  const showArchived = useAgentsUiStore((s) => s.showArchived);
+  const setShowArchived = useAgentsUiStore((s) => s.setShowArchived);
   const {
     data: conversations,
     isLoading,
     error,
     refetch,
     isFetching,
-  } = useConversationsQuery();
+  } = useConversationsQuery(showArchived);
   const { data: issuesData } = useIssuesQuery();
 
   const projectTitles = useMemo(() => {
@@ -42,15 +44,33 @@ export function ConversationListSidebar() {
           {conversations?.length ?? 0} conversation
           {(conversations?.length ?? 0) === 1 ? "" : "s"}
         </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 px-2"
-          onClick={() => openCreateDialog()}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          New
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant={showArchived ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 gap-1 px-2"
+            aria-pressed={showArchived}
+            title={
+              showArchived
+                ? "Hide archived conversations"
+                : "Show archived conversations"
+            }
+            onClick={() => setShowArchived(!showArchived)}
+          >
+            <Archive className="h-3.5 w-3.5" />
+            Archived
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2"
+            onClick={() => openCreateDialog()}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New
+          </Button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
