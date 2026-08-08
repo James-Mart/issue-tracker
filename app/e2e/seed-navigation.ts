@@ -1,6 +1,28 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
+/** Cockpit with Blocked expanded so seeded Epic B rows are reachable. */
+export async function gotoCockpitReady(
+  page: Page,
+  baseURL: string,
+): Promise<Locator> {
+  await page.goto(baseURL);
+  const main = page.getByRole("main");
+  await expect(main.getByText("Cockpit")).toBeVisible();
+
+  const blocked = main.locator('section[aria-labelledby="cockpit-blocked"]');
+  const blockedSummary = blocked.locator("summary");
+  if ((await blockedSummary.count()) > 0) {
+    await blockedSummary.click();
+  }
+
+  await expect(main.getByRole("link", { name: /^Epic B\b/ })).toBeVisible();
+  await expect(main.getByRole("link", { name: /^Story in flight\b/ })).toHaveCount(
+    0,
+  );
+  return main;
+}
+
 export async function gotoSeedStoryDetail(
   page: Page,
   baseURL: string,

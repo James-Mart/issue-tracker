@@ -1,32 +1,213 @@
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
+import { hasAttention } from "@server/kind";
+import { cn } from "@/lib/utils/cn";
 import type { FlowBuckets, FlowItem } from "../lib/flow";
 
-export const FLOW_BUCKET_DEFS: {
-  key: keyof FlowBuckets;
+type FlowBucketKey = keyof FlowBuckets | "needsAttention";
+
+export type FlowBucketDef = {
+  key: FlowBucketKey;
   label: string;
-  empty: string;
-}[] = [
+  empty?: string;
+  hideWhenEmpty?: boolean;
+  collapsedByDefault?: boolean;
+  compact?: boolean;
+};
+
+/** Cockpit bucket order and chrome; overview uses the same labels with legacy layout. */
+export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
+  {
+    key: "needsAttention",
+    label: "Needs attention",
+    hideWhenEmpty: true,
+  },
   {
     key: "inFlight",
     label: "In flight",
     empty: "Nothing in flight. Pick up Ready work or start a Story.",
+    hideWhenEmpty: true,
   },
   {
     key: "ready",
     label: "Ready",
     empty: "Nothing ready. Clear filters, or add work in Structure.",
+    hideWhenEmpty: true,
+    compact: true,
   },
   {
     key: "blocked",
     label: "Blocked",
     empty: "Nothing blocked. Dependencies are clear.",
+    hideWhenEmpty: true,
+    collapsedByDefault: true,
   },
   {
     key: "recentlyMerged",
     label: "Recently merged",
     empty: "Nothing merged recently. Merged Stories land here.",
+    hideWhenEmpty: true,
+    collapsedByDefault: true,
   },
 ];
+
+const OVERVIEW_BUCKET_KEYS = new Set<keyof FlowBuckets>([
+  "inFlight",
+  "ready",
+  "blocked",
+  "recentlyMerged",
+]);
+
+function isNeedsAttentionItem(item: FlowItem): boolean {
+  return hasAttention(item.issue) && item.issue.needsAttention;
+}
+
+/** Pull flagged rows into the virtual needs-attention bucket for cockpit layout. */
+export function partitionCockpitBuckets(buckets: FlowBuckets): {
+  needsAttention: FlowItem[];
+  buckets: FlowBuckets;
+} {
+  const needsAttention: FlowItem[] = [];
+  const take = (items: FlowItem[]) => {
+    const rest: FlowItem[] = [];
+    for (const item of items) {
+      if (isNeedsAttentionItem(item)) needsAttention.push(item);
+      else rest.push(item);
+    }
+    return rest;
+  };
+  return {
+    needsAttention,
+    buckets: {
+      ready: take(buckets.ready),
+      inFlight: take(buckets.inFlight),
+      blocked: take(buckets.blocked),
+      recentlyMerged: take(buckets.recentlyMerged),
+    },
+  };
+}
+
+function bucketItems(
+  key: FlowBucketKey,
+  buckets: FlowBuckets,
+  needsAttention: FlowItem[],
+): FlowItem[] {
+  if (key === "needsAttention") return needsAttention;
+  return buckets[key];
+}
+
+function BucketHeading({
+  id,
+  label,
+  count,
+  compact,
+}: {
+  id: string;
+  label: string;
+  count: number;
+  compact?: boolean;
+}) {
+  return (
+    <h2
+      id={id}
+      className={cn(
+        "font-display font-semibold uppercase tracking-[0.16em] text-[hsl(var(--current))]",
+        compact ? "text-[10px]" : "text-[11px]",
+      )}
+    >
+      {label}
+      <span className="ml-2 font-mono text-[11px] tabular-nums text-muted-foreground">
+        {count}
+      </span>
+    </h2>
+  );
+}
+
+function BucketList({
+  items,
+  renderRow,
+  compact,
+}: {
+  items: FlowItem[];
+  renderRow: (item: FlowItem) => ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <ul
+      className={cn(
+        "flex list-none flex-col p-0",
+        compact ? "mt-2 gap-1" : "mt-3 gap-1.5",
+      )}
+    >
+      {items.map((item) => {
+        const row = renderRow(item);
+        if (row == null) return null;
+        return <li key={item.issue.id}>{row}</li>;
+      })}
+    </ul>
+  );
+}
+
+function FlowBucketSection({
+  def,
+  items,
+  idPrefix,
+  renderRow,
+  variant,
+}: {
+  def: FlowBucketDef;
+  items: FlowItem[];
+  idPrefix: string;
+  renderRow: (item: FlowItem) => ReactNode;
+  variant: "overview" | "cockpit";
+}) {
+  const headingId = `${idPrefix}-${def.key}`;
+  const count = items.length;
+  const hideWhenEmpty = variant === "cockpit" && def.hideWhenEmpty;
+  const collapsed =
+    variant === "cockpit" && def.collapsedByDefault && count > 0;
+  const compact = variant === "cockpit" && def.compact;
+
+  if (hideWhenEmpty && count === 0) return null;
+
+  const body =
+    count === 0 && def.empty ? (
+      <p className="mt-3 text-sm text-muted-foreground">{def.empty}</p>
+    ) : (
+      <BucketList items={items} renderRow={renderRow} compact={compact} />
+    );
+
+  if (collapsed) {
+    return (
+      <section key={def.key} aria-labelledby={headingId}>
+        <details className="group">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+            <BucketHeading
+              id={headingId}
+              label={def.label}
+              count={count}
+              compact={compact}
+            />
+          </summary>
+          {body}
+        </details>
+      </section>
+    );
+  }
+
+  return (
+    <section key={def.key} aria-labelledby={headingId}>
+      <BucketHeading
+        id={headingId}
+        label={def.label}
+        count={count}
+        compact={compact}
+      />
+      {body}
+    </section>
+  );
+}
 
 /**
  * Bucketed Flow lists: section chrome + empty copy. Surfaces supply each row
@@ -36,41 +217,43 @@ export function FlowBucketsSections({
   buckets,
   idPrefix,
   renderRow,
+  variant = "overview",
 }: {
   buckets: FlowBuckets;
   idPrefix: string;
   renderRow: (item: FlowItem) => ReactNode;
+  /** Cockpit foregrounds attention/in-flight work and collapses backlog buckets. */
+  variant?: "overview" | "cockpit";
 }) {
-  return (
-    <div className="flex flex-col gap-8">
-      {FLOW_BUCKET_DEFS.map(({ key, label, empty }) => {
-        const items = buckets[key];
-        const headingId = `${idPrefix}-${key}`;
-        return (
-          <section key={key} aria-labelledby={headingId}>
-            <h2
-              id={headingId}
-              className="font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--current))]"
-            >
-              {label}
-              <span className="ml-2 font-mono text-[11px] tabular-nums text-muted-foreground">
-                {items.length}
-              </span>
-            </h2>
-            {items.length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">{empty}</p>
-            ) : (
-              <ul className="mt-3 flex list-none flex-col gap-1.5 p-0">
-                {items.map((item) => {
-                  const row = renderRow(item);
-                  if (row == null) return null;
-                  return <li key={item.issue.id}>{row}</li>;
-                })}
-              </ul>
-            )}
-          </section>
+  const cockpit =
+    variant === "cockpit" ? partitionCockpitBuckets(buckets) : null;
+  const displayBuckets = cockpit?.buckets ?? buckets;
+  const needsAttention = cockpit?.needsAttention ?? [];
+
+  const defs =
+    variant === "cockpit"
+      ? FLOW_BUCKET_DEFS
+      : FLOW_BUCKET_DEFS.filter((def) =>
+          OVERVIEW_BUCKET_KEYS.has(def.key as keyof FlowBuckets),
         );
-      })}
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col",
+        variant === "cockpit" ? "gap-5" : "gap-8",
+      )}
+    >
+      {defs.map((def) => (
+        <FlowBucketSection
+          key={def.key}
+          def={def}
+          items={bucketItems(def.key, displayBuckets, needsAttention)}
+          idPrefix={idPrefix}
+          renderRow={renderRow}
+          variant={variant}
+        />
+      ))}
     </div>
   );
 }

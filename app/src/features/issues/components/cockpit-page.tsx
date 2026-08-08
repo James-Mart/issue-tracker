@@ -101,6 +101,7 @@ export function CockpitPage() {
           <FlowBucketsSections
             buckets={buckets}
             idPrefix="cockpit"
+            variant="cockpit"
             renderRow={(item) => {
               const projectId = projectIdOf(item.issue.id, byId);
               if (!projectId) return null;
