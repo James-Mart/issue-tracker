@@ -1,18 +1,17 @@
 import { useMemo, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  MessageSquare,
-  PanelRightClose,
-  PanelRightOpen,
-} from "lucide-react";
+import { ArrowLeft, MessageSquare, PanelRightClose } from "lucide-react";
 import type { IssueDetail, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
-import { useIssueDetailQuery, useIssuesQuery } from "../api/queries";
+import {
+  useChatQuery,
+  useIssueDetailQuery,
+  useIssuesQuery,
+} from "../api/queries";
 import { useUploadAttachment } from "../api/mutations";
 import {
   useIssueDetailFileUpload,
@@ -22,9 +21,11 @@ import { kindHas } from "../lib/kind";
 import { issueBelongsToProject, issuesById } from "../lib/build-tree";
 import { projectPath } from "../lib/links";
 import {
-  parseChatCompanionState,
+  parseChatCompanionPreference,
+  resolveChatCompanionExpanded,
   writeChatCompanionParam,
 } from "../lib/chat-companion";
+import { isInFlight } from "../lib/derived";
 import { kindHasOwnFlow } from "../lib/own-flow";
 import {
   isLabelAssignableIssue,
@@ -61,7 +62,7 @@ function OwnFlowSlot({ issue }: { issue: IssueDetail }) {
   );
 }
 
-/** Docked companion for `surfaces-chat`; collapse persisted as `?chat=`. */
+/** Docked companion for `surfaces-chat`; collapse override as `?chat=`. */
 function CompanionSlot({
   issueId,
   attachmentsIssueId,
@@ -106,20 +107,17 @@ function CompanionSlot({
           />
         </>
       ) : (
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            title="Expand chat"
-            aria-label="Expand chat"
-            aria-expanded={false}
-            onClick={() => onExpandedChange(true)}
-          >
-            <PanelRightOpen className="h-4 w-4" />
-          </Button>
-          <MessageSquare className="mt-2 h-3.5 w-3.5 text-muted-foreground" />
-        </>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          title="Steer this issue"
+          aria-label="Steer this issue"
+          aria-expanded={false}
+          onClick={() => onExpandedChange(true)}
+        >
+          <MessageSquare className="h-4 w-4" />
+        </Button>
       )}
     </aside>
   );
@@ -137,9 +135,14 @@ function IssueDetailBody({
   catalog: ProjectLabel[];
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: chat } = useChatQuery(issue.id);
   const attach = supportsAttachments(issue.kind);
-  const companionExpanded =
-    parseChatCompanionState(searchParams.get("chat")) === "expanded";
+  const preference = parseChatCompanionPreference(searchParams.get("chat"));
+  const hasMessages = (chat?.messages.length ?? 0) > 0;
+  const companionExpanded = resolveChatCompanionExpanded(preference, {
+    hasMessages,
+    agentLive: isInFlight(issue),
+  });
 
   const setCompanionExpanded = (expanded: boolean) => {
     setSearchParams(
