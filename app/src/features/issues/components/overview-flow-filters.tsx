@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { OverviewCollapsibleSearch } from "./overview-collapsible-search";
+import { OverviewNewMenu } from "./overview-new-menu";
 import { Switch } from "@/components/ui/switch";
 import {
   BOARD_KIND_OPTIONS,
@@ -31,10 +32,12 @@ const KIND_OPTION_META: Record<
   story: { label: "Stories", icon: GitBranch },
 };
 
-/** Shared search + filter popover (Type / Labels / Show archived) for overview lenses. */
+/** Shared search, filter popover, and create menu for overview lenses. */
 export function OverviewFlowFilters({
+  projectId,
   catalog,
 }: {
+  projectId: string;
   catalog: ProjectLabel[];
 }) {
   const search = useIssueUiStore((s) => s.search);
@@ -58,7 +61,8 @@ export function OverviewFlowFilters({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <OverviewCollapsibleSearch value={search} onChange={setSearch} />
-      <DropdownMenu>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             type="button"
@@ -150,7 +154,9 @@ export function OverviewFlowFilters({
             />
           </div>
         </DropdownMenuContent>
-      </DropdownMenu>
+        </DropdownMenu>
+        <OverviewNewMenu projectId={projectId} />
+      </div>
     </div>
   );
 }

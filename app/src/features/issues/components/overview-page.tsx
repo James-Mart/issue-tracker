@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { GitBranch, Plus } from "lucide-react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { visibleIssues } from "@server/services/archived-visibility";
 import type {
@@ -38,7 +37,6 @@ import { FlowRow } from "./flow-row";
 import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
 import { IssueTree } from "./issue-tree";
 import { OverviewFlowFilters } from "./overview-flow-filters";
-import { StructureIdeaCapture } from "./structure-idea-capture";
 
 function OverviewHeader({ title }: { title: string }) {
   return (
@@ -214,7 +212,6 @@ function OverviewStructureLens({
   derived: Record<string, DerivedState>;
   catalog: ProjectLabel[];
 }) {
-  const openNew = useIssueUiStore((s) => s.openNew);
   const search = useIssueUiStore((s) => s.search);
   const setSearch = useIssueUiStore((s) => s.setSearch);
   const labelFilter = useIssueUiStore((s) => s.labelFilter);
@@ -248,11 +245,6 @@ function OverviewStructureLens({
     setBoardKindFilter([]);
   };
 
-  const hasIdeas = useMemo(
-    () => scoped.some((issue) => issue.kind === "idea"),
-    [scoped],
-  );
-
   return (
     <div
       role="tabpanel"
@@ -260,31 +252,6 @@ function OverviewStructureLens({
       aria-labelledby="overview-lens-tab-structure"
       className="flex flex-col gap-6"
     >
-      <StructureIdeaCapture projectId={projectId} empty={!hasIdeas} />
-
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            openNew({ presetKind: "story", presetParent: projectId })
-          }
-        >
-          <GitBranch className="h-4 w-4" />
-          New story
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            openNew({ presetKind: "epic", presetParent: projectId })
-          }
-        >
-          <Plus className="h-4 w-4" />
-          New epic
-        </Button>
-      </div>
-
       {filtersOn && nodes.length === 0 ? (
         <ShellState
           eyebrow="Filtered"
@@ -360,7 +327,7 @@ export function OverviewPage() {
         <PageShell>
           <OverviewHeader title={project.title} />
           <LensSwitcher value={lens} onChange={setLens} />
-          <OverviewFlowFilters catalog={catalog} />
+          <OverviewFlowFilters projectId={projectId} catalog={catalog} />
 
           {lens === "flow" ? (
             <OverviewFlowLens

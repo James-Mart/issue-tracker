@@ -327,18 +327,14 @@ async function openRenameProjectDialog(page: Page, projectId: string): Promise<v
 }
 
 async function openNewEpicDialog(page: Page): Promise<void> {
-  await page
-    .getByRole("tabpanel", { name: "Structure" })
-    .getByRole("button", { name: "New epic" })
-    .click();
+  await page.getByRole("main").getByRole("button", { name: "New" }).click();
+  await page.getByRole("menuitem", { name: "New epic" }).click();
   await page.getByTestId("new-issue-dialog").waitFor({ state: "visible" });
 }
 
 async function openNewStoryDialog(page: Page): Promise<void> {
-  await page
-    .getByRole("tabpanel", { name: "Structure" })
-    .getByRole("button", { name: "New story" })
-    .click();
+  await page.getByRole("main").getByRole("button", { name: "New" }).click();
+  await page.getByRole("menuitem", { name: "New story" }).click();
   await page.getByTestId("new-issue-dialog").waitFor({ state: "visible" });
 }
 

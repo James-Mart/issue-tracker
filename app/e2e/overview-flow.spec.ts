@@ -40,6 +40,7 @@ test.describe("overview Flow lens", () => {
     ).toHaveCount(0);
     await expect(page).not.toHaveURL(/[?&]lens=/);
     await expect(sharedSearch).toBeVisible();
+    await expect(page.getByRole("main").getByRole("button", { name: "New" })).toBeVisible();
 
     await structureTab.click();
     await expect(page).toHaveURL(/[?&]lens=structure(?:&|$)/);
@@ -52,21 +53,10 @@ test.describe("overview Flow lens", () => {
       structurePanel.getByLabel("Search overview"),
     ).toHaveCount(0);
     await expect(
-      structurePanel.getByRole("heading", { name: "Ideas" }),
-    ).toBeVisible();
+      structurePanel.getByRole("button", { name: "New" }),
+    ).toHaveCount(0);
     await expect(
-      structurePanel.getByText(
-        "No ideas yet. Name what to plan next, then capture it here.",
-      ),
-    ).toBeVisible();
-    await expect(
-      structurePanel.getByRole("button", { name: "New idea" }),
-    ).toBeVisible();
-    await expect(
-      structurePanel.getByRole("button", { name: "New story" }),
-    ).toBeVisible();
-    await expect(
-      structurePanel.getByRole("button", { name: "New epic" }),
+      page.getByRole("main").getByRole("button", { name: "New" }),
     ).toBeVisible();
     await expect(
       structurePanel.getByRole("link", { name: /^Epic A\b/ }),
@@ -81,11 +71,7 @@ test.describe("overview Flow lens", () => {
       }),
     ).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("tabpanel", { name: "Structure" })).toBeVisible();
-    await expect(
-      page
-        .getByRole("tabpanel", { name: "Structure" })
-        .getByRole("button", { name: "New epic" }),
-    ).toBeVisible();
+    await expect(page.getByRole("main").getByRole("button", { name: "New" })).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Search overview")).toBeVisible();
 
     await page
@@ -175,7 +161,7 @@ test.describe("overview Flow lens", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("Structure idea capture creates an Idea outside Flow", async ({
+  test("New menu creates an Idea outside Flow", async ({
     page,
     seededApp,
   }) => {
@@ -187,23 +173,19 @@ test.describe("overview Flow lens", () => {
 
     const structurePanel = page.getByRole("tabpanel", { name: "Structure" });
     await expect(structurePanel).toBeVisible();
-    await expect(
-      structurePanel.getByText(
-        "No ideas yet. Name what to plan next, then capture it here.",
-      ),
-    ).toBeVisible();
 
-    await structurePanel.getByLabel("Idea title").fill("Capture me next");
-    await structurePanel.getByRole("button", { name: "New idea" }).click();
+    await page.getByRole("main").getByRole("button", { name: "New" }).click();
+    await page.getByRole("menuitem", { name: "New idea" }).click();
 
+    const dialog = page.getByTestId("new-issue-dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("Title").fill("Capture me next");
+    await dialog.getByRole("button", { name: "Create" }).click();
+
+    await expect(dialog).toHaveCount(0);
     await expect(
       structurePanel.getByRole("link", { name: /^Capture me next\b/ }),
     ).toBeVisible();
-    await expect(
-      structurePanel.getByText(
-        "No ideas yet. Name what to plan next, then capture it here.",
-      ),
-    ).toHaveCount(0);
 
     await page
       .getByRole("tablist", { name: "Overview lens" })
