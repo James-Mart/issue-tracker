@@ -48,9 +48,9 @@ the custom tools `agent_stack_start` and `agent_stack_stop` (no conversation-id
 argument — they are scoped to the current conversation). `agent_stack_start`
 brings up an API+Vite watch pair on free ports and returns the env contract
 `AGENT_STACK_API_PORT`, `AGENT_STACK_VITE_PORT`, and `AGENT_STACK_BASE_URL`.
-Export those into the shell before screenshots or other probes. Do not stop or
-restart the human's stack on 8060/8061 to test a lifecycle path. Call
-`agent_stack_stop` when finished.
+Export those into the shell before screenshots, Playwright e2e, or other probes.
+Do not stop or restart the human's stack on 8060/8061 to test a lifecycle path.
+Call `agent_stack_stop` when finished.
 
 Outside agents-chat, the same lifecycle is available as:
 
@@ -79,6 +79,19 @@ cd app && npm run screenshots -- [options] <path-or-dialog>...
 - **Discovery** — `npm run screenshots -- --help` for flags; `--all` captures
   common paths plus all dialogs for a project. Full contract: Story
   `agent-ui-screenshot-capture`.
+
+## Playwright e2e
+
+`npm run test:e2e` runs Playwright specs under `app/e2e/`. Call
+`agent_stack_start` when needed and export `AGENT_STACK_BASE_URL` into the
+shell first; smoke specs use that env as `baseURL` and Playwright will not
+start `npm run dev` on the human default ports. Seeded specs boot their own
+ephemeral Express server and ignore the config `baseURL`. With env unset,
+smoke keeps today's behavior (`http://localhost:8060` plus `webServer`).
+
+```bash
+cd app && npm run test:e2e
+```
 
 ## What it shows
 

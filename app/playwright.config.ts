@@ -1,31 +1,55 @@
-import { defineConfig, devices } from "@playwright/test";
+import {
+  defineConfig,
+  devices,
+  type PlaywrightTestConfig,
+} from "@playwright/test";
+import {
+  DEFAULT_BASE_URL,
+  resolveDefaultBaseUrl,
+} from "./scripts/capture-screenshots.js";
 
-export default defineConfig({
-  testDir: "./e2e",
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: "list",
-  expect: {
-    toHaveScreenshot: {
-      animations: "disabled",
-      caret: "hide",
+export function usesAgentStackEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.AGENT_STACK_BASE_URL?.trim());
+}
+
+export function buildPlaywrightConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): PlaywrightTestConfig {
+  const baseURL = resolveDefaultBaseUrl(env);
+
+  return {
+    testDir: "./e2e",
+    fullyParallel: true,
+    forbidOnly: !!env.CI,
+    retries: env.CI ? 2 : 0,
+    workers: env.CI ? 1 : undefined,
+    reporter: "list",
+    expect: {
+      toHaveScreenshot: {
+        animations: "disabled",
+        caret: "hide",
+      },
     },
-  },
-  use: {
-    baseURL: "http://localhost:8060",
-    trace: "retain-on-failure",
-  },
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+    use: {
+      baseURL,
+      trace: "retain-on-failure",
     },
-  ],
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:8060",
-    reuseExistingServer: !process.env.CI,
-  },
-});
+    projects: [
+      {
+        name: "chromium",
+        use: { ...devices["Desktop Chrome"] },
+      },
+    ],
+    ...(usesAgentStackEnv(env)
+      ? {}
+      : {
+          webServer: {
+            command: "npm run dev",
+            url: DEFAULT_BASE_URL,
+            reuseExistingServer: !env.CI,
+          },
+        }),
+  };
+}
+
+export default defineConfig(buildPlaywrightConfig());

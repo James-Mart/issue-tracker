@@ -17,8 +17,9 @@ Absolute path for this file (Read this exact path):
    consult — Task prose and changed paths), also do a **best-effort** UI check
    the way a human implementer would: when verifying server/UI changes from
    agents-chat, call `agent_stack_start` first (or export `AGENT_STACK_BASE_URL`
-   from an existing stack); `npm run screenshots` uses that env as its default
-   base URL. Run
+   from an existing stack); `npm run screenshots` and `npm run test:e2e` use
+   that env as their default base URL (e2e smoke only; seeded specs boot their
+   own server). Run
    `cd app && npm run screenshots -- <path-or-dialog>` and read the PNGs under
    the output dir (default `/tmp/issue-tracker-screenshots`) to confirm the
    Task's visible behavior. Use Cursor browser MCP tools only for interaction
