@@ -65,6 +65,36 @@ function activeRunState(
   return { active: true, runId: run.id, startedAt: run.startedAt };
 }
 
+async function deliverPrompt(
+  conversationId: string,
+  prompt: string,
+  model: string | undefined,
+  sessions: AgentSessions,
+  res: Response,
+): Promise<void> {
+  const { meta } = readConversation(conversationId);
+  if (meta.pendingMessage) {
+    await setPendingMessage(conversationId, null);
+  }
+
+  await appendEvent(conversationId, { type: "prompt", text: prompt });
+
+  const result = await sessions.sendPrompt(conversationId, {
+    prompt,
+    model,
+  });
+  if (!result.ok) {
+    const message = result.error.message;
+    const event = { type: "error" as const, message };
+    await appendEvent(conversationId, event);
+    publishFrame(conversationId, { event, persist: true });
+    res.status(502).json({ error: message });
+    return;
+  }
+
+  res.status(202).json({ runId: result.run.id });
+}
+
 export function createConversationsRouter(
   sessions: AgentSessions = agentSessions,
 ): Router {
@@ -261,27 +291,34 @@ export function createConversationsRouter(
           ? body.model.trim()
           : undefined;
 
-      const { meta } = readConversation(conversationId);
-      if (meta.pendingMessage) {
-        await setPendingMessage(conversationId, null);
-      }
+      await deliverPrompt(conversationId, prompt, model, sessions, res);
+    }),
+  );
 
-      await appendEvent(conversationId, { type: "prompt", text: prompt });
-
-      const result = await sessions.sendPrompt(conversationId, {
-        prompt,
-        model,
-      });
-      if (!result.ok) {
-        const message = result.error.message;
-        const event = { type: "error" as const, message };
-        await appendEvent(conversationId, event);
-        publishFrame(conversationId, { event, persist: true });
-        res.status(502).json({ error: message });
+  router.post(
+    "/:id/interrupt",
+    asyncRoute(async (req, res) => {
+      const body = req.body as { prompt?: unknown; model?: unknown };
+      const prompt =
+        typeof body.prompt === "string" ? body.prompt.trim() : "";
+      if (!prompt) {
+        res.status(400).json({ error: "prompt is required" });
         return;
       }
 
-      res.status(202).json({ runId: result.run.id });
+      const conversationId = req.params.id;
+      const model =
+        typeof body.model === "string" && body.model.trim()
+          ? body.model.trim()
+          : undefined;
+
+      const activeRun = sessions.getActiveRun(conversationId);
+      if (activeRun) {
+        await sessions.cancel(conversationId);
+        await activeRun.wait();
+      }
+
+      await deliverPrompt(conversationId, prompt, model, sessions, res);
     }),
   );
 

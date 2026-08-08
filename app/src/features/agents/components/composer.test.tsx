@@ -5,10 +5,15 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { Composer } from "./composer"
 
 const sendMutate = vi.fn()
+const interruptMutate = vi.fn()
 
 vi.mock("../api/mutations", () => ({
   useSendConversationMessage: () => ({
     mutate: sendMutate,
+    isPending: false,
+  }),
+  useInterruptConversationRun: () => ({
+    mutate: interruptMutate,
     isPending: false,
   }),
   useCancelConversationRun: () => ({
@@ -101,6 +106,7 @@ describe("Composer Enter key", () => {
     container = undefined
     root = undefined
     sendMutate.mockClear()
+    interruptMutate.mockClear()
     coarsePointer.value = false
   })
 
@@ -156,6 +162,7 @@ describe("Composer send affordance", () => {
     container = undefined
     root = undefined
     sendMutate.mockClear()
+    interruptMutate.mockClear()
     coarsePointer.value = false
   })
 
@@ -218,6 +225,7 @@ describe("Composer during active run", () => {
     container = undefined
     root = undefined
     sendMutate.mockClear()
+    interruptMutate.mockClear()
     coarsePointer.value = false
   })
 
@@ -266,6 +274,54 @@ describe("Composer during active run", () => {
       {
         id: "conv-1",
         body: { prompt: "mid-run steer", model: "composer-2.5-fast" },
+      },
+      expect.any(Object),
+    )
+  })
+
+  it("shows Send now only with an active run and a non-empty draft", () => {
+    ;({ container, root } = mountComposer({ runActive: true }))
+
+    expect(
+      container!.querySelector('button[aria-label="Send now"]'),
+    ).toBeNull()
+
+    setDraft(textarea(container!), "redirect please")
+
+    expect(
+      container!.querySelector('button[aria-label="Send now"]'),
+    ).toBeTruthy()
+  })
+
+  it("renders Queue message, Send now, and Stop together during an active run with a draft", () => {
+    ;({ container, root } = mountComposer({ runActive: true }))
+
+    setDraft(textarea(container!), "steer now")
+
+    const queue = queueButton(container!)
+    const sendNow = container!.querySelector(
+      'button[aria-label="Send now"]',
+    ) as HTMLButtonElement
+    const stop = container!.querySelector(
+      'button[aria-label="Stop"]',
+    ) as HTMLButtonElement
+
+    expect(queue).toBeTruthy()
+    expect(sendNow).toBeTruthy()
+    expect(stop).toBeTruthy()
+    expect(queue.className).toMatch(/\bh-11\b/)
+    expect(sendNow.className).toMatch(/\bh-11\b/)
+    expect(stop.className).toMatch(/\bh-11\b/)
+
+    act(() => {
+      sendNow.click()
+    })
+
+    expect(interruptMutate).toHaveBeenCalledTimes(1)
+    expect(interruptMutate).toHaveBeenCalledWith(
+      {
+        id: "conv-1",
+        body: { prompt: "steer now", model: "composer-2.5-fast" },
       },
       expect.any(Object),
     )

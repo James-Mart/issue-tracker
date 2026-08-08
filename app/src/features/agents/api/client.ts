@@ -124,3 +124,19 @@ export async function cancelConversationRun(id: string): Promise<void> {
     throw err;
   }
 }
+
+export type InterruptConversationRunBody = SendConversationMessageBody;
+
+export type InterruptConversationRunResult = {
+  runId: string;
+};
+
+export function interruptConversationRun(
+  id: string,
+  body: InterruptConversationRunBody,
+): Promise<InterruptConversationRunResult> {
+  return request<InterruptConversationRunResult>(
+    `/api/conversations/${id}/interrupt`,
+    { method: "POST", body },
+  );
+}

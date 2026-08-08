@@ -3,7 +3,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { Send, Square } from "lucide-react";
+import { Send, Square, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useIsCoarsePointer } from "@/hooks/use-coarse-pointer";
 import {
   useCancelConversationRun,
+  useInterruptConversationRun,
   useSendConversationMessage,
   useUpdateConversation,
 } from "../api/mutations";
@@ -34,6 +35,7 @@ export function Composer({
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const sendMessage = useSendConversationMessage();
+  const interruptRun = useInterruptConversationRun();
   const cancelRun = useCancelConversationRun();
   const updateConversation = useUpdateConversation();
 
@@ -58,10 +60,31 @@ export function Composer({
     updateConversation.mutate({ id: conversationId, patch: { model: next } });
   };
 
+  const composerBusy = sendMessage.isPending || interruptRun.isPending;
+
   const send = () => {
     const prompt = draft.trim();
-    if (!prompt || sendMessage.isPending) return;
+    if (!prompt || composerBusy) return;
     sendMessage.mutate(
+      {
+        id: conversationId,
+        body: {
+          prompt,
+          ...(model.trim() ? { model: model.trim() } : {}),
+        },
+      },
+      {
+        onSuccess: () => {
+          setDraft("");
+        },
+      },
+    );
+  };
+
+  const sendNow = () => {
+    const prompt = draft.trim();
+    if (!prompt || composerBusy) return;
+    interruptRun.mutate(
       {
         id: conversationId,
         body: {
@@ -89,7 +112,8 @@ export function Composer({
     }
   };
 
-  const canSend = draft.trim().length > 0 && !sendMessage.isPending;
+  const canSend = draft.trim().length > 0 && !composerBusy;
+  const canSendNow = draft.trim().length > 0 && !composerBusy;
 
   const sendLabel = runActive ? "Queue message" : "Send";
   const sendTitle = runActive
@@ -134,7 +158,7 @@ export function Composer({
           </p>
         </div>
 
-        <div className="flex min-w-0 flex-1 items-end gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
           <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -146,8 +170,8 @@ export function Composer({
                 : "Enter to send, Shift+Enter for a newline"
             }
             aria-label="Message the agent"
-            disabled={sendMessage.isPending}
-            className="min-h-[44px] min-w-0 max-h-40 flex-1 resize-none"
+            disabled={composerBusy}
+            className="min-h-[44px] min-w-0 max-h-40 w-full flex-1 basis-[12rem] resize-none shell:w-auto"
           />
           {runActive ? (
             <>
@@ -162,6 +186,19 @@ export function Composer({
               >
                 <Send className="h-4 w-4" />
               </Button>
+              {draft.trim().length > 0 ? (
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  className="h-11 w-11 shrink-0"
+                  onClick={sendNow}
+                  disabled={!canSendNow}
+                  title="Send now — interrupt the current run and send immediately"
+                  aria-label="Send now"
+                >
+                  <Zap className="h-4 w-4" />
+                </Button>
+              ) : null}
               <Button
                 size="icon"
                 variant="destructive"

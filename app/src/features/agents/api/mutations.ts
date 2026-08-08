@@ -6,10 +6,13 @@ import {
   clearConversationPending,
   createConversation,
   deleteConversation,
+  interruptConversationRun,
   sendConversationMessage,
   updateConversation,
   updateConversationPending,
   type CreateConversationBody,
+  type InterruptConversationRunBody,
+  type InterruptConversationRunResult,
   type SendConversationMessageBody,
   type SendConversationMessageResult,
   type UpdateConversationBody,
@@ -69,6 +72,17 @@ export function useSendConversationMessage() {
 export function useCancelConversationRun() {
   return useMutation<void, Error, string>({
     mutationFn: cancelConversationRun,
+    onError: (err) => toast.error(messageOf(err)),
+  });
+}
+
+export function useInterruptConversationRun() {
+  return useMutation<
+    InterruptConversationRunResult,
+    Error,
+    { id: string; body: InterruptConversationRunBody }
+  >({
+    mutationFn: ({ id, body }) => interruptConversationRun(id, body),
     onError: (err) => toast.error(messageOf(err)),
   });
 }
