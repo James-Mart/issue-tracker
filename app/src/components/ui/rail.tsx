@@ -15,27 +15,46 @@ import { cn } from "@/lib/utils/cn";
 
 export type { RailNodeState };
 
-/** Current-hue live glow on a port — arbitrary property so Tailwind emits box-shadow, not a shadow color. */
-const portGlow = "[box-shadow:var(--glow)]";
+/**
+ * Live in-flight emphasis: `--glow` plus the livedot pulse. Arbitrary box-shadow
+ * so Tailwind emits the property, not a shadow color. Pulse respects reduced-motion.
+ */
+const portLive =
+  "[box-shadow:var(--glow)] motion-safe:animate-live-dot";
 
 /** Edge into a node: solid = satisfied/landed hop; dashed = waiting on a dependency. */
 export type RailEdge = "solid" | "dashed";
 
-/** Port ring/fill per state — border color encodes state; the void base keeps ports hollow. */
+/**
+ * Single state→appearance map for RailPort and StateIcon.
+ * ready = hollow ink; in-flight = filled current + glow/pulse; merged = filled
+ * merged (dim); blocked = blocked outline; needs-attention = warn outline.
+ */
 const portStateClasses: Record<RailNodeState, string> = {
   ready: "border-[hsl(var(--ink))] bg-[hsl(var(--void))]",
   "in-flight": "border-[hsl(var(--current))] bg-[hsl(var(--current))]",
   blocked: "border-[hsl(var(--blocked))] bg-[hsl(var(--void))]",
   merged:
     "border-[hsl(var(--merged))] bg-[color-mix(in_srgb,hsl(var(--merged))_22%,hsl(var(--void)))]",
+  "needs-attention": "border-[hsl(var(--warn))] bg-[hsl(var(--void))]",
 };
 
-/** Label ink per state — in-flight lifts to current, blocked recedes to mut. */
+/** Label ink per state — in-flight lifts to current, blocked/attention recede to mut. */
 const labelStateClasses: Record<RailNodeState, string> = {
   ready: "text-foreground",
   "in-flight": "text-[hsl(var(--current))]",
   blocked: "text-muted-foreground",
   merged: "text-foreground",
+  "needs-attention": "text-[hsl(var(--warn))]",
+};
+
+/** Accessible name for the label-free StateIcon (color+shape carry the state visually). */
+const stateIconLabel: Record<RailNodeState, string> = {
+  ready: "ready",
+  "in-flight": "in flight",
+  blocked: "blocked",
+  merged: "done",
+  "needs-attention": "needs attention",
 };
 
 export interface RailPortProps {
@@ -57,16 +76,18 @@ export function RailPort({
   portClassName,
   labelClassName,
 }: RailPortProps) {
-  const showGlow = glow ?? state === "in-flight";
+  const showLive = glow ?? state === "in-flight";
 
   return (
     <span className={cn(className)}>
       <span
         aria-hidden="true"
+        data-testid="rail-port"
+        data-state={state}
         className={cn(
           "h-3 w-3 shrink-0 rounded-full border-2",
           portStateClasses[state],
-          showGlow && portGlow,
+          showLive && portLive,
           portClassName,
         )}
       />
@@ -81,6 +102,29 @@ export function RailPort({
           {label}
         </span>
       )}
+    </span>
+  );
+}
+
+export interface StateIconProps {
+  state: RailNodeState;
+  className?: string;
+}
+
+/**
+ * Row-level state disc — same appearance map as RailPort, never a text label.
+ * Only in-flight carries the live glow/pulse.
+ */
+export function StateIcon({ state, className }: StateIconProps) {
+  return (
+    <span
+      role="img"
+      aria-label={stateIconLabel[state]}
+      data-testid="state-icon"
+      data-state={state}
+      className={cn("inline-flex shrink-0", className)}
+    >
+      <RailPort state={state} className="contents" />
     </span>
   );
 }
