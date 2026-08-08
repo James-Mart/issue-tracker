@@ -2,6 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 
+const devPort = Number(process.env.VITE_DEV_PORT ?? 8060);
+const apiProxyTarget =
+  process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8061";
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -11,11 +15,12 @@ export default defineConfig({
     },
   },
   server: {
-    port: 8060,
+    port: devPort,
+    strictPort: true,
     host: "0.0.0.0",
     allowedHosts: ["issues.martfamily.cc"],
     proxy: {
-      "/api": "http://localhost:8061",
+      "/api": apiProxyTarget,
     },
   },
   test: {

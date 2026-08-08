@@ -15,7 +15,8 @@ selects one Project and scopes the tree and Ready view to it.
 
 ## Layout
 
-- `app/` — Vite + React frontend (`:8060`), Express + SSE backend (`:8061`), and
+- `app/` — Vite + React frontend (default `:8060`, override `VITE_DEV_PORT`),
+  Express + SSE backend (default `:8061`, override `PORT`), and
   a CLI (`app/cli.ts`, exposed as a `bin`).
   - `app/server/schemas.ts` — the kind-discriminated zod schema (single source
     of truth for validation).
@@ -41,8 +42,11 @@ selects one Project and scopes the tree and Ready view to it.
 cd app && npm install && npm run dev
 ```
 
-- Frontend (Vite): http://localhost:8060
-- Backend (Express API + SSE): http://localhost:8061
+- Frontend (Vite): http://localhost:8060 by default (`VITE_DEV_PORT` overrides)
+- Backend (Express API + SSE): http://localhost:8061 by default (`PORT` overrides)
+- Vite proxies `/api` to `VITE_API_PROXY_TARGET` (default
+  `http://localhost:8061`). With `strictPort: true`, a busy Vite port fails
+  instead of walking to the next port.
 
 Other scripts: `npm test` (Vitest) and `npm run build` (build the client into
 `dist/`). `npm start` and `npm run preview` run the Express server, but it only

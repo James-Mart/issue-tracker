@@ -30,10 +30,16 @@ cd app && npm install && npm run dev
 
 This starts:
 
-- Vite dev server on http://localhost:8060 (frontend)
-- Express API + SSE server on http://localhost:8061 (backend)
+- Vite dev server on http://localhost:8060 by default (frontend; override
+  `VITE_DEV_PORT`)
+- Express API + SSE server on http://localhost:8061 by default (backend;
+  override `PORT`)
+- Vite proxies `/api` to `VITE_API_PROXY_TARGET` (default
+  `http://localhost:8061`). With `strictPort: true`, a busy Vite port fails
+  instead of walking to the next port.
 
-Tell the user the UI is available at http://localhost:8060.
+Tell the user the UI is available at the Vite URL (default
+http://localhost:8060).
 
 ## UI screenshots
 
