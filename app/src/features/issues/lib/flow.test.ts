@@ -157,18 +157,10 @@ describe("flowBuckets", () => {
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
 
-    expect(ids(buckets.blocked).sort()).toEqual(
-      ["blocked-epic", "blocked-story"].sort(),
-    );
-    expect(ids(buckets.inFlight).sort()).toEqual(
-      ["flight-epic", "flight-story", "pr-story"].sort(),
-    );
-    expect(ids(buckets.recentlyMerged).sort()).toEqual(
-      ["done-epic", "merged-story"].sort(),
-    );
-    expect(ids(buckets.ready).sort()).toEqual(
-      ["ready-epic", "ready-story"].sort(),
-    );
+    expect(ids(buckets.blocked).sort()).toEqual(["blocked-epic"].sort());
+    expect(ids(buckets.inFlight).sort()).toEqual(["flight-epic"].sort());
+    expect(ids(buckets.recentlyMerged).sort()).toEqual(["done-epic"].sort());
+    expect(ids(buckets.ready).sort()).toEqual(["ready-epic"].sort());
   });
 
   it("puts blocked ahead of inFlight and recentlyMerged", () => {
@@ -186,9 +178,7 @@ describe("flowBuckets", () => {
 
     const buckets = flowBuckets(issues, derived, {});
 
-    expect(ids(buckets.blocked).sort()).toEqual(
-      ["e", "s-flight", "s-merged"].sort(),
-    );
+    expect(ids(buckets.blocked).sort()).toEqual(["e"].sort());
     expect(buckets.inFlight).toEqual([]);
     expect(buckets.recentlyMerged).toEqual([]);
     expect(buckets.ready).toEqual([]);
@@ -209,14 +199,10 @@ describe("flowBuckets", () => {
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
 
-    expect(ids(buckets.recentlyMerged)).toEqual([
-      "new-story",
-      "mid-epic",
-      "old-epic",
-    ]);
+    expect(ids(buckets.recentlyMerged)).toEqual(["mid-epic", "old-epic"]);
   });
 
-  it("excludes Tasks, Projects, and Ideas", () => {
+  it("excludes Epic-child Stories, Tasks, Projects, and Ideas", () => {
     const issues = [
       project("p"),
       idea("i", "p"),
@@ -232,7 +218,7 @@ describe("flowBuckets", () => {
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
 
-    expect(ids(buckets.ready).sort()).toEqual(["e", "s"].sort());
+    expect(ids(buckets.ready).sort()).toEqual(["e"].sort());
     expect(buckets.inFlight).toEqual([]);
     expect(buckets.blocked).toEqual([]);
     expect(buckets.recentlyMerged).toEqual([]);
@@ -255,24 +241,60 @@ describe("flowBuckets", () => {
     };
 
     const scoped = flowBuckets(issues, derived, { projectId: "p1" });
-    expect(ids(scoped.ready).sort()).toEqual(["e1", "s1"].sort());
+    expect(ids(scoped.ready).sort()).toEqual(["e1"].sort());
     expect(scoped.inFlight).toEqual([]);
 
     const all = flowBuckets(issues, derived, {});
-    expect(ids(all.ready).sort()).toEqual(["e1", "s1"].sort());
-    expect(ids(all.inFlight).sort()).toEqual(["e2", "s2"].sort());
+    expect(ids(all.ready).sort()).toEqual(["e1"].sort());
+    expect(ids(all.inFlight).sort()).toEqual(["e2"].sort());
   });
 
-  it("includes pr-open Stories in inFlight (broader than isInFlight)", () => {
+  it("rolls child Story pr-open into the parent Epic inFlight bucket", () => {
     const issues = [project("p"), epic("e", "p"), story("s", "e")];
     const derived: Record<string, DerivedState> = {
-      e: { blocked: false, epicStatus: "todo" },
+      e: { blocked: false, epicStatus: "in-progress" },
       s: { blocked: false, storyStatus: "pr-open" },
     };
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
-    expect(ids(buckets.inFlight)).toEqual(["s"]);
-    expect(ids(buckets.ready)).toEqual(["e"]);
+    expect(ids(buckets.inFlight)).toEqual(["e"]);
+    expect(ids(buckets.ready)).toEqual([]);
+  });
+
+  it("includes project-level Stories alongside Epics", () => {
+    const issues = [
+      project("p"),
+      epic("e", "p"),
+      story("root-story", "p"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      e: { blocked: false, epicStatus: "todo" },
+      "root-story": { blocked: false, storyStatus: "in-progress" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+    expect(ids(buckets.ready).sort()).toEqual(["e"].sort());
+    expect(ids(buckets.inFlight).sort()).toEqual(["root-story"].sort());
+  });
+
+  it("excludes an Epic nested under another Epic", () => {
+    const issues = [
+      project("p"),
+      epic("parent", "p"),
+      epic("nested", "parent"),
+      story("s", "nested"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      parent: { blocked: false, epicStatus: "in-progress" },
+      nested: { blocked: false, epicStatus: "todo" },
+      s: { blocked: false, storyStatus: "not-started" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+    expect(ids(buckets.inFlight)).toEqual(["parent"]);
+    expect(ids(buckets.ready)).toEqual([]);
+    expect(ids(buckets.blocked)).toEqual([]);
+    expect(ids(buckets.recentlyMerged)).toEqual([]);
   });
 });
 
@@ -376,18 +398,14 @@ describe("filterFlowBuckets", () => {
       ...noFilters,
       search: "flight-story",
     });
-    expect(ids(byTitle.inFlight).sort()).toEqual(
-      ["flight-epic", "flight-story"].sort(),
-    );
+    expect(ids(byTitle.inFlight)).toEqual(["flight-epic"]);
     expect(byTitle.ready).toEqual([]);
 
     const byTask = filterFlowBuckets(buckets, issues, {
       ...noFilters,
       search: "ready-task",
     });
-    expect(ids(byTask.ready).sort()).toEqual(
-      ["ready-epic", "ready-story"].sort(),
-    );
+    expect(ids(byTask.ready)).toEqual(["ready-epic"]);
   });
 
   it("filters by label OR and composes with kind", () => {
@@ -395,9 +413,7 @@ describe("filterFlowBuckets", () => {
       ...noFilters,
       labelIds: ["bug"],
     });
-    expect(ids(labeled.ready).sort()).toEqual(
-      ["ready-epic", "ready-story"].sort(),
-    );
+    expect(ids(labeled.ready)).toEqual(["ready-epic"]);
     expect(labeled.inFlight).toEqual([]);
 
     const storiesWithBug = filterFlowBuckets(buckets, issues, {
@@ -405,7 +421,7 @@ describe("filterFlowBuckets", () => {
       labelIds: ["bug"],
       kind: "story",
     });
-    expect(ids(storiesWithBug.ready)).toEqual(["ready-story"]);
+    expect(ids(storiesWithBug.ready)).toEqual([]);
   });
 
   it("keeps an Epic when labels match it and search matches a child (tree semantics)", () => {

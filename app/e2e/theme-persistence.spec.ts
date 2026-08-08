@@ -1,9 +1,9 @@
 import { expect, test } from "./fixtures";
+import { gotoCockpitReady } from "./seed-navigation";
 import { expectThemeState } from "./snapshot-both-themes";
 
 test("theme toggle persists across reload", async ({ page, seededApp }) => {
-  await page.goto(seededApp.baseURL);
-  await expect(page.getByText("Story in flight").first()).toBeVisible();
+  await gotoCockpitReady(page, seededApp.baseURL);
 
   await expectThemeState(page, { dataTheme: "dark", storage: null });
 

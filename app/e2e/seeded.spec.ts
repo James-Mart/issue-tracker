@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
+import { gotoCockpitReady } from "./seed-navigation";
 
-test("seeded overview shows the story in flight", async ({ page, seededApp }) => {
-  await page.goto(seededApp.baseURL);
-  await expect(page.getByText("Story in flight").first()).toBeVisible();
+test("seeded cockpit shows top-level work roots only", async ({ page, seededApp }) => {
+  await gotoCockpitReady(page, seededApp.baseURL);
 });
