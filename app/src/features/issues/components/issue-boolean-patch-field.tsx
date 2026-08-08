@@ -1,5 +1,7 @@
+import { useId } from "react";
 import type { IssuePatch } from "@server/schemas";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useUpdateIssue } from "../api/mutations";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
 
@@ -16,15 +18,17 @@ export function IssueBooleanPatchField({
 }) {
   const update = useUpdateIssue();
   const { error, saving, run } = useIssuePatchAction();
+  const id = useId();
+  const stateLabel = checked ? labels.on : labels.off;
 
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <label className="flex h-7 items-center gap-2 text-sm">
-        <Checkbox
+      <div className="flex h-7 items-center gap-2">
+        <Switch
+          id={id}
           checked={checked}
           disabled={saving}
-          onCheckedChange={(value) => {
-            const next = value === true;
+          onCheckedChange={(next) => {
             if (next === checked) return;
             void run(async () => {
               await update.mutateAsync({
@@ -34,8 +38,10 @@ export function IssueBooleanPatchField({
             });
           }}
         />
-        {checked ? labels.on : labels.off}
-      </label>
+        <Label htmlFor={id} className="cursor-pointer font-normal">
+          {stateLabel}
+        </Label>
+      </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>
   );
