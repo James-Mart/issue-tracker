@@ -1,6 +1,9 @@
 import { bySequence, epicsBlockedBy, isProjectBoardChild } from "@server/order";
 import type { DerivedState, IssueRecord } from "@server/schemas";
-import type { BoardKindFilter } from "./board-kind-filter";
+import {
+  boardKindAllows,
+  type BoardKindFilter,
+} from "./board-kind-filter";
 import { issuesById, projectIdOf } from "./build-tree";
 import { isInFlight, isIssueComplete } from "./derived";
 import { filterIssuesBySearchAndLabels } from "./filter-by-search-labels";
@@ -54,22 +57,14 @@ export function flowFiltersActive(filters: FlowFilters): boolean {
   return (
     filters.search.trim().length > 0 ||
     filters.labelIds.length > 0 ||
-    filters.kind !== "both"
+    filters.kind.length > 0
   );
-}
-
-function flowKindAllows(
-  kind: IssueRecord["kind"],
-  filter: BoardKindFilter,
-): boolean {
-  if (filter === "both") return kind === "epic" || kind === "story";
-  return kind === filter;
 }
 
 /**
  * Story/Epic ids kept under Flow filters. Search/label via shared
  * `filterIssuesBySearchAndLabels` (ancestor retention), then kind via
- * `flowKindAllows`.
+ * `boardKindAllows`.
  */
 export function matchingFlowIssueIds(
   issues: IssueRecord[],
@@ -85,7 +80,7 @@ export function matchingFlowIssueIds(
   for (const issue of next) {
     if (
       isFlowTopLevelRow(issue, byId) &&
-      flowKindAllows(issue.kind, filters.kind)
+      boardKindAllows(issue.kind, filters.kind)
     ) {
       keep.add(issue.id);
     }

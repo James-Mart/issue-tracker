@@ -12,7 +12,7 @@ import {
   type FlowFilters,
 } from "./flow";
 
-const noFilters: FlowFilters = { search: "", labelIds: [], kind: "both" };
+const noFilters: FlowFilters = { search: "", labelIds: [], kind: [] };
 
 const t0 = "2026-07-01T00:00:00.000Z";
 const t1 = "2026-07-02T00:00:00.000Z";
@@ -368,10 +368,10 @@ describe("filterFlowBuckets", () => {
     expect(filterFlowBuckets(buckets, issues, noFilters)).toEqual(buckets);
   });
 
-  it("filters by kind", () => {
+  it("filters by kind (OR multi-select)", () => {
     const epicsOnly = filterFlowBuckets(buckets, issues, {
       ...noFilters,
-      kind: "epic",
+      kind: ["epic"],
     });
     expect(bucketIds(epicsOnly)).toEqual({
       ready: ["ready-epic"],
@@ -382,7 +382,7 @@ describe("filterFlowBuckets", () => {
 
     const ideasOnly = filterFlowBuckets(buckets, issues, {
       ...noFilters,
-      kind: "idea",
+      kind: ["idea"],
     });
     expect(bucketIds(ideasOnly)).toEqual({
       ready: [],
@@ -390,6 +390,12 @@ describe("filterFlowBuckets", () => {
       blocked: [],
       recentlyMerged: [],
     });
+
+    const epicsAndStories = filterFlowBuckets(buckets, issues, {
+      ...noFilters,
+      kind: ["epic", "story"],
+    });
+    expect(bucketIds(epicsAndStories)).toEqual(bucketIds(buckets));
   });
 
   it("filters by search on the row or a descendant", () => {
@@ -418,7 +424,7 @@ describe("filterFlowBuckets", () => {
     const storiesWithBug = filterFlowBuckets(buckets, issues, {
       search: "",
       labelIds: ["bug"],
-      kind: "story",
+      kind: ["story"],
     });
     expect(ids(storiesWithBug.ready)).toEqual([]);
   });
@@ -440,7 +446,7 @@ describe("filterFlowBuckets", () => {
     const filtered = filterFlowBuckets(crossBuckets, crossIssues, {
       search: "search-story",
       labelIds: ["bug"],
-      kind: "both",
+      kind: [],
     });
     expect(ids(filtered.ready)).toEqual(["labeled-epic"]);
     expect(filtered.inFlight).toEqual([]);

@@ -1,11 +1,4 @@
-import {
-  Archive,
-  GitBranch,
-  Layers,
-  Lightbulb,
-  Search,
-  Tags,
-} from "lucide-react";
+import { Filter, GitBranch, Layers, Lightbulb, Search } from "lucide-react";
 import type { ProjectLabel } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,90 +11,27 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import type { BoardKindFilter } from "../lib/board-kind-filter";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  BOARD_KIND_OPTIONS,
+  toggleBoardKind,
+  type BoardKindOption,
+} from "../lib/board-kind-filter";
 import { toggleAssignmentId } from "../lib/project-labels";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { ProjectLabelChip } from "./project-label-chip";
 
-const BOARD_FILTER_OPTIONS: {
-  value: BoardKindFilter;
-  label: string;
-  icon: typeof Layers;
-}[] = [
-  { value: "both", label: "All", icon: Layers },
-  { value: "epic", label: "Epics", icon: Layers },
-  { value: "idea", label: "Ideas", icon: Lightbulb },
-  { value: "story", label: "Stories", icon: GitBranch },
-];
+const KIND_OPTION_META: Record<
+  BoardKindOption,
+  { label: string; icon: typeof Layers }
+> = {
+  epic: { label: "Epics", icon: Layers },
+  idea: { label: "Ideas", icon: Lightbulb },
+  story: { label: "Stories", icon: GitBranch },
+};
 
-function LabelFilterControl({
-  catalog,
-  selected,
-  onChange,
-}: {
-  catalog: ProjectLabel[];
-  selected: string[];
-  onChange: (ids: string[]) => void;
-}) {
-  const selectedInCatalog = selected.filter((id) =>
-    catalog.some((label) => label.id === id),
-  );
-  const active = selectedInCatalog.length > 0;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant={active ? "secondary" : "outline"}
-          size="sm"
-          className="shrink-0"
-          disabled={catalog.length === 0}
-          aria-label="Filter by label"
-          title={
-            catalog.length === 0
-              ? "No labels in project catalog"
-              : "Filter by label"
-          }
-        >
-          <Tags className="h-4 w-4" />
-          Labels
-          {active ? (
-            <span className="ml-1 tabular-nums text-muted-foreground">
-              ({selectedInCatalog.length})
-            </span>
-          ) : null}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Filter by label (OR)</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {catalog.map((label) => (
-          <DropdownMenuCheckboxItem
-            key={label.id}
-            checked={selected.includes(label.id)}
-            onCheckedChange={() =>
-              onChange(toggleAssignmentId(selected, label.id))
-            }
-            onSelect={(event) => event.preventDefault()}
-          >
-            <ProjectLabelChip label={label} />
-          </DropdownMenuCheckboxItem>
-        ))}
-        {active ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => onChange([])}>
-              Clear labels
-            </DropdownMenuItem>
-          </>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-/** Shared search / label / kind / show-archived controls for overview lenses. */
+/** Shared search + filter popover (Type / Labels / Show archived) for overview lenses. */
 export function OverviewFlowFilters({
   catalog,
 }: {
@@ -116,6 +46,15 @@ export function OverviewFlowFilters({
   const showArchived = useIssueUiStore((s) => s.showArchived);
   const setShowArchived = useIssueUiStore((s) => s.setShowArchived);
 
+  const selectedLabels = labelFilter.filter((id) =>
+    catalog.some((label) => label.id === id),
+  );
+  const kindActive = boardKindFilter.length > 0;
+  const labelsActive = selectedLabels.length > 0;
+  const filterActive = kindActive || labelsActive || showArchived;
+  const activeCount =
+    boardKindFilter.length + selectedLabels.length + (showArchived ? 1 : 0);
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-[12rem] flex-1">
@@ -128,45 +67,99 @@ export function OverviewFlowFilters({
           aria-label="Search overview"
         />
       </div>
-      <LabelFilterControl
-        catalog={catalog}
-        selected={labelFilter}
-        onChange={setLabelFilter}
-      />
-      <div
-        className="flex shrink-0 items-center rounded-md border p-0.5"
-        role="group"
-        aria-label="Filter by kind"
-      >
-        {BOARD_FILTER_OPTIONS.map(({ value, label, icon: Icon }) => (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button
-            key={value}
             type="button"
-            variant={boardKindFilter === value ? "secondary" : "ghost"}
+            variant={filterActive ? "secondary" : "outline"}
             size="sm"
-            className="h-7 px-2"
-            aria-pressed={boardKindFilter === value}
-            onClick={() => setBoardKindFilter(value)}
+            className="shrink-0"
+            aria-label="Filters"
+            title="Filters"
           >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
+            <Filter className="h-4 w-4" />
+            Filters
+            {activeCount > 0 ? (
+              <span className="ml-1 tabular-nums text-muted-foreground">
+                ({activeCount})
+              </span>
+            ) : null}
           </Button>
-        ))}
-      </div>
-      <Button
-        type="button"
-        variant={showArchived ? "secondary" : "outline"}
-        size="sm"
-        className="shrink-0"
-        aria-pressed={showArchived}
-        title={
-          showArchived ? "Hide archived issues" : "Show archived issues"
-        }
-        onClick={() => setShowArchived(!showArchived)}
-      >
-        <Archive className="h-4 w-4" />
-        Show archived
-      </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel>Type (OR)</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {BOARD_KIND_OPTIONS.map((kind) => {
+            const { label, icon: Icon } = KIND_OPTION_META[kind];
+            return (
+              <DropdownMenuCheckboxItem
+                key={kind}
+                checked={boardKindFilter.includes(kind)}
+                onCheckedChange={() =>
+                  setBoardKindFilter(toggleBoardKind(boardKindFilter, kind))
+                }
+                onSelect={(event) => event.preventDefault()}
+              >
+                <span className="flex items-center gap-2">
+                  <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                  {label}
+                </span>
+              </DropdownMenuCheckboxItem>
+            );
+          })}
+          {kindActive ? (
+            <DropdownMenuItem onSelect={() => setBoardKindFilter([])}>
+              Clear type
+            </DropdownMenuItem>
+          ) : null}
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Labels (OR)</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {catalog.length === 0 ? (
+            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+              No labels in project catalog
+            </div>
+          ) : (
+            catalog.map((label) => (
+              <DropdownMenuCheckboxItem
+                key={label.id}
+                checked={labelFilter.includes(label.id)}
+                onCheckedChange={() =>
+                  setLabelFilter(toggleAssignmentId(labelFilter, label.id))
+                }
+                onSelect={(event) => event.preventDefault()}
+              >
+                <ProjectLabelChip label={label} />
+              </DropdownMenuCheckboxItem>
+            ))
+          )}
+          {labelsActive ? (
+            <DropdownMenuItem onSelect={() => setLabelFilter([])}>
+              Clear labels
+            </DropdownMenuItem>
+          ) : null}
+
+          <DropdownMenuSeparator />
+          <div
+            className="flex items-center justify-between gap-3 px-2 py-1.5"
+            onPointerDown={(event) => event.preventDefault()}
+          >
+            <Label
+              htmlFor="overview-show-archived"
+              className="cursor-pointer font-normal"
+            >
+              Show archived
+            </Label>
+            <Switch
+              id="overview-show-archived"
+              checked={showArchived}
+              onCheckedChange={setShowArchived}
+              aria-label="Show archived issues"
+            />
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

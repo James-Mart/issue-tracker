@@ -150,7 +150,7 @@ function OverviewFlowLens({
   const clearFilters = () => {
     setSearch("");
     setLabelFilter([]);
-    setBoardKindFilter("both");
+    setBoardKindFilter([]);
   };
 
   return (
@@ -245,7 +245,7 @@ function OverviewStructureLens({
   const clearFilters = () => {
     setSearch("");
     setLabelFilter([]);
-    setBoardKindFilter("both");
+    setBoardKindFilter([]);
   };
 
   const hasIdeas = useMemo(

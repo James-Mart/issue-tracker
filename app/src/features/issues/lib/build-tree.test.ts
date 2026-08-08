@@ -102,55 +102,63 @@ describe("filterToProject", () => {
     ];
     const scoped = filterToProject(issues, "p");
     expect(scoped.map((issue) => issue.id)).toContain("p");
-    expect(projectBoardRoots(scoped, "story").map((issue) => issue.id)).toEqual(
-      ["solo"],
-    );
+    expect(
+      projectBoardRoots(scoped, ["story"]).map((issue) => issue.id),
+    ).toEqual(["solo"]);
   });
 });
 
 describe("projectBoardRoots", () => {
   it("interleaves epics, ideas, and project-level stories by order", () => {
-    expect(projectBoardRoots(boardIssues, "both").map((issue) => issue.id)).toEqual(
+    expect(projectBoardRoots(boardIssues, []).map((issue) => issue.id)).toEqual(
       ["first", "middle", "solo", "last"],
     );
   });
 
   it("shows only epics when filtered", () => {
-    expect(projectBoardRoots(boardIssues, "epic").map((issue) => issue.id)).toEqual(
-      ["middle"],
-    );
+    expect(
+      projectBoardRoots(boardIssues, ["epic"]).map((issue) => issue.id),
+    ).toEqual(["middle"]);
   });
 
   it("shows only ideas when filtered", () => {
-    expect(projectBoardRoots(boardIssues, "idea").map((issue) => issue.id)).toEqual(
-      ["first", "last"],
-    );
+    expect(
+      projectBoardRoots(boardIssues, ["idea"]).map((issue) => issue.id),
+    ).toEqual(["first", "last"]);
   });
 
   it("shows only project-level stories when filtered", () => {
-    expect(projectBoardRoots(boardIssues, "story").map((issue) => issue.id)).toEqual(
-      ["solo"],
-    );
+    expect(
+      projectBoardRoots(boardIssues, ["story"]).map((issue) => issue.id),
+    ).toEqual(["solo"]);
+  });
+
+  it("ORs multiple selected kinds (e.g. epics + stories, ideas hidden)", () => {
+    expect(
+      projectBoardRoots(boardIssues, ["epic", "story"]).map((issue) => issue.id),
+    ).toEqual(["middle", "solo"]);
   });
 
   it("only considers issues in the input set (project-scoped upstream)", () => {
     const scoped = boardIssues.filter((issue) => issue.id !== "last");
-    expect(projectBoardRoots(scoped, "both").map((issue) => issue.id)).toEqual(
-      ["first", "middle", "solo"],
-    );
+    expect(projectBoardRoots(scoped, []).map((issue) => issue.id)).toEqual([
+      "first",
+      "middle",
+      "solo",
+    ]);
   });
 });
 
 describe("buildTree", () => {
   it("nests stories under their epic", () => {
-    const roots = projectBoardRoots(boardIssues, "both");
+    const roots = projectBoardRoots(boardIssues, []);
     const nodes = buildTree(boardIssues, roots);
     const epicNode = nodes.find((node) => node.issue.id === "middle");
     expect(epicNode?.children.map((child) => child.issue.id)).toEqual(["s1"]);
   });
 
   it("honors an explicit root subset without rebuilding unrelated branches", () => {
-    const roots = projectBoardRoots(boardIssues, "idea");
+    const roots = projectBoardRoots(boardIssues, ["idea"]);
     const nodes = buildTree(boardIssues, roots);
     expect(nodes.map((node) => node.issue.id)).toEqual(["first", "last"]);
     expect(nodes.every((node) => node.children.length === 0)).toBe(true);
@@ -164,7 +172,7 @@ describe("buildTree", () => {
       task("t2", "root", 1),
       story("stacked", "p", 0, { stackedOn: "root" }),
     ];
-    const roots = projectBoardRoots(issues, "both");
+    const roots = projectBoardRoots(issues, []);
     const nodes = buildTree(issues, roots);
     expect(nodes.map((node) => node.issue.id)).toEqual(["root"]);
     expect(nodes[0]?.children.map((child) => child.issue.id)).toEqual([
@@ -175,7 +183,7 @@ describe("buildTree", () => {
   });
 
   it("isolates project-level stories when filtered", () => {
-    const roots = projectBoardRoots(boardIssues, "story");
+    const roots = projectBoardRoots(boardIssues, ["story"]);
     const nodes = buildTree(boardIssues, roots);
     expect(nodes.map((node) => node.issue.id)).toEqual(["solo"]);
     expect(nodes.every((node) => node.children.length === 0)).toBe(true);
@@ -189,7 +197,7 @@ describe("buildTree", () => {
       task("t1", "root", 0),
       story("stacked", "p", 0, { stackedOn: "root" }),
     ];
-    const roots = projectBoardRoots(issues, "story");
+    const roots = projectBoardRoots(issues, ["story"]);
     const nodes = buildTree(issues, roots);
     expect(nodes.map((node) => node.issue.id)).toEqual(["root"]);
     expect(nodes[0]?.children.map((child) => child.issue.id)).toEqual([
