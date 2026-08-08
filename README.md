@@ -85,12 +85,15 @@ Run once per machine from `app/`:
 cd app && npm run install-hooks
 ```
 
-This writes (or updates) `~/.cursor/hooks.json` with a `hooks.preToolUse` entry
-that runs `app/hooks/strip-cursor-attribution.mjs` before every Shell tool call. The
-hook strips Cursor's `Co-authored-by: Cursor <cursoragent@cursor.com>` trailer
-from `git commit` commands so agent-driven commits stay clean. The server
-refuses to start until this hook is registered for the current checkout. Re-run
-after moving the checkout; the command is idempotent and preserves unrelated hooks.
+This writes (or updates) `~/.cursor/hooks.json` with `hooks.preToolUse` entries
+for `app/hooks/strip-cursor-attribution.mjs` and `app/hooks/port-kill-guard.mjs`
+before every Shell tool call. The attribution hook strips Cursor's
+`Co-authored-by: Cursor <cursoragent@cursor.com>` trailer from `git commit`
+commands so agent-driven commits stay clean. The kill-guard refuses kill-shaped
+commands aimed at ports this conversation does not currently own and redirects
+the agent to `agent_stack_start`. The server refuses to start until both hooks
+are registered for the current checkout. Re-run after moving the checkout; the
+command is idempotent and preserves unrelated hooks.
 
 ## How the pieces fit
 

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ensureHookRegistration } from "./install-cursor-hooks.js";
+import {
+  ensureAllHookRegistrations,
+  ensureHookRegistration,
+} from "./install-cursor-hooks.js";
 
 const SCRIPT_PATH = "/work/issue-tracker/app/hooks/strip-cursor-attribution.mjs";
 const STALE_SCRIPT_PATH =
   "/old/checkout/app/hooks/strip-cursor-attribution.mjs";
+const KILL_GUARD_PATH = "/work/issue-tracker/app/hooks/port-kill-guard.mjs";
 
 const entry = (scriptPath: string) => ({
   type: "command" as const,
@@ -97,5 +101,24 @@ describe("ensureHookRegistration", () => {
       },
     });
     expect(ensureHookRegistration(config, SCRIPT_PATH)).not.toHaveProperty("preToolUse");
+  });
+});
+
+describe("ensureAllHookRegistrations", () => {
+  it("registers both required scripts without duplicating", () => {
+    const once = ensureAllHookRegistrations(undefined, [
+      SCRIPT_PATH,
+      KILL_GUARD_PATH,
+    ]);
+    expect(once).toEqual({
+      version: 1,
+      hooks: {
+        preToolUse: [entry(SCRIPT_PATH), entry(KILL_GUARD_PATH)],
+      },
+    });
+
+    expect(
+      ensureAllHookRegistrations(once, [SCRIPT_PATH, KILL_GUARD_PATH]),
+    ).toEqual(once);
   });
 });

@@ -3,9 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appDir } from "../config.js";
-import { validateHookRegistration } from "./hook-registration.js";
+import {
+  expectedHookScriptPaths,
+  validateHookRegistration,
+} from "./hook-registration.js";
 
-const SCRIPT_PATH = join(appDir, "hooks", "strip-cursor-attribution.mjs");
+const SCRIPT_PATHS = expectedHookScriptPaths();
+const STRIP_PATH = join(appDir, "hooks", "strip-cursor-attribution.mjs");
+const KILL_GUARD_PATH = join(appDir, "hooks", "port-kill-guard.mjs");
 const STALE_SCRIPT_PATH =
   "/old/checkout/app/hooks/strip-cursor-attribution.mjs";
 const INSTALL_COMMAND = "npm run install-hooks";
@@ -33,11 +38,11 @@ afterEach(() => {
 });
 
 describe("validateHookRegistration", () => {
-  it("passes when hooks.preToolUse registers this checkout's script", () => {
+  it("passes when hooks.preToolUse registers every required script", () => {
     writeHooksConfig({
       version: 1,
       hooks: {
-        preToolUse: [hookEntry(SCRIPT_PATH)],
+        preToolUse: SCRIPT_PATHS.map(hookEntry),
       },
     });
 
@@ -49,7 +54,7 @@ describe("validateHookRegistration", () => {
     expect(() => validateHookRegistration(homeDir)).toThrow(new RegExp(INSTALL_COMMAND));
   });
 
-  it("throws when hooks.preToolUse lacks the entry", () => {
+  it("throws when hooks.preToolUse lacks an entry", () => {
     writeHooksConfig({
       version: 1,
       hooks: {
@@ -67,11 +72,23 @@ describe("validateHookRegistration", () => {
     expect(() => validateHookRegistration(homeDir)).toThrow(new RegExp(INSTALL_COMMAND));
   });
 
+  it("throws when only the attribution hook is registered", () => {
+    writeHooksConfig({
+      version: 1,
+      hooks: {
+        preToolUse: [hookEntry(STRIP_PATH)],
+      },
+    });
+
+    expect(() => validateHookRegistration(homeDir)).toThrow(/port-kill-guard\.mjs/);
+    expect(() => validateHookRegistration(homeDir)).toThrow(new RegExp(INSTALL_COMMAND));
+  });
+
   it("throws when the entry points at a stale script path", () => {
     writeHooksConfig({
       version: 1,
       hooks: {
-        preToolUse: [hookEntry(STALE_SCRIPT_PATH)],
+        preToolUse: [hookEntry(STALE_SCRIPT_PATH), hookEntry(KILL_GUARD_PATH)],
       },
     });
 
@@ -83,7 +100,7 @@ describe("validateHookRegistration", () => {
     writeHooksConfig({
       version: 1,
       hooks: {},
-      preToolUse: [hookEntry(SCRIPT_PATH)],
+      preToolUse: SCRIPT_PATHS.map(hookEntry),
     });
 
     expect(() => validateHookRegistration(homeDir)).toThrow(/not registered under hooks\.preToolUse/);
