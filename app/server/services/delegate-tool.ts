@@ -15,6 +15,7 @@ import {
   resolveModelSelection,
 } from "./model-selection.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
+import { createAgentStackTools } from "./agent-stack-tools.js";
 import { createSdkBugReportTools } from "./sdk-bug-report.js";
 
 /** Interval for live-only nested-run liveness frames. */
@@ -45,6 +46,11 @@ export interface DelegateToolOptions {
    * omitted, the handler still runs the nested agent but does not publish.
    */
   conversationId?: string;
+  /**
+   * Cursor runtime `conversation_id` for the root agent session (its agentId).
+   * Nested delegates pass their own agentId into {@link buildCustomTools}.
+   */
+  getCursorConversationId?: () => string | undefined;
   agents?: Record<string, AgentDefinition>;
   /** Override agents directory (tests). Defaults to the plugin `agents/`. */
   agentsDir?: string;
@@ -258,6 +264,7 @@ export function createDelegateCustomTools(
 
   function buildCustomTools(
     parent: ParentFrame | null,
+    getCursorConversationId?: () => string | undefined,
   ): Record<string, SDKCustomTool> {
     // Bug filing rides along with delegation so every agent — root and nested
     // alike — can report an SDK defect it trips over, without each spawn site
@@ -265,6 +272,18 @@ export function createDelegateCustomTools(
     const customTools: Record<string, SDKCustomTool> = {
       ...createSdkBugReportTools(),
     };
+
+    // Verification stack tools are session-scoped to the app conversation;
+    // the Cursor conversation_id comes from this agent session's runtime id.
+    if (options.conversationId && getCursorConversationId) {
+      Object.assign(
+        customTools,
+        createAgentStackTools({
+          conversationId: options.conversationId,
+          getCursorConversationId,
+        }),
+      );
+    }
 
     customTools.delegations = {
       description:
@@ -377,11 +396,6 @@ export function createDelegateCustomTools(
             model: formatEffectiveModel(model),
           };
 
-          const nestedCustomTools = buildCustomTools({
-            delegationId,
-            depth: attemptedDepth,
-          });
-
           if (resumeId !== undefined) {
             const nestedStoreDir = nestedStorePath(
               options.storeDir,
@@ -392,6 +406,14 @@ export function createDelegateCustomTools(
                 `delegate: unknown or unresumable agent ${resumeId}`,
               );
             }
+            // Local SDK sessionId === agentId; hooks see it as conversation_id.
+            const nestedCustomTools = buildCustomTools(
+              {
+                delegationId,
+                depth: attemptedDepth,
+              },
+              () => resumeId,
+            );
             try {
               handle = await options.sdk.resumeAgent(
                 resumeId,
@@ -423,6 +445,13 @@ export function createDelegateCustomTools(
             );
             mkdirSync(nestedStoreDir, { recursive: true });
 
+            const nestedCustomTools = buildCustomTools(
+              {
+                delegationId,
+                depth: attemptedDepth,
+              },
+              () => agentId,
+            );
             handle = await options.sdk.createAgent({
               cwd: options.cwd,
               model,
@@ -532,5 +561,5 @@ export function createDelegateCustomTools(
     return customTools;
   }
 
-  return buildCustomTools(null);
+  return buildCustomTools(null, options.getCursorConversationId);
 }
