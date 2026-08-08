@@ -211,7 +211,7 @@ export function RailNode({
       {edge === "dashed" && (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute left-[-18px] top-[-6px] h-[18px] border-l-2 border-dashed border-[hsl(var(--blocked))] opacity-[.55]"
+          className="pointer-events-none absolute bottom-1/2 left-[-18px] top-[-6px] border-l-2 border-dashed border-[hsl(var(--blocked))] opacity-[.55]"
         />
       )}
       <RailPort
@@ -219,7 +219,7 @@ export function RailNode({
         label={label}
         glow={glow ?? state === "in-flight"}
         className="contents"
-        portClassName="absolute left-[-23px] top-3"
+        portClassName="absolute left-[-23px] top-1/2 -translate-y-1/2"
       />
       {children}
     </div>
