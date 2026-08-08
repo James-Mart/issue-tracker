@@ -1,5 +1,5 @@
 #!/usr/bin/env -S npx tsx
-// Register the strip-cursor-attribution hook in ~/.cursor/hooks.json.
+// Register issue-tracker Shell preToolUse hooks in ~/.cursor/hooks.json.
 //
 // Run once per machine: `npm run install-hooks` from `app/`.
 
@@ -46,7 +46,7 @@ function asHooksObject(value: unknown): Record<string, unknown> {
 }
 
 /**
- * Merge strip-cursor-attribution registration into parsed hooks.json contents.
+ * Merge one hook script registration into parsed hooks.json contents.
  * Idempotent: replaces an existing entry for the same script, never duplicates.
  */
 export function ensureHookRegistration(
@@ -87,6 +87,20 @@ export function ensureHookRegistration(
   return result as HooksConfig;
 }
 
+/**
+ * Merge every required hook script into hooks.json contents, in order.
+ */
+export function ensureAllHookRegistrations(
+  config: Record<string, unknown> | undefined,
+  scriptPaths: string[],
+): HooksConfig {
+  let next: Record<string, unknown> | undefined = config;
+  for (const scriptPath of scriptPaths) {
+    next = ensureHookRegistration(next, scriptPath);
+  }
+  return next as HooksConfig;
+}
+
 function readHooksConfig(path: string): Record<string, unknown> | undefined {
   let raw: string;
   try {
@@ -119,9 +133,16 @@ function readHooksConfig(path: string): Record<string, unknown> | undefined {
   return parsed as Record<string, unknown>;
 }
 
-function installHooks(hooksPath: string, scriptPath: string): void {
+export function hookScriptPaths(hooksDir: string): string[] {
+  return [
+    resolve(hooksDir, "strip-cursor-attribution.mjs"),
+    resolve(hooksDir, "port-kill-guard.mjs"),
+  ];
+}
+
+function installHooks(hooksPath: string, scriptPaths: string[]): void {
   const config = readHooksConfig(hooksPath);
-  const next = ensureHookRegistration(config, scriptPath);
+  const next = ensureAllHookRegistrations(config, scriptPaths);
   mkdirSync(dirname(hooksPath), { recursive: true });
   writeFileSync(hooksPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
   console.log(hooksPath);
@@ -133,9 +154,6 @@ const isMain =
 
 if (isMain) {
   const hooksPath = join(homedir(), ".cursor", "hooks.json");
-  const scriptPath = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "../hooks/strip-cursor-attribution.mjs",
-  );
-  installHooks(hooksPath, scriptPath);
+  const hooksDir = resolve(dirname(fileURLToPath(import.meta.url)), "../hooks");
+  installHooks(hooksPath, hookScriptPaths(hooksDir));
 }

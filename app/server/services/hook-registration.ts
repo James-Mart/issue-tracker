@@ -1,17 +1,20 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { appDir } from "../config.js";
 
 const INSTALL_COMMAND = "npm run install-hooks";
 
-function expectedScriptPath(): string {
-  return join(appDir, "hooks", "strip-cursor-attribution.mjs");
+export function expectedHookScriptPaths(): string[] {
+  return [
+    join(appDir, "hooks", "strip-cursor-attribution.mjs"),
+    join(appDir, "hooks", "port-kill-guard.mjs"),
+  ];
 }
 
 function registrationError(detail: string): Error {
   return new Error(
-    `${detail} Run \`${INSTALL_COMMAND}\` from \`app/\` to register the strip-cursor-attribution hook.`,
+    `${detail} Run \`${INSTALL_COMMAND}\` from \`app/\` to register the required Shell preToolUse hooks.`,
   );
 }
 
@@ -78,19 +81,25 @@ function isRegisteredUnderHooks(
   );
 }
 
-/** Fail fast when strip-cursor-attribution is missing from ~/.cursor/hooks.json. */
+/** Fail fast when required Shell hooks are missing from ~/.cursor/hooks.json. */
 export function validateHookRegistration(homeDir: string = homedir()): void {
-  const scriptPath = expectedScriptPath();
+  const scriptPaths = expectedHookScriptPaths();
 
-  if (!existsSync(scriptPath)) {
-    throw registrationError(`Hook script is missing at ${scriptPath}.`);
+  for (const scriptPath of scriptPaths) {
+    if (!existsSync(scriptPath)) {
+      throw registrationError(`Hook script is missing at ${scriptPath}.`);
+    }
   }
 
   const config = readHooksConfig(homeDir);
 
-  if (!isRegisteredUnderHooks(config, scriptPath)) {
+  const missing = scriptPaths.filter(
+    (scriptPath) => !isRegisteredUnderHooks(config, scriptPath),
+  );
+  if (missing.length > 0) {
+    const names = missing.map((path) => basename(path)).join(", ");
     throw registrationError(
-      "strip-cursor-attribution is not registered under hooks.preToolUse in ~/.cursor/hooks.json.",
+      `${names} not registered under hooks.preToolUse in ~/.cursor/hooks.json.`,
     );
   }
 }
