@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Bot, Plus } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
+import { cn } from "@/lib/utils/cn";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
@@ -30,30 +31,59 @@ function CockpitHeader() {
   );
 }
 
-function CockpitFlowRow({
-  item,
-  issues,
+type ProjectFlowGroup = {
+  projectId: string;
+  projectTitle: string;
+  items: FlowItem[];
+};
+
+/** Group bucket rows by project; project order follows the global project list. */
+export function groupFlowItemsByProject(
+  items: FlowItem[],
+  byId: Map<string, IssueRecord>,
+  projectOrder: string[],
+): ProjectFlowGroup[] {
+  const groups = new Map<string, FlowItem[]>();
+  for (const item of items) {
+    const projectId = projectIdOf(item.issue.id, byId);
+    if (!projectId) continue;
+    const bucket = groups.get(projectId) ?? [];
+    bucket.push(item);
+    groups.set(projectId, bucket);
+  }
+
+  const orderIndex = new Map(projectOrder.map((id, index) => [id, index]));
+  return [...groups.entries()]
+    .sort(
+      ([leftId], [rightId]) =>
+        (orderIndex.get(leftId) ?? Number.MAX_SAFE_INTEGER) -
+        (orderIndex.get(rightId) ?? Number.MAX_SAFE_INTEGER),
+    )
+    .map(([projectId, groupItems]) => {
+      const project = byId.get(projectId);
+      const projectTitle =
+        project?.kind === "project" ? project.title : projectId;
+      return { projectId, projectTitle, items: groupItems };
+    });
+}
+
+function CockpitProjectSubheader({
   projectId,
   projectTitle,
 }: {
-  item: FlowItem;
-  issues: IssueRecord[];
   projectId: string;
   projectTitle: string;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <div className="min-w-0 flex-1">
-        <FlowRow item={item} issues={issues} to={issuePath(projectId, item.issue.id)} />
-      </div>
+    <h3 className="truncate font-mono text-[11px] font-normal text-muted-foreground">
       <Link
         to={projectPath(projectId)}
-        className="shrink-0 truncate font-mono text-[11px] text-muted-foreground hover:text-foreground"
+        className="hover:text-foreground"
         title={projectTitle}
       >
         {projectTitle}
       </Link>
-    </div>
+    </h3>
   );
 }
 
@@ -65,9 +95,45 @@ export function CockpitPage() {
   const derived = data?.derived ?? {};
   const byId = useMemo(() => issuesById(issues), [issues]);
   const projects = useMemo(() => listProjects(issues), [issues]);
+  const projectOrder = useMemo(() => projects.map((project) => project.id), [projects]);
   const buckets = useMemo(
     () => flowBuckets(issues, derived, {}),
     [derived, issues],
+  );
+
+  const renderBucketItems = useCallback(
+    (items: FlowItem[], compact?: boolean) => {
+      const groups = groupFlowItemsByProject(items, byId, projectOrder);
+      return (
+        <div className={cn("flex flex-col", compact ? "gap-2" : "gap-3")}>
+          {groups.map((group) => (
+            <div key={group.projectId}>
+              <CockpitProjectSubheader
+                projectId={group.projectId}
+                projectTitle={group.projectTitle}
+              />
+              <ul
+                className={cn(
+                  "flex list-none flex-col p-0",
+                  compact ? "mt-1 gap-1" : "mt-1.5 gap-1",
+                )}
+              >
+                {group.items.map((item) => (
+                  <li key={item.issue.id}>
+                    <FlowRow
+                      item={item}
+                      issues={issues}
+                      to={issuePath(group.projectId, item.issue.id)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      );
+    },
+    [byId, issues, projectOrder],
   );
 
   return (
@@ -102,21 +168,7 @@ export function CockpitPage() {
             buckets={buckets}
             idPrefix="cockpit"
             variant="cockpit"
-            renderRow={(item) => {
-              const projectId = projectIdOf(item.issue.id, byId);
-              if (!projectId) return null;
-              const project = byId.get(projectId);
-              const projectTitle =
-                project?.kind === "project" ? project.title : projectId;
-              return (
-                <CockpitFlowRow
-                  item={item}
-                  issues={issues}
-                  projectId={projectId}
-                  projectTitle={projectTitle}
-                />
-              );
-            }}
+            renderItems={renderBucketItems}
           />
         )}
       </PageShell>

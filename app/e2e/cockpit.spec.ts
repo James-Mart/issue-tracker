@@ -42,12 +42,9 @@ test.describe("cockpit", () => {
   }) => {
     const main = await gotoCockpitReady(page, seededApp.baseURL);
 
-    // Row secondary link → project overview (one row among many project links).
-    await main
-      .getByRole("listitem")
-      .filter({ hasText: "Epic B" })
-      .getByRole("link", { name: "Seed Project" })
-      .click();
+    // Project subheader link → project overview.
+    const blocked = main.locator('section[aria-labelledby="cockpit-blocked"]');
+    await blocked.getByRole("link", { name: "Seed Project" }).click();
     await expect(page).toHaveURL(/\/projects\/seed-proj\/?$/);
     await expect(
       page.getByRole("main").getByRole("link", { name: /^Epic B\b/ }),

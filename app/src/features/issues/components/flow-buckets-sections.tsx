@@ -126,12 +126,23 @@ function BucketHeading({
 function BucketList({
   items,
   renderRow,
+  renderItems,
   compact,
 }: {
   items: FlowItem[];
-  renderRow: (item: FlowItem) => ReactNode;
+  renderRow?: (item: FlowItem) => ReactNode;
+  /** When set, renders the whole bucket body (e.g. cockpit project groups). */
+  renderItems?: (items: FlowItem[], compact?: boolean) => ReactNode;
   compact?: boolean;
 }) {
+  if (renderItems) {
+    return (
+      <div className={compact ? "mt-2" : "mt-3"}>
+        {renderItems(items, compact)}
+      </div>
+    );
+  }
+
   return (
     <ul
       className={cn(
@@ -140,7 +151,7 @@ function BucketList({
       )}
     >
       {items.map((item) => {
-        const row = renderRow(item);
+        const row = renderRow?.(item);
         if (row == null) return null;
         return <li key={item.issue.id}>{row}</li>;
       })}
@@ -153,12 +164,14 @@ function FlowBucketSection({
   items,
   idPrefix,
   renderRow,
+  renderItems,
   variant,
 }: {
   def: FlowBucketDef;
   items: FlowItem[];
   idPrefix: string;
-  renderRow: (item: FlowItem) => ReactNode;
+  renderRow?: (item: FlowItem) => ReactNode;
+  renderItems?: (items: FlowItem[], compact?: boolean) => ReactNode;
   variant: "overview" | "cockpit";
 }) {
   const headingId = `${idPrefix}-${def.key}`;
@@ -174,7 +187,12 @@ function FlowBucketSection({
     count === 0 && def.empty ? (
       <p className="mt-3 text-sm text-muted-foreground">{def.empty}</p>
     ) : (
-      <BucketList items={items} renderRow={renderRow} compact={compact} />
+      <BucketList
+        items={items}
+        renderRow={renderRow}
+        renderItems={renderItems}
+        compact={compact}
+      />
     );
 
   if (collapsed) {
@@ -217,11 +235,14 @@ export function FlowBucketsSections({
   buckets,
   idPrefix,
   renderRow,
+  renderItems,
   variant = "overview",
 }: {
   buckets: FlowBuckets;
   idPrefix: string;
-  renderRow: (item: FlowItem) => ReactNode;
+  renderRow?: (item: FlowItem) => ReactNode;
+  /** Optional bucket body renderer; cockpit uses this for project grouping. */
+  renderItems?: (items: FlowItem[], compact?: boolean) => ReactNode;
   /** Cockpit foregrounds attention/in-flight work and collapses backlog buckets. */
   variant?: "overview" | "cockpit";
 }) {
@@ -251,6 +272,7 @@ export function FlowBucketsSections({
           items={bucketItems(def.key, displayBuckets, needsAttention)}
           idPrefix={idPrefix}
           renderRow={renderRow}
+          renderItems={renderItems}
           variant={variant}
         />
       ))}
