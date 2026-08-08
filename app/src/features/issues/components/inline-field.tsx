@@ -16,7 +16,10 @@ import {
   useInlineEditSession,
   type InlineEditSession,
 } from "../hooks/use-inline-edit-session";
-import { shouldBeginInlineEdit } from "../lib/inline-field-display-click";
+import {
+  richDisplayInteractiveTarget,
+  shouldBeginInlineEdit,
+} from "../lib/inline-field-display-click";
 import { ExternalEditConflictBanner } from "./external-edit-conflict-banner";
 
 export type InlineFieldEditContext = Pick<
@@ -152,11 +155,17 @@ export function InlineField({
     );
 
     const onDisplayClick = (event: MouseEvent<HTMLElement>) => {
-      const targetIsLink =
-        richDisplay && Boolean((event.target as HTMLElement).closest("a"));
+      const { targetIsLink, targetIsImage } = richDisplay
+        ? richDisplayInteractiveTarget(event.target)
+        : { targetIsLink: false, targetIsImage: false };
       const hasTextSelection = window.getSelection()?.isCollapsed === false;
       if (
-        !shouldBeginInlineEdit({ richDisplay, targetIsLink, hasTextSelection })
+        !shouldBeginInlineEdit({
+          richDisplay,
+          targetIsLink,
+          targetIsImage,
+          hasTextSelection,
+        })
       ) {
         return;
       }
@@ -164,10 +173,23 @@ export function InlineField({
     };
 
     const onDisplayKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        beginEdit();
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const { targetIsLink, targetIsImage } = richDisplay
+        ? richDisplayInteractiveTarget(event.target)
+        : { targetIsLink: false, targetIsImage: false };
+      if (
+        !shouldBeginInlineEdit({
+          richDisplay,
+          targetIsLink,
+          targetIsImage,
+          hasTextSelection: false,
+        })
+      ) {
+        // Leave default activation to the focused link / image trigger.
+        return;
       }
+      event.preventDefault();
+      beginEdit();
     };
 
     const display = richDisplay ? (

@@ -1,3 +1,5 @@
+import { writeChatCompanionParam } from "./chat-companion";
+
 export const ISSUE_LINK_PREFIX = "issue:";
 
 export function projectPath(projectId: string): string {
@@ -9,11 +11,12 @@ export function issuePath(projectId: string, id: string): string {
 }
 
 /**
- * Detail route with chat companion expanded. Absent `chat` already means
- * expanded (`writeChatCompanionParam`), so this is the plain detail path.
+ * Detail route with chat companion forced open. Absence means adaptive, so
+ * Jump-to-chat must set an explicit `chat=expanded` override.
  */
 export function issueChatPath(projectId: string, id: string): string {
-  return issuePath(projectId, id);
+  const params = writeChatCompanionParam(new URLSearchParams(), "expanded");
+  return `${issuePath(projectId, id)}?${params.toString()}`;
 }
 
 export function parseIssueLink(href: string | undefined): string | null {

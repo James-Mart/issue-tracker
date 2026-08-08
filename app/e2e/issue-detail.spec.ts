@@ -12,8 +12,11 @@ test.describe("issue detail", () => {
 
     await expect(main.locator('[data-region="companion"]')).toHaveAttribute(
       "data-state",
-      "expanded",
+      "collapsed",
     );
+    await expect(
+      main.getByRole("button", { name: "Steer this issue" }),
+    ).toBeVisible();
     await expect(main.getByText("Description")).toBeVisible();
     await expect(main.getByText("Part of")).toBeVisible();
     await expect(main.locator('[data-region="meta-scalars"]')).toBeVisible();

@@ -1,7 +1,12 @@
-import { useMemo, type ComponentPropsWithoutRef } from "react";
+import { useMemo, useState, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils/cn";
 import {
   attachmentDownloadName,
@@ -39,7 +44,86 @@ function IssueAwareLink({
   );
 }
 
-const markdownComponents = { a: IssueAwareLink };
+function MarkdownCode({
+  className,
+  children,
+  node: _node,
+  ...props
+}: ComponentPropsWithoutRef<"code"> & { node?: unknown }) {
+  const languageClass =
+    typeof className === "string" &&
+    className.split(/\s+/).some((part) => part.startsWith("language-"));
+  return (
+    <code
+      className={cn(!languageClass && "issue-md-inline-code", className)}
+      {...props}
+    >
+      {children}
+    </code>
+  );
+}
+
+function MarkdownPre({
+  className,
+  children,
+  node: _node,
+  ...props
+}: ComponentPropsWithoutRef<"pre"> & { node?: unknown }) {
+  return (
+    <pre className={cn("issue-md-pre", className)} {...props}>
+      {children}
+    </pre>
+  );
+}
+
+function MarkdownImage({
+  src,
+  alt,
+  className,
+  node: _node,
+  ...props
+}: ComponentPropsWithoutRef<"img"> & { node?: unknown }) {
+  const [open, setOpen] = useState(false);
+  if (!src) return null;
+
+  const label = alt?.trim() ? alt : "Image";
+
+  return (
+    <>
+      <button
+        type="button"
+        data-markdown-image
+        className="issue-md-image-trigger"
+        onClick={() => setOpen(true)}
+        aria-label={`View larger: ${label}`}
+      >
+        <img
+          src={src}
+          alt={alt ?? ""}
+          className={cn("issue-md-image", className)}
+          {...props}
+        />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="w-auto max-w-[min(96vw,80rem)] p-3">
+          <DialogTitle className="sr-only">{label}</DialogTitle>
+          <img
+            src={src}
+            alt={alt ?? ""}
+            className="max-h-[85vh] w-auto max-w-full rounded-md"
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+const markdownComponents = {
+  a: IssueAwareLink,
+  code: MarkdownCode,
+  pre: MarkdownPre,
+  img: MarkdownImage,
+};
 
 export function Markdown({
   children,
@@ -61,7 +145,7 @@ export function Markdown({
   }, [issueId]);
 
   return (
-    <div className={cn("prose-issue", READING_MEASURE_CLASS)}>
+    <div className={cn("prose-issue min-w-0", READING_MEASURE_CLASS)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={urlTransform}

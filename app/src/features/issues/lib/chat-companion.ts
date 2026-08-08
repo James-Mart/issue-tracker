@@ -1,36 +1,45 @@
-/** Detail companion collapse state, persisted as `?chat=`. */
+/** Detail companion collapse override, persisted as `?chat=`. */
 export const CHAT_COMPANION_STATES = ["expanded", "collapsed"] as const;
 
 export type ChatCompanionState = (typeof CHAT_COMPANION_STATES)[number];
 
-/** Default when `chat` is absent — companion is shown. */
-export const DEFAULT_CHAT_COMPANION_STATE: ChatCompanionState = "expanded";
+/**
+ * Resolved preference: explicit URL override, or adaptive when `chat` is
+ * absent / unknown.
+ */
+export type ChatCompanionPreference = ChatCompanionState | "adaptive";
 
 function isChatCompanionState(value: string): value is ChatCompanionState {
   return (CHAT_COMPANION_STATES as readonly string[]).includes(value);
 }
 
-/** Parse `chat` query value; absent or unknown → expanded. */
-export function parseChatCompanionState(
+/** Parse `chat` query value; absent or unknown → adaptive. */
+export function parseChatCompanionPreference(
   value: string | null,
-): ChatCompanionState {
+): ChatCompanionPreference {
   if (value != null && isChatCompanionState(value)) return value;
-  return DEFAULT_CHAT_COMPANION_STATE;
+  return "adaptive";
 }
 
 /**
- * Write companion state into search params. Default (`expanded`) omits the
- * param so the URL stays clean when absent means shown.
+ * Write an explicit companion override into search params. Absence means
+ * adaptive, so both `expanded` and `collapsed` must stay in the URL.
  */
 export function writeChatCompanionParam(
   params: URLSearchParams,
   state: ChatCompanionState,
 ): URLSearchParams {
   const next = new URLSearchParams(params);
-  if (state === DEFAULT_CHAT_COMPANION_STATE) {
-    next.delete("chat");
-  } else {
-    next.set("chat", state);
-  }
+  next.set("chat", state);
   return next;
+}
+
+/** Open when the URL forces it, or (adaptively) when there is signal. */
+export function resolveChatCompanionExpanded(
+  preference: ChatCompanionPreference,
+  signal: { hasMessages: boolean; agentLive: boolean },
+): boolean {
+  if (preference === "expanded") return true;
+  if (preference === "collapsed") return false;
+  return signal.hasMessages || signal.agentLive;
 }
