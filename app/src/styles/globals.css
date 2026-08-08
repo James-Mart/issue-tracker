@@ -222,9 +222,12 @@
   /* GFM prose — Mainline type scale, code/quote/list, issue-link.
      Width capped by READING_MEASURE_CLASS at call sites. */
   .prose-issue {
+    min-width: 0;
     font-size: 15px;
     line-height: 1.55;
     color: hsl(var(--foreground));
+    overflow-wrap: break-word;
+    word-break: normal;
   }
   .prose-issue > :first-child {
     margin-top: 0;
@@ -284,11 +287,23 @@
   }
   /* issue: links — mono id treatment within prose */
   .prose-issue .issue-md-link {
+    display: inline-block;
+    max-width: 100%;
+    overflow-x: auto;
+    vertical-align: baseline;
     font-family: var(--font-mono);
     font-size: 0.93em;
     font-variant-numeric: tabular-nums;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    white-space: nowrap;
   }
-  .prose-issue code {
+  .prose-issue :not(pre) > code,
+  .prose-issue .issue-md-inline-code {
+    display: inline-block;
+    max-width: 100%;
+    overflow-x: auto;
+    vertical-align: baseline;
     font-family: var(--font-mono);
     font-size: 0.86em;
     font-variant-numeric: tabular-nums;
@@ -296,8 +311,12 @@
     border: 1px solid hsl(var(--border));
     border-radius: 4px;
     padding: 1px 5px;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    white-space: nowrap;
   }
-  .prose-issue pre {
+  .prose-issue pre,
+  .prose-issue .issue-md-pre {
     font-family: var(--font-mono);
     font-size: 12.5px;
     line-height: 1.6;
@@ -308,13 +327,22 @@
     padding: 14px 16px;
     margin: 12px 0;
     overflow-x: auto;
+    overflow-wrap: normal;
+    word-break: normal;
+    white-space: pre;
+    tab-size: 2;
   }
   .prose-issue pre code {
+    display: block;
+    min-width: min-content;
     font-size: inherit;
     background: transparent;
     border: none;
     border-radius: 0;
     padding: 0;
+    overflow-wrap: normal;
+    word-break: normal;
+    white-space: inherit;
   }
   .prose-issue blockquote {
     margin: 12px 0;

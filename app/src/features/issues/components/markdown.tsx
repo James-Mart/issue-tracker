@@ -39,7 +39,43 @@ function IssueAwareLink({
   );
 }
 
-const markdownComponents = { a: IssueAwareLink };
+function MarkdownCode({
+  className,
+  children,
+  node: _node,
+  ...props
+}: ComponentPropsWithoutRef<"code"> & { node?: unknown }) {
+  const languageClass =
+    typeof className === "string" &&
+    className.split(/\s+/).some((part) => part.startsWith("language-"));
+  return (
+    <code
+      className={cn(!languageClass && "issue-md-inline-code", className)}
+      {...props}
+    >
+      {children}
+    </code>
+  );
+}
+
+function MarkdownPre({
+  className,
+  children,
+  node: _node,
+  ...props
+}: ComponentPropsWithoutRef<"pre"> & { node?: unknown }) {
+  return (
+    <pre className={cn("issue-md-pre", className)} {...props}>
+      {children}
+    </pre>
+  );
+}
+
+const markdownComponents = {
+  a: IssueAwareLink,
+  code: MarkdownCode,
+  pre: MarkdownPre,
+};
 
 export function Markdown({
   children,
@@ -61,7 +97,7 @@ export function Markdown({
   }, [issueId]);
 
   return (
-    <div className={cn("prose-issue", READING_MEASURE_CLASS)}>
+    <div className={cn("prose-issue min-w-0", READING_MEASURE_CLASS)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={urlTransform}
