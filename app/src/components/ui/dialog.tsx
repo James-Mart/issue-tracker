@@ -31,7 +31,7 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 p-6 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        "fixed left-1/2 top-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-3 p-5 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         READING_MEASURE_CLASS,
         dialogSurface,
         className,
@@ -55,12 +55,28 @@ export function DialogHeader({
   return (
     <div
       className={cn(
-        "flex flex-col gap-1.5 text-center sm:text-left",
+        "flex flex-col gap-1 text-center sm:text-left",
         className,
       )}
       {...props}
     />
   );
+}
+
+/** Vertical stack of labeled fields — shared density for create/rename dialogs. */
+export function DialogFields({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("grid gap-3", className)} {...props} />;
+}
+
+/** One label + control pair inside a DialogFields stack. */
+export function DialogField({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("grid gap-1.5", className)} {...props} />;
 }
 
 export function DialogFooter({
@@ -70,7 +86,7 @@ export function DialogFooter({
   return (
     <div
       className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        "flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end",
         className,
       )}
       {...props}

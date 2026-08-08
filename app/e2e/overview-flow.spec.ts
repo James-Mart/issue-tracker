@@ -126,7 +126,9 @@ test.describe("overview Flow lens", () => {
       merged.getByRole("heading", { name: "Recently merged0" }),
     ).toBeVisible();
     await expect(
-      merged.getByText("Nothing merged recently. Merged Stories land here."),
+      merged.getByText(
+        "Nothing merged recently. Finish a Story to land it here.",
+      ),
     ).toBeVisible();
   });
 

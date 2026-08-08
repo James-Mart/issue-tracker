@@ -3,7 +3,12 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, MessageSquare, PanelRightClose } from "lucide-react";
 import type { IssueDetail, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
-import { ShellLoadingState } from "@/app/shell-state";
+import {
+  ShellFaultDetail,
+  ShellInlineFault,
+  ShellLoadingState,
+  ShellState,
+} from "@/app/shell-state";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
@@ -288,26 +293,35 @@ export function IssueDetailPage() {
       {backLink}
 
       {error && !missing ? (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive-foreground">
-          {error.message}
-        </div>
+        <ShellInlineFault
+          message={error.message}
+          hint="Check the server, then reload."
+        />
       ) : null}
 
       {loading ? <ShellLoadingState label="Loading issue…" /> : null}
 
       {showScopeError && !loading ? (
-        <div className="rounded-lg border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
-          {missing ? (
-            <>
-              No issue with id <span className="font-mono">{id}</span>.
-            </>
-          ) : (
-            <>
-              Issue <span className="font-mono">{id}</span> is not under project{" "}
-              <span className="font-mono">{projectId}</span>.
-            </>
-          )}
-        </div>
+        <ShellState
+          tone="blocked"
+          eyebrow="Missing"
+          title={
+            missing ? "No issue with that id." : "That issue lives elsewhere."
+          }
+          detail={
+            missing ? (
+              <ShellFaultDetail
+                message={id}
+                hint="Check the id, or pick the issue from the project tree."
+              />
+            ) : (
+              <ShellFaultDetail
+                message={`${id} is not under ${projectId}`}
+                hint="Open it from its own project, or check the id."
+              />
+            )
+          }
+        />
       ) : null}
 
       {issue && !showScopeError ? (

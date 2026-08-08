@@ -656,7 +656,7 @@ export function IssueTree({
             <ProjectUnstackDropZone projectId={projectId} issues={issues} />
           ) : null}
           <p className="px-2 py-8 text-center text-sm text-muted-foreground">
-            No issues yet.
+            No issues yet. Use New to add an Epic, Story, or Idea.
           </p>
         </div>
       </StoryTreeDnDProvider>

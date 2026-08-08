@@ -7,6 +7,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogField,
+  DialogFields,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -83,8 +85,8 @@ export function ProjectDialog() {
           <DialogDescription>{descriptionFor(isRename)}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4">
-          <div className="grid gap-1.5">
+        <DialogFields>
+          <DialogField>
             <Label htmlFor="project-title">{FIELD_LABELS.title}</Label>
             <Input
               id="project-title"
@@ -94,11 +96,11 @@ export function ProjectDialog() {
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
-          </div>
+          </DialogField>
 
           {!isRename ? (
             <>
-              <div className="grid gap-1.5">
+              <DialogField>
                 <Label htmlFor="project-workspace">{FIELD_LABELS.workspace}</Label>
                 <WorkspacePathInput
                   id="project-workspace"
@@ -106,8 +108,8 @@ export function ProjectDialog() {
                   optional
                   onChange={setWorkspace}
                 />
-              </div>
-              <div className="grid gap-1.5">
+              </DialogField>
+              <DialogField>
                 <Label htmlFor="project-merge-policy">
                   {FIELD_LABELS.mergePolicy}
                 </Label>
@@ -116,15 +118,13 @@ export function ProjectDialog() {
                   value={mergePolicy}
                   onChange={setMergePolicy}
                 />
-              </div>
+              </DialogField>
             </>
           ) : null}
-        </div>
+        </DialogFields>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => close()}>
-            Cancel
-          </Button>
+          <Button onClick={() => close()}>Cancel</Button>
           <Button variant="primary" onClick={submit} disabled={!canSubmit}>
             {isRename ? "Save" : "Create"}
           </Button>

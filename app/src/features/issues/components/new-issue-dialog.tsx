@@ -6,6 +6,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogField,
+  DialogFields,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -102,9 +104,9 @@ export function NewIssueDialog() {
           <DialogDescription>{descriptionFor(kind)}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4">
+        <DialogFields>
           {!kindLocked ? (
-            <div className="grid gap-1.5">
+            <DialogField>
               <Label>Kind</Label>
               <Select
                 value={kind}
@@ -124,10 +126,10 @@ export function NewIssueDialog() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </DialogField>
           ) : null}
 
-          <div className="grid gap-1.5">
+          <DialogField>
             <Label htmlFor="new-issue-title">{FIELD_LABELS.title}</Label>
             <Input
               id="new-issue-title"
@@ -137,10 +139,10 @@ export function NewIssueDialog() {
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
-          </div>
+          </DialogField>
 
           {needsParent && !parentLocked ? (
-            <div className="grid gap-1.5">
+            <DialogField>
               <Label>
                 {FIELD_LABELS.partOf} ({parentKindLabel})
               </Label>
@@ -150,7 +152,7 @@ export function NewIssueDialog() {
                 options={parentOptions}
                 placeholder={`Select a ${parentKindLabel.toLowerCase()}`}
               />
-            </div>
+            </DialogField>
           ) : null}
 
           {parentLocked ? (
@@ -166,12 +168,10 @@ export function NewIssueDialog() {
               <span className="font-mono">{stackedOn}</span>
             </p>
           ) : null}
-        </div>
+        </DialogFields>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => closeNew()}>
-            Cancel
-          </Button>
+          <Button onClick={() => closeNew()}>Cancel</Button>
           <Button variant="primary" onClick={submit} disabled={!canSubmit}>
             Create
           </Button>

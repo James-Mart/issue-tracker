@@ -113,7 +113,7 @@ export function OverviewFlowFilters({
           <DropdownMenuSeparator />
           {catalog.length === 0 ? (
             <div className="px-2 py-1.5 text-sm text-muted-foreground">
-              No labels in project catalog
+              No labels in the catalog. Add them in project settings.
             </div>
           ) : (
             catalog.map((label) => (

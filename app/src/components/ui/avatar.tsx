@@ -25,8 +25,32 @@ export interface AvatarProps extends React.HTMLAttributes<HTMLSpanElement> {
   live?: boolean;
 }
 
-/** Initials for a display name: first two letters, or first+last word initials. */
+/** Known model/agent families → single-letter avatar initial. */
+const MODEL_FAMILY_INITIALS: Record<string, string> = {
+  composer: "C",
+  grok: "G",
+  opus: "O",
+};
+
+function modelFamilyInitial(name: string): string | undefined {
+  const parts = name
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase()
+    .split(/[\s._-]+/)
+    .filter(Boolean);
+  for (const part of parts) {
+    const initial = MODEL_FAMILY_INITIALS[part];
+    if (initial) return initial;
+  }
+  return undefined;
+}
+
+/** Initials for a display name: model family letter, else two letters or first+last word initials. */
 export function initialsFromName(name: string): string {
+  const model = modelFamilyInitial(name);
+  if (model) return model;
+
   const parts = name
     .trim()
     .replace(/^@+/, "")
