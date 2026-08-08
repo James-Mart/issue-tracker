@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { OverviewRow } from "@/components/ui/overview-row";
-import { StateIcon } from "@/components/ui/rail";
+import { Rail, RailNode } from "@/components/ui/rail";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -347,11 +347,13 @@ function TreeRow({
   derived,
   catalog,
   issues,
+  depth = 0,
 }: {
   node: IssueNode;
   derived: DerivedMap;
   catalog: ProjectLabel[];
   issues: IssueRecord[];
+  depth?: number;
 }) {
   const { projectId = "" } = useParams();
   const { issue } = node;
@@ -370,96 +372,102 @@ function TreeRow({
   const live = isInFlight(issue, state);
 
   return (
-    <div>
-      <div
-        className={cn(
-          "group flex items-center gap-1.5",
-          hasChildren && "cursor-pointer",
-          rowDraggable && "cursor-grab active:cursor-grabbing",
-          isDragging && "opacity-50",
-          isDropTarget && "rounded-lg ring-1 ring-ring",
-        )}
-        {...rowDnDHandlers}
-        onClick={
-          hasChildren
-            ? () => {
-                if (consumeDragGesture()) return;
-                toggle(issue.id);
-              }
-            : undefined
-        }
+    <>
+      <RailNode
+        state={railState}
+        edge={state?.blocked ? "dashed" : "solid"}
+        glow={live}
+        className="items-center gap-2 py-1"
       >
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
-          {hasChildren ? (
-            expanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )
-          ) : null}
-        </span>
-        <OverviewRow
-          className="min-w-0 flex-1"
-          overlayGroup={false}
-          avatar={
-            assignee ? (
-              <Avatar name={assignee} size="sm" />
-            ) : (
-              <Icon
-                aria-label={issue.kind}
-                className="h-4 w-4 text-muted-foreground"
-              />
-            )
-          }
-          stateIcon={<StateIcon state={railState} live={live} />}
-          attention={attention}
-          blocked={Boolean(state?.blocked)}
-          count={count}
-          overlay={
-            <>
-              <ProjectLabelChips issue={issue} catalog={catalog} />
-              {issue.kind === "story" && issue.prUrl ? (
-                <PrLink url={issue.prUrl} />
-              ) : null}
-              <TreeRowDerivedMeta issue={issue} derived={state} />
-              {issue.kind === "task" ? (
-                <TaskStatusChips status={issue.status} qa={issue.qa} />
-              ) : null}
-              <RowActions issue={issue} />
-            </>
-          }
-          touchMenu={
-            <TreeRowTouchMenu
-              issue={issue}
-              derived={state}
-              catalog={catalog}
-            />
+        <div
+          className={cn(
+            "group flex min-w-0 flex-1 items-center gap-1.5",
+            hasChildren && "cursor-pointer",
+            rowDraggable && "cursor-grab active:cursor-grabbing",
+            isDragging && "opacity-50",
+            isDropTarget && "rounded-lg ring-1 ring-ring",
+          )}
+          style={depth > 0 ? { paddingLeft: depth * 16 } : undefined}
+          {...rowDnDHandlers}
+          onClick={
+            hasChildren
+              ? () => {
+                  if (consumeDragGesture()) return;
+                  toggle(issue.id);
+                }
+              : undefined
           }
         >
-          <Link
-            to={issuePath(projectId, issue.id)}
-            className="truncate text-inherit no-underline hover:underline"
-            onClick={(e) => e.stopPropagation()}
-            draggable={false}
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
+            {hasChildren ? (
+              expanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )
+            ) : null}
+          </span>
+          <OverviewRow
+            className="min-w-0 flex-1"
+            overlayGroup={false}
+            avatar={
+              assignee ? (
+                <Avatar name={assignee} size="sm" />
+              ) : (
+                <Icon
+                  aria-label={issue.kind}
+                  className="h-4 w-4 text-muted-foreground"
+                />
+              )
+            }
+            attention={attention}
+            blocked={Boolean(state?.blocked)}
+            count={count}
+            overlay={
+              <>
+                <ProjectLabelChips issue={issue} catalog={catalog} />
+                {issue.kind === "story" && issue.prUrl ? (
+                  <PrLink url={issue.prUrl} />
+                ) : null}
+                <TreeRowDerivedMeta issue={issue} derived={state} />
+                {issue.kind === "task" ? (
+                  <TaskStatusChips status={issue.status} qa={issue.qa} />
+                ) : null}
+                <RowActions issue={issue} />
+              </>
+            }
+            touchMenu={
+              <TreeRowTouchMenu
+                issue={issue}
+                derived={state}
+                catalog={catalog}
+              />
+            }
           >
-            {issue.title}
-          </Link>
-        </OverviewRow>
-      </div>
-      {hasChildren && expanded ? (
-        <div className="ml-4 border-l border-border/60 pl-2">
-          {node.children.map((child) => (
+            <Link
+              to={issuePath(projectId, issue.id)}
+              className="truncate text-inherit no-underline hover:underline"
+              onClick={(e) => e.stopPropagation()}
+              draggable={false}
+            >
+              {issue.title}
+            </Link>
+          </OverviewRow>
+        </div>
+      </RailNode>
+      {hasChildren && expanded
+        ? node.children.map((child) => (
             <TreeRow
               key={child.issue.id}
               node={child}
               derived={derived}
               catalog={catalog}
               issues={issues}
+              depth={depth + 1}
             />
-          ))}
-        </div>
-      ) : null}
-    </div>
+          ))
+        : null}
+    </>
   );
 }
 
@@ -525,15 +533,17 @@ export function IssueTree({
         {projectId ? (
           <ProjectUnstackDropZone projectId={projectId} issues={issues} />
         ) : null}
-        {nodes.map((node) => (
-          <TreeRow
-            key={node.issue.id}
-            node={node}
-            derived={derived}
-            catalog={catalog}
-            issues={issues}
-          />
-        ))}
+        <Rail data-testid="structure-tree-rail">
+          {nodes.map((node) => (
+            <TreeRow
+              key={node.issue.id}
+              node={node}
+              derived={derived}
+              catalog={catalog}
+              issues={issues}
+            />
+          ))}
+        </Rail>
       </div>
     </StoryTreeDnDProvider>
   );
