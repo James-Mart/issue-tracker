@@ -1,4 +1,4 @@
-import { Filter, GitBranch, Layers, Lightbulb, Search } from "lucide-react";
+import { Filter, GitBranch, Layers, Lightbulb } from "lucide-react";
 import type { ProjectLabel } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +10,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { OverviewCollapsibleSearch } from "./overview-collapsible-search";
 import { Switch } from "@/components/ui/switch";
 import {
   BOARD_KIND_OPTIONS,
@@ -57,16 +57,7 @@ export function OverviewFlowFilters({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-[12rem] flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by title or id"
-          className="pl-9"
-          aria-label="Search overview"
-        />
-      </div>
+      <OverviewCollapsibleSearch value={search} onChange={setSearch} />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
