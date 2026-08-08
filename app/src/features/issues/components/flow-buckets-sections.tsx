@@ -31,7 +31,7 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
   {
     key: "ready",
     label: "Ready",
-    empty: "Nothing ready. Clear filters, or add work in Structure.",
+    empty: "Nothing ready. Unblock a dependency, or add work in Structure.",
     hideWhenEmpty: true,
     compact: true,
   },
@@ -45,7 +45,7 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
   {
     key: "recentlyMerged",
     label: "Recently merged",
-    empty: "Nothing merged recently. Merged Stories land here.",
+    empty: "Nothing merged recently. Finish a Story to land it here.",
     hideWhenEmpty: true,
     collapsedByDefault: true,
   },

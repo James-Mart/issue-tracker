@@ -31,7 +31,8 @@ export function AssignmentLabelsEditor({
       {embedded ? null : <Label>{FIELD_LABELS.labels}</Label>}
       {catalog.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No labels in project catalog.
+          No labels in the catalog. Add them in project settings, then assign
+          them here.
         </p>
       ) : (
         <ul className="flex flex-wrap gap-2">

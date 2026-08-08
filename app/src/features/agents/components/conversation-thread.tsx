@@ -74,7 +74,12 @@ function ErrorEvent({ message }: { message: string }) {
       <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-destructive">
         Send failed
       </p>
-      <p className="whitespace-pre-wrap break-words">{message}</p>
+      <p className="whitespace-pre-wrap break-words font-mono text-xs">
+        {message}
+      </p>
+      <p className="mt-2 text-muted-foreground">
+        The turn did not reach the agent. Send it again, or check the server.
+      </p>
     </div>
   );
 }

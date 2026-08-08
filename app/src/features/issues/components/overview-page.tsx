@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { visibleIssues } from "@server/services/archived-visibility";
 import type {
   DerivedState,
@@ -8,7 +8,11 @@ import type {
 } from "@server/schemas";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
-import { IssuesQueryShell, ShellState } from "@/app/shell-state";
+import {
+  IssuesQueryShell,
+  ShellFaultDetail,
+  ShellState,
+} from "@/app/shell-state";
 import { cn } from "@/lib/utils/cn";
 import { useIssuesQuery } from "../api/queries";
 import { issuesById } from "../lib/build-tree";
@@ -324,9 +328,15 @@ export function OverviewPage() {
             eyebrow="Missing"
             title="No project with that id."
             detail={
-              <span className="font-mono text-xs">
-                {projectId || "(empty)"}
-              </span>
+              <ShellFaultDetail
+                message={projectId || "(no id in the URL)"}
+                hint="It may have been renamed or deleted. Pick a project from the Cockpit."
+              />
+            }
+            action={
+              <Button asChild size="sm" variant="primary">
+                <Link to="/">Back to Cockpit</Link>
+              </Button>
             }
           />
         </PageShell>

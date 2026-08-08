@@ -1,6 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Send } from "lucide-react";
 import type { ChatMessage } from "@server/schemas";
+import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useChatQuery, useIssuesQuery } from "../api/queries";
@@ -109,13 +110,22 @@ export function ChatPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {error ? (
-        <p className="text-sm text-destructive-foreground">{error.message}</p>
+        <ShellInlineFault
+          message={error.message}
+          hint="Check the server, then reload."
+        />
       ) : null}
 
       {problems.length > 0 ? (
         <div className="rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-muted-foreground">
+          <p className="text-foreground">
+            Some chat lines are unreadable and are not shown. Fix them on disk,
+            then reload.
+          </p>
           {problems.map((p) => (
-            <div key={p.message}>{p.message}</div>
+            <div key={p.message} className="mt-1.5 font-mono">
+              {p.message}
+            </div>
           ))}
         </div>
       ) : null}

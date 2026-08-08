@@ -93,8 +93,8 @@ export function AgentsPage() {
         <ShellState
           className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
           eyebrow="Idle"
-          title="Select a conversation."
-          detail="Choose a conversation from the list to view its transcript."
+          title="No conversation selected."
+          detail="Pick one from the list to read its transcript, or start a new conversation."
         />
       )}
     </AgentsPane>

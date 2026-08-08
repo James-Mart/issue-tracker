@@ -92,7 +92,7 @@ export function AttachmentsPanel({
       ) : items.length === 0 && !error ? (
         <p className="flex items-start gap-2 text-sm text-muted-foreground">
           <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>No attachments yet. Upload a file to attach it.</span>
+          <span>No attachments yet. Use Upload to add a file.</span>
         </p>
       ) : items.length > 0 ? (
         <ul className="flex flex-col">
