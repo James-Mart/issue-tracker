@@ -478,7 +478,7 @@ export function ConversationThread({
     streamRunActive,
     runResyncKey,
   );
-  const { data: conversations } = useConversationsQuery();
+  const { data: conversations } = useConversationsQuery(true);
   const meta = conversations?.find((c) => c.id === conversationId);
   const title = meta?.title?.trim() || "Thread";
   const pendingMessageText =

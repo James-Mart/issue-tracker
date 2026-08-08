@@ -29,7 +29,7 @@ export function useCreateConversation() {
     mutationFn: createConversation,
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () =>
-      qc.invalidateQueries({ queryKey: agentsKeys.conversations() }),
+      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() }),
   });
 }
 
@@ -43,7 +43,7 @@ export function useUpdateConversation() {
     mutationFn: ({ id, patch }) => updateConversation(id, patch),
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () =>
-      qc.invalidateQueries({ queryKey: agentsKeys.conversations() }),
+      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() }),
   });
 }
 
@@ -53,7 +53,7 @@ export function useDeleteConversation() {
     mutationFn: deleteConversation,
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: agentsKeys.conversations() });
+      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
     },
   });
 }
@@ -97,7 +97,7 @@ export function useUpdateConversationPending() {
     mutationFn: ({ id, text }) => updateConversationPending(id, { text }),
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () =>
-      qc.invalidateQueries({ queryKey: agentsKeys.conversations() }),
+      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() }),
   });
 }
 
@@ -107,6 +107,6 @@ export function useClearConversationPending() {
     mutationFn: clearConversationPending,
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () =>
-      qc.invalidateQueries({ queryKey: agentsKeys.conversations() }),
+      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() }),
   });
 }

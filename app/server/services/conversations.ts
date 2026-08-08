@@ -270,6 +270,9 @@ export function updateMeta(
         next.pendingMessage = patch.pendingMessage;
       }
     }
+    if (patch.archived !== undefined) {
+      next.archived = patch.archived;
+    }
 
     next.updatedAt = new Date().toISOString();
     writeMeta(next);

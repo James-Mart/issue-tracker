@@ -410,6 +410,7 @@ export const conversationMetaSchema = z.object({
   agentId: nonEmpty.optional(),
   model: nonEmpty,
   pendingMessage: z.object({ text: nonEmpty, at: nonEmpty }).optional(),
+  archived: z.boolean().default(false),
   createdAt: nonEmpty,
   updatedAt: nonEmpty,
 });
@@ -619,7 +620,7 @@ export type CreateConversationInput = {
 };
 
 export type ConversationMetaPatch = Partial<
-  Pick<ConversationMeta, "title" | "agentId" | "model">
+  Pick<ConversationMeta, "title" | "agentId" | "model" | "archived">
 > & {
   pendingMessage?: NonNullable<ConversationMeta["pendingMessage"]> | null;
 };

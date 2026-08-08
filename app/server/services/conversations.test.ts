@@ -259,6 +259,47 @@ describe("conversations store", () => {
     );
   });
 
+  it("parses meta without archived and defaults archived to false", async () => {
+    const { conversationsDir } = await loadConfig();
+    const { parseConversationMeta } = await import("../schemas.js");
+
+    mkdirSync(join(conversationsDir, "legacy-chat"), { recursive: true });
+    writeFileSync(
+      join(conversationsDir, "legacy-chat", "meta.json"),
+      JSON.stringify({
+        id: "legacy-chat",
+        title: "Legacy",
+        projectId: "platform",
+        model: "auto",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+
+    const raw = JSON.parse(
+      readFileSync(join(conversationsDir, "legacy-chat", "meta.json"), "utf8"),
+    );
+    const parsed = parseConversationMeta(raw);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.meta.archived).toBe(false);
+  });
+
+  it("updates archived via updateMeta", async () => {
+    const { createConversation, updateMeta, readConversation } =
+      await loadService();
+
+    const created = await createConversation({
+      title: "Archive me",
+      projectId: "platform",
+      model: "auto",
+    });
+    expect(readConversation(created.id).meta.archived).toBe(false);
+
+    const archived = await updateMeta(created.id, { archived: true });
+    expect(archived.archived).toBe(true);
+    expect(readConversation(created.id).meta.archived).toBe(true);
+  });
+
   it("appends and reads delegation records, omitting parent when root-delegated", async () => {
     const { conversationsDir } = await loadConfig();
     const { createConversation, appendDelegation, readDelegations } =

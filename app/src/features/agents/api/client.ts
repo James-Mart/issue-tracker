@@ -26,6 +26,7 @@ export type CreateConversationBody = {
 export type UpdateConversationBody = {
   title?: string;
   model?: string;
+  archived?: boolean;
 };
 
 function parseConversationList(raw: unknown): ConversationListItem[] {
@@ -39,8 +40,11 @@ function parseConversationList(raw: unknown): ConversationListItem[] {
   });
 }
 
-export function listConversations(): Promise<ConversationListItem[]> {
-  return request<unknown>("/api/conversations").then(parseConversationList);
+export function listConversations(
+  showArchived = false,
+): Promise<ConversationListItem[]> {
+  const qs = showArchived ? "?showArchived=true" : "";
+  return request<unknown>(`/api/conversations${qs}`).then(parseConversationList);
 }
 
 export function createConversation(

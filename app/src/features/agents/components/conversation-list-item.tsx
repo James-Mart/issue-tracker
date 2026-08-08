@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { ConversationListItem as ConversationRow } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { currentGlow } from "@/components/ui/overlay-surfaces";
+import { useIsCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { cn } from "@/lib/utils/cn";
 import { useUpdateConversation } from "../api/mutations";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
@@ -49,7 +50,14 @@ export function ConversationListItem({
   const startRename = useAgentsUiStore((s) => s.startRename);
   const clearRename = useAgentsUiStore((s) => s.clearRename);
   const requestDelete = useAgentsUiStore((s) => s.requestDelete);
+  const selectedConversationId = useAgentsUiStore(
+    (s) => s.selectedConversationId,
+  );
+  const setSelectedConversationId = useAgentsUiStore(
+    (s) => s.setSelectedConversationId,
+  );
   const updateConversation = useUpdateConversation();
+  const isCoarsePointer = useIsCoarsePointer();
 
   const isRenaming = renamingId === conversation.id;
   const [draft, setDraft] = useState(conversation.title);
@@ -62,6 +70,26 @@ export function ConversationListItem({
       inputRef.current?.select();
     }
   }, [isRenaming, conversation.title]);
+
+  const archiveConversation = () => {
+    updateConversation.mutate(
+      { id: conversation.id, patch: { archived: true } },
+      {
+        onSuccess: () => {
+          if (selectedConversationId === conversation.id) {
+            setSelectedConversationId(null);
+          }
+        },
+      },
+    );
+  };
+
+  const unarchiveConversation = () => {
+    updateConversation.mutate({
+      id: conversation.id,
+      patch: { archived: false },
+    });
+  };
 
   const commitRename = () => {
     const trimmed = draft.trim();
@@ -80,6 +108,7 @@ export function ConversationListItem({
       className={cn(
         "group flex items-center gap-1 border-b border-border px-2 py-1",
         isSelected && "bg-accent/40",
+        conversation.archived && "opacity-60",
       )}
     >
       {isRenaming ? (
@@ -113,13 +142,19 @@ export function ConversationListItem({
           )}
         >
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-sm font-medium text-foreground",
+                conversation.archived && "text-muted-foreground",
+              )}
+            >
               {conversation.title}
             </span>
             <RosterActiveRunIndicator activeRun={conversation.activeRun} />
           </span>
           <span className="block truncate font-mono text-[11px] text-muted-foreground">
             {projectTitle} · {conversation.model}
+            {conversation.archived ? " · archived" : ""}
           </span>
         </button>
       )}
@@ -129,8 +164,13 @@ export function ConversationListItem({
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              size="icon-sm"
-              className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100"
+              size={isCoarsePointer ? "icon" : "icon-sm"}
+              className={cn(
+                "shrink-0 transition-opacity",
+                isCoarsePointer
+                  ? "h-11 w-11 opacity-100"
+                  : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100",
+              )}
               title="Conversation actions"
               onClick={(event) => event.stopPropagation()}
             >
@@ -142,6 +182,17 @@ export function ConversationListItem({
               <Pencil className="h-4 w-4" />
               Rename
             </DropdownMenuItem>
+            {conversation.archived ? (
+              <DropdownMenuItem onClick={unarchiveConversation}>
+                <ArchiveRestore className="h-4 w-4" />
+                Unarchive
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={archiveConversation}>
+                <Archive className="h-4 w-4" />
+                Archive
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
               onClick={() => requestDelete(conversation.id)}

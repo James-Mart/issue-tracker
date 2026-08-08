@@ -194,6 +194,64 @@ describe("conversations HTTP API (CRUD)", () => {
     expect(meta.model).toBe("composer-2.5");
   });
 
+  it("PATCH archives a conversation and rejects a non-boolean archived value", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Archive via API" }),
+    }).then((r) => r.json());
+
+    const bad = await fetch(`${baseUrl}/api/conversations/${created.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ archived: "true" }),
+    });
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ error: "archived must be a boolean" });
+
+    const patched = await fetch(`${baseUrl}/api/conversations/${created.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+    expect(patched.status).toBe(200);
+    expect(await patched.json()).toMatchObject({ archived: true });
+    expect(
+      existsSync(join(conversationsDir(), created.id, "meta.json")),
+    ).toBe(true);
+  });
+
+  it("GET omits archived conversations unless showArchived=true", async () => {
+    const visible = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Visible chat" }),
+    }).then((r) => r.json());
+    const hidden = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Hidden chat" }),
+    }).then((r) => r.json());
+
+    await fetch(`${baseUrl}/api/conversations/${hidden.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+
+    const defaultList = await fetch(`${baseUrl}/api/conversations`).then((r) =>
+      r.json(),
+    );
+    expect(defaultList.map((m: { id: string }) => m.id)).toEqual([visible.id]);
+
+    const allList = await fetch(
+      `${baseUrl}/api/conversations?showArchived=true`,
+    ).then((r) => r.json());
+    expect(allList.map((m: { id: string }) => m.id).sort()).toEqual(
+      [visible.id, hidden.id].sort(),
+    );
+  });
+
   it("DELETE removes the conversation directory", async () => {
     const created = await fetch(`${baseUrl}/api/conversations`, {
       method: "POST",

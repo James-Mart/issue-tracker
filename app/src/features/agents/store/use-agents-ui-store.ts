@@ -12,6 +12,8 @@ interface AgentsUiState {
   renamingId: string | null;
   startRename: (id: string) => void;
   clearRename: () => void;
+  showArchived: boolean;
+  setShowArchived: (value: boolean) => void;
 }
 
 export const useAgentsUiStore = create<AgentsUiState>((set) => ({
@@ -26,4 +28,6 @@ export const useAgentsUiStore = create<AgentsUiState>((set) => ({
   renamingId: null,
   startRename: (id) => set({ renamingId: id }),
   clearRename: () => set({ renamingId: null }),
+  showArchived: false,
+  setShowArchived: (value) => set({ showArchived: value }),
 }));
