@@ -25,12 +25,42 @@ const transcriptState: { events: TranscriptEvent[] } = {
   events: [...initialEvents],
 };
 
+const threadUi = vi.hoisted(() => ({
+  pendingText: undefined as string | null | undefined,
+  runActive: false,
+  metaPending: undefined as { text: string; at: string } | undefined,
+}));
+
+const updatePendingMutate = vi.hoisted(() => vi.fn());
+const clearPendingMutate = vi.hoisted(() => vi.fn());
+const sendMutate = vi.hoisted(() => vi.fn());
+
 vi.mock("../api/queries", () => ({
   useConversationsQuery: () => ({
     data: [
-      { id: "conv-1", title: "Test thread", model: "composer-2.5-fast" },
+      {
+        id: "conv-1",
+        title: "Test thread",
+        model: "composer-2.5-fast",
+        pendingMessage: threadUi.metaPending,
+      },
       { id: "conv-2", title: "Other thread", model: "composer-2.5-fast" },
     ],
+  }),
+}));
+
+vi.mock("../api/mutations", () => ({
+  useUpdateConversationPending: () => ({
+    mutate: updatePendingMutate,
+    isPending: false,
+  }),
+  useClearConversationPending: () => ({
+    mutate: clearPendingMutate,
+    isPending: false,
+  }),
+  useSendConversationMessage: () => ({
+    mutate: sendMutate,
+    isPending: false,
   }),
 }));
 
@@ -38,13 +68,14 @@ vi.mock("../hooks/use-conversation-events", () => ({
   useConversationEvents: () => ({
     events: transcriptState.events,
     ready: true,
-    streamRunActive: false,
+    streamRunActive: threadUi.runActive,
     runResyncKey: 0,
+    pendingText: threadUi.pendingText,
   }),
 }));
 
 vi.mock("../hooks/use-conversation-run-active", () => ({
-  useConversationRunActive: () => ({ runActive: false }),
+  useConversationRunActive: () => ({ runActive: threadUi.runActive }),
 }));
 
 vi.mock("./composer", () => ({
@@ -96,6 +127,12 @@ describe("ConversationThread scroller", () => {
     container = undefined;
     root = undefined;
     transcriptState.events = [...initialEvents];
+    threadUi.pendingText = undefined;
+    threadUi.runActive = false;
+    threadUi.metaPending = undefined;
+    updatePendingMutate.mockClear();
+    clearPendingMutate.mockClear();
+    sendMutate.mockClear();
   });
 
   it("positions at the bottom when a conversation opens", () => {
@@ -151,5 +188,124 @@ describe("ConversationThread scroller", () => {
 
     expect(scroller.scrollTop).toBe(1200);
     expect(isScrollPinned(scroller)).toBe(true);
+  });
+});
+
+describe("ConversationThread pending message", () => {
+  let container: HTMLDivElement | undefined;
+  let root: Root | undefined;
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount());
+    container?.remove();
+    container = undefined;
+    root = undefined;
+    transcriptState.events = [...initialEvents];
+    threadUi.pendingText = undefined;
+    threadUi.runActive = false;
+    threadUi.metaPending = undefined;
+    updatePendingMutate.mockClear();
+    clearPendingMutate.mockClear();
+    sendMutate.mockClear();
+  });
+
+  it("renders a pending message row from conversation meta", () => {
+    threadUi.metaPending = {
+      text: "follow up after this run",
+      at: "2026-07-24T00:00:05.000Z",
+    };
+    threadUi.runActive = true;
+    ({ container, root } = mountThread("conv-1"));
+
+    const row = container!.querySelector('[data-testid="pending-message-row"]');
+    expect(row).toBeTruthy();
+    expect(row!.textContent).toContain("follow up after this run");
+    expect(row!.getAttribute("data-run-active")).toBe("true");
+    expect(row!.textContent).toContain("Queued");
+  });
+
+  it("edits the pending message in place", () => {
+    threadUi.pendingText = "edit me";
+    threadUi.runActive = true;
+    ({ container, root } = mountThread("conv-1"));
+
+    act(() => {
+      (
+        container!.querySelector(
+          '[data-testid="pending-message-row"] button[type="button"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    const input = container!.querySelector(
+      'input[aria-label="Edit queued message"]',
+    ) as HTMLInputElement;
+    expect(input).toBeTruthy();
+
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    act(() => {
+      nativeInputValueSetter.call(input, "edited text");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      input.form!.requestSubmit();
+    });
+
+    expect(updatePendingMutate).toHaveBeenCalledWith(
+      { id: "conv-1", text: "edited text" },
+      expect.any(Object),
+    );
+  });
+
+  it("removes the pending message row", () => {
+    threadUi.pendingText = "remove me";
+    ({ container, root } = mountThread("conv-1"));
+
+    act(() => {
+      (
+        container!.querySelector(
+          'button[aria-label="Remove queued message"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(clearPendingMutate).toHaveBeenCalledWith("conv-1");
+  });
+
+  it("shows not-sent state when pending coexists with no active run", () => {
+    threadUi.pendingText = "never sent";
+    threadUi.runActive = false;
+    ({ container, root } = mountThread("conv-1"));
+
+    const row = container!.querySelector('[data-testid="pending-message-row"]');
+    expect(row!.textContent).toContain("Not sent");
+    expect(row!.textContent).toContain(
+      "The run ended before this message could send.",
+    );
+    expect(
+      container!.querySelector('[data-testid="pending-send-now"]'),
+    ).toBeTruthy();
+  });
+
+  it("sends the pending message now and clears via the ordinary send path", () => {
+    threadUi.pendingText = "send when idle";
+    threadUi.runActive = false;
+    ({ container, root } = mountThread("conv-1"));
+
+    act(() => {
+      (
+        container!.querySelector(
+          '[data-testid="pending-send-now"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(sendMutate).toHaveBeenCalledWith({
+      id: "conv-1",
+      body: { prompt: "send when idle", model: "composer-2.5-fast" },
+    });
   });
 });

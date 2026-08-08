@@ -207,3 +207,67 @@ describe("Composer send affordance", () => {
     expect(sendButton(container!).disabled).toBe(false)
   })
 })
+
+describe("Composer during active run", () => {
+  let container: HTMLDivElement | undefined
+  let root: Root | undefined
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount())
+    container?.remove()
+    container = undefined
+    root = undefined
+    sendMutate.mockClear()
+    coarsePointer.value = false
+  })
+
+  function queueButton(container: ParentNode): HTMLButtonElement {
+    const el = container.querySelector('button[aria-label="Queue message"]')
+    expect(el).toBeTruthy()
+    return el as HTMLButtonElement
+  }
+
+  it("shows Queue message alongside Stop and posts on send", () => {
+    ;({ container, root } = mountComposer({ runActive: true }))
+
+    setDraft(textarea(container!), "steer please")
+
+    const queue = queueButton(container!)
+    expect(queue.disabled).toBe(false)
+    expect(queue.title).toContain("Queue message")
+    expect(
+      container!.querySelector('button[aria-label="Stop"]'),
+    ).toBeTruthy()
+
+    act(() => {
+      queue.click()
+    })
+
+    expect(sendMutate).toHaveBeenCalledTimes(1)
+    expect(sendMutate).toHaveBeenCalledWith(
+      {
+        id: "conv-1",
+        body: { prompt: "steer please", model: "composer-2.5-fast" },
+      },
+      expect.any(Object),
+    )
+  })
+
+  it("queues on Enter during an active run", () => {
+    coarsePointer.value = false
+    ;({ container, root } = mountComposer({ runActive: true }))
+
+    const input = textarea(container!)
+    setDraft(input, "mid-run steer")
+    pressEnter(input)
+
+    expect(sendMutate).toHaveBeenCalledTimes(1)
+    expect(sendMutate).toHaveBeenCalledWith(
+      {
+        id: "conv-1",
+        body: { prompt: "mid-run steer", model: "composer-2.5-fast" },
+      },
+      expect.any(Object),
+    )
+  })
+})

@@ -30,6 +30,11 @@ export type ConversationEventsState = {
    * `GET /run` when a missed `finished` frame would otherwise stick Stop on.
    */
   runResyncKey: number;
+  /**
+   * Pending message text from SSE `pending` frames. `undefined` until the
+   * first frame on this subscription — seed from conversation meta until then.
+   */
+  pendingText: string | null | undefined;
 };
 
 /**
@@ -137,6 +142,9 @@ export function useConversationEvents(
   const [ready, setReady] = useState(false);
   const [streamRunActive, setStreamRunActive] = useState<boolean | null>(null);
   const [runResyncKey, setRunResyncKey] = useState(0);
+  const [pendingText, setPendingText] = useState<string | null | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     if (!conversationId) {
@@ -144,6 +152,7 @@ export function useConversationEvents(
       setReady(false);
       setStreamRunActive(null);
       setRunResyncKey(0);
+      setPendingText(undefined);
       return;
     }
     const id = conversationId;
@@ -159,6 +168,7 @@ export function useConversationEvents(
     setReady(false);
     setStreamRunActive(null);
     setRunResyncKey(0);
+    setPendingText(undefined);
 
     const closeSource = () => {
       if (watchdog) {
@@ -177,6 +187,7 @@ export function useConversationEvents(
       // finished while disconnected and its `finished` frame is no longer buffered.
       setStreamRunActive(null);
       setRunResyncKey((key) => key + 1);
+      setPendingText(undefined);
       // Keep `events` + `ready` so the UI keeps the last good transcript.
       if (disposed || reconnectTimer) return;
       reconnectTimer = setTimeout(() => {
@@ -244,6 +255,11 @@ export function useConversationEvents(
           void qc.invalidateQueries({ queryKey: agentsKeys.conversations() });
           return;
         }
+        if (parsed.event.type === "pending") {
+          setPendingText(parsed.event.text);
+          void qc.invalidateQueries({ queryKey: agentsKeys.conversations() });
+          return;
+        }
         if (replaying) {
           replayBuffer = applyTranscriptEvent(replayBuffer, parsed.event);
           return;
@@ -263,8 +279,9 @@ export function useConversationEvents(
       setReady(false);
       setStreamRunActive(null);
       setRunResyncKey(0);
+      setPendingText(undefined);
     };
   }, [conversationId, qc]);
 
-  return { events, ready, streamRunActive, runResyncKey };
+  return { events, ready, streamRunActive, runResyncKey, pendingText };
 }

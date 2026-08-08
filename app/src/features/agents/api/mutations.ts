@@ -3,10 +3,12 @@ import { toast } from "sonner";
 import type { ConversationMeta } from "@server/schemas";
 import {
   cancelConversationRun,
+  clearConversationPending,
   createConversation,
   deleteConversation,
   sendConversationMessage,
   updateConversation,
+  updateConversationPending,
   type CreateConversationBody,
   type SendConversationMessageBody,
   type SendConversationMessageResult,
@@ -68,5 +70,29 @@ export function useCancelConversationRun() {
   return useMutation<void, Error, string>({
     mutationFn: cancelConversationRun,
     onError: (err) => toast.error(messageOf(err)),
+  });
+}
+
+export function useUpdateConversationPending() {
+  const qc = useQueryClient();
+  return useMutation<
+    ConversationMeta,
+    Error,
+    { id: string; text: string }
+  >({
+    mutationFn: ({ id, text }) => updateConversationPending(id, { text }),
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () =>
+      qc.invalidateQueries({ queryKey: agentsKeys.conversations() }),
+  });
+}
+
+export function useClearConversationPending() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: clearConversationPending,
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () =>
+      qc.invalidateQueries({ queryKey: agentsKeys.conversations() }),
   });
 }

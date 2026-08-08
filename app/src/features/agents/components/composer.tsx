@@ -60,7 +60,7 @@ export function Composer({
 
   const send = () => {
     const prompt = draft.trim();
-    if (!prompt || sendMessage.isPending || runActive) return;
+    if (!prompt || sendMessage.isPending) return;
     sendMessage.mutate(
       {
         id: conversationId,
@@ -89,8 +89,12 @@ export function Composer({
     }
   };
 
-  const canSend =
-    draft.trim().length > 0 && !sendMessage.isPending && !runActive;
+  const canSend = draft.trim().length > 0 && !sendMessage.isPending;
+
+  const sendLabel = runActive ? "Queue message" : "Send";
+  const sendTitle = runActive
+    ? "Queue message — sends after the current run finishes"
+    : "Send";
 
   return (
     <div
@@ -146,17 +150,30 @@ export function Composer({
             className="min-h-[44px] min-w-0 max-h-40 flex-1 resize-none"
           />
           {runActive ? (
-            <Button
-              size="icon"
-              variant="destructive"
-              className="h-11 w-11 shrink-0"
-              onClick={stop}
-              disabled={cancelRun.isPending}
-              title="Stop"
-              aria-label="Stop"
-            >
-              <Square className="h-3.5 w-3.5 fill-current" />
-            </Button>
+            <>
+              <Button
+                size="icon"
+                variant="primary"
+                className="h-11 w-11 shrink-0"
+                onClick={send}
+                disabled={!canSend}
+                title={sendTitle}
+                aria-label={sendLabel}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="destructive"
+                className="h-11 w-11 shrink-0"
+                onClick={stop}
+                disabled={cancelRun.isPending}
+                title="Stop"
+                aria-label="Stop"
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </Button>
+            </>
           ) : (
             <Button
               size="icon"
@@ -164,8 +181,8 @@ export function Composer({
               className="h-11 w-11 shrink-0"
               onClick={send}
               disabled={!canSend}
-              title="Send"
-              aria-label="Send"
+              title={sendTitle}
+              aria-label={sendLabel}
             >
               <Send className="h-4 w-4" />
             </Button>

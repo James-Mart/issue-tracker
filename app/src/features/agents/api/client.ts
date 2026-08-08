@@ -84,8 +84,27 @@ export type SendConversationMessageBody = {
 };
 
 export type SendConversationMessageResult = {
-  runId: string;
+  runId?: string;
+  pending?: boolean;
 };
+
+export type UpdateConversationPendingBody = {
+  text: string;
+};
+
+export function updateConversationPending(
+  id: string,
+  body: UpdateConversationPendingBody,
+): Promise<ConversationMeta> {
+  return request<ConversationMeta>(`/api/conversations/${id}/pending`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+export function clearConversationPending(id: string): Promise<void> {
+  return request<void>(`/api/conversations/${id}/pending`, { method: "DELETE" });
+}
 
 export function sendConversationMessage(
   id: string,
