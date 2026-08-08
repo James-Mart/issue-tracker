@@ -114,17 +114,14 @@ describe("liveness helpers", () => {
     expect(isInFlight(task("b", "fixing"), undefined)).toBe(true);
   });
 
-  it("treats todo and done tasks as not in flight without derived state", () => {
+  it("treats todo and done tasks as not in flight", () => {
     expect(isInFlight(task("a", "todo"), undefined)).toBe(false);
     expect(isInFlight(task("b", "done"), undefined)).toBe(false);
   });
 
-  it("treats derived in-progress story or epic status as in flight", () => {
+  it("does not treat derived in-progress story or epic status as in flight", () => {
     const s = story("s");
     expect(isInFlight(s, { blocked: false, storyStatus: "in-progress" })).toBe(
-      true,
-    );
-    expect(isInFlight(s, { blocked: false, storyStatus: "pr-open" })).toBe(
       false,
     );
     expect(
@@ -132,7 +129,7 @@ describe("liveness helpers", () => {
         { id: "e", kind: "epic", title: "e", partOf: "p", ...timestamps },
         { blocked: false, epicStatus: "in-progress" },
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("detects in-flight work across a set", () => {
@@ -144,19 +141,14 @@ describe("liveness helpers", () => {
     };
     expect(hasInFlightWork(issues, idle)).toBe(false);
 
-    const active = {
+    const storyOnlyActive = {
       ...idle,
       s: { blocked: false, storyStatus: "in-progress" as const },
     };
-    expect(hasInFlightWork(issues, active)).toBe(true);
+    expect(hasInFlightWork(issues, storyOnlyActive)).toBe(false);
 
-    const taskActive = {
-      ...idle,
-      a: { blocked: false },
-      b: { blocked: false },
-      s: { blocked: false, storyStatus: "not-started" as const },
-    };
-    expect(hasInFlightWork([task("t", "fixing")], taskActive)).toBe(true);
+    expect(hasInFlightWork([task("t", "fixing")], idle)).toBe(true);
+    expect(hasInFlightWork([task("t", "in-progress")], idle)).toBe(true);
   });
 });
 

@@ -49,7 +49,7 @@ const stateIconLabel: Record<RailNodeState, string> = {
 export interface RailPortProps {
   state: RailNodeState;
   label?: React.ReactNode;
-  /** Force the current-hue glow; defaults to on for in-flight ports. */
+  /** When true, apply the current-hue live glow/pulse. */
   glow?: boolean;
   className?: string;
   portClassName?: string;
@@ -65,7 +65,7 @@ export function RailPort({
   portClassName,
   labelClassName,
 }: RailPortProps) {
-  const showLive = glow ?? state === "in-flight";
+  const showLive = glow === true;
 
   return (
     <span className={cn(className)}>
@@ -97,23 +97,26 @@ export function RailPort({
 
 export interface StateIconProps {
   state: RailNodeState;
+  /** When true, apply the live glow/pulse reserved for active in-flight work. */
+  live?: boolean;
   className?: string;
 }
 
 /**
  * Row-level state disc — same appearance map as RailPort, never a text label.
- * Only in-flight carries the live glow/pulse.
+ * Glow/pulse is opt-in via `live`; lifecycle in-flight fill does not imply it.
  */
-export function StateIcon({ state, className }: StateIconProps) {
+export function StateIcon({ state, live, className }: StateIconProps) {
   return (
     <span
       role="img"
       aria-label={stateIconLabel[state]}
       data-testid="state-icon"
       data-state={state}
+      data-live={live ? "true" : "false"}
       className={cn("inline-flex shrink-0", className)}
     >
-      <RailPort state={state} className="contents" />
+      <RailPort state={state} glow={live} className="contents" />
     </span>
   );
 }
@@ -185,7 +188,7 @@ export interface RailNodeProps extends React.HTMLAttributes<HTMLDivElement> {
   state: RailNodeState;
   edge: RailEdge;
   label?: React.ReactNode;
-  /** Force the current-hue glow; defaults to on for in-flight ports. */
+  /** When true, apply the current-hue live glow/pulse. */
   glow?: boolean;
 }
 
@@ -214,7 +217,7 @@ export function RailNode({
       <RailPort
         state={state}
         label={label}
-        glow={glow}
+        glow={glow ?? state === "in-flight"}
         className="contents"
         portClassName="absolute left-[-23px] top-3"
       />

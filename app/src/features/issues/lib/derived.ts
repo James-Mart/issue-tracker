@@ -100,20 +100,14 @@ export const RETRO_BADGE_VARIANT: Record<
   done: "done",
 };
 
-/** True when work is actively in flight on this issue. */
+/** True when an agent is actively working this task (status in-progress or fixing). */
 export function isInFlight(
   issue: IssueRecord,
-  state: DerivedState | undefined,
+  _state?: DerivedState | undefined,
 ): boolean {
-  if (
+  return (
     issue.kind === "task" &&
     (issue.status === "in-progress" || issue.status === "fixing")
-  ) {
-    return true;
-  }
-  return (
-    state?.storyStatus === "in-progress" ||
-    state?.epicStatus === "in-progress"
   );
 }
 

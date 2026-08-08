@@ -44,6 +44,7 @@ import { useIssueUiStore } from "../store/use-issue-ui-store";
 import type { IssueNode } from "../lib/build-tree";
 import {
   EPIC_STATUS_LABEL,
+  isInFlight,
   leafTaskProgressCount,
   QA_STATUS_LABEL,
   RETRO_LABEL,
@@ -389,6 +390,7 @@ function TreeRow({
   const attention = hasAttention(issue) && issue.needsAttention;
   const count = leafTaskProgressCount(issue, issues);
   const railState = issueRailNodeState(issue, state);
+  const live = isInFlight(issue, state);
 
   return (
     <div>
@@ -432,7 +434,7 @@ function TreeRow({
               />
             )
           }
-          stateIcon={<StateIcon state={railState} />}
+          stateIcon={<StateIcon state={railState} live={live} />}
           attention={attention}
           blocked={Boolean(state?.blocked)}
           count={count}

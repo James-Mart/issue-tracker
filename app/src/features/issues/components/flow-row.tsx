@@ -3,7 +3,7 @@ import { OverviewRow } from "@/components/ui/overview-row";
 import { StateIcon } from "@/components/ui/rail";
 import { hasAttention } from "@server/kind";
 import type { IssueRecord } from "@server/schemas";
-import { leafTaskProgressCount } from "../lib/derived";
+import { leafTaskProgressCount, isInFlight } from "../lib/derived";
 import type { FlowItem } from "../lib/flow";
 import { issueRailNodeState } from "../lib/rail-state";
 
@@ -31,13 +31,14 @@ export function FlowRow({
 }: FlowRowProps) {
   const attention = hasAttention(item.issue) && item.issue.needsAttention;
   const railState = issueRailNodeState(item.issue, item.state);
+  const live = isInFlight(item.issue, item.state);
   const count = leafTaskProgressCount(item.issue, issues);
 
   return (
     <OverviewRow
       className="min-w-0 flex-1"
       avatar={avatar}
-      stateIcon={<StateIcon state={railState} />}
+      stateIcon={<StateIcon state={railState} live={live} />}
       attention={attention}
       blocked={Boolean(item.state?.blocked)}
       count={count}

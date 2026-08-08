@@ -51,21 +51,20 @@ describe("StateIcon", () => {
     expect(byState["needs-attention"]).toContain("bg-[hsl(var(--void))]");
   });
 
-  it("glows/pulses only for in-flight among state icons", () => {
+  it("glows/pulses only when live is true on an in-flight icon", () => {
     for (const state of STATES) {
-      const html = renderToStaticMarkup(
+      const idle = renderToStaticMarkup(
         React.createElement(StateIcon, { state }),
       );
-      const live = html.includes("[box-shadow:var(--glow)]");
-      const pulse = html.includes("animate-live-dot");
-      if (state === "in-flight") {
-        expect(live).toBe(true);
-        expect(pulse).toBe(true);
-      } else {
-        expect(live).toBe(false);
-        expect(pulse).toBe(false);
-      }
+      expect(idle.includes("[box-shadow:var(--glow)]")).toBe(false);
+      expect(idle.includes("animate-live-dot")).toBe(false);
     }
+
+    const live = renderToStaticMarkup(
+      React.createElement(StateIcon, { state: "in-flight", live: true }),
+    );
+    expect(live.includes("[box-shadow:var(--glow)]")).toBe(true);
+    expect(live.includes("animate-live-dot")).toBe(true);
   });
 });
 
@@ -73,10 +72,13 @@ describe("RailPort shared map", () => {
   it("uses the same appearance tokens as StateIcon", () => {
     for (const state of STATES) {
       const icon = renderToStaticMarkup(
-        React.createElement(StateIcon, { state }),
+        React.createElement(StateIcon, { state, live: state === "in-flight" }),
       );
       const port = renderToStaticMarkup(
-        React.createElement(RailPort, { state }),
+        React.createElement(RailPort, {
+          state,
+          glow: state === "in-flight",
+        }),
       );
       const iconPort = icon.match(
         /data-testid="rail-port"[^>]*class="([^"]*)"/,
