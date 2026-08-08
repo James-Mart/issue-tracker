@@ -284,7 +284,6 @@ function expandAll(projectId: string, samples: ReturnType<typeof samplesForProje
     "/",
     `/projects/${projectId}`,
     `/projects/${projectId}?lens=structure`,
-    `/projects/${projectId}?lens=dependencies`,
     `/projects/${projectId}/issues/${projectId}`,
   ];
 

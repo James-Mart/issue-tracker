@@ -8,7 +8,6 @@ import {
   flowBuckets,
   flowFiltersActive,
   inFlightTaskOf,
-  projectEpics,
   type FlowBuckets,
   type FlowFilters,
 } from "./flow";
@@ -445,25 +444,6 @@ describe("filterFlowBuckets", () => {
     });
     expect(ids(filtered.ready)).toEqual(["labeled-epic"]);
     expect(filtered.inFlight).toEqual([]);
-  });
-});
-
-describe("projectEpics", () => {
-  it("returns visible epics under a project and ignores other kinds", () => {
-    const issues = [
-      project("p"),
-      epic("e1", "p"),
-      epic("e2", "p"),
-      story("s", "e1"),
-      task("t", "s"),
-      epic("other", "p2"),
-    ];
-    expect(projectEpics(issues, "p", true).map((e) => e.id).sort()).toEqual([
-      "e1",
-      "e2",
-    ]);
-    expect(projectEpics(issues, "p2", true).map((e) => e.id)).toEqual(["other"]);
-    expect(projectEpics(issues, "missing", true)).toEqual([]);
   });
 });
 

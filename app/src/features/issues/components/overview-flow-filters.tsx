@@ -101,7 +101,7 @@ function LabelFilterControl({
   );
 }
 
-/** Search / label / kind / show-archived controls for the project Flow lens. */
+/** Shared search / label / kind / show-archived controls for overview lenses. */
 export function OverviewFlowFilters({
   catalog,
 }: {
@@ -125,7 +125,7 @@ export function OverviewFlowFilters({
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by title or id"
           className="pl-9"
-          aria-label="Search flow"
+          aria-label="Search overview"
         />
       </div>
       <LabelFilterControl

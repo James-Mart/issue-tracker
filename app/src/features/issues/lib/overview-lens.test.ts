@@ -10,12 +10,12 @@ describe("parseOverviewLens", () => {
     expect(parseOverviewLens(null)).toBe(DEFAULT_OVERVIEW_LENS);
     expect(parseOverviewLens("")).toBe("flow");
     expect(parseOverviewLens("other")).toBe("flow");
+    expect(parseOverviewLens("dependencies")).toBe("flow");
   });
 
-  it("accepts the three lens ids", () => {
+  it("accepts the two lens ids", () => {
     expect(parseOverviewLens("flow")).toBe("flow");
     expect(parseOverviewLens("structure")).toBe("structure");
-    expect(parseOverviewLens("dependencies")).toBe("dependencies");
   });
 });
 
@@ -29,9 +29,6 @@ describe("writeOverviewLensParam", () => {
     const params = new URLSearchParams("x=1");
     expect(writeOverviewLensParam(params, "structure").toString()).toBe(
       "x=1&lens=structure",
-    );
-    expect(writeOverviewLensParam(params, "dependencies").get("lens")).toBe(
-      "dependencies",
     );
   });
 });

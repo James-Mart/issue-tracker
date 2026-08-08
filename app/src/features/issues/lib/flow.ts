@@ -1,8 +1,7 @@
-import { visibleIssues } from "@server/services/archived-visibility";
 import { bySequence, epicsBlockedBy, isProjectBoardChild } from "@server/order";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import type { BoardKindFilter } from "./board-kind-filter";
-import { filterToProject, issuesById, projectIdOf } from "./build-tree";
+import { issuesById, projectIdOf } from "./build-tree";
 import { isInFlight, isIssueComplete } from "./derived";
 import { filterIssuesBySearchAndLabels } from "./filter-by-search-labels";
 import { issueRailNodeState, type RailNodeState } from "./rail-state";
@@ -206,21 +205,6 @@ export function flowBuckets(
   );
 
   return { ready, inFlight, blocked, recentlyMerged };
-}
-
-/** Visible epics under a project (archive filter applied). */
-export function projectEpics(
-  issues: IssueRecord[],
-  projectId: string,
-  showArchived: boolean,
-): IssueRecord[] {
-  const scoped = visibleIssues(
-    filterToProject(issues, projectId),
-    showArchived,
-  );
-  return scoped.filter(
-    (issue): issue is IssueRecord & { kind: "epic" } => issue.kind === "epic",
-  );
 }
 
 /**

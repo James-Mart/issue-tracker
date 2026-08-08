@@ -1,5 +1,5 @@
 /** Per-project overview lens ids, persisted as `?lens=`. */
-export const OVERVIEW_LENSES = ["flow", "structure", "dependencies"] as const;
+export const OVERVIEW_LENSES = ["flow", "structure"] as const;
 
 export type OverviewLens = (typeof OVERVIEW_LENSES)[number];
 
@@ -8,7 +8,6 @@ export const DEFAULT_OVERVIEW_LENS: OverviewLens = "flow";
 const OVERVIEW_LENS_LABELS: Record<OverviewLens, string> = {
   flow: "Flow",
   structure: "Structure",
-  dependencies: "Dependencies",
 };
 
 export const OVERVIEW_LENS_OPTIONS = OVERVIEW_LENSES.map((id) => ({
