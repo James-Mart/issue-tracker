@@ -23,8 +23,8 @@ Do not run any other mutating `issue` command.
    `issue task set <taskId> qa reviewing` (`<taskId>` is the spawn `Issue:`
    id from Inputs)
 2. Run `issue summary <taskId>` for Project → … → Task context (Epic may be
-   absent when the Task's Story / work root is project-level), then
-   `issue task view <taskId>` for the Task spec when needed.
+   absent when the Task's Story / work root is project-level). Use
+   `issue task view <taskId>` for the Task spec.
 3. **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
    Consult per that file using the step-2 summary output:
