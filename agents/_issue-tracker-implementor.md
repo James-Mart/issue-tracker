@@ -15,6 +15,13 @@ separate subagent.
    absent when the Task's Story / work root is project-level). Use
    `issue task view <id>` for the full `description.md`, and
    `issue task view <id> --chat` for prior comments.
+   Also `issue <rootKind> view <workRootId>` for the work root (Inputs):
+   `<rootKind>` is `epic` when the work root is an Epic, `story` when it is a
+   project-level Story. Take the Task's parent Story id from the summary
+   ancestry chain (`Story: <parentStoryId> — …`). When that id differs from
+   `<workRootId>`, also run `issue story view <parentStoryId>`; when the work
+   root is that parent Story, the work-root view alone suffices — do not
+   double-fetch.
    Take `<projectId>` from the id token on `Project: <projectId> — <title>`.
 3. **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.

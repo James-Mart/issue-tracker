@@ -73,8 +73,7 @@ there is nothing to resume.
    `todo`; project-level Story `storyStatus` must be `not-started`; any other
    kind/status → refuse). Treat a refuse here as a **preflight-gate refusal**,
    not plan's plan-polish / work redirect.
-5. `issue <kind> view <issueId>` — the full source `description.md` (not just
-   the summary blurb).
+5. `issue <kind> view <issueId>` — the full source `description.md`.
 6. The Project **vision** doc via the shared consult mechanism: **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
    then consult key `vision` per that file using the step-1 summary output.

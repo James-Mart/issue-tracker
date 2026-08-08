@@ -2,7 +2,7 @@ import type { Issue, IssueKind, InspirationApps, SupportingDocs } from "../schem
 import { KIND_LABEL, kindHas } from "../kind.js";
 import { attachmentPath, listAttachments } from "./attachments.js";
 import { IssueError } from "./errors.js";
-import { readAll, readDescription } from "./issues.js";
+import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
 import { formatInspirationAppsLine } from "./inspiration-apps.js";
 import { formatSupportingDocsLine } from "./supporting-docs.js";
@@ -17,8 +17,6 @@ export interface SummaryNode {
   kind: IssueKind;
   id: string;
   title: string;
-  /** First prose paragraph of description.md (heading stripped); empty if none. */
-  descriptionSummary: string;
   /** Set when a Task intentionally landed no source-controlled file changes. */
   noDiff?: true;
   /** Present when the issue has one or more attachments. */
@@ -31,26 +29,6 @@ export interface IssueSummary {
   workspace?: string;
   supportingDocs?: SupportingDocs;
   inspirationApps?: InspirationApps;
-}
-
-/** First non-empty paragraph after any leading `#` headings. */
-export function summarizeDescription(md: string): string {
-  const lines = md.replace(/\r\n/g, "\n").split("\n");
-  let i = 0;
-  while (i < lines.length) {
-    const trimmed = lines[i].trim();
-    if (trimmed === "" || /^#+\s/.test(trimmed)) {
-      i += 1;
-      continue;
-    }
-    break;
-  }
-  const para: string[] = [];
-  while (i < lines.length && lines[i].trim() !== "") {
-    para.push(lines[i].trim());
-    i += 1;
-  }
-  return para.join(" ");
 }
 
 /**
@@ -73,14 +51,13 @@ export function formatAttachmentsSection(
 }
 
 /**
- * Pure builder: walk `partOf` from `id` and attach description summaries.
+ * Pure builder: walk `partOf` from `id` and attach structured fields.
  * Accepts any kind; a Branch/Epic/Project stops at that node rather than
  * inventing descendants.
  */
 export function buildSummary(
   id: string,
   issues: Issue[],
-  descriptionOf: (id: string) => string = () => "",
   attachmentsOf: (
     id: string,
     kind: IssueKind,
@@ -104,7 +81,6 @@ export function buildSummary(
         kind: issue.kind,
         id: issue.id,
         title: issue.title,
-        descriptionSummary: summarizeDescription(descriptionOf(issue.id)),
         ...(issue.kind === "task" && issue.noDiff
           ? { noDiff: true as const }
           : {}),
@@ -127,7 +103,7 @@ function loadAttachments(
 /** Load the on-disk graph and build a summary for `id`. */
 export function summarize(id: string): IssueSummary {
   const { issues } = readAll();
-  return buildSummary(id, issues, readDescription, loadAttachments);
+  return buildSummary(id, issues, loadAttachments);
 }
 
 /** Agent-oriented plain-text rendering of {@link IssueSummary}. */
@@ -152,9 +128,6 @@ export function formatSummary(summary: IssueSummary): string {
     if (node.kind === "project" && summary.inspirationApps) {
       const line = formatInspirationAppsLine(summary.inspirationApps);
       if (line) lines.push(`  inspirationApps: ${line}`);
-    }
-    if (node.descriptionSummary) {
-      lines.push(`  Description: ${node.descriptionSummary}`);
     }
     if (node.kind === "task" && node.noDiff) {
       lines.push(`  noDiff: true`);

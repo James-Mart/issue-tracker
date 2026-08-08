@@ -77,8 +77,8 @@ Before grilling:
        existing tree use `issue-tracker-plan-polish` (or work it with
        `issue-tracker-work`).
    - Any other kind → refuse.
-4. `issue <kind> view <id>` — load the full capture (`description.md`), not
-   only the summary blurb (`idea`, `epic`, or `story` from step 3).
+4. `issue <kind> view <id>` — load the full capture (`description.md`)
+   (`idea`, `epic`, or `story` from step 3).
 5. If the source is an **Epic** or **project-level Story**, also
    `issue tree <id>` so the existing subtree is in context before grilling.
 6. `issue project get <projectId> trunk` — default merge-base for the

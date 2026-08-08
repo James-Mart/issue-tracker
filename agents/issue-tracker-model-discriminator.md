@@ -37,15 +37,17 @@ You **score and assign only** — then finish and stop.
 
 Run `issue summary <taskId>` (`<taskId>` is the spawn `Issue:` id from
 Inputs) for Project → … → Task context (Epic may be
-absent when the Task's Story / work root is project-level), then
-`issue task view <taskId>` (and `issue story view` / `issue epic view` when needed)
-to read the specs you score against. That summary also carries the Project
-**workspace** — you may **read-only peek** it solely to gather scoring evidence
-for the two axes (**judgment**, **verification difficulty**): whether required
-patterns/APIs already exist, how testable the surface is, etc. Peeks are **file
-reads and greps only** — no edit tools, no running tests or commands, no
-writing files. Use the `Workspace:` line as cwd for those peeks and honor the
-unset escalation, per **SPEC § Project workspace**.
+absent when the Task's Story / work root is project-level). Use
+`issue task view <taskId>` for the Task spec you score against. When parent
+Story or Epic prose is needed for scoring context, take those ids from the
+summary ancestry chain and run `issue story view <storyId>` /
+`issue epic view <epicId>` as applicable. That summary also carries the
+Project **workspace** — you may **read-only peek** it solely to gather scoring
+evidence for the two axes (**judgment**, **verification difficulty**): whether
+required patterns/APIs already exist, how testable the surface is, etc. Peeks
+are **file reads and greps only** — no edit tools, no running tests or
+commands, no writing files. Use the `Workspace:` line as cwd for those peeks
+and honor the unset escalation, per **SPEC § Project workspace**.
 
 ## Inputs (from invoking prompt)
 
