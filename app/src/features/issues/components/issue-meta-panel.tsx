@@ -9,10 +9,7 @@ import {
 } from "./issue-attention-fields";
 import { IssueAssigneeField } from "./issue-assignee-field";
 import { IssueAssignmentLabelsField } from "./issue-assignment-labels-field";
-import { IssueMergePolicyField } from "./issue-merge-policy-field";
 import { IssuePartOfField } from "./issue-part-of-field";
-import { IssueProjectLabelsField } from "./issue-project-labels-field";
-import { IssueWorkspaceField } from "./issue-workspace-field";
 import { CompactMetaBlock } from "./compact-meta";
 import { GitStackPanel } from "./git-stack-panel";
 import { MetaRow } from "./meta-row";
@@ -29,26 +26,6 @@ export function IssueMetaPanel({
   catalog?: ProjectLabel[];
 }) {
   const rows: ReactNode[] = [];
-
-  if (issue.kind === "project") {
-    rows.push(
-      <MetaRow
-        key="workspace"
-        label={FIELD_LABELS.workspace}
-        value={<IssueWorkspaceField issue={issue} />}
-      />,
-      <MetaRow
-        key="mergePolicy"
-        label={FIELD_LABELS.mergePolicy}
-        value={<IssueMergePolicyField issue={issue} />}
-      />,
-      <MetaRow
-        key="labels"
-        label={FIELD_LABELS.labels}
-        value={<IssueProjectLabelsField issue={issue} embedded />}
-      />,
-    );
-  }
 
   if (
     kindHas(issue.kind, "detailPartOf") &&

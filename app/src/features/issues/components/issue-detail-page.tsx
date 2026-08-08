@@ -34,11 +34,10 @@ import { StoryTaskRail } from "./story-task-rail";
 import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
-import { IssueSupportingDocsField } from "./issue-supporting-docs-field";
-import { IssueInspirationAppsField } from "./issue-inspiration-apps-field";
 import { ChatPanel } from "./chat-panel";
 import { DetailEyebrow } from "./detail-section";
 import { ProjectDetailTabs } from "./project-detail-tabs";
+import { ProjectSettingsOverview } from "./project-settings-overview";
 import { supportsAttachments } from "../lib/attachments";
 
 /**
@@ -184,31 +183,23 @@ function IssueDetailView({
   catalog: ProjectLabel[];
   upload?: UploadAttachmentMutation;
 }) {
-  const overview = (
+  if (issue.kind === "project") {
+    return (
+      <ProjectDetailTabs
+        projectId={issue.id}
+        supportingDocs={issue.supportingDocs}
+        overview={<ProjectSettingsOverview issue={issue} upload={upload} />}
+      />
+    );
+  }
+
+  return (
     <>
       <IssueMetaPanel issue={issue} catalog={catalog} />
       <OwnFlowSlot issue={issue} />
       <IssueAttachmentsSection issue={issue} upload={upload} />
       <IssueDescriptionField issue={issue} upload={upload} />
-      {issue.kind === "project" ? (
-        <>
-          <IssueSupportingDocsField issue={issue} />
-          <IssueInspirationAppsField issue={issue} />
-        </>
-      ) : null}
     </>
-  );
-
-  if (issue.kind !== "project") {
-    return overview;
-  }
-
-  return (
-    <ProjectDetailTabs
-      projectId={issue.id}
-      supportingDocs={issue.supportingDocs}
-      overview={overview}
-    />
   );
 }
 
