@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Archive, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { ConversationListItem as ConversationRow } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +50,12 @@ export function ConversationListItem({
   const startRename = useAgentsUiStore((s) => s.startRename);
   const clearRename = useAgentsUiStore((s) => s.clearRename);
   const requestDelete = useAgentsUiStore((s) => s.requestDelete);
+  const selectedConversationId = useAgentsUiStore(
+    (s) => s.selectedConversationId,
+  );
+  const setSelectedConversationId = useAgentsUiStore(
+    (s) => s.setSelectedConversationId,
+  );
   const updateConversation = useUpdateConversation();
   const isCoarsePointer = useIsCoarsePointer();
 
@@ -64,6 +70,19 @@ export function ConversationListItem({
       inputRef.current?.select();
     }
   }, [isRenaming, conversation.title]);
+
+  const archiveConversation = () => {
+    updateConversation.mutate(
+      { id: conversation.id, patch: { archived: true } },
+      {
+        onSuccess: () => {
+          if (selectedConversationId === conversation.id) {
+            setSelectedConversationId(null);
+          }
+        },
+      },
+    );
+  };
 
   const commitRename = () => {
     const trimmed = draft.trim();
@@ -148,6 +167,10 @@ export function ConversationListItem({
             <DropdownMenuItem onClick={() => startRename(conversation.id)}>
               <Pencil className="h-4 w-4" />
               Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={archiveConversation}>
+              <Archive className="h-4 w-4" />
+              Archive
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"

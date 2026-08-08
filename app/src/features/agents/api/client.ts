@@ -26,6 +26,7 @@ export type CreateConversationBody = {
 export type UpdateConversationBody = {
   title?: string;
   model?: string;
+  archived?: boolean;
 };
 
 function parseConversationList(raw: unknown): ConversationListItem[] {

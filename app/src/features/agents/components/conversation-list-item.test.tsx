@@ -10,6 +10,8 @@ import {
 } from "./conversation-list-item";
 
 const coarsePointer = vi.hoisted(() => ({ value: false }));
+const updateMutate = vi.hoisted(() => vi.fn());
+const setSelectedConversationId = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/use-coarse-pointer", () => ({
   useIsCoarsePointer: () => coarsePointer.value,
@@ -17,7 +19,7 @@ vi.mock("@/hooks/use-coarse-pointer", () => ({
 
 vi.mock("../api/mutations", () => ({
   useUpdateConversation: () => ({
-    mutate: vi.fn(),
+    mutate: updateMutate,
     isPending: false,
   }),
 }));
@@ -29,6 +31,8 @@ vi.mock("../store/use-agents-ui-store", () => ({
       startRename: vi.fn(),
       clearRename: vi.fn(),
       requestDelete: vi.fn(),
+      selectedConversationId: null,
+      setSelectedConversationId,
     }),
 }));
 
@@ -71,9 +75,32 @@ function actionsButton(container: ParentNode): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
+function openActionsMenu(trigger: HTMLButtonElement) {
+  act(() => {
+    trigger.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerType: "mouse",
+      }),
+    );
+  });
+}
+
+function archiveMenuItem(): HTMLElement {
+  const item = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+    (entry) => entry.textContent?.includes("Archive"),
+  );
+  expect(item).toBeTruthy();
+  return item as HTMLElement;
+}
+
 afterEach(() => {
   document.body.innerHTML = "";
   coarsePointer.value = false;
+  updateMutate.mockClear();
+  setSelectedConversationId.mockClear();
 });
 
 describe("RosterActiveRunIndicator", () => {
@@ -113,5 +140,25 @@ describe("ConversationListItem", () => {
     expect(button.className).not.toMatch(/\bopacity-0\b/);
     expect(button.className).toMatch(/\bh-11\b/);
     expect(button.className).toMatch(/\bw-11\b/);
+  });
+
+  it("patches archived when Archive is chosen from the menu", () => {
+    const { container, root } = mountListItem();
+    const trigger = actionsButton(container);
+
+    openActionsMenu(trigger);
+
+    act(() => {
+      archiveMenuItem().click();
+    });
+
+    expect(updateMutate).toHaveBeenCalledWith(
+      { id: "conv-1", patch: { archived: true } },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+
+    act(() => {
+      root.unmount();
+    });
   });
 });

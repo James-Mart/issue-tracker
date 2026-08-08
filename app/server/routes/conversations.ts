@@ -100,12 +100,15 @@ export function createConversationsRouter(
 ): Router {
   const router = Router();
 
-  router.get("/", (_req, res) => {
+  router.get("/", (req, res) => {
+    const showArchived = req.query.showArchived === "true";
     res.json(
-      listConversations().map((meta) => ({
-        ...meta,
-        activeRun: activeRunState(sessions, meta.id).active,
-      })),
+      listConversations()
+        .filter((meta) => showArchived || !meta.archived)
+        .map((meta) => ({
+          ...meta,
+          activeRun: activeRunState(sessions, meta.id).active,
+        })),
     );
   });
 
@@ -150,7 +153,11 @@ export function createConversationsRouter(
   router.patch(
     "/:id",
     asyncRoute(async (req, res) => {
-      const body = req.body as { title?: unknown; model?: unknown };
+      const body = req.body as {
+        title?: unknown;
+        model?: unknown;
+        archived?: unknown;
+      };
       const patch: ConversationMetaPatch = {};
       if (body.title !== undefined) {
         if (typeof body.title !== "string") {
@@ -166,8 +173,19 @@ export function createConversationsRouter(
         }
         patch.model = body.model;
       }
-      if (patch.title === undefined && patch.model === undefined) {
-        res.status(400).json({ error: "title or model is required" });
+      if (body.archived !== undefined) {
+        if (typeof body.archived !== "boolean") {
+          res.status(400).json({ error: "archived must be a boolean" });
+          return;
+        }
+        patch.archived = body.archived;
+      }
+      if (
+        patch.title === undefined &&
+        patch.model === undefined &&
+        patch.archived === undefined
+      ) {
+        res.status(400).json({ error: "title, model, or archived is required" });
         return;
       }
 
