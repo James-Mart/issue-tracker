@@ -1,16 +1,5 @@
 import * as React from "react";
-import type { DerivedState, IssueRecord } from "@server/schemas";
-import {
-  statusStages,
-  type StatusStage,
-  type StatusStageState,
-} from "@/features/issues/lib/derived";
 import type { RailNodeState } from "@/features/issues/lib/rail-state";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/cn";
 
 export type { RailNodeState };
@@ -230,112 +219,6 @@ export function RailNode({
         portClassName="absolute left-[-23px] top-3"
       />
       {children}
-    </div>
-  );
-}
-
-const sparkDotClasses: Record<StatusStageState, string> = {
-  idle: "border-[hsl(var(--rail-lit))] bg-[hsl(var(--void))]",
-  done: "border-[hsl(var(--merged))] bg-[color-mix(in_srgb,hsl(var(--merged))_32%,hsl(var(--void)))]",
-  current:
-    "border-[hsl(var(--current))] bg-[hsl(var(--current))] [box-shadow:var(--glow)]",
-};
-
-const sparkSegClasses: Record<StatusStageState, string> = {
-  idle: "bg-[hsl(var(--rail))]",
-  done: "bg-[hsl(var(--merged))]",
-  current:
-    "bg-[linear-gradient(90deg,hsl(var(--merged)),hsl(var(--current)))]",
-};
-
-/** Segment state from the two dots it joins — single source for class + data-state. */
-export function sparkSegState(
-  prev: StatusStageState,
-  next: StatusStageState,
-): StatusStageState {
-  if (next === "current") return "current";
-  if (prev === "done" && next === "done") return "done";
-  return "idle";
-}
-
-function progressRailAriaLabel(stages: readonly StatusStage[]): string {
-  if (stages.every((s) => s.state === "done")) {
-    return `Pipeline: ${stages.map((s) => s.label).join(", ")} complete`;
-  }
-  const done = stages.filter((s) => s.state === "done").map((s) => s.label);
-  const current = stages.find((s) => s.state === "current");
-  const remaining = stages
-    .filter((s) => s.state === "idle")
-    .map((s) => s.label);
-  const parts: string[] = [];
-  if (done.length > 0) parts.push(`${done.join(" and ")} done`);
-  if (current) parts.push(`${current.label} now`);
-  if (remaining.length > 0) parts.push(`${remaining.join(" and ")} remaining`);
-  return `Pipeline: ${parts.join(", ")}`;
-}
-
-export interface ProgressRailProps
-  extends React.HTMLAttributes<HTMLDivElement> {
-  issue: IssueRecord;
-  state?: DerivedState;
-}
-
-/**
- * Inline lifecycle sparkline — one dot per primary status stage.
- * Returns null when the issue kind has no stage sequence.
- */
-export function ProgressRail({
-  issue,
-  state,
-  className,
-  ...props
-}: ProgressRailProps) {
-  const stages = statusStages(issue, state);
-  if (stages.length === 0) return null;
-
-  return (
-    <div
-      role="group"
-      aria-label={progressRailAriaLabel(stages)}
-      className={cn("inline-flex items-center", className)}
-      {...props}
-    >
-      {stages.map((stage, i) => {
-        const segState =
-          i > 0
-            ? sparkSegState(stages[i - 1]!.state, stages[i]!.state)
-            : null;
-        return (
-          <React.Fragment key={stage.label}>
-            {segState != null && (
-              <span
-                aria-hidden="true"
-                data-testid="progress-rail-seg"
-                data-state={segState}
-                className={cn(
-                  "h-0.5 w-[26px] shrink-0",
-                  sparkSegClasses[segState],
-                )}
-              />
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={stage.label}
-                  data-testid="progress-rail-dot"
-                  data-state={stage.state}
-                  className={cn(
-                    "inline-block h-2.5 w-2.5 shrink-0 appearance-none rounded-full border-2 p-0",
-                    sparkDotClasses[stage.state],
-                  )}
-                />
-              </TooltipTrigger>
-              <TooltipContent>{stage.label}</TooltipContent>
-            </Tooltip>
-          </React.Fragment>
-        );
-      })}
     </div>
   );
 }

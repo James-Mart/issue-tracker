@@ -183,6 +183,7 @@ function OverviewFlowLens({
           renderRow={(item: FlowItem) => (
             <FlowRow
               item={item}
+              issues={visible}
               to={issuePath(projectId, item.issue.id)}
               actions={
                 <FlowRowActions

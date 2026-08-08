@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils/cn";
 export interface OverviewRowProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Identity slot — pass an `Avatar` (or any node); the row does not import it. */
   avatar?: React.ReactNode;
-  /** Lifecycle sparkline slot (e.g. `ProgressRail`). */
-  sparkline?: React.ReactNode;
+  /** Row-level state disc (e.g. `StateIcon`). */
+  stateIcon?: React.ReactNode;
   /** Tabular quantity (e.g. `3/4`). */
   count?: React.ReactNode;
   /** At-rest attention signal — warn-hued warning icon only (no chip). */
@@ -16,12 +16,12 @@ export interface OverviewRowProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * Dense overview row shell: avatar · title · sparkline · icon signals · count.
+ * Dense overview row shell: avatar · title · state icon · icon signals · count.
  * At rest, attention/blocked are hue-coded icons only — never chips.
  */
 export function OverviewRow({
   avatar,
-  sparkline,
+  stateIcon,
   count,
   attention = false,
   blocked = false,
@@ -43,8 +43,8 @@ export function OverviewRow({
       <div className="min-w-0 flex-1 truncate font-medium text-foreground">
         {children}
       </div>
-      {sparkline != null ? (
-        <span className="inline-flex shrink-0">{sparkline}</span>
+      {stateIcon != null ? (
+        <span className="inline-flex shrink-0">{stateIcon}</span>
       ) : null}
       {attention ? (
         <AlertTriangle
@@ -59,7 +59,7 @@ export function OverviewRow({
         />
       ) : null}
       {count != null ? (
-        <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+        <span className="w-9 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
           {count}
         </span>
       ) : null}

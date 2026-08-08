@@ -1,13 +1,17 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { hasAttention } from "@server/kind";
+import type { IssueRecord } from "@server/schemas";
 import { OverviewRow } from "@/components/ui/overview-row";
-import { ProgressRail } from "@/components/ui/rail";
+import { StateIcon } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
+import { leafTaskProgressCount } from "../lib/derived";
 import type { FlowItem } from "../lib/flow";
+import { issueRailNodeState } from "../lib/rail-state";
 
 export interface FlowRowProps {
   item: FlowItem;
+  issues: IssueRecord[];
   avatar?: ReactNode;
   actions?: ReactNode;
   /** When set, the row body links here; actions stay outside the link. */
@@ -15,19 +19,22 @@ export interface FlowRowProps {
 }
 
 /**
- * Flow surface row: title, lifecycle sparkline, avatar, and icon-only signals.
+ * Flow surface row: title, state icon, tabular task count, avatar, and icon-only signals.
  * Steering actions reveal on row hover or focus.
  */
-export function FlowRow({ item, avatar, actions, to }: FlowRowProps) {
+export function FlowRow({ item, issues, avatar, actions, to }: FlowRowProps) {
   const attention = hasAttention(item.issue) && item.issue.needsAttention;
+  const railState = issueRailNodeState(item.issue, item.state);
+  const count = leafTaskProgressCount(item.issue, issues);
 
   const body = (
     <OverviewRow
       className={to ? undefined : "min-w-0 flex-1"}
       avatar={avatar}
-      sparkline={<ProgressRail issue={item.issue} state={item.state} />}
+      stateIcon={<StateIcon state={railState} />}
       attention={attention}
       blocked={Boolean(item.state?.blocked)}
+      count={count}
     >
       {item.issue.title}
     </OverviewRow>

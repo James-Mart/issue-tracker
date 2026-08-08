@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { OverviewRow } from "@/components/ui/overview-row";
-import { ProgressRail } from "@/components/ui/rail";
+import { StateIcon } from "@/components/ui/rail";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -40,8 +40,9 @@ import {
 } from "../hooks/use-story-tree-dnd";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import type { IssueNode } from "../lib/build-tree";
-import { isIssueComplete } from "../lib/derived";
+import { leafTaskProgressCount } from "../lib/derived";
 import { issuePath } from "../lib/links";
+import { issueRailNodeState } from "../lib/rail-state";
 import { isRowDraggable } from "../lib/story-tree-dnd-logic";
 import { ArchiveIssueButton } from "./archive-issue-button";
 import { EpicAxisChips, StoryAxisChips } from "./axis-chips";
@@ -101,19 +102,6 @@ function TreeRowDerivedMeta({
     );
   }
   return null;
-}
-
-/** Tabular child progress (`done/total`) for OverviewRow count slot. */
-function childProgressCount(
-  node: IssueNode,
-  derived: DerivedMap,
-): string | undefined {
-  const total = node.children.length;
-  if (total === 0) return undefined;
-  const done = node.children.filter((child) =>
-    isIssueComplete(child.issue, derived[child.issue.id]),
-  ).length;
-  return `${done}/${total}`;
 }
 
 function RowActions({ issue }: { issue: IssueRecord }) {
@@ -214,7 +202,8 @@ function TreeRow({
   const { isDragging, isDropTarget, ...rowDnDHandlers } = getRowDnDProps(issue);
   const assignee = assigneeOf(issue);
   const attention = hasAttention(issue) && issue.needsAttention;
-  const count = childProgressCount(node, derived);
+  const count = leafTaskProgressCount(issue, issues);
+  const railState = issueRailNodeState(issue, state);
 
   return (
     <div>
@@ -257,7 +246,7 @@ function TreeRow({
               />
             )
           }
-          sparkline={<ProgressRail issue={issue} state={state} />}
+          stateIcon={<StateIcon state={railState} />}
           attention={attention}
           blocked={Boolean(state?.blocked)}
           count={count}
