@@ -28,6 +28,7 @@ import {
   type OverviewLens,
 } from "../lib/overview-lens";
 import {
+  structureIdeaNodes,
   structureScopedIssues,
   structureTreeNodes,
 } from "../lib/structure";
@@ -238,6 +239,11 @@ function OverviewStructureLens({
     () => structureTreeNodes(scoped, filters),
     [filters, scoped],
   );
+  const ideaNodes = useMemo(
+    () => structureIdeaNodes(scoped, filters),
+    [filters, scoped],
+  );
+  const hasStructureContent = nodes.length > 0 || ideaNodes.length > 0;
 
   const clearFilters = () => {
     setSearch("");
@@ -252,7 +258,7 @@ function OverviewStructureLens({
       aria-labelledby="overview-lens-tab-structure"
       className="flex flex-col gap-6"
     >
-      {filtersOn && nodes.length === 0 ? (
+      {filtersOn && !hasStructureContent ? (
         <ShellState
           eyebrow="Filtered"
           title="No work matches these filters."
@@ -266,6 +272,7 @@ function OverviewStructureLens({
       ) : (
         <IssueTree
           nodes={nodes}
+          ideaNodes={ideaNodes}
           derived={derived}
           issues={scoped}
           catalog={catalog}

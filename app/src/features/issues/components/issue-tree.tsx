@@ -620,22 +620,74 @@ function ProjectUnstackDropZone({
   );
 }
 
+function IdeasGroup({
+  nodes,
+  derived,
+  catalog,
+  issues,
+}: {
+  nodes: IssueNode[];
+  derived: DerivedMap;
+  catalog: ProjectLabel[];
+  issues: IssueRecord[];
+}) {
+  if (nodes.length === 0) return null;
+
+  const headingId = "structure-ideas-group-heading";
+
+  return (
+    <section aria-labelledby={headingId} data-testid="structure-ideas-group">
+      <details className="group">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+          <h2
+            id={headingId}
+            className="font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--current))]"
+          >
+            Ideas
+            <span className="ml-2 font-mono text-[11px] tabular-nums text-muted-foreground">
+              {nodes.length}
+            </span>
+          </h2>
+        </summary>
+        <div className="mt-1.5">
+          <Rail>
+            {nodes.map((node) => (
+              <TreeRow
+                key={node.issue.id}
+                node={node}
+                derived={derived}
+                catalog={catalog}
+                issues={issues}
+              />
+            ))}
+          </Rail>
+        </div>
+      </details>
+    </section>
+  );
+}
+
 export function IssueTree({
   nodes,
+  ideaNodes = [],
   derived,
   issues,
   catalog,
   projectId,
 }: {
   nodes: IssueNode[];
+  ideaNodes?: IssueNode[];
   derived: DerivedMap;
   issues: IssueRecord[];
   catalog: ProjectLabel[];
   projectId: string;
 }) {
   const dnd = useStoryTreeDnD(issues);
+  const hasHierarchy = nodes.length > 0;
+  const hasIdeas = ideaNodes.length > 0;
 
-  if (nodes.length === 0) {
+  if (!hasHierarchy && !hasIdeas) {
     return (
       <StoryTreeDnDProvider value={dnd}>
         <div className="flex flex-col gap-1.5">
@@ -655,17 +707,25 @@ export function IssueTree({
         {projectId ? (
           <ProjectUnstackDropZone projectId={projectId} issues={issues} />
         ) : null}
-        <Rail data-testid="structure-tree-rail">
-          {nodes.map((node) => (
-            <TreeRow
-              key={node.issue.id}
-              node={node}
-              derived={derived}
-              catalog={catalog}
-              issues={issues}
-            />
-          ))}
-        </Rail>
+        {hasHierarchy ? (
+          <Rail data-testid="structure-tree-rail">
+            {nodes.map((node) => (
+              <TreeRow
+                key={node.issue.id}
+                node={node}
+                derived={derived}
+                catalog={catalog}
+                issues={issues}
+              />
+            ))}
+          </Rail>
+        ) : null}
+        <IdeasGroup
+          nodes={ideaNodes}
+          derived={derived}
+          catalog={catalog}
+          issues={issues}
+        />
       </div>
     </StoryTreeDnDProvider>
   );

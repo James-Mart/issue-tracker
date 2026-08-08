@@ -183,8 +183,10 @@ test.describe("overview Flow lens", () => {
     await dialog.getByRole("button", { name: "Create" }).click();
 
     await expect(dialog).toHaveCount(0);
+    const ideasGroup = structurePanel.getByTestId("structure-ideas-group");
+    await ideasGroup.locator("summary").click();
     await expect(
-      structurePanel.getByRole("link", { name: /^Capture me next\b/ }),
+      ideasGroup.getByRole("link", { name: /^Capture me next\b/ }),
     ).toBeVisible();
 
     await page

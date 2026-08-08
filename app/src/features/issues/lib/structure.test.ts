@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IssueRecord } from "@server/schemas";
-import { structureScopedIssues, structureTreeNodes } from "./structure";
+import { structureScopedIssues, structureIdeaNodes, structureTreeNodes } from "./structure";
 
 const timestamps = {
   createdAt: "2026-07-09T14:00:00.000Z",
@@ -71,23 +71,30 @@ describe("structureTreeNodes", () => {
     epic("e2", "p", 2),
   ];
 
-  it("builds board roots in order", () => {
+  it("builds hierarchy roots in order without ideas", () => {
     const nodes = structureTreeNodes(scoped, {
       search: "",
       labelIds: [],
       kind: [],
     });
-    expect(nodes.map((n) => n.issue.id)).toEqual(["e1", "i1", "e2"]);
+    expect(nodes.map((n) => n.issue.id)).toEqual(["e1", "e2"]);
     expect(nodes[0]!.children.map((c) => c.issue.id)).toEqual(["s1"]);
   });
 
-  it("filters by kind (OR multi-select)", () => {
-    const ideas = structureTreeNodes(scoped, {
+  it("filters ideas into structureIdeaNodes", () => {
+    const ideas = structureIdeaNodes(scoped, {
+      search: "",
+      labelIds: [],
+      kind: [],
+    });
+    expect(ideas.map((n) => n.issue.id)).toEqual(["i1"]);
+
+    const ideasOnly = structureTreeNodes(scoped, {
       search: "",
       labelIds: [],
       kind: ["idea"],
     });
-    expect(ideas.map((n) => n.issue.id)).toEqual(["i1"]);
+    expect(ideasOnly).toEqual([]);
 
     const epicsAndStories = structureTreeNodes(scoped, {
       search: "",
@@ -95,6 +102,15 @@ describe("structureTreeNodes", () => {
       kind: ["epic", "story"],
     });
     expect(epicsAndStories.map((n) => n.issue.id)).toEqual(["e1", "e2"]);
+  });
+
+  it("hides ideas when kind filter excludes them", () => {
+    const ideas = structureIdeaNodes(scoped, {
+      search: "",
+      labelIds: [],
+      kind: ["epic"],
+    });
+    expect(ideas).toEqual([]);
   });
 
   it("filters by search while keeping ancestors", () => {
