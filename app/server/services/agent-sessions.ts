@@ -27,6 +27,7 @@ import {
   EventPipeline,
   type NormalizedStep,
 } from "./event-pipeline.js";
+import { stopAgentStack } from "./agent-stack.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 
 export type { NormalizedStep };
@@ -176,6 +177,19 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const entry: SessionEntry = { handle, cwd };
     sessions.set(conversationId, entry);
     return { handle, entry };
+  }
+
+  async function stopConversationAgentStackBestEffort(
+    conversationId: string,
+  ): Promise<void> {
+    try {
+      await stopAgentStack(conversationId);
+    } catch (err) {
+      console.error(
+        `failed to stop agent stack for conversation ${conversationId}`,
+        err,
+      );
+    }
   }
 
   async function tearDownEntry(
@@ -431,6 +445,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         sessions.delete(conversationId);
         await tearDownEntry(conversationId, entry);
       }
+      await stopConversationAgentStackBestEffort(conversationId);
       clearCatchupBuffer(conversationId);
     },
 
@@ -440,6 +455,11 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       await Promise.all(
         entries.map(([conversationId, entry]) =>
           tearDownEntry(conversationId, entry),
+        ),
+      );
+      await Promise.all(
+        entries.map(([conversationId]) =>
+          stopConversationAgentStackBestEffort(conversationId),
         ),
       );
       for (const [conversationId] of entries) {

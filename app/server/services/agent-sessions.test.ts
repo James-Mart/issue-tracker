@@ -988,6 +988,172 @@ describe("agent sessions manager", () => {
     await sessions.disposeAll();
     expect(getBufferedFrames(meta.id)).toEqual([]);
   });
+
+  it("dispose stops a live agent stack and clears durable ownership", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const { spawn } = await import("node:child_process");
+    const { existsSync, mkdirSync, readFileSync, writeFileSync } =
+      await import("node:fs");
+    const {
+      agentStackCursorIndexDir,
+      agentStackDir,
+      agentStackCursorIndexPath,
+      agentStackStatePath,
+    } = await import("./agent-stack.js");
+
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Stack teardown",
+      projectId: "platform",
+      model: "auto",
+    });
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    const child = spawn("sh", ["-c", "sleep 300 & wait"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    const pid = child.pid!;
+    child.unref();
+    const procStat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const startTok = procStat
+      .slice(procStat.lastIndexOf(")") + 2)
+      .split(" ")[19]!;
+    mkdirSync(agentStackDir(meta.id), { recursive: true });
+    writeFileSync(
+      agentStackStatePath(meta.id),
+      JSON.stringify({
+        conversationId: meta.id,
+        apiPort: 44001,
+        vitePort: 44002,
+        baseUrl: "http://127.0.0.1:44002",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        processes: [{ role: "api", pid, startTime: startTok }],
+        cursorConversationIds: [FAKE_AGENT_ID],
+      }),
+    );
+    mkdirSync(agentStackCursorIndexDir(), { recursive: true });
+    writeFileSync(
+      agentStackCursorIndexPath(FAKE_AGENT_ID),
+      `${JSON.stringify({ appConversationId: meta.id }, null, 2)}\n`,
+    );
+
+    await sessions.dispose(meta.id);
+
+    expect(existsSync(`/proc/${pid}`)).toBe(false);
+    expect(existsSync(agentStackStatePath(meta.id))).toBe(false);
+    expect(existsSync(agentStackCursorIndexPath(FAKE_AGENT_ID))).toBe(false);
+    expect(fake.handles[0]?.disposed).toBe(true);
+  });
+
+  it("dispose succeeds when the agent stack was already stopped", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const { existsSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { agentStackDir, agentStackStatePath, stopAgentStack } =
+      await import("./agent-stack.js");
+
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Stack already stopped",
+      projectId: "platform",
+      model: "auto",
+    });
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    mkdirSync(agentStackDir(meta.id), { recursive: true });
+    writeFileSync(
+      agentStackStatePath(meta.id),
+      JSON.stringify({
+        conversationId: meta.id,
+        apiPort: 44001,
+        vitePort: 44002,
+        baseUrl: "http://127.0.0.1:44002",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        processes: [],
+      }),
+    );
+    await stopAgentStack(meta.id);
+    expect(existsSync(agentStackStatePath(meta.id))).toBe(false);
+
+    await expect(sessions.dispose(meta.id)).resolves.toBeUndefined();
+    expect(fake.handles[0]?.disposed).toBe(true);
+  });
+
+  it("disposeAll stops agent stacks for every disposed conversation", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const { spawn } = await import("node:child_process");
+    const { existsSync, mkdirSync, readFileSync, writeFileSync } =
+      await import("node:fs");
+    const { agentStackDir, agentStackStatePath } = await import(
+      "./agent-stack.js"
+    );
+
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const metaA = await createConversation({
+      title: "Stack A",
+      projectId: "platform",
+      model: "auto",
+    });
+    const metaB = await createConversation({
+      title: "Stack B",
+      projectId: "platform",
+      model: "auto",
+    });
+    for (const meta of [metaA, metaB]) {
+      const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      await result.run.wait();
+    }
+
+    function recordStack(conversationId: string, portBase: number): number {
+      const child = spawn("sh", ["-c", "sleep 300 & wait"], {
+        detached: true,
+        stdio: "ignore",
+      });
+      const pid = child.pid!;
+      child.unref();
+      const procStat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      const startTok = procStat
+        .slice(procStat.lastIndexOf(")") + 2)
+        .split(" ")[19]!;
+      mkdirSync(agentStackDir(conversationId), { recursive: true });
+      writeFileSync(
+        agentStackStatePath(conversationId),
+        JSON.stringify({
+          conversationId,
+          apiPort: portBase,
+          vitePort: portBase + 1,
+          baseUrl: `http://127.0.0.1:${portBase + 1}`,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          processes: [{ role: "api", pid, startTime: startTok }],
+        }),
+      );
+      return pid;
+    }
+
+    const pidA = recordStack(metaA.id, 45001);
+    const pidB = recordStack(metaB.id, 45003);
+
+    await sessions.disposeAll();
+
+    expect(existsSync(`/proc/${pidA}`)).toBe(false);
+    expect(existsSync(`/proc/${pidB}`)).toBe(false);
+    expect(existsSync(agentStackStatePath(metaA.id))).toBe(false);
+    expect(existsSync(agentStackStatePath(metaB.id))).toBe(false);
+  });
 });
 
 describe("pending message firing", () => {
