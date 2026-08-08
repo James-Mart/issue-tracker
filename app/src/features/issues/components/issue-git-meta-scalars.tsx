@@ -6,8 +6,7 @@ import {
   taskGitMetaScalars,
   type GitMetaScalarKey,
 } from "../lib/git-meta-scalars";
-import { CompactMetaBlock, CompactMetaItem } from "./compact-meta";
-import { IssueLink } from "./issue-link";
+import { CompactMetaItem } from "./compact-meta";
 import { IssueMergedField } from "./issue-merged-field";
 import { IssueStackedOnField } from "./issue-stacked-on-field";
 import {
@@ -64,6 +63,7 @@ function taskScalarValue(
   }
 }
 
+/** Story git/spec scalar rows (no outer card — parent owns the block). */
 export function StoryGitMetaScalars({
   issue,
   mergeBase,
@@ -74,7 +74,7 @@ export function StoryGitMetaScalars({
   const scalars = storyGitMetaScalars(issue, mergeBase);
   if (scalars.length === 0) return null;
   return (
-    <CompactMetaBlock>
+    <>
       {scalars.map(({ key, label }) => (
         <CompactMetaItem
           key={key}
@@ -82,10 +82,11 @@ export function StoryGitMetaScalars({
           value={storyScalarValue(key, issue, mergeBase)}
         />
       ))}
-    </CompactMetaBlock>
+    </>
   );
 }
 
+/** Task git/spec scalar rows (no outer card — parent owns the block). */
 export function TaskGitMetaScalars({
   issue,
   issues,
@@ -97,19 +98,9 @@ export function TaskGitMetaScalars({
   const parentBranchName =
     parent?.kind === "story" ? parent.branchName : undefined;
   const scalars = taskGitMetaScalars(issue, parentBranchName);
+  if (scalars.length === 0) return null;
   return (
-    <CompactMetaBlock>
-      <CompactMetaItem
-        label="Story"
-        value={
-          <IssueLink
-            id={issue.partOf}
-            className="font-mono text-[13px] text-primary hover:underline"
-          >
-            {issue.partOf}
-          </IssueLink>
-        }
-      />
+    <>
       {scalars.map(({ key, label }) => (
         <CompactMetaItem
           key={key}
@@ -117,6 +108,6 @@ export function TaskGitMetaScalars({
           value={taskScalarValue(key, issue, parentBranchName)}
         />
       ))}
-    </CompactMetaBlock>
+    </>
   );
 }

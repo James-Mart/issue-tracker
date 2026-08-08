@@ -6,6 +6,7 @@ import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils/cn";
 import {
   LABEL_DESCRIPTION_MAX,
   newCatalogDraft,
@@ -62,6 +63,8 @@ export function ProjectLabelsEditor({
   onCommit,
   error,
   disabled,
+  /** When true, omit card chrome and eyebrow (parent MetaRow supplies Labels). */
+  embedded = false,
 }: {
   drafts: CatalogDraft[];
   onChange: (drafts: CatalogDraft[]) => void;
@@ -69,6 +72,7 @@ export function ProjectLabelsEditor({
   onCommit?: (drafts: CatalogDraft[]) => void;
   error?: string | null;
   disabled?: boolean;
+  embedded?: boolean;
 }) {
   const draftsRef = useRef(drafts);
   draftsRef.current = drafts;
@@ -92,24 +96,37 @@ export function ProjectLabelsEditor({
     onCommit?.(draftsRef.current);
   };
 
+  const addButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={disabled}
+      onClick={() => {
+        const next = [...draftsRef.current, newCatalogDraft()];
+        draftsRef.current = next;
+        onChange(next);
+      }}
+    >
+      <Plus className="h-3.5 w-3.5" />
+      Add label
+    </Button>
+  );
+
   return (
-    <section className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <DetailEyebrow>{FIELD_LABELS.labels}</DetailEyebrow>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          onClick={() => {
-            const next = [...draftsRef.current, newCatalogDraft()];
-            draftsRef.current = next;
-            onChange(next);
-          }}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add label
-        </Button>
+    <section
+      className={cn(
+        embedded ? "min-w-0" : "rounded-lg border border-border bg-card p-5",
+      )}
+    >
+      <div
+        className={cn(
+          "mb-3 flex items-center gap-2",
+          embedded ? "justify-end" : "justify-between",
+        )}
+      >
+        {embedded ? null : <DetailEyebrow>{FIELD_LABELS.labels}</DetailEyebrow>}
+        {addButton}
       </div>
 
       {drafts.length === 0 ? (

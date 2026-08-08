@@ -33,69 +33,24 @@ test.describe("issue detail", () => {
     await snapshotBothThemes(page, "issue-detail");
   });
 
-  test("epic own-flow shows neighborhood DAG and blockedBy edits round-trip", async ({
+  test("epic own-flow shows child-story rail with state-colored ports", async ({
     page,
     seededApp,
   }) => {
     const main = await gotoSeedEpicDetail(page, seededApp.baseURL);
     const ownFlow = main.locator('[data-region="own-flow"]');
-    const neighborhood = ownFlow.getByTestId("epic-dep-neighborhood");
-    await expect(neighborhood).toBeVisible();
-
-    // Neighborhood of B: A, B, D — not C (indirect via D).
+    const rail = ownFlow.getByTestId("epic-story-rail");
+    await expect(rail).toBeVisible();
+    await expect(rail.getByRole("listitem")).toHaveCount(2);
+    await expect(rail.getByText("Story in flight")).toBeVisible();
+    await expect(rail.getByText("Merged story")).toBeVisible();
+    await expect(rail.getByTestId("rail-work-cursor")).toBeAttached();
     await expect(
-      neighborhood.locator('[data-testid="dep-graph-node"]'),
-    ).toHaveCount(3);
+      rail.getByRole("link", { name: "Story in flight" }),
+    ).toHaveAttribute("href", "/projects/seed-proj/issues/seed-story-flight");
     await expect(
-      neighborhood.locator(
-        '[data-testid="dep-graph-node"][data-id="seed-epic-a"]',
-      ),
-    ).toBeVisible();
-    await expect(
-      neighborhood.locator(
-        '[data-testid="dep-graph-node"][data-id="seed-epic-b"]',
-      ),
-    ).toBeVisible();
-    await expect(
-      neighborhood.locator(
-        '[data-testid="dep-graph-node"][data-id="seed-epic-d"]',
-      ),
-    ).toBeVisible();
-    await expect(
-      neighborhood.locator(
-        '[data-testid="dep-graph-node"][data-id="seed-epic-c"]',
-      ),
-    ).toHaveCount(0);
-
-    await expect(neighborhood.getByText("Blocked by")).toBeVisible();
-    await expect(neighborhood.getByText("seed-epic-a")).toBeVisible();
-
-    // Clear blockedBy, reload, then restore.
-    await neighborhood.getByText("seed-epic-a").first().click();
-    const input = neighborhood.getByPlaceholder("space-separated epic ids");
-    await expect(input).toBeVisible();
-    await input.fill("");
-    await input.press("Enter");
-    await expect(neighborhood.getByText("nothing")).toBeVisible();
-
-    await page.reload({ waitUntil: "load" });
-    const afterClear = page
-      .getByRole("main")
-      .locator('[data-testid="epic-dep-neighborhood"]');
-    await expect(afterClear.getByText("nothing")).toBeVisible();
-
-    await afterClear.getByText("nothing").click();
-    const restore = afterClear.getByPlaceholder("space-separated epic ids");
-    await restore.fill("seed-epic-a");
-    await restore.press("Enter");
-    await expect(afterClear.getByText("seed-epic-a")).toBeVisible();
-
-    await page.reload({ waitUntil: "load" });
-    await expect(
-      page
-        .getByRole("main")
-        .locator('[data-testid="epic-dep-neighborhood"]')
-        .getByText("seed-epic-a"),
-    ).toBeVisible();
+      rail.getByRole("link", { name: "Merged story" }),
+    ).toHaveAttribute("href", "/projects/seed-proj/issues/seed-story-merged");
+    await expect(ownFlow.getByTestId("dep-graph-node")).toHaveCount(0);
   });
 });

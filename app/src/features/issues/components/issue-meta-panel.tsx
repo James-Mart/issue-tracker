@@ -1,18 +1,33 @@
 import type { ReactNode } from "react";
 import { FIELD_LABELS } from "@server/fields";
 import { kindHas, hasAssignee, hasAttention } from "@server/kind";
-import type { IssueDetail } from "@server/schemas";
+import type { IssueDetail, ProjectLabel } from "@server/schemas";
+import { isLabelAssignableIssue } from "../lib/project-labels";
 import {
   IssueAttentionReasonField,
   IssueNeedsAttentionField,
 } from "./issue-attention-fields";
 import { IssueAssigneeField } from "./issue-assignee-field";
+import { IssueAssignmentLabelsField } from "./issue-assignment-labels-field";
 import { IssueMergePolicyField } from "./issue-merge-policy-field";
 import { IssuePartOfField } from "./issue-part-of-field";
+import { IssueProjectLabelsField } from "./issue-project-labels-field";
 import { IssueWorkspaceField } from "./issue-workspace-field";
+import { CompactMetaBlock } from "./compact-meta";
+import { GitStackPanel } from "./git-stack-panel";
 import { MetaRow } from "./meta-row";
 
-export function IssueMetaPanel({ issue }: { issue: IssueDetail }) {
+/**
+ * One compact, aligned metadata block for detail overview: plan scalars,
+ * labels, and git/spec scalars — not a stack of separate cards.
+ */
+export function IssueMetaPanel({
+  issue,
+  catalog = [],
+}: {
+  issue: IssueDetail;
+  catalog?: ProjectLabel[];
+}) {
   const rows: ReactNode[] = [];
 
   if (issue.kind === "project") {
@@ -26,6 +41,11 @@ export function IssueMetaPanel({ issue }: { issue: IssueDetail }) {
         key="mergePolicy"
         label={FIELD_LABELS.mergePolicy}
         value={<IssueMergePolicyField issue={issue} />}
+      />,
+      <MetaRow
+        key="labels"
+        label={FIELD_LABELS.labels}
+        value={<IssueProjectLabelsField issue={issue} embedded />}
       />,
     );
   }
@@ -53,6 +73,22 @@ export function IssueMetaPanel({ issue }: { issue: IssueDetail }) {
     );
   }
 
+  if (isLabelAssignableIssue(issue)) {
+    rows.push(
+      <MetaRow
+        key="labels"
+        label={FIELD_LABELS.labels}
+        value={
+          <IssueAssignmentLabelsField
+            issue={issue}
+            catalog={catalog}
+            embedded
+          />
+        }
+      />,
+    );
+  }
+
   if (hasAttention(issue)) {
     rows.push(
       <MetaRow
@@ -72,11 +108,11 @@ export function IssueMetaPanel({ issue }: { issue: IssueDetail }) {
     }
   }
 
+  if (issue.kind === "story" || issue.kind === "task") {
+    rows.push(<GitStackPanel key="git-scalars" issue={issue} />);
+  }
+
   if (rows.length === 0) return null;
 
-  return (
-    <div className="flex flex-col gap-1.5 rounded-lg border bg-card p-4">
-      {rows}
-    </div>
-  );
+  return <CompactMetaBlock>{rows}</CompactMetaBlock>;
 }
