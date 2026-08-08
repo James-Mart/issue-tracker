@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { Bot, Plus } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
 import { useIssuesQuery } from "../api/queries";
 import { issuesById, listProjects, projectIdOf } from "../lib/build-tree";
@@ -16,12 +15,9 @@ import { FlowRow } from "./flow-row";
 function CockpitHeader() {
   return (
     <header className="flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <SidebarTrigger className="-ml-1" />
-        <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
-          Cockpit
-        </p>
-      </div>
+      <p className="min-w-0 font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
+        Cockpit
+      </p>
       <Link
         to="/agents"
         className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[hsl(var(--rail-lit))] hover:text-foreground"

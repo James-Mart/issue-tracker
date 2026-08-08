@@ -15,6 +15,9 @@ const config: Config = {
   	extend: {
   		screens: {
   			shell: "860px",
+  			/* Touch-sized hit areas: a coarse pointer, or the narrow widths
+  			   where the shell is already in its mobile form. */
+  			touch: { raw: "(pointer: coarse), (max-width: 859.98px)" },
   		},
   		fontFamily: {
   			sans: ["var(--font-body)"],

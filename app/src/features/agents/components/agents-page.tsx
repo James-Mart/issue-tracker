@@ -1,5 +1,4 @@
 import { PageShell } from "@/components/page-shell";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ShellState } from "@/app/shell-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
@@ -13,8 +12,7 @@ const AGENTS_PAGE_SHELL_CLASS = "max-w-6xl gap-4 py-6";
 
 function AgentsHeader() {
   return (
-    <header className="flex items-center gap-2">
-      <SidebarTrigger className="-ml-1" />
+    <header>
       <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
         Agents
       </p>
