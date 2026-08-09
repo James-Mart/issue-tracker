@@ -20,6 +20,8 @@ only when unsafe) — do not restate that list here.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 ## Argument
 
 An **Epic** id (any `epicStatus` — not limited to `todo`) or a

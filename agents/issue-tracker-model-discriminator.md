@@ -17,6 +17,8 @@ entry (see work-skill Field ownership / implementor **## Bootstrap** step 1).
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 **Allowed writes:** `issue task set <taskId> assignee <family>` (Task
 `assignee` is overloaded as the implementor family key — `composer`, `grok`, or
 `opus`); confirm with `issue task get <taskId> assignee`. Escalate with

@@ -15,6 +15,8 @@ plan, mark Tasks in-progress, or spawn other agents.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 ## Bootstrap
 
 Run `issue summary <id>` **before any** `git`/`gh` to rebuild Project → … →

@@ -6,5 +6,7 @@ description: >-
 readonly: false
 ---
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor.md`
 and follow it.

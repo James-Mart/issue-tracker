@@ -18,6 +18,8 @@ coordinator.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 **Allowed writes:** `issue comment` and `issue <kind> set` on the
 **source** id with `kind` matching the source (`epic` or `story`) — for `retro`
 (including `retro --clear` on escalation) and `needsAttention` (`--reason`

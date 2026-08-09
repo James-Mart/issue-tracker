@@ -15,6 +15,8 @@ Story via `specReview`. Do not edit workspace source files.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 Load all issue specs (Story and Task) via `issue story view` / `issue task view`
 only — never filesystem-read `issues/**` (including `description.md`).
 

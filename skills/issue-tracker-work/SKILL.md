@@ -45,6 +45,8 @@ IDE Cursor Task) is defined in **## Delegation**.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 ## Delegation
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.

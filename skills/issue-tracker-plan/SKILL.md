@@ -25,6 +25,8 @@ asked.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 Grain, multi-Epic split, apply doc shape, parent-prose, and prune-by-default
 rules live in issue-tracker-authoring and [SPEC.md](../../SPEC.md) — when
 proposing the tree(s), apply those rules yourself; only ask the user when a

@@ -16,6 +16,8 @@ grill, or write to the tracker.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 **No tracker writes.** Read-only `issue` commands only (`summary`, `view`,
 `tree`, `get`). Do not run any mutating `issue` command.
 

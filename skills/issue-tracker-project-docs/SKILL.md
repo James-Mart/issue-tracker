@@ -17,6 +17,8 @@ this skill only creates or revises them. Glossary and field shape:
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 ## Argument
 
 Optional: a **Project** id and/or a doc key

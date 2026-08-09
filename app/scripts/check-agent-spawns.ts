@@ -19,6 +19,9 @@
 // also **Read** that include (workspace-gate style: tolerate `**Read**` and
 // the path on adjacent lines).
 //
+// Every spawnable `agents/*.md` (YAML frontmatter) must **Read**
+// `agents/_issue-tracker-ikigai.md` the same way.
+//
 // Run: `npm run lint:spawns` (also part of `npm test`).
 
 import { readdirSync, readFileSync, statSync } from "fs";
@@ -43,6 +46,9 @@ const FIXED_MODEL_RE = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/i;
 
 /** Shared include every stub / fixed-model / delegation file must **Read**. */
 const DELEGATION_SUFFIX = "_issue-tracker-delegation.md";
+
+/** Shared framing include every spawnable agents/*.md must **Read**. */
+const IKIGAI_SUFFIX = "_issue-tracker-ikigai.md";
 
 /** `` `model: <slug>` `` anywhere in a scanned file (not just stub windows). */
 const FIXED_MODEL_LITERAL_RE = /`model:\s*([^`;\n]+?)`/g;
@@ -267,15 +273,15 @@ function findFixedModelLiterals(
 }
 
 /**
- * Workspace-gate-style **Read** of the shared Delegation include.
+ * Workspace-gate-style **Read** of a shared include by basename.
  * Tolerates `**Read**` and the path on the same line or up to three lines
  * above the path reference.
  */
-function hasDelegationRead(src: string): boolean {
-  if (!src.includes(DELEGATION_SUFFIX)) return false;
+function hasIncludeRead(src: string, basename: string): boolean {
+  if (!src.includes(basename)) return false;
   const lines = src.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    if (!lines[i].includes(DELEGATION_SUFFIX)) continue;
+    if (!lines[i].includes(basename)) continue;
     for (let j = Math.max(0, i - 3); j <= i; j++) {
       if (/\*\*Read\*\*/.test(lines[j])) return true;
     }
@@ -306,7 +312,7 @@ export function collectSpawnViolations(rootDir: string): string[] {
     if (stubs.length > 0) readTriggers.push("spawn stub");
     if (fixedModels.length > 0) readTriggers.push("fixed model literal");
     if (delegations.length > 0) readTriggers.push("delegation");
-    if (readTriggers.length > 0 && !hasDelegationRead(src)) {
+    if (readTriggers.length > 0 && !hasIncludeRead(src, DELEGATION_SUFFIX)) {
       violations.push(
         `${rel(file)}: missing **Read** of agents/_issue-tracker-delegation.md (triggered by ${readTriggers.join(" and ")})`,
       );
@@ -433,6 +439,16 @@ export function collectSpawnViolations(rootDir: string): string[] {
     }
   }
 
+  for (const file of listAgentFiles(agentsDir)) {
+    const src = readFileSync(file, "utf8");
+    if (!parseFrontmatter(src)) continue; // shared include (`_*.md` without frontmatter)
+    if (!hasIncludeRead(src, IKIGAI_SUFFIX)) {
+      violations.push(
+        `${rel(file)}: missing **Read** of agents/_issue-tracker-ikigai.md`,
+      );
+    }
+  }
+
   return violations;
 }
 
@@ -440,14 +456,14 @@ function runCli(rootDir: string): void {
   const violations = collectSpawnViolations(rootDir);
   if (violations.length === 0) {
     console.log(
-      "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; family-parameterized stubs expand to pinned wrappers; generalPurpose forbidden; spawn stubs and Inputs must not declare Comment role; delegations name spawnable roles and no model; stub/model-literal/delegation files **Read** Delegation.",
+      "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; family-parameterized stubs expand to pinned wrappers; generalPurpose forbidden; spawn stubs and Inputs must not declare Comment role; delegations name spawnable roles and no model; stub/model-literal/delegation files **Read** Delegation; every spawnable agents/*.md **Read**s Ikigai.",
     );
     process.exit(0);
   }
 
   console.error(
     `agent-spawns: ${violations.length} spawn/pin agreement violation(s).\n` +
-      "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); family-parameterized stubs must expand to pinned family wrappers; generalPurpose is forbidden; spawn stubs and Inputs must not declare Comment role — hardcode the role in the agent body; `role:` delegations must name a spawnable agents/*.md role and must not name a model; files with spawn stubs, fixed `model: <slug>` literals, or `role:` delegations must **Read** agents/_issue-tracker-delegation.md.\n",
+      "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); family-parameterized stubs must expand to pinned family wrappers; generalPurpose is forbidden; spawn stubs and Inputs must not declare Comment role — hardcode the role in the agent body; `role:` delegations must name a spawnable agents/*.md role and must not name a model; files with spawn stubs, fixed `model: <slug>` literals, or `role:` delegations must **Read** agents/_issue-tracker-delegation.md; every spawnable agents/*.md must **Read** agents/_issue-tracker-ikigai.md.\n",
   );
   for (const v of violations) {
     console.error(`  ${v}`);

@@ -1355,6 +1355,16 @@ consult that section rather than duplicating it.
   **shared include**: not spawnable on its own. Spawnable agents **Read** it
   from disk by absolute path; a markdown link alone is not enough.
 
+**Cross-cutting `_issue-tracker-*` includes.** Shared contract files under
+`agents/` (basename `_issue-tracker-*.md`, no frontmatter) are loaded by
+absolute-path **Read**. Among them, `_issue-tracker-ikigai.md` carries the
+universal framing for pipeline agents. Every spawnable role and every
+coordinator skill (`issue-tracker-work`, `issue-tracker-plan`,
+`issue-tracker-auto-plan`, `issue-tracker-plan-polish`, `issue-tracker-retro`,
+`issue-tracker-project-docs`) **Read**s it. The coding standard that
+sanctions this prose lives in a Project attachment outside version control;
+this SPEC entry is where the invariant is durable.
+
 ## Design rationale
 
 **Directory-per-issue is the source of truth (no database).** Issues are plain

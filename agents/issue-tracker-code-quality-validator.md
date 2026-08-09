@@ -13,6 +13,8 @@ surface problems and own the Task `qa` gate. Do not edit workspace source.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 **Allowed writes:** `issue task set` for `qa` (`reviewing` | `changes-requested` |
 `passed`, or `qa --clear` if needed) and `needsAttention`; `issue task comment`.
 Do not run any other mutating `issue` command.
