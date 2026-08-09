@@ -150,6 +150,11 @@ export interface AgentSdkDeps {
   apiKey: string | undefined;
 }
 
+/** Builtin Task is the only subagent spawn path; the app uses `delegate` instead. */
+const DISALLOWED_BUILTIN_TOOLS: NonNullable<AgentOptions["disallowedTools"]> = [
+  "task",
+];
+
 const defaultDeps: AgentSdkDeps = {
   createSdkAgent: (options) => Agent.create(options),
   resumeSdkAgent: (agentId, options) => Agent.resume(agentId, options),
@@ -171,6 +176,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
         model,
         agentId,
         agents,
+        disallowedTools: DISALLOWED_BUILTIN_TOOLS,
         local: localRuntime(cwd, storeDir, customTools),
       });
       return wrapAgent(sdkAgent);
@@ -181,6 +187,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
         apiKey: deps.apiKey,
         model,
         agents,
+        disallowedTools: DISALLOWED_BUILTIN_TOOLS,
         local: localRuntime(cwd, storeDir, customTools),
       });
       return wrapAgent(sdkAgent);
