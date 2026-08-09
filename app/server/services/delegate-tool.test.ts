@@ -197,7 +197,6 @@ describe("createDelegateCustomTools", () => {
           // And it re-states the role's pin, which a resumed agent does not
           // carry on its own.
           model: resolveModelSelection("cursor-grok-4.5-high-fast"),
-          agents: undefined,
           customTools: expect.any(Object),
         },
       },
@@ -969,7 +968,6 @@ describe("delegate publishes nested run frames", () => {
         options: {
           cwd,
           model: resolveModelSelection("cursor-grok-4.5-high-fast"),
-          agents: undefined,
           customTools: expect.any(Object),
         },
       },
