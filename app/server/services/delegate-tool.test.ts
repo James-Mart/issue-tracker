@@ -6,8 +6,10 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import type { AgentOptions } from "@cursor/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentStreamEvent } from "./agent-sdk.js";
+import { createAgentSdk } from "./agent-sdk.js";
 import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import type { ConversationFrame } from "./conversation-stream.js";
 import {
@@ -155,6 +157,87 @@ describe("createDelegateCustomTools", () => {
     expect(fake.created[0]!.storeDir).toBe(
       join(storeDir, "nested", fake.handles[0]!.agentId),
     );
+  });
+
+  it("disallows Task spawn on nested create and resume while delegate still returns agentId and reply", async () => {
+    const createSdkAgent = vi.fn(async (options: AgentOptions) => {
+      expect(options.disallowedTools).toEqual(["task"]);
+      expect(options.local?.customTools?.delegate).toBeDefined();
+      const agentId = options.agentId ?? "agent-nested";
+      return {
+        agentId,
+        model: undefined,
+        async send() {
+          return {
+            id: "run-nested",
+            agentId,
+            status: "finished" as const,
+            supports: () => true,
+            unsupportedReason: () => undefined,
+            async *stream() {
+              for (const event of ASSISTANT_STREAM) {
+                if (event.kind === "message") yield event.message;
+              }
+            },
+            async conversation() {
+              return [];
+            },
+            async wait() {
+              return { id: "run-nested", status: "finished" as const };
+            },
+            cancel: vi.fn(async () => {}),
+            onDidChangeStatus: () => () => {},
+          };
+        },
+        close() {},
+        async reload() {},
+        async [Symbol.asyncDispose]() {},
+        async listArtifacts() {
+          return [];
+        },
+        async downloadArtifact() {
+          return Buffer.from("");
+        },
+      };
+    });
+    const resumeSdkAgent = vi.fn(async (agentId: string, options?: Partial<AgentOptions>) => {
+      expect(options?.disallowedTools).toEqual(["task"]);
+      expect(options?.local?.customTools?.delegate).toBeDefined();
+      return createSdkAgent.mock.results[0]!.value;
+    });
+    const sdk = createAgentSdk({ createSdkAgent, resumeSdkAgent, apiKey: undefined });
+    const customTools = createDelegateCustomTools({
+      sdk,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    const first = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "first turn" },
+      {},
+    );
+    expect(first).toEqual({
+      agentId: expect.any(String),
+      reply: "On it.",
+    });
+    expect(Object.keys(first)).toEqual(["agentId", "reply"]);
+    expect(createSdkAgent).toHaveBeenCalledTimes(1);
+
+    const second = await customTools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "second turn",
+        resumeId: first.agentId as string,
+      },
+      {},
+    );
+    expect(second).toEqual({
+      agentId: first.agentId,
+      reply: "On it.",
+    });
+    expect(resumeSdkAgent).toHaveBeenCalledTimes(1);
+    expect(createSdkAgent).toHaveBeenCalledTimes(1);
   });
 
   it("resumes an existing nested agent with resumeId instead of creating", async () => {

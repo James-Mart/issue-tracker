@@ -144,6 +144,7 @@ describe("createAgent", () => {
     expect(options.apiKey).toBe("key-abc");
     expect(options.model).toEqual(MODEL);
     expect(options.agentId).toBe("resume-me");
+    expect(options.disallowedTools).toEqual(["task"]);
   });
 
   it("wires a composed store with a cached checkpoints substore", async () => {
@@ -225,6 +226,7 @@ describe("resumeAgent", () => {
         apiKey: "key-xyz",
         model: MODEL,
         agents: undefined,
+        disallowedTools: ["task"],
         local: expect.objectContaining({
           cwd: "/repo",
           settingSources: ["user", "project", "plugins"],
@@ -266,6 +268,8 @@ describe("resumeAgent", () => {
     expect(resumedLocal?.cwd).toEqual(createdLocal?.cwd);
     expect(resumedLocal?.settingSources).toEqual(createdLocal?.settingSources);
     expect(resumedLocal?.customTools).toBe(createdLocal?.customTools);
+    expect(createSdkAgent.mock.calls[0]![0].disallowedTools).toEqual(["task"]);
+    expect(resumeSdkAgent.mock.calls[0]![1]?.disallowedTools).toEqual(["task"]);
     expectCachedComposedStore(createdLocal?.store);
     expectCachedComposedStore(resumedLocal?.store);
   });
