@@ -18,7 +18,7 @@ coordinator.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
-**Allowed writes:** `issue <kind> comment` and `issue <kind> set` on the
+**Allowed writes:** `issue comment` and `issue <kind> set` on the
 **source** id with `kind` matching the source (`epic` or `story`) — for `retro`
 (including `retro --clear` on escalation) and `needsAttention` (`--reason`
 required when true); plus `issue idea add`, `issue idea set` (labels only),
@@ -106,7 +106,7 @@ Always end by posting a comment on the source work root (Ideas have no
 `comment` — source comments stay on epic/story):
 
 ```bash
-issue <sourceKind> comment <sourceRootId> --role retro --body "<body>"
+issue comment <sourceRootId> --role retro --body "<body>"
 ```
 
 - Clean run: `retro: no remaining confusion gaps`

@@ -20,9 +20,9 @@ tracker or edit workspace source.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
 **Read-only allowlist:** `summary`, `tree`, `list`,
-`<kind> get`, `<kind> view`, `<kind> attachments`, and `--help`.
+`get`, `view`, `attachments`, and `--help`.
 
-Load issue specs via `issue <kind> view <id>` (and `<kind> get` for scalars).
+Load issue specs via `issue view <id>` (and `get` for scalars).
 
 ## Bootstrap
 
@@ -42,14 +42,14 @@ Load issue specs via `issue <kind> view <id>` (and `<kind> get` for scalars).
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
    Consult `vision` per that file using the step-1 summary output.
 4. `issue tree <rootId>` for the Story/Task outline.
-5. `issue <kind> view <id>` on the work root and every Story/Task you review
-   (plus any extra `<kind> get` / sibling reads your agent file calls for).
+5. `issue view <id>` on the work root and every Story/Task you review
+   (plus any extra `get` / sibling reads your agent file calls for).
 
 ## Inputs (from invoking prompt)
 
 - **Work root** id (+ title) — Epic or project-level Story
 - Return findings **only** in this delegation result to the parent (never
-  `issue <kind> comment` or other writes).
+  `issue comment` or other writes).
 
 ## Output
 

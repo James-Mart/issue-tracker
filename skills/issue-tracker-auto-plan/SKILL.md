@@ -27,9 +27,8 @@ the spawned discriminator / planner.
 **Allowed writes:** finalize `attach` + `comment` only, target per
 **## Finalize** — (a) **Idea source:** `issue idea attach` and
 `issue idea comment` on the archived source Idea (the seed after migration);
-(b) **Epic / project-level Story source:** `issue <rootKind> attach` and
-`issue <rootKind> comment` on each resulting plan root (kind `epic` or
-`story`, per that root's `issue summary`). Standout-decisions comments use
+(b) **Epic / project-level Story source:** `issue attach` and
+`issue comment` on each resulting plan root. Standout-decisions comments use
 `--role stakeholder`. Also, when registering a newly authored subsystem
 vision doc per **### Subsystem vision consult**: `issue project attach` and
 editing the main vision doc's `## Subsystem reference` (attachment detach /
@@ -73,7 +72,7 @@ there is nothing to resume.
    `todo`; project-level Story `storyStatus` must be `not-started`; any other
    kind/status → refuse). Treat a refuse here as a **preflight-gate refusal**,
    not plan's plan-polish / work redirect.
-5. `issue <kind> view <issueId>` — the full source `description.md`.
+5. `issue view <issueId>` — the full source `description.md`.
 6. The Project **vision** doc via the shared consult mechanism: **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
    then consult key `vision` per that file using the step-1 summary output.

@@ -20,23 +20,21 @@ neither the attachment nor the comment.
 Unchanged from the prior per-root behavior (these sources are not archived, so
 there is no Idea to write to).
 
-- **Target list:** for each resulting root id the planner returned, resolve
-  `<rootKind>` (`epic` or `story`) from `issue summary <rootId>` — kind
-  `<rootKind>`, id `<rootId>`.
+- **Target list:** each resulting root id the planner returned.
 
 ### For each target
 
 1. **Decision-summary report.**
 
    ```bash
-   issue <kind> attach <id> <path-to-decision-summary.md>
+   issue attach <id> <path-to-decision-summary.md>
    ```
 
 2. **Standout-decisions comment.** Flag any standout / uncertain decisions for
    the human to double-check (empty of standouts → say so briefly):
 
    ```bash
-   issue <kind> comment <id> --role stakeholder --body "<body>"
+   issue comment <id> --role stakeholder --body "<body>"
    ```
 
 ### Report to the invoking user

@@ -41,8 +41,8 @@ An **Epic** id (any `epicStatus` — not limited to `todo`) or a
    then consult `vision` per that file using the step-1 summary output.
 3. `issue tree <rootId>` — full Story/Task outline (implementation
    order).
-4. `issue <rootKind> view <rootId>` for the work-root description when preparing
-   the retained plan. Also `issue <kind> view <id>` for each child description
+4. `issue view <rootId>` for the work-root description when preparing
+   the retained plan. Also `issue view <id>` for each child description
    that preparation uses.
 
 ## Parallel check agents

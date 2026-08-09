@@ -252,8 +252,37 @@ per-command.
 
 ## CLI surface
 
-One rule: single-issue ops are kind-scoped; multi-kind / board ops stay global.
-The CLI kind must equal the issue's stored `kind` (hard error otherwise).
+Six kind-uniform single-issue ops take a bare id and dispatch on the issue's
+stored `kind`: `view`, `get`, `comment`, `attach`, `attachments`, `detach`.
+`set`, `add`, and `delete` stay kind-scoped — their flag surface genuinely
+differs by kind. Multi-kind / board ops stay global.
+
+The kind-scoped spellings `issue <kind> view|get|comment|attach|attachments|detach`
+remain available as asserting aliases: the CLI kind must equal the issue's
+stored `kind` (hard error otherwise).
+
+### Bare-id ops (kind-uniform)
+
+```
+issue view|get|comment|attach|attachments|detach <id> …
+```
+
+| verb | notes |
+| --- | --- |
+| `view` / `get` / `attach` / `attachments` / `detach` | every kind |
+| `comment` | epic / idea / story / task (not project) |
+
+- **`view`** — `issue view <id>` (pass `--chat` for the chat log).
+  Prefer `issue get <id> <field>` for a single field. Label lines: see
+  [Project labels](#project-labels).
+- **`get`** — `issue get <id> <field>`; field rules match kind-scoped
+  [get / set](#kind-scoped-get--set).
+- **`comment`** — `issue comment <id> --role <role> --body <text>`
+  (optional `--name`); refuses a Project id; see [Service layer](#service-layer).
+- **`attach` / `attachments` / `detach`** —
+  `issue attach <id> <file>` /
+  `issue attachments <id>` /
+  `issue detach <id> <name>`; see [Attachments](#attachments).
 
 ### Kind-scoped ops
 
@@ -265,25 +294,19 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach
 
 | verb | kinds |
 | --- | --- |
-| `add` / `get` / `set` / `view` / `delete` | every kind |
-| `comment` | epic / idea / story / task (not project) |
-| `attach` / `attachments` / `detach` | every kind |
+| `add` / `set` / `delete` | every kind |
+| `get` / `view` / `attach` / `attachments` / `detach` | every kind (asserting aliases) |
+| `comment` | epic / idea / story / task (not project; asserting alias) |
 
 - **`add`** — `issue project add <title>` (no `--part-of`); children take
   `--part-of`. Description: `--description` and/or `--file` (use `-` for
   stdin). Also: `--assignee` on task; `--stacked-on` on story.
   Prints the new id on stdout.
-- **`view`** — `issue <kind> view <id>` (pass `--chat` for the chat log).
-  Prefer `issue <kind> get <id> <field>` for a single field. Label lines: see
-  [Project labels](#project-labels).
+- **`view`** — asserting alias for `issue view <id>`.
 - **`delete`** — `issue <kind> delete <id>`; cascades per
   [Deletion policy](#deletion-policy).
-- **`comment`** — `issue epic|idea|story|task comment <id> --role <role> --body
-  <text>` (optional `--name`); see [Service layer](#service-layer).
-- **`attach` / `attachments` / `detach`** —
-  `issue <kind> attach <id> <file>` /
-  `issue <kind> attachments <id>` /
-  `issue <kind> detach <id> <name>`; see
+- **`comment`** — asserting alias for `issue comment <id> …`.
+- **`attach` / `attachments` / `detach`** — asserting aliases; see
   [Attachments](#attachments).
 
 ### Global ops
@@ -297,14 +320,18 @@ issue apply|tree|summary|list
   (including Project → Story → Task for a project-level Story).
   (`summary`'s `Workspace:` line remains the bootstrap contract for
   [Project workspace](#project-workspace) resolution.)
-- **`tree [id]`** / **`list [id]`** — identical optional positional `[id]`
-  scoping (no title lookup). Omitted = all projects; project / epic / story
-  scopes the subtree; idea / task refused. Under a Project, `tree` interleaves
-  Epics, Ideas, and *root* project-level Stories by shared sibling `order`
-  (stacked project-level Stories nest under their fork point). `list` keeps
-  JSON shape `issues` / `derived` / `problems`, filtered to scope.
-  `--show-archived` unchanged. No kind-scoped `list`. Label chips / no CLI
-  label filter: see [Project labels](#project-labels).
+- **`tree [id]`** — optional positional `[id]` scopes the subtree (no title
+  lookup). Omitted = all projects; project / epic / story scopes the subtree;
+  idea / task refused. Under a Project, `tree` interleaves Epics, Ideas, and
+  *root* project-level Stories by shared sibling `order` (stacked
+  project-level Stories nest under their fork point).
+- **`list [kind] [--in <containerId>]`** — optional kind positional filters
+  output to one issue kind (`project` | `epic` | `idea` | `story` | `task`);
+  `--in` scopes to a project / epic / story subtree (idea / task refused;
+  omitted = all projects). Both are optional and combinable. JSON shape
+  `issues` / `derived` / `problems`, filtered to the same visible id set.
+  `--show-archived` unchanged. Label chips / no CLI label filter: see
+  [Project labels](#project-labels).
 
 <a id="kind-scoped-get--set"></a>
 
@@ -668,14 +695,14 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
 **Flag stale children.** A successful `merge` or `fast-forward` advances the
 finishing Story's base branch `Bp`. After that push and `merged` write,
 finish-branch takes `<projectId>` from the `Project: <projectId> — <title>`
-line of `issue summary <storyId>`, enumerates candidate Story ids with
-`issue tree <projectId>`, and for each reads `issue story get <id> mergeBase`,
-`issue story get <id> storyStatus`, and `issue story get <id> merged`. It
-flags every not-yet-merged Story other than the finisher whose derived
-`storyStatus` is not `not-started` (started = non-empty `branchName` →
-`in-progress` or `pr-open`) and whose derived `mergeBase` is `Bp`, via
-`issue story set <childId> needsRebase <Bp>`. It never rebases those Stories.
-`manual` and `pull-request` do not advance a base and never flag.
+line of `issue summary <storyId>`, runs `issue list story --in <projectId>`
+once, and for each entry in `issues[]` reads `merged` and `branchName` from
+the entry and `storyStatus` and `mergeBase` from `derived[<id>]`. It flags
+every not-yet-merged Story other than the finisher whose derived
+`storyStatus` is not `not-started` (skip when `branchName` is empty) and whose
+derived `mergeBase` is `Bp`, via `issue story set <childId> needsRebase <Bp>`.
+It never rebases those Stories. `manual` and `pull-request` do not advance a
+base and never flag.
 
 **Resumable / idempotent.** The work loop is resumable, so finish-branch may run
 twice for the same Story. Before acting, the git subagent reads the Story's
@@ -861,8 +888,7 @@ node applies the same value to all descendants (cascade). Creating a child
 under any archived ancestor starts the child `archived: true`. Archiving a
 child while its parent stays unarchived remains allowed. Ideas are leaves, so
 archiving an Idea has no descendants to cascade to. `issue tree` and
-`issue list` (optional positional `[id]` scope — see
-[CLI surface](#cli-surface)) omit archived rows by default; pass
+`issue list` omit archived rows by default; pass
 `--show-archived` to include them. The web UI tree uses the same filter rule:
 archived rows are hidden unless the client "Show archived" preference is on
 (default off; fills the former Ready view-control slot next to search). Detail

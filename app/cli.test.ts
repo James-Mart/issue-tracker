@@ -1028,7 +1028,7 @@ describe("tree / list / summary include Ideas", () => {
   });
 
   it("includes Ideas in list JSON for the project", () => {
-    const { stdout, status } = runCli(["list", "p"]);
+    const { stdout, status } = runCli(["list", "--in", "p"]);
     expect(status).toBe(0);
     const listed = JSON.parse(stdout);
     const ids = listed.issues.map((i: { id: string }) => i.id).sort();
@@ -1058,13 +1058,13 @@ describe("tree / list / summary include Ideas", () => {
     expect(treeShown.status).toBe(0);
     expect(treeShown.stdout).toContain("idea idea-a");
 
-    const listHidden = JSON.parse(runCli(["list", "p"]).stdout);
+    const listHidden = JSON.parse(runCli(["list", "--in", "p"]).stdout);
     expect(listHidden.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["e", "idea-b", "p"],
     );
 
     const listShown = JSON.parse(
-      runCli(["list", "p", "--show-archived"]).stdout,
+      runCli(["list", "--in", "p", "--show-archived"]).stdout,
     );
     expect(listShown.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["e", "idea-a", "idea-b", "p"],
@@ -1549,7 +1549,7 @@ describe("story get/set", () => {
     expect(runCli(["story", "set", "a", "specReview", "passed"]).status).toBe(0);
     expect(runCli(["story", "view", "a"]).stdout).toContain("specReview: passed");
 
-    const listed = JSON.parse(runCli(["list", "p"]).stdout);
+    const listed = JSON.parse(runCli(["list", "--in", "p"]).stdout);
     const branch = listed.issues.find((i: { id: string }) => i.id === "a");
     expect(branch.specReview).toBe("passed");
 
@@ -2005,18 +2005,18 @@ describe("tree", () => {
     expect(withEpic.stderr).toMatch(/unknown option '--epic'/);
   });
 
-  it("lists the same project/epic/story scopes as tree and omits for all", () => {
-    const projectList = JSON.parse(runCli(["list", "p"]).stdout);
+  it("lists the same project/epic/story scopes as tree via --in and omits for all", () => {
+    const projectList = JSON.parse(runCli(["list", "--in", "p"]).stdout);
     expect(projectList.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["a", "b", "c1", "e", "p"],
     );
 
-    const epicList = JSON.parse(runCli(["list", "e"]).stdout);
+    const epicList = JSON.parse(runCli(["list", "--in", "e"]).stdout);
     expect(epicList.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["a", "b", "c1", "e"],
     );
 
-    const storyList = JSON.parse(runCli(["list", "a"]).stdout);
+    const storyList = JSON.parse(runCli(["list", "--in", "a"]).stdout);
     expect(storyList.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["a", "c1"],
     );
@@ -2026,9 +2026,101 @@ describe("tree", () => {
       ["a", "b", "c1", "e", "p"],
     );
 
-    const taskList = runCli(["list", "c1"]);
+    const taskList = runCli(["list", "--in", "c1"]);
     expect(taskList.status).toBe(1);
     expect(taskList.stderr).toContain("cannot scope list to a task");
+  });
+
+  it("filters by kind positional combined with --in scope", () => {
+    const listed = JSON.parse(runCli(["list", "story", "--in", "p"]).stdout);
+    const ids = listed.issues.map((i: { id: string }) => i.id).sort();
+    expect(ids).toEqual(["a", "b"]);
+    for (const id of ids) {
+      expect(listed.issues.find((i: { id: string }) => i.id === id)?.kind).toBe(
+        "story",
+      );
+      expect(listed.derived[id]).toBeDefined();
+    }
+  });
+
+  it("combines kind filter with epic and story --in anchors on unarchived fixtures", () => {
+    const storiesInEpicRun = runCli(["list", "story", "--in", "e"]);
+    expect(storiesInEpicRun.status).toBe(0);
+    const storiesInEpic = JSON.parse(storiesInEpicRun.stdout);
+    expect(storiesInEpic.issues.map((i: { id: string }) => i.id).sort()).toEqual(
+      ["a", "b"],
+    );
+    for (const issue of storiesInEpic.issues) {
+      expect(issue.kind).toBe("story");
+      expect(storiesInEpic.derived[issue.id]).toBeDefined();
+    }
+
+    const tasksInStoryRun = runCli(["list", "task", "--in", "a"]);
+    expect(tasksInStoryRun.status).toBe(0);
+    const tasksInStory = JSON.parse(tasksInStoryRun.stdout);
+    expect(tasksInStory.issues.map((i: { id: string }) => i.id)).toEqual(["c1"]);
+    expect(tasksInStory.issues[0].kind).toBe("task");
+    expect(tasksInStory.derived.c1).toBeDefined();
+  });
+
+  it("returns every kind in scope with --in only", () => {
+    const listed = JSON.parse(runCli(["list", "--in", "p"]).stdout);
+    const kinds = new Set(listed.issues.map((i: { kind: string }) => i.kind));
+    expect(kinds).toEqual(new Set(["project", "epic", "story", "task"]));
+  });
+
+  it("spans all projects when scope and kind are omitted", () => {
+    writeIssue("p2", {
+      kind: "project",
+      title: "Other",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    const listed = JSON.parse(runCli(["list"]).stdout);
+    const projectIds = listed.issues
+      .filter((i: { kind: string }) => i.kind === "project")
+      .map((i: { id: string }) => i.id)
+      .sort();
+    expect(projectIds).toEqual(["p", "p2"]);
+  });
+
+  it("refuses --in with an idea or task id", () => {
+    writeIssue("idea-x", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "p",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    const ideaScope = runCli(["list", "--in", "idea-x"]);
+    expect(ideaScope.status).toBe(1);
+    expect(ideaScope.stderr).toContain("cannot scope list to an idea");
+
+    const taskScope = runCli(["list", "--in", "c1"]);
+    expect(taskScope.status).toBe(1);
+    expect(taskScope.stderr).toContain("cannot scope list to a task");
+  });
+
+  it("errors on a non-kind positional with teaching message", () => {
+    const bad = runCli(["list", "p"]);
+    expect(bad.status).toBe(1);
+    expect(bad.stderr).toContain(
+      'unknown kind "p"; to scope by container use: issue list --in p',
+    );
+  });
+
+  it("describes output shape in --help", () => {
+    const help = runCli(["list", "--help"]);
+    expect(help.status).toBe(0);
+    expect(help.stdout).toContain("issues");
+    expect(help.stdout).toContain("derived");
+    expect(help.stdout).toContain("problems");
+    expect(help.stdout).toContain("keyed by issue id");
+    expect(help.stdout).toContain("blocked");
+    expect(help.stdout).toContain("storyStatus");
+    expect(help.stdout).toContain("epicStatus");
+    expect(help.stdout).toContain("mergeBase");
+    expect(help.stdout).toContain("mergePolicy");
   });
 
   it("shows specReview and retro chips on the correct lines only when set", () => {
@@ -2132,14 +2224,14 @@ describe("archived field, cascade, and CLI filtering", () => {
     expect(treeShown.stdout).toContain("epic e");
     expect(treeShown.stdout).toContain("story a");
 
-    const listHidden = runCli(["list", "p"]);
+    const listHidden = runCli(["list", "--in", "p"]);
     expect(listHidden.status).toBe(0);
     const hiddenIds = JSON.parse(listHidden.stdout).issues.map(
       (issue: { id: string }) => issue.id,
     );
     expect(hiddenIds).toEqual(["p"]);
 
-    const listShown = runCli(["list", "p", "--show-archived"]);
+    const listShown = runCli(["list", "--in", "p", "--show-archived"]);
     expect(listShown.status).toBe(0);
     const shownIds = JSON.parse(listShown.stdout).issues.map(
       (issue: { id: string }) => issue.id,
@@ -2184,10 +2276,6 @@ describe("legacy CLI removed", () => {
     "add-task",
     "show",
     "delete",
-    "comment",
-    "attach",
-    "attachments",
-    "detach",
     "projects",
   ];
 
@@ -2526,6 +2614,177 @@ describe("kind-scoped view / delete / comment / attach", () => {
     expect(status).toBe(0);
     expect(stdout).toContain("deleted c2");
     expect(runCli(["task", "view", "c2"]).status).toBe(1);
+  });
+});
+
+describe("bare-id view / get / comment / attach", () => {
+  beforeEach(() => {
+    writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
+    writeIssue("e", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      order: 0,
+      blockedBy: [],
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("a", {
+      kind: "story",
+      title: "Story A",
+      partOf: "e",
+      order: 0,
+      branchName: "feat/a",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("c1", {
+      kind: "task",
+      title: "C1",
+      partOf: "a",
+      order: 0,
+      status: "todo",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeFileSync(join(dir, "e", "description.md"), "# Epic\n\nepic body\n");
+    writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
+    writeFileSync(
+      join(dir, "a", "chat.jsonl"),
+      JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
+        "\n",
+    );
+  });
+
+  it("views epic and story ids without a kind prefix", () => {
+    const epic = runCli(["view", "e"]);
+    expect(epic.status).toBe(0);
+    expect(epic.stdout).toContain("kind: epic");
+    expect(epic.stdout).toContain("title: Epic");
+    expect(epic.stdout).toContain("# Epic");
+
+    const story = runCli(["view", "a"]);
+    expect(story.status).toBe(0);
+    expect(story.stdout).toContain("kind: story");
+    expect(story.stdout).toContain("title: Story A");
+    expect(story.stdout).toContain("# Story A");
+    expect(story.stdout).not.toContain("--- chat ---");
+
+    const withChat = runCli(["view", "a", "--chat"]);
+    expect(withChat.status).toBe(0);
+    expect(withChat.stdout).toContain("--- chat ---");
+    expect(withChat.stdout).toContain("bot: first note");
+  });
+
+  it("gets epic and story fields without a kind prefix", () => {
+    expect(runCli(["get", "e", "title"]).stdout).toBe("Epic\n");
+    expect(runCli(["get", "e", "description"]).stdout).toBe("# Epic\n\nepic body\n");
+    expect(runCli(["get", "a", "title"]).stdout).toBe("Story A\n");
+    expect(runCli(["get", "a", "branchName"]).stdout).toBe("feat/a\n");
+  });
+
+  it("round-trips attach / attachments / detach without a kind prefix", () => {
+    const source = join(dir, "note.txt");
+    writeFileSync(source, "hello");
+
+    const attach = runCli(["attach", "c1", source]);
+    expect(attach.status).toBe(0);
+    expect(attach.stdout).toContain("attached note.txt");
+
+    const list = runCli(["attachments", "c1"]);
+    expect(list.status).toBe(0);
+    expect(list.stdout).toBe("note.txt\t5\n");
+
+    const detach = runCli(["detach", "c1", "note.txt"]);
+    expect(detach.status).toBe(0);
+    expect(detach.stdout).toBe("detached note.txt from c1\n");
+    expect(runCli(["attachments", "c1"]).stdout).toBe("(no attachments)\n");
+  });
+
+  it("writes the same chat entry as the kind-scoped comment form", () => {
+    const bare = runCli([
+      "comment",
+      "a",
+      "--role",
+      "implementor",
+      "--body",
+      "bare-id note",
+      "--name",
+      "impl",
+    ]);
+    expect(bare.status).toBe(0);
+    expect(bare.stdout).toBe("commented on a as impl\n");
+
+    const scoped = runCli([
+      "story",
+      "comment",
+      "a",
+      "--role",
+      "implementor",
+      "--body",
+      "kind-scoped note",
+      "--name",
+      "impl",
+    ]);
+    expect(scoped.status).toBe(0);
+    expect(scoped.stdout).toBe("commented on a as impl\n");
+
+    const chat = readFileSync(join(dir, "a", "chat.jsonl"), "utf8");
+    expect(chat).toContain('"body":"bare-id note"');
+    expect(chat).toContain('"body":"kind-scoped note"');
+    expect(chat).toContain('"role":"implementor"');
+  });
+
+  it("errors on an unknown id", () => {
+    const view = runCli(["view", "ghost"]);
+    expect(view.status).toBe(1);
+    expect(view.stderr).toContain('unknown issue "ghost"');
+
+    const get = runCli(["get", "ghost", "title"]);
+    expect(get.status).toBe(1);
+    expect(get.stderr).toContain('unknown issue "ghost"');
+
+    const comment = runCli([
+      "comment",
+      "ghost",
+      "--role",
+      "agent",
+      "--body",
+      "x",
+    ]);
+    expect(comment.status).toBe(1);
+    expect(comment.stderr).toContain('unknown issue "ghost"');
+  });
+
+  it("refuses bare-id comment on a project id", () => {
+    const { stderr, status } = runCli([
+      "comment",
+      "p",
+      "--role",
+      "agent",
+      "--body",
+      "nope",
+    ]);
+    expect(status).toBe(1);
+    expect(stderr).toContain('"p" is a Project');
+    expect(stderr).toContain("projects have no chat log");
+  });
+
+  it("still errors on kind-scoped calls against a mismatched kind", () => {
+    const view = runCli(["epic", "view", "a"]);
+    expect(view.status).toBe(1);
+    expect(view.stderr).toContain('"a" is a story, not an epic');
+
+    const get = runCli(["story", "get", "e", "title"]);
+    expect(get.status).toBe(1);
+    expect(get.stderr).toContain('"e" is an epic, not a story');
+
+    const attachFile = join(dir, "mismatch.txt");
+    writeFileSync(attachFile, "x");
+    const attach = runCli(["task", "attach", "a", attachFile]);
+    expect(attach.status).toBe(1);
+    expect(attach.stderr).toContain('"a" is a story, not a task');
   });
 });
 
