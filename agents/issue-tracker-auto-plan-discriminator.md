@@ -23,9 +23,9 @@ grill, or write to the tracker.
 
 1. Run `issue summary <issueId>` for Project → … context (Epic may be absent
    when the source is a project-level Story or Idea).
-2. Run `issue <kind> view <issueId>` for the full `description.md`.
+2. Run `issue view <issueId>` for the full `description.md`.
 3. When parent Epic/Story prose is needed for scoring context, take those ids
-   from the summary ancestry chain and run `issue <kind> view <id>`.
+   from the summary ancestry chain and run `issue view <id>`.
 4. Optionally **light** read-only workspace peek — only when `issue summary`
    prints a `Workspace:` line under the Project. Use that path as cwd for a few
    targeted reads or greps when the issue text alone is insufficient. Per

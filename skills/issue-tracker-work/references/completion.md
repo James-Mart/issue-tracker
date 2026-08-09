@@ -3,7 +3,7 @@
 The Story walk ends when every Task under the work root is `done`. Give a short
 final summary: which Stories were built, and anything still open or escalated
 (needsAttention escalation). For validator findings and revise history, point the user
-at the tracker comments (`issue <kind> view <id> --chat`) rather than collecting them
+at the tracker comments (`issue view <id> --chat`) rather than collecting them
 into your context. Note
 how finished Stories landed from the `issue tree` chips (`pr=` for an opened
 PR, `merged` for a merged Story, neither when left for the human).

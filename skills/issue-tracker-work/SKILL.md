@@ -406,7 +406,7 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 - Never implement, verify, or run the app yourself — always delegate. You own
   only coordination (thin CLI reads + spawn/resume). Field write scopes:
   **Field ownership**.
-- Prefer `issue <kind> get` for scalar field reads — do not parse `view` /
+- Prefer `issue get` for scalar field reads — do not parse `view` /
   `summary` / `tree` for a single field (except `summary`'s `Workspace:`
   bootstrap line and `tree` chips for walk order).
 - Never write Task `status` or Task `qa` yourself (Field ownership).
