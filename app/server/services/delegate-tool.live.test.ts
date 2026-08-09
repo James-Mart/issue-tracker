@@ -2,7 +2,6 @@ import { join } from "path";
 import type { ModelSelection } from "@cursor/sdk";
 import { describe, expect, it } from "vitest";
 import type { TranscriptEvent } from "../schemas.js";
-import { loadPluginAgentDefinitions } from "./agent-definitions.js";
 import {
   agentSdk,
   type AgentHandle,
@@ -278,6 +277,41 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
     LIVE_TIMEOUT_MS,
   );
 
+  // Epic invariant: dropping the inline SDK `agents` map must not drop
+  // pins-survive-resume. Create already proved the pin maps; this proves
+  // re-entry still names it after resume through `delegate`.
+  it(
+    "re-applies the role pin when re-entering through delegate",
+    async () => {
+      const { sdk, runModels } = recordRunModels(agentSdk);
+      const customTools = createDelegateCustomTools({
+        sdk,
+        cwd: process.cwd(),
+        storeDir: STORE_DIR,
+      });
+
+      const spawned = (await customTools.delegate!.execute(
+        { role: ROLE, prompt: PROBE_PROMPT },
+        {},
+      )) as { agentId: string };
+
+      await customTools.delegate!.execute(
+        {
+          role: ROLE,
+          prompt: PROBE_PROMPT,
+          resumeId: spawned.agentId,
+        },
+        {},
+      );
+
+      expect(runModels).toHaveLength(2);
+      const expected = resolveModelSelection(loadRoleModelPin(ROLE));
+      expect(runModels[0]).toEqual(expected);
+      expect(runModels[1]).toEqual(expected);
+    },
+    TWO_TURN_TIMEOUT_MS,
+  );
+
   // Depth 2 is the chain the bridge exists to carry, so it is measured rather
   // than extrapolated from depth 1: the innermost run is started by a nested
   // run's own tools, which is where a role's pin could collapse onto its
@@ -397,9 +431,10 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
   // The IDE counterpart to the assertion above. `lint:spawns` proves the
   // migrated stubs have the right shape; only a live run proves an agent on
   // that surface still gets its check done. Omitting `customTools` is the IDE
-  // condition: the channel-detection probe finds no `delegate`, while the
-  // plugin `agents` map keeps the check roles on the Task tool. The evidence
-  // is the parent's own stream — on this channel no bridge records anything.
+  // condition: the channel-detection probe finds no `delegate`, while
+  // `settingSources: ["plugins"]` keeps the check roles on the Task tool. The
+  // evidence is the parent's own stream — on this channel no bridge records
+  // anything.
   it(
     "delegates a migrated plan-polish check over Task when no delegate tool exists",
     async () => {
@@ -407,7 +442,6 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
         cwd: process.cwd(),
         model: PARENT_CONVERSATION_MODEL,
         storeDir: STORE_DIR,
-        agents: loadPluginAgentDefinitions(),
       });
 
       const toolCalls = await toolCallsFrom(
@@ -442,7 +476,6 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
         cwd: process.cwd(),
         model: PARENT_CONVERSATION_MODEL,
         storeDir: STORE_DIR,
-        agents: loadPluginAgentDefinitions(),
       });
 
       const spawned = soleCompletedTaskCall(

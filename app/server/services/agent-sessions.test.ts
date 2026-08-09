@@ -125,7 +125,7 @@ describe("agent sessions manager", () => {
     expect(fake.created[0]?.customTools?.delegate).toBeDefined();
     expect(fake.created[0]?.customTools?.agent_stack_start).toBeDefined();
     expect(fake.created[0]?.customTools?.agent_stack_stop).toBeDefined();
-    expect(fake.created[0]?.agents).toEqual(expect.any(Object));
+    expect(fake.created[0]?.agents).toBeUndefined();
     expect(fake.resumed).toHaveLength(0);
     expect(fake.handles[0]?.sends).toEqual([
       { prompt: "go", options: {} },
@@ -224,7 +224,6 @@ describe("agent sessions manager", () => {
           // resuming under anything else reports it as missing.
           cwd: workspaceDir,
           model: { id: "auto" },
-          agents: expect.any(Object),
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
           }),
@@ -279,7 +278,6 @@ describe("agent sessions manager", () => {
         options: {
           cwd: workspaceDir,
           model: { id: "composer-2.5" },
-          agents: expect.any(Object),
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
           }),

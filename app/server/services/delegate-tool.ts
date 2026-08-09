@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { join } from "path";
-import type { AgentDefinition, SDKCustomTool } from "@cursor/sdk";
+import type { SDKCustomTool } from "@cursor/sdk";
 import type { AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
 import {
   appendDelegation,
@@ -51,7 +51,6 @@ export interface DelegateToolOptions {
    * Nested delegates pass their own agentId into {@link buildCustomTools}.
    */
   getCursorConversationId?: () => string | undefined;
-  agents?: Record<string, AgentDefinition>;
   /** Override agents directory (tests). Defaults to the plugin `agents/`. */
   agentsDir?: string;
 }
@@ -424,7 +423,6 @@ export function createDelegateCustomTools(
                   // agent to carry it: the app names the model on every turn,
                   // and a resumed local agent has no selection of its own.
                   model,
-                  agents: options.agents,
                   customTools: nestedCustomTools,
                 },
               );
@@ -457,7 +455,6 @@ export function createDelegateCustomTools(
               model,
               agentId,
               storeDir: nestedStoreDir,
-              agents: options.agents,
               customTools: nestedCustomTools,
             });
           }

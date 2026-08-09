@@ -10,7 +10,6 @@ import {
   type AgentSdk,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
-import { loadPluginAgentDefinitions } from "./agent-definitions.js";
 import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import {
   appendEvent,
@@ -118,7 +117,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       mkdirSync(storeDir, { recursive: true });
     }
 
-    const agents = loadPluginAgentDefinitions();
     // Local SDK sessionId === agentId; preToolUse stdin conversation_id is that
     // value. Tools close over this ref so create can fill it after Agent.create.
     const cursorConversationIdRef: { current: string | undefined } = {
@@ -130,7 +128,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       storeDir,
       conversationId,
       getCursorConversationId: () => cursorConversationIdRef.current,
-      agents,
     });
 
     let handle: AgentHandle;
@@ -139,7 +136,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         handle = await sdk.resumeAgent(meta.agentId, storeDir, {
           cwd,
           model,
-          agents,
           customTools,
         });
       } catch (err) {
@@ -147,7 +143,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           cwd,
           model,
           storeDir,
-          agents,
           customTools,
         });
         cursorConversationIdRef.current = handle.agentId;
@@ -167,7 +162,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         cwd,
         model,
         storeDir,
-        agents,
         customTools,
       });
       cursorConversationIdRef.current = handle.agentId;
