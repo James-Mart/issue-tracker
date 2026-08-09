@@ -103,13 +103,20 @@ Invoke **`/grill-me`** for **this doc only**: goals and content the user wants
 captured. Goal-only freeform — **no fixed outline** and no obligatory section
 checklist. Stay on the chosen doc; do not grill the other two keys.
 
+When the key is `vision`, also cover the mission paragraph: what the work
+contributes to, written for an agent about to do that work (not a product
+description). On a revise run, revisit it with the rest of the doc — do not
+carry the existing paragraph over untouched.
+
 Do not write files or set `supportingDocs` until after draft approval (step 6).
 
 ### 6. Draft and approve
 
 Draft the full document in chat (Markdown unless the user asked for HTML).
-Get an **explicit user approve** of the draft before writing. On rejection,
-revise the draft and re-approve — do not write yet.
+When the key is `vision`, the draft includes a `## Mission` section (author
+one when the loaded doc has none). Get an **explicit user approve** of the
+draft before writing. On rejection, revise the draft and re-approve — do not
+write yet.
 
 ### 7. Write
 
@@ -160,3 +167,8 @@ Offer to run again for another key only if the user asks.
 - When revising `vision`, preserve `## Subsystem reference` unless the user
   asks to change it. Convention:
   [SPEC.md § Project supporting docs](../../SPEC.md#project-supporting-docs).
+- On `vision`, keep a `## Mission` section: one short paragraph for an agent
+  audience — what the work it is about to do contributes to, distilled from
+  the rest of the doc (not a product description). Author it when missing;
+  on revise, refresh it with the rest of the doc rather than leaving it
+  untouched. Convention: same SPEC section.
