@@ -564,6 +564,13 @@ Agents discover and consult a subsystem doc via the existing vision path:
 read the vision doc, find a matching `## Subsystem reference` entry, then
 Read that attachment.
 
+**Mission paragraph (convention only).** The main vision doc (the
+`supportingDocs.vision` target) may include a `## Mission` section: one
+short paragraph written for an agent audience, distilled from the rest of
+the doc. `issue summary` surfaces it on the Project section as a
+`Mission:` line (after `Workspace:` and before `supportingDocs:`). An
+absent heading means the line is omitted — not an error.
+
 ### Project workspace
 
 A Project's optional `workspace` is the absolute path to the local git checkout
@@ -1347,6 +1354,24 @@ consult that section rather than duplicating it.
 - A file whose basename starts with `_` and has **no** YAML frontmatter is a
   **shared include**: not spawnable on its own. Spawnable agents **Read** it
   from disk by absolute path; a markdown link alone is not enough.
+
+**Cross-cutting `_issue-tracker-*` includes.** Shared contract files under
+`agents/` (basename `_issue-tracker-*.md`, no frontmatter) are loaded by
+absolute-path **Read**. Among them, `_issue-tracker-ikigai.md` carries the
+universal framing for pipeline agents. Every spawnable role and every
+coordinator skill (`issue-tracker-work`, `issue-tracker-plan`,
+`issue-tracker-auto-plan`, `issue-tracker-plan-polish`, `issue-tracker-retro`,
+`issue-tracker-project-docs`) **Read**s it. The coding standard that
+sanctions this prose lives in a Project attachment outside version control;
+this SPEC entry is where the invariant is durable.
+
+**Per-role craft line.** What the include cannot say is what a particular role
+is good at, so each role carries one line naming the craft it is trusted with,
+sitting with its role intro. A role that exists as several model-pinned
+wrappers carries the line once in its shared body
+(`_issue-tracker-implementor.md`, `_issue-tracker-planner.md`) and not in the
+wrappers. Like the include, the line never modulates scope, effort, or
+thoroughness.
 
 ## Design rationale
 

@@ -194,6 +194,42 @@ describe("formatSummary", () => {
     expect(text).not.toContain("mergePolicy");
   });
 
+  it("prints Mission in the Project section when missionOf returns a paragraph", () => {
+    const withDocs = nestedIssues.map((issue) =>
+      issue.id === "p"
+        ? {
+            ...issue,
+            supportingDocs: {
+              vision: { type: "attachment" as const, name: "vision.md" },
+            },
+          }
+        : issue,
+    );
+    const missionOf = () => "Ship durable human/agent plans.";
+    const summary = buildSummary("c1", withDocs, () => undefined, missionOf);
+    expect(summary.mission).toBe("Ship durable human/agent plans.");
+    const text = formatSummary(summary);
+    expect(text).toContain("  Mission: Ship durable human/agent plans.");
+    expect(text.indexOf("  Mission:")).toBeLessThan(
+      text.indexOf("  supportingDocs:"),
+    );
+  });
+
+  it("omits Mission when missionOf returns undefined", () => {
+    const withDocs = nestedIssues.map((issue) =>
+      issue.id === "p"
+        ? {
+            ...issue,
+            supportingDocs: {
+              vision: { type: "attachment" as const, name: "vision.md" },
+            },
+          }
+        : issue,
+    );
+    const text = formatSummary(buildSummary("c1", withDocs));
+    expect(text).not.toContain("Mission:");
+  });
+
   it("prints attachments when attachmentsOf returns them and omits when empty", () => {
     const attachmentsOf = (
       id: string,

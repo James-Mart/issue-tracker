@@ -24,6 +24,8 @@ the spawned discriminator / planner.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 **Allowed writes:** finalize `attach` + `comment` only, target per
 **## Finalize** — (a) **Idea source:** `issue idea attach` and
 `issue idea comment` on the archived source Idea (the seed after migration);

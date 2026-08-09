@@ -24,12 +24,15 @@ function writeSkill(relPath: string, content: string): void {
 }
 
 const DELEGATION_READ = `**Read** \`/abs/agents/_issue-tracker-delegation.md\`.`;
+const IKIGAI_READ = `**Read** \`/abs/agents/_issue-tracker-ikigai.md\`.`;
 
 const PINNED_ROLE = `---
 name: pinned-role
 model: composer-2.5
 description: A pinned role.
 ---
+
+${IKIGAI_READ}
 
 You are the pinned role.
 `;
@@ -106,6 +109,33 @@ describe("collectSpawnViolations — delegation vocabulary", () => {
 `,
     );
 
+    expect(collectSpawnViolations(rootDir)).toEqual([]);
+  });
+});
+
+describe("collectSpawnViolations — ikigai include", () => {
+  it("fails when a spawnable agent omits the Ikigai Read", () => {
+    writeAgent(
+      "no-ikigai.md",
+      `---
+name: no-ikigai
+model: composer-2.5
+description: Missing ikigai.
+---
+
+You are a role without the framing include.
+`,
+    );
+
+    const violations = collectSpawnViolations(rootDir);
+    expect(
+      violations.some((v) =>
+        v.includes("agents/no-ikigai.md: missing **Read** of agents/_issue-tracker-ikigai.md"),
+      ),
+    ).toBe(true);
+  });
+
+  it("passes when every spawnable agent Reads Ikigai", () => {
     expect(collectSpawnViolations(rootDir)).toEqual([]);
   });
 });

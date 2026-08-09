@@ -165,3 +165,75 @@ describe("supportingDocs helpers", () => {
     );
   });
 });
+
+describe("readMissionParagraph", () => {
+  it("returns the mission body as a single line from an attachment vision ref", async () => {
+    const { putAttachment, readMissionParagraph } = await load();
+    await putAttachment(
+      "p",
+      "vision.md",
+      Buffer.from(
+        "# Vision\n\n## Mission\n\nShip durable\nhuman/agent plans.\n\n## North star\n\nMore text.",
+      ),
+    );
+    expect(
+      readMissionParagraph("p", gitDir, {
+        vision: { type: "attachment", name: "vision.md" },
+      }),
+    ).toBe("Ship durable human/agent plans.");
+  });
+
+  it("returns undefined when the vision doc has no Mission heading", async () => {
+    const { putAttachment, readMissionParagraph } = await load();
+    await putAttachment("p", "vision.md", Buffer.from("# Vision\n\nNo mission here."));
+    expect(
+      readMissionParagraph("p", gitDir, {
+        vision: { type: "attachment", name: "vision.md" },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("stops at the next ## section", async () => {
+    const { putAttachment, readMissionParagraph } = await load();
+    await putAttachment(
+      "p",
+      "vision.md",
+      Buffer.from(
+        "## Mission\n\nFirst paragraph.\n\n## Principles\n\nShould not appear.",
+      ),
+    );
+    expect(
+      readMissionParagraph("p", gitDir, {
+        vision: { type: "attachment", name: "vision.md" },
+      }),
+    ).toBe("First paragraph.");
+  });
+
+  it("reads mission from a workspace-backed vision ref", async () => {
+    const { readMissionParagraph } = await load();
+    writeFileSync(
+      join(gitDir, "vision.md"),
+      "## Mission\n\nWorkspace mission line.",
+    );
+    expect(
+      readMissionParagraph("p", gitDir, {
+        vision: { type: "workspace", path: "vision.md" },
+      }),
+    ).toBe("Workspace mission line.");
+  });
+
+  it("returns undefined when vision is unset or unreadable", async () => {
+    const { readMissionParagraph } = await load();
+    expect(readMissionParagraph("p", gitDir, {})).toBeUndefined();
+    expect(
+      readMissionParagraph("p", gitDir, {
+        vision: { type: "attachment", name: "missing.md" },
+      }),
+    ).toBeUndefined();
+    expect(
+      readMissionParagraph("p", undefined, {
+        vision: { type: "workspace", path: "vision.md" },
+      }),
+    ).toBeUndefined();
+  });
+});

@@ -13,9 +13,14 @@ implementor family key on the Task (see **Allowed writes**). The Task may still
 be `todo` here — the implementor sets `status in-progress` on first implement
 entry (see work-skill Field ownership / implementor **## Bootstrap** step 1).
 
+You are trusted with the craft of reading a Task and knowing which kind of
+implementor it calls for.
+
 ## CLI
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
+
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
 **Allowed writes:** `issue task set <taskId> assignee <family>` (Task
 `assignee` is overloaded as the implementor family key — `composer`, `grok`, or

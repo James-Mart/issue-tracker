@@ -16,6 +16,8 @@ Static behavior lives only in
 `/root/.cursor/plugins/local/issue-tracker/agents/issue-tracker-retro.md`. Do
 not paste or restate that contract here.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
+
 ## Argument
 
 A **work root** id — Epic or project-level Story — plus its title (from
