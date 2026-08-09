@@ -117,7 +117,7 @@ Run these commands in order (use `<rootId>` throughout):
      equals `<projectId>`; refuse Epic-child Stories — they are not work roots).
      Set `<rootKind>` = `story`.
    - Any other kind → refuse.
-4. `issue list <projectId>` — read `problems`. If `problems` is
+4. `issue list --in <projectId>` — read `problems`. If `problems` is
    non-empty, **stop and hand back to the user** — do not reason about or
    attempt fixes, and do not work a tree with integrity problems. (`list` /
    `tree` hide archived rows by default; pass `--show-archived` when you need

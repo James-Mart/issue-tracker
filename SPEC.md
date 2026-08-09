@@ -320,14 +320,18 @@ issue apply|tree|summary|list
   (including Project → Story → Task for a project-level Story).
   (`summary`'s `Workspace:` line remains the bootstrap contract for
   [Project workspace](#project-workspace) resolution.)
-- **`tree [id]`** / **`list [id]`** — identical optional positional `[id]`
-  scoping (no title lookup). Omitted = all projects; project / epic / story
-  scopes the subtree; idea / task refused. Under a Project, `tree` interleaves
-  Epics, Ideas, and *root* project-level Stories by shared sibling `order`
-  (stacked project-level Stories nest under their fork point). `list` keeps
-  JSON shape `issues` / `derived` / `problems`, filtered to scope.
-  `--show-archived` unchanged. No kind-scoped `list`. Label chips / no CLI
-  label filter: see [Project labels](#project-labels).
+- **`tree [id]`** — optional positional `[id]` scopes the subtree (no title
+  lookup). Omitted = all projects; project / epic / story scopes the subtree;
+  idea / task refused. Under a Project, `tree` interleaves Epics, Ideas, and
+  *root* project-level Stories by shared sibling `order` (stacked
+  project-level Stories nest under their fork point).
+- **`list [kind] [--in <containerId>]`** — optional kind positional filters
+  output to one issue kind (`project` | `epic` | `idea` | `story` | `task`);
+  `--in` scopes to a project / epic / story subtree (idea / task refused;
+  omitted = all projects). Both are optional and combinable. JSON shape
+  `issues` / `derived` / `problems`, filtered to the same visible id set.
+  `--show-archived` unchanged. Label chips / no CLI label filter: see
+  [Project labels](#project-labels).
 
 <a id="kind-scoped-get--set"></a>
 
@@ -884,8 +888,7 @@ node applies the same value to all descendants (cascade). Creating a child
 under any archived ancestor starts the child `archived: true`. Archiving a
 child while its parent stays unarchived remains allowed. Ideas are leaves, so
 archiving an Idea has no descendants to cascade to. `issue tree` and
-`issue list` (optional positional `[id]` scope — see
-[CLI surface](#cli-surface)) omit archived rows by default; pass
+`issue list` omit archived rows by default; pass
 `--show-archived` to include them. The web UI tree uses the same filter rule:
 archived rows are hidden unless the client "Show archived" preference is on
 (default off; fills the former Ready view-control slot next to search). Detail

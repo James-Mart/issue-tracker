@@ -365,28 +365,49 @@ program
 
 program
   .command("list")
-  .description(
-    "print issues, derived state, and any problems as JSON (optional id scopes like tree)",
-  )
+  .description("print issues, derived state, and any problems as JSON")
   .argument(
-    "[id]",
-    "scope by issue id (project/epic/story subtree; idea/task refused; omit for all projects)",
+    "[kind]",
+    "filter to issues of this kind (project | epic | idea | story | task)",
+  )
+  .option(
+    "--in <containerId>",
+    "scope to project/epic/story subtree (idea/task refused; omit for all projects)",
   )
   .option("--show-archived", "include archived Epic / Idea / Story / Task issues")
-  .action((id, opts) =>
+  .addHelpText(
+    "after",
+    `
+Output shape:
+  issues    array of stored issue records (each carries kind)
+  derived   object keyed by issue id (not an array); values hold blocked, storyStatus, epicStatus, mergeBase, mergePolicy
+  problems  array of { id, message }
+`,
+  )
+  .action((kind, opts) =>
     run(() => {
+      if (kind !== undefined && !KINDS.includes(kind as (typeof KINDS)[number])) {
+        throw new Error(
+          `unknown kind "${kind}"; to scope by container use: issue list --in ${kind}`,
+        );
+      }
+      const kindFilter = kind as (typeof KINDS)[number] | undefined;
       const full = list();
       // Resolve scope against the full graph so archived ids remain addressable,
       // then filter to the visible subset (unless --show-archived).
-      const scope = resolveBoardScope(id, full.issues, "list");
+      const scope = resolveBoardScope(opts.in, full.issues, "list");
       const showArchived = Boolean(opts.showArchived);
       const inScope = scopeIssueIds(scope, full.issues);
-      const scopedIssues = visibleIssues(
+      const scopedBeforeKind = visibleIssues(
         full.issues.filter((issue) => inScope.has(issue.id)),
         showArchived,
       );
+      const scopeVisibleIds = new Set(scopedBeforeKind.map((issue) => issue.id));
+      if (!showArchived) assertScopeVisible(scope, scopeVisibleIds);
+      const scopedIssues = kindFilter
+        ? scopedBeforeKind.filter((issue) => issue.kind === kindFilter)
+        : scopedBeforeKind;
       const visibleIds = new Set(scopedIssues.map((issue) => issue.id));
-      if (!showArchived) assertScopeVisible(scope, visibleIds);
       const scoped = {
         issues: scopedIssues,
         problems: full.problems.filter((problem) => visibleIds.has(problem.id)),
