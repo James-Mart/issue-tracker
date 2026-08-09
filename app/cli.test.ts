@@ -2184,10 +2184,6 @@ describe("legacy CLI removed", () => {
     "add-task",
     "show",
     "delete",
-    "comment",
-    "attach",
-    "attachments",
-    "detach",
     "projects",
   ];
 
@@ -2526,6 +2522,177 @@ describe("kind-scoped view / delete / comment / attach", () => {
     expect(status).toBe(0);
     expect(stdout).toContain("deleted c2");
     expect(runCli(["task", "view", "c2"]).status).toBe(1);
+  });
+});
+
+describe("bare-id view / get / comment / attach", () => {
+  beforeEach(() => {
+    writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
+    writeIssue("e", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      order: 0,
+      blockedBy: [],
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("a", {
+      kind: "story",
+      title: "Story A",
+      partOf: "e",
+      order: 0,
+      branchName: "feat/a",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("c1", {
+      kind: "task",
+      title: "C1",
+      partOf: "a",
+      order: 0,
+      status: "todo",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeFileSync(join(dir, "e", "description.md"), "# Epic\n\nepic body\n");
+    writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
+    writeFileSync(
+      join(dir, "a", "chat.jsonl"),
+      JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
+        "\n",
+    );
+  });
+
+  it("views epic and story ids without a kind prefix", () => {
+    const epic = runCli(["view", "e"]);
+    expect(epic.status).toBe(0);
+    expect(epic.stdout).toContain("kind: epic");
+    expect(epic.stdout).toContain("title: Epic");
+    expect(epic.stdout).toContain("# Epic");
+
+    const story = runCli(["view", "a"]);
+    expect(story.status).toBe(0);
+    expect(story.stdout).toContain("kind: story");
+    expect(story.stdout).toContain("title: Story A");
+    expect(story.stdout).toContain("# Story A");
+    expect(story.stdout).not.toContain("--- chat ---");
+
+    const withChat = runCli(["view", "a", "--chat"]);
+    expect(withChat.status).toBe(0);
+    expect(withChat.stdout).toContain("--- chat ---");
+    expect(withChat.stdout).toContain("bot: first note");
+  });
+
+  it("gets epic and story fields without a kind prefix", () => {
+    expect(runCli(["get", "e", "title"]).stdout).toBe("Epic\n");
+    expect(runCli(["get", "e", "description"]).stdout).toBe("# Epic\n\nepic body\n");
+    expect(runCli(["get", "a", "title"]).stdout).toBe("Story A\n");
+    expect(runCli(["get", "a", "branchName"]).stdout).toBe("feat/a\n");
+  });
+
+  it("round-trips attach / attachments / detach without a kind prefix", () => {
+    const source = join(dir, "note.txt");
+    writeFileSync(source, "hello");
+
+    const attach = runCli(["attach", "c1", source]);
+    expect(attach.status).toBe(0);
+    expect(attach.stdout).toContain("attached note.txt");
+
+    const list = runCli(["attachments", "c1"]);
+    expect(list.status).toBe(0);
+    expect(list.stdout).toBe("note.txt\t5\n");
+
+    const detach = runCli(["detach", "c1", "note.txt"]);
+    expect(detach.status).toBe(0);
+    expect(detach.stdout).toBe("detached note.txt from c1\n");
+    expect(runCli(["attachments", "c1"]).stdout).toBe("(no attachments)\n");
+  });
+
+  it("writes the same chat entry as the kind-scoped comment form", () => {
+    const bare = runCli([
+      "comment",
+      "a",
+      "--role",
+      "implementor",
+      "--body",
+      "bare-id note",
+      "--name",
+      "impl",
+    ]);
+    expect(bare.status).toBe(0);
+    expect(bare.stdout).toBe("commented on a as impl\n");
+
+    const scoped = runCli([
+      "story",
+      "comment",
+      "a",
+      "--role",
+      "implementor",
+      "--body",
+      "kind-scoped note",
+      "--name",
+      "impl",
+    ]);
+    expect(scoped.status).toBe(0);
+    expect(scoped.stdout).toBe("commented on a as impl\n");
+
+    const chat = readFileSync(join(dir, "a", "chat.jsonl"), "utf8");
+    expect(chat).toContain('"body":"bare-id note"');
+    expect(chat).toContain('"body":"kind-scoped note"');
+    expect(chat).toContain('"role":"implementor"');
+  });
+
+  it("errors on an unknown id", () => {
+    const view = runCli(["view", "ghost"]);
+    expect(view.status).toBe(1);
+    expect(view.stderr).toContain('unknown issue "ghost"');
+
+    const get = runCli(["get", "ghost", "title"]);
+    expect(get.status).toBe(1);
+    expect(get.stderr).toContain('unknown issue "ghost"');
+
+    const comment = runCli([
+      "comment",
+      "ghost",
+      "--role",
+      "agent",
+      "--body",
+      "x",
+    ]);
+    expect(comment.status).toBe(1);
+    expect(comment.stderr).toContain('unknown issue "ghost"');
+  });
+
+  it("refuses bare-id comment on a project id", () => {
+    const { stderr, status } = runCli([
+      "comment",
+      "p",
+      "--role",
+      "agent",
+      "--body",
+      "nope",
+    ]);
+    expect(status).toBe(1);
+    expect(stderr).toContain('"p" is a Project');
+    expect(stderr).toContain("projects have no chat log");
+  });
+
+  it("still errors on kind-scoped calls against a mismatched kind", () => {
+    const view = runCli(["epic", "view", "a"]);
+    expect(view.status).toBe(1);
+    expect(view.stderr).toContain('"a" is a story, not an epic');
+
+    const get = runCli(["story", "get", "e", "title"]);
+    expect(get.status).toBe(1);
+    expect(get.stderr).toContain('"e" is an epic, not a story');
+
+    const attachFile = join(dir, "mismatch.txt");
+    writeFileSync(attachFile, "x");
+    const attach = runCli(["task", "attach", "a", attachFile]);
+    expect(attach.status).toBe(1);
+    expect(attach.stderr).toContain('"a" is a story, not a task');
   });
 });
 

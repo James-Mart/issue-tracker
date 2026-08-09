@@ -2,7 +2,13 @@ import { readFileSync } from "fs";
 import { basename } from "path";
 import type { Command } from "commander";
 import { assigneeOf } from "./server/assignee.js";
-import { hasAttention, hasPartOf, kindHas } from "./server/kind.js";
+import {
+  articleForKind,
+  hasAttention,
+  hasPartOf,
+  kindHas,
+  KIND_LABEL,
+} from "./server/kind.js";
 import type { IssueDetail, IssueKind } from "./server/schemas.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
 import {
@@ -21,7 +27,7 @@ import {
 import { formatAttachmentsSection } from "./server/services/summary.js";
 import { formatInspirationAppsLine } from "./server/services/inspiration-apps.js";
 import { formatSupportingDocsLine } from "./server/services/supporting-docs.js";
-import { assertKind } from "./cli-kind.js";
+import { assertKind, kindGetValue, resolveIssueKind } from "./cli-kind.js";
 
 type Run = (action: () => unknown) => Promise<void>;
 
@@ -265,4 +271,91 @@ export function registerKindOps(
   if (kindHas(kind, "attachments")) {
     registerAttachCommands(kindCmd, run, kind);
   }
+}
+
+export function registerBareIdOps(program: Command, run: Run): void {
+  program
+    .command("view")
+    .argument("<id>", "issue id")
+    .description(
+      "print an issue's metadata and description (pass --chat for the chat log)",
+    )
+    .option("--chat", "also print the chat log")
+    .action((id: string, opts: ViewOptions) =>
+      run(() => {
+        resolveIssueKind(id);
+        printIssueView(id, opts);
+      }),
+    );
+
+  program
+    .command("get")
+    .argument("<id>", "issue id")
+    .argument("<field>", "field name (camelCase)")
+    .action((id: string, field: string) =>
+      run(() => {
+        const kind = resolveIssueKind(id);
+        const value = kindGetValue(kind, id, field);
+        if (value === null) return;
+        process.stdout.write(value.endsWith("\n") ? value : `${value}\n`);
+      }),
+    );
+
+  program
+    .command("comment")
+    .argument("<id>", "issue id")
+    .requiredOption("--role <role>", "message author role (e.g. agent, human)")
+    .requiredOption("--body <text>", "message body (Markdown)")
+    .option("--name <name>", "author display name")
+    .action(
+      (
+        id: string,
+        opts: { role: string; body: string; name?: string },
+      ) =>
+        run(async () => {
+          const kind = resolveIssueKind(id);
+          if (!kindHas(kind, "comment")) {
+            throw new Error(
+              `"${id}" is ${articleForKind(kind)} ${KIND_LABEL[kind]}; projects have no chat log`,
+            );
+          }
+          await printComment(id, opts);
+        }),
+    );
+
+  program
+    .command("attach")
+    .argument("<id>", "issue id")
+    .argument("<file>", "path to file to attach")
+    .description(
+      "attach a file; on basename collision keeps the existing file and stores under a unique name; prints the stored basename",
+    )
+    .action((id: string, file: string) =>
+      run(async () => {
+        resolveIssueKind(id);
+        await printAttach(id, file);
+      }),
+    );
+
+  program
+    .command("attachments")
+    .argument("<id>", "issue id")
+    .description("list attachment names and sizes")
+    .action((id: string) =>
+      run(() => {
+        resolveIssueKind(id);
+        printAttachments(id);
+      }),
+    );
+
+  program
+    .command("detach")
+    .argument("<id>", "issue id")
+    .argument("<name>", "attachment basename to remove")
+    .action((id: string, name: string) =>
+      run(async () => {
+        resolveIssueKind(id);
+        await printDetach(id, name);
+      }),
+    );
 }

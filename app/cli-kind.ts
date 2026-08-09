@@ -55,6 +55,11 @@ export function assertKind(expected: IssueKind, id: string): IssueDetail {
   return detail;
 }
 
+/** Stored kind for a globally unique id; throws when no issue matches. */
+export function resolveIssueKind(id: string): IssueKind {
+  return read(id).kind;
+}
+
 function resolveFileOrValue(
   value: string | undefined,
   file: string | undefined,

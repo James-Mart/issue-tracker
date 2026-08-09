@@ -252,8 +252,37 @@ per-command.
 
 ## CLI surface
 
-One rule: single-issue ops are kind-scoped; multi-kind / board ops stay global.
-The CLI kind must equal the issue's stored `kind` (hard error otherwise).
+Six kind-uniform single-issue ops take a bare id and dispatch on the issue's
+stored `kind`: `view`, `get`, `comment`, `attach`, `attachments`, `detach`.
+`set`, `add`, and `delete` stay kind-scoped — their flag surface genuinely
+differs by kind. Multi-kind / board ops stay global.
+
+The kind-scoped spellings `issue <kind> view|get|comment|attach|attachments|detach`
+remain available as asserting aliases: the CLI kind must equal the issue's
+stored `kind` (hard error otherwise).
+
+### Bare-id ops (kind-uniform)
+
+```
+issue view|get|comment|attach|attachments|detach <id> …
+```
+
+| verb | notes |
+| --- | --- |
+| `view` / `get` / `attach` / `attachments` / `detach` | every kind |
+| `comment` | epic / idea / story / task (not project) |
+
+- **`view`** — `issue view <id>` (pass `--chat` for the chat log).
+  Prefer `issue get <id> <field>` for a single field. Label lines: see
+  [Project labels](#project-labels).
+- **`get`** — `issue get <id> <field>`; field rules match kind-scoped
+  [get / set](#kind-scoped-get--set).
+- **`comment`** — `issue comment <id> --role <role> --body <text>`
+  (optional `--name`); refuses a Project id; see [Service layer](#service-layer).
+- **`attach` / `attachments` / `detach`** —
+  `issue attach <id> <file>` /
+  `issue attachments <id>` /
+  `issue detach <id> <name>`; see [Attachments](#attachments).
 
 ### Kind-scoped ops
 
@@ -265,25 +294,19 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach
 
 | verb | kinds |
 | --- | --- |
-| `add` / `get` / `set` / `view` / `delete` | every kind |
-| `comment` | epic / idea / story / task (not project) |
-| `attach` / `attachments` / `detach` | every kind |
+| `add` / `set` / `delete` | every kind |
+| `get` / `view` / `attach` / `attachments` / `detach` | every kind (asserting aliases) |
+| `comment` | epic / idea / story / task (not project; asserting alias) |
 
 - **`add`** — `issue project add <title>` (no `--part-of`); children take
   `--part-of`. Description: `--description` and/or `--file` (use `-` for
   stdin). Also: `--assignee` on task; `--stacked-on` on story.
   Prints the new id on stdout.
-- **`view`** — `issue <kind> view <id>` (pass `--chat` for the chat log).
-  Prefer `issue <kind> get <id> <field>` for a single field. Label lines: see
-  [Project labels](#project-labels).
+- **`view`** — asserting alias for `issue view <id>`.
 - **`delete`** — `issue <kind> delete <id>`; cascades per
   [Deletion policy](#deletion-policy).
-- **`comment`** — `issue epic|idea|story|task comment <id> --role <role> --body
-  <text>` (optional `--name`); see [Service layer](#service-layer).
-- **`attach` / `attachments` / `detach`** —
-  `issue <kind> attach <id> <file>` /
-  `issue <kind> attachments <id>` /
-  `issue <kind> detach <id> <name>`; see
+- **`comment`** — asserting alias for `issue comment <id> …`.
+- **`attach` / `attachments` / `detach`** — asserting aliases; see
   [Attachments](#attachments).
 
 ### Global ops
