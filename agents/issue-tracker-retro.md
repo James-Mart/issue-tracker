@@ -106,7 +106,7 @@ Always end by posting a comment on the source work root (Ideas have no
 `comment` — source comments stay on epic/story):
 
 ```bash
-issue <sourceKind> comment <sourceRootId> --role retro --body "<body>"
+issue comment <sourceRootId> --role retro --body "<body>"
 ```
 
 - Clean run: `retro: no remaining confusion gaps`
