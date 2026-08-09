@@ -76,6 +76,16 @@ type SessionEntry = {
 const AUTH_FAILURE_TEXT =
   /authentication error|unauthenticated|invalid api key|logging out and back in/i;
 
+/**
+ * The SDK surfaces a failed turn as `Connection failed repeatedly` — an in-band
+ * error string we do not special-case here (unlike `AUTH_FAILURE_TEXT` above).
+ * When that text appears, check server logs: `http2-diagnostics` may already
+ * show `rstCode=11` (`NGHTTP2_ENHANCE_YOUR_CALM`), meaning the peer refused an
+ * oversized request rather than a network fault. A conversation already over
+ * the HTTP/2 ceiling is only recoverable by continuing in a fresh conversation
+ * seeded with a summary.
+ */
+
 /** Breathing room before replaying, in case the rejection was a server-side blip. */
 const AUTH_RETRY_DELAY_MS = 1000;
 
