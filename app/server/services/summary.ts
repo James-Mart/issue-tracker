@@ -5,7 +5,10 @@ import { IssueError } from "./errors.js";
 import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
 import { formatInspirationAppsLine } from "./inspiration-apps.js";
-import { formatSupportingDocsLine } from "./supporting-docs.js";
+import {
+  formatSupportingDocsLine,
+  readMissionParagraph,
+} from "./supporting-docs.js";
 
 /** Name + size as rendered by show/summary; not full Attachment metadata. */
 export interface SummaryAttachment {
@@ -27,6 +30,8 @@ export interface IssueSummary {
   /** Ancestor chain from Project down to the requested issue. */
   nodes: SummaryNode[];
   workspace?: string;
+  /** One-line mission paragraph from the vision doc's `## Mission` section. */
+  mission?: string;
   supportingDocs?: SupportingDocs;
   inspirationApps?: InspirationApps;
 }
@@ -62,13 +67,23 @@ export function buildSummary(
     id: string,
     kind: IssueKind,
   ) => SummaryAttachment[] | undefined = () => undefined,
+  missionOf: (
+    projectId: string,
+    workspace: string | undefined,
+    docs: SupportingDocs,
+  ) => string | undefined = () => undefined,
 ): IssueSummary {
   const chain = ancestorChain(id, issues);
   const root = chain[0];
+  const mission =
+    root?.kind === "project" && root.supportingDocs
+      ? missionOf(root.id, root.workspace, root.supportingDocs)
+      : undefined;
   return {
     ...(root?.kind === "project" && root.workspace
       ? { workspace: root.workspace }
       : {}),
+    ...(mission ? { mission } : {}),
     ...(root?.kind === "project" && root.supportingDocs
       ? { supportingDocs: root.supportingDocs }
       : {}),
@@ -100,10 +115,18 @@ function loadAttachments(
   return listed.map(({ name, size }) => ({ name, size }));
 }
 
+function loadMission(
+  projectId: string,
+  workspace: string | undefined,
+  docs: SupportingDocs,
+): string | undefined {
+  return readMissionParagraph(projectId, workspace, docs);
+}
+
 /** Load the on-disk graph and build a summary for `id`. */
 export function summarize(id: string): IssueSummary {
   const { issues } = readAll();
-  return buildSummary(id, issues, loadAttachments);
+  return buildSummary(id, issues, loadAttachments, loadMission);
 }
 
 /** Agent-oriented plain-text rendering of {@link IssueSummary}. */
@@ -120,6 +143,9 @@ export function formatSummary(summary: IssueSummary): string {
     lines.push(`${KIND_LABEL[node.kind]}: ${node.id} — ${node.title}`);
     if (node.kind === "project" && summary.workspace) {
       lines.push(`  Workspace: ${summary.workspace}`);
+    }
+    if (node.kind === "project" && summary.mission) {
+      lines.push(`  Mission: ${summary.mission}`);
     }
     if (node.kind === "project" && summary.supportingDocs) {
       const line = formatSupportingDocsLine(summary.supportingDocs);

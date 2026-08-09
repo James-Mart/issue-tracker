@@ -564,6 +564,13 @@ Agents discover and consult a subsystem doc via the existing vision path:
 read the vision doc, find a matching `## Subsystem reference` entry, then
 Read that attachment.
 
+**Mission paragraph (convention only).** The main vision doc (the
+`supportingDocs.vision` target) may include a `## Mission` section: one
+short paragraph written for an agent audience, distilled from the rest of
+the doc. `issue summary` surfaces it on the Project section as a
+`Mission:` line (after `Workspace:` and before `supportingDocs:`). An
+absent heading means the line is omitted — not an error.
+
 ### Project workspace
 
 A Project's optional `workspace` is the absolute path to the local git checkout

@@ -469,6 +469,48 @@ describe("project get/set", () => {
     }
   });
 
+  it("prints Mission from the vision doc on summary", () => {
+    const visionSrc = join(dir, "vision-with-mission.md");
+    writeFileSync(
+      visionSrc,
+      "# Vision\n\n## Mission\n\nHelp humans and agents ship together.\n\n## North star\n\nMore detail.",
+    );
+    try {
+      expect(runCli(["project", "attach", "p", visionSrc]).status).toBe(0);
+      expect(
+        runCli([
+          "project",
+          "set",
+          "p",
+          "supportingDocs",
+          "--doc",
+          "vision",
+          "--attachment",
+          "vision-with-mission.md",
+        ]).status,
+      ).toBe(0);
+
+      const summary = runCli(["summary", "p"]);
+      expect(summary.status).toBe(0);
+      expect(summary.stdout).toContain(
+        "  Mission: Help humans and agents ship together.",
+      );
+      expect(summary.stdout.indexOf("  Mission:")).toBeLessThan(
+        summary.stdout.indexOf("  supportingDocs:"),
+      );
+    } finally {
+      expect(
+        runCli([
+          "project",
+          "set",
+          "p",
+          "supportingDocs",
+          "--clear",
+        ]).status,
+      ).toBe(0);
+    }
+  });
+
   it("sets, gets, clears, and surfaces inspirationApps", () => {
     expect(
       runCli([
