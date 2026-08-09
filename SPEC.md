@@ -1365,6 +1365,14 @@ coordinator skill (`issue-tracker-work`, `issue-tracker-plan`,
 sanctions this prose lives in a Project attachment outside version control;
 this SPEC entry is where the invariant is durable.
 
+**Per-role craft line.** What the include cannot say is what a particular role
+is good at, so each role carries one line naming the craft it is trusted with,
+sitting with its role intro. A role that exists as several model-pinned
+wrappers carries the line once in its shared body
+(`_issue-tracker-implementor.md`, `_issue-tracker-planner.md`) and not in the
+wrappers. Like the include, the line never modulates scope, effort, or
+thoroughness.
+
 ## Design rationale
 
 **Directory-per-issue is the source of truth (no database).** Issues are plain
