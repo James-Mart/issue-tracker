@@ -45,9 +45,9 @@ idempotency, and recovery live there). This section is only the concrete
 3. **Flag stale children** (`merge` / `fast-forward` only):
    1. Take `<projectId>` from the `Project: <projectId> — <title>` line of
       `issue summary <storyId>`.
-   2. Enumerate candidate Story ids with `issue tree <projectId>`.
-   3. For each candidate, read `issue story get <id> mergeBase`,
-      `issue story get <id> storyStatus`, and `issue story get <id> merged`.
+   2. Run `issue list story --in <projectId>` once. For each entry in
+      `issues[]`, read `merged` and `branchName` from the entry and
+      `storyStatus` and `mergeBase` from `derived[<id>]`.
    Find every not-yet-merged Story other than `<storyId>` whose derived
    `storyStatus` is not `not-started` (skip when `branchName` is empty) and
    whose derived `mergeBase` is `Bp`, and run `issue story set <childId>
