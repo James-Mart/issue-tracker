@@ -403,17 +403,35 @@ export function parseCommentInput(raw: unknown): CommentInputParseResult {
 
 // --- Conversations (durable agent transcript store; peer of issues/) ---
 
-export const conversationMetaSchema = z.object({
-  id: nonEmpty,
-  title: nonEmpty,
-  projectId: nonEmpty,
-  agentId: nonEmpty.optional(),
-  model: nonEmpty,
-  pendingMessage: z.object({ text: nonEmpty, at: nonEmpty }).optional(),
-  archived: z.boolean().default(false),
-  createdAt: nonEmpty,
-  updatedAt: nonEmpty,
-});
+export const CONVERSATION_CHANNELS = ["planning", "implementing"] as const;
+export type ConversationChannel = (typeof CONVERSATION_CHANNELS)[number];
+
+export const conversationMetaSchema = z
+  .object({
+    id: nonEmpty,
+    title: nonEmpty,
+    projectId: nonEmpty,
+    issueId: nonEmpty.optional(),
+    channel: z.enum(CONVERSATION_CHANNELS).optional(),
+    agentId: nonEmpty.optional(),
+    model: nonEmpty,
+    pendingMessage: z.object({ text: nonEmpty, at: nonEmpty }).optional(),
+    archived: z.boolean().default(false),
+    createdAt: nonEmpty,
+    updatedAt: nonEmpty,
+  })
+  .superRefine((meta, ctx) => {
+    const hasIssueId = meta.issueId !== undefined;
+    const hasChannel = meta.channel !== undefined;
+    if (hasIssueId === hasChannel) return;
+    ctx.addIssue({
+      code: "custom",
+      message: hasIssueId
+        ? "channel is required when issueId is set"
+        : "issueId is required when channel is set",
+      path: hasIssueId ? ["channel"] : ["issueId"],
+    });
+  });
 
 export type ConversationMeta = z.infer<typeof conversationMetaSchema>;
 
@@ -617,6 +635,8 @@ export type CreateConversationInput = {
   projectId: string;
   model: string;
   agentId?: string;
+  issueId?: string;
+  channel?: ConversationChannel;
 };
 
 export type ConversationMetaPatch = Partial<

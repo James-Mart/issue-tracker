@@ -16,17 +16,20 @@ import {
   parseDelegationRecordInput,
   parseTranscriptEvent,
   parseTranscriptEventInput,
+  type ConversationChannel,
   type ConversationDetail,
   type ConversationMeta,
   type ConversationMetaPatch,
   type CreateConversationInput,
   type DelegationRecord,
   type DelegationRecordInput,
+  type Issue,
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
 import { publishFrame } from "./conversation-stream.js";
 import { IssueError } from "./errors.js";
+import { readIssueOrThrow } from "./issues.js";
 import { uniqueSlug } from "./slug.js";
 
 let writeChain: Promise<unknown> = Promise.resolve();
@@ -62,6 +65,48 @@ function scanIds(): string[] {
   return readdirSync(conversationsDir).filter((entry) =>
     statSync(dirOf(entry)).isDirectory(),
   );
+}
+
+function offeredChannelForIssue(issue: Issue): ConversationChannel | undefined {
+  if (issue.kind === "idea") return "planning";
+  if (issue.kind === "epic") return "implementing";
+  if (issue.kind === "story") {
+    const parent = readIssueOrThrow(issue.partOf);
+    return parent.kind === "project" ? "implementing" : undefined;
+  }
+  return undefined;
+}
+
+function validateAnchor(
+  issueId: string | undefined,
+  channel: ConversationChannel | undefined,
+): { issueId: string; channel: ConversationChannel } | undefined {
+  const hasIssueId = issueId !== undefined;
+  const hasChannel = channel !== undefined;
+  if (!hasIssueId && !hasChannel) return undefined;
+  if (hasIssueId !== hasChannel) {
+    throw new IssueError(
+      "validation",
+      hasIssueId
+        ? "channel is required when issueId is set"
+        : "issueId is required when channel is set",
+    );
+  }
+  const issue = readIssueOrThrow(issueId!);
+  const offered = offeredChannelForIssue(issue);
+  if (offered === undefined) {
+    throw new IssueError(
+      "validation",
+      `issue "${issueId}" does not offer a channel`,
+    );
+  }
+  if (channel !== offered) {
+    throw new IssueError(
+      "validation",
+      `channel "${channel}" is not offered by issue "${issueId}"`,
+    );
+  }
+  return { issueId: issueId!, channel: channel! };
 }
 
 function readMetaRaw(id: string): ConversationMeta {
@@ -120,6 +165,11 @@ export function createConversation(
     const model = input.model.trim();
     if (!model) throw new IssueError("validation", "model is required");
 
+    const anchor = validateAnchor(
+      input.issueId?.trim() || undefined,
+      input.channel,
+    );
+
     const id = uniqueSlug(title, scanIds());
     const now = new Date().toISOString();
     const meta: ConversationMeta = {
@@ -131,6 +181,10 @@ export function createConversation(
       updatedAt: now,
     };
     if (input.agentId?.trim()) meta.agentId = input.agentId.trim();
+    if (anchor) {
+      meta.issueId = anchor.issueId;
+      meta.channel = anchor.channel;
+    }
 
     mkdirSync(dirOf(id), { recursive: true });
     writeMeta(meta);

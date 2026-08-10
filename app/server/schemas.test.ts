@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseComment,
   parseCommentInput,
+  parseConversationMeta,
   parseIssue,
   parseTranscriptEvent,
   parseTranscriptEventInput,
@@ -575,6 +576,55 @@ describe("parseCommentInput", () => {
     expect(parseCommentInput({ role: "agent", body: "" }).ok).toBe(false);
     expect(parseCommentInput(null).ok).toBe(false);
     expect(parseCommentInput(undefined).ok).toBe(false);
+  });
+});
+
+describe("parseConversationMeta", () => {
+  const base = {
+    id: "chat-1",
+    title: "Chat",
+    projectId: "platform",
+    model: "composer-2.5",
+    createdAt: "2026-07-09T14:00:00.000Z",
+    updatedAt: "2026-07-09T14:00:00.000Z",
+  };
+
+  it("parses an anchored meta with issueId and channel together", () => {
+    const result = parseConversationMeta({
+      ...base,
+      issueId: "capture-flow",
+      channel: "planning",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta.issueId).toBe("capture-flow");
+      expect(result.meta.channel).toBe("planning");
+    }
+  });
+
+  it("parses meta without anchor fields", () => {
+    const result = parseConversationMeta(base);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta.issueId).toBeUndefined();
+      expect(result.meta.channel).toBeUndefined();
+    }
+  });
+
+  it("rejects meta that carries only issueId", () => {
+    const result = parseConversationMeta({ ...base, issueId: "capture-flow" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("channel is required when issueId is set");
+    }
+  });
+
+  it("rejects meta that carries only channel", () => {
+    const result = parseConversationMeta({ ...base, channel: "planning" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("issueId is required when channel is set");
+    }
   });
 });
 
