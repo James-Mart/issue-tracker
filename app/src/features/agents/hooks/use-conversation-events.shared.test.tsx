@@ -5,8 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ConversationTranscriptPage } from "@server/schemas";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { agentsKeys } from "../api/keys";
-import { FakeEventSource } from "../event-source.fake";
 import { resetConversationEventsRegistryForTests } from "../lib/conversation-events-registry";
+import { resetTransportForTests } from "@/lib/ws/transport";
+import { FakeWebSocket } from "@/lib/ws/websocket.fake";
 import {
   useConversationEvents,
   type ConversationEventsState,
@@ -88,43 +89,57 @@ function unmountConsumer(consumer: {
   consumer.container.remove();
 }
 
+function openAndSubscribe(ws: FakeWebSocket = FakeWebSocket.instances[0]!): FakeWebSocket {
+  act(() => {
+    ws.emitOpen();
+  });
+  return ws;
+}
+
 beforeEach(() => {
   (
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
-  // Keep heartbeat/reconnect timers from pinning the vitest worker open.
+  // Keep reconnect timers from pinning the vitest worker open.
   vi.useFakeTimers();
-  vi.stubGlobal("EventSource", FakeEventSource);
-  FakeEventSource.reset();
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  FakeWebSocket.reset();
+  resetTransportForTests();
   resetConversationEventsRegistryForTests();
 });
 
 afterEach(() => {
   resetConversationEventsRegistryForTests();
-  FakeEventSource.reset();
+  resetTransportForTests();
+  FakeWebSocket.reset();
   vi.unstubAllGlobals();
   vi.useRealTimers();
   document.body.innerHTML = "";
 });
 
 describe("shared conversation subscription", () => {
-  it("opens one EventSource for two consumers and delivers the same events", () => {
+  it("opens one WebSocket for two consumers and delivers the same events", () => {
     const a = mountConsumer("conv-1");
     const b = mountConsumer("conv-1");
 
-    expect(FakeEventSource.instances).toHaveLength(1);
-    const source = FakeEventSource.instances[0]!;
-    expect(source.url).toBe("/api/conversations/conv-1/events");
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    const ws = openAndSubscribe();
+    expect(ws.sent).toEqual([
+      { type: "subscribe", topic: "conversation:conv-1" },
+    ]);
 
     act(() => {
-      source.emitOpen();
-      source.emitMessage({
-        type: "prompt",
-        text: "hello",
-        at: "2026-08-10T00:00:00.000Z",
+      ws.emitMessage({
+        type: "event",
+        topic: "conversation:conv-1",
         seq: 1,
+        event: {
+          type: "prompt",
+          text: "hello",
+          at: "2026-08-10T00:00:00.000Z",
+          seq: 1,
+        },
       });
-      source.emitPing();
     });
 
     expect(a.getState().ready).toBe(true);
@@ -166,15 +181,23 @@ describe("shared conversation subscription", () => {
       },
     ]);
 
-    const source = FakeEventSource.instances[0]!;
+    const ws = openAndSubscribe();
+    expect(ws.sent).toEqual([
+      { type: "subscribe", topic: "conversation:conv-seed", sinceSeq: 1 },
+    ]);
+
     act(() => {
-      source.emitMessage({
-        type: "assistant",
-        text: "delta",
-        at: "2026-08-10T00:00:01.000Z",
+      ws.emitMessage({
+        type: "event",
+        topic: "conversation:conv-seed",
         seq: 2,
+        event: {
+          type: "assistant",
+          text: "delta",
+          at: "2026-08-10T00:00:01.000Z",
+          seq: 2,
+        },
       });
-      source.emitPing();
     });
 
     expect(consumer.getState().events).toEqual([
@@ -195,34 +218,41 @@ describe("shared conversation subscription", () => {
     unmountConsumer(consumer);
   });
 
-  it("opens one EventSource per distinct conversation id", () => {
+  it("opens one topic subscription per distinct conversation id on one socket", () => {
     const a = mountConsumer("conv-1");
     const b = mountConsumer("conv-2");
 
-    expect(FakeEventSource.instances).toHaveLength(2);
-    expect(FakeEventSource.instances[0]!.url).toBe(
-      "/api/conversations/conv-1/events",
-    );
-    expect(FakeEventSource.instances[1]!.url).toBe(
-      "/api/conversations/conv-2/events",
-    );
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    const ws = openAndSubscribe();
+    expect(ws.sent).toEqual([
+      { type: "subscribe", topic: "conversation:conv-1" },
+      { type: "subscribe", topic: "conversation:conv-2" },
+    ]);
 
     unmountConsumer(a);
     unmountConsumer(b);
   });
 
-  it("closes the old subscription when a consumer switches ids", () => {
+  it("releases the old topic when a consumer switches ids", () => {
     const consumer = mountConsumer("conv-1");
-    const firstSource = FakeEventSource.instances[0]!;
+    const first = openAndSubscribe();
 
     consumer.rerender("conv-2");
 
-    expect(FakeEventSource.instances).toHaveLength(2);
-    expect(firstSource.isClosed).toBe(true);
-    expect(FakeEventSource.instances[1]!.isClosed).toBe(false);
+    expect(first.sent).toContainEqual({
+      type: "unsubscribe",
+      topic: "conversation:conv-1",
+    });
+    // Last topic leaving closes the socket; the new id opens another.
+    expect(first.isClosed).toBe(true);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    const second = openAndSubscribe(FakeWebSocket.instances[1]!);
+    expect(second.sent).toEqual([
+      { type: "subscribe", topic: "conversation:conv-2" },
+    ]);
 
     unmountConsumer(consumer);
 
-    expect(FakeEventSource.instances[1]!.isClosed).toBe(true);
+    expect(second.isClosed).toBe(true);
   });
 });

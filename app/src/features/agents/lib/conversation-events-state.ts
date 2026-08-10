@@ -9,17 +9,18 @@ export type ConversationEventsState = {
    */
   ready: boolean;
   /**
-   * Live run lifecycle from SSE `run` frames. `null` until the first frame
+   * Live run lifecycle from topic `run` frames. `null` until the first frame
    * on this subscription (including catch-up replay).
    */
   streamRunActive: boolean | null;
   /**
-   * Increments on each SSE reconnect so run-active state can re-seed from
-   * `GET /run` when a missed `finished` frame would otherwise stick Stop on.
+   * Increments on topic reset (and legacy reconnect paths) so run-active state
+   * can re-seed from `GET /run` when a missed `finished` frame would otherwise
+   * stick Stop on.
    */
   runResyncKey: number;
   /**
-   * Pending message text from SSE `pending` frames. `undefined` until the
+   * Pending message text from topic `pending` frames. `undefined` until the
    * first frame on this subscription — seed from conversation meta until then.
    */
   pendingText: string | null | undefined;

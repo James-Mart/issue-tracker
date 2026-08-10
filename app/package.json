@@ -16,10 +16,11 @@
     "lint:boundary": "tsx scripts/check-client-boundary.ts",
     "lint:spawns": "tsx scripts/check-agent-spawns.ts",
     "lint:cli-forms": "tsx scripts/check-instruction-cli.ts",
+    "lint:transport": "tsx scripts/check-transport-boundary.ts",
     "screenshots": "tsx scripts/capture-screenshots.ts",
     "agent-stack": "tsx scripts/agent-stack.ts",
     "install-hooks": "tsx scripts/install-cursor-hooks.ts",
-    "test": "npm run lint:boundary && npm run lint:spawns && npm run lint:cli-forms && vitest run",
+    "test": "npm run lint:boundary && npm run lint:spawns && npm run lint:cli-forms && npm run lint:transport && vitest run",
     "test:live": "CURSOR_SDK_LIVE=1 vitest run live.test",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots"
@@ -52,6 +53,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
+    "ws": "^8.21.3",
     "yaml": "^2.9.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.13"
@@ -63,6 +65,7 @@
     "@types/multer": "^2.2.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.5.0",
     "concurrently": "^9.0.0",

@@ -16,7 +16,7 @@ selects one Project and scopes the tree and Ready view to it.
 ## Layout
 
 - `app/` — Vite + React frontend (default `:8060`, override `VITE_DEV_PORT`),
-  Express + SSE backend (default `:8061`, override `PORT`), and
+  Express + WebSocket backend (default `:8061`, override `PORT`), and
   a CLI (`app/cli.ts`, exposed as a `bin`).
   - `app/server/schemas.ts` — the kind-discriminated zod schema (single source
     of truth for validation).
@@ -24,9 +24,9 @@ selects one Project and scopes the tree and Ready view to it.
     writer of `issues/`.
   - `app/server/services/derive.ts` — pure derived state (status, ready/blocked,
     base, ready set, problems).
-  - `app/server/routes/` — thin HTTP + SSE adapters over the service layer.
+  - `app/server/routes/` — thin HTTP adapters over the service layer.
   - `app/src/features/issues/` — the React UI (tree / ready / detail, git-stack
-    panel, chat, live SSE updates).
+    panel, chat, live WebSocket updates).
 - `issues/` — one directory per issue; the on-disk source of truth.
 - `skills/issue-tracker/SKILL.md` — launch the issue-tracker web UI for the
   file-backed Project > Epic > Story > Task work tracker.
@@ -43,12 +43,14 @@ cd app && npm install && npm run dev
 ```
 
 - Frontend (Vite): http://localhost:8060 by default (`VITE_DEV_PORT` overrides)
-- Backend (Express API + SSE): http://localhost:8061 by default (`PORT` overrides)
+- Backend (Express API + WebSocket): http://localhost:8061 by default (`PORT` overrides)
 - Vite proxies `/api` to `VITE_API_PROXY_TARGET` (default
   `http://localhost:8061`). With `strictPort: true`, a busy Vite port fails
   instead of walking to the next port.
 
-Other scripts: `npm test` (Vitest) and `npm run build` (build the client into
+Other scripts: `npm test` (static lints — client import boundary, agent spawn
+pins, CLI instruction forms, transport connection boundary — then Vitest) and
+`npm run build` (build the client into
 `dist/`). `npm start` and `npm run preview` run the Express server, but it only
 serves the built client when `NODE_ENV=production` **and** `dist/` exists;
 otherwise it runs API-only on `:8061` (use `npm run dev` for the full UI, or
@@ -111,12 +113,13 @@ Three thin adapters sit over it:
   ready + problems), `GET /api/issues/:id`, `GET /api/issues/:id/comments`,
   `POST /api/issues`, `PATCH /api/issues/:id`, `DELETE /api/issues/:id`,
   `POST /api/issues/:id/comments` — what the UI calls.
-- **SSE** (`routes/events.ts`) — `GET /api/events`; a chokidar watcher on
-  `issues/**` pushes change events so the UI updates live.
+- **WebSocket** (`/api/ws`) — one multiplexed connection per tab; the `issues`
+  topic carries chokidar watcher frames so the UI updates live, and
+  `conversation:<id>` carries conversation deltas.
 
-The **UI** reads through TanStack Query and mutates through the HTTP API; SSE
-patches the cache so on-disk changes (from the CLI or by hand) appear without a
-refresh.
+The **UI** reads through TanStack Query and mutates through the HTTP API; the
+WebSocket patches the cache so on-disk changes (from the CLI or by hand) appear
+without a refresh.
 
 ## Learn more
 

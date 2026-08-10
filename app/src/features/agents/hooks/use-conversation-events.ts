@@ -25,12 +25,12 @@ const idleState = (): ConversationEventsState => ({
 
 /**
  * Load persisted history through react-query (`GET …/transcript`), seed the
- * shared subscription registry from that result, then fold live SSE deltas on
+ * shared subscription registry from that result, then fold live topic deltas on
  * top in `seq` order. The stream itself no longer replays history.
  *
- * Multiple callers for the same id share one registry-owned connection.
- * Prior folded state is left alone across reconnects so the thread does not
- * blank while catch-up frames arrive.
+ * Multiple callers for the same id share one registry-owned topic subscription
+ * on the tab's multiplexed WebSocket. Prior folded state is left alone across
+ * reconnects so the thread does not blank while catch-up frames arrive.
  */
 export function useConversationEvents(
   conversationId: string | null | undefined,

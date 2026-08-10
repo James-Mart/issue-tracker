@@ -1,18 +1,18 @@
 import {
   parseConversationFrame,
+  type ConversationStreamEvent,
   type ConversationTranscriptPage,
-  type TranscriptEvent,
 } from "@server/schemas";
+import { getConversationTranscript } from "../api/client";
+import {
+  holdTopicSeq,
+  subscribeTopic,
+  type TopicMessage,
+} from "@/lib/ws/transport";
 import {
   applyTranscriptDelta,
   type ConversationEventsState,
 } from "./conversation-events-state";
-
-const RECONNECT_DELAY_MS = 2_000;
-// The server sends a `ping` every 10s; if none arrives within this window the
-// connection is treated as dead (e.g. a dev-proxy zombie after a backend
-// restart, which never fires an `error`) and forcibly reconnected.
-const HEARTBEAT_TIMEOUT_MS = 25_000;
 
 export type ConversationEventsListener = (
   state: ConversationEventsState,
@@ -36,6 +36,10 @@ const emptyState = (): ConversationEventsState => ({
   pendingText: undefined,
 });
 
+function conversationTopic(conversationId: string): string {
+  return `conversation:${conversationId}`;
+}
+
 function notify(entry: ConversationEntry): void {
   for (const listener of entry.listeners) {
     listener(entry.state);
@@ -46,10 +50,12 @@ function openEntry(
   conversationId: string,
   seed: ConversationHistorySeed,
 ): ConversationEntry {
-  let source: EventSource | null = null;
-  let watchdog: ReturnType<typeof setTimeout> | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  const topic = conversationTopic(conversationId);
+  let unsubscribeTopic: (() => void) | null = null;
   let disposed = false;
+  let reseedGeneration = 0;
+  let reseeding = false;
+  const buffered: ConversationStreamEvent[] = [];
 
   const entry: ConversationEntry = {
     listeners: new Set(),
@@ -60,9 +66,11 @@ function openEntry(
     },
     dispose: () => {
       disposed = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-      closeSource();
+      unsubscribeTopic?.();
+      unsubscribeTopic = null;
+      reseedGeneration += 1;
+      reseeding = false;
+      buffered.length = 0;
     },
   };
 
@@ -71,47 +79,19 @@ function openEntry(
     notify(entry);
   };
 
-  const closeSource = () => {
-    if (watchdog) {
-      clearTimeout(watchdog);
-      watchdog = null;
+  const applyLiveEvent = (event: ConversationStreamEvent): void => {
+    if (reseeding) {
+      buffered.push(event);
+      return;
     }
-    source?.close();
-    source = null;
-  };
-
-  const scheduleReconnect = () => {
-    closeSource();
-    // Drop stale stream run state and re-seed from GET /run — a run may have
-    // finished while disconnected and its `finished` frame is no longer buffered.
-    // Keep `events` + `ready` so the UI keeps the last good transcript.
-    entry.state = {
-      ...entry.state,
-      streamRunActive: null,
-      runResyncKey: entry.state.runResyncKey + 1,
-      pendingText: undefined,
-    };
-    notify(entry);
-    if (disposed || reconnectTimer) return;
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      connect();
-    }, RECONNECT_DELAY_MS);
-  };
-
-  const armWatchdog = () => {
-    if (watchdog) clearTimeout(watchdog);
-    watchdog = setTimeout(scheduleReconnect, HEARTBEAT_TIMEOUT_MS);
-  };
-
-  const onPing = () => {
-    armWatchdog();
-    if (!entry.state.ready) {
-      setState({ ready: true });
+    if (event.type === "run") {
+      setState({ streamRunActive: event.status === "started" });
+      return;
     }
-  };
-
-  const applyFrame = (event: TranscriptEvent): void => {
+    if (event.type === "pending") {
+      setState({ pendingText: event.text });
+      return;
+    }
     entry.state = {
       ...entry.state,
       events: applyTranscriptDelta(entry.state.events, event),
@@ -119,61 +99,83 @@ function openEntry(
     notify(entry);
   };
 
-  function connect() {
-    source = new EventSource(
-      `/api/conversations/${encodeURIComponent(conversationId)}/events`,
-    );
-    armWatchdog();
-    source.addEventListener("open", armWatchdog);
-    source.addEventListener("ping", onPing);
-    source.onmessage = (raw) => {
-      armWatchdog();
-      let data: unknown;
-      try {
-        data = JSON.parse(raw.data as string);
-      } catch (err) {
+  const reseedFromHistory = (): void => {
+    // Keep the last good transcript painted while history reloads.
+    const generation = ++reseedGeneration;
+    reseeding = true;
+    buffered.length = 0;
+    entry.state = {
+      ...entry.state,
+      streamRunActive: null,
+      runResyncKey: entry.state.runResyncKey + 1,
+      pendingText: undefined,
+    };
+    notify(entry);
+
+    void getConversationTranscript(conversationId)
+      .then((page) => {
+        if (disposed || generation !== reseedGeneration) return;
+        entry.state = {
+          ...entry.state,
+          events: page.events,
+          ready: true,
+        };
+        holdTopicSeq(topic, page.latestSeq);
+        const queued = buffered.splice(0, buffered.length);
+        reseeding = false;
+        notify(entry);
+        for (const event of queued) {
+          applyLiveEvent(event);
+        }
+      })
+      .catch((err) => {
+        if (disposed || generation !== reseedGeneration) return;
+        reseeding = false;
+        buffered.length = 0;
         if (import.meta.env.DEV) {
           console.warn(
-            "ignoring malformed conversation event:",
-            raw.data,
+            "conversation reset reseed failed:",
+            conversationId,
             err,
           );
         }
-        return;
-      }
-      const parsed = parseConversationFrame(data);
-      if (!parsed.ok) {
-        if (import.meta.env.DEV) {
-          console.warn(
-            "ignoring malformed conversation event:",
-            raw.data,
-            parsed.message,
-          );
-        }
-        return;
-      }
-      if (parsed.event.type === "run") {
-        setState({ streamRunActive: parsed.event.status === "started" });
-        return;
-      }
-      if (parsed.event.type === "pending") {
-        setState({ pendingText: parsed.event.text });
-        return;
-      }
-      applyFrame(parsed.event);
-    };
-    source.onerror = scheduleReconnect;
-  }
+      });
+  };
 
-  connect();
+  const onTopicMessage = (message: TopicMessage): void => {
+    if (disposed) return;
+    if (message.type === "reset") {
+      reseedFromHistory();
+      return;
+    }
+    const parsed = parseConversationFrame(message.event);
+    if (!parsed.ok) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          "ignoring malformed conversation event:",
+          message.event,
+          parsed.message,
+        );
+      }
+      return;
+    }
+    applyLiveEvent(parsed.event);
+  };
+
+  unsubscribeTopic = subscribeTopic(
+    topic,
+    onTopicMessage,
+    seed.latestSeq > 0 ? seed.latestSeq : undefined,
+  );
+
   return entry;
 }
 
 /**
- * Subscribe to a conversation's SSE stream. The first subscriber for an id
- * opens the connection (after history was loaded via react-query); later
- * subscribers attach to the same stream and immediately receive the current
- * folded state; the last unsubscribe closes it.
+ * Subscribe to a conversation's live topic. The first subscriber for an id
+ * opens the shared transport subscription (after history was loaded via
+ * react-query); later subscribers attach to the same stream and immediately
+ * receive the current folded state; the last unsubscribe releases it.
  */
 export function subscribeConversation(
   conversationId: string,
@@ -196,7 +198,7 @@ export function subscribeConversation(
   };
 }
 
-/** Tear down every live entry — for tests that install a fake `EventSource`. */
+/** Tear down every live entry — for tests that install a fake transport. */
 export function resetConversationEventsRegistryForTests(): void {
   for (const entry of entries.values()) {
     entry.dispose();

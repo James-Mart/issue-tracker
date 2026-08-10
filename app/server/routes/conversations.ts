@@ -4,10 +4,6 @@ import {
   type AgentSessions,
 } from "../services/agent-sessions.js";
 import {
-  getFramesSince,
-  subscribeFrames,
-} from "../services/conversation-stream.js";
-import {
   createConversation,
   deleteConversation,
   listConversations,
@@ -19,30 +15,11 @@ import {
 import { requireProjectWorkspace } from "../services/project-workspace.js";
 import type {
   ConversationActiveRun,
-  ConversationFrameInput,
   ConversationMetaPatch,
 } from "../schemas.js";
 
 const DEFAULT_TITLE = "New conversation";
 const DEFAULT_MODEL = "auto";
-const HEARTBEAT_MS = 10_000;
-const HEARTBEAT_PAYLOAD = "event: ping\ndata: {}\n\n";
-const RESET_REQUIRED_PAYLOAD = "event: resetRequired\ndata: {}\n\n";
-
-function sendSse(res: Response, payload: string): boolean {
-  if (res.writableEnded) return false;
-  try {
-    res.write(payload);
-    return true;
-  } catch (err) {
-    console.error("dropping unwritable conversation SSE client:", err);
-    return false;
-  }
-}
-
-function sseLiveDataFrame(event: ConversationFrameInput): string {
-  return `data: ${JSON.stringify({ ...event, at: new Date().toISOString() })}\n\n`;
-}
 
 function parseSinceSeqQuery(raw: unknown): number | { error: string } {
   if (raw === undefined) return 0;
@@ -223,48 +200,6 @@ export function createConversationsRouter(
       const latestSeq = transcript.at(-1)?.seq ?? 0;
       const events = transcript.filter((event) => (event.seq ?? 0) > sinceSeq);
       res.json({ events, latestSeq });
-    }),
-  );
-
-  router.get(
-    "/:id/events",
-    asyncRoute(async (req, res) => {
-      const { meta, transcript } = readConversation(req.params.id);
-
-      res.set({
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
-        "X-Accel-Buffering": "no",
-      });
-      res.flushHeaders();
-
-      // History is served by GET /transcript; the stream carries deltas only.
-      const sinceSeq = transcript.at(-1)?.seq ?? 0;
-      const catchup = getFramesSince(meta.id, sinceSeq);
-      if (catchup.resetRequired) {
-        if (!sendSse(res, RESET_REQUIRED_PAYLOAD)) return;
-      } else {
-        for (const frame of catchup.frames) {
-          if (!sendSse(res, sseLiveDataFrame(frame.event))) return;
-        }
-      }
-
-      const unsubscribe = subscribeFrames(meta.id, (frame) => {
-        sendSse(res, sseLiveDataFrame(frame.event));
-      });
-
-      sendSse(res, HEARTBEAT_PAYLOAD);
-      const heartbeat = setInterval(
-        () => sendSse(res, HEARTBEAT_PAYLOAD),
-        HEARTBEAT_MS,
-      );
-
-      req.on("close", () => {
-        clearInterval(heartbeat);
-        unsubscribe();
-        res.end();
-      });
     }),
   );
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { issueIdFromPath, scopeFromPath } from "./events.js";
+import { issueIdFromPath, scopeFromPath } from "./issue-events.js";
 
 describe("issueIdFromPath", () => {
   it("derives the id from a file inside an issue dir", () => {
