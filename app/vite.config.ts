@@ -20,7 +20,10 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: ["issues.martfamily.cc"],
     proxy: {
-      "/api": apiProxyTarget,
+      "/api": {
+        target: apiProxyTarget,
+        ws: true,
+      },
     },
   },
   test: {
