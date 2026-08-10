@@ -44,6 +44,7 @@
     "lucide-react": "^1.14.0",
     "mime": "^1.6.0",
     "multer": "^2.2.0",
+    "node": "^22.22.1",
     "react-error-boundary": "^6.1.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.1",

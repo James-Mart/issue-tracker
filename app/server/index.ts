@@ -1,10 +1,22 @@
-import { createApp } from "./app.js";
-import { refreshAgentModelSlugsFromSdk } from "./agent-model-slugs-sync.js";
-import { listenPort } from "./config.js";
-import { agentSessions } from "./services/agent-sessions.js";
-import { validateHookRegistration } from "./services/hook-registration.js";
-import { installHttp2Diagnostics } from "./services/http2-diagnostics.js";
-import { validateRoleBodies } from "./services/role-bodies.js";
+import { assertSupportedNodeRuntime } from "./node-runtime.js";
+
+// Gate before any other server module loads — static imports would pull in
+// `@cursor/sdk` (via agent-sessions) and can native-crash on Node < 22.13.
+assertSupportedNodeRuntime();
+
+const { createApp } = await import("./app.js");
+const { refreshAgentModelSlugsFromSdk } = await import(
+  "./agent-model-slugs-sync.js"
+);
+const { listenPort } = await import("./config.js");
+const { agentSessions } = await import("./services/agent-sessions.js");
+const { validateHookRegistration } = await import(
+  "./services/hook-registration.js"
+);
+const { installHttp2Diagnostics } = await import(
+  "./services/http2-diagnostics.js"
+);
+const { validateRoleBodies } = await import("./services/role-bodies.js");
 
 // Before anything can open an agent stream, so the patch lands first.
 await installHttp2Diagnostics();

@@ -42,6 +42,11 @@ selects one Project and scopes the tree and Ready view to it.
 cd app && npm install && npm run dev
 ```
 
+The app vendors Node 22.22.1 via the `node` package so `@cursor/sdk` can run
+even when the host Node is older. Prefer `npm run dev` / `npm run serve` /
+`npm start` from `app/` (those put `node_modules/.bin` first on `PATH`);
+starting the server with a system Node below 22.13 exits immediately.
+
 - Frontend (Vite): http://localhost:8060 by default (`VITE_DEV_PORT` overrides)
 - Backend (Express API + SSE): http://localhost:8061 by default (`PORT` overrides)
 - Vite proxies `/api` to `VITE_API_PROXY_TARGET` (default
