@@ -4,7 +4,7 @@ import { assertSupportedNodeRuntime } from "./node-runtime.js";
 // `@cursor/sdk` (via agent-sessions) and can native-crash on Node < 22.13.
 assertSupportedNodeRuntime();
 
-const { createApp } = await import("./app.js");
+const { attachMultiplexedWebSocket, createApp } = await import("./app.js");
 const { refreshAgentModelSlugsFromSdk } = await import(
   "./agent-model-slugs-sync.js"
 );
@@ -33,6 +33,7 @@ const server = app.listen(listenPort, () => {
     `issue-tracker server listening on http://localhost:${listenPort}`,
   );
 });
+attachMultiplexedWebSocket(server);
 
 let shuttingDown = false;
 

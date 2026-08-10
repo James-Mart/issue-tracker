@@ -1,14 +1,15 @@
 import { EventEmitter } from "events";
 import { maxSeqFromTranscriptFile } from "./conversation-transcript-seq.js";
-import type { ConversationFrameInput } from "../schemas.js";
+import type { ConversationFrameInput, IssueEvent } from "../schemas.js";
 
 /**
- * One live frame on the in-process subscriber tap. Carries a normalized
- * transcript step or live-only run signalling; `persist` distinguishes
+ * One live frame on the in-process subscriber tap. Conversation topics carry
+ * a normalized transcript step or live-only run signalling; the `issues`
+ * topic carries filesystem watcher payloads. `persist` distinguishes
  * incremental deltas from finalized events that also land on disk.
  */
 export type ConversationFrame = {
-  event: ConversationFrameInput;
+  event: (ConversationFrameInput | IssueEvent) & { seq?: number };
   persist: boolean;
 };
 

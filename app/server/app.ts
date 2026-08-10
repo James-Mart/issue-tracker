@@ -16,6 +16,12 @@ import {
   agentSessions,
   type AgentSessions,
 } from "./services/agent-sessions.js";
+import {
+  attachMultiplexedWebSocket,
+  getConnectionDiagnostics,
+} from "./services/multiplexed-ws.js";
+
+export { attachMultiplexedWebSocket };
 
 export function requestLogger(
   req: Request,
@@ -61,6 +67,10 @@ export function createApp(sessions: AgentSessions = agentSessions): Express {
   app.use("/api/conversations", createConversationsRouter(sessions));
   app.use("/api/events", eventsRouter);
   app.use("/api/agent-models", agentModelsRouter);
+
+  app.get("/api/diagnostics/connections", (_req, res) => {
+    res.json(getConnectionDiagnostics());
+  });
 
   if (serveStatic) {
     app.get("*", (_req, res) => {
