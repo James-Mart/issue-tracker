@@ -17,7 +17,7 @@ export type ConversationFrameListener = (frame: ConversationFrame) => void;
 
 const FRAME_EVENT = "frame";
 
-/** Max frames retained per conversation for late SSE subscribers. */
+/** Max frames retained per stream key for late topic subscribers. */
 export const CATCHUP_BUFFER_MAX_FRAMES = 256;
 
 // In-process per-conversation subscriber registry. An emitter exists only while

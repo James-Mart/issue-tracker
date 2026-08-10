@@ -9,7 +9,6 @@ import { distDir, hasBuiltClient, isProdEnv } from "./config.js";
 import { errorHandler } from "./errors.js";
 import { agentModelsRouter } from "./routes/agent-models.js";
 import { createConversationsRouter } from "./routes/conversations.js";
-import { eventsRouter } from "./routes/events.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { projectsRouter } from "./routes/projects.js";
 import {
@@ -65,9 +64,7 @@ export function createApp(sessions: AgentSessions = agentSessions): Express {
   app.use("/api/issues", createIssuesRouter(sessions));
   app.use("/api/projects", projectsRouter);
   app.use("/api/conversations", createConversationsRouter(sessions));
-  app.use("/api/events", eventsRouter);
   app.use("/api/agent-models", agentModelsRouter);
-
   app.get("/api/diagnostics/connections", (_req, res) => {
     res.json(getConnectionDiagnostics());
   });

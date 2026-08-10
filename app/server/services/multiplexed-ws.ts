@@ -5,6 +5,7 @@ import {
   subscribeFrames,
   type ConversationFrame,
 } from "./conversation-stream.js";
+import { ISSUES_TOPIC, startIssueEventsWatcher } from "./issue-events.js";
 
 export type ClientToServerMessage =
   | { type: "subscribe"; topic: string; sinceSeq?: number }
@@ -73,6 +74,7 @@ function subscribeTopic(
 ): void {
   const key = streamKeyForTopic(topic);
   if (key === null) return;
+  if (key === ISSUES_TOPIC) startIssueEventsWatcher();
 
   unsubscribeTopic(conn, topic);
 

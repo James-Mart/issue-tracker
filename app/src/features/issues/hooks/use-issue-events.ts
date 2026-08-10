@@ -1,46 +1,37 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { IssueEvent } from "@server/schemas";
+import {
+  subscribeTopic,
+  type TopicMessage,
+} from "@/lib/ws/transport";
 import { issuesKeys } from "../api/keys";
 
-const RECONNECT_DELAY_MS = 2_000;
-// The server sends a `ping` every 10s; if none arrives within this window the
-// connection is treated as dead (e.g. a dev-proxy zombie after a backend
-// restart, which never fires an `error`) and forcibly reconnected.
-const HEARTBEAT_TIMEOUT_MS = 25_000;
-// Cascade writes (e.g. archived) emit one SSE event per issue.json. Coalesce
+// Cascade writes (e.g. archived) emit one event per issue.json. Coalesce
 // list refetches so a deep subtree does not slam the list query N times.
 const LIST_INVALIDATE_DEBOUNCE_MS = 50;
+const ISSUES_TOPIC = "issues";
 
-function parseEvent(data: string): IssueEvent | null {
-  try {
-    const parsed = JSON.parse(data) as Partial<IssueEvent>;
-    if (!parsed.id || !parsed.type) return null;
-    return {
-      type: parsed.type,
-      id: parsed.id,
-      scope:
-        parsed.scope === "comments"
-          ? "comments"
-          : parsed.scope === "attachments"
-            ? "attachments"
-            : "issue",
-    };
-  } catch (err) {
-    if (import.meta.env.DEV) {
-      console.warn("ignoring malformed issue event:", data, err);
-    }
-    return null;
-  }
+function parseEvent(data: unknown): IssueEvent | null {
+  if (typeof data !== "object" || data === null) return null;
+  const parsed = data as Partial<IssueEvent>;
+  if (!parsed.id || !parsed.type) return null;
+  return {
+    type: parsed.type,
+    id: parsed.id,
+    scope:
+      parsed.scope === "comments"
+        ? "comments"
+        : parsed.scope === "attachments"
+          ? "attachments"
+          : "issue",
+  };
 }
 
 export function useIssueEvents(): void {
   const qc = useQueryClient();
 
   useEffect(() => {
-    let source: EventSource | null = null;
-    let watchdog: ReturnType<typeof setTimeout> | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let listInvalidateTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 
@@ -75,52 +66,22 @@ export function useIssueEvents(): void {
       }
     };
 
-    const closeSource = () => {
-      if (watchdog) {
-        clearTimeout(watchdog);
-        watchdog = null;
-      }
-      source?.close();
-      source = null;
-    };
-
-    const scheduleReconnect = () => {
-      closeSource();
-      if (disposed || reconnectTimer) return;
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        connect();
-      }, RECONNECT_DELAY_MS);
-    };
-
-    const armWatchdog = () => {
-      if (watchdog) clearTimeout(watchdog);
-      watchdog = setTimeout(scheduleReconnect, HEARTBEAT_TIMEOUT_MS);
-    };
-
-    function connect() {
-      source = new EventSource("/api/events");
-      armWatchdog();
-      source.addEventListener("open", () => {
-        armWatchdog();
+    const onMessage = (message: TopicMessage) => {
+      if (disposed) return;
+      if (message.type === "reset") {
         resync();
-      });
-      source.addEventListener("ping", armWatchdog);
-      source.addEventListener("issue", (raw) => {
-        armWatchdog();
-        const event = parseEvent((raw as MessageEvent).data);
-        if (event) applyEvent(event);
-      });
-      source.onerror = scheduleReconnect;
-    }
+        return;
+      }
+      const event = parseEvent(message.event);
+      if (event) applyEvent(event);
+    };
 
-    connect();
+    const unsubscribe = subscribeTopic(ISSUES_TOPIC, onMessage);
 
     return () => {
       disposed = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (listInvalidateTimer) clearTimeout(listInvalidateTimer);
-      closeSource();
+      unsubscribe();
     };
   }, [qc]);
 }
