@@ -5,6 +5,7 @@ import {
   type TranscriptEvent,
 } from "@server/schemas";
 import { agentsKeys } from "../api/keys";
+import { patchChannelSessionActiveRunInCache } from "@/features/issues/lib/retire-channel-live-session";
 
 const RECONNECT_DELAY_MS = 2_000;
 // The server sends a `ping` every 10s; if none arrives within this window the
@@ -249,10 +250,12 @@ export function useConversationEvents(
           return;
         }
         if (parsed.event.type === "run") {
-          setStreamRunActive(parsed.event.status === "started");
+          const active = parsed.event.status === "started";
+          setStreamRunActive(active);
           // SSE covers only the open conversation; refresh the roster so its
           // `activeRun` flag tracks this thread's lifecycle immediately.
           void qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
+          patchChannelSessionActiveRunInCache(qc, id, active);
           return;
         }
         if (parsed.event.type === "pending") {

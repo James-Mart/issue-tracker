@@ -429,6 +429,60 @@ describe("channel sessions HTTP API", () => {
     ]);
   });
 
+  it("allows a new implementing session once the holder run is cancelled", async () => {
+    writeIssue("other-epic", {
+      kind: "epic",
+      title: "Other epic",
+      partOf: "platform",
+      status: "open",
+      order: 1,
+      archived: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    await startApp({ hold: true });
+
+    const first = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "composer-2.5",
+          title: "Holder",
+          message: "start implementing",
+        }),
+      },
+    );
+    expect(first.status).toBe(201);
+    const { id: holderId } = await first.json();
+    expect(sessions!.getActiveRun(holderId)).toBeTruthy();
+
+    const cancelled = await fetch(
+      `${baseUrl}/api/conversations/${holderId}/cancel`,
+      { method: "POST" },
+    );
+    expect(cancelled.status).toBe(200);
+    expect(sessions!.getActiveRun(holderId)).toBeUndefined();
+
+    const listed = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
+    ).then((r) => r.json());
+    expect(listed).toEqual([
+      expect.objectContaining({ id: holderId, archived: false, activeRun: false }),
+    ]);
+
+    const second = await fetch(
+      `${baseUrl}/api/issues/other-epic/channels/implementing/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Next" }),
+      },
+    );
+    expect(second.status).toBe(201);
+  });
+
   it("allows a new implementing session once the holder is archived", async () => {
     writeIssue("other-epic", {
       kind: "epic",

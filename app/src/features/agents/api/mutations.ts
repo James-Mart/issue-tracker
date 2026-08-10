@@ -18,6 +18,7 @@ import {
   type UpdateConversationBody,
 } from "./client";
 import { agentsKeys } from "./keys";
+import { patchChannelSessionActiveRunInCache } from "@/features/issues/lib/retire-channel-live-session";
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : "Request failed";
@@ -59,6 +60,7 @@ export function useDeleteConversation() {
 }
 
 export function useSendConversationMessage() {
+  const qc = useQueryClient();
   return useMutation<
     SendConversationMessageResult,
     Error,
@@ -66,17 +68,27 @@ export function useSendConversationMessage() {
   >({
     mutationFn: ({ id, body }) => sendConversationMessage(id, body),
     onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (result, { id }) => {
+      if (result.runId) {
+        patchChannelSessionActiveRunInCache(qc, id, true);
+      }
+    },
   });
 }
 
 export function useCancelConversationRun() {
+  const qc = useQueryClient();
   return useMutation<void, Error, string>({
     mutationFn: cancelConversationRun,
     onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (_data, conversationId) => {
+      patchChannelSessionActiveRunInCache(qc, conversationId, false);
+    },
   });
 }
 
 export function useInterruptConversationRun() {
+  const qc = useQueryClient();
   return useMutation<
     InterruptConversationRunResult,
     Error,
@@ -84,6 +96,9 @@ export function useInterruptConversationRun() {
   >({
     mutationFn: ({ id, body }) => interruptConversationRun(id, body),
     onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (_result, { id }) => {
+      patchChannelSessionActiveRunInCache(qc, id, true);
+    },
   });
 }
 
