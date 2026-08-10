@@ -15,6 +15,7 @@ import { defaultChannelSession } from "../api/channel-sessions";
 import { useChannelSessionsQuery } from "../api/queries";
 import { isImplementingWorkRoot, type ImplementingLockRefusal } from "../lib/implementing-launch";
 import { ChannelSessionSwitcher } from "./channel-session-switcher";
+import { ChannelRetroControl } from "./channel-retro-control";
 import {
   ImplementingChannelEmptyState,
   ImplementingLockRefusalState,
@@ -185,6 +186,22 @@ export function ChannelTranscriptPanel({
       />
     ) : null;
   const channelNewRun = planningNewRun ?? implementingNewRun;
+  const retroControl =
+    planningIdea || implementingWorkRoot ? (
+      <ChannelRetroControl
+        channel={channel}
+        session={selectedSession}
+        issue={planningIdea ?? implementingWorkRoot!}
+        parentKind={parentKind}
+      />
+    ) : null;
+  const channelHeaderActions =
+    retroControl || channelNewRun ? (
+      <>
+        {retroControl}
+        {channelNewRun}
+      </>
+    ) : null;
 
   return (
     <div
@@ -198,14 +215,14 @@ export function ChannelTranscriptPanel({
           sessions={sessions}
           selectedId={selectedSession.id}
           onSelectedIdChange={setSelectedId}
-          trailing={channelNewRun}
+          trailing={channelHeaderActions}
         />
-      ) : channelNewRun ? (
+      ) : channelHeaderActions ? (
         <div
           className="flex min-w-0 items-center justify-end gap-2 border-b border-border px-4 py-2"
           data-testid="channel-panel-header"
         >
-          {channelNewRun}
+          {channelHeaderActions}
         </div>
       ) : null}
       <ConversationThread

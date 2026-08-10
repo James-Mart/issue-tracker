@@ -7,6 +7,7 @@ import type {
   IssueDetail,
   IssuesResponse,
 } from "@server/schemas";
+import type { PlanningWorkRoot } from "@server/services/planning-work-root";
 import type { Attachment } from "@server/services/attachments";
 import { ApiError } from "@/lib/api/errors";
 import { attachmentsApiPath } from "../lib/attachments";
@@ -56,6 +57,19 @@ export function useAttachmentsQuery(
 
 /** Poll so closed-tab runs clear without an open SSE subscription. */
 const CHANNEL_SESSIONS_REFETCH_INTERVAL_MS = 15_000;
+
+export function usePlanningWorkRootQuery(
+  ideaId: string | undefined,
+): UseQueryResult<{ workRoot: PlanningWorkRoot | null }, Error> {
+  return useQuery({
+    queryKey: issuesKeys.planningWorkRoot(ideaId ?? ""),
+    queryFn: () =>
+      request<{ workRoot: PlanningWorkRoot | null }>(
+        `/api/issues/${ideaId}/planning-work-root`,
+      ),
+    enabled: Boolean(ideaId),
+  });
+}
 
 export function useChannelSessionsQuery(
   issueId: string,

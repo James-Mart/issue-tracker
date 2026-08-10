@@ -114,6 +114,14 @@ vi.mock("./implementing-launch-control", () => ({
   ),
 }));
 
+vi.mock("./channel-retro-control", () => ({
+  ChannelRetroControl: () => (
+    <button type="button" data-testid="channel-retro">
+      Retro
+    </button>
+  ),
+}));
+
 vi.mock("./channel-session-switcher", () => ({
   ChannelSessionSwitcher: ({
     sessions,
@@ -331,6 +339,9 @@ describe("ChannelTranscriptPanel", () => {
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="planning-new-run"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="channel-retro"]'),
     ).toBeTruthy();
   });
 

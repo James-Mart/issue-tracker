@@ -37,6 +37,7 @@ import {
 } from "../services/conversations.js";
 import { moveStory } from "../services/move-story.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
+import { findPlanningWorkRoot } from "../services/planning-work-root.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
 import { ancestorChain } from "../services/subtree.js";
 
@@ -89,6 +90,22 @@ export function createIssuesRouter(
     "/:id/comments",
     asyncRoute((req, res) => {
       res.json(readComments(req.params.id));
+    }),
+  );
+
+  router.get(
+    "/:id/planning-work-root",
+    asyncRoute((req, res) => {
+      const issueId = req.params.id;
+      const issue = readIssueOrThrow(issueId);
+      if (issue.kind !== "idea") {
+        throw new IssueError(
+          "validation",
+          "planning-work-root is only defined for Ideas",
+        );
+      }
+      const { issues } = readAll();
+      res.json({ workRoot: findPlanningWorkRoot(issueId, issues) });
     }),
   );
 
