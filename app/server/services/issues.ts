@@ -369,6 +369,9 @@ export function create(input: CreateInput): Promise<IssueRecord> {
       draft.partOf = input.partOf;
     }
     if (input.kind === "epic") draft.blockedBy = [];
+    if (input.kind === "idea" && input.stakeholder) {
+      draft.stakeholder = input.stakeholder;
+    }
     if (input.kind === "story") {
       draft.merged = false;
       if (input.stackedOn) draft.stackedOn = input.stackedOn;

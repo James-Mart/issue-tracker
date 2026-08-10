@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { coerceBoolean, coerceEnum, coerceJson } from "./cli-coerce.js";
 import { readCliFileArg } from "./cli-io.js";
+import { assertAllowedAgentModelSlug } from "./server/agent-model-slugs.js";
 import {
   assertStoryCanSetMergeBase,
   isClearableSetField,
@@ -513,6 +514,9 @@ export function coerceSetPatch(
 
   switch (spec.type) {
     case "string":
+      return { [storeKey]: raw } as IssuePatch;
+    case "agentModelSlug":
+      assertAllowedAgentModelSlug(raw);
       return { [storeKey]: raw } as IssuePatch;
     case "commitSha":
       validateFullCommitSha(raw);

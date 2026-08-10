@@ -48,11 +48,14 @@ Every issue has a `kind`, one of:
   Project (required). Prefer an Epic when the plan needs sibling root Stories,
   stacking, or Epic `blockedBy`.
 - **Idea** — a Project-level capture item (title, description, attachments,
-  archive, and optional `labels` assignments from the Project catalog — see
-  [Project labels](#project-labels)) that agents and humans mine later into
-  real work. Leaf kind: no children, no assignee/needs-attention, no status or
-  git fields. Supports comments and kind-scoped CLI `comment` (same path as other
-  kinds). Is `partOf` a Project (required). Epics, Ideas, and
+  archive, optional `stakeholder` model slug, and optional `labels` assignments
+  from the Project catalog — see [Project labels](#project-labels)) that agents
+  and humans mine later into real work. Leaf kind: no children, no
+  assignee/needs-attention, no status or git fields. `stakeholder` picks who
+  drives planning in the Planning channel: a model slug for auto-plan, or unset
+  for manual planning where the human drives the grill. Supports comments and
+  kind-scoped CLI `comment` (same path as other kinds). Is `partOf` a Project
+  (required). Epics, Ideas, and
   *root* project-level Stories share one Project-child sibling `order` space.
   There is no separate Idea Board kind — the "board" is the Project's board
   children in the tree/CLI/UI.
@@ -793,6 +796,7 @@ Idea — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Project id (required) |
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
+| `stakeholder` | string? | optional agent model slug; unset means manual planning — the human drives the grill |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
 No assignee, needs-attention, status, git fields, or comments. Leaf under a Project;

@@ -413,6 +413,23 @@ describe("parseIssue - valid per kind", () => {
       expect("assignee" in result.issue).toBe(false);
       expect("needsAttention" in result.issue).toBe(false);
       expect("attentionReason" in result.issue).toBe(false);
+      expect(result.issue.stakeholder).toBeUndefined();
+    }
+  });
+
+  it("parses an idea with a valid stakeholder slug", () => {
+    const result = parseIssue({ ...idea, stakeholder: "composer-2.5" });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.issue.kind === "idea") {
+      expect(result.issue.stakeholder).toBe("composer-2.5");
+    }
+  });
+
+  it("rejects an idea with an unknown stakeholder slug", () => {
+    const result = parseIssue({ ...idea, stakeholder: "not-a-model" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).toContain("unknown agent model slug");
     }
   });
 

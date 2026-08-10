@@ -137,6 +137,22 @@ describe("coerceSetPatch", () => {
       opts: { clear: true },
       patch: { needsAttention: false, attentionReason: null },
     },
+    {
+      name: "stakeholder slug",
+      kind: "idea" as const,
+      field: "stakeholder",
+      value: "composer-2.5",
+      opts: {},
+      patch: { stakeholder: "composer-2.5" },
+    },
+    {
+      name: "stakeholder --clear",
+      kind: "idea" as const,
+      field: "stakeholder",
+      value: undefined,
+      opts: { clear: true },
+      patch: { stakeholder: null },
+    },
   ])("$name", ({ kind, field, value, opts, patch }) => {
     expect(coerceSetPatch(kind, field, value, opts)).toEqual(patch);
   });
@@ -166,6 +182,12 @@ describe("coerceSetPatch", () => {
     expect(
       coerceSetPatch("project", "description", undefined, { file: path }),
     ).toEqual({ description: "from file\n" });
+  });
+
+  it("refuses an unknown stakeholder slug", () => {
+    expect(() =>
+      coerceSetPatch("idea", "stakeholder", "not-a-model", {}),
+    ).toThrow(/unknown agent model slug/);
   });
 
   it.each([

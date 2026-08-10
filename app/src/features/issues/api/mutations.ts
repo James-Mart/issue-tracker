@@ -3,7 +3,13 @@ import { toast } from "sonner";
 import { request } from "@/lib/api/client";
 import { deleteConversation } from "@/features/agents/api/client";
 import { agentsKeys } from "@/features/agents/api/keys";
+import {
+  createChannelSession,
+  type CreateChannelSessionBody,
+  type CreateChannelSessionResult,
+} from "./channel-sessions";
 import type {
+  ChannelSessionListItem,
   Comment,
   CommentInput,
   ConversationChannel,
@@ -162,6 +168,50 @@ export function useReorderBoardChild() {
       }),
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () => qc.invalidateQueries({ queryKey: issuesKeys.list() }),
+  });
+}
+
+export function useCreateChannelSession(
+  issueId: string,
+  channel: ConversationChannel,
+) {
+  const qc = useQueryClient();
+  return useMutation<
+    CreateChannelSessionResult,
+    Error,
+    CreateChannelSessionBody
+  >({
+    mutationFn: (body) => createChannelSession(issueId, channel, body),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data, variables) => {
+      const now = new Date().toISOString();
+      const created: ChannelSessionListItem = {
+        id: data.id,
+        title: variables.title,
+        model: variables.model,
+        createdAt: now,
+        updatedAt: now,
+        archived: false,
+        activeRun: true,
+      };
+      qc.setQueryData<ChannelSessionListItem[]>(
+        issuesKeys.channelSessions(issueId, channel),
+        (prev) => {
+          const rest = (prev ?? [])
+            .filter((session) => session.id !== data.id)
+            .map((session) =>
+              session.archived ? session : { ...session, archived: true },
+            );
+          return [created, ...rest];
+        },
+      );
+    },
+    onSettled: () => {
+      qc.invalidateQueries({
+        queryKey: issuesKeys.channelSessions(issueId, channel),
+      });
+      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
+    },
   });
 }
 

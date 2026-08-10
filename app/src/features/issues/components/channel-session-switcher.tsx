@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import type { ChannelSessionListItem, ConversationChannel } from "@server/schemas";
 import { Button } from "@/components/ui/button";
@@ -29,12 +29,15 @@ export function ChannelSessionSwitcher({
   sessions,
   selectedId,
   onSelectedIdChange,
+  trailing,
 }: {
   issueId: string;
   channel: ConversationChannel;
   sessions: readonly ChannelSessionListItem[];
   selectedId: string;
   onSelectedIdChange: (id: string) => void;
+  /** Extra controls aligned to the header row (e.g. New run). */
+  trailing?: ReactNode;
 }) {
   const ordered = orderChannelSessionsForSwitcher(sessions);
   const selected = sessions.find((session) => session.id === selectedId);
@@ -90,6 +93,7 @@ export function ChannelSessionSwitcher({
       >
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
+      {trailing}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent data-testid="delete-channel-session-dialog">
           <DialogHeader>

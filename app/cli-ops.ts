@@ -84,6 +84,9 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
     if (detail.specReview) lines.push(`specReview: ${detail.specReview}`);
     if (detail.needsRebase) lines.push(`needsRebase: ${detail.needsRebase}`);
   }
+  if (detail.kind === "idea" && detail.stakeholder) {
+    lines.push(`stakeholder: ${detail.stakeholder}`);
+  }
   if (detail.kind === "task") {
     lines.push(`status: ${detail.status}`);
     if (detail.qa) lines.push(`qa: ${detail.qa}`);

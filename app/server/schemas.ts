@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAllowedAgentModelSlug } from "./agent-model-slugs.js";
 import type { ClearableKey, NullClearableObjectKey } from "./fields.js";
 import { SLUG_RE } from "./slug.js";
 
@@ -195,6 +196,19 @@ export const epicSchema = z.object({
   ...timestamps,
 });
 
+const stakeholderField = z
+  .string()
+  .optional()
+  .superRefine((value, ctx) => {
+    if (value !== undefined && !isAllowedAgentModelSlug(value)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `unknown agent model slug "${value}"`,
+        path: ["stakeholder"],
+      });
+    }
+  });
+
 // An Idea is a Project-level capture item: title/description/archive only —
 // no assignee, needs-attention, or work-status fields.
 export const ideaSchema = z.object({
@@ -203,6 +217,7 @@ export const ideaSchema = z.object({
   partOf: nonEmpty,
   title: nonEmpty,
   archived: z.boolean().default(false),
+  stakeholder: stakeholderField,
   labels: assignmentLabelsSchema,
   ...orderField,
   ...timestamps,
@@ -304,7 +319,12 @@ export type CreateInput = Pick<IssueFields, "title"> &
   Partial<
     Pick<
       IssueFields,
-      "partOf" | "assignee" | "stackedOn" | "workspace" | "mergePolicy"
+      | "partOf"
+      | "assignee"
+      | "stackedOn"
+      | "workspace"
+      | "mergePolicy"
+      | "stakeholder"
     >
   > & {
     kind: IssueKind;

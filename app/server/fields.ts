@@ -74,7 +74,7 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
 ] as const;
 
 // Idea has no mergeable runtime keys besides imperative label assignments.
-export const IDEA_RUNTIME_OPTIONAL_KEYS = ["labels"] as const;
+export const IDEA_RUNTIME_OPTIONAL_KEYS = ["labels", "stakeholder"] as const;
 
 // Task mergeable keys that are not imperative-only. Imperative-only keys
 // (e.g. noDiff) live in TASK_IMPERATIVE_ONLY_KEYS and are excluded.
@@ -98,6 +98,7 @@ export type IdeaRuntimeOptionalKey = (typeof IDEA_RUNTIME_OPTIONAL_KEYS)[number]
 
 export const CLEARABLE_KEYS = [
   "assignee",
+  "stakeholder",
   "commitSha",
   "branchName",
   "stackedOn",
@@ -157,7 +158,13 @@ export const FIELD_LABELS = {
   labels: "Labels",
   supportingDocs: "Supporting docs",
   inspirationApps: "Inspiration apps",
+  stakeholder: "Stakeholder",
 } as const;
+
+/** Select value for manual planning — unset on disk. */
+export const MANUAL_STAKEHOLDER_VALUE = "__manual__";
+
+export const MANUAL_STAKEHOLDER_LABEL = "The human drives";
 
 export const MERGE_POLICY_LABELS = {
   merge: "Merge",

@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from "express";
+import { syncAgentModelSlugCatalog } from "../agent-model-slugs.js";
 import { agentSdk, CursorAgentError, type AgentSdk } from "../services/agent-sdk.js";
 
 const asyncRoute =
@@ -14,6 +15,7 @@ export function createAgentModelsRouter(sdk: AgentSdk = agentSdk): Router {
     asyncRoute(async (_req, res) => {
       try {
         const models = await sdk.listModels();
+        syncAgentModelSlugCatalog(models);
         res.json({ models });
       } catch (err) {
         if (err instanceof CursorAgentError) {
