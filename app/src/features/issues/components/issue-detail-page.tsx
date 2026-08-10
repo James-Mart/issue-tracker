@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, MessageSquare, PanelRightClose } from "lucide-react";
+import { Link, useParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import type { IssueDetail, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
 import {
@@ -10,13 +10,8 @@ import {
   ShellState,
 } from "@/app/shell-state";
 import { PageShell } from "@/components/page-shell";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
-import {
-  useCommentsQuery,
-  useIssueDetailQuery,
-  useIssuesQuery,
-} from "../api/queries";
+import { useIssueDetailQuery, useIssuesQuery } from "../api/queries";
 import { useUploadAttachment } from "../api/mutations";
 import {
   useIssueDetailFileUpload,
@@ -25,13 +20,6 @@ import {
 import { kindHasOwnFlow } from "../lib/own-flow";
 import { issueBelongsToProject, issuesById } from "../lib/build-tree";
 import { projectPath } from "../lib/links";
-import {
-  parseChatCompanionPreference,
-  resolveChatCompanionExpanded,
-  showsChatCompanion,
-  writeChatCompanionParam,
-} from "../lib/chat-companion";
-import { isInFlight } from "../lib/derived";
 import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
@@ -39,8 +27,7 @@ import { StoryTaskRail } from "./story-task-rail";
 import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
-import { ChatPanel } from "./chat-panel";
-import { DetailEyebrow } from "./detail-section";
+import { IssueCommentsSection } from "./comments/comments-section";
 import { ProjectDetailTabs } from "./project-detail-tabs";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { supportsAttachments } from "../lib/attachments";
@@ -60,97 +47,6 @@ function OwnFlowSlot({ issue }: { issue: IssueDetail }) {
   );
 }
 
-/** Docked companion for `surfaces-chat`; collapse override as `?chat=`. */
-function CompanionSlot({
-  issueId,
-  attachmentsIssueId,
-  expanded,
-  onExpandedChange,
-}: {
-  issueId: string;
-  attachmentsIssueId?: string;
-  expanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
-}) {
-  return (
-    <aside
-      data-region="companion"
-      data-state={expanded ? "expanded" : "collapsed"}
-      className={cn(
-        "flex shrink-0 flex-col border-l border-border",
-        expanded
-          ? "sticky top-8 h-[calc(100svh-4rem)] w-80 pl-4"
-          : "w-10 items-center pt-1",
-      )}
-    >
-      {expanded ? (
-        <>
-          <div className="flex items-center justify-between gap-2 pb-3">
-            <DetailEyebrow>Chat</DetailEyebrow>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              title="Collapse chat"
-              aria-label="Collapse chat"
-              aria-expanded={true}
-              onClick={() => onExpandedChange(false)}
-            >
-              <PanelRightClose className="h-4 w-4" />
-            </Button>
-          </div>
-          <ChatPanel
-            id={issueId}
-            attachmentsIssueId={attachmentsIssueId}
-          />
-        </>
-      ) : (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          title="Steer this issue"
-          aria-label="Steer this issue"
-          aria-expanded={false}
-          onClick={() => onExpandedChange(true)}
-        >
-          <MessageSquare className="h-4 w-4" />
-        </Button>
-      )}
-    </aside>
-  );
-}
-
-/** Owns chat fetch + `?chat=` companion state; mount only when the companion shows. */
-function IssueDetailCompanion({ issue }: { issue: IssueDetail }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { data: chat } = useCommentsQuery(issue.id);
-  const attach = supportsAttachments(issue.kind);
-  const preference = parseChatCompanionPreference(searchParams.get("chat"));
-  const hasMessages = (chat?.messages.length ?? 0) > 0;
-  const companionExpanded = resolveChatCompanionExpanded(preference, {
-    hasMessages,
-    agentLive: isInFlight(issue),
-  });
-
-  const setCompanionExpanded = (expanded: boolean) => {
-    setSearchParams(
-      (prev) =>
-        writeChatCompanionParam(prev, expanded ? "expanded" : "collapsed"),
-      { replace: true },
-    );
-  };
-
-  return (
-    <CompanionSlot
-      issueId={issue.id}
-      attachmentsIssueId={attach ? issue.id : undefined}
-      expanded={companionExpanded}
-      onExpandedChange={setCompanionExpanded}
-    />
-  );
-}
-
 function IssueDetailBody({
   issue,
   upload,
@@ -161,22 +57,12 @@ function IssueDetailBody({
   catalog: ProjectLabel[];
 }) {
   return (
-    <div className="flex min-h-0 flex-1 gap-4">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-        <div className="shrink-0">
-          <IssueDetailHeader issue={issue} catalog={catalog} />
-        </div>
-
-        <IssueDetailView
-          issue={issue}
-          catalog={catalog}
-          upload={upload}
-        />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+      <div className="shrink-0">
+        <IssueDetailHeader issue={issue} catalog={catalog} />
       </div>
 
-      {showsChatCompanion(issue.kind) ? (
-        <IssueDetailCompanion issue={issue} />
-      ) : null}
+      <IssueDetailView issue={issue} catalog={catalog} upload={upload} />
     </div>
   );
 }
@@ -206,6 +92,7 @@ function IssueDetailView({
       <OwnFlowSlot issue={issue} />
       <IssueAttachmentsSection issue={issue} upload={upload} />
       <IssueDescriptionField issue={issue} upload={upload} />
+      <IssueCommentsSection issue={issue} />
     </>
   );
 }

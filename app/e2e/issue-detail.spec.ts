@@ -3,20 +3,15 @@ import { gotoSeedEpicDetail, gotoSeedStoryDetail } from "./seed-navigation";
 import { snapshotBothThemes } from "./snapshot-both-themes";
 
 test.describe("issue detail", () => {
-  // Sole both-theme key-surface snapshot for the two-region issue detail.
-  test("both-theme two-region key-surface snapshot", async ({
+  // Sole both-theme key-surface snapshot for the single-column issue detail.
+  test("both-theme single-column key-surface snapshot", async ({
     page,
     seededApp,
   }) => {
     const main = await gotoSeedStoryDetail(page, seededApp.baseURL);
 
-    await expect(main.locator('[data-region="companion"]')).toHaveAttribute(
-      "data-state",
-      "collapsed",
-    );
-    await expect(
-      main.getByRole("button", { name: "Steer this issue" }),
-    ).toBeVisible();
+    await expect(main.locator('[data-region="companion"]')).toHaveCount(0);
+    await expect(main.locator('[data-region="comments"]')).toBeVisible();
     await expect(main.getByText("Description")).toBeVisible();
     await expect(main.getByText("Part of")).toBeVisible();
     await expect(main.locator('[data-region="meta-scalars"]')).toBeVisible();

@@ -186,14 +186,12 @@ function OverviewFlowLens({
               actions={
                 <FlowRowActions
                   item={item}
-                  projectId={projectId}
                   task={inFlightTaskOf(item.issue, visible, byId)}
                 />
               }
               touchMenu={
                 <FlowRowTouchMenu
                   item={item}
-                  projectId={projectId}
                   task={inFlightTaskOf(item.issue, visible, byId)}
                 />
               }

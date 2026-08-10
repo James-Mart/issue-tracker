@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TranscriptEvent } from "@server/schemas";
-import { isScrollPinned } from "@/features/issues/components/chat/message-scroller";
+import { isScrollPinned } from "@/components/ui/message-scroller";
 import { ConversationThread } from "./conversation-thread";
 
 const initialEvents: TranscriptEvent[] = [

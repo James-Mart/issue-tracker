@@ -27,7 +27,7 @@ import {
   sumUsageTotals,
   threadRunLabel,
 } from "../lib/thread-status";
-import { MessageScroller } from "@/features/issues/components/chat/message-scroller";
+import { MessageScroller } from "@/components/ui/message-scroller";
 import { transcriptScrollerBottomKey } from "../lib/transcript-scroller";
 import { Composer } from "./composer";
 import { SubagentCard } from "./subagent-card";
