@@ -639,29 +639,46 @@ export type ConversationFrameInput = z.infer<
   typeof conversationFrameInputSchema
 >;
 
-const withTranscriptAt = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
-  schema.merge(z.object({ at: nonEmpty }));
+const frameSeq = z.number().int().nonnegative();
+
+const withStoredTranscriptMeta = <T extends z.ZodRawShape>(
+  schema: z.ZodObject<T>,
+) => schema.merge(z.object({ at: nonEmpty, seq: frameSeq.optional() }));
+
+const withStreamFrameMeta = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
+  schema.merge(z.object({ at: nonEmpty, seq: frameSeq }));
 
 export const transcriptEventSchema = z.discriminatedUnion("type", [
-  withTranscriptAt(promptEventInput),
-  withTranscriptAt(assistantEventInput),
-  withTranscriptAt(thinkingEventInput),
-  withTranscriptAt(toolCallEventInput),
-  withTranscriptAt(taskEventInput),
-  withTranscriptAt(statusEventInput),
-  withTranscriptAt(usageEventInput),
-  withTranscriptAt(requestEventInput),
-  withTranscriptAt(subagentUpdateEventInput),
-  withTranscriptAt(errorEventInput),
+  withStoredTranscriptMeta(promptEventInput),
+  withStoredTranscriptMeta(assistantEventInput),
+  withStoredTranscriptMeta(thinkingEventInput),
+  withStoredTranscriptMeta(toolCallEventInput),
+  withStoredTranscriptMeta(taskEventInput),
+  withStoredTranscriptMeta(statusEventInput),
+  withStoredTranscriptMeta(usageEventInput),
+  withStoredTranscriptMeta(requestEventInput),
+  withStoredTranscriptMeta(subagentUpdateEventInput),
+  withStoredTranscriptMeta(errorEventInput),
 ]);
 
 export type TranscriptEvent = z.infer<typeof transcriptEventSchema>;
 
 /** Wire-format event on the SSE stream (transcript events or live run signalling). */
 export const conversationStreamEventSchema = z.union([
-  transcriptEventSchema,
-  runFrameInput.merge(z.object({ at: nonEmpty })),
-  pendingFrameInput.merge(z.object({ at: nonEmpty })),
+  z.discriminatedUnion("type", [
+    withStreamFrameMeta(promptEventInput),
+    withStreamFrameMeta(assistantEventInput),
+    withStreamFrameMeta(thinkingEventInput),
+    withStreamFrameMeta(toolCallEventInput),
+    withStreamFrameMeta(taskEventInput),
+    withStreamFrameMeta(statusEventInput),
+    withStreamFrameMeta(usageEventInput),
+    withStreamFrameMeta(requestEventInput),
+    withStreamFrameMeta(subagentUpdateEventInput),
+    withStreamFrameMeta(errorEventInput),
+  ]),
+  withStreamFrameMeta(runFrameInput),
+  withStreamFrameMeta(pendingFrameInput),
 ]);
 
 export type ConversationStreamEvent = z.infer<
@@ -687,6 +704,16 @@ export type ConversationDetail = {
   meta: ConversationMeta;
   transcript: TranscriptEvent[];
 };
+
+/** GET /api/conversations/:id/transcript — cacheable history page. */
+export const conversationTranscriptPageSchema = z.object({
+  events: z.array(transcriptEventSchema),
+  latestSeq: frameSeq,
+});
+
+export type ConversationTranscriptPage = z.infer<
+  typeof conversationTranscriptPageSchema
+>;
 
 /** Write-time input: stored shape minus the server-stamped `at`. */
 export const delegationRecordInputSchema = z.object({
@@ -789,6 +816,21 @@ export function parseConversationActiveRun(
   return {
     ok: false,
     message: formatZodError(result.error, "invalid conversation run state"),
+  };
+}
+
+export type ConversationTranscriptPageParseResult =
+  | { ok: true; page: ConversationTranscriptPage }
+  | { ok: false; message: string };
+
+export function parseConversationTranscriptPage(
+  raw: unknown,
+): ConversationTranscriptPageParseResult {
+  const result = conversationTranscriptPageSchema.safeParse(raw);
+  if (result.success) return { ok: true, page: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid conversation transcript"),
   };
 }
 

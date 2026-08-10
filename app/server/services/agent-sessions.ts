@@ -412,8 +412,8 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
             await setPendingMessage(conversationId, pending.text);
             const message = fired.error.message;
             const event = { type: "error" as const, message };
-            await appendEvent(conversationId, event);
             publishFrame(conversationId, { event, persist: true });
+            await appendEvent(conversationId, event);
           }
         }
       }

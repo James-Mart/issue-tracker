@@ -1,4 +1,5 @@
 import { EventEmitter } from "events";
+import { maxSeqFromTranscriptFile } from "./conversation-transcript-seq.js";
 import type { ConversationFrameInput } from "../schemas.js";
 
 /**
@@ -15,16 +16,55 @@ export type ConversationFrameListener = (frame: ConversationFrame) => void;
 
 const FRAME_EVENT = "frame";
 
-/** Max unpersisted frames retained per conversation for late SSE subscribers. */
+/** Max frames retained per conversation for late SSE subscribers. */
 export const CATCHUP_BUFFER_MAX_FRAMES = 256;
 
 // In-process per-conversation subscriber registry. An emitter exists only while
 // something is subscribed.
 const emitters = new Map<string, EventEmitter>();
 
-// Unpersisted frames since the last persisted append — replayed to subscribers
-// that connect mid-run before live delivery begins.
+// Bounded window of recent published frames, indexed by seq — survives
+// persisted appends so reconnecting clients can be served what they missed.
 const catchupBuffers = new Map<string, ConversationFrame[]>();
+
+export type FramesSinceResult =
+  | { resetRequired: true }
+  | { resetRequired: false; frames: readonly ConversationFrame[] };
+
+/** Highest seq assigned or read for each conversation this process. */
+const seqByConversation = new Map<string, number>();
+const seqInitialized = new Set<string>();
+
+function ensureSeqInitialized(conversationId: string): void {
+  if (seqInitialized.has(conversationId)) return;
+  seqInitialized.add(conversationId);
+  seqByConversation.set(
+    conversationId,
+    maxSeqFromTranscriptFile(conversationId),
+  );
+}
+
+/**
+ * Next monotonic seq for a conversation. When `existing` is set — e.g. a frame
+ * already stamped by {@link publishFrame} — reuse it and advance the counter
+ * floor without consuming another number.
+ */
+export function nextConversationSeq(
+  conversationId: string,
+  existing?: number,
+): number {
+  ensureSeqInitialized(conversationId);
+  if (existing !== undefined) {
+    const floor = seqByConversation.get(conversationId) ?? 0;
+    if (existing > floor) {
+      seqByConversation.set(conversationId, existing);
+    }
+    return existing;
+  }
+  const next = (seqByConversation.get(conversationId) ?? 0) + 1;
+  seqByConversation.set(conversationId, next);
+  return next;
+}
 
 function emitterFor(conversationId: string): EventEmitter {
   let emitter = emitters.get(conversationId);
@@ -44,10 +84,6 @@ function emitterFor(conversationId: string): EventEmitter {
  * disrupt the other subscribers.
  */
 function retainForCatchup(conversationId: string, frame: ConversationFrame): void {
-  if (frame.persist) {
-    catchupBuffers.delete(conversationId);
-    return;
-  }
   let buffer = catchupBuffers.get(conversationId);
   if (!buffer) {
     buffer = [];
@@ -59,14 +95,33 @@ function retainForCatchup(conversationId: string, frame: ConversationFrame): voi
   }
 }
 
+function frameSeq(frame: ConversationFrame): number {
+  const seq = frame.event.seq;
+  if (typeof seq !== "number") {
+    throw new Error("catch-up frame missing seq");
+  }
+  return seq;
+}
+
 /**
- * Snapshot of unpersisted frames buffered since the last persisted append.
- * Used by the SSE handler to catch up late subscribers before live delivery.
+ * Frames after `sinceSeq` still held in the catch-up window, in order.
+ * Returns `resetRequired` when `sinceSeq` is older than the oldest retained
+ * frame — the gap can no longer be served completely.
  */
-export function getBufferedFrames(
+export function getFramesSince(
   conversationId: string,
-): readonly ConversationFrame[] {
-  return catchupBuffers.get(conversationId) ?? [];
+  sinceSeq: number,
+): FramesSinceResult {
+  const buffer = catchupBuffers.get(conversationId);
+  if (!buffer || buffer.length === 0) {
+    return { resetRequired: false, frames: [] };
+  }
+  const oldestSeq = frameSeq(buffer[0]!);
+  if (sinceSeq < oldestSeq - 1) {
+    return { resetRequired: true };
+  }
+  const frames = buffer.filter((frame) => frameSeq(frame) > sinceSeq);
+  return { resetRequired: false, frames };
 }
 
 /** Drop a conversation's catch-up buffer (session teardown or delete). */
@@ -78,6 +133,8 @@ export function publishFrame(
   conversationId: string,
   frame: ConversationFrame,
 ): void {
+  const seq = nextConversationSeq(conversationId);
+  Object.assign(frame.event, { seq });
   retainForCatchup(conversationId, frame);
 
   const emitter = emitters.get(conversationId);

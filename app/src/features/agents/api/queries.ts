@@ -1,6 +1,10 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import type { ConversationListItem } from "@server/schemas";
+import type {
+  ConversationListItem,
+  ConversationTranscriptPage,
+} from "@server/schemas";
 import {
+  getConversationTranscript,
   listAgentModels,
   listConversations,
   type AgentModelsResponse,
@@ -18,6 +22,16 @@ export function useConversationsQuery(
     queryFn: () => listConversations(showArchived),
     refetchOnWindowFocus: true,
     refetchInterval: CONVERSATIONS_REFETCH_INTERVAL_MS,
+  });
+}
+
+export function useConversationTranscriptQuery(
+  conversationId: string | null | undefined,
+): UseQueryResult<ConversationTranscriptPage, Error> {
+  return useQuery({
+    queryKey: agentsKeys.transcript(conversationId ?? ""),
+    queryFn: () => getConversationTranscript(conversationId!),
+    enabled: Boolean(conversationId),
   });
 }
 

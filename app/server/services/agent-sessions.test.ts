@@ -830,8 +830,8 @@ describe("agent sessions manager", () => {
     await result.run.wait();
     unsubscribe();
 
-    expect(frames[0]).toEqual({
-      event: { type: "run", status: "started", runId: FAKE_RUN_ID },
+    expect(frames[0]).toMatchObject({
+      event: { type: "run", status: "started", runId: FAKE_RUN_ID, seq: 1 },
       persist: false,
     });
 
@@ -839,16 +839,16 @@ describe("agent sessions manager", () => {
       (f): f is ConversationFrame & { event: { type: "run" } } =>
         f.event.type === "run",
     );
-    expect(runFrames).toEqual([
-      {
-        event: { type: "run", status: "started", runId: FAKE_RUN_ID },
-        persist: false,
-      },
-      {
-        event: { type: "run", status: "finished", runId: FAKE_RUN_ID },
-        persist: false,
-      },
-    ]);
+    expect(runFrames).toHaveLength(2);
+    expect(runFrames[0]).toMatchObject({
+      event: { type: "run", status: "started", runId: FAKE_RUN_ID, seq: 1 },
+      persist: false,
+    });
+    expect(runFrames[1]).toMatchObject({
+      event: { type: "run", status: "finished", runId: FAKE_RUN_ID },
+      persist: false,
+    });
+    expect(runFrames[1]!.event.seq).toBeGreaterThan(1);
 
     const { transcript } = readConversation(meta.id);
     expect(transcript.some((e) => e.type === "run")).toBe(false);
@@ -891,11 +891,11 @@ describe("agent sessions manager", () => {
     );
     expect(runFrames).toEqual([
       {
-        event: { type: "run", status: "started", runId: FAKE_RUN_ID },
+        event: { type: "run", status: "started", runId: FAKE_RUN_ID, seq: 1 },
         persist: false,
       },
       {
-        event: { type: "run", status: "finished", runId: FAKE_RUN_ID },
+        event: { type: "run", status: "finished", runId: FAKE_RUN_ID, seq: 2 },
         persist: false,
       },
     ]);
@@ -948,7 +948,7 @@ describe("agent sessions manager", () => {
 
   it("dispose and disposeAll always clear the catch-up buffer", async () => {
     const { createConversation, createAgentSessions } = await load();
-    const { publishFrame, getBufferedFrames } = await import(
+    const { publishFrame, getFramesSince } = await import(
       "./conversation-stream.js"
     );
     const fake = createFakeAgentSdk();
@@ -963,10 +963,16 @@ describe("agent sessions manager", () => {
       event: { type: "assistant", text: "buffered" },
       persist: false,
     });
-    expect(getBufferedFrames(meta.id)).toHaveLength(1);
+    const buffered = getFramesSince(meta.id, 0);
+    expect(buffered.resetRequired).toBe(false);
+    if (buffered.resetRequired) return;
+    expect(buffered.frames).toHaveLength(1);
 
     await sessions.dispose(meta.id);
-    expect(getBufferedFrames(meta.id)).toEqual([]);
+    expect(getFramesSince(meta.id, 0)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
 
     publishFrame(meta.id, {
       event: { type: "assistant", text: "buffered again" },
@@ -981,10 +987,18 @@ describe("agent sessions manager", () => {
       event: { type: "run", status: "started", runId: "run-2" },
       persist: false,
     });
-    expect(getBufferedFrames(meta.id).length).toBeGreaterThan(0);
+    // Buffer was cleared on dispose, so the window no longer reaches seq 0;
+    // ask from the pre-dispose high-water mark.
+    const afterRun = getFramesSince(meta.id, 1);
+    expect(afterRun.resetRequired).toBe(false);
+    if (afterRun.resetRequired) return;
+    expect(afterRun.frames.length).toBeGreaterThan(0);
 
     await sessions.disposeAll();
-    expect(getBufferedFrames(meta.id)).toEqual([]);
+    expect(getFramesSince(meta.id, 1)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
   });
 
   it("dispose stops a live agent stack and clears durable ownership", async () => {

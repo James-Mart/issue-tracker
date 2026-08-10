@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { TranscriptEvent } from "@server/schemas";
 import {
+  applyTranscriptDelta,
   applyTranscriptEvent,
-  beginReplayStaging,
-  commitReplayStaging,
-  foldStreamTranscriptFrame,
+  mergeTranscriptDeltas,
 } from "./use-conversation-events";
 
 function at(
@@ -19,21 +18,21 @@ describe("applyTranscriptEvent", () => {
     let events: TranscriptEvent[] = [];
     events = applyTranscriptEvent(
       events,
-      at({ type: "thinking", text: "Con" }, "t1"),
+      at({ type: "thinking", text: "Con", seq: 1 }, "t1"),
     );
     events = applyTranscriptEvent(
       events,
-      at({ type: "thinking", text: "sid" }, "t2"),
+      at({ type: "thinking", text: "sid", seq: 2 }, "t2"),
     );
     expect(events).toEqual([
-      { type: "thinking", text: "Consid", at: "t2" },
+      { type: "thinking", text: "Consid", at: "t2", seq: 2 },
     ]);
     events = applyTranscriptEvent(
       events,
-      at({ type: "thinking", text: "Consid" }, "t3"),
+      at({ type: "thinking", text: "Consid", seq: 3 }, "t3"),
     );
     expect(events).toEqual([
-      { type: "thinking", text: "Consid", at: "t2" },
+      { type: "thinking", text: "Consid", at: "t2", seq: 2 },
     ]);
   });
 
@@ -41,20 +40,20 @@ describe("applyTranscriptEvent", () => {
     let events: TranscriptEvent[] = [];
     events = applyTranscriptEvent(
       events,
-      at({ type: "thinking", text: "first" }, "t1"),
+      at({ type: "thinking", text: "first", seq: 1 }, "t1"),
     );
     events = applyTranscriptEvent(
       events,
-      at({ type: "assistant", text: "reply" }, "t2"),
+      at({ type: "assistant", text: "reply", seq: 2 }, "t2"),
     );
     events = applyTranscriptEvent(
       events,
-      at({ type: "thinking", text: "second" }, "t3"),
+      at({ type: "thinking", text: "second", seq: 3 }, "t3"),
     );
     expect(events).toEqual([
-      { type: "thinking", text: "first", at: "t1" },
-      { type: "assistant", text: "reply", at: "t2" },
-      { type: "thinking", text: "second", at: "t3" },
+      { type: "thinking", text: "first", at: "t1", seq: 1 },
+      { type: "assistant", text: "reply", at: "t2", seq: 2 },
+      { type: "thinking", text: "second", at: "t3", seq: 3 },
     ]);
   });
 
@@ -62,7 +61,7 @@ describe("applyTranscriptEvent", () => {
     let events: TranscriptEvent[] = [];
     events = applyTranscriptEvent(
       events,
-      at({ type: "thinking", text: "plan" }, "t1"),
+      at({ type: "thinking", text: "plan", seq: 1 }, "t1"),
     );
     events = applyTranscriptEvent(
       events,
@@ -71,11 +70,12 @@ describe("applyTranscriptEvent", () => {
         callId: "c1",
         status: "running",
         name: "Shell",
+        seq: 2,
       }),
     );
     events = applyTranscriptEvent(
       events,
-      at({ type: "thinking", text: "reflect" }, "t2"),
+      at({ type: "thinking", text: "reflect", seq: 3 }, "t2"),
     );
     expect(events).toHaveLength(3);
     expect(events[0]).toMatchObject({ type: "thinking", text: "plan" });
@@ -87,21 +87,21 @@ describe("applyTranscriptEvent", () => {
     let events: TranscriptEvent[] = [];
     events = applyTranscriptEvent(
       events,
-      at({ type: "assistant", text: "Hel" }, "t1"),
+      at({ type: "assistant", text: "Hel", seq: 1 }, "t1"),
     );
     events = applyTranscriptEvent(
       events,
-      at({ type: "assistant", text: "lo" }, "t2"),
+      at({ type: "assistant", text: "lo", seq: 2 }, "t2"),
     );
     expect(events).toEqual([
-      { type: "assistant", text: "Hello", at: "t2" },
+      { type: "assistant", text: "Hello", at: "t2", seq: 2 },
     ]);
     events = applyTranscriptEvent(
       events,
-      at({ type: "assistant", text: "Hello" }, "t3"),
+      at({ type: "assistant", text: "Hello", seq: 3 }, "t3"),
     );
     expect(events).toEqual([
-      { type: "assistant", text: "Hello", at: "t2" },
+      { type: "assistant", text: "Hello", at: "t2", seq: 2 },
     ]);
   });
 
@@ -112,6 +112,7 @@ describe("applyTranscriptEvent", () => {
         callId: "c1",
         status: "running",
         name: "Shell",
+        seq: 1,
       }),
     ];
     events = applyTranscriptEvent(
@@ -122,6 +123,7 @@ describe("applyTranscriptEvent", () => {
         status: "completed",
         name: "Shell",
         result: { ok: true },
+        seq: 2,
       }),
     );
     expect(events).toHaveLength(1);
@@ -130,6 +132,7 @@ describe("applyTranscriptEvent", () => {
       callId: "c1",
       status: "completed",
       result: { ok: true },
+      seq: 2,
     });
   });
 
@@ -137,15 +140,15 @@ describe("applyTranscriptEvent", () => {
     let events: TranscriptEvent[] = [];
     events = applyTranscriptEvent(
       events,
-      at({ type: "prompt", text: "hi" }),
+      at({ type: "prompt", text: "hi", seq: 1 }),
     );
     events = applyTranscriptEvent(
       events,
-      at({ type: "thinking", text: "..." }),
+      at({ type: "thinking", text: "...", seq: 2 }),
     );
     events = applyTranscriptEvent(
       events,
-      at({ type: "status", status: "running" }),
+      at({ type: "status", status: "running", seq: 3 }),
     );
     expect(events.map((e) => e.type)).toEqual([
       "prompt",
@@ -155,71 +158,49 @@ describe("applyTranscriptEvent", () => {
   });
 });
 
-describe("stream replay staging", () => {
-  it("folds transcript replay, catch-up, and live frames in emission order", () => {
-    let { replaying, replayBuffer } = beginReplayStaging();
-    let events: TranscriptEvent[] = [];
+describe("history seed + stream deltas", () => {
+  it("applies catch-up and live deltas on top of a history seed in seq order", () => {
+    const seed: TranscriptEvent[] = [
+      at({ type: "prompt", text: "go", seq: 1 }),
+      at({ type: "assistant", text: "Done", seq: 2 }, "t1"),
+    ];
 
-    const fold = (event: TranscriptEvent) => {
-      ({ replaying, replayBuffer, liveEvents: events } = foldStreamTranscriptFrame(
-        replaying,
-        replayBuffer,
-        events,
-        event,
-      ));
-    };
-
-    fold(at({ type: "prompt", text: "go" }));
-    fold(at({ type: "assistant", text: "Done" }, "t1"));
-    // catch-up deltas between persisted replay and first ping
-    fold(at({ type: "assistant", text: " streaming" }, "t2"));
-    fold(at({ type: "assistant", text: " more" }, "t3"));
-
-    const committed = commitReplayStaging(replayBuffer);
-    replaying = committed.replaying;
-    replayBuffer = committed.replayBuffer;
-    events = committed.events;
-
-    fold(at({ type: "assistant", text: " now" }, "t4"));
+    const events = mergeTranscriptDeltas(seed, [
+      at({ type: "assistant", text: " streaming", seq: 3 }, "t2"),
+      at({ type: "assistant", text: " more", seq: 4 }, "t3"),
+      at({ type: "assistant", text: " now", seq: 5 }, "t4"),
+    ]);
 
     expect(events).toEqual([
-      at({ type: "prompt", text: "go" }),
-      { type: "assistant", text: "Done streaming more now", at: "t4" },
+      at({ type: "prompt", text: "go", seq: 1 }),
+      { type: "assistant", text: "Done streaming more now", at: "t4", seq: 5 },
     ]);
   });
 
-  it("buffers pre-open catch-up with replay instead of racing ahead of commit", () => {
-    let replaying = false;
-    let replayBuffer: TranscriptEvent[] = [];
-    let events: TranscriptEvent[] = [
-      at({ type: "assistant", text: "stale while disconnected" }, "old"),
+  it("skips duplicate seqs already present in the seed", () => {
+    const seed: TranscriptEvent[] = [
+      at({ type: "prompt", text: "go", seq: 1 }),
+      at({ type: "assistant", text: "live", seq: 2 }, "t1"),
     ];
 
-    // Catch-up can arrive before `open`; staging must start at connect().
-    ({ replaying, replayBuffer } = beginReplayStaging());
+    expect(
+      applyTranscriptDelta(
+        seed,
+        at({ type: "assistant", text: "duplicate", seq: 2 }, "t2"),
+      ),
+    ).toEqual(seed);
+  });
 
-    const fold = (event: TranscriptEvent) => {
-      ({ replaying, replayBuffer, liveEvents: events } = foldStreamTranscriptFrame(
-        replaying,
-        replayBuffer,
-        events,
-        event,
-      ));
-    };
-
-    fold(at({ type: "prompt", text: "go" }));
-    fold(at({ type: "assistant", text: "live" }, "t1"));
-    fold(at({ type: "assistant", text: " delta" }, "t2"));
-
-    const committed = commitReplayStaging(replayBuffer);
-    events = committed.events;
-
-    expect(events).toEqual([
-      at({ type: "prompt", text: "go" }),
-      { type: "assistant", text: "live delta", at: "t2" },
-    ]);
-    expect(events.some((e) => e.type === "assistant" && e.text.includes("stale"))).toBe(
-      false,
+  it("inserts an out-of-order delta by seq without dropping later events", () => {
+    const events = applyTranscriptDelta(
+      [
+        at({ type: "prompt", text: "go", seq: 1 }),
+        at({ type: "assistant", text: "later", seq: 3 }, "t3"),
+      ],
+      at({ type: "assistant", text: "gap", seq: 2 }, "t2"),
     );
+
+    expect(events.map((e) => e.seq)).toEqual([1, 2, 3]);
+    expect(events[1]).toMatchObject({ text: "gap", seq: 2 });
   });
 });

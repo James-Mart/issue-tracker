@@ -28,7 +28,8 @@ import {
 } from "../schemas.js";
 import { channelForIssue } from "../kind.js";
 import type { AgentSessions } from "./agent-sessions.js";
-import { publishFrame } from "./conversation-stream.js";
+import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
+import { effectiveTranscriptSeq } from "./conversation-transcript-seq.js";
 import { IssueError } from "./errors.js";
 import { readIssueOrThrow } from "./issues.js";
 import { uniqueSlug } from "./slug.js";
@@ -134,8 +135,10 @@ function readTranscriptLines(id: string): TranscriptEvent[] {
   const path = transcriptPathOf(id);
   if (!existsSync(path)) return [];
   const events: TranscriptEvent[] = [];
+  let lineSeq = 0;
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
+    lineSeq += 1;
     let raw: unknown;
     try {
       raw = JSON.parse(line);
@@ -143,7 +146,12 @@ function readTranscriptLines(id: string): TranscriptEvent[] {
       continue;
     }
     const parsed = parseTranscriptEvent(raw);
-    if (parsed.ok) events.push(parsed.event);
+    if (!parsed.ok) continue;
+    events.push(
+      parsed.event.seq === undefined
+        ? { ...parsed.event, seq: effectiveTranscriptSeq(raw, lineSeq) }
+        : parsed.event,
+    );
   }
   return events;
 }
@@ -353,9 +361,15 @@ export function appendEvent(
     const meta = readMetaRaw(id);
     const parsed = parseTranscriptEventInput(event);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
+    const preassigned =
+      typeof (event as { seq?: unknown }).seq === "number"
+        ? (event as { seq: number }).seq
+        : undefined;
+    const seq = nextConversationSeq(id, preassigned);
     const stamped: TranscriptEvent = {
       ...parsed.input,
       at: new Date().toISOString(),
+      seq,
     };
     appendFileSync(transcriptPathOf(id), `${JSON.stringify(stamped)}\n`);
     writeMeta({ ...meta, updatedAt: new Date().toISOString() });
@@ -456,8 +470,8 @@ export async function startConversationPrompt(
   if (!result.ok) {
     const message = result.error.message;
     const event = { type: "error" as const, message };
-    await appendEvent(conversationId, event);
     publishFrame(conversationId, { event, persist: true });
+    await appendEvent(conversationId, event);
     return { ok: false, message };
   }
 

@@ -1,11 +1,10 @@
 import {
   parseConversationFrame,
+  type ConversationTranscriptPage,
   type TranscriptEvent,
 } from "@server/schemas";
 import {
-  applyTranscriptEvent,
-  beginReplayStaging,
-  commitReplayStaging,
+  applyTranscriptDelta,
   type ConversationEventsState,
 } from "./conversation-events-state";
 
@@ -18,6 +17,8 @@ const HEARTBEAT_TIMEOUT_MS = 25_000;
 export type ConversationEventsListener = (
   state: ConversationEventsState,
 ) => void;
+
+export type ConversationHistorySeed = ConversationTranscriptPage;
 
 type ConversationEntry = {
   listeners: Set<ConversationEventsListener>;
@@ -41,17 +42,22 @@ function notify(entry: ConversationEntry): void {
   }
 }
 
-function openEntry(conversationId: string): ConversationEntry {
+function openEntry(
+  conversationId: string,
+  seed: ConversationHistorySeed,
+): ConversationEntry {
   let source: EventSource | null = null;
   let watchdog: ReturnType<typeof setTimeout> | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
-  let replaying = false;
-  let replayBuffer: TranscriptEvent[] = [];
 
   const entry: ConversationEntry = {
     listeners: new Set(),
-    state: emptyState(),
+    state: {
+      ...emptyState(),
+      events: seed.events,
+      ready: true,
+    },
     dispose: () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -76,8 +82,6 @@ function openEntry(conversationId: string): ConversationEntry {
 
   const scheduleReconnect = () => {
     closeSource();
-    replaying = false;
-    replayBuffer = [];
     // Drop stale stream run state and re-seed from GET /run — a run may have
     // finished while disconnected and its `finished` frame is no longer buffered.
     // Keep `events` + `ready` so the UI keeps the last good transcript.
@@ -102,27 +106,20 @@ function openEntry(conversationId: string): ConversationEntry {
 
   const onPing = () => {
     armWatchdog();
-    if (replaying) {
-      const committed = commitReplayStaging(replayBuffer);
-      replaying = committed.replaying;
-      replayBuffer = committed.replayBuffer;
-      entry.state = {
-        ...entry.state,
-        events: committed.events,
-        ready: true,
-      };
-      notify(entry);
-      return;
-    }
     if (!entry.state.ready) {
       setState({ ready: true });
     }
   };
 
+  const applyFrame = (event: TranscriptEvent): void => {
+    entry.state = {
+      ...entry.state,
+      events: applyTranscriptDelta(entry.state.events, event),
+    };
+    notify(entry);
+  };
+
   function connect() {
-    // Stage before opening the socket so catch-up frames cannot land on live
-    // state ahead of the post-replay commit.
-    ({ replaying, replayBuffer } = beginReplayStaging());
     source = new EventSource(
       `/api/conversations/${encodeURIComponent(conversationId)}/events`,
     );
@@ -163,15 +160,7 @@ function openEntry(conversationId: string): ConversationEntry {
         setState({ pendingText: parsed.event.text });
         return;
       }
-      if (replaying) {
-        replayBuffer = applyTranscriptEvent(replayBuffer, parsed.event);
-        return;
-      }
-      entry.state = {
-        ...entry.state,
-        events: applyTranscriptEvent(entry.state.events, parsed.event),
-      };
-      notify(entry);
+      applyFrame(parsed.event);
     };
     source.onerror = scheduleReconnect;
   }
@@ -182,16 +171,18 @@ function openEntry(conversationId: string): ConversationEntry {
 
 /**
  * Subscribe to a conversation's SSE stream. The first subscriber for an id
- * opens the connection; later subscribers attach to the same stream and
- * immediately receive the current folded state; the last unsubscribe closes it.
+ * opens the connection (after history was loaded via react-query); later
+ * subscribers attach to the same stream and immediately receive the current
+ * folded state; the last unsubscribe closes it.
  */
 export function subscribeConversation(
   conversationId: string,
   listener: ConversationEventsListener,
+  seed: ConversationHistorySeed,
 ): () => void {
   let entry = entries.get(conversationId);
   if (!entry) {
-    entry = openEntry(conversationId);
+    entry = openEntry(conversationId, seed);
     entries.set(conversationId, entry);
   }
   entry.listeners.add(listener);

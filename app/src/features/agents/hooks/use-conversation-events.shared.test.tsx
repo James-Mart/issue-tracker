@@ -2,7 +2,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ConversationTranscriptPage } from "@server/schemas";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { agentsKeys } from "../api/keys";
 import { FakeEventSource } from "../event-source.fake";
 import { resetConversationEventsRegistryForTests } from "../lib/conversation-events-registry";
 import {
@@ -22,12 +24,18 @@ function Probe({
   return null;
 }
 
-function mountConsumer(conversationId: string): {
+function mountConsumer(
+  conversationId: string,
+  seed: ConversationTranscriptPage = { events: [], latestSeq: 0 },
+): {
   root: Root;
   container: HTMLDivElement;
   client: QueryClient;
   getState: () => ConversationEventsState;
-  rerender: (conversationId: string) => void;
+  rerender: (
+    conversationId: string,
+    seed?: ConversationTranscriptPage,
+  ) => void;
 } {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -35,8 +43,11 @@ function mountConsumer(conversationId: string): {
   let state!: ConversationEventsState;
   let currentId = conversationId;
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0, staleTime: Infinity },
+    },
   });
+  client.setQueryData(agentsKeys.transcript(conversationId), seed);
   const render = () => {
     act(() => {
       root.render(
@@ -57,8 +68,9 @@ function mountConsumer(conversationId: string): {
     container,
     client,
     getState: () => state,
-    rerender: (nextId: string) => {
+    rerender: (nextId: string, nextSeed = { events: [], latestSeq: 0 }) => {
       currentId = nextId;
+      client.setQueryData(agentsKeys.transcript(nextId), nextSeed);
       render();
     },
   };
@@ -110,6 +122,7 @@ describe("shared conversation subscription", () => {
         type: "prompt",
         text: "hello",
         at: "2026-08-10T00:00:00.000Z",
+        seq: 1,
       });
       source.emitPing();
     });
@@ -122,11 +135,64 @@ describe("shared conversation subscription", () => {
         type: "prompt",
         text: "hello",
         at: "2026-08-10T00:00:00.000Z",
+        seq: 1,
       },
     ]);
 
     unmountConsumer(a);
     unmountConsumer(b);
+  });
+
+  it("seeds registry state from the transcript query before stream deltas", () => {
+    const consumer = mountConsumer("conv-seed", {
+      events: [
+        {
+          type: "prompt",
+          text: "from history",
+          at: "2026-08-10T00:00:00.000Z",
+          seq: 1,
+        },
+      ],
+      latestSeq: 1,
+    });
+
+    expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().events).toEqual([
+      {
+        type: "prompt",
+        text: "from history",
+        at: "2026-08-10T00:00:00.000Z",
+        seq: 1,
+      },
+    ]);
+
+    const source = FakeEventSource.instances[0]!;
+    act(() => {
+      source.emitMessage({
+        type: "assistant",
+        text: "delta",
+        at: "2026-08-10T00:00:01.000Z",
+        seq: 2,
+      });
+      source.emitPing();
+    });
+
+    expect(consumer.getState().events).toEqual([
+      {
+        type: "prompt",
+        text: "from history",
+        at: "2026-08-10T00:00:00.000Z",
+        seq: 1,
+      },
+      {
+        type: "assistant",
+        text: "delta",
+        at: "2026-08-10T00:00:01.000Z",
+        seq: 2,
+      },
+    ]);
+
+    unmountConsumer(consumer);
   });
 
   it("opens one EventSource per distinct conversation id", () => {

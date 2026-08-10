@@ -335,12 +335,60 @@ describe("conversations HTTP API (CRUD)", () => {
   });
 });
 
-describe("GET /api/conversations/:id/events", () => {
-  it("replays persisted transcript then holds the stream with pings", async () => {
+describe("GET /api/conversations/:id/transcript", () => {
+  it("honors sinceSeq and reports latestSeq", async () => {
     const created = await fetch(`${baseUrl}/api/conversations`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: "platform", title: "SSE replay" }),
+      body: JSON.stringify({ projectId: "platform", title: "Transcript page" }),
+    }).then((r) => r.json());
+
+    const { appendEvent } = await import("../services/conversations.js");
+    const first = await appendEvent(created.id, {
+      type: "prompt",
+      text: "one",
+    });
+    const second = await appendEvent(created.id, {
+      type: "assistant",
+      text: "two",
+    });
+    const third = await appendEvent(created.id, {
+      type: "assistant",
+      text: "three",
+    });
+
+    const all = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/transcript`,
+    ).then((r) => r.json());
+    expect(all.latestSeq).toBe(third.seq);
+    expect(all.events.map((e: { text: string }) => e.text)).toEqual([
+      "one",
+      "two",
+      "three",
+    ]);
+
+    const page = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/transcript?sinceSeq=${first.seq}`,
+    ).then((r) => r.json());
+    expect(page.latestSeq).toBe(third.seq);
+    expect(page.events.map((e: { text: string; seq: number }) => e)).toEqual([
+      expect.objectContaining({ text: "two", seq: second.seq }),
+      expect.objectContaining({ text: "three", seq: third.seq }),
+    ]);
+
+    const empty = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/transcript?sinceSeq=${third.seq}`,
+    ).then((r) => r.json());
+    expect(empty).toEqual({ events: [], latestSeq: third.seq });
+  });
+});
+
+describe("GET /api/conversations/:id/events", () => {
+  it("sends no persisted history on a fresh connection and holds with pings", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "SSE deltas only" }),
     }).then((r) => r.json());
 
     const { appendEvent } = await import("../services/conversations.js");
@@ -362,7 +410,7 @@ describe("GET /api/conversations/:id/events", () => {
       const { value, done } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
-      if (buf.includes("hello sse") && buf.includes("event: ping")) break;
+      if (buf.includes("event: ping")) break;
     }
     controller.abort();
     try {
@@ -371,15 +419,9 @@ describe("GET /api/conversations/:id/events", () => {
       // abort may already have torn the stream down
     }
 
-    expect(buf).toContain("hello sse");
+    expect(buf).not.toContain("hello sse");
+    expect(buf).not.toMatch(/data: .*prompt/);
     expect(buf).toMatch(/event: ping/);
-    const dataLine = buf
-      .split("\n")
-      .find((line) => line.startsWith("data: ") && line.includes("prompt"));
-    expect(dataLine).toBeTruthy();
-    const event = JSON.parse(dataLine!.slice("data: ".length));
-    expect(event).toMatchObject({ type: "prompt", text: "hello sse" });
-    expect(typeof event.at).toBe("string");
   });
 
   it("replays buffered unpersisted frames to a late SSE subscriber", async () => {
@@ -434,6 +476,61 @@ describe("GET /api/conversations/:id/events", () => {
     expect(buf).toMatch(/event: ping/);
   });
 
+  it("signals resetRequired when the catch-up window cannot cover sinceSeq", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "platform",
+        title: "Catch-up reset required",
+      }),
+    }).then((r) => r.json());
+
+    const { appendEvent } = await import("../services/conversations.js");
+    await appendEvent(created.id, { type: "prompt", text: "anchor" });
+
+    const {
+      publishFrame,
+      CATCHUP_BUFFER_MAX_FRAMES,
+    } = await import("../services/conversation-stream.js");
+    for (let i = 0; i < CATCHUP_BUFFER_MAX_FRAMES + 5; i += 1) {
+      publishFrame(created.id, {
+        event: { type: "assistant" as const, text: `live-${i}` },
+        persist: false,
+      });
+    }
+
+    const controller = new AbortController();
+    const res = await fetch(`${baseUrl}/api/conversations/${created.id}/events`, {
+      signal: controller.signal,
+      headers: { accept: "text/event-stream" },
+    });
+    expect(res.status).toBe(200);
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (buf.includes("event: resetRequired") && buf.includes("event: ping")) {
+        break;
+      }
+    }
+    controller.abort();
+    try {
+      await reader.cancel();
+    } catch {
+      // abort may already have torn the stream down
+    }
+
+    expect(buf).not.toContain("anchor");
+    expect(buf).toMatch(/event: resetRequired/);
+    expect(buf).not.toContain("live-0");
+  });
+
   it("does not replay superseded unpersisted frames after a persisted append", async () => {
     const created = await fetch(`${baseUrl}/api/conversations`, {
       method: "POST",
@@ -481,11 +578,11 @@ describe("GET /api/conversations/:id/events", () => {
       // abort may already have torn the stream down
     }
 
-    expect(buf).toContain("final on disk");
+    // Persisted history is no longer on the stream; catch-up must not resurrect
+    // the superseded live chunk either.
+    expect(buf).not.toContain("final on disk");
     expect(buf).not.toContain("superseded chunk");
-    expect(
-      buf.split("\n").filter((line) => line.includes("final on disk")).length,
-    ).toBe(1);
+    expect(buf).toMatch(/event: ping/);
   });
 
   it("forwards live normalized frames while a run is active", async () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useConversationTranscriptQuery } from "../api/queries";
 import { agentsKeys } from "../api/keys";
 import { subscribeConversation } from "../lib/conversation-events-registry";
 import {
@@ -9,10 +10,9 @@ import { patchChannelSessionActiveRunInCache } from "@/features/issues/lib/retir
 
 export type { ConversationEventsState };
 export {
+  applyTranscriptDelta,
   applyTranscriptEvent,
-  beginReplayStaging,
-  commitReplayStaging,
-  foldStreamTranscriptFrame,
+  mergeTranscriptDeltas,
 } from "../lib/conversation-events-state";
 
 const idleState = (): ConversationEventsState => ({
@@ -24,30 +24,38 @@ const idleState = (): ConversationEventsState => ({
 });
 
 /**
- * Subscribe to `GET /api/conversations/:id/events`. Replays persisted
- * history on connect, then folds live frames into local thread state.
- * Tears down (and clears) when `conversationId` changes or the hook unmounts.
+ * Load persisted history through react-query (`GET …/transcript`), seed the
+ * shared subscription registry from that result, then fold live SSE deltas on
+ * top in `seq` order. The stream itself no longer replays history.
  *
  * Multiple callers for the same id share one registry-owned connection.
- * On (re)connect, persisted transcript and catch-up frames are staged into
- * a replay buffer and committed on the first `ping` (after both replays).
- * Prior folded state is left alone until that commit, so reconnect does not
- * blank the thread.
+ * Prior folded state is left alone across reconnects so the thread does not
+ * blank while catch-up frames arrive.
  */
 export function useConversationEvents(
   conversationId: string | null | undefined,
 ): ConversationEventsState {
   const qc = useQueryClient();
+  const history = useConversationTranscriptQuery(conversationId);
   const [state, setState] = useState<ConversationEventsState>(idleState);
   const prevRef = useRef<ConversationEventsState | null>(null);
+  // Prefer a settled mount fetch over a stale cache seed so reconnecting after
+  // live persists does not open the stream on an outdated history page.
+  // `!isFetching` covers tests that prime the cache with no network refetch.
+  const historyReady =
+    Boolean(conversationId) &&
+    history.isSuccess &&
+    history.data != null &&
+    (history.isFetchedAfterMount || !history.isFetching);
 
   useEffect(() => {
-    if (!conversationId) {
+    if (!historyReady || !conversationId || !history.data) {
       prevRef.current = null;
       setState(idleState());
       return;
     }
     const id = conversationId;
+    const seed = history.data;
     prevRef.current = null;
 
     return subscribeConversation(id, (next) => {
@@ -74,8 +82,10 @@ export function useConversationEvents(
           queryKey: agentsKeys.conversationsPrefix(),
         });
       }
-    });
-  }, [conversationId, qc]);
+    }, seed);
+    // Seed once history is settled for this id; background refetches must not
+    // tear down a live subscription (do not depend on `history.data`).
+  }, [conversationId, historyReady, qc]);
 
   return state;
 }
