@@ -46,20 +46,26 @@ describe("conversation-stream catch-up buffer", () => {
     return import("./conversation-stream.js");
   }
 
-  it("retains unpersisted frames for late subscribers", async () => {
-    const { publishFrame, getBufferedFrames } = await load();
+  it("retains frames for late subscribers", async () => {
+    const { publishFrame, getFramesSince } = await load();
     const frame = {
       event: { type: "assistant" as const, text: "delta" },
       persist: false,
     };
     publishFrame("conv-a", frame);
-    expect(getBufferedFrames("conv-a")).toEqual([
-      { event: { type: "assistant", text: "delta", seq: 1 }, persist: false },
-    ]);
+    expect(getFramesSince("conv-a", 0)).toEqual({
+      resetRequired: false,
+      frames: [
+        {
+          event: { type: "assistant", text: "delta", seq: 1 },
+          persist: false,
+        },
+      ],
+    });
   });
 
-  it("clears the buffer when a persisted frame is appended", async () => {
-    const { publishFrame, getBufferedFrames } = await load();
+  it("retains frames across a persisted append", async () => {
+    const { publishFrame, getFramesSince } = await load();
     publishFrame("conv-a", {
       event: { type: "assistant" as const, text: "chunk" },
       persist: false,
@@ -68,11 +74,64 @@ describe("conversation-stream catch-up buffer", () => {
       event: { type: "assistant" as const, text: "final" },
       persist: true,
     });
-    expect(getBufferedFrames("conv-a")).toEqual([]);
+    expect(getFramesSince("conv-a", 0)).toEqual({
+      resetRequired: false,
+      frames: [
+        {
+          event: { type: "assistant", text: "chunk", seq: 1 },
+          persist: false,
+        },
+        {
+          event: { type: "assistant", text: "final", seq: 2 },
+          persist: true,
+        },
+      ],
+    });
   });
 
-  it("caps the buffer at a fixed frame count, dropping oldest first", async () => {
-    const { publishFrame, getBufferedFrames, CATCHUP_BUFFER_MAX_FRAMES } =
+  it("serves frames after sinceSeq in order", async () => {
+    const { publishFrame, getFramesSince } = await load();
+    publishFrame("conv-a", {
+      event: { type: "assistant" as const, text: "one" },
+      persist: false,
+    });
+    publishFrame("conv-a", {
+      event: { type: "assistant" as const, text: "two" },
+      persist: true,
+    });
+    publishFrame("conv-a", {
+      event: { type: "assistant" as const, text: "three" },
+      persist: false,
+    });
+    expect(getFramesSince("conv-a", 1)).toEqual({
+      resetRequired: false,
+      frames: [
+        {
+          event: { type: "assistant", text: "two", seq: 2 },
+          persist: true,
+        },
+        {
+          event: { type: "assistant", text: "three", seq: 3 },
+          persist: false,
+        },
+      ],
+    });
+  });
+
+  it("returns nothing when sinceSeq is already current", async () => {
+    const { publishFrame, getFramesSince } = await load();
+    publishFrame("conv-a", {
+      event: { type: "assistant" as const, text: "only" },
+      persist: false,
+    });
+    expect(getFramesSince("conv-a", 1)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
+  });
+
+  it("answers resetRequired when sinceSeq is older than the window", async () => {
+    const { publishFrame, getFramesSince, CATCHUP_BUFFER_MAX_FRAMES } =
       await load();
     for (let i = 0; i < CATCHUP_BUFFER_MAX_FRAMES + 5; i += 1) {
       publishFrame("conv-a", {
@@ -80,24 +139,41 @@ describe("conversation-stream catch-up buffer", () => {
         persist: false,
       });
     }
-    const buffered = getBufferedFrames("conv-a");
-    expect(buffered).toHaveLength(CATCHUP_BUFFER_MAX_FRAMES);
-    expect(buffered[0]?.event).toMatchObject({ text: "5", seq: 6 });
-    expect(buffered.at(-1)?.event).toMatchObject({
+    // Oldest retained is seq 6; sinceSeq 4 leaves an unservable gap at seq 5.
+    expect(getFramesSince("conv-a", 4)).toEqual({ resetRequired: true });
+  });
+
+  it("caps the buffer at a fixed frame count, dropping oldest first", async () => {
+    const { publishFrame, getFramesSince, CATCHUP_BUFFER_MAX_FRAMES } =
+      await load();
+    for (let i = 0; i < CATCHUP_BUFFER_MAX_FRAMES + 5; i += 1) {
+      publishFrame("conv-a", {
+        event: { type: "assistant" as const, text: String(i) },
+        persist: false,
+      });
+    }
+    const result = getFramesSince("conv-a", 5);
+    expect(result.resetRequired).toBe(false);
+    if (result.resetRequired) return;
+    expect(result.frames).toHaveLength(CATCHUP_BUFFER_MAX_FRAMES);
+    expect(result.frames[0]?.event).toMatchObject({ text: "5", seq: 6 });
+    expect(result.frames.at(-1)?.event).toMatchObject({
       text: String(CATCHUP_BUFFER_MAX_FRAMES + 4),
       seq: CATCHUP_BUFFER_MAX_FRAMES + 5,
     });
   });
 
   it("drops a conversation buffer on clearCatchupBuffer", async () => {
-    const { publishFrame, getBufferedFrames, clearCatchupBuffer } =
-      await load();
+    const { publishFrame, getFramesSince, clearCatchupBuffer } = await load();
     publishFrame("conv-a", {
       event: { type: "run" as const, status: "started" as const, runId: "r1" },
       persist: false,
     });
     clearCatchupBuffer("conv-a");
-    expect(getBufferedFrames("conv-a")).toEqual([]);
+    expect(getFramesSince("conv-a", 0)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
   });
 });
 

@@ -434,6 +434,61 @@ describe("GET /api/conversations/:id/events", () => {
     expect(buf).toMatch(/event: ping/);
   });
 
+  it("signals resetRequired when the catch-up window cannot cover sinceSeq", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "platform",
+        title: "Catch-up reset required",
+      }),
+    }).then((r) => r.json());
+
+    const { appendEvent } = await import("../services/conversations.js");
+    await appendEvent(created.id, { type: "prompt", text: "anchor" });
+
+    const {
+      publishFrame,
+      CATCHUP_BUFFER_MAX_FRAMES,
+    } = await import("../services/conversation-stream.js");
+    for (let i = 0; i < CATCHUP_BUFFER_MAX_FRAMES + 5; i += 1) {
+      publishFrame(created.id, {
+        event: { type: "assistant" as const, text: `live-${i}` },
+        persist: false,
+      });
+    }
+
+    const controller = new AbortController();
+    const res = await fetch(`${baseUrl}/api/conversations/${created.id}/events`, {
+      signal: controller.signal,
+      headers: { accept: "text/event-stream" },
+    });
+    expect(res.status).toBe(200);
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (buf.includes("event: resetRequired") && buf.includes("event: ping")) {
+        break;
+      }
+    }
+    controller.abort();
+    try {
+      await reader.cancel();
+    } catch {
+      // abort may already have torn the stream down
+    }
+
+    expect(buf).toContain("anchor");
+    expect(buf).toMatch(/event: resetRequired/);
+    expect(buf).not.toContain("live-0");
+  });
+
   it("does not replay superseded unpersisted frames after a persisted append", async () => {
     const created = await fetch(`${baseUrl}/api/conversations`, {
       method: "POST",

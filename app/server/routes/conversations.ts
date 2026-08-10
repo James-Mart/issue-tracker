@@ -4,7 +4,7 @@ import {
   type AgentSessions,
 } from "../services/agent-sessions.js";
 import {
-  getBufferedFrames,
+  getFramesSince,
   subscribeFrames,
 } from "../services/conversation-stream.js";
 import {
@@ -28,6 +28,7 @@ const DEFAULT_TITLE = "New conversation";
 const DEFAULT_MODEL = "auto";
 const HEARTBEAT_MS = 10_000;
 const HEARTBEAT_PAYLOAD = "event: ping\ndata: {}\n\n";
+const RESET_REQUIRED_PAYLOAD = "event: resetRequired\ndata: {}\n\n";
 
 function sendSse(res: Response, payload: string): boolean {
   if (res.writableEnded) return false;
@@ -218,8 +219,14 @@ export function createConversationsRouter(
         if (!sendSse(res, sseDataFrame(event))) return;
       }
 
-      for (const frame of getBufferedFrames(meta.id)) {
-        if (!sendSse(res, sseLiveDataFrame(frame.event))) return;
+      const sinceSeq = transcript.at(-1)?.seq ?? 0;
+      const catchup = getFramesSince(meta.id, sinceSeq);
+      if (catchup.resetRequired) {
+        if (!sendSse(res, RESET_REQUIRED_PAYLOAD)) return;
+      } else {
+        for (const frame of catchup.frames) {
+          if (!sendSse(res, sseLiveDataFrame(frame.event))) return;
+        }
       }
 
       const unsubscribe = subscribeFrames(meta.id, (frame) => {
