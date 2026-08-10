@@ -830,8 +830,8 @@ describe("agent sessions manager", () => {
     await result.run.wait();
     unsubscribe();
 
-    expect(frames[0]).toEqual({
-      event: { type: "run", status: "started", runId: FAKE_RUN_ID },
+    expect(frames[0]).toMatchObject({
+      event: { type: "run", status: "started", runId: FAKE_RUN_ID, seq: 1 },
       persist: false,
     });
 
@@ -839,16 +839,16 @@ describe("agent sessions manager", () => {
       (f): f is ConversationFrame & { event: { type: "run" } } =>
         f.event.type === "run",
     );
-    expect(runFrames).toEqual([
-      {
-        event: { type: "run", status: "started", runId: FAKE_RUN_ID },
-        persist: false,
-      },
-      {
-        event: { type: "run", status: "finished", runId: FAKE_RUN_ID },
-        persist: false,
-      },
-    ]);
+    expect(runFrames).toHaveLength(2);
+    expect(runFrames[0]).toMatchObject({
+      event: { type: "run", status: "started", runId: FAKE_RUN_ID, seq: 1 },
+      persist: false,
+    });
+    expect(runFrames[1]).toMatchObject({
+      event: { type: "run", status: "finished", runId: FAKE_RUN_ID },
+      persist: false,
+    });
+    expect(runFrames[1]!.event.seq).toBeGreaterThan(1);
 
     const { transcript } = readConversation(meta.id);
     expect(transcript.some((e) => e.type === "run")).toBe(false);
@@ -891,11 +891,11 @@ describe("agent sessions manager", () => {
     );
     expect(runFrames).toEqual([
       {
-        event: { type: "run", status: "started", runId: FAKE_RUN_ID },
+        event: { type: "run", status: "started", runId: FAKE_RUN_ID, seq: 1 },
         persist: false,
       },
       {
-        event: { type: "run", status: "finished", runId: FAKE_RUN_ID },
+        event: { type: "run", status: "finished", runId: FAKE_RUN_ID, seq: 2 },
         persist: false,
       },
     ]);

@@ -1,4 +1,5 @@
 import { EventEmitter } from "events";
+import { maxSeqFromTranscriptFile } from "./conversation-transcript-seq.js";
 import type { ConversationFrameInput } from "../schemas.js";
 
 /**
@@ -25,6 +26,41 @@ const emitters = new Map<string, EventEmitter>();
 // Unpersisted frames since the last persisted append — replayed to subscribers
 // that connect mid-run before live delivery begins.
 const catchupBuffers = new Map<string, ConversationFrame[]>();
+
+/** Highest seq assigned or read for each conversation this process. */
+const seqByConversation = new Map<string, number>();
+const seqInitialized = new Set<string>();
+
+function ensureSeqInitialized(conversationId: string): void {
+  if (seqInitialized.has(conversationId)) return;
+  seqInitialized.add(conversationId);
+  seqByConversation.set(
+    conversationId,
+    maxSeqFromTranscriptFile(conversationId),
+  );
+}
+
+/**
+ * Next monotonic seq for a conversation. When `existing` is set — e.g. a frame
+ * already stamped by {@link publishFrame} — reuse it and advance the counter
+ * floor without consuming another number.
+ */
+export function nextConversationSeq(
+  conversationId: string,
+  existing?: number,
+): number {
+  ensureSeqInitialized(conversationId);
+  if (existing !== undefined) {
+    const floor = seqByConversation.get(conversationId) ?? 0;
+    if (existing > floor) {
+      seqByConversation.set(conversationId, existing);
+    }
+    return existing;
+  }
+  const next = (seqByConversation.get(conversationId) ?? 0) + 1;
+  seqByConversation.set(conversationId, next);
+  return next;
+}
 
 function emitterFor(conversationId: string): EventEmitter {
   let emitter = emitters.get(conversationId);
@@ -78,6 +114,8 @@ export function publishFrame(
   conversationId: string,
   frame: ConversationFrame,
 ): void {
+  const seq = nextConversationSeq(conversationId);
+  Object.assign(frame.event, { seq });
   retainForCatchup(conversationId, frame);
 
   const emitter = emitters.get(conversationId);
