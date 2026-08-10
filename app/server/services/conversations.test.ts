@@ -385,6 +385,71 @@ describe("conversations store", () => {
     ).rejects.toThrow(/issueId is required when channel is set/);
   });
 
+  it("createIssueChannelSession archives predecessors atomically under concurrent create", async () => {
+    const { createIssueChannelSession, listConversations } = await loadService();
+
+    const [a, b] = await Promise.all([
+      createIssueChannelSession({
+        issueId: "capture",
+        channel: "planning",
+        projectId: "platform",
+        title: "Concurrent A",
+        model: "composer-2.5",
+      }),
+      createIssueChannelSession({
+        issueId: "capture",
+        channel: "planning",
+        projectId: "platform",
+        title: "Concurrent B",
+        model: "composer-2.5",
+      }),
+    ]);
+
+    expect(a.meta.id).not.toBe(b.meta.id);
+    const active = listConversations().filter(
+      (m) =>
+        m.issueId === "capture" &&
+        m.channel === "planning" &&
+        !m.archived,
+    );
+    expect(active).toHaveLength(1);
+    expect([a.meta.id, b.meta.id]).toContain(active[0]!.id);
+  });
+
+  it("createIssueChannelSession refuses before writing when the channel is ineligible", async () => {
+    const { createIssueChannelSession, listConversations } = await loadService();
+
+    const prior = await createIssueChannelSession({
+      issueId: "capture",
+      channel: "planning",
+      projectId: "platform",
+      title: "Keep me",
+      model: "composer-2.5",
+    });
+
+    await expect(
+      createIssueChannelSession({
+        issueId: "capture",
+        channel: "implementing",
+        projectId: "platform",
+        title: "Should not land",
+        model: "composer-2.5",
+      }),
+    ).rejects.toThrow(/channel "implementing" is not offered by issue "capture"/);
+
+    const listed = listConversations().filter(
+      (m) => m.issueId === "capture" && m.channel === "planning",
+    );
+    expect(listed).toEqual([
+      expect.objectContaining({ id: prior.meta.id, archived: false }),
+    ]);
+    expect(
+      listConversations().some(
+        (m) => m.issueId === "capture" && m.channel === "implementing",
+      ),
+    ).toBe(false);
+  });
+
   it("refuses an unknown issueId on anchored create", async () => {
     const { createConversation } = await loadService();
 

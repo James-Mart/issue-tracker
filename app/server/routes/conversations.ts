@@ -5,16 +5,15 @@ import {
 } from "../services/agent-sessions.js";
 import {
   getBufferedFrames,
-  publishFrame,
   subscribeFrames,
 } from "../services/conversation-stream.js";
 import {
-  appendEvent,
   createConversation,
   deleteConversation,
   listConversations,
   readConversation,
   setPendingMessage,
+  startConversationPrompt,
   updateMeta,
 } from "../services/conversations.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
@@ -72,27 +71,17 @@ async function deliverPrompt(
   sessions: AgentSessions,
   res: Response,
 ): Promise<void> {
-  const { meta } = readConversation(conversationId);
-  if (meta.pendingMessage) {
-    await setPendingMessage(conversationId, null);
-  }
-
-  await appendEvent(conversationId, { type: "prompt", text: prompt });
-
-  const result = await sessions.sendPrompt(conversationId, {
+  const result = await startConversationPrompt(
+    conversationId,
     prompt,
     model,
-  });
+    sessions,
+  );
   if (!result.ok) {
-    const message = result.error.message;
-    const event = { type: "error" as const, message };
-    await appendEvent(conversationId, event);
-    publishFrame(conversationId, { event, persist: true });
-    res.status(502).json({ error: message });
+    res.status(502).json({ error: result.message });
     return;
   }
-
-  res.status(202).json({ runId: result.run.id });
+  res.status(202).json({ runId: result.runId });
 }
 
 export function createConversationsRouter(
@@ -342,5 +331,3 @@ export function createConversationsRouter(
 
   return router;
 }
-
-export const conversationsRouter = createConversationsRouter();

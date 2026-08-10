@@ -8,10 +8,14 @@ import { join } from "path";
 import { distDir, hasBuiltClient, isProdEnv } from "./config.js";
 import { errorHandler } from "./errors.js";
 import { agentModelsRouter } from "./routes/agent-models.js";
-import { conversationsRouter } from "./routes/conversations.js";
+import { createConversationsRouter } from "./routes/conversations.js";
 import { eventsRouter } from "./routes/events.js";
-import { issuesRouter } from "./routes/issues.js";
+import { createIssuesRouter } from "./routes/issues.js";
 import { projectsRouter } from "./routes/projects.js";
+import {
+  agentSessions,
+  type AgentSessions,
+} from "./services/agent-sessions.js";
 
 function requestLogger(req: Request, res: Response, next: NextFunction): void {
   const start = process.hrtime.bigint();
@@ -25,7 +29,7 @@ function requestLogger(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
-export function createApp(): Express {
+export function createApp(sessions: AgentSessions = agentSessions): Express {
   const app = express();
   app.use(express.json());
   app.use(requestLogger);
@@ -35,9 +39,9 @@ export function createApp(): Express {
     app.use(express.static(distDir));
   }
 
-  app.use("/api/issues", issuesRouter);
+  app.use("/api/issues", createIssuesRouter(sessions));
   app.use("/api/projects", projectsRouter);
-  app.use("/api/conversations", conversationsRouter);
+  app.use("/api/conversations", createConversationsRouter(sessions));
   app.use("/api/events", eventsRouter);
   app.use("/api/agent-models", agentModelsRouter);
 
