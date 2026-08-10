@@ -121,6 +121,7 @@ export function IssueDetailTabs({
           >
             <ChannelTranscriptPanel
               issueId={issue.id}
+              issue={issue}
               channel={tab.channel}
               label={tab.label}
             />

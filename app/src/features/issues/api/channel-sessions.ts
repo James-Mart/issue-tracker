@@ -16,6 +16,28 @@ function parseChannelSessionList(raw: unknown): ChannelSessionListItem[] {
   });
 }
 
+export type CreateChannelSessionBody = {
+  model: string;
+  title: string;
+  message: string;
+};
+
+export type CreateChannelSessionResult = {
+  id: string;
+};
+
+/** Create a session on an issue channel and start its first run. */
+export function createChannelSession(
+  issueId: string,
+  channel: ConversationChannel,
+  body: CreateChannelSessionBody,
+): Promise<CreateChannelSessionResult> {
+  return request<CreateChannelSessionResult>(
+    `/api/issues/${encodeURIComponent(issueId)}/channels/${encodeURIComponent(channel)}/sessions`,
+    { method: "POST", body },
+  );
+}
+
 /** List sessions anchored to an issue channel (updatedAt desc). */
 export function listChannelSessions(
   issueId: string,

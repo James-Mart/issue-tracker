@@ -23,6 +23,38 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
+vi.mock("./planning-launch-control", () => ({
+  PlanningChannelEmptyState: ({
+    onStarted,
+  }: {
+    onStarted: (session: {
+      id: string;
+      title: string;
+      model: string;
+    }) => void;
+  }) => (
+    <div data-testid="planning-channel-empty-state">
+      <button
+        type="button"
+        onClick={() =>
+          onStarted({
+            id: "new-session",
+            title: "Plan Capture",
+            model: "composer-2.5",
+          })
+        }
+      >
+        Start planning
+      </button>
+    </div>
+  ),
+  PlanningNewRunControl: () => (
+    <button type="button" data-testid="planning-new-run">
+      New run
+    </button>
+  ),
+}));
+
 vi.mock("./channel-session-switcher", () => ({
   ChannelSessionSwitcher: ({
     sessions,
@@ -71,7 +103,19 @@ vi.mock("@/features/agents/components/conversation-thread", () => ({
   },
 }));
 
-function mountPanel(label = "Planning"): {
+function mountPanel(
+  label = "Planning",
+  issue?: {
+    kind: "idea";
+    id: string;
+    title: string;
+    partOf: string;
+    order: number;
+    archived: boolean;
+    createdAt: string;
+    updatedAt: string;
+  },
+): {
   container: HTMLDivElement;
   root: Root;
 } {
@@ -82,6 +126,7 @@ function mountPanel(label = "Planning"): {
     root.render(
       <ChannelTranscriptPanel
         issueId="capture"
+        issue={issue}
         channel="planning"
         label={label}
       />,
@@ -89,6 +134,17 @@ function mountPanel(label = "Planning"): {
   });
   return { container, root };
 }
+
+const idea = {
+  kind: "idea" as const,
+  id: "capture",
+  title: "Capture",
+  partOf: "platform",
+  order: 0,
+  archived: false,
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-01T00:00:00.000Z",
+};
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -99,7 +155,41 @@ afterEach(() => {
 });
 
 describe("ChannelTranscriptPanel", () => {
-  it("shows ShellState and no composer when the channel has no session", () => {
+  it("shows the planning launch empty state for an Idea with no session", () => {
+    queryState.data = [];
+    const { container } = mountPanel("Planning", idea);
+    expect(
+      container.querySelector('[data-testid="planning-channel-empty-state"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="conversation-composer"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="conversation-thread"]'),
+    ).toBeNull();
+  });
+
+  it("mounts the transcript after start before the sessions list refetches", () => {
+    queryState.data = [];
+    const { container } = mountPanel("Planning", idea);
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="planning-channel-empty-state"] button',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(queryState.data).toEqual([]);
+    const thread = container.querySelector(
+      '[data-testid="conversation-thread"]',
+    );
+    expect(thread?.getAttribute("data-conversation-id")).toBe("new-session");
+    expect(
+      container.querySelector('[data-testid="planning-channel-empty-state"]'),
+    ).toBeNull();
+  });
+
+  it("shows generic ShellState when the channel has no session and no Idea context", () => {
     queryState.data = [];
     const { container } = mountPanel();
     expect(container.textContent).toContain("No planning session.");
@@ -107,10 +197,7 @@ describe("ChannelTranscriptPanel", () => {
       "This channel is for planning work on this issue.",
     );
     expect(
-      container.querySelector('[data-testid="conversation-composer"]'),
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-testid="conversation-thread"]'),
+      container.querySelector('[data-testid="planning-channel-empty-state"]'),
     ).toBeNull();
   });
 
@@ -135,7 +222,7 @@ describe("ChannelTranscriptPanel", () => {
         activeRun: false,
       },
     ];
-    const { container } = mountPanel();
+    const { container } = mountPanel("Planning", idea);
     const thread = container.querySelector(
       '[data-testid="conversation-thread"]',
     );
@@ -158,10 +245,13 @@ describe("ChannelTranscriptPanel", () => {
         activeRun: false,
       },
     ];
-    const { container } = mountPanel();
+    const { container } = mountPanel("Planning", idea);
     expect(
       container.querySelector('[data-testid="channel-session-switcher"]'),
     ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="planning-new-run"]'),
+    ).toBeTruthy();
   });
 
   it("renders the session switcher when the channel has two sessions", () => {
