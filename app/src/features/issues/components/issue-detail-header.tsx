@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { KIND_LABEL } from "../lib/kind";
 import { IssueArchiveDeleteMenuItems } from "./issue-archive-delete-menu-items";
+import { CommentsAnchor } from "./comments/comments-anchor";
 import { IssueBadges } from "./issue-badges";
 import { IssueDetailStatusChips } from "./issue-detail-status-chips";
 import { IssueTitleField } from "./issue-title-field";
@@ -57,7 +58,7 @@ function CopyIssueIdButton({ id }: { id: string }) {
 
 /**
  * Mainline detail header: kind eyebrow, title, Foundations status chips,
- * needs-attention (via IssueBadges), labels, and a quiet overflow menu.
+ * comments anchor (warn when flagged), labels, badges, and a quiet overflow menu.
  */
 export function IssueDetailHeader({
   issue,
@@ -76,11 +77,14 @@ export function IssueDetailHeader({
           {KIND_LABEL[issue.kind]}
         </p>
         <IssueTitleField issue={issue} />
-        <div className="mt-0.5 flex items-center gap-0.5">
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
-            {issue.id}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="inline-flex items-center gap-0.5">
+            <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              {issue.id}
+            </span>
+            <CopyIssueIdButton id={issue.id} />
           </span>
-          <CopyIssueIdButton id={issue.id} />
+          <CommentsAnchor issue={issue} />
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <IssueDetailStatusChips issue={issue} />
