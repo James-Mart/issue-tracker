@@ -24,9 +24,16 @@ let baseUrl: string;
 let sessions: AgentSessions | undefined;
 let releaseHold: (() => void) | undefined;
 
-function writeIssue(id: string, body: Record<string, unknown>): void {
+function writeIssue(
+  id: string,
+  body: Record<string, unknown>,
+  description?: string,
+): void {
   mkdirSync(join(issuesRoot, id), { recursive: true });
   writeFileSync(join(issuesRoot, id, "issue.json"), JSON.stringify({ id, ...body }));
+  if (description !== undefined) {
+    writeFileSync(join(issuesRoot, id, "description.md"), description);
+  }
 }
 
 async function startApp(opts?: {
@@ -528,5 +535,49 @@ describe("channel sessions HTTP API", () => {
       },
     );
     expect(second.status).toBe(201);
+  });
+});
+
+describe("planning work root HTTP API", () => {
+  it("returns null when the Idea has no landed root yet", async () => {
+    await startApp();
+
+    const res = await fetch(`${baseUrl}/api/issues/capture/planning-work-root`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ workRoot: null });
+  });
+
+  it("returns the Epic that backlinks the Idea", async () => {
+    writeIssue(
+      "ship-it",
+      {
+        kind: "epic",
+        title: "Ship it",
+        partOf: "platform",
+        status: "open",
+        order: 0,
+        archived: false,
+        createdAt: AT,
+        updatedAt: AT,
+      },
+      "Source idea: [Capture](issue:capture)\n",
+    );
+    await startApp();
+
+    const res = await fetch(`${baseUrl}/api/issues/capture/planning-work-root`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      workRoot: { id: "ship-it", title: "Ship it", kind: "epic" },
+    });
+  });
+
+  it("refuses non-Idea issues", async () => {
+    await startApp();
+
+    const res = await fetch(`${baseUrl}/api/issues/ship-it/planning-work-root`);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "planning-work-root is only defined for Ideas",
+    });
   });
 });
