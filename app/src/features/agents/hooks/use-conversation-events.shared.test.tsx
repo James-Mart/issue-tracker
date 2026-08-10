@@ -27,27 +27,53 @@ function mountConsumer(conversationId: string): {
   container: HTMLDivElement;
   client: QueryClient;
   getState: () => ConversationEventsState;
+  rerender: (conversationId: string) => void;
 } {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   let state!: ConversationEventsState;
+  let currentId = conversationId;
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
+  const render = () => {
+    act(() => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <Probe
+            conversationId={currentId}
+            onState={(next) => {
+              state = next;
+            }}
+          />
+        </QueryClientProvider>,
+      );
+    });
+  };
+  render();
+  return {
+    root,
+    container,
+    client,
+    getState: () => state,
+    rerender: (nextId: string) => {
+      currentId = nextId;
+      render();
+    },
+  };
+}
+
+function unmountConsumer(consumer: {
+  root: Root;
+  container: HTMLDivElement;
+  client: QueryClient;
+}): void {
   act(() => {
-    root.render(
-      <QueryClientProvider client={client}>
-        <Probe
-          conversationId={conversationId}
-          onState={(next) => {
-            state = next;
-          }}
-        />
-      </QueryClientProvider>,
-    );
+    consumer.root.unmount();
   });
-  return { root, container, client, getState: () => state };
+  consumer.client.clear();
+  consumer.container.remove();
 }
 
 beforeEach(() => {
@@ -99,13 +125,38 @@ describe("shared conversation subscription", () => {
       },
     ]);
 
-    act(() => {
-      a.root.unmount();
-      b.root.unmount();
-    });
-    a.client.clear();
-    b.client.clear();
-    a.container.remove();
-    b.container.remove();
+    unmountConsumer(a);
+    unmountConsumer(b);
+  });
+
+  it("opens one EventSource per distinct conversation id", () => {
+    const a = mountConsumer("conv-1");
+    const b = mountConsumer("conv-2");
+
+    expect(FakeEventSource.instances).toHaveLength(2);
+    expect(FakeEventSource.instances[0]!.url).toBe(
+      "/api/conversations/conv-1/events",
+    );
+    expect(FakeEventSource.instances[1]!.url).toBe(
+      "/api/conversations/conv-2/events",
+    );
+
+    unmountConsumer(a);
+    unmountConsumer(b);
+  });
+
+  it("closes the old subscription when a consumer switches ids", () => {
+    const consumer = mountConsumer("conv-1");
+    const firstSource = FakeEventSource.instances[0]!;
+
+    consumer.rerender("conv-2");
+
+    expect(FakeEventSource.instances).toHaveLength(2);
+    expect(firstSource.isClosed).toBe(true);
+    expect(FakeEventSource.instances[1]!.isClosed).toBe(false);
+
+    unmountConsumer(consumer);
+
+    expect(FakeEventSource.instances[1]!.isClosed).toBe(true);
   });
 });
