@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  parseChatMessage,
-  parseChatMessageInput,
+  parseComment,
+  parseCommentInput,
   parseIssue,
   parseTranscriptEvent,
   parseTranscriptEventInput,
@@ -546,35 +546,35 @@ describe("parseIssue - malformed is rejected with a message", () => {
   });
 });
 
-describe("parseChatMessage", () => {
+describe("parseComment", () => {
   const valid = { role: "agent", body: "hello", at: "2026-07-09T14:00:00.000Z" };
 
   it("parses a stored message with an optional name", () => {
-    const result = parseChatMessage({ ...valid, name: "codex" });
+    const result = parseComment({ ...valid, name: "codex" });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.message.name).toBe("codex");
   });
 
   it("rejects an empty body, a missing at, and a non-object", () => {
-    expect(parseChatMessage({ ...valid, body: "" }).ok).toBe(false);
+    expect(parseComment({ ...valid, body: "" }).ok).toBe(false);
     const { at: _at, ...noAt } = valid;
-    expect(parseChatMessage(noAt).ok).toBe(false);
-    expect(parseChatMessage(null).ok).toBe(false);
+    expect(parseComment(noAt).ok).toBe(false);
+    expect(parseComment(null).ok).toBe(false);
   });
 });
 
-describe("parseChatMessageInput", () => {
+describe("parseCommentInput", () => {
   it("accepts role + body (+ optional name) and omits at", () => {
-    const result = parseChatMessageInput({ role: "human", body: "hi" });
+    const result = parseCommentInput({ role: "human", body: "hi" });
     expect(result.ok).toBe(true);
     if (result.ok) expect("at" in result.input).toBe(false);
   });
 
   it("rejects a missing role, an empty body, and a null/undefined body", () => {
-    expect(parseChatMessageInput({ body: "hi" }).ok).toBe(false);
-    expect(parseChatMessageInput({ role: "agent", body: "" }).ok).toBe(false);
-    expect(parseChatMessageInput(null).ok).toBe(false);
-    expect(parseChatMessageInput(undefined).ok).toBe(false);
+    expect(parseCommentInput({ body: "hi" }).ok).toBe(false);
+    expect(parseCommentInput({ role: "agent", body: "" }).ok).toBe(false);
+    expect(parseCommentInput(null).ok).toBe(false);
+    expect(parseCommentInput(undefined).ok).toBe(false);
   });
 });
 

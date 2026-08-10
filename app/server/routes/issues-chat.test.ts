@@ -63,7 +63,7 @@ afterEach(async () => {
 });
 
 describe("chat HTTP API", () => {
-  it("accepts messages on an Idea and creates chat.jsonl", async () => {
+  it("accepts messages on an Idea and creates comments.jsonl", async () => {
     const res = await fetch(`${baseUrl}/api/issues/idea-1/messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -73,6 +73,6 @@ describe("chat HTTP API", () => {
     const body = await res.json();
     expect(body.role).toBe("stakeholder");
     expect(body.body).toBe("audit note");
-    expect(existsSync(join(dir, "idea-1", "chat.jsonl"))).toBe(true);
+    expect(existsSync(join(dir, "idea-1", "comments.jsonl"))).toBe(true);
   });
 });

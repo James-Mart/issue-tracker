@@ -1,11 +1,11 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Send } from "lucide-react";
-import type { ChatMessage } from "@server/schemas";
+import type { Comment } from "@server/schemas";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useChatQuery, useIssuesQuery } from "../api/queries";
-import { usePostMessage } from "../api/mutations";
+import { useCommentsQuery, useIssuesQuery } from "../api/queries";
+import { usePostComment } from "../api/mutations";
 import { isInFlight } from "../lib/derived";
 import { Markdown } from "./markdown";
 import { MessageScroller } from "./chat/message-scroller";
@@ -40,7 +40,7 @@ function MessageList({
   attachmentsIssueId,
   agentLive,
 }: {
-  messages: ChatMessage[];
+  messages: Comment[];
   attachmentsIssueId?: string;
   agentLive: boolean;
 }) {
@@ -80,9 +80,9 @@ export function ChatPanel({
   /** When set, relative Markdown links in chat resolve to this issue's attachments. */
   attachmentsIssueId?: string;
 }) {
-  const { data, isLoading, error } = useChatQuery(id);
+  const { data, isLoading, error } = useCommentsQuery(id);
   const { data: list } = useIssuesQuery();
-  const post = usePostMessage(id);
+  const post = usePostComment(id);
   const [draft, setDraft] = useState("");
 
   const messages = data?.messages ?? [];

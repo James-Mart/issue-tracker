@@ -13,7 +13,7 @@ import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import {
-  useChatQuery,
+  useCommentsQuery,
   useIssueDetailQuery,
   useIssuesQuery,
 } from "../api/queries";
@@ -124,7 +124,7 @@ function CompanionSlot({
 /** Owns chat fetch + `?chat=` companion state; mount only when the companion shows. */
 function IssueDetailCompanion({ issue }: { issue: IssueDetail }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data: chat } = useChatQuery(issue.id);
+  const { data: chat } = useCommentsQuery(issue.id);
   const attach = supportsAttachments(issue.kind);
   const preference = parseChatCompanionPreference(searchParams.get("chat"));
   const hasMessages = (chat?.messages.length ?? 0) > 0;

@@ -12,10 +12,10 @@ import {
 import type { IssueDetail, IssueKind } from "./server/schemas.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
 import {
-  appendMessage,
+  appendComment,
   list,
   read,
-  readChat,
+  readComments,
   remove,
 } from "./server/services/issues.js";
 import {
@@ -105,7 +105,7 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
   console.log(detail.description || "(no description)");
 
   if (opts.chat) {
-    const { messages, problems } = readChat(id);
+    const { messages, problems } = readComments(id);
     console.log();
     console.log("--- chat ---");
     if (messages.length === 0) console.log("(no messages)");
@@ -162,7 +162,7 @@ async function printComment(
   id: string,
   opts: { role: string; body: string; name?: string },
 ): Promise<void> {
-  const message = await appendMessage(id, {
+  const message = await appendComment(id, {
     role: opts.role,
     name: opts.name,
     body: opts.body,

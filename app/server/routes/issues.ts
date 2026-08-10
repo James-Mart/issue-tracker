@@ -9,18 +9,18 @@ import {
 } from "../services/attachments.js";
 import { IssueError } from "../services/errors.js";
 import {
-  appendMessage,
+  appendComment,
   create,
   list,
   read,
-  readChat,
+  readComments,
   remove,
   update,
 } from "../services/issues.js";
 import { moveStory } from "../services/move-story.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
 import type {
-  ChatMessageInput,
+  CommentInput,
   CreateInput,
   IssuePatch,
 } from "../schemas.js";
@@ -46,7 +46,7 @@ issuesRouter.get(
 issuesRouter.get(
   "/:id/chat",
   asyncRoute((req, res) => {
-    res.json(readChat(req.params.id));
+    res.json(readComments(req.params.id));
   }),
 );
 
@@ -102,7 +102,7 @@ issuesRouter.post(
 issuesRouter.post(
   "/:id/messages",
   asyncRoute(async (req, res) => {
-    const message = await appendMessage(req.params.id, req.body as ChatMessageInput);
+    const message = await appendComment(req.params.id, req.body as CommentInput);
     res.status(201).json(message);
   }),
 );

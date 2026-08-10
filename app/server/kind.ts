@@ -18,10 +18,10 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: false,
     attachments: true,
-    chat: true,
-    // Detail companion is narrower than chat storage (project has chat, not companion).
+    comments: true,
+    // Detail companion is narrower than comments storage (project has comments, not companion).
     chatCompanion: false,
-    // CLI `comment` is narrower than chat storage (project has chat, not comment).
+    // CLI `comment` is narrower than comments storage (project has comments, not comment).
     comment: false,
   },
   idea: {
@@ -32,7 +32,7 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: false,
     attachments: true,
-    chat: true,
+    comments: true,
     chatCompanion: true,
     comment: true,
   },
@@ -43,7 +43,7 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: true,
     attachments: true,
-    chat: true,
+    comments: true,
     chatCompanion: true,
     comment: true,
   },
@@ -54,7 +54,7 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: true,
     attachments: true,
-    chat: true,
+    comments: true,
     chatCompanion: true,
     comment: true,
   },
@@ -65,7 +65,7 @@ export const KIND_CAPABILITIES = {
     assignee: true,
     attention: true,
     attachments: true,
-    chat: true,
+    comments: true,
     chatCompanion: true,
     comment: true,
   },
@@ -78,7 +78,7 @@ export const KIND_CAPABILITIES = {
     assignee: boolean;
     attention: boolean;
     attachments: boolean;
-    chat: boolean;
+    comments: boolean;
     chatCompanion: boolean;
     comment: boolean;
   }
@@ -97,7 +97,7 @@ export type AssigneeIssue = Extract<Issue, { kind: "task" }>;
 export type KindCapability = keyof (typeof KIND_CAPABILITIES)[IssueKind];
 
 /** Capabilities that refuse with a user-facing validation error. */
-export type RefuseableCapability = "attachments" | "chat";
+export type RefuseableCapability = "attachments" | "comments";
 
 export function kindHas(kind: IssueKind, capability: KindCapability): boolean {
   return KIND_CAPABILITIES[kind][capability];
@@ -111,7 +111,7 @@ export function kindCapabilityRefusal(
   kind: IssueKind,
   capability: RefuseableCapability,
 ): string {
-  const subject = capability === "attachments" ? "attachments are" : "chat is";
+  const subject = capability === "attachments" ? "attachments are" : "comments are";
   return `${subject} not allowed on ${articleForKind(kind)} ${KIND_LABEL[kind]}`;
 }
 

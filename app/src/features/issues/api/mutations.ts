@@ -2,8 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { request } from "@/lib/api/client";
 import type {
-  ChatMessage,
-  ChatMessageInput,
+  Comment,
+  CommentInput,
   CreateInput,
   IssueDetail,
   IssuePatch,
@@ -62,16 +62,16 @@ export function useUpdateIssue() {
   });
 }
 
-export function usePostMessage(id: string) {
+export function usePostComment(id: string) {
   const qc = useQueryClient();
-  return useMutation<ChatMessage, Error, ChatMessageInput>({
+  return useMutation<Comment, Error, CommentInput>({
     mutationFn: (input) =>
-      request<ChatMessage>(`/api/issues/${id}/messages`, {
+      request<Comment>(`/api/issues/${id}/messages`, {
         method: "POST",
         body: input,
       }),
     onError: (err) => toast.error(messageOf(err)),
-    onSettled: () => qc.invalidateQueries({ queryKey: issuesKeys.chat(id) }),
+    onSettled: () => qc.invalidateQueries({ queryKey: issuesKeys.comments(id) }),
   });
 }
 
@@ -85,7 +85,7 @@ export function useDeleteIssue() {
       qc.invalidateQueries({ queryKey: issuesKeys.list() });
       for (const deletedId of data?.deleted ?? [id]) {
         qc.removeQueries({ queryKey: issuesKeys.detail(deletedId) });
-        qc.removeQueries({ queryKey: issuesKeys.chat(deletedId) });
+        qc.removeQueries({ queryKey: issuesKeys.comments(deletedId) });
         qc.removeQueries({ queryKey: issuesKeys.attachments(deletedId) });
       }
     },

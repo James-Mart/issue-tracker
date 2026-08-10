@@ -238,7 +238,7 @@ describe("view", () => {
     });
     writeFileSync(join(dir, "a", "description.md"), "# Branch A\n\nthe body\n");
     writeFileSync(
-      join(dir, "a", "chat.jsonl"),
+      join(dir, "a", "comments.jsonl"),
       JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) + "\n",
     );
   });
@@ -2509,7 +2509,7 @@ describe("kind-scoped view / delete / comment / attach", () => {
     });
     writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
     writeFileSync(
-      join(dir, "a", "chat.jsonl"),
+      join(dir, "a", "comments.jsonl"),
       JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
         "\n",
     );
@@ -2583,7 +2583,7 @@ describe("kind-scoped view / delete / comment / attach", () => {
       ]);
       expect(status, kind).toBe(0);
       expect(stdout, kind).toContain(`commented on ${id}`);
-      expect(readFileSync(join(dir, id, "chat.jsonl"), "utf8")).toContain(
+      expect(readFileSync(join(dir, id, "comments.jsonl"), "utf8")).toContain(
         `note on ${id}`,
       );
     }
@@ -2693,7 +2693,7 @@ describe("bare-id view / get / comment / attach", () => {
     writeFileSync(join(dir, "e", "description.md"), "# Epic\n\nepic body\n");
     writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
     writeFileSync(
-      join(dir, "a", "chat.jsonl"),
+      join(dir, "a", "comments.jsonl"),
       JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
         "\n",
     );
@@ -2772,7 +2772,7 @@ describe("bare-id view / get / comment / attach", () => {
     expect(scoped.status).toBe(0);
     expect(scoped.stdout).toBe("commented on a as impl\n");
 
-    const chat = readFileSync(join(dir, "a", "chat.jsonl"), "utf8");
+    const chat = readFileSync(join(dir, "a", "comments.jsonl"), "utf8");
     expect(chat).toContain('"body":"bare-id note"');
     expect(chat).toContain('"body":"kind-scoped note"');
     expect(chat).toContain('"role":"implementor"');

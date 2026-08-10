@@ -17,13 +17,13 @@ import {
   type RefuseableCapability,
 } from "../kind.js";
 import {
-  parseChatMessage,
-  parseChatMessageInput,
+  parseComment,
+  parseCommentInput,
   parseIssue,
   requiresPartOf,
-  type ChatMessage,
-  type ChatMessageInput,
-  type ChatResponse,
+  type Comment,
+  type CommentInput,
+  type CommentsResponse,
   type CreateInput,
   type Issue,
   type IssueDetail,
@@ -88,7 +88,11 @@ function jsonPathOf(id: string): string {
   return join(dirOf(id), "issue.json");
 }
 
-function chatPathOf(id: string): string {
+function commentsPathOf(id: string): string {
+  return join(dirOf(id), "comments.jsonl");
+}
+
+function legacyChatPathOf(id: string): string {
   return join(dirOf(id), "chat.jsonl");
 }
 
@@ -176,13 +180,17 @@ export function list(): IssuesResponse {
   ensureMigrations();
   const { issues, problems } = readAll();
   const derived = derive(issues);
-  // Parse each chat.jsonl so out-of-band corruption surfaces in the tree/CLI,
-  // not just the chat panel. Chats are small local files, so the extra reads
-  // are cheap; list() is not invalidated on every chat append (see events).
-  const chatProblems = issues.flatMap((issue) => readChat(issue.id).problems);
+  // Parse each comments.jsonl so out-of-band corruption surfaces in the tree/CLI,
+  // not just the comments panel. Comments are small local files, so the extra reads
+  // are cheap; list() is not invalidated on every comment append (see events).
+  const commentProblems = issues.flatMap((issue) => readComments(issue.id).problems);
+  const legacyChatProblems = issues.flatMap((issue) => {
+    if (!existsSync(legacyChatPathOf(issue.id))) return [];
+    return [{ id: issue.id, message: "chat.jsonl" }];
+  });
   return {
     issues: issues.map(toRecord),
-    problems: [...problems, ...chatProblems, ...derived.problems],
+    problems: [...problems, ...commentProblems, ...legacyChatProblems, ...derived.problems],
     derived: derived.byId,
   };
 }
@@ -213,7 +221,7 @@ export function onDiskHasUnknownKeys(issue: Issue): boolean {
 }
 
 // The version covers issue.json + description.md, the two files the edit form
-// mutates. chat.jsonl is excluded on purpose: append-only chat updates live
+// mutates. comments.jsonl is excluded on purpose: append-only comment updates live
 // through its own SSE-fed query and must not trip the external-edit banner.
 export function versionOf(jsonText: string, description: string): string {
   return createHash("sha1")
@@ -630,14 +638,14 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
   });
 }
 
-export function readChat(id: string): ChatResponse {
+export function readComments(id: string): CommentsResponse {
   if (!existsSync(dirOf(id))) {
     throw new IssueError("not_found", `unknown issue "${id}"`);
   }
-  const path = chatPathOf(id);
+  const path = commentsPathOf(id);
   if (!existsSync(path)) return { messages: [], problems: [] };
 
-  const messages: ChatMessage[] = [];
+  const messages: Comment[] = [];
   const problems: Problem[] = [];
   const lines = readFileSync(path, "utf8").split("\n");
   lines.forEach((line, index) => {
@@ -647,26 +655,26 @@ export function readChat(id: string): ChatResponse {
       raw = JSON.parse(line);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      problems.push({ id, message: `chat.jsonl line ${index + 1}: ${detail}` });
+      problems.push({ id, message: `comments.jsonl line ${index + 1}: ${detail}` });
       return;
     }
-    const parsed = parseChatMessage(raw);
+    const parsed = parseComment(raw);
     if (parsed.ok) messages.push(parsed.message);
-    else problems.push({ id, message: `chat.jsonl line ${index + 1}: ${parsed.message}` });
+    else problems.push({ id, message: `comments.jsonl line ${index + 1}: ${parsed.message}` });
   });
   return { messages, problems };
 }
 
-export function appendMessage(
+export function appendComment(
   id: string,
-  input: ChatMessageInput,
-): Promise<ChatMessage> {
+  input: CommentInput,
+): Promise<Comment> {
   return serialize(() => {
-    requireKindCapability(id, "chat");
-    const parsed = parseChatMessageInput(input);
+    requireKindCapability(id, "comments");
+    const parsed = parseCommentInput(input);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
-    const message: ChatMessage = { ...parsed.input, at: new Date().toISOString() };
-    appendFileSync(chatPathOf(id), `${JSON.stringify(message)}\n`);
+    const message: Comment = { ...parsed.input, at: new Date().toISOString() };
+    appendFileSync(commentsPathOf(id), `${JSON.stringify(message)}\n`);
     return message;
   });
 }
