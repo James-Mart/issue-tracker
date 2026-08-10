@@ -1,4 +1,4 @@
-import type { Issue, IssueKind } from "./schemas.js";
+import type { ConversationChannel, Issue, IssueKind } from "./schemas.js";
 
 export const KIND_LABEL: Record<IssueKind, string> = {
   project: "Project",
@@ -77,6 +77,30 @@ export const KIND_CAPABILITIES = {
     comment: boolean;
   }
 >;
+
+/** Workflow channel an issue offers for anchored conversations, if any. */
+export function channelForIssue(
+  issue: Extract<Issue, { kind: "story" }>,
+  parentKind: IssueKind,
+): ConversationChannel | undefined;
+export function channelForIssue(
+  issue: Exclude<Issue, { kind: "story" }>,
+): ConversationChannel | undefined;
+export function channelForIssue(
+  issue: Issue,
+  parentKind?: IssueKind,
+): ConversationChannel | undefined {
+  switch (issue.kind) {
+    case "idea":
+      return "planning";
+    case "epic":
+      return "implementing";
+    case "story":
+      return parentKind === "project" ? "implementing" : undefined;
+    default:
+      return undefined;
+  }
+}
 
 export type AttentionIssue = Extract<
   Issue,

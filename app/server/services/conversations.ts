@@ -16,6 +16,7 @@ import {
   parseDelegationRecordInput,
   parseTranscriptEvent,
   parseTranscriptEventInput,
+  type ConversationChannel,
   type ConversationDetail,
   type ConversationMeta,
   type ConversationMetaPatch,
@@ -25,8 +26,11 @@ import {
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
+import { channelForIssue } from "../kind.js";
+import type { AgentSessions } from "./agent-sessions.js";
 import { publishFrame } from "./conversation-stream.js";
 import { IssueError } from "./errors.js";
+import { readIssueOrThrow } from "./issues.js";
 import { uniqueSlug } from "./slug.js";
 
 let writeChain: Promise<unknown> = Promise.resolve();
@@ -62,6 +66,41 @@ function scanIds(): string[] {
   return readdirSync(conversationsDir).filter((entry) =>
     statSync(dirOf(entry)).isDirectory(),
   );
+}
+
+function validateAnchor(
+  issueId: string | undefined,
+  channel: ConversationChannel | undefined,
+): { issueId: string; channel: ConversationChannel } | undefined {
+  const hasIssueId = issueId !== undefined;
+  const hasChannel = channel !== undefined;
+  if (!hasIssueId && !hasChannel) return undefined;
+  if (hasIssueId !== hasChannel) {
+    throw new IssueError(
+      "validation",
+      hasIssueId
+        ? "channel is required when issueId is set"
+        : "issueId is required when channel is set",
+    );
+  }
+  const issue = readIssueOrThrow(issueId!);
+  const offered =
+    issue.kind === "story"
+      ? channelForIssue(issue, readIssueOrThrow(issue.partOf).kind)
+      : channelForIssue(issue);
+  if (offered === undefined) {
+    throw new IssueError(
+      "validation",
+      `issue "${issueId}" does not offer a channel`,
+    );
+  }
+  if (channel !== offered) {
+    throw new IssueError(
+      "validation",
+      `channel "${channel}" is not offered by issue "${issueId}"`,
+    );
+  }
+  return { issueId: issueId!, channel: channel! };
 }
 
 function readMetaRaw(id: string): ConversationMeta {
@@ -109,6 +148,38 @@ function readTranscriptLines(id: string): TranscriptEvent[] {
   return events;
 }
 
+/**
+ * Allocate a conversation id and write its on-disk bootstrap (meta + empty
+ * transcript/delegations), optionally persisting the first prompt line.
+ * Caller must already hold the `serialize()` turn.
+ */
+function persistNewConversation(
+  fields: Omit<ConversationMeta, "id" | "createdAt" | "updatedAt">,
+  opts?: { initialPrompt?: string },
+): ConversationMeta {
+  const id = uniqueSlug(fields.title, scanIds());
+  const now = new Date().toISOString();
+  const meta: ConversationMeta = {
+    ...fields,
+    id,
+    createdAt: now,
+    updatedAt: now,
+  };
+  mkdirSync(dirOf(id), { recursive: true });
+  writeMeta(meta);
+  writeFileSync(transcriptPathOf(id), "");
+  writeFileSync(delegationsPathOf(id), "");
+  if (opts?.initialPrompt) {
+    const stamped: TranscriptEvent = {
+      type: "prompt",
+      text: opts.initialPrompt,
+      at: now,
+    };
+    appendFileSync(transcriptPathOf(id), `${JSON.stringify(stamped)}\n`);
+  }
+  return meta;
+}
+
 export function createConversation(
   input: CreateConversationInput,
 ): Promise<ConversationMeta> {
@@ -120,23 +191,86 @@ export function createConversation(
     const model = input.model.trim();
     if (!model) throw new IssueError("validation", "model is required");
 
-    const id = uniqueSlug(title, scanIds());
-    const now = new Date().toISOString();
-    const meta: ConversationMeta = {
-      id,
+    const anchor = validateAnchor(
+      input.issueId?.trim() || undefined,
+      input.channel,
+    );
+
+    const fields: Omit<ConversationMeta, "id" | "createdAt" | "updatedAt"> = {
       title,
       projectId,
       model,
-      createdAt: now,
-      updatedAt: now,
     };
-    if (input.agentId?.trim()) meta.agentId = input.agentId.trim();
+    if (input.agentId?.trim()) fields.agentId = input.agentId.trim();
+    if (anchor) {
+      fields.issueId = anchor.issueId;
+      fields.channel = anchor.channel;
+    }
+    return persistNewConversation(fields);
+  });
+}
 
-    mkdirSync(dirOf(id), { recursive: true });
-    writeMeta(meta);
-    writeFileSync(transcriptPathOf(id), "");
-    writeFileSync(delegationsPathOf(id), "");
-    return meta;
+export type CreateIssueChannelSessionInput = {
+  issueId: string;
+  channel: ConversationChannel;
+  projectId: string;
+  title: string;
+  model: string;
+  /** When set, the first prompt event is persisted in the same write turn. */
+  message?: string;
+};
+
+export type CreateIssueChannelSessionResult = {
+  meta: ConversationMeta;
+  /** Trimmed first prompt when `message` was provided; caller starts the run. */
+  initialPrompt?: string;
+};
+
+/**
+ * Atomically validate eligibility, archive any active predecessor on the same
+ * issue+channel, create the anchored session, and optionally persist the first
+ * prompt event — one `serialize()` turn so concurrent POSTs cannot leave two
+ * active sessions, and refused requests write nothing.
+ */
+export function createIssueChannelSession(
+  input: CreateIssueChannelSessionInput,
+): Promise<CreateIssueChannelSessionResult> {
+  return serialize(() => {
+    const issueId = input.issueId.trim();
+    if (!issueId) throw new IssueError("validation", "issueId is required");
+    const projectId = input.projectId.trim();
+    if (!projectId) throw new IssueError("validation", "projectId is required");
+    const title = input.title.trim();
+    if (!title) throw new IssueError("validation", "title is required");
+    const model = input.model.trim();
+    if (!model) throw new IssueError("validation", "model is required");
+    const initialPrompt = input.message?.trim() || undefined;
+
+    // Refuse before any mutation.
+    validateAnchor(issueId, input.channel);
+
+    const now = new Date().toISOString();
+    for (const id of scanIds()) {
+      let existing: ConversationMeta;
+      try {
+        existing = readMetaRaw(id);
+      } catch {
+        continue;
+      }
+      if (
+        existing.issueId === issueId &&
+        existing.channel === input.channel &&
+        !existing.archived
+      ) {
+        writeMeta({ ...existing, archived: true, updatedAt: now });
+      }
+    }
+
+    const meta = persistNewConversation(
+      { title, projectId, model, issueId, channel: input.channel },
+      initialPrompt ? { initialPrompt } : undefined,
+    );
+    return { meta, ...(initialPrompt ? { initialPrompt } : {}) };
   });
 }
 
@@ -238,6 +372,43 @@ export async function setPendingMessage(
     persist: false,
   });
   return meta;
+}
+
+/**
+ * Start a run from a user prompt (shared by /messages and channel-session create).
+ * Pass `persistPrompt: false` when the prompt event was already written (e.g. inside
+ * `createIssueChannelSession`'s atomic turn).
+ */
+export async function startConversationPrompt(
+  conversationId: string,
+  prompt: string,
+  model: string | undefined,
+  sessions: AgentSessions,
+  opts?: { persistPrompt?: boolean },
+): Promise<{ ok: true; runId: string } | { ok: false; message: string }> {
+  const persistPrompt = opts?.persistPrompt !== false;
+  const { meta } = readConversation(conversationId);
+  if (meta.pendingMessage) {
+    await setPendingMessage(conversationId, null);
+  }
+
+  if (persistPrompt) {
+    await appendEvent(conversationId, { type: "prompt", text: prompt });
+  }
+
+  const result = await sessions.sendPrompt(conversationId, {
+    prompt,
+    model,
+  });
+  if (!result.ok) {
+    const message = result.error.message;
+    const event = { type: "error" as const, message };
+    await appendEvent(conversationId, event);
+    publishFrame(conversationId, { event, persist: true });
+    return { ok: false, message };
+  }
+
+  return { ok: true, runId: result.run.id };
 }
 
 export function updateMeta(

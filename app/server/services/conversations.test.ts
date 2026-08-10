@@ -11,8 +11,17 @@ import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const AT = "2026-07-09T14:00:00.000Z";
 let root: string;
 let issuesDir: string;
+
+function writeIssue(id: string, body: Record<string, unknown>): void {
+  mkdirSync(join(issuesDir, id), { recursive: true });
+  writeFileSync(
+    join(issuesDir, id, "issue.json"),
+    JSON.stringify({ id, ...body }),
+  );
+}
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-conversations-"));
@@ -20,6 +29,33 @@ beforeEach(() => {
   mkdirSync(issuesDir, { recursive: true });
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", issuesDir);
+  writeIssue("platform", {
+    kind: "project",
+    title: "Platform",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("capture", {
+    kind: "idea",
+    title: "Capture",
+    partOf: "platform",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("add-auth", {
+    kind: "epic",
+    title: "Add auth",
+    partOf: "platform",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("root-story", {
+    kind: "story",
+    title: "Root story",
+    partOf: "platform",
+    createdAt: AT,
+    updatedAt: AT,
+  });
 });
 
 afterEach(() => {
@@ -44,6 +80,8 @@ describe("conversations store", () => {
     expect(dirname(conversationsDir)).toBe(dirname(issuesDir));
     expect(conversationsDir).not.toBe(issuesDir);
 
+    const issueIdsBefore = readdirSync(issuesDir).sort();
+
     const meta = await createConversation({
       title: "Hello World",
       projectId: "platform",
@@ -59,7 +97,7 @@ describe("conversations store", () => {
     ).toBe(true);
     // Peer of issues/ — not nested inside the issues store.
     expect(existsSync(join(issuesDir, meta.id))).toBe(false);
-    expect(readdirSync(issuesDir)).toEqual([]);
+    expect(readdirSync(issuesDir).sort()).toEqual(issueIdsBefore);
   });
 
   it("creates, appends, reads in order, updates meta, and deletes", async () => {
@@ -298,6 +336,132 @@ describe("conversations store", () => {
     const archived = await updateMeta(created.id, { archived: true });
     expect(archived.archived).toBe(true);
     expect(readConversation(created.id).meta.archived).toBe(true);
+  });
+
+  it("creates an anchored conversation and round-trips through readConversation", async () => {
+    const { conversationsDir } = await loadConfig();
+    const { createConversation, readConversation } = await loadService();
+
+    const created = await createConversation({
+      title: "Plan capture",
+      projectId: "platform",
+      model: "composer-2.5",
+      issueId: "capture",
+      channel: "planning",
+    });
+    expect(created.issueId).toBe("capture");
+    expect(created.channel).toBe("planning");
+
+    const detail = readConversation(created.id);
+    expect(detail.meta.issueId).toBe("capture");
+    expect(detail.meta.channel).toBe("planning");
+
+    const raw = JSON.parse(
+      readFileSync(join(conversationsDir, created.id, "meta.json"), "utf8"),
+    );
+    expect(raw.issueId).toBe("capture");
+    expect(raw.channel).toBe("planning");
+  });
+
+  it("refuses half an anchor on create", async () => {
+    const { createConversation } = await loadService();
+
+    await expect(
+      createConversation({
+        title: "Half anchor",
+        projectId: "platform",
+        model: "auto",
+        issueId: "capture",
+      }),
+    ).rejects.toThrow(/channel is required when issueId is set/);
+
+    await expect(
+      createConversation({
+        title: "Half anchor",
+        projectId: "platform",
+        model: "auto",
+        channel: "planning",
+      }),
+    ).rejects.toThrow(/issueId is required when channel is set/);
+  });
+
+  it("createIssueChannelSession archives predecessors atomically under concurrent create", async () => {
+    const { createIssueChannelSession, listConversations } = await loadService();
+
+    const [a, b] = await Promise.all([
+      createIssueChannelSession({
+        issueId: "capture",
+        channel: "planning",
+        projectId: "platform",
+        title: "Concurrent A",
+        model: "composer-2.5",
+      }),
+      createIssueChannelSession({
+        issueId: "capture",
+        channel: "planning",
+        projectId: "platform",
+        title: "Concurrent B",
+        model: "composer-2.5",
+      }),
+    ]);
+
+    expect(a.meta.id).not.toBe(b.meta.id);
+    const active = listConversations().filter(
+      (m) =>
+        m.issueId === "capture" &&
+        m.channel === "planning" &&
+        !m.archived,
+    );
+    expect(active).toHaveLength(1);
+    expect([a.meta.id, b.meta.id]).toContain(active[0]!.id);
+  });
+
+  it("createIssueChannelSession refuses before writing when the channel is ineligible", async () => {
+    const { createIssueChannelSession, listConversations } = await loadService();
+
+    const prior = await createIssueChannelSession({
+      issueId: "capture",
+      channel: "planning",
+      projectId: "platform",
+      title: "Keep me",
+      model: "composer-2.5",
+    });
+
+    await expect(
+      createIssueChannelSession({
+        issueId: "capture",
+        channel: "implementing",
+        projectId: "platform",
+        title: "Should not land",
+        model: "composer-2.5",
+      }),
+    ).rejects.toThrow(/channel "implementing" is not offered by issue "capture"/);
+
+    const listed = listConversations().filter(
+      (m) => m.issueId === "capture" && m.channel === "planning",
+    );
+    expect(listed).toEqual([
+      expect.objectContaining({ id: prior.meta.id, archived: false }),
+    ]);
+    expect(
+      listConversations().some(
+        (m) => m.issueId === "capture" && m.channel === "implementing",
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses an unknown issueId on anchored create", async () => {
+    const { createConversation } = await loadService();
+
+    await expect(
+      createConversation({
+        title: "Ghost anchor",
+        projectId: "platform",
+        model: "auto",
+        issueId: "ghost",
+        channel: "planning",
+      }),
+    ).rejects.toThrow(/unknown issue "ghost"/);
   });
 
   it("appends and reads delegation records, omitting parent when root-delegated", async () => {

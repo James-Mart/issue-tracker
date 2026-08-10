@@ -104,6 +104,15 @@ beforeEach(async () => {
     createdAt: AT,
     updatedAt: AT,
   });
+  writeIssue("capture", {
+    kind: "idea",
+    title: "Capture",
+    partOf: "platform",
+    order: 0,
+    archived: false,
+    createdAt: AT,
+    updatedAt: AT,
+  });
 
   const { createApp } = await import("../app.js");
   const app = createApp();
@@ -219,6 +228,37 @@ describe("conversations HTTP API (CRUD)", () => {
     expect(
       existsSync(join(conversationsDir(), created.id, "meta.json")),
     ).toBe(true);
+  });
+
+  it("GET omits issue-anchored conversations with and without showArchived", async () => {
+    const unanchored = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Free-form chat" }),
+    }).then((r) => r.json());
+    const anchored = await fetch(
+      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Anchored chat" }),
+      },
+    ).then((r) => r.json());
+
+    const defaultList = await fetch(`${baseUrl}/api/conversations`).then((r) =>
+      r.json(),
+    );
+    expect(defaultList.map((m: { id: string }) => m.id)).toEqual([unanchored.id]);
+
+    const archivedList = await fetch(
+      `${baseUrl}/api/conversations?showArchived=true`,
+    ).then((r) => r.json());
+    expect(archivedList.map((m: { id: string }) => m.id)).toEqual([
+      unanchored.id,
+    ]);
+    expect(archivedList.some((m: { id: string }) => m.id === anchored.id)).toBe(
+      false,
+    );
   });
 
   it("GET omits archived conversations unless showArchived=true", async () => {
