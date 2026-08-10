@@ -124,6 +124,8 @@ export function IssueDetailTabs({
               issue={issue}
               channel={tab.channel}
               label={tab.label}
+              projectId={projectId}
+              parentKind={parentKind}
             />
           </div>
         );

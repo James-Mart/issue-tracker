@@ -227,6 +227,57 @@ export type CreateIssueChannelSessionResult = {
 };
 
 /**
+ * Active-run lookup used by the Project implementing lock. Narrower than
+ * `AgentSessions` so unit tests can stub just this probe.
+ */
+export type ActiveRunLookup = {
+  getActiveRun(conversationId: string): unknown;
+};
+
+/**
+ * Refuse creating an `implementing` session when another non-archived
+ * implementing session in the same Project already has an active run.
+ *
+ * Rationale: every coordinator shares one git working tree today, so two
+ * implementing loops would collide on branches and commits. The horizon is a
+ * worktree per coordinator, at which point this lock can be lifted.
+ */
+function refuseIfImplementingProjectLocked(
+  projectId: string,
+  channel: ConversationChannel,
+  sessions: ActiveRunLookup,
+): void {
+  if (channel !== "implementing") return;
+
+  for (const id of scanIds()) {
+    let existing: ConversationMeta;
+    try {
+      existing = readMetaRaw(id);
+    } catch {
+      continue;
+    }
+    if (
+      existing.projectId !== projectId ||
+      existing.channel !== "implementing" ||
+      existing.archived ||
+      !existing.issueId ||
+      sessions.getActiveRun(id) === undefined
+    ) {
+      continue;
+    }
+    const holder = readIssueOrThrow(existing.issueId);
+    throw new IssueError(
+      "conflict",
+      `project already has an active implementing session on issue "${existing.issueId}"`,
+      {
+        holderIssueId: existing.issueId,
+        holderIssueTitle: holder.title,
+      },
+    );
+  }
+}
+
+/**
  * Atomically validate eligibility, archive any active predecessor on the same
  * issue+channel, create the anchored session, and optionally persist the first
  * prompt event — one `serialize()` turn so concurrent POSTs cannot leave two
@@ -234,6 +285,7 @@ export type CreateIssueChannelSessionResult = {
  */
 export function createIssueChannelSession(
   input: CreateIssueChannelSessionInput,
+  sessions: ActiveRunLookup,
 ): Promise<CreateIssueChannelSessionResult> {
   return serialize(() => {
     const issueId = input.issueId.trim();
@@ -248,6 +300,7 @@ export function createIssueChannelSession(
 
     // Refuse before any mutation.
     validateAnchor(issueId, input.channel);
+    refuseIfImplementingProjectLocked(projectId, input.channel, sessions);
 
     const now = new Date().toISOString();
     for (const id of scanIds()) {

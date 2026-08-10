@@ -1,8 +1,10 @@
+import type { QueryClient } from "@tanstack/react-query";
 import type { ChannelSessionListItem } from "@server/schemas";
 import {
   cancelConversationRun,
   updateConversation,
 } from "@/features/agents/api/client";
+import { issuesKeys } from "../api/keys";
 
 /**
  * Stop an in-flight channel session and archive it via PATCH so the switcher
@@ -25,4 +27,37 @@ export function markChannelSessionRetired(
       ? { ...session, archived: true, activeRun: false }
       : session,
   );
+}
+
+/** Patch `activeRun` for one session in a channel-sessions list cache entry. */
+export function markChannelSessionActiveRun(
+  sessions: readonly ChannelSessionListItem[] | undefined,
+  sessionId: string,
+  activeRun: boolean,
+): ChannelSessionListItem[] {
+  return (sessions ?? []).map((session) =>
+    session.id === sessionId ? { ...session, activeRun } : session,
+  );
+}
+
+/**
+ * Keep every cached channel-sessions list in sync when a session's run state
+ * changes (Stop, interject, SSE run frames). Issue-anchored sessions are
+ * omitted from the Agents roster, so the roster invalidation alone is not enough.
+ */
+export function patchChannelSessionActiveRunInCache(
+  qc: QueryClient,
+  sessionId: string,
+  activeRun: boolean,
+): void {
+  const entries = qc.getQueriesData<ChannelSessionListItem[]>({
+    queryKey: [...issuesKeys.all, "channelSessions"],
+  });
+  for (const [key, sessions] of entries) {
+    if (!sessions?.some((session) => session.id === sessionId)) continue;
+    qc.setQueryData(
+      key,
+      markChannelSessionActiveRun(sessions, sessionId, activeRun),
+    );
+  }
 }

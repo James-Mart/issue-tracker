@@ -619,6 +619,22 @@ surfaces once a repo subagent is spawned, the work-loop coordinator checks for
 the `Workspace:` line up front (in Setup) and hands back to the user before
 spawning anything if it is absent.
 
+### One active implementing run per Project
+
+Creating an anchored `implementing` channel session is refused with HTTP `409`
+when another non-archived `implementing` session in the same Project already has
+an active run. The response extends the usual `{ error }` body with
+`holderIssueId` and `holderIssueTitle` so a client can name the holder and link
+to its channel without a second request. The check lives in
+`createIssueChannelSession` (`app/server/services/conversations.ts`) so every
+caller obeys it.
+
+This is not a product preference — it follows from every coordinator sharing one
+git working tree today, where two implementing loops would collide on branches
+and commits. The horizon is a git worktree per coordinator; when that lands, this
+lock can be lifted. Idle (no active run) or archived sessions do not hold the
+lock.
+
 ### Project trunk
 
 A Project's `trunk` is the default git ref for derived `mergeBase` when no

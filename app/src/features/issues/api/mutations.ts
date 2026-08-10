@@ -174,6 +174,7 @@ export function useReorderBoardChild() {
 export function useCreateChannelSession(
   issueId: string,
   channel: ConversationChannel,
+  options?: { suppressToast?: (err: Error) => boolean },
 ) {
   const qc = useQueryClient();
   return useMutation<
@@ -182,7 +183,10 @@ export function useCreateChannelSession(
     CreateChannelSessionBody
   >({
     mutationFn: (body) => createChannelSession(issueId, channel, body),
-    onError: (err) => toast.error(messageOf(err)),
+    onError: (err) => {
+      if (options?.suppressToast?.(err)) return;
+      toast.error(messageOf(err));
+    },
     onSuccess: (data, variables) => {
       const now = new Date().toISOString();
       const created: ChannelSessionListItem = {
