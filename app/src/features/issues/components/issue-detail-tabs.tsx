@@ -1,7 +1,9 @@
 import { useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { IssueDetail, IssueKind } from "@server/schemas";
+import type { ConversationChannel, IssueDetail, IssueKind } from "@server/schemas";
+import { RosterActiveRunIndicator } from "@/features/agents/components/conversation-list-item";
 import { cn } from "@/lib/utils/cn";
+import { useChannelTabIndicator } from "../hooks/use-channel-tab-indicator";
 import {
   resolveIssueDetailTab,
   tabsForIssueDetail,
@@ -9,6 +11,7 @@ import {
   type IssueDetailTab,
   type IssueDetailTabKey,
 } from "../lib/issue-detail-tabs";
+import type { ChannelTabIndicator } from "../lib/channel-tab-indicator";
 import type { SupportingDocPreviewTab } from "../lib/supporting-docs";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 import { SupportingDocPreview } from "./supporting-doc-preview";
@@ -70,15 +73,27 @@ export function IssueDetailTabs({
         aria-label="Issue detail"
         className="flex shrink-0 flex-wrap gap-1 border-b border-border shell:flex-nowrap"
       >
-        {tabs.map((tab) => (
-          <TabButton
-            key={tab.key}
-            selected={active === tab.key}
-            onClick={() => setActive(tab.key)}
-          >
-            {tab.label}
-          </TabButton>
-        ))}
+        {tabs.map((tab) =>
+          isChannelTab(tab) ? (
+            <ChannelTabButton
+              key={tab.key}
+              issueId={issue.id}
+              channel={tab.channel}
+              selected={active === tab.key}
+              onClick={() => setActive(tab.key)}
+            >
+              {tab.label}
+            </ChannelTabButton>
+          ) : (
+            <TabButton
+              key={tab.key}
+              selected={active === tab.key}
+              onClick={() => setActive(tab.key)}
+            >
+              {tab.label}
+            </TabButton>
+          ),
+        )}
       </div>
 
       <div
@@ -140,29 +155,65 @@ function tabPanelVisibility(selected: boolean): Record<string, unknown> {
   return selected ? {} : { inert: "" };
 }
 
-function TabButton({
+function ChannelTabButton({
+  issueId,
+  channel,
   selected,
   onClick,
   children,
 }: {
+  issueId: string;
+  channel: ConversationChannel;
   selected: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
+  const indicator = useChannelTabIndicator(issueId, channel);
+  return (
+    <TabButton
+      selected={selected}
+      onClick={onClick}
+      indicator={indicator}
+    >
+      {children}
+    </TabButton>
+  );
+}
+
+function TabButton({
+  selected,
+  onClick,
+  children,
+  indicator = null,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  indicator?: ChannelTabIndicator | null;
+}) {
+  const awaiting = indicator === "awaiting-human";
+  const activeRun = indicator === "active-run";
+
   return (
     <button
       type="button"
       role="tab"
       aria-selected={selected}
       onClick={onClick}
+      data-channel-tab-indicator={indicator ?? undefined}
       className={cn(
-        "-mb-px border-b-2 px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors",
-        selected
-          ? "border-[hsl(var(--current))] text-[hsl(var(--current))]"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+        "-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors",
+        awaiting
+          ? selected
+            ? "border-[hsl(var(--warning))] [color:hsl(var(--warning))]"
+            : "border-transparent [color:hsl(var(--warning))] hover:[color:hsl(var(--warning))]"
+          : selected
+            ? "border-[hsl(var(--current))] text-[hsl(var(--current))]"
+            : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
       {children}
+      <RosterActiveRunIndicator activeRun={activeRun} />
     </button>
   );
 }
