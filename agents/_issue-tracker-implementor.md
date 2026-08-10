@@ -17,7 +17,7 @@ fits the codebase it lands in.
 2. Run `issue summary <id>` to rebuild Project → … → Task context (Epic may be
    absent when the Task's Story / work root is project-level). Use
    `issue task view <id>` for the full `description.md`, and
-   `issue task view <id> --chat` for prior comments.
+   `issue task view <id> --comments` for prior comments.
    Also `issue view <workRootId>` for the work root (Inputs). Take the Task's
    parent Story id from the summary ancestry chain
    (`Story: <parentStoryId> — …`). When that id differs from `<workRootId>`,

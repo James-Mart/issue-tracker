@@ -67,7 +67,7 @@ and follow it; otherwise **Read**
 and follow it.
 
 When Mode is `resume`, also **verify that previously requested changes were
-fixed**: read prior code-quality findings from `issue task view <taskId> --chat`
+fixed**: read prior code-quality findings from `issue task view <taskId> --comments`
 and confirm each actionable item was addressed (or declined with reasoning by
 the implementor). Unfixed prior findings remain actionable.
 

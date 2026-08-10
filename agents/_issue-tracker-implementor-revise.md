@@ -7,7 +7,7 @@ Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-revise.md`
 
-1. Read feedback with `issue task view <id> --chat`.
+1. Read feedback with `issue task view <id> --comments`.
 2. The feedback was delivered by a weaker engineer. You are the senior engineer.
    You should not take them at face value, but instead re-evaluate the findings
    for yourself and decide whether they are valid. For each finding, pick one
