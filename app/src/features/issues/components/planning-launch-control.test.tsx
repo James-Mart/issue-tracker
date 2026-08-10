@@ -56,6 +56,53 @@ vi.mock("../hooks/use-issue-patch-action", () => ({
   }),
 }));
 
+const liveRunConfirm = vi.hoisted(() => ({
+  midRun: false,
+  pending: null as null | (() => void | Promise<void>),
+  confirming: false,
+}));
+
+vi.mock("../hooks/use-confirm-channel-live-run", () => ({
+  useConfirmChannelLiveRun: () => ({
+    confirmIfLiveRun: (action: () => void | Promise<void>) => {
+      if (!liveRunConfirm.midRun) {
+        void action();
+        return;
+      }
+      liveRunConfirm.pending = action;
+    },
+    cancelConfirm: () => {
+      liveRunConfirm.pending = null;
+    },
+    awaitingConfirm: liveRunConfirm.pending !== null,
+    confirming: liveRunConfirm.confirming,
+    dialog:
+      liveRunConfirm.pending !== null ? (
+        <div data-testid="channel-kill-live-run-dialog">
+          <button
+            type="button"
+            onClick={() => {
+              liveRunConfirm.pending = null;
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-testid="channel-kill-live-run-confirm"
+            onClick={() => {
+              const action = liveRunConfirm.pending;
+              liveRunConfirm.pending = null;
+              void action?.();
+            }}
+          >
+            Kill and archive
+          </button>
+        </div>
+      ) : null,
+  }),
+}));
+
 vi.mock("./stakeholder-select", () => ({
   StakeholderSelect: ({
     value,
@@ -110,6 +157,9 @@ afterEach(() => {
   issueState.stakeholder = undefined;
   modelsState.isLoading = false;
   patchActionState.error = null;
+  liveRunConfirm.midRun = false;
+  liveRunConfirm.pending = null;
+  liveRunConfirm.confirming = false;
 });
 
 describe("PlanningChannelEmptyState", () => {
@@ -231,5 +281,110 @@ describe("PlanningNewRunControl", () => {
       '[data-testid="planning-new-run"]',
     );
     expect(button?.textContent).toBe("New run");
+  });
+
+  it("asks before starting a new run when a session is mid-run", () => {
+    liveRunConfirm.midRun = true;
+    const onStarted = vi.fn();
+    const renderControl = () => (
+      <PlanningNewRunControl
+        issue={idea}
+        channel="planning"
+        onStarted={onStarted}
+      />
+    );
+    const { container, root } = mount(renderControl());
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="planning-new-run"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    act(() => {
+      root.render(renderControl());
+    });
+
+    expect(mutate).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('[data-testid="channel-kill-live-run-dialog"]'),
+    ).toBeTruthy();
+  });
+
+  it("leaves the run untouched when New run confirmation is cancelled", () => {
+    liveRunConfirm.midRun = true;
+    const onStarted = vi.fn();
+    const renderControl = () => (
+      <PlanningNewRunControl
+        issue={idea}
+        channel="planning"
+        onStarted={onStarted}
+      />
+    );
+    const { container, root } = mount(renderControl());
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="planning-new-run"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    act(() => {
+      root.render(renderControl());
+    });
+    act(() => {
+      const cancel = [
+        ...(container.querySelectorAll(
+          '[data-testid="channel-kill-live-run-dialog"] button',
+        ) as NodeListOf<HTMLButtonElement>),
+      ].find((button) => button.textContent === "Cancel");
+      cancel?.click();
+    });
+
+    expect(mutate).not.toHaveBeenCalled();
+    expect(liveRunConfirm.pending).toBeNull();
+  });
+
+  it("posts a new session after New run confirmation is accepted", () => {
+    liveRunConfirm.midRun = true;
+    const onStarted = vi.fn();
+    const renderControl = () => (
+      <PlanningNewRunControl
+        issue={idea}
+        channel="planning"
+        onStarted={onStarted}
+      />
+    );
+    const { container, root } = mount(renderControl());
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="planning-new-run"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    act(() => {
+      root.render(renderControl());
+    });
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="channel-kill-live-run-confirm"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        title: "Plan Capture",
+        model: "composer-2.5",
+        message:
+          "Plan capture in the issue tracker using the issue-tracker-plan skill.",
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
   });
 });

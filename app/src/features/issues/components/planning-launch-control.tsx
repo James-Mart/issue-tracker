@@ -7,6 +7,7 @@ import {
   useCreateChannelSession,
   useUpdateIssue,
 } from "../api/mutations";
+import { useConfirmChannelLiveRun } from "../hooks/use-confirm-channel-live-run";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
 import {
   defaultConversationModel,
@@ -75,48 +76,64 @@ function PlanningLaunchButton({
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const models = modelsData?.models ?? [];
   const createSession = useCreateChannelSession(issue.id, channel);
+  const {
+    confirmIfLiveRun,
+    awaitingConfirm,
+    confirming,
+    dialog,
+  } = useConfirmChannelLiveRun(issue.id, channel);
   const copy = planningLaunchCopy(stakeholder, models);
   const defaultModel = defaultConversationModel(models);
+  const blocked = awaitingConfirm || confirming;
   const canStart =
     Boolean(defaultModel) &&
     !modelsLoading &&
     !createSession.isPending &&
+    !blocked &&
     !disabled;
 
   const start = () => {
-    if (!defaultModel || !canStart) return;
+    if (!defaultModel || modelsLoading || createSession.isPending || blocked) {
+      return;
+    }
+    if (disabled) return;
     const title = planningSessionTitle(issue.title);
     const model = planningSessionModel(stakeholder, defaultModel);
-    createSession.mutate(
-      {
-        title,
-        model,
-        message: planningSessionMessage(issue.id, stakeholder),
-      },
-      {
-        onSuccess: ({ id }) => onStarted({ id, title, model }),
-      },
-    );
+    confirmIfLiveRun(() => {
+      createSession.mutate(
+        {
+          title,
+          model,
+          message: planningSessionMessage(issue.id, stakeholder),
+        },
+        {
+          onSuccess: ({ id }) => onStarted({ id, title, model }),
+        },
+      );
+    });
   };
 
   const label =
     variant === "secondary" ? "New run" : copy.actionLabel;
 
   return (
-    <Button
-      type="button"
-      variant={variant === "primary" ? "primary" : "secondary"}
-      size="sm"
-      disabled={!canStart}
-      data-testid={
-        variant === "secondary"
-          ? "planning-new-run"
-          : "planning-start-session"
-      }
-      onClick={start}
-    >
-      {createSession.isPending ? "Starting…" : label}
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant={variant === "primary" ? "primary" : "secondary"}
+        size="sm"
+        disabled={!canStart}
+        data-testid={
+          variant === "secondary"
+            ? "planning-new-run"
+            : "planning-start-session"
+        }
+        onClick={start}
+      >
+        {createSession.isPending ? "Starting…" : label}
+      </Button>
+      {dialog}
+    </>
   );
 }
 
