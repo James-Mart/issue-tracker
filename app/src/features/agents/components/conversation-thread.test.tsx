@@ -79,7 +79,9 @@ vi.mock("../hooks/use-conversation-run-active", () => ({
 }));
 
 vi.mock("./composer", () => ({
-  Composer: () => null,
+  Composer: ({ model }: { model: string }) => (
+    <div data-testid="conversation-composer" data-model={model} />
+  ),
 }));
 
 function mountThread(conversationId: string): {
@@ -307,5 +309,37 @@ describe("ConversationThread pending message", () => {
       id: "conv-1",
       body: { prompt: "send when idle", model: "composer-2.5-fast" },
     });
+  });
+});
+
+describe("ConversationThread anchored meta", () => {
+  let container: HTMLDivElement | undefined;
+  let root: Root | undefined;
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount());
+    container?.remove();
+    container = undefined;
+    root = undefined;
+    transcriptState.events = [...initialEvents];
+  });
+
+  it("mounts the composer from meta when the id is absent from the Agents roster", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <ConversationThread
+          conversationId="anchored-1"
+          meta={{ title: "Plan capture", model: "composer-2.5" }}
+        />,
+      );
+    });
+    const composer = container.querySelector(
+      '[data-testid="conversation-composer"]',
+    );
+    expect(composer?.getAttribute("data-model")).toBe("composer-2.5");
+    expect(container.textContent).toContain("Plan capture");
   });
 });

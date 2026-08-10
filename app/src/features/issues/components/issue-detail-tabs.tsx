@@ -10,6 +10,7 @@ import {
   type IssueDetailTabKey,
 } from "../lib/issue-detail-tabs";
 import type { SupportingDocPreviewTab } from "../lib/supporting-docs";
+import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 import { SupportingDocPreview } from "./supporting-doc-preview";
 
 function isDocTab(tab: IssueDetailTab): tab is SupportingDocPreviewTab {
@@ -97,9 +98,18 @@ export function IssueDetailTabs({
           <div
             key={tab.key}
             role="tabpanel"
-            className={cn("min-h-0 min-w-0 flex-1", !selected && "hidden")}
+            className={cn(
+              "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+              !selected && "hidden",
+            )}
             {...tabPanelVisibility(selected)}
-          />
+          >
+            <ChannelTranscriptPanel
+              issueId={issue.id}
+              channel={tab.channel}
+              label={tab.label}
+            />
+          </div>
         );
       })}
 
