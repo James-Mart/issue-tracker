@@ -3,6 +3,7 @@ import type { Issue } from "@server/schemas";
 import {
   channelTabForIssue,
   DEFAULT_ISSUE_DETAIL_TAB,
+  issueDetailTabNeedsBoundedShell,
   resolveIssueDetailTab,
   tabsForIssueDetail,
   writeIssueDetailTabParam,
@@ -160,5 +161,19 @@ describe("writeIssueDetailTabParam", () => {
     expect(writeIssueDetailTabParam(params, "planning").toString()).toBe(
       "x=1&tab=planning",
     );
+  });
+});
+
+describe("issueDetailTabNeedsBoundedShell", () => {
+  it("is true only for the channel tab", () => {
+    const ideaTabs = tabsForIssueDetail(idea);
+    expect(issueDetailTabNeedsBoundedShell("overview", ideaTabs)).toBe(false);
+    expect(issueDetailTabNeedsBoundedShell("planning", ideaTabs)).toBe(true);
+  });
+
+  it("is false when the issue has no channel tab", () => {
+    const taskTabs = tabsForIssueDetail(task);
+    expect(issueDetailTabNeedsBoundedShell("overview", taskTabs)).toBe(false);
+    expect(issueDetailTabNeedsBoundedShell("planning", taskTabs)).toBe(false);
   });
 });

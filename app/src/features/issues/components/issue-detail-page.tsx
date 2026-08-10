@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import type { IssueDetail, IssueKind, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
@@ -19,6 +19,11 @@ import {
 } from "../hooks/use-issue-detail-file-upload";
 import { kindHasOwnFlow } from "../lib/own-flow";
 import { issueBelongsToProject, issuesById } from "../lib/build-tree";
+import {
+  issueDetailTabNeedsBoundedShell,
+  resolveIssueDetailTab,
+  tabsForIssueDetail,
+} from "../lib/issue-detail-tabs";
 import { projectPath } from "../lib/links";
 import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
@@ -31,6 +36,10 @@ import { IssueDescriptionField } from "./issue-description-field";
 import { IssueCommentsSection } from "./comments/comments-section";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { supportsAttachments } from "../lib/attachments";
+
+/** Match Agents: subtract the app top bar (3rem), not raw 100svh. */
+const BOUNDED_DETAIL_SHELL_CLASS =
+  "h-[calc(100svh-3rem)] min-h-0 overflow-hidden";
 
 /**
  * Own-flow area for `surfaces-detail-flow`. Story: single-spine task Rail.
@@ -123,12 +132,14 @@ function IssueDetailAttachable({
   backLink,
   catalog,
   parentKind,
+  boundShell,
 }: {
   issue: IssueDetail;
   projectId: string;
   backLink: ReactNode;
   catalog: ProjectLabel[];
   parentKind?: IssueKind;
+  boundShell: boolean;
 }) {
   const upload = useUploadAttachment(issue.id);
   const { rootProps } = useIssueDetailFileUpload(upload);
@@ -137,11 +148,7 @@ function IssueDetailAttachable({
     <PageShell
       {...rootProps}
       className={cn(
-        // Project docs (esp. Design system iframe) need a bounded shell so the
-        // reading area can fill and scroll internally. Match agents page:
-        // subtract the app top bar (3rem), not raw 100svh.
-        issue.kind === "project" &&
-          "h-[calc(100svh-3rem)] min-h-0 overflow-hidden",
+        boundShell && BOUNDED_DETAIL_SHELL_CLASS,
         rootProps.className,
       )}
     >
@@ -155,6 +162,23 @@ function IssueDetailAttachable({
       />
     </PageShell>
   );
+}
+
+function useIssueDetailBoundShell(
+  issue: IssueDetail | undefined,
+  parentKind?: IssueKind,
+): boolean {
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  return useMemo(() => {
+    if (!issue) return false;
+    // Project docs (esp. Design system iframe) need a bounded shell so the
+    // reading area can fill and scroll internally.
+    if (issue.kind === "project") return true;
+    const tabs = tabsForIssueDetail(issue, parentKind);
+    const active = resolveIssueDetailTab(tabParam, tabs);
+    return issueDetailTabNeedsBoundedShell(active, tabs);
+  }, [issue, parentKind, tabParam]);
 }
 
 export function IssueDetailPage() {
@@ -177,6 +201,8 @@ export function IssueDetailPage() {
     () => (issue ? parentKindForIssue(issue, projectId, byId) : undefined),
     [issue, projectId, byId],
   );
+
+  const boundShell = useIssueDetailBoundShell(issue, parentKind);
 
   const missing = error instanceof ApiError && error.status === 404;
   const wrongProject =
@@ -204,12 +230,13 @@ export function IssueDetailPage() {
         backLink={backLink}
         catalog={catalog}
         parentKind={parentKind}
+        boundShell={boundShell}
       />
     );
   }
 
   return (
-    <PageShell>
+    <PageShell className={cn(boundShell && BOUNDED_DETAIL_SHELL_CLASS)}>
       {backLink}
 
       {error && !missing ? (

@@ -89,3 +89,15 @@ export function writeIssueDetailTabParam(
   }
   return next;
 }
+
+/**
+ * Channel tabs need the Agents-style bounded page shell so the transcript
+ * scrolls internally and the composer stays pinned. Overview (and other
+ * document tabs) keep unbounded page scroll.
+ */
+export function issueDetailTabNeedsBoundedShell(
+  active: IssueDetailTabKey,
+  tabs: readonly IssueDetailTab[],
+): boolean {
+  return tabs.some((tab) => tab.key === active && "channel" in tab);
+}
