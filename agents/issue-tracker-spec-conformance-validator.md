@@ -66,7 +66,7 @@ per **SPEC § Project workspace**.
      equivalent diff of what that Task delivered against its spec).
    - A `noDiff` Task has no `commitSha` and delivered no source-controlled
      diff: judge it by its Task spec plus the implementor's chat rationale
-     (`issue task view <taskId> --chat`) — was landing no source-controlled
+     (`issue task view <taskId> --comments`) — was landing no source-controlled
      changes actually correct? Do not treat `noDiff` as "nothing was done"
      when a non-source-controlled file was edited. Treat an unjustified or
      spec-violating no-op as a gap.

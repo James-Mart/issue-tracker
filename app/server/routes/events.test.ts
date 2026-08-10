@@ -9,7 +9,7 @@ describe("issueIdFromPath", () => {
   });
 
   it("derives the id from any nested file", () => {
-    expect(issueIdFromPath("/issues", "/issues/add-auth/chat.jsonl")).toBe(
+    expect(issueIdFromPath("/issues", "/issues/add-auth/comments.jsonl")).toBe(
       "add-auth",
     );
   });
@@ -25,8 +25,8 @@ describe("issueIdFromPath", () => {
 });
 
 describe("scopeFromPath", () => {
-  it("classifies chat.jsonl writes as chat scope", () => {
-    expect(scopeFromPath("/issues/add-auth/chat.jsonl")).toBe("chat");
+  it("classifies comments.jsonl writes as comments scope", () => {
+    expect(scopeFromPath("/issues/add-auth/comments.jsonl")).toBe("comments");
   });
 
   it("classifies attachment dir and files as attachments scope", () => {

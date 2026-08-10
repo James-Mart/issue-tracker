@@ -71,7 +71,7 @@ const assignmentLabelsSchema = z
   .transform(dedupePreserveOrder)
   .optional();
 
-export const chatMessageSchema = z.object({
+export const commentSchema = z.object({
   role: nonEmpty,
   name: z.string().optional(),
   body: nonEmpty,
@@ -79,13 +79,13 @@ export const chatMessageSchema = z.object({
 });
 
 // The write-time input is the stored shape minus the server-stamped `at`.
-export const chatMessageInputSchema = chatMessageSchema.omit({ at: true });
+export const commentInputSchema = commentSchema.omit({ at: true });
 
-export type ChatMessage = z.infer<typeof chatMessageSchema>;
-export type ChatMessageInput = z.infer<typeof chatMessageInputSchema>;
+export type Comment = z.infer<typeof commentSchema>;
+export type CommentInput = z.infer<typeof commentInputSchema>;
 
-export interface ChatResponse {
-  messages: ChatMessage[];
+export interface CommentsResponse {
+  messages: Comment[];
   problems: Problem[];
 }
 
@@ -324,7 +324,7 @@ export interface Problem {
 }
 
 export type IssueEventType = "add" | "change" | "unlink" | "unlink-dir";
-export type IssueEventScope = "issue" | "chat" | "attachments";
+export type IssueEventScope = "issue" | "comments" | "attachments";
 
 export interface IssueEvent {
   type: IssueEventType;
@@ -381,22 +381,22 @@ export function parseIssue(raw: unknown): ParseResult {
   return { ok: false, message: formatZodError(result.error, "invalid issue.json") };
 }
 
-export type ChatParseResult =
-  | { ok: true; message: ChatMessage }
+export type CommentParseResult =
+  | { ok: true; message: Comment }
   | { ok: false; message: string };
 
-export function parseChatMessage(raw: unknown): ChatParseResult {
-  const result = chatMessageSchema.safeParse(raw);
+export function parseComment(raw: unknown): CommentParseResult {
+  const result = commentSchema.safeParse(raw);
   if (result.success) return { ok: true, message: result.data };
   return { ok: false, message: formatZodError(result.error, "invalid issue.json") };
 }
 
-export type ChatInputParseResult =
-  | { ok: true; input: ChatMessageInput }
+export type CommentInputParseResult =
+  | { ok: true; input: CommentInput }
   | { ok: false; message: string };
 
-export function parseChatMessageInput(raw: unknown): ChatInputParseResult {
-  const result = chatMessageInputSchema.safeParse(raw);
+export function parseCommentInput(raw: unknown): CommentInputParseResult {
+  const result = commentInputSchema.safeParse(raw);
   if (result.success) return { ok: true, input: result.data };
   return { ok: false, message: formatZodError(result.error, "invalid issue.json") };
 }

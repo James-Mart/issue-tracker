@@ -51,7 +51,7 @@ Every issue has a `kind`, one of:
   archive, and optional `labels` assignments from the Project catalog — see
   [Project labels](#project-labels)) that agents and humans mine later into
   real work. Leaf kind: no children, no assignee/needs-attention, no status or
-  git fields. Supports chat and kind-scoped CLI `comment` (same path as other
+  git fields. Supports comments and kind-scoped CLI `comment` (same path as other
   kinds). Is `partOf` a Project (required). Epics, Ideas, and
   *root* project-level Stories share one Project-child sibling `order` space.
   There is no separate Idea Board kind — the "board" is the Project's board
@@ -272,13 +272,15 @@ issue view|get|comment|attach|attachments|detach <id> …
 | `view` / `get` / `attach` / `attachments` / `detach` | every kind |
 | `comment` | epic / idea / story / task (not project) |
 
-- **`view`** — `issue view <id>` (pass `--chat` for the chat log).
+- **`view`** — `issue view <id>` (pass `--comments` for the comment log).
   Prefer `issue get <id> <field>` for a single field. Label lines: see
   [Project labels](#project-labels).
 - **`get`** — `issue get <id> <field>`; field rules match kind-scoped
   [get / set](#kind-scoped-get--set).
 - **`comment`** — `issue comment <id> --role <role> --body <text>`
-  (optional `--name`); refuses a Project id; see [Service layer](#service-layer).
+  (optional `--name`); appends to `comments.jsonl` (the CLI verb is `comment`;
+  the on-disk log is `comments.jsonl`); refuses a Project id; see
+  [Service layer](#service-layer).
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
@@ -430,11 +432,11 @@ truth (no database).
 issues/<id>/
   issue.json        # metadata + relationships (machine-readable)
   description.md    # the spec/description (for an Epic, the plan). GFM; may contain issue: links
-  chat.jsonl        # append-only per-issue chat, one message object per line
+  comments.jsonl    # append-only per-issue comment log, one message object per line
   attachments/      # optional; opaque files for any kind with attachments
 ```
 
-- `description.md` and `chat.jsonl` are discovered **by convention** from `<id>`
+- `description.md` and `comments.jsonl` are discovered **by convention** from `<id>`
   (there are no path fields, so there can be no dangling file refs). Both are
   optional; absent means empty.
 - `attachments/` is likewise by convention: no manifest; scan the directory.
@@ -793,7 +795,7 @@ Idea — the common-to-every-kind fields plus:
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
-No assignee, needs-attention, status, git fields, or chat. Leaf under a Project;
+No assignee, needs-attention, status, git fields, or comments. Leaf under a Project;
 shares the Project-child `order` space with Epics and root project-level Stories.
 
 Story — the Epic/Story/Task needs-attention common fields plus:
@@ -826,7 +828,7 @@ Task — the Epic/Story/Task needs-attention common fields plus:
 Deliberately excluded: `rank`/priority (sibling order is stored as `order`, not
 authored as a separate priority field), freeform per-issue labels outside the
 Project catalog (see [Project labels](#project-labels)), inline
-`description`/`messages` (they are separate files), and status history.
+`description`/comment log (they are separate files), and status history.
 
 ### Finish commit
 
@@ -846,7 +848,7 @@ then applies:
 The `true` / clean row is a legitimate `done` outcome even when a
 non-source-controlled file was edited (git status stays clean); that is not a
 contradiction with `noDiff`. The implementor sets `noDiff` via kind
-[`set`](#kind-scoped-get--set) (and explains why in chat) when the correct
+[`set`](#kind-scoped-get--set) (and explains why in a comment) when the correct
 outcome is no source-controlled file changes; validators and the git subagent
 honor the flag. Clearing it (`noDiff false`) is required if a revision later
 lands source-controlled file changes.
@@ -902,9 +904,9 @@ archived rows are hidden unless the client "Show archived" preference is on
 header and tree-row hover expose Archive / Unarchive actions that PATCH
 `archived` through the same cascade path as CLI `set`.
 
-## `chat.jsonl` message shape
+## `comments.jsonl` message shape
 
-Each line of `chat.jsonl` is one JSON message object (`app/server/schemas.ts`):
+Each line of `comments.jsonl` is one JSON message object (`app/server/schemas.ts`):
 
 | field | type | notes |
 | --- | --- | --- |
@@ -927,9 +929,9 @@ no consumer can persist a broken file.
 ### Writer contract
 
 - `list()` — scans `issues/*/`, reads each `issue.json` (plus presence of
-  `description.md`/`chat.jsonl`), runs `derive()`, and returns issues + derived
-  state + all `problems`. Malformed dirs/files and malformed chat lines are
-  collected into `problems`, never thrown.
+  `description.md`/`comments.jsonl`), runs `derive()`, and returns issues + derived
+  state + all `problems`. Malformed dirs/files, malformed comment lines, and a
+  surviving legacy `chat.jsonl` are collected into `problems`, never thrown.
 - `read(id)` — returns one issue with its `description` and a content `version`.
 - `create(input)` — generates the id/slug (with collision suffix) and
   timestamps, links `partOf`, and writes the dir + `issue.json` +
@@ -951,11 +953,11 @@ no consumer can persist a broken file.
 - `remove(id)` — deletes the issue and its containment subtree, repairing every
   surviving reference into it (see [Deletion policy](#deletion-policy)). Exposed
   over HTTP as `DELETE /api/issues/:id` and via `issue <kind> delete`.
-- `appendMessage(id, {role, name?, body})` — appends one JSONL line to
-  `chat.jsonl` with a server-stamped `at` (`issue epic|idea|story|task comment`
-  and chat HTTP share this path).
-- `readChat(id)` — reads/parses `chat.jsonl`, skipping malformed lines into
-  `problems`. An issue with no chat file returns empty messages.
+- `appendComment(id, {role, name?, body})` — appends one JSONL line to
+  `comments.jsonl` with a server-stamped `at` (`issue epic|idea|story|task comment`
+  and comments HTTP share this path).
+- `readComments(id)` — reads/parses `comments.jsonl`, skipping malformed lines into
+  `problems`. An issue with no comment log returns empty messages.
 - Attachment bytes (`attachments.ts`): `listAttachments` / `getAttachment` /
   `putAttachment` (unique name on collision) / `removeAttachment` — see
   [Attachments](#attachments). Not part of `read(id)` payloads.
@@ -979,8 +981,8 @@ no consumer can persist a broken file.
   so concurrent CLI/HTTP calls cannot race.
 - **Change detection.** `read` returns a `version` (a hash over `issue.json` +
   `description.md`) so the UI can detect out-of-band edits to the open issue.
-  `chat.jsonl` and `attachments/` are deliberately excluded from the version so
-  chat appends and attachment uploads/deletes do not trip the external-edit
+  `comments.jsonl` and `attachments/` are deliberately excluded from the version so
+  comment appends and attachment uploads/deletes do not trip the external-edit
   banner.
 
 ### Deletion policy
@@ -1071,7 +1073,7 @@ workspace paths remain forbidden. Convention + docs/skills only — there is no
 integrity check that the linked file exists.
 
 **`apply`.** Never creates, updates, or deletes attachment bytes (same seam as
-`chat.jsonl`). Rewriting `description.md` via apply leaves attachments
+`comments.jsonl`). Rewriting `description.md` via apply leaves attachments
 untouched; only deleting the issue (or apply-pruning it) removes them.
 
 ## `apply` doc format
@@ -1288,11 +1290,11 @@ preserves everything else from the existing same-kind issue.
 | `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `assignee` (Task) | imperative write (kind [`set`](#kind-scoped-get--set)); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |
 | `needsAttention`/`attentionReason` (Epic / Story / Task) | imperative write (kind [`set`](#kind-scoped-get--set); `attentionReason` only via `needsAttention` + `--reason`); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |
-| `chat.jsonl` | imperative only (`issue epic|story|task comment`); `apply` never reads or writes it |
+| `comments.jsonl` | imperative only (`issue epic|story|task comment`); `apply` never reads or writes it |
 | `attachments/` | imperative only (HTTP or `issue <kind> attach` / `detach`); `apply` never reads or writes attachment bytes |
 
 So authoring/decomposition is declarative through `apply`, while working the
-stack (progress, git facts, escalation, chat, attachments) stays on the
+stack (progress, git facts, escalation, comments, attachments) stays on the
 kind-scoped ops — the two never fight over a field.
 
 ## Derived state
@@ -1334,7 +1336,8 @@ so cannot drift:
   are only the *derive-time* problems; the
   `problems` array returned by `list()` also includes the *read-time* problems
   raised while loading files (malformed or missing `issue.json`, an id that
-  disagrees with its directory name, and malformed `chat.jsonl` lines — see the
+  disagrees with its directory name, malformed `comments.jsonl` lines, and a
+  surviving legacy `chat.jsonl` — see the
   [writer contract](#writer-contract) and [glossary](#derived-terms)).
 
 ## Agent model resolution
@@ -1378,7 +1381,7 @@ thoroughness.
 **Directory-per-issue is the source of truth (no database).** Issues are plain
 files an agent, a human, or git can read and diff. There is no schema migration,
 no server required to inspect state, and the on-disk tree *is* the data model.
-`description.md`, `chat.jsonl`, and `attachments/` are discovered by convention
+`description.md`, `comments.jsonl`, and `attachments/` are discovered by convention
 from the id (no path fields in `issue.json`), so metadata cannot point at a
 missing file. Markdown links into `attachments/` are a separate convention and
 may dangle — see [Attachments](#attachments).

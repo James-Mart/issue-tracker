@@ -238,12 +238,12 @@ describe("view", () => {
     });
     writeFileSync(join(dir, "a", "description.md"), "# Branch A\n\nthe body\n");
     writeFileSync(
-      join(dir, "a", "chat.jsonl"),
+      join(dir, "a", "comments.jsonl"),
       JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) + "\n",
     );
   });
 
-  it("prints metadata and description but not the chat by default", () => {
+  it("prints metadata and description but not the comment log by default", () => {
     const { stdout, status } = runCli(["story", "view", "a"]);
     expect(status).toBe(0);
     expect(stdout).toContain("id: a");
@@ -255,13 +255,13 @@ describe("view", () => {
     expect(stdout).toContain("merged: false");
     expect(stdout).toContain("# Branch A");
     expect(stdout).toContain("the body");
-    expect(stdout).not.toContain("--- chat ---");
+    expect(stdout).not.toContain("--- comments ---");
   });
 
-  it("appends the chat log with --chat", () => {
-    const { stdout, status } = runCli(["story", "view", "a", "--chat"]);
+  it("appends the comment log with --comments", () => {
+    const { stdout, status } = runCli(["story", "view", "a", "--comments"]);
     expect(status).toBe(0);
-    expect(stdout).toContain("--- chat ---");
+    expect(stdout).toContain("--- comments ---");
     expect(stdout).toContain("bot: first note");
   });
 
@@ -2509,7 +2509,7 @@ describe("kind-scoped view / delete / comment / attach", () => {
     });
     writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
     writeFileSync(
-      join(dir, "a", "chat.jsonl"),
+      join(dir, "a", "comments.jsonl"),
       JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
         "\n",
     );
@@ -2527,10 +2527,10 @@ describe("kind-scoped view / delete / comment / attach", () => {
     expect(stdout).toContain(`kind: ${kind}`);
   });
 
-  it("supports --chat on kind-scoped view", () => {
-    const { stdout, status } = runCli(["story", "view", "a", "--chat"]);
+  it("supports --comments on kind-scoped view", () => {
+    const { stdout, status } = runCli(["story", "view", "a", "--comments"]);
     expect(status).toBe(0);
-    expect(stdout).toContain("--- chat ---");
+    expect(stdout).toContain("--- comments ---");
     expect(stdout).toContain("bot: first note");
   });
 
@@ -2583,7 +2583,7 @@ describe("kind-scoped view / delete / comment / attach", () => {
       ]);
       expect(status, kind).toBe(0);
       expect(stdout, kind).toContain(`commented on ${id}`);
-      expect(readFileSync(join(dir, id, "chat.jsonl"), "utf8")).toContain(
+      expect(readFileSync(join(dir, id, "comments.jsonl"), "utf8")).toContain(
         `note on ${id}`,
       );
     }
@@ -2693,7 +2693,7 @@ describe("bare-id view / get / comment / attach", () => {
     writeFileSync(join(dir, "e", "description.md"), "# Epic\n\nepic body\n");
     writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
     writeFileSync(
-      join(dir, "a", "chat.jsonl"),
+      join(dir, "a", "comments.jsonl"),
       JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
         "\n",
     );
@@ -2711,12 +2711,12 @@ describe("bare-id view / get / comment / attach", () => {
     expect(story.stdout).toContain("kind: story");
     expect(story.stdout).toContain("title: Story A");
     expect(story.stdout).toContain("# Story A");
-    expect(story.stdout).not.toContain("--- chat ---");
+    expect(story.stdout).not.toContain("--- comments ---");
 
-    const withChat = runCli(["view", "a", "--chat"]);
-    expect(withChat.status).toBe(0);
-    expect(withChat.stdout).toContain("--- chat ---");
-    expect(withChat.stdout).toContain("bot: first note");
+    const withComments = runCli(["view", "a", "--comments"]);
+    expect(withComments.status).toBe(0);
+    expect(withComments.stdout).toContain("--- comments ---");
+    expect(withComments.stdout).toContain("bot: first note");
   });
 
   it("gets epic and story fields without a kind prefix", () => {
@@ -2772,7 +2772,7 @@ describe("bare-id view / get / comment / attach", () => {
     expect(scoped.status).toBe(0);
     expect(scoped.stdout).toBe("commented on a as impl\n");
 
-    const chat = readFileSync(join(dir, "a", "chat.jsonl"), "utf8");
+    const chat = readFileSync(join(dir, "a", "comments.jsonl"), "utf8");
     expect(chat).toContain('"body":"bare-id note"');
     expect(chat).toContain('"body":"kind-scoped note"');
     expect(chat).toContain('"role":"implementor"');
@@ -2810,7 +2810,7 @@ describe("bare-id view / get / comment / attach", () => {
     ]);
     expect(status).toBe(1);
     expect(stderr).toContain('"p" is a Project');
-    expect(stderr).toContain("projects have no chat log");
+    expect(stderr).toContain("projects have no comment log");
   });
 
   it("still errors on kind-scoped calls against a mismatched kind", () => {

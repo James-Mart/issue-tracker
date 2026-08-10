@@ -16,7 +16,7 @@ that maps directly onto git stacked PRs, then works the tree while a human
 watches live in the browser. A **Project** is the top-level container (an
 organizational grouping of Epics); a directory per issue on disk is the
 source of truth; the CLI (for agents) and HTTP/SSE (for the UI) are thin
-adapters over one validated service layer. Markdown specs, per-issue chat,
+adapters over one validated service layer. Markdown specs, per-issue comments,
 and derived blocked/status state live in that UI.
 
 Read [SPEC.md](../../SPEC.md) for the full glossary (Kinds, relationships,
@@ -113,7 +113,7 @@ cd app && npm run test:e2e
   `needsAttention` badges (`attentionReason` when
   set), and (for Stories with `specReview` set) a spec-review chip (`passed` /
   `failed`; omitted when unset), (for Tasks with `noDiff` set) a no-diff chip
-  (omitted when unset), and a per-issue chat.
+  (omitted when unset), and a per-issue comment log.
 - Changes to `issues/` on disk (from the CLI or by hand) appear live over SSE
   without a refresh.
 

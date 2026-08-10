@@ -108,9 +108,9 @@ Three thin adapters sit over it:
 
 - **CLI** (`app/cli.ts`) — the interface agents use to author and work the stack.
 - **HTTP API** (`routes/issues.ts`) — `GET /api/issues` (issues + derived +
-  ready + problems), `GET /api/issues/:id`, `GET /api/issues/:id/chat`,
+  ready + problems), `GET /api/issues/:id`, `GET /api/issues/:id/comments`,
   `POST /api/issues`, `PATCH /api/issues/:id`, `DELETE /api/issues/:id`,
-  `POST /api/issues/:id/messages` — what the UI calls.
+  `POST /api/issues/:id/comments` — what the UI calls.
 - **SSE** (`routes/events.ts`) — `GET /api/events`; a chokidar watcher on
   `issues/**` pushes change events so the UI updates live.
 

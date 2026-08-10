@@ -20,8 +20,8 @@ function parseEvent(data: string): IssueEvent | null {
       type: parsed.type,
       id: parsed.id,
       scope:
-        parsed.scope === "chat"
-          ? "chat"
+        parsed.scope === "comments"
+          ? "comments"
           : parsed.scope === "attachments"
             ? "attachments"
             : "issue",
@@ -57,8 +57,8 @@ export function useIssueEvents(): void {
     };
 
     const applyEvent = (event: IssueEvent) => {
-      if (event.scope === "chat") {
-        qc.invalidateQueries({ queryKey: issuesKeys.chat(event.id) });
+      if (event.scope === "comments") {
+        qc.invalidateQueries({ queryKey: issuesKeys.comments(event.id) });
         return;
       }
       if (event.scope === "attachments") {
@@ -68,7 +68,7 @@ export function useIssueEvents(): void {
       scheduleListInvalidate();
       if (event.type === "unlink-dir") {
         qc.removeQueries({ queryKey: issuesKeys.detail(event.id) });
-        qc.removeQueries({ queryKey: issuesKeys.chat(event.id) });
+        qc.removeQueries({ queryKey: issuesKeys.comments(event.id) });
         qc.removeQueries({ queryKey: issuesKeys.attachments(event.id) });
       } else {
         qc.invalidateQueries({ queryKey: issuesKeys.detail(event.id) });

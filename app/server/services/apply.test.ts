@@ -35,7 +35,7 @@ function snapshot(): string {
     // Skip migration marker files (and any other non-issue entries).
     if (!statSync(idDir).isDirectory()) continue;
     const files: Record<string, string> = {};
-    for (const file of ["issue.json", "description.md", "chat.jsonl"]) {
+    for (const file of ["issue.json", "description.md", "comments.jsonl"]) {
       const path = join(idDir, file);
       if (existsSync(path)) files[file] = readFileSync(path, "utf8");
     }
@@ -384,8 +384,8 @@ describe("apply — idempotent re-apply", () => {
 });
 
 describe("apply — update preserves imperative progress state", () => {
-  it("keeps progress fields and chat.jsonl when the doc updates a node", async () => {
-    const { apply, update, appendMessage, readChat } = await loadService();
+  it("keeps progress fields and comments.jsonl when the doc updates a node", async () => {
+    const { apply, update, appendComment, readComments } = await loadService();
     await apply(baseDoc());
 
     // Stamp imperative/runtime state that lives outside the doc.
@@ -408,7 +408,7 @@ describe("apply — update preserves imperative progress state", () => {
       needsAttention: true,
       attentionReason: "verify locally",
     });
-    await appendMessage("b2", { role: "agent", body: "progress note" });
+    await appendComment("b2", { role: "agent", body: "progress note" });
 
     // Re-apply with changed titles so b2 and c1 actually go through the update path.
     const doc = baseDoc();
@@ -445,9 +445,9 @@ describe("apply — update preserves imperative progress state", () => {
     expect(c1.needsAttention).toBe(true);
     expect(c1.attentionReason).toBe("verify locally");
 
-    const chat = readChat("b2");
-    expect(chat.problems).toEqual([]);
-    expect(chat.messages.map((m) => m.body)).toEqual(["progress note"]);
+    const comments = readComments("b2");
+    expect(comments.problems).toEqual([]);
+    expect(comments.messages.map((m) => m.body)).toEqual(["progress note"]);
   });
 
   it("preserves project workspace when the doc updates a project", async () => {
@@ -582,7 +582,7 @@ describe("apply — prune by default", () => {
     // p1 has two epics: e1 (kept, branch b1) and e-victim (to prune). Under
     // e-victim: branch b2 with a commit (c2) and a stacked child branch (b2s),
     // so pruning the epic cascades through both the commit-under-branch case and
-    // a stacked branch. b2s carries a chat.jsonl so we can prove the whole node
+    // a stacked branch. b2s carries a comments.jsonl so we can prove the whole node
     // directory is gone, not just its id absent from list(). p2's epic e-out
     // blocks on e-victim — the only cross-Epic edge — so pruning e-victim must
     // repair that surviving out-of-scope blockedBy.
@@ -610,7 +610,7 @@ describe("apply — prune by default", () => {
       updatedAt: AT,
     });
     writeFileSync(
-      join(dir, "b2s", "chat.jsonl"),
+      join(dir, "b2s", "comments.jsonl"),
       '{"role":"agent","body":"progress"}\n',
     );
     writeIssue("p2", { kind: "project", title: "P2", order: 1, createdAt: AT, updatedAt: AT });
@@ -653,12 +653,12 @@ describe("apply — prune by default", () => {
     expect(ids).not.toContain("b2s");
     expect(ids).toContain("b1");
 
-    // Pruning removes the node directories (chat.jsonl included), not just ids.
+    // Pruning removes the node directories (comments.jsonl included), not just ids.
     expect(existsSync(join(dir, "e-victim"))).toBe(false);
     expect(existsSync(join(dir, "b2"))).toBe(false);
     expect(existsSync(join(dir, "c2"))).toBe(false);
     expect(existsSync(join(dir, "b2s"))).toBe(false);
-    expect(existsSync(join(dir, "b2s", "chat.jsonl"))).toBe(false);
+    expect(existsSync(join(dir, "b2s", "comments.jsonl"))).toBe(false);
     expect(existsSync(join(dir, "b1"))).toBe(true);
 
     // The surviving out-of-scope blocker edge into the pruned epic is dropped.

@@ -14,7 +14,7 @@ to code-review. Instead:
    dirty tree with `noDiff` set is a contradiction — treat it as actionable.
    A clean tree after edits that only touched non-source-controlled files is
    consistent with `noDiff`, not a contradiction.
-2. Confirm the implementor left a rationale: `issue task view <taskId> --chat` must
+2. Confirm the implementor left a rationale: `issue task view <taskId> --comments` must
    contain an implementor comment tying the empty source-controlled diff to the
    spec. A flag set with no rationale is actionable.
 3. Judge that rationale against the Task spec — is "no source-controlled

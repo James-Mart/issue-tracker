@@ -42,7 +42,7 @@ export interface ApplySummary {
 // off the draft entirely so `parseIssue` fills them from the schema `.default()`s — except
 // `archived`, which is seeded true when any ancestor is archived (matching `create`).
 // Story `mergeBase` is derived on read (not stored). `apply` never reads or writes
-// runtime state beyond preserving it, and never touches chat.jsonl. `updatedAt` is set
+// runtime state beyond preserving it, and never touches comments.jsonl. `updatedAt` is set
 // to `now`; callers revert it when nothing actually changed so re-apply does not churn
 // timestamps.
 function buildIssue(

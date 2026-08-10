@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { request } from "@/lib/api/client";
-import type { ChatResponse, IssueDetail, IssuesResponse } from "@server/schemas";
+import type { CommentsResponse, IssueDetail, IssuesResponse } from "@server/schemas";
 import type { Attachment } from "@server/services/attachments";
 import { ApiError } from "@/lib/api/errors";
 import { attachmentsApiPath } from "../lib/attachments";
@@ -25,10 +25,10 @@ export function useIssueDetailQuery(
   });
 }
 
-export function useChatQuery(id: string): UseQueryResult<ChatResponse, Error> {
+export function useCommentsQuery(id: string): UseQueryResult<CommentsResponse, Error> {
   return useQuery({
-    queryKey: issuesKeys.chat(id),
-    queryFn: () => request<ChatResponse>(`/api/issues/${id}/chat`),
+    queryKey: issuesKeys.comments(id),
+    queryFn: () => request<CommentsResponse>(`/api/issues/${id}/comments`),
     enabled: Boolean(id),
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 2,
