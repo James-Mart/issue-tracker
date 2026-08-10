@@ -23,10 +23,10 @@ import {
   type CreateConversationInput,
   type DelegationRecord,
   type DelegationRecordInput,
-  type Issue,
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
+import { channelForIssue } from "../kind.js";
 import { publishFrame } from "./conversation-stream.js";
 import { IssueError } from "./errors.js";
 import { readIssueOrThrow } from "./issues.js";
@@ -67,16 +67,6 @@ function scanIds(): string[] {
   );
 }
 
-function offeredChannelForIssue(issue: Issue): ConversationChannel | undefined {
-  if (issue.kind === "idea") return "planning";
-  if (issue.kind === "epic") return "implementing";
-  if (issue.kind === "story") {
-    const parent = readIssueOrThrow(issue.partOf);
-    return parent.kind === "project" ? "implementing" : undefined;
-  }
-  return undefined;
-}
-
 function validateAnchor(
   issueId: string | undefined,
   channel: ConversationChannel | undefined,
@@ -93,7 +83,10 @@ function validateAnchor(
     );
   }
   const issue = readIssueOrThrow(issueId!);
-  const offered = offeredChannelForIssue(issue);
+  const offered =
+    issue.kind === "story"
+      ? channelForIssue(issue, readIssueOrThrow(issue.partOf).kind)
+      : channelForIssue(issue);
   if (offered === undefined) {
     throw new IssueError(
       "validation",
