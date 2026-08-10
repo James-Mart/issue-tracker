@@ -17,15 +17,32 @@ import {
   type AgentSessions,
 } from "./services/agent-sessions.js";
 
-function requestLogger(req: Request, res: Response, next: NextFunction): void {
+export function requestLogger(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   const start = process.hrtime.bigint();
-  res.on("finish", () => {
-    const status = res.statusCode;
-    if (status >= 400) return;
+  const path = req.originalUrl.split("?")[0];
+  let logged = false;
+
+  const writeLog = (label: string) => {
+    if (logged) return;
+    logged = true;
     const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
-    const path = req.originalUrl.split("?")[0];
-    console.log(`[${status}] ${req.method} ${path} ${durationMs.toFixed(1)}ms`);
+    console.log(`[${label}] ${req.method} ${path} ${durationMs.toFixed(1)}ms`);
+  };
+
+  res.on("finish", () => {
+    writeLog(String(res.statusCode));
   });
+
+  res.on("close", () => {
+    if (!res.writableFinished) {
+      writeLog("closed");
+    }
+  });
+
   next();
 }
 
