@@ -1,9 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { request } from "@/lib/api/client";
+import { deleteConversation } from "@/features/agents/api/client";
+import { agentsKeys } from "@/features/agents/api/keys";
 import type {
   Comment,
   CommentInput,
+  ConversationChannel,
   CreateInput,
   IssueDetail,
   IssuePatch,
@@ -159,5 +162,22 @@ export function useReorderBoardChild() {
       }),
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () => qc.invalidateQueries({ queryKey: issuesKeys.list() }),
+  });
+}
+
+export function useDeleteChannelSession(
+  issueId: string,
+  channel: ConversationChannel,
+) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: deleteConversation,
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () => {
+      qc.invalidateQueries({
+        queryKey: issuesKeys.channelSessions(issueId, channel),
+      });
+      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
+    },
   });
 }

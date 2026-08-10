@@ -25,9 +25,10 @@ export function resolveRunActive(
  *
  * Seeds from `GET /api/conversations/:id/run` on mount, conversation change,
  * and SSE reconnect, then follows live `run` frames on the event stream.
+ * With no conversation id, reports inactive and skips the seed fetch.
  */
 export function useConversationRunActive(
-  conversationId: string,
+  conversationId: string | null | undefined,
   streamActive: boolean | null,
   runResyncKey: number,
 ): { runActive: boolean } {
@@ -37,6 +38,10 @@ export function useConversationRunActive(
   });
 
   useEffect(() => {
+    if (!conversationId) {
+      setSeed({ loaded: true, active: false });
+      return;
+    }
     let cancelled = false;
     setSeed({ loaded: false, active: false });
     getConversationRun(conversationId)

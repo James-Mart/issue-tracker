@@ -442,6 +442,24 @@ export const conversationListItemSchema = conversationMetaSchema.extend({
 
 export type ConversationListItem = z.infer<typeof conversationListItemSchema>;
 
+/**
+ * GET /api/issues/:id/channels/:channel/sessions item — roster fields for an
+ * issue-anchored session (narrower than ConversationListItem).
+ */
+export const channelSessionListItemSchema = z.object({
+  id: nonEmpty,
+  title: nonEmpty,
+  model: nonEmpty,
+  createdAt: nonEmpty,
+  updatedAt: nonEmpty,
+  archived: z.boolean(),
+  activeRun: z.boolean(),
+});
+
+export type ChannelSessionListItem = z.infer<
+  typeof channelSessionListItemSchema
+>;
+
 /** GET /api/conversations/:id/run response. */
 export const conversationActiveRunSchema = z.object({
   active: z.boolean(),
@@ -721,6 +739,21 @@ export function parseConversationListItem(
   return {
     ok: false,
     message: formatZodError(result.error, "invalid conversation list item"),
+  };
+}
+
+export type ChannelSessionListItemParseResult =
+  | { ok: true; item: ChannelSessionListItem }
+  | { ok: false; message: string };
+
+export function parseChannelSessionListItem(
+  raw: unknown,
+): ChannelSessionListItemParseResult {
+  const result = channelSessionListItemSchema.safeParse(raw);
+  if (result.success) return { ok: true, item: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid channel session list item"),
   };
 }
 

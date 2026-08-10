@@ -472,9 +472,22 @@ function ThreadHeader({
 export function ConversationThread({
   conversationId,
   onBack,
+  meta: metaProp,
+  hideComposer,
 }: {
   conversationId: string;
   onBack?: () => void;
+  /**
+   * Issue-anchored sessions are omitted from the Agents roster. Pass title +
+   * model from the channel sessions list so the composer can mount.
+   */
+  meta?: {
+    title: string;
+    model: string;
+    pendingMessage?: { text: string; at: string };
+  };
+  /** Read-only history (e.g. archived channel session) — transcript only. */
+  hideComposer?: boolean;
 }) {
   const { events, ready, streamRunActive, runResyncKey, pendingText } =
     useConversationEvents(conversationId);
@@ -484,7 +497,8 @@ export function ConversationThread({
     runResyncKey,
   );
   const { data: conversations } = useConversationsQuery(true);
-  const meta = conversations?.find((c) => c.id === conversationId);
+  const listMeta = conversations?.find((c) => c.id === conversationId);
+  const meta = listMeta ?? metaProp;
   const title = meta?.title?.trim() || "Thread";
   const pendingMessageText =
     pendingText !== undefined
@@ -509,7 +523,7 @@ export function ConversationThread({
           model={meta?.model ?? ""}
         />
       </div>
-      {meta ? (
+      {meta && !hideComposer ? (
         <Composer
           conversationId={conversationId}
           model={meta.model}

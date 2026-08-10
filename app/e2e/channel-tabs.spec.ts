@@ -1,0 +1,281 @@
+import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
+
+async function documentOverflowsHorizontally(page: Page): Promise<boolean> {
+  return page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth,
+  );
+}
+
+async function ensureSeedProjectWorkspace(
+  page: Page,
+  baseURL: string,
+): Promise<void> {
+  const workspace = mkdtempSync(join(tmpdir(), "it-e2e-channel-ws-"));
+  mkdirSync(join(workspace, ".git"));
+  const res = await page.request.patch(
+    `${baseURL}/api/issues/seed-proj`,
+    { data: { workspace } },
+  );
+  expect(res.ok()).toBeTruthy();
+}
+
+async function seedChannelTranscript(
+  page: Page,
+  baseURL: string,
+  issueId: string,
+  channel: "planning" | "implementing",
+): Promise<string> {
+  await ensureSeedProjectWorkspace(page, baseURL);
+  const title = `Channel e2e ${issueId} ${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  const created = await page.request.post(
+    `${baseURL}/api/issues/${issueId}/channels/${channel}/sessions`,
+    {
+      data: {
+        model: "composer-2.5",
+        title,
+      },
+    },
+  );
+  if (!created.ok()) {
+    throw new Error(
+      `create channel session failed: ${created.status()} ${await created.text()}`,
+    );
+  }
+  const { id } = (await created.json()) as { id: string };
+
+  const { conversationsDir } = await import("../server/config.js");
+  const transcriptPath = join(conversationsDir, id, "transcript.jsonl");
+  const at = "2026-08-10T12:00:00.000Z";
+  for (let i = 0; i < 40; i++) {
+    appendFileSync(
+      transcriptPath,
+      `${JSON.stringify({
+        type: "assistant",
+        text: `Transcript block ${i}. ${"x".repeat(120)}`,
+        at,
+      })}\n`,
+    );
+  }
+  return id;
+}
+
+test.describe("channel tabs", () => {
+  // Use epic A so session-seeding tests on B/story cannot clear the empty state.
+  test("switches to the channel tab and honors ?tab=", async ({
+    page,
+    seededApp,
+  }) => {
+    await page.goto(
+      `${seededApp.baseURL}/projects/seed-proj/issues/seed-epic-a`,
+    );
+    const main = page.getByRole("main");
+    const tablist = main.getByRole("tablist", { name: "Issue detail" });
+    await expect(tablist).toBeVisible();
+    await expect(tablist.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(main.getByText("Epic A").first()).toBeVisible();
+
+    await tablist.getByRole("tab", { name: "Implementing" }).click();
+    await expect(page).toHaveURL(/[?&]tab=implementing(?:&|$)/);
+    await expect(
+      tablist.getByRole("tab", { name: "Implementing" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(main.getByText("No implementing session.")).toBeVisible();
+    // Header stays put above the channel panel.
+    await expect(main.getByText("Epic", { exact: true }).first()).toBeVisible();
+    await expect(main.getByText("Epic A").first()).toBeVisible();
+
+    await page.goto(
+      `${seededApp.baseURL}/projects/seed-proj/issues/seed-epic-a?tab=implementing`,
+    );
+    await expect(
+      main.getByRole("tab", { name: "Implementing" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(main.getByText("No implementing session.")).toBeVisible();
+
+    await main.getByRole("tab", { name: "Overview" }).click();
+    await expect(page).not.toHaveURL(/[?&]tab=/);
+    await expect(main.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  test("Task detail has no issue-detail tab bar", async ({
+    page,
+    seededApp,
+  }) => {
+    await page.goto(
+      `${seededApp.baseURL}/projects/seed-proj/issues/seed-task-flight`,
+    );
+    const main = page.getByRole("main");
+    await expect(main.getByText("Task", { exact: true }).first()).toBeVisible();
+    await expect(
+      main.getByRole("tablist", { name: "Issue detail" }),
+    ).toHaveCount(0);
+  });
+
+  test("transcript scrolls inside the channel pane; composer stays visible", async ({
+    page,
+    seededApp,
+  }) => {
+    await seedChannelTranscript(
+      page,
+      seededApp.baseURL,
+      "seed-epic-b",
+      "implementing",
+    );
+
+    await page.goto(
+      `${seededApp.baseURL}/projects/seed-proj/issues/seed-epic-b?tab=implementing`,
+    );
+    const main = page.getByRole("main");
+    const panel = main.getByTestId("channel-transcript-panel");
+    await expect(panel).toBeVisible();
+    const transcript = panel.getByRole("log", {
+      name: "Conversation transcript",
+    });
+    await expect(transcript).toBeVisible();
+    const composer = panel.getByTestId("conversation-composer");
+    await expect(composer).toBeVisible();
+
+    const before = await page.evaluate(() => {
+      const log = document.querySelector(
+        '[data-testid="channel-transcript-panel"] [role="log"]',
+      ) as HTMLElement | null;
+      return {
+        logScrollHeight: log?.scrollHeight ?? 0,
+        logClientHeight: log?.clientHeight ?? 0,
+        logScrollTop: log?.scrollTop ?? 0,
+        docScrollTop: document.documentElement.scrollTop,
+      };
+    });
+    expect(before.logScrollHeight).toBeGreaterThan(before.logClientHeight);
+
+    await transcript.evaluate((el) => {
+      el.scrollTop = 0;
+    });
+
+    const after = await page.evaluate(() => {
+      const log = document.querySelector(
+        '[data-testid="channel-transcript-panel"] [role="log"]',
+      ) as HTMLElement | null;
+      return {
+        logScrollTop: log?.scrollTop ?? -1,
+        docScrollTop: document.documentElement.scrollTop,
+        composerVisible: (() => {
+          const c = document.querySelector(
+            '[data-testid="conversation-composer"]',
+          );
+          if (!c) return false;
+          const r = c.getBoundingClientRect();
+          return r.top < window.innerHeight && r.bottom > 0;
+        })(),
+      };
+    });
+    expect(after.logScrollTop).toBe(0);
+    expect(after.docScrollTop).toBe(0);
+    expect(after.composerVisible).toBe(true);
+    await expect(composer).toBeInViewport();
+  });
+});
+
+test.describe("channel tabs at phone width", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+  });
+
+  test("tab bar stays reachable without horizontal page scroll", async ({
+    page,
+    seededApp,
+  }) => {
+    await page.goto(
+      `${seededApp.baseURL}/projects/seed-proj/issues/seed-epic-a`,
+    );
+    const main = page.getByRole("main");
+    const tablist = main.getByRole("tablist", { name: "Issue detail" });
+    await expect(tablist).toBeVisible();
+    await expect(tablist.getByRole("tab", { name: "Overview" })).toBeVisible();
+    await expect(
+      tablist.getByRole("tab", { name: "Implementing" }),
+    ).toBeVisible();
+    expect(await documentOverflowsHorizontally(page)).toBe(false);
+
+    await tablist.getByRole("tab", { name: "Implementing" }).click();
+    await expect(page).toHaveURL(/[?&]tab=implementing(?:&|$)/);
+    expect(await documentOverflowsHorizontally(page)).toBe(false);
+  });
+
+  test("composer stays visible while the transcript scrolls on a phone", async ({
+    page,
+    seededApp,
+  }) => {
+    // Epic-child Stories offer no channel; use a sibling Epic.
+    await seedChannelTranscript(
+      page,
+      seededApp.baseURL,
+      "seed-epic-c",
+      "implementing",
+    );
+
+    await page.goto(
+      `${seededApp.baseURL}/projects/seed-proj/issues/seed-epic-c?tab=implementing`,
+    );
+    const panel = page.getByTestId("channel-transcript-panel");
+    const transcript = panel.getByRole("log", {
+      name: "Conversation transcript",
+    });
+    const composer = panel.getByTestId("conversation-composer");
+    await expect(composer).toBeVisible();
+    await expect(composer).toBeInViewport();
+
+    await transcript.evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    await expect(composer).toBeInViewport();
+
+    const scrolledDoc = await page.evaluate(
+      () => document.documentElement.scrollTop,
+    );
+    expect(scrolledDoc).toBe(0);
+  });
+
+  test("Overview still scrolls as a document on a phone", async ({
+    page,
+    seededApp,
+  }) => {
+    await page.goto(
+      `${seededApp.baseURL}/projects/seed-proj/issues/seed-epic-b`,
+    );
+    const main = page.getByRole("main");
+    await expect(
+      main.getByRole("tab", { name: "Overview" }),
+    ).toHaveAttribute("aria-selected", "true");
+
+    // Make Overview tall enough to need document scroll.
+    await page.evaluate(() => {
+      const panel = document.querySelector('[role="tabpanel"]:not([inert])');
+      if (!panel) return;
+      const spacer = document.createElement("div");
+      spacer.style.height = "2000px";
+      spacer.dataset.testid = "overview-scroll-spacer";
+      panel.appendChild(spacer);
+    });
+
+    const before = await page.evaluate(() => document.documentElement.scrollTop);
+    await page.evaluate(() => {
+      window.scrollTo(0, 800);
+    });
+    const after = await page.evaluate(() => document.documentElement.scrollTop);
+    expect(after).toBeGreaterThan(before);
+    expect(after).toBeGreaterThanOrEqual(700);
+  });
+});
