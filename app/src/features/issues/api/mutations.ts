@@ -66,7 +66,7 @@ export function usePostComment(id: string) {
   const qc = useQueryClient();
   return useMutation<Comment, Error, CommentInput>({
     mutationFn: (input) =>
-      request<Comment>(`/api/issues/${id}/messages`, {
+      request<Comment>(`/api/issues/${id}/comments`, {
         method: "POST",
         body: input,
       }),

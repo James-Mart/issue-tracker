@@ -21,7 +21,7 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
 }
 
 beforeEach(async () => {
-  dir = mkdtempSync(join(tmpdir(), "issue-tracker-chat-route-"));
+  dir = mkdtempSync(join(tmpdir(), "issue-tracker-comments-route-"));
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", dir);
 
@@ -62,9 +62,9 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("chat HTTP API", () => {
-  it("accepts messages on an Idea and creates comments.jsonl", async () => {
-    const res = await fetch(`${baseUrl}/api/issues/idea-1/messages`, {
+describe("comments HTTP API", () => {
+  it("accepts comments on an Idea and creates comments.jsonl", async () => {
+    const res = await fetch(`${baseUrl}/api/issues/idea-1/comments`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ role: "stakeholder", body: "audit note" }),

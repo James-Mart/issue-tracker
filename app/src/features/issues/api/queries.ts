@@ -28,7 +28,7 @@ export function useIssueDetailQuery(
 export function useCommentsQuery(id: string): UseQueryResult<CommentsResponse, Error> {
   return useQuery({
     queryKey: issuesKeys.comments(id),
-    queryFn: () => request<CommentsResponse>(`/api/issues/${id}/chat`),
+    queryFn: () => request<CommentsResponse>(`/api/issues/${id}/comments`),
     enabled: Boolean(id),
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 2,

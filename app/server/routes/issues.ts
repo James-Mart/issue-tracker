@@ -44,7 +44,7 @@ issuesRouter.get(
 );
 
 issuesRouter.get(
-  "/:id/chat",
+  "/:id/comments",
   asyncRoute((req, res) => {
     res.json(readComments(req.params.id));
   }),
@@ -100,7 +100,7 @@ issuesRouter.post(
 );
 
 issuesRouter.post(
-  "/:id/messages",
+  "/:id/comments",
   asyncRoute(async (req, res) => {
     const message = await appendComment(req.params.id, req.body as CommentInput);
     res.status(201).json(message);
