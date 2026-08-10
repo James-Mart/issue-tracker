@@ -93,6 +93,7 @@ export function createConversationsRouter(
     const showArchived = req.query.showArchived === "true";
     res.json(
       listConversations()
+        .filter((meta) => !meta.issueId)
         .filter((meta) => showArchived || !meta.archived)
         .map((meta) => ({
           ...meta,
