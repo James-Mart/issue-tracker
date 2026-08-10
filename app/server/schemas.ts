@@ -705,6 +705,16 @@ export type ConversationDetail = {
   transcript: TranscriptEvent[];
 };
 
+/** GET /api/conversations/:id/transcript — cacheable history page. */
+export const conversationTranscriptPageSchema = z.object({
+  events: z.array(transcriptEventSchema),
+  latestSeq: frameSeq,
+});
+
+export type ConversationTranscriptPage = z.infer<
+  typeof conversationTranscriptPageSchema
+>;
+
 /** Write-time input: stored shape minus the server-stamped `at`. */
 export const delegationRecordInputSchema = z.object({
   delegationId: nonEmpty,
@@ -806,6 +816,21 @@ export function parseConversationActiveRun(
   return {
     ok: false,
     message: formatZodError(result.error, "invalid conversation run state"),
+  };
+}
+
+export type ConversationTranscriptPageParseResult =
+  | { ok: true; page: ConversationTranscriptPage }
+  | { ok: false; message: string };
+
+export function parseConversationTranscriptPage(
+  raw: unknown,
+): ConversationTranscriptPageParseResult {
+  const result = conversationTranscriptPageSchema.safeParse(raw);
+  if (result.success) return { ok: true, page: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid conversation transcript"),
   };
 }
 

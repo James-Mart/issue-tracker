@@ -3,9 +3,11 @@ import { ApiError } from "@/lib/api/errors";
 import {
   parseConversationActiveRun,
   parseConversationListItem,
+  parseConversationTranscriptPage,
   type ConversationActiveRun,
   type ConversationListItem,
   type ConversationMeta,
+  type ConversationTranscriptPage,
 } from "@server/schemas";
 
 export type AgentModel = {
@@ -75,6 +77,21 @@ export function getConversationRun(id: string): Promise<ConversationActiveRun> {
     const parsed = parseConversationActiveRun(raw);
     if (!parsed.ok) throw new Error(parsed.message);
     return parsed.state;
+  });
+}
+
+export function getConversationTranscript(
+  id: string,
+  sinceSeq?: number,
+): Promise<ConversationTranscriptPage> {
+  const qs =
+    sinceSeq === undefined ? "" : `?sinceSeq=${encodeURIComponent(String(sinceSeq))}`;
+  return request<unknown>(
+    `/api/conversations/${encodeURIComponent(id)}/transcript${qs}`,
+  ).then((raw) => {
+    const parsed = parseConversationTranscriptPage(raw);
+    if (!parsed.ok) throw new Error(parsed.message);
+    return parsed.page;
   });
 }
 

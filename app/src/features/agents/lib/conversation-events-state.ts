@@ -3,9 +3,9 @@ import type { TranscriptEvent } from "@server/schemas";
 export type ConversationEventsState = {
   events: TranscriptEvent[];
   /**
-   * True after at least one successful connect+replay (server `ping` after
-   * replay). Stays true across reconnects so the thread keeps painting the
-   * last good transcript instead of flashing the loading skeleton.
+   * True once history has been seeded (or the first stream `ping` arrives).
+   * Stays true across reconnects so the thread keeps painting the last good
+   * transcript instead of flashing the loading skeleton.
    */
   ready: boolean;
   /**
@@ -58,6 +58,7 @@ export function applyTranscriptEvent(
         ...last,
         text: last.text + event.text,
         at: event.at,
+        ...(event.seq !== undefined ? { seq: event.seq } : {}),
       };
       return next;
     }
@@ -66,48 +67,38 @@ export function applyTranscriptEvent(
   return [...events, event];
 }
 
-/** Begin staging transcript replay (persisted history + catch-up) for one connect. */
-export function beginReplayStaging(): {
-  replaying: true;
-  replayBuffer: TranscriptEvent[];
-} {
-  return { replaying: true, replayBuffer: [] };
-}
-
-/** Fold one transcript frame during connect — buffer while staging, else live. */
-export function foldStreamTranscriptFrame(
-  replaying: boolean,
-  replayBuffer: TranscriptEvent[],
-  liveEvents: TranscriptEvent[],
+/**
+ * Apply a stream delta on top of seeded history, skipping duplicates and
+ * inserting by `seq` when a frame arrives out of order.
+ */
+export function applyTranscriptDelta(
+  events: TranscriptEvent[],
   event: TranscriptEvent,
-): {
-  replaying: boolean;
-  replayBuffer: TranscriptEvent[];
-  liveEvents: TranscriptEvent[];
-} {
-  if (replaying) {
-    return {
-      replaying: true,
-      replayBuffer: applyTranscriptEvent(replayBuffer, event),
-      liveEvents,
-    };
+): TranscriptEvent[] {
+  if (event.seq !== undefined) {
+    if (events.some((e) => e.seq === event.seq)) return events;
+    const lastSeq = events.at(-1)?.seq;
+    if (lastSeq !== undefined && event.seq < lastSeq) {
+      const idx = events.findIndex(
+        (e) => e.seq !== undefined && e.seq > event.seq,
+      );
+      const at = idx === -1 ? events.length : idx;
+      const next = events.slice();
+      next.splice(at, 0, event);
+      return next;
+    }
   }
-  return {
-    replaying,
-    replayBuffer,
-    liveEvents: applyTranscriptEvent(liveEvents, event),
-  };
+  return applyTranscriptEvent(events, event);
 }
 
-/** Commit staged replay on the server's first post-replay `ping`. */
-export function commitReplayStaging(replayBuffer: TranscriptEvent[]): {
-  replaying: false;
-  replayBuffer: TranscriptEvent[];
-  events: TranscriptEvent[];
-} {
-  return {
-    replaying: false,
-    replayBuffer: [],
-    events: replayBuffer,
-  };
+/** Merge catch-up/live deltas onto a history seed in seq order. */
+export function mergeTranscriptDeltas(
+  base: TranscriptEvent[],
+  deltas: TranscriptEvent[],
+): TranscriptEvent[] {
+  let events = base;
+  for (const event of deltas) {
+    events = applyTranscriptDelta(events, event);
+  }
+  return events;
 }

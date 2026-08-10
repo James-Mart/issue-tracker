@@ -21,7 +21,6 @@ import type {
   ConversationActiveRun,
   ConversationFrameInput,
   ConversationMetaPatch,
-  TranscriptEvent,
 } from "../schemas.js";
 
 const DEFAULT_TITLE = "New conversation";
@@ -41,12 +40,21 @@ function sendSse(res: Response, payload: string): boolean {
   }
 }
 
-function sseDataFrame(event: TranscriptEvent): string {
-  return `data: ${JSON.stringify(event)}\n\n`;
-}
-
 function sseLiveDataFrame(event: ConversationFrameInput): string {
   return `data: ${JSON.stringify({ ...event, at: new Date().toISOString() })}\n\n`;
+}
+
+function parseSinceSeqQuery(raw: unknown): number | { error: string } {
+  if (raw === undefined) return 0;
+  const text = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof text !== "string" && typeof text !== "number") {
+    return { error: "sinceSeq must be a non-negative integer" };
+  }
+  const value = typeof text === "number" ? text : Number(text);
+  if (!Number.isInteger(value) || value < 0) {
+    return { error: "sinceSeq must be a non-negative integer" };
+  }
+  return value;
 }
 
 const asyncRoute =
@@ -203,6 +211,22 @@ export function createConversationsRouter(
   );
 
   router.get(
+    "/:id/transcript",
+    asyncRoute(async (req, res) => {
+      const sinceSeq = parseSinceSeqQuery(req.query.sinceSeq);
+      if (typeof sinceSeq === "object") {
+        res.status(400).json({ error: sinceSeq.error });
+        return;
+      }
+
+      const { transcript } = readConversation(req.params.id);
+      const latestSeq = transcript.at(-1)?.seq ?? 0;
+      const events = transcript.filter((event) => (event.seq ?? 0) > sinceSeq);
+      res.json({ events, latestSeq });
+    }),
+  );
+
+  router.get(
     "/:id/events",
     asyncRoute(async (req, res) => {
       const { meta, transcript } = readConversation(req.params.id);
@@ -215,10 +239,7 @@ export function createConversationsRouter(
       });
       res.flushHeaders();
 
-      for (const event of transcript) {
-        if (!sendSse(res, sseDataFrame(event))) return;
-      }
-
+      // History is served by GET /transcript; the stream carries deltas only.
       const sinceSeq = transcript.at(-1)?.seq ?? 0;
       const catchup = getFramesSince(meta.id, sinceSeq);
       if (catchup.resetRequired) {
