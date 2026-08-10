@@ -1,7 +1,15 @@
 /**
- * Browser transport client — the one module allowed to construct a WebSocket.
- * Components subscribe to topics; they never open a connection themselves.
+ * Browser transport client. Components subscribe to topics; they never open a
+ * connection themselves. When SharedWorker is available the tab attaches over a
+ * MessagePort; otherwise it uses the direct upstream socket module.
  */
+
+import {
+  createUpstreamConnection,
+  type UpstreamConnection,
+  type UpstreamMessage,
+} from "./transport.socket";
+import type { WorkerToPortMessage } from "./transport.worker-owner";
 
 export type TopicEventMessage = {
   type: "event";
@@ -17,14 +25,6 @@ export type TopicMessage = TopicEventMessage | TopicResetMessage;
 
 export type TopicListener = (message: TopicMessage) => void;
 
-type ClientToServerMessage =
-  | { type: "subscribe"; topic: string; sinceSeq?: number }
-  | { type: "unsubscribe"; topic: string };
-
-type ServerToClientMessage =
-  | { type: "event"; topic: string; seq: number; event: unknown }
-  | { type: "reset"; topic: string };
-
 type TopicState = {
   listeners: Set<TopicListener>;
   /** Last seq held for this topic (delivered, or seeded from history). */
@@ -32,179 +32,55 @@ type TopicState = {
 };
 
 const WS_PATH = "/api/ws";
-const BACKOFF_INITIAL_MS = 500;
-const BACKOFF_MAX_MS = 8_000;
 
 const topics = new Map<string, TopicState>();
 
-let socket: WebSocket | null = null;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let backoffMs = BACKOFF_INITIAL_MS;
+function sharedWorkerAvailable(): boolean {
+  return typeof SharedWorker !== "undefined";
+}
 
 function wsUrl(): string {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${location.host}${WS_PATH}`;
 }
 
-function send(message: ClientToServerMessage): void {
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify(message));
-}
+// --- Direct path (no SharedWorker) -----------------------------------------
 
-function subscribeMessage(
-  topic: string,
-  state: TopicState,
-): ClientToServerMessage {
-  if (state.lastSeq !== undefined) {
-    return { type: "subscribe", topic, sinceSeq: state.lastSeq };
-  }
-  return { type: "subscribe", topic };
-}
+let directUpstream: UpstreamConnection | null = null;
 
-function sendSubscribe(topic: string, state: TopicState): void {
-  send(subscribeMessage(topic, state));
-}
-
-function clearReconnectTimer(): void {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
-}
-
-function detachSocket(current: WebSocket): void {
-  current.onopen = null;
-  current.onmessage = null;
-  current.onerror = null;
-  current.onclose = null;
-}
-
-function closeSocket(): void {
-  clearReconnectTimer();
-  const current = socket;
-  socket = null;
-  if (!current) return;
-  detachSocket(current);
-  current.close();
-}
-
-function scheduleReconnect(): void {
-  if (reconnectTimer || topics.size === 0) return;
-  const delay = backoffMs;
-  backoffMs = Math.min(backoffMs * 2, BACKOFF_MAX_MS);
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    connect();
-  }, delay);
-}
-
-function handleMessage(raw: string): void {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    if (import.meta.env.DEV) {
-      console.warn("ignoring malformed ws message:", raw, err);
-    }
-    return;
-  }
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    typeof (parsed as { type?: unknown }).type !== "string"
-  ) {
-    if (import.meta.env.DEV) {
-      console.warn("ignoring malformed ws message:", raw);
-    }
-    return;
-  }
-  const msg = parsed as ServerToClientMessage;
-  if (msg.type === "event") {
-    if (typeof msg.topic !== "string" || typeof msg.seq !== "number") return;
-    const state = topics.get(msg.topic);
-    if (!state) return;
-    state.lastSeq = msg.seq;
+function handleDirectUpstream(message: UpstreamMessage): void {
+  const state = topics.get(message.topic);
+  if (!state) return;
+  if (message.type === "event") {
+    state.lastSeq = message.seq;
     const fanout: TopicEventMessage = {
       type: "event",
-      seq: msg.seq,
-      event: msg.event,
+      seq: message.seq,
+      event: message.event,
     };
     for (const listener of state.listeners) {
       listener(fanout);
     }
     return;
   }
-  if (msg.type === "reset") {
-    if (typeof msg.topic !== "string") return;
-    const state = topics.get(msg.topic);
-    if (!state) return;
-    state.lastSeq = undefined;
-    const fanout: TopicResetMessage = { type: "reset" };
-    for (const listener of state.listeners) {
-      listener(fanout);
-    }
+  state.lastSeq = undefined;
+  const fanout: TopicResetMessage = { type: "reset" };
+  for (const listener of state.listeners) {
+    listener(fanout);
   }
 }
 
-function connect(): void {
-  if (topics.size === 0) return;
-  if (
-    socket &&
-    (socket.readyState === WebSocket.OPEN ||
-      socket.readyState === WebSocket.CONNECTING)
-  ) {
-    return;
+function getDirectUpstream(): UpstreamConnection {
+  if (!directUpstream) {
+    directUpstream = createUpstreamConnection({
+      wsUrl,
+      onMessage: handleDirectUpstream,
+    });
   }
-
-  const ws = new WebSocket(wsUrl());
-  socket = ws;
-
-  ws.onopen = () => {
-    if (socket !== ws) return;
-    backoffMs = BACKOFF_INITIAL_MS;
-    for (const [topic, state] of topics) {
-      sendSubscribe(topic, state);
-    }
-  };
-
-  ws.onmessage = (event) => {
-    if (socket !== ws) return;
-    handleMessage(String(event.data));
-  };
-
-  ws.onerror = () => {
-    // `close` follows and schedules reconnect; nothing else to do here.
-  };
-
-  ws.onclose = () => {
-    if (socket !== ws) return;
-    socket = null;
-    if (topics.size === 0) return;
-    scheduleReconnect();
-  };
+  return directUpstream;
 }
 
-/**
- * Hold a baseline seq for a topic (history seed / post-reset reseed) so the
- * next subscribe — including reconnect — asks for frames after that seq.
- */
-export function holdTopicSeq(topic: string, seq: number): void {
-  const state = topics.get(topic);
-  if (!state) return;
-  if (state.lastSeq === undefined || seq > state.lastSeq) {
-    state.lastSeq = seq;
-  }
-}
-
-/**
- * Subscribe to a multiplexed topic on the shared WebSocket. The socket opens
- * lazily on the first subscription, reconnects with backoff, and resubscribes
- * every held topic with the last seq held for that topic.
- *
- * `heldSeq` is the seq already held for the topic (e.g. history `latestSeq`)
- * so the first subscribe and later reconnects can ask for the gap after it.
- */
-export function subscribeTopic(
+function subscribeDirect(
   topic: string,
   listener: TopicListener,
   heldSeq?: number,
@@ -223,10 +99,97 @@ export function subscribeTopic(
   }
 
   if (isNew) {
-    if (socket?.readyState === WebSocket.OPEN) {
-      sendSubscribe(topic, state);
+    getDirectUpstream().acquire(topic, state.lastSeq);
+  }
+
+  return () => {
+    const current = topics.get(topic);
+    if (!current) return;
+    current.listeners.delete(listener);
+    if (current.listeners.size > 0) return;
+    topics.delete(topic);
+    directUpstream?.release(topic);
+  };
+}
+
+function holdDirectSeq(topic: string, seq: number): void {
+  const state = topics.get(topic);
+  if (!state) return;
+  if (state.lastSeq === undefined || seq > state.lastSeq) {
+    state.lastSeq = seq;
+  }
+  directUpstream?.holdSeq(topic, seq);
+}
+
+// --- SharedWorker path -----------------------------------------------------
+
+let sharedWorker: SharedWorker | null = null;
+let workerPort: MessagePort | null = null;
+
+function handleWorkerMessage(message: WorkerToPortMessage): void {
+  const state = topics.get(message.topic);
+  if (!state) return;
+  if (message.type === "event") {
+    state.lastSeq = message.seq;
+    const fanout: TopicEventMessage = {
+      type: "event",
+      seq: message.seq,
+      event: message.event,
+    };
+    for (const listener of state.listeners) {
+      listener(fanout);
+    }
+    return;
+  }
+  state.lastSeq = undefined;
+  const fanout: TopicResetMessage = { type: "reset" };
+  for (const listener of state.listeners) {
+    listener(fanout);
+  }
+}
+
+function ensureWorkerPort(): MessagePort {
+  if (workerPort) return workerPort;
+  sharedWorker = new SharedWorker(
+    new URL("./transport.shared-worker.ts", import.meta.url),
+    { type: "module", name: "issue-tracker-transport" },
+  );
+  workerPort = sharedWorker.port;
+  workerPort.onmessage = (event: MessageEvent<WorkerToPortMessage>) => {
+    handleWorkerMessage(event.data);
+  };
+  workerPort.start();
+  return workerPort;
+}
+
+function subscribeViaWorker(
+  topic: string,
+  listener: TopicListener,
+  heldSeq?: number,
+): () => void {
+  let state = topics.get(topic);
+  const isNew = !state;
+  if (!state) {
+    state = { listeners: new Set() };
+    topics.set(topic, state);
+  }
+  state.listeners.add(listener);
+  if (heldSeq !== undefined) {
+    if (state.lastSeq === undefined || heldSeq > state.lastSeq) {
+      state.lastSeq = heldSeq;
+    }
+  }
+
+  if (isNew) {
+    const port = ensureWorkerPort();
+    if (state.lastSeq !== undefined) {
+      port.postMessage({
+        type: "subscribe",
+        topic,
+        sinceSeq: state.lastSeq,
+      });
     } else {
-      connect();
+      port.postMessage({ type: "subscribe", topic });
     }
   }
 
@@ -236,23 +199,67 @@ export function subscribeTopic(
     current.listeners.delete(listener);
     if (current.listeners.size > 0) return;
     topics.delete(topic);
-    if (socket?.readyState === WebSocket.OPEN) {
-      send({ type: "unsubscribe", topic });
-    }
-    if (topics.size === 0) {
-      closeSocket();
-      backoffMs = BACKOFF_INITIAL_MS;
-    }
+    workerPort?.postMessage({ type: "unsubscribe", topic });
   };
+}
+
+function holdWorkerSeq(topic: string, seq: number): void {
+  const state = topics.get(topic);
+  if (!state) return;
+  if (state.lastSeq === undefined || seq > state.lastSeq) {
+    state.lastSeq = seq;
+  }
+  // Refresh the worker's held seq for upstream reconnect (same subscribe msg).
+  workerPort?.postMessage({ type: "subscribe", topic, sinceSeq: seq });
+}
+
+// --- Public API ------------------------------------------------------------
+
+/**
+ * Hold a baseline seq for a topic (history seed / post-reset reseed) so the
+ * next subscribe — including reconnect — asks for frames after that seq.
+ */
+export function holdTopicSeq(topic: string, seq: number): void {
+  if (sharedWorkerAvailable()) {
+    holdWorkerSeq(topic, seq);
+    return;
+  }
+  holdDirectSeq(topic, seq);
+}
+
+/**
+ * Subscribe to a multiplexed topic on the shared WebSocket. The socket opens
+ * lazily on the first subscription, reconnects with backoff, and resubscribes
+ * every held topic with the last seq held for that topic.
+ *
+ * When `SharedWorker` is available the connection lives in the worker and this
+ * tab attaches over a MessagePort; otherwise the tab owns the socket directly.
+ *
+ * `heldSeq` is the seq already held for the topic (e.g. history `latestSeq`)
+ * so the first subscribe and later reconnects can ask for the gap after it.
+ */
+export function subscribeTopic(
+  topic: string,
+  listener: TopicListener,
+  heldSeq?: number,
+): () => void {
+  if (sharedWorkerAvailable()) {
+    return subscribeViaWorker(topic, listener, heldSeq);
+  }
+  return subscribeDirect(topic, listener, heldSeq);
 }
 
 /** Tear down transport state — for tests that install a fake `WebSocket`. */
 export function resetTransportForTests(): void {
-  clearReconnectTimer();
-  backoffMs = BACKOFF_INITIAL_MS;
   for (const state of topics.values()) {
     state.listeners.clear();
   }
   topics.clear();
-  closeSocket();
+  directUpstream?.resetForTests();
+  directUpstream = null;
+  if (workerPort) {
+    workerPort.close();
+    workerPort = null;
+  }
+  sharedWorker = null;
 }
