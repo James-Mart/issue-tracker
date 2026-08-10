@@ -166,7 +166,7 @@ function CommentsPanel({
           <Shimmer />
         ) : null}
 
-        <div className="flex shrink-0 items-end gap-2 border-t border-border pt-3">
+        <div className="flex min-w-0 shrink-0 items-end gap-2 border-t border-border pt-3">
           <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -174,11 +174,12 @@ function CommentsPanel({
             placeholder="Add a comment"
             title="Enter to send, Shift+Enter for a newline"
             aria-label="Add a comment"
-            className="min-h-[40px] resize-none"
+            className="min-h-[40px] min-w-0 flex-1 resize-none touch:min-h-[44px]"
           />
           <Button
             size="icon"
             variant="primary"
+            className="h-11 w-11 shrink-0"
             onClick={send}
             disabled={post.isPending || !draft.trim()}
             title="Send"

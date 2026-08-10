@@ -103,6 +103,7 @@ test.describe("shell at phone width", () => {
       "/",
       "/projects/seed-proj",
       "/projects/seed-proj/issues/seed-epic-b",
+      "/projects/seed-proj/issues/seed-story-flight",
       "/agents",
     ]) {
       await page.goto(`${seededApp.baseURL}${path}`);
