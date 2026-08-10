@@ -32,3 +32,48 @@ export function currentChannelSession(
 ): ChannelSessionListItem | undefined {
   return sessions.find((session) => !session.archived);
 }
+
+/** Default panel selection: live session, else newest listed session. */
+export function defaultChannelSession(
+  sessions: readonly ChannelSessionListItem[],
+): ChannelSessionListItem | undefined {
+  if (sessions.length === 0) return undefined;
+  return (
+    currentChannelSession(sessions) ?? orderChannelSessionsForSwitcher(sessions)[0]
+  );
+}
+
+function byUpdatedAtDesc(
+  a: ChannelSessionListItem,
+  b: ChannelSessionListItem,
+): number {
+  return b.updatedAt.localeCompare(a.updatedAt);
+}
+
+/** Active sessions first, then archived; each group newest-first. */
+export function orderChannelSessionsForSwitcher(
+  sessions: readonly ChannelSessionListItem[],
+): ChannelSessionListItem[] {
+  const active = sessions.filter((session) => !session.archived);
+  const archived = sessions.filter((session) => session.archived);
+  return [...active.sort(byUpdatedAtDesc), ...archived.sort(byUpdatedAtDesc)];
+}
+
+function formatSessionStartTime(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return createdAt;
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Switcher row label: session start time plus archived marker. */
+export function formatChannelSessionSwitcherLabel(
+  session: ChannelSessionListItem,
+): string {
+  const time = formatSessionStartTime(session.createdAt);
+  return session.archived ? `${time} · archived` : time;
+}

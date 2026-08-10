@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ChannelSessionListItem } from "@server/schemas";
-import { currentChannelSession } from "./channel-sessions";
+import {
+  currentChannelSession,
+  defaultChannelSession,
+  formatChannelSessionSwitcherLabel,
+  orderChannelSessionsForSwitcher,
+} from "./channel-sessions";
 
 function session(
   overrides: Partial<ChannelSessionListItem> & Pick<ChannelSessionListItem, "id">,
@@ -37,5 +42,82 @@ describe("currentChannelSession", () => {
 
   it("returns undefined for an empty list", () => {
     expect(currentChannelSession([])).toBeUndefined();
+  });
+});
+
+describe("defaultChannelSession", () => {
+  it("prefers the live session over archived history", () => {
+    const sessions = [
+      session({ id: "archived", archived: true, updatedAt: "2026-08-03T00:00:00.000Z" }),
+      session({ id: "live", updatedAt: "2026-08-02T00:00:00.000Z" }),
+    ];
+    expect(defaultChannelSession(sessions)?.id).toBe("live");
+  });
+
+  it("falls back to the newest session when every session is archived", () => {
+    const sessions = [
+      session({
+        id: "newer-archived",
+        archived: true,
+        updatedAt: "2026-08-03T00:00:00.000Z",
+      }),
+      session({
+        id: "older-archived",
+        archived: true,
+        updatedAt: "2026-08-02T00:00:00.000Z",
+      }),
+    ];
+    expect(defaultChannelSession(sessions)?.id).toBe("newer-archived");
+  });
+});
+
+describe("orderChannelSessionsForSwitcher", () => {
+  it("lists active sessions before archived, each group newest-first", () => {
+    const sessions = [
+      session({
+        id: "archived-newer",
+        archived: true,
+        updatedAt: "2026-08-04T00:00:00.000Z",
+        createdAt: "2026-08-04T00:00:00.000Z",
+      }),
+      session({
+        id: "live",
+        updatedAt: "2026-08-03T00:00:00.000Z",
+        createdAt: "2026-08-03T00:00:00.000Z",
+      }),
+      session({
+        id: "archived-older",
+        archived: true,
+        updatedAt: "2026-08-02T00:00:00.000Z",
+        createdAt: "2026-08-02T00:00:00.000Z",
+      }),
+    ];
+    expect(orderChannelSessionsForSwitcher(sessions).map((s) => s.id)).toEqual([
+      "live",
+      "archived-newer",
+      "archived-older",
+    ]);
+  });
+});
+
+describe("formatChannelSessionSwitcherLabel", () => {
+  it("includes an archived marker for archived sessions", () => {
+    const label = formatChannelSessionSwitcherLabel(
+      session({
+        id: "a",
+        archived: true,
+        createdAt: "2026-08-01T12:00:00.000Z",
+      }),
+    );
+    expect(label).toContain("archived");
+    expect(label).not.toMatch(/ · archived · archived/);
+  });
+
+  it("omits the archived marker for the live session", () => {
+    expect(
+      formatChannelSessionSwitcherLabel(
+        session({ id: "a", createdAt: "2026-08-01T12:00:00.000Z" }),
+      ),
+    ).not.toContain("archived");
   });
 });

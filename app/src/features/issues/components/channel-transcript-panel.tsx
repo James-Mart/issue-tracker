@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ConversationChannel } from "@server/schemas";
 import {
   ShellFaultDetail,
@@ -5,8 +6,9 @@ import {
   ShellState,
 } from "@/app/shell-state";
 import { ConversationThread } from "@/features/agents/components/conversation-thread";
-import { currentChannelSession } from "../api/channel-sessions";
+import { defaultChannelSession } from "../api/channel-sessions";
 import { useChannelSessionsQuery } from "../api/queries";
+import { ChannelSessionSwitcher } from "./channel-session-switcher";
 
 /**
  * Full-width channel panel: Agents transcript for the channel's current
@@ -22,6 +24,7 @@ export function ChannelTranscriptPanel({
   label: string;
 }) {
   const { data, isLoading, error } = useChannelSessionsQuery(issueId, channel);
+  const [selectedId, setSelectedId] = useState<string | undefined>();
 
   if (isLoading && !data) {
     return <ShellLoadingState label={`Loading ${label.toLowerCase()} channel…`} />;
@@ -43,8 +46,14 @@ export function ChannelTranscriptPanel({
     );
   }
 
-  const session = currentChannelSession(data ?? []);
-  if (!session) {
+  const sessions = data ?? [];
+  const defaultSession = defaultChannelSession(sessions);
+  const selectedSession =
+    (selectedId
+      ? sessions.find((session) => session.id === selectedId)
+      : undefined) ?? defaultSession;
+
+  if (!selectedSession) {
     return (
       <ShellState
         className="border-0 bg-transparent px-4 py-8 shadow-none"
@@ -55,15 +64,27 @@ export function ChannelTranscriptPanel({
     );
   }
 
+  const showSwitcher = sessions.length >= 2;
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
       data-testid="channel-transcript-panel"
     >
+      {showSwitcher ? (
+        <ChannelSessionSwitcher
+          issueId={issueId}
+          channel={channel}
+          sessions={sessions}
+          selectedId={selectedSession.id}
+          onSelectedIdChange={setSelectedId}
+        />
+      ) : null}
       <ConversationThread
-        key={session.id}
-        conversationId={session.id}
-        meta={{ title: session.title, model: session.model }}
+        key={selectedSession.id}
+        conversationId={selectedSession.id}
+        meta={{ title: selectedSession.title, model: selectedSession.model }}
+        hideComposer={selectedSession.archived}
       />
     </div>
   );

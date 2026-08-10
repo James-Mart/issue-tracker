@@ -342,4 +342,23 @@ describe("ConversationThread anchored meta", () => {
     expect(composer?.getAttribute("data-model")).toBe("composer-2.5");
     expect(container.textContent).toContain("Plan capture");
   });
+
+  it("omits the composer when hideComposer is set for archived history", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <ConversationThread
+          conversationId="anchored-archived"
+          meta={{ title: "Old plan", model: "composer-2.5" }}
+          hideComposer
+        />,
+      );
+    });
+    expect(
+      container.querySelector('[data-testid="conversation-composer"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("Old plan");
+  });
 });

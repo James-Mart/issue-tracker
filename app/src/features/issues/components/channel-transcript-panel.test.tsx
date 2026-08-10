@@ -11,6 +11,10 @@ const queryState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
+const threadProps = vi.hoisted(() => ({
+  hideComposer: false,
+}));
+
 vi.mock("../api/queries", () => ({
   useChannelSessionsQuery: () => ({
     data: queryState.data,
@@ -19,20 +23,52 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
+vi.mock("./channel-session-switcher", () => ({
+  ChannelSessionSwitcher: ({
+    sessions,
+    selectedId,
+    onSelectedIdChange,
+  }: {
+    sessions: readonly ChannelSessionListItem[];
+    selectedId: string;
+    onSelectedIdChange: (id: string) => void;
+  }) => (
+    <div data-testid="channel-session-switcher">
+      {sessions.map((session) => (
+        <button
+          key={session.id}
+          type="button"
+          data-testid={`pick-session-${session.id}`}
+          aria-pressed={session.id === selectedId}
+          onClick={() => onSelectedIdChange(session.id)}
+        >
+          {session.id}
+        </button>
+      ))}
+    </div>
+  ),
+}));
+
 vi.mock("@/features/agents/components/conversation-thread", () => ({
   ConversationThread: ({
     conversationId,
     meta,
+    hideComposer,
   }: {
     conversationId: string;
     meta?: { title: string; model: string };
-  }) => (
-    <div
-      data-testid="conversation-thread"
-      data-conversation-id={conversationId}
-      data-model={meta?.model ?? ""}
-    />
-  ),
+    hideComposer?: boolean;
+  }) => {
+    threadProps.hideComposer = hideComposer ?? false;
+    return (
+      <div
+        data-testid="conversation-thread"
+        data-conversation-id={conversationId}
+        data-model={meta?.model ?? ""}
+        data-hide-composer={hideComposer ? "true" : "false"}
+      />
+    );
+  },
 }));
 
 function mountPanel(label = "Planning"): {
@@ -59,6 +95,7 @@ afterEach(() => {
   queryState.data = undefined;
   queryState.isLoading = false;
   queryState.error = null;
+  threadProps.hideComposer = false;
 });
 
 describe("ChannelTranscriptPanel", () => {
@@ -107,6 +144,90 @@ describe("ChannelTranscriptPanel", () => {
     expect(
       container.querySelector('[data-testid="channel-transcript-panel"]'),
     ).toBeTruthy();
+  });
+
+  it("does not render the session switcher when the channel has one session", () => {
+    queryState.data = [
+      {
+        id: "only",
+        title: "Solo",
+        model: "composer-2.5-fast",
+        createdAt: "2026-08-01T00:00:00.000Z",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+        archived: false,
+        activeRun: false,
+      },
+    ];
+    const { container } = mountPanel();
+    expect(
+      container.querySelector('[data-testid="channel-session-switcher"]'),
+    ).toBeNull();
+  });
+
+  it("renders the session switcher when the channel has two sessions", () => {
+    queryState.data = [
+      {
+        id: "archived",
+        title: "Old",
+        model: "composer-2.5-fast",
+        createdAt: "2026-08-03T00:00:00.000Z",
+        updatedAt: "2026-08-03T00:00:00.000Z",
+        archived: true,
+        activeRun: false,
+      },
+      {
+        id: "live",
+        title: "Live",
+        model: "composer-2.5-fast",
+        createdAt: "2026-08-02T00:00:00.000Z",
+        updatedAt: "2026-08-02T00:00:00.000Z",
+        archived: false,
+        activeRun: false,
+      },
+    ];
+    const { container } = mountPanel();
+    expect(
+      container.querySelector('[data-testid="channel-session-switcher"]'),
+    ).toBeTruthy();
+  });
+
+  it("hides the composer when an archived session is selected", () => {
+    queryState.data = [
+      {
+        id: "archived",
+        title: "Old",
+        model: "composer-2.5-fast",
+        createdAt: "2026-08-03T00:00:00.000Z",
+        updatedAt: "2026-08-03T00:00:00.000Z",
+        archived: true,
+        activeRun: false,
+      },
+      {
+        id: "live",
+        title: "Live",
+        model: "composer-2.5-fast",
+        createdAt: "2026-08-02T00:00:00.000Z",
+        updatedAt: "2026-08-02T00:00:00.000Z",
+        archived: false,
+        activeRun: false,
+      },
+    ];
+    const { container } = mountPanel();
+    expect(threadProps.hideComposer).toBe(false);
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="pick-session-archived"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    const thread = container.querySelector(
+      '[data-testid="conversation-thread"]',
+    );
+    expect(thread?.getAttribute("data-conversation-id")).toBe("archived");
+    expect(thread?.getAttribute("data-hide-composer")).toBe("true");
   });
 
   it("names the Implementing channel in the empty state", () => {

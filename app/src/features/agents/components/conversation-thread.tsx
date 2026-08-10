@@ -473,6 +473,7 @@ export function ConversationThread({
   conversationId,
   onBack,
   meta: metaProp,
+  hideComposer,
 }: {
   conversationId: string;
   onBack?: () => void;
@@ -485,6 +486,8 @@ export function ConversationThread({
     model: string;
     pendingMessage?: { text: string; at: string };
   };
+  /** Read-only history (e.g. archived channel session) — transcript only. */
+  hideComposer?: boolean;
 }) {
   const { events, ready, streamRunActive, runResyncKey, pendingText } =
     useConversationEvents(conversationId);
@@ -520,7 +523,7 @@ export function ConversationThread({
           model={meta?.model ?? ""}
         />
       </div>
-      {meta ? (
+      {meta && !hideComposer ? (
         <Composer
           conversationId={conversationId}
           model={meta.model}
