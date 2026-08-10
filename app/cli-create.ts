@@ -4,6 +4,7 @@ import {
   withCreateDescriptionOptions,
   type CreateDescriptionOpts,
 } from "./cli-io.js";
+import { assertAllowedAgentModelSlug } from "./server/agent-model-slugs.js";
 import { KIND_CAPABILITIES } from "./server/kind.js";
 import {
   PARENT_KINDS,
@@ -18,6 +19,7 @@ type CreateOpts = CreateDescriptionOpts & {
   partOf?: string;
   assignee?: string;
   stackedOn?: string;
+  stakeholder?: string;
 };
 
 function withCreateKindOptions(cmd: Command, kind: IssueKind): Command {
@@ -36,6 +38,12 @@ function withCreateKindOptions(cmd: Command, kind: IssueKind): Command {
   if (kind === "story") {
     cmd = cmd.option("--stacked-on <story>", "fork-point story id");
   }
+  if (kind === "idea") {
+    cmd = cmd.option(
+      "--stakeholder <slug>",
+      "planning driver model slug (omit for manual planning)",
+    );
+  }
   return withCreateDescriptionOptions(cmd);
 }
 
@@ -44,12 +52,16 @@ function buildCreateInput(
   title: string,
   opts: CreateOpts,
 ): CreateInput {
+  if (opts.stakeholder !== undefined) {
+    assertAllowedAgentModelSlug(opts.stakeholder);
+  }
   return {
     kind,
     title,
     partOf: opts.partOf,
     stackedOn: opts.stackedOn,
     assignee: opts.assignee,
+    stakeholder: opts.stakeholder,
     description: resolveDescription(opts),
   };
 }

@@ -1,4 +1,5 @@
 import { createApp } from "./app.js";
+import { refreshAgentModelSlugsFromSdk } from "./agent-model-slugs-sync.js";
 import { listenPort } from "./config.js";
 import { agentSessions } from "./services/agent-sessions.js";
 import { validateHookRegistration } from "./services/hook-registration.js";
@@ -10,6 +11,8 @@ await installHttp2Diagnostics();
 
 validateRoleBodies();
 validateHookRegistration();
+
+await refreshAgentModelSlugsFromSdk();
 
 const app = createApp();
 

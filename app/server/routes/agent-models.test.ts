@@ -1,6 +1,10 @@
 import type { Server } from "http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import express from "express";
+import {
+  isAllowedAgentModelSlug,
+  resetAgentModelSlugsForTests,
+} from "../agent-model-slugs.js";
 import { CursorAgentError } from "../services/agent-sdk.js";
 import { createFakeAgentSdk, FAKE_MODELS } from "../services/agent-sdk.fake.js";
 import { createAgentModelsRouter } from "./agent-models.js";
@@ -24,6 +28,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  resetAgentModelSlugsForTests();
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));
   });
@@ -37,6 +42,8 @@ describe("GET /api/agent-models", () => {
     expect(body).toEqual({ models: FAKE_MODELS });
     expect(body.models[0].id).toBe("composer-2.5");
     expect(body.models[0].displayName).toBe("Composer 2.5");
+    expect(isAllowedAgentModelSlug("composer-2.5")).toBe(true);
+    expect(isAllowedAgentModelSlug("auto")).toBe(true);
   });
 
   it("responds 502 with JSON error on CursorAgentError without crashing", async () => {

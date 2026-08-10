@@ -35,6 +35,7 @@ import { hasAttention } from "./server/kind.js";
 import { registerKindAdd } from "./cli-create.js";
 import { registerKindGetSet } from "./cli-kind.js";
 import { registerBareIdOps, registerKindOps } from "./cli-ops.js";
+import { refreshAgentModelSlugsFromSdk } from "./server/agent-model-slugs-sync.js";
 import { DELETED_FIELD_VERBS } from "./deleted-field-verbs.js";
 
 type EpicRecord = Extract<IssueRecord, { kind: "epic" }>;
@@ -467,6 +468,8 @@ function handleStreamError(err: NodeJS.ErrnoException): void {
 
 process.stdout.on("error", handleStreamError);
 process.stderr.on("error", handleStreamError);
+
+await refreshAgentModelSlugsFromSdk();
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : String(err));

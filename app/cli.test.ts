@@ -33,7 +33,11 @@ function runCli(
 ): { stdout: string; stderr: string; status: number | null } {
   const result = spawnSync(tsx, [cliPath, ...args], {
     cwd: appDir,
-    env: { ...process.env, ISSUES_DIR: dir },
+    env: {
+      ...process.env,
+      ISSUES_DIR: dir,
+      ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
+    },
     input,
     encoding: "utf8",
   });
@@ -52,7 +56,11 @@ function runCliWithEarlyStdoutClose(
   return new Promise((resolve, reject) => {
     const child = spawn(tsx, [cliPath, ...args], {
       cwd: appDir,
-      env: { ...process.env, ISSUES_DIR: dir },
+      env: {
+        ...process.env,
+        ISSUES_DIR: dir,
+        ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -785,6 +793,66 @@ describe("idea add / get / set", () => {
     expect(unknownSet.stderr).toContain(
       'unknown or unsettable field "assignee" for idea',
     );
+  });
+
+  it("sets, gets, and clears stakeholder on an idea", () => {
+    expect(runCli(["idea", "add", "--part-of", "p", "Plan this"]).status).toBe(0);
+
+    expect(
+      runCli(["idea", "set", "plan-this", "stakeholder", "composer-2.5"]).status,
+    ).toBe(0);
+    expect(issueJsonField("plan-this", "stakeholder")).toBe("composer-2.5");
+    expect(runCli(["idea", "get", "plan-this", "stakeholder"]).stdout.trim()).toBe(
+      "composer-2.5",
+    );
+
+    expect(
+      runCli(["idea", "set", "plan-this", "stakeholder", "--clear"]).status,
+    ).toBe(0);
+    expect("stakeholder" in JSON.parse(readFileSync(join(dir, "plan-this", "issue.json"), "utf8"))).toBe(
+      false,
+    );
+    expect(runCli(["idea", "get", "plan-this", "stakeholder"]).stdout).toBe("");
+  });
+
+  it("refuses an unknown stakeholder slug on create and set", () => {
+    const badAdd = runCli([
+      "idea",
+      "add",
+      "--part-of",
+      "p",
+      "--stakeholder",
+      "not-a-model",
+      "Bad slug",
+    ]);
+    expect(badAdd.status).toBe(1);
+    expect(badAdd.stderr).toContain("unknown agent model slug");
+
+    expect(runCli(["idea", "add", "--part-of", "p", "Ok idea"]).status).toBe(0);
+    const badSet = runCli([
+      "idea",
+      "set",
+      "ok-idea",
+      "stakeholder",
+      "not-a-model",
+    ]);
+    expect(badSet.status).toBe(1);
+    expect(badSet.stderr).toContain("unknown agent model slug");
+  });
+
+  it("creates an idea with --stakeholder", () => {
+    const { stdout, status } = runCli([
+      "idea",
+      "add",
+      "--part-of",
+      "p",
+      "--stakeholder",
+      "composer-2.5",
+      "Auto plan",
+    ]);
+    expect(status).toBe(0);
+    const id = stdout.trim();
+    expect(issueJsonField(id, "stakeholder")).toBe("composer-2.5");
   });
 });
 

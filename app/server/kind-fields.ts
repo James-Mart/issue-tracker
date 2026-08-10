@@ -32,7 +32,8 @@ export type FieldCoerce =
   | { type: "inspirationApps" }
   | { type: "description" }
   | { type: "needsAttention" }
-  | { type: "commitSha" };
+  | { type: "commitSha" }
+  | { type: "agentModelSlug" };
 
 export type SetFieldSpec = FieldCoerce;
 
@@ -69,6 +70,7 @@ export const IDEA_SET_FIELDS = {
   title: { type: "string" },
   archived: { type: "boolean" },
   partOf: { type: "string" },
+  stakeholder: { type: "agentModelSlug" },
   labels: { type: "array" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
@@ -164,6 +166,7 @@ export const IDEA_GET_FIELDS = {
   title: STORED,
   partOf: STORED,
   archived: STORED,
+  stakeholder: STORED,
   labels: STORED,
   order: STORED,
   createdAt: STORED,

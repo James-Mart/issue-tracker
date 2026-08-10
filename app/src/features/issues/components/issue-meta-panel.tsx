@@ -10,6 +10,7 @@ import {
 import { IssueAssigneeField } from "./issue-assignee-field";
 import { IssueAssignmentLabelsField } from "./issue-assignment-labels-field";
 import { IssuePartOfField } from "./issue-part-of-field";
+import { IssueStakeholderField } from "./issue-stakeholder-field";
 import { CompactMetaBlock } from "./compact-meta";
 import { GitStackPanel } from "./git-stack-panel";
 import { MetaRow } from "./meta-row";
@@ -62,6 +63,16 @@ export function IssueMetaPanel({
             embedded
           />
         }
+      />,
+    );
+  }
+
+  if (issue.kind === "idea") {
+    rows.push(
+      <MetaRow
+        key="stakeholder"
+        label={FIELD_LABELS.stakeholder}
+        value={<IssueStakeholderField issue={issue} />}
       />,
     );
   }
