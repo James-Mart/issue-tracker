@@ -48,7 +48,9 @@ cd app && npm install && npm run dev
   `http://localhost:8061`). With `strictPort: true`, a busy Vite port fails
   instead of walking to the next port.
 
-Other scripts: `npm test` (Vitest) and `npm run build` (build the client into
+Other scripts: `npm test` (static lints — client import boundary, agent spawn
+pins, CLI instruction forms, transport connection boundary — then Vitest) and
+`npm run build` (build the client into
 `dist/`). `npm start` and `npm run preview` run the Express server, but it only
 serves the built client when `NODE_ENV=production` **and** `dist/` exists;
 otherwise it runs API-only on `:8061` (use `npm run dev` for the full UI, or
