@@ -32,7 +32,7 @@ import { assertKind, kindGetValue, resolveIssueKind } from "./cli-kind.js";
 type Run = (action: () => unknown) => Promise<void>;
 
 type ViewOptions = {
-  chat?: boolean;
+  comments?: boolean;
 };
 
 function labelIdsForView(detail: IssueDetail): string[] {
@@ -104,21 +104,21 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
   console.log();
   console.log(detail.description || "(no description)");
 
-  if (opts.chat) {
+  if (opts.comments) {
     const { messages, problems } = readComments(id);
     console.log();
-    console.log("--- chat ---");
+    console.log("--- comments ---");
     if (messages.length === 0) console.log("(no messages)");
     for (const message of messages) {
       console.log(`[${message.at}] ${message.name ?? message.role}: ${message.body}`);
     }
-    // Malformed chat lines are surfaced as stderr warnings but deliberately
+    // Malformed comment lines are surfaced as stderr warnings but deliberately
     // do not fail the command: like list()'s `problems`, they are data
     // warnings, not a failure of `view` itself, which still printed the
     // issue and every parseable message. Only thrown errors (e.g. unknown
     // id) set a nonzero exit code.
     for (const problem of problems) {
-      console.error(`chat problem: ${problem.message}`);
+      console.error(`comment problem: ${problem.message}`);
     }
   }
 }
@@ -175,9 +175,9 @@ function registerViewCommand(parent: Command, run: Run, kind: IssueKind): void {
     .command("view")
     .argument("<id>", "issue id")
     .description(
-      "print an issue's metadata and description (pass --chat for the chat log)",
+      "print an issue's metadata and description (pass --comments for the comment log)",
     )
-    .option("--chat", "also print the chat log")
+    .option("--comments", "also print the comment log")
     .action((id: string, opts: ViewOptions) =>
       run(() => {
         assertKind(kind, id);
@@ -278,9 +278,9 @@ export function registerBareIdOps(program: Command, run: Run): void {
     .command("view")
     .argument("<id>", "issue id")
     .description(
-      "print an issue's metadata and description (pass --chat for the chat log)",
+      "print an issue's metadata and description (pass --comments for the comment log)",
     )
-    .option("--chat", "also print the chat log")
+    .option("--comments", "also print the comment log")
     .action((id: string, opts: ViewOptions) =>
       run(() => {
         resolveIssueKind(id);
@@ -316,7 +316,7 @@ export function registerBareIdOps(program: Command, run: Run): void {
           const kind = resolveIssueKind(id);
           if (!kindHas(kind, "comment")) {
             throw new Error(
-              `"${id}" is ${articleForKind(kind)} ${KIND_LABEL[kind]}; projects have no chat log`,
+              `"${id}" is ${articleForKind(kind)} ${KIND_LABEL[kind]}; projects have no comment log`,
             );
           }
           await printComment(id, opts);
