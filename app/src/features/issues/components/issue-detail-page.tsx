@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import type { IssueDetail, ProjectLabel } from "@server/schemas";
+import type { IssueDetail, IssueKind, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
 import {
   ShellFaultDetail,
@@ -23,12 +23,12 @@ import { projectPath } from "../lib/links";
 import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
+import { IssueDetailTabs } from "./issue-detail-tabs";
 import { StoryTaskRail } from "./story-task-rail";
 import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
 import { IssueCommentsSection } from "./comments/comments-section";
-import { ProjectDetailTabs } from "./project-detail-tabs";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { supportsAttachments } from "../lib/attachments";
 
@@ -47,7 +47,7 @@ function OwnFlowSlot({ issue }: { issue: IssueDetail }) {
   );
 }
 
-function IssueDetailBody({
+function IssueOverviewPanel({
   issue,
   upload,
   catalog,
@@ -55,6 +55,44 @@ function IssueDetailBody({
   issue: IssueDetail;
   upload?: UploadAttachmentMutation;
   catalog: ProjectLabel[];
+}) {
+  if (issue.kind === "project") {
+    return <ProjectSettingsOverview issue={issue} upload={upload} />;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <IssueMetaPanel issue={issue} catalog={catalog} />
+      <OwnFlowSlot issue={issue} />
+      <IssueAttachmentsSection issue={issue} upload={upload} />
+      <IssueDescriptionField issue={issue} upload={upload} />
+      <IssueCommentsSection issue={issue} />
+    </div>
+  );
+}
+
+function parentKindForIssue(
+  issue: IssueDetail,
+  projectId: string,
+  byId: Map<string, { kind: IssueKind }>,
+): IssueKind | undefined {
+  if (issue.kind !== "story") return undefined;
+  if (issue.partOf === projectId) return "project";
+  return byId.get(issue.partOf)?.kind;
+}
+
+function IssueDetailBody({
+  issue,
+  upload,
+  catalog,
+  projectId,
+  parentKind,
+}: {
+  issue: IssueDetail;
+  upload?: UploadAttachmentMutation;
+  catalog: ProjectLabel[];
+  projectId: string;
+  parentKind?: IssueKind;
 }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
@@ -62,38 +100,19 @@ function IssueDetailBody({
         <IssueDetailHeader issue={issue} catalog={catalog} />
       </div>
 
-      <IssueDetailView issue={issue} catalog={catalog} upload={upload} />
-    </div>
-  );
-}
-
-function IssueDetailView({
-  issue,
-  catalog,
-  upload,
-}: {
-  issue: IssueDetail;
-  catalog: ProjectLabel[];
-  upload?: UploadAttachmentMutation;
-}) {
-  if (issue.kind === "project") {
-    return (
-      <ProjectDetailTabs
-        projectId={issue.id}
-        supportingDocs={issue.supportingDocs}
-        overview={<ProjectSettingsOverview issue={issue} upload={upload} />}
+      <IssueDetailTabs
+        issue={issue}
+        projectId={projectId}
+        parentKind={parentKind}
+        overview={
+          <IssueOverviewPanel
+            issue={issue}
+            upload={upload}
+            catalog={catalog}
+          />
+        }
       />
-    );
-  }
-
-  return (
-    <>
-      <IssueMetaPanel issue={issue} catalog={catalog} />
-      <OwnFlowSlot issue={issue} />
-      <IssueAttachmentsSection issue={issue} upload={upload} />
-      <IssueDescriptionField issue={issue} upload={upload} />
-      <IssueCommentsSection issue={issue} />
-    </>
+    </div>
   );
 }
 
@@ -103,11 +122,13 @@ function IssueDetailAttachable({
   projectId,
   backLink,
   catalog,
+  parentKind,
 }: {
   issue: IssueDetail;
   projectId: string;
   backLink: ReactNode;
   catalog: ProjectLabel[];
+  parentKind?: IssueKind;
 }) {
   const upload = useUploadAttachment(issue.id);
   const { rootProps } = useIssueDetailFileUpload(upload);
@@ -125,7 +146,13 @@ function IssueDetailAttachable({
       )}
     >
       <div className="shrink-0">{backLink}</div>
-      <IssueDetailBody issue={issue} upload={upload} catalog={catalog} />
+      <IssueDetailBody
+        issue={issue}
+        upload={upload}
+        catalog={catalog}
+        projectId={projectId}
+        parentKind={parentKind}
+      />
     </PageShell>
   );
 }
@@ -144,6 +171,11 @@ export function IssueDetailPage() {
   const catalog = useMemo(
     () => projectCatalogLabels(byId, projectId),
     [byId, projectId],
+  );
+
+  const parentKind = useMemo(
+    () => (issue ? parentKindForIssue(issue, projectId, byId) : undefined),
+    [issue, projectId, byId],
   );
 
   const missing = error instanceof ApiError && error.status === 404;
@@ -171,6 +203,7 @@ export function IssueDetailPage() {
         projectId={projectId}
         backLink={backLink}
         catalog={catalog}
+        parentKind={parentKind}
       />
     );
   }
@@ -212,7 +245,12 @@ export function IssueDetailPage() {
       ) : null}
 
       {issue && !showScopeError ? (
-        <IssueDetailBody issue={issue} catalog={catalog} />
+        <IssueDetailBody
+          issue={issue}
+          catalog={catalog}
+          projectId={projectId}
+          parentKind={parentKind}
+        />
       ) : null}
     </PageShell>
   );

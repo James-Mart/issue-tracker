@@ -1,64 +1,85 @@
-import { useMemo, useState, type ReactNode } from "react";
-import type { SupportingDocs } from "@server/schemas";
+import { useMemo, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
+import type { IssueDetail, IssueKind } from "@server/schemas";
 import { cn } from "@/lib/utils/cn";
 import {
-  previewableSupportingDocs,
-  type SupportingDocPreviewTab,
-} from "../lib/supporting-docs";
+  resolveIssueDetailTab,
+  tabsForIssueDetail,
+  writeIssueDetailTabParam,
+  type IssueDetailTab,
+  type IssueDetailTabKey,
+} from "../lib/issue-detail-tabs";
+import type { SupportingDocPreviewTab } from "../lib/supporting-docs";
 import { SupportingDocPreview } from "./supporting-doc-preview";
 
-type TabId = "overview" | SupportingDocPreviewTab["key"];
+function isDocTab(tab: IssueDetailTab): tab is SupportingDocPreviewTab {
+  return "ref" in tab;
+}
 
-export function ProjectDetailTabs({
+function isChannelTab(
+  tab: IssueDetailTab,
+): tab is Extract<IssueDetailTab, { channel: string }> {
+  return "channel" in tab;
+}
+
+/**
+ * Page-level tab bar below the persistent header. Overview always; optional
+ * channel from `channelForIssue`; Project keeps supporting-doc preview tabs.
+ * With Overview alone, no bar renders.
+ */
+export function IssueDetailTabs({
+  issue,
   projectId,
-  supportingDocs,
+  parentKind,
   overview,
 }: {
+  issue: IssueDetail;
   projectId: string;
-  supportingDocs: SupportingDocs | undefined;
+  parentKind?: IssueKind;
   overview: ReactNode;
 }) {
-  const previewTabs = useMemo(
-    () => previewableSupportingDocs(supportingDocs),
-    [supportingDocs],
+  const tabs = useMemo(
+    () => tabsForIssueDetail(issue, parentKind),
+    [issue, parentKind],
   );
-  const [active, setActive] = useState<TabId>("overview");
-  const resolvedActive: TabId =
-    active === "overview" || previewTabs.some((tab) => tab.key === active)
-      ? active
-      : "overview";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const active = resolveIssueDetailTab(searchParams.get("tab"), tabs);
 
-  if (previewTabs.length === 0) {
+  const setActive = (next: IssueDetailTabKey) => {
+    setSearchParams((prev) => writeIssueDetailTabParam(prev, next), {
+      replace: true,
+    });
+  };
+
+  const channelTabs = tabs.filter(isChannelTab);
+  const docTabs = tabs.filter(isDocTab);
+  const showBar = tabs.length > 1;
+  const overviewSelected = active === "overview";
+
+  if (!showBar) {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto">{overview}</div>
     );
   }
 
-  const overviewSelected = resolvedActive === "overview";
-
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div
         role="tablist"
-        aria-label="Project detail"
+        aria-label="Issue detail"
         className="flex shrink-0 flex-wrap gap-1 border-b border-border shell:flex-nowrap"
       >
-        <TabButton
-          selected={overviewSelected}
-          onClick={() => setActive("overview")}
-        >
-          Overview
-        </TabButton>
-        {previewTabs.map((tab) => (
+        {tabs.map((tab) => (
           <TabButton
             key={tab.key}
-            selected={resolvedActive === tab.key}
+            selected={active === tab.key}
             onClick={() => setActive(tab.key)}
           >
             {tab.label}
           </TabButton>
         ))}
       </div>
+
       <div
         role="tabpanel"
         className={cn(
@@ -69,8 +90,21 @@ export function ProjectDetailTabs({
       >
         {overview}
       </div>
-      {previewTabs.map((tab) => {
-        const selected = resolvedActive === tab.key;
+
+      {channelTabs.map((tab) => {
+        const selected = active === tab.key;
+        return (
+          <div
+            key={tab.key}
+            role="tabpanel"
+            className={cn("min-h-0 min-w-0 flex-1", !selected && "hidden")}
+            {...tabPanelVisibility(selected)}
+          />
+        );
+      })}
+
+      {docTabs.map((tab) => {
+        const selected = active === tab.key;
         const fillsReadingArea = tab.format === "html";
         return (
           <div
@@ -78,9 +112,7 @@ export function ProjectDetailTabs({
             role="tabpanel"
             className={cn(
               "min-h-0 min-w-0 flex-1",
-              fillsReadingArea
-                ? "flex flex-col"
-                : "overflow-y-auto",
+              fillsReadingArea ? "flex flex-col" : "overflow-y-auto",
               !selected && "hidden",
             )}
             {...tabPanelVisibility(selected)}
