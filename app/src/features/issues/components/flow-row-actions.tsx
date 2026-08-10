@@ -2,10 +2,8 @@ import { useState } from "react";
 import {
   AlertTriangle,
   GitPullRequest,
-  MessageSquare,
   User,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import { hasAttention } from "@server/kind";
 import type { IssueRecord } from "@server/schemas";
 import { Button } from "@/components/ui/button";
@@ -25,7 +23,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { useUpdateIssue } from "../api/mutations";
 import type { FlowItem } from "../lib/flow";
-import { issueChatPath } from "../lib/links";
 import { needsAttentionPatch } from "../lib/needs-attention-patch";
 
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
@@ -106,16 +103,14 @@ function ReassignDialog({
 }
 
 /**
- * Bounded Flow steering: open PR, reassign in-flight Task, toggle attention,
- * jump to chat. Mutations go through `useUpdateIssue`.
+ * Bounded Flow steering: open PR, reassign in-flight Task, toggle attention.
+ * Mutations go through `useUpdateIssue`.
  */
 export function FlowRowActions({
   item,
-  projectId,
   task,
 }: {
   item: FlowItem;
-  projectId: string;
   task: TaskRecord | undefined;
 }) {
   const update = useUpdateIssue();
@@ -229,12 +224,6 @@ export function FlowRowActions({
           }
         />
       </Button>
-
-      <Button asChild variant="ghost" size="icon-sm" title="Jump to chat">
-        <Link to={issueChatPath(projectId, item.issue.id)}>
-          <MessageSquare className="h-3.5 w-3.5" />
-        </Link>
-      </Button>
     </>
   );
 }
@@ -242,11 +231,9 @@ export function FlowRowActions({
 /** Flat overflow menu for coarse pointers — no nested dropdown triggers. */
 export function FlowRowTouchMenu({
   item,
-  projectId,
   task,
 }: {
   item: FlowItem;
-  projectId: string;
   task: TaskRecord | undefined;
 }) {
   const update = useUpdateIssue();
@@ -288,12 +275,6 @@ export function FlowRowTouchMenu({
           {attention ? "Clear needs attention" : "Flag needs attention"}
         </DropdownMenuItem>
       ) : null}
-      <DropdownMenuItem asChild>
-        <Link to={issueChatPath(projectId, item.issue.id)}>
-          <MessageSquare className="h-4 w-4" />
-          Jump to chat
-        </Link>
-      </DropdownMenuItem>
       {task ? (
         <ReassignDialog
           task={task}

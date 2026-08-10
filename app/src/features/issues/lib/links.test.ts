@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { issueChatPath, issuePath, parseIssueLink } from "./links";
+import { issuePath, parseIssueLink } from "./links";
 
 describe("parseIssueLink", () => {
   it("extracts ids from issue: hrefs", () => {
@@ -10,13 +10,8 @@ describe("parseIssueLink", () => {
   });
 });
 
-describe("issueChatPath", () => {
-  it("forces chat=expanded on the detail route", () => {
-    expect(issueChatPath("proj", "story-1")).toBe(
-      "/projects/proj/issues/story-1?chat=expanded",
-    );
-    expect(issueChatPath("proj", "story-1")).not.toBe(
-      issuePath("proj", "story-1"),
-    );
+describe("issuePath", () => {
+  it("builds the detail route", () => {
+    expect(issuePath("proj", "story-1")).toBe("/projects/proj/issues/story-1");
   });
 });
