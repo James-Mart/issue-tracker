@@ -387,22 +387,29 @@ describe("conversations store", () => {
 
   it("createIssueChannelSession archives predecessors atomically under concurrent create", async () => {
     const { createIssueChannelSession, listConversations } = await loadService();
+    const idle = { getActiveRun: () => undefined };
 
     const [a, b] = await Promise.all([
-      createIssueChannelSession({
-        issueId: "capture",
-        channel: "planning",
-        projectId: "platform",
-        title: "Concurrent A",
-        model: "composer-2.5",
-      }),
-      createIssueChannelSession({
-        issueId: "capture",
-        channel: "planning",
-        projectId: "platform",
-        title: "Concurrent B",
-        model: "composer-2.5",
-      }),
+      createIssueChannelSession(
+        {
+          issueId: "capture",
+          channel: "planning",
+          projectId: "platform",
+          title: "Concurrent A",
+          model: "composer-2.5",
+        },
+        idle,
+      ),
+      createIssueChannelSession(
+        {
+          issueId: "capture",
+          channel: "planning",
+          projectId: "platform",
+          title: "Concurrent B",
+          model: "composer-2.5",
+        },
+        idle,
+      ),
     ]);
 
     expect(a.meta.id).not.toBe(b.meta.id);
@@ -418,23 +425,30 @@ describe("conversations store", () => {
 
   it("createIssueChannelSession refuses before writing when the channel is ineligible", async () => {
     const { createIssueChannelSession, listConversations } = await loadService();
+    const idle = { getActiveRun: () => undefined };
 
-    const prior = await createIssueChannelSession({
-      issueId: "capture",
-      channel: "planning",
-      projectId: "platform",
-      title: "Keep me",
-      model: "composer-2.5",
-    });
+    const prior = await createIssueChannelSession(
+      {
+        issueId: "capture",
+        channel: "planning",
+        projectId: "platform",
+        title: "Keep me",
+        model: "composer-2.5",
+      },
+      idle,
+    );
 
     await expect(
-      createIssueChannelSession({
-        issueId: "capture",
-        channel: "implementing",
-        projectId: "platform",
-        title: "Should not land",
-        model: "composer-2.5",
-      }),
+      createIssueChannelSession(
+        {
+          issueId: "capture",
+          channel: "implementing",
+          projectId: "platform",
+          title: "Should not land",
+          model: "composer-2.5",
+        },
+        idle,
+      ),
     ).rejects.toThrow(/channel "implementing" is not offered by issue "capture"/);
 
     const listed = listConversations().filter(

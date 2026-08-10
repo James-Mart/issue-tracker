@@ -143,14 +143,17 @@ export function createIssuesRouter(
       const projectId = projectIdForIssue(issueId);
       requireProjectWorkspace(projectId);
 
-      const { meta: created, initialPrompt } = await createIssueChannelSession({
-        projectId,
-        title,
-        model,
-        issueId,
-        channel,
-        ...(message ? { message } : {}),
-      });
+      const { meta: created, initialPrompt } = await createIssueChannelSession(
+        {
+          projectId,
+          title,
+          model,
+          issueId,
+          channel,
+          ...(message ? { message } : {}),
+        },
+        sessions,
+      );
 
       // Run start is outside serialize: sendPrompt → updateMeta(agentId) would
       // deadlock if nested inside the conversations write chain.
