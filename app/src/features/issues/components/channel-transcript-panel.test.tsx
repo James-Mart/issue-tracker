@@ -55,6 +55,65 @@ vi.mock("./planning-launch-control", () => ({
   ),
 }));
 
+vi.mock("./implementing-launch-control", () => ({
+  ImplementingChannelEmptyState: ({
+    onStarted,
+    onLockRefusal,
+  }: {
+    onStarted: (session: {
+      id: string;
+      title: string;
+      model: string;
+    }) => void;
+    onLockRefusal: (refusal: {
+      holderIssueId: string;
+      holderIssueTitle: string;
+    }) => void;
+  }) => (
+    <div data-testid="implementing-channel-empty-state">
+      <button
+        type="button"
+        data-testid="implementing-start-session"
+        onClick={() =>
+          onStarted({
+            id: "impl-session",
+            title: "Implement Ship it",
+            model: "composer-2.5",
+          })
+        }
+      >
+        Start work loop
+      </button>
+      <button
+        type="button"
+        data-testid="implementing-trigger-lock"
+        onClick={() =>
+          onLockRefusal({
+            holderIssueId: "ship-it",
+            holderIssueTitle: "Ship it",
+          })
+        }
+      >
+        Trigger lock
+      </button>
+    </div>
+  ),
+  ImplementingLockRefusalState: ({
+    refusal,
+  }: {
+    refusal: { holderIssueId: string; holderIssueTitle: string };
+  }) => (
+    <div data-testid="implementing-lock-refusal">
+      {refusal.holderIssueTitle}
+    </div>
+  ),
+  ImplementingNewRunControl: () => (
+    <button type="button" data-testid="implementing-new-run">
+      New run
+    </button>
+  ),
+}));
+
 vi.mock("./channel-session-switcher", () => ({
   ChannelSessionSwitcher: ({
     sessions,
@@ -106,7 +165,7 @@ vi.mock("@/features/agents/components/conversation-thread", () => ({
 function mountPanel(
   label = "Planning",
   issue?: {
-    kind: "idea";
+    kind: "idea" | "epic";
     id: string;
     title: string;
     partOf: string;
@@ -114,21 +173,30 @@ function mountPanel(
     archived: boolean;
     createdAt: string;
     updatedAt: string;
+    status?: "open";
+  },
+  options?: {
+    channel?: "planning" | "implementing";
+    projectId?: string;
+    parentKind?: "project" | "epic";
   },
 ): {
   container: HTMLDivElement;
   root: Root;
 } {
+  const channel = options?.channel ?? "planning";
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
     root.render(
       <ChannelTranscriptPanel
-        issueId="capture"
+        issueId={issue?.id ?? "capture"}
         issue={issue}
-        channel="planning"
+        channel={channel}
         label={label}
+        projectId={options?.projectId}
+        parentKind={options?.parentKind}
       />,
     );
   });
@@ -140,6 +208,18 @@ const idea = {
   id: "capture",
   title: "Capture",
   partOf: "platform",
+  order: 0,
+  archived: false,
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-01T00:00:00.000Z",
+};
+
+const epic = {
+  kind: "epic" as const,
+  id: "ship-it",
+  title: "Ship it",
+  partOf: "platform",
+  status: "open" as const,
   order: 0,
   archived: false,
   createdAt: "2026-08-01T00:00:00.000Z",
@@ -320,7 +400,37 @@ describe("ChannelTranscriptPanel", () => {
     expect(thread?.getAttribute("data-hide-composer")).toBe("true");
   });
 
-  it("names the Implementing channel in the empty state", () => {
+  it("shows the implementing launch empty state for an Epic with no session", () => {
+    queryState.data = [];
+    const { container } = mountPanel("Implementing", epic, {
+      channel: "implementing",
+      projectId: "platform",
+    });
+    expect(
+      container.querySelector('[data-testid="implementing-channel-empty-state"]'),
+    ).toBeTruthy();
+  });
+
+  it("surfaces a project lock refusal in place for implementing", () => {
+    queryState.data = [];
+    const { container } = mountPanel("Implementing", epic, {
+      channel: "implementing",
+      projectId: "platform",
+    });
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="implementing-trigger-lock"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(
+      container.querySelector('[data-testid="implementing-lock-refusal"]'),
+    ).toBeTruthy();
+    expect(container.textContent).toContain("Ship it");
+  });
+
+  it("names the Implementing channel in the generic empty state without a work root", () => {
     queryState.data = [];
     const { container } = mountPanel("Implementing");
     expect(container.textContent).toContain("No implementing session.");
