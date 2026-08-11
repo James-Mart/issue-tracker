@@ -34,6 +34,8 @@ export type UpstreamConnection = {
   acquire(topic: string, sinceSeq?: number): void;
   release(topic: string): void;
   holdSeq(topic: string, seq: number): void;
+  /** Drop the socket and held topics (worker shutdown / tests). */
+  close(): void;
   resetForTests(): void;
 };
 
@@ -221,6 +223,12 @@ export function createUpstreamConnection(options: {
       const state = topics.get(topic);
       if (!state) return;
       applyHeldSeq(state, seq);
+    },
+
+    close(): void {
+      clearReconnectTimer();
+      topics.clear();
+      closeSocket();
     },
 
     resetForTests(): void {

@@ -13,6 +13,7 @@ class FakePort implements TransportWorkerPort {
   readonly posted: WorkerToPortMessage[] = [];
   private readonly listeners = new Map<string, Set<FakeListener>>();
   private started = false;
+  private closed = false;
 
   postMessage(message: WorkerToPortMessage): void {
     this.posted.push(message);
@@ -34,8 +35,21 @@ class FakePort implements TransportWorkerPort {
     this.started = true;
   }
 
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    const event = new Event("close");
+    for (const listener of this.listeners.get("close") ?? []) {
+      listener(event);
+    }
+  }
+
   get isStarted(): boolean {
     return this.started;
+  }
+
+  get isClosed(): boolean {
+    return this.closed;
   }
 
   /** Deliver a port→worker message as the real MessagePort would. */
@@ -48,22 +62,23 @@ class FakePort implements TransportWorkerPort {
 
   /** Simulate the browsing context going away. */
   disconnect(): void {
-    const event = new Event("close");
-    for (const listener of this.listeners.get("close") ?? []) {
-      listener(event);
-    }
+    this.close();
   }
 }
 
 describe("SharedWorker transport owner ref counting", () => {
   let owner: ReturnType<typeof createTransportWorkerOwner>;
+  let onShutdown: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal("WebSocket", FakeWebSocket);
     FakeWebSocket.reset();
+    onShutdown = vi.fn();
     owner = createTransportWorkerOwner({
       wsUrl: () => "ws://test.example/api/ws",
+      version: 1,
+      onShutdown,
     });
   });
 
@@ -166,5 +181,39 @@ describe("SharedWorker transport owner ref counting", () => {
     expect(portA.posted).toEqual([expected]);
     expect(portB.posted).toEqual([expected]);
     expect(portC.posted).toEqual([]);
+  });
+
+  it("shuts down when a port hellos with a newer version", () => {
+    const portA = new FakePort();
+    const portB = new FakePort();
+    owner.attachPort(portA);
+    owner.attachPort(portB);
+
+    portA.deliver({ type: "subscribe", topic: "issues" });
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    const ws = FakeWebSocket.instances[0]!;
+    ws.emitOpen();
+
+    portB.deliver({ type: "hello", version: 2 });
+
+    expect(ws.isClosed).toBe(true);
+    expect(portA.isClosed).toBe(true);
+    expect(portB.isClosed).toBe(true);
+    expect(onShutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a hello at or below the worker version", () => {
+    const port = new FakePort();
+    owner.attachPort(port);
+    port.deliver({ type: "subscribe", topic: "issues" });
+    const ws = FakeWebSocket.instances[0]!;
+    ws.emitOpen();
+
+    port.deliver({ type: "hello", version: 1 });
+    port.deliver({ type: "hello", version: 0 });
+
+    expect(ws.isClosed).toBe(false);
+    expect(port.isClosed).toBe(false);
+    expect(onShutdown).not.toHaveBeenCalled();
   });
 });

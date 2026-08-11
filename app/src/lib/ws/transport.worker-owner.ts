@@ -10,6 +10,7 @@ import {
 } from "./transport.socket";
 
 export type PortToWorkerMessage =
+  | { type: "hello"; version: number }
   | { type: "subscribe"; topic: string; sinceSeq?: number }
   | { type: "unsubscribe"; topic: string };
 
@@ -23,6 +24,7 @@ export type TransportWorkerPort = {
     listener: (event: MessageEvent | Event) => void,
   ): void;
   start?: () => void;
+  close(): void;
 };
 
 export type TransportWorkerOwner = {
@@ -32,6 +34,8 @@ export type TransportWorkerOwner = {
 
 export function createTransportWorkerOwner(options: {
   wsUrl: () => string;
+  version: number;
+  onShutdown?: () => void;
 }): TransportWorkerOwner {
   /** topic → ports currently subscribed to it */
   const topicPorts = new Map<string, Set<TransportWorkerPort>>();
@@ -39,6 +43,7 @@ export function createTransportWorkerOwner(options: {
   const portTopics = new Map<TransportWorkerPort, Set<string>>();
 
   let upstream: UpstreamConnection | null = null;
+  let shutDown = false;
 
   function ensureUpstream(): UpstreamConnection {
     if (upstream) return upstream;
@@ -111,15 +116,37 @@ export function createTransportWorkerOwner(options: {
     portTopics.delete(port);
   }
 
+  function shutDownWorker(): void {
+    if (shutDown) return;
+    shutDown = true;
+    upstream?.close();
+    upstream = null;
+    const ports = [...portTopics.keys()];
+    topicPorts.clear();
+    portTopics.clear();
+    for (const port of ports) {
+      port.close();
+    }
+    options.onShutdown?.();
+  }
+
   return {
     attachPort(port: TransportWorkerPort): void {
-      if (portTopics.has(port)) return;
+      if (shutDown || portTopics.has(port)) return;
       portTopics.set(port, new Set());
       port.start?.();
 
       port.addEventListener("message", (event) => {
+        if (shutDown) return;
         const msg = (event as MessageEvent).data as PortToWorkerMessage;
         if (!msg || typeof msg !== "object" || typeof msg.type !== "string") {
+          return;
+        }
+        if (msg.type === "hello") {
+          if (typeof msg.version !== "number") return;
+          if (msg.version > options.version) {
+            shutDownWorker();
+          }
           return;
         }
         if (msg.type === "subscribe") {
@@ -134,11 +161,13 @@ export function createTransportWorkerOwner(options: {
       });
 
       port.addEventListener("close", () => {
+        if (shutDown) return;
         detachPort(port);
       });
     },
 
     resetForTests(): void {
+      shutDown = false;
       topicPorts.clear();
       portTopics.clear();
       upstream?.resetForTests();

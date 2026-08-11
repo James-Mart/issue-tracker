@@ -125,6 +125,8 @@ function holdDirectSeq(topic: string, seq: number): void {
 
 let sharedWorker: SharedWorker | null = null;
 let workerPort: MessagePort | null = null;
+/** True while reconnecting after a stale worker shut down. */
+let reconnectingWorker = false;
 
 function handleWorkerMessage(message: WorkerToPortMessage): void {
   const state = topics.get(message.topic);
@@ -148,17 +150,54 @@ function handleWorkerMessage(message: WorkerToPortMessage): void {
   }
 }
 
+function resubscribeAllViaWorker(port: MessagePort): void {
+  for (const [topic, state] of topics) {
+    if (state.lastSeq !== undefined) {
+      port.postMessage({
+        type: "subscribe",
+        topic,
+        sinceSeq: state.lastSeq,
+      });
+    } else {
+      port.postMessage({ type: "subscribe", topic });
+    }
+  }
+}
+
+function handleWorkerPortClosed(): void {
+  if (reconnectingWorker) return;
+  workerPort = null;
+  sharedWorker = null;
+  if (topics.size === 0) return;
+  reconnectingWorker = true;
+  try {
+    const port = ensureWorkerPort();
+    resubscribeAllViaWorker(port);
+  } finally {
+    reconnectingWorker = false;
+  }
+}
+
 function ensureWorkerPort(): MessagePort {
   if (workerPort) return workerPort;
-  sharedWorker = new SharedWorker(
-    new URL("./transport.shared-worker.ts", import.meta.url),
-    { type: "module", name: "issue-tracker-transport" },
-  );
+  const url = new URL("./transport.shared-worker.ts", import.meta.url);
+  url.searchParams.set("v", String(__TRANSPORT_VERSION__));
+  sharedWorker = new SharedWorker(url, {
+    type: "module",
+    name: "issue-tracker-transport",
+  });
   workerPort = sharedWorker.port;
   workerPort.onmessage = (event: MessageEvent<WorkerToPortMessage>) => {
     handleWorkerMessage(event.data);
   };
+  workerPort.addEventListener("close", () => {
+    handleWorkerPortClosed();
+  });
   workerPort.start();
+  workerPort.postMessage({
+    type: "hello",
+    version: __TRANSPORT_VERSION__,
+  });
   return workerPort;
 }
 
@@ -257,6 +296,7 @@ export function resetTransportForTests(): void {
   topics.clear();
   directUpstream?.resetForTests();
   directUpstream = null;
+  reconnectingWorker = false;
   if (workerPort) {
     workerPort.close();
     workerPort = null;
