@@ -85,6 +85,17 @@ export interface DelegateToolOptions {
   getCursorConversationId?: () => string | undefined;
   /** Override agents directory (tests). Defaults to the plugin `agents/`. */
   agentsDir?: string;
+  /**
+   * Called with an `auth` failure once, before it is returned to the caller.
+   * The nested run cannot recover on its own — it shares the workspace executor
+   * with the handle awaiting this tool call, so nothing it retries can mint a
+   * new token — which is why the failure has to travel up.
+   */
+  onAuthFailure?: (detail: {
+    delegationId: string;
+    agentId: string;
+    message: string;
+  }) => void;
 }
 
 type SlotWaiter = {
@@ -496,6 +507,21 @@ export function createDelegateCustomTools(
             throw new Error("delegate: conversation cancelled");
           }
 
+          const agentId = handle.agentId;
+          const reportFailure = (
+            waited: AgentRunResult,
+          ): Extract<DelegateResult, { ok: false }> => {
+            const failure = delegateFailureFromWait(waited, agentId);
+            if (failure.failureClass === "auth") {
+              options.onAuthFailure?.({
+                delegationId,
+                agentId,
+                message: failure.message,
+              });
+            }
+            return failure;
+          };
+
           // conversationId doubles as a concurrency key in tests; only
           // persist when the conversation store is actually present.
           if (
@@ -544,28 +570,22 @@ export function createDelegateCustomTools(
               // iterator abort error, matching the conversation pump.
               const waitedAfterAbort = await run.wait();
               if (waitedAfterAbort.status === "cancelled") {
-                return delegateFailureFromWait(
-                  waitedAfterAbort,
-                  handle.agentId,
-                );
+                return reportFailure(waitedAfterAbort);
               }
               if (waitedAfterAbort.status === "error") {
-                return delegateFailureFromWait(
-                  waitedAfterAbort,
-                  handle.agentId,
-                );
+                return reportFailure(waitedAfterAbort);
               }
               throw streamErr;
             }
 
             const waited = await run.wait();
             if (waited.status === "error") {
-              return delegateFailureFromWait(waited, handle.agentId);
+              return reportFailure(waited);
             }
             if (waited.status === "cancelled") {
-              return delegateFailureFromWait(waited, handle.agentId);
+              return reportFailure(waited);
             }
-            return { ok: true, agentId: handle.agentId, reply };
+            return { ok: true, agentId, reply };
           } finally {
             if (heartbeat !== undefined) clearInterval(heartbeat);
           }

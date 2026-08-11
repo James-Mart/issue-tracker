@@ -28,6 +28,7 @@ import {
 } from "./event-pipeline.js";
 import { stopAgentStack } from "./agent-stack.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
+import { turnMadeProgress } from "./run-progress.js";
 
 export type { NormalizedStep };
 
@@ -58,11 +59,26 @@ export interface AgentSessions {
   disposeAll(): Promise<void>;
 }
 
+/**
+ * One turn in flight. `options` are what a recovery re-enters with, and
+ * `escalated` is the once-per-turn guard: every sibling delegation running when
+ * a token expires reports the same `auth` failure, and only the first is worth
+ * acting on.
+ */
+type LiveTurn = {
+  run: ActiveRun;
+  options: SendPromptOptions;
+  /** True when this turn is itself a recovery re-entry. */
+  isReplay: boolean;
+  escalated: boolean;
+};
+
 type SessionEntry = {
   handle: AgentHandle;
   /** Workspace the handle was built in; the SDK keys its executor cache on it. */
   cwd: string;
-  activeRun?: ActiveRun;
+  /** The turn in flight; absent while the session is idle. */
+  turn?: LiveTurn;
   /** Background streaming + persistence; settles when the run finishes. */
   pump?: Promise<void>;
 };
@@ -78,14 +94,26 @@ type SessionEntry = {
  * summary.
  */
 
-/** Breathing room before replaying, in case the rejection was a server-side blip. */
+/** Breathing room before re-entering, in case the rejection was a server-side blip. */
 const AUTH_RETRY_DELAY_MS = 1000;
+
+/**
+ * Re-entry prompt for a turn that got somewhere before the token expired.
+ * Recovery is mechanical: this says the turn was cut short and nothing else —
+ * it names no task and prescribes no checks.
+ */
+const CUT_SHORT_PROMPT =
+  "The previous turn was cut short by an expired session token. Please carry on.";
 
 function isAuthFailureResult(result: AgentRunResult): boolean {
   return (
     result.status === "error" &&
     isAuthFailureText(result.error?.message ?? "")
   );
+}
+
+function conversationStoreDir(conversationId: string): string {
+  return join(conversationsDir, conversationId, "agent-state");
 }
 
 /**
@@ -104,7 +132,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const { meta } = readConversation(conversationId);
     const cwd = requireProjectWorkspace(meta.projectId);
     const model = { id: meta.model };
-    const storeDir = join(conversationsDir, conversationId, "agent-state");
+    const storeDir = conversationStoreDir(conversationId);
     if (!existsSync(storeDir)) {
       mkdirSync(storeDir, { recursive: true });
     }
@@ -120,6 +148,26 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       storeDir,
       conversationId,
       getCursorConversationId: () => cursorConversationIdRef.current,
+      onAuthFailure: ({ delegationId, agentId, message }) => {
+        console.error(
+          `conversation ${conversationId}: delegation ${delegationId} ` +
+            `(agent ${agentId}) failed authentication: ${message}`,
+        );
+        const live = sessions.get(conversationId);
+        const turn = live?.turn;
+        // A turn that is already recovering owns the repair; the failure
+        // reaches the calling model as data either way.
+        if (!live || !turn || turn.isReplay || turn.escalated) return;
+        turn.escalated = true;
+        void escalateDelegationAuthFailure(conversationId, live, turn).catch(
+          (err) => {
+            console.error(
+              `failed to escalate a delegation auth failure for conversation ${conversationId}`,
+              err,
+            );
+          },
+        );
+      },
     });
 
     let handle: AgentHandle;
@@ -188,7 +236,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       // Continue disposing even if nested cancel fails.
     }
     try {
-      if (entry.activeRun) await entry.handle.cancel();
+      if (entry.turn) await entry.handle.cancel();
     } catch {
       // Continue disposing even if cancel fails.
     }
@@ -204,9 +252,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     } catch {
       // Best-effort dispose.
     }
-    evictConversationStoreCaches(
-      join(conversationsDir, conversationId, "agent-state"),
-    );
+    evictConversationStoreCaches(conversationStoreDir(conversationId));
   }
 
   /** Stream one run into the transcript, reporting any in-band auth failure. */
@@ -250,7 +296,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
   }
 
   /**
-   * Recover from an expired access token, then replay the prompt once.
+   * Recover from an expired access token, then re-enter the agent once with
+   * `options` — which the caller chooses, so it may carry the original prompt
+   * or a continuation.
    *
    * The SDK caches one local executor per workspace + API key + setting-source
    * tuple, mints an access token when it builds one, and tears the executor
@@ -262,26 +310,33 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
    *
    * Dropping the handles is the part of a restart that matters, so do only
    * that, and only for the affected workspace: sessions elsewhere key a
-   * different executor holding a different token. A sibling with a run still in
-   * flight is left alone too — cancelling live work to repair another
-   * conversation is not a trade worth making. Such a sibling keeps the refcount
-   * above zero, so the replay fails and the original error surfaces exactly as
-   * it does today.
+   * different executor holding a different token. A sibling conversation with a
+   * run still in flight is left alone too — cancelling live work to repair
+   * another conversation is not a trade worth making. Such a sibling keeps the
+   * refcount above zero, so the re-entry fails and the original error surfaces
+   * exactly as it does today.
+   *
+   * This conversation's own nested delegations are cancelled by the teardown
+   * and never waited on: they were created against the same workspace, so
+   * waiting for one to finish would be waiting on a handle that is itself
+   * holding the refcount up.
    */
   async function recoverFromAuthFailure(
     conversationId: string,
     entry: SessionEntry,
     options: SendPromptOptions,
   ): Promise<ActiveRun | undefined> {
-    // This runs inside `entry.pump`; dropping the reference keeps the teardown
-    // below from awaiting the promise it is already executing inside.
+    // The pump has nothing left to do here — the in-band caller runs inside it,
+    // and the escalating caller has already awaited the turn's result — so drop
+    // the reference rather than have the teardown await a promise its caller
+    // may be executing inside.
     entry.pump = undefined;
-    entry.activeRun = undefined;
+    entry.turn = undefined;
     sessions.delete(conversationId);
     await tearDownEntry(conversationId, entry);
 
     const idleSiblings = [...sessions.entries()].filter(
-      ([, other]) => other.cwd === entry.cwd && !other.activeRun,
+      ([, other]) => other.cwd === entry.cwd && !other.turn,
     );
     for (const [id] of idleSiblings) sessions.delete(id);
     await Promise.all(
@@ -292,15 +347,57 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       type: "status" as const,
       status: "RETRYING",
       message:
-        "The agent session's access token had expired. Reconnected and resent the last prompt.",
+        "The agent session's access token had expired. Reconnected and resumed the conversation.",
     };
     publishFrame(conversationId, { event: notice, persist: true });
     await appendEvent(conversationId, notice);
 
     await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
 
-    const replayed = await sendPromptInternal(conversationId, options, true);
-    return replayed.ok ? replayed.run : undefined;
+    const reentered = await sendPromptInternal(conversationId, options, true);
+    return reentered.ok ? reentered.run : undefined;
+  }
+
+  /**
+   * Carry an `auth` failure a delegation reported up to the conversation whose
+   * turn is running it.
+   *
+   * The model can do nothing useful once the executor behind its session is
+   * stale — every delegation it retries dies against the same one — so the turn
+   * is cancelled and re-entered instead of left to keep trying.
+   *
+   * Escalating is only safe once that cancel has settled. If it has not, the
+   * resume inside the recovery meets an agent that still has an active run,
+   * falls back to a fresh agent, and loses the context of the long-running loop
+   * the escalation exists to rescue. So a turn that does not come back
+   * `cancelled` is left alone, and the delegation's failure surfaces to the
+   * calling model exactly as it does today.
+   */
+  async function escalateDelegationAuthFailure(
+    conversationId: string,
+    entry: SessionEntry,
+    turn: LiveTurn,
+  ): Promise<void> {
+    try {
+      await entry.handle.cancel();
+    } catch {
+      // A cancel that throws is one that cannot be confirmed settled below.
+    }
+
+    const result = await turn.run.wait();
+    if (result.status !== "cancelled") return;
+
+    const madeProgress = await turnMadeProgress(
+      conversationStoreDir(conversationId),
+      entry.handle.agentId,
+    );
+    await recoverFromAuthFailure(
+      conversationId,
+      entry,
+      madeProgress
+        ? { ...turn.options, prompt: CUT_SHORT_PROMPT }
+        : turn.options,
+    );
   }
 
   async function sendPromptInternal(
@@ -344,7 +441,13 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       startedAt: new Date().toISOString(),
       wait: () => waitPromise,
     };
-    entry.activeRun = activeRun;
+    const turn: LiveTurn = {
+      run: activeRun,
+      options,
+      isReplay,
+      escalated: false,
+    };
+    entry.turn = turn;
 
     publishFrame(conversationId, {
       event: { type: "run", status: "started", runId: agentRun.id },
@@ -360,11 +463,18 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       });
 
       const result = await settleResult(agentRun);
-      if (entry.activeRun === activeRun) {
-        entry.activeRun = undefined;
+      if (entry.turn === turn) {
+        entry.turn = undefined;
       }
 
-      if (!isReplay && (sawAuthFailure || isAuthFailureResult(result))) {
+      // An escalation from a delegation already owns this turn's recovery, and
+      // it cancelled this run to get there — the two must not both tear the
+      // session down and re-enter.
+      if (
+        !isReplay &&
+        !turn.escalated &&
+        (sawAuthFailure || isAuthFailureResult(result))
+      ) {
         const replacement = await recoverFromAuthFailure(
           conversationId,
           entry,
@@ -412,12 +522,12 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     },
 
     getActiveRun(conversationId) {
-      return sessions.get(conversationId)?.activeRun;
+      return sessions.get(conversationId)?.turn?.run;
     },
 
     async cancel(conversationId) {
       const entry = sessions.get(conversationId);
-      if (!entry?.activeRun) return false;
+      if (!entry?.turn) return false;
       // Nested first so queued/in-flight delegations stop before the parent
       // run settles from its own cancel.
       await cancelConversationDelegations(conversationId);

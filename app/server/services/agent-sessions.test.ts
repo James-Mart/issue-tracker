@@ -6,6 +6,7 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { join, dirname } from "path";
+import { JSONL_LOCAL_AGENT_STORE_FILES } from "@cursor/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CursorAgentError } from "./agent-sdk.js";
 import {
@@ -1570,5 +1571,302 @@ describe("expired access token recovery", () => {
     releaseHold();
     if (busyRun.ok) await busyRun.run.wait();
     rmSync(otherWorkspace, { recursive: true, force: true });
+  });
+});
+
+const RETRYING_MESSAGE =
+  "The agent session's access token had expired. Reconnected and resumed the conversation.";
+
+const CUT_SHORT_MESSAGE =
+  "The previous turn was cut short by an expired session token. Please carry on.";
+
+/** A spawnable role the plugin ships, so the bridge finds a body and a pin. */
+const DELEGATE_ROLE = "issue-tracker-research";
+
+describe("delegation auth escalation", () => {
+  /**
+   * A nested run carrying the in-band auth status, whose own terminal result is
+   * the auth error the bridge classifies on.
+   */
+  function nestedAuthFailure() {
+    return {
+      stream: buildAuthFailureStream(),
+      waitResult: {
+        id: "run-nested-auth",
+        status: "error" as const,
+        error: { message: AUTH_ERROR_TEXT },
+      },
+    };
+  }
+
+  async function waitFor(
+    label: string,
+    predicate: () => boolean,
+  ): Promise<void> {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      if (predicate()) return;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error(`timed out waiting for ${label}`);
+  }
+
+  it("cancels the live turn and resends the prompt when the turn made no progress", async () => {
+    const { createConversation, readConversation, createAgentSessions } =
+      await load();
+    let releaseRoot!: () => void;
+    const rootHold = new Promise<void>((resolve) => {
+      releaseRoot = resolve;
+    });
+    const fake = createFakeAgentSdk({
+      stream: [],
+      sendScript: [
+        // The root turn stays live while the delegation runs — it is the handle
+        // awaiting the tool call, and the one holding the executor open.
+        { hold: rootHold },
+        nestedAuthFailure(),
+        {},
+      ],
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Nested token expired",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await Promise.resolve();
+
+    const delegate = fake.created[0]?.customTools?.delegate;
+    expect(delegate).toBeDefined();
+    if (!delegate) return;
+
+    const delegated = await delegate.execute(
+      { role: DELEGATE_ROLE, prompt: "commit it" },
+      { toolCallId: "call-delegate-auth" },
+    );
+    // The calling model still receives the failure as data.
+    expect(delegated).toMatchObject({ ok: false, failureClass: "auth" });
+
+    // The escalation cancelled the root turn rather than letting the model keep
+    // retrying against a stale executor.
+    expect(await result.run.wait()).toEqual({
+      id: FAKE_RUN_ID,
+      status: "cancelled",
+    });
+    expect(fake.handles[0]?.cancelled).toBe(true);
+    releaseRoot();
+
+    await waitFor("the re-entered turn", () => fake.resumed.length === 1);
+
+    // The stale handle is gone — its release is what lets the SDK's refcounted
+    // executor cache reach zero and mint a new token.
+    expect(fake.handles[0]?.disposed).toBe(true);
+    expect(fake.resumed[0]?.agentId).toBe(FAKE_AGENT_ID);
+    expect(fake.handles[2]?.sends).toEqual([{ prompt: "go", options: {} }]);
+
+    const { transcript } = readConversation(meta.id);
+    expect(
+      transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
+    ).toEqual([expect.objectContaining({ message: RETRYING_MESSAGE })]);
+  });
+
+  it("re-enters with a continuation prompt when the cancelled turn made progress", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    let releaseRoot!: () => void;
+    const rootHold = new Promise<void>((resolve) => {
+      releaseRoot = resolve;
+    });
+    const fake = createFakeAgentSdk({
+      stream: [],
+      sendScript: [{ hold: rootHold }, nestedAuthFailure(), {}],
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Nested token expired mid-progress",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    // The agent's own run record is where progress comes from: this turn moved
+    // its checkpoint forward before the token expired.
+    const storeDir = join(
+      dirname(issuesRoot),
+      "conversations",
+      meta.id,
+      "agent-state",
+    );
+    mkdirSync(storeDir, { recursive: true });
+    writeFileSync(
+      join(storeDir, JSONL_LOCAL_AGENT_STORE_FILES.runs),
+      `${JSON.stringify({
+        runId: FAKE_RUN_ID,
+        agentId: FAKE_AGENT_ID,
+        turnNumber: 1,
+        status: "cancelled",
+        createdAt: 1,
+        updatedAt: 1,
+        startCheckpointRef: { schemaVersion: 1, rootBlobId: "start" },
+        latestCheckpointRef: { schemaVersion: 1, rootBlobId: "moved" },
+      })}\n`,
+    );
+
+    const result = await sessions.sendPrompt(meta.id, {
+      prompt: "go",
+      model: "auto",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await Promise.resolve();
+
+    const delegate = fake.created[0]?.customTools?.delegate;
+    expect(delegate).toBeDefined();
+    if (!delegate) return;
+
+    await delegate.execute(
+      { role: DELEGATE_ROLE, prompt: "commit it" },
+      { toolCallId: "call-delegate-auth" },
+    );
+    await result.run.wait();
+    releaseRoot();
+
+    await waitFor("the re-entered turn", () => fake.resumed.length === 1);
+
+    // The per-send model override rides along untouched; only the prompt
+    // changes, and it prescribes nothing beyond carrying on.
+    expect(fake.handles[2]?.sends).toEqual([
+      { prompt: CUT_SHORT_MESSAGE, options: { model: { id: "auto" } } },
+    ]);
+  });
+
+  it("escalates once per turn however many delegations report the failure", async () => {
+    const { createConversation, readConversation, createAgentSessions } =
+      await load();
+    let releaseRoot!: () => void;
+    const rootHold = new Promise<void>((resolve) => {
+      releaseRoot = resolve;
+    });
+    const fake = createFakeAgentSdk({
+      stream: [],
+      sendScript: [
+        { hold: rootHold },
+        nestedAuthFailure(),
+        nestedAuthFailure(),
+        {},
+      ],
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Two nested failures",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await Promise.resolve();
+
+    const delegate = fake.created[0]?.customTools?.delegate;
+    expect(delegate).toBeDefined();
+    if (!delegate) return;
+
+    const both = await Promise.all([
+      delegate.execute(
+        { role: DELEGATE_ROLE, prompt: "first" },
+        { toolCallId: "call-delegate-a" },
+      ),
+      delegate.execute(
+        { role: DELEGATE_ROLE, prompt: "second" },
+        { toolCallId: "call-delegate-b" },
+      ),
+    ]);
+    for (const delegated of both) {
+      expect(delegated).toMatchObject({ ok: false, failureClass: "auth" });
+    }
+
+    await result.run.wait();
+    releaseRoot();
+
+    await waitFor("the re-entered turn", () => fake.resumed.length === 1);
+    // Both failures were reported well before this re-entry, so a second
+    // escalation would be under way by now; give it room to land and confirm it
+    // never does.
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(fake.resumed).toHaveLength(1);
+    // Root, two nested runs, and the single re-entered session.
+    expect(fake.handles).toHaveLength(4);
+    const { transcript } = readConversation(meta.id);
+    expect(
+      transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
+    ).toHaveLength(1);
+  });
+
+  it("abandons the escalation and surfaces the failure when the cancel does not settle", async () => {
+    const { createConversation, readConversation, createAgentSessions } =
+      await load();
+    let releaseRoot!: () => void;
+    const rootHold = new Promise<void>((resolve) => {
+      releaseRoot = resolve;
+    });
+    // A cancel that does not settle leaves the turn reporting an error instead
+    // of `cancelled` — the shape `settleResult` produces when `wait()` rejects,
+    // and the case where a resume would meet an agent that still has a live run.
+    const unsettled = {
+      id: FAKE_RUN_ID,
+      status: "error" as const,
+      error: { message: "run still active" },
+    };
+    const fake = createFakeAgentSdk({
+      stream: [],
+      sendScript: [
+        { hold: rootHold, waitResult: unsettled },
+        nestedAuthFailure(),
+      ],
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Cancel never settles",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await Promise.resolve();
+
+    const delegate = fake.created[0]?.customTools?.delegate;
+    expect(delegate).toBeDefined();
+    if (!delegate) return;
+
+    const delegated = await delegate.execute(
+      { role: DELEGATE_ROLE, prompt: "commit it" },
+      { toolCallId: "call-delegate-auth" },
+    );
+    expect(delegated).toMatchObject({ ok: false, failureClass: "auth" });
+
+    expect(await result.run.wait()).toEqual(unsettled);
+    releaseRoot();
+
+    // A recovery disposes the handle before it ever waits to retry, so this
+    // window is long enough to catch one starting.
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(fake.handles[0]?.disposed).toBe(false);
+    expect(fake.resumed).toHaveLength(0);
+    expect(fake.handles).toHaveLength(2);
+    const { transcript } = readConversation(meta.id);
+    expect(
+      transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
+    ).toHaveLength(0);
   });
 });
