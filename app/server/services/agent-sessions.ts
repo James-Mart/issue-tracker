@@ -8,8 +8,8 @@ import {
   type AgentRun,
   type AgentRunResult,
   type AgentSdk,
-  type AgentStreamEvent,
 } from "./agent-sdk.js";
+import { isAuthFailureEvent, isAuthFailureText } from "./agent-failure.js";
 import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import {
   appendEvent,
@@ -68,41 +68,23 @@ type SessionEntry = {
 };
 
 /**
- * Text the SDK uses when the access token behind a session has expired. It
- * arrives in-band, as a `status: "ERROR"` message inside a run that otherwise
- * started normally, so it never reaches the SDK's transport-level re-auth path
- * — that one only fires on a `ConnectError` with an `Unauthenticated` code.
- */
-const AUTH_FAILURE_TEXT =
-  /authentication error|unauthenticated|invalid api key|logging out and back in/i;
-
-/**
  * The SDK surfaces a failed turn as `Connection failed repeatedly` — an in-band
- * error string we do not special-case here (unlike `AUTH_FAILURE_TEXT` above).
- * When that text appears, check server logs: `http2-diagnostics` may already
- * show `rstCode=11` (`NGHTTP2_ENHANCE_YOUR_CALM`), meaning the peer refused an
- * oversized request rather than a network fault. A conversation already over
- * the HTTP/2 ceiling is only recoverable by continuing in a fresh conversation
- * seeded with a summary.
+ * error string we do not special-case here (unlike auth failure text in
+ * `agent-failure.ts`). When that text appears, check server logs:
+ * `http2-diagnostics` may already show `rstCode=11`
+ * (`NGHTTP2_ENHANCE_YOUR_CALM`), meaning the peer refused an oversized request
+ * rather than a network fault. A conversation already over the HTTP/2 ceiling
+ * is only recoverable by continuing in a fresh conversation seeded with a
+ * summary.
  */
 
 /** Breathing room before replaying, in case the rejection was a server-side blip. */
 const AUTH_RETRY_DELAY_MS = 1000;
 
-function isAuthFailureEvent(event: AgentStreamEvent): boolean {
-  if (event.kind !== "message") return false;
-  const { message } = event;
-  return (
-    message.type === "status" &&
-    message.status === "ERROR" &&
-    AUTH_FAILURE_TEXT.test(message.message ?? "")
-  );
-}
-
 function isAuthFailureResult(result: AgentRunResult): boolean {
   return (
     result.status === "error" &&
-    AUTH_FAILURE_TEXT.test(result.error?.message ?? "")
+    isAuthFailureText(result.error?.message ?? "")
   );
 }
 

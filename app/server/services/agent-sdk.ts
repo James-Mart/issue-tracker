@@ -2,6 +2,7 @@ import {
   Agent,
   Cursor,
   CursorAgentError,
+  CursorSdkError,
   JsonlLocalAgentStore,
   composeLocalAgentStore,
   type AgentDefinition,
@@ -82,10 +83,19 @@ export interface AgentSendOptions {
  */
 export type AgentRunStatus = "finished" | "error" | "cancelled";
 
+export interface AgentRunError {
+  message: string;
+  code?: string;
+  name?: string;
+  status?: number;
+  isRetryable?: boolean;
+  requestId?: string;
+}
+
 export interface AgentRunResult {
   id: string;
   status: AgentRunStatus;
-  error?: { message: string; code?: string };
+  error?: AgentRunError;
 }
 
 /**
@@ -226,6 +236,32 @@ function localRuntime(
 /** The real, `@cursor/sdk`-backed boundary. */
 export const agentSdk: AgentSdk = createAgentSdk();
 
+function toAgentRunError(
+  err: unknown,
+  requestId?: string,
+): AgentRunError {
+  const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof CursorSdkError) {
+    return {
+      message,
+      name: err.name,
+      ...(err.code ? { code: err.code } : {}),
+      ...(err.status !== undefined ? { status: err.status } : {}),
+      isRetryable: err.isRetryable,
+      ...(err.requestId ? { requestId: err.requestId } : {}),
+    };
+  }
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const runErr = err as { message: string; code?: string };
+    return {
+      message: runErr.message,
+      ...(runErr.code ? { code: runErr.code } : {}),
+      ...(requestId ? { requestId } : {}),
+    };
+  }
+  return { message };
+}
+
 function wrapAgent(sdkAgent: SDKAgent): AgentHandle {
   let activeRun: Run | undefined;
 
@@ -291,21 +327,14 @@ async function startSend(
         id: waited.id,
         status: waited.status,
         ...(waited.error
-          ? {
-              error: {
-                message: waited.error.message,
-                ...(waited.error.code ? { code: waited.error.code } : {}),
-              },
-            }
+          ? { error: toAgentRunError(waited.error, waited.requestId) }
           : {}),
       };
     } catch (err) {
       result = {
         id: run.id,
         status: "error",
-        error: {
-          message: err instanceof Error ? err.message : String(err),
-        },
+        error: toAgentRunError(err),
       };
     } finally {
       queue.close();
