@@ -22,7 +22,7 @@ const ROOT_DIR = resolve(APP_DIR, "..");
 
 /** Kind-uniform verbs that must not be preceded by a placeholder kind. */
 const KIND_UNIFORM_VERBS =
-  "(?:view|get|comment|attachments|attach|detach)";
+  "(?:view|get|comment|attachments|attach|detach|merge)";
 
 /**
  * `issue <placeholder> <verb>` — angle-bracket token immediately after
@@ -101,7 +101,7 @@ function runCli(rootDir: string): void {
 
   console.error(
     `instruction-cli: ${violations.length} CLI form violation(s).\n` +
-      "Kind-uniform verbs (view, get, comment, attach, attachments, detach) must use bare-id `issue <verb> <id>` when the kind is a placeholder; `issue list` must not take a non-<kind> placeholder positional (use `issue list --in <id>`).\n",
+      "Kind-uniform verbs (view, get, comment, attach, attachments, detach, merge) must use bare-id `issue <verb> <id>` when the kind is a placeholder; `issue list` must not take a non-<kind> placeholder positional (use `issue list --in <id>`).\n",
   );
   for (const v of violations) {
     console.error(`  ${v}`);

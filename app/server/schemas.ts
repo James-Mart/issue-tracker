@@ -85,6 +85,13 @@ export const commentInputSchema = commentSchema.omit({ at: true });
 export type Comment = z.infer<typeof commentSchema>;
 export type CommentInput = z.infer<typeof commentInputSchema>;
 
+export const mergeStoryBodySchema = z.object({
+  auto: z.boolean().optional(),
+  matchHeadCommit: z.string().optional(),
+});
+
+export type MergeStoryBody = z.infer<typeof mergeStoryBodySchema>;
+
 export interface CommentsResponse {
   messages: Comment[];
   problems: Problem[];

@@ -256,24 +256,25 @@ per-command.
 ## CLI surface
 
 Six kind-uniform single-issue ops take a bare id and dispatch on the issue's
-stored `kind`: `view`, `get`, `comment`, `attach`, `attachments`, `detach`.
-`set`, `add`, and `delete` stay kind-scoped — their flag surface genuinely
-differs by kind. Multi-kind / board ops stay global.
+stored `kind`: `view`, `get`, `comment`, `attach`, `attachments`, `detach`,
+`merge`. `set`, `add`, and `delete` stay kind-scoped — their flag surface
+genuinely differs by kind. Multi-kind / board ops stay global.
 
-The kind-scoped spellings `issue <kind> view|get|comment|attach|attachments|detach`
+The kind-scoped spellings `issue <kind> view|get|comment|attach|attachments|detach|merge`
 remain available as asserting aliases: the CLI kind must equal the issue's
 stored `kind` (hard error otherwise).
 
 ### Bare-id ops (kind-uniform)
 
 ```
-issue view|get|comment|attach|attachments|detach <id> …
+issue view|get|comment|attach|attachments|detach|merge <id> …
 ```
 
 | verb | notes |
 | --- | --- |
 | `view` / `get` / `attach` / `attachments` / `detach` | every kind |
 | `comment` | epic / idea / story / task (not project) |
+| `merge` | story only |
 
 - **`view`** — `issue view <id>` (pass `--comments` for the comment log).
   Prefer `issue get <id> <field>` for a single field. Label lines: see
@@ -284,6 +285,12 @@ issue view|get|comment|attach|attachments|detach <id> …
   (optional `--name`); appends to `comments.jsonl` (the CLI verb is `comment`;
   the on-disk log is `comments.jsonl`); refuses a Project id; see
   [Service layer](#service-layer).
+- **`merge`** — `issue merge <storyId> [--auto] [--match-head-commit <sha>]`;
+  shells out to `gh pr merge --merge` with owner/repo/number from the Story's
+  stored `prUrl` and cwd = the Project `workspace`; refuses other kinds and
+  Stories with no `prUrl`; `--auto` maps to `gh pr merge --auto`;
+  `--match-head-commit` maps to the flag of the same name; surfaces `gh`
+  stderr on failure.
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
@@ -292,7 +299,7 @@ issue view|get|comment|attach|attachments|detach <id> …
 ### Kind-scoped ops
 
 ```
-issue <kind> add|get|set|view|delete|comment|attach|attachments|detach
+issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
 ```
 
 `<kind>` is one of `project` | `epic` | `idea` | `story` | `task`.
@@ -302,6 +309,7 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach
 | `add` / `set` / `delete` | every kind |
 | `get` / `view` / `attach` / `attachments` / `detach` | every kind (asserting aliases) |
 | `comment` | epic / idea / story / task (not project; asserting alias) |
+| `merge` | story (asserting alias) |
 
 - **`add`** — `issue project add <title>` (no `--part-of`); children take
   `--part-of`. Description: `--description` and/or `--file` (use `-` for
@@ -311,6 +319,7 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach
 - **`delete`** — `issue <kind> delete <id>`; cascades per
   [Deletion policy](#deletion-policy).
 - **`comment`** — asserting alias for `issue comment <id> …`.
+- **`merge`** — asserting alias for `issue merge <storyId> …`.
 - **`attach` / `attachments` / `detach`** — asserting aliases; see
   [Attachments](#attachments).
 
@@ -701,7 +710,12 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
 - **`pull-request`** — after the push, open a **draft** PR against its derived
   `mergeBase`, then record the url via `issue story set <storyId> prUrl <url>`.
   It does **not** wait for merge or set `merged`, so the Story derives to
-  `pr-open`.
+  `pr-open`. Landing that PR through the tracker is
+  **`issue merge <storyId>`** (or `issue story merge`): after `gh` reports a
+  successful merge it sets `merged` and runs **flag stale children** (below).
+  A failed `gh` merge writes nothing. Setting `merged` does not write child
+  `mergeBase` keys — children re-derive on the next read; GitHub retargets
+  open child PRs and the tracker runs no PR-base command.
 - **`merge`** — after the push, merge the Story's git branch into its derived
   `mergeBase`, push that ref, and set `merged` via
   `issue story set <storyId> merged true` (Story derives to `merged`). This is
@@ -720,17 +734,20 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
   **Failure and recovery**. Ranks highest on the merge-policy danger order (Epic
   **work-on-existing-branches**). Then **flag stale children** (below).
 
-**Flag stale children.** A successful `merge` or `fast-forward` advances the
-finishing Story's base branch `Bp`. After that push and `merged` write,
-finish-branch takes `<projectId>` from the `Project: <projectId> — <title>`
-line of `issue summary <storyId>`, runs `issue list story --in <projectId>`
-once, and for each entry in `issues[]` reads `merged` and `branchName` from
-the entry and `storyStatus` and `mergeBase` from `derived[<id>]`. It flags
-every not-yet-merged Story other than the finisher whose derived
-`storyStatus` is not `not-started` (skip when `branchName` is empty) and whose
-derived `mergeBase` is `Bp`, via `issue story set <childId> needsRebase <Bp>`.
-It never rebases those Stories. `manual` and `pull-request` do not advance a
-base and never flag.
+**Flag stale children.** A successful `merge`, `fast-forward`, or **`issue
+merge`** advances the finishing Story's base branch `Bp` (`Bp` is the
+finisher's derived `mergeBase` at land time). After that push / `gh` merge and
+`merged` write, the scan runs once over the Project: finish-branch takes
+`<projectId>` from the `Project: <projectId> — <title>` line of
+`issue summary <storyId>` and runs `issue list story --in <projectId>`;
+`issue merge` performs the same scan in-process. For each entry in
+`issues[]`, read `merged` and `branchName` from the entry and `storyStatus`
+and `mergeBase` from `derived[<id>]` (computed after the finisher's
+`merged` write). Flag every not-yet-merged Story other than the finisher
+whose derived `storyStatus` is not `not-started` (skip when `branchName` is
+empty) and whose derived `mergeBase` is `Bp`, via `issue story set <childId>
+needsRebase <Bp>`. It never rebases those Stories. `manual` and
+`pull-request` (without `issue merge`) do not advance a base and never flag.
 
 **Resumable / idempotent.** The work loop is resumable, so finish-branch may run
 twice for the same Story. Before acting, the git subagent reads the Story's
@@ -829,7 +846,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get — this is what `finish-branch` reads (see [Project merge policy](#project-merge-policy)) |
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
-| `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by finish-branch on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base after `merge` / `fast-forward` (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
+| `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by finish-branch or `issue merge` on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base after `merge` / `fast-forward` / a successful `issue merge` (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
 | `specReview` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
 | `labels` | string[]? | assignment ids from the containing Project catalog; unique, order preserved (see [Project labels](#project-labels)) |

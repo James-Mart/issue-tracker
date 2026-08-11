@@ -28,8 +28,57 @@ import { formatAttachmentsSection } from "./server/services/summary.js";
 import { formatInspirationAppsLine } from "./server/services/inspiration-apps.js";
 import { formatSupportingDocsLine } from "./server/services/supporting-docs.js";
 import { assertKind, kindGetValue, resolveIssueKind } from "./cli-kind.js";
+import { parsePrUrl, runGh } from "./server/services/delivery.js";
+import { applyMergeConsequences } from "./server/services/merge-consequences.js";
+import { readAll } from "./server/services/issues.js";
+import { requireProjectWorkspace } from "./server/services/project-workspace.js";
+import { ancestorChain } from "./server/services/subtree.js";
 
 type Run = (action: () => unknown) => Promise<void>;
+
+export type MergeStoryOptions = {
+  auto?: boolean;
+  matchHeadCommit?: string;
+};
+
+function mergeKindRefusal(kind: IssueKind, id: string): string {
+  return `"${id}" is ${articleForKind(kind)} ${KIND_LABEL[kind]}; merge is only valid on a Story (issue merge <storyId>)`;
+}
+
+/** Merge a Story's GitHub PR via `gh pr merge --merge`. */
+export async function mergeStory(
+  id: string,
+  opts: MergeStoryOptions = {},
+): Promise<void> {
+  const detail = read(id);
+  if (detail.kind !== "story") {
+    throw new Error(mergeKindRefusal(detail.kind, id));
+  }
+  if (!detail.prUrl) {
+    throw new Error(`story "${id}" has no prUrl`);
+  }
+
+  const { owner, repo, number } = parsePrUrl(detail.prUrl);
+  const { issues } = readAll();
+  const projectId = ancestorChain(id, issues)[0]!.id;
+  const workspace = requireProjectWorkspace(projectId);
+
+  const args = [
+    "pr",
+    "merge",
+    String(number),
+    "--merge",
+    "-R",
+    `${owner}/${repo}`,
+  ];
+  if (opts.auto) args.push("--auto");
+  if (opts.matchHeadCommit) {
+    args.push("--match-head-commit", opts.matchHeadCommit);
+  }
+
+  await runGh(args, workspace);
+  await applyMergeConsequences(id);
+}
 
 type ViewOptions = {
   comments?: boolean;
@@ -161,6 +210,31 @@ async function printDetach(id: string, name: string): Promise<void> {
   console.log(`detached ${name} from ${id}`);
 }
 
+function registerMergeCommand(parent: Command, run: Run, kind: IssueKind): void {
+  parent
+    .command("merge")
+    .argument("<id>", "story id")
+    .description("merge a Story's GitHub pull request (merge commit)")
+    .option(
+      "--auto",
+      "enable auto-merge when checks are the only remaining requirement",
+    )
+    .option(
+      "--match-head-commit <sha>",
+      "merge only when the PR head matches this commit",
+    )
+    .action(
+      (
+        id: string,
+        opts: { auto?: boolean; matchHeadCommit?: string },
+      ) =>
+        run(async () => {
+          assertKind(kind, id);
+          await mergeStory(id, opts);
+        }),
+    );
+}
+
 async function printComment(
   id: string,
   opts: { role: string; body: string; name?: string },
@@ -274,6 +348,9 @@ export function registerKindOps(
   if (kindHas(kind, "attachments")) {
     registerAttachCommands(kindCmd, run, kind);
   }
+  if (kind === "story") {
+    registerMergeCommand(kindCmd, run, kind);
+  }
 }
 
 export function registerBareIdOps(program: Command, run: Run): void {
@@ -360,5 +437,31 @@ export function registerBareIdOps(program: Command, run: Run): void {
         resolveIssueKind(id);
         await printDetach(id, name);
       }),
+    );
+
+  program
+    .command("merge")
+    .argument("<id>", "story id")
+    .description("merge a Story's GitHub pull request (merge commit)")
+    .option(
+      "--auto",
+      "enable auto-merge when checks are the only remaining requirement",
+    )
+    .option(
+      "--match-head-commit <sha>",
+      "merge only when the PR head matches this commit",
+    )
+    .action(
+      (
+        id: string,
+        opts: { auto?: boolean; matchHeadCommit?: string },
+      ) =>
+        run(async () => {
+          const kind = resolveIssueKind(id);
+          if (kind !== "story") {
+            throw new Error(mergeKindRefusal(kind, id));
+          }
+          await mergeStory(id, opts);
+        }),
     );
 }

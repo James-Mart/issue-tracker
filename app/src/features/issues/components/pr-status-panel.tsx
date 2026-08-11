@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ShellInlineFault } from "@/app/shell-state";
@@ -12,8 +12,11 @@ import type {
   ProjectPrsResponse,
 } from "@server/services/delivery";
 import { issuesKeys } from "../api/keys";
+import { useMergeStory } from "../api/mutations";
 import { useProjectPullRequestsQuery } from "../api/queries";
+import { mergeControlFor } from "../lib/merge-control";
 import { CompactMetaItem } from "./compact-meta";
+import { MergePrDialog } from "./merge-pr-dialog";
 import { PrUrlDisplay } from "./readonly-git-fields";
 
 type StoryWithPr = Extract<IssueDetail, { kind: "story" }> & {
@@ -249,7 +252,90 @@ function PanelHeader({
   );
 }
 
-function PrFactsRows({ facts }: { facts: PrFacts }) {
+function MergeControl({
+  storyId,
+  projectId,
+  facts,
+}: {
+  storyId: string;
+  projectId: string;
+  facts: PrFacts;
+}) {
+  const [open, setOpen] = useState(false);
+  const mergeStory = useMergeStory(projectId);
+  const control = mergeControlFor(facts);
+
+  if (control.mode === "unavailable") {
+    return (
+      <CompactMetaItem
+        label="Merge"
+        value={
+          <div
+            className="flex flex-col gap-1.5"
+            data-testid="pr-merge-unavailable"
+          >
+            <p className="text-[13px] text-foreground">{control.reason}</p>
+            <a
+              href={facts.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[13px] text-primary hover:underline"
+              data-testid="pr-merge-github-link"
+            >
+              Open on GitHub
+            </a>
+          </div>
+        }
+      />
+    );
+  }
+
+  const auto = control.mode === "auto";
+  return (
+    <>
+      <CompactMetaItem
+        label="Merge"
+        value={
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setOpen(true)}
+            data-testid={auto ? "pr-auto-merge-open" : "pr-merge-open"}
+          >
+            {auto ? "Enable auto-merge" : "Merge"}
+          </Button>
+        }
+      />
+      <MergePrDialog
+        open={open}
+        headRefOid={control.headRefOid}
+        auto={auto}
+        confirming={mergeStory.isPending}
+        onOpenChange={setOpen}
+        onConfirm={() => {
+          mergeStory.mutate(
+            {
+              id: storyId,
+              auto: auto || undefined,
+              matchHeadCommit: control.headRefOid,
+            },
+            { onSuccess: () => setOpen(false) },
+          );
+        }}
+      />
+    </>
+  );
+}
+
+function PrFactsRows({
+  facts,
+  storyId,
+  projectId,
+}: {
+  facts: PrFacts;
+  storyId: string;
+  projectId: string;
+}) {
   return (
     <>
       <CompactMetaItem
@@ -277,6 +363,11 @@ function PrFactsRows({ facts }: { facts: PrFacts }) {
       <CompactMetaItem
         label="Review"
         value={reviewLabel(facts.reviewDecision)}
+      />
+      <MergeControl
+        storyId={storyId}
+        projectId={projectId}
+        facts={facts}
       />
       <CompactMetaItem
         label="Link"
@@ -395,7 +486,11 @@ export function PrStatusPanel({
           </span>
         }
       />
-      <PrFactsRows facts={entry} />
+      <PrFactsRows
+        facts={entry}
+        storyId={story.id}
+        projectId={projectId}
+      />
     </div>
   );
 }
