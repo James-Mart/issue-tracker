@@ -10,6 +10,7 @@ import {
   ShellState,
 } from "@/app/shell-state";
 import { PageShell } from "@/components/page-shell";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { useIssueDetailQuery, useIssuesQuery } from "../api/queries";
 import { useUploadAttachment } from "../api/mutations";
@@ -96,18 +97,27 @@ function IssueDetailBody({
   catalog,
   projectId,
   parentKind,
+  compactChannelChrome,
 }: {
   issue: IssueDetail;
   upload?: UploadAttachmentMutation;
   catalog: ProjectLabel[];
   projectId: string;
   parentKind?: IssueKind;
+  compactChannelChrome: boolean;
 }) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-      <div className="shrink-0">
-        <IssueDetailHeader issue={issue} catalog={catalog} />
-      </div>
+    <div
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col",
+        compactChannelChrome ? "gap-0" : "gap-4",
+      )}
+    >
+      {compactChannelChrome ? null : (
+        <div className="shrink-0" data-testid="issue-detail-header">
+          <IssueDetailHeader issue={issue} catalog={catalog} />
+        </div>
+      )}
 
       <IssueDetailTabs
         issue={issue}
@@ -133,6 +143,7 @@ function IssueDetailAttachable({
   catalog,
   parentKind,
   boundShell,
+  compactChannelChrome,
 }: {
   issue: IssueDetail;
   projectId: string;
@@ -140,6 +151,7 @@ function IssueDetailAttachable({
   catalog: ProjectLabel[];
   parentKind?: IssueKind;
   boundShell: boolean;
+  compactChannelChrome: boolean;
 }) {
   const upload = useUploadAttachment(issue.id);
   const { rootProps } = useIssueDetailFileUpload(upload);
@@ -149,36 +161,49 @@ function IssueDetailAttachable({
       {...rootProps}
       className={cn(
         boundShell && BOUNDED_DETAIL_SHELL_CLASS,
+        compactChannelChrome && "gap-0 px-0 py-0",
         rootProps.className,
       )}
     >
-      <div className="shrink-0">{backLink}</div>
+      {compactChannelChrome ? null : (
+        <div className="shrink-0" data-testid="issue-detail-back">
+          {backLink}
+        </div>
+      )}
       <IssueDetailBody
         issue={issue}
         upload={upload}
         catalog={catalog}
         projectId={projectId}
         parentKind={parentKind}
+        compactChannelChrome={compactChannelChrome}
       />
     </PageShell>
   );
 }
 
-function useIssueDetailBoundShell(
+function useIssueDetailShellFlags(
   issue: IssueDetail | undefined,
   parentKind?: IssueKind,
-): boolean {
+): { boundShell: boolean; compactChannelChrome: boolean } {
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
+  const isMobile = useIsMobile();
   return useMemo(() => {
-    if (!issue) return false;
+    if (!issue) return { boundShell: false, compactChannelChrome: false };
     // Project docs (esp. Design system iframe) need a bounded shell so the
     // reading area can fill and scroll internally.
-    if (issue.kind === "project") return true;
+    if (issue.kind === "project") {
+      return { boundShell: true, compactChannelChrome: false };
+    }
     const tabs = tabsForIssueDetail(issue, parentKind);
     const active = resolveIssueDetailTab(tabParam, tabs);
-    return issueDetailTabNeedsBoundedShell(active, tabs);
-  }, [issue, parentKind, tabParam]);
+    const boundShell = issueDetailTabNeedsBoundedShell(active, tabs);
+    return {
+      boundShell,
+      compactChannelChrome: isMobile && boundShell,
+    };
+  }, [issue, parentKind, tabParam, isMobile]);
 }
 
 export function IssueDetailPage() {
@@ -202,7 +227,10 @@ export function IssueDetailPage() {
     [issue, projectId, byId],
   );
 
-  const boundShell = useIssueDetailBoundShell(issue, parentKind);
+  const { boundShell, compactChannelChrome } = useIssueDetailShellFlags(
+    issue,
+    parentKind,
+  );
 
   const missing = error instanceof ApiError && error.status === 404;
   const wrongProject =
@@ -231,13 +259,21 @@ export function IssueDetailPage() {
         catalog={catalog}
         parentKind={parentKind}
         boundShell={boundShell}
+        compactChannelChrome={compactChannelChrome}
       />
     );
   }
 
   return (
-    <PageShell className={cn(boundShell && BOUNDED_DETAIL_SHELL_CLASS)}>
-      {backLink}
+    <PageShell
+      className={cn(
+        boundShell && BOUNDED_DETAIL_SHELL_CLASS,
+        compactChannelChrome && "gap-0 px-0 py-0",
+      )}
+    >
+      {compactChannelChrome ? null : (
+        <div data-testid="issue-detail-back">{backLink}</div>
+      )}
 
       {error && !missing ? (
         <ShellInlineFault
@@ -277,6 +313,7 @@ export function IssueDetailPage() {
           catalog={catalog}
           projectId={projectId}
           parentKind={parentKind}
+          compactChannelChrome={compactChannelChrome}
         />
       ) : null}
     </PageShell>

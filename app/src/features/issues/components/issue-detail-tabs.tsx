@@ -2,9 +2,11 @@ import { useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ConversationChannel, IssueDetail, IssueKind } from "@server/schemas";
 import { RosterActiveRunIndicator } from "@/features/agents/components/conversation-list-item";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { useChannelTabIndicator } from "../hooks/use-channel-tab-indicator";
 import {
+  issueDetailTabNeedsBoundedShell,
   resolveIssueDetailTab,
   tabsForIssueDetail,
   writeIssueDetailTabParam,
@@ -48,12 +50,17 @@ export function IssueDetailTabs({
   );
   const [searchParams, setSearchParams] = useSearchParams();
   const active = resolveIssueDetailTab(searchParams.get("tab"), tabs);
+  const isMobile = useIsMobile();
+  const mobileChannelChrome =
+    isMobile && issueDetailTabNeedsBoundedShell(active, tabs);
 
   const setActive = (next: IssueDetailTabKey) => {
     setSearchParams((prev) => writeIssueDetailTabParam(prev, next), {
       replace: true,
     });
   };
+
+  const onBackToOverview = () => setActive("overview");
 
   const channelTabs = tabs.filter(isChannelTab);
   const docTabs = tabs.filter(isDocTab);
@@ -67,34 +74,41 @@ export function IssueDetailTabs({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div
-        role="tablist"
-        aria-label="Issue detail"
-        className="flex shrink-0 flex-wrap gap-1 border-b border-border shell:flex-nowrap"
-      >
-        {tabs.map((tab) =>
-          isChannelTab(tab) ? (
-            <ChannelTabButton
-              key={tab.key}
-              issueId={issue.id}
-              channel={tab.channel}
-              selected={active === tab.key}
-              onClick={() => setActive(tab.key)}
-            >
-              {tab.label}
-            </ChannelTabButton>
-          ) : (
-            <TabButton
-              key={tab.key}
-              selected={active === tab.key}
-              onClick={() => setActive(tab.key)}
-            >
-              {tab.label}
-            </TabButton>
-          ),
-        )}
-      </div>
+    <div
+      className={cn(
+        "flex min-h-0 flex-1 flex-col",
+        mobileChannelChrome ? "gap-0" : "gap-4",
+      )}
+    >
+      {mobileChannelChrome ? null : (
+        <div
+          role="tablist"
+          aria-label="Issue detail"
+          className="flex shrink-0 flex-wrap gap-1 border-b border-border shell:flex-nowrap"
+        >
+          {tabs.map((tab) =>
+            isChannelTab(tab) ? (
+              <ChannelTabButton
+                key={tab.key}
+                issueId={issue.id}
+                channel={tab.channel}
+                selected={active === tab.key}
+                onClick={() => setActive(tab.key)}
+              >
+                {tab.label}
+              </ChannelTabButton>
+            ) : (
+              <TabButton
+                key={tab.key}
+                selected={active === tab.key}
+                onClick={() => setActive(tab.key)}
+              >
+                {tab.label}
+              </TabButton>
+            ),
+          )}
+        </div>
+      )}
 
       <div
         role="tabpanel"
@@ -126,6 +140,10 @@ export function IssueDetailTabs({
               label={tab.label}
               projectId={projectId}
               parentKind={parentKind}
+              mobileFullViewport={mobileChannelChrome && selected}
+              onBackToOverview={
+                mobileChannelChrome && selected ? onBackToOverview : undefined
+              }
             />
           </div>
         );

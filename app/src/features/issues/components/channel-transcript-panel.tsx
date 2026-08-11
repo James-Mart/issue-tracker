@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   ChannelSessionListItem,
   ConversationChannel,
@@ -10,10 +10,15 @@ import {
   ShellLoadingState,
   ShellState,
 } from "@/app/shell-state";
-import { ConversationThread } from "@/features/agents/components/conversation-thread";
+import {
+  ConversationThread,
+  OpenThreadChrome,
+} from "@/features/agents/components/conversation-thread";
+import { cn } from "@/lib/utils/cn";
 import { defaultChannelSession } from "../api/channel-sessions";
 import { useChannelSessionsQuery } from "../api/queries";
 import { isImplementingWorkRoot, type ImplementingLockRefusal } from "../lib/implementing-launch";
+import { ChannelSessionOverflowMenu } from "./channel-session-overflow-menu";
 import { ChannelSessionSwitcher } from "./channel-session-switcher";
 import { ChannelRetroControl } from "./channel-retro-control";
 import {
@@ -54,6 +59,27 @@ function pendingChannelSession(started: StartedSession): ChannelSessionListItem 
   };
 }
 
+function ChannelPanelFrame({
+  mobileFullViewport,
+  children,
+}: {
+  mobileFullViewport: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-hidden bg-card",
+        !mobileFullViewport && "rounded-lg border border-border",
+      )}
+      data-testid="channel-transcript-panel"
+      data-mobile-full-viewport={mobileFullViewport ? "true" : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
 /**
  * Full-width channel panel: Agents transcript for the channel's current
  * session, or an empty state naming what the channel is for.
@@ -65,6 +91,8 @@ export function ChannelTranscriptPanel({
   label,
   projectId,
   parentKind,
+  mobileFullViewport = false,
+  onBackToOverview,
 }: {
   issueId: string;
   issue?: IssueDetail;
@@ -72,6 +100,9 @@ export function ChannelTranscriptPanel({
   label: string;
   projectId?: string;
   parentKind?: IssueKind;
+  /** Phone-width issue channel: compact chrome under TopBar. */
+  mobileFullViewport?: boolean;
+  onBackToOverview?: () => void;
 }) {
   const { data, isLoading, error } = useChannelSessionsQuery(issueId, channel);
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -84,12 +115,34 @@ export function ChannelTranscriptPanel({
     ? issue
     : undefined;
 
+  const mobileBack =
+    mobileFullViewport && onBackToOverview
+      ? {
+          onBack: onBackToOverview,
+          backAriaLabel: "Back to overview",
+        }
+      : undefined;
+
   if (isLoading && !data) {
+    if (mobileFullViewport && mobileBack) {
+      return (
+        <ChannelPanelFrame mobileFullViewport>
+          <OpenThreadChrome
+            title={label}
+            onBack={mobileBack.onBack}
+            backAriaLabel={mobileBack.backAriaLabel}
+            runActive={false}
+            events={[]}
+          />
+          <ShellLoadingState label={`Loading ${label.toLowerCase()} channel…`} />
+        </ChannelPanelFrame>
+      );
+    }
     return <ShellLoadingState label={`Loading ${label.toLowerCase()} channel…`} />;
   }
 
   if (error) {
-    return (
+    const fault = (
       <ShellState
         tone="blocked"
         eyebrow="Fault"
@@ -102,15 +155,45 @@ export function ChannelTranscriptPanel({
         }
       />
     );
+    if (mobileFullViewport && mobileBack) {
+      return (
+        <ChannelPanelFrame mobileFullViewport>
+          <OpenThreadChrome
+            title={label}
+            onBack={mobileBack.onBack}
+            backAriaLabel={mobileBack.backAriaLabel}
+            runActive={false}
+            events={[]}
+          />
+          {fault}
+        </ChannelPanelFrame>
+      );
+    }
+    return fault;
   }
 
   if (implementingLockRefusal && projectId) {
-    return (
+    const refusal = (
       <ImplementingLockRefusalState
         projectId={projectId}
         refusal={implementingLockRefusal}
       />
     );
+    if (mobileFullViewport && mobileBack) {
+      return (
+        <ChannelPanelFrame mobileFullViewport>
+          <OpenThreadChrome
+            title={label}
+            onBack={mobileBack.onBack}
+            backAriaLabel={mobileBack.backAriaLabel}
+            runActive={false}
+            events={[]}
+          />
+          {refusal}
+        </ChannelPanelFrame>
+      );
+    }
+    return refusal;
   }
 
   const sessions = data ?? [];
@@ -137,28 +220,20 @@ export function ChannelTranscriptPanel({
   };
 
   if (!selectedSession) {
-    if (planningIdea) {
-      return (
-        <PlanningChannelEmptyState
-          issue={planningIdea}
-          channel={channel}
-          onStarted={onSessionStarted}
-        />
-      );
-    }
-
-    if (implementingWorkRoot && projectId) {
-      return (
-        <ImplementingChannelEmptyState
-          issue={implementingWorkRoot}
-          channel={channel}
-          onStarted={onSessionStarted}
-          onLockRefusal={onImplementingLockRefusal}
-        />
-      );
-    }
-
-    return (
+    const emptyBody = planningIdea ? (
+      <PlanningChannelEmptyState
+        issue={planningIdea}
+        channel={channel}
+        onStarted={onSessionStarted}
+      />
+    ) : implementingWorkRoot && projectId ? (
+      <ImplementingChannelEmptyState
+        issue={implementingWorkRoot}
+        channel={channel}
+        onStarted={onSessionStarted}
+        onLockRefusal={onImplementingLockRefusal}
+      />
+    ) : (
       <ShellState
         className="border-0 bg-transparent px-4 py-8 shadow-none"
         eyebrow={label}
@@ -166,6 +241,23 @@ export function ChannelTranscriptPanel({
         detail={`This channel is for ${label.toLowerCase()} work on this issue.`}
       />
     );
+
+    if (mobileFullViewport && mobileBack) {
+      return (
+        <ChannelPanelFrame mobileFullViewport>
+          <OpenThreadChrome
+            title={label}
+            onBack={mobileBack.onBack}
+            backAriaLabel={mobileBack.backAriaLabel}
+            runActive={false}
+            events={[]}
+          />
+          <div className="min-h-0 flex-1 overflow-y-auto">{emptyBody}</div>
+        </ChannelPanelFrame>
+      );
+    }
+
+    return emptyBody;
   }
 
   const showSwitcher = sessions.length >= 2;
@@ -203,34 +295,57 @@ export function ChannelTranscriptPanel({
       </>
     ) : null;
 
-  return (
+  const overflowActions =
+    showSwitcher || channelHeaderActions ? (
+      <ChannelSessionOverflowMenu>
+        {showSwitcher ? (
+          <ChannelSessionSwitcher
+            issueId={issueId}
+            channel={channel}
+            sessions={sessions}
+            selectedId={selectedSession.id}
+            onSelectedIdChange={setSelectedId}
+            className="border-0 px-0 py-0"
+          />
+        ) : null}
+        {channelHeaderActions ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {channelHeaderActions}
+          </div>
+        ) : null}
+      </ChannelSessionOverflowMenu>
+    ) : null;
+
+  const desktopHeader = showSwitcher ? (
+    <ChannelSessionSwitcher
+      issueId={issueId}
+      channel={channel}
+      sessions={sessions}
+      selectedId={selectedSession.id}
+      onSelectedIdChange={setSelectedId}
+      trailing={channelHeaderActions}
+    />
+  ) : channelHeaderActions ? (
     <div
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
-      data-testid="channel-transcript-panel"
+      className="flex min-w-0 items-center justify-end gap-2 border-b border-border px-4 py-2"
+      data-testid="channel-panel-header"
     >
-      {showSwitcher ? (
-        <ChannelSessionSwitcher
-          issueId={issueId}
-          channel={channel}
-          sessions={sessions}
-          selectedId={selectedSession.id}
-          onSelectedIdChange={setSelectedId}
-          trailing={channelHeaderActions}
-        />
-      ) : channelHeaderActions ? (
-        <div
-          className="flex min-w-0 items-center justify-end gap-2 border-b border-border px-4 py-2"
-          data-testid="channel-panel-header"
-        >
-          {channelHeaderActions}
-        </div>
-      ) : null}
+      {channelHeaderActions}
+    </div>
+  ) : null;
+
+  return (
+    <ChannelPanelFrame mobileFullViewport={mobileFullViewport}>
+      {mobileFullViewport ? null : desktopHeader}
       <ConversationThread
         key={selectedSession.id}
         conversationId={selectedSession.id}
         meta={{ title: selectedSession.title, model: selectedSession.model }}
         hideComposer={selectedSession.archived}
+        onBack={mobileBack?.onBack}
+        backAriaLabel={mobileBack?.backAriaLabel}
+        headerActions={mobileFullViewport ? overflowActions : undefined}
       />
-    </div>
+    </ChannelPanelFrame>
   );
 }

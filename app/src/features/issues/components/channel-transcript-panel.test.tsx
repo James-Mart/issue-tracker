@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelSessionListItem } from "@server/schemas";
@@ -13,6 +13,8 @@ const queryState = vi.hoisted(() => ({
 
 const threadProps = vi.hoisted(() => ({
   hideComposer: false,
+  onBack: undefined as (() => void) | undefined,
+  headerActions: false,
 }));
 
 vi.mock("../api/queries", () => ({
@@ -148,24 +150,69 @@ vi.mock("./channel-session-switcher", () => ({
   ),
 }));
 
+vi.mock("./channel-session-overflow-menu", () => ({
+  ChannelSessionOverflowMenu: ({
+    children,
+  }: {
+    children: ReactNode;
+  }) => (
+    <div data-testid="channel-session-overflow-menu">
+      <div data-testid="channel-session-overflow-content">{children}</div>
+    </div>
+  ),
+}));
+
 vi.mock("@/features/agents/components/conversation-thread", () => ({
+  OpenThreadChrome: ({
+    title,
+    onBack,
+    actions,
+  }: {
+    title: string;
+    onBack?: () => void;
+    actions?: ReactNode;
+  }) => (
+    <div data-testid="open-thread-chrome" data-title={title}>
+      {onBack ? (
+        <button type="button" aria-label="Back to overview" onClick={onBack}>
+          Back
+        </button>
+      ) : null}
+      <span data-testid="thread-status-strip">idle</span>
+      {actions}
+    </div>
+  ),
   ConversationThread: ({
     conversationId,
     meta,
     hideComposer,
+    onBack,
+    headerActions,
   }: {
     conversationId: string;
     meta?: { title: string; model: string };
     hideComposer?: boolean;
+    onBack?: () => void;
+    headerActions?: ReactNode;
   }) => {
     threadProps.hideComposer = hideComposer ?? false;
+    threadProps.onBack = onBack;
+    threadProps.headerActions = Boolean(headerActions);
     return (
       <div
         data-testid="conversation-thread"
         data-conversation-id={conversationId}
         data-model={meta?.model ?? ""}
         data-hide-composer={hideComposer ? "true" : "false"}
-      />
+      >
+        {onBack ? (
+          <button type="button" aria-label="Back to overview" onClick={onBack}>
+            Back
+          </button>
+        ) : null}
+        <span data-testid="thread-status-strip">idle</span>
+        {headerActions}
+      </div>
     );
   },
 }));
@@ -187,6 +234,8 @@ function mountPanel(
     channel?: "planning" | "implementing";
     projectId?: string;
     parentKind?: "project" | "epic";
+    mobileFullViewport?: boolean;
+    onBackToOverview?: () => void;
   },
 ): {
   container: HTMLDivElement;
@@ -205,6 +254,8 @@ function mountPanel(
         label={label}
         projectId={options?.projectId}
         parentKind={options?.parentKind}
+        mobileFullViewport={options?.mobileFullViewport}
+        onBackToOverview={options?.onBackToOverview}
       />,
     );
   });
@@ -240,6 +291,8 @@ afterEach(() => {
   queryState.isLoading = false;
   queryState.error = null;
   threadProps.hideComposer = false;
+  threadProps.onBack = undefined;
+  threadProps.headerActions = false;
 });
 
 describe("ChannelTranscriptPanel", () => {
@@ -448,5 +501,110 @@ describe("ChannelTranscriptPanel", () => {
     expect(container.textContent).toContain(
       "This channel is for implementing work on this issue.",
     );
+  });
+
+  it("shares mobile full-viewport chrome for empty and active sessions", () => {
+    const onBack = vi.fn();
+    queryState.data = [];
+    const empty = mountPanel("Planning", idea, {
+      mobileFullViewport: true,
+      onBackToOverview: onBack,
+    });
+    expect(
+      empty.container
+        .querySelector("[data-testid='channel-transcript-panel']")
+        ?.getAttribute("data-mobile-full-viewport"),
+    ).toBe("true");
+    expect(
+      empty.container.querySelector('[data-testid="open-thread-chrome"]'),
+    ).toBeTruthy();
+    expect(
+      empty.container.querySelector('[data-testid="planning-channel-empty-state"]'),
+    ).toBeTruthy();
+    act(() => {
+      (
+        empty.container.querySelector(
+          '[aria-label="Back to overview"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(onBack).toHaveBeenCalledTimes(1);
+
+    queryState.data = [
+      {
+        id: "live",
+        title: "Live plan",
+        model: "composer-2.5-fast",
+        createdAt: "2026-08-02T00:00:00.000Z",
+        updatedAt: "2026-08-02T00:00:00.000Z",
+        archived: false,
+        activeRun: true,
+      },
+    ];
+    const active = mountPanel("Planning", idea, {
+      mobileFullViewport: true,
+      onBackToOverview: onBack,
+    });
+    expect(
+      active.container.querySelector('[data-testid="channel-panel-header"]'),
+    ).toBeNull();
+    expect(
+      active.container.querySelector('[data-testid="channel-session-switcher"]'),
+    ).toBeNull();
+    expect(threadProps.onBack).toBeTypeOf("function");
+    expect(threadProps.headerActions).toBe(true);
+    expect(
+      active.container.querySelector(
+        '[data-testid="channel-session-overflow-menu"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      active.container.querySelector('[data-testid="thread-status-strip"]'),
+    ).toBeTruthy();
+  });
+
+  it("exposes session actions from the mobile overflow menu", () => {
+    queryState.data = [
+      {
+        id: "archived",
+        title: "Old",
+        model: "composer-2.5-fast",
+        createdAt: "2026-08-03T00:00:00.000Z",
+        updatedAt: "2026-08-03T00:00:00.000Z",
+        archived: true,
+        activeRun: false,
+      },
+      {
+        id: "live",
+        title: "Live",
+        model: "composer-2.5-fast",
+        createdAt: "2026-08-02T00:00:00.000Z",
+        updatedAt: "2026-08-02T00:00:00.000Z",
+        archived: false,
+        activeRun: false,
+      },
+    ];
+    const { container } = mountPanel("Planning", idea, {
+      mobileFullViewport: true,
+      onBackToOverview: () => undefined,
+    });
+    expect(
+      container.querySelector('[data-testid="channel-session-overflow-menu"]'),
+    ).toBeTruthy();
+    // Overflow content is portaled; assert the actions are mounted as children
+    // of the trigger's menu (present in the tree even before open in jsdom).
+    expect(threadProps.headerActions).toBe(true);
+    expect(
+      container.querySelector('[data-testid="channel-session-switcher"]') ??
+        document.querySelector('[data-testid="channel-session-switcher"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="planning-new-run"]') ??
+        document.querySelector('[data-testid="planning-new-run"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="channel-retro"]') ??
+        document.querySelector('[data-testid="channel-retro"]'),
+    ).toBeTruthy();
   });
 });

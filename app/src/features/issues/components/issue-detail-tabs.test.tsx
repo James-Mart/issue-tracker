@@ -11,14 +11,43 @@ const indicatorState = vi.hoisted(() => ({
   value: null as ChannelTabIndicator | null,
 }));
 
+const mobileState = vi.hoisted(() => ({
+  value: false,
+}));
+
+const panelProps = vi.hoisted(() => ({
+  mobileFullViewport: false,
+  onBackToOverview: undefined as (() => void) | undefined,
+}));
+
 vi.mock("../hooks/use-channel-tab-indicator", () => ({
   useChannelTabIndicator: () => indicatorState.value,
 }));
 
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => mobileState.value,
+}));
+
 vi.mock("./channel-transcript-panel", () => ({
-  ChannelTranscriptPanel: () => (
-    <div data-testid="channel-transcript-panel" />
-  ),
+  ChannelTranscriptPanel: ({
+    mobileFullViewport,
+    onBackToOverview,
+  }: {
+    mobileFullViewport?: boolean;
+    onBackToOverview?: () => void;
+  }) => {
+    panelProps.mobileFullViewport = Boolean(mobileFullViewport);
+    panelProps.onBackToOverview = onBackToOverview;
+    return (
+      <div data-testid="channel-transcript-panel">
+        {onBackToOverview ? (
+          <button type="button" onClick={onBackToOverview}>
+            Back
+          </button>
+        ) : null}
+      </div>
+    );
+  },
 }));
 
 vi.mock("./supporting-doc-preview", () => ({
@@ -43,7 +72,10 @@ function idea(): IssueDetail {
   };
 }
 
-function mountTabs(indicator: ChannelTabIndicator | null = null): {
+function mountTabs(
+  indicator: ChannelTabIndicator | null = null,
+  initialEntry = "/",
+): {
   container: HTMLDivElement;
   root: Root;
 } {
@@ -53,7 +85,7 @@ function mountTabs(indicator: ChannelTabIndicator | null = null): {
   const root = createRoot(container);
   act(() => {
     root.render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <IssueDetailTabs
           issue={idea()}
           projectId="issue-tracker"
@@ -68,6 +100,9 @@ function mountTabs(indicator: ChannelTabIndicator | null = null): {
 afterEach(() => {
   document.body.innerHTML = "";
   indicatorState.value = null;
+  mobileState.value = false;
+  panelProps.mobileFullViewport = false;
+  panelProps.onBackToOverview = undefined;
 });
 
 describe("IssueDetailTabs channel indicator", () => {
@@ -105,5 +140,29 @@ describe("IssueDetailTabs channel indicator", () => {
       container.querySelector('[data-testid="roster-active-run"]'),
     ).toBeNull();
     expect(planning?.className).not.toContain("--warning");
+  });
+});
+
+describe("IssueDetailTabs mobile channel chrome", () => {
+  it("hides the tab bar on a mobile channel tab and wires Back to Overview", () => {
+    mobileState.value = true;
+    const { container } = mountTabs(null, "/?tab=planning");
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(panelProps.mobileFullViewport).toBe(true);
+    expect(panelProps.onBackToOverview).toBeTypeOf("function");
+
+    act(() => {
+      (container.querySelector("button") as HTMLButtonElement).click();
+    });
+    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(container.textContent).toContain("Overview body");
+    expect(panelProps.mobileFullViewport).toBe(false);
+  });
+
+  it("keeps the tab bar on mobile Overview", () => {
+    mobileState.value = true;
+    const { container } = mountTabs(null, "/");
+    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(panelProps.mobileFullViewport).toBe(false);
   });
 });

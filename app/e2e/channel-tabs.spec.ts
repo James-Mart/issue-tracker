@@ -65,6 +65,71 @@ async function seedChannelTranscript(
   return id;
 }
 
+/**
+ * Stand in for `visualViewport` so a test can shrink the visible band the way a
+ * soft keyboard does. Headless Chromium has no keyboard to raise.
+ */
+async function stubSoftKeyboard(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const band = { covered: 0 };
+    const listeners = new Set<() => void>();
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: {
+        get height() {
+          return window.innerHeight - band.covered;
+        },
+        offsetTop: 0,
+        scale: 1,
+        addEventListener: (_event: string, cb: () => void) => listeners.add(cb),
+        removeEventListener: (_event: string, cb: () => void) =>
+          listeners.delete(cb),
+      },
+    });
+    Object.assign(window, {
+      __coverWithKeyboard(covered: number) {
+        band.covered = covered;
+        for (const cb of [...listeners]) cb();
+      },
+    });
+  });
+}
+
+async function coverWithKeyboard(page: Page, coveredPx: number): Promise<void> {
+  await page.evaluate((covered) => {
+    (
+      window as unknown as { __coverWithKeyboard(px: number): void }
+    ).__coverWithKeyboard(covered);
+  }, coveredPx);
+}
+
+type KeyboardLayout = {
+  bandBottom: number;
+  chromeBottom: number;
+  composerBottom: number;
+  logHeight: number;
+  logDistanceFromBottom: number;
+};
+
+async function measureKeyboardLayout(page: Page): Promise<KeyboardLayout> {
+  return page.evaluate(() => {
+    const bottomOf = (selector: string) => {
+      const el = document.querySelector(selector);
+      if (!el) throw new Error(`missing ${selector}`);
+      return el.getBoundingClientRect().bottom;
+    };
+    const log = document.querySelector('[role="log"]') as HTMLElement | null;
+    if (!log) throw new Error("missing transcript log");
+    return {
+      bandBottom: window.visualViewport!.height,
+      chromeBottom: bottomOf('[data-testid="open-thread-chrome"]'),
+      composerBottom: bottomOf('[data-testid="conversation-composer"]'),
+      logHeight: log.clientHeight,
+      logDistanceFromBottom: log.scrollHeight - log.scrollTop - log.clientHeight,
+    };
+  });
+}
+
 test.describe("channel tabs", () => {
   // Use epic A so session-seeding tests on B/story cannot clear the empty state.
   test("switches to the channel tab and honors ?tab=", async ({
@@ -246,6 +311,41 @@ test.describe("channel tabs at phone width", () => {
       () => document.documentElement.scrollTop,
     );
     expect(scrolledDoc).toBe(0);
+  });
+
+  test("the soft keyboard shortens the transcript instead of burying the composer", async ({
+    page,
+    seededApp,
+  }) => {
+    const KEYBOARD_PX = 320;
+    await stubSoftKeyboard(page);
+    await seedChannelTranscript(
+      page,
+      seededApp.baseURL,
+      "seed-epic-d",
+      "implementing",
+    );
+
+    await page.goto(
+      `${seededApp.baseURL}/projects/seed-proj/issues/seed-epic-d?tab=implementing`,
+    );
+    const panel = page.getByTestId("channel-transcript-panel");
+    await expect(panel.getByTestId("conversation-composer")).toBeVisible();
+    const before = await measureKeyboardLayout(page);
+    expect(before.composerBottom).toBeLessThanOrEqual(before.bandBottom + 1);
+
+    await coverWithKeyboard(page, KEYBOARD_PX);
+    const after = await measureKeyboardLayout(page);
+
+    // Send row above the keyboard, top compact chrome still in the band, and the
+    // height came out of the transcript rather than the shell.
+    expect(after.composerBottom).toBeLessThanOrEqual(after.bandBottom + 1);
+    expect(after.chromeBottom).toBeLessThan(after.bandBottom);
+    expect(after.logHeight).toBeLessThanOrEqual(before.logHeight - KEYBOARD_PX);
+    expect(after.logHeight).toBeGreaterThan(0);
+    // Latest messages stay in view after the transcript shortens.
+    expect(after.logDistanceFromBottom).toBeLessThanOrEqual(1);
+    expect(await documentOverflowsHorizontally(page)).toBe(false);
   });
 
   test("Overview still scrolls as a document on a phone", async ({

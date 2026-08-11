@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { cn } from "@/lib/utils/cn";
 import { useConversationsQuery } from "../api/queries";
 import {
@@ -321,6 +322,7 @@ function ThreadBody({
   runActive,
   conversationId,
   model,
+  keyboardInset,
 }: {
   events: TranscriptEvent[];
   ready: boolean;
@@ -328,6 +330,7 @@ function ThreadBody({
   runActive: boolean;
   conversationId: string;
   model: string;
+  keyboardInset: number;
 }) {
   if (!ready) {
     return (
@@ -361,7 +364,11 @@ function ThreadBody({
 
   return (
     <MessageScroller
-      bottomKey={transcriptScrollerBottomKey(events, pendingMessageText)}
+      bottomKey={transcriptScrollerBottomKey(
+        events,
+        pendingMessageText,
+        keyboardInset,
+      )}
       className="min-w-0 overflow-x-hidden px-4 py-4"
       role="log"
       aria-label="Conversation transcript"
@@ -395,7 +402,7 @@ function ThreadStatusStrip({
   events,
 }: {
   runActive: boolean;
-  events: TranscriptEvent[];
+  events: readonly TranscriptEvent[];
 }) {
   const label = threadRunLabel(runActive);
   const totals = sumUsageTotals(events);
@@ -432,19 +439,27 @@ function ThreadStatusStrip({
   );
 }
 
-function ThreadHeader({
+/** Open-thread density: Back, title, optional trailing actions, status strip. */
+export function OpenThreadChrome({
   title,
   onBack,
+  backAriaLabel = "Back to conversations",
   runActive,
   events,
+  actions,
 }: {
   title: string;
   onBack?: () => void;
+  backAriaLabel?: string;
   runActive: boolean;
-  events: TranscriptEvent[];
+  events: readonly TranscriptEvent[];
+  actions?: ReactNode;
 }) {
   return (
-    <div className="shrink-0 border-b border-border px-4 py-3">
+    <div
+      className="shrink-0 border-b border-border px-4 py-3"
+      data-testid="open-thread-chrome"
+    >
       <div className="flex items-center gap-2">
         {onBack ? (
           <Button
@@ -452,15 +467,16 @@ function ThreadHeader({
             size="sm"
             className="-ml-2 h-7 gap-1 px-2"
             onClick={onBack}
-            aria-label="Back to conversations"
+            aria-label={backAriaLabel}
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
         ) : null}
-        <h2 className="min-w-0 truncate text-sm font-medium text-foreground">
+        <h2 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {title}
         </h2>
+        {actions}
       </div>
       <div className="mt-2">
         <ThreadStatusStrip runActive={runActive} events={events} />
@@ -472,11 +488,16 @@ function ThreadHeader({
 export function ConversationThread({
   conversationId,
   onBack,
+  backAriaLabel,
+  headerActions,
   meta: metaProp,
   hideComposer,
 }: {
   conversationId: string;
   onBack?: () => void;
+  backAriaLabel?: string;
+  /** Trailing controls in the open-thread chrome (e.g. channel overflow). */
+  headerActions?: ReactNode;
   /**
    * Issue-anchored sessions are omitted from the Agents roster. Pass title +
    * model from the channel sessions list so the composer can mount.
@@ -497,6 +518,7 @@ export function ConversationThread({
     runResyncKey,
   );
   const { data: conversations } = useConversationsQuery(true);
+  const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
   const meta = listMeta ?? metaProp;
   const title = meta?.title?.trim() || "Thread";
@@ -506,12 +528,20 @@ export function ConversationThread({
       : (meta?.pendingMessage?.text ?? null);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <ThreadHeader
+    // Give back the keyboard's height at the bottom: the chrome above stays put
+    // while the transcript shortens and the composer rides above the keyboard.
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      style={{ paddingBottom: keyboardInset }}
+      data-testid="conversation-thread"
+    >
+      <OpenThreadChrome
         title={title}
         onBack={onBack}
+        backAriaLabel={backAriaLabel}
         runActive={runActive}
         events={events}
+        actions={headerActions}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ThreadBody
@@ -521,6 +551,7 @@ export function ConversationThread({
           runActive={runActive}
           conversationId={conversationId}
           model={meta?.model ?? ""}
+          keyboardInset={keyboardInset}
         />
       </div>
       {meta && !hideComposer ? (

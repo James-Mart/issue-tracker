@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils/cn";
 import {
   formatChannelSessionSwitcherLabel,
   orderChannelSessionsForSwitcher,
@@ -30,6 +31,7 @@ export function ChannelSessionSwitcher({
   selectedId,
   onSelectedIdChange,
   trailing,
+  className,
 }: {
   issueId: string;
   channel: ConversationChannel;
@@ -38,6 +40,7 @@ export function ChannelSessionSwitcher({
   onSelectedIdChange: (id: string) => void;
   /** Extra controls aligned to the header row (e.g. New run). */
   trailing?: ReactNode;
+  className?: string;
 }) {
   const ordered = orderChannelSessionsForSwitcher(sessions);
   const selected = sessions.find((session) => session.id === selectedId);
@@ -57,7 +60,10 @@ export function ChannelSessionSwitcher({
 
   return (
     <div
-      className="flex min-w-0 items-center gap-2 border-b border-border px-4 py-2"
+      className={cn(
+        "flex min-w-0 items-center gap-2 border-b border-border px-4 py-2",
+        className,
+      )}
       data-testid="channel-session-switcher"
     >
       <Select value={selectedId} onValueChange={onSelectedIdChange}>
