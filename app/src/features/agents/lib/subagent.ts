@@ -1,4 +1,9 @@
 import type { NestedStep, TranscriptEvent } from "@server/schemas";
+import {
+  findOpenThinkingIndex,
+  isBlankThinkingText,
+  isNestedThinkingInterrupt,
+} from "./thinking-coalesce";
 
 /** Collapsed summary for a nested run deeper than one level of nesting. */
 export type CollapsedDelegation = {
@@ -60,9 +65,11 @@ export function isSubAgentToolCall(
 
 /**
  * Fold one nested step into an ordered timeline, mirroring top-level
- * streaming coalescing: consecutive text/thinking deltas concatenate and a
- * finalize frame that repeats the coalesced text is skipped; nested
- * `tool_call` frames with the same `callId` replace in place.
+ * streaming coalescing: consecutive text deltas concatenate; thinking looks
+ * past invisible `liveness` via the shared coalesce helper; a finalize frame
+ * that repeats the coalesced text is skipped; nested `tool_call` frames with
+ * the same `callId` replace in place. Empty / whitespace-only thinking never
+ * becomes a row.
  */
 export function applyNestedStep(
   steps: NestedStep[],
@@ -80,13 +87,31 @@ export function applyNestedStep(
     return [...steps, step];
   }
 
-  if (step.kind === "text" || step.kind === "thinking") {
+  if (step.kind === "thinking") {
+    if (isBlankThinkingText(step.text)) return steps;
+
+    const idx = findOpenThinkingIndex(
+      steps,
+      (s) => s.kind === "thinking",
+      isNestedThinkingInterrupt,
+    );
+    if (idx < 0) return [...steps, step];
+
+    const last = steps[idx] as Extract<NestedStep, { kind: "thinking" }>;
+    if (step.text === last.text) return steps;
+
+    const next = steps.slice();
+    next[idx] = { kind: "thinking", text: last.text + step.text };
+    return next;
+  }
+
+  if (step.kind === "text") {
     const last = steps[steps.length - 1];
-    if (last?.kind === step.kind) {
+    if (last?.kind === "text") {
       if (step.text === last.text) return steps;
       const next = steps.slice();
       next[next.length - 1] = {
-        kind: step.kind,
+        kind: "text",
         text: last.text + step.text,
       };
       return next;

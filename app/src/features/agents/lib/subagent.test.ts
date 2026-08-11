@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TranscriptEvent } from "@server/schemas";
+import type { NestedStep, TranscriptEvent } from "@server/schemas";
 import {
   applyNestedStep,
   deriveSubAgent,
@@ -123,6 +123,55 @@ describe("applyNestedStep", () => {
       text: "Considering.",
     });
     expect(steps).toEqual([{ kind: "thinking", text: "Considering." }]);
+  });
+
+  it("coalesces thinking across liveness and skips the finalize duplicate", () => {
+    let steps = applyNestedStep([], { kind: "thinking", text: "Aa" });
+    steps = applyNestedStep(steps, { kind: "liveness", elapsedMs: 12 });
+    steps = applyNestedStep(steps, { kind: "thinking", text: "Bb" });
+    steps = applyNestedStep(steps, { kind: "thinking", text: "AaBb" });
+    expect(steps).toEqual([
+      { kind: "thinking", text: "AaBb" },
+      { kind: "liveness", elapsedMs: 12 },
+    ]);
+  });
+
+  it("starts a new thinking block after text, tool_call, or step markers", () => {
+    const interrupts: NestedStep[] = [
+      { kind: "text", text: "out" },
+      {
+        kind: "tool_call",
+        callId: "n1",
+        name: "shell",
+        status: "running",
+      },
+      { kind: "step", stepId: 1, status: "started" },
+    ];
+
+    for (const interrupt of interrupts) {
+      let steps = applyNestedStep([], { kind: "thinking", text: "first" });
+      steps = applyNestedStep(steps, interrupt);
+      steps = applyNestedStep(steps, { kind: "thinking", text: "second" });
+      expect(steps).toEqual([
+        { kind: "thinking", text: "first" },
+        interrupt,
+        { kind: "thinking", text: "second" },
+      ]);
+    }
+  });
+
+  it("omits empty and whitespace-only nested thinking", () => {
+    let steps = applyNestedStep([], { kind: "thinking", text: "   " });
+    expect(steps).toEqual([]);
+
+    steps = applyNestedStep(steps, { kind: "thinking", text: "kept" });
+    steps = applyNestedStep(steps, { kind: "liveness", elapsedMs: 3 });
+    steps = applyNestedStep(steps, { kind: "thinking", text: "" });
+    steps = applyNestedStep(steps, { kind: "thinking", text: "\n\t" });
+    expect(steps).toEqual([
+      { kind: "thinking", text: "kept" },
+      { kind: "liveness", elapsedMs: 3 },
+    ]);
   });
 
   it("replaces nested tool_call frames with the same callId", () => {
@@ -275,6 +324,91 @@ describe("deriveSubAgents", () => {
     );
     expect(liveAgent.resumeAgentId).toBe(NESTED_AGENT_ID);
     expect(liveAgent.status).toBe("completed");
+  });
+
+  it("replays persisted nested thinking with the same liveness coalesce and empty omit as live apply", () => {
+    let liveSteps: NestedStep[] = [];
+    liveSteps = applyNestedStep(liveSteps, { kind: "thinking", text: "Aa" });
+    liveSteps = applyNestedStep(liveSteps, {
+      kind: "liveness",
+      elapsedMs: 40,
+    });
+    liveSteps = applyNestedStep(liveSteps, { kind: "thinking", text: "Bb" });
+    liveSteps = applyNestedStep(liveSteps, { kind: "thinking", text: "AaBb" });
+    liveSteps = applyNestedStep(liveSteps, { kind: "thinking", text: "   " });
+    liveSteps = applyNestedStep(liveSteps, {
+      kind: "tool_call",
+      callId: "n-split",
+      name: "shell",
+      status: "completed",
+    });
+    liveSteps = applyNestedStep(liveSteps, {
+      kind: "thinking",
+      text: "after",
+    });
+
+    const persisted: TranscriptEvent[] = [
+      at({
+        type: "tool_call",
+        callId: TASK_CALL_ID,
+        name: "Task",
+        status: "running",
+        args: { description: "Investigate", prompt: "look into it" },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "thinking", text: "Aa" },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "liveness", elapsedMs: 40 },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "thinking", text: "Bb" },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "thinking", text: "AaBb" },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "thinking", text: "   " },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: {
+          kind: "tool_call",
+          callId: "n-split",
+          name: "shell",
+          status: "completed",
+        },
+      }),
+      at({
+        type: "subagent_update",
+        parentCallId: TASK_CALL_ID,
+        step: { kind: "thinking", text: "after" },
+      }),
+    ];
+
+    expect(deriveSubAgent(persisted, TASK_CALL_ID)!.steps).toEqual(liveSteps);
+    expect(liveSteps).toEqual([
+      { kind: "thinking", text: "AaBb" },
+      { kind: "liveness", elapsedMs: 40 },
+      {
+        kind: "tool_call",
+        callId: "n-split",
+        name: "shell",
+        status: "completed",
+      },
+      { kind: "thinking", text: "after" },
+    ]);
   });
 
   it("never throws on missing or oddly-shaped payloads", () => {
