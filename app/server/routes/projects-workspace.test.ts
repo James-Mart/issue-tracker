@@ -119,24 +119,28 @@ describe("project workspace file HTTP API", () => {
     expect(absolute.status).toBe(400);
     expect(await absolute.json()).toEqual({
       error: "workspace-relative path must be relative",
+      code: "validation",
     });
 
     const dotdot = await getWorkspaceFile("p", "../sample.md");
     expect(dotdot.status).toBe(400);
     expect(await dotdot.json()).toEqual({
       error: 'workspace-relative path must not contain ".." or empty segments',
+      code: "validation",
     });
 
     const missing = await getWorkspaceFile("p", "missing.md");
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({
       error: "workspace file not found: missing.md",
+      code: "not_found",
     });
 
     const unset = await getWorkspaceFile("no-ws", "sample.md");
     expect(unset.status).toBe(400);
     expect(await unset.json()).toEqual({
       error: "Project workspace is not set",
+      code: "validation",
     });
   });
 
@@ -145,6 +149,7 @@ describe("project workspace file HTTP API", () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({
       error: 'unknown issue "missing"',
+      code: "not_found",
     });
   });
 });

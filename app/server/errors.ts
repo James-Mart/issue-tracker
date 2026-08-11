@@ -10,8 +10,12 @@ function statusOf(err: unknown): number {
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   const message = err instanceof Error ? err.message : "Internal server error";
-  if (err instanceof IssueError && err.details) {
-    res.status(statusOf(err)).json({ error: message, ...err.details });
+  if (err instanceof IssueError) {
+    res.status(statusOf(err)).json({
+      error: message,
+      code: err.code,
+      ...err.details,
+    });
     return;
   }
   res.status(statusOf(err)).json({ error: message });

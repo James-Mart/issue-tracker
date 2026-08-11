@@ -1,6 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { z } from "zod";
 import { IssueError } from "./errors.js";
+import { readAll, readIssueOrThrow } from "./issues.js";
+import { requireProjectWorkspace } from "./project-workspace.js";
+import { subtreeIds } from "./subtree.js";
 
 const GITHUB_PR_URL =
   /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/;
@@ -452,4 +455,46 @@ export async function readPullRequests(
     }
   }
   return out;
+}
+
+export type ProjectPrsResponse = {
+  prs: Record<string, PrFacts | PrUnavailable>;
+};
+
+/**
+ * Live PR facts keyed by Story id for every Story in the Project that
+ * carries a `prUrl`. Skips `gh` entirely when none do.
+ */
+export async function readProjectPrs(
+  projectId: string,
+): Promise<ProjectPrsResponse> {
+  const project = readIssueOrThrow(projectId);
+  if (project.kind !== "project") {
+    throw new IssueError("not_found", `unknown issue "${projectId}"`);
+  }
+
+  const { issues } = readAll();
+  const inProject = subtreeIds(issues, projectId);
+  const storiesWithPr = issues.filter(
+    (issue): issue is typeof issue & { kind: "story"; prUrl: string } =>
+      issue.kind === "story" &&
+      inProject.has(issue.id) &&
+      issue.prUrl !== undefined,
+  );
+
+  if (storiesWithPr.length === 0) {
+    return { prs: {} };
+  }
+
+  const workspace = requireProjectWorkspace(projectId);
+  const byUrl = await readPullRequests(
+    storiesWithPr.map((story) => story.prUrl),
+    workspace,
+  );
+
+  const prs: Record<string, PrFacts | PrUnavailable> = {};
+  for (const story of storiesWithPr) {
+    prs[story.id] = byUrl.get(story.prUrl)!;
+  }
+  return { prs };
 }
