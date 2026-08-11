@@ -11,6 +11,7 @@ import {
 } from "@/lib/ws/transport";
 import {
   applyTranscriptDelta,
+  foldTranscriptEvents,
   type ConversationEventsState,
 } from "./conversation-events-state";
 
@@ -61,7 +62,7 @@ function openEntry(
     listeners: new Set(),
     state: {
       ...emptyState(),
-      events: seed.events,
+      events: foldTranscriptEvents(seed.events),
       ready: true,
     },
     dispose: () => {
@@ -117,7 +118,7 @@ function openEntry(
         if (disposed || generation !== reseedGeneration) return;
         entry.state = {
           ...entry.state,
-          events: page.events,
+          events: foldTranscriptEvents(page.events),
           ready: true,
         };
         holdTopicSeq(topic, page.latestSeq);

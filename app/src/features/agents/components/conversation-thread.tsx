@@ -43,8 +43,8 @@ function eventKey(event: TranscriptEvent, index: number): string {
   if (event.type === "tool_call") return toolCallRowKey(event.callId);
   // Index-stable for in-place assistant/thinking delta updates (avoid
   // remounting Markdown / details on every token). `at` changes each delta
-  // and is not usable. Consecutive thinking merges in applyTranscriptEvent,
-  // so one stream chain maps to one index.
+  // and is not usable. Thinking coalesces in applyTranscriptEvent across
+  // invisible noise so one stream chain maps to one index.
   return indexedStreamKey(index, event.type);
 }
 
