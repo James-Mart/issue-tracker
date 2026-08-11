@@ -5,6 +5,8 @@ import type { SDKCustomTool } from "@cursor/sdk";
 import type { AgentRunResult, AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
 import {
   classifyAgentFailure,
+  isContentEvent,
+  isRetryableAgentFailure,
   type AgentFailureClass,
 } from "./agent-failure.js";
 import {
@@ -24,6 +26,13 @@ import { createSdkBugReportTools } from "./sdk-bug-report.js";
 
 /** Interval for live-only nested-run liveness frames. */
 export const NESTED_RUN_HEARTBEAT_MS = 5000;
+
+/**
+ * Cancel a nested run that never emits a content event. Roughly 1.8× the
+ * observed healthy maximum time-to-first-content (~166s), and below the
+ * upstream give-up at ~410s.
+ */
+export const NESTED_RUN_FIRST_CONTENT_TIMEOUT_MS = 300_000;
 
 /** Maximum nested delegation depth (conversation root is 0). */
 export const MAX_DELEGATION_DEPTH = 3;
@@ -50,7 +59,7 @@ function delegateFailureFromWait(
   return {
     ok: false,
     failureClass: classifyAgentFailure(waited.status, waited.error),
-    isRetryable: waited.error?.isRetryable ?? false,
+    isRetryable: isRetryableAgentFailure(waited.error),
     message,
     agentId,
   };
@@ -111,6 +120,7 @@ type SlotGate = {
 
 type NestedRunTracker = {
   cancelled: boolean;
+  stalledBeforeFirstContent: boolean;
   cancel: () => Promise<void>;
 };
 
@@ -364,7 +374,7 @@ export function createDelegateCustomTools(
 
     customTools.delegate = {
       description:
-        "Delegate work to a named role. The app selects the role's pinned model. Returns ok: true with agentId and reply on success; ok: false with failureClass (auth | agent-failed | cancelled), isRetryable, message, and agentId on a runtime failure. Caller errors throw.",
+        "Delegate work to a named role. The app selects the role's pinned model. Returns ok: true with agentId and reply on success; ok: false with failureClass (auth | agent-failed | cancelled | stalled-before-first-token | transport-exhausted), isRetryable, message, and agentId on a runtime failure. Caller errors throw.",
       inputSchema: {
         type: "object",
         properties: {
@@ -410,6 +420,7 @@ export function createDelegateCustomTools(
         const release = await acquireConcurrencySlot(concurrencyKey);
         const tracked: NestedRunTracker = {
           cancelled: false,
+          stalledBeforeFirstContent: false,
           cancel: async () => {},
         };
         trackNested(concurrencyKey, tracked);
@@ -511,6 +522,19 @@ export function createDelegateCustomTools(
           const reportFailure = (
             waited: AgentRunResult,
           ): Extract<DelegateResult, { ok: false }> => {
+            if (
+              tracked.stalledBeforeFirstContent &&
+              !tracked.cancelled &&
+              waited.status === "cancelled"
+            ) {
+              return {
+                ok: false,
+                failureClass: "stalled-before-first-token",
+                isRetryable: true,
+                message: `delegate: nested run ${waited.id} stalled before first content`,
+                agentId,
+              };
+            }
             const failure = delegateFailureFromWait(waited, agentId);
             if (failure.failureClass === "auth") {
               options.onAuthFailure?.({
@@ -543,15 +567,27 @@ export function createDelegateCustomTools(
           let reply = "";
           const startedAt = Date.now();
           let heartbeat: ReturnType<typeof setInterval> | undefined;
+          let firstContentTimeout: ReturnType<typeof setTimeout> | undefined;
           if (pipeline && parentCallId) {
             const callId = parentCallId;
             heartbeat = setInterval(() => {
               void pipeline.emitLiveness(callId, stamp, Date.now() - startedAt);
             }, NESTED_RUN_HEARTBEAT_MS);
           }
+          firstContentTimeout = setTimeout(() => {
+            tracked.stalledBeforeFirstContent = true;
+            void handle!.cancel();
+          }, NESTED_RUN_FIRST_CONTENT_TIMEOUT_MS);
           try {
             try {
               for await (const event of run) {
+                if (
+                  firstContentTimeout !== undefined &&
+                  isContentEvent(event)
+                ) {
+                  clearTimeout(firstContentTimeout);
+                  firstContentTimeout = undefined;
+                }
                 reply += assistantTextFromEvent(event);
                 if (pipeline && parentCallId) {
                   await pipeline.handleDelegation(parentCallId, stamp, event);
@@ -588,6 +624,9 @@ export function createDelegateCustomTools(
             return { ok: true, agentId, reply };
           } finally {
             if (heartbeat !== undefined) clearInterval(heartbeat);
+            if (firstContentTimeout !== undefined) {
+              clearTimeout(firstContentTimeout);
+            }
           }
         } finally {
           untrackNested(concurrencyKey, tracked);

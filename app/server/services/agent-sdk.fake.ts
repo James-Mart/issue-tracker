@@ -213,6 +213,11 @@ export interface FakeAgentSdkOptions {
    * any events (keeps the run active for cancel/dispose tests).
    */
   hold?: Promise<void>;
+  /**
+   * When set, each run's event iterator awaits this promise after yielding
+   * every scripted event (keeps the run open after an initial burst).
+   */
+  holdAfterStream?: Promise<void>;
   /** When set, every `resumeAgent(...)` rejects with this error. */
   resumeError?: Error;
   /**
@@ -226,6 +231,8 @@ export interface FakeAgentSdkOptions {
     waitResult?: AgentRunResult;
     /** Holds just this run open, where `hold` would hold every one of them. */
     hold?: Promise<void>;
+    /** Holds this run open after its scripted events are yielded. */
+    holdAfterStream?: Promise<void>;
     /** When set, this send rejects before returning a run. */
     sendError?: Error;
   }>;
@@ -280,6 +287,8 @@ export function createFakeAgentSdk(
         const runStream = scripted?.stream ?? stream;
         const runResult = scripted?.waitResult ?? options.waitResult;
         const runHold = scripted?.hold ?? options.hold;
+        const runHoldAfterStream =
+          scripted?.holdAfterStream ?? options.holdAfterStream;
         const runId = runResult?.id ?? FAKE_RUN_ID;
         const run: AgentRun = {
           id: runId,
@@ -301,6 +310,14 @@ export function createFakeAgentSdk(
               ]);
             }
             for (const event of runStream) yield event;
+            if (runHoldAfterStream) {
+              await Promise.race([
+                runHoldAfterStream,
+                new Promise<never>((_, reject) => {
+                  abortHold = reject;
+                }),
+              ]);
+            }
           },
         };
         return run;

@@ -28,8 +28,12 @@ Use `CallMcpTool` against server `custom-user-tools`:
   `isRetryable`, `message`, and `agentId` on a runtime failure. Caller errors
   still throw. On `failureClass`: `auth` — nothing; the app is already
   recovering and the turn is about to cancel; `cancelled` — report the
-  decision, do not retry; `agent-failed` — the nested agent's conclusion;
-  retry or escalate per judgment.
+  decision, do not retry; `stalled-before-first-token` — retryable; re-issue
+  the delegation; `transport-exhausted` — the upstream already exhausted ten
+  streaming attempts, so an immediate re-issue is unlikely to help; whether to
+  try at all is the caller's judgment rather than something the runtime
+  settles; `agent-failed` — the nested agent's conclusion; retry or escalate
+  per judgment.
 - **`delegations`** — return `{ root: { agentId }, delegations: [...] }`
   where `root.agentId` is this conversation's session root agent and
   `delegations` lists nested delegations most-recent-first (use when
