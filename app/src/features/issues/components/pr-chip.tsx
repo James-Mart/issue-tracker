@@ -1,6 +1,7 @@
 import type { BadgeProps } from "@/components/ui/badge";
 import { Badge } from "@/components/ui/badge";
-import type { PrFacts, PrUnavailable } from "@server/services/delivery";
+import type { IssueRecord } from "@server/schemas";
+import type { PrFacts, PrUnavailable, ProjectPrsResponse } from "@server/services/delivery";
 
 const UNAVAILABLE_LABEL = "PR state unavailable";
 
@@ -102,6 +103,25 @@ export function resolvePrChip(args: {
     label: prFactsChipLabel(args.entry),
     variant: prFactsChipVariant(args.entry),
   };
+}
+
+export type ProjectPrQuery = {
+  data: ProjectPrsResponse | undefined;
+  error: Error | null;
+};
+
+/** Resolve the PR chip model for a Story row from a project PR query. */
+export function storyPrChipModel(
+  issue: IssueRecord,
+  prQuery: ProjectPrQuery,
+): PrChipModel {
+  if (issue.kind !== "story") return { kind: "hidden" };
+  return resolvePrChip({
+    prUrl: issue.prUrl,
+    entry: prQuery.data?.prs[issue.id],
+    queryFailed: prQuery.error != null,
+    hasData: prQuery.data != null,
+  });
 }
 
 /** Compact PR state chip for tree / flow Story rows. */

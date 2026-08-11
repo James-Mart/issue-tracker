@@ -9,6 +9,7 @@ import {
   PrChip,
   prFactsChipLabel,
   resolvePrChip,
+  storyPrChipModel,
   type PrChipModel,
 } from "./pr-chip";
 
@@ -177,6 +178,34 @@ describe("resolvePrChip / PrChip", () => {
     });
     expect(model).toEqual({ kind: "hidden" });
     expect(mountChip(model).querySelector('[data-testid="pr-chip"]')).toBeNull();
+  });
+});
+
+describe("storyPrChipModel", () => {
+  it("delegates Story rows to resolvePrChip", () => {
+    const facts = prFacts();
+    const model = storyPrChipModel(story({ id: "s1", prUrl: facts.url }), {
+      data: { prs: { s1: facts } },
+      error: null,
+    });
+    expect(model.kind).toBe("chip");
+    if (model.kind === "chip") {
+      expect(model.label).toBe(prFactsChipLabel(facts));
+    }
+  });
+
+  it("returns hidden for non-story issues", () => {
+    const epic: IssueRecord = {
+      kind: "epic",
+      id: "e1",
+      title: "Epic",
+      partOf: "p1",
+      createdAt: t0,
+      updatedAt: t0,
+    };
+    expect(
+      storyPrChipModel(epic, { data: { prs: {} }, error: null }),
+    ).toEqual({ kind: "hidden" });
   });
 });
 

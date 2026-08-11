@@ -19,7 +19,6 @@ import {
   type IssueRecord,
   type ProjectLabel,
 } from "@server/schemas";
-import type { ProjectPrsResponse } from "@server/services/delivery";
 import { cn } from "@/lib/utils/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -60,7 +59,12 @@ import { isRowDraggable } from "../lib/story-tree-dnd-logic";
 import { ArchiveIssueButton } from "./archive-issue-button";
 import { EpicAxisChips, StoryAxisChips } from "./axis-chips";
 import { IssueArchiveDeleteMenuItems } from "./issue-archive-delete-menu-items";
-import { PrChip, resolvePrChip, type PrChipModel } from "./pr-chip";
+import {
+  PrChip,
+  storyPrChipModel,
+  type PrChipModel,
+  type ProjectPrQuery,
+} from "./pr-chip";
 import { ProjectLabelChips } from "./project-label-chips";
 import { TaskStatusChips } from "./task-status-chips";
 
@@ -292,24 +296,6 @@ function RowActions({ issue }: { issue: IssueRecord }) {
       </Button>
     </span>
   );
-}
-
-type ProjectPrQuery = {
-  data: ProjectPrsResponse | undefined;
-  error: Error | null;
-};
-
-function storyPrChipModel(
-  issue: IssueRecord,
-  prQuery: ProjectPrQuery,
-): PrChipModel {
-  if (issue.kind !== "story") return { kind: "hidden" };
-  return resolvePrChip({
-    prUrl: issue.prUrl,
-    entry: prQuery.data?.prs[issue.id],
-    queryFailed: prQuery.error != null,
-    hasData: prQuery.data != null,
-  });
 }
 
 /** Read-only chip labels mirrored from the fine-pointer hover overlay. */
