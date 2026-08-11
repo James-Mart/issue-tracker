@@ -115,6 +115,85 @@ function reviewLabel(decision: PrFacts["reviewDecision"]): string {
   return "No review decision";
 }
 
+/** Three most recent conversation comments, newest first. */
+export function recentPrComments(
+  comments: PrFacts["comments"],
+): PrFacts["comments"] {
+  return comments.slice(-3).reverse();
+}
+
+function PrCommentEntry({ comment }: { comment: PrFacts["comments"][number] }) {
+  const author = comment.author ?? "Unknown";
+  return (
+    <li
+      className="flex flex-col gap-1 border-b border-border pb-2 last:border-b-0 last:pb-0"
+      data-testid="pr-comment-entry"
+    >
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12px]">
+        <span className="font-medium text-foreground/80">{author}</span>
+        <a
+          href={comment.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary hover:underline"
+          data-testid="pr-comment-link"
+        >
+          comment
+        </a>
+      </div>
+      <p className="whitespace-pre-wrap text-[13px] text-foreground">
+        {comment.body}
+      </p>
+    </li>
+  );
+}
+
+function PrCommentsSection({ facts }: { facts: PrFacts }) {
+  const recent = recentPrComments(facts.comments);
+  return (
+    <CompactMetaItem
+      label="Comments"
+      value={
+        <div
+          className="flex flex-col gap-2"
+          data-testid="pr-comments-section"
+        >
+          <span className="font-mono text-[13px] tabular-nums">
+            {facts.commentCount}
+          </span>
+          {facts.commentCount === 0 ? (
+            <span
+              className="text-[13px] text-muted-foreground"
+              data-testid="pr-comments-empty"
+            >
+              No conversation comments.
+            </span>
+          ) : (
+            <>
+              <ul className="flex flex-col gap-2">
+                {recent.map((comment) => (
+                  <PrCommentEntry key={comment.url} comment={comment} />
+                ))}
+              </ul>
+              {facts.commentCount > 3 ? (
+                <a
+                  href={facts.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[13px] text-primary hover:underline"
+                  data-testid="pr-comments-conversation-link"
+                >
+                  View all conversation comments
+                </a>
+              ) : null}
+            </>
+          )}
+        </div>
+      }
+    />
+  );
+}
+
 function draftBadgeVariant(
   isDraft: boolean,
 ): "warn" | "done" {
@@ -203,6 +282,7 @@ function PrFactsRows({ facts }: { facts: PrFacts }) {
         label="Link"
         value={<PrUrlDisplay prUrl={facts.url} />}
       />
+      <PrCommentsSection facts={facts} />
     </>
   );
 }

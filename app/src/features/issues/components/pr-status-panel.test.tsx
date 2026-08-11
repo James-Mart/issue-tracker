@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
 import type { PrFacts, ProjectPrsResponse } from "@server/services/delivery";
 import { issuesKeys } from "../api/keys";
-import { PrStatusPanel } from "./pr-status-panel";
+import { PrStatusPanel, recentPrComments } from "./pr-status-panel";
 
 const queryState = vi.hoisted(() => ({
   data: undefined as ProjectPrsResponse | undefined,
@@ -37,6 +37,17 @@ const story = {
   createdAt: "2026-08-10T12:00:00.000Z",
   updatedAt: "2026-08-10T12:00:00.000Z",
 };
+
+function prComment(
+  overrides: Partial<PrFacts["comments"][number]> & { url: string },
+): PrFacts["comments"][number] {
+  return {
+    author: "ada",
+    body: "Looks good.",
+    createdAt: "2026-08-01T00:00:00Z",
+    ...overrides,
+  };
+}
 
 function prFacts(overrides: Partial<PrFacts> = {}): PrFacts {
   return {
@@ -255,5 +266,140 @@ describe("PrStatusPanel", () => {
       queryKey: issuesKeys.projectPullRequests("platform"),
     });
     unmount(mounted);
+  });
+});
+
+describe("PrStatusPanel conversation comments", () => {
+  it("renders a defined empty state when there are zero comments", () => {
+    queryState.data = { prs: { "ship-pr": prFacts({ commentCount: 0 }) } };
+    const mounted = mountPanel();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-comments-section"]'),
+    ).toBeTruthy();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-comments-empty"]'),
+    ).toBeTruthy();
+    expect(mounted.container.textContent).toContain("No conversation comments.");
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="pr-comments-conversation-link"]',
+      ),
+    ).toBeNull();
+    unmount(mounted);
+  });
+
+  it("renders up to three recent comments without a conversation link", () => {
+    queryState.data = {
+      prs: {
+        "ship-pr": prFacts({
+          commentCount: 2,
+          comments: [
+            prComment({
+              url: "https://github.com/acme/widgets/pull/12#issuecomment-1",
+              author: "ada",
+              body: "First comment",
+            }),
+            prComment({
+              url: "https://github.com/acme/widgets/pull/12#issuecomment-2",
+              author: "bob",
+              body: "Second comment",
+            }),
+          ],
+        }),
+      },
+    };
+    const mounted = mountPanel();
+    expect(mounted.container.textContent).toContain("ada");
+    expect(mounted.container.textContent).toContain("bob");
+    expect(
+      mounted.container.querySelector(
+        'a[href="https://github.com/acme/widgets/pull/12#issuecomment-1"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      mounted.container.querySelector(
+        'a[href="https://github.com/acme/widgets/pull/12#issuecomment-2"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="pr-comments-conversation-link"]',
+      ),
+    ).toBeNull();
+    unmount(mounted);
+  });
+
+  it("shows only the three newest comments and links to the conversation", () => {
+    queryState.data = {
+      prs: {
+        "ship-pr": prFacts({
+          commentCount: 5,
+          comments: [
+            prComment({
+              url: "https://github.com/acme/widgets/pull/12#issuecomment-1",
+              author: "one",
+              body: "oldest",
+            }),
+            prComment({
+              url: "https://github.com/acme/widgets/pull/12#issuecomment-2",
+              author: "two",
+              body: "older",
+            }),
+            prComment({
+              url: "https://github.com/acme/widgets/pull/12#issuecomment-3",
+              author: "three",
+              body: "third newest",
+            }),
+            prComment({
+              url: "https://github.com/acme/widgets/pull/12#issuecomment-4",
+              author: "four",
+              body: "second newest",
+            }),
+            prComment({
+              url: "https://github.com/acme/widgets/pull/12#issuecomment-5",
+              author: "five",
+              body: "newest",
+            }),
+          ],
+        }),
+      },
+    };
+    const mounted = mountPanel();
+    const entries = mounted.container.querySelectorAll(
+      '[data-testid="pr-comment-entry"]',
+    );
+    expect(entries).toHaveLength(3);
+    expect(mounted.container.textContent).toContain("five");
+    expect(mounted.container.textContent).toContain("four");
+    expect(mounted.container.textContent).toContain("three");
+    expect(mounted.container.textContent).not.toContain("one");
+    expect(mounted.container.textContent).not.toContain("two");
+    expect(
+      mounted.container.querySelector(
+        'a[href="https://github.com/acme/widgets/pull/12#issuecomment-5"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="pr-comments-conversation-link"]',
+      ),
+    ).toBeTruthy();
+    unmount(mounted);
+  });
+});
+
+describe("recentPrComments", () => {
+  it("returns the three newest entries in reverse chronological order", () => {
+    const comments = [
+      prComment({ url: "https://example.com/1", author: "a" }),
+      prComment({ url: "https://example.com/2", author: "b" }),
+      prComment({ url: "https://example.com/3", author: "c" }),
+      prComment({ url: "https://example.com/4", author: "d" }),
+    ];
+    expect(recentPrComments(comments).map((c) => c.author)).toEqual([
+      "d",
+      "c",
+      "b",
+    ]);
   });
 });
