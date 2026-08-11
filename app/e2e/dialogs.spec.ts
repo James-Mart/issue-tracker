@@ -110,6 +110,7 @@ test.describe("project dialog", () => {
 test.describe("new-issue dialog", () => {
   test("creates an Epic via the dialog", async ({ page, seededApp }) => {
     await gotoOverviewStructure(page, seededApp.baseURL);
+    const priorUrl = page.url();
     await openNewEpicDialog(page);
 
     const dialog = page.getByTestId("new-issue-dialog");
@@ -117,11 +118,15 @@ test.describe("new-issue dialog", () => {
     await dialog.getByRole("button", { name: "Create" }).click();
 
     await expect(dialog).toHaveCount(0);
-    await expect(
-      page
-        .getByRole("tabpanel", { name: "Structure" })
-        .getByRole("link", { name: /^Epic from dialog\b/ }),
-    ).toBeVisible();
+    await expect(page).toHaveURL(
+      `${seededApp.baseURL}/projects/seed-proj/issues/epic-from-dialog`,
+    );
+    await expect(page).not.toHaveURL(/[?&]tab=/);
+    await expect(page.locator("[data-issue-description-editor]")).toHaveCount(0);
+    await expect(page.getByText("Epic from dialog").first()).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(priorUrl);
   });
 
   // Sole both-theme key-surface snapshot for the new-issue dialog.

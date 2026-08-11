@@ -185,6 +185,15 @@ test.describe("overview Flow lens", () => {
     await dialog.getByRole("button", { name: "Create" }).click();
 
     await expect(dialog).toHaveCount(0);
+    await expect(page).toHaveURL(
+      `${seededApp.baseURL}/projects/seed-proj/issues/capture-me-next`,
+    );
+    await expect(page).not.toHaveURL(/[?&]tab=/);
+    await expect(page.locator("[data-issue-description-editor]")).toHaveCount(0);
+
+    await page.goBack();
+    await expect(structurePanel).toBeVisible();
+
     const ideasGroup = structurePanel.getByTestId("structure-ideas-group");
     await ideasGroup.locator("summary").click();
     await expect(
