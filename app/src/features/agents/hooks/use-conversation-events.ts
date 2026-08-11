@@ -12,6 +12,7 @@ export type { ConversationEventsState };
 export {
   applyTranscriptDelta,
   applyTranscriptEvent,
+  foldTranscriptEvents,
   mergeTranscriptDeltas,
 } from "../lib/conversation-events-state";
 
