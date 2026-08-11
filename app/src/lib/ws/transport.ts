@@ -9,6 +9,7 @@ import {
   type UpstreamConnection,
   type UpstreamMessage,
 } from "./transport.socket";
+import workerScriptUrl from "./transport.shared-worker.ts?sharedworker&url";
 import type { WorkerToPortMessage } from "./transport.worker-owner";
 
 export type TopicEventMessage = {
@@ -123,6 +124,15 @@ function holdDirectSeq(topic: string, seq: number): void {
 
 // --- SharedWorker path -----------------------------------------------------
 
+// Vite emits the worker chunk for the `?sharedworker&url` import and hands
+// back that script's URL — dev serves the module directly, production a
+// content-hashed chunk. The transport version rides along as `v` so a restart
+// or redeploy addresses a distinct script and starts its own worker instead of
+// attaching to the one the previous version left running.
+const versionedWorkerScriptUrl = `${workerScriptUrl}${
+  workerScriptUrl.includes("?") ? "&" : "?"
+}v=${String(__TRANSPORT_VERSION__)}`;
+
 let sharedWorker: SharedWorker | null = null;
 let workerPort: MessagePort | null = null;
 /** True while reconnecting after a stale worker shut down. */
@@ -180,18 +190,10 @@ function handleWorkerPortClosed(): void {
 
 function ensureWorkerPort(): MessagePort {
   if (workerPort) return workerPort;
-  // Vite only emits a worker chunk for a direct
-  // `new SharedWorker(new URL("./file.ts", import.meta.url), …)` expression
-  // with static options. Mutating the URL first made production treat the
-  // `.ts` entry as a `data:video/mp2t` asset. Content-hashed worker URLs plus
-  // the hello version handshake retire stale workers across reloads/deploys.
-  sharedWorker = new SharedWorker(
-    new URL("./transport.shared-worker.ts", import.meta.url),
-    {
-      type: "module",
-      name: "issue-tracker-transport",
-    },
-  );
+  sharedWorker = new SharedWorker(versionedWorkerScriptUrl, {
+    type: "module",
+    name: "issue-tracker-transport",
+  });
   workerPort = sharedWorker.port;
   workerPort.onmessage = (event: MessageEvent<WorkerToPortMessage>) => {
     handleWorkerMessage(event.data);
