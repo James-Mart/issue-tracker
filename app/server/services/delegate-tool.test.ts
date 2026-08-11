@@ -150,6 +150,7 @@ describe("createDelegateCustomTools", () => {
       true,
     );
     expect(result).toEqual({
+      ok: true,
       agentId: fake.handles[0]!.agentId,
       reply: "On it.",
     });
@@ -218,10 +219,11 @@ describe("createDelegateCustomTools", () => {
       {},
     );
     expect(first).toEqual({
+      ok: true,
       agentId: expect.any(String),
       reply: "On it.",
     });
-    expect(Object.keys(first)).toEqual(["agentId", "reply"]);
+    expect(Object.keys(first)).toEqual(["ok", "agentId", "reply"]);
     expect(createSdkAgent).toHaveBeenCalledTimes(1);
 
     const second = await customTools.delegate!.execute(
@@ -233,6 +235,7 @@ describe("createDelegateCustomTools", () => {
       {},
     );
     expect(second).toEqual({
+      ok: true,
       agentId: first.agentId,
       reply: "On it.",
     });
@@ -290,6 +293,7 @@ describe("createDelegateCustomTools", () => {
       false,
     );
     expect(second).toEqual({
+      ok: true,
       agentId: first.agentId,
       reply: "On it.",
     });
@@ -398,6 +402,7 @@ describe("createDelegateCustomTools", () => {
       resolveModelSelection("cursor-grok-4.5-high-fast"),
     );
     expect(nestedResult).toEqual({
+      ok: true,
       agentId: fake.handles[1]!.agentId,
       reply: "On it.",
     });
@@ -584,6 +589,112 @@ describe("createDelegateCustomTools", () => {
     await Promise.all([...held, afterFailure]);
   });
 
+  it("returns structured auth failure when wait() resolves error with auth text", async () => {
+    const authMessage =
+      "Authentication error. If you are logged in, try logging out and back in.";
+    const fake = createFakeAgentSdk({
+      stream: [],
+      waitResult: {
+        id: "run-auth-fail",
+        status: "error",
+        error: {
+          message: authMessage,
+          isRetryable: true,
+        },
+      },
+    });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    const result = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "auth fail" },
+      {},
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      failureClass: "auth",
+      isRetryable: true,
+      message: authMessage,
+      agentId: fake.handles[0]!.agentId,
+    });
+  });
+
+  it("returns structured cancelled failure when wait() resolves cancelled", async () => {
+    const fake = createFakeAgentSdk({
+      stream: ASSISTANT_STREAM,
+      waitResult: {
+        id: "run-cancelled",
+        status: "cancelled",
+      },
+    });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    const result = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "cancelled run" },
+      {},
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      failureClass: "cancelled",
+      isRetryable: false,
+      agentId: fake.handles[0]!.agentId,
+    });
+    expect(result).toHaveProperty(
+      "message",
+      expect.stringMatching(/delegate: nested run .* was cancelled/),
+    );
+  });
+
+  it("throws for an unknown role", async () => {
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    await expect(
+      customTools.delegate!.execute(
+        { role: "no-such-role", prompt: "orphan" },
+        {},
+      ),
+    ).rejects.toThrow();
+    expect(fake.created).toHaveLength(0);
+  });
+
+  it("returns ok true with reply on a successful delegation", async () => {
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    const result = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "success" },
+      {},
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      agentId: fake.handles[0]!.agentId,
+      reply: "On it.",
+    });
+  });
+
   it("cancels in-flight nested runs and drops queued waiters for the conversation", async () => {
     let releaseHold!: () => void;
     const hold = new Promise<void>((resolve) => {
@@ -626,9 +737,13 @@ describe("createDelegateCustomTools", () => {
 
     await expect(queued).rejects.toThrow("delegate: conversation cancelled");
     await Promise.all(
-      running.map((p) =>
-        expect(p).rejects.toThrow(/delegate: nested run .* was cancelled/),
-      ),
+      running.map(async (p) => {
+        const result = await p;
+        expect(result).toMatchObject({
+          ok: false,
+          failureClass: "cancelled",
+        });
+      }),
     );
 
     for (let i = 0; i < cap; i++) {

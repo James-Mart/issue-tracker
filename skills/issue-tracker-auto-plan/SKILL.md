@@ -196,7 +196,7 @@ specifics and stop; otherwise proceed to Flow.
    Delegate **Auto-plan discriminator** (Spawn stubs) with the source issue id
    followed by those three labelled statements. Its entire final message is the
    planner family key (`grok` or `opus`) — capture it as `<plannerFamily>`.
-   Unusable / errored → escalate per **## Refusals & escalations**.
+   Unusable result or `ok: false` → escalate per **## Refusals & escalations**.
 2. **Vanilla planner.** Delegate the matching **Vanilla planner** stub for
    `<plannerFamily>` (Spawn stubs). Do not over-instruct the grill mechanics —
    the planner owns them via the agent body / skill.

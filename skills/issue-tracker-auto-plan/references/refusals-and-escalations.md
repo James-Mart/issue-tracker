@@ -19,8 +19,8 @@ Model availability is therefore never a reason to refuse or escalate.
   On resume: re-read ALL mandatory sources (source issue + vision +
   inspirationApps) and re-run **both** refuse checks. Proceed only if the gap
   is closed; otherwise refuse again with specifics.
-- **Subagent-failure escalation** (a discriminator / planner errored or returned
-  an unusable result) — report which delegated role failed and how to the human
+- **Subagent-failure escalation** (a discriminator / planner returned `ok: false`
+  or an unusable result) — report which delegated role failed and how to the human
   with no silent fallback and no model-defaulting. Once the human addresses the
   cause, **resume this same agent**; then delegate that role again and
   continue.

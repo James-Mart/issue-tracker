@@ -11,6 +11,7 @@ import type {
   SDKMessage,
 } from "@cursor/sdk";
 import { JsonlLocalAgentStore } from "@cursor/sdk";
+import { CursorSdkError } from "@cursor/sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAgentSdk,
@@ -507,6 +508,52 @@ describe("send (merged stream)", () => {
       id: "run-err",
       status: "error",
       error: { message: "boom", code: "X" },
+    });
+  });
+
+  it("preserves CursorSdkError fields when the pump throws", async () => {
+    const sdkError = new CursorSdkError("token expired", {
+      code: "AUTH_TOKEN_EXPIRED",
+      isRetryable: true,
+      requestId: "req-abc",
+    });
+    const base = makeFakeSdkAgent([]);
+    const sdkAgent: SDKAgent = {
+      ...base,
+      async send() {
+        const run: FakeRun = {
+          id: "run-sdk-err",
+          agentId: "agent-1",
+          status: "error",
+          supports: () => true,
+          unsupportedReason: () => undefined,
+          async *stream() {},
+          async conversation() {
+            return [];
+          },
+          async wait(): Promise<RunResult> {
+            throw sdkError;
+          },
+          cancel: vi.fn(async () => {}),
+          onDidChangeStatus: () => () => {},
+        };
+        return run;
+      },
+    };
+    const sdk = createAgentSdk({ createSdkAgent: async () => sdkAgent });
+    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
+    const run = await handle.send("go");
+    await drain(run);
+    expect(await run.wait()).toEqual({
+      id: "run-sdk-err",
+      status: "error",
+      error: {
+        message: "token expired",
+        name: "CursorSdkError",
+        code: "AUTH_TOKEN_EXPIRED",
+        isRetryable: true,
+        requestId: "req-abc",
+      },
     });
   });
 });
