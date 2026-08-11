@@ -135,7 +135,14 @@ export function publishFrame(
   frame: ConversationFrame,
 ): void {
   const seq = nextConversationSeq(conversationId);
-  Object.assign(frame.event, { seq });
+  // Clients parse live frames with `at` + `seq` required. Run/pending frames
+  // are live-only and would otherwise be dropped after the SharedWorker hop.
+  const existingAt = (frame.event as { at?: unknown }).at;
+  const at =
+    typeof existingAt === "string" && existingAt.length > 0
+      ? existingAt
+      : new Date().toISOString();
+  Object.assign(frame.event, { seq, at });
   retainForCatchup(conversationId, frame);
 
   const emitter = emitters.get(conversationId);

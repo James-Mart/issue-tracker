@@ -6,8 +6,14 @@ const devPort = Number(process.env.VITE_DEV_PORT ?? 8060);
 const apiProxyTarget =
   process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8061";
 
+/** Bumped on every vite config load so a restart retires stale SharedWorkers. */
+const transportVersion = Date.now();
+
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __TRANSPORT_VERSION__: JSON.stringify(transportVersion),
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
