@@ -1,4 +1,7 @@
 import type { Server } from "http";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import express from "express";
 import {
@@ -11,11 +14,27 @@ import { createAgentModelsRouter } from "./agent-models.js";
 
 let server: Server;
 let baseUrl: string;
+let catalogRoot: string | undefined;
+let catalogPath: string;
+let listModelsCalls: number;
 
 beforeEach(async () => {
+  catalogRoot = mkdtempSync(join(tmpdir(), "agent-models-route-"));
+  catalogPath = join(catalogRoot, "model-slug-catalog.json");
+  listModelsCalls = 0;
   const fake = createFakeAgentSdk();
+  const countingSdk = {
+    ...fake,
+    async listModels() {
+      listModelsCalls += 1;
+      return fake.listModels();
+    },
+  };
   const app = express();
-  app.use("/api/agent-models", createAgentModelsRouter(fake));
+  app.use(
+    "/api/agent-models",
+    createAgentModelsRouter(countingSdk, { catalogPath }),
+  );
 
   await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
@@ -29,6 +48,10 @@ beforeEach(async () => {
 
 afterEach(async () => {
   resetAgentModelSlugsForTests();
+  if (catalogRoot) {
+    rmSync(catalogRoot, { recursive: true, force: true });
+    catalogRoot = undefined;
+  }
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));
   });
@@ -46,7 +69,31 @@ describe("GET /api/agent-models", () => {
     expect(isAllowedAgentModelSlug("auto")).toBe(true);
   });
 
+  it("serves a second GET from the catalog cache without another listModels", async () => {
+    const first = await fetch(`${baseUrl}/api/agent-models`);
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+    expect(firstBody.models[0].id).toBe("composer-2.5");
+    expect(firstBody.models[0].displayName).toBe("Composer 2.5");
+    expect(listModelsCalls).toBe(1);
+
+    const second = await fetch(`${baseUrl}/api/agent-models`);
+    expect(second.status).toBe(200);
+    const secondBody = await second.json();
+    expect(secondBody).toEqual({ models: FAKE_MODELS });
+    expect(secondBody.models[0].id).toBe("composer-2.5");
+    expect(secondBody.models[0].displayName).toBe("Composer 2.5");
+    expect(listModelsCalls).toBe(1);
+  });
+
   it("responds 502 with JSON error on CursorAgentError without crashing", async () => {
+    const failingCatalogRoot = mkdtempSync(
+      join(tmpdir(), "agent-models-fail-"),
+    );
+    const failingCatalogPath = join(
+      failingCatalogRoot,
+      "model-slug-catalog.json",
+    );
     const failingSdk = {
       async listModels() {
         throw new CursorAgentError("Invalid API key");
@@ -59,7 +106,10 @@ describe("GET /api/agent-models", () => {
       },
     };
     const app = express();
-    app.use("/api/agent-models", createAgentModelsRouter(failingSdk));
+    app.use(
+      "/api/agent-models",
+      createAgentModelsRouter(failingSdk, { catalogPath: failingCatalogPath }),
+    );
 
     const errServer = await new Promise<Server>((resolve) => {
       const s = app.listen(0, "127.0.0.1", () => resolve(s));
@@ -70,12 +120,15 @@ describe("GET /api/agent-models", () => {
     }
     const errBaseUrl = `http://127.0.0.1:${addr.port}`;
 
-    const res = await fetch(`${errBaseUrl}/api/agent-models`);
-    expect(res.status).toBe(502);
-    expect(await res.json()).toEqual({ error: "Invalid API key" });
-
-    await new Promise<void>((resolve, reject) => {
-      errServer.close((err) => (err ? reject(err) : resolve()));
-    });
+    try {
+      const res = await fetch(`${errBaseUrl}/api/agent-models`);
+      expect(res.status).toBe(502);
+      expect(await res.json()).toEqual({ error: "Invalid API key" });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        errServer.close((err) => (err ? reject(err) : resolve()));
+      });
+      rmSync(failingCatalogRoot, { recursive: true, force: true });
+    }
   });
 });

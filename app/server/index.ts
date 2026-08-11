@@ -5,7 +5,7 @@ import { assertSupportedNodeRuntime } from "./node-runtime.js";
 assertSupportedNodeRuntime();
 
 const { attachMultiplexedWebSocket, createApp } = await import("./app.js");
-const { refreshAgentModelSlugsFromSdk } = await import(
+const { refreshAgentModelSlugCatalog } = await import(
   "./agent-model-slugs-sync.js"
 );
 const { listenPort } = await import("./config.js");
@@ -24,7 +24,7 @@ await installHttp2Diagnostics();
 validateRoleBodies();
 validateHookRegistration();
 
-await refreshAgentModelSlugsFromSdk();
+await refreshAgentModelSlugCatalog();
 
 const app = createApp();
 

@@ -6,6 +6,9 @@ plans/
 # Conversation runtime store (peer of issues/)
 /conversations/
 
+# Durable SDK model catalog (peer of issues/ / conversations/)
+/model-slug-catalog.json
+
 # Logs
 *.log
 

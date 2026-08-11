@@ -10,6 +10,11 @@ export const pluginDir = join(appDir, "..");
 export const issuesDir = process.env.ISSUES_DIR ?? join(pluginDir, "issues");
 /** Peer of `issuesDir` — never nested under or written through the issues store. */
 export const conversationsDir = join(dirname(issuesDir), "conversations");
+/** Peer of `issuesDir` / `conversationsDir` — durable SDK model catalog. */
+export const modelSlugCatalogPath = join(
+  dirname(issuesDir),
+  "model-slug-catalog.json",
+);
 
 // Cursor SDK credential. Read once here so every `@cursor/sdk` call can pass it
 // explicitly (see `services/agent-sdk.ts`) rather than relying on the SDK's
