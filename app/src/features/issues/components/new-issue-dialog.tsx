@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FIELD_LABELS } from "@server/fields";
 import { KINDS, PARENT_KINDS, type IssueKind } from "@server/schemas";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,9 @@ import {
 } from "@/components/ui/select";
 import { useCreateIssue } from "../api/mutations";
 import { useIssuesQuery } from "../api/queries";
+import { useRouteProjectId } from "../hooks/use-route-project-id";
+import { issuesById, projectIdOf } from "../lib/build-tree";
+import { issuePath } from "../lib/links";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { KIND_LABEL } from "../lib/kind";
 import { PartOfTargetSelect } from "./part-of-target-select";
@@ -46,10 +50,16 @@ function descriptionFor(kind: IssueKind): string {
 }
 
 export function NewIssueDialog() {
+  const navigate = useNavigate();
+  const routeProjectId = useRouteProjectId();
   const target = useIssueUiStore((s) => s.newIssue);
   const closeNew = useIssueUiStore((s) => s.closeNew);
   const { data } = useIssuesQuery();
   const createIssue = useCreateIssue();
+  const byId = useMemo(
+    () => issuesById(data?.issues ?? []),
+    [data?.issues],
+  );
 
   const [kind, setKind] = useState<IssueKind>("epic");
   const [title, setTitle] = useState("");
@@ -92,7 +102,17 @@ export function NewIssueDialog() {
         partOf: needsParent ? parent : undefined,
         stackedOn: stackedOn || undefined,
       },
-      { onSuccess: () => closeNew() },
+      {
+        onSuccess: (issue) => {
+          const withNew = new Map(byId);
+          withNew.set(issue.id, issue);
+          const projectId = projectIdOf(issue.id, withNew) ?? routeProjectId;
+          if (projectId) {
+            navigate(issuePath(projectId, issue.id));
+          }
+          closeNew();
+        },
+      },
     );
   };
 
