@@ -1673,6 +1673,24 @@ describe("delegation auth escalation", () => {
     expect(
       transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
     ).toEqual([expect.objectContaining({ message: RETRYING_MESSAGE })]);
+
+    const delegateCalls = transcript.filter(
+      (e) => e.type === "tool_call" && e.name === "delegate",
+    );
+    expect(delegateCalls.some((e) => e.status === "running")).toBe(false);
+    expect(delegateCalls).toEqual([
+      expect.objectContaining({
+        type: "tool_call",
+        callId: "call-delegate-auth",
+        name: "delegate",
+        status: "error",
+        result: expect.objectContaining({
+          status: "error",
+          failureClass: "auth",
+          message: AUTH_ERROR_TEXT,
+        }),
+      }),
+    ]);
   });
 
   it("re-enters with a continuation prompt when the cancelled turn made progress", async () => {
@@ -1807,6 +1825,20 @@ describe("delegation auth escalation", () => {
     expect(
       transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
     ).toHaveLength(1);
+    const delegateCalls = transcript.filter(
+      (e) => e.type === "tool_call" && e.name === "delegate",
+    );
+    expect(delegateCalls.some((e) => e.status === "running")).toBe(false);
+    expect(delegateCalls).toHaveLength(2);
+    for (const call of delegateCalls) {
+      expect(call).toMatchObject({
+        status: "error",
+        result: expect.objectContaining({
+          status: "error",
+          failureClass: "auth",
+        }),
+      });
+    }
   });
 
   it("abandons the escalation and surfaces the failure when the cancel does not settle", async () => {

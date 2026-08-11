@@ -71,6 +71,8 @@ type LiveTurn = {
   /** True when this turn is itself a recovery re-entry. */
   isReplay: boolean;
   escalated: boolean;
+  /** Delegate tool calls that reported auth failure before escalation settled. */
+  delegateCallFailures?: Map<string, string>;
 };
 
 type SessionEntry = {
@@ -148,13 +150,19 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       storeDir,
       conversationId,
       getCursorConversationId: () => cursorConversationIdRef.current,
-      onAuthFailure: ({ delegationId, agentId, message }) => {
+      onAuthFailure: ({ delegationId, agentId, message, parentCallId }) => {
         console.error(
           `conversation ${conversationId}: delegation ${delegationId} ` +
             `(agent ${agentId}) failed authentication: ${message}`,
         );
         const live = sessions.get(conversationId);
         const turn = live?.turn;
+        if (parentCallId && turn) {
+          if (!turn.delegateCallFailures) {
+            turn.delegateCallFailures = new Map();
+          }
+          turn.delegateCallFailures.set(parentCallId, message);
+        }
         // A turn that is already recovering owns the repair; the failure
         // reaches the calling model as data either way.
         if (!live || !turn || turn.isReplay || turn.escalated) return;
@@ -386,6 +394,17 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     const result = await turn.run.wait();
     if (result.status !== "cancelled") return;
+
+    if (turn.delegateCallFailures && turn.delegateCallFailures.size > 0) {
+      const pipeline = new EventPipeline(conversationId);
+      for (const [callId, message] of turn.delegateCallFailures) {
+        await pipeline.failToolCall(callId, {
+          name: "delegate",
+          failureClass: "auth",
+          message,
+        });
+      }
+    }
 
     const madeProgress = await turnMadeProgress(
       conversationStoreDir(conversationId),

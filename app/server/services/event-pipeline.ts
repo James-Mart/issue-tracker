@@ -1,4 +1,5 @@
 import type { NestedStep, TranscriptEventInput } from "../schemas.js";
+import { type AgentFailureClass } from "./agent-failure.js";
 import { type AgentStreamEvent } from "./agent-sdk.js";
 import { publishFrame } from "./conversation-stream.js";
 import { appendEvent } from "./conversations.js";
@@ -86,6 +87,36 @@ export class EventPipeline {
     for (const parentCallId of [...this.nestedThinking.keys()]) {
       await this.flushNestedThinking(parentCallId);
     }
+  }
+
+  /** Persist a terminal `tool_call` when the SDK never completes one. */
+  async failToolCall(
+    callId: string,
+    detail: {
+      name: string;
+      failureClass?: AgentFailureClass;
+      message: string;
+    },
+  ): Promise<void> {
+    await this.flushAssistant();
+    const result: {
+      status: "error";
+      message: string;
+      failureClass?: AgentFailureClass;
+    } = { status: "error", message: detail.message };
+    if (detail.failureClass !== undefined) {
+      result.failureClass = detail.failureClass;
+    }
+    await this.emit({
+      event: {
+        type: "tool_call",
+        callId,
+        name: detail.name,
+        status: "error",
+        result,
+      },
+      persist: true,
+    });
   }
 
   private async handleMessage(
