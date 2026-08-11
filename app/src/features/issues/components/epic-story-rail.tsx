@@ -9,6 +9,9 @@ import {
   storyRailNodeState,
 } from "../lib/epic-story-rail";
 
+/** Same step as `TREE_INDENT` in `issue-tree.tsx`. */
+const RAIL_INDENT = 24;
+
 function StoryRailLabel({
   story,
   projectId,
@@ -49,12 +52,20 @@ function EpicStoryRailView({
 
   return (
     <Rail live={live} data-testid="epic-story-rail">
-      {stories.map(({ story }) => (
+      {stories.map(({ story, depth }) => (
         <RailNode
           key={story.id}
           state={storyRailNodeState(story, derived[story.id], issues)}
           edge="solid"
-          label={<StoryRailLabel story={story} projectId={projectId} />}
+          label={
+            <span
+              style={
+                depth > 0 ? { marginLeft: depth * RAIL_INDENT } : undefined
+              }
+            >
+              <StoryRailLabel story={story} projectId={projectId} />
+            </span>
+          }
         />
       ))}
     </Rail>
