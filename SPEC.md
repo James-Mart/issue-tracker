@@ -1439,11 +1439,13 @@ that disagrees with reality. A Task's `status` (the one genuine human/agent
 decision) and sibling `order` (authored implicitly via doc position or
 imperative append) are stored.
 
-**Metadata-only with respect to git.** The tracker never shells out to git or
-gh. Agents run git/gh themselves and record the results — `branchName`, `prUrl`,
-`commitSha`, `merged` — through the CLI. The tracker's job is to model the
-stacked-PR *plan* and its progress, not to drive git. This keeps it safe to run
-anywhere and impossible for it to corrupt a repo.
+**Metadata-only with respect to git.** The tracker never shells out to git and
+never touches a working tree. It reads external delivery state by shelling out
+to `gh` with ambient auth and owns no credentials; PR facts are read live and
+never stored. Agents run git themselves and record durable git facts —
+`branchName`, `prUrl`, `commitSha`, `merged` — through the CLI. The tracker's
+job is to model the stacked-PR *plan* and its progress, not to drive git. This
+keeps it safe to run anywhere and impossible for it to corrupt a repo.
 
 **Correct-by-construction over defensive layering.** Malformed files and
 integrity violations become `problems` that are surfaced in the UI and CLI, not

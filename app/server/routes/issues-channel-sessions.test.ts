@@ -193,6 +193,7 @@ describe("channel sessions HTTP API", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: 'issue "a-task" does not offer a channel',
+      code: "validation",
     });
 
     const wrongChannel = await fetch(
@@ -206,6 +207,7 @@ describe("channel sessions HTTP API", () => {
     expect(wrongChannel.status).toBe(400);
     expect(await wrongChannel.json()).toEqual({
       error: 'channel "implementing" is not offered by issue "capture"',
+      code: "validation",
     });
 
     // Refused POSTs must not archive or otherwise mutate existing sessions.
@@ -374,6 +376,7 @@ describe("channel sessions HTTP API", () => {
     expect(refused.status).toBe(409);
     expect(await refused.json()).toEqual({
       error: expect.stringContaining("ship-it"),
+      code: "conflict",
       holderIssueId: "ship-it",
       holderIssueTitle: "Ship it",
     });
@@ -578,6 +581,7 @@ describe("planning work root HTTP API", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: "planning-work-root is only defined for Ideas",
+      code: "validation",
     });
   });
 });

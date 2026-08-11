@@ -178,6 +178,7 @@ describe("attachments HTTP API", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: `attachment exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
+      code: "validation",
     });
   });
 });

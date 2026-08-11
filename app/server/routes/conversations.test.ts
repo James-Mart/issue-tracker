@@ -165,6 +165,7 @@ describe("conversations HTTP API (CRUD)", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: "Project workspace is not set",
+      code: "validation",
     });
   });
 
@@ -331,6 +332,7 @@ describe("conversations HTTP API (CRUD)", () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({
       error: 'unknown conversation "unknown-conversation"',
+      code: "not_found",
     });
   });
 });
