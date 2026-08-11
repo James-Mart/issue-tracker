@@ -256,24 +256,25 @@ per-command.
 ## CLI surface
 
 Six kind-uniform single-issue ops take a bare id and dispatch on the issue's
-stored `kind`: `view`, `get`, `comment`, `attach`, `attachments`, `detach`.
-`set`, `add`, and `delete` stay kind-scoped — their flag surface genuinely
-differs by kind. Multi-kind / board ops stay global.
+stored `kind`: `view`, `get`, `comment`, `attach`, `attachments`, `detach`,
+`merge`. `set`, `add`, and `delete` stay kind-scoped — their flag surface
+genuinely differs by kind. Multi-kind / board ops stay global.
 
-The kind-scoped spellings `issue <kind> view|get|comment|attach|attachments|detach`
+The kind-scoped spellings `issue <kind> view|get|comment|attach|attachments|detach|merge`
 remain available as asserting aliases: the CLI kind must equal the issue's
 stored `kind` (hard error otherwise).
 
 ### Bare-id ops (kind-uniform)
 
 ```
-issue view|get|comment|attach|attachments|detach <id> …
+issue view|get|comment|attach|attachments|detach|merge <id> …
 ```
 
 | verb | notes |
 | --- | --- |
 | `view` / `get` / `attach` / `attachments` / `detach` | every kind |
 | `comment` | epic / idea / story / task (not project) |
+| `merge` | story only |
 
 - **`view`** — `issue view <id>` (pass `--comments` for the comment log).
   Prefer `issue get <id> <field>` for a single field. Label lines: see
@@ -284,6 +285,12 @@ issue view|get|comment|attach|attachments|detach <id> …
   (optional `--name`); appends to `comments.jsonl` (the CLI verb is `comment`;
   the on-disk log is `comments.jsonl`); refuses a Project id; see
   [Service layer](#service-layer).
+- **`merge`** — `issue merge <storyId> [--auto] [--match-head-commit <sha>]`;
+  shells out to `gh pr merge --merge` with owner/repo/number from the Story's
+  stored `prUrl` and cwd = the Project `workspace`; refuses other kinds and
+  Stories with no `prUrl`; `--auto` maps to `gh pr merge --auto`;
+  `--match-head-commit` maps to the flag of the same name; surfaces `gh`
+  stderr on failure.
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
@@ -292,7 +299,7 @@ issue view|get|comment|attach|attachments|detach <id> …
 ### Kind-scoped ops
 
 ```
-issue <kind> add|get|set|view|delete|comment|attach|attachments|detach
+issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
 ```
 
 `<kind>` is one of `project` | `epic` | `idea` | `story` | `task`.
@@ -302,6 +309,7 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach
 | `add` / `set` / `delete` | every kind |
 | `get` / `view` / `attach` / `attachments` / `detach` | every kind (asserting aliases) |
 | `comment` | epic / idea / story / task (not project; asserting alias) |
+| `merge` | story (asserting alias) |
 
 - **`add`** — `issue project add <title>` (no `--part-of`); children take
   `--part-of`. Description: `--description` and/or `--file` (use `-` for
@@ -311,6 +319,7 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach
 - **`delete`** — `issue <kind> delete <id>`; cascades per
   [Deletion policy](#deletion-policy).
 - **`comment`** — asserting alias for `issue comment <id> …`.
+- **`merge`** — asserting alias for `issue merge <storyId> …`.
 - **`attach` / `attachments` / `detach`** — asserting aliases; see
   [Attachments](#attachments).
 
