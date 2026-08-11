@@ -16,12 +16,30 @@ const queryState = vi.hoisted(() => ({
   isFetching: false,
 }));
 
+const mergeMutate = vi.hoisted(() =>
+  vi.fn(
+    (
+      _vars: unknown,
+      opts?: { onSuccess?: () => void },
+    ) => {
+      opts?.onSuccess?.();
+    },
+  ),
+);
+
 vi.mock("../api/queries", () => ({
   useProjectPullRequestsQuery: () => ({
     data: queryState.data,
     error: queryState.error,
     isLoading: queryState.isLoading,
     isFetching: queryState.isFetching,
+  }),
+}));
+
+vi.mock("../api/mutations", () => ({
+  useMergeStory: () => ({
+    mutate: mergeMutate,
+    isPending: false,
   }),
 }));
 
@@ -115,6 +133,7 @@ beforeEach(() => {
   queryState.error = null;
   queryState.isLoading = false;
   queryState.isFetching = false;
+  mergeMutate.mockClear();
 });
 
 afterEach(() => {
@@ -265,6 +284,154 @@ describe("PrStatusPanel", () => {
     expect(mounted.invalidateSpy).toHaveBeenCalledWith({
       queryKey: issuesKeys.projectPullRequests("platform"),
     });
+    unmount(mounted);
+  });
+});
+
+describe("PrStatusPanel merge control", () => {
+  it("names the head commit in the dialog and sends it on submit", () => {
+    queryState.data = {
+      prs: { "ship-pr": prFacts({ headRefOid: "abc123def456" }) },
+    };
+    const mounted = mountPanel();
+    act(() => {
+      (
+        mounted.container.querySelector(
+          '[data-testid="pr-merge-open"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    const dialog = document.body.querySelector(
+      '[data-testid="merge-pr-dialog"]',
+    );
+    expect(dialog?.textContent).toContain("abc123def456");
+    act(() => {
+      (
+        document.body.querySelector(
+          '[data-testid="merge-pr-confirm"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(mergeMutate).toHaveBeenCalledWith(
+      {
+        id: "ship-pr",
+        auto: undefined,
+        matchHeadCommit: "abc123def456",
+      },
+      expect.any(Object),
+    );
+    unmount(mounted);
+  });
+
+  it("offers no merge or un-draft control for a draft PR and links to GitHub", () => {
+    queryState.data = {
+      prs: {
+        "ship-pr": prFacts({
+          isDraft: true,
+          mergeStateStatus: "DRAFT",
+          reviewDecision: null,
+        }),
+      },
+    };
+    const mounted = mountPanel();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-merge-open"]'),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-auto-merge-open"]'),
+    ).toBeNull();
+    expect(mounted.container.textContent).toContain(
+      "draft and must be marked ready on GitHub",
+    );
+    expect(mounted.container.textContent).not.toMatch(/mark ready|un-?draft/i);
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="pr-merge-github-link"]',
+      )?.getAttribute("href"),
+    ).toBe("https://github.com/acme/widgets/pull/12");
+    unmount(mounted);
+  });
+
+  it("offers no merge for a review-required PR and shows the reason", () => {
+    queryState.data = {
+      prs: {
+        "ship-pr": prFacts({
+          reviewDecision: "review-required",
+          mergeStateStatus: "BLOCKED",
+        }),
+      },
+    };
+    const mounted = mountPanel();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-merge-open"]'),
+    ).toBeNull();
+    expect(mounted.container.textContent).toContain("Review is required");
+    expect(
+      mounted.container.querySelector('[data-testid="pr-merge-github-link"]'),
+    ).toBeTruthy();
+    unmount(mounted);
+  });
+
+  it("offers no merge for a conflicting PR and shows the reason", () => {
+    queryState.data = {
+      prs: {
+        "ship-pr": prFacts({
+          mergeable: "conflicting",
+          mergeStateStatus: "DIRTY",
+        }),
+      },
+    };
+    const mounted = mountPanel();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-merge-open"]'),
+    ).toBeNull();
+    expect(mounted.container.textContent).toContain("merge conflicts");
+    expect(
+      mounted.container.querySelector('[data-testid="pr-merge-github-link"]'),
+    ).toBeTruthy();
+    unmount(mounted);
+  });
+
+  it("offers auto-merge when pending checks are the only obstacle", () => {
+    queryState.data = {
+      prs: {
+        "ship-pr": prFacts({
+          headRefOid: "pendinghead01",
+          mergeStateStatus: "BLOCKED",
+          checks: { state: "pending", failing: 0, pending: 2, total: 3 },
+        }),
+      },
+    };
+    const mounted = mountPanel();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-merge-open"]'),
+    ).toBeNull();
+    const open = mounted.container.querySelector(
+      '[data-testid="pr-auto-merge-open"]',
+    );
+    expect(open?.textContent).toContain("Enable auto-merge");
+    act(() => {
+      (open as HTMLButtonElement).click();
+    });
+    expect(
+      document.body.querySelector('[data-testid="merge-pr-dialog"]')
+        ?.textContent,
+    ).toContain("pendinghead01");
+    act(() => {
+      (
+        document.body.querySelector(
+          '[data-testid="merge-pr-confirm"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(mergeMutate).toHaveBeenCalledWith(
+      {
+        id: "ship-pr",
+        auto: true,
+        matchHeadCommit: "pendinghead01",
+      },
+      expect.any(Object),
+    );
     unmount(mounted);
   });
 });

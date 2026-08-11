@@ -18,6 +18,7 @@ import type {
   IssuePatch,
   IssueRecord,
   IssuesResponse,
+  MergeStoryBody,
 } from "@server/schemas";
 import type { Attachment } from "@server/services/attachments";
 import type { DeletionResult } from "@server/services/deletion";
@@ -97,6 +98,29 @@ export function useDeleteIssue() {
         qc.removeQueries({ queryKey: issuesKeys.comments(deletedId) });
         qc.removeQueries({ queryKey: issuesKeys.attachments(deletedId) });
       }
+    },
+  });
+}
+
+export function useMergeStory(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation<
+    void,
+    Error,
+    { id: string } & MergeStoryBody
+  >({
+    mutationFn: ({ id, ...body }) =>
+      request<void>(`/api/issues/${encodeURIComponent(id)}/merge`, {
+        method: "POST",
+        body,
+      }),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({
+        queryKey: issuesKeys.projectPullRequests(projectId),
+      });
+      void qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      void qc.invalidateQueries({ queryKey: issuesKeys.detail(vars.id) });
     },
   });
 }
