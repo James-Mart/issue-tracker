@@ -31,6 +31,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useProjectPullRequestsQuery } from "../api/queries";
 import {
   StoryTreeDnDProvider,
   useStoryTreeDnD,
@@ -57,9 +58,15 @@ import { issueRailNodeState } from "../lib/rail-state";
 import { isRowDraggable } from "../lib/story-tree-dnd-logic";
 import { ArchiveIssueButton } from "./archive-issue-button";
 import { EpicAxisChips, StoryAxisChips } from "./axis-chips";
-import { TaskStatusChips } from "./task-status-chips";
-import { ProjectLabelChips } from "./project-label-chips";
 import { IssueArchiveDeleteMenuItems } from "./issue-archive-delete-menu-items";
+import {
+  PrChip,
+  storyPrChipModel,
+  type PrChipModel,
+  type ProjectPrQuery,
+} from "./pr-chip";
+import { ProjectLabelChips } from "./project-label-chips";
+import { TaskStatusChips } from "./task-status-chips";
 
 const KIND_ICON: Record<IssueKind, typeof Layers> = {
   project: FolderKanban,
@@ -292,10 +299,11 @@ function RowActions({ issue }: { issue: IssueRecord }) {
 }
 
 /** Read-only chip labels mirrored from the fine-pointer hover overlay. */
-function treeRowTouchChipLabels(
+export function treeRowTouchChipLabels(
   issue: IssueRecord,
   derived: DerivedState | undefined,
   catalog: ProjectLabel[],
+  prChip: PrChipModel,
 ): string[] {
   const labels: string[] = [];
 
@@ -306,6 +314,9 @@ function treeRowTouchChipLabels(
   }
 
   if (issue.kind === "story") {
+    if (prChip.kind === "chip") {
+      labels.push(prChip.label);
+    }
     if (derived?.storyStatus) {
       labels.push(STORY_STATUS_LABEL[derived.storyStatus]);
     }
@@ -367,14 +378,16 @@ function TreeRowTouchMenu({
   issue,
   derived,
   catalog,
+  prChip,
 }: {
   issue: IssueRecord;
   derived?: DerivedState;
   catalog: ProjectLabel[];
+  prChip: PrChipModel;
 }) {
   const openNew = useIssueUiStore((s) => s.openNew);
   const childKind = CHILD_KIND[issue.kind];
-  const chipLabels = treeRowTouchChipLabels(issue, derived, catalog);
+  const chipLabels = treeRowTouchChipLabels(issue, derived, catalog, prChip);
 
   return (
     <>
@@ -409,12 +422,14 @@ function TreeRow({
   derived,
   catalog,
   issues,
+  prQuery,
   guides = [],
 }: {
   node: IssueNode;
   derived: DerivedMap;
   catalog: ProjectLabel[];
   issues: IssueRecord[];
+  prQuery: ProjectPrQuery;
   guides?: boolean[];
 }) {
   const { projectId = "" } = useParams();
@@ -436,6 +451,7 @@ function TreeRow({
   const count = leafTaskProgressCount(issue, issues);
   const railState = issueRailNodeState(issue, state);
   const live = isInFlight(issue, state);
+  const prChip = storyPrChipModel(issue, prQuery);
 
   return (
     <>
@@ -509,6 +525,7 @@ function TreeRow({
                 {issue.kind === "story" && issue.prUrl ? (
                   <PrLink url={issue.prUrl} />
                 ) : null}
+                <PrChip model={prChip} />
                 <TreeRowDerivedMeta issue={issue} derived={state} />
                 {issue.kind === "task" ? (
                   <TaskStatusChips status={issue.status} qa={issue.qa} />
@@ -521,6 +538,7 @@ function TreeRow({
                 issue={issue}
                 derived={state}
                 catalog={catalog}
+                prChip={prChip}
               />
             }
           >
@@ -546,6 +564,7 @@ function TreeRow({
               derived={derived}
               catalog={catalog}
               issues={issues}
+              prQuery={prQuery}
               guides={[...guides, index < node.children.length - 1]}
             />
           ))
@@ -586,11 +605,13 @@ function IdeasGroup({
   derived,
   catalog,
   issues,
+  prQuery,
 }: {
   nodes: IssueNode[];
   derived: DerivedMap;
   catalog: ProjectLabel[];
   issues: IssueRecord[];
+  prQuery: ProjectPrQuery;
 }) {
   if (nodes.length === 0) return null;
 
@@ -620,6 +641,7 @@ function IdeasGroup({
                 derived={derived}
                 catalog={catalog}
                 issues={issues}
+                prQuery={prQuery}
               />
             ))}
           </Rail>
@@ -645,6 +667,11 @@ export function IssueTree({
   projectId: string;
 }) {
   const dnd = useStoryTreeDnD(issues);
+  const prQueryResult = useProjectPullRequestsQuery(projectId);
+  const prQuery: ProjectPrQuery = {
+    data: prQueryResult.data,
+    error: prQueryResult.error,
+  };
   const hasHierarchy = nodes.length > 0;
   const hasIdeas = ideaNodes.length > 0;
 
@@ -677,6 +704,7 @@ export function IssueTree({
                 derived={derived}
                 catalog={catalog}
                 issues={issues}
+                prQuery={prQuery}
               />
             ))}
           </Rail>
@@ -686,6 +714,7 @@ export function IssueTree({
           derived={derived}
           catalog={catalog}
           issues={issues}
+          prQuery={prQuery}
         />
       </div>
     </StoryTreeDnDProvider>

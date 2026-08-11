@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   AlertTriangle,
   GitPullRequest,
@@ -18,14 +19,40 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useUpdateIssue } from "../api/mutations";
+import { useProjectPullRequestsQuery } from "../api/queries";
 import type { FlowItem } from "../lib/flow";
 import { needsAttentionPatch } from "../lib/needs-attention-patch";
+import { PrChip, storyPrChipModel, type PrChipModel } from "./pr-chip";
 
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
+
+function useFlowRowPrChip(issue: IssueRecord): PrChipModel {
+  const { projectId = "" } = useParams();
+  const prQuery = useProjectPullRequestsQuery(projectId);
+  return storyPrChipModel(issue, prQuery);
+}
+
+function FlowRowTouchMenuPrChip({ model }: { model: PrChipModel }) {
+  if (model.kind !== "chip") return null;
+
+  return (
+    <>
+      <DropdownMenuItem
+        disabled
+        className="cursor-default opacity-100 focus:bg-transparent"
+        onSelect={(event) => event.preventDefault()}
+      >
+        {model.label}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+    </>
+  );
+}
 
 function ReassignDialog({
   task,
@@ -113,6 +140,7 @@ export function FlowRowActions({
   item: FlowItem;
   task: TaskRecord | undefined;
 }) {
+  const prChip = useFlowRowPrChip(item.issue);
   const update = useUpdateIssue();
   const attention = hasAttention(item.issue) && item.issue.needsAttention;
   const prUrl =
@@ -146,11 +174,14 @@ export function FlowRowActions({
   return (
     <>
       {prUrl ? (
-        <Button asChild variant="ghost" size="icon-sm" title="Open PR">
-          <a href={prUrl} target="_blank" rel="noreferrer">
-            <GitPullRequest className="h-3.5 w-3.5" />
-          </a>
-        </Button>
+        <>
+          <Button asChild variant="ghost" size="icon-sm" title="Open PR">
+            <a href={prUrl} target="_blank" rel="noreferrer">
+              <GitPullRequest className="h-3.5 w-3.5" />
+            </a>
+          </Button>
+          <PrChip model={prChip} />
+        </>
       ) : null}
 
       <DropdownMenu
@@ -236,6 +267,7 @@ export function FlowRowTouchMenu({
   item: FlowItem;
   task: TaskRecord | undefined;
 }) {
+  const prChip = useFlowRowPrChip(item.issue);
   const update = useUpdateIssue();
   const attention = hasAttention(item.issue) && item.issue.needsAttention;
   const prUrl =
@@ -252,6 +284,7 @@ export function FlowRowTouchMenu({
 
   return (
     <>
+      <FlowRowTouchMenuPrChip model={prChip} />
       {prUrl ? (
         <DropdownMenuItem asChild>
           <a href={prUrl} target="_blank" rel="noreferrer">
