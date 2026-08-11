@@ -180,12 +180,18 @@ function handleWorkerPortClosed(): void {
 
 function ensureWorkerPort(): MessagePort {
   if (workerPort) return workerPort;
-  const url = new URL("./transport.shared-worker.ts", import.meta.url);
-  url.searchParams.set("v", String(__TRANSPORT_VERSION__));
-  sharedWorker = new SharedWorker(url, {
-    type: "module",
-    name: "issue-tracker-transport",
-  });
+  // Vite only emits a worker chunk for a direct
+  // `new SharedWorker(new URL("./file.ts", import.meta.url), …)` expression
+  // with static options. Mutating the URL first made production treat the
+  // `.ts` entry as a `data:video/mp2t` asset. Content-hashed worker URLs plus
+  // the hello version handshake retire stale workers across reloads/deploys.
+  sharedWorker = new SharedWorker(
+    new URL("./transport.shared-worker.ts", import.meta.url),
+    {
+      type: "module",
+      name: "issue-tracker-transport",
+    },
+  );
   workerPort = sharedWorker.port;
   workerPort.onmessage = (event: MessageEvent<WorkerToPortMessage>) => {
     handleWorkerMessage(event.data);

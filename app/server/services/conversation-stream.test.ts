@@ -53,15 +53,15 @@ describe("conversation-stream catch-up buffer", () => {
       persist: false,
     };
     publishFrame("conv-a", frame);
-    expect(getFramesSince("conv-a", 0)).toEqual({
-      resetRequired: false,
-      frames: [
-        {
-          event: { type: "assistant", text: "delta", seq: 1 },
-          persist: false,
-        },
-      ],
+    const late = getFramesSince("conv-a", 0);
+    expect(late.resetRequired).toBe(false);
+    if (late.resetRequired) return;
+    expect(late.frames).toHaveLength(1);
+    expect(late.frames[0]).toMatchObject({
+      event: { type: "assistant", text: "delta", seq: 1 },
+      persist: false,
     });
+    expect(typeof (late.frames[0]!.event as { at?: string }).at).toBe("string");
   });
 
   it("retains frames across a persisted append", async () => {
@@ -74,18 +74,17 @@ describe("conversation-stream catch-up buffer", () => {
       event: { type: "assistant" as const, text: "final" },
       persist: true,
     });
-    expect(getFramesSince("conv-a", 0)).toEqual({
-      resetRequired: false,
-      frames: [
-        {
-          event: { type: "assistant", text: "chunk", seq: 1 },
-          persist: false,
-        },
-        {
-          event: { type: "assistant", text: "final", seq: 2 },
-          persist: true,
-        },
-      ],
+    const retained = getFramesSince("conv-a", 0);
+    expect(retained.resetRequired).toBe(false);
+    if (retained.resetRequired) return;
+    expect(retained.frames).toHaveLength(2);
+    expect(retained.frames[0]).toMatchObject({
+      event: { type: "assistant", text: "chunk", seq: 1 },
+      persist: false,
+    });
+    expect(retained.frames[1]).toMatchObject({
+      event: { type: "assistant", text: "final", seq: 2 },
+      persist: true,
     });
   });
 
@@ -103,18 +102,17 @@ describe("conversation-stream catch-up buffer", () => {
       event: { type: "assistant" as const, text: "three" },
       persist: false,
     });
-    expect(getFramesSince("conv-a", 1)).toEqual({
-      resetRequired: false,
-      frames: [
-        {
-          event: { type: "assistant", text: "two", seq: 2 },
-          persist: true,
-        },
-        {
-          event: { type: "assistant", text: "three", seq: 3 },
-          persist: false,
-        },
-      ],
+    const after = getFramesSince("conv-a", 1);
+    expect(after.resetRequired).toBe(false);
+    if (after.resetRequired) return;
+    expect(after.frames).toHaveLength(2);
+    expect(after.frames[0]).toMatchObject({
+      event: { type: "assistant", text: "two", seq: 2 },
+      persist: true,
+    });
+    expect(after.frames[1]).toMatchObject({
+      event: { type: "assistant", text: "three", seq: 3 },
+      persist: false,
     });
   });
 
