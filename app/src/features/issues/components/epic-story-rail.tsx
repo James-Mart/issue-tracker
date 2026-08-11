@@ -43,12 +43,13 @@ function EpicStoryRailView({
   if (stories.length === 0) return null;
 
   const live = stories.some(
-    (story) => storyRailNodeState(story, derived[story.id], issues) === "in-flight",
+    ({ story }) =>
+      storyRailNodeState(story, derived[story.id], issues) === "in-flight",
   );
 
   return (
     <Rail live={live} data-testid="epic-story-rail">
-      {stories.map((story) => (
+      {stories.map(({ story }) => (
         <RailNode
           key={story.id}
           state={storyRailNodeState(story, derived[story.id], issues)}

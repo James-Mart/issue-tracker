@@ -82,7 +82,8 @@ function storyDeps(story: IssueRecord, siblings: Set<string>): string[] {
   return storyDependencyIds(story).filter((id) => siblings.has(id));
 }
 
-function orderSiblings(children: IssueRecord[]): IssueRecord[] {
+/** Sibling order for Structure (and Epic rail Stories): deps among Stories, else sequence. */
+export function orderSiblings(children: IssueRecord[]): IssueRecord[] {
   const sequenced = [...children].sort(bySequence);
   if (!sequenced.every((child) => child.kind === "story")) return sequenced;
 
@@ -103,6 +104,23 @@ function orderSiblings(children: IssueRecord[]): IssueRecord[] {
   return ordered;
 }
 
+/**
+ * Nest parent for Structure / Epic rail: same-container `stackedOn` Story
+ * target wins; otherwise `partOf` (via `parentOf`).
+ */
+export function nestParentOf(
+  issue: IssueRecord,
+  byId: Map<string, IssueRecord>,
+): string | undefined {
+  if (issue.kind === "story" && issue.stackedOn) {
+    const base = byId.get(issue.stackedOn);
+    if (base?.kind === "story" && base.partOf === issue.partOf) {
+      return base.id;
+    }
+  }
+  return parentOf(issue);
+}
+
 // Tasks first (the story's own work), then the stories stacked on it.
 function orderChildren(children: IssueRecord[]): IssueRecord[] {
   const tasks = children
@@ -120,22 +138,9 @@ export function buildTree(
 ): IssueNode[] {
   const byId = new Map(issues.map((issue) => [issue.id, issue]));
 
-  // A branch nests under the branch it forks from (its stackedOn) when that
-  // referent is a branch in the same epic and present here; otherwise it falls
-  // back to its epic as a root branch.
-  const visualParent = (issue: IssueRecord): string | undefined => {
-    if (issue.kind === "story" && issue.stackedOn) {
-      const base = byId.get(issue.stackedOn);
-      if (base?.kind === "story" && base.partOf === issue.partOf) {
-        return base.id;
-      }
-    }
-    return parentOf(issue);
-  };
-
   const childrenOf = new Map<string, IssueRecord[]>();
   for (const issue of issues) {
-    const parent = visualParent(issue);
+    const parent = nestParentOf(issue, byId);
     if (!parent) continue;
     const bucket = childrenOf.get(parent) ?? [];
     bucket.push(issue);
