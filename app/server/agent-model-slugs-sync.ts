@@ -6,7 +6,7 @@ import {
 } from "./agent-model-slugs.js";
 import { modelSlugCatalogPath } from "./config.js";
 import type { AgentSdk } from "./services/agent-sdk.js";
-import { agentSdk } from "./services/agent-sdk.js";
+import { agentSdk, CursorAgentError } from "./services/agent-sdk.js";
 
 /** Story freshness window for the on-disk SDK model catalog. */
 export const MODEL_SLUG_CATALOG_TTL_MS = 60 * 60 * 1000;
@@ -86,11 +86,14 @@ export function writeAgentModelSlugCatalog(
  * Load the allowlist from a fresh on-disk catalog, or refresh via `listModels`
  * when the file is missing/stale. Keeps a usable stale file when refresh fails;
  * fails loud only when there is no usable on-disk catalog.
+ *
+ * Returns the catalog models so HTTP can serve `{ models }` without a second
+ * live call. Returns `null` when sync is skipped via env.
  */
 export async function refreshAgentModelSlugCatalog(
   options: RefreshAgentModelSlugCatalogOptions = {},
-): Promise<void> {
-  if (!shouldSyncAgentModelSlugsFromSdk()) return;
+): Promise<AgentModelCatalogEntry[] | null> {
+  if (!shouldSyncAgentModelSlugsFromSdk()) return null;
 
   const sdk = options.sdk ?? agentSdk;
   const catalogPath = options.catalogPath ?? modelSlugCatalogPath;
@@ -100,9 +103,10 @@ export async function refreshAgentModelSlugCatalog(
 
   if (isUsableCatalog(disk) && isFreshCatalog(disk, nowMs, ttlMs)) {
     syncAgentModelSlugCatalog(disk.models);
-    return;
+    return disk.models;
   }
 
+  let refreshError: unknown;
   try {
     const models = await sdk.listModels();
     if (models.length > 0) {
@@ -112,15 +116,20 @@ export async function refreshAgentModelSlugCatalog(
         new Date(nowMs).toISOString(),
       );
       syncAgentModelSlugCatalog(models);
-      return;
+      return models;
     }
-  } catch {
+  } catch (err) {
     // Refresh failed — fall through to usable stale disk, else fail loud.
+    refreshError = err;
   }
 
   if (isUsableCatalog(disk)) {
     syncAgentModelSlugCatalog(disk.models);
-    return;
+    return disk.models;
+  }
+
+  if (refreshError instanceof CursorAgentError) {
+    throw refreshError;
   }
 
   throw new Error(
