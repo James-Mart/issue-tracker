@@ -1,11 +1,14 @@
 import { Router, type RequestHandler } from "express";
 import { basename } from "path";
+import { mergeStory } from "../../cli-ops.js";
 import {
   CONVERSATION_CHANNELS,
   type CommentInput,
   type ConversationChannel,
   type CreateInput,
+  formatZodError,
   type IssuePatch,
+  mergeStoryBodySchema,
 } from "../schemas.js";
 import { uploadAttachment } from "../middleware/upload-attachment.js";
 import {
@@ -262,6 +265,21 @@ export function createIssuesRouter(
       }
       const result = await moveStory(req.params.id, target);
       res.json(result);
+    }),
+  );
+
+  router.post(
+    "/:id/merge",
+    asyncRoute(async (req, res) => {
+      const parsed = mergeStoryBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        throw new IssueError(
+          "validation",
+          formatZodError(parsed.error, "invalid merge body"),
+        );
+      }
+      await mergeStory(req.params.id, parsed.data);
+      res.status(204).end();
     }),
   );
 
