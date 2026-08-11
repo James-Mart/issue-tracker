@@ -5,6 +5,8 @@ import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSessions } from "../server/services/agent-sessions.js";
+import type { GhSpawner } from "../server/services/delivery.js";
+import type { CreateInput, IssueRecord, IssuePatch } from "../server/schemas.js";
 
 // Deterministic seed tree with stable ids/titles so Flow/DAG assertions stay
 // stable across runs: project `seed-proj`, epics A–D wired into a diamond
@@ -59,6 +61,13 @@ export type SeededApp = {
 export type BootSeededAppOptions = {
   /** Override the default in-process agent sessions (e.g. a held fake SDK). */
   sessions?: AgentSessions;
+  /** Stub `gh` before the server module loads. */
+  ghSpawner?: GhSpawner;
+  /** Run after the seed doc is applied and default runtime patches are set. */
+  afterApply?: (ctx: {
+    update: (id: string, patch: IssuePatch) => Promise<IssueRecord>;
+    create: (input: CreateInput) => Promise<IssueRecord>;
+  }) => Promise<void>;
 };
 
 // Seed a fresh `ISSUES_DIR` and boot the app/server against it in prod mode
@@ -90,16 +99,27 @@ export async function bootSeededApp(
 
   const { parseApplyDoc } = await import("../server/services/apply-schema.js");
   const { apply } = await import("../server/services/apply.js");
-  const { update } = await import("../server/services/issues.js");
-  const { attachMultiplexedWebSocket, createApp } = await import(
-    "../server/app.js"
-  );
+  const { create, update } = await import("../server/services/issues.js");
+
+  if (options.ghSpawner) {
+    const { setGhSpawnerForTests } = await import(
+      "../server/services/delivery.js"
+    );
+    setGhSpawnerForTests(options.ghSpawner);
+  }
 
   const parsed = parseApplyDoc(seedDoc);
   if (!parsed.ok) throw new Error(`invalid seed doc: ${parsed.message}`);
   await apply(parsed.doc);
   await update("seed-task-flight", { status: "in-progress" });
   await update("seed-story-merged", { merged: true });
+  if (options.afterApply) {
+    await options.afterApply({ update, create });
+  }
+
+  const { attachMultiplexedWebSocket, createApp } = await import(
+    "../server/app.js"
+  );
 
   const server: Server = await new Promise((resolve) => {
     const s = createApp(options.sessions).listen(0, "127.0.0.1", () =>
@@ -112,6 +132,12 @@ export async function bootSeededApp(
   return {
     baseURL: `http://127.0.0.1:${port}`,
     stop: async () => {
+      if (options.ghSpawner) {
+        const { setGhSpawnerForTests } = await import(
+          "../server/services/delivery.js"
+        );
+        setGhSpawnerForTests(null);
+      }
       await new Promise<void>((resolve) => server.close(() => resolve()));
       rmSync(root, { recursive: true, force: true });
     },
