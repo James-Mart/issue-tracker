@@ -6,6 +6,7 @@ import {
   isAuthFailureEvent,
   isAuthFailureText,
   isContentEvent,
+  isRetryableAgentFailure,
 } from "./agent-failure.js";
 
 const AUTH_ERROR_TEXT =
@@ -130,9 +131,37 @@ describe("classifyAgentFailure", () => {
     expect(classifyAgentFailure("cancelled", undefined)).toBe("cancelled");
   });
 
+  it("returns transport-exhausted for Connection failed repeatedly text", () => {
+    expect(
+      classifyAgentFailure("error", {
+        message: "Connection failed repeatedly",
+      }),
+    ).toBe("transport-exhausted");
+  });
+
+  it.each([
+    "unavailable",
+    "deadline_exceeded",
+    "canceled",
+    "aborted",
+  ] as const)("returns transport-exhausted for error code %s", (code) => {
+    expect(
+      classifyAgentFailure("error", { message: "something else", code }),
+    ).toBe("transport-exhausted");
+  });
+
+  it("returns auth when auth text and a transport code both appear", () => {
+    expect(
+      classifyAgentFailure("error", {
+        message: AUTH_ERROR_TEXT,
+        code: "unavailable",
+      }),
+    ).toBe("auth");
+  });
+
   it("returns agent-failed for an unknown error", () => {
     const error: AgentRunError = {
-      message: "Connection failed repeatedly",
+      message: "something went wrong",
       code: "NETWORK",
     };
     expect(classifyAgentFailure("error", error)).toBe("agent-failed");
@@ -140,5 +169,28 @@ describe("classifyAgentFailure", () => {
 
   it("returns agent-failed for a finished run with no error", () => {
     expect(classifyAgentFailure("finished", undefined)).toBe("agent-failed");
+  });
+});
+
+describe("isRetryableAgentFailure", () => {
+  it("passes through the SDK isRetryable flag when present", () => {
+    expect(
+      isRetryableAgentFailure({
+        message: "Connection failed repeatedly",
+        isRetryable: true,
+      }),
+    ).toBe(true);
+    expect(
+      isRetryableAgentFailure({
+        message: "Connection failed repeatedly",
+        isRetryable: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("defaults to false when isRetryable is absent", () => {
+    expect(
+      isRetryableAgentFailure({ message: "Connection failed repeatedly" }),
+    ).toBe(false);
   });
 });

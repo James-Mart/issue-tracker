@@ -8,7 +8,8 @@ export type AgentFailureClass =
   | "auth"
   | "agent-failed"
   | "cancelled"
-  | "stalled-before-first-token";
+  | "stalled-before-first-token"
+  | "transport-exhausted";
 
 const CONTROL_MESSAGE_TYPES = new Set(["request", "status", "usage"]);
 
@@ -27,6 +28,15 @@ const AUTH_FAILURE_CODES = new Set([
   "UNAUTHORIZED",
 ]);
 
+const TRANSPORT_EXHAUSTION_TEXT = /connection failed repeatedly/i;
+
+const TRANSPORT_EXHAUSTION_CODES = new Set([
+  "unavailable",
+  "deadline_exceeded",
+  "canceled",
+  "aborted",
+]);
+
 export function isAuthFailureText(text: string): boolean {
   return AUTH_FAILURE_TEXT.test(text);
 }
@@ -41,6 +51,21 @@ export function isAuthFailureEvent(event: AgentStreamEvent): boolean {
   );
 }
 
+function isTransportExhaustion(error: AgentRunError | undefined): boolean {
+  if (error === undefined) return false;
+  return (
+    TRANSPORT_EXHAUSTION_TEXT.test(error.message) ||
+    (error.code !== undefined && TRANSPORT_EXHAUSTION_CODES.has(error.code))
+  );
+}
+
+/** Prefer the SDK's `isRetryable` flag; never infer from failure class. */
+export function isRetryableAgentFailure(
+  error: AgentRunError | undefined,
+): boolean {
+  return error?.isRetryable ?? false;
+}
+
 export function classifyAgentFailure(
   status: AgentRunStatus,
   error: AgentRunError | undefined,
@@ -52,5 +77,6 @@ export function classifyAgentFailure(
   ) {
     return "auth";
   }
+  if (isTransportExhaustion(error)) return "transport-exhausted";
   return "agent-failed";
 }
