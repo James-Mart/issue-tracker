@@ -8,7 +8,9 @@ export type UsageTotals = {
 };
 
 /** Sum `usage` events so the header covers the whole conversation. */
-export function sumUsageTotals(events: TranscriptEvent[]): UsageTotals {
+export function sumUsageTotals(
+  events: readonly TranscriptEvent[],
+): UsageTotals {
   let totalTokens = 0;
   let inputTokens = 0;
   let outputTokens = 0;
