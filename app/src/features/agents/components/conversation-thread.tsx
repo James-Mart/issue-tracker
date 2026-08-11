@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { cn } from "@/lib/utils/cn";
 import { useConversationsQuery } from "../api/queries";
 import {
@@ -321,6 +322,7 @@ function ThreadBody({
   runActive,
   conversationId,
   model,
+  keyboardInset,
 }: {
   events: TranscriptEvent[];
   ready: boolean;
@@ -328,6 +330,7 @@ function ThreadBody({
   runActive: boolean;
   conversationId: string;
   model: string;
+  keyboardInset: number;
 }) {
   if (!ready) {
     return (
@@ -361,7 +364,11 @@ function ThreadBody({
 
   return (
     <MessageScroller
-      bottomKey={transcriptScrollerBottomKey(events, pendingMessageText)}
+      bottomKey={transcriptScrollerBottomKey(
+        events,
+        pendingMessageText,
+        keyboardInset,
+      )}
       className="min-w-0 overflow-x-hidden px-4 py-4"
       role="log"
       aria-label="Conversation transcript"
@@ -511,6 +518,7 @@ export function ConversationThread({
     runResyncKey,
   );
   const { data: conversations } = useConversationsQuery(true);
+  const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
   const meta = listMeta ?? metaProp;
   const title = meta?.title?.trim() || "Thread";
@@ -520,7 +528,13 @@ export function ConversationThread({
       : (meta?.pendingMessage?.text ?? null);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // Give back the keyboard's height at the bottom: the chrome above stays put
+    // while the transcript shortens and the composer rides above the keyboard.
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      style={{ paddingBottom: keyboardInset }}
+      data-testid="conversation-thread"
+    >
       <OpenThreadChrome
         title={title}
         onBack={onBack}
@@ -537,6 +551,7 @@ export function ConversationThread({
           runActive={runActive}
           conversationId={conversationId}
           model={meta?.model ?? ""}
+          keyboardInset={keyboardInset}
         />
       </div>
       {meta && !hideComposer ? (

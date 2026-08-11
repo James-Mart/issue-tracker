@@ -58,4 +58,16 @@ describe("transcriptScrollerBottomKey", () => {
     );
     expect(done.length).toBe(running.length);
   });
+
+  it("changes when the keyboard inset shortens the transcript", () => {
+    expect(transcriptScrollerBottomKey(base, null, 320)).not.toBe(
+      transcriptScrollerBottomKey(base, null, 0),
+    );
+  });
+
+  it("is stable across the same content and inset", () => {
+    expect(transcriptScrollerBottomKey(base, null, 320)).toBe(
+      transcriptScrollerBottomKey([...base], null, 320),
+    );
+  });
 });
