@@ -42,7 +42,8 @@ idempotency, and recovery live there). This section is only the concrete
        <mergeBase> advanced; fast-forward not possible, rebase needed"`, then
        stop. On success, `git push origin <mergeBase>`, `issue story set
        <storyId> merged true`. Then run step 3 with `Bp` = that `<mergeBase>`.
-3. **Flag stale children** (`merge` / `fast-forward` only):
+3. **Flag stale children** (`merge` / `fast-forward`, and the same scan
+   performed by `issue merge` after a successful GitHub PR merge):
    1. Take `<projectId>` from the `Project: <projectId> — <title>` line of
       `issue summary <storyId>`.
    2. Run `issue list story --in <projectId>` once. For each entry in

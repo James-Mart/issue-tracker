@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { Command } from "commander";
@@ -22,6 +22,13 @@ let setGhSpawnerForTests: DeliveryModule["setGhSpawnerForTests"];
 function nextAt(): string {
   clock += 1;
   return new Date(Date.UTC(2026, 6, 10, 14, 0, clock)).toISOString();
+}
+
+function readStoryJson(id: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(dir, id, "issue.json"), "utf8")) as Record<
+    string,
+    unknown
+  >;
 }
 
 function writeIssue(id: string, body: Record<string, unknown>): void {
@@ -156,6 +163,36 @@ beforeEach(async () => {
     createdAt: nextAt(),
     updatedAt: nextAt(),
   });
+  writeIssue("sibling", {
+    kind: "story",
+    title: "Sibling",
+    partOf: "e",
+    order: 1,
+    branchName: "feat/sibling",
+    merged: false,
+    createdAt: nextAt(),
+    updatedAt: nextAt(),
+  });
+  writeIssue("not-started", {
+    kind: "story",
+    title: "Not started",
+    partOf: "e",
+    order: 2,
+    merged: false,
+    createdAt: nextAt(),
+    updatedAt: nextAt(),
+  });
+  writeIssue("child", {
+    kind: "story",
+    title: "Child",
+    partOf: "e",
+    order: 3,
+    stackedOn: "a",
+    branchName: "feat/child",
+    merged: false,
+    createdAt: nextAt(),
+    updatedAt: nextAt(),
+  });
   writeIssue("c1", {
     kind: "task",
     title: "Task",
@@ -233,6 +270,43 @@ describe("mergeStory", () => {
     await expect(mergeStory("a")).rejects.toThrow(
       "GraphQL: Pull request is in draft state",
     );
+    expect(readStoryJson("a").merged).toBe(false);
+    expect(readStoryJson("sibling").needsRebase).toBeUndefined();
+  });
+
+  it("sets merged and flags stale siblings after gh succeeds", async () => {
+    stubGh();
+    await mergeStory("a");
+    expect(readStoryJson("a").merged).toBe(true);
+    expect(readStoryJson("sibling").needsRebase).toBe("main");
+    expect(readStoryJson("not-started").needsRebase).toBeUndefined();
+    expect(readStoryJson("child").mergeBase).toBeUndefined();
+  });
+
+  it("leaves every field untouched when gh fails", async () => {
+    writeIssue("before", {
+      kind: "story",
+      title: "Before snapshot",
+      partOf: "e",
+      order: 4,
+      branchName: "feat/before",
+      merged: false,
+      needsRebase: "feat/old",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    await loadModules();
+    stubGh(() =>
+      mockGhChild({
+        code: 1,
+        stderr: "merge not allowed\n",
+      }),
+    );
+    await expect(mergeStory("a")).rejects.toThrow("merge not allowed");
+    expect(readStoryJson("a").merged).toBe(false);
+    expect(readStoryJson("sibling").needsRebase).toBeUndefined();
+    expect(readStoryJson("before").merged).toBe(false);
+    expect(readStoryJson("before").needsRebase).toBe("feat/old");
   });
 });
 
@@ -301,5 +375,15 @@ describe("issue merge CLI", () => {
     const result = await runMergeCli(["merge", "a"]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("merge not allowed");
+    expect(readStoryJson("a").merged).toBe(false);
+    expect(readStoryJson("sibling").needsRebase).toBeUndefined();
+  });
+
+  it("applies merge consequences on successful CLI merge", async () => {
+    stubGh();
+    const result = await runMergeCli(["merge", "a"]);
+    expect(result.exitCode).toBeUndefined();
+    expect(readStoryJson("a").merged).toBe(true);
+    expect(readStoryJson("sibling").needsRebase).toBe("main");
   });
 });

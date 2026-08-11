@@ -29,6 +29,7 @@ import { formatInspirationAppsLine } from "./server/services/inspiration-apps.js
 import { formatSupportingDocsLine } from "./server/services/supporting-docs.js";
 import { assertKind, kindGetValue, resolveIssueKind } from "./cli-kind.js";
 import { parsePrUrl, runGh } from "./server/services/delivery.js";
+import { applyMergeConsequences } from "./server/services/merge-consequences.js";
 import { readAll } from "./server/services/issues.js";
 import { requireProjectWorkspace } from "./server/services/project-workspace.js";
 import { ancestorChain } from "./server/services/subtree.js";
@@ -76,6 +77,7 @@ export async function mergeStory(
   }
 
   await runGh(args, workspace);
+  await applyMergeConsequences(id);
 }
 
 type ViewOptions = {
