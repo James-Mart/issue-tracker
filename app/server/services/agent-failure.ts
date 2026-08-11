@@ -4,7 +4,19 @@ import type {
   AgentStreamEvent,
 } from "./agent-sdk.js";
 
-export type AgentFailureClass = "auth" | "agent-failed" | "cancelled";
+export type AgentFailureClass =
+  | "auth"
+  | "agent-failed"
+  | "cancelled"
+  | "stalled-before-first-token";
+
+const CONTROL_MESSAGE_TYPES = new Set(["request", "status", "usage"]);
+
+export function isContentEvent(event: AgentStreamEvent): boolean {
+  if (event.kind === "nested") return true;
+  if (event.kind !== "message") return false;
+  return !CONTROL_MESSAGE_TYPES.has(event.message.type);
+}
 
 const AUTH_FAILURE_TEXT =
   /authentication error|unauthenticated|invalid api key|logging out and back in/i;

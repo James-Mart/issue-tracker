@@ -19,6 +19,7 @@ import {
   MAX_CONCURRENT_DELEGATIONS_GLOBAL,
   MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION,
   MAX_DELEGATION_DEPTH,
+  NESTED_RUN_FIRST_CONTENT_TIMEOUT_MS,
   NESTED_RUN_HEARTBEAT_MS,
   resetDelegationConcurrencyForTests,
 } from "./delegate-tool.js";
@@ -50,6 +51,52 @@ const ASSISTANT_STREAM: AgentStreamEvent[] = [
     },
   },
 ];
+
+const NESTED_RUN_IDS = {
+  agent_id: "agent-nested",
+  run_id: "run-nested",
+} as const;
+
+const CONTROL_ONLY_STREAM: AgentStreamEvent[] = [
+  {
+    kind: "message",
+    message: {
+      type: "request",
+      ...NESTED_RUN_IDS,
+      request_id: "req-1",
+    },
+  },
+  {
+    kind: "message",
+    message: {
+      type: "status",
+      ...NESTED_RUN_IDS,
+      status: "RUNNING",
+    },
+  },
+  {
+    kind: "message",
+    message: {
+      type: "usage",
+      ...NESTED_RUN_IDS,
+      usage: {
+        inputTokens: 1,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 1,
+      },
+    },
+  },
+];
+
+function holdAfterStream(): { hold: Promise<void>; release: () => void } {
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { hold, release };
+}
 
 beforeEach(() => {
   agentsDir = mkdtempSync(join(tmpdir(), "issue-delegate-agents-"));
@@ -757,6 +804,228 @@ describe("createDelegateCustomTools", () => {
         nestedTracked: 0,
       },
     );
+
+    releaseHold();
+  });
+});
+
+describe("nested run first-content deadline", () => {
+  it("cancels at the threshold when only control events arrive", async () => {
+    vi.useFakeTimers();
+    try {
+      const { hold, release } = holdAfterStream();
+      const fake = createFakeAgentSdk({
+        stream: CONTROL_ONLY_STREAM,
+        holdAfterStream: hold,
+      });
+      const customTools = createDelegateCustomTools({
+        sdk: fake,
+        cwd,
+        storeDir,
+        agentsDir,
+      });
+
+      const executePromise = customTools.delegate!.execute(
+        { role: "pinned-role", prompt: "control only" },
+        {},
+      );
+
+      for (let i = 0; i < 50; i++) {
+        if (fake.handles[0]?.sends.length === 1) break;
+        await Promise.resolve();
+      }
+      expect(fake.handles[0]?.sends.length).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(NESTED_RUN_FIRST_CONTENT_TIMEOUT_MS);
+
+      const result = await executePromise;
+      expect(result).toEqual({
+        ok: false,
+        failureClass: "stalled-before-first-token",
+        isRetryable: true,
+        message: expect.stringMatching(
+          /delegate: nested run .* stalled before first content/,
+        ),
+        agentId: fake.handles[0]!.agentId,
+      });
+      expect(fake.handles[0]?.cancelled).toBe(true);
+      release();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not cancel after content even well past the threshold", async () => {
+    vi.useFakeTimers();
+    try {
+      const { hold, release } = holdAfterStream();
+      const fake = createFakeAgentSdk({
+        stream: ASSISTANT_STREAM,
+        holdAfterStream: hold,
+      });
+      const customTools = createDelegateCustomTools({
+        sdk: fake,
+        cwd,
+        storeDir,
+        agentsDir,
+      });
+
+      const executePromise = customTools.delegate!.execute(
+        { role: "pinned-role", prompt: "has content" },
+        {},
+      );
+
+      for (let i = 0; i < 50; i++) {
+        if (fake.handles[0]?.sends.length === 1) break;
+        await Promise.resolve();
+      }
+
+      await vi.advanceTimersByTimeAsync(
+        NESTED_RUN_FIRST_CONTENT_TIMEOUT_MS * 3,
+      );
+
+      release();
+      const result = await executePromise;
+      expect(result).toEqual({
+        ok: true,
+        agentId: fake.handles[0]!.agentId,
+        reply: "On it.",
+      });
+      expect(fake.handles[0]?.cancelled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("disarms the deadline on a nested frame alone", async () => {
+    vi.useFakeTimers();
+    try {
+      const { hold, release } = holdAfterStream();
+      const nestedOnly: AgentStreamEvent[] = [
+        {
+          kind: "nested",
+          callId: "call-nested-1",
+          modelCallId: "model-1",
+          update: { type: "text-delta", text: "streaming" },
+        },
+      ];
+      const fake = createFakeAgentSdk({
+        stream: nestedOnly,
+        holdAfterStream: hold,
+      });
+      const customTools = createDelegateCustomTools({
+        sdk: fake,
+        cwd,
+        storeDir,
+        agentsDir,
+      });
+
+      const executePromise = customTools.delegate!.execute(
+        { role: "pinned-role", prompt: "nested frame" },
+        {},
+      );
+
+      for (let i = 0; i < 50; i++) {
+        if (fake.handles[0]?.sends.length === 1) break;
+        await Promise.resolve();
+      }
+
+      await vi.advanceTimersByTimeAsync(
+        NESTED_RUN_FIRST_CONTENT_TIMEOUT_MS * 2,
+      );
+
+      release();
+      const result = await executePromise;
+      expect(result).toEqual({
+        ok: true,
+        agentId: fake.handles[0]!.agentId,
+        reply: "",
+      });
+      expect(fake.handles[0]?.cancelled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("disarms the deadline on an unrecognised message type", async () => {
+    vi.useFakeTimers();
+    try {
+      const { hold, release } = holdAfterStream();
+      const unknownTypeStream: AgentStreamEvent[] = [
+        {
+          kind: "message",
+          message: {
+            type: "future-sdk-event" as "assistant",
+            ...NESTED_RUN_IDS,
+          },
+        },
+      ];
+      const fake = createFakeAgentSdk({
+        stream: unknownTypeStream,
+        holdAfterStream: hold,
+      });
+      const customTools = createDelegateCustomTools({
+        sdk: fake,
+        cwd,
+        storeDir,
+        agentsDir,
+      });
+
+      const executePromise = customTools.delegate!.execute(
+        { role: "pinned-role", prompt: "unknown type" },
+        {},
+      );
+
+      for (let i = 0; i < 50; i++) {
+        if (fake.handles[0]?.sends.length === 1) break;
+        await Promise.resolve();
+      }
+
+      await vi.advanceTimersByTimeAsync(
+        NESTED_RUN_FIRST_CONTENT_TIMEOUT_MS * 2,
+      );
+
+      release();
+      const result = await executePromise;
+      expect(result).toEqual({
+        ok: true,
+        agentId: fake.handles[0]!.agentId,
+        reply: "",
+      });
+      expect(fake.handles[0]?.cancelled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still reports conversation cancel as cancelled, not stalled", async () => {
+    let releaseHold!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const fake = createFakeAgentSdk({ hold, stream: [] });
+    const conversationId = "conv-first-content-cancel";
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId,
+    });
+
+    const running = customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "will cancel" },
+      {},
+    );
+    await waitForHandleSend(fake, 0);
+    await new Promise((r) => setTimeout(r, 50));
+
+    await cancelConversationDelegations(conversationId);
+    const result = await running;
+    expect(result).toMatchObject({
+      ok: false,
+      failureClass: "cancelled",
+    });
 
     releaseHold();
   });

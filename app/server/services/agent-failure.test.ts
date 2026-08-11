@@ -5,6 +5,7 @@ import {
   classifyAgentFailure,
   isAuthFailureEvent,
   isAuthFailureText,
+  isContentEvent,
 } from "./agent-failure.js";
 
 const AUTH_ERROR_TEXT =
@@ -56,6 +57,56 @@ describe("isAuthFailureEvent", () => {
       message: AUTH_ERROR_TEXT,
     };
     expect(isAuthFailureEvent({ kind: "message", message: msg })).toBe(false);
+  });
+});
+
+describe("isContentEvent", () => {
+  const ids = { agent_id: "agent-1", run_id: "run-1" } as const;
+
+  it.each(["request", "status", "usage"] as const)(
+    "returns false for control message type %s",
+    (type) => {
+      const msg: SDKMessage =
+        type === "request"
+          ? { type, ...ids, request_id: "req-1" }
+          : type === "status"
+            ? { type, ...ids, status: "RUNNING" }
+            : {
+                type,
+                ...ids,
+                usage: {
+                  inputTokens: 1,
+                  outputTokens: 0,
+                  cacheReadTokens: 0,
+                  cacheWriteTokens: 0,
+                  totalTokens: 1,
+                },
+              };
+      expect(isContentEvent({ kind: "message", message: msg })).toBe(false);
+    },
+  );
+
+  it("returns true for an unrecognised message type", () => {
+    expect(
+      isContentEvent({
+        kind: "message",
+        message: {
+          type: "future-sdk-event" as "assistant",
+          ...ids,
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for nested events", () => {
+    expect(
+      isContentEvent({
+        kind: "nested",
+        callId: "call-1",
+        modelCallId: "model-1",
+        update: { type: "text-delta", text: "hi" },
+      }),
+    ).toBe(true);
   });
 });
 
