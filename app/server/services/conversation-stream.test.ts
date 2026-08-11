@@ -223,6 +223,22 @@ describe("conversation-stream sequence numbers", () => {
     expect(fromPipeline.seq).toBe(4);
   });
 
+  it("reuses seq already stamped on the event", async () => {
+    const { publishFrame } = await loadConversationStream();
+    const { createConversation, appendEvent } = await loadConversations();
+
+    const meta = await createConversation({
+      title: "Preassigned seq",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    await appendEvent(meta.id, { type: "prompt", text: "first" });
+
+    const event = { type: "assistant" as const, text: "live", seq: 5 };
+    publishFrame(meta.id, { event, persist: false });
+    expect(event.seq).toBe(5);
+  });
+
   it("persists the same seq that publishFrame stamped on error-style paths", async () => {
     const { publishFrame, subscribeFrames } = await loadConversationStream();
     const { createConversation, appendEvent, readConversation } =

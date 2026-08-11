@@ -134,7 +134,11 @@ export function publishFrame(
   conversationId: string,
   frame: ConversationFrame,
 ): void {
-  const seq = nextConversationSeq(conversationId);
+  const preassigned =
+    typeof (frame.event as { seq?: unknown }).seq === "number"
+      ? (frame.event as { seq: number }).seq
+      : undefined;
+  const seq = nextConversationSeq(conversationId, preassigned);
   // Clients parse live frames with `at` + `seq` required. Run/pending frames
   // are live-only and would otherwise be dropped after the SharedWorker hop.
   const existingAt = (frame.event as { at?: unknown }).at;

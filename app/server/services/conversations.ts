@@ -373,6 +373,9 @@ export function appendEvent(
     };
     appendFileSync(transcriptPathOf(id), `${JSON.stringify(stamped)}\n`);
     writeMeta({ ...meta, updatedAt: new Date().toISOString() });
+    if (stamped.type === "prompt") {
+      publishFrame(id, { event: stamped, persist: false });
+    }
     return stamped;
   });
 }

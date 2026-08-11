@@ -1168,6 +1168,56 @@ describe("agent sessions manager", () => {
   });
 });
 
+describe("startConversationPrompt prompt live frames", () => {
+  it("publishes the prompt frame on idle send", async () => {
+    const {
+      createConversation,
+      readConversation,
+      startConversationPrompt,
+      createAgentSessions,
+      subscribeFrames,
+    } = await load();
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Idle send",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const promptFrames: ConversationFrame[] = [];
+    const unsubscribe = subscribeFrames(meta.id, (frame) => {
+      if (frame.event.type === "prompt") promptFrames.push(frame);
+    });
+
+    const result = await startConversationPrompt(
+      meta.id,
+      "go now",
+      undefined,
+      sessions,
+    );
+    unsubscribe();
+
+    expect(result.ok).toBe(true);
+    const { transcript } = readConversation(meta.id);
+    const persisted = transcript.find((e) => e.type === "prompt");
+    expect(persisted).toMatchObject({ type: "prompt", text: "go now" });
+    expect(promptFrames).toHaveLength(1);
+    expect(promptFrames[0]).toMatchObject({
+      persist: false,
+      event: {
+        type: "prompt",
+        text: "go now",
+        seq: persisted?.seq,
+        at: persisted?.at,
+      },
+    });
+  });
+});
+
 describe("pending message firing", () => {
   it("fires a pending message as a new run after a clean finish", async () => {
     const {
@@ -1175,6 +1225,7 @@ describe("pending message firing", () => {
       readConversation,
       updateMeta,
       createAgentSessions,
+      subscribeFrames,
     } = await load();
     const fake = createFakeAgentSdk({
       stream: buildScriptedStreamWithAgentIdHint(),
@@ -1190,10 +1241,16 @@ describe("pending message firing", () => {
       pendingMessage: { text: "follow up", at: AT },
     });
 
+    const promptFrames: ConversationFrame[] = [];
+    const unsubscribe = subscribeFrames(meta.id, (frame) => {
+      if (frame.event.type === "prompt") promptFrames.push(frame);
+    });
+
     const result = await sessions.sendPrompt(meta.id, { prompt: "first turn" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     await result.run.wait();
+    unsubscribe();
 
     // Give the fired run time to settle.
     for (let i = 0; i < 50; i += 1) {
@@ -1207,6 +1264,17 @@ describe("pending message firing", () => {
     expect(
       transcript.filter((e) => e.type === "prompt").map((e) => e.text),
     ).toEqual(["follow up"]);
+    const flushedPrompt = transcript.find((e) => e.type === "prompt");
+    expect(promptFrames).toHaveLength(1);
+    expect(promptFrames[0]).toMatchObject({
+      persist: false,
+      event: {
+        type: "prompt",
+        text: "follow up",
+        seq: flushedPrompt?.seq,
+        at: flushedPrompt?.at,
+      },
+    });
     expect(fake.handles[0]?.sends).toEqual([
       { prompt: "first turn", options: {} },
       { prompt: "follow up", options: {} },
