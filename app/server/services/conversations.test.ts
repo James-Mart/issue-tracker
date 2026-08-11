@@ -535,3 +535,60 @@ describe("conversations store", () => {
     );
   });
 });
+
+describe("appendEvent prompt live frames", () => {
+  it("publishes one live prompt frame with the same seq as the persisted event", async () => {
+    const { createConversation, appendEvent } = await loadService();
+    const { subscribeFrames } = await import("./conversation-stream.js");
+
+    const meta = await createConversation({
+      title: "Prompt publish",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const streamed: Array<{
+      persist: boolean;
+      event: { type?: string; seq?: number; text?: string; at?: string };
+    }> = [];
+    const unsubscribe = subscribeFrames(meta.id, (frame) => {
+      streamed.push(frame);
+    });
+
+    const persisted = await appendEvent(meta.id, {
+      type: "prompt",
+      text: "hello",
+    });
+    unsubscribe();
+
+    expect(streamed).toHaveLength(1);
+    expect(streamed[0]).toMatchObject({
+      persist: false,
+      event: {
+        type: "prompt",
+        text: "hello",
+        seq: persisted.seq,
+        at: persisted.at,
+      },
+    });
+  });
+
+  it("does not publish live frames for non-prompt appendEvent", async () => {
+    const { createConversation, appendEvent } = await loadService();
+    const { subscribeFrames } = await import("./conversation-stream.js");
+
+    const meta = await createConversation({
+      title: "No prompt publish",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const streamed: unknown[] = [];
+    const unsubscribe = subscribeFrames(meta.id, (frame) => {
+      streamed.push(frame);
+    });
+
+    await appendEvent(meta.id, { type: "assistant", text: "reply" });
+    unsubscribe();
+
+    expect(streamed).toHaveLength(0);
+  });
+});
