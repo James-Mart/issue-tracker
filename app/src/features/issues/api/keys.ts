@@ -9,4 +9,6 @@ export const issuesKeys = {
     [...issuesKeys.all, "channelSessions", issueId, channel] as const,
   planningWorkRoot: (ideaId: string) =>
     [...issuesKeys.all, "planningWorkRoot", ideaId] as const,
+  projectPullRequests: (projectId: string) =>
+    [...issuesKeys.all, "projectPullRequests", projectId] as const,
 };

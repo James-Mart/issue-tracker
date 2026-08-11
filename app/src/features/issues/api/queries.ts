@@ -9,6 +9,7 @@ import type {
 } from "@server/schemas";
 import type { PlanningWorkRoot } from "@server/services/planning-work-root";
 import type { Attachment } from "@server/services/attachments";
+import type { ProjectPrsResponse } from "@server/services/delivery";
 import { ApiError } from "@/lib/api/errors";
 import { attachmentsApiPath } from "../lib/attachments";
 import { listChannelSessions } from "./channel-sessions";
@@ -81,5 +82,20 @@ export function useChannelSessionsQuery(
     enabled: Boolean(issueId) && Boolean(channel),
     refetchOnWindowFocus: true,
     refetchInterval: CHANNEL_SESSIONS_REFETCH_INTERVAL_MS,
+  });
+}
+
+/** Live PR facts for a Project — mount + explicit invalidation only. */
+export function useProjectPullRequestsQuery(
+  projectId: string,
+): UseQueryResult<ProjectPrsResponse, Error> {
+  return useQuery({
+    queryKey: issuesKeys.projectPullRequests(projectId),
+    queryFn: () =>
+      request<ProjectPrsResponse>(`/api/projects/${projectId}/prs`),
+    enabled: Boolean(projectId),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
