@@ -2,7 +2,11 @@ import { existsSync, mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { join } from "path";
 import type { SDKCustomTool } from "@cursor/sdk";
-import type { AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
+import type { AgentRunResult, AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
+import {
+  classifyAgentFailure,
+  type AgentFailureClass,
+} from "./agent-failure.js";
 import {
   appendDelegation,
   conversationExists,
@@ -23,6 +27,34 @@ export const NESTED_RUN_HEARTBEAT_MS = 5000;
 
 /** Maximum nested delegation depth (conversation root is 0). */
 export const MAX_DELEGATION_DEPTH = 3;
+
+export type DelegateResult =
+  | { ok: true; agentId: string; reply: string }
+  | {
+      ok: false;
+      failureClass: AgentFailureClass;
+      isRetryable: boolean;
+      message: string;
+      agentId: string;
+    };
+
+function delegateFailureFromWait(
+  waited: AgentRunResult,
+  agentId: string,
+): Extract<DelegateResult, { ok: false }> {
+  const message =
+    waited.status === "error"
+      ? waited.error?.message ??
+        `delegate: nested run ${waited.id} failed`
+      : `delegate: nested run ${waited.id} was cancelled`;
+  return {
+    ok: false,
+    failureClass: classifyAgentFailure(waited.status, waited.error),
+    isRetryable: waited.error?.isRetryable ?? false,
+    message,
+    agentId,
+  };
+}
 
 /**
  * Max in-flight nested runs in one conversation. Covers the widest known
@@ -512,14 +544,15 @@ export function createDelegateCustomTools(
               // iterator abort error, matching the conversation pump.
               const waitedAfterAbort = await run.wait();
               if (waitedAfterAbort.status === "cancelled") {
-                throw new Error(
-                  `delegate: nested run ${waitedAfterAbort.id} was cancelled`,
+                return delegateFailureFromWait(
+                  waitedAfterAbort,
+                  handle.agentId,
                 );
               }
               if (waitedAfterAbort.status === "error") {
-                throw new Error(
-                  waitedAfterAbort.error?.message ??
-                    `delegate: nested run ${waitedAfterAbort.id} failed`,
+                return delegateFailureFromWait(
+                  waitedAfterAbort,
+                  handle.agentId,
                 );
               }
               throw streamErr;
@@ -527,17 +560,12 @@ export function createDelegateCustomTools(
 
             const waited = await run.wait();
             if (waited.status === "error") {
-              throw new Error(
-                waited.error?.message ??
-                  `delegate: nested run ${waited.id} failed`,
-              );
+              return delegateFailureFromWait(waited, handle.agentId);
             }
             if (waited.status === "cancelled") {
-              throw new Error(
-                `delegate: nested run ${waited.id} was cancelled`,
-              );
+              return delegateFailureFromWait(waited, handle.agentId);
             }
-            return { agentId: handle.agentId, reply };
+            return { ok: true, agentId: handle.agentId, reply };
           } finally {
             if (heartbeat !== undefined) clearInterval(heartbeat);
           }

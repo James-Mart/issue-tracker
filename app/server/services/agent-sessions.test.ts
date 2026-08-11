@@ -723,9 +723,13 @@ describe("agent sessions manager", () => {
 
     await expect(queued).rejects.toThrow("delegate: conversation cancelled");
     await Promise.all(
-      nested.map((p) =>
-        expect(p).rejects.toThrow(/delegate: nested run .* was cancelled/),
-      ),
+      nested.map(async (p) => {
+        const result = await p;
+        expect(result).toMatchObject({
+          ok: false,
+          failureClass: "cancelled",
+        });
+      }),
     );
     for (let i = 1; i <= cap; i++) {
       expect(fake.handles[i]?.cancelled).toBe(true);
