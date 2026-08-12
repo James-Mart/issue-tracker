@@ -31,11 +31,8 @@ the spawned discriminator / planner.
 `issue idea comment` on the archived source Idea (the seed after migration);
 (b) **Epic / project-level Story source:** `issue attach` and
 `issue comment` on each resulting plan root. Standout-decisions comments use
-`--role stakeholder`. Also, when registering a newly authored subsystem
-vision doc per **### Subsystem vision consult**: `issue project attach` and
-editing the main vision doc's `## Subsystem reference` (attachment detach /
-rewrite / reattach, or workspace file edit). Everything else is read-only
-`issue` (`summary`, `view`, `tree`, `get`). Do not set any status.
+`--role stakeholder`. Everything else is read-only `issue` (`summary`,
+`view`, `tree`, `get`). Do not set any status.
 
 ## Argument
 
@@ -56,9 +53,10 @@ there is nothing to resume.
 
 1. `issue summary <issueId>` — one fetch. Read the Project section:
    `<projectId>` (the id token on `Project: <projectId> — <title>`),
-   `Workspace:`, `supportingDocs:`, `inspirationApps:` (if present), and the
-   issue's kind / status. Reuse this output for every later bootstrap step;
-   do **not** re-run `summary`.
+   `Workspace:`, `supportingDocs:`, `inspirationApps:` (if present),
+   `personas:` (absent or empty → empty catalog), and the issue's kind /
+   status. Reuse this output for every later bootstrap step; do **not**
+   re-run `summary`.
 2. **Workspace gate** — **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-workspace-gate.md`
    and apply it using the step-1 summary (checked first because it is already
@@ -110,33 +108,15 @@ evident from the high-level vision — delegate a **code-scope research** task
 per **### Research delegation** with a prompt to survey that subsystem's
 breadth and scope as implemented in the code.
 
-When the stakeholder judges a subsystem to be a substantial, durable concept
-— broad in the code and likely to govern future planning decisions — that has
-no subsystem vision doc, **stop and grill the user** to author one. The
-grill's intent is to capture the subsystem's governing vision. That judgment
-may come from the high-level vision or from the delegated code-scope research
-summary. A minor or one-off concept does not trigger this grill; proceed using
-the research summary or vision as applicable.
-
-After the grill, register the new doc so progressive disclosure picks it up
-on future runs. Take `<subsystem name>` and `<one-line scope>` from the grill
-outcome.
-
-1. Write the authored subsystem vision to a temp file, then
-   `issue project attach <projectId> <temp-file>` (`<projectId>` from step 1).
-   Use the printed stored basename as `<name>`.
-2. Index it under the main vision doc's `## Subsystem reference` as
-   `- <subsystem name> — attachment:<name> — <one-line scope>`.
-   Edit the vision target from step-1 `supportingDocs:` `vision=`:
-   - **attachment** (`vision=attachment:<vision-basename>`): Read the current
-     vision content from the step-1 Project `Attachments:` path for
-     `<vision-basename>`. Add the list item, write the full revised doc to a
-     temp file whose basename is `<vision-basename>`, then
-     `issue project detach <projectId> <vision-basename>` and
-     `issue project attach <projectId> <temp-file>`.
-   - **workspace** (`vision=workspace:<path>`): edit the file at the path
-     formed by joining Project `Workspace:` with `<path>`.
-   Do not change `supportingDocs` keys.
+When a subsystem has no vision doc, **Read**
+`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-vision-docs/references/subsystem-trigger.md`
+and apply it using step-1 `personas:` plus the high-level vision or the
+delegated code-scope research summary. When the trigger holds, **Read**
+`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-vision-docs/SKILL.md`
+and follow it on the **From auto-plan** path for that subsystem (pass
+`<projectId>` from step 1 and the subsystem name). That skill owns the grill,
+attachment write, and `## Subsystem reference` index update. When it
+completes, continue at the **Post-bootstrap refuse gate**.
 
 ### PM decision heuristics
 
@@ -283,6 +263,5 @@ When finalize is done, report per **## Finalize**. Then stop.
   discriminator + planner spawns, retro request, finalize. Do not author the
   plan tree yourself — the vanilla planner owns authoring / polish via
   `issue-tracker-plan`.
-- Honor the intro **Allowed writes** contract (finalize attach/comment;
-  subsystem-doc register `issue project attach` + vision `## Subsystem
-  reference` edit; no status changes).
+- Honor the intro **Allowed writes** contract (finalize attach/comment; no
+  status changes).
