@@ -122,24 +122,42 @@ export function StateIcon({ state, live, className }: StateIconProps) {
 }
 
 /**
- * Fraction (0–1) down the spine of the in-flight port — where the work-cursor
- * bead travels to and rests. `null` when no node is in-flight (no live target).
- * Assumes uniform node rhythm, so the port center of node `i` of `n` sits at
- * `(i + 0.5) / n`.
+ * Index of the port the work-cursor sits on — the first in-flight node. `null`
+ * when no node is in-flight, so there is no cursor on the spine.
  */
-export function workCursorFraction(
+export function inFlightIndex(
   states: readonly RailNodeState[],
 ): number | null {
   const index = states.indexOf("in-flight");
-  if (index < 0) return null;
-  return (index + 0.5) / states.length;
+  return index < 0 ? null : index;
 }
+
+/** Node rows in spine order — the work-cursor is a sibling, not a row. */
+function portRows(rail: HTMLElement): HTMLElement[] {
+  return Array.from(rail.children).filter(
+    (child): child is HTMLElement => child.getAttribute("role") === "listitem",
+  );
+}
+
+/**
+ * Vertical center (px from the rail's top) of the port at `index`, taken from
+ * the node row itself so a wrapped or taller row carries its port — and the
+ * work-cursor — with it.
+ */
+function portCenter(rail: HTMLElement, index: number): number {
+  const row = portRows(rail)[index].getBoundingClientRect();
+  return row.top - rail.getBoundingClientRect().top + row.height / 2;
+}
+
+/** Work-cursor travel time; keep in step with the `duration-700` class below. */
+const WORK_CURSOR_TRAVEL_MS = 700;
 
 export interface RailProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
-   * Surface a work-cursor bead that travels the spine toward the in-flight node
-   * — telemetry that autonomous work is on the line. Under `prefers-reduced-motion`
-   * the bead does not travel; it rests statically on the in-flight port.
+   * Surface a work-cursor bead on the in-flight port — telemetry that work is on
+   * the line. It shows only while traveling from the port it was resting on to a
+   * new one; at rest, and under `prefers-reduced-motion`, the fixed port carries
+   * the position on its own.
    */
   live?: boolean;
 }
@@ -152,30 +170,72 @@ export function Rail({ className, children, live, ...props }: RailProps) {
       ? [(child.props as RailNodeProps).state]
       : [],
   );
-  const fraction = live ? workCursorFraction(states) : null;
+  const target = live ? inFlightIndex(states) : null;
+  const railRef = React.useRef<HTMLDivElement>(null);
+  const [center, setCenter] = React.useState<number | null>(null);
+  const [traveling, setTraveling] = React.useState(false);
+  const restingAt = React.useRef<number | null>(null);
+
+  React.useLayoutEffect(() => {
+    if (target == null) {
+      setCenter(null);
+      return;
+    }
+    const rail = railRef.current;
+    if (!rail) return;
+    const measure = () => setCenter(portCenter(rail, target));
+    measure();
+    // Row height is content-driven (labels wrap), so the port center moves.
+    const observer = new ResizeObserver(measure);
+    observer.observe(rail);
+    return () => observer.disconnect();
+  }, [target]);
+
+  React.useLayoutEffect(() => {
+    const from = restingAt.current;
+    restingAt.current = target;
+    // Only a hop between two ports is travel. On first paint, and whenever work
+    // joins or leaves the spine, the cursor is already at rest — so it stays
+    // hidden instead of entering from the top of the rail.
+    if (from == null || target == null || from === target) {
+      setTraveling(false);
+      return;
+    }
+    setTraveling(true);
+    const timer = window.setTimeout(
+      () => setTraveling(false),
+      WORK_CURSOR_TRAVEL_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [target]);
 
   return (
     <div
+      ref={railRef}
       role="list"
       className={cn(
         "relative pl-[26px]",
+        // Spine (2px at left-7), ports (12px at -24 from each node), and the
+        // work-cursor bead (10px at left-3) share horizontal center at 8px.
         // the mainline spine: a 2px vertical gradient (rail-lit -> rail)
         "before:absolute before:left-[7px] before:bottom-2 before:top-2 before:w-[2px] before:rounded-[2px] before:bg-gradient-to-b before:from-[hsl(var(--rail-lit))] before:to-[hsl(var(--rail))] before:content-['']",
         className,
       )}
       {...props}
     >
-      {fraction != null && (
+      {center != null && (
         <span
           aria-hidden="true"
           data-testid="rail-work-cursor"
-          style={{ "--wc-end": `${fraction * 100}%` } as React.CSSProperties}
+          data-traveling={traveling ? "true" : "false"}
+          style={{ top: center }}
           className={cn(
-            "pointer-events-none absolute left-[3px] top-[var(--wc-end)] z-10 h-2.5 w-2.5 -translate-y-1/2 rounded-full",
+            "pointer-events-none absolute left-[3px] z-10 h-2.5 w-2.5 -translate-y-1/2 rounded-full",
             "bg-[hsl(var(--current))] [box-shadow:var(--glow)]",
-            // motion is telemetry: travel only when motion is allowed; under
-            // reduced-motion the base top (the in-flight port) is the rest state.
-            "motion-safe:animate-work-cursor",
+            // Motion is telemetry: the cursor is ink only while the current moves
+            // between ports, and never when motion is not allowed.
+            "opacity-0 motion-safe:data-[traveling=true]:opacity-100",
+            "motion-safe:transition-[top] motion-safe:duration-700 motion-safe:ease-work-cursor",
           )}
         />
       )}
@@ -219,7 +279,7 @@ export function RailNode({
         label={label}
         glow={glow ?? state === "in-flight"}
         className="contents"
-        portClassName="absolute left-[-23px] top-1/2 -translate-y-1/2"
+        portClassName="absolute left-[-24px] top-1/2 -translate-y-1/2"
       />
       {children}
     </div>

@@ -78,8 +78,8 @@ const KIND_ICON: Record<IssueKind, typeof Layers> = {
 
 /** Horizontal step per nesting level — also the x-step between a parent port and its children's. */
 const TREE_INDENT = 24;
-/** Port center relative to a row's own box: `Rail` pads 26px and the 12px port sits at -23. */
-const PORT_CENTER_X = -17;
+/** Port center relative to a row's own box: `Rail` pads 26px and the 12px port sits at -24. */
+const PORT_CENTER_X = -18;
 
 const guideLine = "pointer-events-none absolute w-px bg-[hsl(var(--rail-lit))]";
 
