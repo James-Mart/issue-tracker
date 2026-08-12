@@ -1,6 +1,6 @@
 ---
 name: issue-tracker-plan-dependency-order
-model: cursor-grok-4.5-high-fast
+model: cursor-grok-4.6-high-fast
 description: >-
   Read-only plan polish check for stackedOn / blockedBy / task-order problems.
   Used by issue-tracker-plan-polish.

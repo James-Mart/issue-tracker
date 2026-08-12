@@ -1,6 +1,6 @@
 ---
 name: issue-tracker-planner-grok
-model: cursor-grok-4.5-high-fast
+model: cursor-grok-4.6-high-fast
 description: >-
   Runs issue-tracker-plan on a given issue id and owns the grill through plan
   root ids. Used by issue-tracker-auto-plan.

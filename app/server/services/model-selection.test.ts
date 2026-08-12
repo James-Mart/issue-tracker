@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatEffectiveModel,
+  resolveConversationModel,
   resolveModelSelection,
 } from "./model-selection.js";
 
@@ -8,6 +9,16 @@ describe("resolveModelSelection", () => {
   it("maps composer-2.5 to the base catalog id", () => {
     expect(resolveModelSelection("composer-2.5")).toEqual({
       id: "composer-2.5",
+    });
+  });
+
+  it("maps cursor-grok-4.6-high-fast to grok-4.6 with effort and fast", () => {
+    expect(resolveModelSelection("cursor-grok-4.6-high-fast")).toEqual({
+      id: "grok-4.6",
+      params: [
+        { id: "effort", value: "high" },
+        { id: "fast", value: "true" },
+      ],
     });
   });
 
@@ -37,6 +48,7 @@ describe("resolveModelSelection", () => {
   it("carries parameters in params rather than as top-level keys", () => {
     for (const pin of [
       "composer-2.5",
+      "cursor-grok-4.6-high-fast",
       "cursor-grok-4.5-high-fast",
       "claude-opus-5-thinking-high",
     ]) {
@@ -54,6 +66,22 @@ describe("resolveModelSelection", () => {
     expect(() => resolveModelSelection("unknown-pin")).toThrow(
       "Unknown model pin: unknown-pin",
     );
+  });
+});
+
+describe("resolveConversationModel", () => {
+  it("routes compound pins through resolveModelSelection", () => {
+    expect(
+      resolveConversationModel("cursor-grok-4.5-high-fast"),
+    ).toEqual(resolveModelSelection("cursor-grok-4.5-high-fast"));
+    expect(
+      resolveConversationModel("cursor-grok-4.6-high-fast"),
+    ).toEqual(resolveModelSelection("cursor-grok-4.6-high-fast"));
+  });
+
+  it("passes plain catalog ids through as id-only selections", () => {
+    expect(resolveConversationModel("grok-4.5")).toEqual({ id: "grok-4.5" });
+    expect(resolveConversationModel("auto")).toEqual({ id: "auto" });
   });
 });
 
