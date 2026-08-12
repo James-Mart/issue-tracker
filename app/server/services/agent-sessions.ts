@@ -386,6 +386,11 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     entry: SessionEntry,
     turn: LiveTurn,
   ): Promise<void> {
+    // Nested first, while they are still tracked: the durable recovery event
+    // names how many were cancelled, and they share the stale executor.
+    const cancelledDelegations =
+      await cancelConversationDelegations(conversationId);
+
     try {
       await entry.handle.cancel();
     } catch {
@@ -410,6 +415,22 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       conversationStoreDir(conversationId),
       entry.handle.agentId,
     );
+    const recovery = {
+      type: "delegation_recovery" as const,
+      failureClass: "auth" as const,
+      madeProgress,
+      cancelledDelegations,
+      message: [
+        "A nested delegation failed with auth.",
+        `Cancelled ${cancelledDelegations} nested delegation(s).`,
+        madeProgress
+          ? "The turn had made progress."
+          : "The turn had made no progress.",
+      ].join(" "),
+    };
+    publishFrame(conversationId, { event: recovery, persist: true });
+    await appendEvent(conversationId, recovery);
+
     await recoverFromAuthFailure(
       conversationId,
       entry,

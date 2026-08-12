@@ -230,11 +230,12 @@ function untrackNested(convKey: string, tracker: NestedRunTracker): void {
 /**
  * Cancel in-flight nested runs for a conversation and drop anything still
  * queued on its concurrency gates. Intended to run before the parent run
- * settles on conversation cancel.
+ * settles on conversation cancel. Returns how many nested runs it cancelled
+ * (queued waiters are not counted).
  */
 export async function cancelConversationDelegations(
   conversationId: string,
-): Promise<void> {
+): Promise<number> {
   const err = new Error("delegate: conversation cancelled");
   const rejected: SlotWaiter[] = [];
   const convGate = conversationGates.get(conversationId);
@@ -262,6 +263,7 @@ export async function cancelConversationDelegations(
       }
     }),
   );
+  return toCancel.length;
 }
 
 function requireString(

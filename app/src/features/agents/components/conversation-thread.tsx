@@ -171,7 +171,8 @@ function TranscriptEventRow({
     case "task":
     case "status":
     case "usage":
-    case "request": {
+    case "request":
+    case "delegation_recovery": {
       const info = transcriptInfoLine(event);
       if (!info) return null;
       return <InfoLine label={info.label}>{info.text}</InfoLine>;

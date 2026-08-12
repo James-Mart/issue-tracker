@@ -894,16 +894,15 @@ describe("agent sessions manager", () => {
       (f): f is ConversationFrame & { event: { type: "run" } } =>
         f.event.type === "run",
     );
-    expect(runFrames).toEqual([
-      {
-        event: { type: "run", status: "started", runId: FAKE_RUN_ID, seq: 1 },
-        persist: false,
-      },
-      {
-        event: { type: "run", status: "finished", runId: FAKE_RUN_ID, seq: 2 },
-        persist: false,
-      },
-    ]);
+    expect(runFrames).toHaveLength(2);
+    expect(runFrames[0]).toMatchObject({
+      event: { type: "run", status: "started", runId: FAKE_RUN_ID, seq: 1 },
+      persist: false,
+    });
+    expect(runFrames[1]).toMatchObject({
+      event: { type: "run", status: "finished", runId: FAKE_RUN_ID, seq: 2 },
+      persist: false,
+    });
   });
 
   it("dispose and disposeAll evict agent-state and nested store caches", async () => {
@@ -1673,6 +1672,17 @@ describe("delegation auth escalation", () => {
     expect(
       transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
     ).toEqual([expect.objectContaining({ message: RETRYING_MESSAGE })]);
+    expect(
+      transcript.filter((e) => e.type === "delegation_recovery"),
+    ).toEqual([
+      expect.objectContaining({
+        type: "delegation_recovery",
+        failureClass: "auth",
+        madeProgress: false,
+        cancelledDelegations: 1,
+        message: expect.stringContaining("had made no progress"),
+      }),
+    ]);
 
     const delegateCalls = transcript.filter(
       (e) => e.type === "tool_call" && e.name === "delegate",
@@ -1694,7 +1704,8 @@ describe("delegation auth escalation", () => {
   });
 
   it("re-enters with a continuation prompt when the cancelled turn made progress", async () => {
-    const { createConversation, createAgentSessions } = await load();
+    const { createConversation, readConversation, createAgentSessions } =
+      await load();
     let releaseRoot!: () => void;
     const rootHold = new Promise<void>((resolve) => {
       releaseRoot = resolve;
@@ -1759,6 +1770,19 @@ describe("delegation auth escalation", () => {
     // changes, and it prescribes nothing beyond carrying on.
     expect(fake.handles[2]?.sends).toEqual([
       { prompt: CUT_SHORT_MESSAGE, options: { model: { id: "auto" } } },
+    ]);
+
+    const { transcript } = readConversation(meta.id);
+    expect(
+      transcript.filter((e) => e.type === "delegation_recovery"),
+    ).toEqual([
+      expect.objectContaining({
+        type: "delegation_recovery",
+        failureClass: "auth",
+        madeProgress: true,
+        cancelledDelegations: 1,
+        message: expect.stringContaining("had made progress"),
+      }),
     ]);
   });
 
@@ -1825,6 +1849,16 @@ describe("delegation auth escalation", () => {
     expect(
       transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
     ).toHaveLength(1);
+    expect(
+      transcript.filter((e) => e.type === "delegation_recovery"),
+    ).toEqual([
+      expect.objectContaining({
+        type: "delegation_recovery",
+        failureClass: "auth",
+        madeProgress: false,
+        cancelledDelegations: 2,
+      }),
+    ]);
     const delegateCalls = transcript.filter(
       (e) => e.type === "tool_call" && e.name === "delegate",
     );
@@ -1899,6 +1933,9 @@ describe("delegation auth escalation", () => {
     const { transcript } = readConversation(meta.id);
     expect(
       transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
+    ).toHaveLength(0);
+    expect(
+      transcript.filter((e) => e.type === "delegation_recovery"),
     ).toHaveLength(0);
   });
 });

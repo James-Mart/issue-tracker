@@ -780,7 +780,8 @@ describe("createDelegateCustomTools", () => {
       },
     );
 
-    await cancelConversationDelegations(conversationId);
+    const cancelled = await cancelConversationDelegations(conversationId);
+    expect(cancelled).toBe(cap);
 
     await expect(queued).rejects.toThrow("delegate: conversation cancelled");
     await Promise.all(
