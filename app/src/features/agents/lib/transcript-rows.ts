@@ -25,6 +25,8 @@ export function transcriptInfoLine(
     }
     case "request":
       return { label: "Request", text: event.requestId };
+    case "delegation_recovery":
+      return { label: "Recovery", text: event.message };
     default:
       return null;
   }

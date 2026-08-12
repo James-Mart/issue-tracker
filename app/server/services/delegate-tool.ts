@@ -104,6 +104,7 @@ export interface DelegateToolOptions {
     delegationId: string;
     agentId: string;
     message: string;
+    parentCallId?: string;
   }) => void;
 }
 
@@ -229,11 +230,12 @@ function untrackNested(convKey: string, tracker: NestedRunTracker): void {
 /**
  * Cancel in-flight nested runs for a conversation and drop anything still
  * queued on its concurrency gates. Intended to run before the parent run
- * settles on conversation cancel.
+ * settles on conversation cancel. Returns how many nested runs it cancelled
+ * (queued waiters are not counted).
  */
 export async function cancelConversationDelegations(
   conversationId: string,
-): Promise<void> {
+): Promise<number> {
   const err = new Error("delegate: conversation cancelled");
   const rejected: SlotWaiter[] = [];
   const convGate = conversationGates.get(conversationId);
@@ -261,6 +263,7 @@ export async function cancelConversationDelegations(
       }
     }),
   );
+  return toCancel.length;
 }
 
 function requireString(
@@ -425,6 +428,8 @@ export function createDelegateCustomTools(
         };
         trackNested(concurrencyKey, tracked);
         let handle: Awaited<ReturnType<AgentSdk["createAgent"]>> | undefined;
+        let pipeline: EventPipeline | undefined;
+        let parentCallId: string | undefined;
         try {
           if (tracked.cancelled) {
             throw new Error("delegate: conversation cancelled");
@@ -432,12 +437,12 @@ export function createDelegateCustomTools(
 
           const delegationId = randomUUID();
           const parentDelegationId = parent?.delegationId;
-          const parentCallId =
+          parentCallId =
             typeof context.toolCallId === "string" &&
             context.toolCallId.length > 0
               ? context.toolCallId
               : undefined;
-          const pipeline =
+          pipeline =
             options.conversationId && parentCallId
               ? new EventPipeline(options.conversationId)
               : undefined;
@@ -541,6 +546,7 @@ export function createDelegateCustomTools(
                 delegationId,
                 agentId,
                 message: failure.message,
+                ...(parentCallId !== undefined ? { parentCallId } : {}),
               });
             }
             return failure;
@@ -628,6 +634,18 @@ export function createDelegateCustomTools(
               clearTimeout(firstContentTimeout);
             }
           }
+        } catch (err) {
+          if (pipeline && parentCallId) {
+            try {
+              await pipeline.failToolCall(parentCallId, {
+                name: "delegate",
+                message: err instanceof Error ? err.message : String(err),
+              });
+            } catch {
+              // Best-effort terminal event before the throw propagates.
+            }
+          }
+          throw err;
         } finally {
           untrackNested(concurrencyKey, tracked);
           release();

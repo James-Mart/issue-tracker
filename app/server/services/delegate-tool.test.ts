@@ -780,7 +780,8 @@ describe("createDelegateCustomTools", () => {
       },
     );
 
-    await cancelConversationDelegations(conversationId);
+    const cancelled = await cancelConversationDelegations(conversationId);
+    expect(cancelled).toBe(cap);
 
     await expect(queued).rejects.toThrow("delegate: conversation cancelled");
     await Promise.all(
@@ -1099,6 +1100,55 @@ describe("delegate publishes nested run frames", () => {
     }
     throw new Error(`timed out waiting for handle[${handleIndex}] send`);
   }
+
+  it("persists a terminal delegate tool_call when a caller error throws with pipeline context", async () => {
+    const {
+      createConversation,
+      readConversation,
+      createDelegateCustomTools: createTools,
+    } = await load();
+    const meta = await createConversation({
+      title: "Throw persists",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    await expect(
+      customTools.delegate!.execute(
+        {
+          role: "pinned-role",
+          prompt: "orphan",
+          resumeId: "no-such-agent",
+        },
+        { toolCallId: "call-throw-delegate" },
+      ),
+    ).rejects.toThrow("delegate: unknown or unresumable agent no-such-agent");
+
+    const { transcript } = readConversation(meta.id);
+    const delegateCalls = transcript.filter(
+      (e) => e.type === "tool_call" && e.callId === "call-throw-delegate",
+    );
+    expect(delegateCalls).toEqual([
+      expect.objectContaining({
+        type: "tool_call",
+        callId: "call-throw-delegate",
+        name: "delegate",
+        status: "error",
+        result: {
+          status: "error",
+          message: "delegate: unknown or unresumable agent no-such-agent",
+        },
+      }),
+    ]);
+  });
 
   it("emits subagent_update frames with delegationId and effective model", async () => {
     const {

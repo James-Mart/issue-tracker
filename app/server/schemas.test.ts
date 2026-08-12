@@ -645,6 +645,32 @@ describe("parseConversationMeta", () => {
   });
 });
 
+describe("delegation_recovery transcript event", () => {
+  it("round-trips a recovery record", () => {
+    const input = parseTranscriptEventInput({
+      type: "delegation_recovery",
+      failureClass: "auth",
+      madeProgress: false,
+      cancelledDelegations: 2,
+      message: "A nested delegation failed with auth.",
+    });
+    expect(input.ok).toBe(true);
+    if (!input.ok) return;
+    const stored = parseTranscriptEvent({
+      ...input.input,
+      at: "2026-07-25T12:00:00.000Z",
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    expect(stored.event).toMatchObject({
+      type: "delegation_recovery",
+      failureClass: "auth",
+      madeProgress: false,
+      cancelledDelegations: 2,
+    });
+  });
+});
+
 describe("subagent_update delegation fields", () => {
   const base = {
     type: "subagent_update" as const,

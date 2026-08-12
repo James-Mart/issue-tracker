@@ -601,6 +601,21 @@ const errorEventInput = z.object({
   type: z.literal("error"),
   message: z.string(),
 });
+/** Matches `AgentFailureClass` in agent-failure.ts — keep the two lists aligned. */
+export const agentFailureClassSchema = z.enum([
+  "auth",
+  "agent-failed",
+  "cancelled",
+  "stalled-before-first-token",
+  "transport-exhausted",
+]);
+const delegationRecoveryEventInput = z.object({
+  type: z.literal("delegation_recovery"),
+  failureClass: agentFailureClassSchema,
+  madeProgress: z.boolean(),
+  cancelledDelegations: z.number().int().nonnegative(),
+  message: z.string(),
+});
 
 /** Write-time input: stored shape minus the server-stamped `at`. */
 export const transcriptEventInputSchema = z.discriminatedUnion("type", [
@@ -614,6 +629,7 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
   requestEventInput,
   subagentUpdateEventInput,
   errorEventInput,
+  delegationRecoveryEventInput,
 ]);
 
 export type TranscriptEventInput = z.infer<typeof transcriptEventInputSchema>;
@@ -666,6 +682,7 @@ export const transcriptEventSchema = z.discriminatedUnion("type", [
   withStoredTranscriptMeta(requestEventInput),
   withStoredTranscriptMeta(subagentUpdateEventInput),
   withStoredTranscriptMeta(errorEventInput),
+  withStoredTranscriptMeta(delegationRecoveryEventInput),
 ]);
 
 export type TranscriptEvent = z.infer<typeof transcriptEventSchema>;
@@ -683,6 +700,7 @@ export const conversationStreamEventSchema = z.union([
     withStreamFrameMeta(requestEventInput),
     withStreamFrameMeta(subagentUpdateEventInput),
     withStreamFrameMeta(errorEventInput),
+    withStreamFrameMeta(delegationRecoveryEventInput),
   ]),
   withStreamFrameMeta(runFrameInput),
   withStreamFrameMeta(pendingFrameInput),

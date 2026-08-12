@@ -55,4 +55,21 @@ describe("transcriptInfoLine", () => {
       transcriptInfoLine({ type: "request", at, requestId: "req-1" }),
     ).toEqual({ label: "Request", text: "req-1" });
   });
+
+  it("renders a delegation_recovery event as a Recovery info line", () => {
+    expect(
+      transcriptInfoLine({
+        type: "delegation_recovery",
+        at,
+        failureClass: "auth",
+        madeProgress: false,
+        cancelledDelegations: 1,
+        message:
+          "A nested delegation failed with auth. Cancelled 1 nested delegation(s). The turn had made no progress.",
+      }),
+    ).toEqual({
+      label: "Recovery",
+      text: "A nested delegation failed with auth. Cancelled 1 nested delegation(s). The turn had made no progress.",
+    });
+  });
 });
