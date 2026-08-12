@@ -8,12 +8,20 @@ import "@/styles/globals.css";
 
 applyThemeToDocument(readStoredTheme());
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <Providers>
-        <App />
-      </Providers>
-    </BrowserRouter>
-  </StrictMode>,
-);
+// Do not import `@/app/bootstrap-fault` from this file. It is a separate
+// index.html entry so a failed main chunk still loads the Fault painter.
+try {
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <BrowserRouter>
+        <Providers>
+          <App />
+        </Providers>
+      </BrowserRouter>
+    </StrictMode>,
+  );
+} catch (error) {
+  const show = window.__showBootstrapFault;
+  if (!show) throw error;
+  show(error);
+}

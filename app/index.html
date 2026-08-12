@@ -15,6 +15,28 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        window.__bootstrapFaultQueue = [];
+        function record(error) {
+          window.__bootstrapFaultQueue.push(error);
+        }
+        window.addEventListener(
+          "error",
+          function (event) {
+            var scriptErr = event.target && event.target.tagName === "SCRIPT";
+            if (!scriptErr && !(event.error || event.message)) return;
+            record(event.error || event.message || event);
+          },
+          true,
+        );
+        window.addEventListener("unhandledrejection", function (event) {
+          record(event.reason);
+        });
+      })();
+    </script>
+    <!-- Own module so a failed main entry can still paint Fault. -->
+    <script type="module" src="/src/app/bootstrap-fault.ts"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
