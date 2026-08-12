@@ -159,6 +159,8 @@ export function Rail({ className, children, live, ...props }: RailProps) {
       role="list"
       className={cn(
         "relative pl-[26px]",
+        // Spine (2px at left-7), ports (12px at -24 from each node), and the
+        // work-cursor bead (10px at left-3) share horizontal center at 8px.
         // the mainline spine: a 2px vertical gradient (rail-lit -> rail)
         "before:absolute before:left-[7px] before:bottom-2 before:top-2 before:w-[2px] before:rounded-[2px] before:bg-gradient-to-b before:from-[hsl(var(--rail-lit))] before:to-[hsl(var(--rail))] before:content-['']",
         className,
@@ -219,7 +221,7 @@ export function RailNode({
         label={label}
         glow={glow ?? state === "in-flight"}
         className="contents"
-        portClassName="absolute left-[-23px] top-1/2 -translate-y-1/2"
+        portClassName="absolute left-[-24px] top-1/2 -translate-y-1/2"
       />
       {children}
     </div>
