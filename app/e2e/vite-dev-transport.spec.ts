@@ -11,7 +11,7 @@
 import { spawn } from "node:child_process";
 import { createServer, type AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
-import { type Page } from "@playwright/test";
+import { devices, type Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 const APP_DIR = fileURLToPath(new URL("..", import.meta.url));
@@ -178,6 +178,38 @@ test.describe("transport on the Vite dev path", () => {
       await expect(page.getByRole("main")).toBeVisible({ timeout: 60_000 });
       await expect(page.locator("[data-bootstrap-fault]")).toHaveCount(0);
       expect(staleChunkResponses).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("Pixel 5 viewport paints the shell, stays live, and revalidates optimized deps", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      ...devices["Pixel 5"],
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+    const depCacheControls: string[] = [];
+    page.on("response", (response) => {
+      const path = new URL(response.url()).pathname;
+      if (path.startsWith("/node_modules/.vite/deps/")) {
+        depCacheControls.push(response.headers()["cache-control"] ?? "");
+      }
+    });
+    try {
+      await expectShellAndLiveIssueUpdate(page, dev.baseURL);
+      expect(await page.evaluate(() => typeof SharedWorker)).toBe("function");
+      expect(depCacheControls.length).toBeGreaterThan(0);
+      expect(
+        depCacheControls.every((value) => value === "no-cache"),
+      ).toBeTruthy();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > window.innerWidth,
+        ),
+      ).toBe(false);
     } finally {
       await context.close();
     }

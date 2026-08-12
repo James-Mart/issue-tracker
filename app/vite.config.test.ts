@@ -36,4 +36,19 @@ describe("vite dev server config", () => {
       ws: true,
     });
   });
+
+  it("revalidates optimized dep cache headers while serving", async () => {
+    const config = await loadViteConfig();
+    const names = (config.plugins ?? [])
+      .flat(Infinity)
+      .flatMap((plugin) =>
+        plugin &&
+        typeof plugin === "object" &&
+        "name" in plugin &&
+        typeof plugin.name === "string"
+          ? [plugin.name]
+          : [],
+      );
+    expect(names).toContain("revalidate-optimized-deps");
+  });
 });
