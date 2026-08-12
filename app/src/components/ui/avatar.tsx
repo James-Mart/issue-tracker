@@ -46,6 +46,39 @@ function modelFamilyInitial(name: string): string | undefined {
   return undefined;
 }
 
+/** Token-backed backgrounds for deterministic project avatars (indexed by project id hash). */
+const PROJECT_AVATAR_COLOR_CLASSES = [
+  "bg-[hsl(var(--current))] text-[hsl(var(--void))]",
+  "bg-[hsl(var(--merged))] text-[hsl(var(--void))]",
+  "bg-[hsl(var(--warn))] text-[hsl(var(--void))]",
+  "bg-[hsl(var(--blocked))] text-[hsl(var(--ink))]",
+  "bg-[hsl(var(--current-dim))] text-[hsl(var(--ink))]",
+  "bg-primary text-primary-foreground",
+  "bg-success text-success-foreground",
+  "bg-warning text-warning-foreground",
+] as const;
+
+function stableHash(value: string): number {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) + hash + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+/** Default project avatar: initials from title, stable color from project id. */
+export function projectAvatarFromId(
+  projectId: string,
+  title: string,
+): { initials: string; colorClass: string } {
+  const initials = initialsFromName(title);
+  const colorClass =
+    PROJECT_AVATAR_COLOR_CLASSES[
+      stableHash(projectId) % PROJECT_AVATAR_COLOR_CLASSES.length
+    ]!;
+  return { initials, colorClass };
+}
+
 /** Initials for a display name: model family letter, else two letters or first+last word initials. */
 export function initialsFromName(name: string): string {
   const model = modelFamilyInitial(name);

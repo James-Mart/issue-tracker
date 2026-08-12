@@ -10,6 +10,7 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
+import { projectAvatarFromId } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +31,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils/cn";
 import { useIssuesQuery } from "../api/queries";
 import { useRouteProjectId } from "../hooks/use-route-project-id";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
@@ -42,25 +44,49 @@ function NavItem({
   tooltip,
   label,
   icon: Icon,
+  glyph,
   children,
 }: {
   to: string;
   isActive: boolean;
   tooltip: string;
   label: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  glyph?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={isActive} tooltip={tooltip}>
         <Link to={to}>
-          <Icon />
+          {glyph ?? (Icon ? <Icon /> : null)}
           <span>{label}</span>
         </Link>
       </SidebarMenuButton>
       {children}
     </SidebarMenuItem>
+  );
+}
+
+function ProjectNavGlyph({
+  projectId,
+  title,
+}: {
+  projectId: string;
+  title: string;
+}) {
+  const { initials, colorClass } = projectAvatarFromId(projectId, title);
+
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "inline-flex size-4 shrink-0 items-center justify-center rounded-full font-mono text-[9px] font-semibold leading-none",
+        colorClass,
+      )}
+    >
+      {initials}
+    </span>
   );
 }
 
@@ -152,7 +178,12 @@ export function ProjectSidebar() {
                     isActive={project.id === selectedProjectId}
                     tooltip={project.title}
                     label={project.title}
-                    icon={FolderKanban}
+                    glyph={
+                      <ProjectNavGlyph
+                        projectId={project.id}
+                        title={project.title}
+                      />
+                    }
                   >
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
