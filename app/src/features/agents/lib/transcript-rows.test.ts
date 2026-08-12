@@ -3,6 +3,7 @@ import type { TranscriptEvent } from "@server/schemas";
 import {
   groupOrdinaryToolCalls,
   transcriptInfoLine,
+  toolUseGroupHintEvent,
   toolUseGroupStatus,
   type OrdinaryToolCallEvent,
 } from "./transcript-rows";
@@ -228,6 +229,31 @@ describe("toolUseGroupStatus", () => {
     expect(
       toolUseGroupStatus([tool("c1", "completed"), tool("c2", "completed")]),
     ).toBe("completed");
+  });
+});
+
+describe("toolUseGroupHintEvent", () => {
+  it("returns the latest running tool in transcript order", () => {
+    const t1 = tool("c1", "completed", "Read");
+    const t2 = tool("c2", "running", "Grep");
+    const t3 = tool("c3", "running", "Shell");
+    expect(toolUseGroupHintEvent([t1, t2, t3])).toBe(t3);
+  });
+
+  it("returns the last tool when none are running", () => {
+    const t1 = tool("c1", "completed", "Read");
+    const t2 = tool("c2", "completed", "Grep");
+    expect(toolUseGroupHintEvent([t1, t2])).toBe(t2);
+  });
+
+  it("returns the last tool when the group errored", () => {
+    const t1 = tool("c1", "completed", "Read");
+    const t2 = tool("c2", "error", "Shell");
+    expect(toolUseGroupHintEvent([t1, t2])).toBe(t2);
+  });
+
+  it("returns undefined for an empty group", () => {
+    expect(toolUseGroupHintEvent([])).toBeUndefined();
   });
 });
 

@@ -26,9 +26,11 @@ import {
 import {
   groupOrdinaryToolCalls,
   transcriptInfoLine,
+  toolUseGroupHintEvent,
   toolUseGroupStatus,
   type OrdinaryToolCallEvent,
 } from "../lib/transcript-rows";
+import { summarizeToolCall } from "../lib/tool-summary";
 import {
   formatUsageTotals,
   sumUsageTotals,
@@ -145,6 +147,11 @@ function ToolCallEvent({
 function ToolUseGroup({ events }: { events: OrdinaryToolCallEvent[] }) {
   const status = toolUseGroupStatus(events);
   const running = status === "running";
+  const hintEvent = toolUseGroupHintEvent(events);
+  const { label: hintLabel, detail: hintDetail } = summarizeToolCall(
+    hintEvent?.name,
+    hintEvent?.args,
+  );
   return (
     <CollapsibleDetails
       className="min-w-0 rounded-md border border-border bg-card"
@@ -164,6 +171,16 @@ function ToolUseGroup({ events }: { events: OrdinaryToolCallEvent[] }) {
           <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
             {events.length}
           </span>
+          {hintEvent ? (
+            <span className="shrink-0 font-mono text-xs font-medium text-foreground">
+              {hintLabel}
+            </span>
+          ) : null}
+          {hintDetail ? (
+            <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+              {hintDetail}
+            </span>
+          ) : null}
         </>
       }
       data-event="tool_use_group"

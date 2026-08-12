@@ -503,6 +503,8 @@ describe("ConversationThread Tool use groups", () => {
     expect(group.getAttribute("data-status")).toBe("completed");
     expect(group.querySelector("summary")!.textContent).toContain("Tool use");
     expect(group.querySelector("summary")!.textContent).toContain("2");
+    expect(group.querySelector("summary")!.textContent).toContain("Read");
+    expect(group.querySelector("summary")!.textContent).toContain("b.ts");
 
     const thinking = container!.querySelector('[data-event="thinking"]');
     expect(thinking).toBeTruthy();
@@ -518,6 +520,81 @@ describe("ConversationThread Tool use groups", () => {
     expect(group.open).toBe(true);
     expect(group.querySelector("[data-call-id='c1']")).toBeTruthy();
     expect(group.querySelector("[data-call-id='c2']")).toBeTruthy();
+  });
+
+  it("keeps the group collapsed and updates the live hint as tools progress", () => {
+    transcriptState.events = [
+      { type: "prompt", text: "Run tools", at: "2026-07-24T00:00:00.000Z" },
+      {
+        type: "tool_call",
+        callId: "c1",
+        name: "Read",
+        status: "completed",
+        args: { path: "/tmp/a.ts" },
+        at: "2026-07-24T00:00:01.000Z",
+      },
+      {
+        type: "tool_call",
+        callId: "c2",
+        name: "Grep",
+        status: "running",
+        args: { pattern: "foo", glob: "*.ts" },
+        at: "2026-07-24T00:00:02.000Z",
+      },
+    ];
+    ({ container, root } = mountThread("conv-1"));
+
+    const group = container!.querySelector(
+      '[data-event="tool_use_group"]',
+    ) as HTMLDetailsElement;
+    expect(group.open).toBe(false);
+    expect(group.getAttribute("data-status")).toBe("running");
+    const summary = () => group.querySelector("summary")!.textContent ?? "";
+    expect(summary()).toContain("Grep");
+    expect(summary()).toContain("foo in *.ts");
+
+    transcriptState.events = [
+      ...transcriptState.events.slice(0, 2),
+      {
+        type: "tool_call",
+        callId: "c2",
+        name: "Grep",
+        status: "completed",
+        args: { pattern: "foo", glob: "*.ts" },
+        at: "2026-07-24T00:00:02.000Z",
+      },
+      {
+        type: "tool_call",
+        callId: "c3",
+        name: "Shell",
+        status: "running",
+        args: { command: "npm test" },
+        at: "2026-07-24T00:00:03.000Z",
+      },
+    ];
+    act(() => {
+      root!.render(<ConversationThread conversationId="conv-1" />);
+    });
+
+    expect(group.open).toBe(false);
+    expect(group.getAttribute("data-status")).toBe("running");
+    expect(summary()).toContain("Shell");
+    expect(summary()).toContain("npm test");
+    expect(summary()).not.toContain("Grep");
+
+    transcriptState.events = transcriptState.events.map((event) =>
+      event.type === "tool_call" && event.callId === "c3"
+        ? { ...event, status: "completed" as const }
+        : event,
+    );
+    act(() => {
+      root!.render(<ConversationThread conversationId="conv-1" />);
+    });
+
+    expect(group.open).toBe(false);
+    expect(group.getAttribute("data-status")).toBe("completed");
+    expect(summary()).toContain("Shell");
+    expect(summary()).toContain("npm test");
   });
 });
 

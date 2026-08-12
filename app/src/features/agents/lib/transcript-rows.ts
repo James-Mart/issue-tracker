@@ -51,6 +51,23 @@ export function toolUseGroupStatus(
 }
 
 /**
+ * Tool whose name / one-line summary appears in the collapsed group header.
+ * Latest running child in transcript order while any run; otherwise the last child.
+ */
+export function toolUseGroupHintEvent(
+  events: readonly OrdinaryToolCallEvent[],
+): OrdinaryToolCallEvent | undefined {
+  if (events.length === 0) return undefined;
+  let latestRunning: OrdinaryToolCallEvent | undefined;
+  for (const event of events) {
+    if (event.status === "running") {
+      latestRunning = event;
+    }
+  }
+  return latestRunning ?? events[events.length - 1];
+}
+
+/**
  * Fold consecutive ordinary tool_call events into Tool use groups. Thinking,
  * assistant text, SubagentCard, and any other visible non-ordinary-tool row
  * break a group. A lone ordinary tool still becomes a one-item group.
