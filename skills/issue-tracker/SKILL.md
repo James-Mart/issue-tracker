@@ -138,7 +138,10 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
 - **`issue-tracker-plan-polish`** — polish an existing Epic or project-level
   Story plan tree with parallel check agents, then auto-apply when safe; use
   when polishing a plan, cleaning up a tracker tree, or running plan-polish.
-- **`issue-tracker-project-docs`** — author or revise one Project supporting doc
-  (vision, coding standards, or design system) and record it in
-  `supportingDocs`; use when writing or updating project vision, coding
-  standards, design system, or supporting docs.
+- **`issue-tracker-vision-docs`** — author or revise a Project vision doc (main
+  vision or one subsystem vision) through a single grill and an approved
+  draft; use when writing or refining project vision, authoring a subsystem
+  vision doc, or running vision refinement.
+- **`issue-tracker-project-docs`** — author or revise coding standards or
+  design system and record in `supportingDocs`; use when writing or updating
+  project coding standards or design system.
