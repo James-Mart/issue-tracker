@@ -2,10 +2,12 @@ import type { NestedStep } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/cn";
 import type { CollapsedDelegation, SubAgent } from "../lib/subagent";
+import { groupOrdinaryNestedToolCalls } from "../lib/transcript-rows";
 import {
   indexedStreamKey,
   toolCallRowKey,
   toolStatusVariant,
+  ToolUseGroup,
   TranscriptMarkdownText,
   TranscriptThinking,
   TranscriptToolCall,
@@ -187,6 +189,7 @@ export function SubagentThread({ agent }: { agent: SubAgent }) {
   if (!hasBody) return null;
 
   const running = agent.status === "running";
+  const segments = groupOrdinaryNestedToolCalls(agent.steps, collapsedByCallId);
 
   return (
     <div
@@ -197,13 +200,29 @@ export function SubagentThread({ agent }: { agent: SubAgent }) {
       {agent.resumeAgentId ? (
         <ResumeAffordance agentId={agent.resumeAgentId} />
       ) : null}
-      {agent.steps.length > 0 || orphanCollapsed.length > 0 ? (
+      {segments.length > 0 || orphanCollapsed.length > 0 ? (
         <div
           className="space-y-2 border-l-2 border-l-[hsl(var(--current)/0.45)] pl-3"
           role="list"
           aria-label="Sub-agent thread"
         >
-          {agent.steps.map((step, index) => {
+          {segments.map((segment) => {
+            if (segment.kind === "tool_use_group") {
+              return (
+                <div
+                  key={`tool_use_group-${segment.steps[0]!.callId}`}
+                  role="listitem"
+                >
+                  <ToolUseGroup
+                    tools={segment.steps}
+                    density="compact"
+                    data-nested="tool_use_group"
+                  />
+                </div>
+              );
+            }
+            const { step } = segment;
+            const index = agent.steps.indexOf(step);
             const collapsed =
               step.kind === "tool_call"
                 ? collapsedByCallId.get(step.callId)
