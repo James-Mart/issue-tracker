@@ -596,5 +596,68 @@ describe("ConversationThread Tool use groups", () => {
     expect(summary()).toContain("Shell");
     expect(summary()).toContain("npm test");
   });
+
+  it("auto-expands the group and errored tool row while siblings stay collapsed", () => {
+    transcriptState.events = [
+      { type: "prompt", text: "Run tools", at: "2026-07-24T00:00:00.000Z" },
+      {
+        type: "tool_call",
+        callId: "c1",
+        name: "Read",
+        status: "completed",
+        args: { path: "/tmp/a.ts" },
+        result: "file contents",
+        at: "2026-07-24T00:00:01.000Z",
+      },
+      {
+        type: "tool_call",
+        callId: "c2",
+        name: "Shell",
+        status: "error",
+        args: { command: "npm test" },
+        result: "Command failed with exit code 1",
+        at: "2026-07-24T00:00:02.000Z",
+      },
+      {
+        type: "tool_call",
+        callId: "c3",
+        name: "Grep",
+        status: "completed",
+        args: { pattern: "foo" },
+        result: "no matches",
+        at: "2026-07-24T00:00:03.000Z",
+      },
+    ];
+    ({ container, root } = mountThread("conv-1"));
+
+    const group = container!.querySelector(
+      '[data-event="tool_use_group"]',
+    ) as HTMLDetailsElement;
+    expect(group.open).toBe(true);
+    expect(group.getAttribute("data-status")).toBe("error");
+    expect(group.querySelector("summary")!.textContent).toContain("error");
+
+    const errored = group.querySelector(
+      "[data-call-id='c2']",
+    ) as HTMLDetailsElement;
+    expect(errored.open).toBe(true);
+    expect(group.textContent).toContain("Command failed with exit code 1");
+
+    const completed = group.querySelector(
+      "[data-call-id='c1']",
+    ) as HTMLDetailsElement;
+    expect(completed.open).toBe(false);
+    expect(group.querySelector("[data-call-id='c1'] summary")!.textContent).not.toContain(
+      "file contents",
+    );
+
+    const sibling = group.querySelector(
+      "[data-call-id='c3']",
+    ) as HTMLDetailsElement;
+    expect(sibling.open).toBe(false);
+    expect(group.querySelector("[data-call-id='c3'] summary")!.textContent).not.toContain(
+      "no matches",
+    );
+  });
 });
 

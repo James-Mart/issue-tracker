@@ -147,6 +147,7 @@ function ToolCallEvent({
 function ToolUseGroup({ events }: { events: OrdinaryToolCallEvent[] }) {
   const status = toolUseGroupStatus(events);
   const running = status === "running";
+  const hasError = status === "error";
   const hintEvent = toolUseGroupHintEvent(events);
   const { label: hintLabel, detail: hintDetail } = summarizeToolCall(
     hintEvent?.name,
@@ -157,6 +158,7 @@ function ToolUseGroup({ events }: { events: OrdinaryToolCallEvent[] }) {
       className="min-w-0 rounded-md border border-border bg-card"
       summaryClassName="min-h-0 gap-2 px-3 py-2.5"
       bodyClassName="space-y-2 px-3 py-2"
+      initiallyOpen={hasError}
       label={
         <>
           <Badge
