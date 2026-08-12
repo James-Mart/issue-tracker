@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { TranscriptEvent } from "@server/schemas";
+import type { NestedStep, TranscriptEvent } from "@server/schemas";
 import {
+  groupOrdinaryNestedToolCalls,
   groupOrdinaryToolCalls,
   transcriptInfoLine,
   toolUseGroupHintEvent,
   toolUseGroupStatus,
   type OrdinaryToolCallEvent,
 } from "./transcript-rows";
+import type { CollapsedDelegation } from "./subagent";
 
 const at = "2026-01-01T00:00:00.000Z";
 
@@ -254,6 +256,88 @@ describe("toolUseGroupHintEvent", () => {
 
   it("returns undefined for an empty group", () => {
     expect(toolUseGroupHintEvent([])).toBeUndefined();
+  });
+});
+
+function nestedTool(
+  callId: string,
+  status: "running" | "completed" | "error" = "completed",
+  name = "Read",
+): Extract<NestedStep, { kind: "tool_call" }> {
+  return { kind: "tool_call", callId, name, status };
+}
+
+const noCollapsed = new Map<string, CollapsedDelegation>();
+
+describe("groupOrdinaryNestedToolCalls", () => {
+  it("coalesces consecutive ordinary nested tools into one group", () => {
+    const a = nestedTool("c1");
+    const b = nestedTool("c2");
+    const c = nestedTool("c3");
+    expect(groupOrdinaryNestedToolCalls([a, b, c], noCollapsed)).toEqual([
+      { kind: "tool_use_group", steps: [a, b, c] },
+    ]);
+  });
+
+  it("wraps a lone ordinary nested tool in a one-item group", () => {
+    const only = nestedTool("c1");
+    expect(groupOrdinaryNestedToolCalls([only], noCollapsed)).toEqual([
+      { kind: "tool_use_group", steps: [only] },
+    ]);
+  });
+
+  it("breaks groups on thinking, text, step markers, and collapsed-delegation tool calls", () => {
+    const t1 = nestedTool("c1");
+    const thinking = { kind: "thinking" as const, text: "hmm" };
+    const t2 = nestedTool("c2");
+    const text = { kind: "text" as const, text: "done" };
+    const t3 = nestedTool("c3");
+    const marker = {
+      kind: "step" as const,
+      stepId: 1,
+      status: "started" as const,
+    };
+    const t4 = nestedTool("c4");
+    const collapsedTool = nestedTool("delegate-1", "completed", "Task");
+    const t5 = nestedTool("c5");
+    const collapsedByCallId = new Map<string, CollapsedDelegation>([
+      [
+        "delegate-1",
+        {
+          delegationId: "d1",
+          parentCallId: "delegate-1",
+          status: "completed",
+        },
+      ],
+    ]);
+
+    expect(
+      groupOrdinaryNestedToolCalls(
+        [t1, thinking, t2, text, t3, marker, t4, collapsedTool, t5],
+        collapsedByCallId,
+      ),
+    ).toEqual([
+      { kind: "tool_use_group", steps: [t1] },
+      { kind: "row", step: thinking },
+      { kind: "tool_use_group", steps: [t2] },
+      { kind: "row", step: text },
+      { kind: "tool_use_group", steps: [t3] },
+      { kind: "row", step: marker },
+      { kind: "tool_use_group", steps: [t4] },
+      { kind: "row", step: collapsedTool },
+      { kind: "tool_use_group", steps: [t5] },
+    ]);
+  });
+
+  it("looks past liveness without splitting a group", () => {
+    const a = nestedTool("c1");
+    const b = nestedTool("c2");
+    expect(
+      groupOrdinaryNestedToolCalls(
+        [a, { kind: "liveness", elapsedMs: 1200 }, b],
+        noCollapsed,
+      ),
+    ).toEqual([{ kind: "tool_use_group", steps: [a, b] }]);
   });
 });
 

@@ -1,5 +1,5 @@
-import type { TranscriptEvent } from "@server/schemas";
-import { isSubAgentToolCall } from "./subagent";
+import type { NestedStep, TranscriptEvent } from "@server/schemas";
+import { isSubAgentToolCall, type CollapsedDelegation } from "./subagent";
 
 /** Info-line payload when an event renders as a labeled row in the thread body. */
 export type TranscriptInfoLine = {
@@ -15,6 +15,12 @@ export type OrdinaryToolCallEvent = Extract<
 export type TranscriptRenderSegment =
   | { kind: "row"; event: TranscriptEvent }
   | { kind: "tool_use_group"; events: OrdinaryToolCallEvent[] };
+
+export type OrdinaryNestedToolCall = Extract<NestedStep, { kind: "tool_call" }>;
+
+export type NestedTranscriptRenderSegment =
+  | { kind: "row"; step: NestedStep }
+  | { kind: "tool_use_group"; steps: OrdinaryNestedToolCall[] };
 
 export type ToolUseGroupStatus = OrdinaryToolCallEvent["status"];
 
@@ -43,7 +49,7 @@ function isOmittedTranscriptRow(event: TranscriptEvent): boolean {
 
 /** Aggregate header status for a Tool use group (never empty). */
 export function toolUseGroupStatus(
-  events: readonly OrdinaryToolCallEvent[],
+  events: readonly { status: ToolUseGroupStatus }[],
 ): ToolUseGroupStatus {
   if (events.some((event) => event.status === "error")) return "error";
   if (events.some((event) => event.status === "running")) return "running";
@@ -54,11 +60,11 @@ export function toolUseGroupStatus(
  * Tool whose name / one-line summary appears in the collapsed group header.
  * Latest running child in transcript order while any run; otherwise the last child.
  */
-export function toolUseGroupHintEvent(
-  events: readonly OrdinaryToolCallEvent[],
-): OrdinaryToolCallEvent | undefined {
+export function toolUseGroupHintEvent<T extends { status: ToolUseGroupStatus }>(
+  events: readonly T[],
+): T | undefined {
   if (events.length === 0) return undefined;
-  let latestRunning: OrdinaryToolCallEvent | undefined;
+  let latestRunning: T | undefined;
   for (const event of events) {
     if (event.status === "running") {
       latestRunning = event;
@@ -92,6 +98,46 @@ export function groupOrdinaryToolCalls(
     if (isOmittedTranscriptRow(event)) continue;
     flushGroup();
     segments.push({ kind: "row", event });
+  }
+  flushGroup();
+  return segments;
+}
+
+/** True when a nested tool_call row renders as TranscriptToolCall, not CollapsedDelegationRow. */
+function isOrdinaryNestedToolCall(
+  step: NestedStep,
+  collapsedByCallId: ReadonlyMap<string, CollapsedDelegation>,
+): step is OrdinaryNestedToolCall {
+  return step.kind === "tool_call" && !collapsedByCallId.has(step.callId);
+}
+
+/**
+ * Fold consecutive ordinary nested tool_call steps into Tool use groups.
+ * Thinking, text, step markers, CollapsedDelegationRow, and any other visible
+ * non-ordinary-tool step break a group. Liveness is omitted without splitting.
+ * A lone ordinary nested tool still becomes a one-item group.
+ */
+export function groupOrdinaryNestedToolCalls(
+  steps: readonly NestedStep[],
+  collapsedByCallId: ReadonlyMap<string, CollapsedDelegation>,
+): NestedTranscriptRenderSegment[] {
+  const segments: NestedTranscriptRenderSegment[] = [];
+  let group: OrdinaryNestedToolCall[] = [];
+
+  const flushGroup = () => {
+    if (group.length === 0) return;
+    segments.push({ kind: "tool_use_group", steps: group });
+    group = [];
+  };
+
+  for (const step of steps) {
+    if (isOrdinaryNestedToolCall(step, collapsedByCallId)) {
+      group.push(step);
+      continue;
+    }
+    if (step.kind === "liveness") continue;
+    flushGroup();
+    segments.push({ kind: "row", step });
   }
   flushGroup();
   return segments;

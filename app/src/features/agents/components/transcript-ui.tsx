@@ -11,6 +11,10 @@ import {
   summarizeToolCall,
   thinkingPreview,
 } from "@/features/agents/lib/tool-summary";
+import {
+  toolUseGroupHintEvent,
+  toolUseGroupStatus,
+} from "@/features/agents/lib/transcript-rows";
 import { cn } from "@/lib/utils/cn";
 
 export type TranscriptDensity = "default" | "compact";
@@ -281,6 +285,86 @@ export function TranscriptToolCall({
       <span className="block min-w-0 break-all font-mono text-[10px] text-muted-foreground">
         {callId}
       </span>
+    </CollapsibleDetails>
+  );
+}
+
+export type ToolUseGroupTool = {
+  callId: string;
+  name?: string | null;
+  status: "running" | "completed" | "error";
+  args?: unknown;
+  result?: unknown;
+};
+
+/** Collapsed Tool use block wrapping one or more ordinary TranscriptToolCall rows. */
+export function ToolUseGroup({
+  tools,
+  density = "default",
+  ...detailsProps
+}: {
+  tools: readonly ToolUseGroupTool[];
+  density?: TranscriptDensity;
+} & Omit<ComponentPropsWithoutRef<"details">, "children">) {
+  const status = toolUseGroupStatus(tools);
+  const running = status === "running";
+  const hasError = status === "error";
+  const hintTool = toolUseGroupHintEvent(tools);
+  const { label: hintLabel, detail: hintDetail } = summarizeToolCall(
+    hintTool?.name,
+    hintTool?.args,
+  );
+  return (
+    <CollapsibleDetails
+      className="min-w-0 rounded-md border border-border bg-card"
+      summaryClassName="min-h-0 gap-2 px-3 py-2.5"
+      bodyClassName="space-y-2 px-3 py-2"
+      initiallyOpen={hasError}
+      label={
+        <>
+          <Badge
+            variant={toolStatusVariant(status)}
+            className={cn("shrink-0 text-[10px]", running && "animate-pulse")}
+          >
+            {status}
+          </Badge>
+          <span className="shrink-0 font-mono text-xs font-medium text-foreground">
+            Tool use
+          </span>
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+            {tools.length}
+          </span>
+          {hintTool ? (
+            <span className="shrink-0 font-mono text-xs font-medium text-foreground">
+              {hintLabel}
+            </span>
+          ) : null}
+          {hintDetail ? (
+            <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+              {hintDetail}
+            </span>
+          ) : null}
+        </>
+      }
+      data-event="tool_use_group"
+      data-status={status}
+      data-tool-count={tools.length}
+      {...detailsProps}
+    >
+      {tools.map((tool) => (
+        <TranscriptToolCall
+          key={toolCallRowKey(tool.callId)}
+          callId={tool.callId}
+          name={tool.name}
+          status={tool.status}
+          args={tool.args}
+          result={tool.result}
+          density={density}
+          {...(density === "compact"
+            ? { "data-nested": "tool_call" }
+            : { "data-event": "tool_call" })}
+        />
+      ))}
     </CollapsibleDetails>
   );
 }
