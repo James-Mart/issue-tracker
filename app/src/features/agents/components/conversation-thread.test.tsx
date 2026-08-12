@@ -450,3 +450,74 @@ describe("ConversationThread anchored meta", () => {
     expect(container.textContent).toContain("Old plan");
   });
 });
+
+describe("ConversationThread Tool use groups", () => {
+  let container: HTMLDivElement | undefined;
+  let root: Root | undefined;
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount());
+    container?.remove();
+    container = undefined;
+    root = undefined;
+    transcriptState.events = [...initialEvents];
+  });
+
+  it("folds consecutive ordinary tools into one collapsed Tool use block", () => {
+    transcriptState.events = [
+      { type: "prompt", text: "Read the files", at: "2026-07-24T00:00:00.000Z" },
+      {
+        type: "thinking",
+        text: "I will read both files.",
+        at: "2026-07-24T00:00:01.000Z",
+      },
+      {
+        type: "tool_call",
+        callId: "c1",
+        name: "Read",
+        status: "completed",
+        args: { path: "/tmp/a.ts" },
+        at: "2026-07-24T00:00:02.000Z",
+      },
+      {
+        type: "tool_call",
+        callId: "c2",
+        name: "Read",
+        status: "completed",
+        args: { path: "/tmp/b.ts" },
+        at: "2026-07-24T00:00:03.000Z",
+      },
+      {
+        type: "assistant",
+        text: "Both files are in.",
+        at: "2026-07-24T00:00:04.000Z",
+      },
+    ];
+    ({ container, root } = mountThread("conv-1"));
+
+    const groups = container!.querySelectorAll('[data-event="tool_use_group"]');
+    expect(groups).toHaveLength(1);
+    const group = groups[0] as HTMLDetailsElement;
+    expect(group.open).toBe(false);
+    expect(group.getAttribute("data-tool-count")).toBe("2");
+    expect(group.getAttribute("data-status")).toBe("completed");
+    expect(group.querySelector("summary")!.textContent).toContain("Tool use");
+    expect(group.querySelector("summary")!.textContent).toContain("2");
+
+    const thinking = container!.querySelector('[data-event="thinking"]');
+    expect(thinking).toBeTruthy();
+    expect(thinking!.closest('[data-event="tool_use_group"]')).toBeNull();
+
+    const assistant = container!.querySelector('[data-event="assistant"]');
+    expect(assistant).toBeTruthy();
+    expect(assistant!.textContent).toContain("Both files are in.");
+
+    act(() => {
+      (group.querySelector("summary") as HTMLElement).click();
+    });
+    expect(group.open).toBe(true);
+    expect(group.querySelector("[data-call-id='c1']")).toBeTruthy();
+    expect(group.querySelector("[data-call-id='c2']")).toBeTruthy();
+  });
+});
+
