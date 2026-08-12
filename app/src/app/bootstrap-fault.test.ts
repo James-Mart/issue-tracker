@@ -21,6 +21,25 @@ function flushFaultSchedule(): Promise<void> {
   });
 }
 
+type StubTiming = {
+  name: string;
+  responseStatus: number;
+  nextHopProtocol?: string;
+  transferSize?: number;
+};
+
+function stubResourceTimings(entries: StubTiming[]): void {
+  const timings = entries.map((entry) => ({
+    nextHopProtocol: "h2",
+    transferSize: 0,
+    ...entry,
+  }));
+  vi.stubGlobal("performance", {
+    ...performance,
+    getEntriesByType: (type: string) => (type === "resource" ? timings : []),
+  });
+}
+
 describe("bootstrap Fault surface", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
@@ -54,8 +73,65 @@ describe("bootstrap Fault surface", () => {
     expect(details).toContain("URL: ");
     expect(details).toContain("Time: ");
     expect(details).toContain("User-Agent: ");
+    expect(details).toContain("SharedWorker: ");
     expect(details).toContain("Error: SharedWorker failed");
     expect(details).toContain("Stack: ");
+  });
+
+  it("names the requests that failed, not just the entry that reported it", () => {
+    stubResourceTimings([
+      { name: "https://host/src/main.tsx", responseStatus: 200 },
+      {
+        name: "https://host/src/features/issues/api/keys.ts",
+        responseStatus: 0,
+        nextHopProtocol: "h3",
+      },
+      {
+        name: "https://host/node_modules/.vite/deps/react.js?v=abc",
+        responseStatus: 503,
+        nextHopProtocol: "h2",
+        transferSize: 0,
+      },
+    ]);
+
+    const details = formatBootstrapFaultDetails(
+      new Error("Script failed to load: https://host/src/main.tsx"),
+    );
+
+    expect(details).toContain("Resources: 3 requested, 2 failed");
+    expect(details).toContain(
+      "Failed resource: status=0 protocol=h3 bytes=0 https://host/src/features/issues/api/keys.ts",
+    );
+    expect(details).toContain(
+      "Failed resource: status=503 protocol=h2 bytes=0 https://host/node_modules/.vite/deps/react.js?v=abc",
+    );
+  });
+
+  it("counts failing requests beyond the ones it lists", () => {
+    stubResourceTimings(
+      Array.from({ length: 8 }, (_, index) => ({
+        name: `https://host/src/module-${index}.ts`,
+        responseStatus: 0,
+      })),
+    );
+
+    const details = formatBootstrapFaultDetails(new Error("load failed"));
+
+    expect(details).toContain("Resources: 8 requested, 8 failed");
+    expect(details.match(/Failed resource:/g)).toHaveLength(5);
+    expect(details).toContain("Failed resources not listed: 3");
+  });
+
+  it("reports no failures when every request succeeded", () => {
+    stubResourceTimings([
+      { name: "https://host/src/main.tsx", responseStatus: 200 },
+      { name: "https://host/src/app/app.tsx", responseStatus: 304 },
+    ]);
+
+    const details = formatBootstrapFaultDetails(new Error("render threw"));
+
+    expect(details).toContain("Resources: 2 requested, 0 failed");
+    expect(details).not.toContain("Failed resource:");
   });
 
   it("paints Fault into an empty #root instead of leaving it blank", () => {
@@ -156,6 +232,88 @@ describe("bootstrap Fault surface", () => {
     await flushFaultSchedule();
     expect(root().querySelector("[data-bootstrap-fault]")).toBeNull();
     expect(root().childElementCount).toBe(0);
+  });
+
+  it("replaces cached optimized deps and reloads when a dep chunk 404s", async () => {
+    stubResourceTimings([
+      { name: "https://host/src/main.tsx", responseStatus: 200 },
+      {
+        name: "https://host/node_modules/.vite/deps/react.js?v=abc",
+        responseStatus: 200,
+      },
+      {
+        name: "https://host/node_modules/.vite/deps/chunk-GONE.js?v=abc",
+        responseStatus: 404,
+      },
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue(undefined);
+    const reload = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("location", { href: "https://host/", reload });
+
+    showBootstrapFault(new Error("Script failed to load: /src/main.tsx"));
+
+    // Fault paints either way; the repair is what gets the shell back.
+    expect(root().querySelector("[data-bootstrap-fault]")).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+    expect(fetchMock.mock.calls).toEqual([
+      [
+        "https://host/node_modules/.vite/deps/react.js?v=abc",
+        { cache: "reload" },
+      ],
+      [
+        "https://host/node_modules/.vite/deps/chunk-GONE.js?v=abc",
+        { cache: "reload" },
+      ],
+    ]);
+  });
+
+  it("bounds repair passes per tab session so a repeat failure cannot loop", async () => {
+    stubResourceTimings([
+      {
+        name: "https://host/node_modules/.vite/deps/chunk-GONE.js?v=abc",
+        responseStatus: 404,
+      },
+    ]);
+    const reload = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(undefined));
+    vi.stubGlobal("location", { href: "https://host/", reload });
+
+    for (let load = 1; load <= 3; load += 1) {
+      document.body.innerHTML = '<div id="root"></div>';
+      showBootstrapFault(new Error(`load ${load} hit the same missing chunk`));
+      await vi.waitFor(() => {
+        expect(reload).toHaveBeenCalledTimes(load);
+      });
+    }
+
+    document.body.innerHTML = '<div id="root"></div>';
+    showBootstrapFault(new Error("still failing after three passes"));
+    await flushFaultSchedule();
+    expect(reload).toHaveBeenCalledTimes(3);
+    expect(root().querySelector("[data-bootstrap-fault]")).not.toBeNull();
+  });
+
+  it("does not reload for a fault with no failed optimized dep", async () => {
+    stubResourceTimings([
+      { name: "https://host/src/main.tsx", responseStatus: 404 },
+      {
+        name: "https://host/node_modules/.vite/deps/react.js?v=abc",
+        responseStatus: 200,
+      },
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue(undefined);
+    const reload = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("location", { href: "https://host/", reload });
+
+    showBootstrapFault(new Error("Script failed to load: /src/main.tsx"));
+    await flushFaultSchedule();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it("Copy details writes the diagnostic payload to the clipboard", async () => {

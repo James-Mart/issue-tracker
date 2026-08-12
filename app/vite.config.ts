@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 import { independentBootstrapFaultEntryProblem } from "./scripts/bootstrap-fault-entry.js";
+import { revalidateOptimizedDeps } from "./scripts/optimized-deps-cache.js";
 
 const indexHtmlPath = fileURLToPath(new URL("./index.html", import.meta.url));
 const bootstrapFaultSrcPath = fileURLToPath(
@@ -75,6 +76,17 @@ function bootstrapFaultProductionEntry(): Plugin[] {
   ];
 }
 
+/** Keeps a returning browser from holding dep files the server has replaced. */
+function revalidatedOptimizedDeps(): Plugin {
+  return {
+    name: "revalidate-optimized-deps",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(revalidateOptimizedDeps());
+    },
+  };
+}
+
 const devPort = Number(process.env.VITE_DEV_PORT ?? 8060);
 const apiProxyTarget =
   process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8061";
@@ -83,7 +95,11 @@ const apiProxyTarget =
 const transportVersion = Date.now();
 
 export default defineConfig({
-  plugins: [react(), ...bootstrapFaultProductionEntry()],
+  plugins: [
+    react(),
+    revalidatedOptimizedDeps(),
+    ...bootstrapFaultProductionEntry(),
+  ],
   define: {
     __TRANSPORT_VERSION__: JSON.stringify(transportVersion),
   },
