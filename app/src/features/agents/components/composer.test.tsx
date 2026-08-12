@@ -333,6 +333,60 @@ describe("Composer during active run", () => {
   })
 })
 
+describe("Composer post-send focus", () => {
+  let container: HTMLDivElement | undefined
+  let root: Root | undefined
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount())
+    container?.remove()
+    container = undefined
+    root = undefined
+    sendMutate.mockClear()
+    interruptMutate.mockClear()
+    coarsePointer.value = false
+  })
+
+  it("refocuses the textarea after a successful send via Enter", () => {
+    sendMutate.mockImplementation((_args, opts) => {
+      opts?.onSuccess?.()
+    })
+    coarsePointer.value = false
+    ;({ container, root } = mountComposer())
+
+    const input = textarea(container!)
+    setDraft(input, "Hello")
+    act(() => {
+      input.blur()
+    })
+    expect(document.activeElement).not.toBe(input)
+
+    pressEnter(input)
+
+    expect(document.activeElement).toBe(input)
+  })
+
+  it("refocuses the textarea after a successful send via the send control", () => {
+    sendMutate.mockImplementation((_args, opts) => {
+      opts?.onSuccess?.()
+    })
+    ;({ container, root } = mountComposer())
+
+    const input = textarea(container!)
+    setDraft(input, "Hello")
+    act(() => {
+      input.blur()
+    })
+    expect(document.activeElement).not.toBe(input)
+
+    act(() => {
+      sendButton(container!).click()
+    })
+
+    expect(document.activeElement).toBe(input)
+  })
+})
+
 describe("Composer draft persistence", () => {
   let container: HTMLDivElement | undefined
   let root: Root | undefined

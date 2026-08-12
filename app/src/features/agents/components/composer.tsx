@@ -58,6 +58,8 @@ export function Composer({
   }, [conversationId, initialModel]);
 
   const skipDraftPersistRef = useRef(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const refocusAfterSendRef = useRef(false);
 
   useEffect(() => {
     skipDraftPersistRef.current = true;
@@ -75,14 +77,26 @@ export function Composer({
     return () => window.clearTimeout(handle);
   }, [conversationId, draft]);
 
+  const composerBusy = sendMessage.isPending || interruptRun.isPending;
+
+  useEffect(() => {
+    if (!refocusAfterSendRef.current || composerBusy) return;
+    refocusAfterSendRef.current = false;
+    textareaRef.current?.focus();
+  }, [composerBusy, draft]);
+
+  const onSuccessfulSend = () => {
+    clearComposerDraft(conversationId);
+    setDraft("");
+    refocusAfterSendRef.current = true;
+  };
+
   const onModelChange = (next: string) => {
     setModel(next);
     // Always PATCH — skipping when `next === initialModel` races A→B→A while
     // the B write is in flight and leaves the server on B after invalidate.
     updateConversation.mutate({ id: conversationId, patch: { model: next } });
   };
-
-  const composerBusy = sendMessage.isPending || interruptRun.isPending;
 
   const send = () => {
     const prompt = draft.trim();
@@ -95,12 +109,7 @@ export function Composer({
           ...(model.trim() ? { model: model.trim() } : {}),
         },
       },
-      {
-        onSuccess: () => {
-          clearComposerDraft(conversationId);
-          setDraft("");
-        },
-      },
+      { onSuccess: onSuccessfulSend },
     );
   };
 
@@ -115,12 +124,7 @@ export function Composer({
           ...(model.trim() ? { model: model.trim() } : {}),
         },
       },
-      {
-        onSuccess: () => {
-          clearComposerDraft(conversationId);
-          setDraft("");
-        },
-      },
+      { onSuccess: onSuccessfulSend },
     );
   };
 
@@ -184,6 +188,7 @@ export function Composer({
 
         <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
           <Textarea
+            ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
