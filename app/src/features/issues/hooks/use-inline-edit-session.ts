@@ -8,6 +8,10 @@ export interface InlineEditSessionOptions {
   onSave: (next: string) => Promise<void>;
   validate?: (next: string) => string | null;
   multiline?: boolean;
+  /** Initial draft when entering edit (e.g. localStorage hydration). */
+  resolveEditDraft?: (savedValue: string) => string;
+  onEditCancel?: () => void;
+  onEditingChange?: (editing: boolean) => void;
 }
 
 export interface InlineEditSession {
@@ -32,6 +36,9 @@ export function useInlineEditSession({
   onSave,
   validate,
   multiline = false,
+  resolveEditDraft,
+  onEditCancel,
+  onEditingChange,
 }: InlineEditSessionOptions): InlineEditSession {
   const [editing, setEditing] = useState(false);
   const [draft, setDraftState] = useState(value);
@@ -51,6 +58,9 @@ export function useInlineEditSession({
   const onSaveRef = useRef(onSave);
   const validateRef = useRef(validate);
   const multilineRef = useRef(multiline);
+  const resolveEditDraftRef = useRef(resolveEditDraft);
+  const onEditCancelRef = useRef(onEditCancel);
+  const onEditingChangeRef = useRef(onEditingChange);
   const { hasConflict, acknowledge } = useExternalEditConflict(issue, editing);
   const hasConflictRef = useRef(hasConflict);
 
@@ -61,7 +71,23 @@ export function useInlineEditSession({
   onSaveRef.current = onSave;
   validateRef.current = validate;
   multilineRef.current = multiline;
+  resolveEditDraftRef.current = resolveEditDraft;
+  onEditCancelRef.current = onEditCancel;
+  onEditingChangeRef.current = onEditingChange;
   hasConflictRef.current = hasConflict;
+
+  useEffect(() => {
+    onEditingChangeRef.current?.(editing);
+  }, [editing]);
+
+  useEffect(() => {
+    if (!editingRef.current || !resolveEditDraftRef.current) return;
+    const resolved = resolveEditDraftRef.current(valueRef.current);
+    if (resolved !== draftRef.current) {
+      setDraft(resolved);
+    }
+    // Hydrate when remounting while already in edit mode (e.g. HMR).
+  }, []);
 
   useEffect(() => {
     if (!editing) {
@@ -82,6 +108,7 @@ export function useInlineEditSession({
   const cancel = () => {
     skipBlurCommit.current = true;
     sessionRef.current += 1;
+    onEditCancelRef.current?.();
     exit();
   };
 
@@ -95,7 +122,9 @@ export function useInlineEditSession({
     skipBlurCommit.current = false;
     sessionRef.current += 1;
     editingRef.current = true;
-    setDraft(valueRef.current);
+    const initial =
+      resolveEditDraftRef.current?.(valueRef.current) ?? valueRef.current;
+    setDraft(initial);
     setError(null);
     setEditing(true);
   };

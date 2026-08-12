@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Composer } from "./composer"
+import { composerDraftStorageKey } from "../lib/composer-draft-storage"
 
 const sendMutate = vi.fn()
 const interruptMutate = vi.fn()
@@ -41,7 +42,11 @@ vi.mock("@/hooks/use-coarse-pointer", () => ({
 }))
 
 function mountComposer(
-  overrides: { model?: string; runActive?: boolean } = {},
+  overrides: {
+    conversationId?: string
+    model?: string
+    runActive?: boolean
+  } = {},
 ): {
   container: HTMLDivElement
   root: Root
@@ -52,7 +57,7 @@ function mountComposer(
   act(() => {
     root.render(
       <Composer
-        conversationId="conv-1"
+        conversationId={overrides.conversationId ?? "conv-1"}
         model={overrides.model ?? "composer-2.5-fast"}
         runActive={overrides.runActive ?? false}
       />,
@@ -325,5 +330,182 @@ describe("Composer during active run", () => {
       },
       expect.any(Object),
     )
+  })
+})
+
+describe("Composer post-send focus", () => {
+  let container: HTMLDivElement | undefined
+  let root: Root | undefined
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount())
+    container?.remove()
+    container = undefined
+    root = undefined
+    sendMutate.mockClear()
+    interruptMutate.mockClear()
+    coarsePointer.value = false
+  })
+
+  it("refocuses the textarea after a successful send via Enter", () => {
+    sendMutate.mockImplementation((_args, opts) => {
+      opts?.onSuccess?.()
+    })
+    coarsePointer.value = false
+    ;({ container, root } = mountComposer())
+
+    const input = textarea(container!)
+    setDraft(input, "Hello")
+    act(() => {
+      input.blur()
+    })
+    expect(document.activeElement).not.toBe(input)
+
+    pressEnter(input)
+
+    expect(document.activeElement).toBe(input)
+  })
+
+  it("refocuses the textarea after a successful send via the send control", () => {
+    sendMutate.mockImplementation((_args, opts) => {
+      opts?.onSuccess?.()
+    })
+    ;({ container, root } = mountComposer())
+
+    const input = textarea(container!)
+    setDraft(input, "Hello")
+    act(() => {
+      input.blur()
+    })
+    expect(document.activeElement).not.toBe(input)
+
+    act(() => {
+      sendButton(container!).click()
+    })
+
+    expect(document.activeElement).toBe(input)
+  })
+})
+
+describe("Composer draft persistence", () => {
+  let container: HTMLDivElement | undefined
+  let root: Root | undefined
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount())
+    container?.remove()
+    container = undefined
+    root = undefined
+    sendMutate.mockClear()
+    interruptMutate.mockClear()
+    coarsePointer.value = false
+    localStorage.clear()
+    vi.useRealTimers()
+  })
+
+  it("restores the draft after remount for the same conversation", () => {
+    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
+
+    setDraft(textarea(container!), "Long in-progress reply")
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBe(
+      "Long in-progress reply",
+    )
+
+    act(() => root!.unmount())
+    container!.remove()
+    container = undefined
+    root = undefined
+
+    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
+
+    expect(textarea(container!).value).toBe("Long in-progress reply")
+  })
+
+  it("does not leak drafts across conversation ids", () => {
+    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
+
+    setDraft(textarea(container!), "Draft for A")
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    act(() => root!.unmount())
+    container!.remove()
+    container = undefined
+    root = undefined
+
+    ;({ container, root } = mountComposer({ conversationId: "conv-b" }))
+
+    expect(textarea(container!).value).toBe("")
+
+    setDraft(textarea(container!), "Draft for B")
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    act(() => root!.unmount())
+    container!.remove()
+    container = undefined
+    root = undefined
+
+    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
+
+    expect(textarea(container!).value).toBe("Draft for A")
+    expect(localStorage.getItem(composerDraftStorageKey("conv-b"))).toBe(
+      "Draft for B",
+    )
+  })
+
+  it("clears storage on successful send", () => {
+    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
+
+    setDraft(textarea(container!), "Ready to send")
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBe(
+      "Ready to send",
+    )
+
+    sendMutate.mockImplementation((_args, opts) => {
+      opts?.onSuccess?.()
+    })
+
+    act(() => {
+      sendButton(container!).click()
+    })
+
+    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBeNull()
+    expect(textarea(container!).value).toBe("")
+  })
+
+  it("clears storage when the draft field is emptied", () => {
+    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
+
+    setDraft(textarea(container!), "Will delete")
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBe(
+      "Will delete",
+    )
+
+    setDraft(textarea(container!), "")
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBeNull()
   })
 })

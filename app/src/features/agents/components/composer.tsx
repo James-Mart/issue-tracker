@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type KeyboardEvent,
 } from "react";
@@ -21,6 +22,13 @@ import {
   useUpdateConversation,
 } from "../api/mutations";
 import { useAgentModelsQuery } from "../api/queries";
+import {
+  clearComposerDraft,
+  readComposerDraft,
+  writeComposerDraft,
+} from "../lib/composer-draft-storage";
+
+const DRAFT_PERSIST_DEBOUNCE_MS = 300;
 
 export function Composer({
   conversationId,
@@ -49,9 +57,39 @@ export function Composer({
     setModel(initialModel);
   }, [conversationId, initialModel]);
 
+  const skipDraftPersistRef = useRef(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const refocusAfterSendRef = useRef(false);
+
   useEffect(() => {
-    setDraft("");
+    skipDraftPersistRef.current = true;
+    setDraft(readComposerDraft(conversationId));
   }, [conversationId]);
+
+  useEffect(() => {
+    if (skipDraftPersistRef.current) {
+      skipDraftPersistRef.current = false;
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      writeComposerDraft(conversationId, draft);
+    }, DRAFT_PERSIST_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [conversationId, draft]);
+
+  const composerBusy = sendMessage.isPending || interruptRun.isPending;
+
+  useEffect(() => {
+    if (!refocusAfterSendRef.current || composerBusy) return;
+    refocusAfterSendRef.current = false;
+    textareaRef.current?.focus();
+  }, [composerBusy, draft]);
+
+  const onSuccessfulSend = () => {
+    clearComposerDraft(conversationId);
+    setDraft("");
+    refocusAfterSendRef.current = true;
+  };
 
   const onModelChange = (next: string) => {
     setModel(next);
@@ -59,8 +97,6 @@ export function Composer({
     // the B write is in flight and leaves the server on B after invalidate.
     updateConversation.mutate({ id: conversationId, patch: { model: next } });
   };
-
-  const composerBusy = sendMessage.isPending || interruptRun.isPending;
 
   const send = () => {
     const prompt = draft.trim();
@@ -73,11 +109,7 @@ export function Composer({
           ...(model.trim() ? { model: model.trim() } : {}),
         },
       },
-      {
-        onSuccess: () => {
-          setDraft("");
-        },
-      },
+      { onSuccess: onSuccessfulSend },
     );
   };
 
@@ -92,11 +124,7 @@ export function Composer({
           ...(model.trim() ? { model: model.trim() } : {}),
         },
       },
-      {
-        onSuccess: () => {
-          setDraft("");
-        },
-      },
+      { onSuccess: onSuccessfulSend },
     );
   };
 
@@ -160,6 +188,7 @@ export function Composer({
 
         <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
           <Textarea
+            ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
