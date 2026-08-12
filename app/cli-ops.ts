@@ -26,6 +26,7 @@ import {
 } from "./server/services/attachments.js";
 import { formatAttachmentsSection } from "./server/services/summary.js";
 import { formatInspirationAppsLine } from "./server/services/inspiration-apps.js";
+import { formatPersonasLine } from "./server/services/personas.js";
 import { formatSupportingDocsLine } from "./server/services/supporting-docs.js";
 import { assertKind, kindGetValue, resolveIssueKind } from "./cli-kind.js";
 import { parsePrUrl, runGh } from "./server/services/delivery.js";
@@ -113,6 +114,10 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
     if (detail.inspirationApps && detail.inspirationApps.length > 0) {
       const line = formatInspirationAppsLine(detail.inspirationApps);
       if (line) lines.push(`inspirationApps: ${line}`);
+    }
+    if (detail.personas && detail.personas.length > 0) {
+      const line = formatPersonasLine(detail.personas);
+      if (line) lines.push(`personas: ${line}`);
     }
   }
   if (hasPartOf(detail)) lines.push(`partOf: ${detail.partOf}`);

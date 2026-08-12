@@ -56,6 +56,7 @@ import { validateMergePolicyPatch } from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
 import { validateSupportingDocsPatch } from "./supporting-docs.js";
 import { validateInspirationAppsPatch } from "./inspiration-apps.js";
+import { validatePersonasPatch } from "./personas.js";
 import {
   planLabelCatalogCascade,
   planLabelCatalogRename,
@@ -526,6 +527,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     validateWorkspacePatch(jsonPatch);
     validateSupportingDocsPatch(existing, jsonPatch);
     validateInspirationAppsPatch(existing, jsonPatch);
+    validatePersonasPatch(existing, jsonPatch);
     validateCommitShaPatch(jsonPatch);
     validateNonClearablePatch(existing, jsonPatch);
     validateMergePolicyPatch(existing, jsonPatch, issues);

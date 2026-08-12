@@ -603,6 +603,74 @@ describe("project get/set", () => {
     expect(set.stderr).toContain('unknown or unsettable field "inspirationApps" for epic');
   });
 
+  it("sets, gets, clears, and surfaces personas", () => {
+    expect(
+      runCli([
+        "project",
+        "set",
+        "p",
+        "personas",
+        "--add",
+        JSON.stringify({
+          name: "Planner",
+          description: "Plans work",
+        }),
+      ]).status,
+    ).toBe(0);
+    expect(
+      runCli([
+        "project",
+        "set",
+        "p",
+        "personas",
+        "--add",
+        JSON.stringify({
+          name: "Implementor",
+          description: "Writes code",
+        }),
+      ]).status,
+    ).toBe(0);
+
+    const got = runCli(["project", "get", "p", "personas"]);
+    expect(got.status).toBe(0);
+    expect(JSON.parse(got.stdout)).toEqual([
+      { name: "Planner", description: "Plans work" },
+      { name: "Implementor", description: "Writes code" },
+    ]);
+
+    const line =
+      "personas: Planner — Plans work, Implementor — Writes code";
+    expect(runCli(["project", "view", "p"]).stdout).toContain(line);
+    expect(runCli(["summary", "p"]).stdout).toContain(line);
+
+    expect(
+      runCli(["project", "set", "p", "personas", "--remove", "Planner"]).status,
+    ).toBe(0);
+    expect(JSON.parse(runCli(["project", "get", "p", "personas"]).stdout)).toEqual([
+      { name: "Implementor", description: "Writes code" },
+    ]);
+
+    expect(runCli(["project", "set", "p", "personas", "--clear"]).status).toBe(0);
+    expect(JSON.parse(runCli(["project", "get", "p", "personas"]).stdout)).toEqual([]);
+    expect(runCli(["project", "view", "p"]).stdout).not.toContain("personas:");
+  });
+
+  it("refuses personas on non-project kinds", () => {
+    const set = runCli([
+      "epic",
+      "set",
+      "e",
+      "personas",
+      "--add",
+      JSON.stringify({
+        name: "Planner",
+        description: "Plans work",
+      }),
+    ]);
+    expect(set.status).toBe(1);
+    expect(set.stderr).toContain('unknown or unsettable field "personas" for epic');
+  });
+
   it("refuses invalid supportingDocs sets", () => {
     const ws = makeGitWorkspace();
     try {

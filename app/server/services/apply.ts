@@ -37,7 +37,7 @@ export interface ApplySummary {
 // Imperative/progress fields
 // (retro, status, qa, commitSha, noDiff, branchName, prUrl, merged, specReview, assignee,
 // needsAttention, attentionReason, archived, workspace, mergePolicy, labels, supportingDocs,
-// inspirationApps) and
+// inspirationApps, personas) and
 // `createdAt` are preserved from a same-kind existing issue; for a brand-new issue they are left
 // off the draft entirely so `parseIssue` fills them from the schema `.default()`s — except
 // `archived`, which is seeded true when any ancestor is archived (matching `create`).

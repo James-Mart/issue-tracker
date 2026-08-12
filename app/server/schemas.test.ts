@@ -182,6 +182,43 @@ describe("parseIssue - valid per kind", () => {
     ).toBe(false);
   });
 
+  it("parses optional personas entries", () => {
+    const result = parseIssue({
+      ...project,
+      personas: [{ name: "Planner", description: "Plans work" }],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.issue.kind === "project") {
+      expect(result.issue.personas).toEqual([
+        { name: "Planner", description: "Plans work" },
+      ]);
+    }
+  });
+
+  it("rejects bad personas entries", () => {
+    expect(
+      parseIssue({
+        ...project,
+        personas: [{ name: "", description: "x" }],
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseIssue({
+        ...project,
+        personas: [{ name: "X", description: "x", extra: true }],
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseIssue({
+        ...project,
+        personas: [
+          { name: "Planner", description: "a" },
+          { name: "Planner", description: "b" },
+        ],
+      }).ok,
+    ).toBe(false);
+  });
+
   it("parses a project (minimal fields only)", () => {
     const result = parseIssue(project);
     expect(result.ok).toBe(true);

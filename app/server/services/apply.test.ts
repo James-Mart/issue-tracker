@@ -548,6 +548,26 @@ describe("apply — update preserves imperative progress state", () => {
     ]);
   });
 
+  it("preserves project personas when the doc updates a project", async () => {
+    const { apply, update } = await loadService();
+    await apply(baseDoc());
+
+    await update("proj", {
+      personas: [{ name: "Planner", description: "Plans work" }],
+    });
+
+    const doc = baseDoc();
+    doc.project.title = "Project with personas preserved";
+    const summary = await apply(doc);
+    expect(summary.updated).toContain("proj");
+
+    const proj = readIssue("proj");
+    expect(proj.title).toBe("Project with personas preserved");
+    expect(proj.personas).toEqual([
+      { name: "Planner", description: "Plans work" },
+    ]);
+  });
+
   it("preserves project catalog and issue label assignments across re-apply", async () => {
     const { apply, update } = await loadService();
     await apply(baseDoc());

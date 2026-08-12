@@ -1,10 +1,11 @@
-import type { Issue, IssueKind, InspirationApps, SupportingDocs } from "../schemas.js";
+import type { Issue, IssueKind, InspirationApps, Personas, SupportingDocs } from "../schemas.js";
 import { KIND_LABEL, kindHas } from "../kind.js";
 import { attachmentPath, listAttachments } from "./attachments.js";
 import { IssueError } from "./errors.js";
 import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
 import { formatInspirationAppsLine } from "./inspiration-apps.js";
+import { formatPersonasLine } from "./personas.js";
 import {
   formatSupportingDocsLine,
   readMissionParagraph,
@@ -34,6 +35,7 @@ export interface IssueSummary {
   mission?: string;
   supportingDocs?: SupportingDocs;
   inspirationApps?: InspirationApps;
+  personas?: Personas;
 }
 
 /**
@@ -89,6 +91,9 @@ export function buildSummary(
       : {}),
     ...(root?.kind === "project" && root.inspirationApps
       ? { inspirationApps: root.inspirationApps }
+      : {}),
+    ...(root?.kind === "project" && root.personas
+      ? { personas: root.personas }
       : {}),
     nodes: chain.map((issue) => {
       const attachments = attachmentsOf(issue.id, issue.kind);
@@ -154,6 +159,10 @@ export function formatSummary(summary: IssueSummary): string {
     if (node.kind === "project" && summary.inspirationApps) {
       const line = formatInspirationAppsLine(summary.inspirationApps);
       if (line) lines.push(`  inspirationApps: ${line}`);
+    }
+    if (node.kind === "project" && summary.personas) {
+      const line = formatPersonasLine(summary.personas);
+      if (line) lines.push(`  personas: ${line}`);
     }
     if (node.kind === "task" && node.noDiff) {
       lines.push(`  noDiff: true`);

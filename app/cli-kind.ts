@@ -19,12 +19,15 @@ import {
   type IssuePatch,
   type ProjectLabel,
   type InspirationAppEntry,
+  type PersonaEntry,
   type SupportingDocKey,
   type SupportingDocRef,
   type SupportingDocs,
   formatZodError,
   inspirationAppEntrySchema,
   inspirationAppsSchema,
+  personaEntrySchema,
+  personasSchema,
   MERGE_POLICIES,
 } from "./server/schemas.js";
 import { isSupportingDocKey } from "./server/services/supporting-docs.js";
@@ -173,6 +176,28 @@ function parseInspirationAppsValue(raw: string): InspirationAppEntry[] {
   if (!result.success) {
     throw new Error(
       `invalid inspirationApps: ${formatZodError(result.error, "expected a JSON array")}`,
+    );
+  }
+  return result.data;
+}
+
+function parsePersonaObject(raw: string): PersonaEntry {
+  const parsed = coerceJson(raw, "personas");
+  const result = personaEntrySchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `invalid personas: ${formatZodError(result.error, "expected a persona object")}`,
+    );
+  }
+  return result.data;
+}
+
+function parsePersonasValue(raw: string): PersonaEntry[] {
+  const parsed = coerceJson(raw, "personas");
+  const result = personasSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `invalid personas: ${formatZodError(result.error, "expected a JSON array")}`,
     );
   }
   return result.data;
@@ -360,6 +385,74 @@ export function resolveInspirationAppsSet(
 }
 
 /**
+ * Resolve a `personas` patch from CLI flags.
+ * Modes: clear all; remove by `--remove <name>`; upsert one entry via
+ * `--add` JSON `{name,description}`; or replace the full array via
+ * positional value / `--file`.
+ */
+export function resolvePersonasSet(
+  value: string | undefined,
+  opts: KindSetOptions,
+  current: PersonaEntry[],
+): IssuePatch {
+  if (opts.doc !== undefined || opts.attachment !== undefined) {
+    throw new Error("--doc and --attachment are not valid for personas");
+  }
+  if (opts.rename !== undefined) {
+    throw new Error("--rename is not valid for personas");
+  }
+
+  const modes = countSetModes(value, opts);
+  if (modes.length === 0) {
+    throw new Error(
+      "provide --add, --file, --remove, --clear, or a positional value for personas",
+    );
+  }
+  if (modes.length > 1) {
+    throw new Error(
+      `value, --file, --clear, --add, and --remove are mutually exclusive (got ${formatModes(modes)})`,
+    );
+  }
+
+  if (opts.clear) {
+    return { personas: [] };
+  }
+  if (opts.remove !== undefined) {
+    const removeSet = new Set(opts.remove);
+    return {
+      personas: current.filter((entry) => !removeSet.has(entry.name)),
+    };
+  }
+  if (opts.add !== undefined) {
+    if (opts.add.length !== 1) {
+      throw new Error(
+        "--add for personas expects a single JSON object with name and description",
+      );
+    }
+    const entry = parsePersonaObject(opts.add[0]);
+    const next = [...current];
+    const idx = next.findIndex((item) => item.name === entry.name);
+    if (idx >= 0) next[idx] = entry;
+    else next.push(entry);
+    const validated = personasSchema.safeParse(next);
+    if (!validated.success) {
+      throw new Error(
+        `invalid personas: ${formatZodError(validated.error, "invalid personas")}`,
+      );
+    }
+    return { personas: validated.data };
+  }
+
+  const raw = resolveFileOrValue(value, opts.file);
+  if (raw === undefined) {
+    throw new Error(
+      "provide a JSON array via --file or a positional value for personas",
+    );
+  }
+  return { personas: parsePersonasValue(raw) };
+}
+
+/**
  * Single entry for project `labels` set: exclusive modes are clear, remove,
  * rename, or upsert (composite of --add / --file / positional).
  */
@@ -449,6 +542,10 @@ export function coerceSetPatch(
 
   if (spec.type === "inspirationApps") {
     throw new Error("inspirationApps must be set via kindSet");
+  }
+
+  if (spec.type === "personas") {
+    throw new Error("personas must be set via kindSet");
   }
 
   if (opts.add !== undefined || opts.remove !== undefined) {
@@ -603,6 +700,13 @@ function currentInspirationApps(detail: IssueDetail): InspirationAppEntry[] {
   return detail.inspirationApps ?? [];
 }
 
+function currentPersonas(detail: IssueDetail): PersonaEntry[] {
+  if (detail.kind !== "project") {
+    throw new Error(`personas is only on project (got ${detail.kind})`);
+  }
+  return detail.personas ?? [];
+}
+
 export function kindSet(
   kind: IssueKind,
   id: string,
@@ -642,6 +746,13 @@ export function kindSet(
     return update(
       id,
       resolveInspirationAppsSet(value, opts, currentInspirationApps(detail)),
+    );
+  }
+
+  if (spec.type === "personas") {
+    return update(
+      id,
+      resolvePersonasSet(value, opts, currentPersonas(detail)),
     );
   }
 
