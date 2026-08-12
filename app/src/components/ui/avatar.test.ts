@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialsFromName } from "./avatar";
+import { initialsFromName, projectAvatarFromId } from "./avatar";
 
 describe("initialsFromName", () => {
   it("maps composer family names to C", () => {
@@ -33,5 +33,34 @@ describe("initialsFromName", () => {
 
   it("returns ? for empty input", () => {
     expect(initialsFromName("   ")).toBe("?");
+  });
+});
+
+describe("projectAvatarFromId", () => {
+  it("derives initials from the project title", () => {
+    expect(projectAvatarFromId("alpha", "Alpha Project").initials).toBe("AP");
+    expect(projectAvatarFromId("alpha", "Beta").initials).toBe("BE");
+  });
+
+  it("keeps color stable for the same project id", () => {
+    const first = projectAvatarFromId("my-project", "My Project");
+    const renamed = projectAvatarFromId("my-project", "Renamed Project");
+    expect(first.colorClass).toBe(renamed.colorClass);
+    expect(renamed.initials).toBe("RP");
+  });
+
+  it("can differ in color across project ids", () => {
+    const colors = new Set(
+      ["a", "b", "c", "d", "e", "f", "g", "h"].map(
+        (id) => projectAvatarFromId(id, "Same Title").colorClass,
+      ),
+    );
+    expect(colors.size).toBeGreaterThan(1);
+  });
+
+  it("uses token-backed tailwind background classes", () => {
+    const { colorClass } = projectAvatarFromId("issue-tracker", "issue-tracker");
+    expect(colorClass).toMatch(/^bg-/);
+    expect(colorClass).toMatch(/text-/);
   });
 });
