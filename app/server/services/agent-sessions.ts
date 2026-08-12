@@ -27,6 +27,7 @@ import {
   type NormalizedStep,
 } from "./event-pipeline.js";
 import { stopAgentStack } from "./agent-stack.js";
+import { resolveConversationModel } from "./model-selection.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { turnMadeProgress } from "./run-progress.js";
 
@@ -133,7 +134,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     const { meta } = readConversation(conversationId);
     const cwd = requireProjectWorkspace(meta.projectId);
-    const model = { id: meta.model };
+    const model = resolveConversationModel(meta.model);
     const storeDir = conversationStoreDir(conversationId);
     if (!existsSync(storeDir)) {
       mkdirSync(storeDir, { recursive: true });

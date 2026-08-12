@@ -12,6 +12,7 @@ describe("initialsFromName", () => {
   it("maps grok family names to G", () => {
     expect(initialsFromName("grok")).toBe("G");
     expect(initialsFromName("cursor-grok-4.5-high-fast")).toBe("G");
+    expect(initialsFromName("cursor-grok-4.6-high-fast")).toBe("G");
   });
 
   it("maps opus family names to O", () => {

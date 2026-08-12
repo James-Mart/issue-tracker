@@ -16,6 +16,14 @@ export function resolveModelSelection(pin: string): ModelSelection {
   switch (pin) {
     case "composer-2.5":
       return { id: "composer-2.5" };
+    case "cursor-grok-4.6-high-fast":
+      return {
+        id: "grok-4.6",
+        params: [
+          { id: "effort", value: "high" },
+          { id: "fast", value: "true" },
+        ],
+      };
     case "cursor-grok-4.5-high-fast":
       return {
         id: "grok-4.5",
@@ -34,6 +42,20 @@ export function resolveModelSelection(pin: string): ModelSelection {
       };
     default:
       throw new Error(`Unknown model pin: ${pin}`);
+  }
+}
+
+/**
+ * Map stored conversation meta.model to the selection the SDK expects.
+ *
+ * Compound pins go through {@link resolveModelSelection}; plain catalog ids
+ * pass through as `{ id }` so backend defaults apply.
+ */
+export function resolveConversationModel(stored: string): ModelSelection {
+  try {
+    return resolveModelSelection(stored);
+  } catch {
+    return { id: stored };
   }
 }
 

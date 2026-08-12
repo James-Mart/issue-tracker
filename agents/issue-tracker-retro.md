@@ -1,6 +1,6 @@
 ---
 name: issue-tracker-retro
-model: cursor-grok-4.5-high-fast
+model: cursor-grok-4.6-high-fast
 description: >-
   Mines the invoking session's transcripts for tracker meta-confusion and
   lands one Idea (or comments clean). Used by issue-tracker-work,

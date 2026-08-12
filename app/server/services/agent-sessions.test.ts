@@ -236,6 +236,50 @@ describe("agent sessions manager", () => {
     ]);
   });
 
+  it("routes a stored compound grok pin through the model bridge on resume", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Legacy grok pin",
+      projectId: "platform",
+      model: "cursor-grok-4.5-high-fast",
+      agentId: "agent-grok-legacy",
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "again" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    expect(fake.created).toHaveLength(0);
+    expect(fake.resumed).toEqual([
+      {
+        agentId: "agent-grok-legacy",
+        storeDir: join(
+          dirname(issuesRoot),
+          "conversations",
+          meta.id,
+          "agent-state",
+        ),
+        options: {
+          cwd: workspaceDir,
+          model: {
+            id: "grok-4.5",
+            params: [
+              { id: "effort", value: "high" },
+              { id: "fast", value: "true" },
+            ],
+          },
+          customTools: expect.objectContaining({
+            delegate: expect.any(Object),
+          }),
+        },
+      },
+    ]);
+  });
+
   it("creates a fresh agent when resume fails, records an error event, and continues the send", async () => {
     const {
       createConversation,
