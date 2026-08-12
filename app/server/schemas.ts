@@ -168,6 +168,33 @@ export const inspirationAppsSchema = z
 export type InspirationAppEntry = z.infer<typeof inspirationAppEntrySchema>;
 export type InspirationApps = z.infer<typeof inspirationAppsSchema>;
 
+export const personaEntrySchema = z
+  .object({
+    name: nonEmpty,
+    description: z.string(),
+  })
+  .strict();
+
+export const personasSchema = z
+  .array(personaEntrySchema)
+  .superRefine((personas, ctx) => {
+    const seen = new Set<string>();
+    for (let i = 0; i < personas.length; i += 1) {
+      const name = personas[i].name;
+      if (seen.has(name)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `duplicate persona name "${name}"`,
+          path: [i, "name"],
+        });
+      }
+      seen.add(name);
+    }
+  });
+
+export type PersonaEntry = z.infer<typeof personaEntrySchema>;
+export type Personas = z.infer<typeof personasSchema>;
+
 // A Project is a minimal organizational container: no status, no assignee, and
 // no needs-attention. Deliberately does not spread `mutableCommon`.
 export const projectSchema = z.object({
@@ -183,6 +210,8 @@ export const projectSchema = z.object({
   supportingDocs: supportingDocsSchema.optional(),
   // Imperative ordered list of reference apps (name, url, description).
   inspirationApps: inspirationAppsSchema.optional(),
+  // Imperative ordered persona catalog (name, description).
+  personas: personasSchema.optional(),
   ...orderField,
   ...timestamps,
 });

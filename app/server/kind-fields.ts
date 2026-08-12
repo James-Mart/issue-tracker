@@ -30,6 +30,7 @@ export type FieldCoerce =
   | { type: "labelCatalog" }
   | { type: "supportingDocs" }
   | { type: "inspirationApps" }
+  | { type: "personas" }
   | { type: "description" }
   | { type: "needsAttention" }
   | { type: "commitSha" }
@@ -50,6 +51,7 @@ export const PROJECT_SET_FIELDS = {
   labels: { type: "labelCatalog" },
   supportingDocs: { type: "supportingDocs" },
   inspirationApps: { type: "inspirationApps" },
+  personas: { type: "personas" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
 
@@ -134,6 +136,7 @@ export const PROJECT_GET_FIELDS = {
   labels: STORED,
   supportingDocs: STORED,
   inspirationApps: STORED,
+  personas: STORED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,

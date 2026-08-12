@@ -25,6 +25,7 @@ export const PROJECT_FIELD_KEYS = [
   "labels",
   "supportingDocs",
   "inspirationApps",
+  "personas",
 ] as const;
 
 export const EPIC_FIELD_KEYS = ["blockedBy"] as const;
@@ -158,6 +159,7 @@ export const FIELD_LABELS = {
   labels: "Labels",
   supportingDocs: "Supporting docs",
   inspirationApps: "Inspiration apps",
+  personas: "Personas",
   stakeholder: "Stakeholder",
 } as const;
 

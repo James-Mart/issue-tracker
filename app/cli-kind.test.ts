@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   coerceSetPatch,
   resolveInspirationAppsSet,
+  resolvePersonasSet,
   resolveLabelCatalogSet,
   resolveSupportingDocsSet,
 } from "./cli-kind.js";
@@ -548,5 +549,77 @@ describe("resolveInspirationAppsSet", () => {
         [],
       ),
     ).toThrow(/duplicate inspiration app name/);
+  });
+});
+
+describe("resolvePersonasSet", () => {
+  const planner = { name: "Planner", description: "Plans work" };
+  const implementor = { name: "Implementor", description: "Writes code" };
+
+  it("adds and upserts entries", () => {
+    expect(
+      resolvePersonasSet(undefined, { add: [JSON.stringify(planner)] }, []),
+    ).toEqual({ personas: [planner] });
+    expect(
+      resolvePersonasSet(
+        undefined,
+        {
+          add: [
+            JSON.stringify({
+              ...planner,
+              description: "Updated",
+            }),
+          ],
+        },
+        [planner],
+      ),
+    ).toEqual({
+      personas: [{ ...planner, description: "Updated" }],
+    });
+    expect(
+      resolvePersonasSet(undefined, { add: [JSON.stringify(implementor)] }, [
+        planner,
+      ]),
+    ).toEqual({ personas: [planner, implementor] });
+  });
+
+  it("removes by name and clears all", () => {
+    expect(
+      resolvePersonasSet(undefined, { remove: ["Planner"] }, [
+        planner,
+        implementor,
+      ]),
+    ).toEqual({ personas: [implementor] });
+    expect(resolvePersonasSet(undefined, { clear: true }, [planner])).toEqual({
+      personas: [],
+    });
+  });
+
+  it("replaces the full array from a positional value", () => {
+    expect(
+      resolvePersonasSet(JSON.stringify([planner, implementor]), {}, []),
+    ).toEqual({ personas: [planner, implementor] });
+  });
+
+  it("rejects invalid modes and payloads", () => {
+    expect(() =>
+      resolvePersonasSet(undefined, { add: ["{}", "{}"] }, []),
+    ).toThrow(/single JSON object/);
+    expect(() =>
+      resolvePersonasSet(undefined, { add: [JSON.stringify({ name: "" })] }, []),
+    ).toThrow(/invalid personas/);
+    expect(() =>
+      resolvePersonasSet(undefined, { clear: true, remove: ["X"] }, []),
+    ).toThrow(/mutually exclusive/);
+    expect(() =>
+      resolvePersonasSet(
+        JSON.stringify([
+          { name: "A", description: "a" },
+          { name: "A", description: "b" },
+        ]),
+        {},
+        [],
+      ),
+    ).toThrow(/duplicate persona name/);
   });
 });
