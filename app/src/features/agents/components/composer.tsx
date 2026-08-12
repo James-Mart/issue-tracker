@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type KeyboardEvent,
 } from "react";
@@ -21,6 +22,13 @@ import {
   useUpdateConversation,
 } from "../api/mutations";
 import { useAgentModelsQuery } from "../api/queries";
+import {
+  clearComposerDraft,
+  readComposerDraft,
+  writeComposerDraft,
+} from "../lib/composer-draft-storage";
+
+const DRAFT_PERSIST_DEBOUNCE_MS = 300;
 
 export function Composer({
   conversationId,
@@ -49,9 +57,23 @@ export function Composer({
     setModel(initialModel);
   }, [conversationId, initialModel]);
 
+  const skipDraftPersistRef = useRef(true);
+
   useEffect(() => {
-    setDraft("");
+    skipDraftPersistRef.current = true;
+    setDraft(readComposerDraft(conversationId));
   }, [conversationId]);
+
+  useEffect(() => {
+    if (skipDraftPersistRef.current) {
+      skipDraftPersistRef.current = false;
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      writeComposerDraft(conversationId, draft);
+    }, DRAFT_PERSIST_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [conversationId, draft]);
 
   const onModelChange = (next: string) => {
     setModel(next);
@@ -75,6 +97,7 @@ export function Composer({
       },
       {
         onSuccess: () => {
+          clearComposerDraft(conversationId);
           setDraft("");
         },
       },
@@ -94,6 +117,7 @@ export function Composer({
       },
       {
         onSuccess: () => {
+          clearComposerDraft(conversationId);
           setDraft("");
         },
       },
