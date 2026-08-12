@@ -23,6 +23,7 @@ export type CreateConversationBody = {
   projectId: string;
   model: string;
   title?: string;
+  message?: string;
 };
 
 export type UpdateConversationBody = {
