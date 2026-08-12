@@ -54,7 +54,7 @@ Do not invent other keys. One key per run.
 
 **Revise vs create.** From the step-1 JSON: this run is **revising** when
 `supportingDocs[<key>]` is present; otherwise it is **creating**. Use that
-fork in steps 3–4 (do not re-derive it).
+fork in step 3 and step 5 (do not re-derive it).
 
 If revising and the existing ref is already `type: "workspace"`, you may
 apply the Workspace gate in step 3 early (same stop-and-hand-back rule).
@@ -85,7 +85,19 @@ paths, no `..`).
 and apply it (use `issue summary <projectId>` / step-1 Project lines as the
 summary parameter). Attachment storage does not require a workspace.
 
-### 4. Load current content (revise only)
+### 4. Vision key
+
+When the selected key is `vision`:
+
+1. **Read**
+   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-vision-docs/SKILL.md`
+   and follow it on the **From project-docs** path. Location is already
+   settled in step 3; vision-docs returns an approved draft and stops.
+2. Continue at **## Flow → 7. Write** with that draft (skip steps 5–6).
+
+When the key is `codingStandards` or `designSystem`, continue with steps 5–6.
+
+### 5. Load current content (revise only)
 
 When **revising**, load from the existing ref in the step-1 JSON:
 
@@ -99,26 +111,17 @@ When **revising**, load from the existing ref in the step-1 JSON:
 If the target is missing or unreadable, tell the user and continue as a
 fresh draft for that key (still write + set at the end).
 
-### 5. Grill (`/grill-me`)
+### 6. Grill and draft (`codingStandards` / `designSystem`)
 
 Invoke **`/grill-me`** for **this doc only**: goals and content the user wants
 captured. Goal-only freeform — **no fixed outline** and no obligatory section
 checklist. Stay on the chosen doc; do not grill the other two keys.
 
-When the key is `vision`, also cover the mission paragraph: what the work
-contributes to, written for an agent about to do that work (not a product
-description). On a revise run, revisit it with the rest of the doc — do not
-carry the existing paragraph over untouched.
-
-Do not write files or set `supportingDocs` until after draft approval (step 6).
-
-### 6. Draft and approve
-
 Draft the full document in chat (Markdown unless the user asked for HTML).
-When the key is `vision`, the draft includes a `## Mission` section (author
-one when the loaded doc has none). Get an **explicit user approve** of the
-draft before writing. On rejection, revise the draft and re-approve — do not
-write yet.
+Get an **explicit user approve** of the draft before writing. On rejection,
+revise the draft and re-approve — do not write yet.
+
+Do not write files or set `supportingDocs` until after draft approval.
 
 ### 7. Write
 
@@ -166,11 +169,3 @@ Offer to run again for another key only if the user asks.
   user explicitly asks.
 - Do not hand-edit `issue.json`. Do not put supporting-doc bodies into
   Project `description.md`.
-- When revising `vision`, preserve `## Subsystem reference` unless the user
-  asks to change it. Convention:
-  [SPEC.md § Project supporting docs](../../SPEC.md#project-supporting-docs).
-- On `vision`, keep a `## Mission` section: one short paragraph for an agent
-  audience — what the work it is about to do contributes to, distilled from
-  the rest of the doc (not a product description). Author it when missing;
-  on revise, refresh it with the rest of the doc rather than leaving it
-  untouched. Convention: same SPEC section.
