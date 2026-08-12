@@ -102,6 +102,7 @@ export function createConversationsRouter(
         projectId?: unknown;
         title?: unknown;
         model?: unknown;
+        message?: unknown;
       };
       const projectId =
         typeof body.projectId === "string" ? body.projectId.trim() : "";
@@ -120,8 +121,32 @@ export function createConversationsRouter(
         typeof body.model === "string" && body.model.trim()
           ? body.model.trim()
           : DEFAULT_MODEL;
+      const message =
+        typeof body.message === "string" ? body.message.trim() : "";
 
-      const meta = await createConversation({ projectId, title, model });
+      const meta = await createConversation({
+        projectId,
+        title,
+        model,
+        ...(message ? { message } : {}),
+      });
+
+      // Run start is outside serialize: sendPrompt → updateMeta(agentId) would
+      // deadlock if nested inside the conversations write chain.
+      if (message) {
+        const started = await startConversationPrompt(
+          meta.id,
+          message,
+          model,
+          sessions,
+          { persistPrompt: false },
+        );
+        if (!started.ok) {
+          res.status(502).json({ error: started.message });
+          return;
+        }
+      }
+
       res.status(201).json(meta);
     }),
   );

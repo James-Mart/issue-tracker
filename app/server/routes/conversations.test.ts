@@ -335,6 +335,84 @@ describe("conversations HTTP API (CRUD)", () => {
       code: "not_found",
     });
   });
+
+  it("POST without message creates an idle conversation with an empty transcript", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "platform",
+        title: "Idle create",
+        model: "composer-2.5",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const meta = await created.json();
+
+    const run = await fetch(`${baseUrl}/api/conversations/${meta.id}/run`).then(
+      (r) => r.json(),
+    );
+    expect(run).toEqual({
+      active: false,
+      runId: null,
+      startedAt: null,
+    });
+
+    const detail = await fetch(`${baseUrl}/api/conversations/${meta.id}`).then(
+      (r) => r.json(),
+    );
+    expect(detail.transcript).toEqual([]);
+  });
+});
+
+describe("POST /api/conversations with message", () => {
+  let messageServer: Server;
+  let messageBaseUrl: string;
+  let messageSessions: AgentSessions;
+  let releaseHold: () => void;
+
+  beforeEach(async () => {
+    const held = await startHeldConversationRouter();
+    messageServer = held.server;
+    messageBaseUrl = held.baseUrl;
+    messageSessions = held.sessions;
+    releaseHold = held.releaseHold;
+  });
+
+  afterEach(async () => {
+    releaseHold();
+    await messageSessions.disposeAll();
+    await new Promise<void>((resolve, reject) => {
+      messageServer.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("persists the prompt and starts a run", async () => {
+    const created = await fetch(`${messageBaseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "platform",
+        title: "Vision refinement",
+        model: "composer-2.5",
+        message: "Refine vision for platform",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const meta = await created.json();
+
+    expect(messageSessions.getActiveRun(meta.id)).toBeTruthy();
+
+    const detail = await fetch(
+      `${messageBaseUrl}/api/conversations/${meta.id}`,
+    ).then((r) => r.json());
+    expect(detail.transcript).toEqual([
+      expect.objectContaining({
+        type: "prompt",
+        text: "Refine vision for platform",
+      }),
+    ]);
+  });
 });
 
 describe("GET /api/conversations/:id/transcript", () => {

@@ -746,6 +746,8 @@ export type CreateConversationInput = {
   agentId?: string;
   issueId?: string;
   channel?: ConversationChannel;
+  /** When set, the first prompt event is persisted in the same write turn. */
+  message?: string;
 };
 
 export type ConversationMetaPatch = Partial<
