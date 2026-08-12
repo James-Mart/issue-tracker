@@ -187,7 +187,7 @@ not from a spawn-time argument.
 | Coordinator (you) | — | Drive the whole run: thin CLI + spawn subagents | Composer 2.5 (`composer-2.5`) | spawn/CLI only |
 | Git | `issue-tracker-git` | Start a Story; finish a Task after `qa=passed`; finish a Story | `composer-2.5` | writes |
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
-| Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via **resume** | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.5-high-fast`; `opus`→`claude-opus-5-thinking-high` | writes (see Field ownership) |
+| Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via **resume** | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.6-high-fast`; `opus`→`claude-opus-5-thinking-high` | writes (see Field ownership) |
 | Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `needsAttention`; `issue task comment`) |
 | Spec-conformance validator | `issue-tracker-spec-conformance-validator` | Close-Story when Story `specReview` is unset | `composer-2.5` | writes (`issue story set … specReview` / `issue task add` / `issue story|task comment`) |
 
