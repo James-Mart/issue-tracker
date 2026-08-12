@@ -214,7 +214,11 @@ export function createConversation(
       fields.issueId = anchor.issueId;
       fields.channel = anchor.channel;
     }
-    return persistNewConversation(fields);
+    const initialPrompt = input.message?.trim() || undefined;
+    return persistNewConversation(
+      fields,
+      initialPrompt ? { initialPrompt } : undefined,
+    );
   });
 }
 

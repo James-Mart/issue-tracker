@@ -21,7 +21,37 @@ import { useCreateConversation } from "../api/mutations";
 import { useAgentModelsQuery } from "../api/queries";
 import { useIssuesQuery } from "@/features/issues/api/queries";
 import { listProjects } from "@/features/issues/lib/build-tree";
+import {
+  visionSessionMessage,
+  visionSessionTitle,
+} from "../lib/vision-launch";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
+
+const CONVERSATION_TYPES = [
+  { value: "general", label: "General" },
+  { value: "vision-refinement", label: "Vision refinement" },
+] as const;
+
+type ConversationType = (typeof CONVERSATION_TYPES)[number]["value"];
+
+export function buildCreateConversationBody(
+  conversationType: ConversationType,
+  fields: { projectId: string; model: string; title: string },
+) {
+  if (conversationType === "vision-refinement") {
+    return {
+      projectId: fields.projectId,
+      model: fields.model,
+      title: visionSessionTitle(),
+      message: visionSessionMessage(fields.projectId),
+    };
+  }
+  return {
+    projectId: fields.projectId,
+    model: fields.model,
+    ...(fields.title.trim() ? { title: fields.title.trim() } : {}),
+  };
+}
 
 export function CreateConversationDialog() {
   const open = useAgentsUiStore((s) => s.createDialogOpen);
@@ -33,6 +63,8 @@ export function CreateConversationDialog() {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const createConversation = useCreateConversation();
 
+  const [conversationType, setConversationType] =
+    useState<ConversationType>("general");
   const [projectId, setProjectId] = useState("");
   const [model, setModel] = useState("");
   const [title, setTitle] = useState("");
@@ -46,6 +78,7 @@ export function CreateConversationDialog() {
 
   useEffect(() => {
     if (!open) return;
+    setConversationType("general");
     setProjectId("");
     setModel("");
     setTitle("");
@@ -69,13 +102,12 @@ export function CreateConversationDialog() {
 
   const submit = () => {
     if (!canSubmit) return;
-    const trimmedTitle = title.trim();
     createConversation.mutate(
-      {
+      buildCreateConversationBody(conversationType, {
         projectId,
         model,
-        ...(trimmedTitle ? { title: trimmedTitle } : {}),
-      },
+        title,
+      }),
       {
         onSuccess: (meta) => {
           setSelectedConversationId(meta.id);
@@ -97,6 +129,27 @@ export function CreateConversationDialog() {
         </DialogHeader>
 
         <div className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="conversation-type">Conversation type</Label>
+            <Select
+              value={conversationType}
+              onValueChange={(value) =>
+                setConversationType(value as ConversationType)
+              }
+            >
+              <SelectTrigger id="conversation-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CONVERSATION_TYPES.map((entry) => (
+                  <SelectItem key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid gap-1.5">
             <Label htmlFor="conversation-project">Project</Label>
             <Select value={projectId} onValueChange={setProjectId}>
@@ -145,16 +198,18 @@ export function CreateConversationDialog() {
             </Select>
           </div>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="conversation-title">Title (optional)</Label>
-            <Input
-              id="conversation-title"
-              value={title}
-              placeholder="New conversation"
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
-            />
-          </div>
+          {conversationType === "general" ? (
+            <div className="grid gap-1.5">
+              <Label htmlFor="conversation-title">Title (optional)</Label>
+              <Input
+                id="conversation-title"
+                value={title}
+                placeholder="New conversation"
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submit()}
+              />
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter>
