@@ -1,10 +1,101 @@
 import type { TranscriptEvent } from "@server/schemas";
+import { isSubAgentToolCall } from "./subagent";
 
 /** Info-line payload when an event renders as a labeled row in the thread body. */
 export type TranscriptInfoLine = {
   label: string;
   text: string;
 };
+
+export type OrdinaryToolCallEvent = Extract<
+  TranscriptEvent,
+  { type: "tool_call" }
+>;
+
+export type TranscriptRenderSegment =
+  | { kind: "row"; event: TranscriptEvent }
+  | { kind: "tool_use_group"; events: OrdinaryToolCallEvent[] };
+
+export type ToolUseGroupStatus = OrdinaryToolCallEvent["status"];
+
+/** True when a tool_call row renders as TranscriptToolCall, not SubagentCard. */
+export function isOrdinaryToolCall(
+  event: TranscriptEvent,
+): event is OrdinaryToolCallEvent {
+  return event.type === "tool_call" && !isSubAgentToolCall(event);
+}
+
+/**
+ * Events omitted from the thread body (same set TranscriptEventRow returns
+ * null for). They must not split a Tool use group.
+ */
+function isOmittedTranscriptRow(event: TranscriptEvent): boolean {
+  switch (event.type) {
+    case "usage":
+    case "subagent_update":
+      return true;
+    case "status":
+      return !event.message;
+    default:
+      return false;
+  }
+}
+
+/** Aggregate header status for a Tool use group (never empty). */
+export function toolUseGroupStatus(
+  events: readonly OrdinaryToolCallEvent[],
+): ToolUseGroupStatus {
+  if (events.some((event) => event.status === "error")) return "error";
+  if (events.some((event) => event.status === "running")) return "running";
+  return "completed";
+}
+
+/**
+ * Tool whose name / one-line summary appears in the collapsed group header.
+ * Latest running child in transcript order while any run; otherwise the last child.
+ */
+export function toolUseGroupHintEvent(
+  events: readonly OrdinaryToolCallEvent[],
+): OrdinaryToolCallEvent | undefined {
+  if (events.length === 0) return undefined;
+  let latestRunning: OrdinaryToolCallEvent | undefined;
+  for (const event of events) {
+    if (event.status === "running") {
+      latestRunning = event;
+    }
+  }
+  return latestRunning ?? events[events.length - 1];
+}
+
+/**
+ * Fold consecutive ordinary tool_call events into Tool use groups. Thinking,
+ * assistant text, SubagentCard, and any other visible non-ordinary-tool row
+ * break a group. A lone ordinary tool still becomes a one-item group.
+ */
+export function groupOrdinaryToolCalls(
+  events: readonly TranscriptEvent[],
+): TranscriptRenderSegment[] {
+  const segments: TranscriptRenderSegment[] = [];
+  let group: OrdinaryToolCallEvent[] = [];
+
+  const flushGroup = () => {
+    if (group.length === 0) return;
+    segments.push({ kind: "tool_use_group", events: group });
+    group = [];
+  };
+
+  for (const event of events) {
+    if (isOrdinaryToolCall(event)) {
+      group.push(event);
+      continue;
+    }
+    if (isOmittedTranscriptRow(event)) continue;
+    flushGroup();
+    segments.push({ kind: "row", event });
+  }
+  flushGroup();
+  return segments;
+}
 
 /** Map bookkeeping events to labeled thread rows; null means omit from the body. */
 export function transcriptInfoLine(

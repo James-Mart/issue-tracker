@@ -6,6 +6,7 @@ import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { cn } from "@/lib/utils/cn";
@@ -22,7 +23,14 @@ import {
   isSubAgentToolCall,
   type SubAgent,
 } from "../lib/subagent";
-import { transcriptInfoLine } from "../lib/transcript-rows";
+import {
+  groupOrdinaryToolCalls,
+  transcriptInfoLine,
+  toolUseGroupHintEvent,
+  toolUseGroupStatus,
+  type OrdinaryToolCallEvent,
+} from "../lib/transcript-rows";
+import { summarizeToolCall } from "../lib/tool-summary";
 import {
   formatUsageTotals,
   sumUsageTotals,
@@ -33,8 +41,10 @@ import { transcriptScrollerBottomKey } from "../lib/transcript-scroller";
 import { Composer } from "./composer";
 import { SubagentCard } from "./subagent-card";
 import {
+  CollapsibleDetails,
   indexedStreamKey,
   toolCallRowKey,
+  toolStatusVariant,
   TranscriptMarkdownText,
   TranscriptThinking,
   TranscriptToolCall,
@@ -131,6 +141,58 @@ function ToolCallEvent({
       result={event.result}
       data-event="tool_call"
     />
+  );
+}
+
+function ToolUseGroup({ events }: { events: OrdinaryToolCallEvent[] }) {
+  const status = toolUseGroupStatus(events);
+  const running = status === "running";
+  const hasError = status === "error";
+  const hintEvent = toolUseGroupHintEvent(events);
+  const { label: hintLabel, detail: hintDetail } = summarizeToolCall(
+    hintEvent?.name,
+    hintEvent?.args,
+  );
+  return (
+    <CollapsibleDetails
+      className="min-w-0 rounded-md border border-border bg-card"
+      summaryClassName="min-h-0 gap-2 px-3 py-2.5"
+      bodyClassName="space-y-2 px-3 py-2"
+      initiallyOpen={hasError}
+      label={
+        <>
+          <Badge
+            variant={toolStatusVariant(status)}
+            className={cn("shrink-0 text-[10px]", running && "animate-pulse")}
+          >
+            {status}
+          </Badge>
+          <span className="shrink-0 font-mono text-xs font-medium text-foreground">
+            Tool use
+          </span>
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+            {events.length}
+          </span>
+          {hintEvent ? (
+            <span className="shrink-0 font-mono text-xs font-medium text-foreground">
+              {hintLabel}
+            </span>
+          ) : null}
+          {hintDetail ? (
+            <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+              {hintDetail}
+            </span>
+          ) : null}
+        </>
+      }
+      data-event="tool_use_group"
+      data-status={status}
+      data-tool-count={events.length}
+    >
+      {events.map((event) => (
+        <ToolCallEvent key={toolCallRowKey(event.callId)} event={event} />
+      ))}
+    </CollapsibleDetails>
   );
 }
 
@@ -362,6 +424,7 @@ function ThreadBody({
   const subAgentsByCallId = new Map(
     deriveSubAgents(events).map((agent) => [agent.callId, agent]),
   );
+  const segments = groupOrdinaryToolCalls(events);
 
   return (
     <MessageScroller
@@ -376,16 +439,28 @@ function ThreadBody({
       aria-live="polite"
       aria-relevant="additions text"
     >
-      {events.map((event, index) => (
-        <TranscriptEventRow
-          key={eventKey(event, index)}
-          event={event}
-          subAgentsByCallId={subAgentsByCallId}
-          thinkingOpen={
-            event.type === "thinking" && isLiveThinking(events, index)
-          }
-        />
-      ))}
+      {segments.map((segment) => {
+        if (segment.kind === "tool_use_group") {
+          return (
+            <ToolUseGroup
+              key={`tool_use_group-${segment.events[0]!.callId}`}
+              events={segment.events}
+            />
+          );
+        }
+        const index = events.indexOf(segment.event);
+        return (
+          <TranscriptEventRow
+            key={eventKey(segment.event, index)}
+            event={segment.event}
+            subAgentsByCallId={subAgentsByCallId}
+            thinkingOpen={
+              segment.event.type === "thinking" &&
+              isLiveThinking(events, index)
+            }
+          />
+        );
+      })}
       {pendingMessageText ? (
         <PendingMessageRow
           conversationId={conversationId}
