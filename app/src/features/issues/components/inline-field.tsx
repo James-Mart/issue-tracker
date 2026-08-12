@@ -71,6 +71,10 @@ export interface InlineFieldProps {
   onDraftChange?: (draft: string) => void;
   /** Let a parent push draft updates into the session (e.g. attachment insert). */
   setDraftRef?: MutableRefObject<((draft: string) => void) | null>;
+  /** Initial draft when entering edit (e.g. localStorage hydration). */
+  resolveEditDraft?: (savedValue: string) => string;
+  onEditCancel?: () => void;
+  onEditingChange?: (editing: boolean) => void;
   /** Sibling of the display control (e.g. navigate icon); not inside the click target. */
   trailingDisplay?: ReactNode;
 }
@@ -96,6 +100,9 @@ export function InlineField({
   shouldDeferBlurCommit,
   onDraftChange,
   setDraftRef,
+  resolveEditDraft,
+  onEditCancel,
+  onEditingChange,
   trailingDisplay,
 }: InlineFieldProps) {
   const {
@@ -112,7 +119,16 @@ export function InlineField({
     acknowledge,
     onKeyDown,
     onBlur,
-  } = useInlineEditSession({ value, issue, onSave, validate, multiline });
+  } = useInlineEditSession({
+    value,
+    issue,
+    onSave,
+    validate,
+    multiline,
+    resolveEditDraft,
+    onEditCancel,
+    onEditingChange,
+  });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
