@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { workCursorFraction } from "./rail";
+import { inFlightIndex } from "./rail";
 import type { RailNodeState } from "@/features/issues/lib/rail-state";
 
-describe("workCursorFraction", () => {
-  it("returns the center fraction of the in-flight node", () => {
+describe("inFlightIndex", () => {
+  it("returns the index of the in-flight node", () => {
     const states: RailNodeState[] = [
       "merged",
       "merged",
@@ -11,20 +11,20 @@ describe("workCursorFraction", () => {
       "ready",
       "blocked",
     ];
-    expect(workCursorFraction(states)).toBeCloseTo(2.5 / 5);
+    expect(inFlightIndex(states)).toBe(2);
   });
 
   it("targets the first in-flight node when several are present", () => {
     const states: RailNodeState[] = ["in-flight", "in-flight", "ready"];
-    expect(workCursorFraction(states)).toBeCloseTo(0.5 / 3);
+    expect(inFlightIndex(states)).toBe(0);
   });
 
   it("returns null when no node is in-flight", () => {
     const states: RailNodeState[] = ["merged", "ready", "blocked"];
-    expect(workCursorFraction(states)).toBeNull();
+    expect(inFlightIndex(states)).toBeNull();
   });
 
   it("returns null for an empty spine", () => {
-    expect(workCursorFraction([])).toBeNull();
+    expect(inFlightIndex([])).toBeNull();
   });
 });

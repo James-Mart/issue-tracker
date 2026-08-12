@@ -99,15 +99,6 @@ const config: Config = {
   					height: '0'
   				}
   			},
-  			// work-cursor bead: current flows from the top of the spine down to the
-  			// in-flight port (--wc-end), dwells, then fades and loops.
-  			'work-cursor': {
-  				'0%': { top: '0', opacity: '0' },
-  				'10%': { opacity: '1' },
-  				'70%': { top: 'var(--wc-end)', opacity: '1' },
-  				'88%': { top: 'var(--wc-end)', opacity: '1' },
-  				'100%': { top: 'var(--wc-end)', opacity: '0' }
-  			},
   			// live chip pulse — matches design-system livedot
   			'live-dot': {
   				'0%, 100%': { opacity: '1' },
@@ -117,8 +108,11 @@ const config: Config = {
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
   			'accordion-up': 'accordion-up 0.2s ease-out',
-  			'work-cursor': 'work-cursor 5.2s cubic-bezier(0.5, 0, 0.5, 1) infinite',
   			'live-dot': 'live-dot 2.4s ease-in-out infinite'
+  		},
+  		transitionTimingFunction: {
+  			// work-cursor travel: the current leaves one port and settles on the next
+  			'work-cursor': 'cubic-bezier(0.5, 0, 0.5, 1)'
   		}
   	}
   },
