@@ -6,6 +6,7 @@ import { IssueAttachmentsSection } from "./attachments-panel";
 import { SettingsCard } from "./detail-section";
 import { IssueDescriptionField } from "./issue-description-field";
 import { IssueInspirationAppsField } from "./issue-inspiration-apps-field";
+import { IssuePersonasField } from "./issue-personas-field";
 import { IssueMergePolicyField } from "./issue-merge-policy-field";
 import { IssueProjectLabelsField } from "./issue-project-labels-field";
 import { IssueSupportingDocsField } from "./issue-supporting-docs-field";
@@ -17,8 +18,8 @@ const SETTINGS_ROW_CLASS = "grid-cols-[7rem_minmax(0,1fr)]";
 /**
  * Project config as a settings surface: prose at reading measure, then config
  * modules tiled across the width. Two columns from `xl` — below that each
- * module's own table needs the full width. Inspiration apps stays full width
- * because its three text columns do not fit half of one.
+ * module's own table needs the full width. Personas and inspiration apps stay
+ * full width because their text columns do not fit half of one.
  */
 export function ProjectSettingsOverview({
   issue,
@@ -60,6 +61,7 @@ export function ProjectSettingsOverview({
         </div>
       </div>
 
+      <IssuePersonasField issue={issue} />
       <IssueInspirationAppsField issue={issue} />
     </div>
   );
