@@ -201,10 +201,12 @@ function TreeRowDerivedMeta({
   derived?: DerivedState;
 }) {
   if (issue.kind === "story") {
+    const reviewStale = Boolean(issue.review && derived?.reviewCurrent === false);
     return (
       <StoryAxisChips
         storyStatus={derived?.storyStatus}
         review={issue.review}
+        reviewStale={reviewStale}
         needsRebase={issue.needsRebase}
         retro={issue.retro}
       />
@@ -322,6 +324,9 @@ export function treeRowTouchChipLabels(
     }
     if (issue.review) {
       labels.push(`review: ${REVIEW_LABEL[issue.review]}`);
+      if (derived?.reviewCurrent === false) {
+        labels.push("review: stale");
+      }
     }
     if (issue.needsRebase) {
       labels.push(`needsRebase: ${issue.needsRebase}`);

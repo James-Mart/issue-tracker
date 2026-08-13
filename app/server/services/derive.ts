@@ -72,6 +72,13 @@ export function derive(issues: Issue[]): DeriveResult {
     return "not-started";
   };
 
+  const reviewCurrentOf = (story: Story): boolean => {
+    if (!story.review) return false;
+    const tasks = tasksOf.get(story.id) ?? [];
+    const reviewed = new Set(story.reviewedTasks);
+    return tasks.every((task) => task.status === "done" && reviewed.has(task.id));
+  };
+
   const storiesById = new Map<string, Story>();
   for (const issue of issues) {
     if (issue.kind === "story") storiesById.set(issue.id, issue);
@@ -109,6 +116,7 @@ export function derive(issues: Issue[]): DeriveResult {
     state[story.id] = {
       blocked: storyStatus === "not-started" && !parentTipDone(story),
       storyStatus,
+      reviewCurrent: reviewCurrentOf(story),
       ...(mergeBase !== undefined ? { mergeBase } : {}),
     };
   }

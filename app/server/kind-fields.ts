@@ -89,6 +89,7 @@ export const STORY_SET_FIELDS = {
   prUrl: { type: "string" },
   merged: { type: "boolean" },
   review: { type: "enum", values: REVIEW_STATUSES },
+  reviewedTasks: { type: "array" },
   needsRebase: { type: "string" },
   retro: { type: "enum", values: RETRO_STATUSES },
   labels: { type: "array" },
@@ -191,6 +192,7 @@ export const STORY_GET_FIELDS = {
   prUrl: STORED,
   merged: STORED,
   review: STORED,
+  reviewedTasks: STORED,
   needsRebase: STORED,
   retro: STORED,
   labels: STORED,
@@ -199,6 +201,7 @@ export const STORY_GET_FIELDS = {
   updatedAt: STORED,
   description: DESCRIPTION,
   storyStatus: DERIVED,
+  reviewCurrent: DERIVED,
   mergePolicy: DERIVED,
   blocked: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;

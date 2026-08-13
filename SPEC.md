@@ -64,7 +64,8 @@ Every issue has a `kind`, one of:
   *project-level Story* — use it when the plan is a single Story plus its
   Tasks. Prefer wrapping in an Epic when you need sibling root Stories,
   stacking, or Epic `blockedBy`. Carries `branchName`, `stackedOn`,
-  `prUrl`, `merged`, `review`, an optional informational `retro` record
+  `prUrl`, `merged`, `review`, `reviewedTasks` (Task ids the review covered),
+  an optional informational `retro` record
   (`in-progress` while mining, `done` once retro posts its terminal comment;
   same enum as Epic; no workflow branches on it), and optional `labels`
   assignments from
@@ -212,7 +213,17 @@ These are computed by `derive()` and never written to disk (see
   (`composer`, `grok`, or `opus`).
 - **review** — a Story-only machine-readable spec-review gate (`passed` /
   `failed`; absent until set via kind [`set`](#kind-scoped-get--set)). Surfaced
-  in the detail panel when set; omitted from the tree outline.
+  in the detail panel when set; omitted from the tree outline. Pair with
+  `reviewedTasks` (the Task ids covered) and derived **`reviewCurrent`** (see
+  [Derived state](#derived-state)).
+- **reviewedTasks** — a Story-only list of Task ids the stored `review` verdict
+  covered; defaults `[]`; set via kind [`set`](#kind-scoped-get--set) (same array
+  patch surface as Epic `blockedBy`). Never rendered as a tree chip — storage
+  for the reviewer.
+- **reviewCurrent** — derived Story flag: `true` when `review` is set, every
+  Task `partOf` the Story is `done`, and every such Task id is in
+  `reviewedTasks`; otherwise `false`. When `review` is set and `reviewCurrent`
+  is `false`, tree/detail chips show the verdict plus a **stale** marker.
 - **noDiff** — a Task-only signal that the implementor intentionally landed no
   source-controlled file changes (`true`; absent until set via kind
   [`set`](#kind-scoped-get--set)). Edits that only touch non-source-controlled
@@ -394,14 +405,14 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | project | `title`, `workspace`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
 | idea | `title`, `archived`, `partOf`, `labels`, `description` |
-| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `retro`, `labels`, `description` |
+| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commitSha`, `noDiff`, `description` |
 
 ##### Value parsing
 
 - Enums: literal strings.
 - Booleans: only `true` / `false`.
-- Arrays (`blockedBy`, assignment `labels` on epic / idea / story): full replace
+- Arrays (`blockedBy`, `reviewedTasks`, assignment `labels` on epic / idea / story): full replace
   takes a positional JSON array; incremental edits use `--add <ids...>` /
   `--remove <ids...>` (variadic ids). Exactly one mode per call — positional
   value, `--add`, `--remove`, and `--clear` are mutually exclusive.
@@ -418,7 +429,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   `--rename`):
   - **Clearable scalars** (`assignee`, `commitSha`, `branchName`, `stackedOn`,
     `prUrl`, `workspace`, `qa`, `retro`): blanks the field (absent / `null`).
-  - **`blockedBy`** / assignment **`labels`**: sets `[]` (empty array, not null).
+  - **`blockedBy`** / **`reviewedTasks`** / assignment **`labels`**: sets `[]` (empty array, not null).
   - **Project `labels`**: sets `[]` (empty catalog).
   - **Project `supportingDocs`**: blanks the field (absent / `null`); with
     `--doc <key>`, removes only that key.
@@ -848,6 +859,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `merged` | boolean | defaults `false` |
 | `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by finish-branch or `issue merge` on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base after `merge` / `fast-forward` / a successful `issue merge` (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
 | `review` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
+| `reviewedTasks` | string[] | Task ids the stored review covered; defaults `[]`; same array patch surface as Epic `blockedBy`; never rendered as a tree chip |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
 | `labels` | string[]? | assignment ids from the containing Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
@@ -1322,7 +1334,7 @@ preserves everything else from the existing same-kind issue.
 | `partOf`, `stackedOn` | inferred from nesting (a story-rooted doc has no nesting, so it preserves the on-disk `stackedOn`); runtime `partOf`/`stackedOn` edits use kind [`set`](#kind-scoped-get--set) |
 | `id`, `createdAt` | set on create; `apply` preserves them, never rewrites |
 | `status`, `qa`, `commitSha`, `noDiff` (Task) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
-| `branchName`, `prUrl`, `merged`, `review`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `branchName`, `prUrl`, `merged`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `mergeBaseOverride` (Epic / Story) | imperative only via kind [`set`](#kind-scoped-get--set) field `mergeBase` (stores as `mergeBaseOverride`); `apply` preserves |
 | `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `assignee` (Task) | imperative write (kind [`set`](#kind-scoped-get--set)); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |
@@ -1347,6 +1359,11 @@ so cannot drift:
 - **Story status** — `merged` if `merged`; else `pr-open` if it has Tasks,
   all are `done`, and `prUrl` is set; else `in-progress` if `branchName` is set;
   else `not-started`.
+- **Story `reviewCurrent`** — `true` when `review` is set, every Task `partOf`
+  the Story is `done`, and every such Task id is in `reviewedTasks`; otherwise
+  `false` (including when `review` is unset). A covered Task moved back off
+  `done`, a Task injected after the review, or any uncovered done Task makes
+  the verdict stale until `reviewedTasks` is updated.
 - **Story `blocked`** (to start) — a `not-started` Story is `blocked` when it
   has a `stackedOn` parent whose tip cannot be forked yet: the parent must have
   a `branchName` **and** all the parent's Tasks must be `done` (it forks the

@@ -328,6 +328,20 @@ describe("parseIssue - valid per kind", () => {
     expect(parseIssue({ ...branch, review: "pending" }).ok).toBe(false);
   });
 
+  it("parses a branch and defaults reviewedTasks to []", () => {
+    const absent = parseIssue(branch);
+    expect(absent.ok).toBe(true);
+    if (absent.ok && absent.issue.kind === "story") {
+      expect(absent.issue.reviewedTasks).toEqual([]);
+    }
+
+    const covered = parseIssue({ ...branch, reviewedTasks: ["c1", "c2"] });
+    expect(covered.ok).toBe(true);
+    if (covered.ok && covered.issue.kind === "story") {
+      expect(covered.issue.reviewedTasks).toEqual(["c1", "c2"]);
+    }
+  });
+
   it("parses a branch with an optional retro", () => {
     const inProgress = parseIssue({ ...branch, retro: "in-progress" });
     expect(inProgress.ok).toBe(true);

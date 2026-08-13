@@ -2299,6 +2299,7 @@ describe("tree", () => {
     expect(help.stdout).toContain("epicStatus");
     expect(help.stdout).toContain("mergeBase");
     expect(help.stdout).toContain("mergePolicy");
+    expect(help.stdout).toContain("reviewCurrent");
   });
 
   it("shows review and retro chips on the correct lines only when set", () => {
@@ -2326,6 +2327,40 @@ describe("tree", () => {
     expect(cleared.stdout).not.toMatch(/^ {2}epic e\b.*\bretro=/m);
     expect(cleared.stdout).not.toMatch(/^ {4}story a\b.*\bretro=/m);
     expect(cleared.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b/m);
+  });
+
+  it("shows review stale chip when coverage is out of date and never reviewedTasks", () => {
+    expect(runCli(["story", "set", "a", "branchName", "feat/a"]).status).toBe(0);
+    expect(runCli(["task", "set", "c1", "status", "done"]).status).toBe(0);
+    expect(runCli(["story", "set", "a", "review", "passed"]).status).toBe(0);
+    expect(runCli(["story", "set", "a", "reviewedTasks", '["c1"]']).status).toBe(0);
+
+    const current = runCli(["tree", "p"]);
+    expect(current.status).toBe(0);
+    expect(current.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b/m);
+    expect(current.stdout).not.toMatch(/^ {4}story a\b.*\bstale\b/m);
+    expect(current.stdout).not.toMatch(/^ {4}story a\b.*\breviewedTasks=/m);
+
+    writeIssue("c2", {
+      kind: "task",
+      title: "C2",
+      partOf: "a",
+      status: "done",
+      order: 1,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const stale = runCli(["tree", "p"]);
+    expect(stale.status).toBe(0);
+    expect(stale.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b.*\bstale\b/m);
+    expect(stale.stdout).not.toMatch(/\breviewedTasks=/m);
+
+    expect(runCli(["task", "set", "c1", "status", "in-progress"]).status).toBe(0);
+
+    const rework = runCli(["tree", "p"]);
+    expect(rework.status).toBe(0);
+    expect(rework.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b.*\bstale\b/m);
   });
 
   it("shows needsRebase chip on story lines only when set", () => {

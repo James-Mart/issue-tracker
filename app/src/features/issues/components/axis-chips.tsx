@@ -55,19 +55,22 @@ export function storyAxesVisible(
   review?: ReviewStatus,
   retro?: RetroStatus,
   needsRebase?: string,
+  reviewStale?: boolean,
 ) {
-  return Boolean(storyStatus || review || retro || needsRebase);
+  return Boolean(storyStatus || review || retro || needsRebase || reviewStale);
 }
 
 export function StoryAxisChips({
   storyStatus,
   review,
+  reviewStale,
   retro,
   needsRebase,
   className,
 }: {
   storyStatus?: StoryStatus;
   review?: ReviewStatus;
+  reviewStale?: boolean;
   retro?: RetroStatus;
   needsRebase?: string;
   className?: string;
@@ -83,6 +86,13 @@ export function StoryAxisChips({
     chips.push({
       variant: REVIEW_BADGE_VARIANT[review],
       label: REVIEW_LABEL[review],
+      prefix: "review",
+    });
+  }
+  if (reviewStale) {
+    chips.push({
+      variant: "warn",
+      label: "stale",
       prefix: "review",
     });
   }

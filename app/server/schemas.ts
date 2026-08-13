@@ -271,6 +271,7 @@ export const storySchema = z.object({
   prUrl: z.string().optional(),
   merged: z.boolean().default(false),
   review: z.enum(REVIEW_STATUSES).optional(),
+  reviewedTasks: z.array(z.string()).default([]),
   needsRebase: z.string().optional(),
   retro: z.enum(RETRO_STATUSES).optional(),
   labels: assignmentLabelsSchema,
@@ -402,6 +403,8 @@ export interface DerivedState {
   blocked: boolean;
   storyStatus?: StoryStatus;
   epicStatus?: EpicStatus;
+  /** True when a stored review still covers every done Task on the Story. */
+  reviewCurrent?: boolean;
   /** Derived git fork-point ref (see resolveMergeBase). */
   mergeBase?: string;
   /** Effective merge policy (stored override else inherited from parent). */

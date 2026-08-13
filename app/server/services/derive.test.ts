@@ -359,6 +359,59 @@ describe("derive - epic blocked gating", () => {
   });
 });
 
+describe("derive - review coverage", () => {
+  it("leaves reviewCurrent false when no review is recorded", () => {
+    const issues = [
+      epic("e"),
+      branch("b", "e", { branchName: "feat/b" }),
+      commit("c1", "b", { status: "done", commitSha: "a" }),
+    ];
+    expect(derive(issues).byId.b.reviewCurrent).toBe(false);
+  });
+
+  it("is true when review covers every done task", () => {
+    const issues = [
+      epic("e"),
+      branch("b", "e", {
+        branchName: "feat/b",
+        review: "passed",
+        reviewedTasks: ["c1", "c2"],
+      }),
+      commit("c1", "b", { status: "done", commitSha: "a" }, 0),
+      commit("c2", "b", { status: "done", commitSha: "b" }, 1),
+    ];
+    expect(derive(issues).byId.b.reviewCurrent).toBe(true);
+  });
+
+  it("is false when a task is injected after the review", () => {
+    const issues = [
+      epic("e"),
+      branch("b", "e", {
+        branchName: "feat/b",
+        review: "passed",
+        reviewedTasks: ["c1"],
+      }),
+      commit("c1", "b", { status: "done", commitSha: "a" }, 0),
+      commit("c2", "b", { status: "done", commitSha: "b" }, 1),
+    ];
+    expect(derive(issues).byId.b.reviewCurrent).toBe(false);
+  });
+
+  it("is false when a covered task moves back off done", () => {
+    const issues = [
+      epic("e"),
+      branch("b", "e", {
+        branchName: "feat/b",
+        review: "passed",
+        reviewedTasks: ["c1", "c2"],
+      }),
+      commit("c1", "b", { status: "done", commitSha: "a" }, 0),
+      commit("c2", "b", { status: "in-progress" }, 1),
+    ];
+    expect(derive(issues).byId.b.reviewCurrent).toBe(false);
+  });
+});
+
 describe("derive - problems", () => {
   it("passes integrity problems through (cycles, dangling, kind)", () => {
     const issues = [
