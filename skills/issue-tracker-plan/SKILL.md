@@ -118,13 +118,20 @@ mid-grill.
   - **Non-trunk branch** — for every **Focused codebase research** spawn
     during the rest of the grill, pass the chosen branch as `Ref` so research
     reads at that ref (see Spawn stubs).
+- After the merge-base answer and before any other grill question, spawn one
+  **Focused codebase research** (Spawn stubs; `role: issue-tracker-research`)
+  whose `Research` surveys how the host repository already solves directory
+  placement and what a directory's location means, test registration and
+  invocation, how binaries and toolchains are located, and how dependencies
+  get installed. Wait for its summary; findings stay in session and inform
+  the grill.
 - Ask **one question at a time**, waiting for feedback before continuing.
   Multiple questions at once is bewildering.
 - Each question should be **succinct**.
 - Recommended answers must **not** be part of the question text. Express them
   only via a `(recommended)` prefix in the **list of answers** (not inside the
   question).
-- When a **focused** codebase question or fact needs answering (cwd =
+- When a further **focused** codebase question or fact needs answering (cwd =
   Project `Workspace:`), **delegate** research rather than reading widely
   yourself — spawn **Focused codebase research** (Spawn stubs); wait for its
   summary, then continue the grill.
