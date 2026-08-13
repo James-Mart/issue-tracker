@@ -212,6 +212,15 @@ Verify.
 Run the unit tests. Confirm X.
 ```
 
+## Task footprint
+
+- Anything introduced purely to make an intermediate Task verifiable —
+  placeholder specs, fixtures, stubs, temporary wiring — must name the Task
+  that removes it.
+- A Task that mutates state outside the repository (`/etc` entries, `sudo`,
+  global installs, machine-wide config) must justify in its prose why no
+  design avoids the mutation.
+
 ## Prior-content consistency
 
 When a Task Change updates content, you must update every place that still
@@ -280,6 +289,10 @@ Before done:
 - Every Task with implementor work has a `### Verify` / `## Verify` heading
   (not inline `Verify:`) stating how to check the work (see
   [Task Verify heading](#task-verify-heading)).
+- Every piece of verifiable scaffolding names the Task that removes it (see
+  [Task footprint](#task-footprint)).
+- Every Task that mutates state outside the repository justifies in its prose
+  why no design avoids the mutation (see [Task footprint](#task-footprint)).
 - Every Task Change that updates content also updates every place that still
   describes or depends on the prior version (see
   [Prior-content consistency](#prior-content-consistency)).
