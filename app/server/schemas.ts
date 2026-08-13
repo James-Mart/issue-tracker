@@ -8,7 +8,7 @@ export const TASK_STATUSES = ["todo", "in-progress", "fixing", "done"] as const;
 export const QA_STATUSES = ["reviewing", "changes-requested", "passed"] as const;
 export const RETRO_STATUSES = ["in-progress", "done"] as const;
 export const MERGE_POLICIES = ["merge", "pull-request", "manual", "fast-forward"] as const;
-export const SPEC_REVIEW_STATUSES = ["passed", "failed"] as const;
+export const REVIEW_STATUSES = ["passed", "failed"] as const;
 export const SUPPORTING_DOC_KEYS = [
   "vision",
   "codingStandards",
@@ -270,7 +270,8 @@ export const storySchema = z.object({
   mergePolicy: z.enum(MERGE_POLICIES).optional(),
   prUrl: z.string().optional(),
   merged: z.boolean().default(false),
-  specReview: z.enum(SPEC_REVIEW_STATUSES).optional(),
+  review: z.enum(REVIEW_STATUSES).optional(),
+  reviewedTasks: z.array(z.string()).default([]),
   needsRebase: z.string().optional(),
   retro: z.enum(RETRO_STATUSES).optional(),
   labels: assignmentLabelsSchema,
@@ -306,7 +307,7 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type QaStatus = (typeof QA_STATUSES)[number];
 export type RetroStatus = (typeof RETRO_STATUSES)[number];
 export type MergePolicy = (typeof MERGE_POLICIES)[number];
-export type SpecReviewStatus = (typeof SPEC_REVIEW_STATUSES)[number];
+export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 
 /** Allowed `partOf` parent kinds per child kind (empty = no parent). */
 export const PARENT_KINDS: Record<IssueKind, readonly IssueKind[]> = {
@@ -402,6 +403,8 @@ export interface DerivedState {
   blocked: boolean;
   storyStatus?: StoryStatus;
   epicStatus?: EpicStatus;
+  /** True when a stored review still covers every done Task on the Story. */
+  reviewCurrent?: boolean;
   /** Derived git fork-point ref (see resolveMergeBase). */
   mergeBase?: string;
   /** Effective merge policy (stored override else inherited from parent). */

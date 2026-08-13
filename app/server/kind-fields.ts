@@ -4,7 +4,7 @@ import {
   QA_STATUSES,
   RETRO_STATUSES,
   MERGE_POLICIES,
-  SPEC_REVIEW_STATUSES,
+  REVIEW_STATUSES,
   type IssueKind,
 } from "./schemas.js";
 
@@ -88,7 +88,8 @@ export const STORY_SET_FIELDS = {
   mergePolicy: { type: "enum", values: MERGE_POLICIES },
   prUrl: { type: "string" },
   merged: { type: "boolean" },
-  specReview: { type: "enum", values: SPEC_REVIEW_STATUSES },
+  review: { type: "enum", values: REVIEW_STATUSES },
+  reviewedTasks: { type: "array" },
   needsRebase: { type: "string" },
   retro: { type: "enum", values: RETRO_STATUSES },
   labels: { type: "array" },
@@ -190,7 +191,8 @@ export const STORY_GET_FIELDS = {
   stackedOn: STORED,
   prUrl: STORED,
   merged: STORED,
-  specReview: STORED,
+  review: STORED,
+  reviewedTasks: STORED,
   needsRebase: STORED,
   retro: STORED,
   labels: STORED,
@@ -199,6 +201,7 @@ export const STORY_GET_FIELDS = {
   updatedAt: STORED,
   description: DESCRIPTION,
   storyStatus: DERIVED,
+  reviewCurrent: DERIVED,
   mergePolicy: DERIVED,
   blocked: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;

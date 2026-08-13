@@ -3,7 +3,7 @@ import type { IssueRecord } from "@server/schemas";
 import { assigneeOf } from "@server/assignee";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/cn";
-import { SpecReviewBadge } from "./spec-review-badge";
+import { ReviewBadge } from "./review-badge";
 
 export function IssueBadges({
   issue,
@@ -15,12 +15,12 @@ export function IssueBadges({
   className?: string;
 }) {
   const assignee = assigneeOf(issue);
-  const specReview =
-    !compact && issue.kind === "story" ? issue.specReview : undefined;
+  const review =
+    !compact && issue.kind === "story" ? issue.review : undefined;
   const noDiff =
     !compact && issue.kind === "task" ? issue.noDiff : undefined;
 
-  if (!assignee && !specReview && !noDiff) return null;
+  if (!assignee && !review && !noDiff) return null;
   return (
     <span className={cn("flex items-center gap-1.5", className)}>
       {assignee ? (
@@ -29,7 +29,7 @@ export function IssueBadges({
           {assignee}
         </Badge>
       ) : null}
-      {specReview ? <SpecReviewBadge status={specReview} /> : null}
+      {review ? <ReviewBadge status={review} /> : null}
       {noDiff ? (
         <Badge variant="secondary" className="gap-1" title="No source-controlled implementor changes">
           <CircleSlash className="h-3 w-3" />

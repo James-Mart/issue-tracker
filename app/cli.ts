@@ -134,7 +134,8 @@ function storyChips(story: StoryRecord, derived: Record<string, DerivedState>): 
   const d = derived[story.id];
   const chips: string[] = [];
   if (d?.storyStatus) chips.push(`status=${d.storyStatus}`);
-  if (story.specReview) chips.push(`specReview=${story.specReview}`);
+  if (story.review) chips.push(`review=${story.review}`);
+  if (story.review && d?.reviewCurrent === false) chips.push("stale");
   if (story.needsRebase) chips.push(`needsRebase=${story.needsRebase}`);
   if (story.retro) chips.push(`retro=${story.retro}`);
   chips.push(`mergeBase=${d?.mergeBase ?? CHIP_UNSET}`);
@@ -381,7 +382,7 @@ program
     `
 Output shape:
   issues    array of stored issue records (each carries kind)
-  derived   object keyed by issue id (not an array); values hold blocked, storyStatus, epicStatus, mergeBase, mergePolicy
+  derived   object keyed by issue id (not an array); values hold blocked, storyStatus, epicStatus, reviewCurrent, mergeBase, mergePolicy
   problems  array of { id, message }
 `,
   )

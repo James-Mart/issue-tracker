@@ -35,7 +35,7 @@ export interface ApplySummary {
 // Build the on-disk issue for a desired doc node. Doc-owned fields (title,
 // partOf, stackedOn, and the Epic's blockedBy) come from the doc.
 // Imperative/progress fields
-// (retro, status, qa, commitSha, noDiff, branchName, prUrl, merged, specReview, assignee,
+// (retro, status, qa, commitSha, noDiff, branchName, prUrl, merged, review, assignee,
 // needsAttention, attentionReason, archived, workspace, mergePolicy, labels, supportingDocs,
 // inspirationApps, personas) and
 // `createdAt` are preserved from a same-kind existing issue; for a brand-new issue they are left

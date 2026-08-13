@@ -1,6 +1,6 @@
 import { CHIP_UNSET } from "@server/fields";
 import type { IssueDetail, IssueRecord } from "@server/schemas";
-import { QA_STATUS_LABEL, SPEC_REVIEW_LABEL } from "../lib/derived";
+import { QA_STATUS_LABEL, REVIEW_LABEL } from "../lib/derived";
 import {
   storyGitMetaScalars,
   taskGitMetaScalars,
@@ -35,9 +35,9 @@ function storyScalarValue(
       return <PrUrlDisplay prUrl={issue.prUrl} />;
     case "merged":
       return <IssueMergedField issue={issue} />;
-    case "specReview":
-      return issue.specReview ? (
-        <span>{SPEC_REVIEW_LABEL[issue.specReview]}</span>
+    case "review":
+      return issue.review ? (
+        <span>{REVIEW_LABEL[issue.review]}</span>
       ) : null;
     default:
       return null;

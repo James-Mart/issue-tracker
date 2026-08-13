@@ -1,7 +1,7 @@
 import type {
   EpicStatus,
   RetroStatus,
-  SpecReviewStatus,
+  ReviewStatus,
   StoryStatus,
 } from "@server/schemas";
 import type { BadgeProps } from "@/components/ui/badge";
@@ -12,8 +12,8 @@ import {
   EPIC_STATUS_LABEL,
   RETRO_BADGE_VARIANT,
   RETRO_LABEL,
-  SPEC_REVIEW_BADGE_VARIANT,
-  SPEC_REVIEW_LABEL,
+  REVIEW_BADGE_VARIANT,
+  REVIEW_LABEL,
   STORY_STATUS_BADGE_VARIANT,
   STORY_STATUS_LABEL,
 } from "../lib/derived";
@@ -24,7 +24,7 @@ export type AxisChip = {
   prefix?: string;
 };
 
-/** Shared status/axis chip row (status, specReview, retro, …). */
+/** Shared status/axis chip row (status, review, retro, …). */
 export function AxisChips({
   chips,
   className,
@@ -52,22 +52,25 @@ export function AxisChips({
 
 export function storyAxesVisible(
   storyStatus?: StoryStatus,
-  specReview?: SpecReviewStatus,
+  review?: ReviewStatus,
   retro?: RetroStatus,
   needsRebase?: string,
+  reviewStale?: boolean,
 ) {
-  return Boolean(storyStatus || specReview || retro || needsRebase);
+  return Boolean(storyStatus || review || retro || needsRebase || reviewStale);
 }
 
 export function StoryAxisChips({
   storyStatus,
-  specReview,
+  review,
+  reviewStale,
   retro,
   needsRebase,
   className,
 }: {
   storyStatus?: StoryStatus;
-  specReview?: SpecReviewStatus;
+  review?: ReviewStatus;
+  reviewStale?: boolean;
   retro?: RetroStatus;
   needsRebase?: string;
   className?: string;
@@ -79,11 +82,18 @@ export function StoryAxisChips({
       label: STORY_STATUS_LABEL[storyStatus],
     });
   }
-  if (specReview) {
+  if (review) {
     chips.push({
-      variant: SPEC_REVIEW_BADGE_VARIANT[specReview],
-      label: SPEC_REVIEW_LABEL[specReview],
-      prefix: "specReview",
+      variant: REVIEW_BADGE_VARIANT[review],
+      label: REVIEW_LABEL[review],
+      prefix: "review",
+    });
+  }
+  if (reviewStale) {
+    chips.push({
+      variant: "warn",
+      label: "stale",
+      prefix: "review",
     });
   }
   if (needsRebase) {

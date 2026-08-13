@@ -7,7 +7,9 @@ Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-code-quality-diff-review.md`
 
-1. Inspect the current **uncommitted** working-tree diff for this Task.
+1. Inspect the whole uncommitted change for this Task: tracked
+   modifications plus the contents of untracked files, enumerated with
+   `git status --porcelain --untracked-files=all` and read directly.
 2. Perform a deep code quality review for
     * introduced redundancy
     * poor abstraction, encapsulation, or modularity
@@ -15,6 +17,8 @@ Absolute path for this file (Read this exact path):
     * spaghetti code
     * succinctness/legibility issues
     * leftover patterns / dead code
+    * an untracked file that looks generated — the implementor deletes it
+      or adds an ignore rule
 3. Rethink how to structure / implement the changes to meaningfully improve
    code quality without impacting behavior. Be **ambitious** here about code
    structure. Do not merely identify local cleanup opportunities. Actively

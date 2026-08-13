@@ -45,7 +45,7 @@ import {
   leafTaskProgressCount,
   QA_STATUS_LABEL,
   RETRO_LABEL,
-  SPEC_REVIEW_LABEL,
+  REVIEW_LABEL,
   STORY_STATUS_LABEL,
   TASK_STATUS_LABEL,
 } from "../lib/derived";
@@ -201,10 +201,12 @@ function TreeRowDerivedMeta({
   derived?: DerivedState;
 }) {
   if (issue.kind === "story") {
+    const reviewStale = Boolean(issue.review && derived?.reviewCurrent === false);
     return (
       <StoryAxisChips
         storyStatus={derived?.storyStatus}
-        specReview={issue.specReview}
+        review={issue.review}
+        reviewStale={reviewStale}
         needsRebase={issue.needsRebase}
         retro={issue.retro}
       />
@@ -320,8 +322,11 @@ export function treeRowTouchChipLabels(
     if (derived?.storyStatus) {
       labels.push(STORY_STATUS_LABEL[derived.storyStatus]);
     }
-    if (issue.specReview) {
-      labels.push(`specReview: ${SPEC_REVIEW_LABEL[issue.specReview]}`);
+    if (issue.review) {
+      labels.push(`review: ${REVIEW_LABEL[issue.review]}`);
+      if (derived?.reviewCurrent === false) {
+        labels.push("review: stale");
+      }
     }
     if (issue.needsRebase) {
       labels.push(`needsRebase: ${issue.needsRebase}`);

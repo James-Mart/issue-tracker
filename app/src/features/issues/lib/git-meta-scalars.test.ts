@@ -48,7 +48,7 @@ describe("storyGitMetaScalars", () => {
       story({
         branchName: "feat/a",
         prUrl: "https://example.test/pr/1",
-        specReview: "passed",
+        review: "passed",
       }),
       "main",
     );
@@ -58,7 +58,7 @@ describe("storyGitMetaScalars", () => {
       { key: "stackedOn", label: FIELD_LABELS.stackedOn },
       { key: "prUrl", label: FIELD_LABELS.prUrl },
       { key: "merged", label: FIELD_LABELS.merged },
-      { key: "specReview", label: FIELD_LABELS.specReview },
+      { key: "review", label: FIELD_LABELS.review },
     ]);
     expect(FIELD_LABELS.branchName).toBe("Branch");
     expect(FIELD_LABELS.prUrl).toBe("Pull request");

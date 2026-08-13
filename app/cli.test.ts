@@ -1545,8 +1545,8 @@ describe("story get/set", () => {
     expect(runCli(["story", "set", "a", "prUrl", "--clear"]).status).toBe(0);
     expect(runCli(["story", "get", "a", "prUrl"]).stdout).toBe("");
 
-    expect(runCli(["story", "set", "a", "specReview", "passed"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "specReview"]).stdout).toBe("passed\n");
+    expect(runCli(["story", "set", "a", "review", "passed"]).status).toBe(0);
+    expect(runCli(["story", "get", "a", "review"]).stdout).toBe("passed\n");
 
     expect(runCli(["story", "set", "a", "needsRebase", "main"]).status).toBe(0);
     expect(runCli(["story", "get", "a", "needsRebase"]).stdout).toBe("main\n");
@@ -1716,24 +1716,24 @@ describe("story get/set", () => {
       createdAt: AT,
       updatedAt: AT,
     });
-    const setOnCommit = runCli(["story", "set", "c1", "specReview", "passed"]);
+    const setOnCommit = runCli(["story", "set", "c1", "review", "passed"]);
     expect(setOnCommit.status).toBe(1);
     expect(setOnCommit.stderr).toMatch(/"c1" is a task, not a story/);
   });
 
-  it("surfaces specReview in view/list and preserves it across apply", () => {
-    expect(runCli(["story", "view", "a"]).stdout).not.toContain("specReview:");
+  it("surfaces review in view/list and preserves it across apply", () => {
+    expect(runCli(["story", "view", "a"]).stdout).not.toContain("review:");
 
-    expect(runCli(["story", "set", "a", "specReview", "passed"]).status).toBe(0);
-    expect(runCli(["story", "view", "a"]).stdout).toContain("specReview: passed");
+    expect(runCli(["story", "set", "a", "review", "passed"]).status).toBe(0);
+    expect(runCli(["story", "view", "a"]).stdout).toContain("review: passed");
 
     const listed = JSON.parse(runCli(["list", "--in", "p"]).stdout);
     const branch = listed.issues.find((i: { id: string }) => i.id === "a");
-    expect(branch.specReview).toBe("passed");
+    expect(branch.review).toBe("passed");
 
-    const invalid = runCli(["story", "set", "a", "specReview", "pending"]);
+    const invalid = runCli(["story", "set", "a", "review", "pending"]);
     expect(invalid.status).toBe(1);
-    expect(invalid.stderr).toMatch(/invalid specReview "pending"/);
+    expect(invalid.stderr).toMatch(/invalid review "pending"/);
 
     const applyPath = join(dir, "epic.yaml");
     writeFileSync(
@@ -1748,12 +1748,12 @@ epic:
       title: Branch A renamed
 `,
     );
-    expect(runCli(["story", "set", "a", "specReview", "failed"]).status).toBe(0);
+    expect(runCli(["story", "set", "a", "review", "failed"]).status).toBe(0);
     expect(runCli(["apply", applyPath]).status).toBe(0);
-    expect(JSON.parse(readFileSync(join(dir, "a", "issue.json"), "utf8")).specReview).toBe(
+    expect(JSON.parse(readFileSync(join(dir, "a", "issue.json"), "utf8")).review).toBe(
       "failed",
     );
-    expect(runCli(["story", "view", "a"]).stdout).toContain("specReview: failed");
+    expect(runCli(["story", "view", "a"]).stdout).toContain("review: failed");
     expect(runCli(["story", "view", "a"]).stdout).toContain("title: Branch A renamed");
   });
 
@@ -2299,23 +2299,24 @@ describe("tree", () => {
     expect(help.stdout).toContain("epicStatus");
     expect(help.stdout).toContain("mergeBase");
     expect(help.stdout).toContain("mergePolicy");
+    expect(help.stdout).toContain("reviewCurrent");
   });
 
-  it("shows specReview and retro chips on the correct lines only when set", () => {
+  it("shows review and retro chips on the correct lines only when set", () => {
     const unset = runCli(["tree", "p"]);
     expect(unset.status).toBe(0);
     expect(unset.stdout).not.toMatch(/^ {2}epic e\b.*\bretro=/m);
-    expect(unset.stdout).not.toMatch(/^ {4}story a\b.*\bspecReview=/m);
+    expect(unset.stdout).not.toMatch(/^ {4}story a\b.*\breview=/m);
     expect(unset.stdout).not.toMatch(/^ {4}story a\b.*\bretro=/m);
 
     expect(runCli(["epic", "set", "e", "retro", "in-progress"]).status).toBe(0);
-    expect(runCli(["story", "set", "a", "specReview", "passed"]).status).toBe(0);
+    expect(runCli(["story", "set", "a", "review", "passed"]).status).toBe(0);
     expect(runCli(["story", "set", "a", "retro", "done"]).status).toBe(0);
 
     const set = runCli(["tree", "p"]);
     expect(set.status).toBe(0);
     expect(set.stdout).toMatch(/^ {2}epic e\b.*\bretro=in-progress\b/m);
-    expect(set.stdout).toMatch(/^ {4}story a\b.*\bspecReview=passed\b/m);
+    expect(set.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b/m);
     expect(set.stdout).toMatch(/^ {4}story a\b.*\bretro=done\b/m);
 
     expect(runCli(["epic", "set", "e", "retro", "--clear"]).status).toBe(0);
@@ -2325,7 +2326,41 @@ describe("tree", () => {
     expect(cleared.status).toBe(0);
     expect(cleared.stdout).not.toMatch(/^ {2}epic e\b.*\bretro=/m);
     expect(cleared.stdout).not.toMatch(/^ {4}story a\b.*\bretro=/m);
-    expect(cleared.stdout).toMatch(/^ {4}story a\b.*\bspecReview=passed\b/m);
+    expect(cleared.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b/m);
+  });
+
+  it("shows review stale chip when coverage is out of date and never reviewedTasks", () => {
+    expect(runCli(["story", "set", "a", "branchName", "feat/a"]).status).toBe(0);
+    expect(runCli(["task", "set", "c1", "status", "done"]).status).toBe(0);
+    expect(runCli(["story", "set", "a", "review", "passed"]).status).toBe(0);
+    expect(runCli(["story", "set", "a", "reviewedTasks", '["c1"]']).status).toBe(0);
+
+    const current = runCli(["tree", "p"]);
+    expect(current.status).toBe(0);
+    expect(current.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b/m);
+    expect(current.stdout).not.toMatch(/^ {4}story a\b.*\bstale\b/m);
+    expect(current.stdout).not.toMatch(/^ {4}story a\b.*\breviewedTasks=/m);
+
+    writeIssue("c2", {
+      kind: "task",
+      title: "C2",
+      partOf: "a",
+      status: "done",
+      order: 1,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const stale = runCli(["tree", "p"]);
+    expect(stale.status).toBe(0);
+    expect(stale.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b.*\bstale\b/m);
+    expect(stale.stdout).not.toMatch(/\breviewedTasks=/m);
+
+    expect(runCli(["task", "set", "c1", "status", "in-progress"]).status).toBe(0);
+
+    const rework = runCli(["tree", "p"]);
+    expect(rework.status).toBe(0);
+    expect(rework.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b.*\bstale\b/m);
   });
 
   it("shows needsRebase chip on story lines only when set", () => {

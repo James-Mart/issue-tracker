@@ -31,13 +31,15 @@ export function IssueDetailStatusChips({
 
   if (issue.kind === "story") {
     const state = derived?.[issue.id];
-    if (!storyAxesVisible(state?.storyStatus, issue.specReview, issue.retro, issue.needsRebase)) {
+    const reviewStale = Boolean(issue.review && state?.reviewCurrent === false);
+    if (!storyAxesVisible(state?.storyStatus, issue.review, issue.retro, issue.needsRebase, reviewStale)) {
       return null;
     }
     return (
       <StoryAxisChips
         storyStatus={state?.storyStatus}
-        specReview={issue.specReview}
+        review={issue.review}
+        reviewStale={reviewStale}
         needsRebase={issue.needsRebase}
         retro={issue.retro}
         className={className}
