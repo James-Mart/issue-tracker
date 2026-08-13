@@ -26,7 +26,11 @@ For the **dirty + no `noDiff`** row:
 
 1. Stage **all** uncommitted changes (`git add -A`). Do not pick paths —
    the implementor left everything unstaged for this finalize step.
-2. `git commit -m "<Task title>"` (message = the Task issue's title).
+2. Read the staged diff (`git diff --cached`). Compose a single-line subject
+   from what the diff does — the Task title is context only, not the message.
+   Voice: all lowercase (no exceptions), imperative ("when applied, this commit
+   will X"), fewer than 80 characters, no title/body. Then
+   `git commit -m "<subject>"`.
 3. `issue task set <taskId> status done`
 4. `issue task set <taskId> commitSha $(git rev-parse HEAD)`
 5. Finish and stop.
