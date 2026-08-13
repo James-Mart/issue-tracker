@@ -203,12 +203,14 @@ Coordinator never sets Task `status` or Task `qa`.
 | Task `qa` | Code-quality | on each entry `reviewing`, then terminal `passed` / `changes-requested` (three-strike → `needsAttention`); never the coordinator |
 | Story `review` | Story review | on each review round `passed` / `failed` |
 | Story `reviewedTasks` | Story review | all `done` Tasks inspected in that round |
+| Story `needsAttention` (review three-strike) | Coordinator | on the 3rd story-review reopen in one session — see **Close a Story** |
 
 Implement and revise are the **same** implementor agent. Code-quality is a
 **writer** of Task `qa` (spawn/resume and three-strike escalate: see **Per-Task
 cycle** — you do **not** count rounds). Story review is the Story gate
 recorder: it sets `review` and `reviewedTasks` and may append remediation
-Tasks (tracker writes only; never workspace source). Both keep findings out of
+Tasks (tracker writes only; never workspace source); you spawn/resume it and
+enforce the reopen cap (see **Close a Story**). Both keep findings out of
 your context via comments / machine-readable fields.
 
 ## The loop
@@ -323,16 +325,41 @@ Repeat until finish-branch:
    validator-injected remediation Task), **run** the full Per-Task cycle
    for each in tree order (entry gate + steps there). Then continue from
    step 1.
-3. **`specReview` gate.** Read `specReview` with
-   `issue story get <storyId> specReview` — never by parsing chat or `view`.
-   If unset, spawn `issue-tracker-spec-conformance-validator` with the
-   spec-conformance spawn stub. Wait until it finishes (or raises
-   needsAttention); do not ingest
-   its report. Then continue from step 1.
-4. **Finish and advance.** All Tasks are `done` and `specReview` is set
-   (`passed` or `failed`) — do **not** run the validator again. Spawn
-   `issue-tracker-git` with the finish-branch stub. Git applies the Story's
-   effective merge policy — see SPEC § Project merge policy. Advance to the next Story.
+3. **Review gate.** Read `review` with
+   `issue story get <storyId> review` and `reviewCurrent` with
+   `issue story get <storyId> reviewCurrent` — never by parsing chat,
+   `view`, or `tree`. Branch (count only the reopen cap — not general review
+   rounds):
+   - `reviewCurrent` is `true` → step 5 (Finish).
+   - `review` unset → **Delegate** `issue-tracker-story-review` with the
+     story-review spawn stub; keep the returned nested agent id as
+     `resumeId`. Then step 4.
+   - `review` set and `reviewCurrent` is `false` → count how many times you
+     have already **resumed** `issue-tracker-story-review` for `<storyId>`
+     in **this** coordinator session (including the resume you are about to
+     run). On the **3rd** resume, run
+     `issue story set <storyId> needsAttention true --reason "story-review: 3rd reopen in this session — <short summary>"`
+     and stop (Escalation) — do **not** resume again. Otherwise **re-enter**
+     that same story-review agent with the story-review resume stub and its
+     `resumeId`. When the coordinator has lost the `resumeId` (skill
+     re-run), look it up with `delegations` — the most recent entry in the
+     returned `delegations` array whose `role` is
+     `issue-tracker-story-review` — rather than starting a second
+     story-review agent. Then step 4.
+   Wait until a spawn/resume finishes (or raises needsAttention) before
+   step 4.
+
+4. **Gate after story-review.** Read
+   `issue story get <storyId> needsAttention`. If `true`, stop (Escalation).
+   When story-review returned from a **resume** round (`review` was already
+   set before step 3 delegated) and `issue story get <storyId> retro` is
+   `done`, run `issue story set <storyId> retro --clear` — the retro
+   covered only the original Tasks. Then continue from step 1.
+
+5. **Finish and advance.** All Tasks are `done` and `reviewCurrent` is
+   `true` — do **not** run story-review again. Spawn `issue-tracker-git`
+   with the finish-branch stub. Git applies the Story's effective merge
+   policy — see SPEC § Project merge policy. Advance to the next Story.
 
 ### Escalation
 
@@ -397,8 +424,14 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 > fixed.
 
 **Story review** — `role: issue-tracker-story-review`
+(when to spawn: Close-Story step 3)
 
 > *(Issue context line.)*
+
+**Story review (resume)** — `role: issue-tracker-story-review`
+(when to resume: Close-Story step 3)
+
+> *(Issue context line.)* Mode: resume.
 
 **Revise** — `role: issue-tracker-implementor-<family>`
 (re-enter with `resumeId`; look up that role via `delegations` when lost)
@@ -435,7 +468,8 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
   signal.
 - Per-Task QA loop (entry gate, spawn/resume, three-strike): see **Per-Task
   cycle** — single canonical definition; you never count QA rounds.
-  Story-review remediation is Close-Story's job (see that section) — no
+  Story-review spawn/resume and reopen cap: see **Close a Story** — single
+  canonical definition. Story-review remediation is Close-Story's job — no
   story-level revise.
 - Never let a validator edit workspace source (write scopes: Models table).
   Code-quality may write Task `qa` / `needsAttention` and comments only.
