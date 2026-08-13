@@ -67,7 +67,7 @@ export function IssueDetailHeader({
   issue: IssueDetail;
   catalog: ProjectLabel[];
 }) {
-  // Stories carry specReview/retro on axis chips — keep badges compact to avoid dupes.
+  // Stories carry review/retro on axis chips — keep badges compact to avoid dupes.
   const badgesCompact = issue.kind === "story";
 
   return (

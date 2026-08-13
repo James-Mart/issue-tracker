@@ -64,7 +64,7 @@ Every issue has a `kind`, one of:
   *project-level Story* — use it when the plan is a single Story plus its
   Tasks. Prefer wrapping in an Epic when you need sibling root Stories,
   stacking, or Epic `blockedBy`. Carries `branchName`, `stackedOn`,
-  `prUrl`, `merged`, `specReview`, an optional informational `retro` record
+  `prUrl`, `merged`, `review`, an optional informational `retro` record
   (`in-progress` while mining, `done` once retro posts its terminal comment;
   same enum as Epic; no workflow branches on it), and optional `labels`
   assignments from
@@ -210,7 +210,7 @@ These are computed by `derive()` and never written to disk (see
 - **assignee** — Task-only. Who currently owns the Task (e.g. `human` or an
   agent id); in the work loop, overloaded as the implementor model family key
   (`composer`, `grok`, or `opus`).
-- **specReview** — a Story-only machine-readable spec-review gate (`passed` /
+- **review** — a Story-only machine-readable spec-review gate (`passed` /
   `failed`; absent until set via kind [`set`](#kind-scoped-get--set)). Surfaced
   in the detail panel when set; omitted from the tree outline.
 - **noDiff** — a Task-only signal that the implementor intentionally landed no
@@ -394,7 +394,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | project | `title`, `workspace`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
 | idea | `title`, `archived`, `partOf`, `labels`, `description` |
-| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `specReview`, `retro`, `labels`, `description` |
+| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commitSha`, `noDiff`, `description` |
 
 ##### Value parsing
@@ -847,7 +847,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
 | `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by finish-branch or `issue merge` on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base after `merge` / `fast-forward` / a successful `issue merge` (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
-| `specReview` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
+| `review` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
 | `labels` | string[]? | assignment ids from the containing Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
@@ -980,7 +980,7 @@ no consumer can persist a broken file.
   descendants — see [Archived visibility](#archived-visibility)), `partOf`, the
   kind-specific fields (`blockedBy` for an Epic; `status`/`qa`/`commitSha`/`noDiff`
   for a Task; `branchName`/`stackedOn`/`prUrl`/`merged`/
-  `specReview` for a Story), `labels` (Project catalog; Epic / Idea / Story
+  `review` for a Story), `labels` (Project catalog; Epic / Idea / Story
   assignments — see [Project labels](#project-labels)), and `description`
   (written to `description.md`). Catalog remove/clear cascades strip matching
   assignment ids project-wide in the same write; catalog rename retargets
@@ -1322,7 +1322,7 @@ preserves everything else from the existing same-kind issue.
 | `partOf`, `stackedOn` | inferred from nesting (a story-rooted doc has no nesting, so it preserves the on-disk `stackedOn`); runtime `partOf`/`stackedOn` edits use kind [`set`](#kind-scoped-get--set) |
 | `id`, `createdAt` | set on create; `apply` preserves them, never rewrites |
 | `status`, `qa`, `commitSha`, `noDiff` (Task) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
-| `branchName`, `prUrl`, `merged`, `specReview`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `branchName`, `prUrl`, `merged`, `review`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `mergeBaseOverride` (Epic / Story) | imperative only via kind [`set`](#kind-scoped-get--set) field `mergeBase` (stores as `mergeBaseOverride`); `apply` preserves |
 | `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `assignee` (Task) | imperative write (kind [`set`](#kind-scoped-get--set)); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |

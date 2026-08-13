@@ -304,28 +304,28 @@ describe("parseIssue - valid per kind", () => {
     }
   });
 
-  it("parses a branch with an optional specReview", () => {
-    const passed = parseIssue({ ...branch, specReview: "passed" });
+  it("parses a branch with an optional review", () => {
+    const passed = parseIssue({ ...branch, review: "passed" });
     expect(passed.ok).toBe(true);
     if (passed.ok && passed.issue.kind === "story") {
-      expect(passed.issue.specReview).toBe("passed");
+      expect(passed.issue.review).toBe("passed");
     }
 
-    const failed = parseIssue({ ...branch, specReview: "failed" });
+    const failed = parseIssue({ ...branch, review: "failed" });
     expect(failed.ok).toBe(true);
     if (failed.ok && failed.issue.kind === "story") {
-      expect(failed.issue.specReview).toBe("failed");
+      expect(failed.issue.review).toBe("failed");
     }
 
     const absent = parseIssue(branch);
     expect(absent.ok).toBe(true);
     if (absent.ok && absent.issue.kind === "story") {
-      expect(absent.issue.specReview).toBeUndefined();
+      expect(absent.issue.review).toBeUndefined();
     }
   });
 
-  it("rejects an unknown specReview value", () => {
-    expect(parseIssue({ ...branch, specReview: "pending" }).ok).toBe(false);
+  it("rejects an unknown review value", () => {
+    expect(parseIssue({ ...branch, review: "pending" }).ok).toBe(false);
   });
 
   it("parses a branch with an optional retro", () => {

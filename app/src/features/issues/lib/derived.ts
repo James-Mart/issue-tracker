@@ -2,7 +2,7 @@ import {
   type StoryStatus,
   type TaskStatus,
   type EpicStatus,
-  type SpecReviewStatus,
+  type ReviewStatus,
   type QaStatus,
   type RetroStatus,
   type IssueRecord,
@@ -74,13 +74,13 @@ export const EPIC_STATUS_BADGE_VARIANT: Record<
   done: "done",
 };
 
-export const SPEC_REVIEW_LABEL: Record<SpecReviewStatus, string> = {
+export const REVIEW_LABEL: Record<ReviewStatus, string> = {
   passed: "passed",
   failed: "failed",
 };
 
-export const SPEC_REVIEW_BADGE_VARIANT: Record<
-  SpecReviewStatus,
+export const REVIEW_BADGE_VARIANT: Record<
+  ReviewStatus,
   NonNullable<BadgeProps["variant"]>
 > = {
   passed: "done",

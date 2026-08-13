@@ -3,7 +3,7 @@ import {
   EPIC_STATUSES,
   QA_STATUSES,
   RETRO_STATUSES,
-  SPEC_REVIEW_STATUSES,
+  REVIEW_STATUSES,
   STORY_STATUSES,
   TASK_STATUSES,
   type DerivedState,
@@ -14,7 +14,7 @@ import {
   EPIC_STATUS_BADGE_VARIANT,
   QA_STATUS_BADGE_VARIANT,
   RETRO_BADGE_VARIANT,
-  SPEC_REVIEW_BADGE_VARIANT,
+  REVIEW_BADGE_VARIANT,
   STORY_STATUS_BADGE_VARIANT,
   TASK_STATUS_BADGE_VARIANT,
   hasInFlightWork,
@@ -99,8 +99,8 @@ describe("status badge variant maps", () => {
     expectMapCovers(EPIC_STATUSES, EPIC_STATUS_BADGE_VARIANT);
   });
 
-  it("maps every specReview status to an existing Badge variant", () => {
-    expectMapCovers(SPEC_REVIEW_STATUSES, SPEC_REVIEW_BADGE_VARIANT);
+  it("maps every review status to an existing Badge variant", () => {
+    expectMapCovers(REVIEW_STATUSES, REVIEW_BADGE_VARIANT);
   });
 
   it("maps every retro status to an existing Badge variant", () => {

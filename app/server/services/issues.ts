@@ -47,6 +47,7 @@ import {
   type ArchivedCascadePatch,
 } from "./archived.js";
 import { ensureKindRenamed } from "./kind-rename.js";
+import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import { uniqueSlug } from "./slug.js";
@@ -169,12 +170,17 @@ export function ensureArchivedMigrated(): void {
   });
 }
 
+export function ensureSpecReviewMigrated(): void {
+  ensureSpecReviewRenamed();
+}
+
 /** Run every one-shot on-disk migration. Prefer this over calling each ensure* alone. */
 export function ensureMigrations(): void {
   // Kind rename must run before parseIssue-based migrations (old kinds won't parse).
   ensureKindRenamed();
   ensureMergeBasesMigrated();
   ensureArchivedMigrated();
+  ensureSpecReviewMigrated();
 }
 
 export function list(): IssuesResponse {

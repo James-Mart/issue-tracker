@@ -8,7 +8,7 @@ export type GitMetaScalarKey =
   | "stackedOn"
   | "prUrl"
   | "merged"
-  | "specReview"
+  | "review"
   | "commitSha"
   | "noDiff"
   | "qa";
@@ -38,8 +38,8 @@ export function storyGitMetaScalars(
     out.push({ key: "prUrl", label: FIELD_LABELS.prUrl });
   }
   out.push({ key: "merged", label: FIELD_LABELS.merged });
-  if (issue.specReview) {
-    out.push({ key: "specReview", label: FIELD_LABELS.specReview });
+  if (issue.review) {
+    out.push({ key: "review", label: FIELD_LABELS.review });
   }
   return out;
 }

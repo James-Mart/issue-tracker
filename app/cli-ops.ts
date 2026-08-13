@@ -135,7 +135,7 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
     if (detail.branchName) lines.push(`branchName: ${detail.branchName}`);
     if (detail.prUrl) lines.push(`prUrl: ${detail.prUrl}`);
     lines.push(`merged: ${detail.merged}`);
-    if (detail.specReview) lines.push(`specReview: ${detail.specReview}`);
+    if (detail.review) lines.push(`review: ${detail.review}`);
     if (detail.needsRebase) lines.push(`needsRebase: ${detail.needsRebase}`);
   }
   if (detail.kind === "idea" && detail.stakeholder) {

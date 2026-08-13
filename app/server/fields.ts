@@ -40,7 +40,7 @@ export const EPIC_IMPERATIVE_ONLY_KEYS = [
 export const EPIC_RUNTIME_OPTIONAL_KEYS = EPIC_IMPERATIVE_ONLY_KEYS;
 
 // Story mergeable keys that are not imperative-only. Imperative-only keys
-// (e.g. specReview) live in STORY_IMPERATIVE_ONLY_KEYS and are excluded.
+// (e.g. review) live in STORY_IMPERATIVE_ONLY_KEYS and are excluded.
 export const STORY_FORM_FIELD_KEYS = [
   "branchName",
   "stackedOn",
@@ -51,7 +51,7 @@ export const STORY_FORM_FIELD_KEYS = [
 export const STORY_IMPERATIVE_ONLY_KEYS = [
   "mergeBaseOverride",
   "mergePolicy",
-  "specReview",
+  "review",
   "needsRebase",
   "retro",
   "labels",
@@ -68,7 +68,7 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "mergeBaseOverride",
   "mergePolicy",
   "prUrl",
-  "specReview",
+  "review",
   "needsRebase",
   "retro",
   "labels",
@@ -149,7 +149,7 @@ export const FIELD_LABELS = {
   blockedBy: "Blocked by",
   prUrl: "Pull request",
   merged: "Merged",
-  specReview: "Spec review",
+  review: "Review",
   needsRebase: "Needs rebase",
   status: "Status",
   qa: "QA",
