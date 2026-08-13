@@ -49,7 +49,7 @@ An **Epic** id (any `epicStatus` — not limited to `todo`) or a
 
 ## Parallel check agents
 
-Delegate **all five** checks **in parallel** via the **Spawn stubs** below.
+Delegate **all six** checks **in parallel** via the **Spawn stubs** below.
 Pass **only** the fields each stub lists — children own static behavior in
 `agents/*.md`; do not paste agent workflow into the prompt.
 
@@ -60,6 +60,7 @@ Pass **only** the fields each stub lists — children own static behavior in
 | `issue-tracker-plan-authoring-conformance` |
 | `issue-tracker-plan-dependency-order` |
 | `issue-tracker-plan-internal-consistency` |
+| `issue-tracker-plan-footprint` |
 
 Each agent template is `readonly: true`. Shared CLI/bootstrap/JSON output
 contract lives only in
@@ -83,7 +84,7 @@ paste workflow instructions here.
 **Delegation** — **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
-**Work-root context line** — shared prefix for all five check stubs:
+**Work-root context line** — shared prefix for all six check stubs:
 
 > Work root: `<rootId>` (`<title>`).
 
@@ -114,9 +115,13 @@ are re-read each spawn while agent injection may be frozen):
 
 > *(Work-root context line.)* *(Findings return line.)*
 
+**Footprint** — `role: issue-tracker-plan-footprint`
+
+> *(Work-root context line.)* *(Findings return line.)*
+
 ## Aggregate → apply → summary
 
-After all five check agents return, **Read**
+After all six check agents return, **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/references/aggregate-apply-summary.md`
 and follow it.
 

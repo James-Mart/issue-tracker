@@ -1,6 +1,6 @@
 # Aggregate → apply → summary
 
-After all five return:
+After all six return:
 
 1. Parse each result as a JSON findings array per
    [`agents/_issue-tracker-plan-polish-check-base.md`](../../../agents/_issue-tracker-plan-polish-check-base.md).
