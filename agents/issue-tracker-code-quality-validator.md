@@ -35,10 +35,10 @@ Do not run any other mutating `issue` command.
    Consult per that file using the step-2 summary output:
    - `codingStandards`
    - `designSystem` when this Task appears UI-related (judgment from Task prose
-     plus paths in the working-tree diff; no Task flag)
-4. The summary carries the Project **workspace** — inspect the working-tree
-   diff and read files with it as the cwd, and honor the unset escalation,
-   per **SPEC § Project workspace**.
+     plus paths in the uncommitted change; no Task flag)
+4. The summary carries the Project **workspace** — inspect the whole
+   uncommitted change and read files with it as the cwd, and honor the unset
+   escalation, per **SPEC § Project workspace**.
 
 Do **not** clear `qa` as part of a normal pass; the implementor never clears
 `qa` either. Use `qa --clear` only if you must recover from a stuck/invalid
