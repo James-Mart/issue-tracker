@@ -22,8 +22,8 @@ on the cheap model, **Composer 2.5**, not a premium model (see **Models and
 subagent roles**). The model discriminator assigns an implementor model onto
 each Task; the implementor writes code; the code-quality validator owns Task
 `qa` (writes the gate, resumes across rounds, three-strike escalate); the
-spec-conformance validator records the Story gate (`specReview`, optional
-remediation Task) without editing workspace source; the git subagent owns
+story-review agent records the Story gate (`review`, `reviewedTasks`, optional
+remediation Tasks) without editing workspace source; the git subagent owns
 branch create, Task finalize, and Story finish.
 
 **You do not write code, run the app, or verify the work yourself.** You read the
@@ -189,7 +189,7 @@ not from a spawn-time argument.
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
 | Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via **resume** | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.6-high-fast`; `opus`→`claude-opus-5-thinking-high` | writes (see Field ownership) |
 | Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `needsAttention`; `issue task comment`) |
-| Spec-conformance validator | `issue-tracker-spec-conformance-validator` | Close-Story when Story `specReview` is unset | `composer-2.5` | writes (`issue story set … specReview` / `issue task add` / `issue story|task comment`) |
+| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue task add`; `issue story comment`) |
 
 ### Field ownership
 
@@ -201,19 +201,21 @@ Coordinator never sets Task `status` or Task `qa`.
 | Task `status` `fixing` | Implementor | on every revise entry |
 | Task `status` `done` | Git (finish-commit) | Task finalize |
 | Task `qa` | Code-quality | on each entry `reviewing`, then terminal `passed` / `changes-requested` (three-strike → `needsAttention`); never the coordinator |
+| Story `review` | Story review | on each review round `passed` / `failed` |
+| Story `reviewedTasks` | Story review | all `done` Tasks inspected in that round |
 
 Implement and revise are the **same** implementor agent. Code-quality is a
 **writer** of Task `qa` (spawn/resume and three-strike escalate: see **Per-Task
-cycle** — you do **not** count rounds). Spec-conformance is the Story gate
-recorder: it sets `specReview` and may append a remediation Task (tracker
-writes only; never workspace source). Both keep findings out of your context
-via comments / machine-readable fields.
+cycle** — you do **not** count rounds). Story review is the Story gate
+recorder: it sets `review` and `reviewedTasks` and may append remediation
+Tasks (tracker writes only; never workspace source). Both keep findings out of
+your context via comments / machine-readable fields.
 
 ## The loop
 
 Walk the Stories in the order `issue tree` printed them (top-to-bottom). For
 each Story: start it if needed, work its not-`done` Tasks in the sequence
-`issue tree` lists them, then **Close a Story** (specReview gate +
+`issue tree` lists them, then **Close a Story** (review gate +
 finish-branch) before moving to Stories nested under it.
 
 **Re-read `issue tree <id>` every time control returns to you** — after
@@ -355,7 +357,7 @@ instructions here. Channel rules: **## Delegation** (do not re-Read the
 include here).
 
 **Issue context line** — shared prefix for discriminator, implement,
-code-quality, spec-conformance, and revise stubs:
+code-quality, story-review, and revise stubs:
 
 > Work root: `<rootId>`. Issue: `<id>` (`<title>`).
 
@@ -394,7 +396,7 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 > *(Issue context line.)* Mode: resume. Verify that previously requested changes were
 > fixed.
 
-**Spec-conformance validator** — `role: issue-tracker-spec-conformance-validator`
+**Story review** — `role: issue-tracker-story-review`
 
 > *(Issue context line.)*
 
@@ -433,7 +435,7 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
   signal.
 - Per-Task QA loop (entry gate, spawn/resume, three-strike): see **Per-Task
   cycle** — single canonical definition; you never count QA rounds.
-  Spec-conformance remediation is Close-Story's job (see that section) — no
+  Story-review remediation is Close-Story's job (see that section) — no
   story-level revise.
 - Never let a validator edit workspace source (write scopes: Models table).
   Code-quality may write Task `qa` / `needsAttention` and comments only.

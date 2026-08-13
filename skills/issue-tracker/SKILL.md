@@ -111,8 +111,9 @@ cd app && npm run test:e2e
   Archive / Unarchive in the header (Epic / Story / Task), attachment
   list/upload/download, a git/stack panel, Task `assignee` and Epic/Story/Task
   `needsAttention` badges (`attentionReason` when
-  set), and (for Stories with `specReview` set) a spec-review chip (`passed` /
-  `failed`; omitted when unset), (for Tasks with `noDiff` set) a no-diff chip
+  set), and (for Stories with `review` set) a review chip (`passed` /
+  `failed`, plus a stale marker when coverage is out of date; omitted when
+  unset), (for Tasks with `noDiff` set) a no-diff chip
   (omitted when unset), and a per-issue comment log.
 - Changes to `issues/` on disk (from the CLI or by hand) appear live over SSE
   without a refresh.
