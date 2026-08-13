@@ -459,7 +459,7 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
   mid-run are picked up. Never act from a cached outline.
 - The implementor leaves work uncommitted; the **git** subagent finalizes per
   its Finish Commit matrix (the authority for these outcomes): a normal Task
-  is committed (message = Task title) and recorded `done` with its sha, while
+  is committed and recorded `done` with its sha, while
   a Task the implementor deliberately marked `noDiff` (no source-controlled
   changes) is recorded `done` with **no** git commit and no sha — do not treat
   that as "nothing was done" when a non-source-controlled file was edited.
