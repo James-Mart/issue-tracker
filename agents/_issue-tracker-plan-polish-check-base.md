@@ -1,6 +1,6 @@
 # Plan-polish check agent — shared contract
 
-Not a spawnable agent (no frontmatter). Referenced by the five
+Not a spawnable agent (no frontmatter). Referenced by the six
 `issue-tracker-plan-*` check agents and by `issue-tracker-plan-polish`
 Bootstrap (work-root kind gates). Used by `issue-tracker-plan-polish`.
 
