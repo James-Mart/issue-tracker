@@ -126,6 +126,39 @@ vi.mock("./stakeholder-select", () => ({
   ),
 }));
 
+vi.mock("@/components/ui/select", () => ({
+  Select: ({
+    value,
+    onValueChange,
+    disabled,
+    children,
+  }: {
+    value: string;
+    onValueChange: (value: string) => void;
+    disabled?: boolean;
+    children: React.ReactNode;
+  }) => (
+    <select
+      data-testid="planning-session-model"
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onValueChange(event.target.value)}
+    >
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectItem: ({
+    value,
+    children,
+  }: {
+    value: string;
+    children: React.ReactNode;
+  }) => <option value={value}>{children}</option>,
+}));
+
 const idea = {
   kind: "idea" as const,
   id: "capture",
@@ -175,6 +208,12 @@ describe("PlanningChannelEmptyState", () => {
     expect(container.textContent).toContain("Start planning grill");
     expect(container.textContent).toContain("you answer");
 
+    const modelSelect = container.querySelector(
+      '[data-testid="planning-session-model"]',
+    ) as HTMLSelectElement;
+    expect(modelSelect).toBeTruthy();
+    expect(modelSelect.value).toBe("composer-2.5");
+
     act(() => {
       (
         container.querySelector(
@@ -194,6 +233,42 @@ describe("PlanningChannelEmptyState", () => {
     );
   });
 
+  it("uses the selected planner model when stakeholder is unset", () => {
+    const { container } = mount(
+      <PlanningChannelEmptyState
+        issue={idea}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    const modelSelect = container.querySelector(
+      '[data-testid="planning-session-model"]',
+    ) as HTMLSelectElement;
+
+    act(() => {
+      modelSelect.value = "claude-opus-5";
+      modelSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="planning-start-session"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        title: "Plan Capture",
+        model: "claude-opus-5",
+        message:
+          "Plan capture in the issue tracker using the issue-tracker-plan skill.",
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+
   it("shows auto-plan copy and posts issue-tracker-auto-plan when a slug is set", () => {
     issueState.stakeholder = "claude-opus-5";
     const ideaWithStakeholder = { ...idea, stakeholder: "claude-opus-5" };
@@ -206,6 +281,9 @@ describe("PlanningChannelEmptyState", () => {
     );
     expect(container.textContent).toContain("Start auto-plan on Opus 5");
     expect(container.textContent).toContain("without your answers");
+    expect(
+      container.querySelector('[data-testid="planning-session-model"]'),
+    ).toBeNull();
 
     act(() => {
       (
