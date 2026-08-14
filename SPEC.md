@@ -892,7 +892,7 @@ then applies:
 | `true` | clean (empty) | `issue task set <taskId> status done` only — no `git commit`, no `commitSha`; leave `noDiff` set. |
 | `true` | dirty | Escalate: `issue task set <taskId> needsAttention true --reason "…"` — the flag contradicts a non-empty tree. |
 | absent / `false` | clean (empty) | Escalate: `issue task set <taskId> needsAttention true --reason "…"` — an empty tree without `noDiff` is not a completion signal. |
-| absent / `false` | dirty | Stage all changes (`git add -A`), read the staged diff and compose a single-line subject (lowercase imperative, fewer than 80 chars; Task title is context only), `git commit -m "<subject>"`, `issue task set <taskId> status done`, `issue task set <taskId> commitSha $(git rev-parse HEAD)`. |
+| absent / `false` | dirty | Stage, commit, and record — steps below. |
 
 The `true` / clean row is a legitimate `done` outcome even when a
 non-source-controlled file was edited (git status stays clean); that is not a
@@ -901,6 +901,20 @@ contradiction with `noDiff`. The implementor sets `noDiff` via kind
 outcome is no source-controlled file changes; validators and the git subagent
 honor the flag. Clearing it (`noDiff false`) is required if a revision later
 lands source-controlled file changes.
+
+For the **dirty + no `noDiff`** row:
+
+1. Detect an in-progress merge with `git rev-parse -q --verify MERGE_HEAD`.
+2. **When it succeeds:** if unmerged paths remain (`git diff --name-only
+   --diff-filter=U` is non-empty), escalate:
+   `issue task set <taskId> needsAttention true --reason "…"` and stop.
+   Otherwise `git add -A`, then `git commit --no-edit` with no `-m` (Git uses
+   `MERGE_MSG`).
+3. **When it fails** (no merge in progress): `git add -A`, read the staged diff
+   and compose a single-line subject (lowercase imperative, fewer than 80 chars;
+   Task title is context only), then `git commit -m "<subject>"`.
+4. `issue task set <taskId> status done`, `issue task set <taskId> commitSha
+   $(git rev-parse HEAD)`.
 
 ### Tree nesting and order
 

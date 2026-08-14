@@ -43,4 +43,8 @@ Absolute path for this file (Read this exact path):
    `issue task comment <id> --role implementor --body "..."` (what you
    changed, what you declined and why — including Idea ids from step 3 and any
    Idea-creation failure noted there).
-6. Leave changes uncommitted.
+6. Leave changes uncommitted. When you start a merge, run
+   `git merge --no-commit <ref>` — not a default `git merge` that may
+   auto-commit. If the merge has conflicts, resolve them, `git add` those
+   paths, and still do not commit — leave `MERGE_HEAD` set with no unmerged
+   paths at handoff.
