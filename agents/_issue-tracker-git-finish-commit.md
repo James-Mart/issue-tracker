@@ -24,13 +24,20 @@ contradiction with `noDiff`.
 
 For the **dirty + no `noDiff`** row:
 
-1. Stage **all** uncommitted changes (`git add -A`). Do not pick paths —
-   the implementor left everything unstaged for this finalize step.
-2. Read the staged diff (`git diff --cached`). Compose a single-line subject
-   from what the diff does — the Task title is context only, not the message.
-   Voice: all lowercase (no exceptions), imperative ("when applied, this commit
-   will X"), fewer than 80 characters, no title/body. Then
-   `git commit -m "<subject>"`.
-3. `issue task set <taskId> status done`
-4. `issue task set <taskId> commitSha $(git rev-parse HEAD)`
-5. Finish and stop.
+1. Detect an in-progress merge with `git rev-parse -q --verify MERGE_HEAD`.
+2. **When it succeeds:**
+   - If unmerged paths remain (`git diff --name-only --diff-filter=U` is
+     non-empty): `issue task set <taskId> needsAttention true --reason "..."`.
+     Then stop.
+   - Otherwise: `git add -A`, then `git commit --no-edit` with no `-m` (Git
+     uses `MERGE_MSG`).
+3. **When it fails** (no merge in progress): stage all changes (`git add -A`).
+   Do not pick paths — the implementor left everything unstaged for this
+   finalize step. Read the staged diff (`git diff --cached`). Compose a
+   single-line subject from what the diff does — the Task title is context
+   only, not the message. Voice: all lowercase (no exceptions), imperative
+   ("when applied, this commit will X"), fewer than 80 characters, no
+   title/body. Then `git commit -m "<subject>"`.
+4. `issue task set <taskId> status done`
+5. `issue task set <taskId> commitSha $(git rev-parse HEAD)`
+6. Finish and stop.
