@@ -2,6 +2,14 @@ import { useEffect, useState } from "react";
 import type { ConversationChannel, IssueDetail } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { AgentModel } from "@/features/agents/api/client";
 import { useAgentModelsQuery } from "@/features/agents/api/queries";
 import {
   useCreateChannelSession,
@@ -58,10 +66,56 @@ export type PlanningSessionStarted = {
   model: string;
 };
 
+/** Planner model catalog picker for human-driven planning launch. */
+export function PlanningSessionModelSelect({
+  value,
+  models,
+  disabled,
+  loading,
+  onChange,
+}: {
+  value: string | undefined;
+  models: readonly AgentModel[];
+  disabled?: boolean;
+  loading?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Select
+        value={value ?? ""}
+        disabled={disabled || loading || models.length === 0}
+        onValueChange={onChange}
+      >
+        <SelectTrigger
+          aria-label="Planner model"
+          data-testid="planning-session-model"
+          className="font-mono"
+        >
+          <SelectValue
+            placeholder={loading ? "Loading models…" : "Select a model"}
+          />
+        </SelectTrigger>
+        <SelectContent>
+          {models.map((model) => (
+            <SelectItem key={model.id} value={model.id}>
+              {model.displayName ?? model.id}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+        Planner model
+      </p>
+    </div>
+  );
+}
+
 function PlanningLaunchButton({
   issue,
   channel,
   stakeholder,
+  fallbackCatalogId,
   variant,
   disabled,
   onStarted,
@@ -69,6 +123,7 @@ function PlanningLaunchButton({
   issue: IdeaDetail;
   channel: ConversationChannel;
   stakeholder: string | undefined;
+  fallbackCatalogId?: string;
   variant: "primary" | "secondary";
   disabled?: boolean;
   onStarted: (session: PlanningSessionStarted) => void;
@@ -84,21 +139,25 @@ function PlanningLaunchButton({
   } = useConfirmChannelLiveRun(issue.id, channel);
   const copy = planningLaunchCopy(stakeholder, models);
   const defaultModel = defaultConversationModel(models);
+  const catalogId = fallbackCatalogId ?? defaultModel;
   const blocked = awaitingConfirm || confirming;
   const canStart =
-    Boolean(defaultModel) &&
+    Boolean(catalogId) &&
     !modelsLoading &&
     !createSession.isPending &&
     !blocked &&
     !disabled;
 
   const start = () => {
-    if (!defaultModel || modelsLoading || createSession.isPending || blocked) {
+    if (!catalogId || modelsLoading || createSession.isPending || blocked) {
       return;
     }
     if (disabled) return;
     const title = planningSessionTitle(issue.title);
-    const model = planningSessionModel(stakeholder, defaultModel);
+    const model = planningSessionModel(
+      stakeholder,
+      fallbackCatalogId ?? defaultModel!,
+    );
     confirmIfLiveRun(() => {
       createSession.mutate(
         {
@@ -149,8 +208,16 @@ export function PlanningChannelEmptyState({
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const models = modelsData?.models ?? [];
+  const defaultModel = defaultConversationModel(models);
   const { stakeholder, onChange, saving, error } = usePlanningStakeholder(issue);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
   const copy = planningLaunchCopy(stakeholder, models);
+
+  useEffect(() => {
+    if (defaultModel && selectedCatalogId === undefined) {
+      setSelectedCatalogId(defaultModel);
+    }
+  }, [defaultModel, selectedCatalogId]);
 
   return (
     <ShellState
@@ -175,10 +242,20 @@ export function PlanningChannelEmptyState({
             disabled={saving}
             onChange={onChange}
           />
+          {!stakeholder ? (
+            <PlanningSessionModelSelect
+              value={selectedCatalogId}
+              models={models}
+              loading={modelsLoading}
+              disabled={saving}
+              onChange={setSelectedCatalogId}
+            />
+          ) : null}
           <PlanningLaunchButton
             issue={issue}
             channel={channel}
             stakeholder={stakeholder}
+            fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
             variant="primary"
             disabled={saving}
             onStarted={onStarted}
@@ -199,15 +276,36 @@ export function PlanningNewRunControl({
   channel: ConversationChannel;
   onStarted: (session: PlanningSessionStarted) => void;
 }) {
+  const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
+  const models = modelsData?.models ?? [];
+  const defaultModel = defaultConversationModel(models);
   const { stakeholder } = usePlanningStakeholder(issue);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (defaultModel && selectedCatalogId === undefined) {
+      setSelectedCatalogId(defaultModel);
+    }
+  }, [defaultModel, selectedCatalogId]);
 
   return (
-    <PlanningLaunchButton
-      issue={issue}
-      channel={channel}
-      stakeholder={stakeholder}
-      variant="secondary"
-      onStarted={onStarted}
-    />
+    <div className="flex items-center gap-2">
+      {!stakeholder ? (
+        <PlanningSessionModelSelect
+          value={selectedCatalogId}
+          models={models}
+          loading={modelsLoading}
+          onChange={setSelectedCatalogId}
+        />
+      ) : null}
+      <PlanningLaunchButton
+        issue={issue}
+        channel={channel}
+        stakeholder={stakeholder}
+        fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
+        variant="secondary"
+        onStarted={onStarted}
+      />
+    </div>
   );
 }

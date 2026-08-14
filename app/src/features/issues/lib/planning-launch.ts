@@ -5,12 +5,15 @@ export function planningSessionTitle(ideaTitle: string): string {
   return `Plan ${ideaTitle}`;
 }
 
-/** Root-agent model: stakeholder slug when set, else the default conversation model. */
+/**
+ * Root-agent model: stakeholder slug when set, else fallbackCatalogId.
+ * @param fallbackCatalogId Catalog id used when stakeholder is unset.
+ */
 export function planningSessionModel(
   stakeholder: string | undefined,
-  defaultConversationModel: string,
+  fallbackCatalogId: string,
 ): string {
-  return stakeholder ?? defaultConversationModel;
+  return stakeholder ?? fallbackCatalogId;
 }
 
 /** First prompt naming the Idea id and skill to load. */
