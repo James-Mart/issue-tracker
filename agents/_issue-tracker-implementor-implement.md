@@ -9,7 +9,12 @@ Absolute path for this file (Read this exact path):
 
 1. Implement what the Task's `description.md` specifies. Also do anything
    that obviously belongs with it for internal consistency.
-2. Edit the working tree; **do not commit or stage**.
+2. Edit the working tree; **do not commit**. Do not stage except to clear
+   unmerged merge paths (below). When you start a merge, run
+   `git merge --no-commit <ref>` — not a default `git merge` that may
+   auto-commit. If the merge has conflicts, resolve them, `git add` those
+   paths, and still do not commit — leave `MERGE_HEAD` set with no unmerged
+   paths at handoff.
 3. Verify as that description requires (tests, build, etc.). When this
    Task builds on a prior Task's tests, keep verification focused on this
    Task's surface — do not re-run the prior Task's full matrix by default.
