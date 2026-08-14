@@ -276,15 +276,36 @@ export function PlanningNewRunControl({
   channel: ConversationChannel;
   onStarted: (session: PlanningSessionStarted) => void;
 }) {
+  const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
+  const models = modelsData?.models ?? [];
+  const defaultModel = defaultConversationModel(models);
   const { stakeholder } = usePlanningStakeholder(issue);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (defaultModel && selectedCatalogId === undefined) {
+      setSelectedCatalogId(defaultModel);
+    }
+  }, [defaultModel, selectedCatalogId]);
 
   return (
-    <PlanningLaunchButton
-      issue={issue}
-      channel={channel}
-      stakeholder={stakeholder}
-      variant="secondary"
-      onStarted={onStarted}
-    />
+    <div className="flex items-center gap-2">
+      {!stakeholder ? (
+        <PlanningSessionModelSelect
+          value={selectedCatalogId}
+          models={models}
+          loading={modelsLoading}
+          onChange={setSelectedCatalogId}
+        />
+      ) : null}
+      <PlanningLaunchButton
+        issue={issue}
+        channel={channel}
+        stakeholder={stakeholder}
+        fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
+        variant="secondary"
+        onStarted={onStarted}
+      />
+    </div>
   );
 }

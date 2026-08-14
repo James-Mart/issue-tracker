@@ -465,4 +465,88 @@ describe("PlanningNewRunControl", () => {
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
   });
+
+  it("shows the planner model picker when stakeholder is unset", () => {
+    const { container } = mount(
+      <PlanningNewRunControl
+        issue={idea}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    const modelSelect = container.querySelector(
+      '[data-testid="planning-session-model"]',
+    ) as HTMLSelectElement;
+    expect(modelSelect).toBeTruthy();
+    expect(modelSelect.value).toBe("composer-2.5");
+  });
+
+  it("uses the selected planner model when stakeholder is unset", () => {
+    const { container } = mount(
+      <PlanningNewRunControl
+        issue={idea}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    const modelSelect = container.querySelector(
+      '[data-testid="planning-session-model"]',
+    ) as HTMLSelectElement;
+
+    act(() => {
+      modelSelect.value = "claude-opus-5";
+      modelSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="planning-new-run"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        title: "Plan Capture",
+        model: "claude-opus-5",
+        message:
+          "Plan capture in the issue tracker using the issue-tracker-plan skill.",
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+
+  it("hides the picker and uses the stakeholder slug when set", () => {
+    issueState.stakeholder = "claude-opus-5";
+    const ideaWithStakeholder = { ...idea, stakeholder: "claude-opus-5" };
+    const { container } = mount(
+      <PlanningNewRunControl
+        issue={ideaWithStakeholder}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    expect(
+      container.querySelector('[data-testid="planning-session-model"]'),
+    ).toBeNull();
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="planning-new-run"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        title: "Plan Capture",
+        model: "claude-opus-5",
+        message:
+          "Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Stakeholder stand-in model: claude-opus-5.",
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
 });
