@@ -176,6 +176,7 @@ export const IDEA_GET_FIELDS = {
   createdAt: STORED,
   updatedAt: STORED,
   description: DESCRIPTION,
+  ideaStatus: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const STORY_GET_FIELDS = {

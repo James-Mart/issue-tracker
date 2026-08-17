@@ -27,6 +27,43 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
   writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
 }
 
+function conversationsRoot(): string {
+  return join(dirname(dir), "conversations");
+}
+
+function seedPlanningSession(
+  convId: string,
+  ideaId: string,
+  projectId: string,
+  opts?: { live?: boolean; transcriptLine?: string },
+): void {
+  const convDir = join(conversationsRoot(), convId);
+  mkdirSync(convDir, { recursive: true });
+  const now = nextAt();
+  writeFileSync(
+    join(convDir, "meta.json"),
+    JSON.stringify({
+      id: convId,
+      title: "Plan",
+      projectId,
+      model: "auto",
+      issueId: ideaId,
+      channel: "planning",
+      createdAt: now,
+      updatedAt: now,
+    }),
+  );
+  if (opts?.transcriptLine) {
+    writeFileSync(join(convDir, "transcript.jsonl"), `${opts.transcriptLine}\n`);
+  }
+  if (opts?.live) {
+    writeFileSync(
+      join(convDir, "run-live.json"),
+      `${JSON.stringify({ pid: process.pid })}\n`,
+    );
+  }
+}
+
 function runCli(
   args: string[],
   input?: string,
@@ -924,6 +961,53 @@ describe("idea add / get / set", () => {
   });
 });
 
+describe("idea ideaStatus", () => {
+  beforeEach(() => {
+    rmSync(conversationsRoot(), { recursive: true, force: true });
+    writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
+    writeIssue("capture", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+  });
+
+  it("gets derived ideaStatus and shows it on tree", () => {
+    expect(runCli(["idea", "get", "capture", "ideaStatus"]).stdout).toBe("captured\n");
+
+    const tree = runCli(["tree", "p"]);
+    expect(tree.status).toBe(0);
+    expect(tree.stdout).toMatch(/^ {2}idea capture\b.*\bstatus=captured\b/m);
+  });
+
+  it("reports planning when a planning session run is live", () => {
+    seedPlanningSession("plan-live", "capture", "p", { live: true });
+
+    expect(runCli(["idea", "get", "capture", "ideaStatus"]).stdout).toBe("planning\n");
+
+    const tree = runCli(["tree", "p"]);
+    expect(tree.status).toBe(0);
+    expect(tree.stdout).toMatch(/^ {2}idea capture\b.*\bstatus=planning\b/m);
+  });
+
+  it("reports awaiting-direction when a session stopped without a plan", () => {
+    seedPlanningSession("plan-stopped", "capture", "p", {
+      transcriptLine: JSON.stringify({
+        type: "assistant",
+        text: "What should this become?",
+        at: nextAt(),
+      }),
+    });
+
+    expect(runCli(["idea", "get", "capture", "ideaStatus"]).stdout).toBe(
+      "awaiting-direction\n",
+    );
+  });
+});
+
 describe("kind-scoped add", () => {
   beforeEach(() => {
     writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
@@ -1126,14 +1210,13 @@ describe("tree / list / summary include Ideas", () => {
     writeFileSync(join(dir, "idea-a", "description.md"), "# Idea\n\nfirst capture\n");
   });
 
-  it("interleaves Ideas and Epics by order in tree with title-only Idea rows", () => {
+  it("interleaves Ideas and Epics by order in tree with Idea status chips", () => {
     const { stdout, status } = runCli(["tree", "p"]);
     expect(status).toBe(0);
     expect(stdout).toMatch(/^project p {2}Proj$/m);
-    expect(stdout).toMatch(/^ {2}idea idea-a {2}Capture first$/m);
+    expect(stdout).toMatch(/^ {2}idea idea-a\b.*\bstatus=captured\b/m);
     expect(stdout).toMatch(/^ {2}epic e {2}Epic\b/m);
-    expect(stdout).toMatch(/^ {2}idea idea-b {2}Capture last$/m);
-    expect(stdout).not.toMatch(/^ {2}idea idea-a .+\[/m);
+    expect(stdout).toMatch(/^ {2}idea idea-b\b.*\bstatus=captured\b/m);
     const ideaA = stdout.indexOf("idea idea-a");
     const epic = stdout.indexOf("epic e");
     const ideaB = stdout.indexOf("idea idea-b");
@@ -1273,8 +1356,8 @@ describe("tree / list / summary include Ideas", () => {
     expect(status).toBe(0);
     expect(stdout).toMatch(/^project p {2}Proj$/m);
     expect(stdout).toMatch(/^ {2}epic e {2}Epic\b/m);
-    expect(stdout).toMatch(/^ {2}idea idea-a {2}Capture first$/m);
-    expect(stdout).toMatch(/^ {2}idea idea-b {2}Capture last$/m);
+    expect(stdout).toMatch(/^ {2}idea idea-a\b.*\bstatus=captured\b/m);
+    expect(stdout).toMatch(/^ {2}idea idea-b\b.*\bstatus=captured\b/m);
     const epic = stdout.indexOf("epic e");
     const ideaA = stdout.indexOf("idea idea-a");
     const ideaB = stdout.indexOf("idea idea-b");
@@ -2297,6 +2380,7 @@ describe("tree", () => {
     expect(help.stdout).toContain("blocked");
     expect(help.stdout).toContain("storyStatus");
     expect(help.stdout).toContain("epicStatus");
+    expect(help.stdout).toContain("ideaStatus");
     expect(help.stdout).toContain("mergeBase");
     expect(help.stdout).toContain("mergePolicy");
     expect(help.stdout).toContain("reviewCurrent");

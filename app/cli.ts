@@ -39,6 +39,7 @@ import { refreshAgentModelSlugCatalog } from "./server/agent-model-slugs-sync.js
 import { DELETED_FIELD_VERBS } from "./deleted-field-verbs.js";
 
 type EpicRecord = Extract<IssueRecord, { kind: "epic" }>;
+type IdeaRecord = Extract<IssueRecord, { kind: "idea" }>;
 type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
 type ProjectBoardChild = Extract<
@@ -130,6 +131,13 @@ function epicChips(epic: EpicRecord, derived: Record<string, DerivedState>): str
   return [...chips, ...labelsChip(epic), ...attentionChip(epic)];
 }
 
+function ideaChips(idea: IdeaRecord, derived: Record<string, DerivedState>): string[] {
+  const d = derived[idea.id];
+  const chips: string[] = [];
+  if (d?.ideaStatus) chips.push(`status=${d.ideaStatus}`);
+  return [...chips, ...labelsChip(idea)];
+}
+
 function storyChips(story: StoryRecord, derived: Record<string, DerivedState>): string[] {
   const d = derived[story.id];
   const chips: string[] = [];
@@ -201,7 +209,7 @@ function renderBoardChild(
   ctx: TreeContext,
 ): string[] {
   if (child.kind === "idea") {
-    return [nodeLine(indent, "idea", child.id, child.title, labelsChip(child))];
+    return [nodeLine(indent, "idea", child.id, child.title, ideaChips(child, ctx.derived))];
   }
   if (child.kind === "story") {
     return renderStoryStackFromRoot(child, indent, ctx);
@@ -382,7 +390,7 @@ program
     `
 Output shape:
   issues    array of stored issue records (each carries kind)
-  derived   object keyed by issue id (not an array); values hold blocked, storyStatus, epicStatus, reviewCurrent, mergeBase, mergePolicy
+  derived   object keyed by issue id (not an array); values hold blocked, storyStatus, epicStatus, ideaStatus, reviewCurrent, mergeBase, mergePolicy
   problems  array of { id, message }
 `,
   )
