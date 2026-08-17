@@ -2,6 +2,10 @@ import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
 import {
+  clearRunLiveMarker,
+  writeRunLiveMarker,
+} from "./run-live.js";
+import {
   agentSdk,
   CursorAgentError,
   type AgentHandle,
@@ -22,6 +26,7 @@ import {
   createDelegateCustomTools,
 } from "./delegate-tool.js";
 import { clearCatchupBuffer, publishFrame } from "./conversation-stream.js";
+import { ISSUES_TOPIC } from "./issue-events.js";
 import {
   EventPipeline,
   type NormalizedStep,
@@ -118,6 +123,15 @@ function isAuthFailureResult(result: AgentRunResult): boolean {
 function conversationStoreDir(conversationId: string): string {
   return join(conversationsDir, conversationId, "agent-state");
 }
+
+function publishPlanningRunIssueFrame(issueId: string): void {
+  publishFrame(ISSUES_TOPIC, {
+    event: { type: "change", id: issueId, scope: "planning-run" },
+    persist: false,
+  });
+}
+
+export { isRunLive } from "./run-live.js";
 
 /**
  * Build a session manager. Tests inject a fake {@link AgentSdk}; production
@@ -341,6 +355,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     // may be executing inside.
     entry.pump = undefined;
     entry.turn = undefined;
+    clearRunLiveMarker(conversationId);
     sessions.delete(conversationId);
     await tearDownEntry(conversationId, entry);
 
@@ -489,11 +504,16 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       escalated: false,
     };
     entry.turn = turn;
+    writeRunLiveMarker(conversationId);
 
     publishFrame(conversationId, {
       event: { type: "run", status: "started", runId: agentRun.id },
       persist: false,
     });
+    const { meta: runMeta } = readConversation(conversationId);
+    if (runMeta.issueId) {
+      publishPlanningRunIssueFrame(runMeta.issueId);
+    }
 
     entry.pump = (async () => {
       const { sawAuthFailure } = await pumpEvents(conversationId, agentRun);
@@ -502,10 +522,14 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         event: { type: "run", status: "finished", runId: agentRun.id },
         persist: false,
       });
+      if (runMeta.issueId) {
+        publishPlanningRunIssueFrame(runMeta.issueId);
+      }
 
       const result = await settleResult(agentRun);
       if (entry.turn === turn) {
         entry.turn = undefined;
+        clearRunLiveMarker(conversationId);
       }
 
       // An escalation from a delegation already owns this turn's recovery, and

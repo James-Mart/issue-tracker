@@ -80,6 +80,22 @@ const project = (
   ...extra,
 });
 
+const idea = (
+  id: string,
+  partOf = "p",
+  order = 0,
+  extra: Partial<Extract<Issue, { kind: "idea" }>> = {},
+): Issue => ({
+  id,
+  kind: "idea",
+  title: id,
+  partOf,
+  order,
+  createdAt: nextAt(),
+  updatedAt: nextAt(),
+  ...extra,
+});
+
 describe("derive - commit blocked", () => {
   it("does not block a todo commit when its branch has a name and earlier siblings are done", () => {
     const issues = [
@@ -488,5 +504,13 @@ describe("derive - effective mergePolicy", () => {
     const { byId } = derive(issues);
     expect(byId.base.mergePolicy).toBe("merge");
     expect(byId.child.mergePolicy).toBe("merge");
+  });
+});
+
+describe("derive - purity", () => {
+  it("takes only Issue[] and does not attach ideaStatus", () => {
+    const issues = [project("p"), idea("capture", "p")];
+    expect(derive.length).toBe(1);
+    expect(derive(issues).byId.capture?.ideaStatus).toBeUndefined();
   });
 });

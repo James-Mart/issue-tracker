@@ -51,7 +51,8 @@ Every issue has a `kind`, one of:
   archive, optional `stakeholder` model slug, and optional `labels` assignments
   from the Project catalog — see [Project labels](#project-labels)) that agents
   and humans mine later into real work. Leaf kind: no children, no
-  assignee/needs-attention, no status or git fields. `stakeholder` picks who
+  assignee/needs-attention, no stored status or git fields (planning phase is
+  derived as **`ideaStatus`** — see [Derived state](#derived-state)). `stakeholder` picks who
   drives planning in the Planning channel: a model slug for auto-plan, or unset
   for manual planning where the human drives the grill. Supports comments and
   kind-scoped CLI `comment` (same path as other kinds). Is `partOf` a Project
@@ -201,6 +202,9 @@ These are computed by `derive()` and never written to disk (see
   [Derived state](#derived-state)).
 - **Story status** — `not-started` / `in-progress` / `pr-open` / `merged`.
 - **Epic status** — `todo` / `in-progress` / `done` (rollup of its Stories).
+- **Idea status** — `captured` / `planning` / `awaiting-direction` / `planned`
+  (planning phase from sessions, live runs, and plan-root backlinks); also
+  `issue idea get … ideaStatus`. Tree chip `status=<value>`.
 - **mergeBase** — tree chip `mergeBase=<ref>` / `mergeBase=(unset)`;
   also `issue story get … mergeBase`. Resolution:
   [stacked-PR merge model](#the-stacked-pr-merge-model). No second name
@@ -381,7 +385,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `blocked`, `mergeBase`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `blocked`, `mergeBase`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -843,7 +847,8 @@ Idea — the common-to-every-kind fields plus:
 | `stakeholder` | string? | optional agent model slug; unset means manual planning — the human drives the grill |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
-No assignee, needs-attention, status, git fields, or comments. Leaf under a Project;
+No assignee, needs-attention, stored status, git fields, or comments. Derived
+**`ideaStatus`** on get / tree / list (see [Derived state](#derived-state)). Leaf under a Project;
 shares the Project-child `order` space with Epics and root project-level Stories.
 
 Story — the Epic/Story/Task needs-attention common fields plus:
@@ -1392,6 +1397,12 @@ so cannot drift:
   Epic `blocked` does **not** cascade onto descendant Stories'/Tasks' own
   `blocked` flags — `tree`/`list` still show per-node stacking/sibling blocking
   under a blocked Epic.
+- **Idea status** — `captured` when no planning session has run;
+  `planning` when a planning-session run is live; `awaiting-direction` when a
+  session ran and stopped without a plan root; `planned` when a plan root
+  backlinks the Idea. Computed by `planningStatusById()` (I/O over planning
+  sessions and live-run markers) and merged into `derived` by `list()` — not
+  by the pure `derive()` pass.
 - **problems** — the integrity checks `derive()` runs over the parsed issues:
   dependency cycles over `stackedOn`/`blockedBy`; dangling
   `partOf`/`stackedOn`/`blockedBy` ids; a Story whose `stackedOn` entry is not a

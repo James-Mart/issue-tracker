@@ -16,15 +16,18 @@ function parseEvent(data: unknown): IssueEvent | null {
   if (typeof data !== "object" || data === null) return null;
   const parsed = data as Partial<IssueEvent>;
   if (!parsed.id || !parsed.type) return null;
+  const scope =
+    parsed.scope === "comments"
+      ? "comments"
+      : parsed.scope === "attachments"
+        ? "attachments"
+        : parsed.scope === "planning-run"
+          ? "planning-run"
+          : "issue";
   return {
     type: parsed.type,
     id: parsed.id,
-    scope:
-      parsed.scope === "comments"
-        ? "comments"
-        : parsed.scope === "attachments"
-          ? "attachments"
-          : "issue",
+    scope,
   };
 }
 
@@ -54,6 +57,11 @@ export function useIssueEvents(): void {
       }
       if (event.scope === "attachments") {
         qc.invalidateQueries({ queryKey: issuesKeys.attachments(event.id) });
+        return;
+      }
+      if (event.scope === "planning-run") {
+        scheduleListInvalidate();
+        qc.invalidateQueries({ queryKey: issuesKeys.detail(event.id) });
         return;
       }
       scheduleListInvalidate();
