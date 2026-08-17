@@ -396,13 +396,21 @@ export const STORY_STATUSES = [
   "merged",
 ] as const;
 export const EPIC_STATUSES = ["todo", "in-progress", "done"] as const;
+export const IDEA_STATUSES = [
+  "captured",
+  "planning",
+  "awaiting-direction",
+  "planned",
+] as const;
 export type StoryStatus = (typeof STORY_STATUSES)[number];
 export type EpicStatus = (typeof EPIC_STATUSES)[number];
+export type IdeaStatus = (typeof IDEA_STATUSES)[number];
 
 export interface DerivedState {
   blocked: boolean;
   storyStatus?: StoryStatus;
   epicStatus?: EpicStatus;
+  ideaStatus?: IdeaStatus;
   /** True when a stored review still covers every done Task on the Story. */
   reviewCurrent?: boolean;
   /** Derived git fork-point ref (see resolveMergeBase). */

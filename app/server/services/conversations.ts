@@ -339,6 +339,17 @@ export function createIssueChannelSession(
   });
 }
 
+/** True when the conversation transcript has at least one persisted line. */
+export function conversationHasTranscript(conversationId: string): boolean {
+  const path = transcriptPathOf(conversationId);
+  try {
+    return statSync(path).size > 0;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
+}
+
 export function listConversations(): ConversationMeta[] {
   const metas: ConversationMeta[] = [];
   for (const id of scanIds()) {
