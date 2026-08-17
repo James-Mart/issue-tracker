@@ -909,6 +909,53 @@ describe("agent sessions manager", () => {
     expect(transcript.some((e) => e.type === "run")).toBe(false);
   });
 
+  it("publishes planning-run frames on the issues topic when an issue-anchored run starts and finishes", async () => {
+    writeIssue("capture", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "platform",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const { createConversation, createAgentSessions, subscribeFrames } =
+      await load();
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Plan capture",
+      projectId: "platform",
+      model: "auto",
+      issueId: "capture",
+      channel: "planning",
+    });
+
+    const issueFrames: ConversationFrame[] = [];
+    const unsubscribe = subscribeFrames("issues", (frame) => {
+      issueFrames.push(frame);
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    await result.run.wait();
+    unsubscribe();
+
+    expect(issueFrames).toHaveLength(2);
+    expect(issueFrames[0]).toMatchObject({
+      event: { type: "change", id: "capture", scope: "planning-run" },
+      persist: false,
+    });
+    expect(issueFrames[1]).toMatchObject({
+      event: { type: "change", id: "capture", scope: "planning-run" },
+      persist: false,
+    });
+  });
+
   it("publishes finished when a run is cancelled mid-flight", async () => {
     const { createConversation, createAgentSessions, subscribeFrames } =
       await load();

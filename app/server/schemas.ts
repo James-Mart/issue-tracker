@@ -381,7 +381,11 @@ export interface Problem {
 }
 
 export type IssueEventType = "add" | "change" | "unlink" | "unlink-dir";
-export type IssueEventScope = "issue" | "comments" | "attachments";
+export type IssueEventScope =
+  | "issue"
+  | "comments"
+  | "attachments"
+  | "planning-run";
 
 export interface IssueEvent {
   type: IssueEventType;

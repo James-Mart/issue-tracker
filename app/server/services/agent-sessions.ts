@@ -26,6 +26,7 @@ import {
   createDelegateCustomTools,
 } from "./delegate-tool.js";
 import { clearCatchupBuffer, publishFrame } from "./conversation-stream.js";
+import { ISSUES_TOPIC } from "./issue-events.js";
 import {
   EventPipeline,
   type NormalizedStep,
@@ -121,6 +122,13 @@ function isAuthFailureResult(result: AgentRunResult): boolean {
 
 function conversationStoreDir(conversationId: string): string {
   return join(conversationsDir, conversationId, "agent-state");
+}
+
+function publishPlanningRunIssueFrame(issueId: string): void {
+  publishFrame(ISSUES_TOPIC, {
+    event: { type: "change", id: issueId, scope: "planning-run" },
+    persist: false,
+  });
 }
 
 export { isRunLive } from "./run-live.js";
@@ -502,6 +510,10 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       event: { type: "run", status: "started", runId: agentRun.id },
       persist: false,
     });
+    const { meta: runMeta } = readConversation(conversationId);
+    if (runMeta.issueId) {
+      publishPlanningRunIssueFrame(runMeta.issueId);
+    }
 
     entry.pump = (async () => {
       const { sawAuthFailure } = await pumpEvents(conversationId, agentRun);
@@ -510,6 +522,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         event: { type: "run", status: "finished", runId: agentRun.id },
         persist: false,
       });
+      if (runMeta.issueId) {
+        publishPlanningRunIssueFrame(runMeta.issueId);
+      }
 
       const result = await settleResult(agentRun);
       if (entry.turn === turn) {
