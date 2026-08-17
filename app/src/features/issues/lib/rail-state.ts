@@ -24,12 +24,18 @@ export function issueRailNodeState(
   state: DerivedState | undefined,
 ): RailNodeState {
   if (hasAttention(issue) && issue.needsAttention) return "needs-attention";
+  if (issue.kind === "idea" && state?.ideaStatus === "awaiting-direction") {
+    return "needs-attention";
+  }
   if (state?.blocked) return "blocked";
   if (isInFlight(issue, state)) return "in-flight";
   if (issue.kind === "story" && state?.storyStatus === "in-progress") {
     return "in-flight";
   }
   if (issue.kind === "epic" && state?.epicStatus === "in-progress") {
+    return "in-flight";
+  }
+  if (issue.kind === "idea" && state?.ideaStatus === "planning") {
     return "in-flight";
   }
   if (isIssueComplete(issue, state)) return "merged";

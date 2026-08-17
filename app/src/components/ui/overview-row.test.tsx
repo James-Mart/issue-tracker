@@ -82,6 +82,14 @@ describe("OverviewRow overlay", () => {
     expect(row.className).not.toMatch(/\bgroup\b/);
   });
 
+  it("renders at-rest chips after the title", () => {
+    const { container } = mountRow({
+      chips: <span data-testid="planning-chip">planning</span>,
+    });
+    expect(container.querySelector('[data-testid="planning-chip"]')).toBeTruthy();
+    expect(container.textContent).toContain("planning");
+  });
+
   it("stretches a drill-in link across the card while keeping overlay above it", () => {
     coarsePointer.value = false;
     const { container } = mountRow({

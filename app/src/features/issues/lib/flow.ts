@@ -1,3 +1,4 @@
+import { hasAttention } from "@server/kind";
 import { bySequence, epicsBlockedBy, isProjectBoardChild } from "@server/order";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import {
@@ -62,13 +63,14 @@ export function flowFiltersActive(filters: FlowFilters): boolean {
 }
 
 /**
- * Story/Epic ids kept under Flow filters. Search/label via shared
+ * Story/Epic/Idea ids kept under Flow filters. Search/label via shared
  * `filterIssuesBySearchAndLabels` (ancestor retention), then kind via
  * `boardKindAllows`.
  */
 export function matchingFlowIssueIds(
   issues: IssueRecord[],
   filters: FlowFilters,
+  derived: Record<string, DerivedState> = {},
 ): Set<string> {
   const byId = issuesById(issues);
   const next = filterIssuesBySearchAndLabels(
@@ -79,7 +81,7 @@ export function matchingFlowIssueIds(
   const keep = new Set<string>();
   for (const issue of next) {
     if (
-      isFlowTopLevelRow(issue, byId) &&
+      isFlowTopLevelRow(issue, byId, derived) &&
       boardKindAllows(issue.kind, filters.kind)
     ) {
       keep.add(issue.id);
@@ -93,9 +95,10 @@ export function filterFlowBuckets(
   buckets: FlowBuckets,
   issues: IssueRecord[],
   filters: FlowFilters,
+  derived: Record<string, DerivedState> = {},
 ): FlowBuckets {
   if (!flowFiltersActive(filters)) return buckets;
-  const keep = matchingFlowIssueIds(issues, filters);
+  const keep = matchingFlowIssueIds(issues, filters, derived);
   const take = (items: FlowItem[]) =>
     items.filter((item) => keep.has(item.issue.id));
   return {
@@ -106,16 +109,34 @@ export function filterFlowBuckets(
   };
 }
 
-/** Epic or project-level Story — the only kinds that appear as Flow rows. */
+/**
+ * Epic, project-level Story, or Idea that is not `planned`. Tasks and
+ * Epic-child Stories stay out. A planned Idea's plan root is already a row.
+ */
 function isFlowTopLevelRow(
   issue: IssueRecord,
   byId: Map<string, IssueRecord>,
-): issue is IssueRecord & { kind: "story" | "epic" } {
-  if (issue.kind !== "epic" && issue.kind !== "story") return false;
+  derived: Record<string, DerivedState> = {},
+): issue is IssueRecord & { kind: "story" | "epic" | "idea" } {
+  if (issue.kind !== "epic" && issue.kind !== "story" && issue.kind !== "idea") {
+    return false;
+  }
   if (!isProjectBoardChild(issue, byId)) return false;
   // `isProjectBoardChild` keys off the immediate parent id; require a Project
   // parent so an epic nested under another epic (writable via the API) stays out.
-  return byId.get(issue.partOf)?.kind === "project";
+  if (byId.get(issue.partOf)?.kind !== "project") return false;
+  if (issue.kind === "idea") {
+    return derived[issue.id]?.ideaStatus !== "planned";
+  }
+  return true;
+}
+
+/** Attention for Flow: stored flag on Epics/Stories, stall only on planning. */
+export function flowItemNeedsAttention(item: FlowItem): boolean {
+  if (item.issue.kind === "idea") {
+    return item.state?.ideaStatus === "awaiting-direction";
+  }
+  return hasAttention(item.issue) && item.issue.needsAttention;
 }
 
 /**
@@ -141,9 +162,10 @@ export function inFlightTaskOf(
 }
 
 function isInFlightBucket(
-  issue: IssueRecord & { kind: "story" | "epic" },
+  issue: IssueRecord & { kind: "story" | "epic" | "idea" },
   state: DerivedState | undefined,
 ): boolean {
+  if (issue.kind === "idea") return state?.ideaStatus === "planning";
   if (issue.kind === "story") {
     return (
       state?.storyStatus === "in-progress" || state?.storyStatus === "pr-open"
@@ -153,16 +175,18 @@ function isInFlightBucket(
 }
 
 function isRecentlyMerged(
-  issue: IssueRecord & { kind: "story" | "epic" },
+  issue: IssueRecord & { kind: "story" | "epic" | "idea" },
   state: DerivedState | undefined,
 ): boolean {
   return isIssueComplete(issue, state);
 }
 
 /**
- * Bucket Stories and Epics into ready / inFlight / blocked / recentlyMerged.
- * Pure view-model — no I/O. `inFlight` is broader than the `isInFlight`
- * liveness helper: it includes `pr-open` Stories.
+ * Bucket Stories, Epics, and Ideas into ready / inFlight / blocked /
+ * recentlyMerged. Pure view-model — no I/O. `inFlight` is broader than the
+ * `isInFlight` liveness helper: it includes `pr-open` Stories and Ideas
+ * whose status is `planning`. Captured Ideas stay unbucketed until the
+ * Awaiting planning section exists.
  */
 export function flowBuckets(
   issues: IssueRecord[],
@@ -170,11 +194,13 @@ export function flowBuckets(
   scope: FlowScope = {},
 ): FlowBuckets {
   const byId = issuesById(issues);
-  const candidates = issues.filter((issue) => {
-    if (!isFlowTopLevelRow(issue, byId)) return false;
-    if (scope.projectId === undefined) return true;
-    return projectIdOf(issue.id, byId) === scope.projectId;
-  }) as Array<IssueRecord & { kind: "story" | "epic" }>;
+  const candidates = issues.filter(
+    (issue): issue is IssueRecord & { kind: "story" | "epic" | "idea" } => {
+      if (!isFlowTopLevelRow(issue, byId, derived)) return false;
+      if (scope.projectId === undefined) return true;
+      return projectIdOf(issue.id, byId) === scope.projectId;
+    },
+  );
 
   const ready: FlowItem[] = [];
   const inFlight: FlowItem[] = [];
@@ -183,6 +209,8 @@ export function flowBuckets(
 
   for (const issue of candidates) {
     const state = derived[issue.id];
+    // Captured Ideas stay unbucketed until the Awaiting planning section exists.
+    if (issue.kind === "idea" && state?.ideaStatus === "captured") continue;
     const item: FlowItem = { issue, state };
     if (state?.blocked) {
       blocked.push(item);

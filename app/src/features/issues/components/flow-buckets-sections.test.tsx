@@ -11,6 +11,36 @@ import {
 
 const t0 = "2026-07-01T00:00:00.000Z";
 
+function idea(id: string): IssueRecord {
+  return {
+    id,
+    kind: "idea",
+    title: id,
+    partOf: "p",
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+    archived: false,
+  };
+}
+
+function story(id: string): IssueRecord {
+  return {
+    id,
+    kind: "story",
+    title: id,
+    partOf: "p",
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+    branchName: id,
+    merged: false,
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
+  };
+}
+
 function epic(id: string, needsAttention = false): IssueRecord {
   return {
     id,
@@ -88,6 +118,32 @@ describe("partitionCockpitBuckets", () => {
       "flight",
     ]);
   });
+
+  it("lifts awaiting-direction Ideas and leaves an implementing Story in place", () => {
+    const awaiting = row(idea("awaiting"), {
+      blocked: false,
+      ideaStatus: "awaiting-direction",
+    });
+    const implementing = row(story("implementing"), {
+      blocked: false,
+      storyStatus: "in-progress",
+    });
+
+    const partitioned = partitionCockpitBuckets({
+      ready: [awaiting],
+      inFlight: [implementing],
+      blocked: [],
+      recentlyMerged: [],
+    });
+
+    expect(partitioned.needsAttention.map((item) => item.issue.id)).toEqual([
+      "awaiting",
+    ]);
+    expect(partitioned.buckets.ready).toEqual([]);
+    expect(partitioned.buckets.inFlight.map((item) => item.issue.id)).toEqual([
+      "implementing",
+    ]);
+  });
 });
 
 describe("FlowBucketsSections", () => {
@@ -105,6 +161,43 @@ describe("FlowBucketsSections", () => {
       "Nothing in flight. Pick up Ready work or start a Story.",
     );
     expect(section(container, "needsAttention")).toBeNull();
+  });
+
+  it("partitions awaiting-direction Ideas into attention under both variants", () => {
+    const buckets: FlowBuckets = {
+      ready: [
+        row(idea("awaiting"), {
+          blocked: false,
+          ideaStatus: "awaiting-direction",
+        }),
+        row(epic("ready"), { blocked: false, epicStatus: "todo" }),
+      ],
+      inFlight: [
+        row(story("implementing"), {
+          blocked: false,
+          storyStatus: "in-progress",
+        }),
+      ],
+      blocked: [],
+      recentlyMerged: [],
+    };
+
+    for (const variant of ["overview", "cockpit"] as const) {
+      const { container, root } = mountSections(buckets, variant);
+      expect(section(container, "needsAttention")?.textContent).toContain(
+        "awaiting",
+      );
+      expect(section(container, "ready")?.textContent).toContain("ready");
+      expect(section(container, "ready")?.textContent).not.toContain(
+        "awaiting",
+      );
+      expect(section(container, "inFlight")?.textContent).toContain(
+        "implementing",
+      );
+      act(() => {
+        root.unmount();
+      });
+    }
   });
 
   it("cockpit hides empty buckets and collapses backlog sections", () => {

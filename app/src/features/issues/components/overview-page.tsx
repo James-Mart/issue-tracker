@@ -147,7 +147,7 @@ function OverviewFlowLens({
 
   const buckets = useMemo(() => {
     const raw = flowBuckets(visible, derived, { projectId });
-    return filterFlowBuckets(raw, visible, filters);
+    return filterFlowBuckets(raw, visible, filters, derived);
   }, [derived, filters, projectId, visible]);
 
   const clearFilters = () => {

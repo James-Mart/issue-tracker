@@ -15,6 +15,8 @@ export interface OverviewRowProps extends React.HTMLAttributes<HTMLDivElement> {
   avatar?: React.ReactNode;
   /** Row-level state disc (e.g. `StateIcon`). */
   stateIcon?: React.ReactNode;
+  /** At-rest status chips (e.g. planning) — sit after the title, before the disc. */
+  chips?: React.ReactNode;
   /** Tabular quantity (e.g. `3/4`). */
   count?: React.ReactNode;
   /** At-rest attention signal — warn-hued warning icon only (no chip). */
@@ -40,13 +42,15 @@ const overlayReveal =
   "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100";
 
 /**
- * Dense overview row shell: avatar · title · state icon · icon signals · count.
- * At rest, attention/blocked are hue-coded icons only — never chips.
+ * Dense overview row shell: avatar · title · chips · state icon · icon signals · count.
+ * At rest, attention/blocked are hue-coded icons only; optional chips are for
+ * phase (e.g. planning), not those signals.
  * Optional overlay fades in on hover/focus; touch uses a separate flat menu.
  */
 export function OverviewRow({
   avatar,
   stateIcon,
+  chips,
   count,
   attention = false,
   blocked = false,
@@ -93,6 +97,9 @@ export function OverviewRow({
         <div className="min-w-0 flex-1 truncate font-medium text-foreground">
           {children}
         </div>
+        {chips != null ? (
+          <span className="inline-flex shrink-0">{chips}</span>
+        ) : null}
         {stateIcon != null ? (
           <span className="inline-flex shrink-0">{stateIcon}</span>
         ) : null}

@@ -7,6 +7,7 @@ import {
   filterFlowBuckets,
   flowBuckets,
   flowFiltersActive,
+  flowItemNeedsAttention,
   inFlightTaskOf,
   type FlowBuckets,
   type FlowFilters,
@@ -201,7 +202,7 @@ describe("flowBuckets", () => {
     expect(ids(buckets.recentlyMerged)).toEqual(["mid-epic", "old-epic"]);
   });
 
-  it("excludes Epic-child Stories, Tasks, Projects, and Ideas", () => {
+  it("excludes Epic-child Stories, Tasks, Projects, and planned Ideas", () => {
     const issues = [
       project("p"),
       idea("i", "p"),
@@ -210,6 +211,7 @@ describe("flowBuckets", () => {
       task("t", "s"),
     ];
     const derived: Record<string, DerivedState> = {
+      i: { blocked: false, ideaStatus: "planned" },
       e: { blocked: false, epicStatus: "todo" },
       s: { blocked: false, storyStatus: "not-started" },
       t: { blocked: false },
@@ -221,6 +223,29 @@ describe("flowBuckets", () => {
     expect(buckets.inFlight).toEqual([]);
     expect(buckets.blocked).toEqual([]);
     expect(buckets.recentlyMerged).toEqual([]);
+  });
+
+  it("places a planning Idea in inFlight and leaves captured unbucketed", () => {
+    const issues = [
+      project("p"),
+      idea("planning-idea", "p"),
+      idea("captured-idea", "p"),
+      idea("planned-idea", "p"),
+      idea("awaiting-idea", "p"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      "planning-idea": { blocked: false, ideaStatus: "planning" },
+      "captured-idea": { blocked: false, ideaStatus: "captured" },
+      "planned-idea": { blocked: false, ideaStatus: "planned" },
+      "awaiting-idea": { blocked: false, ideaStatus: "awaiting-direction" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(ids(buckets.inFlight)).toEqual(["planning-idea"]);
+    expect(ids(buckets.ready)).toEqual(["awaiting-idea"]);
+    expect(ids(buckets.blocked)).toEqual([]);
+    expect(ids(buckets.recentlyMerged)).toEqual([]);
   });
 
   it("scopes to projectId when set and aggregates when omitted", () => {
@@ -294,6 +319,29 @@ describe("flowBuckets", () => {
     expect(ids(buckets.ready)).toEqual([]);
     expect(ids(buckets.blocked)).toEqual([]);
     expect(ids(buckets.recentlyMerged)).toEqual([]);
+  });
+});
+
+describe("flowItemNeedsAttention", () => {
+  it("treats awaiting-direction Ideas as attention and ignores implementing Stories", () => {
+    expect(
+      flowItemNeedsAttention({
+        issue: idea("awaiting", "p"),
+        state: { blocked: false, ideaStatus: "awaiting-direction" },
+      }),
+    ).toBe(true);
+    expect(
+      flowItemNeedsAttention({
+        issue: idea("planning", "p"),
+        state: { blocked: false, ideaStatus: "planning" },
+      }),
+    ).toBe(false);
+    expect(
+      flowItemNeedsAttention({
+        issue: story("implementing", "p"),
+        state: { blocked: false, storyStatus: "in-progress" },
+      }),
+    ).toBe(false);
   });
 });
 

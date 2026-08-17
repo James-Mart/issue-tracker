@@ -1,8 +1,11 @@
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { hasAttention } from "@server/kind";
 import { cn } from "@/lib/utils/cn";
-import type { FlowBuckets, FlowItem } from "../lib/flow";
+import {
+  flowItemNeedsAttention,
+  type FlowBuckets,
+  type FlowItem,
+} from "../lib/flow";
 
 type FlowBucketKey = keyof FlowBuckets | "needsAttention";
 
@@ -51,18 +54,15 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
   },
 ];
 
-const OVERVIEW_BUCKET_KEYS = new Set<keyof FlowBuckets>([
+const OVERVIEW_BUCKET_KEYS = new Set<FlowBucketKey>([
+  "needsAttention",
   "inFlight",
   "ready",
   "blocked",
   "recentlyMerged",
 ]);
 
-function isNeedsAttentionItem(item: FlowItem): boolean {
-  return hasAttention(item.issue) && item.issue.needsAttention;
-}
-
-/** Pull flagged rows into the virtual needs-attention bucket for cockpit layout. */
+/** Pull flagged rows into the virtual needs-attention bucket. */
 export function partitionCockpitBuckets(buckets: FlowBuckets): {
   needsAttention: FlowItem[];
   buckets: FlowBuckets;
@@ -71,7 +71,7 @@ export function partitionCockpitBuckets(buckets: FlowBuckets): {
   const take = (items: FlowItem[]) => {
     const rest: FlowItem[] = [];
     for (const item of items) {
-      if (isNeedsAttentionItem(item)) needsAttention.push(item);
+      if (flowItemNeedsAttention(item)) needsAttention.push(item);
       else rest.push(item);
     }
     return rest;
@@ -176,7 +176,8 @@ function FlowBucketSection({
 }) {
   const headingId = `${idPrefix}-${def.key}`;
   const count = items.length;
-  const hideWhenEmpty = variant === "cockpit" && def.hideWhenEmpty;
+  const hideWhenEmpty =
+    def.hideWhenEmpty && (variant === "cockpit" || def.empty == null);
   const collapsed =
     variant === "cockpit" && def.collapsedByDefault && count > 0;
   const compact = variant === "cockpit" && def.compact;
@@ -246,17 +247,13 @@ export function FlowBucketsSections({
   /** Cockpit foregrounds attention/in-flight work and collapses backlog buckets. */
   variant?: "overview" | "cockpit";
 }) {
-  const cockpit =
-    variant === "cockpit" ? partitionCockpitBuckets(buckets) : null;
-  const displayBuckets = cockpit?.buckets ?? buckets;
-  const needsAttention = cockpit?.needsAttention ?? [];
+  const { needsAttention, buckets: displayBuckets } =
+    partitionCockpitBuckets(buckets);
 
   const defs =
     variant === "cockpit"
       ? FLOW_BUCKET_DEFS
-      : FLOW_BUCKET_DEFS.filter((def) =>
-          OVERVIEW_BUCKET_KEYS.has(def.key as keyof FlowBuckets),
-        );
+      : FLOW_BUCKET_DEFS.filter((def) => OVERVIEW_BUCKET_KEYS.has(def.key));
 
   return (
     <div
