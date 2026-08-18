@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { Play } from "lucide-react";
 import type { ConversationChannel, IssueDetail } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -124,7 +126,7 @@ function PlanningLaunchButton({
   channel: ConversationChannel;
   stakeholder: string | undefined;
   fallbackCatalogId?: string;
-  variant: "primary" | "secondary";
+  variant: "primary" | "secondary" | "icon" | "menuItem";
   disabled?: boolean;
   onStarted: (session: PlanningSessionStarted) => void;
 }) {
@@ -175,6 +177,44 @@ function PlanningLaunchButton({
   const label =
     variant === "secondary" ? "New run" : copy.actionLabel;
 
+  if (variant === "icon") {
+    return (
+      <>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          title={label}
+          disabled={!canStart}
+          data-testid="flow-row-start-planning"
+          onClick={start}
+        >
+          <Play className="h-3.5 w-3.5" />
+        </Button>
+        {dialog}
+      </>
+    );
+  }
+
+  if (variant === "menuItem") {
+    return (
+      <>
+        <DropdownMenuItem
+          disabled={!canStart}
+          data-testid="flow-row-start-planning-menu"
+          onSelect={(event) => {
+            event.preventDefault();
+            start();
+          }}
+        >
+          <Play className="h-4 w-4" />
+          {createSession.isPending ? "Starting…" : label}
+        </DropdownMenuItem>
+        {dialog}
+      </>
+    );
+  }
+
   return (
     <>
       <Button
@@ -193,6 +233,32 @@ function PlanningLaunchButton({
       </Button>
       {dialog}
     </>
+  );
+}
+
+/** Icon-only planning launch for Flow row steering. */
+export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
+  return (
+    <PlanningLaunchButton
+      issue={issue}
+      channel="planning"
+      stakeholder={issue.stakeholder}
+      variant="icon"
+      onStarted={() => {}}
+    />
+  );
+}
+
+/** Touch overflow menu item for the same planning launch path. */
+export function PlanningFlowRowTouchMenuLaunch({ issue }: { issue: IdeaDetail }) {
+  return (
+    <PlanningLaunchButton
+      issue={issue}
+      channel="planning"
+      stakeholder={issue.stakeholder}
+      variant="menuItem"
+      onStarted={() => {}}
+    />
   );
 }
 

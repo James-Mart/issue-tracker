@@ -21,6 +21,7 @@ import {
   flowBuckets,
   flowFiltersActive,
   inFlightTaskOf,
+  type FlowBuckets,
   type FlowFilters,
   type FlowItem,
 } from "../lib/flow";
@@ -97,13 +98,9 @@ function LensSwitcher({
   );
 }
 
-function flowBucketsEmpty(buckets: {
-  ready: unknown[];
-  inFlight: unknown[];
-  blocked: unknown[];
-  recentlyMerged: unknown[];
-}): boolean {
+function flowBucketsEmpty(buckets: FlowBuckets): boolean {
   return (
+    buckets.awaitingPlanning.length === 0 &&
     buckets.ready.length === 0 &&
     buckets.inFlight.length === 0 &&
     buckets.blocked.length === 0 &&
@@ -147,7 +144,7 @@ function OverviewFlowLens({
 
   const buckets = useMemo(() => {
     const raw = flowBuckets(visible, derived, { projectId });
-    return filterFlowBuckets(raw, visible, filters);
+    return filterFlowBuckets(raw, visible, filters, derived);
   }, [derived, filters, projectId, visible]);
 
   const clearFilters = () => {

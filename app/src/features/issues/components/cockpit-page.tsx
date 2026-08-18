@@ -8,11 +8,15 @@ import { Button } from "@/components/ui/button";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
 import { useIssuesQuery } from "../api/queries";
 import { issuesById, listProjects, projectIdOf } from "../lib/build-tree";
-import { flowBuckets, type FlowItem } from "../lib/flow";
+import { flowBuckets, inFlightTaskOf, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
-import { FlowBucketsSections } from "./flow-buckets-sections";
+import {
+  FlowBucketsSections,
+  FlowPreviewedItems,
+} from "./flow-buckets-sections";
 import { FlowRow } from "./flow-row";
+import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
 
 function CockpitHeader() {
   return (
@@ -102,7 +106,7 @@ export function CockpitPage() {
   );
 
   const renderBucketItems = useCallback(
-    (items: FlowItem[], compact?: boolean) => {
+    (items: FlowItem[], compact?: boolean, previewLimit?: number) => {
       const groups = groupFlowItemsByProject(items, byId, projectOrder);
       return (
         <div className={cn("flex flex-col", compact ? "gap-2" : "gap-3")}>
@@ -112,22 +116,30 @@ export function CockpitPage() {
                 projectId={group.projectId}
                 projectTitle={group.projectTitle}
               />
-              <ul
-                className={cn(
-                  "flex list-none flex-col p-0",
-                  compact ? "mt-1 gap-1" : "mt-1.5 gap-1",
+              <FlowPreviewedItems
+                items={group.items}
+                previewLimit={previewLimit}
+                listClassName={compact ? "mt-1 gap-1" : "mt-1.5 gap-1"}
+                renderItem={(item) => (
+                  <FlowRow
+                    item={item}
+                    issues={issues}
+                    to={issuePath(group.projectId, item.issue.id)}
+                    actions={
+                      <FlowRowActions
+                        item={item}
+                        task={inFlightTaskOf(item.issue, issues, byId)}
+                      />
+                    }
+                    touchMenu={
+                      <FlowRowTouchMenu
+                        item={item}
+                        task={inFlightTaskOf(item.issue, issues, byId)}
+                      />
+                    }
+                  />
                 )}
-              >
-                {group.items.map((item) => (
-                  <li key={item.issue.id}>
-                    <FlowRow
-                      item={item}
-                      issues={issues}
-                      to={issuePath(group.projectId, item.issue.id)}
-                    />
-                  </li>
-                ))}
-              </ul>
+              />
             </div>
           ))}
         </div>

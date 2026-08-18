@@ -26,7 +26,9 @@ import { Input } from "@/components/ui/input";
 import { useUpdateIssue } from "../api/mutations";
 import { useProjectPullRequestsQuery } from "../api/queries";
 import type { FlowItem } from "../lib/flow";
+import { isCapturedIdeaFlowItem } from "../lib/flow";
 import { needsAttentionPatch } from "../lib/needs-attention-patch";
+import { PlanningFlowRowLaunch, PlanningFlowRowTouchMenuLaunch } from "./planning-launch-control";
 import { PrChip, storyPrChipModel, type PrChipModel } from "./pr-chip";
 
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
@@ -171,8 +173,12 @@ export function FlowRowActions({
     setReassignOpen(false);
   };
 
+  const capturedIdea = isCapturedIdeaFlowItem(item) ? item.issue : undefined;
+
   return (
     <>
+      {capturedIdea ? <PlanningFlowRowLaunch issue={capturedIdea} /> : null}
+
       {prUrl ? (
         <>
           <Button asChild variant="ghost" size="icon-sm" title="Open PR">
@@ -282,9 +288,14 @@ export function FlowRowTouchMenu({
     });
   };
 
+  const capturedIdea = isCapturedIdeaFlowItem(item) ? item.issue : undefined;
+
   return (
     <>
       <FlowRowTouchMenuPrChip model={prChip} />
+      {capturedIdea ? (
+        <PlanningFlowRowTouchMenuLaunch issue={capturedIdea} />
+      ) : null}
       {prUrl ? (
         <DropdownMenuItem asChild>
           <a href={prUrl} target="_blank" rel="noreferrer">

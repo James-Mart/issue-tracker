@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { OverviewRow } from "@/components/ui/overview-row";
 import { StateIcon } from "@/components/ui/rail";
-import { hasAttention } from "@server/kind";
 import type { IssueRecord } from "@server/schemas";
 import { leafTaskProgressCount, isInFlight } from "../lib/derived";
-import type { FlowItem } from "../lib/flow";
+import { flowItemNeedsAttention, type FlowItem } from "../lib/flow";
 import { issueRailNodeState } from "../lib/rail-state";
+import { AxisChips } from "./axis-chips";
 
 export interface FlowRowProps {
   item: FlowItem;
@@ -29,7 +29,7 @@ export function FlowRow({
   touchMenu,
   to,
 }: FlowRowProps) {
-  const attention = hasAttention(item.issue) && item.issue.needsAttention;
+  const attention = flowItemNeedsAttention(item);
   const railState = issueRailNodeState(item.issue, item.state);
   const live = isInFlight(item.issue, item.state);
   const count = leafTaskProgressCount(item.issue, issues);
@@ -39,6 +39,11 @@ export function FlowRow({
       className="min-w-0 flex-1"
       avatar={avatar}
       stateIcon={<StateIcon state={railState} live={live} />}
+      chips={
+        item.issue.kind === "idea" ? (
+          <AxisChips chips={[{ variant: "inProgress", label: "planning" }]} />
+        ) : undefined
+      }
       attention={attention}
       blocked={Boolean(item.state?.blocked)}
       count={count}

@@ -40,6 +40,17 @@ function story(
   };
 }
 
+function idea(): IssueRecord {
+  return {
+    id: "i",
+    kind: "idea",
+    title: "i",
+    partOf: "project",
+    archived: false,
+    ...timestamps,
+  };
+}
+
 function epic(
   extras: Partial<Extract<IssueRecord, { kind: "epic" }>> = {},
 ): IssueRecord {
@@ -83,6 +94,15 @@ describe("issueRailNodeState", () => {
     expect(
       issueRailNodeState(epic(), { blocked: false, epicStatus: "todo" }),
     ).toBe("ready");
+    expect(
+      issueRailNodeState(idea(), { blocked: false, ideaStatus: "planning" }),
+    ).toBe("in-flight");
+    expect(
+      issueRailNodeState(idea(), {
+        blocked: false,
+        ideaStatus: "awaiting-direction",
+      }),
+    ).toBe("needs-attention");
   });
 
   it("maps blocked ahead of in-flight", () => {
