@@ -16,7 +16,7 @@ async function gotoOverviewFlow(page: Page, baseURL: string): Promise<Locator> {
 
 function bucketSection(
   main: Locator,
-  key: "ready" | "inFlight" | "blocked" | "recentlyMerged",
+  key: "ready" | "inFlight" | "blocked" | "recentlyMerged" | "awaitingPlanning",
 ): Locator {
   return main.locator(`section[aria-labelledby="overview-flow-${key}"]`);
 }
@@ -163,7 +163,7 @@ test.describe("overview Flow lens", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("New menu creates an Idea outside Flow", async ({
+  test("New menu creates an Idea under Awaiting planning", async ({
     page,
     seededApp,
   }) => {
@@ -206,9 +206,13 @@ test.describe("overview Flow lens", () => {
       .click();
     const flowPanel = page.getByRole("tabpanel", { name: "Flow" });
     await expect(flowPanel).toBeVisible();
+    const awaiting = bucketSection(flowPanel, "awaitingPlanning");
     await expect(
-      flowPanel.getByRole("link", { name: /^Capture me next\b/ }),
-    ).toHaveCount(0);
+      awaiting.getByRole("heading", { name: "Awaiting planning1" }),
+    ).toBeVisible();
+    await expect(
+      awaiting.getByRole("link", { name: /^Capture me next\b/ }),
+    ).toBeVisible();
   });
 
   // Sole both-theme key-surface snapshot for the project Flow overview.

@@ -37,6 +37,7 @@ export type DepGraphModel = {
 };
 
 export type FlowBuckets = {
+  awaitingPlanning: FlowItem[];
   ready: FlowItem[];
   inFlight: FlowItem[];
   blocked: FlowItem[];
@@ -102,6 +103,7 @@ export function filterFlowBuckets(
   const take = (items: FlowItem[]) =>
     items.filter((item) => keep.has(item.issue.id));
   return {
+    awaitingPlanning: take(buckets.awaitingPlanning),
     ready: take(buckets.ready),
     inFlight: take(buckets.inFlight),
     blocked: take(buckets.blocked),
@@ -182,11 +184,10 @@ function isRecentlyMerged(
 }
 
 /**
- * Bucket Stories, Epics, and Ideas into ready / inFlight / blocked /
- * recentlyMerged. Pure view-model — no I/O. `inFlight` is broader than the
- * `isInFlight` liveness helper: it includes `pr-open` Stories and Ideas
- * whose status is `planning`. Captured Ideas stay unbucketed until the
- * Awaiting planning section exists.
+ * Bucket Stories, Epics, and Ideas into awaitingPlanning / ready / inFlight /
+ * blocked / recentlyMerged. Pure view-model — no I/O. `inFlight` is broader
+ * than the `isInFlight` liveness helper: it includes `pr-open` Stories and
+ * Ideas whose status is `planning`. Captured Ideas go to `awaitingPlanning`.
  */
 export function flowBuckets(
   issues: IssueRecord[],
@@ -202,6 +203,7 @@ export function flowBuckets(
     },
   );
 
+  const awaitingPlanning: FlowItem[] = [];
   const ready: FlowItem[] = [];
   const inFlight: FlowItem[] = [];
   const blocked: FlowItem[] = [];
@@ -209,10 +211,10 @@ export function flowBuckets(
 
   for (const issue of candidates) {
     const state = derived[issue.id];
-    // Captured Ideas stay unbucketed until the Awaiting planning section exists.
-    if (issue.kind === "idea" && state?.ideaStatus === "captured") continue;
     const item: FlowItem = { issue, state };
-    if (state?.blocked) {
+    if (issue.kind === "idea" && state?.ideaStatus === "captured") {
+      awaitingPlanning.push(item);
+    } else if (state?.blocked) {
       blocked.push(item);
     } else if (isInFlightBucket(issue, state)) {
       inFlight.push(item);
@@ -227,7 +229,7 @@ export function flowBuckets(
     b.issue.updatedAt.localeCompare(a.issue.updatedAt),
   );
 
-  return { ready, inFlight, blocked, recentlyMerged };
+  return { awaitingPlanning, ready, inFlight, blocked, recentlyMerged };
 }
 
 /**

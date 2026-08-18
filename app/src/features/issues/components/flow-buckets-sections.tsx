@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import {
   flowItemNeedsAttention,
@@ -9,6 +10,8 @@ import {
 
 type FlowBucketKey = keyof FlowBuckets | "needsAttention";
 
+export const AWAITING_PLANNING_PREVIEW_LIMIT = 5;
+
 export type FlowBucketDef = {
   key: FlowBucketKey;
   label: string;
@@ -16,6 +19,7 @@ export type FlowBucketDef = {
   hideWhenEmpty?: boolean;
   collapsedByDefault?: boolean;
   compact?: boolean;
+  previewLimit?: number;
 };
 
 /** Cockpit bucket order and chrome; overview uses the same labels with legacy layout. */
@@ -24,6 +28,12 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     key: "needsAttention",
     label: "Needs attention",
     hideWhenEmpty: true,
+  },
+  {
+    key: "awaitingPlanning",
+    label: "Awaiting planning",
+    hideWhenEmpty: true,
+    previewLimit: AWAITING_PLANNING_PREVIEW_LIMIT,
   },
   {
     key: "inFlight",
@@ -56,6 +66,7 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
 
 const OVERVIEW_BUCKET_KEYS = new Set<FlowBucketKey>([
   "needsAttention",
+  "awaitingPlanning",
   "inFlight",
   "ready",
   "blocked",
@@ -79,6 +90,7 @@ export function partitionCockpitBuckets(buckets: FlowBuckets): {
   return {
     needsAttention,
     buckets: {
+      awaitingPlanning: take(buckets.awaitingPlanning),
       ready: take(buckets.ready),
       inFlight: take(buckets.inFlight),
       blocked: take(buckets.blocked),
@@ -128,34 +140,75 @@ function BucketList({
   renderRow,
   renderItems,
   compact,
+  previewLimit,
 }: {
   items: FlowItem[];
   renderRow?: (item: FlowItem) => ReactNode;
   /** When set, renders the whole bucket body (e.g. cockpit project groups). */
-  renderItems?: (items: FlowItem[], compact?: boolean) => ReactNode;
+  renderItems?: (
+    items: FlowItem[],
+    compact?: boolean,
+    previewLimit?: number,
+  ) => ReactNode;
   compact?: boolean;
+  previewLimit?: number;
 }) {
   if (renderItems) {
     return (
       <div className={compact ? "mt-2" : "mt-3"}>
-        {renderItems(items, compact)}
+        {renderItems(items, compact, previewLimit)}
       </div>
     );
   }
 
   return (
-    <ul
-      className={cn(
-        "flex list-none flex-col p-0",
-        compact ? "mt-2 gap-1" : "mt-3 gap-1.5",
-      )}
-    >
-      {items.map((item) => {
-        const row = renderRow?.(item);
-        if (row == null) return null;
-        return <li key={item.issue.id}>{row}</li>;
-      })}
-    </ul>
+    <FlowPreviewedItems
+      items={items}
+      previewLimit={previewLimit}
+      listClassName={compact ? "mt-2 gap-1" : "mt-3 gap-1.5"}
+      renderItem={(item) => renderRow?.(item)}
+    />
+  );
+}
+
+/** List that shows `previewLimit` rows, then a Show all control for the rest. */
+export function FlowPreviewedItems({
+  items,
+  previewLimit,
+  listClassName,
+  renderItem,
+}: {
+  items: FlowItem[];
+  previewLimit?: number;
+  listClassName?: string;
+  renderItem: (item: FlowItem) => ReactNode;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const capped =
+    previewLimit != null && !showAll && items.length > previewLimit;
+  const visible = capped ? items.slice(0, previewLimit) : items;
+
+  return (
+    <>
+      <ul className={cn("flex list-none flex-col p-0", listClassName)}>
+        {visible.map((item) => {
+          const row = renderItem(item);
+          if (row == null) return null;
+          return <li key={item.issue.id}>{row}</li>;
+        })}
+      </ul>
+      {capped ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="mt-1 min-h-11 font-mono text-xs text-muted-foreground"
+          onClick={() => setShowAll(true)}
+        >
+          Show all
+        </Button>
+      ) : null}
+    </>
   );
 }
 
@@ -171,7 +224,11 @@ function FlowBucketSection({
   items: FlowItem[];
   idPrefix: string;
   renderRow?: (item: FlowItem) => ReactNode;
-  renderItems?: (items: FlowItem[], compact?: boolean) => ReactNode;
+  renderItems?: (
+    items: FlowItem[],
+    compact?: boolean,
+    previewLimit?: number,
+  ) => ReactNode;
   variant: "overview" | "cockpit";
 }) {
   const headingId = `${idPrefix}-${def.key}`;
@@ -193,6 +250,7 @@ function FlowBucketSection({
         renderRow={renderRow}
         renderItems={renderItems}
         compact={compact}
+        previewLimit={def.previewLimit}
       />
     );
 
@@ -243,7 +301,11 @@ export function FlowBucketsSections({
   idPrefix: string;
   renderRow?: (item: FlowItem) => ReactNode;
   /** Optional bucket body renderer; cockpit uses this for project grouping. */
-  renderItems?: (items: FlowItem[], compact?: boolean) => ReactNode;
+  renderItems?: (
+    items: FlowItem[],
+    compact?: boolean,
+    previewLimit?: number,
+  ) => ReactNode;
   /** Cockpit foregrounds attention/in-flight work and collapses backlog buckets. */
   variant?: "overview" | "cockpit";
 }) {

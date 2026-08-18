@@ -122,6 +122,7 @@ function ids(items: { issue: IssueRecord }[]): string[] {
 
 function bucketIds(buckets: FlowBuckets): Record<keyof FlowBuckets, string[]> {
   return {
+    awaitingPlanning: ids(buckets.awaitingPlanning),
     ready: ids(buckets.ready),
     inFlight: ids(buckets.inFlight),
     blocked: ids(buckets.blocked),
@@ -220,12 +221,13 @@ describe("flowBuckets", () => {
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
 
     expect(ids(buckets.ready).sort()).toEqual(["e"].sort());
+    expect(buckets.awaitingPlanning).toEqual([]);
     expect(buckets.inFlight).toEqual([]);
     expect(buckets.blocked).toEqual([]);
     expect(buckets.recentlyMerged).toEqual([]);
   });
 
-  it("places a planning Idea in inFlight and leaves captured unbucketed", () => {
+  it("places a captured Idea in awaitingPlanning and a planning Idea in inFlight", () => {
     const issues = [
       project("p"),
       idea("planning-idea", "p"),
@@ -242,6 +244,7 @@ describe("flowBuckets", () => {
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
 
+    expect(ids(buckets.awaitingPlanning)).toEqual(["captured-idea"]);
     expect(ids(buckets.inFlight)).toEqual(["planning-idea"]);
     expect(ids(buckets.ready)).toEqual(["awaiting-idea"]);
     expect(ids(buckets.blocked)).toEqual([]);
@@ -422,6 +425,7 @@ describe("filterFlowBuckets", () => {
       kind: ["epic"],
     });
     expect(bucketIds(epicsOnly)).toEqual({
+      awaitingPlanning: [],
       ready: ["ready-epic"],
       inFlight: ["flight-epic"],
       blocked: [],
@@ -433,6 +437,7 @@ describe("filterFlowBuckets", () => {
       kind: ["idea"],
     });
     expect(bucketIds(ideasOnly)).toEqual({
+      awaitingPlanning: [],
       ready: [],
       inFlight: [],
       blocked: [],
