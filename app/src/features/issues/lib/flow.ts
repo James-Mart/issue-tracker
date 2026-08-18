@@ -19,6 +19,13 @@ export type FlowItem = {
   state: DerivedState | undefined;
 };
 
+/** Idea row in the awaiting-planning bucket (captured, not yet directed). */
+export function isCapturedIdeaFlowItem(
+  item: FlowItem,
+): item is FlowItem & { issue: Extract<IssueRecord, { kind: "idea" }> } {
+  return item.issue.kind === "idea" && item.state?.ideaStatus === "captured";
+}
+
 export type DepGraphNode = {
   id: string;
   label: string;
