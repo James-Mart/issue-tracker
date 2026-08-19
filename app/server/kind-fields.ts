@@ -21,6 +21,19 @@ export function assertStoryCanSetMergeBase(
   }
 }
 
+export const SOURCE_IDEA_SET_ERROR =
+  "sourceIdea can only be set on an Epic or a root-level project Story";
+
+/** Reject story sourceIdea sets on stacked or first-layer Epic Stories. */
+export function assertStoryCanSetSourceIdea(
+  story: { stackedOn?: string },
+  parentKind: IssueKind,
+): void {
+  if (story.stackedOn || parentKind === "epic") {
+    throw new Error(SOURCE_IDEA_SET_ERROR);
+  }
+}
+
 export type FieldCoerce =
   | { type: "string"; storeAs?: string }
   | { type: "boolean" }
@@ -61,6 +74,7 @@ export const EPIC_SET_FIELDS = {
   archived: { type: "boolean" },
   partOf: { type: "string" },
   blockedBy: { type: "array" },
+  sourceIdea: { type: "string" },
   mergeBase: { type: "string", storeAs: "mergeBaseOverride" },
   mergePolicy: { type: "enum", values: MERGE_POLICIES },
   labels: { type: "array" },
@@ -84,6 +98,7 @@ export const STORY_SET_FIELDS = {
   partOf: { type: "string" },
   branchName: { type: "string" },
   stackedOn: { type: "string" },
+  sourceIdea: { type: "string" },
   mergeBase: { type: "string", storeAs: "mergeBaseOverride" },
   mergePolicy: { type: "enum", values: MERGE_POLICIES },
   prUrl: { type: "string" },
@@ -153,6 +168,7 @@ export const EPIC_GET_FIELDS = {
   attentionReason: STORED,
   archived: STORED,
   blockedBy: STORED,
+  sourceIdea: STORED,
   labels: STORED,
   retro: STORED,
   order: STORED,
@@ -190,6 +206,7 @@ export const STORY_GET_FIELDS = {
   branchName: STORED,
   mergeBase: DERIVED,
   stackedOn: STORED,
+  sourceIdea: STORED,
   prUrl: STORED,
   merged: STORED,
   review: STORED,

@@ -35,6 +35,7 @@ export const EPIC_IMPERATIVE_ONLY_KEYS = [
   "mergePolicy",
   "retro",
   "labels",
+  "sourceIdea",
 ] as const;
 
 export const EPIC_RUNTIME_OPTIONAL_KEYS = EPIC_IMPERATIVE_ONLY_KEYS;
@@ -56,6 +57,7 @@ export const STORY_IMPERATIVE_ONLY_KEYS = [
   "needsRebase",
   "retro",
   "labels",
+  "sourceIdea",
 ] as const;
 
 export const STORY_FIELD_KEYS = [
@@ -74,6 +76,7 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "needsRebase",
   "retro",
   "labels",
+  "sourceIdea",
 ] as const;
 
 // Idea has no mergeable runtime keys besides imperative label assignments.
@@ -112,6 +115,7 @@ export const CLEARABLE_KEYS = [
   "retro",
   "mergeBaseOverride",
   "mergePolicy",
+  "sourceIdea",
 ] as const;
 
 export type ClearableKey = (typeof CLEARABLE_KEYS)[number];

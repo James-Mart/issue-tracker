@@ -124,6 +124,12 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
   if (detail.kind === "epic" && detail.blockedBy.length > 0) {
     lines.push(`blockedBy: ${detail.blockedBy.join(", ")}`);
   }
+  if (
+    (detail.kind === "epic" || detail.kind === "story") &&
+    detail.sourceIdea
+  ) {
+    lines.push(`sourceIdea: ${detail.sourceIdea}`);
+  }
   const labelIds = labelIdsForView(detail);
   if (labelIds.length > 0) {
     lines.push(`labels: ${labelIds.join(", ")}`);
@@ -188,6 +194,9 @@ async function printDeleteResult(id: string): Promise<void> {
   }
   for (const { id: bid } of result.unblocked) {
     console.log(`  dropped deleted blocker from ${bid}.blockedBy`);
+  }
+  for (const { id: bid } of result.droppedSourceIdea) {
+    console.log(`  cleared ${bid}.sourceIdea`);
   }
 }
 

@@ -13,6 +13,10 @@ export interface Unblock {
   blockedBy: string[];
 }
 
+export interface DropSourceIdea {
+  id: string;
+}
+
 export interface DeletionPlan {
   // The target plus everything transitively `partOf` it (the containment closure).
   deleteIds: string[];
@@ -21,6 +25,8 @@ export interface DeletionPlan {
   repoint: Repoint[];
   // Surviving Epics whose `blockedBy` had entries in the delete set removed.
   unblock: Unblock[];
+  // Surviving Epics and root Stories whose `sourceIdea` pointed into the delete set.
+  dropSourceIdea: DropSourceIdea[];
 }
 
 // The outcome `remove()` returns once the plan has been applied.
@@ -28,6 +34,7 @@ export interface DeletionResult {
   deleted: string[];
   repointed: Repoint[];
   unblocked: Unblock[];
+  droppedSourceIdea: DropSourceIdea[];
 }
 
 // Pure, filesystem-free planner for deleting an issue. It computes the full set
@@ -38,6 +45,8 @@ export interface DeletionResult {
 //     `undefined` = Project trunk).
 //   - Epic `blockedBy` (the only cross-container edge): the deleted ids are
 //     dropped, no inheritance.
+//   - Epic / root Story `sourceIdea`: the field is cleared when the Idea is
+//     deleted, no inheritance.
 // `partOf` never needs repair: anything that points into the delete set via
 // `partOf` is itself contained and therefore also deleted.
 export function planDeletion(issues: Issue[], id: string): DeletionPlan {
@@ -78,6 +87,7 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
 
   const repoint: Repoint[] = [];
   const unblock: Unblock[] = [];
+  const dropSourceIdea: DropSourceIdea[] = [];
   for (const issue of issues) {
     if (deleteSet.has(issue.id)) continue;
     // Branch `stackedOn` splices within its Epic.
@@ -93,7 +103,14 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
         blockedBy: (issue.blockedBy ?? []).filter((dep) => !deleteSet.has(dep)),
       });
     }
+    if (
+      (issue.kind === "epic" || issue.kind === "story") &&
+      issue.sourceIdea &&
+      deleteSet.has(issue.sourceIdea)
+    ) {
+      dropSourceIdea.push({ id: issue.id });
+    }
   }
 
-  return { deleteIds: [...deleteSet], repoint, unblock };
+  return { deleteIds: [...deleteSet], repoint, unblock, dropSourceIdea };
 }

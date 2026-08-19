@@ -304,6 +304,38 @@ describe("parseIssue - valid per kind", () => {
     }
   });
 
+  it("parses optional sourceIdea on story and epic; absent by default", () => {
+    const storyWith = parseIssue({
+      ...branch,
+      sourceIdea: "capture-flow",
+    });
+    expect(storyWith.ok).toBe(true);
+    if (storyWith.ok && storyWith.issue.kind === "story") {
+      expect(storyWith.issue.sourceIdea).toBe("capture-flow");
+    }
+
+    const epicWith = parseIssue({
+      ...epic,
+      sourceIdea: "capture-flow",
+    });
+    expect(epicWith.ok).toBe(true);
+    if (epicWith.ok && epicWith.issue.kind === "epic") {
+      expect(epicWith.issue.sourceIdea).toBe("capture-flow");
+    }
+
+    const storyAbsent = parseIssue(branch);
+    expect(storyAbsent.ok).toBe(true);
+    if (storyAbsent.ok && storyAbsent.issue.kind === "story") {
+      expect(storyAbsent.issue.sourceIdea).toBeUndefined();
+    }
+
+    const epicAbsent = parseIssue(epic);
+    expect(epicAbsent.ok).toBe(true);
+    if (epicAbsent.ok && epicAbsent.issue.kind === "epic") {
+      expect(epicAbsent.issue.sourceIdea).toBeUndefined();
+    }
+  });
+
   it("parses a branch with an optional review", () => {
     const passed = parseIssue({ ...branch, review: "passed" });
     expect(passed.ok).toBe(true);

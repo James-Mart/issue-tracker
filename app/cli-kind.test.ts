@@ -1,7 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { spawnSync } from "child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   coerceSetPatch,
   resolveInspirationAppsSet,
@@ -153,6 +155,30 @@ describe("coerceSetPatch", () => {
       value: undefined,
       opts: { clear: true },
       patch: { stakeholder: null },
+    },
+    {
+      name: "epic sourceIdea",
+      kind: "epic" as const,
+      field: "sourceIdea",
+      value: "capture-flow",
+      opts: {},
+      patch: { sourceIdea: "capture-flow" },
+    },
+    {
+      name: "story sourceIdea",
+      kind: "story" as const,
+      field: "sourceIdea",
+      value: "capture-flow",
+      opts: {},
+      patch: { sourceIdea: "capture-flow" },
+    },
+    {
+      name: "sourceIdea --clear",
+      kind: "epic" as const,
+      field: "sourceIdea",
+      value: undefined,
+      opts: { clear: true },
+      patch: { sourceIdea: null },
     },
   ])("$name", ({ kind, field, value, opts, patch }) => {
     expect(coerceSetPatch(kind, field, value, opts)).toEqual(patch);
@@ -621,5 +647,112 @@ describe("resolvePersonasSet", () => {
         [],
       ),
     ).toThrow(/duplicate persona name/);
+  });
+});
+
+const appDir = dirname(fileURLToPath(import.meta.url));
+const tsx = join(appDir, "node_modules", ".bin", "tsx");
+const cliPath = join(appDir, "cli.ts");
+
+describe("sourceIdea get/set", () => {
+  let dir: string;
+  let clock = 0;
+
+  function nextAt(): string {
+    clock += 1;
+    return new Date(Date.UTC(2026, 6, 10, 14, 0, clock)).toISOString();
+  }
+
+  function writeIssue(id: string, body: Record<string, unknown>): void {
+    mkdirSync(join(dir, id), { recursive: true });
+    writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
+  }
+
+  function runCli(args: string[]): { stdout: string; stderr: string; status: number | null } {
+    const result = spawnSync(tsx, [cliPath, ...args], {
+      cwd: appDir,
+      env: {
+        ...process.env,
+        ISSUES_DIR: dir,
+        ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
+      },
+      encoding: "utf8",
+    });
+    if (result.error) throw result.error;
+    return {
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+      status: result.status,
+    };
+  }
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  beforeEach(() => {
+    clock = 0;
+    dir = mkdtempSync(join(tmpdir(), "cli-kind-source-idea-"));
+    writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
+    writeIssue("idea-a", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("e", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      order: 1,
+      blockedBy: [],
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("s", {
+      kind: "story",
+      title: "Root story",
+      partOf: "p",
+      order: 2,
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+  });
+
+  it("sets, gets, and clears sourceIdea on an epic", () => {
+    expect(runCli(["epic", "set", "e", "sourceIdea", "idea-a"]).status).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, "e", "issue.json"), "utf8")).sourceIdea).toBe(
+      "idea-a",
+    );
+    expect(runCli(["epic", "get", "e", "sourceIdea"]).stdout.trim()).toBe("idea-a");
+
+    expect(runCli(["epic", "set", "e", "sourceIdea", "--clear"]).status).toBe(0);
+    expect("sourceIdea" in JSON.parse(readFileSync(join(dir, "e", "issue.json"), "utf8"))).toBe(
+      false,
+    );
+    expect(runCli(["epic", "get", "e", "sourceIdea"]).stdout).toBe("");
+  });
+
+  it("sets, gets, and clears sourceIdea on a root story", () => {
+    expect(runCli(["story", "set", "s", "sourceIdea", "idea-a"]).status).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, "s", "issue.json"), "utf8")).sourceIdea).toBe(
+      "idea-a",
+    );
+    expect(runCli(["story", "get", "s", "sourceIdea"]).stdout.trim()).toBe("idea-a");
+
+    expect(runCli(["story", "set", "s", "sourceIdea", "--clear"]).status).toBe(0);
+    expect("sourceIdea" in JSON.parse(readFileSync(join(dir, "s", "issue.json"), "utf8"))).toBe(
+      false,
+    );
+    expect(runCli(["story", "get", "s", "sourceIdea"]).stdout).toBe("");
+  });
+
+  it("refuses an unknown sourceIdea id", () => {
+    const unknown = runCli(["epic", "set", "e", "sourceIdea", "ghost"]);
+    expect(unknown.status).toBe(1);
+    expect(unknown.stderr).toContain("sourceIdea");
   });
 });

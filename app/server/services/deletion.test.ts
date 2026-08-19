@@ -62,6 +62,16 @@ const commit = (id: string, partOf: string): Issue => ({
   updatedAt: AT,
 });
 
+const idea = (id: string, partOf = "p"): Issue => ({
+  id,
+  kind: "idea",
+  title: id,
+  partOf,
+  order: 0,
+  createdAt: AT,
+  updatedAt: AT,
+});
+
 describe("planDeletion - containment cascade", () => {
   it("deletes only the commit itself", () => {
     const plan = planDeletion(
@@ -145,6 +155,7 @@ describe("planDeletion - containment cascade", () => {
       deleteIds: [],
       repoint: [],
       unblock: [],
+      dropSourceIdea: [],
     });
   });
 });
@@ -212,5 +223,33 @@ describe("planDeletion - blockedBy drop", () => {
       "b",
     );
     expect(plan.unblock).toEqual([]);
+  });
+});
+
+describe("planDeletion - sourceIdea drop", () => {
+  it("clears sourceIdea on surviving epics and root stories when the idea is deleted", () => {
+    const plan = planDeletion(
+      [
+        project("p"),
+        idea("i", "p"),
+        epic("e1", "p", { sourceIdea: "i" }),
+        branch("s1", "p", { sourceIdea: "i" }),
+      ],
+      "i",
+    );
+    expect(plan.deleteIds).toEqual(["i"]);
+    expect(plan.dropSourceIdea).toEqual([{ id: "e1" }, { id: "s1" }]);
+  });
+
+  it("needs no sourceIdea repair when deleting the containing project", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p"),
+      epic("e1", "p", { sourceIdea: "i" }),
+      branch("s1", "p", { sourceIdea: "i" }),
+    ];
+    const plan = planDeletion(issues, "p");
+    expect([...plan.deleteIds].sort()).toEqual(["e1", "i", "p", "s1"]);
+    expect(plan.dropSourceIdea).toEqual([]);
   });
 });
