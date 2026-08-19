@@ -21,6 +21,19 @@ export function assertStoryCanSetMergeBase(
   }
 }
 
+export const SOURCE_IDEA_SET_ERROR =
+  "sourceIdea can only be set on an Epic or a root-level project Story";
+
+/** Reject story sourceIdea sets on stacked or first-layer Epic Stories. */
+export function assertStoryCanSetSourceIdea(
+  story: { stackedOn?: string },
+  parentKind: IssueKind,
+): void {
+  if (story.stackedOn || parentKind === "epic") {
+    throw new Error(SOURCE_IDEA_SET_ERROR);
+  }
+}
+
 export type FieldCoerce =
   | { type: "string"; storeAs?: string }
   | { type: "boolean" }

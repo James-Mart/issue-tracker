@@ -52,7 +52,7 @@ import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import { uniqueSlug } from "./slug.js";
-import { validateNonClearablePatch } from "./patch.js";
+import { validateNonClearablePatch, validateSourceIdeaPatch } from "./patch.js";
 import { validateCommitShaPatch } from "./commit-sha.js";
 import { validateMergePolicyPatch } from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
@@ -543,6 +543,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     validateCommitShaPatch(jsonPatch);
     validateNonClearablePatch(existing, jsonPatch);
     validateMergePolicyPatch(existing, jsonPatch, issues);
+    validateSourceIdeaPatch(existing, jsonPatch, issues);
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);

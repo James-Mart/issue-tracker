@@ -65,6 +65,36 @@ describe("validate-at-write on the service layer", () => {
     );
   });
 
+  it("refuses sourceIdea on an epic-child story", async () => {
+    writeIssue("idea", {
+      kind: "idea",
+      title: "Idea",
+      partOf: "p",
+      order: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { update } = await loadService();
+    await expect(update("a", { sourceIdea: "idea" })).rejects.toThrow(
+      /sourceIdea can only be set on an Epic or a root-level project Story/,
+    );
+  });
+
+  it("refuses sourceIdea on a stacked story", async () => {
+    writeIssue("idea", {
+      kind: "idea",
+      title: "Idea",
+      partOf: "p",
+      order: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { update } = await loadService();
+    await expect(update("b", { sourceIdea: "idea" })).rejects.toThrow(
+      /sourceIdea can only be set on an Epic or a root-level project Story/,
+    );
+  });
+
   it("rejects an update that would introduce an epic blockedBy cycle", async () => {
     // e2 already blocks on e; blocking e on e2 in turn would close the cycle.
     writeIssue("e2", {

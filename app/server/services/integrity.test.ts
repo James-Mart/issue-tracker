@@ -269,6 +269,49 @@ describe("checkIntegrity", () => {
     expect(problems.some((p) => p.message.includes("blockedBy"))).toBe(false);
   });
 
+  it("flags a dangling sourceIdea referent", () => {
+    const problems = checkIntegrity([
+      project("root"),
+      epic("e1", "root", { sourceIdea: "ghost" }),
+    ]);
+    expect(problems.filter((p) => p.id === "e1")).toHaveLength(1);
+    expect(problems[0].message).toContain("sourceIdea");
+    expect(problems[0].message).toContain("unknown issue");
+  });
+
+  it("flags a sourceIdea referent that is not an idea", () => {
+    const problems = checkIntegrity([
+      project("root"),
+      epic("e1", "root", { sourceIdea: "e2" }),
+      epic("e2", "root", { order: 1 }),
+    ]);
+    expect(problems.filter((p) => p.id === "e1")).toHaveLength(1);
+    expect(problems[0].message).toContain("sourceIdea");
+    expect(problems[0].message).toContain("must be a idea");
+  });
+
+  it("flags a sourceIdea in a different project", () => {
+    const problems = checkIntegrity([
+      project("p1"),
+      project("p2"),
+      idea("i1", "p2"),
+      epic("e1", "p1", { sourceIdea: "i1" }),
+    ]);
+    expect(problems.filter((p) => p.id === "e1")).toHaveLength(1);
+    expect(problems[0].message).toContain("sourceIdea");
+    expect(problems[0].message).toContain("same Project");
+  });
+
+  it("does not flag a same-project sourceIdea on an epic or root story", () => {
+    const problems = checkIntegrity([
+      project("root"),
+      idea("i1"),
+      epic("e1", "root", { sourceIdea: "i1" }),
+      branch("b1", "root", { order: 1, sourceIdea: "i1" }),
+    ]);
+    expect(problems.some((p) => p.message.includes("sourceIdea"))).toBe(false);
+  });
+
   it("flags duplicate order within a sibling group", () => {
     const problems = checkIntegrity([
       project("root"),
