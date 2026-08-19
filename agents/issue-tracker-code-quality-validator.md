@@ -19,8 +19,9 @@ only looks wrong.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
 **Allowed writes:** `issue task set` for `qa` (`reviewing` | `changes-requested` |
-`passed`, or `qa --clear` if needed) and `needsAttention`; `issue task comment`.
-Do not run any other mutating `issue` command.
+`passed`, or `qa --clear` if needed) and `needsAttention`; `issue task comment`;
+`issue attach` for judged UI-look PNGs. Do not run any other mutating `issue`
+command.
 
 ## Bootstrap
 
@@ -72,21 +73,14 @@ and confirm each actionable item was addressed (or declined with reasoning by
 the implementor). Unfixed prior findings remain actionable.
 
 Do **not** post the comment or stop from the review include. After the review
-include prepares the comment body, do a **best-effort** UI look for UI-related
-Tasks (same UI-related judgment as the `designSystem` consult): when verifying
-server/UI changes from agents-chat, call `agent_stack_start` first (or export
-`AGENT_STACK_BASE_URL` from an existing stack); `npm run screenshots` and
-`npm run test:e2e` use that env as their default base URL (e2e smoke only;
-seeded specs boot their own server). Run
-`cd app && npm run screenshots -- <path-or-dialog>` and read the PNGs under the
-output dir (default
-`/tmp/issue-tracker-screenshots`) to confirm the Task's visible behavior is
-acceptable, the way a good reviewer would. Use Cursor browser MCP tools only
-for interaction needed to reach a state (not for screenshot capture). A visible
-problem is an actionable `changes-requested` finding — fold it into the comment
-body before the Outcome. If capture fails or is unavailable, note that in the
-comment body and proceed with the static review — do not fail `qa` solely
-because capture failed. Leave non-UI Tasks on the static-only path.
+include prepares the comment body, for UI-related Tasks (same UI-related
+judgment as the `designSystem` consult) **Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
+and follow it. Fold the include's three evidence fields and the embedded
+screenshot markdown into that prepared comment body. A failed look is an
+actionable `changes-requested` finding before Outcome. A completed look with
+a visible product problem stays an actionable `changes-requested` finding, as
+today. Leave non-UI Tasks on the static-only path.
 
 Then **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-code-quality-outcome.md`

@@ -39,10 +39,17 @@ Absolute path for this file (Read this exact path):
    changes, clear the flag (`issue task set <id> noDiff false`). If you now
    conclude the correct outcome is no source-controlled file changes, set it
    (`issue task set <id> noDiff true`) and say why in your reply.
+   When the Task appears UI-related (same judgment as the `designSystem`
+   consult), before step 5 **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
+   and follow it.
 5. Post a succinct reply:
    `issue task comment <id> --role implementor --body "..."` (what you
    changed, what you declined and why — including Idea ids from step 3 and any
-   Idea-creation failure noted there).
+   Idea-creation failure noted there). When the Task is UI-related, put the
+   include's three evidence fields in this comment. If the look failed, still
+   post this comment, then `issue task set <id> needsAttention true --reason
+   "..."` and stop.
 6. Leave changes uncommitted. When you start a merge, run
    `git merge --no-commit <ref>` — not a default `git merge` that may
    auto-commit. If the merge has conflicts, resolve them, `git add` those
