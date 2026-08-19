@@ -210,6 +210,10 @@ These are computed by `derive()` and never written to disk (see
 - **Idea status** — `captured` / `planning` / `awaiting-direction` / `planned`
   (planning phase from sessions, live runs, and plan-root backlinks); also
   `issue idea get … ideaStatus`. Tree chip `status=<value>`.
+- **planRoots** — derived reverse of `sourceIdea`: the ids of Epics and root
+  project-level Stories in the same Project whose stored `sourceIdea` points at
+  this Idea, in ascending `order`; also `issue idea get … planRoots` (JSON
+  array; `[]` when none).
 - **mergeBase** — tree chip `mergeBase=<ref>` / `mergeBase=(unset)`;
   also `issue story get … mergeBase`. Resolution:
   [stacked-PR merge model](#the-stacked-pr-merge-model). No second name
@@ -390,7 +394,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `blocked`, `mergeBase`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `blocked`, `mergeBase`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -854,7 +858,7 @@ Idea — the common-to-every-kind fields plus:
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
 No assignee, needs-attention, stored status, git fields, or comments. Derived
-**`ideaStatus`** on get / tree / list (see [Derived state](#derived-state)). Leaf under a Project;
+**`ideaStatus`** and **`planRoots`** on get / tree / list (see [Derived state](#derived-state)). Leaf under a Project;
 shares the Project-child `order` space with Epics and root project-level Stories.
 
 Story — the Epic/Story/Task needs-attention common fields plus:
@@ -1412,6 +1416,9 @@ so cannot drift:
   backlinks the Idea. Computed by `planningStatusById()` (I/O over planning
   sessions and live-run markers) and merged into `derived` by `list()` — not
   by the pure `derive()` pass.
+- **Idea `planRoots`** — the ids of Epics and root project-level Stories in
+  the same Project whose stored `sourceIdea` equals the Idea's id, sorted by
+  ascending `order`; `[]` when none. Computed by `derive()` for every Idea.
 - **problems** — the integrity checks `derive()` runs over the parsed issues:
   dependency cycles over `stackedOn`/`blockedBy`; dangling
   `partOf`/`stackedOn`/`blockedBy` ids; a Story whose `stackedOn` entry is not a
