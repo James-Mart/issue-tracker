@@ -19,20 +19,15 @@ Absolute path for this file (Read this exact path):
    Task builds on a prior Task's tests, keep verification focused on this
    Task's surface — do not re-run the prior Task's full matrix by default.
    When the Task appears UI-related (same judgment as the `designSystem`
-   consult — Task prose and changed paths), also do a **best-effort** UI check
-   the way a human implementer would: when verifying server/UI changes from
-   agents-chat, call `agent_stack_start` first (or export `AGENT_STACK_BASE_URL`
-   from an existing stack); `npm run screenshots` and `npm run test:e2e` use
-   that env as their default base URL (e2e smoke only; seeded specs boot their
-   own server). Run
-   `cd app && npm run screenshots -- <path-or-dialog>` and read the PNGs under
-   the output dir (default `/tmp/issue-tracker-screenshots`) to confirm the
-   Task's visible behavior. Use Cursor browser MCP tools only for interaction
-   needed to reach a state (not for screenshot capture). If capture fails or is
-   unavailable, note that in an `issue task comment <id> --role implementor`
-   and continue with the Task's non-screenshot Verify steps — do not raise
-   `needsAttention` solely because capture failed. This UI check never weakens
-   the hard gates (tests/build) the Task already requires.
+   consult — Task prose and changed paths), **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
+   and follow it as part of Verify. Record the include's three evidence fields
+   on one `issue task comment <id> --role implementor` (the Verify comment for
+   this look — do not add a second look-only comment). If the look failed, then
+   `issue task set <id> needsAttention true --reason "..."` and stop. Passing
+   tests or build does not waive a failed look; tests and build stay required.
+   A completed look with a visible product problem is fixed in this implement
+   pass — it is not a reason to skip the look.
 4. **Intentional no-op.** If correctly satisfying the spec means there are **no
    source-controlled file changes**, signal it explicitly:
    `issue task set <id> noDiff true`, then `issue task comment <id> --role
