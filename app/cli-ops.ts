@@ -124,6 +124,12 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
   if (detail.kind === "epic" && detail.blockedBy.length > 0) {
     lines.push(`blockedBy: ${detail.blockedBy.join(", ")}`);
   }
+  if (
+    (detail.kind === "epic" || detail.kind === "story") &&
+    detail.sourceIdea
+  ) {
+    lines.push(`sourceIdea: ${detail.sourceIdea}`);
+  }
   const labelIds = labelIdsForView(detail);
   if (labelIds.length > 0) {
     lines.push(`labels: ${labelIds.join(", ")}`);

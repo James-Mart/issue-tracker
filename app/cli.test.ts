@@ -338,6 +338,53 @@ describe("view", () => {
     expect(stdout).not.toContain("blockedBy:");
   });
 
+  it("prints sourceIdea on an epic or story when set and omits it when unset", () => {
+    writeIssue("idea-v", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "p",
+      order: 10,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("e-with-idea", {
+      kind: "epic",
+      title: "Epic with idea",
+      partOf: "p",
+      order: 11,
+      blockedBy: [],
+      sourceIdea: "idea-v",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("s-with-idea", {
+      kind: "story",
+      title: "Story with idea",
+      partOf: "p",
+      order: 12,
+      merged: false,
+      sourceIdea: "idea-v",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const epicSet = runCli(["view", "e-with-idea"]);
+    expect(epicSet.status).toBe(0);
+    expect(epicSet.stdout).toContain("sourceIdea: idea-v");
+
+    const storySet = runCli(["view", "s-with-idea"]);
+    expect(storySet.status).toBe(0);
+    expect(storySet.stdout).toContain("sourceIdea: idea-v");
+
+    const epicUnset = runCli(["view", "e"]);
+    expect(epicUnset.status).toBe(0);
+    expect(epicUnset.stdout).not.toContain("sourceIdea:");
+
+    const storyUnset = runCli(["view", "a"]);
+    expect(storyUnset.status).toBe(0);
+    expect(storyUnset.stdout).not.toContain("sourceIdea:");
+  });
+
   it("prints workspace when set on a project", () => {
     const ws = makeGitWorkspace();
     try {
