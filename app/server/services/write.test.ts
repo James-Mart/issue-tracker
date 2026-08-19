@@ -672,6 +672,55 @@ describe("cascade delete + reference repair on remove", () => {
     expect(keeper && "blockedBy" in keeper ? keeper.blockedBy : ["unexpected"]).toEqual([]);
   });
 
+  it("clears sourceIdea on surviving roots when an idea is deleted", async () => {
+    writeIssue("idea", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "p",
+      order: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("e", {
+      kind: "epic",
+      title: "E",
+      partOf: "p",
+      order: 0,
+      sourceIdea: "idea",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("root-story", {
+      kind: "story",
+      title: "Root story",
+      partOf: "p",
+      order: 1,
+      sourceIdea: "idea",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { remove, list } = await loadService();
+    const result = await remove("idea");
+    expect(result.deleted).toEqual(["idea"]);
+    expect(result.droppedSourceIdea).toEqual([{ id: "e" }, { id: "root-story" }]);
+
+    const after = list();
+    expect(after.problems).toEqual([]);
+    const epic = after.issues.find((i) => i.id === "e");
+    const rootStory = after.issues.find((i) => i.id === "root-story");
+    expect(epic && epic.kind === "epic" ? epic.sourceIdea : "unexpected").toBeUndefined();
+    expect(
+      rootStory && rootStory.kind === "story" ? rootStory.sourceIdea : "unexpected",
+    ).toBeUndefined();
+    expect(
+      "sourceIdea" in JSON.parse(readFileSync(join(dir, "e", "issue.json"), "utf8")),
+    ).toBe(false);
+    expect(
+      "sourceIdea" in
+        JSON.parse(readFileSync(join(dir, "root-story", "issue.json"), "utf8")),
+    ).toBe(false);
+  });
+
   it("deletes an entire epic subtree", async () => {
     const { remove, list } = await loadService();
     const result = await remove("e");

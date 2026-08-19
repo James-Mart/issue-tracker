@@ -195,6 +195,9 @@ async function printDeleteResult(id: string): Promise<void> {
   for (const { id: bid } of result.unblocked) {
     console.log(`  dropped deleted blocker from ${bid}.blockedBy`);
   }
+  for (const { id: bid } of result.droppedSourceIdea) {
+    console.log(`  cleared ${bid}.sourceIdea`);
+  }
 }
 
 async function printAttach(id: string, file: string): Promise<void> {

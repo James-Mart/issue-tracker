@@ -700,7 +700,8 @@ export function appendComment(
 // Deleting an issue removes the whole containment subtree (the issue plus every
 // descendant `partOf` it) and repairs every surviving foreign reference into it:
 // a branch stacked on a deleted branch is spliced to the deleted branch's own
-// fork point, and deleted ids are dropped from any Epic's `blockedBy`. The
+// fork point, deleted ids are dropped from any Epic's `blockedBy`, and
+// `sourceIdea` is cleared on surviving Epics and root Stories. The
 // prospective surviving set is validated before anything is written, so a
 // deletion that could not leave the graph valid is refused without side effects.
 export function remove(id: string): Promise<DeletionResult> {
@@ -722,6 +723,11 @@ export function remove(id: string): Promise<DeletionResult> {
     for (const { id: bid, blockedBy } of plan.unblock) {
       const patch = patchOf.get(bid) ?? {};
       patch.blockedBy = blockedBy;
+      patchOf.set(bid, patch);
+    }
+    for (const { id: bid } of plan.dropSourceIdea) {
+      const patch = patchOf.get(bid) ?? {};
+      patch.sourceIdea = null;
       patchOf.set(bid, patch);
     }
 
@@ -756,6 +762,7 @@ export function remove(id: string): Promise<DeletionResult> {
       deleted: plan.deleteIds,
       repointed: plan.repoint,
       unblocked: plan.unblock,
+      droppedSourceIdea: plan.dropSourceIdea,
     };
   });
 }

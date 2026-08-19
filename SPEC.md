@@ -1093,6 +1093,7 @@ into it, and each edge type resolves deterministically:
 | `partOf` | Cannot survive — the referrer is itself contained, so it is already in the delete set. No repair needed. |
 | `stackedOn` (a deleted Story; always same container) | **Splice**: repoint the surviving Story to the deleted story's own `stackedOn`, walking up until a surviving Story, or absent (forks the Project trunk) if none. The next read re-derives `mergeBase` from the new topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)). Preserves the stack minus the removed node. |
 | `blockedBy` (a deleted Epic; cross-Epic, same Project) | **Drop**: remove the deleted Epic id from the blocked Epic's list, with no inheritance. This is the case that matters for Epic deletion, since `blockedBy` is the only edge that crosses an Epic boundary. |
+| `sourceIdea` (a deleted Idea; Epic or root Story, same Project) | **Drop**: clear the field, with no inheritance. |
 | `stackedOn` → a deleted Task/Epic, or `blockedBy` → a deleted Story/Task | Impossible — `stackedOn` only ever references a Story, and `blockedBy` only ever references an Epic. |
 
 `issue:` cross-links inside `description.md` are freeform Markdown, not
