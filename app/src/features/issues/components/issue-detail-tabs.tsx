@@ -180,7 +180,7 @@ export function IssueDetailTabs({
             )}
             {...tabPanelVisibility(selected)}
           >
-            <AgentRunsPanel issueId={issue.id} />
+            <AgentRunsPanel issueId={issue.id} projectId={projectId} />
           </div>
         );
       })}

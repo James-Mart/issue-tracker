@@ -22,7 +22,10 @@ import {
   removeAttachment,
 } from "../services/attachments.js";
 import { IssueError } from "../services/errors.js";
-import { listAgentRunsForIssue } from "../services/agent-runs.js";
+import {
+  findAgentRunsWorkRoot,
+  listAgentRunsForIssue,
+} from "../services/agent-runs.js";
 import {
   appendComment,
   create,
@@ -102,7 +105,12 @@ export function createIssuesRouter(
     asyncRoute((req, res) => {
       const issueId = req.params.id;
       readIssueOrThrow(issueId);
-      res.json({ runs: listAgentRunsForIssue(issueId) });
+      const { issues } = readAll();
+      const workRoot = findAgentRunsWorkRoot(issueId, issues);
+      res.json({
+        runs: listAgentRunsForIssue(issueId),
+        ...(workRoot ? { workRoot } : {}),
+      });
     }),
   );
 

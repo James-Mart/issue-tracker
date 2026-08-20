@@ -11,6 +11,36 @@ const ISSUE_ID = "linked-task";
 
 let root: string;
 let conversationsDir: string;
+let issuesRoot: string;
+
+function writeIssue(id: string, body: Record<string, unknown>): void {
+  mkdirSync(join(issuesRoot, id), { recursive: true });
+  writeFileSync(join(issuesRoot, id, "issue.json"), JSON.stringify({ id, ...body }));
+}
+
+function writeConversationMeta(
+  id: string,
+  overrides: Record<string, unknown> = {},
+): void {
+  const dir = join(conversationsDir, id);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "meta.json"),
+    `${JSON.stringify(
+      {
+        id,
+        title: "Test conversation",
+        projectId: "platform",
+        model: "composer-2.5",
+        createdAt: AT,
+        updatedAt: AT,
+        ...overrides,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
 
 function writeConversation(
   id: string,
@@ -85,9 +115,11 @@ function toolCall(
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-agent-runs-"));
   conversationsDir = join(root, "conversations");
+  issuesRoot = join(root, "issues");
   mkdirSync(conversationsDir, { recursive: true });
+  mkdirSync(issuesRoot, { recursive: true });
   vi.resetModules();
-  vi.stubEnv("ISSUES_DIR", join(root, "issues"));
+  vi.stubEnv("ISSUES_DIR", issuesRoot);
 });
 
 afterEach(() => {
@@ -95,9 +127,9 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-async function loadListAgentRuns() {
+async function loadAgentRunsService() {
   const mod = await import("./agent-runs.js");
-  return mod.listAgentRunsForIssue;
+  return mod;
 }
 
 describe("listAgentRunsForIssue", () => {
@@ -186,7 +218,7 @@ describe("listAgentRunsForIssue", () => {
       transcript: [toolCall("call-other", "completed", AT_END)],
     });
 
-    const listAgentRunsForIssue = await loadListAgentRuns();
+    const { listAgentRunsForIssue } = await loadAgentRunsService();
     const runs = listAgentRunsForIssue(ISSUE_ID);
 
     expect(runs).toHaveLength(5);
@@ -235,5 +267,97 @@ describe("listAgentRunsForIssue", () => {
       endedAt: AT_END,
       isResume: true,
     });
+  });
+});
+
+describe("findAgentRunsWorkRoot", () => {
+  it("resolves a Task under an Epic-child Story to the Epic implementing conversation", async () => {
+    writeIssue("platform", {
+      kind: "project",
+      title: "Platform",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("ship-it", {
+      kind: "epic",
+      title: "Ship it",
+      partOf: "platform",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("linked-story", {
+      kind: "story",
+      title: "Linked story",
+      partOf: "ship-it",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue(ISSUE_ID, {
+      kind: "task",
+      title: "Linked task",
+      partOf: "linked-story",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    writeConversationMeta("conv-old", {
+      issueId: "ship-it",
+      channel: "implementing",
+      updatedAt: "2026-07-09T13:00:00.000Z",
+    });
+    writeConversationMeta("conv-new", {
+      issueId: "ship-it",
+      channel: "implementing",
+      updatedAt: AT_LATER,
+    });
+    writeConversationMeta("conv-archived", {
+      issueId: "ship-it",
+      channel: "implementing",
+      archived: true,
+      updatedAt: "2026-07-09T17:00:00.000Z",
+    });
+
+    const { findAgentRunsWorkRoot } = await loadAgentRunsService();
+    const { readAll } = await import("./issues.js");
+    const { issues } = readAll();
+
+    expect(findAgentRunsWorkRoot(ISSUE_ID, issues)).toEqual({
+      issueId: "ship-it",
+      conversationId: "conv-new",
+    });
+  });
+
+  it("omits workRoot when the root has no implementing conversation", async () => {
+    writeIssue("platform", {
+      kind: "project",
+      title: "Platform",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("ship-it", {
+      kind: "epic",
+      title: "Ship it",
+      partOf: "platform",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue(ISSUE_ID, {
+      kind: "task",
+      title: "Linked task",
+      partOf: "ship-it",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    writeConversationMeta("conv-planning", {
+      issueId: "ship-it",
+      channel: "planning",
+    });
+
+    const { findAgentRunsWorkRoot } = await loadAgentRunsService();
+    const { readAll } = await import("./issues.js");
+    const { issues } = readAll();
+
+    expect(findAgentRunsWorkRoot(ISSUE_ID, issues)).toBeUndefined();
   });
 });

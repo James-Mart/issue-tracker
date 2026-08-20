@@ -23,8 +23,9 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
 function writeConversation(
   id: string,
   opts: {
-    delegations: DelegationRecord[];
-    transcript: TranscriptEvent[];
+    delegations?: DelegationRecord[];
+    transcript?: TranscriptEvent[];
+    meta?: Record<string, unknown>;
   },
 ): void {
   const dir = join(conversationsDir, id);
@@ -39,6 +40,7 @@ function writeConversation(
         model: "composer-2.5",
         createdAt: AT,
         updatedAt: AT,
+        ...opts.meta,
       },
       null,
       2,
@@ -46,13 +48,15 @@ function writeConversation(
   );
   writeFileSync(
     join(dir, "delegations.jsonl"),
-    opts.delegations.map((d) => JSON.stringify(d)).join("\n") +
-      (opts.delegations.length ? "\n" : ""),
+    (opts.delegations ?? [])
+      .map((d) => JSON.stringify(d))
+      .join("\n") + ((opts.delegations?.length ?? 0) ? "\n" : ""),
   );
   writeFileSync(
     join(dir, "transcript.jsonl"),
-    opts.transcript.map((e) => JSON.stringify(e)).join("\n") +
-      (opts.transcript.length ? "\n" : ""),
+    (opts.transcript ?? [])
+      .map((e) => JSON.stringify(e))
+      .join("\n") + ((opts.transcript?.length ?? 0) ? "\n" : ""),
   );
 }
 
@@ -71,10 +75,24 @@ beforeEach(async () => {
     createdAt: AT,
     updatedAt: AT,
   });
+  writeIssue("ship-it", {
+    kind: "epic",
+    title: "Ship it",
+    partOf: "platform",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("linked-story", {
+    kind: "story",
+    title: "Linked story",
+    partOf: "ship-it",
+    createdAt: AT,
+    updatedAt: AT,
+  });
   writeIssue(ISSUE_ID, {
     kind: "task",
     title: "Linked task",
-    partOf: "platform",
+    partOf: "linked-story",
     createdAt: AT,
     updatedAt: AT,
   });
@@ -154,7 +172,25 @@ describe("GET /api/issues/:id/agent-runs", () => {
     const res = await fetch(`${baseUrl}/api/issues/${ISSUE_ID}/agent-runs`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ runs: [] });
+    expect(body.runs).toEqual([]);
+    expect(body).not.toHaveProperty("workRoot");
+  });
+
+  it("returns workRoot for a Task under an Epic-child Story", async () => {
+    writeConversation("conv-coordinator", {
+      meta: {
+        issueId: "ship-it",
+        channel: "implementing",
+      },
+    });
+
+    const res = await fetch(`${baseUrl}/api/issues/${ISSUE_ID}/agent-runs`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.workRoot).toEqual({
+      issueId: "ship-it",
+      conversationId: "conv-coordinator",
+    });
   });
 
   it("returns 404 for an unknown issue", async () => {

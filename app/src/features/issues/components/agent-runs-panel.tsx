@@ -1,12 +1,16 @@
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import {
   ShellInlineFault,
   ShellLoadingState,
+  ShellState,
 } from "@/app/shell-state";
 import { toolStatusVariant } from "@/features/agents/components/transcript-ui";
 import { cn } from "@/lib/utils/cn";
 import type { AgentRun } from "@server/schemas";
+import type { IssueAgentRunsWorkRoot } from "../api/agent-runs";
 import { useIssueAgentRunsQuery } from "../api/queries";
+import { issueChannelPath } from "../lib/links";
 
 function formatRunStartTime(startedAt: string): string {
   const date = new Date(startedAt);
@@ -33,6 +37,26 @@ function runDuration(run: AgentRun): string | null {
   const end = new Date(run.endedAt).getTime();
   if (Number.isNaN(start) || Number.isNaN(end) || end < start) return null;
   return formatRunDurationMs(end - start);
+}
+
+function AgentRunsCoordinatorLink({
+  projectId,
+  workRoot,
+}: {
+  projectId: string;
+  workRoot: IssueAgentRunsWorkRoot;
+}) {
+  return (
+    <p className="text-sm text-muted-foreground">
+      <Link
+        to={issueChannelPath(projectId, workRoot.issueId, "implementing")}
+        className="font-medium text-foreground underline underline-offset-2 hover:text-[hsl(var(--current))]"
+        data-testid="agent-runs-coordinator-link"
+      >
+        Open coordinator conversation
+      </Link>
+    </p>
+  );
 }
 
 /** At-rest run card — header only; expansion arrives in a later Story. */
@@ -85,7 +109,13 @@ export function AgentRunCard({ run }: { run: AgentRun }) {
   );
 }
 
-export function AgentRunsPanel({ issueId }: { issueId: string }) {
+export function AgentRunsPanel({
+  issueId,
+  projectId,
+}: {
+  issueId: string;
+  projectId: string;
+}) {
   const { data, isLoading, error } = useIssueAgentRunsQuery(issueId);
 
   if (isLoading) {
@@ -102,9 +132,28 @@ export function AgentRunsPanel({ issueId }: { issueId: string }) {
   }
 
   const runs = data?.runs ?? [];
+  const workRoot = data?.workRoot;
+  const coordinatorLink =
+    workRoot != null ? (
+      <AgentRunsCoordinatorLink projectId={projectId} workRoot={workRoot} />
+    ) : null;
+
+  if (runs.length === 0) {
+    return (
+      <div data-slot="agent-runs-panel" data-testid="agent-runs-empty-state">
+        <ShellState
+          className="border-0 bg-transparent px-4 py-8 shadow-none"
+          eyebrow="Agents"
+          title="No agent has run against this issue yet."
+          detail={coordinatorLink}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-2" data-slot="agent-runs-panel">
+      {coordinatorLink}
       {runs.map((run) => (
         <AgentRunCard key={run.delegationId} run={run} />
       ))}

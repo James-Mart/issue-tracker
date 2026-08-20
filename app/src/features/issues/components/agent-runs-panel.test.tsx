@@ -1,12 +1,18 @@
 // @vitest-environment happy-dom
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentRun } from "@server/schemas";
 import { AgentRunCard, AgentRunsPanel } from "./agent-runs-panel";
 
 const queryState = vi.hoisted(() => ({
-  data: { runs: [] as AgentRun[] },
+  data: {
+    runs: [] as AgentRun[],
+    workRoot: undefined as
+      | { issueId: string; conversationId: string }
+      | undefined,
+  },
   isLoading: false,
   error: null as Error | null,
 }));
@@ -48,14 +54,20 @@ function mountPanel(props: ComponentProps<typeof AgentRunsPanel>): {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<AgentRunsPanel {...props} />);
+    root.render(
+      <MemoryRouter>
+        <AgentRunsPanel {...props} />
+      </MemoryRouter>,
+    );
   });
   return { container, root };
 }
 
+const PROJECT_ID = "platform";
+
 afterEach(() => {
   document.body.innerHTML = "";
-  queryState.data = { runs: [] };
+  queryState.data = { runs: [], workRoot: undefined };
   queryState.isLoading = false;
   queryState.error = null;
 });
@@ -86,7 +98,7 @@ describe("AgentRunsPanel", () => {
       ],
     };
 
-    const { container } = mountPanel({ issueId: "task-1" });
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
     const cards = Array.from(
       container.querySelectorAll("[data-run-id]"),
     ) as HTMLElement[];
@@ -131,10 +143,66 @@ describe("AgentRunsPanel", () => {
     document.body.appendChild(shell);
     const root = createRoot(shell);
     act(() => {
-      root.render(<AgentRunsPanel issueId="task-1" />);
+      root.render(
+        <MemoryRouter>
+          <AgentRunsPanel issueId="task-1" projectId={PROJECT_ID} />
+        </MemoryRouter>,
+      );
     });
 
     expect(shell.scrollWidth).toBeLessThanOrEqual(390);
+  });
+
+  it("renders an empty state when there are no linked runs", () => {
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+
+    expect(
+      container.querySelector('[data-testid="agent-runs-empty-state"]'),
+    ).toBeTruthy();
+    expect(container.textContent).toContain(
+      "No agent has run against this issue yet.",
+    );
+  });
+
+  it("renders no coordinator link when workRoot is absent", () => {
+    queryState.data = { runs: [], workRoot: undefined };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+
+    expect(
+      container.querySelector('[data-testid="agent-runs-coordinator-link"]'),
+    ).toBeNull();
+  });
+
+  it("renders a coordinator link when workRoot is present", () => {
+    queryState.data = {
+      runs: [],
+      workRoot: { issueId: "ship-it", conversationId: "conv-coordinator" },
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    const link = container.querySelector(
+      '[data-testid="agent-runs-coordinator-link"]',
+    ) as HTMLAnchorElement | null;
+
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute("href")).toBe(
+      "/projects/platform/issues/ship-it?tab=implementing",
+    );
+  });
+
+  it("renders a coordinator link above populated runs", () => {
+    queryState.data = {
+      runs: [sampleRun()],
+      workRoot: { issueId: "ship-it", conversationId: "conv-coordinator" },
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+
+    expect(
+      container.querySelector('[data-testid="agent-runs-coordinator-link"]'),
+    ).toBeTruthy();
+    expect(container.querySelector('[data-run-id="del-1"]')).toBeTruthy();
   });
 });
 
