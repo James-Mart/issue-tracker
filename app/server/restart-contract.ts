@@ -2,6 +2,11 @@ export const RESTART_SENTINEL_EXIT_CODE = 75;
 
 export const RESTART_SUPERVISED_ENV_VAR = "RESTART_SUPERVISED";
 
+/** Whether this process was launched under the restart supervisor. */
+export function isRestartSupervised(): boolean {
+  return Boolean(process.env[RESTART_SUPERVISED_ENV_VAR]);
+}
+
 export type ProcessExit = {
   code: number | null;
   signal: NodeJS.Signals | null;

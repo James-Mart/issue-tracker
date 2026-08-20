@@ -10,6 +10,7 @@ import { errorHandler } from "./errors.js";
 import { agentModelsRouter } from "./routes/agent-models.js";
 import { createConversationsRouter } from "./routes/conversations.js";
 import { createIssuesRouter } from "./routes/issues.js";
+import { createHealthRouter } from "./routes/health.js";
 import { projectsRouter } from "./routes/projects.js";
 import {
   createRestartRouter,
@@ -80,6 +81,7 @@ export function createApp(
   app.use("/api/projects", projectsRouter);
   app.use("/api/conversations", createConversationsRouter(sessions));
   app.use("/api/agent-models", agentModelsRouter);
+  app.use("/api/health", createHealthRouter());
   app.use("/api/restart", createRestartRouter(sessions, initiateRestart));
   app.get("/api/diagnostics/connections", (_req, res) => {
     res.json(getConnectionDiagnostics());
