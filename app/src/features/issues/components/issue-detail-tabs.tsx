@@ -4,8 +4,10 @@ import type { ConversationChannel, IssueDetail, IssueKind } from "@server/schema
 import { RosterActiveRunIndicator } from "@/features/agents/components/conversation-list-item";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
+import { useIssueAgentRunsQuery } from "../api/queries";
 import { useChannelTabIndicator } from "../hooks/use-channel-tab-indicator";
 import {
+  AGENTS_DETAIL_TAB,
   issueDetailTabNeedsBoundedShell,
   resolveIssueDetailTab,
   tabsForIssueDetail,
@@ -15,11 +17,18 @@ import {
 } from "../lib/issue-detail-tabs";
 import type { ChannelTabIndicator } from "../lib/channel-tab-indicator";
 import type { SupportingDocPreviewTab } from "../lib/supporting-docs";
+import { AgentRunsPanel } from "./agent-runs-panel";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 import { SupportingDocPreview } from "./supporting-doc-preview";
 
 function isDocTab(tab: IssueDetailTab): tab is SupportingDocPreviewTab {
   return "ref" in tab;
+}
+
+function isAgentsTab(
+  tab: IssueDetailTab,
+): tab is Extract<IssueDetailTab, { key: typeof AGENTS_DETAIL_TAB }> {
+  return tab.key === AGENTS_DETAIL_TAB;
 }
 
 function isChannelTab(
@@ -63,6 +72,7 @@ export function IssueDetailTabs({
   const onBackToOverview = () => setActive("overview");
 
   const channelTabs = tabs.filter(isChannelTab);
+  const agentsTabs = tabs.filter(isAgentsTab);
   const docTabs = tabs.filter(isDocTab);
   const showBar = tabs.length > 1;
   const overviewSelected = active === "overview";
@@ -97,6 +107,15 @@ export function IssueDetailTabs({
               >
                 {tab.label}
               </ChannelTabButton>
+            ) : isAgentsTab(tab) ? (
+              <AgentsTabButton
+                key={tab.key}
+                issueId={issue.id}
+                selected={active === tab.key}
+                onClick={() => setActive(tab.key)}
+              >
+                {tab.label}
+              </AgentsTabButton>
             ) : (
               <TabButton
                 key={tab.key}
@@ -145,6 +164,23 @@ export function IssueDetailTabs({
                 mobileChannelChrome && selected ? onBackToOverview : undefined
               }
             />
+          </div>
+        );
+      })}
+
+      {agentsTabs.map((tab) => {
+        const selected = active === tab.key;
+        return (
+          <div
+            key={tab.key}
+            role="tabpanel"
+            className={cn(
+              "min-h-0 min-w-0 flex-1 overflow-y-auto",
+              !selected && "hidden",
+            )}
+            {...tabPanelVisibility(selected)}
+          >
+            <AgentRunsPanel issueId={issue.id} />
           </div>
         );
       })}
@@ -201,16 +237,38 @@ function ChannelTabButton({
   );
 }
 
+function AgentsTabButton({
+  issueId,
+  selected,
+  onClick,
+  children,
+}: {
+  issueId: string;
+  selected: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const { data } = useIssueAgentRunsQuery(issueId);
+  const count = data?.runs.length ?? 0;
+  return (
+    <TabButton selected={selected} onClick={onClick} count={count || undefined}>
+      {children}
+    </TabButton>
+  );
+}
+
 function TabButton({
   selected,
   onClick,
   children,
   indicator = null,
+  count,
 }: {
   selected: boolean;
   onClick: () => void;
   children: ReactNode;
   indicator?: ChannelTabIndicator | null;
+  count?: number;
 }) {
   const awaiting = indicator === "awaiting-human";
   const activeRun = indicator === "active-run";
@@ -234,6 +292,14 @@ function TabButton({
       )}
     >
       {children}
+      {count != null ? (
+        <span
+          className="inline-flex min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted px-1.5 py-0 font-mono text-[10px] font-semibold tabular-nums leading-none text-muted-foreground"
+          data-tab-count={count}
+        >
+          {count}
+        </span>
+      ) : null}
       <RosterActiveRunIndicator activeRun={activeRun} />
     </button>
   );
