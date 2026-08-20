@@ -22,6 +22,7 @@ import {
   removeAttachment,
 } from "../services/attachments.js";
 import { IssueError } from "../services/errors.js";
+import { listAgentRunsForIssue } from "../services/agent-runs.js";
 import {
   appendComment,
   create,
@@ -93,6 +94,15 @@ export function createIssuesRouter(
     "/:id/comments",
     asyncRoute((req, res) => {
       res.json(readComments(req.params.id));
+    }),
+  );
+
+  router.get(
+    "/:id/agent-runs",
+    asyncRoute((req, res) => {
+      const issueId = req.params.id;
+      readIssueOrThrow(issueId);
+      res.json({ runs: listAgentRunsForIssue(issueId) });
     }),
   );
 
