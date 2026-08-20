@@ -1,16 +1,34 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ShellInlineFault,
   ShellLoadingState,
   ShellState,
 } from "@/app/shell-state";
-import { toolStatusVariant } from "@/features/agents/components/transcript-ui";
+import { applyNestedStep } from "@/features/agents/lib/subagent";
+import { groupOrdinaryNestedToolCalls } from "@/features/agents/lib/transcript-rows";
+import {
+  indexedStreamKey,
+  toolCallRowKey,
+  toolStatusVariant,
+  ToolUseGroup,
+  TranscriptMarkdownText,
+  TranscriptThinking,
+  TranscriptToolCall,
+} from "@/features/agents/components/transcript-ui";
 import { cn } from "@/lib/utils/cn";
-import type { AgentRun } from "@server/schemas";
+import type { AgentRun, NestedStep, TranscriptEvent } from "@server/schemas";
 import type { IssueAgentRunsWorkRoot } from "../api/agent-runs";
-import { useIssueAgentRunsQuery } from "../api/queries";
+import {
+  useIssueAgentRunEventsQuery,
+  useIssueAgentRunsQuery,
+} from "../api/queries";
 import { issueChannelPath } from "../lib/links";
+
+type SubagentUpdateEvent = Extract<TranscriptEvent, { type: "subagent_update" }>;
 
 function formatRunStartTime(startedAt: string): string {
   const date = new Date(startedAt);
@@ -39,6 +57,152 @@ function runDuration(run: AgentRun): string | null {
   return formatRunDurationMs(end - start);
 }
 
+function nestedStepKey(step: NestedStep, index: number): string {
+  if (step.kind === "tool_call") return toolCallRowKey(step.callId);
+  return indexedStreamKey(index, step.kind);
+}
+
+function nestedStepsFromEvents(events: SubagentUpdateEvent[]): NestedStep[] {
+  let steps: NestedStep[] = [];
+  for (const event of events) {
+    if (event.parentDelegationId) continue;
+    steps = applyNestedStep(steps, event.step);
+  }
+  return steps;
+}
+
+function isLiveNestedThinking(steps: NestedStep[], index: number): boolean {
+  for (let i = index + 1; i < steps.length; i++) {
+    const kind = steps[i]?.kind;
+    if (kind === "thinking" || kind === "text" || kind === "tool_call") {
+      return false;
+    }
+  }
+  return true;
+}
+
+function AgentRunStepRow({
+  step,
+  thinkingOpen,
+}: {
+  step: NestedStep;
+  thinkingOpen?: boolean;
+}) {
+  switch (step.kind) {
+    case "text":
+      return (
+        <TranscriptMarkdownText text={step.text} data-run-step="text" />
+      );
+    case "thinking":
+      return (
+        <TranscriptThinking
+          text={step.text}
+          open={thinkingOpen}
+          density="compact"
+          data-run-step="thinking"
+        />
+      );
+    case "tool_call":
+      return (
+        <TranscriptToolCall
+          callId={step.callId}
+          name={step.name}
+          status={step.status}
+          args={step.args}
+          result={step.result}
+          density="compact"
+          data-run-step="tool_call"
+        />
+      );
+    default:
+      return null;
+  }
+}
+
+function AgentRunBody({
+  issueId,
+  delegationId,
+  running,
+}: {
+  issueId: string;
+  delegationId: string;
+  running: boolean;
+}) {
+  const { data, isLoading, error } = useIssueAgentRunEventsQuery(
+    issueId,
+    delegationId,
+    true,
+  );
+
+  if (isLoading) {
+    return (
+      <div
+        className="space-y-2 border-t border-border px-3 py-3"
+        data-slot="agent-run-body"
+        data-state="loading"
+        aria-busy="true"
+        aria-label="Loading run transcript"
+      >
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        className="border-t border-border px-3 py-3"
+        data-slot="agent-run-body"
+        data-state="error"
+      >
+        <ShellInlineFault
+          message={error.message}
+          hint="Expand again later or reload the page."
+        />
+      </div>
+    );
+  }
+
+  const steps = nestedStepsFromEvents(data?.events ?? []);
+  const segments = groupOrdinaryNestedToolCalls(steps, new Map());
+
+  return (
+    <div
+      className="min-w-0 space-y-2 border-t border-border px-3 py-3"
+      data-slot="agent-run-body"
+      data-state="ready"
+    >
+      {segments.map((segment) => {
+        if (segment.kind === "tool_use_group") {
+          return (
+            <ToolUseGroup
+              key={`tool_use_group-${segment.steps[0]!.callId}`}
+              tools={segment.steps}
+              density="compact"
+              data-run-step="tool_call"
+            />
+          );
+        }
+        const { step } = segment;
+        const index = steps.indexOf(step);
+        return (
+          <div key={nestedStepKey(step, index)}>
+            <AgentRunStepRow
+              step={step}
+              thinkingOpen={
+                running &&
+                step.kind === "thinking" &&
+                isLiveNestedThinking(steps, index)
+              }
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AgentRunsCoordinatorLink({
   projectId,
   workRoot,
@@ -59,9 +223,15 @@ function AgentRunsCoordinatorLink({
   );
 }
 
-/** At-rest run card — header only; expansion arrives in a later Story. */
-export function AgentRunCard({ run }: { run: AgentRun }) {
+export function AgentRunCard({
+  run,
+  issueId,
+}: {
+  run: AgentRun;
+  issueId: string;
+}) {
   const running = run.status === "running";
+  const [expanded, setExpanded] = useState(running);
   const duration = runDuration(run);
 
   return (
@@ -69,8 +239,22 @@ export function AgentRunCard({ run }: { run: AgentRun }) {
       className="min-w-0 overflow-hidden rounded-lg border border-border bg-card"
       data-run-id={run.delegationId}
       data-status={run.status}
+      {...(expanded ? { "data-expanded": "" } : {})}
     >
-      <div className="flex min-h-11 min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 border-l-2 border-l-[hsl(var(--current))] px-3 py-2.5 font-mono text-[11px] text-muted-foreground">
+      <button
+        type="button"
+        className="flex min-h-11 w-full min-w-0 cursor-pointer flex-wrap items-center gap-x-1.5 gap-y-1 border-l-2 border-l-[hsl(var(--current))] px-3 py-2.5 text-left font-mono text-[11px] text-muted-foreground"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((open) => !open)}
+        data-testid="agent-run-card-header"
+      >
+        <ChevronRight
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 transition-transform",
+            expanded && "rotate-90",
+          )}
+          aria-hidden
+        />
         <Badge
           variant={toolStatusVariant(run.status)}
           className={cn("shrink-0 text-[10px]", running && "animate-pulse")}
@@ -104,7 +288,14 @@ export function AgentRunCard({ run }: { run: AgentRun }) {
             Resume
           </span>
         ) : null}
-      </div>
+      </button>
+      {expanded ? (
+        <AgentRunBody
+          issueId={issueId}
+          delegationId={run.delegationId}
+          running={running}
+        />
+      ) : null}
     </div>
   );
 }
@@ -155,7 +346,7 @@ export function AgentRunsPanel({
     <div className="flex min-w-0 flex-col gap-2" data-slot="agent-runs-panel">
       {coordinatorLink}
       {runs.map((run) => (
-        <AgentRunCard key={run.delegationId} run={run} />
+        <AgentRunCard key={run.delegationId} run={run} issueId={issueId} />
       ))}
     </div>
   );
