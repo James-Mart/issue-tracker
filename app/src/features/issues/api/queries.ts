@@ -13,7 +13,20 @@ import type { ProjectPrsResponse } from "@server/services/delivery";
 import { ApiError } from "@/lib/api/errors";
 import { attachmentsApiPath } from "../lib/attachments";
 import { listChannelSessions } from "./channel-sessions";
-import { issuesKeys } from "./keys";
+import { healthKeys, issuesKeys } from "./keys";
+
+export interface HealthResponse {
+  bootId: string;
+  startedAt: string;
+  restartSupported: boolean;
+}
+
+export function useHealthQuery(): UseQueryResult<HealthResponse, Error> {
+  return useQuery({
+    queryKey: healthKeys.current(),
+    queryFn: () => request<HealthResponse>("/api/health"),
+  });
+}
 
 export function useIssuesQuery(): UseQueryResult<IssuesResponse, Error> {
   return useQuery({

@@ -7,6 +7,7 @@ import { useIssuesQuery } from "../api/queries";
 import { useRouteProjectId } from "../hooks/use-route-project-id";
 import { filterToProject } from "../lib/build-tree";
 import { hasInFlightWork } from "../lib/derived";
+import { RestartControl } from "./restart-control";
 
 export function TopBar() {
   const projectId = useRouteProjectId();
@@ -45,7 +46,10 @@ export function TopBar() {
           </span>
         </span>
       </div>
-      <ThemeToggle />
+      <div className="flex min-w-0 items-start justify-end gap-2">
+        <RestartControl />
+        <ThemeToggle />
+      </div>
     </header>
   );
 }
