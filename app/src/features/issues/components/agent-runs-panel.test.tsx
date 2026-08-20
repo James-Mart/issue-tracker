@@ -215,6 +215,149 @@ describe("AgentRunsPanel", () => {
     expect(eventsQueryState.expandedCalls).toEqual(["del-done"]);
   });
 
+  it("folds consecutive tool calls into one Tool use group in an expanded run body", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-done",
+          status: "completed",
+          endedAt: AT_END,
+        }),
+      ],
+    };
+    eventsQueryState.data = {
+      events: [
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: {
+            kind: "tool_call",
+            callId: "tool-1",
+            name: "Read",
+            status: "completed",
+            args: { path: "a.ts" },
+          },
+          at: AT,
+          seq: 1,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: {
+            kind: "tool_call",
+            callId: "tool-2",
+            name: "Read",
+            status: "completed",
+            args: { path: "b.ts" },
+          },
+          at: AT,
+          seq: 2,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: {
+            kind: "tool_call",
+            callId: "tool-3",
+            name: "Grep",
+            status: "completed",
+            args: { pattern: "foo" },
+          },
+          at: AT,
+          seq: 3,
+        },
+      ],
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    clickHeader(container, "del-done");
+
+    const groups = container.querySelectorAll('[data-event="tool_use_group"]');
+    expect(groups).toHaveLength(1);
+    const group = groups[0] as HTMLDetailsElement;
+    expect(group.getAttribute("data-tool-count")).toBe("3");
+    expect(group.getAttribute("data-status")).toBe("completed");
+    expect(group.querySelector("summary")!.textContent).toContain("Tool use");
+    expect(group.querySelector("[data-call-id='tool-1']")).toBeTruthy();
+    expect(group.querySelector("[data-call-id='tool-2']")).toBeTruthy();
+    expect(group.querySelector("[data-call-id='tool-3']")).toBeTruthy();
+  });
+
+  it("starts a new Tool use group after assistant text between tool calls", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-done",
+          status: "completed",
+          endedAt: AT_END,
+        }),
+      ],
+    };
+    eventsQueryState.data = {
+      events: [
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: {
+            kind: "tool_call",
+            callId: "tool-1",
+            name: "Read",
+            status: "completed",
+            args: { path: "a.ts" },
+          },
+          at: AT,
+          seq: 1,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: {
+            kind: "tool_call",
+            callId: "tool-2",
+            name: "Read",
+            status: "completed",
+            args: { path: "b.ts" },
+          },
+          at: AT,
+          seq: 2,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: { kind: "text", text: "Both files are in." },
+          at: AT,
+          seq: 3,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: {
+            kind: "tool_call",
+            callId: "tool-3",
+            name: "Shell",
+            status: "completed",
+            args: { command: "npm test" },
+          },
+          at: AT,
+          seq: 4,
+        },
+      ],
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    clickHeader(container, "del-done");
+
+    const groups = container.querySelectorAll('[data-event="tool_use_group"]');
+    expect(groups).toHaveLength(2);
+    expect(groups[0]!.getAttribute("data-tool-count")).toBe("2");
+    expect(groups[1]!.getAttribute("data-tool-count")).toBe("1");
+
+    const text = container.querySelector('[data-run-step="text"]');
+    expect(text).toBeTruthy();
+    expect(text!.textContent).toContain("Both files are in.");
+    expect(text!.closest('[data-event="tool_use_group"]')).toBeNull();
+  });
+
   it("renders each step kind through its matching transcript primitive", () => {
     queryState.data = {
       runs: [
