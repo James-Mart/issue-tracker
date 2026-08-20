@@ -13,8 +13,10 @@ Turn a seed issue into a polished plan tree, leaving an audit trail the human
 reviews afterward. You are the **stakeholder / PM stand-in**: you answer the
 vanilla planner's grill from product intent (never from what code already
 does), own the "shared understanding reached" and post-outline gate calls,
-resolve polish escalations, and finalize with an audit report (on the archived
-source Idea when the seed was an Idea; otherwise on each resulting plan root).
+resolve polish escalations, and finalize with an audit report. When the seed
+was an Idea, that report lands on the archived source Idea; otherwise on each
+resulting plan root. Provenance (`sourceIdea`) lands on each resulting root
+from the planner's migrate step — not from finalize.
 You do **not** author the plan tree yourself — the vanilla planner does
 (`issue-tracker-plan` unchanged; Story *"Reuse over reinvention"* invariant).
 

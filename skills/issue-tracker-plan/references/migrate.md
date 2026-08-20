@@ -19,25 +19,17 @@ skill):
 `<rootKind>` is `story` or `epic` matching the apply shape; `<rootId>` is the
 resulting root id from that apply. Imperative only — not in the YAML doc.
 
+- When the source is an **Idea**, after each successful root `apply`:
+  `issue epic set <rootId> sourceIdea <ideaId>` for an epic-form root, or
+  `issue story set <rootId> sourceIdea <ideaId>` for a story-form root.
+  `<rootId>` is the resulting root id from that apply; `<ideaId>` is the
+  source Idea's id. Applies to **single-root** and **multi-root** Idea
+  migrations alike. **Non-Idea** sources (**Epic**, **project-level Story**)
+  record nothing — imperative only, not in the YAML doc.
 - Verification-only Tasks (intentionally no source-controlled edits): after
   `apply`, `issue task set <taskId> noDiff true` per
   [Verification-only Tasks (noDiff)](../../issue-tracker-authoring/SKILL.md#verification-only-tasks-nodiff)
   — imperative only, not in the YAML doc.
-
-### Idea source backlink
-
-When the source is an **Idea**, each new root authored in the migrate apply
-doc must begin its root `description` (written to `description.md`) with this
-line — no text before it:
-
-    Source idea: [<idea title>](issue:<ideaId>)
-
-Use the source Idea's real title and id. **Non-Idea** sources (**Epic**,
-**project-level Story**) get no such line. The link is a freeform `issue:`
-cross-link; the archived Idea stays reachable via `--show-archived`.
-
-This applies to **single-root** and **multi-root** Idea migrations alike —
-every new Epic or project-level Story root gets the line.
 
 ### Single root (not splitting)
 

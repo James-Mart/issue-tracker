@@ -109,7 +109,8 @@ mid-grill.
   list. **Trunk** — proceed with the rest of the grill; Focused codebase
   research uses the workspace working tree only (omit `Ref` in spawn stubs).
   Carry the chosen merge-base and merge-policy (when non-trunk) through to
-  outline and migrate — a sibling migrate step records them on the root.
+  outline and migrate — the migrate step records them on the root (and
+  `sourceIdea` on each resulting root when the source is an Idea).
   - **Non-trunk branch** — ask **one** merge-policy question for the
     resulting root (Epic or project-level Story) next. Recommend
     **`pull-request`** via `(recommended)` in the answer list. Valid values:
