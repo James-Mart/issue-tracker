@@ -1,10 +1,24 @@
 import { readFileSync } from "fs";
 import type { Command } from "commander";
 
+let stdinForDash: string | undefined;
+
+export function bindCliStdin(contents: string | undefined): () => void {
+  if (contents === undefined) return () => {};
+  const previous = stdinForDash;
+  stdinForDash = contents;
+  return () => {
+    stdinForDash = previous;
+  };
+}
+
 /** Read a CLI `--file` path; `-` means stdin. */
 export function readCliFileArg(path: string): string {
-  const source = path === "-" ? 0 : path;
-  return readFileSync(source, "utf8");
+  if (path === "-") {
+    if (stdinForDash !== undefined) return stdinForDash;
+    return readFileSync(0, "utf8");
+  }
+  return readFileSync(path, "utf8");
 }
 
 export type CreateDescriptionOpts = {

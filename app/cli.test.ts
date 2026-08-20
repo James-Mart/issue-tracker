@@ -4,18 +4,24 @@ import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { runIssueCli } from "./cli-program.js";
 import { DELETED_FIELD_VERBS } from "./deleted-field-verbs.js";
 
-// Drive the real CLI as a subprocess against a throwaway ISSUES_DIR. Verb
-// behavior (stdin, exit codes, stdout formatting, service round-trips) only
-// exists once commander has parsed argv, so these tests exercise the whole
-// path end to end rather than importing the side-effectful cli.ts module.
+// Drive the CLI against a throwaway ISSUES_DIR. In-process cases use
+// runIssueCli; EPIPE and the --help cold-boot spawn the thin cli.ts shell.
 const appDir = dirname(fileURLToPath(import.meta.url));
 const tsx = join(appDir, "node_modules", ".bin", "tsx");
 const cliPath = join(appDir, "cli.ts");
 
 let dir: string;
 let clock = 0;
+
+function env() {
+  return {
+    ISSUES_DIR: dir,
+    ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
+  };
+}
 
 function nextAt(): string {
   clock += 1;
@@ -64,9 +70,8 @@ function seedPlanningSession(
   }
 }
 
-function runCli(
+function spawnCliColdBoot(
   args: string[],
-  input?: string,
 ): { stdout: string; stderr: string; status: number | null } {
   const result = spawnSync(tsx, [cliPath, ...args], {
     cwd: appDir,
@@ -75,7 +80,6 @@ function runCli(
       ISSUES_DIR: dir,
       ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
     },
-    input,
     encoding: "utf8",
   });
   if (result.error) throw result.error;
@@ -146,6 +150,13 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+describe("thin shell cold-boot", () => {
+  it("exits 0 for --help", async () => {
+    const { status } = spawnCliColdBoot(["--help"]);
+    expect(status).toBe(0);
+  });
+});
+
 describe("EPIPE on stdout", () => {
   beforeEach(() => {
     writeIssue("p", {
@@ -193,19 +204,16 @@ describe("EPIPE on stdout", () => {
 });
 
 describe("removed commands", () => {
-  it("rejects the removed ready command", () => {
-    const { status, stderr } = runCli(["ready", "--project", "p"]);
+  it("rejects the removed ready command", async () => {
+    const { status, stderr } = await runIssueCli(["ready", "--project", "p"], { env: env() });
     expect(status).not.toBe(0);
     expect(stderr).toMatch(/unknown command/i);
   });
 });
 
 describe("--file - reads stdin on create", () => {
-  it("seeds description.md from piped stdin through the create service", () => {
-    const { stdout, status } = runCli(
-      ["project", "add", "Stdin Project", "--file", "-"],
-      "# Piped description\n\nfrom stdin\n",
-    );
+  it("seeds description.md from piped stdin through the create service", async () => {
+    const { stdout, status } = await runIssueCli(["project", "add", "Stdin Project", "--file", "-"], { env: env(), stdin: "# Piped description\n\nfrom stdin\n" });
     expect(status).toBe(0);
     const id = stdout.trim();
     expect(id).toBeTruthy();
@@ -236,24 +244,26 @@ describe("summary", () => {
     });
   });
 
-  it("wires the verb through to formatted stdout", () => {
-    const { stdout, status } = runCli(["summary", "c1"]);
+  it("wires the verb through to formatted stdout", async () => {
+    const { stdout, status } = await runIssueCli(["summary", "c1"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("Task: c1 — Do the thing");
     expect(stdout).toContain("For more details, try `issue <kind> view <id>` or `issue tree`.");
   });
 
-  it("errors with a nonzero exit on an unknown id", () => {
-    const { stderr, status } = runCli(["summary", "ghost"]);
+  it("errors with a nonzero exit on an unknown id", async () => {
+    const { stderr, status } = await runIssueCli(["summary", "ghost"], { env: env() });
     expect(status).toBe(1);
     expect(stderr).toContain('unknown issue "ghost"');
   });
 
-  it("prints Workspace when set on the project", () => {
+  it("prints Workspace when set on the project", async () => {
     const ws = makeGitWorkspace();
     try {
-      expect(runCli(["project", "set", "p", "workspace", ws]).status).toBe(0);
-      const { stdout, status } = runCli(["summary", "c1"]);
+      expect(
+        (await runIssueCli(["project", "set", "p", "workspace", ws], { env: env() })).status,
+      ).toBe(0);
+      const { stdout, status } = await runIssueCli(["summary", "c1"], { env: env() });
       expect(status).toBe(0);
       expect(stdout).toContain(`  Workspace: ${ws}`);
     } finally {
@@ -261,8 +271,8 @@ describe("summary", () => {
     }
   });
 
-  it("omits Workspace when unset on the project", () => {
-    const { stdout, status } = runCli(["summary", "c1"]);
+  it("omits Workspace when unset on the project", async () => {
+    const { stdout, status } = await runIssueCli(["summary", "c1"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).not.toContain("Workspace:");
   });
@@ -288,8 +298,8 @@ describe("view", () => {
     );
   });
 
-  it("prints metadata and description but not the comment log by default", () => {
-    const { stdout, status } = runCli(["story", "view", "a"]);
+  it("prints metadata and description but not the comment log by default", async () => {
+    const { stdout, status } = await runIssueCli(["story", "view", "a"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("id: a");
     expect(stdout).toContain("kind: story");
@@ -303,20 +313,20 @@ describe("view", () => {
     expect(stdout).not.toContain("--- comments ---");
   });
 
-  it("appends the comment log with --comments", () => {
-    const { stdout, status } = runCli(["story", "view", "a", "--comments"]);
+  it("appends the comment log with --comments", async () => {
+    const { stdout, status } = await runIssueCli(["story", "view", "a", "--comments"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("--- comments ---");
     expect(stdout).toContain("bot: first note");
   });
 
-  it("errors with a nonzero exit on an unknown id", () => {
-    const { stderr, status } = runCli(["story", "view", "ghost"]);
+  it("errors with a nonzero exit on an unknown id", async () => {
+    const { stderr, status } = await runIssueCli(["story", "view", "ghost"], { env: env() });
     expect(status).toBe(1);
     expect(stderr).toContain('unknown issue "ghost"');
   });
 
-  it("prints an epic's blockedBy line when it has blockers", () => {
+  it("prints an epic's blockedBy line when it has blockers", async () => {
     writeIssue("e2", {
       kind: "epic",
       title: "Epic 2",
@@ -325,20 +335,20 @@ describe("view", () => {
       createdAt: nextAt(),
       updatedAt: nextAt(),
     });
-    const { stdout, status } = runCli(["epic", "view", "e2"]);
+    const { stdout, status } = await runIssueCli(["epic", "view", "e2"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("kind: epic");
     expect(stdout).toContain("blockedBy: e");
   });
 
-  it("omits the blockedBy line for an epic with no blockers", () => {
-    const { stdout, status } = runCli(["epic", "view", "e"]);
+  it("omits the blockedBy line for an epic with no blockers", async () => {
+    const { stdout, status } = await runIssueCli(["epic", "view", "e"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("kind: epic");
     expect(stdout).not.toContain("blockedBy:");
   });
 
-  it("prints sourceIdea on an epic or story when set and omits it when unset", () => {
+  it("prints sourceIdea on an epic or story when set and omits it when unset", async () => {
     writeIssue("idea-v", {
       kind: "idea",
       title: "Capture",
@@ -368,29 +378,29 @@ describe("view", () => {
       updatedAt: nextAt(),
     });
 
-    const epicSet = runCli(["view", "e-with-idea"]);
+    const epicSet = await runIssueCli(["view", "e-with-idea"], { env: env() });
     expect(epicSet.status).toBe(0);
     expect(epicSet.stdout).toContain("sourceIdea: idea-v");
 
-    const storySet = runCli(["view", "s-with-idea"]);
+    const storySet = await runIssueCli(["view", "s-with-idea"], { env: env() });
     expect(storySet.status).toBe(0);
     expect(storySet.stdout).toContain("sourceIdea: idea-v");
 
-    const epicUnset = runCli(["view", "e"]);
+    const epicUnset = await runIssueCli(["view", "e"], { env: env() });
     expect(epicUnset.status).toBe(0);
     expect(epicUnset.stdout).not.toContain("sourceIdea:");
 
-    const storyUnset = runCli(["view", "a"]);
+    const storyUnset = await runIssueCli(["view", "a"], { env: env() });
     expect(storyUnset.status).toBe(0);
     expect(storyUnset.stdout).not.toContain("sourceIdea:");
   });
 
-  it("prints workspace when set on a project", () => {
+  it("prints workspace when set on a project", async () => {
     const ws = makeGitWorkspace();
     try {
-      const { status: setStatus } = runCli(["project", "set", "p", "workspace", ws]);
+      const { status: setStatus } = await runIssueCli(["project", "set", "p", "workspace", ws], { env: env() });
       expect(setStatus).toBe(0);
-      const { stdout, status } = runCli(["project", "view", "p"]);
+      const { stdout, status } = await runIssueCli(["project", "view", "p"], { env: env() });
       expect(status).toBe(0);
       expect(stdout).toContain(`workspace: ${ws}`);
     } finally {
@@ -398,8 +408,8 @@ describe("view", () => {
     }
   });
 
-  it("omits workspace when unset on a project", () => {
-    const { stdout, status } = runCli(["project", "view", "p"]);
+  it("omits workspace when unset on a project", async () => {
+    const { stdout, status } = await runIssueCli(["project", "view", "p"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("mergePolicy: manual");
     expect(stdout).not.toContain("workspace:");
@@ -419,32 +429,32 @@ describe("project get/set", () => {
     writeFileSync(join(dir, "p", "description.md"), "# Proj\n\nbody\n");
   });
 
-  it("gets and sets allowlisted project fields", () => {
-    expect(runCli(["project", "get", "p", "title"]).stdout).toBe("Proj\n");
-    expect(runCli(["project", "get", "p", "mergePolicy"]).stdout).toBe("manual\n");
-    expect(runCli(["project", "get", "p", "description"]).stdout).toBe("# Proj\n\nbody\n");
+  it("gets and sets allowlisted project fields", async () => {
+    expect((await runIssueCli(["project", "get", "p", "title"], { env: env() })).stdout).toBe("Proj\n");
+    expect((await runIssueCli(["project", "get", "p", "mergePolicy"], { env: env() })).stdout).toBe("manual\n");
+    expect((await runIssueCli(["project", "get", "p", "description"], { env: env() })).stdout).toBe("# Proj\n\nbody\n");
 
-    expect(runCli(["project", "set", "p", "title", "Renamed"]).status).toBe(0);
-    expect(runCli(["project", "get", "p", "title"]).stdout).toBe("Renamed\n");
+    expect((await runIssueCli(["project", "set", "p", "title", "Renamed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["project", "get", "p", "title"], { env: env() })).stdout).toBe("Renamed\n");
 
-    expect(runCli(["project", "set", "p", "mergePolicy", "pull-request"]).status).toBe(0);
-    expect(runCli(["project", "get", "p", "mergePolicy"]).stdout).toBe("pull-request\n");
+    expect((await runIssueCli(["project", "set", "p", "mergePolicy", "pull-request"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["project", "get", "p", "mergePolicy"], { env: env() })).stdout).toBe("pull-request\n");
   });
 
-  it("sets description from --file and clears workspace with --clear", () => {
+  it("sets description from --file and clears workspace with --clear", async () => {
     const descFile = join(dir, "desc.md");
     writeFileSync(descFile, "from file\n");
     expect(
-      runCli(["project", "set", "p", "description", "--file", descFile]).status,
+      (await runIssueCli(["project", "set", "p", "description", "--file", descFile], { env: env() })).status,
     ).toBe(0);
-    expect(runCli(["project", "get", "p", "description"]).stdout).toBe("from file\n");
+    expect((await runIssueCli(["project", "get", "p", "description"], { env: env() })).stdout).toBe("from file\n");
 
     const ws = makeGitWorkspace();
     try {
-      expect(runCli(["project", "set", "p", "workspace", ws]).status).toBe(0);
-      expect(runCli(["project", "get", "p", "workspace"]).stdout).toBe(`${ws}\n`);
-      expect(runCli(["project", "set", "p", "workspace", "--clear"]).status).toBe(0);
-      const { stdout, status } = runCli(["project", "get", "p", "workspace"]);
+      expect((await runIssueCli(["project", "set", "p", "workspace", ws], { env: env() })).status).toBe(0);
+      expect((await runIssueCli(["project", "get", "p", "workspace"], { env: env() })).stdout).toBe(`${ws}\n`);
+      expect((await runIssueCli(["project", "set", "p", "workspace", "--clear"], { env: env() })).status).toBe(0);
+      const { stdout, status } = await runIssueCli(["project", "get", "p", "workspace"], { env: env() });
       expect(status).toBe(0);
       expect(stdout).toBe("");
     } finally {
@@ -452,50 +462,50 @@ describe("project get/set", () => {
     }
   });
 
-  it("prints empty stdout for unset optional get", () => {
-    const { stdout, status } = runCli(["project", "get", "p", "workspace"]);
+  it("prints empty stdout for unset optional get", async () => {
+    const { stdout, status } = await runIssueCli(["project", "get", "p", "workspace"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toBe("");
   });
 
-  it("refuses kind mismatch and unknown fields", () => {
-    const mismatch = runCli(["project", "get", "e", "title"]);
+  it("refuses kind mismatch and unknown fields", async () => {
+    const mismatch = await runIssueCli(["project", "get", "e", "title"], { env: env() });
     expect(mismatch.status).toBe(1);
     expect(mismatch.stderr).toContain('"e" is an epic, not a project');
 
-    const setMismatch = runCli(["project", "set", "e", "title", "Nope"]);
+    const setMismatch = await runIssueCli(["project", "set", "e", "title", "Nope"], { env: env() });
     expect(setMismatch.status).toBe(1);
     expect(setMismatch.stderr).toContain('"e" is an epic, not a project');
 
-    const unknownGet = runCli(["project", "get", "p", "assignee"]);
+    const unknownGet = await runIssueCli(["project", "get", "p", "assignee"], { env: env() });
     expect(unknownGet.status).toBe(1);
     expect(unknownGet.stderr).toContain('unknown field "assignee" for project');
 
-    const unknownSet = runCli(["project", "set", "p", "assignee", "bot"]);
+    const unknownSet = await runIssueCli(["project", "set", "p", "assignee", "bot"], { env: env() });
     expect(unknownSet.status).toBe(1);
     expect(unknownSet.stderr).toContain(
       'unknown or unsettable field "assignee" for project',
     );
   });
 
-  it("wires mergePolicy through to view", () => {
-    expect(runCli(["project", "set", "p", "mergePolicy", "pull-request"]).status).toBe(0);
-    const { stdout, status } = runCli(["project", "view", "p"]);
+  it("wires mergePolicy through to view", async () => {
+    expect((await runIssueCli(["project", "set", "p", "mergePolicy", "pull-request"], { env: env() })).status).toBe(0);
+    const { stdout, status } = await runIssueCli(["project", "view", "p"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("mergePolicy: pull-request");
   });
 
-  it("sets, gets, clears, and surfaces supportingDocs", () => {
+  it("sets, gets, clears, and surfaces supportingDocs", async () => {
     const ws = makeGitWorkspace();
     const visionSrc = join(dir, "vision.md");
     writeFileSync(visionSrc, "# Vision");
     writeFileSync(join(ws, "standards.md"), "# Standards");
     try {
-      expect(runCli(["project", "set", "p", "workspace", ws]).status).toBe(0);
-      expect(runCli(["project", "attach", "p", visionSrc]).status).toBe(0);
+      expect((await runIssueCli(["project", "set", "p", "workspace", ws], { env: env() })).status).toBe(0);
+      expect((await runIssueCli(["project", "attach", "p", visionSrc], { env: env() })).status).toBe(0);
 
       expect(
-        runCli([
+        (await runIssueCli([
           "project",
           "set",
           "p",
@@ -504,10 +514,10 @@ describe("project get/set", () => {
           "vision",
           "--attachment",
           "vision.md",
-        ]).status,
+        ], { env: env() })).status,
       ).toBe(0);
       expect(
-        runCli([
+        (await runIssueCli([
           "project",
           "set",
           "p",
@@ -516,30 +526,30 @@ describe("project get/set", () => {
           "codingStandards",
           "--workspace",
           "standards.md",
-        ]).status,
+        ], { env: env() })).status,
       ).toBe(0);
 
-      const got = runCli(["project", "get", "p", "supportingDocs"]);
+      const got = await runIssueCli(["project", "get", "p", "supportingDocs"], { env: env() });
       expect(got.status).toBe(0);
       expect(JSON.parse(got.stdout)).toEqual({
         vision: { type: "attachment", name: "vision.md" },
         codingStandards: { type: "workspace", path: "standards.md" },
       });
 
-      const view = runCli(["project", "view", "p"]);
+      const view = await runIssueCli(["project", "view", "p"], { env: env() });
       expect(view.status).toBe(0);
       expect(view.stdout).toContain(
         "supportingDocs: vision=attachment:vision.md, codingStandards=workspace:standards.md",
       );
 
-      const summary = runCli(["summary", "p"]);
+      const summary = await runIssueCli(["summary", "p"], { env: env() });
       expect(summary.status).toBe(0);
       expect(summary.stdout).toContain(
         "supportingDocs: vision=attachment:vision.md, codingStandards=workspace:standards.md",
       );
 
       expect(
-        runCli([
+        (await runIssueCli([
           "project",
           "set",
           "p",
@@ -547,30 +557,30 @@ describe("project get/set", () => {
           "--clear",
           "--doc",
           "vision",
-        ]).status,
+        ], { env: env() })).status,
       ).toBe(0);
-      expect(JSON.parse(runCli(["project", "get", "p", "supportingDocs"]).stdout)).toEqual({
+      expect(JSON.parse((await runIssueCli(["project", "get", "p", "supportingDocs"], { env: env() })).stdout)).toEqual({
         codingStandards: { type: "workspace", path: "standards.md" },
       });
 
-      expect(runCli(["project", "set", "p", "supportingDocs", "--clear"]).status).toBe(0);
-      expect(runCli(["project", "get", "p", "supportingDocs"]).stdout).toBe("");
-      expect(runCli(["project", "view", "p"]).stdout).not.toContain("supportingDocs:");
+      expect((await runIssueCli(["project", "set", "p", "supportingDocs", "--clear"], { env: env() })).status).toBe(0);
+      expect((await runIssueCli(["project", "get", "p", "supportingDocs"], { env: env() })).stdout).toBe("");
+      expect((await runIssueCli(["project", "view", "p"], { env: env() })).stdout).not.toContain("supportingDocs:");
     } finally {
       rmSync(ws, { recursive: true, force: true });
     }
   });
 
-  it("prints Mission from the vision doc on summary", () => {
+  it("prints Mission from the vision doc on summary", async () => {
     const visionSrc = join(dir, "vision-with-mission.md");
     writeFileSync(
       visionSrc,
       "# Vision\n\n## Mission\n\nHelp humans and agents ship together.\n\n## North star\n\nMore detail.",
     );
     try {
-      expect(runCli(["project", "attach", "p", visionSrc]).status).toBe(0);
+      expect((await runIssueCli(["project", "attach", "p", visionSrc], { env: env() })).status).toBe(0);
       expect(
-        runCli([
+        (await runIssueCli([
           "project",
           "set",
           "p",
@@ -579,10 +589,10 @@ describe("project get/set", () => {
           "vision",
           "--attachment",
           "vision-with-mission.md",
-        ]).status,
+        ], { env: env() })).status,
       ).toBe(0);
 
-      const summary = runCli(["summary", "p"]);
+      const summary = await runIssueCli(["summary", "p"], { env: env() });
       expect(summary.status).toBe(0);
       expect(summary.stdout).toContain(
         "  Mission: Help humans and agents ship together.",
@@ -592,20 +602,20 @@ describe("project get/set", () => {
       );
     } finally {
       expect(
-        runCli([
+        (await runIssueCli([
           "project",
           "set",
           "p",
           "supportingDocs",
           "--clear",
-        ]).status,
+        ], { env: env() })).status,
       ).toBe(0);
     }
   });
 
-  it("sets, gets, clears, and surfaces inspirationApps", () => {
+  it("sets, gets, clears, and surfaces inspirationApps", async () => {
     expect(
-      runCli([
+      (await runIssueCli([
         "project",
         "set",
         "p",
@@ -616,10 +626,10 @@ describe("project get/set", () => {
           url: "https://notion.so",
           description: "Note-taking app",
         }),
-      ]).status,
+      ], { env: env() })).status,
     ).toBe(0);
     expect(
-      runCli([
+      (await runIssueCli([
         "project",
         "set",
         "p",
@@ -630,10 +640,10 @@ describe("project get/set", () => {
           url: "https://figma.com",
           description: "Design tool",
         }),
-      ]).status,
+      ], { env: env() })).status,
     ).toBe(0);
 
-    const got = runCli(["project", "get", "p", "inspirationApps"]);
+    const got = await runIssueCli(["project", "get", "p", "inspirationApps"], { env: env() });
     expect(got.status).toBe(0);
     expect(JSON.parse(got.stdout)).toEqual([
       {
@@ -650,14 +660,14 @@ describe("project get/set", () => {
 
     const line =
       "inspirationApps: Notion — https://notion.so — Note-taking app, Figma — https://figma.com — Design tool";
-    expect(runCli(["project", "view", "p"]).stdout).toContain(line);
-    expect(runCli(["summary", "p"]).stdout).toContain(line);
+    expect((await runIssueCli(["project", "view", "p"], { env: env() })).stdout).toContain(line);
+    expect((await runIssueCli(["summary", "p"], { env: env() })).stdout).toContain(line);
 
     expect(
-      runCli(["project", "set", "p", "inspirationApps", "--remove", "Notion"])
+      (await runIssueCli(["project", "set", "p", "inspirationApps", "--remove", "Notion"], { env: env() }))
         .status,
     ).toBe(0);
-    expect(JSON.parse(runCli(["project", "get", "p", "inspirationApps"]).stdout)).toEqual([
+    expect(JSON.parse((await runIssueCli(["project", "get", "p", "inspirationApps"], { env: env() })).stdout)).toEqual([
       {
         name: "Figma",
         url: "https://figma.com",
@@ -665,13 +675,13 @@ describe("project get/set", () => {
       },
     ]);
 
-    expect(runCli(["project", "set", "p", "inspirationApps", "--clear"]).status).toBe(0);
-    expect(JSON.parse(runCli(["project", "get", "p", "inspirationApps"]).stdout)).toEqual([]);
-    expect(runCli(["project", "view", "p"]).stdout).not.toContain("inspirationApps:");
+    expect((await runIssueCli(["project", "set", "p", "inspirationApps", "--clear"], { env: env() })).status).toBe(0);
+    expect(JSON.parse((await runIssueCli(["project", "get", "p", "inspirationApps"], { env: env() })).stdout)).toEqual([]);
+    expect((await runIssueCli(["project", "view", "p"], { env: env() })).stdout).not.toContain("inspirationApps:");
   });
 
-  it("refuses inspirationApps on non-project kinds", () => {
-    const set = runCli([
+  it("refuses inspirationApps on non-project kinds", async () => {
+    const set = await runIssueCli([
       "epic",
       "set",
       "e",
@@ -682,14 +692,14 @@ describe("project get/set", () => {
         url: "https://notion.so",
         description: "Notes",
       }),
-    ]);
+    ], { env: env() });
     expect(set.status).toBe(1);
     expect(set.stderr).toContain('unknown or unsettable field "inspirationApps" for epic');
   });
 
-  it("sets, gets, clears, and surfaces personas", () => {
+  it("sets, gets, clears, and surfaces personas", async () => {
     expect(
-      runCli([
+      (await runIssueCli([
         "project",
         "set",
         "p",
@@ -699,10 +709,10 @@ describe("project get/set", () => {
           name: "Planner",
           description: "Plans work",
         }),
-      ]).status,
+      ], { env: env() })).status,
     ).toBe(0);
     expect(
-      runCli([
+      (await runIssueCli([
         "project",
         "set",
         "p",
@@ -712,10 +722,10 @@ describe("project get/set", () => {
           name: "Implementor",
           description: "Writes code",
         }),
-      ]).status,
+      ], { env: env() })).status,
     ).toBe(0);
 
-    const got = runCli(["project", "get", "p", "personas"]);
+    const got = await runIssueCli(["project", "get", "p", "personas"], { env: env() });
     expect(got.status).toBe(0);
     expect(JSON.parse(got.stdout)).toEqual([
       { name: "Planner", description: "Plans work" },
@@ -724,23 +734,23 @@ describe("project get/set", () => {
 
     const line =
       "personas: Planner — Plans work, Implementor — Writes code";
-    expect(runCli(["project", "view", "p"]).stdout).toContain(line);
-    expect(runCli(["summary", "p"]).stdout).toContain(line);
+    expect((await runIssueCli(["project", "view", "p"], { env: env() })).stdout).toContain(line);
+    expect((await runIssueCli(["summary", "p"], { env: env() })).stdout).toContain(line);
 
     expect(
-      runCli(["project", "set", "p", "personas", "--remove", "Planner"]).status,
+      (await runIssueCli(["project", "set", "p", "personas", "--remove", "Planner"], { env: env() })).status,
     ).toBe(0);
-    expect(JSON.parse(runCli(["project", "get", "p", "personas"]).stdout)).toEqual([
+    expect(JSON.parse((await runIssueCli(["project", "get", "p", "personas"], { env: env() })).stdout)).toEqual([
       { name: "Implementor", description: "Writes code" },
     ]);
 
-    expect(runCli(["project", "set", "p", "personas", "--clear"]).status).toBe(0);
-    expect(JSON.parse(runCli(["project", "get", "p", "personas"]).stdout)).toEqual([]);
-    expect(runCli(["project", "view", "p"]).stdout).not.toContain("personas:");
+    expect((await runIssueCli(["project", "set", "p", "personas", "--clear"], { env: env() })).status).toBe(0);
+    expect(JSON.parse((await runIssueCli(["project", "get", "p", "personas"], { env: env() })).stdout)).toEqual([]);
+    expect((await runIssueCli(["project", "view", "p"], { env: env() })).stdout).not.toContain("personas:");
   });
 
-  it("refuses personas on non-project kinds", () => {
-    const set = runCli([
+  it("refuses personas on non-project kinds", async () => {
+    const set = await runIssueCli([
       "epic",
       "set",
       "e",
@@ -750,17 +760,17 @@ describe("project get/set", () => {
         name: "Planner",
         description: "Plans work",
       }),
-    ]);
+    ], { env: env() });
     expect(set.status).toBe(1);
     expect(set.stderr).toContain('unknown or unsettable field "personas" for epic');
   });
 
-  it("refuses invalid supportingDocs sets", () => {
+  it("refuses invalid supportingDocs sets", async () => {
     const ws = makeGitWorkspace();
     try {
-      expect(runCli(["project", "set", "p", "workspace", ws]).status).toBe(0);
+      expect((await runIssueCli(["project", "set", "p", "workspace", ws], { env: env() })).status).toBe(0);
 
-      const missingAttach = runCli([
+      const missingAttach = await runIssueCli([
         "project",
         "set",
         "p",
@@ -769,11 +779,11 @@ describe("project get/set", () => {
         "vision",
         "--attachment",
         "vision.md",
-      ]);
+      ], { env: env() });
       expect(missingAttach.status).toBe(1);
       expect(missingAttach.stderr).toContain("not attached");
 
-      const badPath = runCli([
+      const badPath = await runIssueCli([
         "project",
         "set",
         "p",
@@ -782,11 +792,11 @@ describe("project get/set", () => {
         "vision",
         "--workspace",
         "../escape.md",
-      ]);
+      ], { env: env() });
       expect(badPath.status).toBe(1);
       expect(badPath.stderr).toMatch(/\.\.|relative|escape/i);
 
-      const unknownKey = runCli([
+      const unknownKey = await runIssueCli([
         "project",
         "set",
         "p",
@@ -795,11 +805,11 @@ describe("project get/set", () => {
         "roadmap",
         "--workspace",
         "x.md",
-      ]);
+      ], { env: env() });
       expect(unknownKey.status).toBe(1);
       expect(unknownKey.stderr).toContain("unknown supportingDocs key");
 
-      const missingFile = runCli([
+      const missingFile = await runIssueCli([
         "project",
         "set",
         "p",
@@ -808,7 +818,7 @@ describe("project get/set", () => {
         "vision",
         "--workspace",
         "missing.md",
-      ]);
+      ], { env: env() });
       expect(missingFile.status).toBe(1);
       expect(missingFile.stderr).toContain("does not exist");
     } finally {
@@ -838,15 +848,15 @@ describe("idea add / get / set", () => {
     });
   });
 
-  it("shows --part-of on idea add --help", () => {
-    const { stdout, status } = runCli(["idea", "add", "--help"]);
+  it("shows --part-of on idea add --help", async () => {
+    const { stdout, status } = await runIssueCli(["idea", "add", "--help"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toMatch(/--part-of/);
     expect(stdout).not.toMatch(/--project/);
   });
 
-  it("adds an idea without a description and prints its id", () => {
-    const { stdout, status } = runCli(["idea", "add", "--part-of", "p", "Capture me"]);
+  it("adds an idea without a description and prints its id", async () => {
+    const { stdout, status } = await runIssueCli(["idea", "add", "--part-of", "p", "Capture me"], { env: env() });
     expect(status).toBe(0);
     const id = stdout.trim();
     expect(id).toBe("capture-me");
@@ -856,8 +866,8 @@ describe("idea add / get / set", () => {
     expect(readFileSync(join(dir, id, "description.md"), "utf8")).toBe("# Capture me\n");
   });
 
-  it("adds an idea with --description", () => {
-    const { stdout, status } = runCli([
+  it("adds an idea with --description", async () => {
+    const { stdout, status } = await runIssueCli([
       "idea",
       "add",
       "--part-of",
@@ -865,17 +875,17 @@ describe("idea add / get / set", () => {
       "With body",
       "--description",
       "# Idea\n\nnotes\n",
-    ]);
+    ], { env: env() });
     expect(status).toBe(0);
     const id = stdout.trim();
     expect(id).toBe("with-body");
     expect(readFileSync(join(dir, id, "description.md"), "utf8")).toBe("# Idea\n\nnotes\n");
   });
 
-  it("adds an idea with --file", () => {
+  it("adds an idea with --file", async () => {
     const descFile = join(dir, "idea-desc.md");
     writeFileSync(descFile, "# From file\n\nseeded\n");
-    const { stdout, status } = runCli([
+    const { stdout, status } = await runIssueCli([
       "idea",
       "add",
       "--part-of",
@@ -883,7 +893,7 @@ describe("idea add / get / set", () => {
       "From file",
       "--file",
       descFile,
-    ]);
+    ], { env: env() });
     expect(status).toBe(0);
     const id = stdout.trim();
     expect(id).toBe("from-file");
@@ -892,83 +902,83 @@ describe("idea add / get / set", () => {
     );
   });
 
-  it("gets and sets title, archived, partOf, and description", () => {
-    expect(runCli(["idea", "add", "--part-of", "p", "Mine later"]).status).toBe(0);
+  it("gets and sets title, archived, partOf, and description", async () => {
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Mine later"], { env: env() })).status).toBe(0);
     writeFileSync(join(dir, "mine-later", "description.md"), "# Idea\n\nbody\n");
 
-    expect(runCli(["idea", "get", "mine-later", "title"]).stdout).toBe("Mine later\n");
-    expect(runCli(["idea", "get", "mine-later", "partOf"]).stdout).toBe("p\n");
-    expect(runCli(["idea", "get", "mine-later", "archived"]).stdout).toBe("false\n");
-    expect(runCli(["idea", "get", "mine-later", "description"]).stdout).toBe("# Idea\n\nbody\n");
+    expect((await runIssueCli(["idea", "get", "mine-later", "title"], { env: env() })).stdout).toBe("Mine later\n");
+    expect((await runIssueCli(["idea", "get", "mine-later", "partOf"], { env: env() })).stdout).toBe("p\n");
+    expect((await runIssueCli(["idea", "get", "mine-later", "archived"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["idea", "get", "mine-later", "description"], { env: env() })).stdout).toBe("# Idea\n\nbody\n");
 
-    expect(runCli(["idea", "set", "mine-later", "title", "Renamed"]).status).toBe(0);
-    expect(runCli(["idea", "get", "mine-later", "title"]).stdout).toBe("Renamed\n");
+    expect((await runIssueCli(["idea", "set", "mine-later", "title", "Renamed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "mine-later", "title"], { env: env() })).stdout).toBe("Renamed\n");
 
-    expect(runCli(["idea", "set", "mine-later", "archived", "true"]).status).toBe(0);
-    expect(runCli(["idea", "get", "mine-later", "archived"]).stdout).toBe("true\n");
+    expect((await runIssueCli(["idea", "set", "mine-later", "archived", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "mine-later", "archived"], { env: env() })).stdout).toBe("true\n");
 
-    expect(runCli(["idea", "set", "mine-later", "partOf", "p2"]).status).toBe(0);
-    expect(runCli(["idea", "get", "mine-later", "partOf"]).stdout).toBe("p2\n");
+    expect((await runIssueCli(["idea", "set", "mine-later", "partOf", "p2"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "mine-later", "partOf"], { env: env() })).stdout).toBe("p2\n");
 
-    expect(runCli(["idea", "set", "mine-later", "description", "updated\n"]).status).toBe(0);
-    expect(runCli(["idea", "get", "mine-later", "description"]).stdout).toBe("updated\n");
+    expect((await runIssueCli(["idea", "set", "mine-later", "description", "updated\n"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "mine-later", "description"], { env: env() })).stdout).toBe("updated\n");
   });
 
-  it("rejects add and set when the parent is not a project", () => {
-    const badAdd = runCli(["idea", "add", "--part-of", "e", "Bad parent"]);
+  it("rejects add and set when the parent is not a project", async () => {
+    const badAdd = await runIssueCli(["idea", "add", "--part-of", "e", "Bad parent"], { env: env() });
     expect(badAdd.status).toBe(1);
     expect(badAdd.stderr).toMatch(/must be a project/);
 
-    expect(runCli(["idea", "add", "--part-of", "p", "Ok"]).status).toBe(0);
-    const badSet = runCli(["idea", "set", "ok", "partOf", "e"]);
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Ok"], { env: env() })).status).toBe(0);
+    const badSet = await runIssueCli(["idea", "set", "ok", "partOf", "e"], { env: env() });
     expect(badSet.status).toBe(1);
     expect(badSet.stderr).toMatch(/must be a project/);
   });
 
-  it("refuses kind mismatch and unknown fields", () => {
-    expect(runCli(["idea", "add", "--part-of", "p", "Mine"]).status).toBe(0);
+  it("refuses kind mismatch and unknown fields", async () => {
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Mine"], { env: env() })).status).toBe(0);
 
-    const mismatch = runCli(["idea", "get", "e", "title"]);
+    const mismatch = await runIssueCli(["idea", "get", "e", "title"], { env: env() });
     expect(mismatch.status).toBe(1);
     expect(mismatch.stderr).toContain('"e" is an epic, not an idea');
 
-    const setMismatch = runCli(["idea", "set", "e", "title", "Nope"]);
+    const setMismatch = await runIssueCli(["idea", "set", "e", "title", "Nope"], { env: env() });
     expect(setMismatch.status).toBe(1);
     expect(setMismatch.stderr).toContain('"e" is an epic, not an idea');
 
-    const unknownGet = runCli(["idea", "get", "mine", "assignee"]);
+    const unknownGet = await runIssueCli(["idea", "get", "mine", "assignee"], { env: env() });
     expect(unknownGet.status).toBe(1);
     expect(unknownGet.stderr).toContain('unknown field "assignee" for idea');
 
-    const unknownSet = runCli(["idea", "set", "mine", "assignee", "bot"]);
+    const unknownSet = await runIssueCli(["idea", "set", "mine", "assignee", "bot"], { env: env() });
     expect(unknownSet.status).toBe(1);
     expect(unknownSet.stderr).toContain(
       'unknown or unsettable field "assignee" for idea',
     );
   });
 
-  it("sets, gets, and clears stakeholder on an idea", () => {
-    expect(runCli(["idea", "add", "--part-of", "p", "Plan this"]).status).toBe(0);
+  it("sets, gets, and clears stakeholder on an idea", async () => {
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Plan this"], { env: env() })).status).toBe(0);
 
     expect(
-      runCli(["idea", "set", "plan-this", "stakeholder", "composer-2.5"]).status,
+      (await runIssueCli(["idea", "set", "plan-this", "stakeholder", "composer-2.5"], { env: env() })).status,
     ).toBe(0);
     expect(issueJsonField("plan-this", "stakeholder")).toBe("composer-2.5");
-    expect(runCli(["idea", "get", "plan-this", "stakeholder"]).stdout.trim()).toBe(
+    expect((await runIssueCli(["idea", "get", "plan-this", "stakeholder"], { env: env() })).stdout.trim()).toBe(
       "composer-2.5",
     );
 
     expect(
-      runCli(["idea", "set", "plan-this", "stakeholder", "--clear"]).status,
+      (await runIssueCli(["idea", "set", "plan-this", "stakeholder", "--clear"], { env: env() })).status,
     ).toBe(0);
     expect("stakeholder" in JSON.parse(readFileSync(join(dir, "plan-this", "issue.json"), "utf8"))).toBe(
       false,
     );
-    expect(runCli(["idea", "get", "plan-this", "stakeholder"]).stdout).toBe("");
+    expect((await runIssueCli(["idea", "get", "plan-this", "stakeholder"], { env: env() })).stdout).toBe("");
   });
 
-  it("refuses an unknown stakeholder slug on create and set", () => {
-    const badAdd = runCli([
+  it("refuses an unknown stakeholder slug on create and set", async () => {
+    const badAdd = await runIssueCli([
       "idea",
       "add",
       "--part-of",
@@ -976,24 +986,24 @@ describe("idea add / get / set", () => {
       "--stakeholder",
       "not-a-model",
       "Bad slug",
-    ]);
+    ], { env: env() });
     expect(badAdd.status).toBe(1);
     expect(badAdd.stderr).toContain("unknown agent model slug");
 
-    expect(runCli(["idea", "add", "--part-of", "p", "Ok idea"]).status).toBe(0);
-    const badSet = runCli([
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Ok idea"], { env: env() })).status).toBe(0);
+    const badSet = await runIssueCli([
       "idea",
       "set",
       "ok-idea",
       "stakeholder",
       "not-a-model",
-    ]);
+    ], { env: env() });
     expect(badSet.status).toBe(1);
     expect(badSet.stderr).toContain("unknown agent model slug");
   });
 
-  it("creates an idea with --stakeholder", () => {
-    const { stdout, status } = runCli([
+  it("creates an idea with --stakeholder", async () => {
+    const { stdout, status } = await runIssueCli([
       "idea",
       "add",
       "--part-of",
@@ -1001,7 +1011,7 @@ describe("idea add / get / set", () => {
       "--stakeholder",
       "composer-2.5",
       "Auto plan",
-    ]);
+    ], { env: env() });
     expect(status).toBe(0);
     const id = stdout.trim();
     expect(issueJsonField(id, "stakeholder")).toBe("composer-2.5");
@@ -1022,25 +1032,25 @@ describe("idea ideaStatus", () => {
     });
   });
 
-  it("gets derived ideaStatus and shows it on tree", () => {
-    expect(runCli(["idea", "get", "capture", "ideaStatus"]).stdout).toBe("captured\n");
+  it("gets derived ideaStatus and shows it on tree", async () => {
+    expect((await runIssueCli(["idea", "get", "capture", "ideaStatus"], { env: env() })).stdout).toBe("captured\n");
 
-    const tree = runCli(["tree", "p"]);
+    const tree = await runIssueCli(["tree", "p"], { env: env() });
     expect(tree.status).toBe(0);
     expect(tree.stdout).toMatch(/^ {2}idea capture\b.*\bstatus=captured\b/m);
   });
 
-  it("reports planning when a planning session run is live", () => {
+  it("reports planning when a planning session run is live", async () => {
     seedPlanningSession("plan-live", "capture", "p", { live: true });
 
-    expect(runCli(["idea", "get", "capture", "ideaStatus"]).stdout).toBe("planning\n");
+    expect((await runIssueCli(["idea", "get", "capture", "ideaStatus"], { env: env() })).stdout).toBe("planning\n");
 
-    const tree = runCli(["tree", "p"]);
+    const tree = await runIssueCli(["tree", "p"], { env: env() });
     expect(tree.status).toBe(0);
     expect(tree.stdout).toMatch(/^ {2}idea capture\b.*\bstatus=planning\b/m);
   });
 
-  it("reports awaiting-direction when a session stopped without a plan", () => {
+  it("reports awaiting-direction when a session stopped without a plan", async () => {
     seedPlanningSession("plan-stopped", "capture", "p", {
       transcriptLine: JSON.stringify({
         type: "assistant",
@@ -1049,7 +1059,7 @@ describe("idea ideaStatus", () => {
       }),
     });
 
-    expect(runCli(["idea", "get", "capture", "ideaStatus"]).stdout).toBe(
+    expect((await runIssueCli(["idea", "get", "capture", "ideaStatus"], { env: env() })).stdout).toBe(
       "awaiting-direction\n",
     );
   });
@@ -1076,8 +1086,8 @@ describe("kind-scoped add", () => {
     });
   });
 
-  it("adds a project and prints its id", () => {
-    const { stdout, status } = runCli(["project", "add", "New Project"]);
+  it("adds a project and prints its id", async () => {
+    const { stdout, status } = await runIssueCli(["project", "add", "New Project"], { env: env() });
     expect(status).toBe(0);
     const id = stdout.trim();
     expect(id).toBe("new-project");
@@ -1093,8 +1103,8 @@ describe("kind-scoped add", () => {
       partOf: "a",
       assignee: "carol",
     },
-  ])("adds $kind under the correct parent with assignee", ({ args, id, partOf, assignee }) => {
-    const result = runCli(args);
+  ])("adds $kind under the correct parent with assignee", async ({ args, id, partOf, assignee }) => {
+    const result = await runIssueCli(args, { env: env() });
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe(id);
     expect(issueJsonField(id, "partOf")).toBe(partOf);
@@ -1110,20 +1120,20 @@ describe("kind-scoped add", () => {
       kind: "story",
       args: ["story", "add", "--part-of", "e", "Child Story", "--assignee", "bob"],
     },
-  ])("rejects $kind add with --assignee", ({ args }) => {
-    const result = runCli(args);
+  ])("rejects $kind add with --assignee", async ({ args }) => {
+    const result = await runIssueCli(args, { env: env() });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/unknown option '--assignee'/);
   });
 
-  it("seeds description from --description and --file without --description-file", () => {
-    const inline = runCli([
+  it("seeds description from --description and --file without --description-file", async () => {
+    const inline = await runIssueCli([
       "project",
       "add",
       "Inline Desc",
       "--description",
       "# Inline\n",
-    ]);
+    ], { env: env() });
     expect(inline.status).toBe(0);
     expect(readFileSync(join(dir, "inline-desc", "description.md"), "utf8")).toBe(
       "# Inline\n",
@@ -1131,7 +1141,7 @@ describe("kind-scoped add", () => {
 
     const descFile = join(dir, "seed.md");
     writeFileSync(descFile, "# From file\n");
-    const fromFile = runCli([
+    const fromFile = await runIssueCli([
       "epic",
       "add",
       "--part-of",
@@ -1139,30 +1149,30 @@ describe("kind-scoped add", () => {
       "File Desc",
       "--file",
       descFile,
-    ]);
+    ], { env: env() });
     expect(fromFile.status).toBe(0);
     expect(readFileSync(join(dir, "file-desc", "description.md"), "utf8")).toBe(
       "# From file\n",
     );
 
-    const help = runCli(["project", "add", "--help"]);
+    const help = await runIssueCli(["project", "add", "--help"], { env: env() });
     expect(help.status).toBe(0);
     expect(help.stdout).toMatch(/--file <path>/);
     expect(help.stdout).not.toMatch(/--description[_-]file/);
   });
 
-  it("stacks a story with --stacked-on", () => {
-    const help = runCli(["story", "add", "--help"]);
+  it("stacks a story with --stacked-on", async () => {
+    const help = await runIssueCli(["story", "add", "--help"], { env: env() });
     expect(help.status).toBe(0);
     expect(help.stdout).toMatch(/--stacked-on <story>/);
     expect(help.stdout).not.toMatch(/<branch>/);
 
-    const taskHelp = runCli(["task", "add", "--help"]);
+    const taskHelp = await runIssueCli(["task", "add", "--help"], { env: env() });
     expect(taskHelp.status).toBe(0);
     expect(taskHelp.stdout).toMatch(/--part-of <story>/);
     expect(taskHelp.stdout).not.toMatch(/<branch>/);
 
-    const add = runCli([
+    const add = await runIssueCli([
       "story",
       "add",
       "Stacked Child",
@@ -1170,7 +1180,7 @@ describe("kind-scoped add", () => {
       "e",
       "--stacked-on",
       "a",
-    ]);
+    ], { env: env() });
     expect(add.status).toBe(0);
     expect(add.stdout.trim()).toBe("stacked-child");
     expect(issueJsonField("stacked-child", "stackedOn")).toBe("a");
@@ -1192,35 +1202,35 @@ describe("kind-scoped add", () => {
       args: ["task", "add", "--part-of", "e", "Nope"],
       error: /must be a story/,
     },
-  ])("rejects a bad parent for $kind", ({ args, error }) => {
-    const result = runCli(args);
+  ])("rejects a bad parent for $kind", async ({ args, error }) => {
+    const result = await runIssueCli(args, { env: env() });
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(error);
   });
 
-  it("adds a story under a project and reparents between project and epic", () => {
-    const add = runCli([
+  it("adds a story under a project and reparents between project and epic", async () => {
+    const add = await runIssueCli([
       "story",
       "add",
       "Solo Story",
       "--part-of",
       "p",
-    ]);
+    ], { env: env() });
     expect(add.status).toBe(0);
     expect(add.stdout.trim()).toBe("solo-story");
     expect(issueJsonField("solo-story", "partOf")).toBe("p");
 
-    expect(runCli(["story", "set", "solo-story", "partOf", "e"]).status).toBe(
+    expect((await runIssueCli(["story", "set", "solo-story", "partOf", "e"], { env: env() })).status).toBe(
       0,
     );
     expect(issueJsonField("solo-story", "partOf")).toBe("e");
 
-    expect(runCli(["story", "set", "solo-story", "partOf", "p"]).status).toBe(
+    expect((await runIssueCli(["story", "set", "solo-story", "partOf", "p"], { env: env() })).status).toBe(
       0,
     );
     expect(issueJsonField("solo-story", "partOf")).toBe("p");
 
-    const bad = runCli(["story", "set", "solo-story", "partOf", "a"]);
+    const bad = await runIssueCli(["story", "set", "solo-story", "partOf", "a"], { env: env() });
     expect(bad.status).toBe(1);
     expect(bad.stderr).toMatch(/must be one of: project, epic/);
   });
@@ -1257,8 +1267,8 @@ describe("tree / list / summary include Ideas", () => {
     writeFileSync(join(dir, "idea-a", "description.md"), "# Idea\n\nfirst capture\n");
   });
 
-  it("interleaves Ideas and Epics by order in tree with Idea status chips", () => {
-    const { stdout, status } = runCli(["tree", "p"]);
+  it("interleaves Ideas and Epics by order in tree with Idea status chips", async () => {
+    const { stdout, status } = await runIssueCli(["tree", "p"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toMatch(/^project p {2}Proj$/m);
     expect(stdout).toMatch(/^ {2}idea idea-a\b.*\bstatus=captured\b/m);
@@ -1271,7 +1281,7 @@ describe("tree / list / summary include Ideas", () => {
     expect(epic).toBeLessThan(ideaB);
   });
 
-  it("interleaves project-level Stories with Epics and Ideas and nests stacked children", () => {
+  it("interleaves project-level Stories with Epics and Ideas and nests stacked children", async () => {
     // beforeEach: idea-a=0, e=1, idea-b=2 — bump idea-b so solo sits between e and idea-b.
     writeIssue("idea-b", {
       kind: "idea",
@@ -1314,7 +1324,7 @@ describe("tree / list / summary include Ideas", () => {
       "# Solo\n\nproject-level story\n",
     );
 
-    const { stdout, status } = runCli(["tree", "p"]);
+    const { stdout, status } = await runIssueCli(["tree", "p"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toMatch(/^ {2}story solo {2}Solo Story\b/m);
     expect(stdout).toMatch(/^ {4}task solo-t {2}Solo task\b/m);
@@ -1327,7 +1337,7 @@ describe("tree / list / summary include Ideas", () => {
     expect(epic).toBeLessThan(solo);
     expect(solo).toBeLessThan(ideaB);
 
-    const summary = runCli(["summary", "solo-t"]);
+    const summary = await runIssueCli(["summary", "solo-t"], { env: env() });
     expect(summary.status).toBe(0);
     expect(summary.stdout).toContain("Project: p — Proj");
     expect(summary.stdout).toContain("Story: solo — Solo Story");
@@ -1335,8 +1345,8 @@ describe("tree / list / summary include Ideas", () => {
     expect(summary.stdout).not.toContain("Epic:");
   });
 
-  it("includes Ideas in list JSON for the project", () => {
-    const { stdout, status } = runCli(["list", "--in", "p"]);
+  it("includes Ideas in list JSON for the project", async () => {
+    const { stdout, status } = await runIssueCli(["list", "--in", "p"], { env: env() });
     expect(status).toBe(0);
     const listed = JSON.parse(stdout);
     const ids = listed.issues.map((i: { id: string }) => i.id).sort();
@@ -1345,8 +1355,8 @@ describe("tree / list / summary include Ideas", () => {
     expect(idea.kind).toBe("idea");
   });
 
-  it("summarizes an Idea as Project then Idea", () => {
-    const { stdout, status } = runCli(["summary", "idea-a"]);
+  it("summarizes an Idea as Project then Idea", async () => {
+    const { stdout, status } = await runIssueCli(["summary", "idea-a"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("Project: p — Proj");
     expect(stdout).toContain("Idea: idea-a — Capture first");
@@ -1354,32 +1364,32 @@ describe("tree / list / summary include Ideas", () => {
     expect(stdout).not.toContain("Epic:");
   });
 
-  it("hides archived Ideas from tree/list unless --show-archived", () => {
-    expect(runCli(["idea", "set", "idea-a", "archived", "true"]).status).toBe(0);
+  it("hides archived Ideas from tree/list unless --show-archived", async () => {
+    expect((await runIssueCli(["idea", "set", "idea-a", "archived", "true"], { env: env() })).status).toBe(0);
 
-    const treeHidden = runCli(["tree", "p"]);
+    const treeHidden = await runIssueCli(["tree", "p"], { env: env() });
     expect(treeHidden.status).toBe(0);
     expect(treeHidden.stdout).toContain("idea idea-b");
     expect(treeHidden.stdout).not.toContain("idea idea-a");
 
-    const treeShown = runCli(["tree", "p", "--show-archived"]);
+    const treeShown = await runIssueCli(["tree", "p", "--show-archived"], { env: env() });
     expect(treeShown.status).toBe(0);
     expect(treeShown.stdout).toContain("idea idea-a");
 
-    const listHidden = JSON.parse(runCli(["list", "--in", "p"]).stdout);
+    const listHidden = JSON.parse((await runIssueCli(["list", "--in", "p"], { env: env() })).stdout);
     expect(listHidden.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["e", "idea-b", "p"],
     );
 
     const listShown = JSON.parse(
-      runCli(["list", "--in", "p", "--show-archived"]).stdout,
+      (await runIssueCli(["list", "--in", "p", "--show-archived"], { env: env() })).stdout,
     );
     expect(listShown.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["e", "idea-a", "idea-b", "p"],
     );
   });
 
-  it("echoes mixed Idea/Epic order from apply-root", () => {
+  it("echoes mixed Idea/Epic order from apply-root", async () => {
     // Project-root children: order is the interleaved array index.
     const applyPath = join(dir, "board.yaml");
     writeFileSync(
@@ -1399,7 +1409,7 @@ describe("tree / list / summary include Ideas", () => {
       title: Capture last
 `,
     );
-    const { stdout, status } = runCli(["apply", applyPath]);
+    const { stdout, status } = await runIssueCli(["apply", applyPath], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toMatch(/^project p {2}Proj$/m);
     expect(stdout).toMatch(/^ {2}epic e {2}Epic\b/m);
@@ -1448,72 +1458,72 @@ describe("epic get/set", () => {
     writeFileSync(join(dir, "e", "description.md"), "# Epic\n\nbody\n");
   });
 
-  it("gets and sets allowlisted epic fields", () => {
-    expect(runCli(["epic", "get", "e", "title"]).stdout).toBe("Epic\n");
-    expect(runCli(["epic", "get", "e", "description"]).stdout).toBe("# Epic\n\nbody\n");
-    expect(runCli(["epic", "get", "e", "blockedBy"]).stdout).toBe("[]\n");
+  it("gets and sets allowlisted epic fields", async () => {
+    expect((await runIssueCli(["epic", "get", "e", "title"], { env: env() })).stdout).toBe("Epic\n");
+    expect((await runIssueCli(["epic", "get", "e", "description"], { env: env() })).stdout).toBe("# Epic\n\nbody\n");
+    expect((await runIssueCli(["epic", "get", "e", "blockedBy"], { env: env() })).stdout).toBe("[]\n");
 
-    expect(runCli(["epic", "set", "e", "title", "Renamed"]).status).toBe(0);
-    expect(runCli(["epic", "get", "e", "title"]).stdout).toBe("Renamed\n");
+    expect((await runIssueCli(["epic", "set", "e", "title", "Renamed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "get", "e", "title"], { env: env() })).stdout).toBe("Renamed\n");
 
-    const unknownAssigneeGet = runCli(["epic", "get", "e", "assignee"]);
+    const unknownAssigneeGet = await runIssueCli(["epic", "get", "e", "assignee"], { env: env() });
     expect(unknownAssigneeGet.status).toBe(1);
     expect(unknownAssigneeGet.stderr).toContain('unknown field "assignee" for epic');
-    const unknownAssigneeSet = runCli(["epic", "set", "e", "assignee", "bot"]);
+    const unknownAssigneeSet = await runIssueCli(["epic", "set", "e", "assignee", "bot"], { env: env() });
     expect(unknownAssigneeSet.status).toBe(1);
     expect(unknownAssigneeSet.stderr).toContain(
       'unknown or unsettable field "assignee" for epic',
     );
 
     expect(
-      runCli(["epic", "set", "e", "needsAttention", "true", "--reason", "need decision"]).status,
+      (await runIssueCli(["epic", "set", "e", "needsAttention", "true", "--reason", "need decision"], { env: env() })).status,
     ).toBe(0);
-    expect(runCli(["epic", "get", "e", "needsAttention"]).stdout).toBe("true\n");
-    expect(runCli(["epic", "get", "e", "attentionReason"]).stdout).toBe("need decision\n");
-    expect(runCli(["epic", "set", "e", "needsAttention", "false"]).status).toBe(0);
-    expect(runCli(["epic", "get", "e", "needsAttention"]).stdout).toBe("false\n");
-    expect(runCli(["epic", "get", "e", "attentionReason"]).stdout).toBe("");
+    expect((await runIssueCli(["epic", "get", "e", "needsAttention"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["epic", "get", "e", "attentionReason"], { env: env() })).stdout).toBe("need decision\n");
+    expect((await runIssueCli(["epic", "set", "e", "needsAttention", "false"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "get", "e", "needsAttention"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["epic", "get", "e", "attentionReason"], { env: env() })).stdout).toBe("");
 
-    expect(runCli(["epic", "set", "e", "retro", "in-progress"]).status).toBe(0);
-    expect(runCli(["epic", "get", "e", "retro"]).stdout).toBe("in-progress\n");
-    expect(runCli(["epic", "set", "e", "retro", "done"]).status).toBe(0);
-    expect(runCli(["epic", "get", "e", "retro"]).stdout).toBe("done\n");
-    expect(runCli(["epic", "set", "e", "retro", "--clear"]).status).toBe(0);
-    expect(runCli(["epic", "get", "e", "retro"]).stdout).toBe("");
+    expect((await runIssueCli(["epic", "set", "e", "retro", "in-progress"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "get", "e", "retro"], { env: env() })).stdout).toBe("in-progress\n");
+    expect((await runIssueCli(["epic", "set", "e", "retro", "done"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "get", "e", "retro"], { env: env() })).stdout).toBe("done\n");
+    expect((await runIssueCli(["epic", "set", "e", "retro", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "get", "e", "retro"], { env: env() })).stdout).toBe("");
 
-    const invalidRetro = runCli(["epic", "set", "e", "retro", "pending"]);
+    const invalidRetro = await runIssueCli(["epic", "set", "e", "retro", "pending"], { env: env() });
     expect(invalidRetro.status).toBe(1);
     expect(invalidRetro.stderr).toMatch(/invalid retro "pending"/);
   });
 
-  it("replaces and incrementally edits blockedBy", () => {
+  it("replaces and incrementally edits blockedBy", async () => {
     expect(
-      runCli(["epic", "set", "e", "blockedBy", '["blocker"]']).status,
+      (await runIssueCli(["epic", "set", "e", "blockedBy", '["blocker"]'], { env: env() })).status,
     ).toBe(0);
     expect(blockedByOf("e")).toEqual(["blocker"]);
-    expect(runCli(["epic", "get", "e", "blockedBy"]).stdout).toBe('["blocker"]\n');
+    expect((await runIssueCli(["epic", "get", "e", "blockedBy"], { env: env() })).stdout).toBe('["blocker"]\n');
 
-    expect(runCli(["epic", "set", "e", "blockedBy", "--add", "other"]).status).toBe(0);
+    expect((await runIssueCli(["epic", "set", "e", "blockedBy", "--add", "other"], { env: env() })).status).toBe(0);
     expect(blockedByOf("e").sort()).toEqual(["blocker", "other"]);
 
     // --add is idempotent for ids already present.
-    expect(runCli(["epic", "set", "e", "blockedBy", "--add", "blocker", "other"]).status).toBe(
+    expect((await runIssueCli(["epic", "set", "e", "blockedBy", "--add", "blocker", "other"], { env: env() })).status).toBe(
       0,
     );
     expect(blockedByOf("e").sort()).toEqual(["blocker", "other"]);
 
-    expect(runCli(["epic", "set", "e", "blockedBy", "--remove", "blocker"]).status).toBe(0);
+    expect((await runIssueCli(["epic", "set", "e", "blockedBy", "--remove", "blocker"], { env: env() })).status).toBe(0);
     expect(blockedByOf("e")).toEqual(["other"]);
 
-    expect(runCli(["epic", "set", "e", "blockedBy", "--clear"]).status).toBe(0);
+    expect((await runIssueCli(["epic", "set", "e", "blockedBy", "--clear"], { env: env() })).status).toBe(0);
     expect(blockedByOf("e")).toEqual([]);
-    expect(runCli(["epic", "get", "e", "blockedBy"]).stdout).toBe("[]\n");
+    expect((await runIssueCli(["epic", "get", "e", "blockedBy"], { env: env() })).stdout).toBe("[]\n");
   });
 
-  it("rejects invalid blockedBy set modes and wrong kind", () => {
-    expect(runCli(["epic", "set", "e", "blockedBy", '["blocker"]']).status).toBe(0);
+  it("rejects invalid blockedBy set modes and wrong kind", async () => {
+    expect((await runIssueCli(["epic", "set", "e", "blockedBy", '["blocker"]'], { env: env() })).status).toBe(0);
 
-    const combined = runCli([
+    const combined = await runIssueCli([
       "epic",
       "set",
       "e",
@@ -1521,12 +1531,12 @@ describe("epic get/set", () => {
       '["other"]',
       "--add",
       "blocker",
-    ]);
+    ], { env: env() });
     expect(combined.status).toBe(1);
     expect(combined.stderr).toMatch(/mutually exclusive/);
     expect(blockedByOf("e")).toEqual(["blocker"]);
 
-    const missing = runCli(["epic", "set", "e", "blockedBy"]);
+    const missing = await runIssueCli(["epic", "set", "e", "blockedBy"], { env: env() });
     expect(missing.status).toBe(1);
     expect(missing.stderr).toMatch(
       /provide a JSON array value, --file, --add, --remove, or --clear for blockedBy/,
@@ -1541,17 +1551,17 @@ describe("epic get/set", () => {
       createdAt: AT,
       updatedAt: AT,
     });
-    const wrongKind = runCli(["epic", "set", "br", "blockedBy", "--add", "blocker"]);
+    const wrongKind = await runIssueCli(["epic", "set", "br", "blockedBy", "--add", "blocker"], { env: env() });
     expect(wrongKind.status).toBe(1);
     expect(wrongKind.stderr).toMatch(/"br" is a story, not an epic/);
   });
 
-  it("gets derived epicStatus and blocked", () => {
-    expect(runCli(["epic", "get", "e", "epicStatus"]).stdout).toBe("todo\n");
-    expect(runCli(["epic", "get", "e", "blocked"]).stdout).toBe("false\n");
+  it("gets derived epicStatus and blocked", async () => {
+    expect((await runIssueCli(["epic", "get", "e", "epicStatus"], { env: env() })).stdout).toBe("todo\n");
+    expect((await runIssueCli(["epic", "get", "e", "blocked"], { env: env() })).stdout).toBe("false\n");
 
-    expect(runCli(["epic", "set", "e", "blockedBy", '["blocker"]']).status).toBe(0);
-    expect(runCli(["epic", "get", "e", "blocked"]).stdout).toBe("true\n");
+    expect((await runIssueCli(["epic", "set", "e", "blockedBy", '["blocker"]'], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "get", "e", "blocked"], { env: env() })).stdout).toBe("true\n");
 
     writeIssue("br", {
       kind: "story",
@@ -1562,7 +1572,7 @@ describe("epic get/set", () => {
       createdAt: AT,
       updatedAt: AT,
     });
-    expect(runCli(["epic", "get", "e", "epicStatus"]).stdout).toBe("todo\n");
+    expect((await runIssueCli(["epic", "get", "e", "epicStatus"], { env: env() })).stdout).toBe("todo\n");
 
     writeIssue("br", {
       kind: "story",
@@ -1574,11 +1584,11 @@ describe("epic get/set", () => {
       createdAt: AT,
       updatedAt: AT,
     });
-    expect(runCli(["epic", "get", "e", "epicStatus"]).stdout).toBe("in-progress\n");
+    expect((await runIssueCli(["epic", "get", "e", "epicStatus"], { env: env() })).stdout).toBe("in-progress\n");
   });
 
-  it("preserves retro across apply", () => {
-    expect(runCli(["epic", "set", "e", "retro", "in-progress"]).status).toBe(0);
+  it("preserves retro across apply", async () => {
+    expect((await runIssueCli(["epic", "set", "e", "retro", "in-progress"], { env: env() })).status).toBe(0);
 
     const applyPath = join(dir, "epic-apply.yaml");
     writeFileSync(
@@ -1590,26 +1600,26 @@ epic:
   children: []
 `,
     );
-    expect(runCli(["apply", applyPath]).status).toBe(0);
+    expect((await runIssueCli(["apply", applyPath], { env: env() })).status).toBe(0);
     const onDisk = JSON.parse(readFileSync(join(dir, "e", "issue.json"), "utf8"));
     expect(onDisk.retro).toBe("in-progress");
     expect(onDisk.title).toBe("Epic renamed");
   });
 
-  it("refuses kind mismatch and unknown fields", () => {
-    const mismatch = runCli(["epic", "get", "p", "title"]);
+  it("refuses kind mismatch and unknown fields", async () => {
+    const mismatch = await runIssueCli(["epic", "get", "p", "title"], { env: env() });
     expect(mismatch.status).toBe(1);
     expect(mismatch.stderr).toContain('"p" is a project, not an epic');
 
-    const unknownGet = runCli(["epic", "get", "e", "workspace"]);
+    const unknownGet = await runIssueCli(["epic", "get", "e", "workspace"], { env: env() });
     expect(unknownGet.status).toBe(1);
     expect(unknownGet.stderr).toContain('unknown field "workspace" for epic');
 
-    const removedReady = runCli(["epic", "get", "e", "ready"]);
+    const removedReady = await runIssueCli(["epic", "get", "e", "ready"], { env: env() });
     expect(removedReady.status).toBe(1);
     expect(removedReady.stderr).toContain('unknown field "ready" for epic');
 
-    const unknownSet = runCli(["epic", "set", "e", "workspace", "/tmp"]);
+    const unknownSet = await runIssueCli(["epic", "set", "e", "workspace", "/tmp"], { env: env() });
     expect(unknownSet.status).toBe(1);
     expect(unknownSet.stderr).toContain(
       'unknown or unsettable field "workspace" for epic',
@@ -1653,76 +1663,76 @@ describe("story get/set", () => {
     writeFileSync(join(dir, "a", "description.md"), "# Branch\n\nbody\n");
   });
 
-  it("gets and sets allowlisted branch fields", () => {
-    expect(runCli(["story", "get", "a", "title"]).stdout).toBe("Branch A\n");
-    expect(runCli(["story", "get", "a", "description"]).stdout).toBe("# Branch\n\nbody\n");
-    expect(runCli(["story", "get", "a", "merged"]).stdout).toBe("false\n");
-    expect(runCli(["story", "get", "b", "stackedOn"]).stdout).toBe("a\n");
+  it("gets and sets allowlisted branch fields", async () => {
+    expect((await runIssueCli(["story", "get", "a", "title"], { env: env() })).stdout).toBe("Branch A\n");
+    expect((await runIssueCli(["story", "get", "a", "description"], { env: env() })).stdout).toBe("# Branch\n\nbody\n");
+    expect((await runIssueCli(["story", "get", "a", "merged"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["story", "get", "b", "stackedOn"], { env: env() })).stdout).toBe("a\n");
 
-    expect(runCli(["story", "set", "a", "title", "Renamed"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "title"]).stdout).toBe("Renamed\n");
+    expect((await runIssueCli(["story", "set", "a", "title", "Renamed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "title"], { env: env() })).stdout).toBe("Renamed\n");
 
-    expect(runCli(["story", "set", "a", "branchName", "feat/a"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "branchName"]).stdout).toBe("feat/a\n");
+    expect((await runIssueCli(["story", "set", "a", "branchName", "feat/a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "branchName"], { env: env() })).stdout).toBe("feat/a\n");
 
-    expect(runCli(["story", "set", "b", "stackedOn", "--clear"]).status).toBe(0);
-    expect(runCli(["story", "get", "b", "stackedOn"]).stdout).toBe("");
-    expect(runCli(["story", "set", "b", "stackedOn", "a"]).status).toBe(0);
-    expect(runCli(["story", "get", "b", "stackedOn"]).stdout).toBe("a\n");
+    expect((await runIssueCli(["story", "set", "b", "stackedOn", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "b", "stackedOn"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["story", "set", "b", "stackedOn", "a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "b", "stackedOn"], { env: env() })).stdout).toBe("a\n");
 
-    expect(runCli(["story", "set", "a", "prUrl", "https://pr/1"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "prUrl"]).stdout).toBe("https://pr/1\n");
-    expect(runCli(["story", "set", "a", "prUrl", "--clear"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "prUrl"]).stdout).toBe("");
+    expect((await runIssueCli(["story", "set", "a", "prUrl", "https://pr/1"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "prUrl"], { env: env() })).stdout).toBe("https://pr/1\n");
+    expect((await runIssueCli(["story", "set", "a", "prUrl", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "prUrl"], { env: env() })).stdout).toBe("");
 
-    expect(runCli(["story", "set", "a", "review", "passed"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "review"]).stdout).toBe("passed\n");
+    expect((await runIssueCli(["story", "set", "a", "review", "passed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "review"], { env: env() })).stdout).toBe("passed\n");
 
-    expect(runCli(["story", "set", "a", "needsRebase", "main"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "needsRebase"]).stdout).toBe("main\n");
-    expect(runCli(["story", "set", "a", "needsRebase", "--clear"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "needsRebase"]).stdout).toBe("");
+    expect((await runIssueCli(["story", "set", "a", "needsRebase", "main"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "needsRebase"], { env: env() })).stdout).toBe("main\n");
+    expect((await runIssueCli(["story", "set", "a", "needsRebase", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "needsRebase"], { env: env() })).stdout).toBe("");
 
-    expect(runCli(["story", "set", "a", "retro", "in-progress"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "retro"]).stdout).toBe("in-progress\n");
-    expect(runCli(["story", "set", "a", "retro", "done"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "retro"]).stdout).toBe("done\n");
-    expect(runCli(["story", "set", "a", "retro", "--clear"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "retro"]).stdout).toBe("");
+    expect((await runIssueCli(["story", "set", "a", "retro", "in-progress"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "retro"], { env: env() })).stdout).toBe("in-progress\n");
+    expect((await runIssueCli(["story", "set", "a", "retro", "done"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "retro"], { env: env() })).stdout).toBe("done\n");
+    expect((await runIssueCli(["story", "set", "a", "retro", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "retro"], { env: env() })).stdout).toBe("");
 
-    const invalidRetro = runCli(["story", "set", "a", "retro", "pending"]);
+    const invalidRetro = await runIssueCli(["story", "set", "a", "retro", "pending"], { env: env() });
     expect(invalidRetro.status).toBe(1);
     expect(invalidRetro.stderr).toMatch(/invalid retro "pending"/);
 
-    const unknownAssigneeGet = runCli(["story", "get", "a", "assignee"]);
+    const unknownAssigneeGet = await runIssueCli(["story", "get", "a", "assignee"], { env: env() });
     expect(unknownAssigneeGet.status).toBe(1);
     expect(unknownAssigneeGet.stderr).toContain('unknown field "assignee" for story');
-    const unknownAssigneeSet = runCli(["story", "set", "a", "assignee", "bot"]);
+    const unknownAssigneeSet = await runIssueCli(["story", "set", "a", "assignee", "bot"], { env: env() });
     expect(unknownAssigneeSet.status).toBe(1);
     expect(unknownAssigneeSet.stderr).toContain(
       'unknown or unsettable field "assignee" for story',
     );
 
     expect(
-      runCli(["story", "set", "a", "needsAttention", "true", "--reason", "blocked"]).status,
+      (await runIssueCli(["story", "set", "a", "needsAttention", "true", "--reason", "blocked"], { env: env() })).status,
     ).toBe(0);
-    expect(runCli(["story", "get", "a", "needsAttention"]).stdout).toBe("true\n");
-    expect(runCli(["story", "get", "a", "attentionReason"]).stdout).toBe("blocked\n");
-    expect(runCli(["story", "set", "a", "needsAttention", "false"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "needsAttention"]).stdout).toBe("false\n");
-    expect(runCli(["story", "get", "a", "attentionReason"]).stdout).toBe("");
+    expect((await runIssueCli(["story", "get", "a", "needsAttention"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["story", "get", "a", "attentionReason"], { env: env() })).stdout).toBe("blocked\n");
+    expect((await runIssueCli(["story", "set", "a", "needsAttention", "false"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "needsAttention"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["story", "get", "a", "attentionReason"], { env: env() })).stdout).toBe("");
   });
 
-  it("gets derived storyStatus, mergeBase, and blocked", () => {
-    expect(runCli(["story", "get", "a", "storyStatus"]).stdout).toBe("not-started\n");
-    expect(runCli(["story", "get", "a", "mergeBase"]).stdout).toBe("main\n");
-    expect(runCli(["story", "get", "a", "blocked"]).stdout).toBe("false\n");
+  it("gets derived storyStatus, mergeBase, and blocked", async () => {
+    expect((await runIssueCli(["story", "get", "a", "storyStatus"], { env: env() })).stdout).toBe("not-started\n");
+    expect((await runIssueCli(["story", "get", "a", "mergeBase"], { env: env() })).stdout).toBe("main\n");
+    expect((await runIssueCli(["story", "get", "a", "blocked"], { env: env() })).stdout).toBe("false\n");
 
-    expect(runCli(["story", "get", "b", "blocked"]).stdout).toBe("true\n");
+    expect((await runIssueCli(["story", "get", "b", "blocked"], { env: env() })).stdout).toBe("true\n");
     // b is stacked on unnamed a — derived mergeBase unset.
-    expect(runCli(["story", "get", "b", "mergeBase"]).stdout).toBe("");
+    expect((await runIssueCli(["story", "get", "b", "mergeBase"], { env: env() })).stdout).toBe("");
 
-    const add = runCli([
+    const add = await runIssueCli([
       "story",
       "add",
       "Unset child",
@@ -1730,15 +1740,15 @@ describe("story get/set", () => {
       "e",
       "--stacked-on",
       "a",
-    ]);
+    ], { env: env() });
     expect(add.status).toBe(0);
     const childId = add.stdout.trim();
-    expect(runCli(["story", "get", childId, "mergeBase"]).stdout).toBe("");
+    expect((await runIssueCli(["story", "get", childId, "mergeBase"], { env: env() })).stdout).toBe("");
 
-    expect(runCli(["story", "set", "a", "branchName", "feat/a"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "storyStatus"]).stdout).toBe("in-progress\n");
-    expect(runCli(["story", "get", "b", "blocked"]).stdout).toBe("false\n");
-    expect(runCli(["story", "get", "b", "mergeBase"]).stdout).toBe("feat/a\n");
+    expect((await runIssueCli(["story", "set", "a", "branchName", "feat/a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "storyStatus"], { env: env() })).stdout).toBe("in-progress\n");
+    expect((await runIssueCli(["story", "get", "b", "blocked"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["story", "get", "b", "mergeBase"], { env: env() })).stdout).toBe("feat/a\n");
     expect(mergeBaseOf("b")).toBeUndefined();
 
     writeIssue("c1", {
@@ -1750,11 +1760,11 @@ describe("story get/set", () => {
       createdAt: AT,
       updatedAt: AT,
     });
-    expect(runCli(["story", "set", "a", "prUrl", "https://pr/1"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "storyStatus"]).stdout).toBe("pr-open\n");
+    expect((await runIssueCli(["story", "set", "a", "prUrl", "https://pr/1"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "storyStatus"], { env: env() })).stdout).toBe("pr-open\n");
   });
 
-  it("does not cascade mergeBase on disk when parent is merged", () => {
+  it("does not cascade mergeBase on disk when parent is merged", async () => {
     writeIssue("a", {
       kind: "story",
       title: "Branch A",
@@ -1776,36 +1786,36 @@ describe("story get/set", () => {
       updatedAt: AT,
     });
 
-    expect(runCli(["story", "set", "a", "merged", "true"]).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "merged", "true"], { env: env() })).status).toBe(0);
     expect(mergeBaseOf("b")).toBeUndefined();
-    expect(runCli(["story", "get", "b", "mergeBase"]).stdout).toBe("main\n");
-    expect(runCli(["story", "get", "a", "merged"]).stdout).toBe("true\n");
+    expect((await runIssueCli(["story", "get", "b", "mergeBase"], { env: env() })).stdout).toBe("main\n");
+    expect((await runIssueCli(["story", "get", "a", "merged"], { env: env() })).stdout).toBe("true\n");
   });
 
-  it("refuses kind mismatch and unknown fields; mergeBase sets override", () => {
-    const mismatch = runCli(["story", "get", "e", "title"]);
+  it("refuses kind mismatch and unknown fields; mergeBase sets override", async () => {
+    const mismatch = await runIssueCli(["story", "get", "e", "title"], { env: env() });
     expect(mismatch.status).toBe(1);
     expect(mismatch.stderr).toContain('"e" is an epic, not a story');
 
-    const unknownGet = runCli(["story", "get", "a", "blockedBy"]);
+    const unknownGet = await runIssueCli(["story", "get", "a", "blockedBy"], { env: env() });
     expect(unknownGet.status).toBe(1);
     expect(unknownGet.stderr).toContain('unknown field "blockedBy" for story');
 
-    const removedBase = runCli(["story", "get", "a", "base"]);
+    const removedBase = await runIssueCli(["story", "get", "a", "base"], { env: env() });
     expect(removedBase.status).toBe(1);
     expect(removedBase.stderr).toContain('unknown field "base" for story');
 
-    const removedReady = runCli(["story", "get", "a", "ready"]);
+    const removedReady = await runIssueCli(["story", "get", "a", "ready"], { env: env() });
     expect(removedReady.status).toBe(1);
     expect(removedReady.stderr).toContain('unknown field "ready" for story');
 
-    const epicStorySet = runCli(["story", "set", "a", "mergeBase", "feat/existing"]);
+    const epicStorySet = await runIssueCli(["story", "set", "a", "mergeBase", "feat/existing"], { env: env() });
     expect(epicStorySet.status).toBe(1);
     expect(epicStorySet.stderr).toContain(
       "mergeBase can only be set on a root-level Story or an Epic",
     );
 
-    const stackedSet = runCli(["story", "set", "b", "mergeBase", "feat/stacked"]);
+    const stackedSet = await runIssueCli(["story", "set", "b", "mergeBase", "feat/stacked"], { env: env() });
     expect(stackedSet.status).toBe(1);
     expect(stackedSet.stderr).toContain(
       "mergeBase can only be set on a root-level Story or an Epic",
@@ -1820,20 +1830,20 @@ describe("story get/set", () => {
       createdAt: AT,
       updatedAt: AT,
     });
-    expect(runCli(["story", "set", "root", "mergeBase", "feat/existing"]).status).toBe(
+    expect((await runIssueCli(["story", "set", "root", "mergeBase", "feat/existing"], { env: env() })).status).toBe(
       0,
     );
     expect(issueJsonField("root", "mergeBaseOverride")).toBe("feat/existing");
     expect(issueJsonField("root", "mergeBase")).toBeUndefined();
-    expect(runCli(["story", "get", "root", "mergeBase"]).stdout).toBe(
+    expect((await runIssueCli(["story", "get", "root", "mergeBase"], { env: env() })).stdout).toBe(
       "feat/existing\n",
     );
 
-    expect(runCli(["epic", "set", "e", "mergeBase", "feat/epic-base"]).status).toBe(
+    expect((await runIssueCli(["epic", "set", "e", "mergeBase", "feat/epic-base"], { env: env() })).status).toBe(
       0,
     );
     expect(issueJsonField("e", "mergeBaseOverride")).toBe("feat/epic-base");
-    expect(runCli(["story", "get", "a", "mergeBase"]).stdout).toBe(
+    expect((await runIssueCli(["story", "get", "a", "mergeBase"], { env: env() })).stdout).toBe(
       "feat/epic-base\n",
     );
 
@@ -1846,22 +1856,22 @@ describe("story get/set", () => {
       createdAt: AT,
       updatedAt: AT,
     });
-    const setOnCommit = runCli(["story", "set", "c1", "review", "passed"]);
+    const setOnCommit = await runIssueCli(["story", "set", "c1", "review", "passed"], { env: env() });
     expect(setOnCommit.status).toBe(1);
     expect(setOnCommit.stderr).toMatch(/"c1" is a task, not a story/);
   });
 
-  it("surfaces review in view/list and preserves it across apply", () => {
-    expect(runCli(["story", "view", "a"]).stdout).not.toContain("review:");
+  it("surfaces review in view/list and preserves it across apply", async () => {
+    expect((await runIssueCli(["story", "view", "a"], { env: env() })).stdout).not.toContain("review:");
 
-    expect(runCli(["story", "set", "a", "review", "passed"]).status).toBe(0);
-    expect(runCli(["story", "view", "a"]).stdout).toContain("review: passed");
+    expect((await runIssueCli(["story", "set", "a", "review", "passed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "view", "a"], { env: env() })).stdout).toContain("review: passed");
 
-    const listed = JSON.parse(runCli(["list", "--in", "p"]).stdout);
+    const listed = JSON.parse((await runIssueCli(["list", "--in", "p"], { env: env() })).stdout);
     const branch = listed.issues.find((i: { id: string }) => i.id === "a");
     expect(branch.review).toBe("passed");
 
-    const invalid = runCli(["story", "set", "a", "review", "pending"]);
+    const invalid = await runIssueCli(["story", "set", "a", "review", "pending"], { env: env() });
     expect(invalid.status).toBe(1);
     expect(invalid.stderr).toMatch(/invalid review "pending"/);
 
@@ -1878,17 +1888,17 @@ epic:
       title: Branch A renamed
 `,
     );
-    expect(runCli(["story", "set", "a", "review", "failed"]).status).toBe(0);
-    expect(runCli(["apply", applyPath]).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "review", "failed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["apply", applyPath], { env: env() })).status).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "a", "issue.json"), "utf8")).review).toBe(
       "failed",
     );
-    expect(runCli(["story", "view", "a"]).stdout).toContain("review: failed");
-    expect(runCli(["story", "view", "a"]).stdout).toContain("title: Branch A renamed");
+    expect((await runIssueCli(["story", "view", "a"], { env: env() })).stdout).toContain("review: failed");
+    expect((await runIssueCli(["story", "view", "a"], { env: env() })).stdout).toContain("title: Branch A renamed");
   });
 
-  it("preserves retro across apply", () => {
-    expect(runCli(["story", "set", "a", "retro", "in-progress"]).status).toBe(0);
+  it("preserves retro across apply", async () => {
+    expect((await runIssueCli(["story", "set", "a", "retro", "in-progress"], { env: env() })).status).toBe(0);
 
     const applyPath = join(dir, "epic-retro.yaml");
     writeFileSync(
@@ -1903,7 +1913,7 @@ epic:
       title: Branch A renamed
 `,
     );
-    expect(runCli(["apply", applyPath]).status).toBe(0);
+    expect((await runIssueCli(["apply", applyPath], { env: env() })).status).toBe(0);
     const onDisk = JSON.parse(readFileSync(join(dir, "a", "issue.json"), "utf8"));
     expect(onDisk.retro).toBe("in-progress");
     expect(onDisk.title).toBe("Branch A renamed");
@@ -1967,146 +1977,146 @@ describe("task get/set", () => {
     writeFileSync(join(dir, "c1", "description.md"), "# Commit\n\nbody\n");
   });
 
-  it("gets and sets allowlisted commit fields", () => {
-    expect(runCli(["task", "get", "c1", "title"]).stdout).toBe("Commit 1\n");
-    expect(runCli(["task", "get", "c1", "description"]).stdout).toBe("# Commit\n\nbody\n");
-    expect(runCli(["task", "get", "c1", "status"]).stdout).toBe("todo\n");
-    expect(runCli(["task", "get", "c1", "noDiff"]).stdout).toBe("");
+  it("gets and sets allowlisted commit fields", async () => {
+    expect((await runIssueCli(["task", "get", "c1", "title"], { env: env() })).stdout).toBe("Commit 1\n");
+    expect((await runIssueCli(["task", "get", "c1", "description"], { env: env() })).stdout).toBe("# Commit\n\nbody\n");
+    expect((await runIssueCli(["task", "get", "c1", "status"], { env: env() })).stdout).toBe("todo\n");
+    expect((await runIssueCli(["task", "get", "c1", "noDiff"], { env: env() })).stdout).toBe("");
 
-    expect(runCli(["task", "set", "c1", "title", "Renamed"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "title"]).stdout).toBe("Renamed\n");
+    expect((await runIssueCli(["task", "set", "c1", "title", "Renamed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "title"], { env: env() })).stdout).toBe("Renamed\n");
 
-    expect(runCli(["task", "set", "c1", "status", "in-progress"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "status"]).stdout).toBe("in-progress\n");
+    expect((await runIssueCli(["task", "set", "c1", "status", "in-progress"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "status"], { env: env() })).stdout).toBe("in-progress\n");
 
-    expect(runCli(["task", "set", "c1", "status", "fixing"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "status"]).stdout).toBe("fixing\n");
+    expect((await runIssueCli(["task", "set", "c1", "status", "fixing"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "status"], { env: env() })).stdout).toBe("fixing\n");
 
-    expect(runCli(["task", "set", "c1", "qa", "reviewing"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "qa"]).stdout).toBe("reviewing\n");
-    expect(runCli(["task", "set", "c1", "qa", "--clear"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "qa"]).stdout).toBe("");
+    expect((await runIssueCli(["task", "set", "c1", "qa", "reviewing"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "qa"], { env: env() })).stdout).toBe("reviewing\n");
+    expect((await runIssueCli(["task", "set", "c1", "qa", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "qa"], { env: env() })).stdout).toBe("");
 
-    const invalidQa = runCli(["task", "set", "c1", "qa", "pending"]);
+    const invalidQa = await runIssueCli(["task", "set", "c1", "qa", "pending"], { env: env() });
     expect(invalidQa.status).toBe(1);
     expect(invalidQa.stderr).toMatch(/invalid qa "pending"/);
 
-    expect(runCli(["task", "set", "c1", "commitSha", sha1]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "commitSha"]).stdout).toBe(`${sha1}\n`);
-    expect(runCli(["task", "set", "c1", "commitSha", "--clear"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "commitSha"]).stdout).toBe("");
+    expect((await runIssueCli(["task", "set", "c1", "commitSha", sha1], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "commitSha"], { env: env() })).stdout).toBe(`${sha1}\n`);
+    expect((await runIssueCli(["task", "set", "c1", "commitSha", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "commitSha"], { env: env() })).stdout).toBe("");
 
-    expect(runCli(["task", "set", "c1", "noDiff", "true"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "noDiff"]).stdout).toBe("true\n");
-    expect(runCli(["task", "set", "c1", "noDiff", "false"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "noDiff"]).stdout).toBe("");
+    expect((await runIssueCli(["task", "set", "c1", "noDiff", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "noDiff"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["task", "set", "c1", "noDiff", "false"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "noDiff"], { env: env() })).stdout).toBe("");
 
-    expect(runCli(["task", "set", "c1", "assignee", "bot"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "assignee"]).stdout).toBe("bot\n");
-    expect(runCli(["task", "set", "c1", "assignee", "--clear"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "assignee"]).stdout).toBe("");
+    expect((await runIssueCli(["task", "set", "c1", "assignee", "bot"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "assignee"], { env: env() })).stdout).toBe("bot\n");
+    expect((await runIssueCli(["task", "set", "c1", "assignee", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "assignee"], { env: env() })).stdout).toBe("");
 
     expect(
-      runCli(["task", "set", "c1", "needsAttention", "true", "--reason", "blocked"]).status,
+      (await runIssueCli(["task", "set", "c1", "needsAttention", "true", "--reason", "blocked"], { env: env() })).status,
     ).toBe(0);
-    expect(runCli(["task", "get", "c1", "needsAttention"]).stdout).toBe("true\n");
-    expect(runCli(["task", "get", "c1", "attentionReason"]).stdout).toBe("blocked\n");
-    expect(runCli(["task", "set", "c1", "needsAttention", "false"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "needsAttention"]).stdout).toBe("false\n");
-    expect(runCli(["task", "get", "c1", "attentionReason"]).stdout).toBe("");
+    expect((await runIssueCli(["task", "get", "c1", "needsAttention"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["task", "get", "c1", "attentionReason"], { env: env() })).stdout).toBe("blocked\n");
+    expect((await runIssueCli(["task", "set", "c1", "needsAttention", "false"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "needsAttention"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["task", "get", "c1", "attentionReason"], { env: env() })).stdout).toBe("");
   });
 
-  it("sets description from --file", () => {
+  it("sets description from --file", async () => {
     const descFile = join(dir, "desc.md");
     writeFileSync(descFile, "from file\n");
     expect(
-      runCli(["task", "set", "c1", "description", "--file", descFile]).status,
+      (await runIssueCli(["task", "set", "c1", "description", "--file", descFile], { env: env() })).status,
     ).toBe(0);
-    expect(runCli(["task", "get", "c1", "description"]).stdout).toBe("from file\n");
+    expect((await runIssueCli(["task", "get", "c1", "description"], { env: env() })).stdout).toBe("from file\n");
   });
 
-  it("gets derived blocked", () => {
-    expect(runCli(["task", "get", "c1", "blocked"]).stdout).toBe("false\n");
-    expect(runCli(["task", "get", "c2", "blocked"]).stdout).toBe("true\n");
+  it("gets derived blocked", async () => {
+    expect((await runIssueCli(["task", "get", "c1", "blocked"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["task", "get", "c2", "blocked"], { env: env() })).stdout).toBe("true\n");
 
-    expect(runCli(["task", "set", "c1", "status", "done"]).status).toBe(0);
-    expect(runCli(["task", "get", "c1", "blocked"]).stdout).toBe("false\n");
-    expect(runCli(["task", "get", "c2", "blocked"]).stdout).toBe("false\n");
+    expect((await runIssueCli(["task", "set", "c1", "status", "done"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "blocked"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["task", "get", "c2", "blocked"], { env: env() })).stdout).toBe("false\n");
   });
 
-  it("refuses kind mismatch, unknown fields, and invalid commitSha / noDiff", () => {
-    const mismatch = runCli(["task", "get", "a", "title"]);
+  it("refuses kind mismatch, unknown fields, and invalid commitSha / noDiff", async () => {
+    const mismatch = await runIssueCli(["task", "get", "a", "title"], { env: env() });
     expect(mismatch.status).toBe(1);
     expect(mismatch.stderr).toContain('"a" is a story, not a task');
 
-    const unknownGet = runCli(["task", "get", "c1", "branchName"]);
+    const unknownGet = await runIssueCli(["task", "get", "c1", "branchName"], { env: env() });
     expect(unknownGet.status).toBe(1);
     expect(unknownGet.stderr).toContain('unknown field "branchName" for task');
 
-    const removedReady = runCli(["task", "get", "c1", "ready"]);
+    const removedReady = await runIssueCli(["task", "get", "c1", "ready"], { env: env() });
     expect(removedReady.status).toBe(1);
     expect(removedReady.stderr).toContain('unknown field "ready" for task');
 
-    const unknownSet = runCli(["task", "set", "c1", "branchName", "feat/x"]);
+    const unknownSet = await runIssueCli(["task", "set", "c1", "branchName", "feat/x"], { env: env() });
     expect(unknownSet.status).toBe(1);
     expect(unknownSet.stderr).toContain(
       'unknown or unsettable field "branchName" for task',
     );
 
-    const badSha = runCli(["task", "set", "c1", "commitSha", "4019c25"]);
+    const badSha = await runIssueCli(["task", "set", "c1", "commitSha", "4019c25"], { env: env() });
     expect(badSha.status).toBe(1);
     expect(badSha.stderr).toMatch(/invalid commit sha "4019c25"/);
 
-    const shortSha = runCli([
+    const shortSha = await runIssueCli([
       "task",
       "set",
       "c1",
       "commitSha",
       "0123456789abcdef0123456789abcdef0123456",
-    ]);
+    ], { env: env() });
     expect(shortSha.status).toBe(1);
     expect(shortSha.stderr).toMatch(/invalid commit sha/);
 
-    const nonHex = runCli([
+    const nonHex = await runIssueCli([
       "task",
       "set",
       "c1",
       "commitSha",
       "ghijghijghijghijghijghijghijghijghijghij",
-    ]);
+    ], { env: env() });
     expect(nonHex.status).toBe(1);
     expect(nonHex.stderr).toMatch(/invalid commit sha/);
 
-    const upper = runCli([
+    const upper = await runIssueCli([
       "task",
       "set",
       "c1",
       "commitSha",
       "0123456789ABCDEF0123456789ABCDEF01234567",
-    ]);
+    ], { env: env() });
     expect(upper.status).toBe(1);
     expect(upper.stderr).toMatch(/invalid commit sha/);
 
-    expect(runCli(["task", "set", "a", "commitSha", sha1]).stderr).toMatch(
+    expect((await runIssueCli(["task", "set", "a", "commitSha", sha1], { env: env() })).stderr).toMatch(
       /"a" is a story, not a task/,
     );
-    expect(runCli(["task", "set", "a", "noDiff", "true"]).stderr).toMatch(
+    expect((await runIssueCli(["task", "set", "a", "noDiff", "true"], { env: env() })).stderr).toMatch(
       /"a" is a story, not a task/,
     );
 
-    const badNoDiff = runCli(["task", "set", "c1", "noDiff", "maybe"]);
+    const badNoDiff = await runIssueCli(["task", "set", "c1", "noDiff", "maybe"], { env: env() });
     expect(badNoDiff.status).toBe(1);
     expect(badNoDiff.stderr).toMatch(/invalid noDiff "maybe"/);
   });
 
-  it("surfaces qa in view/tree and preserves it across apply", () => {
-    expect(runCli(["task", "view", "c1"]).stdout).not.toContain("qa:");
+  it("surfaces qa in view/tree and preserves it across apply", async () => {
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).not.toContain("qa:");
 
-    expect(runCli(["task", "set", "c1", "status", "fixing"]).status).toBe(0);
-    expect(runCli(["task", "set", "c1", "qa", "passed"]).status).toBe(0);
-    expect(runCli(["task", "view", "c1"]).stdout).toContain("status: fixing");
-    expect(runCli(["task", "view", "c1"]).stdout).toContain("qa: passed");
-    expect(runCli(["tree", "p"]).stdout).toMatch(/^ {6}task c1\b.*\bqa=passed/m);
+    expect((await runIssueCli(["task", "set", "c1", "status", "fixing"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "set", "c1", "qa", "passed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("status: fixing");
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("qa: passed");
+    expect((await runIssueCli(["tree", "p"], { env: env() })).stdout).toMatch(/^ {6}task c1\b.*\bqa=passed/m);
 
     const applyPath = join(dir, "task-apply.yaml");
     writeFileSync(
@@ -2125,36 +2135,36 @@ epic:
           title: Commit 1 renamed
 `,
     );
-    expect(runCli(["apply", applyPath]).status).toBe(0);
+    expect((await runIssueCli(["apply", applyPath], { env: env() })).status).toBe(0);
     const onDisk = JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8"));
     expect(onDisk.status).toBe("fixing");
     expect(onDisk.qa).toBe("passed");
-    expect(runCli(["task", "view", "c1"]).stdout).toContain("qa: passed");
-    expect(runCli(["task", "view", "c1"]).stdout).toContain("title: Commit 1 renamed");
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("qa: passed");
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("title: Commit 1 renamed");
 
-    expect(runCli(["task", "set", "c1", "qa", "--clear"]).status).toBe(0);
-    expect(runCli(["tree", "p"]).stdout).not.toMatch(/^ {6}task c1\b.*\bqa=/m);
+    expect((await runIssueCli(["task", "set", "c1", "qa", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["tree", "p"], { env: env() })).stdout).not.toMatch(/^ {6}task c1\b.*\bqa=/m);
   });
 
-  it("accepts sha256 commitSha and surfaces noDiff in view/summary", () => {
-    expect(runCli(["task", "set", "c1", "commitSha", sha256]).status).toBe(0);
+  it("accepts sha256 commitSha and surfaces noDiff in view/summary", async () => {
+    expect((await runIssueCli(["task", "set", "c1", "commitSha", sha256], { env: env() })).status).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8")).commitSha).toBe(
       sha256,
     );
 
-    expect(runCli(["task", "view", "c1"]).stdout).not.toContain("noDiff:");
-    expect(runCli(["task", "set", "c1", "noDiff", "true"]).status).toBe(0);
-    expect(runCli(["task", "view", "c1"]).stdout).toContain("noDiff: true");
-    expect(runCli(["summary", "c1"]).stdout).toContain("noDiff: true");
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).not.toContain("noDiff:");
+    expect((await runIssueCli(["task", "set", "c1", "noDiff", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("noDiff: true");
+    expect((await runIssueCli(["summary", "c1"], { env: env() })).stdout).toContain("noDiff: true");
 
-    expect(runCli(["task", "set", "c1", "noDiff", "false"]).status).toBe(0);
+    expect((await runIssueCli(["task", "set", "c1", "noDiff", "false"], { env: env() })).status).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8"))).not.toHaveProperty(
       "noDiff",
     );
-    expect(runCli(["task", "view", "c1"]).stdout).not.toContain("noDiff:");
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).not.toContain("noDiff:");
   });
 
-  it("gets whitespace assignee as stored and errors on unknown id", () => {
+  it("gets whitespace assignee as stored and errors on unknown id", async () => {
     writeIssue("c1", {
       kind: "task",
       title: "Commit 1",
@@ -2165,23 +2175,23 @@ epic:
       createdAt: AT,
       updatedAt: AT,
     });
-    expect(runCli(["task", "get", "c1", "assignee"]).stdout).toBe("   \n");
+    expect((await runIssueCli(["task", "get", "c1", "assignee"], { env: env() })).stdout).toBe("   \n");
 
-    const unknown = runCli(["task", "get", "ghost", "assignee"]);
+    const unknown = await runIssueCli(["task", "get", "ghost", "assignee"], { env: env() });
     expect(unknown.status).toBe(1);
     expect(unknown.stderr).toContain('unknown issue "ghost"');
   });
 
-  it("reparents via partOf and rejects bad parents", () => {
-    expect(runCli(["task", "set", "c1", "partOf", "a2"]).status).toBe(0);
+  it("reparents via partOf and rejects bad parents", async () => {
+    expect((await runIssueCli(["task", "set", "c1", "partOf", "a2"], { env: env() })).status).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8")).partOf).toBe("a2");
 
-    const wrongKind = runCli(["task", "set", "c1", "partOf", "e"]);
+    const wrongKind = await runIssueCli(["task", "set", "c1", "partOf", "e"], { env: env() });
     expect(wrongKind.status).toBe(1);
     expect(wrongKind.stderr).toMatch(/must be a story, not a epic/);
     expect(JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8")).partOf).toBe("a2");
 
-    const unknown = runCli(["task", "set", "c1", "partOf", "ghost"]);
+    const unknown = await runIssueCli(["task", "set", "c1", "partOf", "ghost"], { env: env() });
     expect(unknown.status).toBe(1);
     expect(unknown.stderr).toMatch(/references unknown issue "ghost"/);
   });
@@ -2218,8 +2228,8 @@ describe("tree", () => {
     });
   });
 
-  it("renders indentation, chips, and stacked depth-first order", () => {
-    const { stdout, status } = runCli(["tree", "p"]);
+  it("renders indentation, chips, and stacked depth-first order", async () => {
+    const { stdout, status } = await runIssueCli(["tree", "p"], { env: env() });
     expect(status).toBe(0);
     // Indentation: project at col 0, epic +2, root branch +4, commit +6.
     expect(stdout).toMatch(/^project p {2}Proj$/m);
@@ -2241,10 +2251,10 @@ describe("tree", () => {
     expect(stdout.indexOf("task c1")).toBeLessThan(stdout.indexOf("story b"));
   });
 
-  it("shows mergeBase=(unset) for a stacked child whose mergeBase is not set yet", () => {
+  it("shows mergeBase=(unset) for a stacked child whose mergeBase is not set yet", async () => {
     // Create via the CLI: child of an unnamed parent leaves derived mergeBase
     // unset until the parent gets a branchName.
-    const add = runCli([
+    const add = await runIssueCli([
       "story",
       "add",
       "Unset child",
@@ -2252,33 +2262,33 @@ describe("tree", () => {
       "e",
       "--stacked-on",
       "a",
-    ]);
+    ], { env: env() });
     expect(add.status).toBe(0);
     const childId = add.stdout.trim();
-    const { stdout, status } = runCli(["tree", "p"]);
+    const { stdout, status } = await runIssueCli(["tree", "p"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toMatch(
       new RegExp(`^\\s+story ${childId}\\b.*\\bmergeBase=\\(unset\\)`, "m"),
     );
   });
 
-  it("scopes by a positional project id", () => {
-    const { stdout, status } = runCli(["tree", "p"]);
+  it("scopes by a positional project id", async () => {
+    const { stdout, status } = await runIssueCli(["tree", "p"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toMatch(/^project p {2}Proj$/m);
     expect(stdout).toContain("epic e");
   });
 
-  it("scopes by a positional epic id", () => {
-    const { stdout, status } = runCli(["tree", "e"]);
+  it("scopes by a positional epic id", async () => {
+    const { stdout, status } = await runIssueCli(["tree", "e"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toMatch(/^epic e {2}Epic\b/m);
     expect(stdout).toContain("story a");
     expect(stdout).not.toContain("project p");
   });
 
-  it("scopes by a positional story id to that story and its tasks only", () => {
-    const { stdout, status } = runCli(["tree", "a"]);
+  it("scopes by a positional story id to that story and its tasks only", async () => {
+    const { stdout, status } = await runIssueCli(["tree", "a"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toMatch(/^story a {2}Branch A\b/m);
     expect(stdout).toMatch(/^ {2}task c1 {2}C1\b/m);
@@ -2286,61 +2296,61 @@ describe("tree", () => {
     expect(stdout).not.toContain("epic e");
   });
 
-  it("refuses a positional task id and names the parent story", () => {
-    const { stderr, status } = runCli(["tree", "c1"]);
+  it("refuses a positional task id and names the parent story", async () => {
+    const { stderr, status } = await runIssueCli(["tree", "c1"], { env: env() });
     expect(status).toBe(1);
     expect(stderr).toContain("cannot scope tree to a task");
     expect(stderr).toContain('story "a"');
   });
 
-  it("refuses an unknown positional id", () => {
-    const { stderr, status } = runCli(["tree", "ghost"]);
+  it("refuses an unknown positional id", async () => {
+    const { stderr, status } = await runIssueCli(["tree", "ghost"], { env: env() });
     expect(status).toBe(1);
     expect(stderr).toContain('unknown issue "ghost"');
   });
 
-  it("refuses title lookup and dropped scope flags", () => {
-    const byTitle = runCli(["tree", "Proj"]);
+  it("refuses title lookup and dropped scope flags", async () => {
+    const byTitle = await runIssueCli(["tree", "Proj"], { env: env() });
     expect(byTitle.status).toBe(1);
     expect(byTitle.stderr).toContain('unknown issue "Proj"');
 
-    const withProject = runCli(["tree", "--project", "p"]);
+    const withProject = await runIssueCli(["tree", "--project", "p"], { env: env() });
     expect(withProject.status).not.toBe(0);
     expect(withProject.stderr).toMatch(/unknown option '--project'/);
 
-    const withEpic = runCli(["tree", "--epic", "e"]);
+    const withEpic = await runIssueCli(["tree", "--epic", "e"], { env: env() });
     expect(withEpic.status).not.toBe(0);
     expect(withEpic.stderr).toMatch(/unknown option '--epic'/);
   });
 
-  it("lists the same project/epic/story scopes as tree via --in and omits for all", () => {
-    const projectList = JSON.parse(runCli(["list", "--in", "p"]).stdout);
+  it("lists the same project/epic/story scopes as tree via --in and omits for all", async () => {
+    const projectList = JSON.parse((await runIssueCli(["list", "--in", "p"], { env: env() })).stdout);
     expect(projectList.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["a", "b", "c1", "e", "p"],
     );
 
-    const epicList = JSON.parse(runCli(["list", "--in", "e"]).stdout);
+    const epicList = JSON.parse((await runIssueCli(["list", "--in", "e"], { env: env() })).stdout);
     expect(epicList.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["a", "b", "c1", "e"],
     );
 
-    const storyList = JSON.parse(runCli(["list", "--in", "a"]).stdout);
+    const storyList = JSON.parse((await runIssueCli(["list", "--in", "a"], { env: env() })).stdout);
     expect(storyList.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["a", "c1"],
     );
 
-    const all = JSON.parse(runCli(["list"]).stdout);
+    const all = JSON.parse((await runIssueCli(["list"], { env: env() })).stdout);
     expect(all.issues.map((i: { id: string }) => i.id).sort()).toEqual(
       ["a", "b", "c1", "e", "p"],
     );
 
-    const taskList = runCli(["list", "--in", "c1"]);
+    const taskList = await runIssueCli(["list", "--in", "c1"], { env: env() });
     expect(taskList.status).toBe(1);
     expect(taskList.stderr).toContain("cannot scope list to a task");
   });
 
-  it("filters by kind positional combined with --in scope", () => {
-    const listed = JSON.parse(runCli(["list", "story", "--in", "p"]).stdout);
+  it("filters by kind positional combined with --in scope", async () => {
+    const listed = JSON.parse((await runIssueCli(["list", "story", "--in", "p"], { env: env() })).stdout);
     const ids = listed.issues.map((i: { id: string }) => i.id).sort();
     expect(ids).toEqual(["a", "b"]);
     for (const id of ids) {
@@ -2351,8 +2361,8 @@ describe("tree", () => {
     }
   });
 
-  it("combines kind filter with epic and story --in anchors on unarchived fixtures", () => {
-    const storiesInEpicRun = runCli(["list", "story", "--in", "e"]);
+  it("combines kind filter with epic and story --in anchors on unarchived fixtures", async () => {
+    const storiesInEpicRun = await runIssueCli(["list", "story", "--in", "e"], { env: env() });
     expect(storiesInEpicRun.status).toBe(0);
     const storiesInEpic = JSON.parse(storiesInEpicRun.stdout);
     expect(storiesInEpic.issues.map((i: { id: string }) => i.id).sort()).toEqual(
@@ -2363,7 +2373,7 @@ describe("tree", () => {
       expect(storiesInEpic.derived[issue.id]).toBeDefined();
     }
 
-    const tasksInStoryRun = runCli(["list", "task", "--in", "a"]);
+    const tasksInStoryRun = await runIssueCli(["list", "task", "--in", "a"], { env: env() });
     expect(tasksInStoryRun.status).toBe(0);
     const tasksInStory = JSON.parse(tasksInStoryRun.stdout);
     expect(tasksInStory.issues.map((i: { id: string }) => i.id)).toEqual(["c1"]);
@@ -2371,20 +2381,20 @@ describe("tree", () => {
     expect(tasksInStory.derived.c1).toBeDefined();
   });
 
-  it("returns every kind in scope with --in only", () => {
-    const listed = JSON.parse(runCli(["list", "--in", "p"]).stdout);
+  it("returns every kind in scope with --in only", async () => {
+    const listed = JSON.parse((await runIssueCli(["list", "--in", "p"], { env: env() })).stdout);
     const kinds = new Set(listed.issues.map((i: { kind: string }) => i.kind));
     expect(kinds).toEqual(new Set(["project", "epic", "story", "task"]));
   });
 
-  it("spans all projects when scope and kind are omitted", () => {
+  it("spans all projects when scope and kind are omitted", async () => {
     writeIssue("p2", {
       kind: "project",
       title: "Other",
       createdAt: nextAt(),
       updatedAt: nextAt(),
     });
-    const listed = JSON.parse(runCli(["list"]).stdout);
+    const listed = JSON.parse((await runIssueCli(["list"], { env: env() })).stdout);
     const projectIds = listed.issues
       .filter((i: { kind: string }) => i.kind === "project")
       .map((i: { id: string }) => i.id)
@@ -2392,7 +2402,7 @@ describe("tree", () => {
     expect(projectIds).toEqual(["p", "p2"]);
   });
 
-  it("refuses --in with an idea or task id", () => {
+  it("refuses --in with an idea or task id", async () => {
     writeIssue("idea-x", {
       kind: "idea",
       title: "Capture",
@@ -2400,25 +2410,25 @@ describe("tree", () => {
       createdAt: nextAt(),
       updatedAt: nextAt(),
     });
-    const ideaScope = runCli(["list", "--in", "idea-x"]);
+    const ideaScope = await runIssueCli(["list", "--in", "idea-x"], { env: env() });
     expect(ideaScope.status).toBe(1);
     expect(ideaScope.stderr).toContain("cannot scope list to an idea");
 
-    const taskScope = runCli(["list", "--in", "c1"]);
+    const taskScope = await runIssueCli(["list", "--in", "c1"], { env: env() });
     expect(taskScope.status).toBe(1);
     expect(taskScope.stderr).toContain("cannot scope list to a task");
   });
 
-  it("errors on a non-kind positional with teaching message", () => {
-    const bad = runCli(["list", "p"]);
+  it("errors on a non-kind positional with teaching message", async () => {
+    const bad = await runIssueCli(["list", "p"], { env: env() });
     expect(bad.status).toBe(1);
     expect(bad.stderr).toContain(
       'unknown kind "p"; to scope by container use: issue list --in p',
     );
   });
 
-  it("describes output shape in --help", () => {
-    const help = runCli(["list", "--help"]);
+  it("describes output shape in --help", async () => {
+    const help = await runIssueCli(["list", "--help"], { env: env() });
     expect(help.status).toBe(0);
     expect(help.stdout).toContain("issues");
     expect(help.stdout).toContain("derived");
@@ -2433,40 +2443,40 @@ describe("tree", () => {
     expect(help.stdout).toContain("reviewCurrent");
   });
 
-  it("shows review and retro chips on the correct lines only when set", () => {
-    const unset = runCli(["tree", "p"]);
+  it("shows review and retro chips on the correct lines only when set", async () => {
+    const unset = await runIssueCli(["tree", "p"], { env: env() });
     expect(unset.status).toBe(0);
     expect(unset.stdout).not.toMatch(/^ {2}epic e\b.*\bretro=/m);
     expect(unset.stdout).not.toMatch(/^ {4}story a\b.*\breview=/m);
     expect(unset.stdout).not.toMatch(/^ {4}story a\b.*\bretro=/m);
 
-    expect(runCli(["epic", "set", "e", "retro", "in-progress"]).status).toBe(0);
-    expect(runCli(["story", "set", "a", "review", "passed"]).status).toBe(0);
-    expect(runCli(["story", "set", "a", "retro", "done"]).status).toBe(0);
+    expect((await runIssueCli(["epic", "set", "e", "retro", "in-progress"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "review", "passed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "retro", "done"], { env: env() })).status).toBe(0);
 
-    const set = runCli(["tree", "p"]);
+    const set = await runIssueCli(["tree", "p"], { env: env() });
     expect(set.status).toBe(0);
     expect(set.stdout).toMatch(/^ {2}epic e\b.*\bretro=in-progress\b/m);
     expect(set.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b/m);
     expect(set.stdout).toMatch(/^ {4}story a\b.*\bretro=done\b/m);
 
-    expect(runCli(["epic", "set", "e", "retro", "--clear"]).status).toBe(0);
-    expect(runCli(["story", "set", "a", "retro", "--clear"]).status).toBe(0);
+    expect((await runIssueCli(["epic", "set", "e", "retro", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "retro", "--clear"], { env: env() })).status).toBe(0);
 
-    const cleared = runCli(["tree", "p"]);
+    const cleared = await runIssueCli(["tree", "p"], { env: env() });
     expect(cleared.status).toBe(0);
     expect(cleared.stdout).not.toMatch(/^ {2}epic e\b.*\bretro=/m);
     expect(cleared.stdout).not.toMatch(/^ {4}story a\b.*\bretro=/m);
     expect(cleared.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b/m);
   });
 
-  it("shows review stale chip when coverage is out of date and never reviewedTasks", () => {
-    expect(runCli(["story", "set", "a", "branchName", "feat/a"]).status).toBe(0);
-    expect(runCli(["task", "set", "c1", "status", "done"]).status).toBe(0);
-    expect(runCli(["story", "set", "a", "review", "passed"]).status).toBe(0);
-    expect(runCli(["story", "set", "a", "reviewedTasks", '["c1"]']).status).toBe(0);
+  it("shows review stale chip when coverage is out of date and never reviewedTasks", async () => {
+    expect((await runIssueCli(["story", "set", "a", "branchName", "feat/a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "set", "c1", "status", "done"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "review", "passed"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "reviewedTasks", '["c1"]'], { env: env() })).status).toBe(0);
 
-    const current = runCli(["tree", "p"]);
+    const current = await runIssueCli(["tree", "p"], { env: env() });
     expect(current.status).toBe(0);
     expect(current.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b/m);
     expect(current.stdout).not.toMatch(/^ {4}story a\b.*\bstale\b/m);
@@ -2482,32 +2492,32 @@ describe("tree", () => {
       updatedAt: nextAt(),
     });
 
-    const stale = runCli(["tree", "p"]);
+    const stale = await runIssueCli(["tree", "p"], { env: env() });
     expect(stale.status).toBe(0);
     expect(stale.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b.*\bstale\b/m);
     expect(stale.stdout).not.toMatch(/\breviewedTasks=/m);
 
-    expect(runCli(["task", "set", "c1", "status", "in-progress"]).status).toBe(0);
+    expect((await runIssueCli(["task", "set", "c1", "status", "in-progress"], { env: env() })).status).toBe(0);
 
-    const rework = runCli(["tree", "p"]);
+    const rework = await runIssueCli(["tree", "p"], { env: env() });
     expect(rework.status).toBe(0);
     expect(rework.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b.*\bstale\b/m);
   });
 
-  it("shows needsRebase chip on story lines only when set", () => {
-    const unset = runCli(["tree", "p"]);
+  it("shows needsRebase chip on story lines only when set", async () => {
+    const unset = await runIssueCli(["tree", "p"], { env: env() });
     expect(unset.status).toBe(0);
     expect(unset.stdout).not.toMatch(/^ {4}story a\b.*\bneedsRebase=/m);
 
-    expect(runCli(["story", "set", "a", "needsRebase", "feat/base"]).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "needsRebase", "feat/base"], { env: env() })).status).toBe(0);
 
-    const set = runCli(["tree", "p"]);
+    const set = await runIssueCli(["tree", "p"], { env: env() });
     expect(set.status).toBe(0);
     expect(set.stdout).toMatch(/^ {4}story a\b.*\bneedsRebase=feat\/base\b/m);
 
-    expect(runCli(["story", "set", "a", "needsRebase", "--clear"]).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "needsRebase", "--clear"], { env: env() })).status).toBe(0);
 
-    const cleared = runCli(["tree", "p"]);
+    const cleared = await runIssueCli(["tree", "p"], { env: env() });
     expect(cleared.status).toBe(0);
     expect(cleared.stdout).not.toMatch(/^ {4}story a\b.*\bneedsRebase=/m);
   });
@@ -2542,40 +2552,40 @@ describe("archived field, cascade, and CLI filtering", () => {
     });
   });
 
-  it("gets/sets archived on epic and cascades to descendants", () => {
-    expect(runCli(["epic", "get", "e", "archived"]).stdout).toBe("false\n");
-    expect(runCli(["epic", "set", "e", "archived", "true"]).status).toBe(0);
-    expect(runCli(["epic", "get", "e", "archived"]).stdout).toBe("true\n");
-    expect(runCli(["story", "get", "a", "archived"]).stdout).toBe("true\n");
-    expect(runCli(["task", "get", "c1", "archived"]).stdout).toBe("true\n");
+  it("gets/sets archived on epic and cascades to descendants", async () => {
+    expect((await runIssueCli(["epic", "get", "e", "archived"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["epic", "set", "e", "archived", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "get", "e", "archived"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["story", "get", "a", "archived"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["task", "get", "c1", "archived"], { env: env() })).stdout).toBe("true\n");
 
-    expect(runCli(["epic", "set", "e", "archived", "false"]).status).toBe(0);
-    expect(runCli(["story", "get", "a", "archived"]).stdout).toBe("false\n");
-    expect(runCli(["task", "get", "c1", "archived"]).stdout).toBe("false\n");
+    expect((await runIssueCli(["epic", "set", "e", "archived", "false"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "archived"], { env: env() })).stdout).toBe("false\n");
+    expect((await runIssueCli(["task", "get", "c1", "archived"], { env: env() })).stdout).toBe("false\n");
   });
 
-  it("hides archived issues from tree/list unless --show-archived", () => {
-    expect(runCli(["epic", "set", "e", "archived", "true"]).status).toBe(0);
+  it("hides archived issues from tree/list unless --show-archived", async () => {
+    expect((await runIssueCli(["epic", "set", "e", "archived", "true"], { env: env() })).status).toBe(0);
 
-    const treeHidden = runCli(["tree", "p"]);
+    const treeHidden = await runIssueCli(["tree", "p"], { env: env() });
     expect(treeHidden.status).toBe(0);
     expect(treeHidden.stdout).toContain("project p");
     expect(treeHidden.stdout).not.toContain("epic e");
     expect(treeHidden.stdout).not.toContain("story a");
 
-    const treeShown = runCli(["tree", "p", "--show-archived"]);
+    const treeShown = await runIssueCli(["tree", "p", "--show-archived"], { env: env() });
     expect(treeShown.status).toBe(0);
     expect(treeShown.stdout).toContain("epic e");
     expect(treeShown.stdout).toContain("story a");
 
-    const listHidden = runCli(["list", "--in", "p"]);
+    const listHidden = await runIssueCli(["list", "--in", "p"], { env: env() });
     expect(listHidden.status).toBe(0);
     const hiddenIds = JSON.parse(listHidden.stdout).issues.map(
       (issue: { id: string }) => issue.id,
     );
     expect(hiddenIds).toEqual(["p"]);
 
-    const listShown = runCli(["list", "--in", "p", "--show-archived"]);
+    const listShown = await runIssueCli(["list", "--in", "p", "--show-archived"], { env: env() });
     expect(listShown.status).toBe(0);
     const shownIds = JSON.parse(listShown.stdout).issues.map(
       (issue: { id: string }) => issue.id,
@@ -2583,28 +2593,28 @@ describe("archived field, cascade, and CLI filtering", () => {
     expect(shownIds.sort()).toEqual(["a", "c1", "e", "p"]);
   });
 
-  it("creates a child under an archived parent as archived", () => {
-    expect(runCli(["epic", "set", "e", "archived", "true"]).status).toBe(0);
-    const add = runCli(["story", "add", "Child", "--part-of", "e"]);
+  it("creates a child under an archived parent as archived", async () => {
+    expect((await runIssueCli(["epic", "set", "e", "archived", "true"], { env: env() })).status).toBe(0);
+    const add = await runIssueCli(["story", "add", "Child", "--part-of", "e"], { env: env() });
     expect(add.status).toBe(0);
     const childId = add.stdout.trim();
-    expect(runCli(["story", "get", childId, "archived"]).stdout).toBe("true\n");
+    expect((await runIssueCli(["story", "get", childId, "archived"], { env: env() })).stdout).toBe("true\n");
   });
 
-  it("refuses project set archived", () => {
-    const result = runCli(["project", "set", "p", "archived", "true"]);
+  it("refuses project set archived", async () => {
+    const result = await runIssueCli(["project", "set", "p", "archived", "true"], { env: env() });
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/unknown or unsettable field "archived"/);
   });
 });
 
 describe("deleted field verbs", () => {
-  it("are unknown commands and absent from top-level --help", () => {
-    const help = runCli(["--help"]);
+  it("are unknown commands and absent from top-level --help", async () => {
+    const help = await runIssueCli(["--help"], { env: env() });
     expect(help.status).toBe(0);
 
     for (const verb of DELETED_FIELD_VERBS) {
-      const { stderr, status } = runCli([verb]);
+      const { stderr, status } = await runIssueCli([verb], { env: env() });
       expect(status, verb).not.toBe(0);
       expect(stderr, verb).toMatch(new RegExp(`unknown command '${verb}'`));
       expect(help.stdout, verb).not.toMatch(new RegExp(`\\n  ${verb}\\b`));
@@ -2623,12 +2633,12 @@ describe("legacy CLI removed", () => {
     "projects",
   ];
 
-  it("are unknown commands and absent from top-level --help", () => {
-    const help = runCli(["--help"]);
+  it("are unknown commands and absent from top-level --help", async () => {
+    const help = await runIssueCli(["--help"], { env: env() });
     expect(help.status).toBe(0);
 
     for (const verb of LEGACY_COMMANDS) {
-      const { stderr, status } = runCli([verb]);
+      const { stderr, status } = await runIssueCli([verb], { env: env() });
       expect(status, verb).not.toBe(0);
       expect(stderr, verb).toMatch(new RegExp(`unknown command '${verb}'`));
       expect(help.stdout, verb).not.toMatch(new RegExp(`\\n  ${verb}\\b`));
@@ -2669,21 +2679,21 @@ describe("attach / attachments / detach", () => {
     });
   });
 
-  it("attaches, lists, unique-names on collision, and detaches on a commit", () => {
+  it("attaches, lists, unique-names on collision, and detaches on a commit", async () => {
     const source = join(dir, "fixture.tsx");
     writeFileSync(source, "export const x = 1;\n");
 
-    const attach1 = runCli(["task", "attach", "c1", source]);
+    const attach1 = await runIssueCli(["task", "attach", "c1", source], { env: env() });
     expect(attach1.status).toBe(0);
     expect(attach1.stdout).toContain("attached fixture.tsx (20 bytes)");
     expect(attach1.stdout).toContain(join(dir, "c1", "attachments", "fixture.tsx"));
 
-    const list1 = runCli(["task", "attachments", "c1"]);
+    const list1 = await runIssueCli(["task", "attachments", "c1"], { env: env() });
     expect(list1.status).toBe(0);
     expect(list1.stdout).toBe("fixture.tsx\t20\n");
 
     writeFileSync(source, "export const x = 2;\n");
-    const attach2 = runCli(["task", "attach", "c1", source]);
+    const attach2 = await runIssueCli(["task", "attach", "c1", source], { env: env() });
     expect(attach2.status).toBe(0);
     expect(attach2.stdout).toContain("attached fixture-2.tsx (20 bytes)");
     expect(attach2.stdout).toContain(
@@ -2696,75 +2706,75 @@ describe("attach / attachments / detach", () => {
       readFileSync(join(dir, "c1", "attachments", "fixture-2.tsx"), "utf8"),
     ).toBe("export const x = 2;\n");
 
-    const detach = runCli(["task", "detach", "c1", "fixture.tsx"]);
+    const detach = await runIssueCli(["task", "detach", "c1", "fixture.tsx"], { env: env() });
     expect(detach.status).toBe(0);
     expect(detach.stdout).toBe("detached fixture.tsx from c1\n");
-    expect(runCli(["task", "attachments", "c1"]).stdout).toBe("fixture-2.tsx\t20\n");
+    expect((await runIssueCli(["task", "attachments", "c1"], { env: env() })).stdout).toBe("fixture-2.tsx\t20\n");
 
-    expect(runCli(["task", "detach", "c1", "fixture-2.tsx"]).status).toBe(0);
-    expect(runCli(["task", "attachments", "c1"]).stdout).toBe("(no attachments)\n");
+    expect((await runIssueCli(["task", "detach", "c1", "fixture-2.tsx"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["task", "attachments", "c1"], { env: env() })).stdout).toBe("(no attachments)\n");
   });
 
-  it("allows attachments on epic and branch", () => {
+  it("allows attachments on epic and branch", async () => {
     const source = join(dir, "ui.png");
     writeFileSync(source, "png-bytes");
 
-    expect(runCli(["epic", "attach", "e", source]).status).toBe(0);
-    expect(runCli(["story", "attach", "a", source]).status).toBe(0);
-    expect(runCli(["epic", "attachments", "e"]).stdout).toContain("ui.png\t9\n");
-    expect(runCli(["story", "attachments", "a"]).stdout).toContain("ui.png\t9\n");
+    expect((await runIssueCli(["epic", "attach", "e", source], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "attach", "a", source], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "attachments", "e"], { env: env() })).stdout).toContain("ui.png\t9\n");
+    expect((await runIssueCli(["story", "attachments", "a"], { env: env() })).stdout).toContain("ui.png\t9\n");
   });
 
-  it("prints attachments in view when present and omits them when empty", () => {
+  it("prints attachments in view when present and omits them when empty", async () => {
     const source = join(dir, "mock.tsx");
     writeFileSync(source, "canvas");
-    expect(runCli(["task", "attach", "c1", source]).status).toBe(0);
+    expect((await runIssueCli(["task", "attach", "c1", source], { env: env() })).status).toBe(0);
 
-    const withAttachments = runCli(["task", "view", "c1"]);
+    const withAttachments = await runIssueCli(["task", "view", "c1"], { env: env() });
     expect(withAttachments.status).toBe(0);
     expect(withAttachments.stdout).toContain("Attachments:");
     expect(withAttachments.stdout).toContain(
       `mock.tsx (6 bytes) — ${join(dir, "c1", "attachments", "mock.tsx")}`,
     );
 
-    expect(runCli(["task", "detach", "c1", "mock.tsx"]).status).toBe(0);
-    const withoutAttachments = runCli(["task", "view", "c1"]);
+    expect((await runIssueCli(["task", "detach", "c1", "mock.tsx"], { env: env() })).status).toBe(0);
+    const withoutAttachments = await runIssueCli(["task", "view", "c1"], { env: env() });
     expect(withoutAttachments.status).toBe(0);
     expect(withoutAttachments.stdout).not.toContain("Attachments:");
   });
 
-  it("prints project attachments in view when present and omits them when empty", () => {
+  it("prints project attachments in view when present and omits them when empty", async () => {
     const source = join(dir, "vision.md");
     writeFileSync(source, "# Vision");
-    expect(runCli(["project", "attach", "p", source]).status).toBe(0);
+    expect((await runIssueCli(["project", "attach", "p", source], { env: env() })).status).toBe(0);
 
-    const withAttachments = runCli(["project", "view", "p"]);
+    const withAttachments = await runIssueCli(["project", "view", "p"], { env: env() });
     expect(withAttachments.status).toBe(0);
     expect(withAttachments.stdout).toContain("Attachments:");
     expect(withAttachments.stdout).toContain(
       `vision.md (8 bytes) — ${join(dir, "p", "attachments", "vision.md")}`,
     );
 
-    expect(runCli(["project", "detach", "p", "vision.md"]).status).toBe(0);
-    const withoutAttachments = runCli(["project", "view", "p"]);
+    expect((await runIssueCli(["project", "detach", "p", "vision.md"], { env: env() })).status).toBe(0);
+    const withoutAttachments = await runIssueCli(["project", "view", "p"], { env: env() });
     expect(withoutAttachments.status).toBe(0);
     expect(withoutAttachments.stdout).not.toContain("Attachments:");
   });
 
-  it("prints attachments in summary when present and omits them when empty", () => {
+  it("prints attachments in summary when present and omits them when empty", async () => {
     const source = join(dir, "mock.tsx");
     writeFileSync(source, "canvas");
-    expect(runCli(["task", "attach", "c1", source]).status).toBe(0);
+    expect((await runIssueCli(["task", "attach", "c1", source], { env: env() })).status).toBe(0);
 
-    const withAttachments = runCli(["summary", "c1"]);
+    const withAttachments = await runIssueCli(["summary", "c1"], { env: env() });
     expect(withAttachments.status).toBe(0);
     expect(withAttachments.stdout).toContain("  Attachments:");
     expect(withAttachments.stdout).toContain(
       `mock.tsx (6 bytes) — ${join(dir, "c1", "attachments", "mock.tsx")}`,
     );
 
-    expect(runCli(["task", "detach", "c1", "mock.tsx"]).status).toBe(0);
-    const withoutAttachments = runCli(["summary", "c1"]);
+    expect((await runIssueCli(["task", "detach", "c1", "mock.tsx"], { env: env() })).status).toBe(0);
+    const withoutAttachments = await runIssueCli(["summary", "c1"], { env: env() });
     expect(withoutAttachments.status).toBe(0);
     expect(withoutAttachments.stdout).not.toContain("Attachments:");
   });
@@ -2823,14 +2833,14 @@ describe("kind-scoped view / delete / comment / attach", () => {
     { kind: "epic", id: "e" },
     { kind: "story", id: "a" },
     { kind: "task", id: "c1" },
-  ])("views a $kind via kind-scoped view", ({ kind, id }) => {
-    const { stdout, status } = runCli([kind, "view", id]);
+  ])("views a $kind via kind-scoped view", async ({ kind, id }) => {
+    const { stdout, status } = await runIssueCli([kind, "view", id], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain(`kind: ${kind}`);
   });
 
-  it("supports --comments on kind-scoped view", () => {
-    const { stdout, status } = runCli(["story", "view", "a", "--comments"]);
+  it("supports --comments on kind-scoped view", async () => {
+    const { stdout, status } = await runIssueCli(["story", "view", "a", "--comments"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("--- comments ---");
     expect(stdout).toContain("bot: first note");
@@ -2861,20 +2871,20 @@ describe("kind-scoped view / delete / comment / attach", () => {
       },
       error: '"e" is an epic, not an idea',
     },
-  ])("refuses kind mismatch for $name", ({ cmd, error }) => {
-    const { stderr, status } = runCli(cmd());
+  ])("refuses kind mismatch for $name", async ({ cmd, error }) => {
+    const { stderr, status } = await runIssueCli(cmd(), { env: env() });
     expect(status).toBe(1);
     expect(stderr).toContain(error);
   });
 
-  it("comments on epic/idea/story/task via kind-scoped comment", () => {
+  it("comments on epic/idea/story/task via kind-scoped comment", async () => {
     for (const [kind, id] of [
       ["epic", "e"],
       ["idea", "idea-1"],
       ["story", "a"],
       ["task", "c1"],
     ] as const) {
-      const { stdout, status } = runCli([
+      const { stdout, status } = await runIssueCli([
         kind,
         "comment",
         id,
@@ -2882,7 +2892,7 @@ describe("kind-scoped view / delete / comment / attach", () => {
         "agent",
         "--body",
         `note on ${id}`,
-      ]);
+      ], { env: env() });
       expect(status, kind).toBe(0);
       expect(stdout, kind).toContain(`commented on ${id}`);
       expect(readFileSync(join(dir, id, "comments.jsonl"), "utf8")).toContain(
@@ -2891,12 +2901,12 @@ describe("kind-scoped view / delete / comment / attach", () => {
     }
   });
 
-  it("does not register comment under project", () => {
-    const help = runCli(["project", "--help"]);
+  it("does not register comment under project", async () => {
+    const help = await runIssueCli(["project", "--help"], { env: env() });
     expect(help.status).toBe(0);
     expect(help.stdout).toContain("trunk");
     expect(help.stdout).not.toMatch(/\n {2}comment\b/);
-    const { stderr, status } = runCli([
+    const { stderr, status } = await runIssueCli([
       "project",
       "comment",
       "p",
@@ -2904,12 +2914,12 @@ describe("kind-scoped view / delete / comment / attach", () => {
       "agent",
       "--body",
       "nope",
-    ]);
+    ], { env: env() });
     expect(status).not.toBe(0);
     expect(stderr).toMatch(/unknown command 'comment'/);
   });
 
-  it("attaches on idea/epic/story/task via kind-scoped attach", () => {
+  it("attaches on idea/epic/story/task via kind-scoped attach", async () => {
     const source = join(dir, "note.txt");
     writeFileSync(source, "hello");
     for (const [kind, id] of [
@@ -2918,33 +2928,33 @@ describe("kind-scoped view / delete / comment / attach", () => {
       ["story", "a"],
       ["task", "c1"],
     ] as const) {
-      const attach = runCli([kind, "attach", id, source]);
+      const attach = await runIssueCli([kind, "attach", id, source], { env: env() });
       expect(attach.status, kind).toBe(0);
       expect(attach.stdout, kind).toContain("attached note.txt");
-      const list = runCli([kind, "attachments", id]);
+      const list = await runIssueCli([kind, "attachments", id], { env: env() });
       expect(list.status, kind).toBe(0);
       expect(list.stdout, kind).toContain("note.txt\t5");
-      const detach = runCli([kind, "detach", id, "note.txt"]);
+      const detach = await runIssueCli([kind, "detach", id, "note.txt"], { env: env() });
       expect(detach.status, kind).toBe(0);
       expect(detach.stdout, kind).toBe(`detached note.txt from ${id}\n`);
     }
   });
 
-  it("attaches on project via kind-scoped attach", () => {
+  it("attaches on project via kind-scoped attach", async () => {
     const source = join(dir, "note.txt");
     writeFileSync(source, "hello");
-    const attach = runCli(["project", "attach", "p", source]);
+    const attach = await runIssueCli(["project", "attach", "p", source], { env: env() });
     expect(attach.status).toBe(0);
     expect(attach.stdout).toContain("attached note.txt");
-    const list = runCli(["project", "attachments", "p"]);
+    const list = await runIssueCli(["project", "attachments", "p"], { env: env() });
     expect(list.status).toBe(0);
     expect(list.stdout).toContain("note.txt\t5");
-    const detach = runCli(["project", "detach", "p", "note.txt"]);
+    const detach = await runIssueCli(["project", "detach", "p", "note.txt"], { env: env() });
     expect(detach.status).toBe(0);
     expect(detach.stdout).toBe("detached note.txt from p\n");
   });
 
-  it("deletes via kind-scoped delete", () => {
+  it("deletes via kind-scoped delete", async () => {
     writeIssue("c2", {
       kind: "task",
       title: "C2",
@@ -2954,10 +2964,10 @@ describe("kind-scoped view / delete / comment / attach", () => {
       createdAt: nextAt(),
       updatedAt: nextAt(),
     });
-    const { stdout, status } = runCli(["task", "delete", "c2"]);
+    const { stdout, status } = await runIssueCli(["task", "delete", "c2"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("deleted c2");
-    expect(runCli(["task", "view", "c2"]).status).toBe(1);
+    expect((await runIssueCli(["task", "view", "c2"], { env: env() })).status).toBe(1);
   });
 });
 
@@ -3001,53 +3011,53 @@ describe("bare-id view / get / comment / attach", () => {
     );
   });
 
-  it("views epic and story ids without a kind prefix", () => {
-    const epic = runCli(["view", "e"]);
+  it("views epic and story ids without a kind prefix", async () => {
+    const epic = await runIssueCli(["view", "e"], { env: env() });
     expect(epic.status).toBe(0);
     expect(epic.stdout).toContain("kind: epic");
     expect(epic.stdout).toContain("title: Epic");
     expect(epic.stdout).toContain("# Epic");
 
-    const story = runCli(["view", "a"]);
+    const story = await runIssueCli(["view", "a"], { env: env() });
     expect(story.status).toBe(0);
     expect(story.stdout).toContain("kind: story");
     expect(story.stdout).toContain("title: Story A");
     expect(story.stdout).toContain("# Story A");
     expect(story.stdout).not.toContain("--- comments ---");
 
-    const withComments = runCli(["view", "a", "--comments"]);
+    const withComments = await runIssueCli(["view", "a", "--comments"], { env: env() });
     expect(withComments.status).toBe(0);
     expect(withComments.stdout).toContain("--- comments ---");
     expect(withComments.stdout).toContain("bot: first note");
   });
 
-  it("gets epic and story fields without a kind prefix", () => {
-    expect(runCli(["get", "e", "title"]).stdout).toBe("Epic\n");
-    expect(runCli(["get", "e", "description"]).stdout).toBe("# Epic\n\nepic body\n");
-    expect(runCli(["get", "a", "title"]).stdout).toBe("Story A\n");
-    expect(runCli(["get", "a", "branchName"]).stdout).toBe("feat/a\n");
+  it("gets epic and story fields without a kind prefix", async () => {
+    expect((await runIssueCli(["get", "e", "title"], { env: env() })).stdout).toBe("Epic\n");
+    expect((await runIssueCli(["get", "e", "description"], { env: env() })).stdout).toBe("# Epic\n\nepic body\n");
+    expect((await runIssueCli(["get", "a", "title"], { env: env() })).stdout).toBe("Story A\n");
+    expect((await runIssueCli(["get", "a", "branchName"], { env: env() })).stdout).toBe("feat/a\n");
   });
 
-  it("round-trips attach / attachments / detach without a kind prefix", () => {
+  it("round-trips attach / attachments / detach without a kind prefix", async () => {
     const source = join(dir, "note.txt");
     writeFileSync(source, "hello");
 
-    const attach = runCli(["attach", "c1", source]);
+    const attach = await runIssueCli(["attach", "c1", source], { env: env() });
     expect(attach.status).toBe(0);
     expect(attach.stdout).toContain("attached note.txt");
 
-    const list = runCli(["attachments", "c1"]);
+    const list = await runIssueCli(["attachments", "c1"], { env: env() });
     expect(list.status).toBe(0);
     expect(list.stdout).toBe("note.txt\t5\n");
 
-    const detach = runCli(["detach", "c1", "note.txt"]);
+    const detach = await runIssueCli(["detach", "c1", "note.txt"], { env: env() });
     expect(detach.status).toBe(0);
     expect(detach.stdout).toBe("detached note.txt from c1\n");
-    expect(runCli(["attachments", "c1"]).stdout).toBe("(no attachments)\n");
+    expect((await runIssueCli(["attachments", "c1"], { env: env() })).stdout).toBe("(no attachments)\n");
   });
 
-  it("writes the same chat entry as the kind-scoped comment form", () => {
-    const bare = runCli([
+  it("writes the same chat entry as the kind-scoped comment form", async () => {
+    const bare = await runIssueCli([
       "comment",
       "a",
       "--role",
@@ -3056,11 +3066,11 @@ describe("bare-id view / get / comment / attach", () => {
       "bare-id note",
       "--name",
       "impl",
-    ]);
+    ], { env: env() });
     expect(bare.status).toBe(0);
     expect(bare.stdout).toBe("commented on a as impl\n");
 
-    const scoped = runCli([
+    const scoped = await runIssueCli([
       "story",
       "comment",
       "a",
@@ -3070,7 +3080,7 @@ describe("bare-id view / get / comment / attach", () => {
       "kind-scoped note",
       "--name",
       "impl",
-    ]);
+    ], { env: env() });
     expect(scoped.status).toBe(0);
     expect(scoped.stdout).toBe("commented on a as impl\n");
 
@@ -3080,53 +3090,53 @@ describe("bare-id view / get / comment / attach", () => {
     expect(chat).toContain('"role":"implementor"');
   });
 
-  it("errors on an unknown id", () => {
-    const view = runCli(["view", "ghost"]);
+  it("errors on an unknown id", async () => {
+    const view = await runIssueCli(["view", "ghost"], { env: env() });
     expect(view.status).toBe(1);
     expect(view.stderr).toContain('unknown issue "ghost"');
 
-    const get = runCli(["get", "ghost", "title"]);
+    const get = await runIssueCli(["get", "ghost", "title"], { env: env() });
     expect(get.status).toBe(1);
     expect(get.stderr).toContain('unknown issue "ghost"');
 
-    const comment = runCli([
+    const comment = await runIssueCli([
       "comment",
       "ghost",
       "--role",
       "agent",
       "--body",
       "x",
-    ]);
+    ], { env: env() });
     expect(comment.status).toBe(1);
     expect(comment.stderr).toContain('unknown issue "ghost"');
   });
 
-  it("refuses bare-id comment on a project id", () => {
-    const { stderr, status } = runCli([
+  it("refuses bare-id comment on a project id", async () => {
+    const { stderr, status } = await runIssueCli([
       "comment",
       "p",
       "--role",
       "agent",
       "--body",
       "nope",
-    ]);
+    ], { env: env() });
     expect(status).toBe(1);
     expect(stderr).toContain('"p" is a Project');
     expect(stderr).toContain("projects have no comment log");
   });
 
-  it("still errors on kind-scoped calls against a mismatched kind", () => {
-    const view = runCli(["epic", "view", "a"]);
+  it("still errors on kind-scoped calls against a mismatched kind", async () => {
+    const view = await runIssueCli(["epic", "view", "a"], { env: env() });
     expect(view.status).toBe(1);
     expect(view.stderr).toContain('"a" is a story, not an epic');
 
-    const get = runCli(["story", "get", "e", "title"]);
+    const get = await runIssueCli(["story", "get", "e", "title"], { env: env() });
     expect(get.status).toBe(1);
     expect(get.stderr).toContain('"e" is an epic, not a story');
 
     const attachFile = join(dir, "mismatch.txt");
     writeFileSync(attachFile, "x");
-    const attach = runCli(["task", "attach", "a", attachFile]);
+    const attach = await runIssueCli(["task", "attach", "a", attachFile], { env: env() });
     expect(attach.status).toBe(1);
     expect(attach.stderr).toContain('"a" is a story, not a task');
   });
@@ -3174,22 +3184,22 @@ describe("project labels catalog and assignments", () => {
     return issueJsonField(id, "labels") ?? [];
   }
 
-  function seedCatalog(
+  async function seedCatalog(
     ...labels: Array<{ id: string; color: string; description?: string }>
-  ): void {
+  ): Promise<void> {
     for (const label of labels) {
       expect(
-        runCli(["project", "set", "p", "labels", "--add", JSON.stringify(label)])
+        (await runIssueCli(["project", "set", "p", "labels", "--add", JSON.stringify(label)], { env: env() }))
           .status,
       ).toBe(0);
     }
   }
 
-  it("adds, updates, removes, renames, and clears the project catalog", () => {
+  it("adds, updates, removes, renames, and clears the project catalog", async () => {
     const bug = JSON.stringify({ id: "bug", color: "#ff0000" });
-    expect(runCli(["project", "set", "p", "labels", "--add", bug]).status).toBe(0);
+    expect((await runIssueCli(["project", "set", "p", "labels", "--add", bug], { env: env() })).status).toBe(0);
     expect(catalogOf()).toEqual([{ id: "bug", color: "#ff0000" }]);
-    expect(runCli(["project", "get", "p", "labels"]).stdout).toBe(
+    expect((await runIssueCli(["project", "get", "p", "labels"], { env: env() })).stdout).toBe(
       '[{"id":"bug","color":"#ff0000"}]\n',
     );
 
@@ -3198,7 +3208,7 @@ describe("project labels catalog and assignments", () => {
       color: "#aa0000",
       description: "Defects",
     });
-    expect(runCli(["project", "set", "p", "labels", "--add", updated]).status).toBe(
+    expect((await runIssueCli(["project", "set", "p", "labels", "--add", updated], { env: env() })).status).toBe(
       0,
     );
     expect(catalogOf()).toEqual([
@@ -3211,135 +3221,135 @@ describe("project labels catalog and assignments", () => {
       JSON.stringify({ id: "feat", color: "#00ff00" }),
     );
     expect(
-      runCli(["project", "set", "p", "labels", "--add", "--file", featPath]).status,
+      (await runIssueCli(["project", "set", "p", "labels", "--add", "--file", featPath], { env: env() })).status,
     ).toBe(0);
     expect(catalogOf().map((l) => l.id)).toEqual(["bug", "feat"]);
 
     expect(
-      runCli(["project", "set", "p", "labels", "--file", "-", "--add"], '{"id":"chore","color":"#0000ff"}')
+      (await runIssueCli(["project", "set", "p", "labels", "--file", "-", "--add"], { env: env(), stdin: '{"id":"chore","color":"#0000ff"}' }))
         .status,
     ).toBe(0);
     expect(catalogOf().map((l) => l.id)).toEqual(["bug", "feat", "chore"]);
 
-    expect(runCli(["project", "set", "p", "labels", "--remove", "chore"]).status).toBe(
+    expect((await runIssueCli(["project", "set", "p", "labels", "--remove", "chore"], { env: env() })).status).toBe(
       0,
     );
     expect(catalogOf().map((l) => l.id)).toEqual(["bug", "feat"]);
 
     expect(
-      runCli(["project", "set", "p", "labels", "--rename", "bug", "defect"]).status,
+      (await runIssueCli(["project", "set", "p", "labels", "--rename", "bug", "defect"], { env: env() })).status,
     ).toBe(0);
     expect(catalogOf().map((l) => l.id)).toEqual(["defect", "feat"]);
 
-    expect(runCli(["project", "set", "p", "labels", "--clear"]).status).toBe(0);
+    expect((await runIssueCli(["project", "set", "p", "labels", "--clear"], { env: env() })).status).toBe(0);
     expect(catalogOf()).toEqual([]);
-    expect(runCli(["project", "get", "p", "labels"]).stdout).toBe("[]\n");
+    expect((await runIssueCli(["project", "get", "p", "labels"], { env: env() })).stdout).toBe("[]\n");
   });
 
-  it("assigns, removes, and clears labels on epic/idea/story", () => {
-    seedCatalog(
+  it("assigns, removes, and clears labels on epic/idea/story", async () => {
+    await seedCatalog(
       { id: "bug", color: "#ff0000" },
       { id: "feat", color: "#00ff00" },
     );
 
-    expect(runCli(["epic", "set", "e", "labels", "--add", "bug", "feat"]).status).toBe(
+    expect((await runIssueCli(["epic", "set", "e", "labels", "--add", "bug", "feat"], { env: env() })).status).toBe(
       0,
     );
     expect(labelsOf("e")).toEqual(["bug", "feat"]);
-    expect(runCli(["epic", "get", "e", "labels"]).stdout).toBe('["bug","feat"]\n');
+    expect((await runIssueCli(["epic", "get", "e", "labels"], { env: env() })).stdout).toBe('["bug","feat"]\n');
 
-    expect(runCli(["idea", "set", "idea-a", "labels", "--add", "feat"]).status).toBe(
+    expect((await runIssueCli(["idea", "set", "idea-a", "labels", "--add", "feat"], { env: env() })).status).toBe(
       0,
     );
     expect(labelsOf("idea-a")).toEqual(["feat"]);
 
-    expect(runCli(["story", "set", "a", "labels", "--add", "bug"]).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "labels", "--add", "bug"], { env: env() })).status).toBe(0);
     expect(labelsOf("a")).toEqual(["bug"]);
 
-    expect(runCli(["epic", "set", "e", "labels", "--remove", "bug"]).status).toBe(0);
+    expect((await runIssueCli(["epic", "set", "e", "labels", "--remove", "bug"], { env: env() })).status).toBe(0);
     expect(labelsOf("e")).toEqual(["feat"]);
 
-    expect(runCli(["story", "set", "a", "labels", "--clear"]).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "labels", "--clear"], { env: env() })).status).toBe(0);
     expect(labelsOf("a")).toEqual([]);
-    expect(runCli(["story", "get", "a", "labels"]).stdout).toBe("[]\n");
+    expect((await runIssueCli(["story", "get", "a", "labels"], { env: env() })).stdout).toBe("[]\n");
   });
 
-  it("refuses unknown assignment ids", () => {
-    seedCatalog({ id: "bug", color: "#ff0000" });
-    const refused = runCli(["epic", "set", "e", "labels", "--add", "ghost"]);
+  it("refuses unknown assignment ids", async () => {
+    await seedCatalog({ id: "bug", color: "#ff0000" });
+    const refused = await runIssueCli(["epic", "set", "e", "labels", "--add", "ghost"], { env: env() });
     expect(refused.status).toBe(1);
     expect(refused.stderr).toMatch(/unknown catalog id/);
     expect(labelsOf("e")).toEqual([]);
   });
 
-  it("cascades catalog remove and rename onto assignments", () => {
-    seedCatalog(
+  it("cascades catalog remove and rename onto assignments", async () => {
+    await seedCatalog(
       { id: "bug", color: "#ff0000" },
       { id: "feat", color: "#00ff00" },
     );
-    expect(runCli(["epic", "set", "e", "labels", "--add", "bug", "feat"]).status).toBe(
+    expect((await runIssueCli(["epic", "set", "e", "labels", "--add", "bug", "feat"], { env: env() })).status).toBe(
       0,
     );
-    expect(runCli(["story", "set", "a", "labels", "--add", "bug"]).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "labels", "--add", "bug"], { env: env() })).status).toBe(0);
 
-    expect(runCli(["project", "set", "p", "labels", "--remove", "bug"]).status).toBe(
+    expect((await runIssueCli(["project", "set", "p", "labels", "--remove", "bug"], { env: env() })).status).toBe(
       0,
     );
     expect(labelsOf("e")).toEqual(["feat"]);
     expect(labelsOf("a")).toEqual([]);
 
-    expect(runCli(["epic", "set", "e", "labels", "--add", "feat"]).status).toBe(0);
+    expect((await runIssueCli(["epic", "set", "e", "labels", "--add", "feat"], { env: env() })).status).toBe(0);
     expect(
-      runCli(["project", "set", "p", "labels", "--rename", "feat", "feature"]).status,
+      (await runIssueCli(["project", "set", "p", "labels", "--rename", "feat", "feature"], { env: env() })).status,
     ).toBe(0);
     expect(labelsOf("e")).toEqual(["feature"]);
     expect(catalogOf().map((l) => l.id)).toEqual(["feature"]);
   });
 
-  it("prints labels on view and tree chips, and omits them from summary", () => {
-    seedCatalog(
+  it("prints labels on view and tree chips, and omits them from summary", async () => {
+    await seedCatalog(
       { id: "bug", color: "#ff0000" },
       { id: "feat", color: "#00ff00" },
     );
-    expect(runCli(["epic", "set", "e", "labels", "--add", "bug", "feat"]).status).toBe(
+    expect((await runIssueCli(["epic", "set", "e", "labels", "--add", "bug", "feat"], { env: env() })).status).toBe(
       0,
     );
-    expect(runCli(["idea", "set", "idea-a", "labels", "--add", "feat"]).status).toBe(
+    expect((await runIssueCli(["idea", "set", "idea-a", "labels", "--add", "feat"], { env: env() })).status).toBe(
       0,
     );
-    expect(runCli(["story", "set", "a", "labels", "--add", "bug"]).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "a", "labels", "--add", "bug"], { env: env() })).status).toBe(0);
 
-    const projectView = runCli(["project", "view", "p"]);
+    const projectView = await runIssueCli(["project", "view", "p"], { env: env() });
     expect(projectView.status).toBe(0);
     expect(projectView.stdout).toContain("labels: bug, feat");
 
-    const epicView = runCli(["epic", "view", "e"]);
+    const epicView = await runIssueCli(["epic", "view", "e"], { env: env() });
     expect(epicView.status).toBe(0);
     expect(epicView.stdout).toContain("labels: bug, feat");
 
-    const ideaView = runCli(["idea", "view", "idea-a"]);
+    const ideaView = await runIssueCli(["idea", "view", "idea-a"], { env: env() });
     expect(ideaView.status).toBe(0);
     expect(ideaView.stdout).toContain("labels: feat");
 
-    const storyView = runCli(["story", "view", "a"]);
+    const storyView = await runIssueCli(["story", "view", "a"], { env: env() });
     expect(storyView.status).toBe(0);
     expect(storyView.stdout).toContain("labels: bug");
 
-    expect(runCli(["epic", "set", "e", "labels", "--clear"]).status).toBe(0);
-    const clearedView = runCli(["epic", "view", "e"]);
+    expect((await runIssueCli(["epic", "set", "e", "labels", "--clear"], { env: env() })).status).toBe(0);
+    const clearedView = await runIssueCli(["epic", "view", "e"], { env: env() });
     expect(clearedView.status).toBe(0);
     expect(clearedView.stdout).not.toContain("labels:");
-    expect(runCli(["epic", "set", "e", "labels", "--add", "bug", "feat"]).status).toBe(
+    expect((await runIssueCli(["epic", "set", "e", "labels", "--add", "bug", "feat"], { env: env() })).status).toBe(
       0,
     );
 
-    const tree = runCli(["tree", "p"]);
+    const tree = await runIssueCli(["tree", "p"], { env: env() });
     expect(tree.status).toBe(0);
     expect(tree.stdout).toMatch(/^ {2}epic e\b.*\blabels=bug,feat\b/m);
     expect(tree.stdout).toMatch(/^ {2}idea idea-a\b.*\blabels=feat\b/m);
     expect(tree.stdout).toMatch(/^ {4}story a\b.*\blabels=bug\b/m);
 
-    const summary = runCli(["summary", "a"]);
+    const summary = await runIssueCli(["summary", "a"], { env: env() });
     expect(summary.status).toBe(0);
     expect(summary.stdout).not.toMatch(/\blabels\b/);
   });

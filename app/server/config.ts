@@ -7,14 +7,25 @@ export const PORT = Number(process.env.PORT ?? 8061);
 const serverDir = fileURLToPath(new URL(".", import.meta.url));
 export const appDir = join(serverDir, "..");
 export const pluginDir = join(appDir, "..");
-export const issuesDir = process.env.ISSUES_DIR ?? join(pluginDir, "issues");
+const defaultIssuesDir = join(pluginDir, "issues");
+
+export let issuesDir = process.env.ISSUES_DIR ?? defaultIssuesDir;
 /** Peer of `issuesDir` — never nested under or written through the issues store. */
-export const conversationsDir = join(dirname(issuesDir), "conversations");
+export let conversationsDir = join(dirname(issuesDir), "conversations");
 /** Peer of `issuesDir` / `conversationsDir` — durable SDK model catalog. */
-export const modelSlugCatalogPath = join(
+export let modelSlugCatalogPath = join(
   dirname(issuesDir),
   "model-slug-catalog.json",
 );
+
+export function refreshStorePathsFromEnv(): void {
+  issuesDir = process.env.ISSUES_DIR ?? defaultIssuesDir;
+  conversationsDir = join(dirname(issuesDir), "conversations");
+  modelSlugCatalogPath = join(
+    dirname(issuesDir),
+    "model-slug-catalog.json",
+  );
+}
 
 // Cursor SDK credential. Read once here so every `@cursor/sdk` call can pass it
 // explicitly (see `services/agent-sdk.ts`) rather than relying on the SDK's
