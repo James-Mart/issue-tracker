@@ -1,9 +1,8 @@
-import { spawnSync } from "child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { runIssueCli } from "./cli-program.js";
 import {
   coerceSetPatch,
   resolveInspirationAppsSet,
@@ -650,13 +649,16 @@ describe("resolvePersonasSet", () => {
   });
 });
 
-const appDir = dirname(fileURLToPath(import.meta.url));
-const tsx = join(appDir, "node_modules", ".bin", "tsx");
-const cliPath = join(appDir, "cli.ts");
-
 describe("sourceIdea get/set", () => {
   let dir: string;
   let clock = 0;
+
+  function env() {
+    return {
+      ISSUES_DIR: dir,
+      ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
+    };
+  }
 
   function nextAt(): string {
     clock += 1;
@@ -666,24 +668,6 @@ describe("sourceIdea get/set", () => {
   function writeIssue(id: string, body: Record<string, unknown>): void {
     mkdirSync(join(dir, id), { recursive: true });
     writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
-  }
-
-  function runCli(args: string[]): { stdout: string; stderr: string; status: number | null } {
-    const result = spawnSync(tsx, [cliPath, ...args], {
-      cwd: appDir,
-      env: {
-        ...process.env,
-        ISSUES_DIR: dir,
-        ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
-      },
-      encoding: "utf8",
-    });
-    if (result.error) throw result.error;
-    return {
-      stdout: result.stdout ?? "",
-      stderr: result.stderr ?? "",
-      status: result.status,
-    };
   }
 
   afterEach(() => {
@@ -722,36 +706,36 @@ describe("sourceIdea get/set", () => {
     });
   });
 
-  it("sets, gets, and clears sourceIdea on an epic", () => {
-    expect(runCli(["epic", "set", "e", "sourceIdea", "idea-a"]).status).toBe(0);
+  it("sets, gets, and clears sourceIdea on an epic", async () => {
+    expect((await runIssueCli(["epic", "set", "e", "sourceIdea", "idea-a"], { env: env() })).status).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "e", "issue.json"), "utf8")).sourceIdea).toBe(
       "idea-a",
     );
-    expect(runCli(["epic", "get", "e", "sourceIdea"]).stdout.trim()).toBe("idea-a");
+    expect((await runIssueCli(["epic", "get", "e", "sourceIdea"], { env: env() })).stdout.trim()).toBe("idea-a");
 
-    expect(runCli(["epic", "set", "e", "sourceIdea", "--clear"]).status).toBe(0);
+    expect((await runIssueCli(["epic", "set", "e", "sourceIdea", "--clear"], { env: env() })).status).toBe(0);
     expect("sourceIdea" in JSON.parse(readFileSync(join(dir, "e", "issue.json"), "utf8"))).toBe(
       false,
     );
-    expect(runCli(["epic", "get", "e", "sourceIdea"]).stdout).toBe("");
+    expect((await runIssueCli(["epic", "get", "e", "sourceIdea"], { env: env() })).stdout).toBe("");
   });
 
-  it("sets, gets, and clears sourceIdea on a root story", () => {
-    expect(runCli(["story", "set", "s", "sourceIdea", "idea-a"]).status).toBe(0);
+  it("sets, gets, and clears sourceIdea on a root story", async () => {
+    expect((await runIssueCli(["story", "set", "s", "sourceIdea", "idea-a"], { env: env() })).status).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, "s", "issue.json"), "utf8")).sourceIdea).toBe(
       "idea-a",
     );
-    expect(runCli(["story", "get", "s", "sourceIdea"]).stdout.trim()).toBe("idea-a");
+    expect((await runIssueCli(["story", "get", "s", "sourceIdea"], { env: env() })).stdout.trim()).toBe("idea-a");
 
-    expect(runCli(["story", "set", "s", "sourceIdea", "--clear"]).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "s", "sourceIdea", "--clear"], { env: env() })).status).toBe(0);
     expect("sourceIdea" in JSON.parse(readFileSync(join(dir, "s", "issue.json"), "utf8"))).toBe(
       false,
     );
-    expect(runCli(["story", "get", "s", "sourceIdea"]).stdout).toBe("");
+    expect((await runIssueCli(["story", "get", "s", "sourceIdea"], { env: env() })).stdout).toBe("");
   });
 
-  it("refuses an unknown sourceIdea id", () => {
-    const unknown = runCli(["epic", "set", "e", "sourceIdea", "ghost"]);
+  it("refuses an unknown sourceIdea id", async () => {
+    const unknown = await runIssueCli(["epic", "set", "e", "sourceIdea", "ghost"], { env: env() });
     expect(unknown.status).toBe(1);
     expect(unknown.stderr).toContain("sourceIdea");
   });
@@ -761,6 +745,13 @@ describe("planRoots get", () => {
   let dir: string;
   let clock = 0;
 
+  function env() {
+    return {
+      ISSUES_DIR: dir,
+      ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
+    };
+  }
+
   function nextAt(): string {
     clock += 1;
     return new Date(Date.UTC(2026, 6, 10, 14, 0, clock)).toISOString();
@@ -769,24 +760,6 @@ describe("planRoots get", () => {
   function writeIssue(id: string, body: Record<string, unknown>): void {
     mkdirSync(join(dir, id), { recursive: true });
     writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
-  }
-
-  function runCli(args: string[]): { stdout: string; stderr: string; status: number | null } {
-    const result = spawnSync(tsx, [cliPath, ...args], {
-      cwd: appDir,
-      env: {
-        ...process.env,
-        ISSUES_DIR: dir,
-        ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
-      },
-      encoding: "utf8",
-    });
-    if (result.error) throw result.error;
-    return {
-      stdout: result.stdout ?? "",
-      stderr: result.stderr ?? "",
-      status: result.status,
-    };
   }
 
   afterEach(() => {
@@ -825,16 +798,16 @@ describe("planRoots get", () => {
     });
   });
 
-  it("prints planRoots as a JSON array", () => {
-    expect(runCli(["epic", "set", "e", "sourceIdea", "idea-a"]).status).toBe(0);
-    expect(runCli(["story", "set", "s", "sourceIdea", "idea-a"]).status).toBe(0);
-    expect(runCli(["idea", "get", "idea-a", "planRoots"]).stdout.trim()).toBe(
+  it("prints planRoots as a JSON array", async () => {
+    expect((await runIssueCli(["epic", "set", "e", "sourceIdea", "idea-a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "s", "sourceIdea", "idea-a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "idea-a", "planRoots"], { env: env() })).stdout.trim()).toBe(
       '["e","s"]',
     );
-    expect(runCli(["idea", "get", "idea-a", "planRoots"]).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "idea-a", "planRoots"], { env: env() })).status).toBe(0);
   });
 
-  it("prints an empty JSON array when there are no plan roots", () => {
-    expect(runCli(["idea", "get", "idea-a", "planRoots"]).stdout.trim()).toBe("[]");
+  it("prints an empty JSON array when there are no plan roots", async () => {
+    expect((await runIssueCli(["idea", "get", "idea-a", "planRoots"], { env: env() })).stdout.trim()).toBe("[]");
   });
 });

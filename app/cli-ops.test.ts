@@ -2,7 +2,6 @@ import { EventEmitter } from "node:events";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GhSpawner } from "./server/services/delivery.js";
 
@@ -12,11 +11,11 @@ let clock = 0;
 let ghCalls: { args: string[]; cwd: string }[] = [];
 
 type CliOpsModule = typeof import("./cli-ops.js");
+type CliProgramModule = typeof import("./cli-program.js");
 type DeliveryModule = typeof import("./server/services/delivery.js");
 
 let mergeStory: CliOpsModule["mergeStory"];
-let registerBareIdOps: CliOpsModule["registerBareIdOps"];
-let registerKindOps: CliOpsModule["registerKindOps"];
+let runIssueCli: CliProgramModule["runIssueCli"];
 let setGhSpawnerForTests: DeliveryModule["setGhSpawnerForTests"];
 
 function nextAt(): string {
@@ -68,67 +67,24 @@ function stubGh(
   setGhSpawnerForTests(spawner);
 }
 
-async function runMergeCli(
-  args: string[],
-): Promise<{ stdout: string; stderr: string; exitCode: number | undefined }> {
-  const stdoutChunks: string[] = [];
-  const stderrChunks: string[] = [];
-  const consoleError = vi
-    .spyOn(console, "error")
-    .mockImplementation((message?: unknown) => {
-      stderrChunks.push(String(message ?? ""));
-    });
-
-  const program = new Command();
-  program.exitOverride();
-  const run = async (action: () => unknown) => {
-    try {
-      await action();
-    } catch (err) {
-      console.error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    }
-  };
-  registerBareIdOps(program, run);
-  const storyCmd = program.command("story");
-  registerKindOps(storyCmd, "story", run);
-
-  let exitCode: number | undefined;
-  try {
-    await program.parseAsync(["node", "test", ...args]);
-  } catch (err) {
-    if (
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      (err as { code: string }).code === "commander.helpDisplayed"
-    ) {
-      exitCode = 0;
-    } else {
-      throw err;
-    }
-  } finally {
-    exitCode = process.exitCode;
-    process.exitCode = undefined;
-    consoleError.mockRestore();
-  }
-
+function env() {
   return {
-    stdout: stdoutChunks.join(""),
-    stderr: stderrChunks.join(""),
-    exitCode,
+    ISSUES_DIR: dir,
+    ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
   };
 }
 
 async function loadModules(): Promise<void> {
   vi.resetModules();
   process.env.ISSUES_DIR = dir;
-  const cliOps = await import("./cli-ops.js");
-  const delivery = await import("./server/services/delivery.js");
+  const [cliOps, delivery, cliProgram] = await Promise.all([
+    import("./cli-ops.js"),
+    import("./server/services/delivery.js"),
+    import("./cli-program.js"),
+  ]);
   mergeStory = cliOps.mergeStory;
-  registerBareIdOps = cliOps.registerBareIdOps;
-  registerKindOps = cliOps.registerKindOps;
   setGhSpawnerForTests = delivery.setGhSpawnerForTests;
+  runIssueCli = cliProgram.runIssueCli;
 }
 
 beforeEach(async () => {
@@ -313,8 +269,8 @@ describe("mergeStory", () => {
 describe("issue merge CLI", () => {
   it("runs bare issue merge with the same gh argv as mergeStory", async () => {
     stubGh();
-    const result = await runMergeCli(["merge", "a"]);
-    expect(result.exitCode).toBeUndefined();
+    const result = await runIssueCli(["merge", "a"], { env: env() });
+    expect(result.status).toBe(0);
     expect(ghCalls).toEqual([
       {
         args: ["pr", "merge", "42", "--merge", "-R", "acme/widgets"],
@@ -325,31 +281,34 @@ describe("issue merge CLI", () => {
 
   it("forwards flags on bare issue merge", async () => {
     stubGh();
-    await runMergeCli([
-      "merge",
-      "a",
-      "--auto",
-      "--match-head-commit",
-      "abc123def4567890123456789012345678901234",
-    ]);
+    await runIssueCli(
+      [
+        "merge",
+        "a",
+        "--auto",
+        "--match-head-commit",
+        "abc123def4567890123456789012345678901234",
+      ],
+      { env: env() },
+    );
     expect(ghCalls[0]?.args).toContain("--auto");
     expect(ghCalls[0]?.args).toContain("--match-head-commit");
   });
 
   it("matches issue story merge to the bare form", async () => {
     stubGh();
-    const bare = await runMergeCli(["merge", "a"]);
-    const scoped = await runMergeCli(["story", "merge", "a"]);
-    expect(bare.exitCode).toBeUndefined();
-    expect(scoped.exitCode).toBeUndefined();
+    const bare = await runIssueCli(["merge", "a"], { env: env() });
+    const scoped = await runIssueCli(["story", "merge", "a"], { env: env() });
+    expect(bare.status).toBe(0);
+    expect(scoped.status).toBe(0);
     expect(ghCalls).toHaveLength(2);
     expect(ghCalls[0]).toEqual(ghCalls[1]);
   });
 
   it("refuses merge on an Epic with a message naming the valid form", async () => {
     stubGh();
-    const result = await runMergeCli(["merge", "e"]);
-    expect(result.exitCode).toBe(1);
+    const result = await runIssueCli(["merge", "e"], { env: env() });
+    expect(result.status).toBe(1);
     expect(result.stderr).toContain('"e" is an Epic');
     expect(result.stderr).toContain("merge is only valid on a Story");
     expect(result.stderr).toContain("issue merge <storyId>");
@@ -358,8 +317,8 @@ describe("issue merge CLI", () => {
 
   it("refuses merge on a Task with a message naming the valid form", async () => {
     stubGh();
-    const result = await runMergeCli(["merge", "c1"]);
-    expect(result.exitCode).toBe(1);
+    const result = await runIssueCli(["merge", "c1"], { env: env() });
+    expect(result.status).toBe(1);
     expect(result.stderr).toContain('"c1" is a Task');
     expect(result.stderr).toContain("merge is only valid on a Story");
     expect(ghCalls).toHaveLength(0);
@@ -372,8 +331,8 @@ describe("issue merge CLI", () => {
         stderr: "merge not allowed: repository rule violations\n",
       }),
     );
-    const result = await runMergeCli(["merge", "a"]);
-    expect(result.exitCode).toBe(1);
+    const result = await runIssueCli(["merge", "a"], { env: env() });
+    expect(result.status).toBe(1);
     expect(result.stderr).toContain("merge not allowed");
     expect(readStoryJson("a").merged).toBe(false);
     expect(readStoryJson("sibling").needsRebase).toBeUndefined();
@@ -381,8 +340,8 @@ describe("issue merge CLI", () => {
 
   it("applies merge consequences on successful CLI merge", async () => {
     stubGh();
-    const result = await runMergeCli(["merge", "a"]);
-    expect(result.exitCode).toBeUndefined();
+    const result = await runIssueCli(["merge", "a"], { env: env() });
+    expect(result.status).toBe(0);
     expect(readStoryJson("a").merged).toBe(true);
     expect(readStoryJson("sibling").needsRebase).toBe("main");
   });
