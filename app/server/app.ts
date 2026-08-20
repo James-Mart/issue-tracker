@@ -80,7 +80,7 @@ export function createApp(
   app.use("/api/projects", projectsRouter);
   app.use("/api/conversations", createConversationsRouter(sessions));
   app.use("/api/agent-models", agentModelsRouter);
-  app.use("/api/restart", createRestartRouter(initiateRestart));
+  app.use("/api/restart", createRestartRouter(sessions, initiateRestart));
   app.get("/api/diagnostics/connections", (_req, res) => {
     res.json(getConnectionDiagnostics());
   });

@@ -1,15 +1,29 @@
 import type { Server } from "http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentSessions } from "../services/agent-sessions.js";
 import { RESTART_SUPERVISED_ENV_VAR } from "../restart-contract.js";
 
 let server: Server;
 let baseUrl: string;
 let initiateRestart: ReturnType<typeof vi.fn>;
 
-async function startApp(): Promise<void> {
+function stubSessions(
+  listActiveRuns: AgentSessions["listActiveRuns"],
+): AgentSessions {
+  return {
+    sendPrompt: vi.fn(),
+    getActiveRun: vi.fn(),
+    listActiveRuns,
+    cancel: vi.fn(),
+    dispose: vi.fn(),
+    disposeAll: vi.fn(),
+  };
+}
+
+async function startApp(sessions?: AgentSessions): Promise<void> {
   vi.resetModules();
   const { createApp } = await import("../app.js");
-  const app = createApp(undefined, initiateRestart);
+  const app = createApp(sessions, initiateRestart);
   await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
   });
@@ -18,6 +32,14 @@ async function startApp(): Promise<void> {
     throw new Error("expected TCP listen address");
   }
   baseUrl = `http://127.0.0.1:${addr.port}`;
+}
+
+async function postRestart(body?: { force?: boolean }) {
+  return fetch(`${baseUrl}/api/restart`, {
+    method: "POST",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
 }
 
 beforeEach(() => {
@@ -36,9 +58,9 @@ afterEach(async () => {
 describe("POST /api/restart", () => {
   it("accepts when supervised and calls initiateRestart after the response", async () => {
     vi.stubEnv(RESTART_SUPERVISED_ENV_VAR, "1");
-    await startApp();
+    await startApp(stubSessions(() => []));
 
-    const res = await fetch(`${baseUrl}/api/restart`, { method: "POST" });
+    const res = await postRestart();
     expect(res.status).toBe(202);
     const body = await res.json();
     expect(body.bootId).toEqual(expect.any(String));
@@ -47,9 +69,50 @@ describe("POST /api/restart", () => {
   });
 
   it("refuses when unsupervised and never calls initiateRestart", async () => {
-    await startApp();
+    await startApp(stubSessions(() => []));
 
-    const res = await fetch(`${baseUrl}/api/restart`, { method: "POST" });
+    const res = await postRestart();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ code: "not-supervised" });
+    expect(initiateRestart).not.toHaveBeenCalled();
+  });
+
+  it("refuses as runs-in-flight when live turns exist and force is not set", async () => {
+    vi.stubEnv(RESTART_SUPERVISED_ENV_VAR, "1");
+    const conversationId = "conv-live-turn";
+    await startApp(
+      stubSessions(() => [{ conversationId }]),
+    );
+
+    const res = await postRestart();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      code: "runs-in-flight",
+      activeRuns: [{ conversationId }],
+    });
+    expect(initiateRestart).not.toHaveBeenCalled();
+  });
+
+  it("accepts with force when live turns exist", async () => {
+    vi.stubEnv(RESTART_SUPERVISED_ENV_VAR, "1");
+    await startApp(
+      stubSessions(() => [{ conversationId: "conv-live-turn" }]),
+    );
+
+    const res = await postRestart({ force: true });
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({ bootId: expect.any(String) }),
+    );
+    expect(initiateRestart).toHaveBeenCalledOnce();
+  });
+
+  it("refuses unsupervised even when force is true", async () => {
+    await startApp(
+      stubSessions(() => [{ conversationId: "conv-live-turn" }]),
+    );
+
+    const res = await postRestart({ force: true });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ code: "not-supervised" });
     expect(initiateRestart).not.toHaveBeenCalled();
