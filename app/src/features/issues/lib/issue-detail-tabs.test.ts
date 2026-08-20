@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Issue } from "@server/schemas";
 import {
+  agentsTabForIssue,
   channelTabForIssue,
   DEFAULT_ISSUE_DETAIL_TAB,
   issueDetailTabNeedsBoundedShell,
@@ -80,9 +81,23 @@ describe("channelTabForIssue", () => {
   });
 });
 
+describe("agentsTabForIssue", () => {
+  it("returns true for Task and Epic-child Story only", () => {
+    expect(agentsTabForIssue(task)).toBe(true);
+    expect(agentsTabForIssue(epicStory, "epic")).toBe(true);
+    expect(agentsTabForIssue(idea)).toBe(false);
+    expect(agentsTabForIssue(epic)).toBe(false);
+    expect(agentsTabForIssue(projectStory, "project")).toBe(false);
+    expect(agentsTabForIssue(epicStory)).toBe(false);
+  });
+});
+
 describe("tabsForIssueDetail", () => {
-  it("Task: Overview only", () => {
-    expect(tabsForIssueDetail(task).map((t) => t.key)).toEqual(["overview"]);
+  it("Task: Overview + Agents", () => {
+    expect(tabsForIssueDetail(task).map((t) => t.key)).toEqual([
+      "overview",
+      "agents",
+    ]);
   });
 
   it("Idea: Overview + Planning", () => {
@@ -110,6 +125,7 @@ describe("tabsForIssueDetail", () => {
     ).toEqual(["overview", "implementing"]);
     expect(tabsForIssueDetail(epicStory, "epic").map((t) => t.key)).toEqual([
       "overview",
+      "agents",
     ]);
   });
 
@@ -142,6 +158,8 @@ describe("resolveIssueDetailTab", () => {
   it("accepts an eligible key", () => {
     expect(resolveIssueDetailTab("planning", ideaTabs)).toBe("planning");
     expect(resolveIssueDetailTab("overview", ideaTabs)).toBe("overview");
+    const taskTabs = tabsForIssueDetail(task);
+    expect(resolveIssueDetailTab("agents", taskTabs)).toBe("agents");
   });
 
   it("falls back when the key is not in this issue's set", () => {

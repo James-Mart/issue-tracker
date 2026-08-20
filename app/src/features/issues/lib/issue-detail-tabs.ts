@@ -6,14 +6,17 @@ import {
 } from "./supporting-docs";
 
 export const DEFAULT_ISSUE_DETAIL_TAB = "overview" as const;
+export const AGENTS_DETAIL_TAB = "agents" as const;
 
 export type IssueDetailTabKey =
   | typeof DEFAULT_ISSUE_DETAIL_TAB
+  | typeof AGENTS_DETAIL_TAB
   | ConversationChannel
   | SupportingDocPreviewTab["key"];
 
 export type IssueDetailTab =
   | { key: typeof DEFAULT_ISSUE_DETAIL_TAB; label: "Overview" }
+  | { key: typeof AGENTS_DETAIL_TAB; label: "Agents" }
   | { key: ConversationChannel; label: string; channel: ConversationChannel }
   | SupportingDocPreviewTab;
 
@@ -37,6 +40,16 @@ export function channelTabForIssue(
   return undefined;
 }
 
+/** Agents tab for Task and Epic-child Story — kind-only, not data-dependent. */
+export function agentsTabForIssue(
+  issue: Issue,
+  parentKind?: IssueKind,
+): boolean {
+  if (issue.kind === "task") return true;
+  if (issue.kind === "story" && parentKind === "epic") return true;
+  return false;
+}
+
 /**
  * Page-level tab set for issue detail: Overview always; optional channel;
  * Project keeps supporting-doc preview tabs.
@@ -55,6 +68,9 @@ export function tabsForIssueDetail(
       label: CHANNEL_TAB_LABELS[channel],
       channel,
     });
+  }
+  if (agentsTabForIssue(issue, parentKind)) {
+    tabs.push({ key: AGENTS_DETAIL_TAB, label: "Agents" });
   }
   if (issue.kind === "project") {
     tabs.push(...previewableSupportingDocs(issue.supportingDocs));

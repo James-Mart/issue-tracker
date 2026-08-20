@@ -15,6 +15,8 @@ import {
   readConversation,
   readDelegations,
 } from "./conversations.js";
+import { IssueError } from "./errors.js";
+import { readIssueOrThrow } from "./issues.js";
 import { EventPipeline } from "./event-pipeline.js";
 import {
   formatEffectiveModel,
@@ -286,6 +288,26 @@ function optionalResumeId(args: Record<string, unknown>): string | undefined {
   return args.resumeId;
 }
 
+/** Optional `issueId`; absent/undefined → omit; present but invalid → error. */
+function optionalIssueId(args: Record<string, unknown>): string | undefined {
+  if (!("issueId" in args) || args.issueId === undefined) return undefined;
+  if (typeof args.issueId !== "string" || args.issueId.length === 0) {
+    throw new Error("delegate: missing or invalid issueId");
+  }
+  return args.issueId;
+}
+
+function requireKnownIssue(issueId: string): void {
+  try {
+    readIssueOrThrow(issueId);
+  } catch (err) {
+    if (err instanceof IssueError && err.code === "not_found") {
+      throw new Error(`delegate: unknown issue "${issueId}"`);
+    }
+    throw err;
+  }
+}
+
 function nestedStorePath(storeDir: string, agentId: string): string {
   return join(storeDir, "nested", agentId);
 }
@@ -394,6 +416,10 @@ export function createDelegateCustomTools(
             description:
               "Existing nested agent id to re-enter. When set, resumes that agent instead of creating one.",
           },
+          issueId: {
+            type: "string",
+            description: "Tracker issue this run is being spawned for.",
+          },
         },
         required: ["role", "prompt"],
       },
@@ -401,6 +427,10 @@ export function createDelegateCustomTools(
         const role = requireString(args, "role");
         const prompt = requireString(args, "prompt");
         const resumeId = optionalResumeId(args);
+        const issueId = optionalIssueId(args);
+        if (issueId !== undefined) {
+          requireKnownIssue(issueId);
+        }
 
         const attemptedDepth = (parent?.depth ?? 0) + 1;
         if (attemptedDepth > MAX_DELEGATION_DEPTH) {
@@ -566,6 +596,8 @@ export function createDelegateCustomTools(
               ...(parentDelegationId !== undefined
                 ? { parentDelegationId }
                 : {}),
+              ...(issueId !== undefined ? { issueId } : {}),
+              ...(parentCallId !== undefined ? { parentCallId } : {}),
             });
           }
 

@@ -21,8 +21,9 @@ host from surrounding context.
 Use `CallMcpTool` against server `custom-user-tools`:
 
 - **`delegate`** — spawn or resume a nested agent. Arguments: `role`
-  (spawnable `agents/<role>.md` name), `prompt`, and optional `resumeId`
-  (existing nested agent id to re-enter). The app selects the model from the
+  (spawnable `agents/<role>.md` name), `prompt`, optional `resumeId`
+  (existing nested agent id to re-enter), and optional `issueId` (tracker
+  issue this run is being spawned for). The app selects the model from the
   role's frontmatter pin; do not pass a model. Returns `ok: true` with
   `agentId` and `reply` on success; `ok: false` with `failureClass`,
   `isRetryable`, `message`, and `agentId` on a runtime failure. Caller errors

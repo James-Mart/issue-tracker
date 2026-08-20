@@ -137,7 +137,8 @@ Run these commands in order (use `<rootId>` throughout):
    a time. This mirror is a cache of the outline — re-sync it from a fresh
    `issue tree <rootId>` each time control returns to you (see The loop).
 2. Delegate the plugin roles below via the Spawn stubs. Pass **only** the
-   fields each stub lists. Never pass the workspace — each repo subagent
+   delegate arguments each stub lists (`role`, `issueId`, `prompt`; plus
+   `resumeId` when resuming). Never pass the workspace — each repo subagent
    resolves it from its own `issue summary` (SPEC § Project workspace). Do not
    gather descriptions, read diffs, or ingest reports into your own context.
 
@@ -376,7 +377,8 @@ and follow it.
 
 ## Spawn stubs
 
-Pass these as the delegation `prompt`. Inline the fields each stub lists.
+Pass each stub's delegate arguments (`role`, `issueId`, `prompt`; plus
+`resumeId` when resuming). Inline the fields each stub lists.
 Id labels in spawn prompts must be `Issue:` (or `Work root:` where noted) —
 never kind nouns (`Task:`, `Story:`, `Commit:`, `Branch:`, `Epic:`). Children
 own static behavior via their `agents/*.md` files — do not paste workflow
@@ -392,48 +394,48 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 **only** Mode + issue id — no work-root id, tree chips, or git facts
 (`mergeBase`, `branchName`).
 
-**Start branch** — `role: issue-tracker-git`
+**Start branch** — `role: issue-tracker-git`, `issueId: <storyId>`
 
 > Mode: start-branch. Issue: `<storyId>`.
 
-**Finish commit** — `role: issue-tracker-git`
+**Finish commit** — `role: issue-tracker-git`, `issueId: <taskId>`
 
 > Mode: finish-commit. Issue: `<taskId>`.
 
-**Finish branch** — `role: issue-tracker-git`
+**Finish branch** — `role: issue-tracker-git`, `issueId: <storyId>`
 
 > Mode: finish-branch. Issue: `<storyId>`.
 
-**Model discriminator** — `role: issue-tracker-model-discriminator`
+**Model discriminator** — `role: issue-tracker-model-discriminator`, `issueId: <id>`
 
 > *(Issue context line.)*
 
-**Implement** — `role: issue-tracker-implementor-<family>`
+**Implement** — `role: issue-tracker-implementor-<family>`, `issueId: <id>`
 
 > *(Issue context line.)* Mode: implement.
 
-**Code-quality validator** — `role: issue-tracker-code-quality-validator`
+**Code-quality validator** — `role: issue-tracker-code-quality-validator`, `issueId: <id>`
 (when to spawn vs resume: Per-Task cycle step 3)
 
 > *(Issue context line.)* Mode: review.
 
-**Code-quality validator (resume)** — `role: issue-tracker-code-quality-validator`
+**Code-quality validator (resume)** — `role: issue-tracker-code-quality-validator`, `issueId: <id>`
 (when to resume: Per-Task cycle step 3)
 
 > *(Issue context line.)* Mode: resume. Verify that previously requested changes were
 > fixed.
 
-**Story review** — `role: issue-tracker-story-review`
+**Story review** — `role: issue-tracker-story-review`, `issueId: <id>`
 (when to spawn: Close-Story step 3)
 
 > *(Issue context line.)*
 
-**Story review (resume)** — `role: issue-tracker-story-review`
+**Story review (resume)** — `role: issue-tracker-story-review`, `issueId: <id>`
 (when to resume: Close-Story step 3)
 
 > *(Issue context line.)* Mode: resume.
 
-**Revise** — `role: issue-tracker-implementor-<family>`
+**Revise** — `role: issue-tracker-implementor-<family>`, `issueId: <id>`
 (re-enter with `resumeId`; look up that role via `delegations` when lost)
 
 > *(Issue context line.)* Mode: revise.

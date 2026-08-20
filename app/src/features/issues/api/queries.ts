@@ -12,6 +12,7 @@ import type { Attachment } from "@server/services/attachments";
 import type { ProjectPrsResponse } from "@server/services/delivery";
 import { ApiError } from "@/lib/api/errors";
 import { attachmentsApiPath } from "../lib/attachments";
+import { fetchIssueAgentRuns } from "./agent-runs";
 import { listChannelSessions } from "./channel-sessions";
 import { healthKeys, issuesKeys } from "./keys";
 
@@ -52,6 +53,18 @@ export function useCommentsQuery(id: string): UseQueryResult<CommentsResponse, E
     queryKey: issuesKeys.comments(id),
     queryFn: () => request<CommentsResponse>(`/api/issues/${id}/comments`),
     enabled: Boolean(id),
+    retry: (count, error) =>
+      !(error instanceof ApiError && error.status === 404) && count < 2,
+  });
+}
+
+export function useIssueAgentRunsQuery(
+  issueId: string,
+): UseQueryResult<Awaited<ReturnType<typeof fetchIssueAgentRuns>>, Error> {
+  return useQuery({
+    queryKey: issuesKeys.agentRuns(issueId),
+    queryFn: () => fetchIssueAgentRuns(issueId),
+    enabled: Boolean(issueId),
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 2,
   });

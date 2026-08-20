@@ -3,6 +3,8 @@ export const issuesKeys = {
   list: () => [...issuesKeys.all, "list"] as const,
   detail: (id: string) => [...issuesKeys.all, "detail", id] as const,
   comments: (id: string) => [...issuesKeys.all, "comments", id] as const,
+  agentRuns: (issueId: string) =>
+    [...issuesKeys.all, "agentRuns", issueId] as const,
   attachments: (id: string) =>
     [...issuesKeys.all, "attachments", id] as const,
   channelSessions: (issueId: string, channel: string) =>

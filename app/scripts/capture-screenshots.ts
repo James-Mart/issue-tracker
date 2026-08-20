@@ -197,6 +197,40 @@ async function gotoPath(page: Page, baseUrl: string, path: string): Promise<void
   await settle(page);
 }
 
+const ISSUE_DETAIL_PATH = /^\/projects\/[^/]+\/issues\/[^/]+/;
+
+/** Issue detail hydrates after theme reload; 800ms settle alone captures the skeleton. */
+async function waitForIssueDetailReady(page: Page, path: string): Promise<void> {
+  const pathname = path.split("?")[0] ?? path;
+  if (!ISSUE_DETAIL_PATH.test(pathname)) return;
+
+  await page.waitForFunction(
+    () => {
+      const body = document.body.textContent ?? "";
+      if (body.includes("Loading issue")) return false;
+      return (
+        document.querySelector('[role="tablist"]') != null ||
+        body.includes("Issue not found")
+      );
+    },
+    { timeout: 20_000 },
+  );
+
+  const tab = new URL(path, "http://local").searchParams.get("tab");
+  if (tab === "agents") {
+    await page.waitForFunction(
+      () => {
+        const body = document.body.textContent ?? "";
+        if (body.includes("Loading agent runs")) return false;
+        return document.querySelector('[data-slot="agent-runs-panel"]') != null;
+      },
+      { timeout: 10_000 },
+    );
+  }
+
+  await settle(page);
+}
+
 // Chromium needs its system shared libraries, not just its own build. Surface
 // the remedy here instead of leaving a raw loader error from the browser.
 async function launchBrowser() {
@@ -470,6 +504,7 @@ async function captureTarget(
 
   await gotoPath(page, baseUrl, target);
   await applyTheme(page, theme);
+  await waitForIssueDetailReady(page, target);
   await writeScreenshot(page, outDir, withThemeSuffix(pathFilename(target), themeSuffix));
   let count = 1;
 

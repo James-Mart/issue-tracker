@@ -1383,6 +1383,95 @@ describe("delegate publishes nested run frames", () => {
     }
   });
 
+  it("records issueId and parentCallId on a delegation when both are provided", async () => {
+    const {
+      createConversation,
+      readDelegations,
+      createDelegateCustomTools: createTools,
+    } = await load();
+    mkdirSync(join(issuesRoot, "linked-task"), { recursive: true });
+    writeFileSync(
+      join(issuesRoot, "linked-task", "issue.json"),
+      JSON.stringify({
+        id: "linked-task",
+        kind: "task",
+        partOf: "platform",
+        title: "Linked task",
+        status: "todo",
+        createdAt: AT,
+        updatedAt: AT,
+      }),
+    );
+
+    const meta = await createConversation({
+      title: "Issue link",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    const result = await customTools.delegate!.execute(
+      {
+        role: "pinned-role",
+        prompt: "for issue",
+        issueId: "linked-task",
+      },
+      { toolCallId: "call-linked-task" },
+    );
+
+    const records = readDelegations(meta.id);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      agentId: result.agentId,
+      role: "pinned-role",
+      issueId: "linked-task",
+      parentCallId: "call-linked-task",
+    });
+  });
+
+  it("throws for an unknown issueId without writing a delegation record", async () => {
+    const {
+      createConversation,
+      readDelegations,
+      createDelegateCustomTools: createTools,
+    } = await load();
+    const meta = await createConversation({
+      title: "Unknown issue link",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
+    const customTools = createTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    await expect(
+      customTools.delegate!.execute(
+        {
+          role: "pinned-role",
+          prompt: "bad link",
+          issueId: "no-such-issue",
+        },
+        { toolCallId: "call-bad-issue" },
+      ),
+    ).rejects.toThrow('delegate: unknown issue "no-such-issue"');
+    expect(readDelegations(meta.id)).toHaveLength(0);
+    expect(fake.created).toHaveLength(0);
+  });
+
   it("appends a delegations.jsonl record on delegation start", async () => {
     const {
       createConversation,
