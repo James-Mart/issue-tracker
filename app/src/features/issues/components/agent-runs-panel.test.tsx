@@ -3,7 +3,7 @@ import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentRun } from "@server/schemas";
+import type { AgentRun, TranscriptEvent } from "@server/schemas";
 import { AgentRunCard, AgentRunsPanel } from "./agent-runs-panel";
 
 const queryState = vi.hoisted(() => ({
@@ -17,12 +17,33 @@ const queryState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
+const eventsQueryState = vi.hoisted(() => ({
+  data: { events: [] as TranscriptEvent[] },
+  isLoading: false,
+  error: null as Error | null,
+  expandedCalls: [] as string[],
+}));
+
 vi.mock("../api/queries", () => ({
   useIssueAgentRunsQuery: () => ({
     data: queryState.data,
     isLoading: queryState.isLoading,
     error: queryState.error,
   }),
+  useIssueAgentRunEventsQuery: (
+    _issueId: string,
+    delegationId: string,
+    expanded: boolean,
+  ) => {
+    if (expanded) {
+      eventsQueryState.expandedCalls.push(delegationId);
+    }
+    return {
+      data: expanded ? eventsQueryState.data : undefined,
+      isLoading: expanded && eventsQueryState.isLoading,
+      error: expanded ? eventsQueryState.error : null,
+    };
+  },
 }));
 
 const AT = "2026-07-09T14:00:00.000Z";
@@ -63,6 +84,16 @@ function mountPanel(props: ComponentProps<typeof AgentRunsPanel>): {
   return { container, root };
 }
 
+function clickHeader(container: ParentNode, delegationId: string) {
+  const card = container.querySelector(
+    `[data-run-id="${delegationId}"] [data-testid="agent-run-card-header"]`,
+  ) as HTMLButtonElement | null;
+  expect(card).toBeTruthy();
+  act(() => {
+    card!.click();
+  });
+}
+
 const PROJECT_ID = "platform";
 
 afterEach(() => {
@@ -70,6 +101,10 @@ afterEach(() => {
   queryState.data = { runs: [], workRoot: undefined };
   queryState.isLoading = false;
   queryState.error = null;
+  eventsQueryState.data = { events: [] };
+  eventsQueryState.isLoading = false;
+  eventsQueryState.error = null;
+  eventsQueryState.expandedCalls = [];
 });
 
 describe("AgentRunsPanel", () => {
@@ -124,6 +159,166 @@ describe("AgentRunsPanel", () => {
     );
   });
 
+  it("expands a running run on mount and keeps completed runs collapsed", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-running",
+          status: "running",
+          endedAt: undefined,
+        }),
+        sampleRun({
+          delegationId: "del-done",
+          status: "completed",
+          endedAt: AT_END,
+        }),
+      ],
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+
+    expect(
+      container.querySelector('[data-run-id="del-running"][data-expanded]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-run-id="del-running"] [data-slot="agent-run-body"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-run-id="del-done"][data-expanded]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-run-id="del-done"] [data-slot="agent-run-body"]'),
+    ).toBeNull();
+    expect(eventsQueryState.expandedCalls).toEqual(["del-running"]);
+  });
+
+  it("expands a completed run when its header is clicked", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-done",
+          status: "completed",
+          endedAt: AT_END,
+        }),
+      ],
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    clickHeader(container, "del-done");
+
+    expect(
+      container.querySelector('[data-run-id="del-done"][data-expanded]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-run-id="del-done"] [data-slot="agent-run-body"]'),
+    ).toBeTruthy();
+    expect(eventsQueryState.expandedCalls).toEqual(["del-done"]);
+  });
+
+  it("renders each step kind through its matching transcript primitive", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-done",
+          status: "completed",
+          endedAt: AT_END,
+        }),
+      ],
+    };
+    eventsQueryState.data = {
+      events: [
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: { kind: "text", text: "Done implementing." },
+          at: AT,
+          seq: 1,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: { kind: "thinking", text: "Need to inspect the panel." },
+          at: AT,
+          seq: 2,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: {
+            kind: "tool_call",
+            callId: "tool-1",
+            name: "Read",
+            status: "completed",
+            args: { path: "agent-runs-panel.tsx" },
+          },
+          at: AT,
+          seq: 3,
+        },
+      ],
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    clickHeader(container, "del-done");
+
+    expect(container.querySelector('[data-run-step="text"]')).toBeTruthy();
+    expect(container.querySelector('[data-run-step="thinking"]')).toBeTruthy();
+    expect(container.querySelector('[data-run-step="tool_call"]')).toBeTruthy();
+    expect(container.textContent).toContain("Done implementing.");
+    expect(container.textContent).toContain("Need to inspect the panel.");
+    expect(container.textContent).toContain("Read");
+  });
+
+  it("does not mount composer controls on the agents tab", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-running",
+          status: "running",
+          endedAt: undefined,
+        }),
+      ],
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(container.querySelector('[data-slot="composer"]')).toBeNull();
+    expect(container.querySelector('[data-slot="open-thread-chrome"]')).toBeNull();
+    expect(container.querySelector('[data-slot="conversation-thread"]')).toBeNull();
+    expect(Array.from(container.querySelectorAll("button")).some((btn) =>
+      btn.textContent?.includes("Send"),
+    )).toBe(false);
+  });
+
+  it("shows loading and error states while fetching an expanded body", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-done",
+          status: "completed",
+          endedAt: AT_END,
+        }),
+      ],
+    };
+    eventsQueryState.isLoading = true;
+
+    const loadingMount = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    clickHeader(loadingMount.container, "del-done");
+    expect(
+      loadingMount.container.querySelector('[data-slot="agent-run-body"][data-state="loading"]'),
+    ).toBeTruthy();
+
+    eventsQueryState.isLoading = false;
+    eventsQueryState.error = new Error("events unavailable");
+
+    const errorMount = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    clickHeader(errorMount.container, "del-done");
+    expect(
+      errorMount.container.querySelector('[data-slot="agent-run-body"][data-state="error"]'),
+    ).toBeTruthy();
+    expect(errorMount.container.textContent).toContain("events unavailable");
+  });
+
   it("keeps run headers within a 390px-wide viewport", () => {
     queryState.data = {
       runs: [
@@ -151,6 +346,65 @@ describe("AgentRunsPanel", () => {
     });
 
     expect(shell.scrollWidth).toBeLessThanOrEqual(390);
+  });
+
+  it("keeps an expanded body within a 390px-wide viewport", () => {
+    const longArg = "x".repeat(240);
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-done",
+          status: "completed",
+          endedAt: AT_END,
+        }),
+      ],
+    };
+    eventsQueryState.data = {
+      events: [
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: {
+            kind: "text",
+            text: "A long wrapped sentence that should stay inside the card without forcing horizontal overflow on a narrow phone viewport.",
+          },
+          at: AT,
+          seq: 1,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: {
+            kind: "tool_call",
+            callId: "tool-long",
+            name: "Shell",
+            status: "completed",
+            args: { command: longArg },
+          },
+          at: AT,
+          seq: 2,
+        },
+      ],
+    };
+
+    const shell = document.createElement("div");
+    shell.style.width = "390px";
+    shell.style.overflow = "hidden";
+    document.body.appendChild(shell);
+    const root = createRoot(shell);
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <AgentRunsPanel issueId="task-1" projectId={PROJECT_ID} />
+        </MemoryRouter>,
+      );
+    });
+    clickHeader(shell, "del-done");
+
+    expect(shell.scrollWidth).toBeLessThanOrEqual(390);
+    const card = shell.querySelector('[data-run-id="del-done"]') as HTMLElement;
+    expect(card).toBeTruthy();
+    expect(card.scrollWidth).toBeLessThanOrEqual(390);
   });
 
   it("renders an empty state when there are no linked runs", () => {
@@ -214,6 +468,7 @@ describe("AgentRunCard", () => {
     act(() => {
       root.render(
         <AgentRunCard
+          issueId="task-1"
           run={sampleRun({
             startedAt: AT,
             endedAt: "2026-07-09T14:00:12.000Z",
