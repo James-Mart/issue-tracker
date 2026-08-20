@@ -4,8 +4,7 @@ import {
   listConversations,
 } from "./conversations.js";
 import { isRunLive } from "./run-live.js";
-import { readDescription } from "./issues.js";
-import { descriptionBacklinksIdea } from "./planning-work-root.js";
+import { ideaIdsWithPlanRoot } from "./planning-work-root.js";
 
 function planningSessionsByIssueId(): Map<string, string[]> {
   const byIssueChannel = new Map<string, string[]>();
@@ -24,29 +23,6 @@ function planningSessionsByIssueId(): Map<string, string[]> {
     planning.set(key.slice(0, sep), conversationIds);
   }
   return planning;
-}
-
-function ideaIdsWithPlanRoot(issues: Issue[]): Set<string> {
-  const ideaIdsByProject = new Map<string, string[]>();
-  for (const issue of issues) {
-    if (issue.kind !== "idea") continue;
-    const bucket = ideaIdsByProject.get(issue.partOf);
-    if (bucket) bucket.push(issue.id);
-    else ideaIdsByProject.set(issue.partOf, [issue.id]);
-  }
-
-  const planned = new Set<string>();
-  for (const issue of issues) {
-    if (issue.kind !== "epic" && issue.kind !== "story") continue;
-    const ideaIds = ideaIdsByProject.get(issue.partOf);
-    if (!ideaIds) continue;
-    const description = readDescription(issue.id);
-    for (const ideaId of ideaIds) {
-      if (planned.has(ideaId)) continue;
-      if (descriptionBacklinksIdea(description, ideaId)) planned.add(ideaId);
-    }
-  }
-  return planned;
 }
 
 function statusForIdea(
