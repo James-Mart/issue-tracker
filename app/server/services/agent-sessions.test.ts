@@ -390,10 +390,12 @@ describe("agent sessions manager", () => {
       "assistant",
       "thinking",
       "tool_call",
+      "tool_call",
       "task",
       "status",
       "usage",
       "request",
+      "tool_call",
       "subagent_update",
       "subagent_update",
       "subagent_update",
@@ -410,14 +412,22 @@ describe("agent sessions manager", () => {
       type: "tool_call",
       callId: PRIMARY_TOOL_CALL_ID,
       name: "read",
+      status: "running",
+    });
+    expect(transcript[3]).toMatchObject({
+      type: "tool_call",
+      callId: PRIMARY_TOOL_CALL_ID,
+      name: "read",
       status: "completed",
     });
-    // Running tool_call frames are not persisted — only the terminal Task call.
     expect(
       transcript.filter(
         (e) => e.type === "tool_call" && e.callId === TASK_TOOL_CALL_ID,
       ),
-    ).toHaveLength(1);
+    ).toEqual([
+      expect.objectContaining({ status: "running" }),
+      expect.objectContaining({ status: "completed" }),
+    ]);
 
     const nested = transcript.filter((e) => e.type === "subagent_update");
     expect(nested.every((e) => e.parentCallId === TASK_TOOL_CALL_ID)).toBe(true);
@@ -444,7 +454,10 @@ describe("agent sessions manager", () => {
     });
 
     const taskDone = transcript.find(
-      (e) => e.type === "tool_call" && e.callId === TASK_TOOL_CALL_ID,
+      (e) =>
+        e.type === "tool_call" &&
+        e.callId === TASK_TOOL_CALL_ID &&
+        e.status === "completed",
     );
     expect(taskDone).toMatchObject({
       type: "tool_call",
@@ -453,7 +466,7 @@ describe("agent sessions manager", () => {
     });
   });
 
-  it("live tap delivers deltas/transitions/nested frames while disk holds only finalized events", async () => {
+  it("live tap delivers deltas/transitions/nested frames while disk holds durable transcript events", async () => {
     const {
       createConversation,
       readConversation,
@@ -516,7 +529,7 @@ describe("agent sessions manager", () => {
       .filter((f) => f.event.callId === PRIMARY_TOOL_CALL_ID)
       .map((f) => ({ status: f.event.status, persist: f.persist }));
     expect(primaryStatuses).toEqual([
-      { status: "running", persist: false },
+      { status: "running", persist: true },
       { status: "completed", persist: true },
     ]);
 
@@ -536,18 +549,19 @@ describe("agent sessions manager", () => {
       { kind: "tool_call", status: "running" },
     ]);
 
-    // Persistence semantics unchanged: disk holds only the finalized events in
-    // order — one coalesced assistant, one terminal tool_call per call_id, and
-    // the finalized nested subagent_update events.
+    // Disk holds coalesced assistant/thinking, every top-level tool_call frame
+    // (running and terminal), and finalized nested subagent_update events.
     const { transcript } = readConversation(meta.id);
     expect(transcript.map((e) => e.type)).toEqual([
       "assistant",
       "thinking",
       "tool_call",
+      "tool_call",
       "task",
       "status",
       "usage",
       "request",
+      "tool_call",
       "subagent_update",
       "subagent_update",
       "subagent_update",
@@ -559,13 +573,13 @@ describe("agent sessions manager", () => {
     expect(
       transcript.filter(
         (e) => e.type === "tool_call" && e.callId === PRIMARY_TOOL_CALL_ID,
-      ),
-    ).toHaveLength(1);
+      ).map((e) => e.status),
+    ).toEqual(["running", "completed"]);
     expect(
       transcript.filter(
         (e) => e.type === "tool_call" && e.callId === TASK_TOOL_CALL_ID,
-      ),
-    ).toHaveLength(1);
+      ).map((e) => e.status),
+    ).toEqual(["running", "completed"]);
   });
 
   it("a throwing live subscriber disrupts neither persistence nor other subscribers", async () => {
@@ -622,16 +636,18 @@ describe("agent sessions manager", () => {
     expect(thrown).toBeGreaterThan(0);
     expect(healthy).toHaveLength(thrown);
 
-    // Persistence is intact: all finalized events reached disk in order.
+    // Persistence is intact: all durable transcript events reached disk in order.
     const { transcript } = readConversation(meta.id);
     expect(transcript.map((e) => e.type)).toEqual([
       "assistant",
       "thinking",
       "tool_call",
+      "tool_call",
       "task",
       "status",
       "usage",
       "request",
+      "tool_call",
       "subagent_update",
       "subagent_update",
       "subagent_update",

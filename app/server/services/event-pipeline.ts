@@ -6,9 +6,9 @@ import { appendEvent } from "./conversations.js";
 
 /**
  * One step out of the session manager's single normalize pass. Persistence
- * writes only when `persist` is true (finalized events); every step is also
- * published to the live-subscriber tap, so `persist: false` steps surface the
- * incremental deltas that never touch disk.
+ * writes only when `persist` is true; every step is also published to the
+ * live-subscriber tap, so `persist: false` steps surface incremental deltas
+ * and run signalling that never touch disk.
  */
 export type NormalizedStep = {
   event: TranscriptEventInput;
@@ -23,9 +23,9 @@ export type DelegationStamp = {
 };
 
 /**
- * Normalize + persist finalized events for one conversation turn, and publish
- * every normalized step to the live-subscriber tap ({@link emit}). Persistence
- * semantics are unchanged: only `persist: true` steps land on disk.
+ * Normalize + persist durable transcript events for one conversation turn, and
+ * publish every normalized step to the live-subscriber tap ({@link emit}). Only
+ * `persist: true` steps land on disk.
  */
 export class EventPipeline {
   private assistantText = "";
@@ -156,9 +156,7 @@ export class EventPipeline {
           ...(message.result !== undefined ? { result: message.result } : {}),
           ...hints,
         };
-        const terminal =
-          message.status === "completed" || message.status === "error";
-        await this.emit({ event, persist: terminal });
+        await this.emit({ event, persist: true });
         return;
       }
       case "task": {
