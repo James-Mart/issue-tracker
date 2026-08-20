@@ -168,6 +168,8 @@ export const FIELD_LABELS = {
   inspirationApps: "Inspiration apps",
   personas: "Personas",
   stakeholder: "Stakeholder",
+  sourceIdea: "Source idea",
+  generatedIssues: "Generated issues",
 } as const;
 
 /** Select value for manual planning — unset on disk. */
