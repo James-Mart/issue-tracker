@@ -812,6 +812,23 @@ export const delegationRecordSchema = delegationRecordInputSchema.merge(
 
 export type DelegationRecord = z.infer<typeof delegationRecordSchema>;
 
+/** Resolved agent run on an issue — derived from delegations + transcript tool calls. */
+export const agentRunSchema = z.object({
+  delegationId: nonEmpty,
+  agentId: nonEmpty,
+  role: nonEmpty,
+  model: nonEmpty,
+  issueId: nonEmpty,
+  parentCallId: nonEmpty,
+  conversationId: nonEmpty,
+  startedAt: nonEmpty,
+  status: z.enum(["running", "completed", "error"]),
+  endedAt: nonEmpty.optional(),
+  isResume: z.boolean(),
+});
+
+export type AgentRun = z.infer<typeof agentRunSchema>;
+
 export type DelegationRecordParseResult =
   | { ok: true; record: DelegationRecord }
   | { ok: false; message: string };
