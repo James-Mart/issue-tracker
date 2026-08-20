@@ -252,6 +252,18 @@ Derived `mergeBase` (`issue story get … mergeBase`) already reflects the
 override. Rules:
 [SPEC.md § The stacked-PR merge model](../../SPEC.md#the-stacked-pr-merge-model).
 
+## Source idea (sourceIdea)
+
+When a plan root was planned from an Idea, record that edge **after**
+`apply` (imperative only — not in the YAML doc):
+
+- Epic: `issue epic set <id> sourceIdea <ideaId>`
+- Project-level root Story: `issue story set <id> sourceIdea <ideaId>`
+
+`apply` preserves `sourceIdea` and never reads it from description prose.
+Only Idea-sourced migrations set this — replans from an Epic or Story record
+nothing. Rules: [SPEC.md § Relationships](../../SPEC.md#relationships).
+
 ## Verification-only Tasks (noDiff)
 
 When a Task's Change intentionally makes no source-controlled edits, describe
@@ -301,6 +313,9 @@ Before done:
 - Non-trunk bases use imperative `mergeBase` on the root Story or Epic after
   `apply` (see [Merge-base override](#merge-base-override)) — never invent a
   base in YAML or Task prose for the git agent.
+- Idea-sourced plan roots use imperative `sourceIdea` after `apply` (see
+  [Source idea (sourceIdea)](#source-idea-sourceidea)) — never put the field
+  in the YAML doc or a `Source idea:` description line.
 - Verification-only Tasks use imperative `noDiff` after `apply` (see
   [Verification-only Tasks (noDiff)](#verification-only-tasks-nodiff)) — never
   put the flag in the YAML doc.
