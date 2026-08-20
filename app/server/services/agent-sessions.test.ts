@@ -401,6 +401,7 @@ describe("agent sessions manager", () => {
       "subagent_update",
       "subagent_update",
       "subagent_update",
+      "subagent_update",
       "tool_call",
     ]);
 
@@ -435,6 +436,7 @@ describe("agent sessions manager", () => {
       "text",
       "thinking",
       "tool_call",
+      "tool_call",
       "step",
       "step",
     ]);
@@ -445,6 +447,14 @@ describe("agent sessions manager", () => {
       step: { kind: "thinking", text: "Considering options." },
     });
     expect(nested[2]).toMatchObject({
+      step: {
+        kind: "tool_call",
+        callId: "nested-shell-1",
+        name: "shell",
+        status: "running",
+      },
+    });
+    expect(nested[3]).toMatchObject({
       step: {
         kind: "tool_call",
         callId: "nested-shell-1",
@@ -534,7 +544,7 @@ describe("agent sessions manager", () => {
     ]);
 
     // Nested subagent_update frames — all tagged with the parent Task call —
-    // include the live-only text/thinking/tool-call-running deltas.
+    // include the live-only text/thinking deltas; running nested tool_call persists.
     const nested = frames.filter(isSubagent);
     expect(nested.length).toBeGreaterThan(0);
     expect(
@@ -546,8 +556,13 @@ describe("agent sessions manager", () => {
     expect(nestedLive).toEqual([
       { kind: "text", status: undefined },
       { kind: "thinking", status: undefined },
-      { kind: "tool_call", status: "running" },
     ]);
+    const nestedRunningTool = nested.find(
+      (f) =>
+        f.event.step.kind === "tool_call" &&
+        f.event.step.status === "running",
+    );
+    expect(nestedRunningTool?.persist).toBe(true);
 
     // Disk holds coalesced assistant/thinking, every top-level tool_call frame
     // (running and terminal), and finalized nested subagent_update events.
@@ -562,6 +577,7 @@ describe("agent sessions manager", () => {
       "usage",
       "request",
       "tool_call",
+      "subagent_update",
       "subagent_update",
       "subagent_update",
       "subagent_update",
@@ -648,6 +664,7 @@ describe("agent sessions manager", () => {
       "usage",
       "request",
       "tool_call",
+      "subagent_update",
       "subagent_update",
       "subagent_update",
       "subagent_update",

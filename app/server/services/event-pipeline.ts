@@ -347,7 +347,7 @@ export class EventPipeline {
         };
         await this.emit({
           event: this.subagentUpdate(parentCallId, step),
-          persist: false,
+          persist: true,
         });
         return;
       }
