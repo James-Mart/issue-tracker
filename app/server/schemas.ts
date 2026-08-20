@@ -682,6 +682,23 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
 
 export type TranscriptEventInput = z.infer<typeof transcriptEventInputSchema>;
 
+/** Resolved agent run on an issue — derived from delegations + transcript tool calls. */
+export const agentRunSchema = z.object({
+  delegationId: nonEmpty,
+  agentId: nonEmpty,
+  role: nonEmpty,
+  model: nonEmpty,
+  issueId: nonEmpty,
+  parentCallId: nonEmpty,
+  conversationId: nonEmpty,
+  startedAt: nonEmpty,
+  status: z.enum(["running", "completed", "error"]),
+  endedAt: nonEmpty.optional(),
+  isResume: z.boolean(),
+});
+
+export type AgentRun = z.infer<typeof agentRunSchema>;
+
 /** Live-only run lifecycle signalling on the event stream (never persisted). */
 const runFrameInput = z.object({
   type: z.literal("run"),
@@ -699,11 +716,20 @@ const pendingFrameInput = z.object({
 
 export type PendingFrameInput = z.infer<typeof pendingFrameInput>;
 
+/** Live-only issue-scoped delegation start on the event stream (never persisted). */
+const delegationFrameInput = z.object({
+  type: z.literal("delegation"),
+  run: agentRunSchema,
+});
+
+export type DelegationFrameInput = z.infer<typeof delegationFrameInput>;
+
 /** Write-time frame union: transcript events plus live-only run signalling. */
 export const conversationFrameInputSchema = z.union([
   transcriptEventInputSchema,
   runFrameInput,
   pendingFrameInput,
+  delegationFrameInput,
 ]);
 
 export type ConversationFrameInput = z.infer<
@@ -752,6 +778,7 @@ export const conversationStreamEventSchema = z.union([
   ]),
   withStreamFrameMeta(runFrameInput),
   withStreamFrameMeta(pendingFrameInput),
+  withStreamFrameMeta(delegationFrameInput),
 ]);
 
 export type ConversationStreamEvent = z.infer<
@@ -811,23 +838,6 @@ export const delegationRecordSchema = delegationRecordInputSchema.merge(
 );
 
 export type DelegationRecord = z.infer<typeof delegationRecordSchema>;
-
-/** Resolved agent run on an issue — derived from delegations + transcript tool calls. */
-export const agentRunSchema = z.object({
-  delegationId: nonEmpty,
-  agentId: nonEmpty,
-  role: nonEmpty,
-  model: nonEmpty,
-  issueId: nonEmpty,
-  parentCallId: nonEmpty,
-  conversationId: nonEmpty,
-  startedAt: nonEmpty,
-  status: z.enum(["running", "completed", "error"]),
-  endedAt: nonEmpty.optional(),
-  isResume: z.boolean(),
-});
-
-export type AgentRun = z.infer<typeof agentRunSchema>;
 
 export type DelegationRecordParseResult =
   | { ok: true; record: DelegationRecord }
