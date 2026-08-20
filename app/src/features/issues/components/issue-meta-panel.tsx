@@ -10,6 +10,7 @@ import {
 import { IssueAssigneeField } from "./issue-assignee-field";
 import { IssueAssignmentLabelsField } from "./issue-assignment-labels-field";
 import { IssuePartOfField } from "./issue-part-of-field";
+import { IssueSourceIdeaField } from "./issue-source-idea-field";
 import { IssueStakeholderField } from "./issue-stakeholder-field";
 import { CompactMetaBlock } from "./compact-meta";
 import { GitStackPanel } from "./git-stack-panel";
@@ -39,6 +40,10 @@ export function IssueMetaPanel({
         value={<IssuePartOfField issue={issue} />}
       />,
     );
+  }
+
+  if (issue.kind === "epic" || issue.kind === "story") {
+    rows.push(<IssueSourceIdeaField key="sourceIdea" issue={issue} />);
   }
 
   if (hasAssignee(issue)) {
