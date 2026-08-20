@@ -24,6 +24,7 @@ import {
 import { IssueError } from "../services/errors.js";
 import {
   findAgentRunsWorkRoot,
+  listAgentRunEvents,
   listAgentRunsForIssue,
 } from "../services/agent-runs.js";
 import {
@@ -111,6 +112,23 @@ export function createIssuesRouter(
         runs: listAgentRunsForIssue(issueId),
         ...(workRoot ? { workRoot } : {}),
       });
+    }),
+  );
+
+  router.get(
+    "/:id/agent-runs/:delegationId/events",
+    asyncRoute((req, res) => {
+      const issueId = req.params.id;
+      const delegationId = req.params.delegationId;
+      readIssueOrThrow(issueId);
+      const events = listAgentRunEvents(issueId, delegationId);
+      if (!events) {
+        throw new IssueError(
+          "not_found",
+          `unknown agent run "${delegationId}"`,
+        );
+      }
+      res.json({ events });
     }),
   );
 

@@ -13,6 +13,7 @@ export type AgentRunsWorkRoot = {
 };
 
 type ToolCallEvent = Extract<TranscriptEvent, { type: "tool_call" }>;
+type SubagentUpdateEvent = Extract<TranscriptEvent, { type: "subagent_update" }>;
 
 function deriveRunStatus(
   parentCallId: string,
@@ -131,4 +132,44 @@ export function listAgentRunsForIssue(issueId: string): AgentRun[] {
 
   runs.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   return runs;
+}
+
+function subagentEventsForRun(
+  conversationId: string,
+  parentCallId: string,
+): SubagentUpdateEvent[] {
+  const events = readConversation(conversationId).transcript.filter(
+    (e): e is SubagentUpdateEvent =>
+      e.type === "subagent_update" && e.parentCallId === parentCallId,
+  );
+  events.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+  return events;
+}
+
+/** Persisted nested-run events for one linked agent run, in `seq` order. */
+export function listAgentRunEvents(
+  issueId: string,
+  delegationId: string,
+): SubagentUpdateEvent[] | undefined {
+  for (const conversationId of listConversationIds()) {
+    let delegations: DelegationRecord[];
+    let toolCalls: ToolCallEvent[];
+    try {
+      delegations = readDelegations(conversationId);
+      toolCalls = readConversation(conversationId).transcript.filter(
+        (e): e is ToolCallEvent => e.type === "tool_call",
+      );
+    } catch {
+      continue;
+    }
+
+    const record = delegations.find(
+      (d) => d.delegationId === delegationId && d.issueId === issueId,
+    );
+    if (!record?.parentCallId) continue;
+    if (!deriveRunStatus(record.parentCallId, toolCalls)) continue;
+
+    return subagentEventsForRun(conversationId, record.parentCallId);
+  }
+  return undefined;
 }

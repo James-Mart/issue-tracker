@@ -12,7 +12,7 @@ import type { Attachment } from "@server/services/attachments";
 import type { ProjectPrsResponse } from "@server/services/delivery";
 import { ApiError } from "@/lib/api/errors";
 import { attachmentsApiPath } from "../lib/attachments";
-import { fetchIssueAgentRuns } from "./agent-runs";
+import { fetchIssueAgentRunEvents, fetchIssueAgentRuns } from "./agent-runs";
 import { listChannelSessions } from "./channel-sessions";
 import { healthKeys, issuesKeys } from "./keys";
 
@@ -65,6 +65,20 @@ export function useIssueAgentRunsQuery(
     queryKey: issuesKeys.agentRuns(issueId),
     queryFn: () => fetchIssueAgentRuns(issueId),
     enabled: Boolean(issueId),
+    retry: (count, error) =>
+      !(error instanceof ApiError && error.status === 404) && count < 2,
+  });
+}
+
+export function useIssueAgentRunEventsQuery(
+  issueId: string,
+  delegationId: string,
+  expanded: boolean,
+): UseQueryResult<Awaited<ReturnType<typeof fetchIssueAgentRunEvents>>, Error> {
+  return useQuery({
+    queryKey: issuesKeys.agentRunEvents(issueId, delegationId),
+    queryFn: () => fetchIssueAgentRunEvents(issueId, delegationId),
+    enabled: Boolean(issueId) && Boolean(delegationId) && expanded,
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 2,
   });

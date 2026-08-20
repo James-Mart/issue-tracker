@@ -5,6 +5,8 @@ export const issuesKeys = {
   comments: (id: string) => [...issuesKeys.all, "comments", id] as const,
   agentRuns: (issueId: string) =>
     [...issuesKeys.all, "agentRuns", issueId] as const,
+  agentRunEvents: (issueId: string, delegationId: string) =>
+    [...issuesKeys.all, "agentRunEvents", issueId, delegationId] as const,
   attachments: (id: string) =>
     [...issuesKeys.all, "attachments", id] as const,
   channelSessions: (issueId: string, channel: string) =>

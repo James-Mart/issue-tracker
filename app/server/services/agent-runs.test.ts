@@ -112,6 +112,20 @@ function toolCall(
   };
 }
 
+function subagentUpdate(
+  parentCallId: string,
+  seq: number,
+  text: string,
+): TranscriptEvent {
+  return {
+    type: "subagent_update",
+    parentCallId,
+    step: { kind: "text", text },
+    at: AT,
+    seq,
+  };
+}
+
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-agent-runs-"));
   conversationsDir = join(root, "conversations");
@@ -359,5 +373,82 @@ describe("findAgentRunsWorkRoot", () => {
     const { issues } = readAll();
 
     expect(findAgentRunsWorkRoot(ISSUE_ID, issues)).toBeUndefined();
+  });
+});
+
+describe("listAgentRunEvents", () => {
+  it("returns subagent_update events for one run in seq order, excluding siblings", async () => {
+    writeConversation("conv-main", {
+      delegations: [
+        delegation({
+          delegationId: "del-a",
+          agentId: "agent-a",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: ISSUE_ID,
+          parentCallId: "call-a",
+        }),
+        delegation({
+          delegationId: "del-b",
+          agentId: "agent-b",
+          role: "validator",
+          model: "composer-2.5",
+          at: AT_LATER,
+          issueId: ISSUE_ID,
+          parentCallId: "call-b",
+        }),
+      ],
+      transcript: [
+        toolCall("call-a", "running", AT),
+        subagentUpdate("call-a", 2, "first run step 1"),
+        subagentUpdate("call-b", 3, "sibling run step"),
+        subagentUpdate("call-a", 4, "first run step 2"),
+        toolCall("call-a", "completed", AT_END),
+        toolCall("call-b", "running", AT_LATER),
+        subagentUpdate("call-b", 6, "sibling run step 2"),
+        toolCall("call-b", "completed", AT_END),
+      ],
+    });
+
+    const { listAgentRunEvents } = await loadAgentRunsService();
+
+    const eventsA = listAgentRunEvents(ISSUE_ID, "del-a");
+    expect(eventsA).toHaveLength(2);
+    expect(eventsA!.map((e) => e.step)).toEqual([
+      { kind: "text", text: "first run step 1" },
+      { kind: "text", text: "first run step 2" },
+    ]);
+    expect(eventsA!.map((e) => e.seq)).toEqual([2, 4]);
+
+    const eventsB = listAgentRunEvents(ISSUE_ID, "del-b");
+    expect(eventsB).toHaveLength(2);
+    expect(eventsB!.map((e) => e.step)).toEqual([
+      { kind: "text", text: "sibling run step" },
+      { kind: "text", text: "sibling run step 2" },
+    ]);
+  });
+
+  it("returns undefined for an unknown delegationId", async () => {
+    writeConversation("conv-main", {
+      delegations: [
+        delegation({
+          delegationId: "del-a",
+          agentId: "agent-a",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: ISSUE_ID,
+          parentCallId: "call-a",
+        }),
+      ],
+      transcript: [
+        toolCall("call-a", "running", AT),
+        toolCall("call-a", "completed", AT_END),
+      ],
+    });
+
+    const { listAgentRunEvents } = await loadAgentRunsService();
+    expect(listAgentRunEvents(ISSUE_ID, "del-missing")).toBeUndefined();
   });
 });

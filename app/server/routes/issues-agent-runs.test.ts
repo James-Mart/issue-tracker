@@ -200,3 +200,103 @@ describe("GET /api/issues/:id/agent-runs", () => {
     expect(body.code).toBe("not_found");
   });
 });
+
+describe("GET /api/issues/:id/agent-runs/:delegationId/events", () => {
+  it("returns subagent_update events for a linked run", async () => {
+    writeConversation("conv-main", {
+      delegations: [
+        {
+          delegationId: "del-a",
+          agentId: "agent-a",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: ISSUE_ID,
+          parentCallId: "call-a",
+        },
+        {
+          delegationId: "del-b",
+          agentId: "agent-b",
+          role: "validator",
+          model: "composer-2.5",
+          at: AT,
+          issueId: ISSUE_ID,
+          parentCallId: "call-b",
+        },
+      ],
+      transcript: [
+        {
+          type: "tool_call",
+          callId: "call-a",
+          name: "delegate",
+          status: "running",
+          at: AT,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-a",
+          step: { kind: "text", text: "run a step 1" },
+          at: AT,
+          seq: 2,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-b",
+          step: { kind: "text", text: "run b step" },
+          at: AT,
+          seq: 3,
+        },
+        {
+          type: "subagent_update",
+          parentCallId: "call-a",
+          step: { kind: "text", text: "run a step 2" },
+          at: AT,
+          seq: 4,
+        },
+        {
+          type: "tool_call",
+          callId: "call-a",
+          name: "delegate",
+          status: "completed",
+          at: AT_END,
+        },
+        {
+          type: "tool_call",
+          callId: "call-b",
+          name: "delegate",
+          status: "completed",
+          at: AT_END,
+        },
+      ],
+    });
+
+    const res = await fetch(
+      `${baseUrl}/api/issues/${ISSUE_ID}/agent-runs/del-a/events`,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.events).toHaveLength(2);
+    expect(body.events.map((e: { step: { text: string } }) => e.step.text)).toEqual([
+      "run a step 1",
+      "run a step 2",
+    ]);
+  });
+
+  it("returns 404 for an unknown delegationId", async () => {
+    const res = await fetch(
+      `${baseUrl}/api/issues/${ISSUE_ID}/agent-runs/del-missing/events`,
+    );
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.code).toBe("not_found");
+  });
+
+  it("returns 404 for an unknown issue", async () => {
+    const res = await fetch(
+      `${baseUrl}/api/issues/missing-task/agent-runs/del-a/events`,
+    );
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.code).toBe("not_found");
+  });
+});

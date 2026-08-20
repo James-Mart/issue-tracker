@@ -1,5 +1,5 @@
 import { request } from "@/lib/api/client";
-import type { AgentRun } from "@server/schemas";
+import type { AgentRun, TranscriptEvent } from "@server/schemas";
 
 export type IssueAgentRunsWorkRoot = {
   issueId: string;
@@ -17,5 +17,19 @@ export function fetchIssueAgentRuns(
 ): Promise<IssueAgentRunsResponse> {
   return request<IssueAgentRunsResponse>(
     `/api/issues/${encodeURIComponent(issueId)}/agent-runs`,
+  );
+}
+
+export type IssueAgentRunEventsResponse = {
+  events: TranscriptEvent[];
+};
+
+/** Nested-run transcript events for one linked agent run. */
+export function fetchIssueAgentRunEvents(
+  issueId: string,
+  delegationId: string,
+): Promise<IssueAgentRunEventsResponse> {
+  return request<IssueAgentRunEventsResponse>(
+    `/api/issues/${encodeURIComponent(issueId)}/agent-runs/${encodeURIComponent(delegationId)}/events`,
   );
 }
