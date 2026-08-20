@@ -4,12 +4,11 @@ import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { runIssueCli } from "./cli-program.js";
 import { DELETED_FIELD_VERBS } from "./deleted-field-verbs.js";
 
-// Drive the real CLI as a subprocess against a throwaway ISSUES_DIR. Verb
-// behavior (stdin, exit codes, stdout formatting, service round-trips) only
-// exists once commander has parsed argv, so these tests exercise the whole
-// path end to end rather than importing the side-effectful cli.ts module.
+// Drive the CLI against a throwaway ISSUES_DIR. In-process cases use
+// runIssueCli; EPIPE and the --help cold-boot spawn the thin cli.ts shell.
 const appDir = dirname(fileURLToPath(import.meta.url));
 const tsx = join(appDir, "node_modules", ".bin", "tsx");
 const cliPath = join(appDir, "cli.ts");
@@ -146,6 +145,13 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+describe("thin shell cold-boot", () => {
+  it("exits 0 for --help", () => {
+    const { status } = runCli(["--help"]);
+    expect(status).toBe(0);
+  });
+});
+
 describe("EPIPE on stdout", () => {
   beforeEach(() => {
     writeIssue("p", {
@@ -215,6 +221,13 @@ describe("--file - reads stdin on create", () => {
 });
 
 describe("summary", () => {
+  function env() {
+    return {
+      ISSUES_DIR: dir,
+      ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
+    };
+  }
+
   beforeEach(() => {
     writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
     writeIssue("e", { kind: "epic", title: "Epic", partOf: "p", createdAt: nextAt(), updatedAt: nextAt() });
@@ -236,24 +249,26 @@ describe("summary", () => {
     });
   });
 
-  it("wires the verb through to formatted stdout", () => {
-    const { stdout, status } = runCli(["summary", "c1"]);
+  it("wires the verb through to formatted stdout", async () => {
+    const { stdout, status } = await runIssueCli(["summary", "c1"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).toContain("Task: c1 — Do the thing");
     expect(stdout).toContain("For more details, try `issue <kind> view <id>` or `issue tree`.");
   });
 
-  it("errors with a nonzero exit on an unknown id", () => {
-    const { stderr, status } = runCli(["summary", "ghost"]);
+  it("errors with a nonzero exit on an unknown id", async () => {
+    const { stderr, status } = await runIssueCli(["summary", "ghost"], { env: env() });
     expect(status).toBe(1);
     expect(stderr).toContain('unknown issue "ghost"');
   });
 
-  it("prints Workspace when set on the project", () => {
+  it("prints Workspace when set on the project", async () => {
     const ws = makeGitWorkspace();
     try {
-      expect(runCli(["project", "set", "p", "workspace", ws]).status).toBe(0);
-      const { stdout, status } = runCli(["summary", "c1"]);
+      expect(
+        (await runIssueCli(["project", "set", "p", "workspace", ws], { env: env() })).status,
+      ).toBe(0);
+      const { stdout, status } = await runIssueCli(["summary", "c1"], { env: env() });
       expect(status).toBe(0);
       expect(stdout).toContain(`  Workspace: ${ws}`);
     } finally {
@@ -261,8 +276,8 @@ describe("summary", () => {
     }
   });
 
-  it("omits Workspace when unset on the project", () => {
-    const { stdout, status } = runCli(["summary", "c1"]);
+  it("omits Workspace when unset on the project", async () => {
+    const { stdout, status } = await runIssueCli(["summary", "c1"], { env: env() });
     expect(status).toBe(0);
     expect(stdout).not.toContain("Workspace:");
   });
