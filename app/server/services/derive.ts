@@ -170,5 +170,31 @@ export function derive(issues: Issue[]): DeriveResult {
     }
   }
 
+  for (const issue of issues) {
+    if (issue.kind !== "idea") continue;
+    const projectId = issue.partOf;
+    const roots: { id: string; order: number }[] = [];
+    for (const candidate of issues) {
+      if (candidate.kind === "epic") {
+        if (
+          candidate.sourceIdea === issue.id &&
+          candidate.partOf === projectId
+        ) {
+          roots.push({ id: candidate.id, order: candidate.order });
+        }
+      } else if (candidate.kind === "story") {
+        if (
+          candidate.sourceIdea === issue.id &&
+          !candidate.stackedOn &&
+          candidate.partOf === projectId
+        ) {
+          roots.push({ id: candidate.id, order: candidate.order });
+        }
+      }
+    }
+    roots.sort(bySequence);
+    state[issue.id] = { blocked: false, planRoots: roots.map((r) => r.id) };
+  }
+
   return { byId: state, problems };
 }

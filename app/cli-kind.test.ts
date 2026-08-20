@@ -756,3 +756,85 @@ describe("sourceIdea get/set", () => {
     expect(unknown.stderr).toContain("sourceIdea");
   });
 });
+
+describe("planRoots get", () => {
+  let dir: string;
+  let clock = 0;
+
+  function nextAt(): string {
+    clock += 1;
+    return new Date(Date.UTC(2026, 6, 10, 14, 0, clock)).toISOString();
+  }
+
+  function writeIssue(id: string, body: Record<string, unknown>): void {
+    mkdirSync(join(dir, id), { recursive: true });
+    writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
+  }
+
+  function runCli(args: string[]): { stdout: string; stderr: string; status: number | null } {
+    const result = spawnSync(tsx, [cliPath, ...args], {
+      cwd: appDir,
+      env: {
+        ...process.env,
+        ISSUES_DIR: dir,
+        ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
+      },
+      encoding: "utf8",
+    });
+    if (result.error) throw result.error;
+    return {
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+      status: result.status,
+    };
+  }
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  beforeEach(() => {
+    clock = 0;
+    dir = mkdtempSync(join(tmpdir(), "cli-kind-plan-roots-"));
+    writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
+    writeIssue("idea-a", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("e", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      order: 1,
+      blockedBy: [],
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("s", {
+      kind: "story",
+      title: "Root story",
+      partOf: "p",
+      order: 2,
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+  });
+
+  it("prints planRoots as a JSON array", () => {
+    expect(runCli(["epic", "set", "e", "sourceIdea", "idea-a"]).status).toBe(0);
+    expect(runCli(["story", "set", "s", "sourceIdea", "idea-a"]).status).toBe(0);
+    expect(runCli(["idea", "get", "idea-a", "planRoots"]).stdout.trim()).toBe(
+      '["e","s"]',
+    );
+    expect(runCli(["idea", "get", "idea-a", "planRoots"]).status).toBe(0);
+  });
+
+  it("prints an empty JSON array when there are no plan roots", () => {
+    expect(runCli(["idea", "get", "idea-a", "planRoots"]).stdout.trim()).toBe("[]");
+  });
+});

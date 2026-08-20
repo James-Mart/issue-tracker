@@ -507,10 +507,42 @@ describe("derive - effective mergePolicy", () => {
   });
 });
 
+describe("derive - planRoots", () => {
+  it("lists epics and root project-level stories in order", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p"),
+      epic("e2", "p", 2, { sourceIdea: "i" }),
+      epic("e1", "p", 1, { sourceIdea: "i" }),
+      branch("s1", "p", { sourceIdea: "i" }, 0),
+    ];
+    expect(derive(issues).byId.i.planRoots).toEqual(["s1", "e1", "e2"]);
+  });
+
+  it("derives an empty array when there are no plan roots", () => {
+    const issues = [project("p"), idea("i", "p")];
+    expect(derive(issues).byId.i.planRoots).toEqual([]);
+  });
+
+  it("excludes a root in another project", () => {
+    const issues = [
+      project("p1"),
+      project("p2", 1),
+      idea("i1", "p1"),
+      idea("i2", "p2", 0),
+      epic("e1", "p1", 0, { sourceIdea: "i1" }),
+      epic("e2", "p2", 0, { sourceIdea: "i1" }),
+    ];
+    expect(derive(issues).byId.i1.planRoots).toEqual(["e1"]);
+    expect(derive(issues).byId.i2.planRoots).toEqual([]);
+  });
+});
+
 describe("derive - purity", () => {
   it("takes only Issue[] and does not attach ideaStatus", () => {
     const issues = [project("p"), idea("capture", "p")];
     expect(derive.length).toBe(1);
     expect(derive(issues).byId.capture?.ideaStatus).toBeUndefined();
+    expect(derive(issues).byId.capture?.planRoots).toEqual([]);
   });
 });

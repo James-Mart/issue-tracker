@@ -423,6 +423,8 @@ export interface DerivedState {
   mergeBase?: string;
   /** Effective merge policy (stored override else inherited from parent). */
   mergePolicy?: MergePolicy;
+  /** Epic and root project-level Story ids whose stored sourceIdea points here. */
+  planRoots?: string[];
 }
 
 export interface IssuesResponse {

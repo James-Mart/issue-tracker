@@ -29,30 +29,8 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("descriptionBacklinksIdea", () => {
-  it("matches a Source idea markdown link", async () => {
-    const { descriptionBacklinksIdea } = await import("./planning-work-root.js");
-    expect(
-      descriptionBacklinksIdea(
-        "Source idea: [Capture](issue:capture)\n\nPlan body.",
-        "capture",
-      ),
-    ).toBe(true);
-  });
-
-  it("does not match a different idea id", async () => {
-    const { descriptionBacklinksIdea } = await import("./planning-work-root.js");
-    expect(
-      descriptionBacklinksIdea(
-        "Source idea: [Other](issue:other)\n",
-        "capture",
-      ),
-    ).toBe(false);
-  });
-});
-
 describe("findPlanningWorkRoot", () => {
-  it("returns an Epic whose description backlinks the Idea", async () => {
+  it("returns an Epic whose sourceIdea points at the Idea", async () => {
     writeIssue("platform", {
       kind: "project",
       title: "Platform",
@@ -68,20 +46,17 @@ describe("findPlanningWorkRoot", () => {
       createdAt: "2026-08-01T00:00:00.000Z",
       updatedAt: "2026-08-01T00:00:00.000Z",
     });
-    writeIssue(
-      "ship-it",
-      {
-        kind: "epic",
-        title: "Ship it",
-        partOf: "platform",
-        status: "open",
-        order: 0,
-        archived: false,
-        createdAt: "2026-08-01T00:00:00.000Z",
-        updatedAt: "2026-08-01T00:00:00.000Z",
-      },
-      "Source idea: [Capture](issue:capture)\n",
-    );
+    writeIssue("ship-it", {
+      kind: "epic",
+      title: "Ship it",
+      partOf: "platform",
+      status: "open",
+      order: 0,
+      archived: false,
+      sourceIdea: "capture",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    });
     writeIssue(
       "nested-story",
       {
@@ -106,7 +81,7 @@ describe("findPlanningWorkRoot", () => {
     });
   });
 
-  it("returns a project-level Story whose description backlinks the Idea", async () => {
+  it("returns a project-level Story whose sourceIdea points at the Idea", async () => {
     writeIssue("platform", {
       kind: "project",
       title: "Platform",
@@ -122,19 +97,16 @@ describe("findPlanningWorkRoot", () => {
       createdAt: "2026-08-01T00:00:00.000Z",
       updatedAt: "2026-08-01T00:00:00.000Z",
     });
-    writeIssue(
-      "solo-story",
-      {
-        kind: "story",
-        title: "Solo story",
-        partOf: "platform",
-        order: 0,
-        archived: false,
-        createdAt: "2026-08-01T00:00:00.000Z",
-        updatedAt: "2026-08-01T00:00:00.000Z",
-      },
-      "Source idea: [Capture](issue:capture)\n",
-    );
+    writeIssue("solo-story", {
+      kind: "story",
+      title: "Solo story",
+      partOf: "platform",
+      order: 0,
+      archived: false,
+      sourceIdea: "capture",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    });
 
     const { readAll } = await import("./issues.js");
     const { findPlanningWorkRoot } = await import("./planning-work-root.js");
@@ -146,7 +118,54 @@ describe("findPlanningWorkRoot", () => {
     });
   });
 
-  it("returns null when no root backlinks the Idea yet", async () => {
+  it("returns the lowest-order root when several point at the same Idea", async () => {
+    writeIssue("platform", {
+      kind: "project",
+      title: "Platform",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    });
+    writeIssue("capture", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "platform",
+      order: 0,
+      archived: false,
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    });
+    writeIssue("later-root", {
+      kind: "epic",
+      title: "Later",
+      partOf: "platform",
+      order: 2,
+      archived: false,
+      sourceIdea: "capture",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    });
+    writeIssue("first-root", {
+      kind: "epic",
+      title: "First",
+      partOf: "platform",
+      order: 1,
+      archived: false,
+      sourceIdea: "capture",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    });
+
+    const { readAll } = await import("./issues.js");
+    const { findPlanningWorkRoot } = await import("./planning-work-root.js");
+    const { issues } = readAll();
+    expect(findPlanningWorkRoot("capture", issues)).toEqual({
+      id: "first-root",
+      title: "First",
+      kind: "epic",
+    });
+  });
+
+  it("returns null when no root stores sourceIdea for the Idea yet", async () => {
     writeIssue("platform", {
       kind: "project",
       title: "Platform",

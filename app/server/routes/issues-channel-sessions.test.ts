@@ -550,21 +550,18 @@ describe("planning work root HTTP API", () => {
     expect(await res.json()).toEqual({ workRoot: null });
   });
 
-  it("returns the Epic that backlinks the Idea", async () => {
-    writeIssue(
-      "ship-it",
-      {
-        kind: "epic",
-        title: "Ship it",
-        partOf: "platform",
-        status: "open",
-        order: 0,
-        archived: false,
-        createdAt: AT,
-        updatedAt: AT,
-      },
-      "Source idea: [Capture](issue:capture)\n",
-    );
+  it("returns the Epic whose sourceIdea points at the Idea", async () => {
+    writeIssue("ship-it", {
+      kind: "epic",
+      title: "Ship it",
+      partOf: "platform",
+      status: "open",
+      order: 0,
+      archived: false,
+      sourceIdea: "capture",
+      createdAt: AT,
+      updatedAt: AT,
+    });
     await startApp();
 
     const res = await fetch(`${baseUrl}/api/issues/capture/planning-work-root`);

@@ -135,40 +135,34 @@ describe("planningStatusById", () => {
     expect(statusOf()).toBe("awaiting-direction");
   });
 
-  it("is planned when a project-level Story backlinks the Idea", async () => {
+  it("is planned when a project-level Story stores sourceIdea", async () => {
     seedProjectAndIdea();
-    writeIssue(
-      "solo-story",
-      {
-        kind: "story",
-        title: "Solo story",
-        partOf: "platform",
-        order: 1,
-        archived: false,
-        createdAt: AT,
-        updatedAt: AT,
-      },
-      "Source idea: [Capture](issue:capture)\n",
-    );
+    writeIssue("solo-story", {
+      kind: "story",
+      title: "Solo story",
+      partOf: "platform",
+      order: 1,
+      archived: false,
+      sourceIdea: "capture",
+      createdAt: AT,
+      updatedAt: AT,
+    });
     const { statusOf } = await load();
     expect(statusOf()).toBe("planned");
   });
 
   it("is planned when a plan root exists and the planning session has stopped", async () => {
     seedProjectAndIdea();
-    writeIssue(
-      "ship-it",
-      {
-        kind: "epic",
-        title: "Ship it",
-        partOf: "platform",
-        order: 1,
-        archived: false,
-        createdAt: AT,
-        updatedAt: AT,
-      },
-      "Source idea: [Capture](issue:capture)\n",
-    );
+    writeIssue("ship-it", {
+      kind: "epic",
+      title: "Ship it",
+      partOf: "platform",
+      order: 1,
+      archived: false,
+      sourceIdea: "capture",
+      createdAt: AT,
+      updatedAt: AT,
+    });
     const { statusOf, createConversation, appendEvent } = await load();
     const meta = await createConversation({
       title: "Plan capture",
@@ -186,19 +180,16 @@ describe("planningStatusById", () => {
 
   it("is planning when a run is live, even if a plan root already exists", async () => {
     seedProjectAndIdea();
-    writeIssue(
-      "ship-it",
-      {
-        kind: "epic",
-        title: "Ship it",
-        partOf: "platform",
-        order: 1,
-        archived: false,
-        createdAt: AT,
-        updatedAt: AT,
-      },
-      "Source idea: [Capture](issue:capture)\n",
-    );
+    writeIssue("ship-it", {
+      kind: "epic",
+      title: "Ship it",
+      partOf: "platform",
+      order: 1,
+      archived: false,
+      sourceIdea: "capture",
+      createdAt: AT,
+      updatedAt: AT,
+    });
     const { statusOf, createConversation, conversationsDir } = await load();
     const meta = await createConversation({
       title: "Replan capture",
@@ -214,7 +205,7 @@ describe("planningStatusById", () => {
     expect(statusOf()).toBe("planning");
   });
 
-  it("ignores a nested Story backlink and an implementing session", async () => {
+  it("ignores a nested Story sourceIdea and an implementing session", async () => {
     seedProjectAndIdea();
     writeIssue("ship-it", {
       kind: "epic",
@@ -233,10 +224,10 @@ describe("planningStatusById", () => {
         partOf: "ship-it",
         order: 0,
         archived: false,
+        sourceIdea: "capture",
         createdAt: AT,
         updatedAt: AT,
       },
-      "Source idea: [Capture](issue:capture)\n",
     );
     const { statusOf, createConversation } = await load();
     await createConversation({
