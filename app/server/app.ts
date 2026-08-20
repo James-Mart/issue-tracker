@@ -12,6 +12,11 @@ import { createConversationsRouter } from "./routes/conversations.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { projectsRouter } from "./routes/projects.js";
 import {
+  createRestartRouter,
+  type InitiateRestart,
+} from "./routes/restart.js";
+import { RESTART_SENTINEL_EXIT_CODE } from "./restart-contract.js";
+import {
   agentSessions,
   type AgentSessions,
 } from "./services/agent-sessions.js";
@@ -51,7 +56,17 @@ export function requestLogger(
   next();
 }
 
-export function createApp(sessions: AgentSessions = agentSessions): Express {
+function defaultInitiateRestart(sessions: AgentSessions): InitiateRestart {
+  return async () => {
+    await sessions.disposeAll();
+    process.exit(RESTART_SENTINEL_EXIT_CODE);
+  };
+}
+
+export function createApp(
+  sessions: AgentSessions = agentSessions,
+  initiateRestart: InitiateRestart = defaultInitiateRestart(sessions),
+): Express {
   const app = express();
   app.use(express.json());
   app.use(requestLogger);
@@ -65,6 +80,7 @@ export function createApp(sessions: AgentSessions = agentSessions): Express {
   app.use("/api/projects", projectsRouter);
   app.use("/api/conversations", createConversationsRouter(sessions));
   app.use("/api/agent-models", agentModelsRouter);
+  app.use("/api/restart", createRestartRouter(sessions, initiateRestart));
   app.get("/api/diagnostics/connections", (_req, res) => {
     res.json(getConnectionDiagnostics());
   });

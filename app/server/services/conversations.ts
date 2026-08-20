@@ -69,6 +69,11 @@ function scanIds(): string[] {
   );
 }
 
+/** Conversation store ids on disk — same enumeration as implementing-project lock scans. */
+export function listConversationIds(): string[] {
+  return scanIds();
+}
+
 function validateAnchor(
   issueId: string | undefined,
   channel: ConversationChannel | undefined,

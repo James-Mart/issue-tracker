@@ -17,6 +17,7 @@ import { isAuthFailureEvent, isAuthFailureText } from "./agent-failure.js";
 import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import {
   appendEvent,
+  listConversationIds,
   readConversation,
   setPendingMessage,
   updateMeta,
@@ -60,6 +61,7 @@ export interface AgentSessions {
     options: SendPromptOptions,
   ): Promise<SendPromptResult>;
   getActiveRun(conversationId: string): ActiveRun | undefined;
+  listActiveRuns(): { conversationId: string }[];
   cancel(conversationId: string): Promise<boolean>;
   dispose(conversationId: string): Promise<void>;
   disposeAll(): Promise<void>;
@@ -588,6 +590,12 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     getActiveRun(conversationId) {
       return sessions.get(conversationId)?.turn?.run;
+    },
+
+    listActiveRuns() {
+      return listConversationIds()
+        .filter((conversationId) => sessions.get(conversationId)?.turn?.run)
+        .map((conversationId) => ({ conversationId }));
     },
 
     async cancel(conversationId) {
