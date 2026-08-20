@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiError } from "@/lib/api/errors";
+import { toast } from "sonner";
 import type { HealthResponse } from "../api/queries";
+import { restartLiveTurnsMessage } from "../lib/restart-refusal";
 import {
   RESTART_FAILURE_MESSAGE,
   RESTART_PENDING_MESSAGE,
@@ -107,6 +109,21 @@ function status(container: HTMLElement): HTMLElement | null {
 
 function postCalls(): unknown[][] {
   return requestMock.mock.calls.filter(([path]) => path === "/api/restart");
+}
+
+function liveTurnsDialog(): HTMLElement | null {
+  return document.body.querySelector(
+    '[data-testid="restart-live-turns-dialog"]',
+  );
+}
+
+function runsInFlightError(count: number): ApiError {
+  return new ApiError("Request failed with status 409", 409, {
+    code: "runs-in-flight",
+    activeRuns: Array.from({ length: count }, (_, i) => ({
+      conversationId: `conv-${i + 1}`,
+    })),
+  });
 }
 
 beforeEach(() => {
@@ -245,6 +262,110 @@ describe("RestartControl", () => {
     expect(status(mounted.container)?.textContent).not.toBe(
       RESTART_PENDING_MESSAGE,
     );
+
+    unmount(mounted);
+  });
+
+  it("opens a confirmation dialog when restart is refused for live turns", async () => {
+    restartError = runsInFlightError(2);
+    const mounted = mountControl();
+    await flush();
+
+    act(() => {
+      button(mounted.container).click();
+    });
+    await flush();
+
+    expect(postCalls()).toHaveLength(1);
+    expect(postCalls()[0]![1]).toEqual({ method: "POST" });
+    expect(liveTurnsDialog()?.textContent).toContain(
+      restartLiveTurnsMessage(2),
+    );
+    expect(status(mounted.container)).toBeNull();
+    expect(toast.error).not.toHaveBeenCalled();
+
+    unmount(mounted);
+  });
+
+  it("confirms by posting again with force and entering pending", async () => {
+    restartError = runsInFlightError(1);
+    const mounted = mountControl();
+    await flush();
+
+    act(() => {
+      button(mounted.container).click();
+    });
+    await flush();
+    expect(liveTurnsDialog()?.textContent).toContain(
+      restartLiveTurnsMessage(1),
+    );
+
+    restartError = null;
+    act(() => {
+      (
+        document.body.querySelector(
+          '[data-testid="restart-live-turns-confirm"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flush();
+
+    expect(postCalls()).toHaveLength(2);
+    expect(postCalls()[1]![1]).toEqual({
+      method: "POST",
+      body: { force: true },
+    });
+    expect(liveTurnsDialog()).toBeNull();
+    expect(status(mounted.container)?.textContent).toBe(
+      RESTART_PENDING_MESSAGE,
+    );
+    expect(button(mounted.container).getAttribute("aria-busy")).toBe("true");
+
+    unmount(mounted);
+  });
+
+  it("dismisses without a second post and stays idle", async () => {
+    restartError = runsInFlightError(1);
+    const mounted = mountControl();
+    await flush();
+
+    act(() => {
+      button(mounted.container).click();
+    });
+    await flush();
+
+    act(() => {
+      (
+        document.body.querySelector(
+          '[data-testid="restart-live-turns-dismiss"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flush();
+
+    expect(postCalls()).toHaveLength(1);
+    expect(liveTurnsDialog()).toBeNull();
+    expect(status(mounted.container)).toBeNull();
+    expect(button(mounted.container).disabled).toBe(false);
+
+    unmount(mounted);
+  });
+
+  it("surfaces a non-runs-in-flight refusal as a generic error", async () => {
+    restartError = new ApiError("not supervised", 409, {
+      code: "not-supervised",
+    });
+    const mounted = mountControl();
+    await flush();
+
+    act(() => {
+      button(mounted.container).click();
+    });
+    await flush();
+
+    expect(liveTurnsDialog()).toBeNull();
+    expect(status(mounted.container)).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith("not supervised");
 
     unmount(mounted);
   });

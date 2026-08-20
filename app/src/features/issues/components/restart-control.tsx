@@ -3,6 +3,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -12,6 +20,10 @@ import { cn } from "@/lib/utils/cn";
 import { healthKeys } from "../api/keys";
 import { useRestartProcess } from "../api/mutations";
 import { useHealthQuery, type HealthResponse } from "../api/queries";
+import {
+  parseRunsInFlightRefusal,
+  restartLiveTurnsMessage,
+} from "../lib/restart-refusal";
 
 export const RESTART_POLL_MS = 500;
 export const RESTART_WAIT_MS = 30_000;
@@ -33,12 +45,14 @@ export function RestartControl() {
   const restart = useRestartProcess();
   const [phase, setPhase] = useState<Phase>("idle");
   const [capturedBootId, setCapturedBootId] = useState<string | null>(null);
+  const [liveTurnCount, setLiveTurnCount] = useState<number | null>(null);
   const pending = phase === "pending";
   const health = useHealthQuery();
 
   const supported = health.data?.restartSupported === true;
   const failed = phase === "failed";
-  const disabled = !supported || pending || !health.data?.bootId;
+  const disabled =
+    !supported || pending || !health.data?.bootId || restart.isPending;
 
   const status = !health.data
     ? null
@@ -83,15 +97,22 @@ export function RestartControl() {
     };
   }, [pending, capturedBootId, qc]);
 
-  function onRestart() {
+  function postRestart(force = false) {
     const bootId = health.data?.bootId;
-    if (!bootId || !supported || pending) return;
-    setCapturedBootId(bootId);
-    setPhase("pending");
-    restart.mutate(undefined, {
-      onError: () => {
+    if (!bootId || !supported || pending || restart.isPending) return;
+    restart.mutate(force ? { force: true } : undefined, {
+      onSuccess: () => {
+        setLiveTurnCount(null);
+        setCapturedBootId(bootId);
+        setPhase("pending");
+      },
+      onError: (err) => {
         setPhase("idle");
         setCapturedBootId(null);
+        const refusal = parseRunsInFlightRefusal(err);
+        if (refusal) {
+          setLiveTurnCount(refusal.activeRuns.length);
+        }
       },
     });
   }
@@ -110,7 +131,7 @@ export function RestartControl() {
               aria-busy={pending}
               aria-describedby={status ? "restart-control-status" : undefined}
               data-testid="restart-control"
-              onClick={onRestart}
+              onClick={() => postRestart()}
             >
               <RotateCw
                 className={cn(
@@ -139,6 +160,45 @@ export function RestartControl() {
           {status}
         </p>
       ) : null}
+      <Dialog
+        open={liveTurnCount !== null}
+        onOpenChange={(open) => {
+          if (!open) setLiveTurnCount(null);
+        }}
+      >
+        <DialogContent
+          className="w-[calc(100%-2rem)] max-w-sm"
+          data-testid="restart-live-turns-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Drop live turns?</DialogTitle>
+            <DialogDescription>
+              {liveTurnCount !== null
+                ? restartLiveTurnsMessage(liveTurnCount)
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setLiveTurnCount(null)}
+              data-testid="restart-live-turns-dismiss"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => postRestart(true)}
+              disabled={restart.isPending}
+              data-testid="restart-live-turns-confirm"
+            >
+              Restart anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
