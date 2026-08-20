@@ -50,6 +50,9 @@ const DELEGATION_SUFFIX = "_issue-tracker-delegation.md";
 /** Shared framing include every spawnable agents/*.md must **Read**. */
 const IKIGAI_SUFFIX = "_issue-tracker-ikigai.md";
 
+/** Work-loop skill whose delegation stubs must pass delegate `issueId`. */
+const WORK_LOOP_SKILL_REL = "skills/issue-tracker-work/SKILL.md";
+
 /** `` `model: <slug>` `` anywhere in a scanned file (not just stub windows). */
 const FIXED_MODEL_LITERAL_RE = /`model:\s*([^`;\n]+?)`/g;
 
@@ -163,6 +166,11 @@ function expandSubagentTypes(subagentType: string): string[] {
 
 function isFamilyParameterized(subagentType: string): boolean {
   return subagentType.endsWith(FAMILY_PLACEHOLDER);
+}
+
+/** `` `issueId: <id>` `` in a delegation stub window. */
+function hasIssueIdArg(region: string): boolean {
+  return /`issueId:\s*[^`]+`/.test(region);
 }
 
 /** Model expression inside a short forward window from a stub match. */
@@ -399,6 +407,15 @@ export function collectSpawnViolations(rootDir: string): string[] {
     for (const del of delegations) {
       const loc = `${rel(del.file)}:${del.line}`;
 
+      if (
+        rel(del.file) === WORK_LOOP_SKILL_REL &&
+        !hasIssueIdArg(del.region)
+      ) {
+        violations.push(
+          `${loc}: work-loop delegation role '${del.role}' omits delegate issueId argument`,
+        );
+      }
+
       if (del.region.includes("Comment role")) {
         violations.push(
           `${loc}: spawn stub for '${del.role}' passes 'Comment role' — hardcode the role in the agent body`,
@@ -456,14 +473,14 @@ function runCli(rootDir: string): void {
   const violations = collectSpawnViolations(rootDir);
   if (violations.length === 0) {
     console.log(
-      "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; family-parameterized stubs expand to pinned wrappers; generalPurpose forbidden; spawn stubs and Inputs must not declare Comment role; delegations name spawnable roles and no model; stub/model-literal/delegation files **Read** Delegation; every spawnable agents/*.md **Read**s Ikigai.",
+      "agent-spawns: OK — every spawn stub names a model; fixed models agree with agent pins; types resolve; family-parameterized stubs expand to pinned wrappers; generalPurpose forbidden; spawn stubs and Inputs must not declare Comment role; delegations name spawnable roles and no model; work-loop delegations pass issueId; stub/model-literal/delegation files **Read** Delegation; every spawnable agents/*.md **Read**s Ikigai.",
     );
     process.exit(0);
   }
 
   console.error(
     `agent-spawns: ${violations.length} spawn/pin agreement violation(s).\n` +
-      "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); family-parameterized stubs must expand to pinned family wrappers; generalPurpose is forbidden; spawn stubs and Inputs must not declare Comment role — hardcode the role in the agent body; `role:` delegations must name a spawnable agents/*.md role and must not name a model; files with spawn stubs, fixed `model: <slug>` literals, or `role:` delegations must **Read** agents/_issue-tracker-delegation.md; every spawnable agents/*.md must **Read** agents/_issue-tracker-ikigai.md.\n",
+      "Every spawn stub must name a Cursor Task model; fixed-model stubs must match the target agent's frontmatter pin; subagent_type must name a spawnable agents/*.md file (or an allowed Cursor builtin); family-parameterized stubs must expand to pinned family wrappers; generalPurpose is forbidden; spawn stubs and Inputs must not declare Comment role — hardcode the role in the agent body; `role:` delegations must name a spawnable agents/*.md role and must not name a model; work-loop delegations in skills/issue-tracker-work/SKILL.md must pass `issueId:`; files with spawn stubs, fixed `model: <slug>` literals, or `role:` delegations must **Read** agents/_issue-tracker-delegation.md; every spawnable agents/*.md must **Read** agents/_issue-tracker-ikigai.md.\n",
   );
   for (const v of violations) {
     console.error(`  ${v}`);

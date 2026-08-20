@@ -111,6 +111,27 @@ describe("collectSpawnViolations — delegation vocabulary", () => {
 
     expect(collectSpawnViolations(rootDir)).toEqual([]);
   });
+
+  it("fails when a work-loop delegation omits issueId", () => {
+    writeSkill(
+      "issue-tracker-work/SKILL.md",
+      `${DELEGATION_READ}
+
+**Implement** — \`role: pinned-role\`
+
+> Work root: \`<rootId>\`. Issue: \`<id>\` (\`<title>\`). Mode: implement.
+`,
+    );
+
+    const violations = collectSpawnViolations(rootDir);
+    expect(
+      violations.some(
+        (v) =>
+          v.includes("skills/issue-tracker-work/SKILL.md") &&
+          v.includes("omits delegate issueId argument"),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("collectSpawnViolations — ikigai include", () => {
