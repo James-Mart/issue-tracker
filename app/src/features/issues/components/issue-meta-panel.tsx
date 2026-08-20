@@ -10,6 +10,7 @@ import {
 import { IssueAssigneeField } from "./issue-assignee-field";
 import { IssueAssignmentLabelsField } from "./issue-assignment-labels-field";
 import { IssuePartOfField } from "./issue-part-of-field";
+import { IssueGeneratedIssuesField } from "./issue-generated-issues-field";
 import { IssueSourceIdeaField } from "./issue-source-idea-field";
 import { IssueStakeholderField } from "./issue-stakeholder-field";
 import { CompactMetaBlock } from "./compact-meta";
@@ -79,6 +80,9 @@ export function IssueMetaPanel({
         label={FIELD_LABELS.stakeholder}
         value={<IssueStakeholderField issue={issue} />}
       />,
+    );
+    rows.push(
+      <IssueGeneratedIssuesField key="generatedIssues" issue={issue} />,
     );
   }
 
