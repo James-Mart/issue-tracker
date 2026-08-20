@@ -24,10 +24,27 @@ import type { Attachment } from "@server/services/attachments";
 import type { DeletionResult } from "@server/services/deletion";
 import { subtreeIds } from "@server/services/subtree";
 import { attachmentsApiPath } from "../lib/attachments";
+import { parseRunsInFlightRefusal } from "../lib/restart-refusal";
 import { issuesKeys } from "./keys";
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : "Request failed";
+}
+
+export type RestartProcessInput = { force?: boolean };
+
+export function useRestartProcess() {
+  return useMutation<{ bootId: string }, Error, RestartProcessInput | void>({
+    mutationFn: (input) =>
+      request<{ bootId: string }>("/api/restart", {
+        method: "POST",
+        ...(input?.force ? { body: { force: true } } : {}),
+      }),
+    onError: (err) => {
+      if (parseRunsInFlightRefusal(err)) return;
+      toast.error(messageOf(err));
+    },
+  });
 }
 
 export function useCreateIssue() {

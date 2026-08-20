@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import { bootId } from "../boot-info.js";
-import { RESTART_SUPERVISED_ENV_VAR } from "../restart-contract.js";
+import { isRestartSupervised } from "../restart-contract.js";
 import type { AgentSessions } from "../services/agent-sessions.js";
 
 const asyncRoute =
@@ -19,7 +19,7 @@ export function createRestartRouter(
   router.post(
     "/",
     asyncRoute(async (req, res) => {
-      if (!process.env[RESTART_SUPERVISED_ENV_VAR]) {
+      if (!isRestartSupervised()) {
         res.status(409).json({ code: "not-supervised" });
         return;
       }

@@ -16,6 +16,7 @@ const DIALOGS = [
   "new-epic",
   "new-story",
   "delete-issue",
+  "restart-live-turns",
 ] as const;
 
 type DialogId = (typeof DIALOGS)[number];
@@ -348,6 +349,8 @@ function dialogPrepPath(projectId: string, dialogId: DialogId): string {
     case "new-story":
     case "delete-issue":
       return `/projects/${projectId}?lens=structure`;
+    case "restart-live-turns":
+      return `/projects/${projectId}`;
   }
 }
 
@@ -381,6 +384,38 @@ async function openDialog(
       await row.hover();
       await row.getByTitle("Delete").click();
       await page.getByTestId("delete-issue-dialog").waitFor({ state: "visible" });
+      break;
+    }
+    case "restart-live-turns": {
+      await page.route("**/api/health", async (route) => {
+        const response = await route.fetch();
+        const json = (await response.json()) as Record<string, unknown>;
+        await route.fulfill({
+          status: response.status(),
+          contentType: "application/json",
+          body: JSON.stringify({ ...json, restartSupported: true }),
+        });
+      });
+      await page.route("**/api/restart", async (route) => {
+        if (route.request().method() !== "POST") {
+          await route.continue();
+          return;
+        }
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({
+            code: "runs-in-flight",
+            activeRuns: [{ conversationId: "conv-live-turn" }],
+          }),
+        });
+      });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await settle(page);
+      await page.getByTestId("restart-control").click();
+      await page
+        .getByTestId("restart-live-turns-dialog")
+        .waitFor({ state: "visible" });
       break;
     }
   }

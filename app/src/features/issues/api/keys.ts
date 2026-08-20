@@ -12,3 +12,7 @@ export const issuesKeys = {
   projectPullRequests: (projectId: string) =>
     [...issuesKeys.all, "projectPullRequests", projectId] as const,
 };
+
+export const healthKeys = {
+  current: () => ["health"] as const,
+};
