@@ -798,6 +798,10 @@ export const delegationRecordInputSchema = z.object({
   model: nonEmpty,
   /** Delegating run; unset when the conversation root delegated. */
   parentDelegationId: nonEmpty.optional(),
+  /** Tracker issue this delegation was spawned for. */
+  issueId: nonEmpty.optional(),
+  /** Parent tool call that spawned this delegation. */
+  parentCallId: nonEmpty.optional(),
 });
 
 export type DelegationRecordInput = z.infer<typeof delegationRecordInputSchema>;
