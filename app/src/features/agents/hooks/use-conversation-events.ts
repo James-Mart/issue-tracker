@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConversationTranscriptQuery } from "../api/queries";
 import { agentsKeys } from "../api/keys";
-import { subscribeConversation } from "../lib/conversation-events-registry";
+import {
+  applyConversationHistorySeed,
+  subscribeConversation,
+} from "../lib/conversation-events-registry";
 import {
   type ConversationEventsState,
 } from "../lib/conversation-events-state";
@@ -24,6 +27,14 @@ const idleState = (): ConversationEventsState => ({
   pendingText: undefined,
 });
 
+function isOnScreenThread(host: Element | null | undefined): boolean {
+  if (document.visibilityState !== "visible") return false;
+  if (!host) return false;
+  if (host.closest("[inert]")) return false;
+  if (host.closest(".hidden, [hidden]")) return false;
+  return true;
+}
+
 /**
  * Load persisted history through react-query (`GET …/transcript`), seed the
  * shared subscription registry from that result, then fold live topic deltas on
@@ -35,20 +46,31 @@ const idleState = (): ConversationEventsState => ({
  */
 export function useConversationEvents(
   conversationId: string | null | undefined,
+  hostRef?: RefObject<Element | null>,
 ): ConversationEventsState & { historyFailed: boolean } {
   const qc = useQueryClient();
   const history = useConversationTranscriptQuery(conversationId);
   const [state, setState] = useState<ConversationEventsState>(idleState);
   const prevRef = useRef<ConversationEventsState | null>(null);
   const historyFailed = history.isError;
+  const seededForIdRef = useRef<string | null>(null);
+  if (seededForIdRef.current !== conversationId) {
+    seededForIdRef.current = null;
+  }
   // Prefer a settled mount fetch over a stale cache seed so reconnecting after
   // live persists does not open the stream on an outdated history page.
   // `!isFetching` covers tests that prime the cache with no network refetch.
+  // Once this id has seeded, keep historyReady across a background refetch
+  // (including a failed one) so ThreadBody does not drop into skeletons.
   const historyReady =
     Boolean(conversationId) &&
-    history.isSuccess &&
     history.data != null &&
-    (history.isFetchedAfterMount || !history.isFetching);
+    (seededForIdRef.current === conversationId ||
+      history.isFetchedAfterMount ||
+      !history.isFetching);
+  if (historyReady && conversationId) {
+    seededForIdRef.current = conversationId;
+  }
 
   useEffect(() => {
     if (!historyReady || !conversationId || !history.data) {
@@ -88,6 +110,41 @@ export function useConversationEvents(
     // Seed once history is settled for this id; background refetches must not
     // tear down a live subscription (do not depend on `history.data`).
   }, [conversationId, historyReady, qc]);
+
+  const historyData = history.data;
+  const historySuccess = history.isSuccess;
+  const dataUpdatedAt = history.dataUpdatedAt;
+  useEffect(() => {
+    if (!historyReady || !historySuccess || !conversationId || !historyData) {
+      return;
+    }
+    applyConversationHistorySeed(conversationId, historyData);
+  }, [
+    conversationId,
+    dataUpdatedAt,
+    historyData,
+    historyReady,
+    historySuccess,
+  ]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    const refetchVisible = () => {
+      if (!isOnScreenThread(hostRef?.current ?? null)) return;
+      void qc.refetchQueries({
+        queryKey: agentsKeys.transcript(conversationId),
+      });
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refetchVisible();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", refetchVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", refetchVisible);
+    };
+  }, [conversationId, hostRef, qc]);
 
   return {
     ...state,

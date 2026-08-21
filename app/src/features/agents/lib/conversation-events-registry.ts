@@ -173,6 +173,28 @@ function openEntry(
 }
 
 /**
+ * Replace a live entry's painted history with a later GET page (tab-return
+ * catch-up) without tearing the topic subscription down. No-op when no entry
+ * is open — the subscribe path seeds the first page.
+ */
+export function applyConversationHistorySeed(
+  conversationId: string,
+  seed: ConversationHistorySeed,
+): void {
+  const entry = entries.get(conversationId);
+  if (!entry) return;
+  entry.state = {
+    ...entry.state,
+    events: foldTranscriptEvents(seed.events),
+    ready: true,
+  };
+  if (seed.latestSeq > 0) {
+    holdTopicSeq(conversationTopic(conversationId), seed.latestSeq);
+  }
+  notify(entry);
+}
+
+/**
  * Subscribe to a conversation's live topic. The first subscriber for an id
  * opens the shared transport subscription (after history was loaded via
  * react-query); later subscribers attach to the same stream and immediately

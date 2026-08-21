@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
   notifyManager,
@@ -30,9 +30,10 @@ function Probe({
   conversationId: string;
   onState: (state: ConversationEventsView) => void;
 }) {
-  const state = useConversationEvents(conversationId);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const state = useConversationEvents(conversationId, hostRef);
   onState(state);
-  return null;
+  return <div ref={hostRef} data-testid={`thread-host-${conversationId}`} />;
 }
 
 function mountConsumer(
@@ -43,6 +44,7 @@ function mountConsumer(
       queries: { retry: false, gcTime: 0, staleTime: Infinity },
     },
   }),
+  options: { inert?: boolean; hidden?: boolean } = {},
 ): {
   root: Root;
   container: HTMLDivElement;
@@ -54,6 +56,8 @@ function mountConsumer(
   ) => void;
 } {
   const container = document.createElement("div");
+  if (options.inert) container.setAttribute("inert", "");
+  if (options.hidden) container.classList.add("hidden");
   document.body.appendChild(container);
   const root = createRoot(container);
   let state!: ConversationEventsView;
@@ -299,6 +303,9 @@ async function flushQueryNotifications(): Promise<void> {
     await Promise.resolve();
     await vi.advanceTimersByTimeAsync(0);
   });
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 describe("transcript fetch timeout and historyFailed", () => {
@@ -442,6 +449,299 @@ describe("transcript fetch timeout and historyFailed", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(consumer.getState().historyFailed).toBe(true);
+
+    unmountConsumer(consumer);
+  });
+});
+
+function transcriptPage(
+  text: string,
+  seq = 1,
+): ConversationTranscriptPage {
+  return {
+    events: [
+      {
+        type: "prompt",
+        text,
+        at: "2026-08-10T00:00:00.000Z",
+        seq,
+      },
+    ],
+    latestSeq: seq,
+  };
+}
+
+function fetchTranscriptOk(pages: Record<string, ConversationTranscriptPage>) {
+  return vi.fn((input: string) => {
+    const id = /\/api\/conversations\/([^/]+)\/transcript/.exec(String(input))?.[1];
+    const page = id ? pages[id] : undefined;
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(page ?? { events: [], latestSeq: 0 }),
+    });
+  });
+}
+
+async function returnToTab(): Promise<void> {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => "visible",
+  });
+  await act(async () => {
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await flushQueryNotifications();
+}
+
+describe("transcript refetch on tab return", () => {
+  beforeEach(() => {
+    notifyManager.setScheduler((cb) => {
+      cb();
+    });
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), ms);
+      return controller.signal;
+    });
+  });
+
+  afterEach(() => {
+    vi.mocked(AbortSignal.timeout).mockRestore();
+    notifyManager.setScheduler((cb) => {
+      setTimeout(cb, 0);
+    });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+  });
+
+  it("refetches the visible thread on visibility and applies the new page", async () => {
+    const fetchMock = fetchTranscriptOk({
+      visible: transcriptPage("caught up", 2),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const consumer = mountConsumer("visible", transcriptPage("stale"));
+
+    expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().events[0]).toMatchObject({ text: "stale" });
+
+    await returnToTab();
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/conversations/visible/transcript",
+    );
+    expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().historyFailed).toBe(false);
+    expect(consumer.getState().events).toEqual([
+      {
+        type: "prompt",
+        text: "caught up",
+        at: "2026-08-10T00:00:00.000Z",
+        seq: 2,
+      },
+    ]);
+
+    unmountConsumer(consumer);
+  });
+
+  it("refetches the visible thread on window focus", async () => {
+    const fetchMock = fetchTranscriptOk({
+      "conv-focus": transcriptPage("from focus"),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const consumer = mountConsumer("conv-focus", transcriptPage("stale"));
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await flushQueryNotifications();
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/conversations/conv-focus/transcript",
+    );
+    expect(consumer.getState().ready).toBe(true);
+
+    unmountConsumer(consumer);
+  });
+
+  it("does not refetch when the hook has no on-screen host", async () => {
+    function HostlessProbe({
+      conversationId,
+      onState,
+    }: {
+      conversationId: string;
+      onState: (state: ConversationEventsView) => void;
+    }) {
+      const state = useConversationEvents(conversationId);
+      onState(state);
+      return null;
+    }
+
+    const fetchMock = fetchTranscriptOk({
+      "conv-indicator": transcriptPage("indicator"),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0, staleTime: Infinity },
+      },
+    });
+    client.setQueryData(
+      agentsKeys.transcript("conv-indicator"),
+      transcriptPage("seed"),
+    );
+    act(() => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <HostlessProbe
+            conversationId="conv-indicator"
+            onState={() => {}}
+          />
+        </QueryClientProvider>,
+      );
+    });
+
+    await returnToTab();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    act(() => {
+      root.unmount();
+    });
+    client.clear();
+    container.remove();
+  });
+
+  it("does not refetch an inert or hidden mounted thread", async () => {
+    const fetchMock = fetchTranscriptOk({
+      "conv-visible": transcriptPage("visible"),
+      "conv-inert": transcriptPage("inert"),
+      "conv-hidden": transcriptPage("hidden"),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const visible = mountConsumer("conv-visible", transcriptPage("v"));
+    const inert = mountConsumer(
+      "conv-inert",
+      transcriptPage("i"),
+      visible.client,
+      { inert: true },
+    );
+    const hidden = mountConsumer(
+      "conv-hidden",
+      transcriptPage("h"),
+      visible.client,
+      { hidden: true },
+    );
+
+    await returnToTab();
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("/conv-visible/transcript"))).toBe(
+      true,
+    );
+    expect(urls.some((url) => url.includes("/conv-inert/transcript"))).toBe(
+      false,
+    );
+    expect(urls.some((url) => url.includes("/conv-hidden/transcript"))).toBe(
+      false,
+    );
+
+    unmountConsumer(inert);
+    unmountConsumer(hidden);
+    unmountConsumer(visible);
+  });
+
+  it("keeps painted events while a successful refetch is in flight", async () => {
+    type FetchResponse = {
+      ok: boolean;
+      status: number;
+      text: () => Promise<string>;
+    };
+    let resolveFetch: (value: FetchResponse) => void = () => {};
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<FetchResponse>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const consumer = mountConsumer("conv-hold", transcriptPage("painted"));
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await flushQueryNotifications();
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().historyFailed).toBe(false);
+    expect(consumer.getState().events[0]).toMatchObject({ text: "painted" });
+
+    await act(async () => {
+      resolveFetch({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(transcriptPage("caught up", 2)),
+      });
+    });
+    await flushQueryNotifications();
+
+    expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().events[0]).toMatchObject({ text: "caught up" });
+
+    unmountConsumer(consumer);
+  });
+
+  it("sets historyFailed on a failed refetch without dropping ready", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: async () => JSON.stringify({ error: "bad gateway" }),
+      }),
+    );
+    const consumer = mountConsumer("conv-fail", transcriptPage("painted"));
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await flushQueryNotifications();
+
+    expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().historyFailed).toBe(true);
+    expect(consumer.getState().events[0]).toMatchObject({ text: "painted" });
+
+    unmountConsumer(consumer);
+  });
+
+  it("sets historyFailed when a tab-return refetch aborts at 10s", async () => {
+    const fetchMock = hangingFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    const consumer = mountConsumer("conv-abort", transcriptPage("painted"));
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await flushQueryNotifications();
+    expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().historyFailed).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_FETCH_TIMEOUT_MS);
+    });
+    await flushQueryNotifications();
+
+    expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().historyFailed).toBe(true);
+    expect(consumer.getState().events[0]).toMatchObject({ text: "painted" });
 
     unmountConsumer(consumer);
   });
