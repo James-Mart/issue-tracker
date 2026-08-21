@@ -26,6 +26,7 @@ import {
   useIssueAgentRunEventsQuery,
   useIssueAgentRunsQuery,
 } from "../api/queries";
+import { useWorkRootAgentRuns } from "../hooks/use-work-root-agent-runs";
 import { issueChannelPath } from "../lib/links";
 
 type SubagentUpdateEvent = Extract<TranscriptEvent, { type: "subagent_update" }>;
@@ -300,6 +301,8 @@ export function AgentRunCard({
   );
 }
 
+const EMPTY_RUNS: AgentRun[] = [];
+
 export function AgentRunsPanel({
   issueId,
   projectId,
@@ -308,6 +311,11 @@ export function AgentRunsPanel({
   projectId: string;
 }) {
   const { data, isLoading, error } = useIssueAgentRunsQuery(issueId);
+  const runs = useWorkRootAgentRuns(
+    issueId,
+    data?.workRoot?.conversationId,
+    data?.runs ?? EMPTY_RUNS,
+  );
 
   if (isLoading) {
     return <ShellLoadingState label="Loading agent runs…" />;
@@ -322,7 +330,6 @@ export function AgentRunsPanel({
     );
   }
 
-  const runs = data?.runs ?? [];
   const workRoot = data?.workRoot;
   const coordinatorLink =
     workRoot != null ? (

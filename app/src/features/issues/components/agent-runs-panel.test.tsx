@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
-import { act, type ComponentProps } from "react";
+import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentRun, TranscriptEvent } from "@server/schemas";
+import type { TopicListener, TopicMessage } from "@/lib/ws/transport";
+import { issuesKeys } from "../api/keys";
 import { AgentRunCard, AgentRunsPanel } from "./agent-runs-panel";
 
 const queryState = vi.hoisted(() => ({
@@ -15,6 +18,24 @@ const queryState = vi.hoisted(() => ({
   },
   isLoading: false,
   error: null as Error | null,
+}));
+
+const topicState = vi.hoisted(() => {
+  const listeners = new Map<string, TopicListener>();
+  return {
+    listeners,
+    subscribe: (topic: string, listener: TopicListener) => {
+      listeners.set(topic, listener);
+      return () => {
+        listeners.delete(topic);
+      };
+    },
+  };
+});
+
+vi.mock("@/lib/ws/transport", () => ({
+  subscribeTopic: (topic: string, listener: TopicListener) =>
+    topicState.subscribe(topic, listener),
 }));
 
 const eventsQueryState = vi.hoisted(() => ({
@@ -67,21 +88,44 @@ function sampleRun(overrides: Partial<AgentRun> = {}): AgentRun {
   };
 }
 
+function testQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0, staleTime: Infinity },
+    },
+  });
+}
+
+function panelTree(panel: ReactNode, client: QueryClient) {
+  return (
+    <QueryClientProvider client={client}>
+      <MemoryRouter>{panel}</MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
 function mountPanel(props: ComponentProps<typeof AgentRunsPanel>): {
   container: HTMLDivElement;
   root: Root;
+  invalidateSpy: ReturnType<typeof vi.spyOn>;
 } {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const client = testQueryClient();
+  const invalidateSpy = vi.spyOn(client, "invalidateQueries");
   act(() => {
-    root.render(
-      <MemoryRouter>
-        <AgentRunsPanel {...props} />
-      </MemoryRouter>,
-    );
+    root.render(panelTree(<AgentRunsPanel {...props} />, client));
   });
-  return { container, root };
+  return { container, root, invalidateSpy };
+}
+
+function deliverTopic(topic: string, message: TopicMessage) {
+  const listener = topicState.listeners.get(topic);
+  expect(listener).toBeTruthy();
+  act(() => {
+    listener!(message);
+  });
 }
 
 function clickHeader(container: ParentNode, delegationId: string) {
@@ -105,6 +149,7 @@ afterEach(() => {
   eventsQueryState.isLoading = false;
   eventsQueryState.error = null;
   eventsQueryState.expandedCalls = [];
+  topicState.listeners.clear();
 });
 
 describe("AgentRunsPanel", () => {
@@ -482,9 +527,10 @@ describe("AgentRunsPanel", () => {
     const root = createRoot(shell);
     act(() => {
       root.render(
-        <MemoryRouter>
-          <AgentRunsPanel issueId="task-1" projectId={PROJECT_ID} />
-        </MemoryRouter>,
+        panelTree(
+          <AgentRunsPanel issueId="task-1" projectId={PROJECT_ID} />,
+          testQueryClient(),
+        ),
       );
     });
 
@@ -537,9 +583,10 @@ describe("AgentRunsPanel", () => {
     const root = createRoot(shell);
     act(() => {
       root.render(
-        <MemoryRouter>
-          <AgentRunsPanel issueId="task-1" projectId={PROJECT_ID} />
-        </MemoryRouter>,
+        panelTree(
+          <AgentRunsPanel issueId="task-1" projectId={PROJECT_ID} />,
+          testQueryClient(),
+        ),
       );
     });
     clickHeader(shell, "del-done");
@@ -600,6 +647,162 @@ describe("AgentRunsPanel", () => {
       container.querySelector('[data-testid="agent-runs-coordinator-link"]'),
     ).toBeTruthy();
     expect(container.querySelector('[data-run-id="del-1"]')).toBeTruthy();
+  });
+
+  it("subscribes to the work root conversation and appends a matching run in startedAt order", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-old",
+          parentCallId: "call-old",
+          startedAt: AT,
+          status: "completed",
+          endedAt: AT,
+        }),
+        sampleRun({
+          delegationId: "del-new",
+          parentCallId: "call-new",
+          startedAt: AT_END,
+          status: "running",
+          endedAt: undefined,
+        }),
+      ],
+      workRoot: { issueId: "ship-it", conversationId: "conv-coordinator" },
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    expect(topicState.listeners.has("conversation:conv-coordinator")).toBe(true);
+
+    deliverTopic("conversation:conv-coordinator", {
+      type: "event",
+      seq: 10,
+      event: {
+        type: "delegation",
+        run: sampleRun({
+          delegationId: "del-mid",
+          parentCallId: "call-mid",
+          startedAt: AT_MID,
+          status: "running",
+          endedAt: undefined,
+        }),
+        at: AT_MID,
+        seq: 10,
+      },
+    });
+
+    expect(
+      Array.from(container.querySelectorAll("[data-run-id]")).map((card) =>
+        card.getAttribute("data-run-id"),
+      ),
+    ).toEqual(["del-old", "del-mid", "del-new"]);
+  });
+
+  it("ignores a delegation frame whose run belongs to a different issue", () => {
+    queryState.data = {
+      runs: [sampleRun()],
+      workRoot: { issueId: "ship-it", conversationId: "conv-coordinator" },
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+
+    deliverTopic("conversation:conv-coordinator", {
+      type: "event",
+      seq: 11,
+      event: {
+        type: "delegation",
+        run: sampleRun({
+          delegationId: "del-other",
+          issueId: "other-task",
+          parentCallId: "call-other",
+          status: "running",
+          endedAt: undefined,
+        }),
+        at: AT_MID,
+        seq: 11,
+      },
+    });
+
+    expect(container.querySelector('[data-run-id="del-other"]')).toBeNull();
+    expect(container.querySelectorAll("[data-run-id]")).toHaveLength(1);
+  });
+
+  it("flips status and fills duration when a terminal tool_call matches parentCallId", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-live",
+          parentCallId: "call-1",
+          startedAt: AT,
+          status: "running",
+          endedAt: undefined,
+        }),
+      ],
+      workRoot: { issueId: "ship-it", conversationId: "conv-coordinator" },
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    const card = container.querySelector('[data-run-id="del-live"]') as HTMLElement;
+    expect(card.getAttribute("data-status")).toBe("running");
+    expect(card.querySelector("[data-duration]")).toBeNull();
+
+    deliverTopic("conversation:conv-coordinator", {
+      type: "event",
+      seq: 12,
+      event: {
+        type: "tool_call",
+        callId: "call-1",
+        name: "Task",
+        status: "completed",
+        at: "2026-07-09T14:00:12.000Z",
+        seq: 12,
+      },
+    });
+
+    expect(card.getAttribute("data-status")).toBe("completed");
+    expect(
+      card.querySelector("[data-status-indicator]")?.getAttribute(
+        "data-status-indicator",
+      ),
+    ).toBe("completed");
+    expect(card.querySelector("[data-duration]")?.textContent).toBe("12s");
+  });
+
+  it("drops the live overlay and invalidates agent runs on topic reset", () => {
+    queryState.data = {
+      runs: [sampleRun({ delegationId: "del-seed" })],
+      workRoot: { issueId: "ship-it", conversationId: "conv-coordinator" },
+    };
+
+    const { container, invalidateSpy } = mountPanel({
+      issueId: "task-1",
+      projectId: PROJECT_ID,
+    });
+
+    deliverTopic("conversation:conv-coordinator", {
+      type: "event",
+      seq: 10,
+      event: {
+        type: "delegation",
+        run: sampleRun({
+          delegationId: "del-live",
+          parentCallId: "call-live",
+          startedAt: AT_MID,
+          status: "running",
+          endedAt: undefined,
+        }),
+        at: AT_MID,
+        seq: 10,
+      },
+    });
+    expect(container.querySelector('[data-run-id="del-live"]')).toBeTruthy();
+
+    deliverTopic("conversation:conv-coordinator", { type: "reset" });
+
+    expect(container.querySelector('[data-run-id="del-live"]')).toBeNull();
+    expect(container.querySelector('[data-run-id="del-seed"]')).toBeTruthy();
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: issuesKeys.agentRuns("task-1"),
+    });
   });
 });
 
