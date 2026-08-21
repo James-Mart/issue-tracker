@@ -260,7 +260,8 @@ export function ChannelTranscriptPanel({
     return emptyBody;
   }
 
-  const showSwitcher = sessions.length >= 2;
+  const showSessionSelect = sessions.length >= 2;
+  const showSessionControls = sessions.length >= 1;
   const planningNewRun = planningIdea ? (
     <PlanningNewRunControl
       issue={planningIdea}
@@ -296,15 +297,16 @@ export function ChannelTranscriptPanel({
     ) : null;
 
   const overflowActions =
-    showSwitcher || channelHeaderActions ? (
+    showSessionControls || channelHeaderActions ? (
       <ChannelSessionOverflowMenu>
-        {showSwitcher ? (
+        {showSessionControls ? (
           <ChannelSessionSwitcher
             issueId={issueId}
             channel={channel}
             sessions={sessions}
             selectedId={selectedSession.id}
             onSelectedIdChange={setSelectedId}
+            showSelect={showSessionSelect}
             className="border-0 px-0 py-0"
           />
         ) : null}
@@ -316,13 +318,14 @@ export function ChannelTranscriptPanel({
       </ChannelSessionOverflowMenu>
     ) : null;
 
-  const desktopHeader = showSwitcher ? (
+  const desktopHeader = showSessionControls ? (
     <ChannelSessionSwitcher
       issueId={issueId}
       channel={channel}
       sessions={sessions}
       selectedId={selectedSession.id}
       onSelectedIdChange={setSelectedId}
+      showSelect={showSessionSelect}
       trailing={channelHeaderActions}
     />
   ) : channelHeaderActions ? (

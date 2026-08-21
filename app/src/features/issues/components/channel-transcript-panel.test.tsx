@@ -17,6 +17,8 @@ const threadProps = vi.hoisted(() => ({
   headerActions: false,
 }));
 
+const deleteMutate = vi.hoisted(() => vi.fn());
+
 vi.mock("../api/queries", () => ({
   useChannelSessionsQuery: () => ({
     data: queryState.data,
@@ -129,23 +131,47 @@ vi.mock("./channel-session-switcher", () => ({
     sessions,
     selectedId,
     onSelectedIdChange,
+    showSelect = true,
+    trailing,
   }: {
     sessions: readonly ChannelSessionListItem[];
     selectedId: string;
     onSelectedIdChange: (id: string) => void;
+    showSelect?: boolean;
+    trailing?: ReactNode;
   }) => (
     <div data-testid="channel-session-switcher">
-      {sessions.map((session) => (
-        <button
-          key={session.id}
-          type="button"
-          data-testid={`pick-session-${session.id}`}
-          aria-pressed={session.id === selectedId}
-          onClick={() => onSelectedIdChange(session.id)}
-        >
-          {session.id}
-        </button>
-      ))}
+      {showSelect
+        ? sessions.map((session) => (
+            <button
+              key={session.id}
+              type="button"
+              data-testid={`pick-session-${session.id}`}
+              aria-pressed={session.id === selectedId}
+              onClick={() => onSelectedIdChange(session.id)}
+            >
+              {session.id}
+            </button>
+          ))
+        : null}
+      <button
+        type="button"
+        data-testid="channel-session-delete"
+        onClick={() =>
+          deleteMutate(selectedId, {
+            onSuccess: () => {
+              const remaining = sessions.filter(
+                (session) => session.id !== selectedId,
+              );
+              const next = remaining[0];
+              if (next) onSelectedIdChange(next.id);
+            },
+          })
+        }
+      >
+        Delete session
+      </button>
+      {trailing}
     </div>
   ),
 }));
@@ -293,6 +319,7 @@ afterEach(() => {
   threadProps.hideComposer = false;
   threadProps.onBack = undefined;
   threadProps.headerActions = false;
+  deleteMutate.mockReset();
 });
 
 describe("ChannelTranscriptPanel", () => {
@@ -374,7 +401,7 @@ describe("ChannelTranscriptPanel", () => {
     ).toBeTruthy();
   });
 
-  it("does not render the session switcher when the channel has one session", () => {
+  it("exposes delete without the session select when the channel has one session", () => {
     queryState.data = [
       {
         id: "only",
@@ -389,7 +416,16 @@ describe("ChannelTranscriptPanel", () => {
     const { container } = mountPanel("Planning", idea);
     expect(
       container.querySelector('[data-testid="channel-session-switcher"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="channel-session-select"]'),
     ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="pick-session-only"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="channel-session-delete"]'),
+    ).toBeTruthy();
     expect(
       container.querySelector('[data-testid="planning-new-run"]'),
     ).toBeTruthy();
@@ -550,6 +586,12 @@ describe("ChannelTranscriptPanel", () => {
     ).toBeNull();
     expect(
       active.container.querySelector('[data-testid="channel-session-switcher"]'),
+    ).toBeTruthy();
+    expect(
+      active.container.querySelector('[data-testid="channel-session-delete"]'),
+    ).toBeTruthy();
+    expect(
+      active.container.querySelector('[data-testid="pick-session-live"]'),
     ).toBeNull();
     expect(threadProps.onBack).toBeTypeOf("function");
     expect(threadProps.headerActions).toBe(true);
@@ -606,5 +648,77 @@ describe("ChannelTranscriptPanel", () => {
       container.querySelector('[data-testid="channel-retro"]') ??
         document.querySelector('[data-testid="channel-retro"]'),
     ).toBeTruthy();
+  });
+
+  it("returns to the planning empty state after deleting the last session", () => {
+    const soloSession = {
+      id: "only",
+      title: "Solo",
+      model: "composer-2.5-fast",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+      archived: false,
+      activeRun: false,
+    };
+    queryState.data = [soloSession];
+    const { container, root } = mountPanel("Planning", idea);
+
+    deleteMutate.mockImplementation((_id, options) => {
+      queryState.data = [];
+      options?.onSuccess?.();
+      act(() => {
+        root.render(
+          <ChannelTranscriptPanel
+            issueId={idea.id}
+            issue={idea}
+            channel="planning"
+            label="Planning"
+          />,
+        );
+      });
+    });
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="channel-session-delete"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(deleteMutate).toHaveBeenCalledWith("only", expect.any(Object));
+    expect(
+      container.querySelector('[data-testid="planning-channel-empty-state"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="conversation-thread"]'),
+    ).toBeNull();
+  });
+
+  it("exposes delete for a single session from the mobile overflow menu", () => {
+    queryState.data = [
+      {
+        id: "only",
+        title: "Solo",
+        model: "composer-2.5-fast",
+        createdAt: "2026-08-01T00:00:00.000Z",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+        archived: false,
+        activeRun: false,
+      },
+    ];
+    const { container } = mountPanel("Planning", idea, {
+      mobileFullViewport: true,
+      onBackToOverview: () => undefined,
+    });
+    expect(
+      container.querySelector('[data-testid="channel-session-overflow-menu"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="channel-session-delete"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="pick-session-only"]'),
+    ).toBeNull();
   });
 });

@@ -38,6 +38,7 @@ const sessions: ChannelSessionListItem[] = [
 function mountSwitcher(
   selectedId = "archived",
   onSelectedIdChange = vi.fn(),
+  options?: { showSelect?: boolean; sessions?: ChannelSessionListItem[] },
 ): { container: HTMLDivElement; root: Root; onSelectedIdChange: ReturnType<typeof vi.fn> } {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -47,9 +48,10 @@ function mountSwitcher(
       <ChannelSessionSwitcher
         issueId="capture"
         channel="planning"
-        sessions={sessions}
+        sessions={options?.sessions ?? sessions}
         selectedId={selectedId}
         onSelectedIdChange={onSelectedIdChange}
+        showSelect={options?.showSelect}
       />,
     );
   });
@@ -90,5 +92,51 @@ describe("ChannelSessionSwitcher", () => {
 
     expect(mutate).toHaveBeenCalledWith("archived", expect.any(Object));
     expect(onSelectedIdChange).toHaveBeenCalledWith("live");
+  });
+
+  it("hides the session select but keeps delete when showSelect is false", () => {
+    const soloSession = sessions.filter((session) => session.id === "live");
+    const { container } = mountSwitcher("live", vi.fn(), {
+      showSelect: false,
+      sessions: soloSession,
+    });
+
+    expect(
+      container.querySelector('[data-testid="channel-session-select"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="channel-session-delete"]'),
+    ).toBeTruthy();
+  });
+
+  it("deletes the last remaining session without changing selection", () => {
+    const soloSession = sessions.filter((session) => session.id === "live");
+    const onSelectedIdChange = vi.fn();
+    const { container } = mountSwitcher("live", onSelectedIdChange, {
+      showSelect: false,
+      sessions: soloSession,
+    });
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="channel-session-delete"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    mutate.mockImplementation((_id, options) => {
+      options?.onSuccess?.();
+    });
+
+    act(() => {
+      const deleteButton = document.body.querySelector(
+        '[data-testid="delete-channel-session-dialog"] button:last-of-type',
+      ) as HTMLButtonElement;
+      deleteButton.click();
+    });
+
+    expect(mutate).toHaveBeenCalledWith("live", expect.any(Object));
+    expect(onSelectedIdChange).not.toHaveBeenCalled();
   });
 });

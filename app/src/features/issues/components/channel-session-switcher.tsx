@@ -30,6 +30,7 @@ export function ChannelSessionSwitcher({
   sessions,
   selectedId,
   onSelectedIdChange,
+  showSelect = true,
   trailing,
   className,
 }: {
@@ -38,6 +39,8 @@ export function ChannelSessionSwitcher({
   sessions: readonly ChannelSessionListItem[];
   selectedId: string;
   onSelectedIdChange: (id: string) => void;
+  /** Hide the session picker (e.g. when only one session remains). */
+  showSelect?: boolean;
   /** Extra controls aligned to the header row (e.g. New run). */
   trailing?: ReactNode;
   className?: string;
@@ -66,26 +69,28 @@ export function ChannelSessionSwitcher({
       )}
       data-testid="channel-session-switcher"
     >
-      <Select value={selectedId} onValueChange={onSelectedIdChange}>
-        <SelectTrigger
-          className="h-8 min-w-0 flex-1 font-mono text-xs"
-          aria-label="Channel session"
-          data-testid="channel-session-select"
-        >
-          <SelectValue>
-            {selected
-              ? formatChannelSessionSwitcherLabel(selected)
-              : "Select session"}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {ordered.map((session) => (
-            <SelectItem key={session.id} value={session.id}>
-              {formatChannelSessionSwitcherLabel(session)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {showSelect ? (
+        <Select value={selectedId} onValueChange={onSelectedIdChange}>
+          <SelectTrigger
+            className="h-8 min-w-0 flex-1 font-mono text-xs"
+            aria-label="Channel session"
+            data-testid="channel-session-select"
+          >
+            <SelectValue>
+              {selected
+                ? formatChannelSessionSwitcherLabel(selected)
+                : "Select session"}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {ordered.map((session) => (
+              <SelectItem key={session.id} value={session.id}>
+                {formatChannelSessionSwitcherLabel(session)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
       <Button
         type="button"
         variant="ghost"
