@@ -1,9 +1,7 @@
 # Migrate
 
-Never a project-form `apply` for this migration. Follow authoring for
-apply-doc shape and prune-by-default scope. Choose **story-form** or
-**epic-form** per root by issue-tracker-authoring **Epic grain** (do not
-restate that rule here).
+Never a project-form `apply` for this migration. Use the **story-form** or
+**epic-form** already chosen for the approved outline.
 
 ### Merge-base and policy
 
