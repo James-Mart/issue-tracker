@@ -700,6 +700,18 @@ describe("ConversationThread transcript load failure", () => {
     refetchHistory.mockClear();
   });
 
+  it("shows retry rather than skeletons over painted events when a seeded refetch fails", () => {
+    threadUi.ready = true;
+    threadUi.historyFailed = true;
+    ({ container, root } = mountThread("conv-1"));
+
+    expect(container!.querySelector('[aria-busy="true"]')).toBeNull();
+    expect(
+      container!.querySelector('[data-testid="transcript-retry"]'),
+    ).toBeTruthy();
+    expect(container!.textContent).not.toContain("First turn");
+  });
+
   it("shows failed/retry UI instead of loading skeletons when historyFailed", () => {
     threadUi.ready = false;
     threadUi.historyFailed = true;

@@ -583,6 +583,7 @@ export function ConversationThread({
   /** Read-only history (e.g. archived channel session) — transcript only. */
   hideComposer?: boolean;
 }) {
+  const hostRef = useRef<HTMLDivElement>(null);
   const {
     events,
     ready,
@@ -593,7 +594,7 @@ export function ConversationThread({
     refetchHistory,
     isRefetchingHistory,
     historyError,
-  } = useConversationEvents(conversationId);
+  } = useConversationEvents(conversationId, hostRef);
   const { runActive } = useConversationRunActive(
     conversationId,
     streamRunActive,
@@ -613,6 +614,7 @@ export function ConversationThread({
     // Give back the keyboard's height at the bottom: the chrome above stays put
     // while the transcript shortens and the composer rides above the keyboard.
     <div
+      ref={hostRef}
       className="flex min-h-0 flex-1 flex-col"
       style={{ paddingBottom: keyboardInset }}
       data-testid="conversation-thread"
