@@ -89,5 +89,11 @@ export function useConversationEvents(
     // tear down a live subscription (do not depend on `history.data`).
   }, [conversationId, historyReady, qc]);
 
-  return { ...state, historyFailed };
+  return {
+    ...state,
+    historyFailed,
+    refetchHistory: history.refetch,
+    isRefetchingHistory: history.isFetching,
+    historyError: history.error,
+  };
 }
