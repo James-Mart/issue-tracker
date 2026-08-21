@@ -142,15 +142,12 @@ export function IssueDetailTabs({
 
       {channelTabs.map((tab) => {
         const selected = active === tab.key;
+        if (!selected) return null;
         return (
           <div
             key={tab.key}
             role="tabpanel"
-            className={cn(
-              "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-              !selected && "hidden",
-            )}
-            {...tabPanelVisibility(selected)}
+            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
           >
             <ChannelTranscriptPanel
               issueId={issue.id}
@@ -159,9 +156,9 @@ export function IssueDetailTabs({
               label={tab.label}
               projectId={projectId}
               parentKind={parentKind}
-              mobileFullViewport={mobileChannelChrome && selected}
+              mobileFullViewport={mobileChannelChrome}
               onBackToOverview={
-                mobileChannelChrome && selected ? onBackToOverview : undefined
+                mobileChannelChrome ? onBackToOverview : undefined
               }
             />
           </div>
@@ -207,7 +204,7 @@ export function IssueDetailTabs({
   );
 }
 
-/** Keep panels mounted; freeze inactive ones. `inert` cast: React 18 DOM types omit it. */
+/** Keep non-channel panels mounted; freeze inactive ones. `inert` cast: React 18 DOM types omit it. */
 function tabPanelVisibility(selected: boolean): Record<string, unknown> {
   return selected ? {} : { inert: "" };
 }
