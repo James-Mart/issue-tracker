@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,7 @@ const mobileState = vi.hoisted(() => ({
 const panelProps = vi.hoisted(() => ({
   mobileFullViewport: false,
   onBackToOverview: undefined as (() => void) | undefined,
+  mounted: false,
 }));
 
 vi.mock("../hooks/use-channel-tab-indicator", () => ({
@@ -36,6 +37,14 @@ vi.mock("./channel-transcript-panel", () => ({
     mobileFullViewport?: boolean;
     onBackToOverview?: () => void;
   }) => {
+    useEffect(() => {
+      panelProps.mounted = true;
+      return () => {
+        panelProps.mounted = false;
+        panelProps.mobileFullViewport = false;
+        panelProps.onBackToOverview = undefined;
+      };
+    }, []);
     panelProps.mobileFullViewport = Boolean(mobileFullViewport);
     panelProps.onBackToOverview = onBackToOverview;
     return (
@@ -103,6 +112,43 @@ afterEach(() => {
   mobileState.value = false;
   panelProps.mobileFullViewport = false;
   panelProps.onBackToOverview = undefined;
+  panelProps.mounted = false;
+});
+
+describe("IssueDetailTabs channel panel mount", () => {
+  it("does not mount the channel panel while Overview is selected", () => {
+    const { container } = mountTabs(null, "/");
+    expect(panelProps.mounted).toBe(false);
+    expect(
+      container.querySelector('[data-testid="channel-transcript-panel"]'),
+    ).toBeNull();
+  });
+
+  it("mounts the channel panel only for the selected channel tab", () => {
+    const { container } = mountTabs(null, "/?tab=planning");
+    expect(panelProps.mounted).toBe(true);
+    expect(
+      container.querySelector('[data-testid="channel-transcript-panel"]'),
+    ).toBeTruthy();
+  });
+
+  it("unmounts the channel panel when leaving the channel tab", () => {
+    const { container } = mountTabs(null, "/?tab=planning");
+    expect(panelProps.mounted).toBe(true);
+
+    act(() => {
+      (
+        Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>
+          el.textContent?.includes("Overview"),
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(panelProps.mounted).toBe(false);
+    expect(
+      container.querySelector('[data-testid="channel-transcript-panel"]'),
+    ).toBeNull();
+  });
 });
 
 describe("IssueDetailTabs channel indicator", () => {

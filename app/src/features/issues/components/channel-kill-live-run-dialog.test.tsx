@@ -4,16 +4,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelSessionListItem } from "@server/schemas";
 import { ChannelKillLiveRunDialog } from "./channel-kill-live-run-dialog";
+import { channelSessionListItem } from "../test/channel-session-list-item";
 
-const session: ChannelSessionListItem = {
+const session: ChannelSessionListItem = channelSessionListItem({
   id: "live-1",
   title: "Plan Capture",
   model: "composer-2.5",
   createdAt: "2026-08-02T15:30:00.000Z",
   updatedAt: "2026-08-02T15:30:00.000Z",
-  archived: false,
   activeRun: true,
-};
+  awaitingHuman: false,
+});
 
 function mount(ui: React.ReactElement): { root: Root } {
   const container = document.createElement("div");

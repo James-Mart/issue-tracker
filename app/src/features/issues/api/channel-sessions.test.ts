@@ -6,20 +6,7 @@ import {
   formatChannelSessionSwitcherLabel,
   orderChannelSessionsForSwitcher,
 } from "./channel-sessions";
-
-function session(
-  overrides: Partial<ChannelSessionListItem> & Pick<ChannelSessionListItem, "id">,
-): ChannelSessionListItem {
-  return {
-    title: "Session",
-    model: "composer-2.5-fast",
-    createdAt: "2026-08-01T00:00:00.000Z",
-    updatedAt: "2026-08-01T00:00:00.000Z",
-    archived: false,
-    activeRun: false,
-    ...overrides,
-  };
-}
+import { channelSessionListItem as session } from "../test/channel-session-list-item";
 
 describe("currentChannelSession", () => {
   it("returns the first non-archived session (list is updatedAt desc)", () => {

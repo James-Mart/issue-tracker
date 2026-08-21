@@ -6,7 +6,7 @@ import {
 } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildScriptedStreamWithAgentIdHint,
@@ -15,6 +15,22 @@ import {
 import type { AgentSessions } from "../services/agent-sessions.js";
 
 const AT = "2026-08-10T12:00:00.000Z";
+
+function conversationsDir(): string {
+  return join(dirname(issuesRoot), "conversations");
+}
+
+function writeTranscript(
+  conversationId: string,
+  events: Record<string, unknown>[],
+): void {
+  const path = join(conversationsDir(), conversationId, "transcript.jsonl");
+  writeFileSync(
+    path,
+    events.map((e) => JSON.stringify({ at: AT, ...e })).join("\n") +
+      (events.length ? "\n" : ""),
+  );
+}
 
 let root: string;
 let issuesRoot: string;
@@ -165,6 +181,7 @@ describe("channel sessions HTTP API", () => {
       model: "composer-2.5",
       archived: false,
       activeRun: false,
+      awaitingHuman: false,
     });
     expect(listed[0].createdAt).toEqual(expect.any(String));
     expect(listed[0].updatedAt).toEqual(expect.any(String));
@@ -331,9 +348,65 @@ describe("channel sessions HTTP API", () => {
       expect.objectContaining({
         id,
         activeRun: true,
+        awaitingHuman: false,
         archived: false,
       }),
     ]);
+  });
+
+  it("lists awaitingHuman from the session transcript turn-boundary rule", async () => {
+    await startApp();
+
+    const created = await fetch(
+      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Turn states" }),
+      },
+    );
+    expect(created.status).toBe(201);
+    const { id } = await created.json();
+
+    writeTranscript(id, [
+      { type: "prompt", text: "go" },
+      { type: "assistant", text: "done" },
+    ]);
+    const awaiting = await fetch(
+      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
+    ).then((r) => r.json());
+    expect(awaiting[0]).toMatchObject({
+      id,
+      activeRun: false,
+      awaitingHuman: true,
+    });
+
+    writeTranscript(id, [
+      { type: "prompt", text: "go" },
+      { type: "assistant", text: "done" },
+      { type: "prompt", text: "again" },
+    ]);
+    const quiet = await fetch(
+      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
+    ).then((r) => r.json());
+    expect(quiet[0]).toMatchObject({
+      id,
+      activeRun: false,
+      awaitingHuman: false,
+    });
+
+    writeTranscript(id, [
+      { type: "prompt", text: "go" },
+      { type: "error", message: "boom" },
+    ]);
+    const errored = await fetch(
+      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
+    ).then((r) => r.json());
+    expect(errored[0]).toMatchObject({
+      id,
+      activeRun: false,
+      awaitingHuman: true,
+    });
   });
 
   it("refuses a second implementing session while another Project run is active", async () => {

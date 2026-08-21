@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from "react";
+import type {
+  ChannelSessionListItem,
+  ConversationChannel,
+} from "@server/schemas";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ConversationChannel } from "@server/schemas";
 import { agentsKeys } from "@/features/agents/api/keys";
 import { currentChannelSession } from "../api/channel-sessions";
 import { issuesKeys } from "../api/keys";
@@ -70,7 +73,7 @@ export function useConfirmChannelLiveRun(
     void (async () => {
       try {
         await retireChannelLiveSession(midRun.id);
-        qc.setQueryData(
+        qc.setQueryData<ChannelSessionListItem[]>(
           issuesKeys.channelSessions(issueId, channel),
           (prev) => markChannelSessionRetired(prev, midRun.id),
         );
