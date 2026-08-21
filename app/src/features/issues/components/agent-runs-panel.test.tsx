@@ -804,6 +804,144 @@ describe("AgentRunsPanel", () => {
       queryKey: issuesKeys.agentRuns("task-1"),
     });
   });
+
+  it("appends live subagent_update frames to an expanded run in seq order", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-live",
+          status: "running",
+          endedAt: undefined,
+        }),
+      ],
+      workRoot: { issueId: "ship-it", conversationId: "conv-coordinator" },
+    };
+    eventsQueryState.data = {
+      events: [
+        {
+          type: "subagent_update",
+          parentCallId: "call-1",
+          step: { kind: "text", text: "Seeded opener." },
+          at: AT,
+          seq: 1,
+        },
+      ],
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    expect(
+      container.querySelector('[data-run-id="del-live"][data-expanded]'),
+    ).toBeTruthy();
+
+    deliverTopic("conversation:conv-coordinator", {
+      type: "event",
+      seq: 3,
+      event: {
+        type: "subagent_update",
+        parentCallId: "call-1",
+        step: {
+          kind: "tool_call",
+          callId: "tool-live",
+          name: "Read",
+          status: "running",
+          args: { path: "panel.tsx" },
+        },
+        at: AT,
+        seq: 3,
+      },
+    });
+    deliverTopic("conversation:conv-coordinator", {
+      type: "event",
+      seq: 2,
+      event: {
+        type: "subagent_update",
+        parentCallId: "call-1",
+        step: { kind: "thinking", text: "Checking the card body." },
+        at: AT,
+        seq: 2,
+      },
+    });
+
+    const steps = Array.from(
+      container.querySelectorAll("[data-run-step]"),
+    ).map((node) => node.getAttribute("data-run-step"));
+    expect(steps).toEqual(["text", "thinking", "tool_call"]);
+    expect(container.textContent).toContain("Seeded opener.");
+    expect(container.textContent).toContain("Checking the card body.");
+    expect(container.textContent).toContain("Read");
+  });
+
+  it("renders nothing for live frames that belong to a collapsed run", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-done",
+          status: "completed",
+          endedAt: AT_END,
+        }),
+      ],
+      workRoot: { issueId: "ship-it", conversationId: "conv-coordinator" },
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    expect(
+      container.querySelector('[data-run-id="del-done"][data-expanded]'),
+    ).toBeNull();
+
+    deliverTopic("conversation:conv-coordinator", {
+      type: "event",
+      seq: 4,
+      event: {
+        type: "subagent_update",
+        parentCallId: "call-1",
+        step: { kind: "text", text: "Should stay hidden." },
+        at: AT,
+        seq: 4,
+      },
+    });
+
+    expect(
+      container.querySelector('[data-run-id="del-done"] [data-slot="agent-run-body"]'),
+    ).toBeNull();
+    expect(container.querySelector("[data-run-step]")).toBeNull();
+    expect(container.textContent).not.toContain("Should stay hidden.");
+  });
+
+  it("opens a run expanded when it starts while the panel is open", () => {
+    queryState.data = {
+      runs: [],
+      workRoot: { issueId: "ship-it", conversationId: "conv-coordinator" },
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    expect(
+      container.querySelector('[data-testid="agent-runs-empty-state"]'),
+    ).toBeTruthy();
+
+    deliverTopic("conversation:conv-coordinator", {
+      type: "event",
+      seq: 10,
+      event: {
+        type: "delegation",
+        run: sampleRun({
+          delegationId: "del-fresh",
+          parentCallId: "call-fresh",
+          status: "running",
+          endedAt: undefined,
+        }),
+        at: AT,
+        seq: 10,
+      },
+    });
+
+    const card = container.querySelector(
+      '[data-run-id="del-fresh"]',
+    ) as HTMLElement | null;
+    expect(card).toBeTruthy();
+    expect(card?.hasAttribute("data-expanded")).toBe(true);
+    expect(card?.querySelector('[data-slot="agent-run-body"]')).toBeTruthy();
+    expect(eventsQueryState.expandedCalls).toContain("del-fresh");
+  });
 });
 
 describe("AgentRunCard", () => {

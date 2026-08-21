@@ -8,6 +8,7 @@ import {
   ShellLoadingState,
   ShellState,
 } from "@/app/shell-state";
+import { mergeTranscriptDeltas } from "@/features/agents/lib/conversation-events-state";
 import { applyNestedStep } from "@/features/agents/lib/subagent";
 import { groupOrdinaryNestedToolCalls } from "@/features/agents/lib/transcript-rows";
 import {
@@ -120,14 +121,18 @@ function AgentRunStepRow({
   }
 }
 
+const EMPTY_LIVE_EVENTS: SubagentUpdateEvent[] = [];
+
 function AgentRunBody({
   issueId,
   delegationId,
   running,
+  liveEvents,
 }: {
   issueId: string;
   delegationId: string;
   running: boolean;
+  liveEvents: SubagentUpdateEvent[];
 }) {
   const { data, isLoading, error } = useIssueAgentRunEventsQuery(
     issueId,
@@ -135,7 +140,14 @@ function AgentRunBody({
     true,
   );
 
-  if (isLoading) {
+  const events = mergeTranscriptDeltas(
+    data?.events ?? [],
+    liveEvents,
+  ).filter((event): event is SubagentUpdateEvent =>
+    event.type === "subagent_update",
+  );
+
+  if (isLoading && events.length === 0) {
     return (
       <div
         className="space-y-2 border-t border-border px-3 py-3"
@@ -150,7 +162,7 @@ function AgentRunBody({
     );
   }
 
-  if (error) {
+  if (error && events.length === 0) {
     return (
       <div
         className="border-t border-border px-3 py-3"
@@ -165,7 +177,7 @@ function AgentRunBody({
     );
   }
 
-  const steps = nestedStepsFromEvents(data?.events ?? []);
+  const steps = nestedStepsFromEvents(events);
   const segments = groupOrdinaryNestedToolCalls(steps, new Map());
 
   return (
@@ -227,9 +239,11 @@ function AgentRunsCoordinatorLink({
 export function AgentRunCard({
   run,
   issueId,
+  liveEvents = EMPTY_LIVE_EVENTS,
 }: {
   run: AgentRun;
   issueId: string;
+  liveEvents?: SubagentUpdateEvent[];
 }) {
   const running = run.status === "running";
   const [expanded, setExpanded] = useState(running);
@@ -295,6 +309,7 @@ export function AgentRunCard({
           issueId={issueId}
           delegationId={run.delegationId}
           running={running}
+          liveEvents={liveEvents}
         />
       ) : null}
     </div>
@@ -311,7 +326,7 @@ export function AgentRunsPanel({
   projectId: string;
 }) {
   const { data, isLoading, error } = useIssueAgentRunsQuery(issueId);
-  const runs = useWorkRootAgentRuns(
+  const { runs, liveEventsByParentCallId } = useWorkRootAgentRuns(
     issueId,
     data?.workRoot?.conversationId,
     data?.runs ?? EMPTY_RUNS,
@@ -353,7 +368,14 @@ export function AgentRunsPanel({
     <div className="flex min-w-0 flex-col gap-2" data-slot="agent-runs-panel">
       {coordinatorLink}
       {runs.map((run) => (
-        <AgentRunCard key={run.delegationId} run={run} issueId={issueId} />
+        <AgentRunCard
+          key={run.delegationId}
+          run={run}
+          issueId={issueId}
+          liveEvents={
+            liveEventsByParentCallId[run.parentCallId] ?? EMPTY_LIVE_EVENTS
+          }
+        />
       ))}
     </div>
   );

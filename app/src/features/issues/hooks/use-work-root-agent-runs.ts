@@ -4,7 +4,9 @@ import {
   parseConversationFrame,
   type AgentRun,
   type ConversationStreamEvent,
+  type TranscriptEvent,
 } from "@server/schemas";
+import { applyTranscriptDelta } from "@/features/agents/lib/conversation-events-state";
 import {
   subscribeTopic,
   type TopicMessage,
@@ -16,6 +18,14 @@ function conversationTopic(conversationId: string): string {
 }
 
 type ToolCallFrame = Extract<ConversationStreamEvent, { type: "tool_call" }>;
+type SubagentUpdateEvent = Extract<
+  TranscriptEvent,
+  { type: "subagent_update" }
+>;
+
+export type LiveEventsByParentCallId = Record<string, SubagentUpdateEvent[]>;
+
+const EMPTY_LIVE_EVENTS_BY_PARENT: LiveEventsByParentCallId = {};
 
 export function appendIssueRun(runs: AgentRun[], run: AgentRun): AgentRun[] {
   if (runs.some((existing) => existing.delegationId === run.delegationId)) {
@@ -52,23 +62,43 @@ function applyFrame(
   return runs;
 }
 
+/** Fold one live `subagent_update` into the overlay for its `parentCallId`, in `seq` order. */
+export function appendLiveSubagentUpdate(
+  byParent: LiveEventsByParentCallId,
+  event: SubagentUpdateEvent,
+): LiveEventsByParentCallId {
+  const existing = byParent[event.parentCallId] ?? [];
+  const next = applyTranscriptDelta(existing, event) as SubagentUpdateEvent[];
+  if (next === existing) return byParent;
+  return { ...byParent, [event.parentCallId]: next };
+}
+
+export type WorkRootAgentRuns = {
+  runs: AgentRun[];
+  liveEventsByParentCallId: LiveEventsByParentCallId;
+};
+
 /**
  * Overlay live work-root conversation frames on the fetched run list:
  * matching `delegation` frames append a run; top-level `tool_call` frames
- * update the run whose `parentCallId` they close.
+ * update the run whose `parentCallId` they close; `subagent_update` frames
+ * fold into that run's live event overlay in `seq` order.
  */
 export function useWorkRootAgentRuns(
   issueId: string,
   conversationId: string | undefined,
   queryRuns: AgentRun[],
-): AgentRun[] {
+): WorkRootAgentRuns {
   const qc = useQueryClient();
   const [liveRuns, setLiveRuns] = useState<AgentRun[] | null>(null);
+  const [liveEventsByParentCallId, setLiveEventsByParentCallId] =
+    useState<LiveEventsByParentCallId>(EMPTY_LIVE_EVENTS_BY_PARENT);
   const queryRunsRef = useRef(queryRuns);
   queryRunsRef.current = queryRuns;
 
   useEffect(() => {
     setLiveRuns(null);
+    setLiveEventsByParentCallId(EMPTY_LIVE_EVENTS_BY_PARENT);
   }, [issueId, conversationId]);
 
   useEffect(() => {
@@ -79,8 +109,12 @@ export function useWorkRootAgentRuns(
       if (disposed) return;
       if (message.type === "reset") {
         setLiveRuns(null);
+        setLiveEventsByParentCallId(EMPTY_LIVE_EVENTS_BY_PARENT);
         void qc.invalidateQueries({
           queryKey: issuesKeys.agentRuns(issueId),
+        });
+        void qc.invalidateQueries({
+          queryKey: [...issuesKeys.all, "agentRunEvents", issueId],
         });
         return;
       }
@@ -95,8 +129,14 @@ export function useWorkRootAgentRuns(
         }
         return;
       }
+      const { event } = parsed;
+      if (event.type === "subagent_update") {
+        setLiveEventsByParentCallId((prev) =>
+          appendLiveSubagentUpdate(prev, event),
+        );
+      }
       setLiveRuns((prev) =>
-        applyFrame(prev ?? queryRunsRef.current, parsed.event, issueId),
+        applyFrame(prev ?? queryRunsRef.current, event, issueId),
       );
     };
 
@@ -110,5 +150,8 @@ export function useWorkRootAgentRuns(
     };
   }, [conversationId, issueId, qc]);
 
-  return liveRuns ?? queryRuns;
+  return {
+    runs: liveRuns ?? queryRuns,
+    liveEventsByParentCallId,
+  };
 }
