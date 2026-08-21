@@ -38,9 +38,11 @@ import {
   remove,
   update,
 } from "../services/issues.js";
+import { awaitingHumanFromTranscript } from "../services/awaiting-human.js";
 import {
   createIssueChannelSession,
   listConversations,
+  readConversation,
   startConversationPrompt,
 } from "../services/conversations.js";
 import { moveStory } from "../services/move-story.js";
@@ -159,15 +161,19 @@ export function createIssuesRouter(
           .filter(
             (meta) => meta.issueId === issueId && meta.channel === channel,
           )
-          .map((meta) => ({
-            id: meta.id,
-            title: meta.title,
-            model: meta.model,
-            createdAt: meta.createdAt,
-            updatedAt: meta.updatedAt,
-            archived: meta.archived,
-            activeRun: activeRunFlag(sessions, meta.id),
-          })),
+          .map((meta) => {
+            const { transcript } = readConversation(meta.id);
+            return {
+              id: meta.id,
+              title: meta.title,
+              model: meta.model,
+              createdAt: meta.createdAt,
+              updatedAt: meta.updatedAt,
+              archived: meta.archived,
+              activeRun: activeRunFlag(sessions, meta.id),
+              awaitingHuman: awaitingHumanFromTranscript(transcript),
+            };
+          }),
       );
     }),
   );

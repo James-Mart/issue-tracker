@@ -1,22 +1,8 @@
 import type { TranscriptEvent } from "@server/schemas";
+import { awaitingHumanFromTranscript } from "@server/services/awaiting-human";
 
 /** Decoration the channel tab may show — never both at once. */
 export type ChannelTabIndicator = "active-run" | "awaiting-human";
-
-/**
- * Turn-boundary events: a human prompt vs an agent-completed turn (reply or
- * error). Intermediate frames (thinking, tools, usage) do not clear or set
- * the waiting accent on their own.
- */
-function isTurnBoundary(
-  event: TranscriptEvent,
-): event is Extract<TranscriptEvent, { type: "prompt" | "assistant" | "error" }> {
-  return (
-    event.type === "prompt" ||
-    event.type === "assistant" ||
-    event.type === "error"
-  );
-}
 
 /**
  * Channel tab decoration from the session the panel already renders.
@@ -32,12 +18,5 @@ export function channelTabIndicator(
 ): ChannelTabIndicator | null {
   if (!hasSession) return null;
   if (runActive) return "active-run";
-
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
-    if (!isTurnBoundary(event)) continue;
-    if (event.type === "prompt") return null;
-    return "awaiting-human";
-  }
-  return null;
+  return awaitingHumanFromTranscript(events) ? "awaiting-human" : null;
 }

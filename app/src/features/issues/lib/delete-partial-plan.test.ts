@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteConversation } from "@/features/agents/api/client";
 import { listChannelSessions } from "../api/channel-sessions";
 import { deletePartialPlanSessions } from "./delete-partial-plan";
+import { channelSessionListItem } from "../test/channel-session-list-item";
 
 vi.mock("../api/channel-sessions", () => ({
   listChannelSessions: vi.fn(),
@@ -22,24 +23,18 @@ describe("deletePartialPlanSessions", () => {
 
   it("lists planning sessions then deletes each in list order", async () => {
     listSessions.mockResolvedValue([
-      {
+      channelSessionListItem({
         id: "live",
         title: "Live",
         model: "composer-2.5",
-        createdAt: "2026-08-02T00:00:00.000Z",
         updatedAt: "2026-08-02T00:00:00.000Z",
-        archived: false,
-        activeRun: false,
-      },
-      {
+      }),
+      channelSessionListItem({
         id: "archived",
         title: "Old",
         model: "composer-2.5",
-        createdAt: "2026-08-01T00:00:00.000Z",
-        updatedAt: "2026-08-01T00:00:00.000Z",
         archived: true,
-        activeRun: false,
-      },
+      }),
     ]);
     deleteSession.mockResolvedValue(undefined);
 
@@ -53,24 +48,18 @@ describe("deletePartialPlanSessions", () => {
 
   it("stops after the first delete failure", async () => {
     listSessions.mockResolvedValue([
-      {
+      channelSessionListItem({
         id: "first",
         title: "First",
         model: "composer-2.5",
-        createdAt: "2026-08-02T00:00:00.000Z",
         updatedAt: "2026-08-02T00:00:00.000Z",
-        archived: false,
-        activeRun: false,
-      },
-      {
+      }),
+      channelSessionListItem({
         id: "second",
         title: "Second",
         model: "composer-2.5",
-        createdAt: "2026-08-01T00:00:00.000Z",
-        updatedAt: "2026-08-01T00:00:00.000Z",
         archived: true,
-        activeRun: false,
-      },
+      }),
     ]);
     deleteSession.mockRejectedValueOnce(new Error("delete failed"));
 

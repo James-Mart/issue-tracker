@@ -529,6 +529,7 @@ export const channelSessionListItemSchema = z.object({
   updatedAt: nonEmpty,
   archived: z.boolean(),
   activeRun: z.boolean(),
+  awaitingHuman: z.boolean(),
 });
 
 export type ChannelSessionListItem = z.infer<

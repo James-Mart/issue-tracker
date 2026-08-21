@@ -379,6 +379,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-03T00:00:00.000Z",
         archived: true,
         activeRun: false,
+        awaitingHuman: false,
       },
       {
         id: "live",
@@ -388,6 +389,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-02T00:00:00.000Z",
         archived: false,
         activeRun: false,
+        awaitingHuman: false,
       },
     ];
     const { container } = mountPanel("Planning", idea);
@@ -411,6 +413,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-01T00:00:00.000Z",
         archived: false,
         activeRun: false,
+        awaitingHuman: false,
       },
     ];
     const { container } = mountPanel("Planning", idea);
@@ -444,6 +447,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-03T00:00:00.000Z",
         archived: true,
         activeRun: false,
+        awaitingHuman: false,
       },
       {
         id: "live",
@@ -453,6 +457,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-02T00:00:00.000Z",
         archived: false,
         activeRun: false,
+        awaitingHuman: false,
       },
     ];
     const { container } = mountPanel();
@@ -471,6 +476,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-03T00:00:00.000Z",
         archived: true,
         activeRun: false,
+        awaitingHuman: false,
       },
       {
         id: "live",
@@ -480,6 +486,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-02T00:00:00.000Z",
         archived: false,
         activeRun: false,
+        awaitingHuman: false,
       },
     ];
     const { container } = mountPanel();
@@ -575,6 +582,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-02T00:00:00.000Z",
         archived: false,
         activeRun: true,
+        awaitingHuman: false,
       },
     ];
     const active = mountPanel("Planning", idea, {
@@ -615,6 +623,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-03T00:00:00.000Z",
         archived: true,
         activeRun: false,
+        awaitingHuman: false,
       },
       {
         id: "live",
@@ -624,6 +633,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-02T00:00:00.000Z",
         archived: false,
         activeRun: false,
+        awaitingHuman: false,
       },
     ];
     const { container } = mountPanel("Planning", idea, {
@@ -659,6 +669,7 @@ describe("ChannelTranscriptPanel", () => {
       updatedAt: "2026-08-01T00:00:00.000Z",
       archived: false,
       activeRun: false,
+      awaitingHuman: false,
     };
     queryState.data = [soloSession];
     const { container, root } = mountPanel("Planning", idea);
@@ -705,6 +716,7 @@ describe("ChannelTranscriptPanel", () => {
         updatedAt: "2026-08-01T00:00:00.000Z",
         archived: false,
         activeRun: false,
+        awaitingHuman: false,
       },
     ];
     const { container } = mountPanel("Planning", idea, {

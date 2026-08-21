@@ -56,6 +56,7 @@ function pendingChannelSession(started: StartedSession): ChannelSessionListItem 
     updatedAt: now,
     archived: false,
     activeRun: true,
+    awaitingHuman: false,
   };
 }
 

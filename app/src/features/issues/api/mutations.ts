@@ -239,6 +239,7 @@ export function useCreateChannelSession(
         updatedAt: now,
         archived: false,
         activeRun: true,
+        awaitingHuman: false,
       };
       qc.setQueryData<ChannelSessionListItem[]>(
         issuesKeys.channelSessions(issueId, channel),

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelSessionListItem } from "@server/schemas";
 import { useConfirmChannelLiveRun } from "./use-confirm-channel-live-run";
+import { channelSessionListItem } from "../test/channel-session-list-item";
 
 const sessionsState = vi.hoisted(() => ({
   data: [] as ChannelSessionListItem[],
@@ -30,15 +31,14 @@ vi.mock("../lib/retire-channel-live-session", async () => {
   };
 });
 
-const midRunSession: ChannelSessionListItem = {
+const midRunSession: ChannelSessionListItem = channelSessionListItem({
   id: "live",
   title: "Plan",
   model: "composer-2.5",
-  createdAt: "2026-08-02T00:00:00.000Z",
   updatedAt: "2026-08-02T00:00:00.000Z",
-  archived: false,
   activeRun: true,
-};
+  awaitingHuman: false,
+});
 
 function Probe({
   onReady,
@@ -92,15 +92,12 @@ afterEach(() => {
 describe("useConfirmChannelLiveRun", () => {
   it("runs the action immediately when no mid-run session exists", () => {
     sessionsState.data = [
-      {
+      channelSessionListItem({
         id: "idle",
         title: "Plan",
         model: "composer-2.5",
-        createdAt: "2026-08-02T00:00:00.000Z",
         updatedAt: "2026-08-02T00:00:00.000Z",
-        archived: false,
-        activeRun: false,
-      },
+      }),
     ];
     const { getApi } = mountProbe();
     const action = vi.fn();

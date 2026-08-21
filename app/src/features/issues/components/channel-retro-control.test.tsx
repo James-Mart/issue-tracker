@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelSessionListItem } from "@server/schemas";
 import { ChannelRetroControl } from "./channel-retro-control";
+import { channelSessionListItem } from "../test/channel-session-list-item";
 
 const sendMutate = vi.fn();
 const planningWorkRoot = vi.hoisted(() => ({
@@ -29,15 +30,11 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
-const endedSession: ChannelSessionListItem = {
+const endedSession: ChannelSessionListItem = channelSessionListItem({
   id: "session-1",
   title: "Plan Capture",
   model: "composer-2.5",
-  createdAt: "2026-08-01T00:00:00.000Z",
-  updatedAt: "2026-08-01T00:00:00.000Z",
-  archived: false,
-  activeRun: false,
-};
+});
 
 const idea = {
   kind: "idea" as const,

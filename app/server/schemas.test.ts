@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseComment,
   parseCommentInput,
+  parseChannelSessionListItem,
   parseConversationMeta,
   parseIssue,
   parseTranscriptEvent,
@@ -816,5 +817,30 @@ describe("subagent_update delegation fields", () => {
     expect(input.ok).toBe(true);
     if (!input.ok) return;
     expect(input.input.step).toEqual({ kind: "liveness", elapsedMs: 5000 });
+  });
+});
+
+describe("parseChannelSessionListItem", () => {
+  const item = {
+    id: "plan-capture",
+    title: "Plan Capture",
+    model: "composer-2.5",
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+    archived: false,
+    activeRun: false,
+    awaitingHuman: true,
+  };
+
+  it("accepts a complete channel session list item", () => {
+    const result = parseChannelSessionListItem(item);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.item).toEqual(item);
+  });
+
+  it("rejects items missing awaitingHuman", () => {
+    const { awaitingHuman: _omit, ...without } = item;
+    const result = parseChannelSessionListItem(without);
+    expect(result.ok).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelSessionListItem } from "@server/schemas";
 import { ChannelSessionSwitcher } from "./channel-session-switcher";
+import { channelSessionListItem } from "../test/channel-session-list-item";
 
 const mutate = vi.hoisted(() => vi.fn());
 
@@ -15,24 +16,18 @@ vi.mock("../api/mutations", () => ({
 }));
 
 const sessions: ChannelSessionListItem[] = [
-  {
+  channelSessionListItem({
     id: "live",
     title: "Live",
-    model: "composer-2.5-fast",
-    createdAt: "2026-08-02T00:00:00.000Z",
     updatedAt: "2026-08-02T00:00:00.000Z",
-    archived: false,
-    activeRun: false,
-  },
-  {
+  }),
+  channelSessionListItem({
     id: "archived",
     title: "Old",
-    model: "composer-2.5-fast",
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
     archived: true,
-    activeRun: false,
-  },
+  }),
 ];
 
 function mountSwitcher(
