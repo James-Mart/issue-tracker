@@ -26,8 +26,12 @@ import { Input } from "@/components/ui/input";
 import { useUpdateIssue } from "../api/mutations";
 import { useProjectPullRequestsQuery } from "../api/queries";
 import type { FlowItem } from "../lib/flow";
-import { isCapturedIdeaFlowItem } from "../lib/flow";
+import { isAwaitingDirectionIdeaFlowItem, isCapturedIdeaFlowItem } from "../lib/flow";
 import { needsAttentionPatch } from "../lib/needs-attention-patch";
+import {
+  DeletePartialPlanFlowRowAction,
+  DeletePartialPlanFlowRowTouchMenu,
+} from "./delete-partial-plan-control";
 import { PlanningFlowRowLaunch, PlanningFlowRowTouchMenuLaunch } from "./planning-launch-control";
 import { PrChip, storyPrChipModel, type PrChipModel } from "./pr-chip";
 
@@ -174,10 +178,16 @@ export function FlowRowActions({
   };
 
   const capturedIdea = isCapturedIdeaFlowItem(item) ? item.issue : undefined;
+  const awaitingDirectionIdea = isAwaitingDirectionIdeaFlowItem(item)
+    ? item.issue
+    : undefined;
 
   return (
     <>
       {capturedIdea ? <PlanningFlowRowLaunch issue={capturedIdea} /> : null}
+      {awaitingDirectionIdea ? (
+        <DeletePartialPlanFlowRowAction issue={awaitingDirectionIdea} />
+      ) : null}
 
       {prUrl ? (
         <>
@@ -289,12 +299,18 @@ export function FlowRowTouchMenu({
   };
 
   const capturedIdea = isCapturedIdeaFlowItem(item) ? item.issue : undefined;
+  const awaitingDirectionIdea = isAwaitingDirectionIdeaFlowItem(item)
+    ? item.issue
+    : undefined;
 
   return (
     <>
       <FlowRowTouchMenuPrChip model={prChip} />
       {capturedIdea ? (
         <PlanningFlowRowTouchMenuLaunch issue={capturedIdea} />
+      ) : null}
+      {awaitingDirectionIdea ? (
+        <DeletePartialPlanFlowRowTouchMenu issue={awaitingDirectionIdea} />
       ) : null}
       {prUrl ? (
         <DropdownMenuItem asChild>

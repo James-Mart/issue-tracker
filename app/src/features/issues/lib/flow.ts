@@ -26,6 +26,13 @@ export function isCapturedIdeaFlowItem(
   return item.issue.kind === "idea" && item.state?.ideaStatus === "captured";
 }
 
+/** Idea row stalled in Needs attention (partial plan, no direction). */
+export function isAwaitingDirectionIdeaFlowItem(
+  item: FlowItem,
+): item is FlowItem & { issue: Extract<IssueRecord, { kind: "idea" }> } {
+  return item.issue.kind === "idea" && item.state?.ideaStatus === "awaiting-direction";
+}
+
 export type DepGraphNode = {
   id: string;
   label: string;
