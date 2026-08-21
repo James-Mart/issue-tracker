@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Send, X } from "lucide-react";
 import type { TranscriptEvent } from "@server/schemas";
-import { ShellState } from "@/app/shell-state";
+import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
@@ -320,9 +320,50 @@ function PendingMessageRow({
   );
 }
 
+function TranscriptHistoryFailed({
+  errorMessage,
+  isRetrying,
+  onRetry,
+}: {
+  errorMessage?: string;
+  isRetrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <ShellState
+      className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
+      tone="blocked"
+      eyebrow="Fault"
+      title="Could not load the transcript."
+      detail={
+        <ShellFaultDetail
+          message={
+            errorMessage ?? "The transcript request failed or timed out."
+          }
+          hint="Check the server, then try again."
+        />
+      }
+      action={
+        <Button
+          variant="primary"
+          disabled={isRetrying}
+          onClick={onRetry}
+          data-testid="transcript-retry"
+        >
+          Retry
+        </Button>
+      }
+    />
+  );
+}
+
 function ThreadBody({
   events,
   ready,
+  historyFailed,
+  historyErrorMessage,
+  isRefetchingHistory,
+  onRetryHistory,
   pendingMessageText,
   runActive,
   conversationId,
@@ -331,12 +372,26 @@ function ThreadBody({
 }: {
   events: TranscriptEvent[];
   ready: boolean;
+  historyFailed: boolean;
+  historyErrorMessage?: string;
+  isRefetchingHistory: boolean;
+  onRetryHistory: () => void;
   pendingMessageText: string | null;
   runActive: boolean;
   conversationId: string;
   model: string;
   keyboardInset: number;
 }) {
+  if (historyFailed) {
+    return (
+      <TranscriptHistoryFailed
+        errorMessage={historyErrorMessage}
+        isRetrying={isRefetchingHistory}
+        onRetry={onRetryHistory}
+      />
+    );
+  }
+
   if (!ready) {
     return (
       <div
@@ -528,8 +583,17 @@ export function ConversationThread({
   /** Read-only history (e.g. archived channel session) — transcript only. */
   hideComposer?: boolean;
 }) {
-  const { events, ready, streamRunActive, runResyncKey, pendingText } =
-    useConversationEvents(conversationId);
+  const {
+    events,
+    ready,
+    streamRunActive,
+    runResyncKey,
+    pendingText,
+    historyFailed,
+    refetchHistory,
+    isRefetchingHistory,
+    historyError,
+  } = useConversationEvents(conversationId);
   const { runActive } = useConversationRunActive(
     conversationId,
     streamRunActive,
@@ -565,6 +629,10 @@ export function ConversationThread({
         <ThreadBody
           events={events}
           ready={ready}
+          historyFailed={historyFailed}
+          historyErrorMessage={historyError?.message}
+          isRefetchingHistory={isRefetchingHistory}
+          onRetryHistory={() => void refetchHistory()}
           pendingMessageText={pendingMessageText}
           runActive={runActive}
           conversationId={conversationId}

@@ -35,11 +35,12 @@ const idleState = (): ConversationEventsState => ({
  */
 export function useConversationEvents(
   conversationId: string | null | undefined,
-): ConversationEventsState {
+): ConversationEventsState & { historyFailed: boolean } {
   const qc = useQueryClient();
   const history = useConversationTranscriptQuery(conversationId);
   const [state, setState] = useState<ConversationEventsState>(idleState);
   const prevRef = useRef<ConversationEventsState | null>(null);
+  const historyFailed = history.isError;
   // Prefer a settled mount fetch over a stale cache seed so reconnecting after
   // live persists does not open the stream on an outdated history page.
   // `!isFetching` covers tests that prime the cache with no network refetch.
@@ -88,5 +89,11 @@ export function useConversationEvents(
     // tear down a live subscription (do not depend on `history.data`).
   }, [conversationId, historyReady, qc]);
 
-  return state;
+  return {
+    ...state,
+    historyFailed,
+    refetchHistory: history.refetch,
+    isRefetchingHistory: history.isFetching,
+    historyError: history.error,
+  };
 }
