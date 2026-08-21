@@ -21,6 +21,7 @@ import {
   type ConversationMeta,
   type ConversationMetaPatch,
   type CreateConversationInput,
+  type AgentRun,
   type DelegationRecord,
   type DelegationRecordInput,
   type TranscriptEvent,
@@ -418,6 +419,26 @@ function readDelegationLines(id: string): DelegationRecord[] {
   return records;
 }
 
+function agentRunAtDelegationStart(
+  conversationId: string,
+  record: DelegationRecord,
+  priorDelegations: DelegationRecord[],
+): AgentRun | undefined {
+  if (!record.issueId || !record.parentCallId) return undefined;
+  return {
+    delegationId: record.delegationId,
+    agentId: record.agentId,
+    role: record.role,
+    model: record.model,
+    issueId: record.issueId,
+    parentCallId: record.parentCallId,
+    conversationId,
+    startedAt: record.at,
+    status: "running",
+    isResume: priorDelegations.some((d) => d.agentId === record.agentId),
+  };
+}
+
 /** Append a nested-agent delegation record (one JSON line). */
 export function appendDelegation(
   id: string,
@@ -427,12 +448,20 @@ export function appendDelegation(
     const meta = readMetaRaw(id);
     const parsed = parseDelegationRecordInput(record);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
+    const priorDelegations = readDelegationLines(id);
     const stamped: DelegationRecord = {
       ...parsed.input,
       at: new Date().toISOString(),
     };
     appendFileSync(delegationsPathOf(id), `${JSON.stringify(stamped)}\n`);
     writeMeta({ ...meta, updatedAt: new Date().toISOString() });
+    const run = agentRunAtDelegationStart(id, stamped, priorDelegations);
+    if (run) {
+      publishFrame(id, {
+        event: { type: "delegation", run },
+        persist: false,
+      });
+    }
     return stamped;
   });
 }

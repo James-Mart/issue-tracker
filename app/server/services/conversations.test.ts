@@ -536,6 +536,89 @@ describe("conversations store", () => {
   });
 });
 
+describe("appendDelegation live frames", () => {
+  it("publishes one live delegation frame when issueId is set and never persists it", async () => {
+    const { conversationsDir } = await loadConfig();
+    const { createConversation, appendDelegation } = await loadService();
+    const { subscribeFrames } = await import("./conversation-stream.js");
+
+    const meta = await createConversation({
+      title: "Issue-linked delegation",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const streamed: Array<{
+      persist: boolean;
+      event: { type?: string; run?: Record<string, unknown>; seq?: number };
+    }> = [];
+    const unsubscribe = subscribeFrames(meta.id, (frame) => {
+      streamed.push(frame);
+    });
+
+    const record = await appendDelegation(meta.id, {
+      delegationId: "del-linked",
+      agentId: "agent-nested-1",
+      role: "implementor",
+      model: "composer-2.5",
+      issueId: "add-auth",
+      parentCallId: "call-task-1",
+    });
+    unsubscribe();
+
+    expect(streamed).toHaveLength(1);
+    expect(streamed[0]).toMatchObject({
+      persist: false,
+      event: {
+        type: "delegation",
+        run: {
+          delegationId: "del-linked",
+          agentId: "agent-nested-1",
+          role: "implementor",
+          model: "composer-2.5",
+          issueId: "add-auth",
+          parentCallId: "call-task-1",
+          conversationId: meta.id,
+          startedAt: record.at,
+          status: "running",
+          isResume: false,
+        },
+      },
+    });
+    expect(typeof streamed[0]!.event.seq).toBe("number");
+
+    const transcript = readFileSync(
+      join(conversationsDir, meta.id, "transcript.jsonl"),
+      "utf8",
+    );
+    expect(transcript.trim()).toBe("");
+  });
+
+  it("does not publish when issueId is absent", async () => {
+    const { createConversation, appendDelegation } = await loadService();
+    const { subscribeFrames } = await import("./conversation-stream.js");
+
+    const meta = await createConversation({
+      title: "Unlinked delegation",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const streamed: unknown[] = [];
+    const unsubscribe = subscribeFrames(meta.id, (frame) => {
+      streamed.push(frame);
+    });
+
+    await appendDelegation(meta.id, {
+      delegationId: "del-root",
+      agentId: "agent-nested-1",
+      role: "pinned-role",
+      model: "auto",
+    });
+    unsubscribe();
+
+    expect(streamed).toHaveLength(0);
+  });
+});
+
 describe("appendEvent prompt live frames", () => {
   it("publishes one live prompt frame with the same seq as the persisted event", async () => {
     const { createConversation, appendEvent } = await loadService();
