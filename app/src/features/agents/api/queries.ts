@@ -30,8 +30,11 @@ export function useConversationTranscriptQuery(
 ): UseQueryResult<ConversationTranscriptPage, Error> {
   return useQuery({
     queryKey: agentsKeys.transcript(conversationId ?? ""),
-    queryFn: () => getConversationTranscript(conversationId!),
+    queryFn: ({ signal }) =>
+      getConversationTranscript(conversationId!, undefined, signal),
     enabled: Boolean(conversationId),
+    // App query defaults retry once; a hang must surface at 10s, not ~20s.
+    retry: false,
   });
 }
 

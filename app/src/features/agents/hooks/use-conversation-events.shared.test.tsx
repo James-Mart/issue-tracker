@@ -1,24 +1,34 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import type { ConversationTranscriptPage } from "@server/schemas";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { agentsKeys } from "../api/keys";
 import { resetConversationEventsRegistryForTests } from "../lib/conversation-events-registry";
 import { resetTransportForTests } from "@/lib/ws/transport";
 import { FakeWebSocket } from "@/lib/ws/websocket.fake";
+import { TRANSCRIPT_FETCH_TIMEOUT_MS } from "../api/client";
+import { createQueryClient } from "@/lib/query/client";
 import {
   useConversationEvents,
   type ConversationEventsState,
 } from "./use-conversation-events";
+
+type ConversationEventsView = ConversationEventsState & {
+  historyFailed: boolean;
+};
 
 function Probe({
   conversationId,
   onState,
 }: {
   conversationId: string;
-  onState: (state: ConversationEventsState) => void;
+  onState: (state: ConversationEventsView) => void;
 }) {
   const state = useConversationEvents(conversationId);
   onState(state);
@@ -27,12 +37,17 @@ function Probe({
 
 function mountConsumer(
   conversationId: string,
-  seed: ConversationTranscriptPage = { events: [], latestSeq: 0 },
+  seed: ConversationTranscriptPage | null = { events: [], latestSeq: 0 },
+  client: QueryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0, staleTime: Infinity },
+    },
+  }),
 ): {
   root: Root;
   container: HTMLDivElement;
   client: QueryClient;
-  getState: () => ConversationEventsState;
+  getState: () => ConversationEventsView;
   rerender: (
     conversationId: string,
     seed?: ConversationTranscriptPage,
@@ -41,14 +56,9 @@ function mountConsumer(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  let state!: ConversationEventsState;
+  let state!: ConversationEventsView;
   let currentId = conversationId;
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0, staleTime: Infinity },
-    },
-  });
-  client.setQueryData(agentsKeys.transcript(conversationId), seed);
+  if (seed) client.setQueryData(agentsKeys.transcript(conversationId), seed);
   const render = () => {
     act(() => {
       root.render(
@@ -112,6 +122,7 @@ afterEach(() => {
   resetConversationEventsRegistryForTests();
   resetTransportForTests();
   FakeWebSocket.reset();
+  vi.clearAllTimers();
   vi.unstubAllGlobals();
   vi.useRealTimers();
   document.body.innerHTML = "";
@@ -172,6 +183,7 @@ describe("shared conversation subscription", () => {
     });
 
     expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().historyFailed).toBe(false);
     expect(consumer.getState().events).toEqual([
       {
         type: "prompt",
@@ -254,5 +266,183 @@ describe("shared conversation subscription", () => {
     unmountConsumer(consumer);
 
     expect(second.isClosed).toBe(true);
+  });
+});
+
+function hangingFetch(): ReturnType<typeof vi.fn> {
+  return vi.fn((_input: string, init?: RequestInit) => {
+    return new Promise((_resolve, reject) => {
+      const signal = init?.signal;
+      if (!signal) return;
+      const fail = () => {
+        queueMicrotask(() => {
+          reject(
+            Object.assign(new Error("The operation was aborted."), {
+              name: "AbortError",
+            }),
+          );
+        });
+      };
+      if (signal.aborted) {
+        fail();
+        return;
+      }
+      signal.addEventListener("abort", fail, { once: true });
+    });
+  });
+}
+
+async function flushQueryNotifications(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+  });
+}
+
+describe("transcript fetch timeout and historyFailed", () => {
+  beforeEach(() => {
+    notifyManager.setScheduler((cb) => {
+      cb();
+    });
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), ms);
+      return controller.signal;
+    });
+  });
+
+  afterEach(() => {
+    vi.mocked(AbortSignal.timeout).mockRestore();
+    notifyManager.setScheduler((cb) => {
+      setTimeout(cb, 0);
+    });
+  });
+
+  it("does not treat an in-flight transcript GET as failed before the deadline", async () => {
+    vi.stubGlobal("fetch", hangingFetch());
+    const consumer = mountConsumer("conv-hang", null);
+
+    await flushQueryNotifications();
+    expect(consumer.getState().ready).toBe(false);
+    expect(consumer.getState().historyFailed).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_FETCH_TIMEOUT_MS - 1);
+    });
+    await flushQueryNotifications();
+
+    expect(consumer.getState().ready).toBe(false);
+    expect(consumer.getState().historyFailed).toBe(false);
+
+    unmountConsumer(consumer);
+  });
+
+  it("aborts a hung transcript GET at 10s and leaves historyFailed true", async () => {
+    const fetchMock = hangingFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    const consumer = mountConsumer("conv-timeout", null);
+    await flushQueryNotifications();
+    expect(fetchMock).toHaveBeenCalled();
+    const signal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_FETCH_TIMEOUT_MS);
+    });
+    await flushQueryNotifications();
+
+    expect(signal?.aborted).toBe(true);
+    expect(consumer.getState().ready).toBe(false);
+    expect(consumer.getState().historyFailed).toBe(true);
+
+    unmountConsumer(consumer);
+  });
+
+  it("seeds the thread from a successful transcript GET", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            events: [
+              {
+                type: "prompt",
+                text: "from GET",
+                at: "2026-08-10T00:00:00.000Z",
+                seq: 1,
+              },
+            ],
+            latestSeq: 1,
+          }),
+      }),
+    );
+    const consumer = mountConsumer("conv-ok", null);
+
+    await flushQueryNotifications();
+
+    expect(consumer.getState().ready).toBe(true);
+    expect(consumer.getState().historyFailed).toBe(false);
+    expect(consumer.getState().events).toEqual([
+      {
+        type: "prompt",
+        text: "from GET",
+        at: "2026-08-10T00:00:00.000Z",
+        seq: 1,
+      },
+    ]);
+
+    unmountConsumer(consumer);
+  });
+
+  it("sets historyFailed on an immediate HTTP error without waiting for the deadline", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: async () => JSON.stringify({ error: "bad gateway" }),
+      }),
+    );
+    const consumer = mountConsumer("conv-http", null);
+
+    await flushQueryNotifications();
+
+    expect(consumer.getState().ready).toBe(false);
+    expect(consumer.getState().historyFailed).toBe(true);
+
+    unmountConsumer(consumer);
+  });
+
+  it("surfaces historyFailed at 10s under app query defaults (retry: 1)", async () => {
+    const fetchMock = hangingFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    const consumer = mountConsumer(
+      "conv-app-defaults",
+      null,
+      createQueryClient(),
+    );
+    await flushQueryNotifications();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_FETCH_TIMEOUT_MS);
+    });
+    await flushQueryNotifications();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(consumer.getState().ready).toBe(false);
+    expect(consumer.getState().historyFailed).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSCRIPT_FETCH_TIMEOUT_MS + 1_000);
+    });
+    await flushQueryNotifications();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(consumer.getState().historyFailed).toBe(true);
+
+    unmountConsumer(consumer);
   });
 });

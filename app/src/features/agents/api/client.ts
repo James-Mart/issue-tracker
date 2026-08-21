@@ -81,14 +81,21 @@ export function getConversationRun(id: string): Promise<ConversationActiveRun> {
   });
 }
 
+/** Transcript GET is the only client helper that takes this deadline. */
+export const TRANSCRIPT_FETCH_TIMEOUT_MS = 10_000;
+
 export function getConversationTranscript(
   id: string,
   sinceSeq?: number,
+  signal?: AbortSignal,
 ): Promise<ConversationTranscriptPage> {
   const qs =
     sinceSeq === undefined ? "" : `?sinceSeq=${encodeURIComponent(String(sinceSeq))}`;
+  const timeout = AbortSignal.timeout(TRANSCRIPT_FETCH_TIMEOUT_MS);
+  const abort = signal ? AbortSignal.any([timeout, signal]) : timeout;
   return request<unknown>(
     `/api/conversations/${encodeURIComponent(id)}/transcript${qs}`,
+    { signal: abort },
   ).then((raw) => {
     const parsed = parseConversationTranscriptPage(raw);
     if (!parsed.ok) throw new Error(parsed.message);
