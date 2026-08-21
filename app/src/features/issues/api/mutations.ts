@@ -24,6 +24,7 @@ import type { Attachment } from "@server/services/attachments";
 import type { DeletionResult } from "@server/services/deletion";
 import { subtreeIds } from "@server/services/subtree";
 import { attachmentsApiPath } from "../lib/attachments";
+import { deletePartialPlanSessions } from "../lib/delete-partial-plan";
 import { parseRunsInFlightRefusal } from "../lib/restart-refusal";
 import { issuesKeys } from "./keys";
 
@@ -271,6 +272,21 @@ export function useDeleteChannelSession(
     onSettled: () => {
       qc.invalidateQueries({
         queryKey: issuesKeys.channelSessions(issueId, channel),
+      });
+      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
+    },
+  });
+}
+
+export function useDeletePartialPlan(issueId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, void>({
+    mutationFn: () => deletePartialPlanSessions(issueId),
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({
+        queryKey: issuesKeys.channelSessions(issueId, "planning"),
       });
       qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
     },

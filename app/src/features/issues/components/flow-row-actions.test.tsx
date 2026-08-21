@@ -4,10 +4,16 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { FlowItem } from "../lib/flow";
-import { FlowRowActions } from "./flow-row-actions";
+import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
 
 const mutate = vi.fn();
+const deletePartialPlanMutate = vi.fn();
 const modelsState = vi.hoisted(() => ({
   models: [{ id: "composer-2.5", displayName: "Composer 2.5" }],
   isLoading: false,
@@ -25,6 +31,10 @@ vi.mock("../api/mutations", () => ({
     mutate: (...args: unknown[]) => {
       mutate(issueId, channel, ...args);
     },
+    isPending: false,
+  }),
+  useDeletePartialPlan: () => ({
+    mutate: deletePartialPlanMutate,
     isPending: false,
   }),
   useUpdateIssue: () => ({
@@ -108,9 +118,34 @@ function mountActions(item: FlowItem): {
   return { container, root };
 }
 
+function mountTouchMenu(item: FlowItem): {
+  container: HTMLDivElement;
+  root: Root;
+} {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() => {
+    root.render(
+      <MemoryRouter initialEntries={["/projects/project-a"]}>
+        <DropdownMenu open>
+          <DropdownMenuTrigger asChild>
+            <button type="button">Menu</button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <FlowRowTouchMenu item={item} task={undefined} />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </MemoryRouter>,
+    );
+  });
+  return { container, root };
+}
+
 afterEach(() => {
   document.body.innerHTML = "";
   mutate.mockReset();
+  deletePartialPlanMutate.mockReset();
   modelsState.isLoading = false;
 });
 
@@ -162,5 +197,103 @@ describe("FlowRowActions start planning", () => {
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
+  });
+});
+
+describe("FlowRowActions delete partial plan", () => {
+  it("shows delete partial plan only on awaiting-direction Idea rows", () => {
+    const awaiting = mountActions(
+      flowItem(idea("stalled"), {
+        blocked: false,
+        ideaStatus: "awaiting-direction",
+      }),
+    );
+    expect(
+      awaiting.container.querySelector(
+        '[data-testid="flow-row-delete-partial-plan"]',
+      ),
+    ).toBeTruthy();
+
+    const captured = mountActions(
+      flowItem(idea("fresh"), { blocked: false, ideaStatus: "captured" }),
+    );
+    expect(
+      captured.container.querySelector(
+        '[data-testid="flow-row-delete-partial-plan"]',
+      ),
+    ).toBeNull();
+
+    const planning = mountActions(
+      flowItem(idea("in-flight"), { blocked: false, ideaStatus: "planning" }),
+    );
+    expect(
+      planning.container.querySelector(
+        '[data-testid="flow-row-delete-partial-plan"]',
+      ),
+    ).toBeNull();
+  });
+
+  it("confirms before deleting the partial plan", () => {
+    const { container } = mountActions(
+      flowItem(idea("stalled"), {
+        blocked: false,
+        ideaStatus: "awaiting-direction",
+      }),
+    );
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="flow-row-delete-partial-plan"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(
+      document.body.querySelector('[data-testid="delete-partial-plan-dialog"]'),
+    ).toBeTruthy();
+
+    deletePartialPlanMutate.mockImplementation((_input, options) => {
+      options?.onSuccess?.();
+    });
+
+    act(() => {
+      const deleteButton = document.body.querySelector(
+        '[data-testid="delete-partial-plan-dialog"] button:last-of-type',
+      ) as HTMLButtonElement;
+      deleteButton.click();
+    });
+
+    expect(deletePartialPlanMutate).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+});
+
+describe("FlowRowTouchMenu delete partial plan", () => {
+  it("shows delete partial plan only on awaiting-direction Idea rows", () => {
+    mountTouchMenu(
+      flowItem(idea("stalled"), {
+        blocked: false,
+        ideaStatus: "awaiting-direction",
+      }),
+    );
+    expect(
+      document.body.querySelector(
+        '[data-testid="flow-row-delete-partial-plan-menu"]',
+      ),
+    ).toBeTruthy();
+
+    document.body.innerHTML = "";
+
+    mountTouchMenu(
+      flowItem(idea("fresh"), { blocked: false, ideaStatus: "captured" }),
+    );
+    expect(
+      document.body.querySelector(
+        '[data-testid="flow-row-delete-partial-plan-menu"]',
+      ),
+    ).toBeNull();
   });
 });
