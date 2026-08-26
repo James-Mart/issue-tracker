@@ -71,15 +71,7 @@ a human-paced Epic boundary (a merge round-trip), this fits the one-root-at-a-
 time model. Use the default `issues/` dir (do not set `ISSUES_DIR`) so the
 human sees changes live in the UI.
 
-## Preflight: confirm before starting
-
-Before doing anything else, stop and ask the user to confirm they want you to
-coordinate this work root now. State that **Composer 2.5 is the recommended
-coordinator** (see **Models and subagent roles**). Do not attempt to detect or
-print the current model id. If they do not confirm, stop — do not start
-coordinating. After they confirm, continue with the CLI checks below.
-
-### CLI checks
+## CLI checks
 
 Run these commands in order (use `<rootId>` throughout):
 
@@ -484,5 +476,5 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
   resolve or pass it — each repo-touching subagent and the model discriminator
   read it from their own `issue summary` (discriminator: read-only peek only; see
   SPEC § Model discriminator (read-only peek)). Your only workspace duty is the
-  Preflight CLI checks step 2: if the work root's Project has no `Workspace:`
+  CLI checks step 2: if the work root's Project has no `Workspace:`
   line, stop and hand back to the user instead of spawning.
