@@ -33,8 +33,10 @@ the spawned discriminator / planner.
 `issue idea comment` on the archived source Idea (the seed after migration);
 (b) **Epic / project-level Story source:** `issue attach` and
 `issue comment` on each resulting plan root. Standout-decisions comments use
-`--role stakeholder`. Everything else is read-only `issue` (`summary`,
-`view`, `tree`, `get`). Do not set any status.
+`--role stakeholder`. The only other writes are those owned by skills this
+skill itself directs you to follow — today, **`issue-tracker-vision-docs`**
+on the **§ Subsystem vision consult** path. All other `issue` use is
+read-only (`summary`, `view`, `tree`, `get`). Do not set any status.
 
 ## Argument
 
@@ -116,9 +118,10 @@ and apply it using step-1 `personas:` plus the high-level vision or the
 delegated code-scope research summary. When the trigger holds, **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-vision-docs/SKILL.md`
 and follow it on the **From auto-plan** path for that subsystem (pass
-`<projectId>` from step 1 and the subsystem name). That skill owns the grill,
-attachment write, and `## Subsystem reference` index update. When it
-completes, continue at the **Post-bootstrap refuse gate**.
+`<projectId>` from step 1 and the subsystem name) — a **sanctioned pause**
+in the hands-off run. That skill owns the grill, attachment write, and
+`## Subsystem reference` index update. When it completes, resume and continue
+at the **Post-bootstrap refuse gate**.
 
 ### PM decision heuristics
 
@@ -163,8 +166,8 @@ specifics and stop; otherwise proceed to Flow.
 **Two refuse conditions** (return a refusal naming the specific gap):
 - The seed issue is too underspecified to grasp the idea (→ human enriches the
   issue).
-- Alignment sources (vision + inspirationApps) are too thin to represent the
-  human (→ human enriches the vision doc).
+- The high-level vision + `inspirationApps` are too thin to stand in for the
+  human (→ human enriches the high-level vision doc).
 
 ## Flow
 
@@ -265,5 +268,6 @@ When finalize is done, report per **## Finalize**. Then stop.
   discriminator + planner spawns, retro request, finalize. Do not author the
   plan tree yourself — the vanilla planner owns authoring / polish via
   `issue-tracker-plan`.
-- Honor the intro **Allowed writes** contract (finalize attach/comment; no
-  status changes).
+- Honor the intro **Allowed writes** contract (finalize attach/comment; writes
+  only via directed skills such as **`issue-tracker-vision-docs`** on the
+  consult path; no status changes).

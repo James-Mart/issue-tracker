@@ -64,7 +64,8 @@ Settle the target doc first. The other two paths arrive with it already
 fixed — project-docs on the main vision at the target it chose, auto-plan on
 the subsystem it named. On the standalone path:
 
-1. Ask the user whether this run is the **main vision** or a **subsystem doc**
+1. Ask the human (never a stakeholder stand-in) whether this run is the
+   **main vision** or a **subsystem doc**
    when the invocation did not say.
 2. For a subsystem, ask which subsystem when the invocation did not name it.
    Match that name against the `## Subsystem reference` entries loaded in
@@ -76,7 +77,7 @@ Before drafting any subsystem doc, **Read**
 and apply it to the settled subsystem. One that fails the trigger gets no doc:
 name the persona-facing surface whose doc should absorb it, and stop.
 
-Then name the run for the user in one sentence before grilling:
+Then name the run for the human in one sentence before grilling:
 
 - **Greenfield** — no target doc exists yet: the main vision has no `vision=`
   entry or its target was unreadable, or the subsystem matched no
@@ -113,7 +114,7 @@ issue project set <projectId> personas --add '{"name":"<name>","description":"<d
 
 **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-vision-docs/references/quality-bar.md`
-and draft the whole doc in chat to that bar. Get an **explicit user approve**
+and draft the whole doc in chat to that bar. Get an **explicit human approve**
 before any write. On rejection, revise the draft and re-approve.
 
 ## Write
@@ -126,7 +127,7 @@ Reached on the standalone and auto-plan paths. Two mechanics, used by both:
   basename is `<name>`, then `issue project detach <projectId> <name>` and
   `issue project attach <projectId> <temp-file>`.
 - **workspace `<path>`** — overwrite the file at Project `Workspace:` joined
-  with `<path>`, and tell the user it will not be committed for them.
+  with `<path>`, and tell the human it will not be committed for them.
 
 **Attach a new doc** — write the approved draft to a temp file with the chosen
 basename, run `issue project attach <projectId> <temp-file>`, and take `<name>`
