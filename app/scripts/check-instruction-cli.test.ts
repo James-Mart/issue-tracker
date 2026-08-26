@@ -101,4 +101,122 @@ describe("collectCliFormViolations", () => {
 
     expect(collectCliFormViolations(rootDir)).toEqual([]);
   });
+
+  it("flags npx tsx cli.ts in root SPEC.md", () => {
+    writeFileSync(
+      join(rootDir, "SPEC.md"),
+      "Run the CLI with `npx tsx cli.ts <command>`.\n",
+      "utf8",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("SPEC.md:1:");
+    expect(violations[0]).toContain("npx tsx cli.ts");
+    expect(violations[0]).toContain("use: the issue binary");
+  });
+
+  it("flags npx tsx cli.ts in root README.md", () => {
+    writeFileSync(
+      join(rootDir, "README.md"),
+      "Invoke via `npx tsx cli.ts issue list`.\n",
+      "utf8",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("README.md:1:");
+    expect(violations[0]).toContain("npx tsx cli.ts");
+  });
+
+  it("does not flag placeholder-kind CLI examples in root SPEC.md", () => {
+    writeFileSync(
+      join(rootDir, "SPEC.md"),
+      "Example: `issue <kind> view <id>` is wrong; use `issue view <id>`.\n",
+      "utf8",
+    );
+
+    expect(collectCliFormViolations(rootDir)).toEqual([]);
+  });
+
+  it("reports existing violations when root docs are absent", () => {
+    writeAgent(
+      "fixture.md",
+      "Run `issue <kind> view <id>` then continue.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("agents/fixture.md:1:");
+    expect(violations[0]).toContain("issue <kind> view");
+  });
+
+  it("flags issues/<id>/description.md in agents", () => {
+    writeAgent(
+      "fixture.md",
+      "Read `issues/my-task/description.md` for the spec.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("agents/fixture.md:1:");
+    expect(violations[0]).toContain("issues/my-task/description.md");
+    expect(violations[0]).toContain("use: the issue CLI for tracker content");
+  });
+
+  it("flags issues/<id>/issue.json in agents", () => {
+    writeAgent(
+      "fixture.md",
+      "Never edit issues/foo/issue.json by hand.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("issues/foo/issue.json");
+    expect(violations[0]).toContain(
+      "agents/_issue-tracker-consult-supporting-doc.md",
+    );
+  });
+
+  it("flags issues/<id>/attachments/ in agents", () => {
+    writeAgent(
+      "fixture.md",
+      "Open issues/p/attachments/vision.md from disk.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("issues/p/attachments/");
+  });
+
+  it("flags tracker-store file paths in skills", () => {
+    writeSkill(
+      "fixture/SKILL.md",
+      "Load issues/capture/description.md directly.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("skills/fixture/SKILL.md:1:");
+    expect(violations[0]).toContain("issues/capture/description.md");
+  });
+
+  it("allows a bare issues/ directory mention", () => {
+    writeAgent(
+      "fixture.md",
+      "The gitignored `issues/` store holds tracker state.\n",
+    );
+
+    expect(collectCliFormViolations(rootDir)).toEqual([]);
+  });
+
+  it("does not flag on-disk layout paths in root SPEC.md", () => {
+    writeFileSync(
+      join(rootDir, "SPEC.md"),
+      "Attachments live at `issues/<id>/attachments/<basename>` on disk.\n",
+      "utf8",
+    );
+
+    expect(collectCliFormViolations(rootDir)).toEqual([]);
+  });
 });

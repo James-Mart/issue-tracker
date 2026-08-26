@@ -5,7 +5,15 @@ Not a spawnable agent (no frontmatter). Parameter: `<key>` —
 
 Resolve supporting docs **only** via `supportingDocs` on the Project
 (**consult-if-present**). No key or unreadable target → skip; never fail the
-workflow. No ad-hoc path scans.
+workflow.
+
+Issues, attachments, and Project `supportingDocs` are located through the
+`issue` CLI and this consult path — never discovered by Grep or Glob. The
+tracker store is gitignored, so those search tools skip it; an empty search
+is not absence. Reading an absolute path that `issue summary` already
+resolved is that sanctioned channel — that is what this file's Algorithm
+does for an `attachment:` ref. The ban is on finding tracker content by
+search, not on the Read that follows.
 
 Absolute path for this file (Read this exact path):
 

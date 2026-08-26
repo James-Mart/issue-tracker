@@ -1,6 +1,7 @@
 #!/usr/bin/env -S npx tsx
-// One-time setup to invoke this CLI as `issue <verb>` instead of `npx tsx cli.ts <verb>`:
-//   cd .cursor/plugins/issue-tracker/app && npm link
+// One-time setup: npm link in this plugin's app/ directory, then invoke as
+// `issue <verb>` — see SPEC CLI invariants
+// (/root/.cursor/plugins/local/issue-tracker/app).
 import { runIssueCli } from "./cli-program.js";
 
 function handleStreamError(err: NodeJS.ErrnoException): void {
