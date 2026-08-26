@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Bot, Plus } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
+import { visibleIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
@@ -101,7 +102,7 @@ export function CockpitPage() {
   const projects = useMemo(() => listProjects(issues), [issues]);
   const projectOrder = useMemo(() => projects.map((project) => project.id), [projects]);
   const buckets = useMemo(
-    () => flowBuckets(issues, derived, {}),
+    () => flowBuckets(visibleIssues(issues, false), derived, {}),
     [derived, issues],
   );
 

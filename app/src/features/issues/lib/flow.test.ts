@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
+import { visibleIssues } from "@server/services/archived-visibility";
+import { partitionCockpitBuckets } from "../components/flow-buckets-sections";
 import { issuesById } from "./build-tree";
 import {
   depGraphModel,
@@ -302,6 +304,58 @@ describe("flowBuckets", () => {
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
     expect(ids(buckets.ready).sort()).toEqual(["e"].sort());
     expect(ids(buckets.inFlight).sort()).toEqual(["root-story"].sort());
+  });
+
+  it("excludes archived board-level issues from every cockpit bucket", () => {
+    const issues = [
+      project("p"),
+      { ...epic("arch-ready", "p"), archived: true },
+      {
+        ...story("arch-flight", "p"),
+        archived: true,
+      },
+      { ...epic("arch-blocked", "p"), archived: true },
+      { ...idea("arch-captured", "p"), archived: true },
+      { ...story("arch-merged", "p", t2), archived: true },
+      {
+        ...epic("arch-attention", "p"),
+        archived: true,
+        needsAttention: true,
+        attentionReason: "stalled",
+      },
+      epic("visible-ready", "p"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      "arch-ready": { blocked: false, epicStatus: "todo" },
+      "arch-flight": { blocked: false, storyStatus: "in-progress" },
+      "arch-blocked": { blocked: true, epicStatus: "todo" },
+      "arch-captured": { blocked: false, ideaStatus: "captured" },
+      "arch-merged": { blocked: false, storyStatus: "merged" },
+      "arch-attention": { blocked: false, epicStatus: "todo" },
+      "visible-ready": { blocked: false, epicStatus: "todo" },
+    };
+
+    const raw = flowBuckets(issues, derived, {});
+    expect(ids(raw.ready).sort()).toEqual(
+      [
+        "arch-ready",
+        "arch-attention",
+        "visible-ready",
+      ].sort(),
+    );
+
+    const cockpit = flowBuckets(visibleIssues(issues, false), derived, {});
+    const { needsAttention, buckets } = partitionCockpitBuckets(cockpit);
+    const allCockpitIds = [
+      ...ids(needsAttention),
+      ...ids(buckets.awaitingPlanning),
+      ...ids(buckets.ready),
+      ...ids(buckets.inFlight),
+      ...ids(buckets.blocked),
+      ...ids(buckets.recentlyMerged),
+    ];
+
+    expect(allCockpitIds).toEqual(["visible-ready"]);
   });
 
   it("excludes an Epic nested under another Epic", () => {
