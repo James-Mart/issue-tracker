@@ -358,6 +358,36 @@ describe("flowBuckets", () => {
     expect(allCockpitIds).toEqual(["visible-ready"]);
   });
 
+  it("locks cockpit vs project Flow Ready agreement across projects", () => {
+    const issues = [
+      project("project-a"),
+      project("project-b"),
+      epic("a-live-ready", "project-a"),
+      { ...epic("a-archived-ready", "project-a"), archived: true },
+      epic("b-live-ready", "project-b"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      "a-live-ready": { blocked: false, epicStatus: "todo" },
+      "a-archived-ready": { blocked: false, epicStatus: "todo" },
+      "b-live-ready": { blocked: false, epicStatus: "todo" },
+    };
+
+    const visible = visibleIssues(issues, false);
+
+    const cockpitReady = ids(
+      partitionCockpitBuckets(flowBuckets(visible, derived, {})).buckets.ready,
+    );
+    expect(cockpitReady.sort()).toEqual(["a-live-ready", "b-live-ready"].sort());
+    expect(cockpitReady).not.toContain("a-archived-ready");
+
+    const projectAReady = ids(
+      partitionCockpitBuckets(
+        flowBuckets(visible, derived, { projectId: "project-a" }),
+      ).buckets.ready,
+    );
+    expect(projectAReady).toEqual(["a-live-ready"]);
+  });
+
   it("excludes an Epic nested under another Epic", () => {
     const issues = [
       project("p"),
