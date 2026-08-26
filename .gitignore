@@ -16,3 +16,6 @@ plans/
 .env
 .env.local
 .env.*.local
+
+# Storybook static build output
+app/storybook-static/
