@@ -49,13 +49,16 @@ cd app && npm install && npm run dev
   instead of walking to the next port.
 
 Other scripts: `npm test` (static lints — client import boundary, agent spawn
-pins, CLI instruction forms, transport connection boundary — then Vitest) and
+pins, CLI instruction forms and entrypoint, transport connection boundary — then
+Vitest) and
 `npm run build` (build the client into
 `dist/`). `npm start` and `npm run preview` run the Express server, but it only
 serves the built client when `NODE_ENV=production` **and** `dist/` exists;
 otherwise it runs API-only on `:8061` (use `npm run dev` for the full UI, or
 `npm run build && NODE_ENV=production npm start` to serve the built client). Run
-the CLI with `npx tsx cli.ts <command>` (see `issue --help` or SPEC.md).
+the CLI as `issue <command>` after one-time setup in [SPEC.md § CLI
+invariants](./SPEC.md#cli-invariants) (`npm link` in this plugin's `app/`
+directory).
 
 ### Agent verification stack
 

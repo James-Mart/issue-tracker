@@ -1,19 +1,25 @@
 #!/usr/bin/env -S npx tsx
 // Instruction-corpus CLI form lint.
 //
-// Scans every `.md` file under the plugin root's `agents/` and `skills/`
-// directories and fails when instruction prose uses a derivable kind:
+// Scans instruction prose and fails on disallowed CLI forms:
 //
 // 1. Placeholder kind before a kind-uniform verb —
 //    `issue <…> view|get|comment|attach|attachments|detach`
 //    (correct: `issue <verb> <id>`).
+//    Scope: every `.md` under `agents/` and `skills/`.
 // 2. Placeholder positional after `issue list` that is not `<kind>` —
 //    e.g. `issue list <projectId>` (correct: `issue list --in <id>`).
 //    Literal kinds (`issue list story`) and the `<kind>` spelling stay valid.
+//    Scope: every `.md` under `agents/` and `skills/`.
+// 3. Direct `npx tsx cli.ts` invocation (correct: the `issue` binary after
+//    one-time `npm link` in this plugin's `app/` directory — see SPEC CLI
+//    invariants).
+//    Scope: root-level `SPEC.md` and `README.md` (skipped when absent), plus
+//    every `.md` under `agents/` and `skills/`.
 //
 // Run: `npm run lint:cli-forms` (also part of `npm test`).
 
-import { readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { dirname, relative, resolve } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 
@@ -39,6 +45,9 @@ const PLACEHOLDER_KIND_VERB_RE = new RegExp(
  */
 const LIST_PLACEHOLDER_RE = /\bissue\s+list\s+(<(?!kind>)[^>\s]+>)/g;
 
+/** Direct tsx invocation — agents must use the linked `issue` binary. */
+const NPX_TSX_CLI_RE = /\bnpx tsx cli\.ts\b/g;
+
 function walkMd(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -57,15 +66,34 @@ function lineAt(src: string, index: number): number {
   return src.slice(0, index).split(/\r?\n/).length;
 }
 
+function collectNpxTsxCliViolations(
+  file: string,
+  src: string,
+  rel: (f: string) => string,
+): string[] {
+  const violations: string[] = [];
+  NPX_TSX_CLI_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = NPX_TSX_CLI_RE.exec(src))) {
+    violations.push(
+      `${rel(file)}:${lineAt(src, m.index)}: ${m[0]} — use: the issue binary (see SPEC CLI invariants)`,
+    );
+  }
+  return violations;
+}
+
 /** Collect CLI-form violations for a plugin root with `agents/` and `skills/`. */
 export function collectCliFormViolations(rootDir: string): string[] {
   const agentsDir = resolve(rootDir, "agents");
   const skillsDir = resolve(rootDir, "skills");
   const rel = (f: string) => relative(rootDir, f);
-  const scanFiles = [...walkMd(agentsDir), ...walkMd(skillsDir)];
+  const instructionFiles = [...walkMd(agentsDir), ...walkMd(skillsDir)];
+  const rootDocFiles = ["SPEC.md", "README.md"]
+    .map((name) => resolve(rootDir, name))
+    .filter((file) => existsSync(file));
   const violations: string[] = [];
 
-  for (const file of scanFiles) {
+  for (const file of instructionFiles) {
     const src = readFileSync(file, "utf8");
 
     PLACEHOLDER_KIND_VERB_RE.lastIndex = 0;
@@ -85,6 +113,13 @@ export function collectCliFormViolations(rootDir: string): string[] {
         `${rel(file)}:${lineAt(src, m.index)}: ${offending} — use: issue list --in <id>`,
       );
     }
+
+    violations.push(...collectNpxTsxCliViolations(file, src, rel));
+  }
+
+  for (const file of rootDocFiles) {
+    const src = readFileSync(file, "utf8");
+    violations.push(...collectNpxTsxCliViolations(file, src, rel));
   }
 
   return violations;
@@ -94,14 +129,14 @@ function runCli(rootDir: string): void {
   const violations = collectCliFormViolations(rootDir);
   if (violations.length === 0) {
     console.log(
-      "instruction-cli: OK — no placeholder-kind kind-uniform verbs; no non-<kind> placeholder after issue list.",
+      "instruction-cli: OK — no placeholder-kind kind-uniform verbs; no non-<kind> placeholder after issue list; no npx tsx cli.ts invocations.",
     );
     process.exit(0);
   }
 
   console.error(
     `instruction-cli: ${violations.length} CLI form violation(s).\n` +
-      "Kind-uniform verbs (view, get, comment, attach, attachments, detach, merge) must use bare-id `issue <verb> <id>` when the kind is a placeholder; `issue list` must not take a non-<kind> placeholder positional (use `issue list --in <id>`).\n",
+      "Kind-uniform verbs (view, get, comment, attach, attachments, detach, merge) must use bare-id `issue <verb> <id>` when the kind is a placeholder; `issue list` must not take a non-<kind> placeholder positional (use `issue list --in <id>`); invoke the CLI via the linked `issue` binary, not `npx tsx cli.ts`.\n",
   );
   for (const v of violations) {
     console.error(`  ${v}`);

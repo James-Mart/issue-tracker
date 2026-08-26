@@ -101,4 +101,53 @@ describe("collectCliFormViolations", () => {
 
     expect(collectCliFormViolations(rootDir)).toEqual([]);
   });
+
+  it("flags npx tsx cli.ts in root SPEC.md", () => {
+    writeFileSync(
+      join(rootDir, "SPEC.md"),
+      "Run the CLI with `npx tsx cli.ts <command>`.\n",
+      "utf8",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("SPEC.md:1:");
+    expect(violations[0]).toContain("npx tsx cli.ts");
+    expect(violations[0]).toContain("use: the issue binary");
+  });
+
+  it("flags npx tsx cli.ts in root README.md", () => {
+    writeFileSync(
+      join(rootDir, "README.md"),
+      "Invoke via `npx tsx cli.ts issue list`.\n",
+      "utf8",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("README.md:1:");
+    expect(violations[0]).toContain("npx tsx cli.ts");
+  });
+
+  it("does not flag placeholder-kind CLI examples in root SPEC.md", () => {
+    writeFileSync(
+      join(rootDir, "SPEC.md"),
+      "Example: `issue <kind> view <id>` is wrong; use `issue view <id>`.\n",
+      "utf8",
+    );
+
+    expect(collectCliFormViolations(rootDir)).toEqual([]);
+  });
+
+  it("reports existing violations when root docs are absent", () => {
+    writeAgent(
+      "fixture.md",
+      "Run `issue <kind> view <id>` then continue.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("agents/fixture.md:1:");
+    expect(violations[0]).toContain("issue <kind> view");
+  });
 });
