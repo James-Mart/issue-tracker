@@ -79,6 +79,7 @@ describe("mockup stack state", () => {
   const sampleState = {
     port: 41005,
     pid: 12345,
+    startTime: "999999",
     baseUrl: "http://127.0.0.1:41005",
     startedAt: "2026-01-01T00:00:00.000Z",
   };

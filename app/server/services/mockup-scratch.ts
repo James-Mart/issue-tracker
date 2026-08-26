@@ -12,6 +12,11 @@ import { isSlugSafe } from "../slug.js";
 const mockupStackStateSchema = z.object({
   port: z.number().int().positive(),
   pid: z.number().int().positive(),
+  /**
+   * `/proc/<pid>/stat` start time. Pins the pid to the process we spawned, so a
+   * recycled pid in state left behind by a crash does not read as owned.
+   */
+  startTime: z.string().min(1),
   baseUrl: z.string().min(1),
   startedAt: z.string().min(1),
 });
@@ -59,15 +64,18 @@ export function harnessConfigPath(conversationId: string): string {
   return join(conversationsDir, conversationId, "mockups", "harness.json");
 }
 
-function mockupStackStatePath(conversationId: string): string {
+/** Peer of the conversation's `mockups/` scratch. */
+export function mockupStackDir(conversationId: string): string {
   assertConversationId(conversationId);
-  return join(
-    conversationsDir,
-    conversationId,
-    "mockups",
-    "mockup-stack",
-    "state.json",
-  );
+  return join(conversationsDir, conversationId, "mockups", "mockup-stack");
+}
+
+export function mockupStackStatePath(conversationId: string): string {
+  return join(mockupStackDir(conversationId), "state.json");
+}
+
+export function mockupStackLogPath(conversationId: string): string {
+  return join(mockupStackDir(conversationId), "storybook.log");
 }
 
 export function readMockupStackState(
@@ -94,8 +102,6 @@ export function writeMockupStackState(
   assertConversationId(conversationId);
   const parsed = mockupStackStateSchema.parse(state);
   const path = mockupStackStatePath(conversationId);
-  mkdirSync(join(mockupScratchDir(conversationId), "mockup-stack"), {
-    recursive: true,
-  });
+  mkdirSync(mockupStackDir(conversationId), { recursive: true });
   writeFileSync(path, `${JSON.stringify(parsed, null, 2)}\n`);
 }
