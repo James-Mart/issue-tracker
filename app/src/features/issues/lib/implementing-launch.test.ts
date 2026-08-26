@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/errors";
+import { skillPath } from "@/lib/plugin-paths";
 import {
   implementingLaunchCopy,
   implementingSessionMessage,
@@ -38,7 +39,7 @@ describe("implementingSessionModel", () => {
 describe("implementingSessionMessage", () => {
   it("names the work-root id and issue-tracker-work skill", () => {
     expect(implementingSessionMessage("ship-it")).toBe(
-      "Work ship-it in the issue tracker using the issue-tracker-work skill.",
+      `Work ship-it in the issue tracker using the issue-tracker-work skill. Read ${skillPath("issue-tracker-work")} and follow it.`,
     );
   });
 });

@@ -1,5 +1,6 @@
 import type { AgentModel } from "@/features/agents/api/client";
 import { ApiError } from "@/lib/api/errors";
+import { skillPath } from "@/lib/plugin-paths";
 import type { ConversationChannel, IssueDetail } from "@server/schemas";
 import { defaultConversationModel } from "./planning-launch";
 
@@ -33,7 +34,10 @@ export function implementingSessionModel(
 
 /** First prompt naming the work-root id and skill to load. */
 export function implementingSessionMessage(issueId: string): string {
-  return `Work ${issueId} in the issue tracker using the issue-tracker-work skill.`;
+  return (
+    `Work ${issueId} in the issue tracker using the issue-tracker-work skill. ` +
+    `Read ${skillPath("issue-tracker-work")} and follow it.`
+  );
 }
 
 export type ImplementingLaunchCopy = {

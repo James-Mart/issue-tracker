@@ -1,4 +1,5 @@
 import type { ConversationChannel, IssueDetail, IssueKind } from "@server/schemas";
+import { skillPath } from "@/lib/plugin-paths";
 import { isImplementingWorkRoot, type ImplementingWorkRoot } from "./implementing-launch";
 
 export type RetroWorkRoot = {
@@ -13,7 +14,8 @@ export function retroSessionMessage(
 ): string {
   return (
     `Run retro on ${workRootId} (${workRootTitle}) in the issue tracker ` +
-    "using the issue-tracker-retro skill."
+    `using the issue-tracker-retro skill. ` +
+    `Read ${skillPath("issue-tracker-retro")} and follow it.`
   );
 }
 
