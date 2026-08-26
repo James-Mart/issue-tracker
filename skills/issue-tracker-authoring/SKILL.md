@@ -16,7 +16,9 @@ must replace any prior plan doc and stand alone. Companion material belongs
 **with the issue that uses it** (prose in `description.md`, or opaque files as
 attachments — [SPEC.md § Attachments](../../SPEC.md#attachments)). Do not
 hand-edit `issue.json`. Glossary and apply-doc shape: [SPEC.md](../../SPEC.md).
-Work the resulting tree with `issue-tracker-work`.
+Work the resulting tree with `issue-tracker-work`. **Read**
+`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-work/SKILL.md`
+and follow it.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
 Localize prose to the tier where it belongs — don't dump the whole spec in the
