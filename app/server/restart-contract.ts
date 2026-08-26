@@ -15,7 +15,7 @@ export function captureRestartSupervision(supervised: boolean): void {
 
 /** Whether this process was launched under the restart supervisor. */
 export function isRestartSupervised(): boolean {
-  return capturedSupervision ?? Boolean(process.env[RESTART_SUPERVISED_ENV_VAR]);
+  return capturedSupervision ?? false;
 }
 
 export type ProcessExit = {

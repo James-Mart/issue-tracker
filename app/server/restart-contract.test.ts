@@ -53,9 +53,9 @@ describe("captureRestartSupervision", () => {
 });
 
 describe("isRestartSupervised", () => {
-  it("reads the env var when capture has not run", async () => {
+  it("is false when capture has not run even if the env var is set", async () => {
     process.env[RESTART_SUPERVISED_ENV_VAR] = "1";
     const { isRestartSupervised } = await loadContract();
-    expect(isRestartSupervised()).toBe(true);
+    expect(isRestartSupervised()).toBe(false);
   });
 });
