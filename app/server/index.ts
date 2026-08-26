@@ -4,6 +4,11 @@ import { assertSupportedNodeRuntime } from "./node-runtime.js";
 // `@cursor/sdk` (via agent-sessions) and can native-crash on Node < 22.13.
 assertSupportedNodeRuntime();
 
+const { captureRestartSupervision, RESTART_SUPERVISED_ENV_VAR } = await import(
+  "./restart-contract.js"
+);
+captureRestartSupervision(Boolean(process.env[RESTART_SUPERVISED_ENV_VAR]));
+
 const { attachMultiplexedWebSocket, createApp } = await import("./app.js");
 const { refreshAgentModelSlugCatalog } = await import(
   "./agent-model-slugs-sync.js"

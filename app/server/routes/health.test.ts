@@ -1,7 +1,6 @@
 import type { Server } from "http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessions } from "../services/agent-sessions.js";
-import { RESTART_SUPERVISED_ENV_VAR } from "../restart-contract.js";
 
 let server: Server;
 let baseUrl: string;
@@ -18,10 +17,14 @@ function stubSessions(): AgentSessions {
   };
 }
 
-async function startApp(): Promise<void> {
+async function startApp(options?: { supervised?: boolean }): Promise<void> {
   vi.resetModules();
   initiateRestart = vi.fn();
   const { createApp } = await import("../app.js");
+  if (options?.supervised) {
+    const { captureRestartSupervision } = await import("../restart-contract.js");
+    captureRestartSupervision(true);
+  }
   const app = createApp(stubSessions(), initiateRestart);
   await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
@@ -52,8 +55,7 @@ afterEach(async () => {
 
 describe("GET /api/health", () => {
   it("returns boot identity and restart support", async () => {
-    vi.stubEnv(RESTART_SUPERVISED_ENV_VAR, "1");
-    await startApp();
+    await startApp({ supervised: true });
 
     const first = await getHealth();
     expect(first.status).toBe(200);

@@ -2,9 +2,20 @@ export const RESTART_SENTINEL_EXIT_CODE = 75;
 
 export const RESTART_SUPERVISED_ENV_VAR = "RESTART_SUPERVISED";
 
+let capturedSupervision: boolean | undefined;
+
+/**
+ * Record whether this process is the supervisor's direct child, then drop the
+ * env marker so descendants do not inherit it.
+ */
+export function captureRestartSupervision(supervised: boolean): void {
+  capturedSupervision = supervised;
+  delete process.env[RESTART_SUPERVISED_ENV_VAR];
+}
+
 /** Whether this process was launched under the restart supervisor. */
 export function isRestartSupervised(): boolean {
-  return Boolean(process.env[RESTART_SUPERVISED_ENV_VAR]);
+  return capturedSupervision ?? false;
 }
 
 export type ProcessExit = {
