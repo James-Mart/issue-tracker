@@ -28,18 +28,22 @@ reporting only that.
 
 ## Procedure
 
-1. **Read** — the Read tool has no working directory. Form absolute paths by
+1. When **Research** names a `supportingDocs` key or a standing rule that
+   lives in one, **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
+   and follow it instead of searching the Workspace.
+2. **Read** — the Read tool has no working directory. Form absolute paths by
    joining **Workspace** with workspace-relative paths (including **Seed paths**
    when given).
-2. **Shell** — pass **Workspace** as `working_directory` for grep and git
+3. **Shell** — pass **Workspace** as `working_directory` for grep and git
    commands only.
-3. When **Seed paths** are given, start there before widening the search.
-4. When **Ref** is set, read file contents only via `git show <ref>:<path>` and
+4. When **Seed paths** are given, start there before widening the search.
+5. When **Ref** is set, read file contents only via `git show <ref>:<path>` and
    list directory trees only via `git ls-tree <ref>` — no `git checkout`, no
    branch switches, and no mutation of the working tree or repo.
-5. When **Ref** is omitted, read the working tree via absolute paths under
-   **Workspace** (per step 1 — not via Read cwd).
-6. Investigate only enough to answer **Research** — do not hunt broadly.
+6. When **Ref** is omitted, read the working tree via absolute paths under
+   **Workspace** (per step 2 — not via Read cwd).
+7. Investigate only enough to answer **Research** — do not hunt broadly.
 
 ## Stop conditions
 

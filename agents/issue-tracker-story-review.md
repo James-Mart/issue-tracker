@@ -21,8 +21,9 @@ that only reads as delivered.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-Load all issue specs (Story and Task) via `issue story view` / `issue task view`
-only — never filesystem-read `issues/**` (including `description.md`).
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
+
+Load all issue specs (Story and Task) via `issue story view` / `issue task view`.
 
 **Allowed writes:** `issue story set` (for `review`, `reviewedTasks`, and
 `needsAttention`), `issue task add`, `issue story comment`. Do not run any
