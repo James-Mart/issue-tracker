@@ -1443,8 +1443,9 @@ spawn-time selection, ID forms, and how to verify the effective model — is
 defined in the Project **`codingStandards`** supporting doc, section **Subagent
 model resolution** under **Skills and Subagents** (see [Project supporting
 docs](#project-supporting-docs)). That text is the standing rule; this SPEC does
-not restate it. Authoring or spawning code that touches model selection should
-consult that section rather than duplicating it.
+not restate it. **Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
+with key `codingStandards`.
 
 **`agents/` layout.**
 
