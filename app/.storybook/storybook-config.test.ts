@@ -11,7 +11,9 @@ import { loadHarnessConfig } from "./harness-config.js";
 import {
   SMOKE_STORY_GLOB,
   buildHarnessStorybookOptions,
+  buildReactAliases,
   collectFsAllowPaths,
+  harnessCssModuleSource,
 } from "./storybook-config.js";
 
 let rootDir: string;
@@ -64,11 +66,34 @@ describe("buildHarnessStorybookOptions", () => {
       SMOKE_STORY_GLOB,
     ]);
     expect(options.aliases).toEqual({ "@target": join(rootDir, "alias") });
+    expect(options.reactAliases).toEqual(
+      buildReactAliases(join(rootDir, "react-node_modules")),
+    );
+    expect(options.cssEntries).toEqual([join(rootDir, "styles", "app.css")]);
 
     const fsAllow = collectFsAllowPaths(harness);
     expect(fsAllow).toContain(join(rootDir, "target"));
     expect(fsAllow).toContain(join(rootDir, "stories"));
     expect(fsAllow).toContain(join(rootDir, "styles"));
     expect(options.fsAllow).toEqual(fsAllow);
+  });
+});
+
+describe("buildReactAliases", () => {
+  it("points react, react-dom, and jsx-runtime at reactRoot", () => {
+    const reactRoot = "/abs/react-node_modules";
+    expect(buildReactAliases(reactRoot)).toEqual({
+      react: join(reactRoot, "react"),
+      "react-dom": join(reactRoot, "react-dom"),
+      "react/jsx-runtime": join(reactRoot, "react/jsx-runtime"),
+    });
+  });
+});
+
+describe("harnessCssModuleSource", () => {
+  it("emits one import per cssEntries path, in order", () => {
+    expect(
+      harnessCssModuleSource(["/abs/a.css", "/abs/b.css"]),
+    ).toBe('import "/abs/a.css";\nimport "/abs/b.css";');
   });
 });

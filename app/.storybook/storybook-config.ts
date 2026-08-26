@@ -28,9 +28,27 @@ export function collectFsAllowPaths(config: HarnessConfig): string[] {
 export type HarnessStorybookOptions = {
   stories: string[];
   aliases: Record<string, string>;
+  reactAliases: Record<string, string>;
+  cssEntries: string[];
   fsAllow: string[];
   viteConfigPath: string | undefined;
 };
+
+/** One React resolution root so the preview and target components share an instance. */
+export function buildReactAliases(reactRoot: string): Record<string, string> {
+  return {
+    react: path.join(reactRoot, "react"),
+    "react-dom": path.join(reactRoot, "react-dom"),
+    "react/jsx-runtime": path.join(reactRoot, "react/jsx-runtime"),
+  };
+}
+
+/** Source for the virtual module preview.ts imports — one import per cssEntries path, in order. */
+export function harnessCssModuleSource(cssEntries: string[]): string {
+  return cssEntries.map((entry) => `import ${JSON.stringify(entry)};`).join("\n");
+}
+
+export const HARNESS_CSS_VIRTUAL_ID = "virtual:harness-css";
 
 export function buildHarnessStorybookOptions(
   config: HarnessConfig,
@@ -38,6 +56,8 @@ export function buildHarnessStorybookOptions(
   return {
     stories: [...config.storiesGlobs, SMOKE_STORY_GLOB],
     aliases: config.aliases,
+    reactAliases: buildReactAliases(config.reactRoot),
+    cssEntries: config.cssEntries,
     fsAllow: collectFsAllowPaths(config),
     viteConfigPath: config.viteConfigPath,
   };
