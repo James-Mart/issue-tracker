@@ -1,4 +1,5 @@
 import type { AgentModel } from "@/features/agents/api/client";
+import { skillPath } from "@/lib/plugin-paths";
 
 /** Session title for a planning run on an Idea. */
 export function planningSessionTitle(ideaTitle: string): string {
@@ -24,10 +25,14 @@ export function planningSessionMessage(
   if (stakeholder) {
     return (
       `Plan ${ideaId} in the issue tracker using the issue-tracker-auto-plan skill. ` +
+      `Read ${skillPath("issue-tracker-auto-plan")} and follow it. ` +
       `Stakeholder stand-in model: ${stakeholder}.`
     );
   }
-  return `Plan ${ideaId} in the issue tracker using the issue-tracker-plan skill.`;
+  return (
+    `Plan ${ideaId} in the issue tracker using the issue-tracker-plan skill. ` +
+    `Read ${skillPath("issue-tracker-plan")} and follow it.`
+  );
 }
 
 export type PlanningLaunchCopy = {

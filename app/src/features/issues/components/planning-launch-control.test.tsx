@@ -2,6 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { skillPath } from "@/lib/plugin-paths";
 import { MANUAL_STAKEHOLDER_LABEL } from "@server/fields";
 import {
   PlanningChannelEmptyState,
@@ -227,7 +228,7 @@ describe("PlanningChannelEmptyState", () => {
         title: "Plan Capture",
         model: "composer-2.5",
         message:
-          "Plan capture in the issue tracker using the issue-tracker-plan skill.",
+          `Plan capture in the issue tracker using the issue-tracker-plan skill. Read ${skillPath("issue-tracker-plan")} and follow it.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
@@ -263,7 +264,7 @@ describe("PlanningChannelEmptyState", () => {
         title: "Plan Capture",
         model: "claude-opus-5",
         message:
-          "Plan capture in the issue tracker using the issue-tracker-plan skill.",
+          `Plan capture in the issue tracker using the issue-tracker-plan skill. Read ${skillPath("issue-tracker-plan")} and follow it.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
@@ -298,7 +299,7 @@ describe("PlanningChannelEmptyState", () => {
         title: "Plan Capture",
         model: "claude-opus-5",
         message:
-          "Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Stakeholder stand-in model: claude-opus-5.",
+          `Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Read ${skillPath("issue-tracker-auto-plan")} and follow it. Stakeholder stand-in model: claude-opus-5.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
@@ -460,7 +461,7 @@ describe("PlanningNewRunControl", () => {
         title: "Plan Capture",
         model: "composer-2.5",
         message:
-          "Plan capture in the issue tracker using the issue-tracker-plan skill.",
+          `Plan capture in the issue tracker using the issue-tracker-plan skill. Read ${skillPath("issue-tracker-plan")} and follow it.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
@@ -511,7 +512,7 @@ describe("PlanningNewRunControl", () => {
         title: "Plan Capture",
         model: "claude-opus-5",
         message:
-          "Plan capture in the issue tracker using the issue-tracker-plan skill.",
+          `Plan capture in the issue tracker using the issue-tracker-plan skill. Read ${skillPath("issue-tracker-plan")} and follow it.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
@@ -544,7 +545,7 @@ describe("PlanningNewRunControl", () => {
         title: "Plan Capture",
         model: "claude-opus-5",
         message:
-          "Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Stakeholder stand-in model: claude-opus-5.",
+          `Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Read ${skillPath("issue-tracker-auto-plan")} and follow it. Stakeholder stand-in model: claude-opus-5.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );

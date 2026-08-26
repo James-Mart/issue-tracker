@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { skillPath } from "@/lib/plugin-paths";
 import {
   defaultConversationModel,
   planningLaunchCopy,
@@ -28,13 +29,13 @@ describe("planningSessionModel", () => {
 describe("planningSessionMessage", () => {
   it("names issue-tracker-plan when stakeholder is unset", () => {
     expect(planningSessionMessage("capture", undefined)).toBe(
-      "Plan capture in the issue tracker using the issue-tracker-plan skill.",
+      `Plan capture in the issue tracker using the issue-tracker-plan skill. Read ${skillPath("issue-tracker-plan")} and follow it.`,
     );
   });
 
   it("names issue-tracker-auto-plan and the stand-in slug when set", () => {
     expect(planningSessionMessage("capture", "claude-opus-5")).toBe(
-      "Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Stakeholder stand-in model: claude-opus-5.",
+      `Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Read ${skillPath("issue-tracker-auto-plan")} and follow it. Stakeholder stand-in model: claude-opus-5.`,
     );
   });
 });
