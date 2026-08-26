@@ -40,7 +40,8 @@ export function FlowRow({
       avatar={avatar}
       stateIcon={<StateIcon state={railState} live={live} />}
       chips={
-        item.issue.kind === "idea" ? (
+        item.issue.kind === "idea" &&
+        item.state?.ideaStatus === "planning" ? (
           <AxisChips chips={[{ variant: "inProgress", label: "planning" }]} />
         ) : undefined
       }

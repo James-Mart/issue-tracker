@@ -57,12 +57,18 @@ afterEach(() => {
 });
 
 describe("FlowRow", () => {
-  it("shows a planning chip on Idea rows and not on Stories", () => {
-    const ideaRow = mountRow(idea("grill"), {
+  it("shows a planning chip only on in-flight Ideas, not captured Ideas or Stories", () => {
+    const planningRow = mountRow(idea("grill"), {
       blocked: false,
       ideaStatus: "planning",
     });
-    expect(ideaRow.textContent).toContain("planning");
+    expect(planningRow.textContent).toContain("planning");
+
+    const capturedRow = mountRow(idea("capture"), {
+      blocked: false,
+      ideaStatus: "captured",
+    });
+    expect(capturedRow.textContent).not.toContain("planning");
 
     const storyRow = mountRow(story("implementing"), {
       blocked: false,
