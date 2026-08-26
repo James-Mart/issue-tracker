@@ -16,5 +16,5 @@
       "@server/*": ["server/*"]
     }
   },
-  "include": ["src", "server"]
+  "include": ["src", "server", ".storybook"]
 }
