@@ -179,7 +179,9 @@ roots (otherwise any order) — **serially**: finish that root's polish
 before starting the next; never parallelize polish across roots (each
 polish spawns parallel check agents; concurrent polish runs overload CPU):
 
-1. Auto-chain **`issue-tracker-plan-polish`** on that root — no polish
+1. Auto-chain **`issue-tracker-plan-polish`** on that root — **Read**
+   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
+   and follow it; no polish
    yes/no. Polish itself auto-applies when safe (see that skill); do not add
    an approve-before-apply beat here. If polish is deferred in this session
    (e.g. the user asks to grill more before polish runs), the polish

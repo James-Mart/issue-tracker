@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
+import { skillPath } from "@/lib/plugin-paths";
 import {
   ImplementingChannelEmptyState,
   ImplementingLockRefusalState,
@@ -141,7 +142,7 @@ describe("ImplementingChannelEmptyState", () => {
         title: "Implement Ship it",
         model: "composer-2.5",
         message:
-          "Work ship-it in the issue tracker using the issue-tracker-work skill.",
+          `Work ship-it in the issue tracker using the issue-tracker-work skill. Read ${skillPath("issue-tracker-work")} and follow it.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );

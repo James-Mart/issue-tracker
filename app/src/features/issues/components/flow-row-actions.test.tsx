@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { FlowItem } from "../lib/flow";
+import { skillPath } from "@/lib/plugin-paths";
 import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
 
 const mutate = vi.fn();
@@ -193,7 +194,7 @@ describe("FlowRowActions start planning", () => {
         title: "Plan Idea capture-me",
         model: "composer-2.5",
         message:
-          "Plan capture-me in the issue tracker using the issue-tracker-plan skill.",
+          `Plan capture-me in the issue tracker using the issue-tracker-plan skill. Read ${skillPath("issue-tracker-plan")} and follow it.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );

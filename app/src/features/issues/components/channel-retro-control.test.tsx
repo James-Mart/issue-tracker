@@ -3,6 +3,7 @@ import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelSessionListItem } from "@server/schemas";
+import { skillPath } from "@/lib/plugin-paths";
 import { ChannelRetroControl } from "./channel-retro-control";
 import { channelSessionListItem } from "../test/channel-session-list-item";
 
@@ -156,7 +157,7 @@ describe("ChannelRetroControl", () => {
       id: "session-1",
       body: {
         prompt:
-          "Run retro on ship-it (Ship it) in the issue tracker using the issue-tracker-retro skill.",
+          `Run retro on ship-it (Ship it) in the issue tracker using the issue-tracker-retro skill. Read ${skillPath("issue-tracker-retro")} and follow it.`,
       },
     });
   });
@@ -178,7 +179,7 @@ describe("ChannelRetroControl", () => {
       id: "session-1",
       body: {
         prompt:
-          "Run retro on ship-it (Ship it) in the issue tracker using the issue-tracker-retro skill.",
+          `Run retro on ship-it (Ship it) in the issue tracker using the issue-tracker-retro skill. Read ${skillPath("issue-tracker-retro")} and follow it.`,
       },
     });
   });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { skillPath } from "@/lib/plugin-paths";
 import {
   implementingRetroWorkRoot,
   retroSessionMessage,
@@ -7,7 +8,7 @@ import {
 describe("retroSessionMessage", () => {
   it("names the work root and issue-tracker-retro skill", () => {
     expect(retroSessionMessage("ship-it", "Ship it")).toBe(
-      "Run retro on ship-it (Ship it) in the issue tracker using the issue-tracker-retro skill.",
+      `Run retro on ship-it (Ship it) in the issue tracker using the issue-tracker-retro skill. Read ${skillPath("issue-tracker-retro")} and follow it.`,
     );
   });
 });
