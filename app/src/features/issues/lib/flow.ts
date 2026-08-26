@@ -62,7 +62,11 @@ export type FlowScope = {
   projectId?: string;
 };
 
-/** In-memory Flow lens filters (search / label / kind). Archive is applied separately. */
+/**
+ * In-memory Flow lens filters (search / label / kind). Archive is applied
+ * separately: project Flow uses `visibleIssues` with the Overview `showArchived`
+ * flag; cockpit always uses `visibleIssues(..., false)` before bucketing.
+ */
 export type FlowFilters = {
   search: string;
   labelIds: readonly string[];
