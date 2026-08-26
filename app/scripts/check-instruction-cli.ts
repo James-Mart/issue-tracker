@@ -1,7 +1,7 @@
 #!/usr/bin/env -S npx tsx
-// Instruction-corpus CLI form lint.
+// Instruction-corpus lint.
 //
-// Scans instruction prose and fails on disallowed CLI forms:
+// Scans instruction prose and fails on disallowed forms:
 //
 // 1. Placeholder kind before a kind-uniform verb —
 //    `issue <…> view|get|comment|attach|attachments|detach`
@@ -16,6 +16,12 @@
 //    invariants).
 //    Scope: root-level `SPEC.md` and `README.md` (skipped when absent), plus
 //    every `.md` under `agents/` and `skills/`.
+// 4. Tracker-store file paths — `issues/<id>/description.md`,
+//    `issues/<id>/issue.json`, or `issues/<id>/attachments/` (correct: the
+//    `issue` CLI; supporting docs via
+//    `agents/_issue-tracker-consult-supporting-doc.md`). Bare `issues/`
+//    directory mentions stay valid.
+//    Scope: every `.md` under `agents/` and `skills/` only.
 //
 // Run: `npm run lint:cli-forms` (also part of `npm test`).
 
@@ -48,6 +54,13 @@ const LIST_PLACEHOLDER_RE = /\bissue\s+list\s+(<(?!kind>)[^>\s]+>)/g;
 /** Direct tsx invocation — agents must use the linked `issue` binary. */
 const NPX_TSX_CLI_RE = /\bnpx tsx cli\.ts\b/g;
 
+/**
+ * Path into a file inside an issue directory under the tracker store —
+ * `issues/<id>/description.md`, `issue.json`, or `attachments/`.
+ */
+const TRACKER_STORE_FILE_RE =
+  /\bissues\/[^/\s`"'<>]+?\/(?:description\.md|issue\.json|attachments\/)/g;
+
 function walkMd(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -77,6 +90,22 @@ function collectNpxTsxCliViolations(
   while ((m = NPX_TSX_CLI_RE.exec(src))) {
     violations.push(
       `${rel(file)}:${lineAt(src, m.index)}: ${m[0]} — use: the issue binary (see SPEC CLI invariants)`,
+    );
+  }
+  return violations;
+}
+
+function collectTrackerStoreFileViolations(
+  file: string,
+  src: string,
+  rel: (f: string) => string,
+): string[] {
+  const violations: string[] = [];
+  TRACKER_STORE_FILE_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TRACKER_STORE_FILE_RE.exec(src))) {
+    violations.push(
+      `${rel(file)}:${lineAt(src, m.index)}: ${m[0]} — use: the issue CLI for tracker content; supporting docs via agents/_issue-tracker-consult-supporting-doc.md`,
     );
   }
   return violations;
@@ -115,6 +144,7 @@ export function collectCliFormViolations(rootDir: string): string[] {
     }
 
     violations.push(...collectNpxTsxCliViolations(file, src, rel));
+    violations.push(...collectTrackerStoreFileViolations(file, src, rel));
   }
 
   for (const file of rootDocFiles) {
@@ -129,14 +159,14 @@ function runCli(rootDir: string): void {
   const violations = collectCliFormViolations(rootDir);
   if (violations.length === 0) {
     console.log(
-      "instruction-cli: OK — no placeholder-kind kind-uniform verbs; no non-<kind> placeholder after issue list; no npx tsx cli.ts invocations.",
+      "instruction-cli: OK — no placeholder-kind kind-uniform verbs; no non-<kind> placeholder after issue list; no npx tsx cli.ts invocations; no tracker-store file paths.",
     );
     process.exit(0);
   }
 
   console.error(
-    `instruction-cli: ${violations.length} CLI form violation(s).\n` +
-      "Kind-uniform verbs (view, get, comment, attach, attachments, detach, merge) must use bare-id `issue <verb> <id>` when the kind is a placeholder; `issue list` must not take a non-<kind> placeholder positional (use `issue list --in <id>`); invoke the CLI via the linked `issue` binary, not `npx tsx cli.ts`.\n",
+    `instruction-cli: ${violations.length} instruction-corpus violation(s).\n` +
+      "Kind-uniform verbs (view, get, comment, attach, attachments, detach, merge) must use bare-id `issue <verb> <id>` when the kind is a placeholder; `issue list` must not take a non-<kind> placeholder positional (use `issue list --in <id>`); invoke the CLI via the linked `issue` binary, not `npx tsx cli.ts`; read tracker content via the `issue` CLI and supporting docs via agents/_issue-tracker-consult-supporting-doc.md, not filesystem paths under issues/<id>/.\n",
   );
   for (const v of violations) {
     console.error(`  ${v}`);

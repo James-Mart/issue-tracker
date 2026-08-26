@@ -150,4 +150,73 @@ describe("collectCliFormViolations", () => {
     expect(violations[0]).toContain("agents/fixture.md:1:");
     expect(violations[0]).toContain("issue <kind> view");
   });
+
+  it("flags issues/<id>/description.md in agents", () => {
+    writeAgent(
+      "fixture.md",
+      "Read `issues/my-task/description.md` for the spec.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("agents/fixture.md:1:");
+    expect(violations[0]).toContain("issues/my-task/description.md");
+    expect(violations[0]).toContain("use: the issue CLI for tracker content");
+  });
+
+  it("flags issues/<id>/issue.json in agents", () => {
+    writeAgent(
+      "fixture.md",
+      "Never edit issues/foo/issue.json by hand.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("issues/foo/issue.json");
+    expect(violations[0]).toContain(
+      "agents/_issue-tracker-consult-supporting-doc.md",
+    );
+  });
+
+  it("flags issues/<id>/attachments/ in agents", () => {
+    writeAgent(
+      "fixture.md",
+      "Open issues/p/attachments/vision.md from disk.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("issues/p/attachments/");
+  });
+
+  it("flags tracker-store file paths in skills", () => {
+    writeSkill(
+      "fixture/SKILL.md",
+      "Load issues/capture/description.md directly.\n",
+    );
+
+    const violations = collectCliFormViolations(rootDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("skills/fixture/SKILL.md:1:");
+    expect(violations[0]).toContain("issues/capture/description.md");
+  });
+
+  it("allows a bare issues/ directory mention", () => {
+    writeAgent(
+      "fixture.md",
+      "The gitignored `issues/` store holds tracker state.\n",
+    );
+
+    expect(collectCliFormViolations(rootDir)).toEqual([]);
+  });
+
+  it("does not flag on-disk layout paths in root SPEC.md", () => {
+    writeFileSync(
+      join(rootDir, "SPEC.md"),
+      "Attachments live at `issues/<id>/attachments/<basename>` on disk.\n",
+      "utf8",
+    );
+
+    expect(collectCliFormViolations(rootDir)).toEqual([]);
+  });
 });
