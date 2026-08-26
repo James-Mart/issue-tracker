@@ -77,11 +77,12 @@ describe("FlowRow", () => {
     expect(storyRow.textContent).not.toContain("planning");
   });
 
-  it("marks awaiting-direction Ideas as needing attention", () => {
+  it("shows the planning chip and needs-attention icon on awaiting-direction Ideas", () => {
     const container = mountRow(idea("stalled"), {
       blocked: false,
       ideaStatus: "awaiting-direction",
     });
+    expect(container.textContent).toContain("planning");
     expect(container.querySelector('[aria-label="needs attention"]')).toBeTruthy();
   });
 });
