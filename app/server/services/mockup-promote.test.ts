@@ -12,6 +12,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_ATTACHMENT_BYTES } from "./attachments.js";
 import type { CaptureResult } from "./mockup-story-capture.js";
 
+const mockCaptureMockupStoryStates = vi.fn();
+
+vi.mock("./mockup-capture.js", () => ({
+  captureMockupStoryStates: (...args: unknown[]) =>
+    mockCaptureMockupStoryStates(...args),
+}));
+
 const AT = "2026-07-09T14:00:00.000Z";
 
 let root: string;
@@ -81,6 +88,7 @@ beforeEach(() => {
   issuesDir = join(root, "issues");
   mkdirSync(issuesDir, { recursive: true });
   vi.resetModules();
+  vi.clearAllMocks();
   vi.stubEnv("ISSUES_DIR", issuesDir);
   seedIssues();
 });
@@ -91,16 +99,23 @@ afterEach(() => {
 });
 
 describe("attachment names", () => {
-  it("uses slugified story ids in candidate and chosen names", async () => {
+  it("uses slugified story ids and viewport suffixes in candidate and chosen names", async () => {
     const {
       candidateAttachmentName,
       chosenAttachmentName,
       chosenArchiveName,
     } = await loadPromote();
 
-    expect(candidateAttachmentName("direction-a", "direction-a-card--default")).toBe(
-      "mockup-candidate-direction-a-direction-a-card-default-phone.png",
-    );
+    expect(
+      candidateAttachmentName("direction-a", "direction-a-card--default", "phone"),
+    ).toBe("mockup-candidate-direction-a-direction-a-card-default-phone.png");
+    expect(
+      candidateAttachmentName(
+        "direction-a",
+        "direction-a-card--default",
+        "desktop",
+      ),
+    ).toBe("mockup-candidate-direction-a-direction-a-card-default-desktop.png");
     expect(
       chosenAttachmentName("direction-a", "direction-a-card--default", "desktop"),
     ).toBe("mockup-direction-a-direction-a-card-default-desktop.png");
@@ -181,7 +196,7 @@ describe("createDirectionArchive", () => {
 });
 
 describe("attachCapturedDirection", () => {
-  it("attaches phone candidate PNGs under mockup-candidate- names", async () => {
+  it("attaches candidate PNGs under mockup-candidate- names with viewport suffixes", async () => {
     const { attachCapturedDirection } = await loadPromote();
     const { listAttachments } = await loadAttachments();
 
@@ -218,12 +233,20 @@ describe("attachCapturedDirection", () => {
 
     await putAttachment(
       "src",
-      candidateAttachmentName("direction-a", "direction-a-card--default"),
+      candidateAttachmentName(
+        "direction-a",
+        "direction-a-card--default",
+        "phone",
+      ),
       Buffer.from("old-a"),
     );
     await putAttachment(
       "src",
-      candidateAttachmentName("direction-b", "direction-b-list--default"),
+      candidateAttachmentName(
+        "direction-b",
+        "direction-b-list--default",
+        "desktop",
+      ),
       Buffer.from("old-b"),
     );
 
@@ -382,8 +405,52 @@ describe("promoteMockup", () => {
     ]);
   });
 
+  it("candidate mode captures both viewports", async () => {
+    const { promoteMockup } = await loadPromote();
+    const { directionDir, harnessConfigPath } = await loadScratch();
+
+    const storiesDir = directionDir("promote-chat", "direction-a");
+    writeFileSync(join(storiesDir, "Card.stories.tsx"), "export const Default = {};");
+    const harnessPath = harnessConfigPath("promote-chat");
+    mkdirSync(join(harnessPath, ".."), { recursive: true });
+    writeFileSync(harnessPath, JSON.stringify({ ok: true }));
+
+    const phone = join(root, "candidate-phone.png");
+    const desktop = join(root, "candidate-desktop.png");
+    writePng(phone, "phone");
+    writePng(desktop, "desktop");
+
+    mockCaptureMockupStoryStates.mockResolvedValue([
+      capture("direction-a-card--default", "phone", phone),
+      capture("direction-a-card--default", "desktop", desktop),
+    ]);
+
+    const result = await promoteMockup({
+      mode: "candidate",
+      directionId: "direction-a",
+      issueId: "src",
+      conversationId: "promote-chat",
+    });
+
+    expect(mockCaptureMockupStoryStates).toHaveBeenCalledWith({
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      viewports: ["phone", "desktop"],
+    });
+    expect(result.attached.sort()).toEqual([
+      "mockup-candidate-direction-a-direction-a-card-default-desktop.png",
+      "mockup-candidate-direction-a-direction-a-card-default-phone.png",
+    ]);
+  });
+
   it("throws naming the conversation when no stack is running", async () => {
     const { promoteMockup } = await loadPromote();
+
+    mockCaptureMockupStoryStates.mockRejectedValue(
+      new Error(
+        'no mockup stack running for conversation "missing-conversation"',
+      ),
+    );
 
     await expect(
       promoteMockup({

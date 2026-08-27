@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { parseArgs } from "./mockup-capture.js";
 
 describe("parseArgs", () => {
-  it("requires --conversation and defaults viewports to phone", () => {
+  it("requires --conversation and defaults viewports to phone and desktop", () => {
     expect(parseArgs(["--conversation", "my-chat"])).toEqual({
       conversationId: "my-chat",
       directionId: undefined,
-      viewports: ["phone"],
+      viewports: ["phone", "desktop"],
       baseUrl: undefined,
     });
   });

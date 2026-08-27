@@ -22,7 +22,7 @@ Attach mockup captures (and, for chosen, an archive) to an issue, or copy a
 chosen direction's artifacts from one issue to another.
 
 Modes:
-  candidate  Capture phone PNGs and attach as mockup-candidate-...
+  candidate  Capture both viewports and attach as mockup-candidate-...
   chosen     Capture both viewports, attach PNGs plus archive, detach candidates
   copy       Copy chosen PNGs and archive from --from-issue (no stack)
 

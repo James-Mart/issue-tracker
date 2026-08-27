@@ -30,7 +30,7 @@ mockup scratch and print one absolute path per line on stdout.
 Options:
   --conversation <id>   Conversation whose mockup scratch holds the harness
   --direction <id>      Capture only stories titled <id>/...
-  --viewports <list>    phone or phone,desktop (default phone)
+  --viewports <list>    phone or phone,desktop (default phone,desktop)
   --base-url <url>      Storybook base URL (default: live stack for conversation)
 `;
 }
@@ -38,7 +38,7 @@ Options:
 export function parseArgs(argv: string[]): MockupCaptureCliOptions {
   let conversationId: string | undefined;
   let directionId: string | undefined;
-  let viewports: ViewportName[] = ["phone"];
+  let viewports: ViewportName[] = ["phone", "desktop"];
   let baseUrl: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {

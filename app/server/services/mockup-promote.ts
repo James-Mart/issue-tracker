@@ -56,8 +56,9 @@ export function stateSlug(storyId: string): string {
 export function candidateAttachmentName(
   directionId: string,
   storyId: string,
+  viewport: ViewportName,
 ): string {
-  return `${CANDIDATE_PREFIX}${directionId}-${stateSlug(storyId)}-phone.png`;
+  return `${CANDIDATE_PREFIX}${directionId}-${stateSlug(storyId)}-${viewport}.png`;
 }
 
 export function chosenAttachmentName(
@@ -217,7 +218,11 @@ function pendingFromCaptures(
   for (const capture of captures) {
     const name =
       mode === "candidate"
-        ? candidateAttachmentName(directionId, capture.storyId)
+        ? candidateAttachmentName(
+            directionId,
+            capture.storyId,
+            capture.viewport,
+          )
         : chosenAttachmentName(directionId, capture.storyId, capture.viewport);
     files.push({
       name,
@@ -306,8 +311,7 @@ export async function promoteMockup(
     });
   }
 
-  const viewports: ViewportName[] =
-    checked.mode === "chosen" ? ["phone", "desktop"] : ["phone"];
+  const viewports: ViewportName[] = ["phone", "desktop"];
   const captures = await captureMockupStoryStates({
     conversationId: checked.conversationId,
     directionId: checked.directionId,
