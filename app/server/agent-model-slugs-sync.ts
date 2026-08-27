@@ -1,26 +1,21 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { mkdirSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import {
+  markAgentModelSlugCatalogPathLoaded,
+  readAgentModelSlugCatalog,
   shouldSyncAgentModelSlugsFromSdk,
   syncAgentModelSlugCatalog,
+  type AgentModelCatalogEntry,
+  type AgentModelCatalogFile,
 } from "./agent-model-slugs.js";
 import { modelSlugCatalogPath } from "./config.js";
 import type { AgentSdk } from "./services/agent-sdk.js";
 import { agentSdk, CursorAgentError } from "./services/agent-sdk.js";
 
+export type { AgentModelCatalogEntry, AgentModelCatalogFile };
+
 /** Story freshness window for the on-disk SDK model catalog. */
 export const MODEL_SLUG_CATALOG_TTL_MS = 60 * 60 * 1000;
-
-export type AgentModelCatalogEntry = {
-  id: string;
-  displayName: string;
-  [key: string]: unknown;
-};
-
-export type AgentModelCatalogFile = {
-  fetchedAt: string;
-  models: AgentModelCatalogEntry[];
-};
 
 export type RefreshAgentModelSlugCatalogOptions = {
   sdk?: Pick<AgentSdk, "listModels">;
@@ -28,33 +23,6 @@ export type RefreshAgentModelSlugCatalogOptions = {
   now?: () => number;
   ttlMs?: number;
 };
-
-function isCatalogEntry(value: unknown): value is AgentModelCatalogEntry {
-  if (value === null || typeof value !== "object") return false;
-  const entry = value as Record<string, unknown>;
-  return typeof entry.id === "string" && typeof entry.displayName === "string";
-}
-
-function parseCatalog(raw: unknown): AgentModelCatalogFile | null {
-  if (raw === null || typeof raw !== "object") return null;
-  const body = raw as Record<string, unknown>;
-  if (typeof body.fetchedAt !== "string" || !Array.isArray(body.models)) {
-    return null;
-  }
-  if (!body.models.every(isCatalogEntry)) return null;
-  return { fetchedAt: body.fetchedAt, models: body.models };
-}
-
-export function readAgentModelSlugCatalog(
-  catalogPath: string,
-): AgentModelCatalogFile | null {
-  if (!existsSync(catalogPath)) return null;
-  try {
-    return parseCatalog(JSON.parse(readFileSync(catalogPath, "utf8")));
-  } catch {
-    return null;
-  }
-}
 
 function isUsableCatalog(
   catalog: AgentModelCatalogFile | null,
@@ -103,6 +71,7 @@ export async function refreshAgentModelSlugCatalog(
 
   if (isUsableCatalog(disk) && isFreshCatalog(disk, nowMs, ttlMs)) {
     syncAgentModelSlugCatalog(disk.models);
+    markAgentModelSlugCatalogPathLoaded(catalogPath);
     return disk.models;
   }
 
@@ -116,6 +85,7 @@ export async function refreshAgentModelSlugCatalog(
         new Date(nowMs).toISOString(),
       );
       syncAgentModelSlugCatalog(models);
+      markAgentModelSlugCatalogPathLoaded(catalogPath);
       return models;
     }
   } catch (err) {
@@ -125,6 +95,7 @@ export async function refreshAgentModelSlugCatalog(
 
   if (isUsableCatalog(disk)) {
     syncAgentModelSlugCatalog(disk.models);
+    markAgentModelSlugCatalogPathLoaded(catalogPath);
     return disk.models;
   }
 
