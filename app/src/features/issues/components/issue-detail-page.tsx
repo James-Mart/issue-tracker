@@ -36,6 +36,7 @@ import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
 import { IssueCommentsSection } from "./comments/comments-section";
 import { ProjectSettingsOverview } from "./project-settings-overview";
+import { DeletePartialPlanDetailAction } from "./delete-partial-plan-control";
 import { supportsAttachments } from "../lib/attachments";
 
 /** Match Agents: subtract the app top bar (3rem), not raw 100svh. */
@@ -66,6 +67,11 @@ function IssueOverviewPanel({
   upload?: UploadAttachmentMutation;
   catalog: ProjectLabel[];
 }) {
+  const { data: list } = useIssuesQuery();
+  const awaitingDirection =
+    issue.kind === "idea" &&
+    list?.derived?.[issue.id]?.ideaStatus === "awaiting-direction";
+
   if (issue.kind === "project") {
     return <ProjectSettingsOverview issue={issue} upload={upload} />;
   }
@@ -73,6 +79,9 @@ function IssueOverviewPanel({
   return (
     <div className="flex flex-col gap-4">
       <IssueMetaPanel issue={issue} catalog={catalog} />
+      {awaitingDirection ? (
+        <DeletePartialPlanDetailAction issue={issue} />
+      ) : null}
       <OwnFlowSlot issue={issue} />
       <IssueAttachmentsSection issue={issue} upload={upload} />
       <IssueDescriptionField issue={issue} upload={upload} />

@@ -101,4 +101,41 @@ describe("OverviewRow overlay", () => {
     expect(link?.className).toMatch(/\binset-0\b/);
     expect(container.querySelector(".pointer-events-none")).toBeTruthy();
   });
+
+  it("renders inline actions beside the title cluster on sm+ and wraps on narrow", () => {
+    const { container } = mountRow({
+      count: "3/4",
+      actions: <button type="button">Inline action</button>,
+      overlay: undefined,
+      touchMenu: undefined,
+    });
+    const titleCluster = container.querySelector(
+      ".min-w-0.flex-1.truncate",
+    )?.parentElement as HTMLElement;
+    expect(titleCluster).toBeTruthy();
+    expect(titleCluster.textContent).toContain("3/4");
+    expect(titleCluster.textContent).not.toContain("Inline action");
+
+    const actionButton = container.querySelector('button[type="button"]');
+    expect(actionButton?.textContent).toBe("Inline action");
+    const actionWrapper = actionButton?.parentElement as HTMLElement;
+    expect(actionWrapper.className).toMatch(/flex-wrap/);
+    expect(actionWrapper.className).toMatch(/sm:shrink-0/);
+    expect(container.querySelector(".pointer-events-none")).toBeNull();
+  });
+
+  it("keeps inline actions clickable when drillInTo is set", () => {
+    const { container } = mountRow({
+      drillInTo: "/projects/p/issues/e",
+      drillInLabel: "Epic title",
+      actions: <button type="button">Inline action</button>,
+      overlay: undefined,
+      touchMenu: undefined,
+    });
+    const actionWrapper = container
+      .querySelector('button[type="button"]')
+      ?.parentElement as HTMLElement;
+    expect(actionWrapper).toBeTruthy();
+    expect(actionWrapper.className).toMatch(/pointer-events-auto/);
+  });
 });

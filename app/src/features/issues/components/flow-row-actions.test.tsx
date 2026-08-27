@@ -4,17 +4,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import type { PrFacts } from "@server/services/delivery";
 import type { FlowItem } from "../lib/flow";
 import { skillPath } from "@/lib/plugin-paths";
-import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
+import { FlowRowActions } from "./flow-row-actions";
 
 const mutate = vi.fn();
-const deletePartialPlanMutate = vi.fn();
 const modelsState = vi.hoisted(() => ({
   models: [{ id: "composer-2.5", displayName: "Composer 2.5" }],
   isLoading: false,
@@ -34,10 +29,6 @@ vi.mock("../api/mutations", () => ({
     },
     isPending: false,
   }),
-  useDeletePartialPlan: () => ({
-    mutate: deletePartialPlanMutate,
-    isPending: false,
-  }),
   useUpdateIssue: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn(),
@@ -45,9 +36,15 @@ vi.mock("../api/mutations", () => ({
   }),
 }));
 
+const prQueryState = vi.hoisted(() => ({
+  data: undefined as { prs: Record<string, PrFacts> } | undefined,
+  error: null as Error | null,
+}));
+
 vi.mock("../api/queries", () => ({
   useProjectPullRequestsQuery: () => ({
-    data: undefined,
+    data: prQueryState.data,
+    error: prQueryState.error,
   }),
 }));
 
@@ -78,7 +75,7 @@ function idea(id: string, stakeholder?: string): IssueRecord {
   };
 }
 
-function story(id: string): IssueRecord {
+function story(id: string, prUrl?: string): IssueRecord {
   return {
     id,
     kind: "story",
@@ -92,6 +89,7 @@ function story(id: string): IssueRecord {
     needsAttention: false,
     attentionReason: null,
     archived: false,
+    prUrl,
   };
 }
 
@@ -102,7 +100,10 @@ function flowItem(
   return { issue, state };
 }
 
-function mountActions(item: FlowItem): {
+function mountActions(
+  item: FlowItem,
+  projectId = "project-a",
+): {
   container: HTMLDivElement;
   root: Root;
 } {
@@ -111,53 +112,38 @@ function mountActions(item: FlowItem): {
   const root = createRoot(container);
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={["/projects/project-a"]}>
-        <FlowRowActions item={item} task={undefined} />
+      <MemoryRouter initialEntries={["/"]}>
+        <FlowRowActions item={item} projectId={projectId} />
       </MemoryRouter>,
     );
   });
   return { container, root };
 }
 
-function mountTouchMenu(item: FlowItem): {
-  container: HTMLDivElement;
-  root: Root;
-} {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(
-      <MemoryRouter initialEntries={["/projects/project-a"]}>
-        <DropdownMenu open>
-          <DropdownMenuTrigger asChild>
-            <button type="button">Menu</button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <FlowRowTouchMenu item={item} task={undefined} />
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </MemoryRouter>,
-    );
-  });
-  return { container, root };
+function buttonCount(container: HTMLElement): number {
+  return container.querySelectorAll("button").length;
 }
 
 afterEach(() => {
   document.body.innerHTML = "";
   mutate.mockReset();
-  deletePartialPlanMutate.mockReset();
   modelsState.isLoading = false;
+  prQueryState.data = undefined;
+  prQueryState.error = null;
 });
 
 describe("FlowRowActions start planning", () => {
-  it("shows start planning only on captured Idea rows", () => {
+  it("shows begin planning only on captured Idea rows", () => {
     const captured = mountActions(
       flowItem(idea("capture-me"), { blocked: false, ideaStatus: "captured" }),
     );
-    expect(
-      captured.container.querySelector('[data-testid="flow-row-start-planning"]'),
-    ).toBeTruthy();
+    const startButton = captured.container.querySelector(
+      '[data-testid="flow-row-start-planning"]',
+    );
+    expect(startButton).toBeTruthy();
+    expect(startButton?.getAttribute("aria-label")).toBe("Begin planning");
+    expect(startButton?.getAttribute("title")).toBe("Begin planning");
+    expect(startButton?.closest("button")?.hasAttribute("disabled")).toBe(false);
 
     const planning = mountActions(
       flowItem(idea("planning"), { blocked: false, ideaStatus: "planning" }),
@@ -199,102 +185,85 @@ describe("FlowRowActions start planning", () => {
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
   });
-});
 
-describe("FlowRowActions delete partial plan", () => {
-  it("shows delete partial plan only on awaiting-direction Idea rows", () => {
-    const awaiting = mountActions(
-      flowItem(idea("stalled"), {
-        blocked: false,
-        ideaStatus: "awaiting-direction",
-      }),
-    );
-    expect(
-      awaiting.container.querySelector(
-        '[data-testid="flow-row-delete-partial-plan"]',
-      ),
-    ).toBeTruthy();
-
-    const captured = mountActions(
-      flowItem(idea("fresh"), { blocked: false, ideaStatus: "captured" }),
-    );
-    expect(
-      captured.container.querySelector(
-        '[data-testid="flow-row-delete-partial-plan"]',
-      ),
-    ).toBeNull();
-
-    const planning = mountActions(
-      flowItem(idea("in-flight"), { blocked: false, ideaStatus: "planning" }),
-    );
-    expect(
-      planning.container.querySelector(
-        '[data-testid="flow-row-delete-partial-plan"]',
-      ),
-    ).toBeNull();
-  });
-
-  it("confirms before deleting the partial plan", () => {
+  it("renders nothing while planner models are loading", () => {
+    modelsState.isLoading = true;
     const { container } = mountActions(
-      flowItem(idea("stalled"), {
-        blocked: false,
-        ideaStatus: "awaiting-direction",
-      }),
+      flowItem(idea("capture-me"), { blocked: false, ideaStatus: "captured" }),
     );
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="flow-row-delete-partial-plan"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(
-      document.body.querySelector('[data-testid="delete-partial-plan-dialog"]'),
-    ).toBeTruthy();
-
-    deletePartialPlanMutate.mockImplementation((_input, options) => {
-      options?.onSuccess?.();
-    });
-
-    act(() => {
-      const deleteButton = document.body.querySelector(
-        '[data-testid="delete-partial-plan-dialog"] button:last-of-type',
-      ) as HTMLButtonElement;
-      deleteButton.click();
-    });
-
-    expect(deletePartialPlanMutate).toHaveBeenCalledWith(
-      undefined,
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
+    expect(buttonCount(container)).toBe(0);
   });
 });
 
-describe("FlowRowTouchMenu delete partial plan", () => {
-  it("shows delete partial plan only on awaiting-direction Idea rows", () => {
-    mountTouchMenu(
-      flowItem(idea("stalled"), {
+describe("FlowRowActions open PR", () => {
+  it("shows labeled Open PR only when the Story has a prUrl", () => {
+    const withPr = mountActions(
+      flowItem(story("ship", "https://github.com/org/repo/pull/1"), {
         blocked: false,
-        ideaStatus: "awaiting-direction",
+        storyStatus: "in-progress",
       }),
     );
-    expect(
-      document.body.querySelector(
-        '[data-testid="flow-row-delete-partial-plan-menu"]',
-      ),
-    ).toBeTruthy();
+    const link = withPr.container.querySelector('a[href="https://github.com/org/repo/pull/1"]');
+    expect(link).toBeTruthy();
+    expect(link?.textContent).toContain("Open PR");
 
-    document.body.innerHTML = "";
-
-    mountTouchMenu(
-      flowItem(idea("fresh"), { blocked: false, ideaStatus: "captured" }),
+    const withoutPr = mountActions(
+      flowItem(story("no-pr"), { blocked: false, storyStatus: "in-progress" }),
     );
-    expect(
-      document.body.querySelector(
-        '[data-testid="flow-row-delete-partial-plan-menu"]',
-      ),
-    ).toBeNull();
+    expect(withoutPr.container.querySelector('a[href^="http"]')).toBeNull();
+  });
+
+  it("shows the PR chip when projectId is supplied and PR facts are loaded", () => {
+    prQueryState.data = {
+      prs: {
+        ship: {
+          number: 1,
+          url: "https://github.com/org/repo/pull/1",
+          state: "open",
+          isDraft: false,
+          mergeable: "mergeable",
+          mergeStateStatus: "CLEAN",
+          reviewDecision: "approved",
+          checks: { state: "success", failing: 0, pending: 0, total: 1 },
+          commentCount: 0,
+          comments: [],
+          headRefOid: "abc",
+          baseRefName: "main",
+          updatedAt: "2026-08-01T00:00:00Z",
+        },
+      },
+    };
+
+    const { container } = mountActions(
+      flowItem(story("ship", "https://github.com/org/repo/pull/1"), {
+        blocked: false,
+        storyStatus: "in-progress",
+      }),
+    );
+
+    const chip = container.querySelector('[data-testid="pr-chip"]');
+    expect(chip).toBeTruthy();
+    expect(chip?.textContent).toContain("Ready");
+    expect(chip?.textContent).toContain("Success");
+    expect(chip?.textContent).toContain("Approved");
+  });
+});
+
+describe("FlowRowActions quiet buckets", () => {
+  it("renders no controls for needs-attention, ready, or recently merged rows", () => {
+    for (const item of [
+      flowItem(story("attention"), {
+        blocked: false,
+        storyStatus: "in-progress",
+      }),
+      flowItem(story("ready"), { blocked: false, storyStatus: "ready" }),
+      flowItem({ ...story("merged"), merged: true }, {
+        blocked: false,
+        storyStatus: "merged",
+      }),
+    ]) {
+      const { container } = mountActions(item);
+      expect(buttonCount(container)).toBe(0);
+    }
   });
 });

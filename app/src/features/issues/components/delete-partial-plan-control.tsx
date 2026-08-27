@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useDeletePartialPlan } from "../api/mutations";
 
 type IdeaDetail = Extract<IssueDetail, { kind: "idea" }>;
@@ -61,56 +60,26 @@ function DeletePartialPlanDialog({
   );
 }
 
-function DeletePartialPlanControl({
-  issue,
-  variant,
-}: {
-  issue: IdeaDetail;
-  variant: "icon" | "menuItem";
-}) {
+/** Labeled destructive delete-partial-plan action for the Idea detail overview. */
+export function DeletePartialPlanDetailAction({ issue }: { issue: IdeaDetail }) {
   const deletePartialPlan = useDeletePartialPlan(issue.id);
   const [open, setOpen] = useState(false);
   const label = "Delete partial plan";
 
-  if (variant === "icon") {
-    return (
-      <>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          title={label}
-          aria-label={label}
-          data-testid="flow-row-delete-partial-plan"
-          className="text-muted-foreground hover:text-destructive"
-          disabled={deletePartialPlan.isPending}
-          onClick={() => setOpen(true)}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-        <DeletePartialPlanDialog
-          issue={issue}
-          open={open}
-          onOpenChange={setOpen}
-          deletePartialPlan={deletePartialPlan}
-        />
-      </>
-    );
-  }
-
   return (
     <>
-      <DropdownMenuItem
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="w-fit text-destructive"
+        data-testid="idea-detail-delete-partial-plan"
         disabled={deletePartialPlan.isPending}
-        data-testid="flow-row-delete-partial-plan-menu"
-        onSelect={(event) => {
-          event.preventDefault();
-          setOpen(true);
-        }}
+        onClick={() => setOpen(true)}
       >
-        <Trash2 className="h-4 w-4" />
+        <Trash2 className="h-3.5 w-3.5" />
         {deletePartialPlan.isPending ? "Deleting…" : label}
-      </DropdownMenuItem>
+      </Button>
       <DeletePartialPlanDialog
         issue={issue}
         open={open}
@@ -119,14 +88,4 @@ function DeletePartialPlanControl({
       />
     </>
   );
-}
-
-/** Icon-only delete-partial-plan action for Flow row steering. */
-export function DeletePartialPlanFlowRowAction({ issue }: { issue: IdeaDetail }) {
-  return <DeletePartialPlanControl issue={issue} variant="icon" />;
-}
-
-/** Touch overflow menu item for the same delete-partial-plan path. */
-export function DeletePartialPlanFlowRowTouchMenu({ issue }: { issue: IdeaDetail }) {
-  return <DeletePartialPlanControl issue={issue} variant="menuItem" />;
 }

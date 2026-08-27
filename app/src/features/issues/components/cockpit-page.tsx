@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
 import { useIssuesQuery } from "../api/queries";
 import { issuesById, listProjects, projectIdOf } from "../lib/build-tree";
-import { flowBuckets, inFlightTaskOf, type FlowItem } from "../lib/flow";
+import { flowBuckets, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import {
@@ -17,7 +17,7 @@ import {
   FlowPreviewedItems,
 } from "./flow-buckets-sections";
 import { FlowRow } from "./flow-row";
-import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
+import { FlowRowActions } from "./flow-row-actions";
 
 function CockpitHeader() {
   return (
@@ -127,16 +127,7 @@ export function CockpitPage() {
                     issues={issues}
                     to={issuePath(group.projectId, item.issue.id)}
                     actions={
-                      <FlowRowActions
-                        item={item}
-                        task={inFlightTaskOf(item.issue, issues, byId)}
-                      />
-                    }
-                    touchMenu={
-                      <FlowRowTouchMenu
-                        item={item}
-                        task={inFlightTaskOf(item.issue, issues, byId)}
-                      />
+                      <FlowRowActions item={item} projectId={group.projectId} />
                     }
                   />
                 )}

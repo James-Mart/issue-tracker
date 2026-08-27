@@ -77,12 +77,36 @@ describe("FlowRow", () => {
     expect(storyRow.textContent).not.toContain("planning");
   });
 
-  it("shows the planning chip and needs-attention icon on awaiting-direction Ideas", () => {
+  it("shows the planning chip without the at-rest attention warning icon on awaiting-direction Ideas", () => {
     const container = mountRow(idea("stalled"), {
       blocked: false,
       ideaStatus: "awaiting-direction",
     });
     expect(container.textContent).toContain("planning");
-    expect(container.querySelector('[aria-label="needs attention"]')).toBeTruthy();
+    expect(
+      container.querySelector('[aria-label="needs attention"].h-3\\.5'),
+    ).toBeNull();
+  });
+
+  it("passes actions through the inline slot instead of the hover overlay", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <FlowRow
+            item={{
+              issue: idea("with-action"),
+              state: { blocked: false, ideaStatus: "captured" },
+            }}
+            issues={[idea("with-action")]}
+            actions={<button type="button">Start planning</button>}
+          />
+        </MemoryRouter>,
+      );
+    });
+    expect(container.textContent).toContain("Start planning");
+    expect(container.querySelector(".pointer-events-none")).toBeNull();
   });
 });

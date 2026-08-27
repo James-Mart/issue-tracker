@@ -19,6 +19,8 @@ export interface OverviewRowProps extends React.HTMLAttributes<HTMLDivElement> {
   chips?: React.ReactNode;
   /** Tabular quantity (e.g. `3/4`). */
   count?: React.ReactNode;
+  /** Inline action controls — sit after count in the row flex line. */
+  actions?: React.ReactNode;
   /** At-rest attention signal — warn-hued warning icon only (no chip). */
   attention?: boolean;
   /** At-rest blocked signal — blocked-hued exclamation icon only (no chip). */
@@ -52,6 +54,7 @@ export function OverviewRow({
   stateIcon,
   chips,
   count,
+  actions,
   attention = false,
   blocked = false,
   overlay,
@@ -87,37 +90,52 @@ export function OverviewRow({
 
       <div
         className={cn(
-          "relative z-[1] flex min-w-0 flex-1 items-center gap-3.5",
+          "relative z-[1] flex min-w-0 flex-1 gap-3.5",
+          actions != null
+            ? "flex-col sm:flex-row sm:items-center"
+            : "flex-row items-center",
           drillInTo != null && "pointer-events-none",
         )}
       >
-        {avatar != null ? (
-          <span className="inline-flex shrink-0">{avatar}</span>
-        ) : null}
-        <div className="min-w-0 flex-1 truncate font-medium text-foreground">
-          {children}
+        <div className="flex min-w-0 flex-1 items-center gap-3.5">
+          {avatar != null ? (
+            <span className="inline-flex shrink-0">{avatar}</span>
+          ) : null}
+          <div className="min-w-0 flex-1 truncate font-medium text-foreground">
+            {children}
+          </div>
+          {chips != null ? (
+            <span className="inline-flex shrink-0">{chips}</span>
+          ) : null}
+          {stateIcon != null ? (
+            <span className="inline-flex shrink-0">{stateIcon}</span>
+          ) : null}
+          {attention ? (
+            <AlertTriangle
+              aria-label="needs attention"
+              className="h-3.5 w-3.5 shrink-0 [color:hsl(var(--warning))]"
+            />
+          ) : null}
+          {blocked ? (
+            <AlertCircle
+              aria-label="blocked"
+              className="h-3.5 w-3.5 shrink-0 [color:hsl(var(--blocked))]"
+            />
+          ) : null}
+          {count != null ? (
+            <span className="w-9 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+              {count}
+            </span>
+          ) : null}
         </div>
-        {chips != null ? (
-          <span className="inline-flex shrink-0">{chips}</span>
-        ) : null}
-        {stateIcon != null ? (
-          <span className="inline-flex shrink-0">{stateIcon}</span>
-        ) : null}
-        {attention ? (
-          <AlertTriangle
-            aria-label="needs attention"
-            className="h-3.5 w-3.5 shrink-0 [color:hsl(var(--warning))]"
-          />
-        ) : null}
-        {blocked ? (
-          <AlertCircle
-            aria-label="blocked"
-            className="h-3.5 w-3.5 shrink-0 [color:hsl(var(--blocked))]"
-          />
-        ) : null}
-        {count != null ? (
-          <span className="w-9 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
-            {count}
+        {actions != null ? (
+          <span
+            className={cn(
+              "inline-flex flex-wrap items-center justify-end gap-2 sm:shrink-0",
+              drillInTo != null && "pointer-events-auto",
+            )}
+          >
+            {actions}
           </span>
         ) : null}
       </div>
