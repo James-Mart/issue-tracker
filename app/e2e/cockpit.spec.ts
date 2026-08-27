@@ -1,6 +1,5 @@
-import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { gotoCockpitReady } from "./seed-navigation";
+import { gotoCockpitReady, gotoOverviewStructure } from "./seed-navigation";
 import { snapshotBothThemes } from "./snapshot-both-themes";
 
 test.describe("cockpit", () => {
@@ -18,22 +17,13 @@ test.describe("cockpit", () => {
     await expect(
       main.locator('section[aria-labelledby="cockpit-recentlyMerged"]'),
     ).toHaveCount(0);
+    await expect(
+      main.locator('section[aria-labelledby="cockpit-blocked"]'),
+    ).toHaveCount(0);
 
     const ready = main.locator('section[aria-labelledby="cockpit-ready"]');
     await expect(ready.getByRole("heading", { name: "Ready1" })).toBeVisible();
     await expect(ready.getByRole("link", { name: /^Epic A\b/ })).toBeVisible();
-
-    const blocked = main.locator('section[aria-labelledby="cockpit-blocked"]');
-    await expect(
-      blocked.getByRole("heading", { name: "Blocked3" }),
-    ).toBeVisible();
-    await expect(blocked.locator("details")).toHaveJSProperty("open", false);
-    await expect(blocked.getByRole("link", { name: /^Epic B\b/ })).toHaveCount(
-      0,
-    );
-
-    await blocked.locator("summary").click();
-    await expect(blocked.getByRole("link", { name: /^Epic B\b/ })).toBeVisible();
   });
 
   test("drills into project overview then issue detail", async ({
@@ -42,9 +32,8 @@ test.describe("cockpit", () => {
   }) => {
     const main = await gotoCockpitReady(page, seededApp.baseURL);
 
-    // Project subheader link → project overview.
-    const blocked = main.locator('section[aria-labelledby="cockpit-blocked"]');
-    await blocked.getByRole("link", { name: "Seed Project" }).click();
+    const ready = main.locator('section[aria-labelledby="cockpit-ready"]');
+    await ready.getByRole("link", { name: "Seed Project" }).click();
     await expect(page).toHaveURL(/\/projects\/seed-proj\/?$/);
     await expect(
       page.getByRole("main").getByRole("link", { name: /^Epic B\b/ }),
@@ -63,6 +52,12 @@ test.describe("cockpit", () => {
     await expect(
       page.getByRole("main").getByText("Story in flight").first(),
     ).toBeVisible();
+  });
+
+  test("blocked work stays visible in Structure", async ({ page, seededApp }) => {
+    const structure = await gotoOverviewStructure(page, seededApp.baseURL);
+    await expect(structure.getByRole("link", { name: /^Epic B\b/ })).toBeVisible();
+    await expect(structure.getByRole("link", { name: /^Epic D\b/ })).toBeVisible();
   });
 
   test("both-theme snapshot", async ({ page, seededApp }) => {

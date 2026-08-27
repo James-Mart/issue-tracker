@@ -1,23 +1,73 @@
-import { ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
+import { parentOf } from "../lib/build-tree";
 import {
   flowItemNeedsAttention,
   type FlowBuckets,
   type FlowItem,
 } from "../lib/flow";
+import { projectLensPath } from "../lib/links";
 
 type FlowBucketKey = keyof FlowBuckets | "needsAttention";
 
 export const AWAITING_PLANNING_PREVIEW_LIMIT = 5;
+
+export const READY_EMPTY_COPY =
+  "Nothing ready. Unblock a dependency, or add work in Structure.";
+
+function blockedProjectIds(blocked: FlowItem[]): string[] {
+  const ids = new Set<string>();
+  for (const item of blocked) {
+    const projectId = parentOf(item.issue);
+    if (projectId) ids.add(projectId);
+  }
+  return [...ids];
+}
+
+/** Empty Ready copy: existing line, or a blocked-work hint when that bucket has rows. */
+export function readyEmptyCopy(blocked: FlowItem[]): {
+  text: string;
+  href: string | null;
+} {
+  const projectIds = blockedProjectIds(blocked);
+  if (projectIds.length === 1) {
+    return {
+      text: "Nothing ready. Blocked work is waiting in Structure.",
+      href: projectLensPath(projectIds[0]!, "structure"),
+    };
+  }
+  if (projectIds.length > 1) {
+    return {
+      text: "Nothing ready. Blocked work is waiting.",
+      href: null,
+    };
+  }
+  return { text: READY_EMPTY_COPY, href: null };
+}
+
+function ReadyEmptyState({ blocked }: { blocked: FlowItem[] }) {
+  const { text, href } = readyEmptyCopy(blocked);
+  if (!href) {
+    return <p className="mt-3 text-sm text-muted-foreground">{text}</p>;
+  }
+  return (
+    <p className="mt-3 text-sm text-muted-foreground">
+      Nothing ready. Blocked work is waiting in{" "}
+      <Link to={href} className="text-[hsl(var(--current))] hover:underline">
+        Structure
+      </Link>
+      .
+    </p>
+  );
+}
 
 export type FlowBucketDef = {
   key: FlowBucketKey;
   label: string;
   empty?: string;
   hideWhenEmpty?: boolean;
-  collapsedByDefault?: boolean;
   compact?: boolean;
   previewLimit?: number;
 };
@@ -28,6 +78,13 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     key: "needsAttention",
     label: "Needs attention",
     hideWhenEmpty: true,
+  },
+  {
+    key: "ready",
+    label: "Ready",
+    empty: READY_EMPTY_COPY,
+    hideWhenEmpty: true,
+    compact: true,
   },
   {
     key: "awaitingPlanning",
@@ -42,25 +99,11 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     hideWhenEmpty: true,
   },
   {
-    key: "ready",
-    label: "Ready",
-    empty: "Nothing ready. Unblock a dependency, or add work in Structure.",
-    hideWhenEmpty: true,
-    compact: true,
-  },
-  {
-    key: "blocked",
-    label: "Blocked",
-    empty: "Nothing blocked. Dependencies are clear.",
-    hideWhenEmpty: true,
-    collapsedByDefault: true,
-  },
-  {
     key: "recentlyMerged",
     label: "Recently merged",
     empty: "Nothing merged recently. Finish a Story to land it here.",
     hideWhenEmpty: true,
-    collapsedByDefault: true,
+    previewLimit: AWAITING_PLANNING_PREVIEW_LIMIT,
   },
 ];
 
@@ -206,12 +249,14 @@ export function FlowPreviewedItems({
 function FlowBucketSection({
   def,
   items,
+  blocked,
   idPrefix,
   renderRow,
   renderItems,
 }: {
   def: FlowBucketDef;
   items: FlowItem[];
+  blocked: FlowItem[];
   idPrefix: string;
   renderRow?: (item: FlowItem) => ReactNode;
   renderItems?: (
@@ -223,13 +268,15 @@ function FlowBucketSection({
   const headingId = `${idPrefix}-${def.key}`;
   const count = items.length;
   const hideWhenEmpty = def.hideWhenEmpty;
-  const collapsed = def.collapsedByDefault && count > 0;
   const compact = def.compact;
+  const readyBlockedHint = def.key === "ready" && count === 0 && blocked.length > 0;
 
-  if (hideWhenEmpty && count === 0) return null;
+  if (hideWhenEmpty && count === 0 && !readyBlockedHint) return null;
 
   const body =
-    count === 0 && def.empty ? (
+    count === 0 && def.key === "ready" ? (
+      <ReadyEmptyState blocked={blocked} />
+    ) : count === 0 && def.empty ? (
       <p className="mt-3 text-sm text-muted-foreground">{def.empty}</p>
     ) : (
       <BucketList
@@ -240,25 +287,6 @@ function FlowBucketSection({
         previewLimit={def.previewLimit}
       />
     );
-
-  if (collapsed) {
-    return (
-      <section key={def.key} aria-labelledby={headingId}>
-        <details className="group">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
-            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
-            <BucketHeading
-              id={headingId}
-              label={def.label}
-              count={count}
-              compact={compact}
-            />
-          </summary>
-          {body}
-        </details>
-      </section>
-    );
-  }
 
   return (
     <section key={def.key} aria-labelledby={headingId}>
@@ -303,6 +331,7 @@ export function FlowBucketsSections({
           key={def.key}
           def={def}
           items={bucketItems(def.key, displayBuckets, needsAttention)}
+          blocked={buckets.blocked}
           idPrefix={idPrefix}
           renderRow={renderRow}
           renderItems={renderItems}
