@@ -1,5 +1,6 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -9,8 +10,10 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  assertAllowedAgentModelSlug,
   configureAgentModelSlugs,
   isAllowedAgentModelSlug,
+  loadAgentModelSlugCatalogFromDisk,
   resetAgentModelSlugsForTests,
   shouldSyncAgentModelSlugsFromSdk,
   SKIP_AGENT_MODEL_SLUG_SYNC_ENV,
@@ -21,21 +24,31 @@ import {
   refreshAgentModelSlugCatalog,
   writeAgentModelSlugCatalog,
 } from "./agent-model-slugs-sync.js";
+import { modelSlugCatalogPath, refreshStorePathsFromEnv } from "./config.js";
 
-let catalogRoot: string | undefined;
+let catalogRoots: string[] = [];
+let savedIssuesDir: string | undefined;
 
 afterEach(() => {
   delete process.env[SKIP_AGENT_MODEL_SLUG_SYNC_ENV];
-  resetAgentModelSlugsForTests();
-  if (catalogRoot) {
-    rmSync(catalogRoot, { recursive: true, force: true });
-    catalogRoot = undefined;
+  if (savedIssuesDir === undefined) {
+    delete process.env.ISSUES_DIR;
+  } else {
+    process.env.ISSUES_DIR = savedIssuesDir;
   }
+  savedIssuesDir = undefined;
+  refreshStorePathsFromEnv();
+  resetAgentModelSlugsForTests();
+  for (const root of catalogRoots) {
+    rmSync(root, { recursive: true, force: true });
+  }
+  catalogRoots = [];
 });
 
 function tempCatalogPath(): string {
-  catalogRoot = mkdtempSync(join(tmpdir(), "model-slug-catalog-"));
-  return join(catalogRoot, "model-slug-catalog.json");
+  const root = mkdtempSync(join(tmpdir(), "model-slug-catalog-"));
+  catalogRoots.push(root);
+  return join(root, "model-slug-catalog.json");
 }
 
 describe("syncAgentModelSlugCatalog", () => {
@@ -47,6 +60,69 @@ describe("syncAgentModelSlugCatalog", () => {
     expect(isAllowedAgentModelSlug("grok-4.5")).toBe(true);
     expect(isAllowedAgentModelSlug("default")).toBe(true);
     expect(isAllowedAgentModelSlug("composer-2.5")).toBe(false);
+  });
+});
+
+describe("loadAgentModelSlugCatalogFromDisk", () => {
+  it("loads a usable on-disk catalog without refreshAgentModelSlugCatalog", () => {
+    savedIssuesDir = process.env.ISSUES_DIR;
+    const store = mkdtempSync(join(tmpdir(), "model-slug-catalog-"));
+    catalogRoots.push(store);
+    const issuesDir = join(store, "issues");
+    mkdirSync(issuesDir, { recursive: true });
+    process.env.ISSUES_DIR = issuesDir;
+    refreshStorePathsFromEnv();
+    writeAgentModelSlugCatalog(modelSlugCatalogPath, [
+      { id: "disk-only", displayName: "Disk Only" },
+    ]);
+    expect(() => assertAllowedAgentModelSlug("disk-only")).not.toThrow();
+    expect(() => assertAllowedAgentModelSlug("not-in-catalog")).toThrow(
+      /unknown agent model slug/,
+    );
+  });
+
+  it("leaves FAKE_MODELS when the catalog file is missing", () => {
+    const catalogPath = tempCatalogPath();
+    loadAgentModelSlugCatalogFromDisk({ catalogPath });
+    expect(isAllowedAgentModelSlug("composer-2.5")).toBe(true);
+    expect(isAllowedAgentModelSlug("auto")).toBe(true);
+    expect(isAllowedAgentModelSlug("disk-only")).toBe(false);
+  });
+
+  it("leaves FAKE_MODELS when the catalog file is empty", () => {
+    const catalogPath = tempCatalogPath();
+    writeAgentModelSlugCatalog(catalogPath, []);
+    loadAgentModelSlugCatalogFromDisk({ catalogPath });
+    expect(isAllowedAgentModelSlug("composer-2.5")).toBe(true);
+    expect(isAllowedAgentModelSlug("auto")).toBe(true);
+  });
+
+  it("reloads from the new store after refreshStorePathsFromEnv", () => {
+    savedIssuesDir = process.env.ISSUES_DIR;
+    const storeOne = mkdtempSync(join(tmpdir(), "issues-store-one-"));
+    const storeTwo = mkdtempSync(join(tmpdir(), "issues-store-two-"));
+    catalogRoots.push(storeOne, storeTwo);
+
+    const issuesDirOne = join(storeOne, "issues");
+    mkdirSync(issuesDirOne, { recursive: true });
+    process.env.ISSUES_DIR = issuesDirOne;
+    refreshStorePathsFromEnv();
+    writeAgentModelSlugCatalog(modelSlugCatalogPath, [
+      { id: "store-one-slug", displayName: "Store One" },
+    ]);
+    expect(() => assertAllowedAgentModelSlug("store-one-slug")).not.toThrow();
+
+    const issuesDirTwo = join(storeTwo, "issues");
+    mkdirSync(issuesDirTwo, { recursive: true });
+    process.env.ISSUES_DIR = issuesDirTwo;
+    refreshStorePathsFromEnv();
+    writeAgentModelSlugCatalog(modelSlugCatalogPath, [
+      { id: "store-two-slug", displayName: "Store Two" },
+    ]);
+    expect(() => assertAllowedAgentModelSlug("store-two-slug")).not.toThrow();
+    expect(() => assertAllowedAgentModelSlug("store-one-slug")).toThrow(
+      /unknown agent model slug/,
+    );
   });
 });
 
