@@ -55,36 +55,39 @@ named no surface, ask for it before step 1.
    and 5.
 2. **Start the harness.**
    `npm run mockup-stack -- start <conversationId>`. It prints the Storybook
-   base URL — hand that URL to the stakeholder, who can open the live
-   directions in a browser. The stack refuses to start until the author has
-   written the harness configuration, so this step never runs before step 1.
-3. **Capture and post.** For each direction id, in the order the author
-   returned them:
-   - `npm run mockup-promote -- --conversation <conversationId> --direction <directionId> --issue <issueId> --mode candidate`
-     — it prints that direction's stored attachment basenames, then one
-     absolute capture path per line.
-   - Post one message naming that direction and embedding each basename that
-     run printed as `![<name>](/api/issues/<issueId>/attachments/<name>)`. Use
-     the printed basenames: a repeat round stores a fresh basename rather than
-     overwriting the earlier one.
+   base URL. The stack refuses to start until the author has written the
+   harness configuration, so this step never runs before step 1.
+3. **Capture and review.** For each direction id, in the order the author
+   returned them, run
+   `npm run mockup-promote -- --conversation <conversationId> --direction <directionId> --issue <issueId> --mode candidate`.
+   Candidate mode captures every state at both widths. It prints stored
+   attachment basenames, then one absolute capture path per line, then one
+   embed line per PNG of the form
+   `![<name>](/api/issues/<issueId>/attachments/<name>)`.
+   A repeat round stores a fresh basename rather than overwriting the earlier
+   one.
 
-   Then end your turn with a reply listing every absolute capture path from
-   every direction in this round. The embedded images are what a human
-   stakeholder reviews and the paths are what an agent stakeholder opens;
-   produce both, every round.
+   Close the turn with one message that carries both halves. Grouped by
+   direction: the direction's name and a one-line description, the embed
+   lines that promote printed for every state at both widths, and the live
+   Storybook URL (the base URL step 2 printed). After those groups, every
+   absolute capture path from every direction in this round. The embed lines
+   are the human half and the paths are the agent half; both ship in that
+   single message, and neither substitutes for the other.
 4. **Feedback.** Re-enter the same author agent with the feedback stub and its
    `resumeId` — when it is lost, look it up with `delegations`, taking the most
    recent entry whose role is `issue-tracker-mockup-author`. Then repeat step 3.
    The harness stays up across feedback rounds.
 5. **Selection.** With the stakeholder's `<chosenDirectionId>`, run in order:
    - `npm run mockup-promote -- --conversation <conversationId> --direction <chosenDirectionId> --issue <issueId> --mode chosen`
-     — attaches that direction's phone and desktop PNGs plus its archive, and
-     detaches every candidate attachment from the issue.
+     — captures every state at both widths, attaches those PNGs plus the
+     archive, and detaches every candidate attachment from the issue. It
+     prints the same three blocks as candidate mode.
    - `npm run mockup-prune -- --conversation <conversationId> --keep <chosenDirectionId>`
    - `npm run mockup-stack -- stop <conversationId>`
 
-   Report the chosen direction's attached basenames and absolute capture paths,
-   and stop. The round is over.
+   Close with one message that carries that run's printed embed lines and
+   every absolute capture path, and stop. The round is over.
 
 ## Spawn stubs
 
