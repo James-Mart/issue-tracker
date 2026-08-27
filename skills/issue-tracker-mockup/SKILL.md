@@ -102,8 +102,8 @@ Pass each stub's delegate arguments (`role`, `issueId`, `prompt`; plus
 **Author** — `role: issue-tracker-mockup-author`, `issueId: <issueId>`
 (when to delegate: Round step 1)
 
-> Surface: `<surface>`. Target workspace: `<workspace>`. Conversation id:
-> `<conversationId>`. Direction count: `<count>`.
+> Issue: `<issueId>`. Surface: `<surface>`. Target workspace: `<workspace>`.
+> Conversation id: `<conversationId>`. Direction count: `<count>`.
 
 **Author (feedback)** — `role: issue-tracker-mockup-author`,
 `issueId: <issueId>` (when to resume: Round step 4)

@@ -44,11 +44,25 @@ those pieces wireframe-grade.
 
 ## Inputs (from invoking prompt)
 
+- **Issue id** — the spawn `Issue:` value; pass it to `issue summary` in
+  **## Bootstrap**
 - **Surface** — the UI to mock up
 - **Target workspace** — absolute path of the project whose components
   the stories import
 - **Conversation id** — tracker conversation slug for the scratch paths
 - **Direction count** — how many directions to produce
+
+## Bootstrap
+
+Complete before **## Procedure**.
+
+1. **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
+2. Run `issue summary <issueId>` (`<issueId>` is **Issue id** from Inputs).
+3. **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
+   and consult key `designSystem` per that file using the step-2 summary
+   output.
 
 ## Procedure
 
