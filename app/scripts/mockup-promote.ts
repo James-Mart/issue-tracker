@@ -10,6 +10,7 @@ import {
   type PromoteMode,
   type PromoteOptions,
 } from "../server/services/mockup-promote.js";
+import { attachmentsApiPath } from "../src/features/issues/lib/attachments.js";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -92,6 +93,10 @@ export function parseArgs(argv: string[]): MockupPromoteCliOptions {
   return { mode, directionId, issueId, conversationId, fromIssueId };
 }
 
+export function attachmentEmbedMarkdown(issueId: string, name: string): string {
+  return `![${name}](${attachmentsApiPath(issueId, name)})`;
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const result = await promoteMockup(options);
@@ -100,6 +105,10 @@ async function main(): Promise<void> {
   }
   for (const path of result.capturePaths) {
     process.stdout.write(`${path}\n`);
+  }
+  for (const name of result.attached) {
+    if (!name.endsWith(".png")) continue;
+    process.stdout.write(`${attachmentEmbedMarkdown(options.issueId, name)}\n`);
   }
 }
 

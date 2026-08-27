@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs } from "./mockup-promote.js";
+import { attachmentEmbedMarkdown, parseArgs } from "./mockup-promote.js";
+
+describe("attachmentEmbedMarkdown", () => {
+  it("matches the transcript attachment image markdown form", () => {
+    const issueId = "demo-issue";
+    const name = "empty.png";
+    expect(attachmentEmbedMarkdown(issueId, name)).toBe(
+      `![${name}](/api/issues/${issueId}/attachments/${name})`,
+    );
+  });
+});
 
 describe("parseArgs", () => {
   it("parses capturing flags", () => {
