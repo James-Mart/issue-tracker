@@ -30,6 +30,18 @@ see before anyone implements them.
   with nothing running behind them. Never use a server path such as
   `/api/issues/<id>/attachments/<name>`; those 404 inside the harness.
 
+## Fidelity bar
+
+A direction is done when every decision a stakeholder would otherwise be
+asked is visible in the captures: surface content and hierarchy, the full
+set of states, affordance placement, and interaction behavior. Pixel polish
+is not the goal — stop once those decisions read clearly.
+
+Prefer the target project's real components over fabricating substitutes.
+Polish on real components carries into implementation; polish on a fabricated
+stand-in is tuning something that gets rebuilt. When you must fabricate, keep
+those pieces wireframe-grade.
+
 ## Inputs (from invoking prompt)
 
 - **Surface** — the UI to mock up
