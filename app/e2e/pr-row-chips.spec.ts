@@ -5,6 +5,7 @@ import type { Locator, Page } from "@playwright/test";
 import { test as base, expect } from "@playwright/test";
 import { bootSeededApp } from "./fixtures";
 import { createGhStub, ghPullRequest } from "./gh-stub";
+import { gotoOverviewStructure } from "./seed-navigation";
 
 const PR_URL = "https://github.com/acme/widgets/pull/1";
 const CHIP_LABEL = "Ready · Success · Approved · 0 comments";
@@ -64,31 +65,12 @@ const test = base.extend<Record<string, never>, { prChipApp: PrChipApp }>({
   ],
 });
 
-async function gotoOverviewFlow(page: Page, baseURL: string): Promise<Locator> {
-  await page.goto(`${baseURL}/projects/seed-proj`);
-  const main = page.getByRole("main");
-  await expect(main.getByRole("heading", { name: "Seed Project" })).toBeVisible();
-  await expect(page.getByRole("tabpanel", { name: "Flow" })).toBeVisible();
-  return main;
-}
-
-async function gotoOverviewStructure(
-  page: Page,
-  baseURL: string,
-): Promise<Locator> {
-  await page.goto(`${baseURL}/projects/seed-proj?lens=structure`);
-  const main = page.getByRole("main");
-  await expect(main.getByRole("heading", { name: "Seed Project" })).toBeVisible();
-  await expect(page.getByRole("tabpanel", { name: "Structure" })).toBeVisible();
-  return main;
-}
-
 function storyRow(main: Locator, title: string): Locator {
   return main.getByRole("listitem").filter({ hasText: title });
 }
 
 test.describe("PR row chips", () => {
-  test("shows the live PR chip on PR-bearing Stories in Structure and Flow", async ({
+  test("shows the live PR chip on PR-bearing Stories in Structure", async ({
     page,
     prChipApp,
   }) => {
@@ -112,20 +94,13 @@ test.describe("PR row chips", () => {
     await nestedNoPr.hover();
     await expect(nestedNoPr.getByTestId("pr-chip")).toHaveCount(0);
 
-    await page
-      .getByRole("tablist", { name: "Overview lens" })
-      .getByRole("tab", { name: "Flow" })
-      .click();
-    const flow = page.getByRole("tabpanel", { name: "Flow" });
-    await expect(flow).toBeVisible();
+    const topWithPr = storyRow(structure, "Flow story with PR");
+    await topWithPr.hover();
+    await expect(topWithPr.getByTestId("pr-chip")).toHaveText(CHIP_LABEL);
 
-    const flowWithPr = storyRow(flow, "Flow story with PR");
-    await flowWithPr.hover();
-    await expect(flowWithPr.getByTestId("pr-chip")).toHaveText(CHIP_LABEL);
-
-    const flowNoPr = storyRow(flow, "Flow story without PR");
-    await flowNoPr.hover();
-    await expect(flowNoPr.getByTestId("pr-chip")).toHaveCount(0);
+    const topNoPr = storyRow(structure, "Flow story without PR");
+    await topNoPr.hover();
+    await expect(topNoPr.getByTestId("pr-chip")).toHaveCount(0);
 
     expect(prFetchCount).toBe(1);
 
@@ -133,7 +108,7 @@ test.describe("PR row chips", () => {
     expect(prFetchCount).toBe(1);
   });
 
-  test("mirrors the PR chip label in the Flow touch overflow menu", async ({
+  test("mirrors the PR chip label in the Structure touch overflow menu", async ({
     page,
     prChipApp,
   }) => {
@@ -156,11 +131,11 @@ test.describe("PR row chips", () => {
       };
     });
 
-    const main = await gotoOverviewFlow(page, prChipApp.baseURL);
+    const main = await gotoOverviewStructure(page, prChipApp.baseURL);
 
-    const flowWithPr = storyRow(main, "Flow story with PR");
-    await expect(flowWithPr.getByTitle("Row actions")).toBeVisible();
-    await flowWithPr.getByTitle("Row actions").click();
+    const withPr = storyRow(main, "Flow story with PR");
+    await expect(withPr.getByTitle("Row actions")).toBeVisible();
+    await withPr.getByTitle("Row actions").click();
     await expect(
       page.getByRole("menuitem", { name: CHIP_LABEL }),
     ).toBeVisible();
@@ -168,8 +143,8 @@ test.describe("PR row chips", () => {
 
     await page.keyboard.press("Escape");
 
-    const flowNoPr = storyRow(main, "Flow story without PR");
-    await flowNoPr.getByTitle("Row actions").click();
+    const noPr = storyRow(main, "Flow story without PR");
+    await noPr.getByTitle("Row actions").click();
     await expect(
       page.getByRole("menuitem", { name: CHIP_LABEL }),
     ).toHaveCount(0);

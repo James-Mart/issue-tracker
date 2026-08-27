@@ -4,6 +4,13 @@ export function projectPath(projectId: string): string {
   return `/projects/${projectId}`;
 }
 
+export function projectLensPath(
+  projectId: string,
+  lens: "structure" | "overview",
+): string {
+  return `${projectPath(projectId)}?lens=${lens}`;
+}
+
 export function issuePath(projectId: string, id: string): string {
   return `/projects/${projectId}/issues/${id}`;
 }

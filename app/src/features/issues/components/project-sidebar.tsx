@@ -37,7 +37,7 @@ import { useIssuesQuery } from "../api/queries";
 import { useRouteProjectId } from "../hooks/use-route-project-id";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { listProjects } from "../lib/build-tree";
-import { issuePath, projectPath } from "../lib/links";
+import { projectLensPath, projectPath } from "../lib/links";
 import {
   readSidebarProjectsSectionOpen,
   writeSidebarProjectsSectionOpen,
@@ -236,7 +236,7 @@ export function ProjectSidebar() {
                         <DropdownMenuContent side="right" align="start">
                           <DropdownMenuItem
                             onClick={() =>
-                              navigate(issuePath(project.id, project.id))
+                              navigate(projectLensPath(project.id, "overview"))
                             }
                           >
                             <FolderKanban className="h-4 w-4" />

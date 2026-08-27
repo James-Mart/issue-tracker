@@ -72,9 +72,12 @@ test.describe("shell at phone width", () => {
     await toggle.tap();
     await nav.getByRole("button", { name: "Project actions" }).tap();
     await page.getByRole("menuitem", { name: "Open" }).tap();
-    await expect(page).toHaveURL(
-      /\/projects\/seed-proj\/issues\/seed-proj\/?$/,
-    );
+    await expect(page).toHaveURL(/[?&]lens=overview(?:&|$)/);
+    await expect(
+      page.getByRole("tablist", { name: "Overview lens" }).getByRole("tab", {
+        name: "Overview",
+      }),
+    ).toHaveAttribute("aria-selected", "true");
     await expect(nav).toBeHidden();
   });
 

@@ -180,7 +180,6 @@ export function CockpitPage() {
           <FlowBucketsSections
             buckets={buckets}
             idPrefix="cockpit"
-            variant="cockpit"
             renderItems={renderBucketItems}
           />
         )}

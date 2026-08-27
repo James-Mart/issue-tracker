@@ -22,7 +22,7 @@ export type FlowBucketDef = {
   previewLimit?: number;
 };
 
-/** Cockpit bucket order and chrome; overview uses the same labels with legacy layout. */
+/** Cockpit bucket order and chrome. */
 export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
   {
     key: "needsAttention",
@@ -63,15 +63,6 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     collapsedByDefault: true,
   },
 ];
-
-const OVERVIEW_BUCKET_KEYS = new Set<FlowBucketKey>([
-  "needsAttention",
-  "awaitingPlanning",
-  "inFlight",
-  "ready",
-  "blocked",
-  "recentlyMerged",
-]);
 
 /** Pull flagged rows into the virtual needs-attention bucket. */
 export function partitionCockpitBuckets(buckets: FlowBuckets): {
@@ -218,7 +209,6 @@ function FlowBucketSection({
   idPrefix,
   renderRow,
   renderItems,
-  variant,
 }: {
   def: FlowBucketDef;
   items: FlowItem[];
@@ -229,15 +219,12 @@ function FlowBucketSection({
     compact?: boolean,
     previewLimit?: number,
   ) => ReactNode;
-  variant: "overview" | "cockpit";
 }) {
   const headingId = `${idPrefix}-${def.key}`;
   const count = items.length;
-  const hideWhenEmpty =
-    def.hideWhenEmpty && (variant === "cockpit" || def.empty == null);
-  const collapsed =
-    variant === "cockpit" && def.collapsedByDefault && count > 0;
-  const compact = variant === "cockpit" && def.compact;
+  const hideWhenEmpty = def.hideWhenEmpty;
+  const collapsed = def.collapsedByDefault && count > 0;
+  const compact = def.compact;
 
   if (hideWhenEmpty && count === 0) return null;
 
@@ -288,14 +275,13 @@ function FlowBucketSection({
 
 /**
  * Bucketed Flow lists: section chrome + empty copy. Surfaces supply each row
- * via `renderRow` (cockpit adds project drill-in; project Flow lens does not).
+ * via `renderRow` or a bucket body via `renderItems` (cockpit project groups).
  */
 export function FlowBucketsSections({
   buckets,
   idPrefix,
   renderRow,
   renderItems,
-  variant = "overview",
 }: {
   buckets: FlowBuckets;
   idPrefix: string;
@@ -306,25 +292,13 @@ export function FlowBucketsSections({
     compact?: boolean,
     previewLimit?: number,
   ) => ReactNode;
-  /** Cockpit foregrounds attention/in-flight work and collapses backlog buckets. */
-  variant?: "overview" | "cockpit";
 }) {
   const { needsAttention, buckets: displayBuckets } =
     partitionCockpitBuckets(buckets);
 
-  const defs =
-    variant === "cockpit"
-      ? FLOW_BUCKET_DEFS
-      : FLOW_BUCKET_DEFS.filter((def) => OVERVIEW_BUCKET_KEYS.has(def.key));
-
   return (
-    <div
-      className={cn(
-        "flex flex-col",
-        variant === "cockpit" ? "gap-5" : "gap-8",
-      )}
-    >
-      {defs.map((def) => (
+    <div className="flex flex-col gap-5">
+      {FLOW_BUCKET_DEFS.map((def) => (
         <FlowBucketSection
           key={def.key}
           def={def}
@@ -332,7 +306,6 @@ export function FlowBucketsSections({
           idPrefix={idPrefix}
           renderRow={renderRow}
           renderItems={renderItems}
-          variant={variant}
         />
       ))}
     </div>

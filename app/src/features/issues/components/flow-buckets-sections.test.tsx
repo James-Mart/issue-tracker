@@ -78,7 +78,6 @@ function emptyBuckets(
 
 function mountSections(
   buckets: FlowBuckets,
-  variant: "overview" | "cockpit" = "overview",
 ): { container: HTMLDivElement; root: Root } {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -88,7 +87,6 @@ function mountSections(
       <FlowBucketsSections
         buckets={buckets}
         idPrefix="test"
-        variant={variant}
         renderRow={(item) => <a href={`#${item.issue.id}`}>{item.issue.title}</a>}
       />,
     );
@@ -162,20 +160,17 @@ describe("partitionCockpitBuckets", () => {
 });
 
 describe("FlowBucketsSections", () => {
-  it("overview keeps empty buckets visible with empty copy", () => {
+  it("hides empty buckets", () => {
     const buckets = emptyBuckets({
       ready: [row(epic("ready"), { blocked: false, epicStatus: "todo" })],
     });
-    const { container } = mountSections(buckets, "overview");
+    const { container } = mountSections(buckets);
 
-    expect(section(container, "inFlight")).toBeTruthy();
-    expect(container.textContent).toContain(
-      "Nothing in flight. Pick up Ready work or start a Story.",
-    );
+    expect(section(container, "inFlight")).toBeNull();
     expect(section(container, "needsAttention")).toBeNull();
   });
 
-  it("partitions awaiting-direction Ideas into attention under both variants", () => {
+  it("partitions awaiting-direction Ideas into attention", () => {
     const buckets = emptyBuckets({
       ready: [
         row(idea("awaiting"), {
@@ -192,30 +187,25 @@ describe("FlowBucketsSections", () => {
       ],
     });
 
-    for (const variant of ["overview", "cockpit"] as const) {
-      const { container, root } = mountSections(buckets, variant);
-      expect(section(container, "needsAttention")?.textContent).toContain(
-        "awaiting",
-      );
-      expect(section(container, "ready")?.textContent).toContain("ready");
-      expect(section(container, "ready")?.textContent).not.toContain(
-        "awaiting",
-      );
-      expect(section(container, "inFlight")?.textContent).toContain(
-        "implementing",
-      );
-      act(() => {
-        root.unmount();
-      });
-    }
+    const { container } = mountSections(buckets);
+    expect(section(container, "needsAttention")?.textContent).toContain(
+      "awaiting",
+    );
+    expect(section(container, "ready")?.textContent).toContain("ready");
+    expect(section(container, "ready")?.textContent).not.toContain(
+      "awaiting",
+    );
+    expect(section(container, "inFlight")?.textContent).toContain(
+      "implementing",
+    );
   });
 
-  it("cockpit hides empty buckets and collapses backlog sections", () => {
+  it("collapses backlog sections", () => {
     const buckets = emptyBuckets({
       ready: [row(epic("ready"), { blocked: false, epicStatus: "todo" })],
       blocked: [row(epic("blocked"), { blocked: true, epicStatus: "todo" })],
     });
-    const { container } = mountSections(buckets, "cockpit");
+    const { container } = mountSections(buckets);
 
     expect(section(container, "inFlight")).toBeNull();
     expect(section(container, "recentlyMerged")).toBeNull();
@@ -235,7 +225,7 @@ describe("FlowBucketsSections", () => {
     expect(blocked?.querySelector('a[href="#blocked"]')).toBeTruthy();
   });
 
-  it("cockpit renders needs-attention before in-flight", () => {
+  it("renders needs-attention before in-flight", () => {
     const buckets = emptyBuckets({
       ready: [
         row(epic("attention", true), { blocked: false, epicStatus: "todo" }),
@@ -245,7 +235,7 @@ describe("FlowBucketsSections", () => {
       ],
     });
 
-    const { container } = mountSections(buckets, "cockpit");
+    const { container } = mountSections(buckets);
     const headings = [...container.querySelectorAll("h2")].map((node) =>
       node.textContent?.replace(/\d+/g, "").trim(),
     );
@@ -269,28 +259,22 @@ describe("FlowBucketsSections", () => {
       ],
     });
 
-    for (const variant of ["overview", "cockpit"] as const) {
-      const { container, root } = mountSections(buckets, variant);
-      const headings = [...container.querySelectorAll("h2")].map((node) =>
-        node.textContent?.replace(/\d+/g, "").trim(),
-      );
-      expect(headings.indexOf("Needs attention")).toBeLessThan(
-        headings.indexOf("Awaiting planning"),
-      );
-      expect(headings.indexOf("Awaiting planning")).toBeLessThan(
-        headings.indexOf("In flight"),
-      );
+    const { container } = mountSections(buckets);
+    const headings = [...container.querySelectorAll("h2")].map((node) =>
+      node.textContent?.replace(/\d+/g, "").trim(),
+    );
+    expect(headings.indexOf("Needs attention")).toBeLessThan(
+      headings.indexOf("Awaiting planning"),
+    );
+    expect(headings.indexOf("Awaiting planning")).toBeLessThan(
+      headings.indexOf("In flight"),
+    );
 
-      const awaiting = section(container, "awaitingPlanning");
-      expect(awaiting).toBeTruthy();
-      expect(awaiting?.querySelector("details")).toBeNull();
-      expect(awaiting?.textContent).toContain("captured");
-      expect(awaiting?.textContent).toContain("1");
-
-      act(() => {
-        root.unmount();
-      });
-    }
+    const awaiting = section(container, "awaitingPlanning");
+    expect(awaiting).toBeTruthy();
+    expect(awaiting?.querySelector("details")).toBeNull();
+    expect(awaiting?.textContent).toContain("captured");
+    expect(awaiting?.textContent).toContain("1");
   });
 
   it("shows five captured Ideas until Show all reveals the sixth", () => {
@@ -299,30 +283,24 @@ describe("FlowBucketsSections", () => {
     );
     const buckets = emptyBuckets({ awaitingPlanning });
 
-    for (const variant of ["overview", "cockpit"] as const) {
-      const { container, root } = mountSections(buckets, variant);
-      const awaiting = section(container, "awaitingPlanning");
-      expect(awaiting?.querySelectorAll("a")).toHaveLength(
-        AWAITING_PLANNING_PREVIEW_LIMIT,
-      );
-      expect(awaiting?.textContent).toContain("idea-4");
-      expect(awaiting?.textContent).not.toContain("idea-5");
+    const { container } = mountSections(buckets);
+    const awaiting = section(container, "awaitingPlanning");
+    expect(awaiting?.querySelectorAll("a")).toHaveLength(
+      AWAITING_PLANNING_PREVIEW_LIMIT,
+    );
+    expect(awaiting?.textContent).toContain("idea-4");
+    expect(awaiting?.textContent).not.toContain("idea-5");
 
-      const showAll = [...(awaiting?.querySelectorAll("button") ?? [])].find(
-        (button) => button.textContent === "Show all",
-      );
-      expect(showAll).toBeTruthy();
-      act(() => {
-        showAll?.click();
-      });
-      expect(awaiting?.querySelectorAll("a")).toHaveLength(6);
-      expect(awaiting?.textContent).toContain("idea-5");
-      expect(awaiting?.textContent).not.toContain("Show all");
-
-      act(() => {
-        root.unmount();
-      });
-    }
+    const showAll = [...(awaiting?.querySelectorAll("button") ?? [])].find(
+      (button) => button.textContent === "Show all",
+    );
+    expect(showAll).toBeTruthy();
+    act(() => {
+      showAll?.click();
+    });
+    expect(awaiting?.querySelectorAll("a")).toHaveLength(6);
+    expect(awaiting?.textContent).toContain("idea-5");
+    expect(awaiting?.textContent).not.toContain("Show all");
   });
 });
 

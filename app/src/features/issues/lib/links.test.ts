@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { issueChannelPath, issuePath, parseIssueLink } from "./links";
+import {
+  issueChannelPath,
+  issuePath,
+  parseIssueLink,
+  projectLensPath,
+} from "./links";
 
 describe("parseIssueLink", () => {
   it("extracts ids from issue: hrefs", () => {
@@ -13,6 +18,17 @@ describe("parseIssueLink", () => {
 describe("issuePath", () => {
   it("builds the detail route", () => {
     expect(issuePath("proj", "story-1")).toBe("/projects/proj/issues/story-1");
+  });
+});
+
+describe("projectLensPath", () => {
+  it("builds the project route with a lens query", () => {
+    expect(projectLensPath("proj", "overview")).toBe(
+      "/projects/proj?lens=overview",
+    );
+    expect(projectLensPath("proj", "structure")).toBe(
+      "/projects/proj?lens=structure",
+    );
   });
 });
 
