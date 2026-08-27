@@ -51,13 +51,8 @@ test.describe("cockpit", () => {
     ).toBeVisible();
     await expect(
       page.getByRole("main").getByRole("link", { name: /^Story in flight\b/ }),
-    ).toHaveCount(0);
+    ).toBeVisible();
 
-    // Structure lens → child story detail.
-    await page
-      .getByRole("tablist", { name: "Overview lens" })
-      .getByRole("tab", { name: "Structure" })
-      .click();
     await page
       .getByRole("main")
       .getByRole("link", { name: "Story in flight" })

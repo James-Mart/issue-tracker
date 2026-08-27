@@ -1,13 +1,9 @@
 import { hasAttention } from "@server/kind";
 import { bySequence, epicsBlockedBy, isProjectBoardChild } from "@server/order";
 import type { DerivedState, IssueRecord } from "@server/schemas";
-import {
-  boardKindAllows,
-  type BoardKindFilter,
-} from "./board-kind-filter";
+import { type BoardKindFilter } from "./board-kind-filter";
 import { issuesById, projectIdOf } from "./build-tree";
 import { isInFlight, isIssueComplete } from "./derived";
-import { filterIssuesBySearchAndLabels } from "./filter-by-search-labels";
 import { issueRailNodeState, type RailNodeState } from "./rail-state";
 
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
@@ -62,11 +58,7 @@ export type FlowScope = {
   projectId?: string;
 };
 
-/**
- * In-memory Flow lens filters (search / label / kind). Archive is applied
- * separately: project Flow uses `visibleIssues` with the Overview `showArchived`
- * flag; cockpit always uses `visibleIssues(..., false)` before bucketing.
- */
+/** In-memory Structure lens filters (search / label / kind). */
 export type FlowFilters = {
   search: string;
   labelIds: readonly string[];
@@ -79,54 +71,6 @@ export function flowFiltersActive(filters: FlowFilters): boolean {
     filters.labelIds.length > 0 ||
     filters.kind.length > 0
   );
-}
-
-/**
- * Story/Epic/Idea ids kept under Flow filters. Search/label via shared
- * `filterIssuesBySearchAndLabels` (ancestor retention), then kind via
- * `boardKindAllows`.
- */
-export function matchingFlowIssueIds(
-  issues: IssueRecord[],
-  filters: FlowFilters,
-  derived: Record<string, DerivedState> = {},
-): Set<string> {
-  const byId = issuesById(issues);
-  const next = filterIssuesBySearchAndLabels(
-    issues,
-    filters.search,
-    filters.labelIds,
-  );
-  const keep = new Set<string>();
-  for (const issue of next) {
-    if (
-      isFlowTopLevelRow(issue, byId, derived) &&
-      boardKindAllows(issue.kind, filters.kind)
-    ) {
-      keep.add(issue.id);
-    }
-  }
-  return keep;
-}
-
-/** Narrow bucketed Flow rows by search / label / kind. Pure — no I/O. */
-export function filterFlowBuckets(
-  buckets: FlowBuckets,
-  issues: IssueRecord[],
-  filters: FlowFilters,
-  derived: Record<string, DerivedState> = {},
-): FlowBuckets {
-  if (!flowFiltersActive(filters)) return buckets;
-  const keep = matchingFlowIssueIds(issues, filters, derived);
-  const take = (items: FlowItem[]) =>
-    items.filter((item) => keep.has(item.issue.id));
-  return {
-    awaitingPlanning: take(buckets.awaitingPlanning),
-    ready: take(buckets.ready),
-    inFlight: take(buckets.inFlight),
-    blocked: take(buckets.blocked),
-    recentlyMerged: take(buckets.recentlyMerged),
-  };
 }
 
 /**

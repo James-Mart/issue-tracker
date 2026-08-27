@@ -6,7 +6,6 @@ import { issuesById } from "./build-tree";
 import {
   depGraphModel,
   epicDependencyNeighborhood,
-  filterFlowBuckets,
   flowBuckets,
   flowFiltersActive,
   flowItemNeedsAttention,
@@ -477,116 +476,10 @@ describe("inFlightTaskOf", () => {
   });
 });
 
-describe("filterFlowBuckets", () => {
-  const issues = [
-    project("p"),
-    epic("ready-epic", "p"),
-    labeledStory("ready-story", "ready-epic", ["bug"]),
-    task("ready-task", "ready-story"),
-    epic("flight-epic", "p"),
-    story("flight-story", "flight-epic"),
-  ];
-  const derived: Record<string, DerivedState> = {
-    "ready-epic": { blocked: false, epicStatus: "todo" },
-    "ready-story": { blocked: false, storyStatus: "not-started" },
-    "flight-epic": { blocked: false, epicStatus: "in-progress" },
-    "flight-story": { blocked: false, storyStatus: "in-progress" },
-  };
-  const buckets = flowBuckets(issues, derived, { projectId: "p" });
-
-  it("flowFiltersActive is false for defaults", () => {
+describe("flowFiltersActive", () => {
+  it("is false for defaults", () => {
     expect(flowFiltersActive(noFilters)).toBe(false);
     expect(flowFiltersActive({ ...noFilters, search: "  " })).toBe(false);
-  });
-
-  it("returns buckets unchanged when filters are inactive", () => {
-    expect(filterFlowBuckets(buckets, issues, noFilters)).toEqual(buckets);
-  });
-
-  it("filters by kind (OR multi-select)", () => {
-    const epicsOnly = filterFlowBuckets(buckets, issues, {
-      ...noFilters,
-      kind: ["epic"],
-    });
-    expect(bucketIds(epicsOnly)).toEqual({
-      awaitingPlanning: [],
-      ready: ["ready-epic"],
-      inFlight: ["flight-epic"],
-      blocked: [],
-      recentlyMerged: [],
-    });
-
-    const ideasOnly = filterFlowBuckets(buckets, issues, {
-      ...noFilters,
-      kind: ["idea"],
-    });
-    expect(bucketIds(ideasOnly)).toEqual({
-      awaitingPlanning: [],
-      ready: [],
-      inFlight: [],
-      blocked: [],
-      recentlyMerged: [],
-    });
-
-    const epicsAndStories = filterFlowBuckets(buckets, issues, {
-      ...noFilters,
-      kind: ["epic", "story"],
-    });
-    expect(bucketIds(epicsAndStories)).toEqual(bucketIds(buckets));
-  });
-
-  it("filters by search on the row or a descendant", () => {
-    const byTitle = filterFlowBuckets(buckets, issues, {
-      ...noFilters,
-      search: "flight-story",
-    });
-    expect(ids(byTitle.inFlight)).toEqual(["flight-epic"]);
-    expect(byTitle.ready).toEqual([]);
-
-    const byTask = filterFlowBuckets(buckets, issues, {
-      ...noFilters,
-      search: "ready-task",
-    });
-    expect(ids(byTask.ready)).toEqual(["ready-epic"]);
-  });
-
-  it("filters by label OR and composes with kind", () => {
-    const labeled = filterFlowBuckets(buckets, issues, {
-      ...noFilters,
-      labelIds: ["bug"],
-    });
-    expect(ids(labeled.ready)).toEqual(["ready-epic"]);
-    expect(labeled.inFlight).toEqual([]);
-
-    const storiesWithBug = filterFlowBuckets(buckets, issues, {
-      search: "",
-      labelIds: ["bug"],
-      kind: ["story"],
-    });
-    expect(ids(storiesWithBug.ready)).toEqual([]);
-  });
-
-  it("keeps an Epic when labels match it and search matches a child (tree semantics)", () => {
-    // AND-at-seed would drop both: epic matches label only, story matches search only.
-    const crossIssues = [
-      project("p"),
-      labeledEpic("labeled-epic", "p", ["bug"]),
-      story("search-story", "labeled-epic"),
-    ];
-    const crossDerived: Record<string, DerivedState> = {
-      "labeled-epic": { blocked: false, epicStatus: "todo" },
-      "search-story": { blocked: false, storyStatus: "not-started" },
-    };
-    const crossBuckets = flowBuckets(crossIssues, crossDerived, {
-      projectId: "p",
-    });
-    const filtered = filterFlowBuckets(crossBuckets, crossIssues, {
-      search: "search-story",
-      labelIds: ["bug"],
-      kind: [],
-    });
-    expect(ids(filtered.ready)).toEqual(["labeled-epic"]);
-    expect(filtered.inFlight).toEqual([]);
   });
 });
 
