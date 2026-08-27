@@ -25,6 +25,10 @@ see before anyone implements them.
 - **Author responsively.** Every direction must compose at phone width as
   well as desktop. A layout that is only legible at desktop width is a
   defect.
+- **Mock images render offline.** Image content in mock data is
+  self-contained bytes — an inline `data:` URI or inline SVG — that render
+  with nothing running behind them. Never use a server path such as
+  `/api/issues/<id>/attachments/<name>`; those 404 inside the harness.
 
 ## Inputs (from invoking prompt)
 

@@ -67,6 +67,10 @@ named no surface, ask for it before step 1.
    A repeat round stores a fresh basename rather than overwriting the earlier
    one.
 
+   Before closing this step, check every captured state. One that renders
+   empty or visibly broken goes back to the author as feedback (step 4)
+   before it is posted — do not close the turn with a caveat.
+
    Close the turn with one message that carries both halves. Grouped by
    direction: the direction's name and a one-line description, the embed
    lines that promote printed for every state at both widths, and the live
