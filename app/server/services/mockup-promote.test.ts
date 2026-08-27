@@ -108,18 +108,81 @@ describe("attachment names", () => {
 
     expect(
       candidateAttachmentName("direction-a", "direction-a-card--default", "phone"),
-    ).toBe("mockup-candidate-direction-a-direction-a-card-default-phone.png");
+    ).toBe("mockup-candidate-direction-a-card-default-phone.png");
     expect(
       candidateAttachmentName(
         "direction-a",
         "direction-a-card--default",
         "desktop",
       ),
-    ).toBe("mockup-candidate-direction-a-direction-a-card-default-desktop.png");
+    ).toBe("mockup-candidate-direction-a-card-default-desktop.png");
     expect(
       chosenAttachmentName("direction-a", "direction-a-card--default", "desktop"),
-    ).toBe("mockup-direction-a-direction-a-card-default-desktop.png");
+    ).toBe("mockup-direction-a-card-default-desktop.png");
     expect(chosenArchiveName("direction-a")).toBe("mockup-direction-a.tar.gz");
+  });
+
+  it("strips one leading direction segment from state slugs and keeps prefix-safe matching", async () => {
+    const {
+      stateSlug,
+      candidateAttachmentName,
+      chosenAttachmentName,
+      copyDirectionArtifacts,
+    } = await loadPromote();
+    const { putAttachment } = await loadAttachments();
+
+    expect(stateSlug("grid/gallery-grid-attachmentspanel-empty", "grid")).toBe(
+      "gallery-grid-attachmentspanel-empty",
+    );
+    expect(
+      stateSlug("grid-lightbox/gallery-grid-attachmentspanel-empty", "grid-lightbox"),
+    ).toBe("gallery-grid-attachmentspanel-empty");
+    expect(stateSlug("grid-lightbox/card--default", "grid")).toBe(
+      "lightbox-card-default",
+    );
+
+    expect(
+      candidateAttachmentName("grid", "grid/gallery-grid-attachmentspanel-empty", "phone"),
+    ).toBe("mockup-candidate-grid-gallery-grid-attachmentspanel-empty-phone.png");
+    expect(
+      candidateAttachmentName(
+        "grid-lightbox",
+        "grid-lightbox/gallery-grid-attachmentspanel-empty",
+        "phone",
+      ),
+    ).toBe(
+      "mockup-candidate-grid-lightbox-gallery-grid-attachmentspanel-empty-phone.png",
+    );
+    expect(
+      chosenAttachmentName("grid", "grid/card--default", "desktop"),
+    ).toBe("mockup-grid-card-default-desktop.png");
+
+    await putAttachment(
+      "src",
+      "mockup-grid-card-default-phone.png",
+      Buffer.from("grid-phone"),
+    );
+    await putAttachment("src", "mockup-grid.tar.gz", Buffer.from("grid-archive"));
+    await putAttachment(
+      "src",
+      "mockup-grid-lightbox-card-default-phone.png",
+      Buffer.from("lightbox-phone"),
+    );
+    await putAttachment(
+      "src",
+      "mockup-grid-lightbox.tar.gz",
+      Buffer.from("lightbox-archive"),
+    );
+
+    const gridCopy = await copyDirectionArtifacts({
+      fromIssueId: "src",
+      issueId: "dst",
+      directionId: "grid",
+    });
+    expect(gridCopy.attached.sort()).toEqual([
+      "mockup-grid-card-default-phone.png",
+      "mockup-grid.tar.gz",
+    ]);
   });
 });
 
@@ -212,7 +275,7 @@ describe("attachCapturedDirection", () => {
     });
 
     expect(result.attached).toEqual([
-      "mockup-candidate-direction-a-direction-a-card-default-phone.png",
+      "mockup-candidate-direction-a-card-default-phone.png",
     ]);
     expect(result.capturePaths).toEqual([phone]);
     expect(listAttachments("src").map((att) => att.name)).toEqual(result.attached);
@@ -275,8 +338,8 @@ describe("attachCapturedDirection", () => {
     const names = listAttachments("src").map((att) => att.name).sort();
     expect(names).toEqual(
       [
-        "mockup-direction-a-direction-a-card-default-desktop.png",
-        "mockup-direction-a-direction-a-card-default-phone.png",
+        "mockup-direction-a-card-default-desktop.png",
+        "mockup-direction-a-card-default-phone.png",
         "mockup-direction-a.tar.gz",
       ].sort(),
     );
@@ -284,8 +347,8 @@ describe("attachCapturedDirection", () => {
       false,
     );
     expect(result.attached).toEqual([
-      "mockup-direction-a-direction-a-card-default-phone.png",
-      "mockup-direction-a-direction-a-card-default-desktop.png",
+      "mockup-direction-a-card-default-phone.png",
+      "mockup-direction-a-card-default-desktop.png",
       "mockup-direction-a.tar.gz",
     ]);
     expect(result.capturePaths).toEqual([phone, desktop]);
@@ -312,7 +375,7 @@ describe("attachCapturedDirection", () => {
         ],
       }),
     ).rejects.toThrow(
-      `attachment "mockup-candidate-direction-a-direction-a-card-hover-phone.png" exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
+      `attachment "mockup-candidate-direction-a-card-hover-phone.png" exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
     );
     expect(listAttachments("src")).toEqual([]);
   });
@@ -438,8 +501,8 @@ describe("promoteMockup", () => {
       viewports: ["phone", "desktop"],
     });
     expect(result.attached.sort()).toEqual([
-      "mockup-candidate-direction-a-direction-a-card-default-desktop.png",
-      "mockup-candidate-direction-a-direction-a-card-default-phone.png",
+      "mockup-candidate-direction-a-card-default-desktop.png",
+      "mockup-candidate-direction-a-card-default-phone.png",
     ]);
   });
 

@@ -49,8 +49,13 @@ export interface PendingAttachment {
 const CANDIDATE_PREFIX = "mockup-candidate-";
 const STORY_FILE_RE = /\.stories\.(tsx|ts|jsx|js|mdx)$/;
 
-export function stateSlug(storyId: string): string {
-  return slugify(storyId);
+export function stateSlug(storyId: string, directionId: string): string {
+  const slug = slugify(storyId);
+  const directionPrefix = `${slugify(directionId)}-`;
+  if (slug.startsWith(directionPrefix)) {
+    return slug.slice(directionPrefix.length);
+  }
+  return slug;
 }
 
 export function candidateAttachmentName(
@@ -58,7 +63,7 @@ export function candidateAttachmentName(
   storyId: string,
   viewport: ViewportName,
 ): string {
-  return `${CANDIDATE_PREFIX}${directionId}-${stateSlug(storyId)}-${viewport}.png`;
+  return `${CANDIDATE_PREFIX}${directionId}-${stateSlug(storyId, directionId)}-${viewport}.png`;
 }
 
 export function chosenAttachmentName(
@@ -66,7 +71,7 @@ export function chosenAttachmentName(
   storyId: string,
   viewport: ViewportName,
 ): string {
-  return `mockup-${directionId}-${stateSlug(storyId)}-${viewport}.png`;
+  return `mockup-${directionId}-${stateSlug(storyId, directionId)}-${viewport}.png`;
 }
 
 export function chosenArchiveName(directionId: string): string {
@@ -75,6 +80,39 @@ export function chosenArchiveName(directionId: string): string {
 
 export function chosenPngPrefix(directionId: string): string {
   return `mockup-${directionId}-`;
+}
+
+function directionIdsFromArchives(names: string[]): string[] {
+  return names
+    .filter(
+      (name) =>
+        name.startsWith("mockup-") &&
+        name.endsWith(".tar.gz") &&
+        !name.startsWith(CANDIDATE_PREFIX),
+    )
+    .map((name) => name.slice("mockup-".length, -".tar.gz".length));
+}
+
+export function matchesChosenPngPrefix(
+  name: string,
+  directionId: string,
+  otherDirectionIds: Iterable<string> = [],
+): boolean {
+  const prefix = chosenPngPrefix(directionId);
+  if (!name.startsWith(prefix)) return false;
+  if (!name.endsWith("-phone.png") && !name.endsWith("-desktop.png")) {
+    return false;
+  }
+  for (const other of otherDirectionIds) {
+    if (
+      other !== directionId &&
+      other.startsWith(`${directionId}-`) &&
+      name.startsWith(chosenPngPrefix(other))
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 type CopyPromoteOptions = PromoteOptions & {
@@ -277,10 +315,16 @@ export async function copyDirectionArtifacts(options: {
   listAttachments(options.issueId);
   const source = listAttachments(options.fromIssueId);
   const archive = chosenArchiveName(options.directionId);
-  const prefix = chosenPngPrefix(options.directionId);
+  const otherDirectionIds = directionIdsFromArchives(
+    source.map((att) => att.name),
+  );
   const names = source
     .map((att) => att.name)
-    .filter((name) => name === archive || name.startsWith(prefix));
+    .filter(
+      (name) =>
+        name === archive ||
+        matchesChosenPngPrefix(name, options.directionId, otherDirectionIds),
+    );
 
   if (!names.includes(archive)) {
     throw new Error(
