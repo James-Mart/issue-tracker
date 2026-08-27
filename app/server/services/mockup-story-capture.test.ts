@@ -94,7 +94,35 @@ async function loadStack() {
   return import("./mockup-stack.js");
 }
 
+async function loadConfig() {
+  return import("../config.js");
+}
+
+function writeConversationMeta(
+  conversationsDir: string,
+  conversationId: string,
+  overrides: { agentId?: string } = {},
+): void {
+  const dir = join(conversationsDir, conversationId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "meta.json"),
+    JSON.stringify({
+      id: conversationId,
+      title: conversationId,
+      projectId: "test-project",
+      model: "composer-2.5",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archived: false,
+      ...overrides,
+    }),
+  );
+}
+
 async function writeHarnessWithStories(conversationId: string): Promise<void> {
+  const { conversationsDir } = await loadConfig();
+  writeConversationMeta(conversationsDir, conversationId);
   const storiesDir = join(root, "stories");
   mkdirSync(storiesDir, { recursive: true });
   writeFileSync(

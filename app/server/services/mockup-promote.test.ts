@@ -70,6 +70,32 @@ async function loadAttachments() {
   return import("./attachments.js");
 }
 
+async function loadConfig() {
+  return import("../config.js");
+}
+
+function writeConversationMeta(
+  conversationsDir: string,
+  conversationId: string,
+  overrides: { agentId?: string } = {},
+): void {
+  const dir = join(conversationsDir, conversationId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "meta.json"),
+    JSON.stringify({
+      id: conversationId,
+      title: conversationId,
+      projectId: "p",
+      model: "composer-2.5",
+      createdAt: AT,
+      updatedAt: AT,
+      archived: false,
+      ...overrides,
+    }),
+  );
+}
+
 function writePng(path: string, marker: string): void {
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileSync(path, Buffer.from(`png:${marker}`));
@@ -83,7 +109,7 @@ function capture(
   return { storyId, viewport, absolutePath };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-mockup-promote-"));
   issuesDir = join(root, "issues");
   mkdirSync(issuesDir, { recursive: true });
@@ -91,6 +117,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("ISSUES_DIR", issuesDir);
   seedIssues();
+  const { conversationsDir } = await loadConfig();
+  writeConversationMeta(conversationsDir, "promote-chat");
 });
 
 afterEach(() => {
@@ -650,6 +678,8 @@ describe("promoteMockup", () => {
 
   it("throws naming the conversation when no stack is running", async () => {
     const { promoteMockup } = await loadPromote();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "missing-conversation");
 
     mockCaptureMockupStoryStates.mockRejectedValue(
       new Error(

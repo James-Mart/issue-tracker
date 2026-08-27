@@ -51,6 +51,28 @@ async function loadConfig() {
   return import("../config.js");
 }
 
+function writeConversationMeta(
+  conversationsDir: string,
+  conversationId: string,
+  overrides: { agentId?: string } = {},
+): void {
+  const dir = join(conversationsDir, conversationId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "meta.json"),
+    JSON.stringify({
+      id: conversationId,
+      title: conversationId,
+      projectId: "test-project",
+      model: "composer-2.5",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archived: false,
+      ...overrides,
+    }),
+  );
+}
+
 function procStartTime(pid: number): string {
   const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
   return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]!;
@@ -113,6 +135,8 @@ describe("mockup stack liveness", () => {
 });
 
 async function writeHarnessConfig(conversationId: string): Promise<string> {
+  const { conversationsDir } = await loadConfig();
+  writeConversationMeta(conversationsDir, conversationId);
   const targetRoot = join(root, "target");
   const reactRoot = join(root, "react-node_modules");
   const cssEntry = join(root, "styles.css");
@@ -141,6 +165,7 @@ describe("mockup stack durable state", () => {
   it("stores state and log beside each other under mockup-stack/", async () => {
     const { mockupStackLogPath, mockupStackStatePath } = await loadScratch();
     const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     const statePath = mockupStackStatePath("my-conversation");
     const logPath = mockupStackLogPath("my-conversation");
@@ -199,6 +224,8 @@ describe("mockup stack lifecycle", () => {
 
   it("stop succeeds quietly when no stack is recorded", async () => {
     const { stopMockupStack } = await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     await expect(stopMockupStack("my-conversation")).resolves.toEqual({
       stopped: false,
@@ -209,6 +236,8 @@ describe("mockup stack lifecycle", () => {
   it("start fails naming the harness path when configuration is missing", async () => {
     const { startMockupStack } = await loadService();
     const { harnessConfigPath } = await loadScratch();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     const expected = harnessConfigPath("my-conversation");
     await expect(startMockupStack("my-conversation")).rejects.toThrow(

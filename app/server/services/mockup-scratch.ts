@@ -42,10 +42,58 @@ function assertDirectionId(directionId: string): void {
   }
 }
 
+function metaPathFor(id: string): string {
+  return join(conversationsDir, id, "meta.json");
+}
+
+function conversationIdForAgentId(agentId: string): string | null {
+  if (!existsSync(conversationsDir)) return null;
+  for (const entry of readdirSync(conversationsDir)) {
+    const entryPath = join(conversationsDir, entry);
+    if (!statSync(entryPath).isDirectory()) continue;
+    const metaPath = join(entryPath, "meta.json");
+    if (!existsSync(metaPath)) continue;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(readFileSync(metaPath, "utf8"));
+    } catch {
+      continue;
+    }
+    if (
+      typeof raw === "object" &&
+      raw !== null &&
+      "agentId" in raw &&
+      raw.agentId === agentId
+    ) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+/**
+ * Map a conversation id or owning agent id to the conversation directory name
+ * used for mockup scratch.
+ */
+export function resolveMockupConversationId(id: string): string {
+  assertConversationId(id);
+  const directMetaPath = metaPathFor(id);
+  if (existsSync(directMetaPath)) {
+    return id;
+  }
+  const mapped = conversationIdForAgentId(id);
+  if (mapped !== null) {
+    return mapped;
+  }
+  throw new Error(
+    `mockup scratch id ${JSON.stringify(id)} did not resolve: looked for ${directMetaPath} and scanned ${join(conversationsDir, "*", "meta.json")} for agentId === ${JSON.stringify(id)}`,
+  );
+}
+
 /** Peer of the conversation's `agent-stack/`. */
 export function mockupScratchDir(conversationId: string): string {
-  assertConversationId(conversationId);
-  const dir = join(conversationsDir, conversationId, "mockups");
+  const resolvedId = resolveMockupConversationId(conversationId);
+  const dir = join(conversationsDir, resolvedId, "mockups");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -54,7 +102,6 @@ export function directionDir(
   conversationId: string,
   directionId: string,
 ): string {
-  assertConversationId(conversationId);
   assertDirectionId(directionId);
   const dir = join(mockupScratchDir(conversationId), directionId);
   mkdirSync(dir, { recursive: true });
@@ -65,8 +112,8 @@ const MOCKUP_STACK_DIR = "mockup-stack";
 
 /** Lists direction directory names under the conversation scratch (excludes mockup-stack). */
 export function listDirectionIds(conversationId: string): string[] {
-  assertConversationId(conversationId);
-  const scratch = join(conversationsDir, conversationId, "mockups");
+  const resolvedId = resolveMockupConversationId(conversationId);
+  const scratch = join(conversationsDir, resolvedId, "mockups");
   if (!existsSync(scratch)) return [];
   return readdirSync(scratch)
     .filter((name) => {
@@ -82,9 +129,9 @@ export function pruneDirections(
   conversationId: string,
   keepDirectionId: string,
 ): string[] {
-  assertConversationId(conversationId);
+  const resolvedId = resolveMockupConversationId(conversationId);
   assertDirectionId(keepDirectionId);
-  const scratch = join(conversationsDir, conversationId, "mockups");
+  const scratch = join(conversationsDir, resolvedId, "mockups");
   const keepPath = join(scratch, keepDirectionId);
   if (!existsSync(keepPath) || !statSync(keepPath).isDirectory()) {
     throw new Error(
@@ -105,14 +152,14 @@ export function pruneDirections(
 
 /** Canonical harness config at the scratch root; does not create the file. */
 export function harnessConfigPath(conversationId: string): string {
-  assertConversationId(conversationId);
-  return join(conversationsDir, conversationId, "mockups", "harness.json");
+  const resolvedId = resolveMockupConversationId(conversationId);
+  return join(conversationsDir, resolvedId, "mockups", "harness.json");
 }
 
 /** Peer of the conversation's `mockups/` scratch. */
 export function mockupStackDir(conversationId: string): string {
-  assertConversationId(conversationId);
-  return join(conversationsDir, conversationId, "mockups", "mockup-stack");
+  const resolvedId = resolveMockupConversationId(conversationId);
+  return join(conversationsDir, resolvedId, "mockups", "mockup-stack");
 }
 
 export function mockupStackStatePath(conversationId: string): string {
@@ -126,7 +173,6 @@ export function mockupStackLogPath(conversationId: string): string {
 export function readMockupStackState(
   conversationId: string,
 ): MockupStackState | null {
-  assertConversationId(conversationId);
   const path = mockupStackStatePath(conversationId);
   if (!existsSync(path)) return null;
   const parsed = mockupStackStateSchema.safeParse(
@@ -144,7 +190,6 @@ export function writeMockupStackState(
   conversationId: string,
   state: MockupStackState,
 ): void {
-  assertConversationId(conversationId);
   const parsed = mockupStackStateSchema.parse(state);
   const path = mockupStackStatePath(conversationId);
   mkdirSync(mockupStackDir(conversationId), { recursive: true });

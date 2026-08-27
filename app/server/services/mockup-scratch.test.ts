@@ -28,10 +28,74 @@ async function loadConfig() {
   return import("../config.js");
 }
 
+function writeConversationMeta(
+  conversationsDir: string,
+  conversationId: string,
+  overrides: { agentId?: string } = {},
+): void {
+  const dir = join(conversationsDir, conversationId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "meta.json"),
+    JSON.stringify({
+      id: conversationId,
+      title: conversationId,
+      projectId: "test-project",
+      model: "composer-2.5",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archived: false,
+      ...overrides,
+    }),
+  );
+}
+
+describe("resolveMockupConversationId", () => {
+  it("returns a direct conversation id when meta.json exists", async () => {
+    const { resolveMockupConversationId } = await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "plan-mockup-round-verify");
+
+    expect(resolveMockupConversationId("plan-mockup-round-verify")).toBe(
+      "plan-mockup-round-verify",
+    );
+  });
+
+  it("maps an agent id through meta.json to the owning conversation", async () => {
+    const { resolveMockupConversationId } = await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "plan-mockup-round-verify", {
+      agentId: "agent-45876f25-f1a3-4300-b066-7da0ac7979d5",
+    });
+
+    expect(
+      resolveMockupConversationId(
+        "agent-45876f25-f1a3-4300-b066-7da0ac7979d5",
+      ),
+    ).toBe("plan-mockup-round-verify");
+  });
+
+  it("throws when the id resolves to neither lookup", async () => {
+    const { resolveMockupConversationId } = await loadService();
+    const { conversationsDir } = await loadConfig();
+
+    expect(() =>
+      resolveMockupConversationId("agent-unknown-no-owner"),
+    ).toThrow(/agent-unknown-no-owner/);
+    expect(() =>
+      resolveMockupConversationId("agent-unknown-no-owner"),
+    ).toThrow(new RegExp(join(conversationsDir, "agent-unknown-no-owner", "meta.json")));
+    expect(() =>
+      resolveMockupConversationId("agent-unknown-no-owner"),
+    ).toThrow(/agentId === "agent-unknown-no-owner"/);
+  });
+});
+
 describe("mockup scratch layout", () => {
   it("places mockups beside agent-stack under the conversation", async () => {
     const { mockupScratchDir } = await loadService();
     const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     const scratch = mockupScratchDir("my-conversation");
 
@@ -44,6 +108,8 @@ describe("mockup scratch layout", () => {
 
   it("creates a direction directory beneath the scratch", async () => {
     const { directionDir, mockupScratchDir } = await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     const dir = directionDir("my-conversation", "direction-a");
 
@@ -53,6 +119,8 @@ describe("mockup scratch layout", () => {
 
   it("lists direction ids excluding mockup-stack", async () => {
     const { directionDir, listDirectionIds } = await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     directionDir("my-conversation", "grid");
     directionDir("my-conversation", "grid-lightbox");
@@ -66,6 +134,7 @@ describe("mockup scratch layout", () => {
   it("computes harness.json at the scratch root without creating it", async () => {
     const { harnessConfigPath } = await loadService();
     const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     const path = harnessConfigPath("my-conversation");
     const scratch = join(conversationsDir, "my-conversation", "mockups");
@@ -73,6 +142,22 @@ describe("mockup scratch layout", () => {
     expect(path).toBe(join(scratch, "harness.json"));
     expect(existsSync(scratch)).toBe(false);
     expect(existsSync(path)).toBe(false);
+  });
+
+  it("routes scratch paths through agent id resolution", async () => {
+    const { harnessConfigPath, mockupScratchDir } = await loadService();
+    const { conversationsDir } = await loadConfig();
+    const agentId = "agent-45876f25-f1a3-4300-b066-7da0ac7979d5";
+    writeConversationMeta(conversationsDir, "plan-mockup-round-verify", {
+      agentId,
+    });
+
+    expect(mockupScratchDir(agentId)).toBe(
+      join(conversationsDir, "plan-mockup-round-verify", "mockups"),
+    );
+    expect(harnessConfigPath(agentId)).toBe(
+      join(conversationsDir, "plan-mockup-round-verify", "mockups", "harness.json"),
+    );
   });
 
   it("refuses ids that would escape the conversations dir", async () => {
@@ -99,6 +184,7 @@ describe("mockup stack state", () => {
   it("reports no state before a stack has started", async () => {
     const { readMockupStackState } = await loadService();
     const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
     const scratch = join(conversationsDir, "my-conversation", "mockups");
 
     expect(existsSync(scratch)).toBe(false);
@@ -109,6 +195,8 @@ describe("mockup stack state", () => {
   it("round-trips validated state under mockup-stack/state.json", async () => {
     const { mockupScratchDir, readMockupStackState, writeMockupStackState } =
       await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     writeMockupStackState("my-conversation", sampleState);
 
@@ -123,6 +211,8 @@ describe("mockup stack state", () => {
 
   it("rejects malformed state instead of treating it as no stack", async () => {
     const { mockupScratchDir, readMockupStackState } = await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
     const statePath = join(
       mockupScratchDir("my-conversation"),
       "mockup-stack",
@@ -144,6 +234,8 @@ describe("pruneDirections", () => {
   it("removes sibling directions and keeps the chosen one", async () => {
     const { directionDir, mockupScratchDir, pruneDirections } =
       await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     directionDir("my-conversation", "direction-a");
     directionDir("my-conversation", "direction-b");
@@ -161,6 +253,8 @@ describe("pruneDirections", () => {
   it("throws for an unknown direction to keep and removes nothing", async () => {
     const { directionDir, mockupScratchDir, pruneDirections } =
       await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
 
     directionDir("my-conversation", "direction-a");
     directionDir("my-conversation", "direction-b");
