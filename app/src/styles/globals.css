@@ -378,10 +378,27 @@
     border: none;
     border-top: 1px solid hsl(var(--border));
   }
-  .prose-issue .issue-md-image-trigger {
-    display: inline-block;
+  .prose-issue .issue-md-gallery {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin: 12px 0;
+    min-width: 0;
     max-width: 100%;
-    margin: 0.75rem 0;
+  }
+  .prose-issue .issue-md-figure {
+    margin: 12px 0;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .prose-issue .issue-md-gallery .issue-md-figure {
+    margin: 0;
+  }
+  .prose-issue .issue-md-image-trigger {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
     padding: 0;
     border: none;
     background: transparent;
@@ -394,9 +411,17 @@
   }
   .prose-issue .issue-md-image {
     display: block;
+    width: 100%;
     max-width: 100%;
     height: auto;
     border-radius: var(--radius);
     border: 1px solid hsl(var(--border));
+  }
+  .prose-issue .issue-md-image-caption {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.3;
+    color: hsl(var(--muted-foreground));
   }
 }
