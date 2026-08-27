@@ -3,8 +3,9 @@ name: issue-tracker-plan
 disable-model-invocation: true
 description: >-
   Grill an Idea, todo Epic, or not-started project-level Story into a plan
-  tree via apply, then auto-chain polish. Use when the user asks to plan an
-  Idea, flesh out a tracker plan, or run issue-tracker-plan.
+  tree via apply, offering a mockup round on each UI surface, then auto-chain
+  polish. Use when the user asks to plan an Idea, flesh out a tracker plan, or
+  run issue-tracker-plan.
 ---
 
 # Issue Tracker — Plan (grill → plan tree)
@@ -12,8 +13,9 @@ description: >-
 Turn a rough capture into one or more detailed plan trees — each a
 **project-level Story > Task** tree or an **Epic > Story > Task** tree, per
 authoring Epic grain and [Multi-Epic split](../issue-tracker-authoring/SKILL.md#multi-epic-split).
-You grill the user, show the outline, get one explicit-consequence yes, then
-migrate via `issue apply` (issue-tracker-authoring), auto-chain
+You grill the user, offer a mockup round on each UI surface the plan touches,
+show the outline, get one explicit-consequence yes, then migrate via
+`issue apply` (issue-tracker-authoring), auto-chain
 `issue-tracker-plan-polish` on every resulting root. Behavioral contract:
 Epic **auto-plan-polish-confirm** invariants (single post-outline gate +
 auto-chain polish) — do not restate that list here. Do not implement product
@@ -140,6 +142,13 @@ mid-grill.
   launched the planner and controls the vision — including questions that impact
   **user or developer experience** (UX/DX). When unsure about any of these, do
   not resolve product direction yourself; put each decision to them and wait.
+- **Mockup round per surface** — for each user-visible surface the plan will
+  create or change, ask **one** question offering a mockup round for that
+  surface, before the outline. Recommend running the round via `(recommended)`
+  in the answer list. On **yes**, **Read**
+  `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-mockup/SKILL.md`
+  and follow it, naming that surface and passing the issue being planned as its
+  argument. On **no**, continue the grill.
 - **Do not enact** the plan (no `apply`, no tracker writes that materialize the
   tree) until the user answers yes at the single post-outline gate below.
 - Do **not** ask a separate pre-outline “shared understanding?” confirm —
