@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
 import { useIssuesQuery } from "../api/queries";
 import { issuesById, listProjects, projectIdOf } from "../lib/build-tree";
-import { flowBuckets, inFlightTaskOf, type FlowItem } from "../lib/flow";
+import { flowBuckets, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import {
@@ -126,12 +126,7 @@ export function CockpitPage() {
                     item={item}
                     issues={issues}
                     to={issuePath(group.projectId, item.issue.id)}
-                    actions={
-                      <FlowRowActions
-                        item={item}
-                        task={inFlightTaskOf(item.issue, issues, byId)}
-                      />
-                    }
+                    actions={<FlowRowActions item={item} />}
                   />
                 )}
               />

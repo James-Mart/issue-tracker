@@ -3,7 +3,6 @@ import { Play } from "lucide-react";
 import type { ConversationChannel, IssueDetail } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -126,7 +125,7 @@ function PlanningLaunchButton({
   channel: ConversationChannel;
   stakeholder: string | undefined;
   fallbackCatalogId?: string;
-  variant: "primary" | "secondary" | "icon" | "menuItem";
+  variant: "primary" | "secondary" | "icon";
   disabled?: boolean;
   onStarted: (session: PlanningSessionStarted) => void;
 }) {
@@ -178,38 +177,21 @@ function PlanningLaunchButton({
     variant === "secondary" ? "New run" : copy.actionLabel;
 
   if (variant === "icon") {
+    if (modelsLoading || !catalogId) return null;
+
     return (
       <>
         <Button
           type="button"
-          variant="ghost"
+          variant="default"
           size="icon-sm"
-          title={label}
-          disabled={!canStart}
+          title="Begin planning"
+          aria-label="Begin planning"
           data-testid="flow-row-start-planning"
           onClick={start}
         >
           <Play className="h-3.5 w-3.5" />
         </Button>
-        {dialog}
-      </>
-    );
-  }
-
-  if (variant === "menuItem") {
-    return (
-      <>
-        <DropdownMenuItem
-          disabled={!canStart}
-          data-testid="flow-row-start-planning-menu"
-          onSelect={(event) => {
-            event.preventDefault();
-            start();
-          }}
-        >
-          <Play className="h-4 w-4" />
-          {createSession.isPending ? "Starting…" : label}
-        </DropdownMenuItem>
         {dialog}
       </>
     );
@@ -244,19 +226,6 @@ export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
       channel="planning"
       stakeholder={issue.stakeholder}
       variant="icon"
-      onStarted={() => {}}
-    />
-  );
-}
-
-/** Touch overflow menu item for the same planning launch path. */
-export function PlanningFlowRowTouchMenuLaunch({ issue }: { issue: IdeaDetail }) {
-  return (
-    <PlanningLaunchButton
-      issue={issue}
-      channel="planning"
-      stakeholder={issue.stakeholder}
-      variant="menuItem"
       onStarted={() => {}}
     />
   );
