@@ -22,6 +22,8 @@
     "agent-stack": "tsx scripts/agent-stack.ts",
     "mockup-stack": "tsx scripts/mockup-stack.ts",
     "mockup-capture": "tsx scripts/mockup-capture.ts",
+    "mockup-promote": "tsx scripts/mockup-promote.ts",
+    "mockup-prune": "tsx scripts/mockup-prune.ts",
     "install-hooks": "tsx scripts/install-cursor-hooks.ts",
     "test": "npm run lint:boundary && npm run lint:spawns && npm run lint:cli-forms && npm run lint:skill-paths && npm run lint:transport && vitest run",
     "test:live": "CURSOR_SDK_LIVE=1 vitest run live.test",
