@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { visibleIssues } from "@server/services/archived-visibility";
 import type {
   DerivedState,
   IssueRecord,
@@ -11,21 +10,17 @@ import { Button } from "@/components/ui/button";
 import {
   IssuesQueryShell,
   ShellFaultDetail,
+  ShellInlineFault,
+  ShellLoadingState,
   ShellState,
 } from "@/app/shell-state";
 import { cn } from "@/lib/utils/cn";
-import { useIssuesQuery } from "../api/queries";
-import { issuesById } from "../lib/build-tree";
+import { useUploadAttachment } from "../api/mutations";
+import { useIssueDetailQuery, useIssuesQuery } from "../api/queries";
 import {
-  filterFlowBuckets,
-  flowBuckets,
-  flowFiltersActive,
-  inFlightTaskOf,
-  type FlowBuckets,
   type FlowFilters,
-  type FlowItem,
+  flowFiltersActive,
 } from "../lib/flow";
-import { issuePath } from "../lib/links";
 import {
   OVERVIEW_LENS_OPTIONS,
   parseOverviewLens,
@@ -38,11 +33,9 @@ import {
   structureTreeNodes,
 } from "../lib/structure";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
-import { FlowBucketsSections } from "./flow-buckets-sections";
-import { FlowRow } from "./flow-row";
-import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
 import { IssueTree } from "./issue-tree";
 import { OverviewFlowFilters } from "./overview-flow-filters";
+import { ProjectSettingsOverview } from "./project-settings-overview";
 
 function OverviewHeader({ title }: { title: string }) {
   return (
@@ -98,104 +91,32 @@ function LensSwitcher({
   );
 }
 
-function flowBucketsEmpty(buckets: FlowBuckets): boolean {
-  return (
-    buckets.awaitingPlanning.length === 0 &&
-    buckets.ready.length === 0 &&
-    buckets.inFlight.length === 0 &&
-    buckets.blocked.length === 0 &&
-    buckets.recentlyMerged.length === 0
-  );
-}
-
-/** Project-scoped Flow lens content (shared toolbar lives on OverviewPage). */
-function OverviewFlowLens({
-  projectId,
-  issues,
-  derived,
-}: {
-  projectId: string;
-  issues: IssueRecord[];
-  derived: Record<string, DerivedState>;
-}) {
-  const search = useIssueUiStore((s) => s.search);
-  const setSearch = useIssueUiStore((s) => s.setSearch);
-  const labelFilter = useIssueUiStore((s) => s.labelFilter);
-  const setLabelFilter = useIssueUiStore((s) => s.setLabelFilter);
-  const boardKindFilter = useIssueUiStore((s) => s.boardKindFilter);
-  const setBoardKindFilter = useIssueUiStore((s) => s.setBoardKindFilter);
-  const showArchived = useIssueUiStore((s) => s.showArchived);
-
-  const filters: FlowFilters = useMemo(
-    () => ({
-      search,
-      labelIds: labelFilter,
-      kind: boardKindFilter,
-    }),
-    [boardKindFilter, labelFilter, search],
-  );
-  const filtersOn = flowFiltersActive(filters);
-
-  const visible = useMemo(
-    () => visibleIssues(issues, showArchived),
-    [issues, showArchived],
-  );
-  const byId = useMemo(() => issuesById(visible), [visible]);
-
-  const buckets = useMemo(() => {
-    const raw = flowBuckets(visible, derived, { projectId });
-    return filterFlowBuckets(raw, visible, filters, derived);
-  }, [derived, filters, projectId, visible]);
-
-  const clearFilters = () => {
-    setSearch("");
-    setLabelFilter([]);
-    setBoardKindFilter([]);
-  };
+/** Project-scoped Overview lens: the Project issue's own detail content. */
+function OverviewProjectLens({ projectId }: { projectId: string }) {
+  const { data: issue, isLoading, error } = useIssueDetailQuery(projectId);
+  const upload = useUploadAttachment(projectId);
 
   return (
     <div
       role="tabpanel"
-      id="overview-lens-panel-flow"
-      aria-labelledby="overview-lens-tab-flow"
+      id="overview-lens-panel-overview"
+      aria-labelledby="overview-lens-tab-overview"
       className="flex flex-col gap-6"
     >
-      {filtersOn && flowBucketsEmpty(buckets) ? (
-        <ShellState
-          eyebrow="Filtered"
-          title="No work matches these filters."
-          detail="Clear search, labels, or kind to see the Flow again."
-          action={
-            <Button size="sm" variant="primary" onClick={clearFilters}>
-              Clear filters
-            </Button>
-          }
+      {isLoading && !issue ? (
+        <ShellLoadingState label="Loading project…" />
+      ) : null}
+
+      {error ? (
+        <ShellInlineFault
+          message={error.message}
+          hint="Check the server, then reload."
         />
-      ) : (
-        <FlowBucketsSections
-          buckets={buckets}
-          idPrefix="overview-flow"
-          renderRow={(item: FlowItem) => (
-            <FlowRow
-              item={item}
-              issues={visible}
-              to={issuePath(projectId, item.issue.id)}
-              actions={
-                <FlowRowActions
-                  item={item}
-                  task={inFlightTaskOf(item.issue, visible, byId)}
-                />
-              }
-              touchMenu={
-                <FlowRowTouchMenu
-                  item={item}
-                  task={inFlightTaskOf(item.issue, visible, byId)}
-                />
-              }
-            />
-          )}
-        />
-      )}
+      ) : null}
+
+      {issue?.kind === "project" ? (
+        <ProjectSettingsOverview issue={issue} upload={upload} />
+      ) : null}
     </div>
   );
 }
@@ -282,7 +203,7 @@ function OverviewStructureLens({
   );
 }
 
-/** Per-project overview shell: shared toolbar + Flow / Structure lenses (`?lens=`). */
+/** Per-project overview shell: shared toolbar + Structure / Overview lenses (`?lens=`). */
 export function OverviewPage() {
   const { projectId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -339,14 +260,8 @@ export function OverviewPage() {
         <PageShell>
           <OverviewHeader title={project.title} />
           <LensSwitcher value={lens} onChange={setLens} />
-          <OverviewFlowFilters projectId={projectId} catalog={catalog} />
-
-          {lens === "flow" ? (
-            <OverviewFlowLens
-              projectId={projectId}
-              issues={issues}
-              derived={derived}
-            />
+          {lens === "structure" ? (
+            <OverviewFlowFilters projectId={projectId} catalog={catalog} />
           ) : null}
 
           {lens === "structure" ? (
@@ -356,6 +271,10 @@ export function OverviewPage() {
               derived={derived}
               catalog={catalog}
             />
+          ) : null}
+
+          {lens === "overview" ? (
+            <OverviewProjectLens projectId={projectId} />
           ) : null}
         </PageShell>
       )}
