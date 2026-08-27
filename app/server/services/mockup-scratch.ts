@@ -1,7 +1,10 @@
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -56,6 +59,34 @@ export function directionDir(
   const dir = join(mockupScratchDir(conversationId), directionId);
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+const MOCKUP_STACK_DIR = "mockup-stack";
+
+/** Removes every direction directory except `keepDirectionId`. */
+export function pruneDirections(
+  conversationId: string,
+  keepDirectionId: string,
+): string[] {
+  assertConversationId(conversationId);
+  assertDirectionId(keepDirectionId);
+  const scratch = join(conversationsDir, conversationId, "mockups");
+  const keepPath = join(scratch, keepDirectionId);
+  if (!existsSync(keepPath) || !statSync(keepPath).isDirectory()) {
+    throw new Error(
+      `mockup scratch has no direction ${JSON.stringify(keepDirectionId)} for conversation ${JSON.stringify(conversationId)}`,
+    );
+  }
+
+  const removed: string[] = [];
+  for (const name of readdirSync(scratch)) {
+    if (name === keepDirectionId || name === MOCKUP_STACK_DIR) continue;
+    const entryPath = join(scratch, name);
+    if (!statSync(entryPath).isDirectory()) continue;
+    rmSync(entryPath, { recursive: true, force: true });
+    removed.push(name);
+  }
+  return removed;
 }
 
 /** Canonical harness config at the scratch root; does not create the file. */

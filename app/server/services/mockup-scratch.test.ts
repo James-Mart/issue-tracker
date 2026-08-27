@@ -127,3 +127,37 @@ describe("mockup stack state", () => {
     );
   });
 });
+
+describe("pruneDirections", () => {
+  it("removes sibling directions and keeps the chosen one", async () => {
+    const { directionDir, mockupScratchDir, pruneDirections } =
+      await loadService();
+
+    directionDir("my-conversation", "direction-a");
+    directionDir("my-conversation", "direction-b");
+    directionDir("my-conversation", "direction-c");
+    const scratch = mockupScratchDir("my-conversation");
+
+    const removed = pruneDirections("my-conversation", "direction-b");
+
+    expect(removed.sort()).toEqual(["direction-a", "direction-c"]);
+    expect(existsSync(join(scratch, "direction-a"))).toBe(false);
+    expect(existsSync(join(scratch, "direction-c"))).toBe(false);
+    expect(existsSync(join(scratch, "direction-b"))).toBe(true);
+  });
+
+  it("throws for an unknown direction to keep and removes nothing", async () => {
+    const { directionDir, mockupScratchDir, pruneDirections } =
+      await loadService();
+
+    directionDir("my-conversation", "direction-a");
+    directionDir("my-conversation", "direction-b");
+    const scratch = mockupScratchDir("my-conversation");
+
+    expect(() =>
+      pruneDirections("my-conversation", "direction-missing"),
+    ).toThrow(/has no direction "direction-missing"/);
+    expect(existsSync(join(scratch, "direction-a"))).toBe(true);
+    expect(existsSync(join(scratch, "direction-b"))).toBe(true);
+  });
+});
