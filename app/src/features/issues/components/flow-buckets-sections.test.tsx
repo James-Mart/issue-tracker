@@ -1,24 +1,28 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import type { FlowBuckets, FlowItem } from "../lib/flow";
+import { projectLensPath } from "../lib/links";
 import {
   AWAITING_PLANNING_PREVIEW_LIMIT,
   FlowBucketsSections,
   FlowPreviewedItems,
+  READY_EMPTY_COPY,
   partitionCockpitBuckets,
+  readyEmptyCopy,
 } from "./flow-buckets-sections";
 
 const t0 = "2026-07-01T00:00:00.000Z";
 
-function idea(id: string): IssueRecord {
+function idea(id: string, partOf = "p"): IssueRecord {
   return {
     id,
     kind: "idea",
     title: id,
-    partOf: "p",
+    partOf,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
@@ -26,12 +30,12 @@ function idea(id: string): IssueRecord {
   };
 }
 
-function story(id: string): IssueRecord {
+function story(id: string, partOf = "p"): IssueRecord {
   return {
     id,
     kind: "story",
     title: id,
-    partOf: "p",
+    partOf,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
@@ -43,12 +47,12 @@ function story(id: string): IssueRecord {
   };
 }
 
-function epic(id: string, needsAttention = false): IssueRecord {
+function epic(id: string, needsAttention = false, partOf = "p"): IssueRecord {
   return {
     id,
     kind: "epic",
     title: id,
-    partOf: "p",
+    partOf,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
@@ -84,11 +88,13 @@ function mountSections(
   const root = createRoot(container);
   act(() => {
     root.render(
-      <FlowBucketsSections
-        buckets={buckets}
-        idPrefix="test"
-        renderRow={(item) => <a href={`#${item.issue.id}`}>{item.issue.title}</a>}
-      />,
+      <MemoryRouter>
+        <FlowBucketsSections
+          buckets={buckets}
+          idPrefix="test"
+          renderRow={(item) => <a href={`#${item.issue.id}`}>{item.issue.title}</a>}
+        />
+      </MemoryRouter>,
     );
   });
   return { container, root };
@@ -100,6 +106,51 @@ function section(container: ParentNode, key: string): HTMLElement | null {
 
 afterEach(() => {
   document.body.innerHTML = "";
+});
+
+describe("readyEmptyCopy", () => {
+  it("keeps the existing copy when nothing is blocked", () => {
+    expect(readyEmptyCopy([])).toEqual({
+      text: READY_EMPTY_COPY,
+      href: null,
+    });
+  });
+
+  it("links to Structure when blocked work is in one project", () => {
+    expect(
+      readyEmptyCopy([
+        row(epic("blocked", false, "alpha"), {
+          blocked: true,
+          epicStatus: "todo",
+        }),
+        row(epic("blocked-2", false, "alpha"), {
+          blocked: true,
+          epicStatus: "todo",
+        }),
+      ]),
+    ).toEqual({
+      text: "Nothing ready. Blocked work is waiting in Structure.",
+      href: projectLensPath("alpha", "structure"),
+    });
+  });
+
+  it("stays general when blocked work spans several projects", () => {
+    expect(
+      readyEmptyCopy([
+        row(epic("blocked-a", false, "alpha"), {
+          blocked: true,
+          epicStatus: "todo",
+        }),
+        row(epic("blocked-b", false, "beta"), {
+          blocked: true,
+          epicStatus: "todo",
+        }),
+      ]),
+    ).toEqual({
+      text: "Nothing ready. Blocked work is waiting.",
+      href: null,
+    });
+  });
 });
 
 describe("partitionCockpitBuckets", () => {
@@ -209,6 +260,55 @@ describe("FlowBucketsSections", () => {
 
     expect(section(container, "blocked")).toBeNull();
     expect(section(container, "ready")?.querySelector('a[href="#ready"]')).toBeTruthy();
+  });
+
+  it("links empty Ready to Structure when blocked work is in one project", () => {
+    const buckets = emptyBuckets({
+      blocked: [
+        row(epic("blocked", false, "alpha"), {
+          blocked: true,
+          epicStatus: "todo",
+        }),
+      ],
+    });
+    const { container } = mountSections(buckets);
+    const ready = section(container, "ready");
+    expect(ready?.textContent).toContain("Blocked work is waiting");
+    const link = ready?.querySelector("a");
+    expect(link?.getAttribute("href")).toBe(
+      projectLensPath("alpha", "structure"),
+    );
+    expect(link?.textContent).toBe("Structure");
+  });
+
+  it("keeps empty Ready general when blocked work spans several projects", () => {
+    const buckets = emptyBuckets({
+      blocked: [
+        row(epic("blocked-a", false, "alpha"), {
+          blocked: true,
+          epicStatus: "todo",
+        }),
+        row(epic("blocked-b", false, "beta"), {
+          blocked: true,
+          epicStatus: "todo",
+        }),
+      ],
+    });
+    const { container } = mountSections(buckets);
+    const ready = section(container, "ready");
+    expect(ready?.textContent).toContain("Blocked work is waiting");
+    expect(ready?.querySelector("a")).toBeNull();
+  });
+
+  it("keeps the existing empty Ready copy when nothing is blocked", () => {
+    const buckets = emptyBuckets({
+      inFlight: [
+        row(epic("flight"), { blocked: false, epicStatus: "in-progress" }),
+      ],
+    });
+    const { container } = mountSections(buckets);
+    expect(section(container, "ready")).toBeNull();
+    expect(container.textContent).not.toContain("Blocked work is waiting");
   });
 
   it("collapses recently merged", () => {
