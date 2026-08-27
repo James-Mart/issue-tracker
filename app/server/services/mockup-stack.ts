@@ -10,11 +10,16 @@ import {
 import { createServer, type AddressInfo, type Server } from "node:net";
 import { appDir } from "../config.js";
 import {
+  conversationMetaExists,
   harnessConfigPath,
+  listRecordedMockupStackIds,
   mockupStackDir,
   mockupStackLogPath,
   mockupStackStatePath,
+  mockupStackStatePathDirect,
   readMockupStackState,
+  readMockupStackStateDirect,
+  removeMockupScratch,
   writeMockupStackState,
   type MockupStackState,
 } from "./mockup-scratch.js";
@@ -41,6 +46,18 @@ export interface MockupStackHandle {
 export type MockupStackStopResult =
   | { stopped: true; state: MockupStackState }
   | { stopped: false; state: null };
+
+export type MockupStackStopAllEntry = {
+  conversationId: string;
+  port: number;
+};
+
+export type MockupStackReapReport = {
+  /** State files removed for dead or pid-recycled stacks. */
+  staleStateRemoved: string[];
+  /** Live stacks stopped and scratch removed because the conversation is gone. */
+  orphanedStacksStopped: MockupStackStopAllEntry[];
+};
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -249,6 +266,26 @@ async function waitForExit(
   return !isMockupStackLive(state);
 }
 
+async function stopLiveProcess(state: MockupStackState): Promise<void> {
+  if (!isMockupStackLive(state)) return;
+
+  signalGroup(state.pid, "SIGTERM");
+  const exited = await waitForExit(state, TERM_GRACE_MS);
+  if (!exited) {
+    signalGroup(state.pid, "SIGKILL");
+    const killed = await waitForExit(state, KILL_GRACE_MS);
+    if (!killed) {
+      throw new Error(
+        `mockup stack survived SIGKILL (pid ${state.pid}, port ${state.port})`,
+      );
+    }
+  }
+}
+
+function removeMockupStackState(conversationId: string): void {
+  rmSync(mockupStackStatePathDirect(conversationId), { force: true });
+}
+
 /**
  * Stop this conversation's Storybook stack and release its port. A
  * conversation with no recorded stack is not an error.
@@ -259,20 +296,62 @@ export async function stopMockupStack(
   const state = readMockupStackState(conversationId);
   if (!state) return { stopped: false, state: null };
 
-  if (isMockupStackLive(state)) {
-    signalGroup(state.pid, "SIGTERM");
-    const exited = await waitForExit(state, TERM_GRACE_MS);
-    if (!exited) {
-      signalGroup(state.pid, "SIGKILL");
-      const killed = await waitForExit(state, KILL_GRACE_MS);
-      if (!killed) {
-        throw new Error(
-          `mockup stack for ${conversationId} survived SIGKILL (pid ${state.pid})`,
-        );
-      }
-    }
-  }
-
+  await stopLiveProcess(state);
   rmSync(mockupStackStatePath(conversationId), { force: true });
   return { stopped: true, state };
+}
+
+/**
+ * Stop every recorded mockup stack. Returns each live stack's freed port.
+ */
+export async function stopAllMockupStacks(): Promise<MockupStackStopAllEntry[]> {
+  const freed: MockupStackStopAllEntry[] = [];
+  for (const conversationId of listRecordedMockupStackIds()) {
+    const state = readMockupStackStateDirect(conversationId);
+    if (!state) continue;
+    const wasLive = isMockupStackLive(state);
+    await stopLiveProcess(state);
+    removeMockupStackState(conversationId);
+    if (wasLive) {
+      freed.push({ conversationId, port: state.port });
+    }
+  }
+  return freed;
+}
+
+/**
+ * Sweep recorded mockup stacks at API boot. Stale state is dropped without
+ * signaling; live stacks whose conversation no longer exists are stopped and
+ * their scratch removed. Scratch for conversations that still exist is never
+ * removed here.
+ */
+export async function reapOrphanedMockupStacksAtBoot(): Promise<MockupStackReapReport> {
+  const report: MockupStackReapReport = {
+    staleStateRemoved: [],
+    orphanedStacksStopped: [],
+  };
+
+  for (const conversationId of listRecordedMockupStackIds()) {
+    const state = readMockupStackStateDirect(conversationId);
+    if (!state) continue;
+
+    if (!isMockupStackLive(state)) {
+      removeMockupStackState(conversationId);
+      report.staleStateRemoved.push(conversationId);
+      continue;
+    }
+
+    if (conversationMetaExists(conversationId)) {
+      continue;
+    }
+
+    await stopLiveProcess(state);
+    removeMockupScratch(conversationId);
+    report.orphanedStacksStopped.push({
+      conversationId,
+      port: state.port,
+    });
+  }
+
+  return report;
 }

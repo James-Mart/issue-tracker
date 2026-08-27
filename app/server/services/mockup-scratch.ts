@@ -110,6 +110,45 @@ export function directionDir(
 
 const MOCKUP_STACK_DIR = "mockup-stack";
 
+function mockupScratchRoot(conversationId: string): string {
+  return join(conversationsDir, conversationId, "mockups");
+}
+
+/** Whether the conversation directory still has bootstrap meta on disk. */
+export function conversationMetaExists(conversationId: string): boolean {
+  return existsSync(metaPathFor(conversationId));
+}
+
+/** Every conversation id with a recorded mockup-stack state file. */
+export function listRecordedMockupStackIds(): string[] {
+  if (!existsSync(conversationsDir)) return [];
+  return readdirSync(conversationsDir)
+    .filter((entry) => {
+      const statePath = join(
+        conversationsDir,
+        entry,
+        "mockups",
+        MOCKUP_STACK_DIR,
+        "state.json",
+      );
+      return existsSync(statePath);
+    })
+    .sort();
+}
+
+function readMockupStackStateFile(path: string): MockupStackState | null {
+  if (!existsSync(path)) return null;
+  const parsed = mockupStackStateSchema.safeParse(
+    JSON.parse(readFileSync(path, "utf8")),
+  );
+  if (!parsed.success) {
+    throw new Error(
+      `invalid mockup-stack state at ${path}: ${parsed.error.message}`,
+    );
+  }
+  return parsed.data;
+}
+
 /** Lists direction directory names under the conversation scratch (excludes mockup-stack). */
 export function listDirectionIds(conversationId: string): string[] {
   const resolvedId = resolveMockupConversationId(conversationId);
@@ -166,6 +205,27 @@ export function mockupStackStatePath(conversationId: string): string {
   return join(mockupStackDir(conversationId), "state.json");
 }
 
+/** State path without resolving the conversation — for boot reap when meta is gone. */
+export function mockupStackStatePathDirect(conversationId: string): string {
+  return join(
+    mockupScratchRoot(conversationId),
+    MOCKUP_STACK_DIR,
+    "state.json",
+  );
+}
+
+/** Read stack state by conversation directory name, without resolveMockupConversationId. */
+export function readMockupStackStateDirect(
+  conversationId: string,
+): MockupStackState | null {
+  return readMockupStackStateFile(mockupStackStatePathDirect(conversationId));
+}
+
+/** Remove the entire mockups scratch tree for a conversation directory. */
+export function removeMockupScratch(conversationId: string): void {
+  rmSync(mockupScratchRoot(conversationId), { recursive: true, force: true });
+}
+
 export function mockupStackLogPath(conversationId: string): string {
   return join(mockupStackDir(conversationId), "storybook.log");
 }
@@ -173,17 +233,7 @@ export function mockupStackLogPath(conversationId: string): string {
 export function readMockupStackState(
   conversationId: string,
 ): MockupStackState | null {
-  const path = mockupStackStatePath(conversationId);
-  if (!existsSync(path)) return null;
-  const parsed = mockupStackStateSchema.safeParse(
-    JSON.parse(readFileSync(path, "utf8")),
-  );
-  if (!parsed.success) {
-    throw new Error(
-      `invalid mockup-stack state at ${path}: ${parsed.error.message}`,
-    );
-  }
-  return parsed.data;
+  return readMockupStackStateFile(mockupStackStatePath(conversationId));
 }
 
 export function writeMockupStackState(

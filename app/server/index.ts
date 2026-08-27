@@ -9,6 +9,9 @@ const { captureRestartSupervision, RESTART_SUPERVISED_ENV_VAR } = await import(
 );
 captureRestartSupervision(Boolean(process.env[RESTART_SUPERVISED_ENV_VAR]));
 
+const { captureMockupStackReapAtBoot } = await import("./mockup-stack-boot.js");
+await captureMockupStackReapAtBoot();
+
 const { attachMultiplexedWebSocket, createApp } = await import("./app.js");
 const { refreshAgentModelSlugCatalog } = await import(
   "./agent-model-slugs-sync.js"
