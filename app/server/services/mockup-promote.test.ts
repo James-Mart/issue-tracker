@@ -12,6 +12,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_ATTACHMENT_BYTES } from "./attachments.js";
 import type { CaptureResult } from "./mockup-story-capture.js";
 
+const mockCaptureMockupStoryStates = vi.fn();
+
+vi.mock("./mockup-capture.js", () => ({
+  captureMockupStoryStates: (...args: unknown[]) =>
+    mockCaptureMockupStoryStates(...args),
+}));
+
 const AT = "2026-07-09T14:00:00.000Z";
 
 let root: string;
@@ -63,6 +70,32 @@ async function loadAttachments() {
   return import("./attachments.js");
 }
 
+async function loadConfig() {
+  return import("../config.js");
+}
+
+function writeConversationMeta(
+  conversationsDir: string,
+  conversationId: string,
+  overrides: { agentId?: string } = {},
+): void {
+  const dir = join(conversationsDir, conversationId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "meta.json"),
+    JSON.stringify({
+      id: conversationId,
+      title: conversationId,
+      projectId: "p",
+      model: "composer-2.5",
+      createdAt: AT,
+      updatedAt: AT,
+      archived: false,
+      ...overrides,
+    }),
+  );
+}
+
 function writePng(path: string, marker: string): void {
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileSync(path, Buffer.from(`png:${marker}`));
@@ -76,13 +109,16 @@ function capture(
   return { storyId, viewport, absolutePath };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-mockup-promote-"));
   issuesDir = join(root, "issues");
   mkdirSync(issuesDir, { recursive: true });
   vi.resetModules();
+  vi.clearAllMocks();
   vi.stubEnv("ISSUES_DIR", issuesDir);
   seedIssues();
+  const { conversationsDir } = await loadConfig();
+  writeConversationMeta(conversationsDir, "promote-chat");
 });
 
 afterEach(() => {
@@ -91,20 +127,90 @@ afterEach(() => {
 });
 
 describe("attachment names", () => {
-  it("uses slugified story ids in candidate and chosen names", async () => {
+  it("uses slugified story ids and viewport suffixes in candidate and chosen names", async () => {
     const {
       candidateAttachmentName,
       chosenAttachmentName,
       chosenArchiveName,
     } = await loadPromote();
 
-    expect(candidateAttachmentName("direction-a", "direction-a-card--default")).toBe(
-      "mockup-candidate-direction-a-direction-a-card-default-phone.png",
-    );
+    expect(
+      candidateAttachmentName("direction-a", "direction-a-card--default", "phone"),
+    ).toBe("mockup-candidate-direction-a-card-default-phone.png");
+    expect(
+      candidateAttachmentName(
+        "direction-a",
+        "direction-a-card--default",
+        "desktop",
+      ),
+    ).toBe("mockup-candidate-direction-a-card-default-desktop.png");
     expect(
       chosenAttachmentName("direction-a", "direction-a-card--default", "desktop"),
-    ).toBe("mockup-direction-a-direction-a-card-default-desktop.png");
+    ).toBe("mockup-direction-a-card-default-desktop.png");
     expect(chosenArchiveName("direction-a")).toBe("mockup-direction-a.tar.gz");
+  });
+
+  it("strips one leading direction segment from state slugs and keeps prefix-safe matching", async () => {
+    const {
+      stateSlug,
+      candidateAttachmentName,
+      chosenAttachmentName,
+      copyDirectionArtifacts,
+    } = await loadPromote();
+    const { putAttachment } = await loadAttachments();
+
+    expect(stateSlug("grid/gallery-grid-attachmentspanel-empty", "grid")).toBe(
+      "gallery-grid-attachmentspanel-empty",
+    );
+    expect(
+      stateSlug("grid-lightbox/gallery-grid-attachmentspanel-empty", "grid-lightbox"),
+    ).toBe("gallery-grid-attachmentspanel-empty");
+    expect(stateSlug("grid-lightbox/card--default", "grid")).toBe(
+      "lightbox-card-default",
+    );
+
+    expect(
+      candidateAttachmentName("grid", "grid/gallery-grid-attachmentspanel-empty", "phone"),
+    ).toBe("mockup-candidate-grid-gallery-grid-attachmentspanel-empty-phone.png");
+    expect(
+      candidateAttachmentName(
+        "grid-lightbox",
+        "grid-lightbox/gallery-grid-attachmentspanel-empty",
+        "phone",
+      ),
+    ).toBe(
+      "mockup-candidate-grid-lightbox-gallery-grid-attachmentspanel-empty-phone.png",
+    );
+    expect(
+      chosenAttachmentName("grid", "grid/card--default", "desktop"),
+    ).toBe("mockup-grid-card-default-desktop.png");
+
+    await putAttachment(
+      "src",
+      "mockup-grid-card-default-phone.png",
+      Buffer.from("grid-phone"),
+    );
+    await putAttachment("src", "mockup-grid.tar.gz", Buffer.from("grid-archive"));
+    await putAttachment(
+      "src",
+      "mockup-grid-lightbox-card-default-phone.png",
+      Buffer.from("lightbox-phone"),
+    );
+    await putAttachment(
+      "src",
+      "mockup-grid-lightbox.tar.gz",
+      Buffer.from("lightbox-archive"),
+    );
+
+    const gridCopy = await copyDirectionArtifacts({
+      fromIssueId: "src",
+      issueId: "dst",
+      directionId: "grid",
+    });
+    expect(gridCopy.attached.sort()).toEqual([
+      "mockup-grid-card-default-phone.png",
+      "mockup-grid.tar.gz",
+    ]);
   });
 });
 
@@ -181,7 +287,7 @@ describe("createDirectionArchive", () => {
 });
 
 describe("attachCapturedDirection", () => {
-  it("attaches phone candidate PNGs under mockup-candidate- names", async () => {
+  it("attaches candidate PNGs under mockup-candidate- names with viewport suffixes", async () => {
     const { attachCapturedDirection } = await loadPromote();
     const { listAttachments } = await loadAttachments();
 
@@ -197,7 +303,7 @@ describe("attachCapturedDirection", () => {
     });
 
     expect(result.attached).toEqual([
-      "mockup-candidate-direction-a-direction-a-card-default-phone.png",
+      "mockup-candidate-direction-a-card-default-phone.png",
     ]);
     expect(result.capturePaths).toEqual([phone]);
     expect(listAttachments("src").map((att) => att.name)).toEqual(result.attached);
@@ -218,12 +324,20 @@ describe("attachCapturedDirection", () => {
 
     await putAttachment(
       "src",
-      candidateAttachmentName("direction-a", "direction-a-card--default"),
+      candidateAttachmentName(
+        "direction-a",
+        "direction-a-card--default",
+        "phone",
+      ),
       Buffer.from("old-a"),
     );
     await putAttachment(
       "src",
-      candidateAttachmentName("direction-b", "direction-b-list--default"),
+      candidateAttachmentName(
+        "direction-b",
+        "direction-b-list--default",
+        "desktop",
+      ),
       Buffer.from("old-b"),
     );
 
@@ -252,8 +366,8 @@ describe("attachCapturedDirection", () => {
     const names = listAttachments("src").map((att) => att.name).sort();
     expect(names).toEqual(
       [
-        "mockup-direction-a-direction-a-card-default-desktop.png",
-        "mockup-direction-a-direction-a-card-default-phone.png",
+        "mockup-direction-a-card-default-desktop.png",
+        "mockup-direction-a-card-default-phone.png",
         "mockup-direction-a.tar.gz",
       ].sort(),
     );
@@ -261,8 +375,8 @@ describe("attachCapturedDirection", () => {
       false,
     );
     expect(result.attached).toEqual([
-      "mockup-direction-a-direction-a-card-default-phone.png",
-      "mockup-direction-a-direction-a-card-default-desktop.png",
+      "mockup-direction-a-card-default-phone.png",
+      "mockup-direction-a-card-default-desktop.png",
       "mockup-direction-a.tar.gz",
     ]);
     expect(result.capturePaths).toEqual([phone, desktop]);
@@ -289,9 +403,151 @@ describe("attachCapturedDirection", () => {
         ],
       }),
     ).rejects.toThrow(
-      `attachment "mockup-candidate-direction-a-direction-a-card-hover-phone.png" exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
+      `attachment "mockup-candidate-direction-a-card-hover-phone.png" exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
     );
     expect(listAttachments("src")).toEqual([]);
+  });
+
+  it("replaces one direction's candidates on repeat without touching others", async () => {
+    const { attachCapturedDirection, candidateAttachmentName } =
+      await loadPromote();
+    const { listAttachments } = await loadAttachments();
+
+    const aPhoneFirst = join(root, "a-phone-first.png");
+    const aDesktopFirst = join(root, "a-desktop-first.png");
+    const bPhone = join(root, "b-phone.png");
+    const aPhoneSecond = join(root, "a-phone-second.png");
+    const aDesktopSecond = join(root, "a-desktop-second.png");
+    writePng(aPhoneFirst, "a-phone-first");
+    writePng(aDesktopFirst, "a-desktop-first");
+    writePng(bPhone, "b-phone");
+    writePng(aPhoneSecond, "a-phone-second");
+    writePng(aDesktopSecond, "a-desktop-second");
+
+    const aPhoneName = candidateAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "phone",
+    );
+    const aDesktopName = candidateAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "desktop",
+    );
+    const bPhoneName = candidateAttachmentName(
+      "direction-b",
+      "direction-b-list--default",
+      "phone",
+    );
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      issueId: "src",
+      captures: [
+        capture("direction-a-card--default", "phone", aPhoneFirst),
+        capture("direction-a-card--default", "desktop", aDesktopFirst),
+      ],
+    });
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "direction-b",
+      issueId: "src",
+      captures: [capture("direction-b-list--default", "phone", bPhone)],
+    });
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      issueId: "src",
+      captures: [
+        capture("direction-a-card--default", "phone", aPhoneSecond),
+        capture("direction-a-card--default", "desktop", aDesktopSecond),
+      ],
+    });
+
+    const names = listAttachments("src").map((att) => att.name).sort();
+    expect(names).toEqual([aDesktopName, aPhoneName, bPhoneName].sort());
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", aPhoneName)).toString(),
+    ).toBe("png:a-phone-second");
+    expect(
+      readFileSync(
+        join(issuesDir, "src", "attachments", aDesktopName),
+      ).toString(),
+    ).toBe("png:a-desktop-second");
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", bPhoneName)).toString(),
+    ).toBe("png:b-phone");
+  });
+
+  it("does not detach prefix-colliding directions during candidate-only review", async () => {
+    const { attachCapturedDirection, candidateAttachmentName } =
+      await loadPromote();
+    const { directionDir } = await loadScratch();
+    const { listAttachments } = await loadAttachments();
+
+    directionDir("promote-chat", "grid");
+    directionDir("promote-chat", "grid-lightbox");
+
+    const gridPhoneFirst = join(root, "grid-phone-first.png");
+    const lightboxPhone = join(root, "lightbox-phone.png");
+    const gridPhoneSecond = join(root, "grid-phone-second.png");
+    writePng(gridPhoneFirst, "grid-first");
+    writePng(lightboxPhone, "lightbox");
+    writePng(gridPhoneSecond, "grid-second");
+
+    const gridPhoneName = candidateAttachmentName(
+      "grid",
+      "grid/card--default",
+      "phone",
+    );
+    const lightboxPhoneName = candidateAttachmentName(
+      "grid-lightbox",
+      "grid-lightbox/card--default",
+      "phone",
+    );
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "grid",
+      issueId: "src",
+      captures: [capture("grid/card--default", "phone", gridPhoneFirst)],
+    });
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "grid-lightbox",
+      issueId: "src",
+      captures: [
+        capture("grid-lightbox/card--default", "phone", lightboxPhone),
+      ],
+    });
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "grid",
+      issueId: "src",
+      captures: [capture("grid/card--default", "phone", gridPhoneSecond)],
+    });
+
+    const names = listAttachments("src").map((att) => att.name).sort();
+    expect(names).toEqual([gridPhoneName, lightboxPhoneName].sort());
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", gridPhoneName)).toString(),
+    ).toBe("png:grid-second");
+    expect(
+      readFileSync(
+        join(issuesDir, "src", "attachments", lightboxPhoneName),
+      ).toString(),
+    ).toBe("png:lightbox");
   });
 });
 
@@ -382,8 +638,54 @@ describe("promoteMockup", () => {
     ]);
   });
 
+  it("candidate mode captures both viewports", async () => {
+    const { promoteMockup } = await loadPromote();
+    const { directionDir, harnessConfigPath } = await loadScratch();
+
+    const storiesDir = directionDir("promote-chat", "direction-a");
+    writeFileSync(join(storiesDir, "Card.stories.tsx"), "export const Default = {};");
+    const harnessPath = harnessConfigPath("promote-chat");
+    mkdirSync(join(harnessPath, ".."), { recursive: true });
+    writeFileSync(harnessPath, JSON.stringify({ ok: true }));
+
+    const phone = join(root, "candidate-phone.png");
+    const desktop = join(root, "candidate-desktop.png");
+    writePng(phone, "phone");
+    writePng(desktop, "desktop");
+
+    mockCaptureMockupStoryStates.mockResolvedValue([
+      capture("direction-a-card--default", "phone", phone),
+      capture("direction-a-card--default", "desktop", desktop),
+    ]);
+
+    const result = await promoteMockup({
+      mode: "candidate",
+      directionId: "direction-a",
+      issueId: "src",
+      conversationId: "promote-chat",
+    });
+
+    expect(mockCaptureMockupStoryStates).toHaveBeenCalledWith({
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      viewports: ["phone", "desktop"],
+    });
+    expect(result.attached.sort()).toEqual([
+      "mockup-candidate-direction-a-card-default-desktop.png",
+      "mockup-candidate-direction-a-card-default-phone.png",
+    ]);
+  });
+
   it("throws naming the conversation when no stack is running", async () => {
     const { promoteMockup } = await loadPromote();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "missing-conversation");
+
+    mockCaptureMockupStoryStates.mockRejectedValue(
+      new Error(
+        'no mockup stack running for conversation "missing-conversation"',
+      ),
+    );
 
     await expect(
       promoteMockup({

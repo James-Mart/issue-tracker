@@ -22,6 +22,7 @@ import { captureMockupStoryStates } from "./mockup-capture.js";
 import {
   directionDir,
   harnessConfigPath,
+  listDirectionIds,
 } from "./mockup-scratch.js";
 import type { CaptureResult, ViewportName } from "./mockup-story-capture.js";
 import { slugify } from "./slug.js";
@@ -49,15 +50,21 @@ export interface PendingAttachment {
 const CANDIDATE_PREFIX = "mockup-candidate-";
 const STORY_FILE_RE = /\.stories\.(tsx|ts|jsx|js|mdx)$/;
 
-export function stateSlug(storyId: string): string {
-  return slugify(storyId);
+export function stateSlug(storyId: string, directionId: string): string {
+  const slug = slugify(storyId);
+  const directionPrefix = `${slugify(directionId)}-`;
+  if (slug.startsWith(directionPrefix)) {
+    return slug.slice(directionPrefix.length);
+  }
+  return slug;
 }
 
 export function candidateAttachmentName(
   directionId: string,
   storyId: string,
+  viewport: ViewportName,
 ): string {
-  return `${CANDIDATE_PREFIX}${directionId}-${stateSlug(storyId)}-phone.png`;
+  return `${CANDIDATE_PREFIX}${directionId}-${stateSlug(storyId, directionId)}-${viewport}.png`;
 }
 
 export function chosenAttachmentName(
@@ -65,7 +72,7 @@ export function chosenAttachmentName(
   storyId: string,
   viewport: ViewportName,
 ): string {
-  return `mockup-${directionId}-${stateSlug(storyId)}-${viewport}.png`;
+  return `mockup-${directionId}-${stateSlug(storyId, directionId)}-${viewport}.png`;
 }
 
 export function chosenArchiveName(directionId: string): string {
@@ -74,6 +81,77 @@ export function chosenArchiveName(directionId: string): string {
 
 export function chosenPngPrefix(directionId: string): string {
   return `mockup-${directionId}-`;
+}
+
+export function candidateAttachmentPrefix(directionId: string): string {
+  return `${CANDIDATE_PREFIX}${directionId}-`;
+}
+
+function directionIdsFromArchives(names: string[]): string[] {
+  return names
+    .filter(
+      (name) =>
+        name.startsWith("mockup-") &&
+        name.endsWith(".tar.gz") &&
+        !name.startsWith(CANDIDATE_PREFIX),
+    )
+    .map((name) => name.slice("mockup-".length, -".tar.gz".length));
+}
+
+function knownDirectionIds(
+  attachmentNames: string[],
+  conversationId: string,
+): string[] {
+  return [
+    ...new Set([
+      ...directionIdsFromArchives(attachmentNames),
+      ...listDirectionIds(conversationId),
+    ]),
+  ];
+}
+
+export function matchesChosenPngPrefix(
+  name: string,
+  directionId: string,
+  otherDirectionIds: Iterable<string> = [],
+): boolean {
+  const prefix = chosenPngPrefix(directionId);
+  if (!name.startsWith(prefix)) return false;
+  if (!name.endsWith("-phone.png") && !name.endsWith("-desktop.png")) {
+    return false;
+  }
+  for (const other of otherDirectionIds) {
+    if (
+      other !== directionId &&
+      other.startsWith(`${directionId}-`) &&
+      name.startsWith(chosenPngPrefix(other))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function matchesCandidatePrefix(
+  name: string,
+  directionId: string,
+  otherDirectionIds: Iterable<string> = [],
+): boolean {
+  const prefix = candidateAttachmentPrefix(directionId);
+  if (!name.startsWith(prefix)) return false;
+  if (!name.endsWith("-phone.png") && !name.endsWith("-desktop.png")) {
+    return false;
+  }
+  for (const other of otherDirectionIds) {
+    if (
+      other !== directionId &&
+      other.startsWith(`${directionId}-`) &&
+      name.startsWith(candidateAttachmentPrefix(other))
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 type CopyPromoteOptions = PromoteOptions & {
@@ -207,6 +285,22 @@ export async function detachCandidateAttachments(
   return names;
 }
 
+export async function detachCandidateAttachmentsForDirection(
+  issueId: string,
+  directionId: string,
+  conversationId: string,
+): Promise<string[]> {
+  const allNames = listAttachments(issueId).map((att) => att.name);
+  const otherDirectionIds = knownDirectionIds(allNames, conversationId);
+  const names = allNames.filter((name) =>
+    matchesCandidatePrefix(name, directionId, otherDirectionIds),
+  );
+  for (const name of names) {
+    await removeAttachment(issueId, name);
+  }
+  return names;
+}
+
 function pendingFromCaptures(
   mode: "candidate" | "chosen",
   directionId: string,
@@ -217,7 +311,11 @@ function pendingFromCaptures(
   for (const capture of captures) {
     const name =
       mode === "candidate"
-        ? candidateAttachmentName(directionId, capture.storyId)
+        ? candidateAttachmentName(
+            directionId,
+            capture.storyId,
+            capture.viewport,
+          )
         : chosenAttachmentName(directionId, capture.storyId, capture.viewport);
     files.push({
       name,
@@ -242,6 +340,13 @@ export async function attachCapturedDirection(options: {
     options.directionId,
     options.captures,
   );
+  if (options.mode === "candidate") {
+    await detachCandidateAttachmentsForDirection(
+      options.issueId,
+      options.directionId,
+      options.conversationId,
+    );
+  }
   if (options.mode === "chosen") {
     const archivePath = createDirectionArchive(
       options.conversationId,
@@ -272,10 +377,16 @@ export async function copyDirectionArtifacts(options: {
   listAttachments(options.issueId);
   const source = listAttachments(options.fromIssueId);
   const archive = chosenArchiveName(options.directionId);
-  const prefix = chosenPngPrefix(options.directionId);
+  const otherDirectionIds = directionIdsFromArchives(
+    source.map((att) => att.name),
+  );
   const names = source
     .map((att) => att.name)
-    .filter((name) => name === archive || name.startsWith(prefix));
+    .filter(
+      (name) =>
+        name === archive ||
+        matchesChosenPngPrefix(name, options.directionId, otherDirectionIds),
+    );
 
   if (!names.includes(archive)) {
     throw new Error(
@@ -306,8 +417,7 @@ export async function promoteMockup(
     });
   }
 
-  const viewports: ViewportName[] =
-    checked.mode === "chosen" ? ["phone", "desktop"] : ["phone"];
+  const viewports: ViewportName[] = ["phone", "desktop"];
   const captures = await captureMockupStoryStates({
     conversationId: checked.conversationId,
     directionId: checked.directionId,
