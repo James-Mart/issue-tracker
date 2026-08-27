@@ -200,29 +200,41 @@ describe("FlowBucketsSections", () => {
     );
   });
 
-  it("collapses backlog sections", () => {
+  it("does not render blocked work on the cockpit", () => {
     const buckets = emptyBuckets({
       ready: [row(epic("ready"), { blocked: false, epicStatus: "todo" })],
       blocked: [row(epic("blocked"), { blocked: true, epicStatus: "todo" })],
     });
     const { container } = mountSections(buckets);
 
-    expect(section(container, "inFlight")).toBeNull();
-    expect(section(container, "recentlyMerged")).toBeNull();
+    expect(section(container, "blocked")).toBeNull();
+    expect(section(container, "ready")?.querySelector('a[href="#ready"]')).toBeTruthy();
+  });
 
-    const blocked = section(container, "blocked");
-    expect(blocked).toBeTruthy();
-    const details = blocked?.querySelector("details");
+  it("collapses recently merged", () => {
+    const buckets = emptyBuckets({
+      ready: [row(epic("ready"), { blocked: false, epicStatus: "todo" })],
+      recentlyMerged: [
+        row(story("merged"), { blocked: false, storyStatus: "merged" }),
+      ],
+    });
+    const { container } = mountSections(buckets);
+
+    expect(section(container, "inFlight")).toBeNull();
+
+    const recentlyMerged = section(container, "recentlyMerged");
+    expect(recentlyMerged).toBeTruthy();
+    const details = recentlyMerged?.querySelector("details");
     expect(details).toBeTruthy();
     expect(details?.open).toBe(false);
 
     act(() => {
-      blocked?.querySelector("summary")?.dispatchEvent(
+      recentlyMerged?.querySelector("summary")?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });
     expect(details?.open).toBe(true);
-    expect(blocked?.querySelector('a[href="#blocked"]')).toBeTruthy();
+    expect(recentlyMerged?.querySelector('a[href="#merged"]')).toBeTruthy();
   });
 
   it("renders needs-attention before in-flight", () => {
@@ -246,12 +258,13 @@ describe("FlowBucketsSections", () => {
     expect(section(container, "inFlight")?.querySelector("a")).toBeTruthy();
   });
 
-  it("renders Awaiting planning expanded between Needs attention and In flight", () => {
+  it("renders Ready before Awaiting planning and In flight", () => {
     const buckets = emptyBuckets({
       awaitingPlanning: [
         row(idea("captured"), { blocked: false, ideaStatus: "captured" }),
       ],
       ready: [
+        row(epic("ready"), { blocked: false, epicStatus: "todo" }),
         row(epic("attention", true), { blocked: false, epicStatus: "todo" }),
       ],
       inFlight: [
@@ -264,6 +277,9 @@ describe("FlowBucketsSections", () => {
       node.textContent?.replace(/\d+/g, "").trim(),
     );
     expect(headings.indexOf("Needs attention")).toBeLessThan(
+      headings.indexOf("Ready"),
+    );
+    expect(headings.indexOf("Ready")).toBeLessThan(
       headings.indexOf("Awaiting planning"),
     );
     expect(headings.indexOf("Awaiting planning")).toBeLessThan(

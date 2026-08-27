@@ -30,6 +30,13 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     hideWhenEmpty: true,
   },
   {
+    key: "ready",
+    label: "Ready",
+    empty: "Nothing ready. Unblock a dependency, or add work in Structure.",
+    hideWhenEmpty: true,
+    compact: true,
+  },
+  {
     key: "awaitingPlanning",
     label: "Awaiting planning",
     hideWhenEmpty: true,
@@ -40,20 +47,6 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     label: "In flight",
     empty: "Nothing in flight. Pick up Ready work or start a Story.",
     hideWhenEmpty: true,
-  },
-  {
-    key: "ready",
-    label: "Ready",
-    empty: "Nothing ready. Unblock a dependency, or add work in Structure.",
-    hideWhenEmpty: true,
-    compact: true,
-  },
-  {
-    key: "blocked",
-    label: "Blocked",
-    empty: "Nothing blocked. Dependencies are clear.",
-    hideWhenEmpty: true,
-    collapsedByDefault: true,
   },
   {
     key: "recentlyMerged",
