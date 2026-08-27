@@ -22,6 +22,7 @@ import { captureMockupStoryStates } from "./mockup-capture.js";
 import {
   directionDir,
   harnessConfigPath,
+  listDirectionIds,
 } from "./mockup-scratch.js";
 import type { CaptureResult, ViewportName } from "./mockup-story-capture.js";
 import { slugify } from "./slug.js";
@@ -82,6 +83,10 @@ export function chosenPngPrefix(directionId: string): string {
   return `mockup-${directionId}-`;
 }
 
+export function candidateAttachmentPrefix(directionId: string): string {
+  return `${CANDIDATE_PREFIX}${directionId}-`;
+}
+
 function directionIdsFromArchives(names: string[]): string[] {
   return names
     .filter(
@@ -91,6 +96,18 @@ function directionIdsFromArchives(names: string[]): string[] {
         !name.startsWith(CANDIDATE_PREFIX),
     )
     .map((name) => name.slice("mockup-".length, -".tar.gz".length));
+}
+
+function knownDirectionIds(
+  attachmentNames: string[],
+  conversationId: string,
+): string[] {
+  return [
+    ...new Set([
+      ...directionIdsFromArchives(attachmentNames),
+      ...listDirectionIds(conversationId),
+    ]),
+  ];
 }
 
 export function matchesChosenPngPrefix(
@@ -108,6 +125,28 @@ export function matchesChosenPngPrefix(
       other !== directionId &&
       other.startsWith(`${directionId}-`) &&
       name.startsWith(chosenPngPrefix(other))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function matchesCandidatePrefix(
+  name: string,
+  directionId: string,
+  otherDirectionIds: Iterable<string> = [],
+): boolean {
+  const prefix = candidateAttachmentPrefix(directionId);
+  if (!name.startsWith(prefix)) return false;
+  if (!name.endsWith("-phone.png") && !name.endsWith("-desktop.png")) {
+    return false;
+  }
+  for (const other of otherDirectionIds) {
+    if (
+      other !== directionId &&
+      other.startsWith(`${directionId}-`) &&
+      name.startsWith(candidateAttachmentPrefix(other))
     ) {
       return false;
     }
@@ -246,6 +285,22 @@ export async function detachCandidateAttachments(
   return names;
 }
 
+export async function detachCandidateAttachmentsForDirection(
+  issueId: string,
+  directionId: string,
+  conversationId: string,
+): Promise<string[]> {
+  const allNames = listAttachments(issueId).map((att) => att.name);
+  const otherDirectionIds = knownDirectionIds(allNames, conversationId);
+  const names = allNames.filter((name) =>
+    matchesCandidatePrefix(name, directionId, otherDirectionIds),
+  );
+  for (const name of names) {
+    await removeAttachment(issueId, name);
+  }
+  return names;
+}
+
 function pendingFromCaptures(
   mode: "candidate" | "chosen",
   directionId: string,
@@ -285,6 +340,13 @@ export async function attachCapturedDirection(options: {
     options.directionId,
     options.captures,
   );
+  if (options.mode === "candidate") {
+    await detachCandidateAttachmentsForDirection(
+      options.issueId,
+      options.directionId,
+      options.conversationId,
+    );
+  }
   if (options.mode === "chosen") {
     const archivePath = createDirectionArchive(
       options.conversationId,

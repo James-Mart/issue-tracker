@@ -63,6 +63,20 @@ export function directionDir(
 
 const MOCKUP_STACK_DIR = "mockup-stack";
 
+/** Lists direction directory names under the conversation scratch (excludes mockup-stack). */
+export function listDirectionIds(conversationId: string): string[] {
+  assertConversationId(conversationId);
+  const scratch = join(conversationsDir, conversationId, "mockups");
+  if (!existsSync(scratch)) return [];
+  return readdirSync(scratch)
+    .filter((name) => {
+      if (name === MOCKUP_STACK_DIR) return false;
+      const entryPath = join(scratch, name);
+      return statSync(entryPath).isDirectory();
+    })
+    .sort();
+}
+
 /** Removes every direction directory except `keepDirectionId`. */
 export function pruneDirections(
   conversationId: string,

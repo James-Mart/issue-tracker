@@ -51,6 +51,18 @@ describe("mockup scratch layout", () => {
     expect(existsSync(dir)).toBe(true);
   });
 
+  it("lists direction ids excluding mockup-stack", async () => {
+    const { directionDir, listDirectionIds } = await loadService();
+
+    directionDir("my-conversation", "grid");
+    directionDir("my-conversation", "grid-lightbox");
+
+    expect(listDirectionIds("my-conversation")).toEqual([
+      "grid",
+      "grid-lightbox",
+    ]);
+  });
+
   it("computes harness.json at the scratch root without creating it", async () => {
     const { harnessConfigPath } = await loadService();
     const { conversationsDir } = await loadConfig();

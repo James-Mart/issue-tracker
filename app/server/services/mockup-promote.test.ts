@@ -379,6 +379,148 @@ describe("attachCapturedDirection", () => {
     );
     expect(listAttachments("src")).toEqual([]);
   });
+
+  it("replaces one direction's candidates on repeat without touching others", async () => {
+    const { attachCapturedDirection, candidateAttachmentName } =
+      await loadPromote();
+    const { listAttachments } = await loadAttachments();
+
+    const aPhoneFirst = join(root, "a-phone-first.png");
+    const aDesktopFirst = join(root, "a-desktop-first.png");
+    const bPhone = join(root, "b-phone.png");
+    const aPhoneSecond = join(root, "a-phone-second.png");
+    const aDesktopSecond = join(root, "a-desktop-second.png");
+    writePng(aPhoneFirst, "a-phone-first");
+    writePng(aDesktopFirst, "a-desktop-first");
+    writePng(bPhone, "b-phone");
+    writePng(aPhoneSecond, "a-phone-second");
+    writePng(aDesktopSecond, "a-desktop-second");
+
+    const aPhoneName = candidateAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "phone",
+    );
+    const aDesktopName = candidateAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "desktop",
+    );
+    const bPhoneName = candidateAttachmentName(
+      "direction-b",
+      "direction-b-list--default",
+      "phone",
+    );
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      issueId: "src",
+      captures: [
+        capture("direction-a-card--default", "phone", aPhoneFirst),
+        capture("direction-a-card--default", "desktop", aDesktopFirst),
+      ],
+    });
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "direction-b",
+      issueId: "src",
+      captures: [capture("direction-b-list--default", "phone", bPhone)],
+    });
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      issueId: "src",
+      captures: [
+        capture("direction-a-card--default", "phone", aPhoneSecond),
+        capture("direction-a-card--default", "desktop", aDesktopSecond),
+      ],
+    });
+
+    const names = listAttachments("src").map((att) => att.name).sort();
+    expect(names).toEqual([aDesktopName, aPhoneName, bPhoneName].sort());
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", aPhoneName)).toString(),
+    ).toBe("png:a-phone-second");
+    expect(
+      readFileSync(
+        join(issuesDir, "src", "attachments", aDesktopName),
+      ).toString(),
+    ).toBe("png:a-desktop-second");
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", bPhoneName)).toString(),
+    ).toBe("png:b-phone");
+  });
+
+  it("does not detach prefix-colliding directions during candidate-only review", async () => {
+    const { attachCapturedDirection, candidateAttachmentName } =
+      await loadPromote();
+    const { directionDir } = await loadScratch();
+    const { listAttachments } = await loadAttachments();
+
+    directionDir("promote-chat", "grid");
+    directionDir("promote-chat", "grid-lightbox");
+
+    const gridPhoneFirst = join(root, "grid-phone-first.png");
+    const lightboxPhone = join(root, "lightbox-phone.png");
+    const gridPhoneSecond = join(root, "grid-phone-second.png");
+    writePng(gridPhoneFirst, "grid-first");
+    writePng(lightboxPhone, "lightbox");
+    writePng(gridPhoneSecond, "grid-second");
+
+    const gridPhoneName = candidateAttachmentName(
+      "grid",
+      "grid/card--default",
+      "phone",
+    );
+    const lightboxPhoneName = candidateAttachmentName(
+      "grid-lightbox",
+      "grid-lightbox/card--default",
+      "phone",
+    );
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "grid",
+      issueId: "src",
+      captures: [capture("grid/card--default", "phone", gridPhoneFirst)],
+    });
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "grid-lightbox",
+      issueId: "src",
+      captures: [
+        capture("grid-lightbox/card--default", "phone", lightboxPhone),
+      ],
+    });
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "grid",
+      issueId: "src",
+      captures: [capture("grid/card--default", "phone", gridPhoneSecond)],
+    });
+
+    const names = listAttachments("src").map((att) => att.name).sort();
+    expect(names).toEqual([gridPhoneName, lightboxPhoneName].sort());
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", gridPhoneName)).toString(),
+    ).toBe("png:grid-second");
+    expect(
+      readFileSync(
+        join(issuesDir, "src", "attachments", lightboxPhoneName),
+      ).toString(),
+    ).toBe("png:lightbox");
+  });
 });
 
 describe("copyDirectionArtifacts", () => {

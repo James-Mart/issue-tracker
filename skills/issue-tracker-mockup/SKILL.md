@@ -64,8 +64,8 @@ named no surface, ask for it before step 1.
    attachment basenames, then one absolute capture path per line, then one
    embed line per PNG of the form
    `![<name>](/api/issues/<issueId>/attachments/<name>)`.
-   A repeat round stores a fresh basename rather than overwriting the earlier
-   one.
+   A repeat round for one direction replaces that direction's earlier
+   candidates and keeps the same basenames; other directions stay untouched.
 
    Before closing this step, check every captured state. One that renders
    empty or visibly broken goes back to the author as feedback (step 4)
