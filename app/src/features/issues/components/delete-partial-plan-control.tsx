@@ -66,11 +66,36 @@ function DeletePartialPlanControl({
   variant,
 }: {
   issue: IdeaDetail;
-  variant: "icon" | "menuItem";
+  variant: "icon" | "menuItem" | "detail";
 }) {
   const deletePartialPlan = useDeletePartialPlan(issue.id);
   const [open, setOpen] = useState(false);
   const label = "Delete partial plan";
+
+  if (variant === "detail") {
+    return (
+      <>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-fit text-destructive"
+          data-testid="idea-detail-delete-partial-plan"
+          disabled={deletePartialPlan.isPending}
+          onClick={() => setOpen(true)}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          {deletePartialPlan.isPending ? "Deleting…" : label}
+        </Button>
+        <DeletePartialPlanDialog
+          issue={issue}
+          open={open}
+          onOpenChange={setOpen}
+          deletePartialPlan={deletePartialPlan}
+        />
+      </>
+    );
+  }
 
   if (variant === "icon") {
     return (
@@ -129,4 +154,9 @@ export function DeletePartialPlanFlowRowAction({ issue }: { issue: IdeaDetail })
 /** Touch overflow menu item for the same delete-partial-plan path. */
 export function DeletePartialPlanFlowRowTouchMenu({ issue }: { issue: IdeaDetail }) {
   return <DeletePartialPlanControl issue={issue} variant="menuItem" />;
+}
+
+/** Labeled destructive delete-partial-plan action for the Idea detail overview. */
+export function DeletePartialPlanDetailAction({ issue }: { issue: IdeaDetail }) {
+  return <DeletePartialPlanControl issue={issue} variant="detail" />;
 }

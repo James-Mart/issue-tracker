@@ -10,6 +10,10 @@ const mobileState = vi.hoisted(() => ({
   value: false,
 }));
 
+const derivedState = vi.hoisted(() => ({
+  ideaStatus: undefined as string | undefined,
+}));
+
 const t0 = "2026-08-01T00:00:00.000Z";
 
 const project = {
@@ -49,13 +53,22 @@ vi.mock("../api/queries", () => ({
     error: null,
   }),
   useIssuesQuery: () => ({
-    data: { issues: [project, idea] },
+    data: {
+      issues: [project, idea],
+      derived: {
+        capture: { blocked: false, ideaStatus: derivedState.ideaStatus },
+      },
+    },
   }),
 }));
 
 vi.mock("../api/mutations", () => ({
   useUploadAttachment: () => ({
     mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useDeletePartialPlan: () => ({
+    mutate: vi.fn(),
     isPending: false,
   }),
 }));
@@ -71,7 +84,9 @@ vi.mock("./issue-detail-header", () => ({
 }));
 
 vi.mock("./issue-detail-tabs", () => ({
-  IssueDetailTabs: () => <div data-testid="issue-detail-tabs" />,
+  IssueDetailTabs: ({ overview }: { overview: React.ReactNode }) => (
+    <div data-testid="issue-detail-tabs">{overview}</div>
+  ),
 }));
 
 vi.mock("./issue-meta-panel", () => ({
@@ -112,6 +127,7 @@ function mountPage(entry: string): { container: HTMLDivElement; root: Root } {
 afterEach(() => {
   document.body.innerHTML = "";
   mobileState.value = false;
+  derivedState.ideaStatus = undefined;
 });
 
 describe("IssueDetailPage mobile channel chrome", () => {
@@ -153,5 +169,35 @@ describe("IssueDetailPage mobile channel chrome", () => {
     expect(
       container.querySelector('[data-testid="issue-detail-header"]'),
     ).toBeTruthy();
+  });
+});
+
+describe("IssueDetailPage delete partial plan", () => {
+  it("shows delete partial plan only for awaiting-direction Ideas", () => {
+    derivedState.ideaStatus = "awaiting-direction";
+    const awaiting = mountPage("/projects/issue-tracker/issues/capture");
+    expect(
+      awaiting.container.querySelector(
+        '[data-testid="idea-detail-delete-partial-plan"]',
+      ),
+    ).toBeTruthy();
+
+    document.body.innerHTML = "";
+    derivedState.ideaStatus = "captured";
+    const captured = mountPage("/projects/issue-tracker/issues/capture");
+    expect(
+      captured.container.querySelector(
+        '[data-testid="idea-detail-delete-partial-plan"]',
+      ),
+    ).toBeNull();
+
+    document.body.innerHTML = "";
+    derivedState.ideaStatus = "planning";
+    const planning = mountPage("/projects/issue-tracker/issues/capture");
+    expect(
+      planning.container.querySelector(
+        '[data-testid="idea-detail-delete-partial-plan"]',
+      ),
+    ).toBeNull();
   });
 });
