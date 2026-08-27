@@ -3,7 +3,7 @@ import { OverviewRow } from "@/components/ui/overview-row";
 import { StateIcon } from "@/components/ui/rail";
 import type { IssueRecord } from "@server/schemas";
 import { leafTaskProgressCount, isInFlight } from "../lib/derived";
-import { flowItemNeedsAttention, type FlowItem } from "../lib/flow";
+import type { FlowItem } from "../lib/flow";
 import { issueRailNodeState } from "../lib/rail-state";
 import { AxisChips } from "./axis-chips";
 
@@ -12,24 +12,21 @@ export interface FlowRowProps {
   issues: IssueRecord[];
   avatar?: ReactNode;
   actions?: ReactNode;
-  touchMenu?: ReactNode;
   /** When set, the full row drills in here; actions stay outside the link. */
   to?: string;
 }
 
 /**
  * Flow surface row: title, state icon, tabular task count, avatar, and icon-only signals.
- * Steering actions overlay the row on hover/focus or via a flat touch overflow menu.
+ * Steering actions render inline in the row flex line when provided.
  */
 export function FlowRow({
   item,
   issues,
   avatar,
   actions,
-  touchMenu,
   to,
 }: FlowRowProps) {
-  const attention = flowItemNeedsAttention(item);
   const railState = issueRailNodeState(item.issue, item.state);
   const live = isInFlight(item.issue, item.state);
   const count = leafTaskProgressCount(item.issue, issues);
@@ -46,11 +43,9 @@ export function FlowRow({
           <AxisChips chips={[{ variant: "inProgress", label: "planning" }]} />
         ) : undefined
       }
-      attention={attention}
       blocked={Boolean(item.state?.blocked)}
       count={count}
-      overlay={actions}
-      touchMenu={touchMenu}
+      actions={actions}
       drillInTo={to}
       drillInLabel={item.issue.title}
     >

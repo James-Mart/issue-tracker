@@ -17,7 +17,7 @@ import {
   FlowPreviewedItems,
 } from "./flow-buckets-sections";
 import { FlowRow } from "./flow-row";
-import { FlowRowActions, FlowRowTouchMenu } from "./flow-row-actions";
+import { FlowRowActions } from "./flow-row-actions";
 
 function CockpitHeader() {
   return (
@@ -128,12 +128,6 @@ export function CockpitPage() {
                     to={issuePath(group.projectId, item.issue.id)}
                     actions={
                       <FlowRowActions
-                        item={item}
-                        task={inFlightTaskOf(item.issue, issues, byId)}
-                      />
-                    }
-                    touchMenu={
-                      <FlowRowTouchMenu
                         item={item}
                         task={inFlightTaskOf(item.issue, issues, byId)}
                       />

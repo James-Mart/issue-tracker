@@ -101,4 +101,37 @@ describe("OverviewRow overlay", () => {
     expect(link?.className).toMatch(/\binset-0\b/);
     expect(container.querySelector(".pointer-events-none")).toBeTruthy();
   });
+
+  it("renders inline actions after count in the flex line", () => {
+    const { container } = mountRow({
+      count: "3/4",
+      actions: <button type="button">Inline action</button>,
+      overlay: undefined,
+      touchMenu: undefined,
+    });
+    const flexLine = container.querySelector(".min-w-0.flex-1.truncate")
+      ?.parentElement as HTMLElement;
+    expect(flexLine).toBeTruthy();
+    expect(flexLine.textContent).toContain("Inline action");
+    expect(flexLine.textContent).toContain("3/4");
+    const actionButton = container.querySelector('button[type="button"]');
+    expect(actionButton?.textContent).toBe("Inline action");
+    expect(actionButton?.closest(".shrink-0")).toBeTruthy();
+    expect(container.querySelector(".pointer-events-none")).toBeNull();
+  });
+
+  it("keeps inline actions clickable when drillInTo is set", () => {
+    const { container } = mountRow({
+      drillInTo: "/projects/p/issues/e",
+      drillInLabel: "Epic title",
+      actions: <button type="button">Inline action</button>,
+      overlay: undefined,
+      touchMenu: undefined,
+    });
+    const actionWrapper = container
+      .querySelector('button[type="button"]')
+      ?.closest(".shrink-0") as HTMLElement;
+    expect(actionWrapper).toBeTruthy();
+    expect(actionWrapper.className).toMatch(/pointer-events-auto/);
+  });
 });

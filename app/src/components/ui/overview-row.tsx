@@ -19,6 +19,8 @@ export interface OverviewRowProps extends React.HTMLAttributes<HTMLDivElement> {
   chips?: React.ReactNode;
   /** Tabular quantity (e.g. `3/4`). */
   count?: React.ReactNode;
+  /** Inline action controls — sit after count in the row flex line. */
+  actions?: React.ReactNode;
   /** At-rest attention signal — warn-hued warning icon only (no chip). */
   attention?: boolean;
   /** At-rest blocked signal — blocked-hued exclamation icon only (no chip). */
@@ -52,6 +54,7 @@ export function OverviewRow({
   stateIcon,
   chips,
   count,
+  actions,
   attention = false,
   blocked = false,
   overlay,
@@ -118,6 +121,16 @@ export function OverviewRow({
         {count != null ? (
           <span className="w-9 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
             {count}
+          </span>
+        ) : null}
+        {actions != null ? (
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center gap-2",
+              drillInTo != null && "pointer-events-auto",
+            )}
+          >
+            {actions}
           </span>
         ) : null}
       </div>
