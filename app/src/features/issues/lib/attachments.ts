@@ -7,6 +7,10 @@ export function supportsAttachments(kind: IssueKind): boolean {
   return kindHas(kind, "attachments");
 }
 
+export function isImageMime(mime: string): boolean {
+  return mime.startsWith("image/");
+}
+
 export function formatAttachmentSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) {

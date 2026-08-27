@@ -4,6 +4,7 @@ import {
   attachmentLinkHref,
   attachmentsApiPath,
   formatAttachmentSize,
+  isImageMime,
   isSafeAttachmentName,
   supportsAttachments,
 } from "./attachments";
@@ -14,6 +15,15 @@ describe("supportsAttachments", () => {
     expect(supportsAttachments("epic")).toBe(true);
     expect(supportsAttachments("story")).toBe(true);
     expect(supportsAttachments("task")).toBe(true);
+  });
+});
+
+describe("isImageMime", () => {
+  it("treats image/* as images and everything else as other files", () => {
+    expect(isImageMime("image/png")).toBe(true);
+    expect(isImageMime("image/svg+xml")).toBe(true);
+    expect(isImageMime("application/pdf")).toBe(false);
+    expect(isImageMime("text/plain")).toBe(false);
   });
 });
 
