@@ -72,15 +72,21 @@ fixed**: read prior code-quality findings from `issue task view <taskId> --comme
 and confirm each actionable item was addressed (or declined with reasoning by
 the implementor). Unfixed prior findings remain actionable.
 
+For UI-related Tasks (same UI-related judgment as the `designSystem` consult),
+judge the built surface on its own merits — product quality plus the
+`designSystem` doc from Bootstrap when consulted. A promoted mockup on the
+Story or Task is direction, not an acceptance target; do not compare the
+implementation to a mockup capture.
+
 Do **not** post the comment or stop from the review include. After the review
-include prepares the comment body, for UI-related Tasks (same UI-related
-judgment as the `designSystem` consult) **Read**
+include prepares the comment body, for those UI-related Tasks **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
 and follow it. Fold the include's three evidence fields and the embedded
 screenshot markdown into that prepared comment body. A failed look is an
 actionable `changes-requested` finding before Outcome. A completed look with
-a visible product problem stays an actionable `changes-requested` finding, as
-today. Leave non-UI Tasks on the static-only path.
+a visible product problem is an actionable `changes-requested` finding —
+product judgment belongs to this role, not the look include. Leave non-UI
+Tasks on the static-only path.
 
 Then **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-code-quality-outcome.md`

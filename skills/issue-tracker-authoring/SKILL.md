@@ -299,12 +299,18 @@ In that Story's prose, name the copied files and state what they are:
   `mockup-<directionId>-<stateSlug>-<viewport>.png`
 - the archive `mockup-<directionId>.tar.gz`
 
-Write the paragraph in your own words. It must claim: the screenshots are the
-contract (valid indefinitely); the archive is reference material for
-composition, layout, class structure, and state enumeration (lift
-deliberately); prop shapes were invented for rendering and wiring to real
-state is the work; the archive's source may rot as the project moves; there is
-no restore path and the archive must not be described as restorable.
+Write the paragraph in your own words. It must claim: the screenshots record
+the direction chosen for the surface (content and hierarchy, states to
+support, where affordances live, how interactions behave) and an implementor
+honors those decisions while owning the execution; where a mockup diverges
+from the `designSystem` supporting doc or from the app's real components,
+those win and better spacing, copy, or polish is expected rather than
+deviation; no gate compares an implementation against the captures; the
+archive is reference material for composition, layout, class structure, and
+state enumeration (lift deliberately); prop shapes were invented for rendering
+and wiring to real state is the work; the archive's source may rot as the
+project moves; there is no restore path and the archive must not be described
+as restorable.
 
 Full migrate procedure:
 [issue-tracker-plan migrate reference](../issue-tracker-plan/references/migrate.md#promoted-mockup-artifacts).
@@ -356,6 +362,7 @@ Before done:
 - Chosen mockup directions use imperative `mockup-promote` in copy mode after
   `apply`, and the receiving Story's prose names the promoted files
   (`mockup-<directionId>-<stateSlug>-<viewport>.png`,
-  `mockup-<directionId>.tar.gz`) and states their contract vs reference status
-  (see [Promoted mockup artifacts](#promoted-mockup-artifacts)) — not in the
+  `mockup-<directionId>.tar.gz`) and states what the captures carry (direction,
+  not contract) and what the archive is for (see
+  [Promoted mockup artifacts](#promoted-mockup-artifacts)) — not in the
   YAML doc.

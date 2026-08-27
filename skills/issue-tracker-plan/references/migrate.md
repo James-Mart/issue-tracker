@@ -58,8 +58,14 @@ surface, for each chosen direction on that surface:
 
    Write the paragraph in your own words — not a stock block. It must make
    these claims:
-   - The named screenshots are the contract. They record what the direction
-     agreed to and stay valid indefinitely.
+   - The named screenshots record the direction chosen for the surface: its
+     content and hierarchy, the states it must support, where affordances live,
+     and how interactions behave. An implementor honors those decisions while
+     owning the execution.
+   - Where a mockup diverges from the `designSystem` supporting doc or from the
+     app's real components, those win. Better spacing, copy, or polish is
+     expected rather than deviation.
+   - No gate compares an implementation against the captures.
    - The named archive is reference material. Read it for composition, layout,
      class structure, and the enumeration of states the surface has to support.
      Lift from it deliberately.

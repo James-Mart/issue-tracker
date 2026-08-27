@@ -17,8 +17,9 @@ Absolute path for this file (Read this exact path):
 4. If the look is loading, empty, failed, or unavailable, re-run the same
    screenshots command once.
 5. If the second look is still loading, empty, failed, or unavailable, the look
-   failed. A completed look is a non-loading, non-empty PNG; this include does
-   not judge product defects on that PNG.
+   failed. A completed look is a non-loading, non-empty PNG — liveness only.
+   The caller judges product quality on that capture; this include stops at
+   liveness.
 6. The caller records these three evidence fields on the Task comment they
    already post for this look — do not post an extra comment solely for the
    look:
