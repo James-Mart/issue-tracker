@@ -51,14 +51,21 @@ named no surface, ask for it before step 1.
 1. **Author the directions.** Delegate `role: issue-tracker-mockup-author` with
    the author stub, asking for two directions unless the caller asked for a
    different count. Keep the returned nested agent id as `resumeId` for step 4.
-   The author returns the direction ids it produced; those ids drive steps 3
-   and 5.
-2. **Start the harness.**
-   `npm run mockup-stack -- start <conversationId>`. It prints the Storybook
-   base URL. The stack refuses to start until the author has written the
-   harness configuration, so this step never runs before step 1.
-3. **Capture and review.** For each direction id, in the order the author
-   returned them, run
+   The author starts the stack, renders and revises, and leaves the stack
+   running. It returns the direction ids it produced; those ids drive steps 3
+   and 5. It also returns any state still not faithful after its own review.
+2. **Reuse the harness.**
+   `npm run mockup-stack -- start <conversationId>`. Start is idempotent:
+   when the author already started the stack, this reuses it. A stopped
+   stack is not expected or required. It prints the Storybook base URL.
+   The stack refuses to start until the author has written the harness
+   configuration, so this step never runs before step 1.
+3. **Capture and review.** The author's own captures live in the conversation
+   scratch and attach nothing. `mockup-promote` is the only command that puts
+   bytes on an issue. Those scratch paths are not candidates the stakeholder
+   has been shown.
+
+   For each direction id, in the order the author returned them, run
    `npm run mockup-promote -- --conversation <conversationId> --direction <directionId> --issue <issueId> --mode candidate`.
    Candidate mode captures every state at both widths. It prints stored
    attachment basenames, then one absolute capture path per line, then one
@@ -67,9 +74,9 @@ named no surface, ask for it before step 1.
    A repeat round for one direction replaces that direction's earlier
    candidates and keeps the same basenames; other directions stay untouched.
 
-   Before closing this step, check every captured state. One that renders
-   empty or visibly broken goes back to the author as feedback (step 4)
-   before it is posted — do not close the turn with a caveat.
+   A state the author reported as not faithful goes back to the author as
+   feedback (step 4) rather than being posted. A captured state that still
+   renders empty or visibly broken is the same send-back, as a backstop.
 
    Close the turn with one message that carries both halves. Grouped by
    direction: the direction's name and a one-line description, the embed
@@ -102,8 +109,8 @@ Pass each stub's delegate arguments (`role`, `issueId`, `prompt`; plus
 **Author** — `role: issue-tracker-mockup-author`, `issueId: <issueId>`
 (when to delegate: Round step 1)
 
-> Surface: `<surface>`. Target workspace: `<workspace>`. Conversation id:
-> `<conversationId>`. Direction count: `<count>`.
+> Issue: `<issueId>`. Surface: `<surface>`. Target workspace: `<workspace>`.
+> Conversation id: `<conversationId>`. Direction count: `<count>`.
 
 **Author (feedback)** — `role: issue-tracker-mockup-author`,
 `issueId: <issueId>` (when to resume: Round step 4)
