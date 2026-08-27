@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
+import type { PrFacts } from "@server/services/delivery";
 import type { FlowItem } from "../lib/flow";
 import { skillPath } from "@/lib/plugin-paths";
 import { FlowRowActions } from "./flow-row-actions";
@@ -35,9 +36,15 @@ vi.mock("../api/mutations", () => ({
   }),
 }));
 
+const prQueryState = vi.hoisted(() => ({
+  data: undefined as { prs: Record<string, PrFacts> } | undefined,
+  error: null as Error | null,
+}));
+
 vi.mock("../api/queries", () => ({
   useProjectPullRequestsQuery: () => ({
-    data: undefined,
+    data: prQueryState.data,
+    error: prQueryState.error,
   }),
 }));
 
@@ -93,7 +100,10 @@ function flowItem(
   return { issue, state };
 }
 
-function mountActions(item: FlowItem): {
+function mountActions(
+  item: FlowItem,
+  projectId = "project-a",
+): {
   container: HTMLDivElement;
   root: Root;
 } {
@@ -102,8 +112,8 @@ function mountActions(item: FlowItem): {
   const root = createRoot(container);
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={["/projects/project-a"]}>
-        <FlowRowActions item={item} />
+      <MemoryRouter initialEntries={["/"]}>
+        <FlowRowActions item={item} projectId={projectId} />
       </MemoryRouter>,
     );
   });
@@ -118,6 +128,8 @@ afterEach(() => {
   document.body.innerHTML = "";
   mutate.mockReset();
   modelsState.isLoading = false;
+  prQueryState.data = undefined;
+  prQueryState.error = null;
 });
 
 describe("FlowRowActions start planning", () => {
@@ -199,6 +211,41 @@ describe("FlowRowActions open PR", () => {
       flowItem(story("no-pr"), { blocked: false, storyStatus: "in-progress" }),
     );
     expect(withoutPr.container.querySelector('a[href^="http"]')).toBeNull();
+  });
+
+  it("shows the PR chip when projectId is supplied and PR facts are loaded", () => {
+    prQueryState.data = {
+      prs: {
+        ship: {
+          number: 1,
+          url: "https://github.com/org/repo/pull/1",
+          state: "open",
+          isDraft: false,
+          mergeable: "mergeable",
+          mergeStateStatus: "CLEAN",
+          reviewDecision: "approved",
+          checks: { state: "success", failing: 0, pending: 0, total: 1 },
+          commentCount: 0,
+          comments: [],
+          headRefOid: "abc",
+          baseRefName: "main",
+          updatedAt: "2026-08-01T00:00:00Z",
+        },
+      },
+    };
+
+    const { container } = mountActions(
+      flowItem(story("ship", "https://github.com/org/repo/pull/1"), {
+        blocked: false,
+        storyStatus: "in-progress",
+      }),
+    );
+
+    const chip = container.querySelector('[data-testid="pr-chip"]');
+    expect(chip).toBeTruthy();
+    expect(chip?.textContent).toContain("Ready");
+    expect(chip?.textContent).toContain("Success");
+    expect(chip?.textContent).toContain("Approved");
   });
 });
 

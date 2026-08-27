@@ -126,7 +126,9 @@ export function CockpitPage() {
                     item={item}
                     issues={issues}
                     to={issuePath(group.projectId, item.issue.id)}
-                    actions={<FlowRowActions item={item} />}
+                    actions={
+                      <FlowRowActions item={item} projectId={group.projectId} />
+                    }
                   />
                 )}
               />

@@ -1,4 +1,3 @@
-import { useParams } from "react-router-dom";
 import { GitPullRequest } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
 import { Button } from "@/components/ui/button";
@@ -8,15 +7,20 @@ import { isCapturedIdeaFlowItem } from "../lib/flow";
 import { PlanningFlowRowLaunch } from "./planning-launch-control";
 import { PrChip, storyPrChipModel } from "./pr-chip";
 
-function useFlowRowPrChip(issue: IssueRecord) {
-  const { projectId = "" } = useParams();
+function useFlowRowPrChip(issue: IssueRecord, projectId: string) {
   const prQuery = useProjectPullRequestsQuery(projectId);
   return storyPrChipModel(issue, prQuery);
 }
 
 /** Inline cockpit row actions scoped to what each flow bucket can perform. */
-export function FlowRowActions({ item }: { item: FlowItem }) {
-  const prChip = useFlowRowPrChip(item.issue);
+export function FlowRowActions({
+  item,
+  projectId,
+}: {
+  item: FlowItem;
+  projectId: string;
+}) {
+  const prChip = useFlowRowPrChip(item.issue, projectId);
   const prUrl =
     item.issue.kind === "story" ? item.issue.prUrl : undefined;
   const capturedIdea = isCapturedIdeaFlowItem(item) ? item.issue : undefined;
