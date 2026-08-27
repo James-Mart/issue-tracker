@@ -802,3 +802,41 @@ describe("ConversationThread transcript load failure", () => {
   });
 });
 
+describe("ConversationThread attachment images", () => {
+  let container: HTMLDivElement | undefined;
+  let root: Root | undefined;
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount());
+    container?.remove();
+    container = undefined;
+    root = undefined;
+    transcriptState.events = [...initialEvents];
+  });
+
+  it("renders an attachment image and opens the zoom view", () => {
+    const src = "/api/issues/demo-issue/attachments/shot.png";
+    transcriptState.events = [
+      {
+        type: "assistant",
+        text: `Here is the capture:\n\n![shot.png](${src})`,
+        at: "2026-07-24T00:00:01.000Z",
+      },
+    ];
+    ({ container, root } = mountThread("conv-1"));
+
+    const img = container!.querySelector(`img[src="${src}"]`);
+    expect(img).toBeTruthy();
+
+    act(() => {
+      (
+        container!.querySelector("[data-markdown-image]") as HTMLButtonElement
+      ).click();
+    });
+
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog).toBeTruthy();
+    expect(dialog!.querySelector(`img[src="${src}"]`)).toBeTruthy();
+  });
+});
+
