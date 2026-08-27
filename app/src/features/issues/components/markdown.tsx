@@ -1,4 +1,11 @@
-import { useMemo, useState, type ComponentPropsWithoutRef } from "react";
+import {
+  Children,
+  isValidElement,
+  useMemo,
+  useState,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+} from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
@@ -13,6 +20,7 @@ import {
   attachmentLinkHref,
 } from "../lib/attachments";
 import { ISSUE_LINK_PREFIX, parseIssueLink } from "../lib/links";
+import { remarkImageGallery } from "../lib/remark-image-gallery";
 import { IssueLink } from "./issue-link";
 
 function IssueAwareLink({
@@ -86,10 +94,11 @@ function MarkdownImage({
   const [open, setOpen] = useState(false);
   if (!src) return null;
 
-  const label = alt?.trim() ? alt : "Image";
+  const caption = alt?.trim() ?? "";
+  const label = caption || "Image";
 
   return (
-    <>
+    <figure className="issue-md-figure">
       <button
         type="button"
         data-markdown-image
@@ -104,6 +113,9 @@ function MarkdownImage({
           {...props}
         />
       </button>
+      {caption ? (
+        <figcaption className="issue-md-image-caption">{caption}</figcaption>
+      ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="w-auto max-w-[min(96vw,80rem)] p-3">
           <DialogTitle className="sr-only">{label}</DialogTitle>
@@ -114,8 +126,27 @@ function MarkdownImage({
           />
         </DialogContent>
       </Dialog>
-    </>
+    </figure>
   );
+}
+
+function isFigureElement(child: ReactNode): boolean {
+  return isValidElement(child) && child.type === "figure";
+}
+
+function MarkdownParagraph({
+  children,
+  node: _node,
+  ...props
+}: ComponentPropsWithoutRef<"p"> & { node?: unknown }) {
+  const items = Children.toArray(children).filter((child) => {
+    if (typeof child === "string") return child.trim().length > 0;
+    return true;
+  });
+  if (items.length > 0 && items.every(isFigureElement)) {
+    return <>{items}</>;
+  }
+  return <p {...props}>{children}</p>;
 }
 
 const markdownComponents = {
@@ -123,6 +154,7 @@ const markdownComponents = {
   code: MarkdownCode,
   pre: MarkdownPre,
   img: MarkdownImage,
+  p: MarkdownParagraph,
 };
 
 export function Markdown({
@@ -147,7 +179,7 @@ export function Markdown({
   return (
     <div className={cn("prose-issue min-w-0", READING_MEASURE_CLASS)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkImageGallery]}
         urlTransform={urlTransform}
         components={markdownComponents}
       >
