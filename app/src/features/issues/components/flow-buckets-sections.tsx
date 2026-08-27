@@ -1,4 +1,3 @@
-import { ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -69,7 +68,6 @@ export type FlowBucketDef = {
   label: string;
   empty?: string;
   hideWhenEmpty?: boolean;
-  collapsedByDefault?: boolean;
   compact?: boolean;
   previewLimit?: number;
 };
@@ -105,7 +103,7 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     label: "Recently merged",
     empty: "Nothing merged recently. Finish a Story to land it here.",
     hideWhenEmpty: true,
-    collapsedByDefault: true,
+    previewLimit: AWAITING_PLANNING_PREVIEW_LIMIT,
   },
 ];
 
@@ -270,7 +268,6 @@ function FlowBucketSection({
   const headingId = `${idPrefix}-${def.key}`;
   const count = items.length;
   const hideWhenEmpty = def.hideWhenEmpty;
-  const collapsed = def.collapsedByDefault && count > 0;
   const compact = def.compact;
   const readyBlockedHint = def.key === "ready" && count === 0 && blocked.length > 0;
 
@@ -290,25 +287,6 @@ function FlowBucketSection({
         previewLimit={def.previewLimit}
       />
     );
-
-  if (collapsed) {
-    return (
-      <section key={def.key} aria-labelledby={headingId}>
-        <details className="group">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
-            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
-            <BucketHeading
-              id={headingId}
-              label={def.label}
-              count={count}
-              compact={compact}
-            />
-          </summary>
-          {body}
-        </details>
-      </section>
-    );
-  }
 
   return (
     <section key={def.key} aria-labelledby={headingId}>

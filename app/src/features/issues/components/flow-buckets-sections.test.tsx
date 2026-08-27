@@ -311,30 +311,37 @@ describe("FlowBucketsSections", () => {
     expect(container.textContent).not.toContain("Blocked work is waiting");
   });
 
-  it("collapses recently merged", () => {
+  it("shows five recently merged until Show all reveals the sixth", () => {
+    const recentlyMerged = Array.from({ length: 6 }, (_, index) =>
+      row(story(`merged-${index}`), { blocked: false, storyStatus: "merged" }),
+    );
     const buckets = emptyBuckets({
       ready: [row(epic("ready"), { blocked: false, epicStatus: "todo" })],
-      recentlyMerged: [
-        row(story("merged"), { blocked: false, storyStatus: "merged" }),
-      ],
+      recentlyMerged,
     });
     const { container } = mountSections(buckets);
 
     expect(section(container, "inFlight")).toBeNull();
 
-    const recentlyMerged = section(container, "recentlyMerged");
-    expect(recentlyMerged).toBeTruthy();
-    const details = recentlyMerged?.querySelector("details");
-    expect(details).toBeTruthy();
-    expect(details?.open).toBe(false);
+    const sectionEl = section(container, "recentlyMerged");
+    expect(sectionEl).toBeTruthy();
+    expect(sectionEl?.querySelector("details")).toBeNull();
+    expect(sectionEl?.querySelectorAll("a")).toHaveLength(
+      AWAITING_PLANNING_PREVIEW_LIMIT,
+    );
+    expect(sectionEl?.textContent).toContain("merged-4");
+    expect(sectionEl?.textContent).not.toContain("merged-5");
 
+    const showAll = [...(sectionEl?.querySelectorAll("button") ?? [])].find(
+      (button) => button.textContent === "Show all",
+    );
+    expect(showAll).toBeTruthy();
     act(() => {
-      recentlyMerged?.querySelector("summary")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
+      showAll?.click();
     });
-    expect(details?.open).toBe(true);
-    expect(recentlyMerged?.querySelector('a[href="#merged"]')).toBeTruthy();
+    expect(sectionEl?.querySelectorAll("a")).toHaveLength(6);
+    expect(sectionEl?.textContent).toContain("merged-5");
+    expect(sectionEl?.textContent).not.toContain("Show all");
   });
 
   it("renders needs-attention before in-flight", () => {
