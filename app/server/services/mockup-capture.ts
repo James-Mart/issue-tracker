@@ -5,6 +5,7 @@ import {
 } from "./mockup-scratch.js";
 import {
   captureStoryStates,
+  type CaptureResult,
   type ViewportName,
 } from "./mockup-story-capture.js";
 import { listStoryStates } from "./mockup-story-states.js";
@@ -76,9 +77,9 @@ export function mockupCaptureOutDir(
   return mockupScratchDir(conversationId);
 }
 
-export async function captureMockupStories(
+export async function captureMockupStoryStates(
   options: MockupCaptureOptions,
-): Promise<string[]> {
+): Promise<CaptureResult[]> {
   const viewports = options.viewports ?? (["phone"] as ViewportName[]);
   for (const viewport of viewports) {
     if (!VIEWPORT_NAMES.includes(viewport)) {
@@ -95,12 +96,17 @@ export async function captureMockupStories(
     options.directionId,
   );
   const states = await listStoryStates(baseUrl, options.directionId);
-  const results = await captureStoryStates({
+  return captureStoryStates({
     baseUrl,
     outDir,
     states,
     viewports,
   });
+}
 
+export async function captureMockupStories(
+  options: MockupCaptureOptions,
+): Promise<string[]> {
+  const results = await captureMockupStoryStates(options);
   return results.map((result) => result.absolutePath);
 }
