@@ -1461,7 +1461,7 @@ absolute-path **Read**. Among them, `_issue-tracker-ikigai.md` carries the
 universal framing for pipeline agents. Every spawnable role and every
 coordinator skill (`issue-tracker-work`, `issue-tracker-plan`,
 `issue-tracker-auto-plan`, `issue-tracker-plan-polish`, `issue-tracker-retro`,
-`issue-tracker-project-docs`) **Read**s it. The coding standard that
+`issue-tracker-mockup`, `issue-tracker-project-docs`) **Read**s it. The coding standard that
 sanctions this prose lives in a Project attachment outside version control;
 this SPEC entry is where the invariant is durable.
 

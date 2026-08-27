@@ -24,8 +24,8 @@ into a plan someone else can build from.
 1. **Read**
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/SKILL.md`
    and follow it for the given issue id.
-2. Own the grill, outline gate, apply, polish chain, and retro spawn per that
-   skill — one grill question per turn, ending the turn so the stakeholder can
-   resume with an answer.
+2. Own the grill, its mockup rounds, outline gate, apply, polish chain, and
+   retro spawn per that skill — one grill question per turn, ending the turn so
+   the stakeholder can resume with an answer.
 3. When the skill finishes, return the resulting plan root id(s) as your
    entire final message.

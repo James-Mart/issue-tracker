@@ -277,6 +277,38 @@ successful `apply` (imperative only — not in the YAML doc):
 `apply` never writes `noDiff`; it preserves an existing value. Rules:
 [SPEC.md § Finish commit](../../SPEC.md#finish-commit).
 
+## Promoted mockup artifacts
+
+When a plan included mockup rounds with chosen directions, promote each
+direction onto the Story that implements its surface **after** `apply`
+(imperative only — not in the YAML doc). From `app/`:
+
+`npm run mockup-promote -- --from-issue <fromIssueId> --direction <directionId> --issue <storyId> --mode copy`
+
+- `<fromIssueId>` — the Idea or work root being migrated, where the round
+  attached the chosen direction
+- `<directionId>` — the direction chosen for that surface during the grill
+- `<storyId>` — the Story that implements that surface
+
+Copy mode moves bytes already attached — the scratch and harness are gone by
+migrate time. `apply` never writes attachment bytes.
+
+In that Story's prose, name the copied files and state what they are:
+
+- each both-viewport capture
+  `mockup-<directionId>-<stateSlug>-<viewport>.png`
+- the archive `mockup-<directionId>.tar.gz`
+
+Write the paragraph in your own words. It must claim: the screenshots are the
+contract (valid indefinitely); the archive is reference material for
+composition, layout, class structure, and state enumeration (lift
+deliberately); prop shapes were invented for rendering and wiring to real
+state is the work; the archive's source may rot as the project moves; there is
+no restore path and the archive must not be described as restorable.
+
+Full migrate procedure:
+[issue-tracker-plan migrate reference](../issue-tracker-plan/references/migrate.md#promoted-mockup-artifacts).
+
 ## Completeness pass
 
 Before done:
@@ -321,3 +353,9 @@ Before done:
 - Verification-only Tasks use imperative `noDiff` after `apply` (see
   [Verification-only Tasks (noDiff)](#verification-only-tasks-nodiff)) — never
   put the flag in the YAML doc.
+- Chosen mockup directions use imperative `mockup-promote` in copy mode after
+  `apply`, and the receiving Story's prose names the promoted files
+  (`mockup-<directionId>-<stateSlug>-<viewport>.png`,
+  `mockup-<directionId>.tar.gz`) and states their contract vs reference status
+  (see [Promoted mockup artifacts](#promoted-mockup-artifacts)) — not in the
+  YAML doc.
