@@ -203,3 +203,148 @@ describe("AttachmentsPanel", () => {
     expect(heading(container, "Other files")).toBeTruthy();
   });
 });
+
+function mixedImages() {
+  queryState.data = [
+    attachment({ name: "shot.png", mime: "image/png", size: 240 * 1024 }),
+    attachment({ name: "notes.pdf", mime: "application/pdf", size: 1024 * 1024 }),
+    attachment({ name: "logo.svg", mime: "image/svg+xml", size: 12 * 1024 }),
+  ];
+}
+
+function viewButton(container: HTMLElement, name: string): HTMLButtonElement {
+  return Array.from(container.querySelectorAll("button")).find(
+    (el) => el.getAttribute("aria-label") === `View ${name}`,
+  ) as HTMLButtonElement;
+}
+
+function lightbox(): HTMLElement {
+  return document.querySelector('[role="dialog"]') as HTMLElement;
+}
+
+function pressLightboxKey(key: string) {
+  act(() => {
+    lightbox().dispatchEvent(
+      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+    );
+  });
+}
+
+describe("AttachmentsPanel lightbox", () => {
+  let root: Root | undefined;
+  let container: HTMLDivElement | undefined;
+
+  beforeEach(() => {
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    queryState.data = undefined;
+    queryState.isLoading = false;
+    queryState.error = null;
+    deleteState.mutate.mockReset();
+    deleteState.isPending = false;
+    deleteState.variables = undefined;
+    mixedImages();
+    const mounted = mountPanel();
+    container = mounted.container;
+    root = mounted.root;
+  });
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount());
+    container?.remove();
+    root = undefined;
+    container = undefined;
+  });
+
+  it("opens the chosen image large with filename and size", () => {
+    expect(lightbox()).toBeFalsy();
+    act(() => {
+      viewButton(container!, "shot.png").click();
+    });
+
+    const dialog = lightbox();
+    expect(dialog).toBeTruthy();
+    expect(dialog.querySelector("h2")?.textContent).toBe("shot.png");
+    expect(dialog.textContent).toContain("240 KB");
+    expect(dialog.querySelector("img")?.getAttribute("src")).toBe(
+      "/api/issues/task-1/attachments/shot.png",
+    );
+  });
+
+  it("cycles previous/next including keyboard and updates the counter", () => {
+    act(() => {
+      viewButton(container!, "shot.png").click();
+    });
+    expect(lightbox().textContent).toContain("1 / 2");
+
+    act(() => {
+      (
+        lightbox().querySelector(
+          '[aria-label="Next image"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(lightbox().querySelector("h2")?.textContent).toBe("logo.svg");
+    expect(lightbox().textContent).toContain("2 / 2");
+    expect(lightbox().textContent).toContain("12 KB");
+
+    act(() => {
+      (
+        lightbox().querySelector(
+          '[aria-label="Previous image"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(lightbox().querySelector("h2")?.textContent).toBe("shot.png");
+    expect(lightbox().textContent).toContain("1 / 2");
+
+    pressLightboxKey("ArrowRight");
+    expect(lightbox().querySelector("h2")?.textContent).toBe("logo.svg");
+    pressLightboxKey("ArrowRight");
+    expect(lightbox().querySelector("h2")?.textContent).toBe("shot.png");
+    pressLightboxKey("ArrowLeft");
+    expect(lightbox().querySelector("h2")?.textContent).toBe("logo.svg");
+  });
+
+  it("closes from the close control and Escape", () => {
+    act(() => {
+      viewButton(container!, "shot.png").click();
+    });
+    expect(lightbox()).toBeTruthy();
+
+    const close = Array.from(lightbox().querySelectorAll("button")).find((el) =>
+      el.textContent?.includes("Close"),
+    ) as HTMLButtonElement;
+    act(() => {
+      close.click();
+    });
+    expect(lightbox()).toBeFalsy();
+
+    act(() => {
+      viewButton(container!, "shot.png").click();
+    });
+    pressLightboxKey("Escape");
+    expect(lightbox()).toBeFalsy();
+  });
+
+  it("keeps download and delete in the lightbox", () => {
+    act(() => {
+      viewButton(container!, "logo.svg").click();
+    });
+
+    const dialog = lightbox();
+    expect(
+      dialog.querySelector('a[download="logo.svg"]')?.getAttribute("href"),
+    ).toBe("/api/issues/task-1/attachments/logo.svg");
+    expect(dialog.textContent).toContain("Download");
+
+    const del = Array.from(dialog.querySelectorAll("button")).find(
+      (el) => el.textContent?.includes("Delete"),
+    ) as HTMLButtonElement;
+    act(() => {
+      del.click();
+    });
+    expect(deleteState.mutate).toHaveBeenCalledWith("logo.svg");
+  });
+});
