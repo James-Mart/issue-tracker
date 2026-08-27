@@ -189,6 +189,23 @@ describe("listAttachments / putAttachment / getAttachment / removeAttachment (gu
     expect(listAttachments("idea-1").map((a) => a.name)).toEqual(["note.txt"]);
   });
 
+  it("allows putAttachment on an idea with an unknown stakeholder slug", async () => {
+    writeIssue("idea-unknown", {
+      kind: "idea",
+      title: "Legacy",
+      partOf: "p",
+      order: 1,
+      stakeholder: "retired-model",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { putAttachment, listAttachments } = await loadAttachments();
+    await putAttachment("idea-unknown", "sketch.md", Buffer.from("# Sketch"));
+    expect(listAttachments("idea-unknown").map((a) => a.name)).toEqual([
+      "sketch.md",
+    ]);
+  });
+
   it("stores and lists attachments on a project", async () => {
     const { listAttachments, putAttachment, getAttachment, removeAttachment } =
       await loadAttachments();

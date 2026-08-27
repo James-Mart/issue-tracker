@@ -509,11 +509,11 @@ describe("parseIssue - valid per kind", () => {
     }
   });
 
-  it("rejects an idea with an unknown stakeholder slug", () => {
+  it("parses an idea with an unknown stakeholder slug", () => {
     const result = parseIssue({ ...idea, stakeholder: "not-a-model" });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).toContain("unknown agent model slug");
+    expect(result.ok).toBe(true);
+    if (result.ok && result.issue.kind === "idea") {
+      expect(result.issue.stakeholder).toBe("not-a-model");
     }
   });
 

@@ -549,6 +549,61 @@ describe("idea create / reparent / shared order", () => {
     expect(result.deleted).toEqual([idea.id]);
     expect(list().issues.map((i) => i.id).sort()).toEqual(["a", "b", "e", "p"]);
   });
+
+  it("rejects create with an unknown stakeholder slug", async () => {
+    const { create } = await loadService();
+    await expect(
+      create({
+        kind: "idea",
+        title: "Bad slug",
+        partOf: "p",
+        stakeholder: "not-a-model",
+      }),
+    ).rejects.toThrow(/unknown agent model slug "not-a-model"/);
+  });
+
+  it("creates an idea with a valid stakeholder slug", async () => {
+    const { create } = await loadService();
+    const idea = await create({
+      kind: "idea",
+      title: "Pinned",
+      partOf: "p",
+      stakeholder: "composer-2.5",
+    });
+    expect(idea.kind === "idea" && idea.stakeholder).toBe("composer-2.5");
+  });
+
+  it("rejects update that sets an unknown stakeholder slug", async () => {
+    writeIssue("idea-unknown", {
+      kind: "idea",
+      title: "Legacy",
+      partOf: "p",
+      order: 1,
+      stakeholder: "retired-model",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { update } = await loadService();
+    await expect(
+      update("idea-unknown", { stakeholder: "not-a-model" }),
+    ).rejects.toThrow(/unknown agent model slug "not-a-model"/);
+  });
+
+  it("updates an idea without stakeholder when the persisted slug is unknown", async () => {
+    writeIssue("idea-unknown", {
+      kind: "idea",
+      title: "Legacy",
+      partOf: "p",
+      order: 1,
+      stakeholder: "retired-model",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { update } = await loadService();
+    const updated = await update("idea-unknown", { title: "Renamed" });
+    expect(updated.kind === "idea" && updated.title).toBe("Renamed");
+    expect(updated.kind === "idea" && updated.stakeholder).toBe("retired-model");
+  });
 });
 
 describe("cascade delete + reference repair on remove", () => {

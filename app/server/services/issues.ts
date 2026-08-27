@@ -66,6 +66,7 @@ import {
   singleCatalogIdRename,
   type LabelCascadePatch,
 } from "./labels.js";
+import { assertAllowedAgentModelSlug } from "../agent-model-slugs.js";
 
 let writeChain: Promise<unknown> = Promise.resolve();
 
@@ -389,6 +390,7 @@ export function create(input: CreateInput): Promise<IssueRecord> {
     }
     if (input.kind === "epic") draft.blockedBy = [];
     if (input.kind === "idea" && input.stakeholder) {
+      assertAllowedAgentModelSlug(input.stakeholder);
       draft.stakeholder = input.stakeholder;
     }
     if (input.kind === "story") {
@@ -550,6 +552,14 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     validateNonClearablePatch(existing, jsonPatch);
     validateMergePolicyPatch(existing, jsonPatch, issues);
     validateSourceIdeaPatch(existing, jsonPatch, issues);
+    if (
+      existing.kind === "idea" &&
+      "stakeholder" in jsonPatch &&
+      jsonPatch.stakeholder !== undefined &&
+      jsonPatch.stakeholder !== null
+    ) {
+      assertAllowedAgentModelSlug(jsonPatch.stakeholder);
+    }
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);
