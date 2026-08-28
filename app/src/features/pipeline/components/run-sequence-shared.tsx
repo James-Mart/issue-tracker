@@ -179,5 +179,10 @@ export function displayLifelineLabel(line: SequenceLifeline): string {
 }
 
 export function displayBeatLabel(label: string): string {
-  return label.replace(/issue-tracker-/g, "");
+  const variantStart = label.indexOf(" (");
+  if (variantStart === -1) return label.replace(/issue-tracker-/g, "");
+  return (
+    label.slice(0, variantStart).replace(/issue-tracker-/g, "") +
+    label.slice(variantStart)
+  );
 }

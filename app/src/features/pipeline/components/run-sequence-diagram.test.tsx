@@ -360,6 +360,43 @@ describe("RunSequenceDiagram", () => {
     expect(shaft?.getAttribute("stroke-dasharray")).toBe("5 4");
   });
 
+  it("strips the harness prefix from variant captions without touching the model name", () => {
+    const { container } = mountDiagram(
+      sequence({
+        lifelines: [
+          lifeline("human", "human"),
+          lifeline("coordinator", "coordinator"),
+          lifeline("issue-tracker-implementor"),
+        ],
+        beats: [
+          beat({
+            from: "coordinator",
+            to: "issue-tracker-implementor",
+            label: "spawn issue-tracker-implementor (composer)",
+            startedAt: AT,
+            durationMs: 45_000,
+            kind: "spawn",
+          }),
+          beat({
+            from: "issue-tracker-implementor",
+            to: "coordinator",
+            label: "issue-tracker-implementor (sonnet) returned",
+            startedAt: "2026-08-28T12:00:45.000Z",
+            durationMs: 12_000,
+            kind: "return",
+          }),
+        ],
+      }),
+    );
+    const labels = Array.from(
+      container.querySelectorAll('[data-testid="sequence-beat-label"]'),
+    ).map((el) => el.textContent);
+    expect(labels).toEqual([
+      "spawn implementor (composer)",
+      "implementor (sonnet) returned",
+    ]);
+  });
+
   it("still draws beats after a mid-run failure", () => {
     const { container } = mountDiagram(
       sequence({

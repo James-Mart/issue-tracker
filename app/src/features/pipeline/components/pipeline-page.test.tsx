@@ -485,6 +485,71 @@ describe("PipelinePage", () => {
     ).toBeNull();
   });
 
+  it("names each model variant on the phone rail caption", async () => {
+    mockViewport(390);
+    stubRuns(FIVE_RUNS, {
+      e: {
+        condition: "completed",
+        lifelines: [
+          { id: "coordinator", label: "implementing", kind: "coordinator" },
+          {
+            id: "issue-tracker-implementor",
+            label: "issue-tracker-implementor",
+            kind: "role",
+          },
+        ],
+        beats: [
+          {
+            from: "coordinator",
+            to: "issue-tracker-implementor",
+            label: "spawn issue-tracker-implementor (composer)",
+            startedAt: "2026-08-28T13:00:00.000Z",
+            durationMs: 30_000,
+            kind: "spawn",
+            turns: [
+              {
+                label: "spawn issue-tracker-implementor (composer)",
+                startedAt: "2026-08-28T13:00:00.000Z",
+                durationMs: 12_000,
+              },
+              {
+                label: "spawn issue-tracker-implementor (sonnet)",
+                startedAt: "2026-08-28T13:00:00.000Z",
+                durationMs: 18_000,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const { container } = mountPipelinePage("/pipeline/runs/e");
+    await flush();
+    expect(
+      container.querySelector('[data-testid="sequence-beat-label"]')?.textContent,
+    ).toBe("spawn implementor (composer)");
+    const expand = container.querySelector(
+      '[data-testid="sequence-beat"][data-row="collapsed"] button',
+    );
+    if (!(expand instanceof HTMLElement)) {
+      throw new Error("missing expand control");
+    }
+    act(() => {
+      expand.click();
+    });
+    const turnLabels = Array.from(
+      container.querySelectorAll(
+        '[data-testid="sequence-beat"][data-row="turn"] [data-testid="sequence-beat-label"]',
+      ),
+    ).map((el) => el.textContent);
+    expect(turnLabels).toEqual([
+      "spawn implementor (composer)",
+      "spawn implementor (sonnet)",
+    ]);
+    expect(
+      container.querySelector('[data-testid="sequence-to"]')?.textContent,
+    ).toBe("implementor");
+  });
+
   it("draws an indeterminate spawn on the phone rail with a no-return caption", async () => {
     mockViewport(390);
     stubRuns(FIVE_RUNS, {

@@ -887,6 +887,92 @@ describe("runSequence", () => {
     expect(sequence).not.toHaveProperty("rootIssue");
   });
 
+  it("derives one lifeline per role family and names each model variant on beats", async () => {
+    writeConversation("conv-variant-implementors", {
+      meta: { issueId: "capture", channel: "implementing" },
+      delegations: [
+        delegation({
+          delegationId: "del-composer",
+          agentId: "agent-composer",
+          role: "issue-tracker-implementor-composer",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-composer",
+          end: { status: "completed", endedAt: AT_ROUND1_END },
+        }),
+        delegation({
+          delegationId: "del-sonnet",
+          agentId: "agent-sonnet",
+          role: "issue-tracker-implementor-sonnet",
+          model: "claude-sonnet",
+          at: AT,
+          parentCallId: "call-sonnet",
+          end: { status: "completed", endedAt: AT_ROUND2_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-composer", "running", AT, 1),
+        toolCall("call-sonnet", "running", AT, 2),
+        toolCall("call-composer", "completed", AT_ROUND1_END, 3),
+        toolCall("call-sonnet", "completed", AT_ROUND2_END, 4),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-variant-implementors");
+
+    expect(sequence.lifelines).toEqual([
+      { id: "coordinator", label: "implementing", kind: "coordinator" },
+      {
+        id: "issue-tracker-implementor",
+        label: "issue-tracker-implementor",
+        kind: "role",
+      },
+    ]);
+    expect(sequence.beats).toHaveLength(2);
+    expect(sequence.beats[0]).toEqual({
+      from: "coordinator",
+      to: "issue-tracker-implementor",
+      label: "spawn issue-tracker-implementor (composer)",
+      startedAt: AT,
+      durationMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
+      kind: "spawn",
+      parentCallId: "call-sonnet",
+      turns: [
+        {
+          label: "spawn issue-tracker-implementor (composer)",
+          startedAt: AT,
+          durationMs: Date.parse(AT_ROUND1_END) - Date.parse(AT),
+        },
+        {
+          label: "spawn issue-tracker-implementor (sonnet)",
+          startedAt: AT,
+          durationMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
+        },
+      ],
+    });
+    expect(sequence.beats[1]).toEqual({
+      from: "issue-tracker-implementor",
+      to: "coordinator",
+      label: "issue-tracker-implementor (composer) returned",
+      startedAt: AT_ROUND1_END,
+      durationMs: 9000,
+      kind: "return",
+      turns: [
+        {
+          label: "issue-tracker-implementor (composer) returned",
+          startedAt: AT_ROUND1_END,
+          durationMs: Date.parse(AT_ROUND1_END) - Date.parse(AT),
+        },
+        {
+          label: "issue-tracker-implementor (sonnet) returned",
+          startedAt: AT_ROUND2_END,
+          durationMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
+        },
+      ],
+    });
+  });
+
   it("omits rootIssue when the earliest issue id no longer resolves", async () => {
     writeConversation("conv-dangling", {
       meta: { title: "Historical run", createdAt: AT },

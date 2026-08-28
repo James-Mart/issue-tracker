@@ -1,3 +1,4 @@
+import { roleFamily } from "@/features/pipeline/role-family";
 import type {
   ConversationMeta,
   DelegationRecord,
@@ -38,6 +39,8 @@ export type SequenceBeat = {
   durationMs?: number;
   kind: SequenceBeatKind;
   turns?: SequenceBeatTurn[];
+  /** Model variant when the role name carries a suffix (e.g. composer). */
+  variant?: string;
   /** Parent tool call that spawned this beat — used to close it from a live frame. */
   parentCallId?: string;
   /** Predates lifecycle recording — end cannot be judged. */
@@ -125,7 +128,24 @@ function parentLifelineId(
       `delegation "${record.delegationId}" parent "${parentId}" is not in conversation "${conversationId}"`,
     );
   }
-  return parent.role;
+  return roleFamily(parent.role).family;
+}
+
+function roleCaption(family: string, variant?: string): string {
+  return variant ? `${family} (${variant})` : family;
+}
+
+function spawnLabel(family: string, variant?: string): string {
+  return `spawn ${roleCaption(family, variant)}`;
+}
+
+function returnLabel(
+  family: string,
+  variant: string | undefined,
+  failed: boolean,
+): string {
+  const role = roleCaption(family, variant);
+  return failed ? `${role} failed` : `${role} returned`;
 }
 
 function closedDuration(
@@ -270,8 +290,9 @@ export function runSequence(conversationId: string): RunSequence {
   }
 
   for (const record of delegations) {
+    const { family, variant } = roleFamily(record.role);
     const from = parentLifelineId(record, byId, conversationId);
-    const to = record.role;
+    const to = family;
     const startEvent =
       record.parentCallId !== undefined
         ? earliestCallEvent(record.parentCallId, toolCalls)
@@ -285,9 +306,10 @@ export function runSequence(conversationId: string): RunSequence {
       beat: {
         from,
         to,
-        label: `spawn ${record.role}`,
+        label: spawnLabel(family, variant),
         startedAt: record.at,
         kind: "spawn",
+        ...(variant !== undefined ? { variant } : {}),
         ...(closed ? closedDuration(record.at, end.endedAt) : {}),
         ...(record.parentCallId !== undefined
           ? { parentCallId: record.parentCallId }
@@ -306,12 +328,10 @@ export function runSequence(conversationId: string): RunSequence {
       beat: {
         from: to,
         to: from,
-        label:
-          end.status === "error"
-            ? `${record.role} failed`
-            : `${record.role} returned`,
+        label: returnLabel(family, variant, end.status === "error"),
         startedAt: end.endedAt,
         kind: "return",
+        ...(variant !== undefined ? { variant } : {}),
         ...closedDuration(record.at, end.endedAt),
       },
       at: end.endedAt,
@@ -323,9 +343,10 @@ export function runSequence(conversationId: string): RunSequence {
   ordered.sort(compareOrder);
   const collapsed = collapseConsecutiveBeats(ordered);
 
-  const roleIds: string[] = [];
+  const familyIds: string[] = [];
   for (const record of delegations) {
-    if (!roleIds.includes(record.role)) roleIds.push(record.role);
+    const { family } = roleFamily(record.role);
+    if (!familyIds.includes(family)) familyIds.push(family);
   }
 
   const lifelines: SequenceLifeline[] = [];
@@ -337,8 +358,8 @@ export function runSequence(conversationId: string): RunSequence {
     label: coordinatorLabel(meta),
     kind: "coordinator",
   });
-  for (const role of roleIds) {
-    lifelines.push({ id: role, label: role, kind: "role" });
+  for (const family of familyIds) {
+    lifelines.push({ id: family, label: family, kind: "role" });
   }
 
   const { condition, recoveredErrors } = runOutcome(ordered);
