@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { projectAvatarFromId } from "@/components/ui/avatar";
@@ -129,6 +130,8 @@ export function ProjectSidebar() {
 
   const isCockpit = pathname === "/";
   const isAgents = pathname === "/agents" || pathname.startsWith("/agents/");
+  const isPipeline =
+    pathname === "/pipeline" || pathname.startsWith("/pipeline/");
   const showProjectRows =
     sidebarState === "collapsed" || projectsSectionOpen;
 
@@ -169,6 +172,13 @@ export function ProjectSidebar() {
               tooltip="Agents"
               label="Agents"
               icon={Bot}
+            />
+            <NavItem
+              to="/pipeline"
+              isActive={isPipeline}
+              tooltip="Pipeline"
+              label="Pipeline"
+              icon={Workflow}
             />
           </SidebarMenu>
         </SidebarGroup>
