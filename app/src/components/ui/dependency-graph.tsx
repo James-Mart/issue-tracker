@@ -53,7 +53,8 @@ export type GraphEdgeStroke = {
   opacity?: number;
 };
 
-function assignLayers(
+/** Longest-path layer index per id. Callers that omit back-edges keep a DAG. */
+export function assignLayers(
   nodeIds: string[],
   edges: GraphEdge[],
 ): Map<string, number> {

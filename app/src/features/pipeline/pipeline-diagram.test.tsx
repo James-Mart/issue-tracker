@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { layoutDepGraph } from "@/components/ui/dependency-graph";
 import { PipelineDiagram } from "./pipeline-diagram";
 import {
+  PHONE_WIDTH,
+  layoutPipelineDiagram,
+  pickNodeLabel,
+} from "./pipeline-layout";
+import {
   pipelines,
   type Pipeline,
   type PipelineEdge,
@@ -44,7 +49,10 @@ const KINDS_PIPELINE: Pipeline = {
   ],
 };
 
-function mountDiagram(pipeline: Pipeline): {
+function mountDiagram(
+  pipeline: Pipeline,
+  containerWidth?: number,
+): {
   container: HTMLDivElement;
   root: Root;
 } {
@@ -52,7 +60,9 @@ function mountDiagram(pipeline: Pipeline): {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<PipelineDiagram pipeline={pipeline} />);
+    root.render(
+      <PipelineDiagram pipeline={pipeline} containerWidth={containerWidth} />,
+    );
   });
   return { container, root };
 }
@@ -175,4 +185,153 @@ describe("PipelineDiagram", () => {
       expect(kinds.has("handoff")).toBe(true);
     },
   );
+});
+
+function pathEndX(d: string): number {
+  const nums = [...d.matchAll(/-?[\d.]+/g)].map(Number);
+  return nums[nums.length - 2]!;
+}
+
+function nodeCenterX(el: HTMLElement): number {
+  return parseFloat(el.style.left) + parseFloat(el.style.width) / 2;
+}
+
+const planning = pipelines.find((pipeline) => pipeline.id === "planning")!;
+const work = pipelines.find((pipeline) => pipeline.id === "work")!;
+
+const POLISH_FANOUT = [
+  "check-authoring-conformance",
+  "check-dependency-order",
+  "check-dry",
+  "check-footprint",
+  "check-internal-consistency",
+  "check-no-ambiguity",
+] as const;
+
+describe("PipelineDiagram phone width", () => {
+  it("gives each fan-out sibling its own incoming edge", () => {
+    const { container } = mountDiagram(planning, PHONE_WIDTH);
+    const edges = edgeEls(container);
+    const endXs: number[] = [];
+
+    for (const id of POLISH_FANOUT) {
+      const node = nodeEl(container, id);
+      const edge = edges.find(
+        (el) =>
+          el.getAttribute("data-from") === "polish" &&
+          el.getAttribute("data-to") === id,
+      );
+      if (!edge) throw new Error(`Missing fan-out edge to ${id}`);
+      expect(edge.getAttribute("marker-end")).toBeTruthy();
+      const d = edge.getAttribute("d") ?? "";
+      expect(d).toMatch(/ L /);
+      const endX = pathEndX(d);
+      expect(endX).toBeCloseTo(nodeCenterX(node), 5);
+      endXs.push(endX);
+    }
+
+    expect(new Set(endXs.map((x) => Math.round(x))).size).toBe(
+      POLISH_FANOUT.length,
+    );
+
+    const inner = container.querySelector(
+      '[data-testid="pipeline-diagram"] > div',
+    );
+    if (!(inner instanceof HTMLElement)) {
+      throw new Error("Missing diagram inner");
+    }
+    const lane = parseFloat(inner.style.width);
+    for (const id of POLISH_FANOUT) {
+      const node = nodeEl(container, id);
+      const right = parseFloat(node.style.left) + parseFloat(node.style.width);
+      expect(right).toBeLessThanOrEqual(lane);
+      expect(parseFloat(node.style.left)).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("renders a name in full when it fits and never truncates it", () => {
+    const { container } = mountDiagram(planning, PHONE_WIDTH);
+    const grill = nodeEl(container, "grill");
+    expect(grill.getAttribute("data-label")).toBe("Grill-me protocol");
+    expect(grill.textContent).toContain("Grill-me protocol");
+    expect(grill.querySelector(".truncate")).toBeNull();
+
+    const apply = nodeEl(container, "polish-apply");
+    expect(apply.getAttribute("data-label")).toBe(
+      "Aggregate → apply → summary",
+    );
+    expect(apply.textContent).toContain("Aggregate → apply → summary");
+    expect(apply.querySelector(".truncate")).toBeNull();
+
+    const dry = nodeEl(container, "check-dry");
+    expect(dry.getAttribute("data-label")).toBe("DRY");
+    expect(dry.textContent).toContain("DRY");
+  });
+
+  it("uses shortLabel only when the real name does not fit", () => {
+    const measure = (text: string) => {
+      if (text === "Focused codebase research") return 400;
+      if (text === "Research") return 40;
+      if (text === "Mockup round") return 40;
+      return text.length * 6;
+    };
+    const layout = layoutPipelineDiagram(planning, PHONE_WIDTH, measure);
+    const byId = Object.fromEntries(layout.nodes.map((node) => [node.id, node]));
+
+    expect(byId.research!.label).toBe("Research");
+    expect(byId["mockup-round"]!.label).toBe("Mockup round");
+    expect(byId.grill!.label).toBe("Grill-me protocol");
+
+    const { container } = mountDiagram(planning, PHONE_WIDTH);
+    expect(nodeEl(container, "grill").textContent).toContain(
+      "Grill-me protocol",
+    );
+    expect(container.querySelector(".truncate")).toBeNull();
+  });
+
+  it.each([
+    ["planning", planning],
+    ["work", work],
+  ] as const)("does not clip cards on the %s pipeline", (_id, pipeline) => {
+    const { container } = mountDiagram(pipeline, PHONE_WIDTH);
+    const diagram = container.querySelector('[data-testid="pipeline-diagram"]');
+    expect(diagram?.getAttribute("data-layout")).toBe("phone");
+    const inner = container.querySelector(
+      '[data-testid="pipeline-diagram"] > div',
+    );
+    if (!(inner instanceof HTMLElement)) {
+      throw new Error("Missing diagram inner");
+    }
+    const layoutWidth = parseFloat(inner.style.width);
+    expect(layoutWidth).toBeLessThanOrEqual(PHONE_WIDTH);
+    for (const node of pipeline.nodes) {
+      const el = nodeEl(container, node.id);
+      expect(el.className).not.toMatch(/\boverflow-hidden\b/);
+      expect(el.querySelector(".truncate")).toBeNull();
+      expect(parseFloat(el.style.width)).toBeGreaterThan(0);
+      const right = parseFloat(el.style.left) + parseFloat(el.style.width);
+      expect(right).toBeLessThanOrEqual(layoutWidth);
+    }
+  });
+});
+
+describe("pickNodeLabel", () => {
+  it("keeps a name that fits and falls back only when it does not", () => {
+    const measure = (text: string) => text.length * 10;
+    expect(
+      pickNodeLabel(
+        { name: "DRY", shortLabel: "D" },
+        40,
+        measure,
+      ),
+    ).toBe("DRY");
+    expect(
+      pickNodeLabel(
+        { name: "Internal consistency", shortLabel: "Consistency" },
+        40,
+        measure,
+      ),
+    ).toBe("Consistency");
+    expect(pickNodeLabel({ name: "Footprint" }, 20, measure)).toBe("Footprint");
+  });
 });

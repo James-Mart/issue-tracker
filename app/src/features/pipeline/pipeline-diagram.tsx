@@ -1,28 +1,22 @@
 import { ExternalLink, UserRound } from "lucide-react";
-import { layoutDepGraph } from "@/components/ui/dependency-graph";
+import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils/cn";
+import {
+  layoutPipelineDiagram,
+  type PlacedPipelineNode,
+} from "./pipeline-layout";
 import type { Pipeline, PipelineEdge, PipelineNode } from "./shape";
 
-const CARD_W = 168;
-const CARD_H = 60;
-const COL_GAP = 152;
-const ROW_GAP = 84;
-const PAD_X = 28;
-const PAD_Y = 28;
-const LOOP_GUTTER = 80;
 const ARROW_LEN = 6;
 
-function isForwardEdge(edge: PipelineEdge): boolean {
-  return edge.kind !== "loop";
-}
-
 function forwardEdgePath(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
+  from: PlacedPipelineNode,
+  to: PlacedPipelineNode,
+  cardH: number,
 ): string {
-  const yStart = from.y + CARD_H / 2;
-  const yEnd = to.y - CARD_H / 2 - ARROW_LEN;
-  if (Math.abs(to.x - from.x) <= 6) {
+  const yStart = from.y + cardH / 2;
+  const yEnd = to.y - cardH / 2 - ARROW_LEN;
+  if (Math.abs(to.x - from.x) <= 0.5) {
     return `M ${from.x} ${yStart} L ${from.x} ${yEnd}`;
   }
   const busY = yStart + (yEnd - yStart) * 0.38;
@@ -30,13 +24,14 @@ function forwardEdgePath(
 }
 
 function loopArcPath(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
+  from: PlacedPipelineNode,
+  to: PlacedPipelineNode,
   gutterX: number,
+  cardH: number,
 ): string {
-  const startX = from.x - CARD_W / 2;
-  const startY = from.y + CARD_H / 2;
-  const tipY = to.y - CARD_H / 2;
+  const startX = from.x - from.cardW / 2;
+  const startY = from.y + cardH / 2;
+  const tipY = to.y - cardH / 2;
   const endY = tipY - 2;
   // First control holds y so the run reaches the gutter before climbing;
   // the vertical segment stays beside the layers, not through them.
@@ -53,44 +48,79 @@ function HollowPort() {
   );
 }
 
-function PipelineNodeCard({ node }: { node: PipelineNode }) {
+function PipelineNodeCard({
+  node,
+  label,
+  compact,
+  dense,
+}: {
+  node: PipelineNode;
+  label: string;
+  compact: boolean;
+  dense: boolean;
+}) {
+  const labelClass = cn(
+    "min-w-0 font-medium",
+    dense
+      ? "text-center text-[10px] leading-tight break-words"
+      : "text-xs leading-snug",
+  );
+  const pad = dense
+    ? "justify-center px-1 py-1"
+    : compact
+      ? "gap-1.5 px-2 py-2"
+      : "gap-2 px-3 py-2";
+
   if (node.kind === "gate") {
     // Attention hue waits for a published waiting-on-person state.
     return (
-      <div className="flex h-full w-full items-center gap-2 rounded-none border-[3px] border-double border-foreground bg-card px-3 py-2">
-        <UserRound
-          aria-hidden
-          data-testid="pipeline-gate-glyph"
-          className="h-4 w-4 shrink-0 text-muted-foreground"
-        />
-        <span className="min-w-0 text-xs font-medium leading-snug text-foreground">
-          {node.name}
-        </span>
+      <div
+        className={cn(
+          "flex h-full w-full items-center rounded-none border-[3px] border-double border-foreground bg-card",
+          pad,
+        )}
+      >
+        {dense ? null : (
+          <UserRound
+            aria-hidden
+            data-testid="pipeline-gate-glyph"
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+          />
+        )}
+        <span className={cn(labelClass, "text-foreground")}>{label}</span>
       </div>
     );
   }
 
   if (node.kind === "handoff") {
     return (
-      <div className="flex h-full w-full items-center gap-2 rounded-md border border-dashed border-[hsl(var(--rail-lit))] bg-[hsl(var(--panel))] px-3 py-2">
-        <ExternalLink
-          aria-hidden
-          data-testid="pipeline-handoff-glyph"
-          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-        />
-        <span className="min-w-0 text-xs font-medium leading-snug text-muted-foreground">
-          {node.name}
-        </span>
+      <div
+        className={cn(
+          "flex h-full w-full items-center rounded-md border border-dashed border-[hsl(var(--rail-lit))] bg-[hsl(var(--panel))]",
+          pad,
+        )}
+      >
+        {dense ? null : (
+          <ExternalLink
+            aria-hidden
+            data-testid="pipeline-handoff-glyph"
+            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          />
+        )}
+        <span className={cn(labelClass, "text-muted-foreground")}>{label}</span>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
-      <HollowPort />
-      <span className="min-w-0 text-xs font-medium leading-snug text-foreground">
-        {node.name}
-      </span>
+    <div
+      className={cn(
+        "flex h-full w-full items-center rounded-md border border-border bg-card",
+        pad,
+      )}
+    >
+      {dense ? null : <HollowPort />}
+      <span className={cn(labelClass, "text-foreground")}>{label}</span>
     </div>
   );
 }
@@ -99,32 +129,50 @@ function PipelineNodeCard({ node }: { node: PipelineNode }) {
 export function PipelineDiagram({
   pipeline,
   className,
+  containerWidth,
 }: {
   pipeline: Pipeline;
   className?: string;
+  containerWidth?: number;
 }) {
-  const layout = layoutDepGraph(pipeline, {
-    layeringEdges: isForwardEdge,
-    colGap: COL_GAP,
-    rowGap: ROW_GAP,
-    labelW: CARD_W,
-    padX: PAD_X,
-    padY: PAD_Y,
-    gutterLeft: LOOP_GUTTER,
-    nodeHeight: CARD_H,
-  });
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState<number | undefined>(
+    undefined,
+  );
+
+  useLayoutEffect(() => {
+    if (containerWidth != null) return;
+    const el = rootRef.current;
+    if (!el) return;
+    const measure = () => {
+      const width = el.clientWidth;
+      const next = width > 0 ? width : undefined;
+      setMeasuredWidth((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [containerWidth]);
+
+  const layout = layoutPipelineDiagram(
+    pipeline,
+    containerWidth ?? measuredWidth,
+  );
   const byId = new Map(layout.nodes.map((node) => [node.id, node]));
   const loopEdges = layout.edges.filter((edge) => edge.kind === "loop");
   const markerId = `pipeline-arrow-${pipeline.id}`;
 
   return (
     <div
+      ref={rootRef}
       role="img"
       aria-label={`${pipeline.title} diagram`}
       data-testid="pipeline-diagram"
       data-pipeline={pipeline.id}
+      data-layout={layout.compact ? "phone" : "desktop"}
       className={cn(
-        "relative overflow-x-auto rounded-md border border-border bg-[hsl(var(--panel)/0.35)]",
+        "relative w-full overflow-x-auto rounded-md border border-border bg-[hsl(var(--panel)/0.35)]",
         className,
       )}
     >
@@ -152,7 +200,7 @@ export function PipelineDiagram({
               <path d="M 0 0 L 10 3.5 L 0 7 z" fill="context-stroke" />
             </marker>
           </defs>
-          {layout.edges.map((edge) => {
+          {layout.edges.map((edge: PipelineEdge) => {
             const from = byId.get(edge.from)!;
             const to = byId.get(edge.to)!;
             const isLoop = edge.kind === "loop";
@@ -162,10 +210,11 @@ export function PipelineDiagram({
                     candidate.from === edge.from && candidate.to === edge.to,
                 )
               : 0;
-            const gutterX = PAD_X + LOOP_GUTTER * 0.42 - loopIndex * 14;
+            const gutterX =
+              layout.padX + layout.loopGutter * 0.42 - loopIndex * 14;
             const d = isLoop
-              ? loopArcPath(from, to, gutterX)
-              : forwardEdgePath(from, to);
+              ? loopArcPath(from, to, gutterX, layout.cardH)
+              : forwardEdgePath(from, to, layout.cardH);
             return (
               <path
                 key={`${edge.from}->${edge.to}:${edge.kind}`}
@@ -189,15 +238,21 @@ export function PipelineDiagram({
             data-testid="pipeline-node"
             data-id={node.id}
             data-kind={node.kind}
+            data-label={node.label}
             className="absolute"
             style={{
-              left: node.x - CARD_W / 2,
-              top: node.y - CARD_H / 2,
-              width: CARD_W,
-              height: CARD_H,
+              left: node.x - node.cardW / 2,
+              top: node.y - layout.cardH / 2,
+              width: node.cardW,
+              height: layout.cardH,
             }}
           >
-            <PipelineNodeCard node={node} />
+            <PipelineNodeCard
+              node={node}
+              label={node.label}
+              compact={layout.compact}
+              dense={node.dense}
+            />
           </div>
         ))}
       </div>
