@@ -85,7 +85,8 @@ Lower fidelity has a fixed meaning:
 - **Surface** — the UI to mock up
 - **Target workspace** — absolute path of the project whose components
   the stories import
-- **Conversation id** — tracker conversation slug for the scratch paths
+- **Conversation id** — session-root agent id from the caller for scratch
+  paths
 - **Direction count** — how many directions to produce
 
 ## Bootstrap
@@ -102,8 +103,12 @@ Complete before **## Procedure**.
 
 ## Procedure
 
+From `/root/.cursor/plugins/local/issue-tracker/app`, run
+`npm run mockup-resolve -- <conversationId>` and take the printed line as
+`<resolvedConversationId>`.
+
 Scratch root: join `/root/.cursor/plugins/local/issue-tracker` with
-`conversations/<conversationId>/mockups/`.
+`conversations/<resolvedConversationId>/mockups/`.
 
 1. Inspect **Target workspace** read-only. Form Read paths by joining
    **Target workspace** with workspace-relative paths. Pass **Target

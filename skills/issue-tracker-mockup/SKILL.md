@@ -40,10 +40,9 @@ named no surface, ask for it before step 1.
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-workspace-gate.md`
    and apply it to that output. The Project `Workspace:` it gates is this
    round's **target workspace**.
-2. `<conversationId>` is the value of `$CURSOR_CONVERSATION_ID`. Empty → stop
-   and hand back to the user: the scratch and the harness are keyed by it and
-   there is no fallback. Use that one value in every conformance stub — the
-   conformance agent must not read its own.
+2. Call `delegations` per **## Delegation** and set `<conversationId>` to
+   `root.agentId`. When `root` is omitted → stop and hand back to the user.
+   Use that one value in every conformance stub.
 
 ## Round
 

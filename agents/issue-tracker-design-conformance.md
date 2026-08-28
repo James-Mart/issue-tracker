@@ -27,7 +27,8 @@ follows the design.
 - **Surface** — the UI to mock up
 - **Target workspace** — absolute path of the project whose components
   the stories import
-- **Conversation id** — tracker conversation slug for the scratch paths
+- **Conversation id** — session-root agent id from the caller for scratch
+  paths; pass the same value to every author stub
 - **Direction count** — how many directions to produce; when unset, `1`
 
 ## Bootstrap
