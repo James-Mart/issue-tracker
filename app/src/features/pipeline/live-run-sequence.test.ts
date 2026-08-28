@@ -128,13 +128,13 @@ describe("applyLiveFrame", () => {
     expect(next.beats).toHaveLength(1);
   });
 
-  it("closes a matching spawn and flips the run to completed", () => {
+  it("closes a matching spawn and flips the run to completed from delegation_end", () => {
     const next = applyLiveFrame(inFlight(), {
-      type: "tool_call",
-      callId: "call-impl",
-      name: "Task",
+      type: "delegation_end",
+      delegationId: "del-impl",
+      parentCallId: "call-impl",
       status: "completed",
-      at: AT_END,
+      endedAt: AT_END,
       seq: 12,
     });
     expect(next.condition).toBe("completed");
@@ -152,13 +152,13 @@ describe("applyLiveFrame", () => {
     });
   });
 
-  it("marks the run failed when the matching tool_call errors", () => {
+  it("marks the run failed when delegation_end errors", () => {
     const next = applyLiveFrame(inFlight(), {
-      type: "tool_call",
-      callId: "call-impl",
-      name: "Task",
+      type: "delegation_end",
+      delegationId: "del-impl",
+      parentCallId: "call-impl",
       status: "error",
-      at: AT_END,
+      endedAt: AT_END,
       seq: 12,
     });
     expect(next.condition).toBe("failed");
@@ -166,6 +166,19 @@ describe("applyLiveFrame", () => {
       kind: "return",
       label: "implementor failed",
     });
+  });
+
+  it("ignores a terminal tool_call", () => {
+    const seed = inFlight();
+    const next = applyLiveFrame(seed, {
+      type: "tool_call",
+      callId: "call-impl",
+      name: "Task",
+      status: "completed",
+      at: AT_END,
+      seq: 12,
+    });
+    expect(next).toBe(seed);
   });
 
   it("ignores a non-terminal tool_call", () => {
@@ -202,11 +215,11 @@ describe("insertFrameBySeq / applyLiveFrames", () => {
   it("applies out-of-order frames in seq order", () => {
     const frames = [
       {
-        type: "tool_call" as const,
-        callId: "call-qa",
-        name: "Task",
+        type: "delegation_end" as const,
+        delegationId: "del-qa",
+        parentCallId: "call-qa",
         status: "completed" as const,
-        at: AT_END,
+        endedAt: AT_END,
         seq: 11,
       },
       delegationFrame(),

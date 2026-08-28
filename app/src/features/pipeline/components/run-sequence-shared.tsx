@@ -80,10 +80,14 @@ export function conditionCaption(sequence: RunSequence): string {
   return "as-run trace";
 }
 
+export type BeatAccent = "live" | "failed" | "indeterminate";
+
 export function beatAccent(
   sequence: RunSequence,
   beatIndex: number,
-): "live" | "failed" | undefined {
+): BeatAccent | undefined {
+  const beat = sequence.beats[beatIndex];
+  if (beat?.indeterminate) return "indeterminate";
   if (
     sequence.condition === "failed" &&
     failedBeatIndex(sequence.beats) === beatIndex
@@ -92,6 +96,14 @@ export function beatAccent(
   }
   if (frontierBeatIndex(sequence) === beatIndex) return "live";
   return undefined;
+}
+
+const INDETERMINATE_DASH = "5 4";
+const OPEN_TERMINUS_DASH = "2 2";
+
+export function beatCaptionLabel(beat: SequenceBeat, label: string): string {
+  const base = displayBeatLabel(label);
+  return beat.indeterminate ? `${base} · no return` : base;
 }
 
 export function DirectedArrow({
@@ -105,29 +117,58 @@ export function DirectedArrow({
   toX: number;
   y: number;
   kind: SequenceBeatKind;
-  accent?: "live" | "failed";
+  accent?: BeatAccent;
 }) {
-  const stroke = beatStroke(kind, accent);
-  const color = strokeCss(stroke.color);
+  const isIndeterminate = accent === "indeterminate";
+  const stroke = beatStroke(
+    kind,
+    isIndeterminate ? undefined : accent,
+  );
+  const color = isIndeterminate ? "hsl(var(--warn))" : strokeCss(stroke.color);
   const tipX = toX;
-  const lineEndX = toX - Math.sign(toX - fromX || 1) * ARROW_SIZE;
+  const lineEndX = isIndeterminate
+    ? toX - 12
+    : toX - Math.sign(toX - fromX || 1) * ARROW_SIZE;
+  const dash = isIndeterminate
+    ? INDETERMINATE_DASH
+    : stroke.dash === "return"
+      ? RETURN_DASH
+      : undefined;
+  const width = isIndeterminate ? 1.75 : stroke.width;
   return (
-    <g data-testid="sequence-arrow" data-kind={kind}>
+    <g
+      data-testid="sequence-arrow"
+      data-kind={kind}
+      data-indeterminate={isIndeterminate ? "true" : undefined}
+    >
       <line
         x1={fromX}
         y1={y}
         x2={lineEndX}
         y2={y}
         stroke={color}
-        strokeWidth={stroke.width}
-        strokeDasharray={stroke.dash === "return" ? RETURN_DASH : undefined}
+        strokeWidth={width}
+        strokeDasharray={dash}
         data-testid="sequence-arrow-shaft"
       />
-      <polygon
-        points={arrowHeadPoints(tipX, y, fromX, y)}
-        fill={color}
-        data-testid="sequence-arrowhead"
-      />
+      {isIndeterminate ? (
+        <circle
+          cx={toX - 8}
+          cy={y}
+          r={3}
+          fill="none"
+          stroke={color}
+          strokeWidth={1.5}
+          strokeDasharray={OPEN_TERMINUS_DASH}
+          data-testid="sequence-arrow-open-terminus"
+        />
+      ) : (
+        <polygon
+          points={arrowHeadPoints(tipX, y, fromX, y)}
+          fill={color}
+          data-testid="sequence-arrowhead"
+        />
+      )}
     </g>
   );
 }

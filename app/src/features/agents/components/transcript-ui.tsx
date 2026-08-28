@@ -42,10 +42,11 @@ export function formatUnknown(value: unknown): string {
 }
 
 export function toolStatusVariant(
-  status: "running" | "completed" | "error",
-): "inProgress" | "done" | "blocked" {
+  status: "running" | "completed" | "error" | "unknown",
+): "inProgress" | "done" | "blocked" | "todo" {
   if (status === "running") return "inProgress";
   if (status === "completed") return "done";
+  if (status === "unknown") return "todo";
   return "blocked";
 }
 

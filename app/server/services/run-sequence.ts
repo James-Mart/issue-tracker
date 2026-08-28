@@ -1,6 +1,7 @@
 import type {
   ConversationMeta,
   DelegationRecord,
+  DelegationRecordWithEnd,
   TranscriptEvent,
 } from "../schemas.js";
 import {
@@ -38,6 +39,8 @@ export type SequenceBeat = {
   turns?: SequenceBeatTurn[];
   /** Parent tool call that spawned this beat — used to close it from a live frame. */
   parentCallId?: string;
+  /** Predates lifecycle recording — end cannot be judged. */
+  indeterminate?: true;
 };
 
 export type RunSequence = {
@@ -86,34 +89,6 @@ function durationMs(startedAt: string, endedAt: string): number {
   return Date.parse(endedAt) - Date.parse(startedAt);
 }
 
-/**
- * Delegation end from the parent tool call's terminal event — same scan as
- * `deriveRunStatus` in agent-runs.ts.
- */
-function deriveDelegationEnd(
-  parentCallId: string,
-  toolCalls: ToolCallEvent[],
-):
-  | { status: "completed" | "error"; event: ToolCallEvent }
-  | { status: "running" }
-  | undefined {
-  const matching = toolCalls.filter((e) => e.callId === parentCallId);
-  if (matching.length === 0) return undefined;
-
-  for (let i = matching.length - 1; i >= 0; i -= 1) {
-    const row = matching[i]!;
-    if (row.status === "completed" || row.status === "error") {
-      return { status: row.status, event: row };
-    }
-  }
-
-  if (matching.some((e) => e.status === "running")) {
-    return { status: "running" };
-  }
-
-  return undefined;
-}
-
 function earliestCallEvent(
   parentCallId: string,
   toolCalls: ToolCallEvent[],
@@ -128,7 +103,7 @@ function earliestCallEvent(
 
 function parentLifelineId(
   record: DelegationRecord,
-  byId: Map<string, DelegationRecord>,
+  byId: Map<string, DelegationRecordWithEnd>,
   conversationId: string,
 ): string {
   const parentId = record.parentDelegationId;
@@ -186,8 +161,9 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
   }));
 
   const anyOpen = group.some((row) => row.open);
+  const indeterminate = group.some((row) => row.beat.indeterminate);
   let durationMs: number | undefined;
-  if (!anyOpen) {
+  if (!anyOpen && !indeterminate) {
     const firstStart = Date.parse(first.beat.startedAt);
     let latestEnd = firstStart;
     for (const row of group) {
@@ -207,6 +183,7 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
       turns,
       ...(durationMs !== undefined ? { durationMs } : {}),
       ...(parentCallId !== undefined ? { parentCallId } : {}),
+      ...(indeterminate ? { indeterminate: true } : {}),
     },
     seq: first.seq,
     at: first.at,
@@ -272,13 +249,10 @@ export function runSequence(conversationId: string): RunSequence {
       record.parentCallId !== undefined
         ? earliestCallEvent(record.parentCallId, toolCalls)
         : undefined;
-    const end =
-      record.parentCallId !== undefined
-        ? deriveDelegationEnd(record.parentCallId, toolCalls)
-        : undefined;
-    const terminal = end !== undefined && end.status !== "running" ? end : undefined;
-    const endedAt = terminal?.event.at;
-    const endedInError = terminal?.status === "error";
+    const end = record.end;
+    const closed = end !== undefined;
+    const indeterminate = !closed && record.lifecycle !== "tracked";
+    const endedInError = end?.status === "error";
 
     ordered.push({
       beat: {
@@ -287,33 +261,33 @@ export function runSequence(conversationId: string): RunSequence {
         label: `spawn ${record.role}`,
         startedAt: record.at,
         kind: "spawn",
-        ...(endedAt !== undefined ? closedDuration(record.at, endedAt) : {}),
+        ...(closed ? closedDuration(record.at, end.endedAt) : {}),
         ...(record.parentCallId !== undefined
           ? { parentCallId: record.parentCallId }
           : {}),
+        ...(indeterminate ? { indeterminate: true } : {}),
       },
       seq: startEvent?.seq,
       at: startEvent?.at ?? record.at,
-      open: endedAt === undefined,
+      open: !closed && !indeterminate,
       endedInError,
     });
 
-    if (terminal === undefined) continue;
+    if (!closed) continue;
 
     ordered.push({
       beat: {
         from: to,
         to: from,
         label:
-          terminal.status === "error"
+          end.status === "error"
             ? `${record.role} failed`
             : `${record.role} returned`,
-        startedAt: terminal.event.at,
+        startedAt: end.endedAt,
         kind: "return",
-        ...closedDuration(record.at, terminal.event.at),
+        ...closedDuration(record.at, end.endedAt),
       },
-      seq: terminal.event.seq,
-      at: terminal.event.at,
+      at: end.endedAt,
       open: false,
       endedInError,
     });

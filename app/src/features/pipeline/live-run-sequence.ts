@@ -36,7 +36,14 @@ function derivedCondition(beats: SequenceBeat[]): RunSequence["condition"] {
   if (beats.some((beat) => beat.kind === "return" && beat.label.endsWith(" failed"))) {
     return "failed";
   }
-  if (beats.some((beat) => beat.kind === "spawn" && beat.durationMs === undefined)) {
+  if (
+    beats.some(
+      (beat) =>
+        beat.kind === "spawn" &&
+        beat.durationMs === undefined &&
+        !beat.indeterminate,
+    )
+  ) {
     return "in-flight";
   }
   return "completed";
@@ -88,18 +95,17 @@ function applyDelegation(
   return withCondition(withLifeline, insertBeat(withLifeline.beats, beat));
 }
 
-function applyToolCall(
+function applyDelegationEnd(
   sequence: RunSequence,
-  event: Extract<ConversationStreamEvent, { type: "tool_call" }>,
+  event: Extract<ConversationStreamEvent, { type: "delegation_end" }>,
 ): RunSequence {
-  if (event.status !== "completed" && event.status !== "error") return sequence;
   const index = sequence.beats.findIndex((beat) =>
-    hasParentCallId(beat, event.callId),
+    hasParentCallId(beat, event.parentCallId),
   );
   if (index < 0) return sequence;
   const beat = sequence.beats[index]!;
   if (beat.durationMs !== undefined) return sequence;
-  const duration = elapsedMs(beat.startedAt, event.at);
+  const duration = elapsedMs(beat.startedAt, event.endedAt);
   if (duration === undefined) return sequence;
 
   const { liveElapsedMs: _closedElapsed, ...rest } = beat;
@@ -111,7 +117,7 @@ function applyToolCall(
     const turns = closed.turns.slice();
     const last = turns[turns.length - 1]!;
     if (last.durationMs === undefined) {
-      const turnDuration = elapsedMs(last.startedAt, event.at);
+      const turnDuration = elapsedMs(last.startedAt, event.endedAt);
       turns[turns.length - 1] = {
         ...last,
         ...(turnDuration !== undefined ? { durationMs: turnDuration } : {}),
@@ -127,7 +133,7 @@ function applyToolCall(
     from: role,
     to: beat.from,
     label: event.status === "error" ? `${role} failed` : `${role} returned`,
-    startedAt: event.at,
+    startedAt: event.endedAt,
     durationMs: duration,
     kind: "return",
     parentCallId: beat.parentCallId,
@@ -157,7 +163,9 @@ export function applyLiveFrame(
   event: ConversationStreamEvent,
 ): RunSequence {
   if (event.type === "delegation") return applyDelegation(sequence, event);
-  if (event.type === "tool_call") return applyToolCall(sequence, event);
+  if (event.type === "delegation_end") {
+    return applyDelegationEnd(sequence, event);
+  }
   if (event.type === "subagent_update") {
     return applySubagentUpdate(sequence, event);
   }

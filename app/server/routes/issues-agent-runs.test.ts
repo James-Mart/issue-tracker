@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DelegationRecord, TranscriptEvent } from "../schemas.js";
+import type { DelegationRecordWithEnd, TranscriptEvent } from "../schemas.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const AT_END = "2026-07-09T16:00:00.000Z";
@@ -23,7 +23,7 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
 function writeConversation(
   id: string,
   opts: {
-    delegations?: DelegationRecord[];
+    delegations?: DelegationRecordWithEnd[];
     transcript?: TranscriptEvent[];
     meta?: Record<string, unknown>;
   },
@@ -46,11 +46,23 @@ function writeConversation(
       2,
     )}\n`,
   );
+  const lines: unknown[] = [];
+  for (const record of opts.delegations ?? []) {
+    const { end, ...start } = record;
+    lines.push(start);
+    if (end !== undefined) {
+      lines.push({
+        kind: "end",
+        delegationId: start.delegationId,
+        status: end.status,
+        endedAt: end.endedAt,
+      });
+    }
+  }
   writeFileSync(
     join(dir, "delegations.jsonl"),
-    (opts.delegations ?? [])
-      .map((d) => JSON.stringify(d))
-      .join("\n") + ((opts.delegations?.length ?? 0) ? "\n" : ""),
+    lines.map((line) => JSON.stringify(line)).join("\n") +
+      (lines.length ? "\n" : ""),
   );
   writeFileSync(
     join(dir, "transcript.jsonl"),
@@ -129,24 +141,11 @@ describe("GET /api/issues/:id/agent-runs", () => {
           at: AT,
           issueId: ISSUE_ID,
           parentCallId: "call-completed",
+          lifecycle: "tracked",
+          end: { status: "completed", endedAt: AT_END },
         },
       ],
-      transcript: [
-        {
-          type: "tool_call",
-          callId: "call-completed",
-          name: "delegate",
-          status: "running",
-          at: AT,
-        },
-        {
-          type: "tool_call",
-          callId: "call-completed",
-          name: "delegate",
-          status: "completed",
-          at: AT_END,
-        },
-      ],
+      transcript: [],
     });
 
     const res = await fetch(`${baseUrl}/api/issues/${ISSUE_ID}/agent-runs`);
@@ -213,6 +212,8 @@ describe("GET /api/issues/:id/agent-runs/:delegationId/events", () => {
           at: AT,
           issueId: ISSUE_ID,
           parentCallId: "call-a",
+          lifecycle: "tracked",
+          end: { status: "completed", endedAt: AT_END },
         },
         {
           delegationId: "del-b",
@@ -222,16 +223,11 @@ describe("GET /api/issues/:id/agent-runs/:delegationId/events", () => {
           at: AT,
           issueId: ISSUE_ID,
           parentCallId: "call-b",
+          lifecycle: "tracked",
+          end: { status: "completed", endedAt: AT_END },
         },
       ],
       transcript: [
-        {
-          type: "tool_call",
-          callId: "call-a",
-          name: "delegate",
-          status: "running",
-          at: AT,
-        },
         {
           type: "subagent_update",
           parentCallId: "call-a",
@@ -252,20 +248,6 @@ describe("GET /api/issues/:id/agent-runs/:delegationId/events", () => {
           step: { kind: "text", text: "run a step 2" },
           at: AT,
           seq: 4,
-        },
-        {
-          type: "tool_call",
-          callId: "call-a",
-          name: "delegate",
-          status: "completed",
-          at: AT_END,
-        },
-        {
-          type: "tool_call",
-          callId: "call-b",
-          name: "delegate",
-          status: "completed",
-          at: AT_END,
         },
       ],
     });

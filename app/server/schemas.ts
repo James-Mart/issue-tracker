@@ -671,7 +671,7 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
 
 export type TranscriptEventInput = z.infer<typeof transcriptEventInputSchema>;
 
-/** Resolved agent run on an issue — derived from delegations + transcript tool calls. */
+/** Resolved agent run on an issue — derived from the delegation store. */
 export const agentRunSchema = z.object({
   delegationId: nonEmpty,
   agentId: nonEmpty,
@@ -681,7 +681,7 @@ export const agentRunSchema = z.object({
   parentCallId: nonEmpty,
   conversationId: nonEmpty,
   startedAt: nonEmpty,
-  status: z.enum(["running", "completed", "error"]),
+  status: z.enum(["running", "completed", "error", "unknown"]),
   endedAt: nonEmpty.optional(),
   isResume: z.boolean(),
 });
@@ -712,6 +712,18 @@ const delegationFrameInput = z.object({
 });
 
 export type DelegationFrameInput = z.infer<typeof delegationFrameInput>;
+
+/** Live-only watched delegation end on the event stream (never persisted). */
+const delegationEndFrameInput = z.object({
+  type: z.literal("delegation_end"),
+  delegationId: nonEmpty,
+  parentCallId: nonEmpty,
+  status: z.enum(["completed", "error"]),
+  endedAt: nonEmpty,
+  failureClass: agentFailureClassSchema.optional(),
+});
+
+export type DelegationEndFrameInput = z.infer<typeof delegationEndFrameInput>;
 
 /** Write-time frame union: transcript events plus live-only run signalling. */
 export const conversationFrameInputSchema = z.union([
@@ -768,6 +780,7 @@ export const conversationStreamEventSchema = z.union([
   withStreamFrameMeta(runFrameInput),
   withStreamFrameMeta(pendingFrameInput),
   withStreamFrameMeta(delegationFrameInput),
+  withStreamFrameMeta(delegationEndFrameInput),
 ]);
 
 export type ConversationStreamEvent = z.infer<
@@ -818,6 +831,8 @@ export const delegationRecordInputSchema = z.object({
   issueId: nonEmpty.optional(),
   /** Parent tool call that spawned this delegation. */
   parentCallId: nonEmpty.optional(),
+  /** Present on start records written after lifecycle tracking landed. */
+  lifecycle: z.literal("tracked").optional(),
 });
 
 export type DelegationRecordInput = z.infer<typeof delegationRecordInputSchema>;
@@ -827,6 +842,35 @@ export const delegationRecordSchema = delegationRecordInputSchema.merge(
 );
 
 export type DelegationRecord = z.infer<typeof delegationRecordSchema>;
+
+export const delegationEndRecordInputSchema = z.object({
+  delegationId: nonEmpty,
+  status: z.enum(["completed", "error"]),
+  failureClass: agentFailureClassSchema.optional(),
+});
+
+export type DelegationEndRecordInput = z.infer<
+  typeof delegationEndRecordInputSchema
+>;
+
+export const delegationEndRecordSchema = delegationEndRecordInputSchema.merge(
+  z.object({
+    kind: z.literal("end"),
+    endedAt: nonEmpty,
+  }),
+);
+
+export type DelegationEndRecord = z.infer<typeof delegationEndRecordSchema>;
+
+export type DelegationEnd = {
+  status: "completed" | "error";
+  endedAt: string;
+  failureClass?: z.infer<typeof agentFailureClassSchema>;
+};
+
+export type DelegationRecordWithEnd = DelegationRecord & {
+  end?: DelegationEnd;
+};
 
 export type DelegationRecordParseResult =
   | { ok: true; record: DelegationRecord }
@@ -853,6 +897,36 @@ export function parseDelegationRecordInput(
   return {
     ok: false,
     message: formatZodError(result.error, "invalid delegation record"),
+  };
+}
+
+export type DelegationEndRecordParseResult =
+  | { ok: true; record: DelegationEndRecord }
+  | { ok: false; message: string };
+
+export function parseDelegationEndRecord(
+  raw: unknown,
+): DelegationEndRecordParseResult {
+  const result = delegationEndRecordSchema.safeParse(raw);
+  if (result.success) return { ok: true, record: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid delegation end record"),
+  };
+}
+
+export type DelegationEndRecordInputParseResult =
+  | { ok: true; input: DelegationEndRecordInput }
+  | { ok: false; message: string };
+
+export function parseDelegationEndRecordInput(
+  raw: unknown,
+): DelegationEndRecordInputParseResult {
+  const result = delegationEndRecordInputSchema.safeParse(raw);
+  if (result.success) return { ok: true, input: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid delegation end record"),
   };
 }
 

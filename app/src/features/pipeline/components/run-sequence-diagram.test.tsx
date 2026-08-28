@@ -324,6 +324,42 @@ describe("RunSequenceDiagram", () => {
     expect(cap?.getAttribute("data-lifeline")).toBe("research");
   });
 
+  it("renders an indeterminate beat with a no-return caption and no spinner", () => {
+    const { container } = mountDiagram(
+      sequence({
+        beats: [
+          beat({
+            from: "coordinator",
+            to: "research",
+            label: "spawn research",
+            startedAt: AT,
+            kind: "spawn",
+            indeterminate: true,
+          }),
+        ],
+      }),
+    );
+    const label = beatEl(container, "coordinator", "research").querySelector(
+      '[data-testid="sequence-beat-label"]',
+    );
+    expect(label?.textContent).toBe("spawn research · no return");
+    expect(label?.className).toContain("hsl(var(--warn))");
+    expect(label?.querySelector(".animate-spin")).toBeNull();
+    const arrow = container.querySelector(
+      '[data-testid="sequence-arrow"][data-kind="spawn"]',
+    );
+    expect(arrow?.getAttribute("data-indeterminate")).toBe("true");
+    expect(
+      arrow?.querySelector('[data-testid="sequence-arrowhead"]'),
+    ).toBeNull();
+    expect(
+      arrow?.querySelector('[data-testid="sequence-arrow-open-terminus"]'),
+    ).not.toBeNull();
+    const shaft = arrow?.querySelector('[data-testid="sequence-arrow-shaft"]');
+    expect(shaft?.getAttribute("stroke")).toBe("hsl(var(--warn))");
+    expect(shaft?.getAttribute("stroke-dasharray")).toBe("5 4");
+  });
+
   it("still draws beats after a mid-run failure", () => {
     const { container } = mountDiagram(
       sequence({
@@ -555,6 +591,38 @@ describe("RunSequenceDiagram phone rail", () => {
     expect(
       container.querySelector('[data-testid="sequence-termination-cap"]'),
     ).toBeNull();
+  });
+
+  it("renders an indeterminate beat with a no-return caption and no spinner", () => {
+    const { container } = mountPhone(
+      sequence({
+        beats: [
+          beat({
+            from: "coordinator",
+            to: "research",
+            label: "spawn research",
+            startedAt: AT,
+            kind: "spawn",
+            indeterminate: true,
+          }),
+        ],
+      }),
+    );
+    const row = beatEl(container, "coordinator", "research");
+    const label = row.querySelector('[data-testid="sequence-beat-label"]');
+    expect(label?.textContent).toBe("spawn research · no return");
+    expect(label?.closest("p")?.className).toContain("hsl(var(--warn))");
+    expect(row.querySelector(".animate-spin")).toBeNull();
+    const arrow = row.querySelector(
+      '[data-testid="sequence-arrow"][data-kind="spawn"]',
+    );
+    expect(arrow?.getAttribute("data-indeterminate")).toBe("true");
+    expect(
+      arrow?.querySelector('[data-testid="sequence-arrowhead"]'),
+    ).toBeNull();
+    expect(
+      arrow?.querySelector('[data-testid="sequence-arrow-open-terminus"]'),
+    ).not.toBeNull();
   });
 
   it("stops a failed rail at a termination cap on the lifeline that failed", () => {

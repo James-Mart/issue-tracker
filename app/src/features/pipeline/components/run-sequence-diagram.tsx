@@ -29,6 +29,7 @@ import {
   DirectedArrow,
   IterationCountChip,
   beatAccent,
+  beatCaptionLabel,
   buildSequenceRows,
   conditionCaption,
   displayBeatLabel,
@@ -130,25 +131,31 @@ function BeatLabel({
   y,
   isLive,
   isFailed,
+  isIndeterminate,
 }: {
   label: string;
   x: number;
   y: number;
   isLive: boolean;
   isFailed: boolean;
+  isIndeterminate: boolean;
 }) {
   return (
     <span
       className={cn(
         "absolute z-10 inline-flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium leading-none",
         "bg-[hsl(var(--panel-2))]",
-        isLive ? "text-[hsl(var(--current))]" : "text-foreground",
+        isIndeterminate
+          ? "text-[hsl(var(--warn))]"
+          : isLive
+            ? "text-[hsl(var(--current))]"
+            : "text-foreground",
         isFailed && "text-[hsl(var(--blocked))]",
       )}
       style={{ left: x, top: y - 20 }}
       data-testid="sequence-beat-label"
     >
-      {isLive ? (
+      {isLive && !isIndeterminate ? (
         <Loader2
           className="h-3 w-3 shrink-0 motion-safe:animate-spin text-[hsl(var(--current))]"
           aria-hidden
@@ -431,6 +438,7 @@ export function RunSequenceDiagram({
             const accent = beatAccent(sequence, row.beatIndex);
             const isLive = accent === "live";
             const isFailed = accent === "failed";
+            const isIndeterminate = accent === "indeterminate";
             const count = collapsedIterationCount(row.beat);
 
             if (row.kind === "collapsed") {
@@ -452,7 +460,10 @@ export function RunSequenceDiagram({
                     className={cn(
                       "absolute z-20 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded border px-2 py-0.5",
                       "border-[hsl(var(--rail))] bg-[hsl(var(--panel-2))] hover:border-[hsl(var(--rail-lit))]",
-                      "text-[11px] font-medium text-foreground",
+                      "text-[11px] font-medium",
+                      isIndeterminate
+                        ? "text-[hsl(var(--warn))]"
+                        : "text-foreground",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     )}
                     style={{ left: midX, top: y - 20 }}
@@ -463,7 +474,7 @@ export function RunSequenceDiagram({
                       aria-hidden
                     />
                     <span data-testid="sequence-beat-label">
-                      {displayBeatLabel(row.beat.label)}
+                      {beatCaptionLabel(row.beat, row.beat.label)}
                     </span>
                     {count !== undefined ? (
                       <IterationCountChip count={count} />
@@ -512,7 +523,8 @@ export function RunSequenceDiagram({
               );
             }
 
-            const label = displayBeatLabel(
+            const label = beatCaptionLabel(
+              row.beat,
               row.kind === "turn" ? row.turn.label : row.beat.label,
             );
             return (
@@ -532,6 +544,7 @@ export function RunSequenceDiagram({
                   y={y}
                   isLive={row.kind === "beat" && isLive}
                   isFailed={row.kind === "beat" && isFailed}
+                  isIndeterminate={row.kind === "beat" && isIndeterminate}
                 />
               </div>
             );

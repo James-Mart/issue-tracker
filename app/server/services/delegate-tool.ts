@@ -11,6 +11,7 @@ import {
 } from "./agent-failure.js";
 import {
   appendDelegation,
+  appendDelegationEnd,
   conversationExists,
   readConversation,
   readDelegations,
@@ -460,6 +461,10 @@ export function createDelegateCustomTools(
         let handle: Awaited<ReturnType<AgentSdk["createAgent"]>> | undefined;
         let pipeline: EventPipeline | undefined;
         let parentCallId: string | undefined;
+        let delegationStarted = false;
+        let activeDelegationId: string | undefined;
+        let endStatus: "completed" | "error" | undefined;
+        let endFailureClass: AgentFailureClass | undefined;
         try {
           if (tracked.cancelled) {
             throw new Error("delegate: conversation cancelled");
@@ -557,11 +562,13 @@ export function createDelegateCustomTools(
           const reportFailure = (
             waited: AgentRunResult,
           ): Extract<DelegateResult, { ok: false }> => {
+            endStatus = "error";
             if (
               tracked.stalledBeforeFirstContent &&
               !tracked.cancelled &&
               waited.status === "cancelled"
             ) {
+              endFailureClass = "stalled-before-first-token";
               return {
                 ok: false,
                 failureClass: "stalled-before-first-token",
@@ -571,6 +578,7 @@ export function createDelegateCustomTools(
               };
             }
             const failure = delegateFailureFromWait(waited, agentId);
+            endFailureClass = failure.failureClass;
             if (failure.failureClass === "auth") {
               options.onAuthFailure?.({
                 delegationId,
@@ -588,6 +596,7 @@ export function createDelegateCustomTools(
             options.conversationId &&
             conversationExists(options.conversationId)
           ) {
+            activeDelegationId = delegationId;
             await appendDelegation(options.conversationId, {
               delegationId,
               agentId: handle.agentId,
@@ -599,6 +608,7 @@ export function createDelegateCustomTools(
               ...(issueId !== undefined ? { issueId } : {}),
               ...(parentCallId !== undefined ? { parentCallId } : {}),
             });
+            delegationStarted = true;
           }
 
           const run = await handle.send(fullPrompt);
@@ -659,6 +669,7 @@ export function createDelegateCustomTools(
             if (waited.status === "cancelled") {
               return reportFailure(waited);
             }
+            endStatus = "completed";
             return { ok: true, agentId, reply };
           } finally {
             if (heartbeat !== undefined) clearInterval(heartbeat);
@@ -667,6 +678,9 @@ export function createDelegateCustomTools(
             }
           }
         } catch (err) {
+          if (delegationStarted) {
+            endStatus = "error";
+          }
           if (pipeline && parentCallId) {
             try {
               await pipeline.failToolCall(parentCallId, {
@@ -679,6 +693,21 @@ export function createDelegateCustomTools(
           }
           throw err;
         } finally {
+          if (
+            delegationStarted &&
+            activeDelegationId !== undefined &&
+            endStatus !== undefined &&
+            options.conversationId &&
+            conversationExists(options.conversationId)
+          ) {
+            await appendDelegationEnd(options.conversationId, {
+              delegationId: activeDelegationId,
+              status: endStatus,
+              ...(endFailureClass !== undefined
+                ? { failureClass: endFailureClass }
+                : {}),
+            });
+          }
           untrackNested(concurrencyKey, tracked);
           release();
           if (handle) {

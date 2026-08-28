@@ -12,6 +12,8 @@ import { join } from "path";
 import { conversationsDir } from "../config.js";
 import {
   parseConversationMeta,
+  parseDelegationEndRecord,
+  parseDelegationEndRecordInput,
   parseDelegationRecord,
   parseDelegationRecordInput,
   parseTranscriptEvent,
@@ -22,8 +24,11 @@ import {
   type ConversationMetaPatch,
   type CreateConversationInput,
   type AgentRun,
+  type DelegationEndRecord,
+  type DelegationEndRecordInput,
   type DelegationRecord,
   type DelegationRecordInput,
+  type DelegationRecordWithEnd,
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
@@ -401,10 +406,14 @@ export function appendEvent(
   });
 }
 
-function readDelegationLines(id: string): DelegationRecord[] {
+type ParsedDelegationLine =
+  | { kind: "start"; record: DelegationRecord }
+  | { kind: "end"; record: DelegationEndRecord };
+
+function readDelegationLines(id: string): ParsedDelegationLine[] {
   const path = delegationsPathOf(id);
   if (!existsSync(path)) return [];
-  const records: DelegationRecord[] = [];
+  const lines: ParsedDelegationLine[] = [];
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
     let raw: unknown;
@@ -413,10 +422,17 @@ function readDelegationLines(id: string): DelegationRecord[] {
     } catch {
       continue;
     }
-    const parsed = parseDelegationRecord(raw);
-    if (parsed.ok) records.push(parsed.record);
+    const endParsed = parseDelegationEndRecord(raw);
+    if (endParsed.ok) {
+      lines.push({ kind: "end", record: endParsed.record });
+      continue;
+    }
+    const startParsed = parseDelegationRecord(raw);
+    if (startParsed.ok) {
+      lines.push({ kind: "start", record: startParsed.record });
+    }
   }
-  return records;
+  return lines;
 }
 
 function agentRunAtDelegationStart(
@@ -449,13 +465,22 @@ export function appendDelegation(
     const parsed = parseDelegationRecordInput(record);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
     const priorDelegations = readDelegationLines(id);
+    const priorStarts = priorDelegations.filter(
+      (line): line is ParsedDelegationLine & { kind: "start" } =>
+        line.kind === "start",
+    );
     const stamped: DelegationRecord = {
       ...parsed.input,
+      lifecycle: "tracked",
       at: new Date().toISOString(),
     };
     appendFileSync(delegationsPathOf(id), `${JSON.stringify(stamped)}\n`);
     writeMeta({ ...meta, updatedAt: new Date().toISOString() });
-    const run = agentRunAtDelegationStart(id, stamped, priorDelegations);
+    const run = agentRunAtDelegationStart(
+      id,
+      stamped,
+      priorStarts.map((line) => line.record),
+    );
     if (run) {
       publishFrame(id, {
         event: { type: "delegation", run },
@@ -466,10 +491,71 @@ export function appendDelegation(
   });
 }
 
+/** Append a delegation end record (one JSON line). */
+export function appendDelegationEnd(
+  id: string,
+  record: DelegationEndRecordInput,
+): Promise<DelegationEndRecord> {
+  return serialize(() => {
+    const meta = readMetaRaw(id);
+    const parsed = parseDelegationEndRecordInput(record);
+    if (!parsed.ok) throw new IssueError("validation", parsed.message);
+    const priorDelegations = readDelegationLines(id);
+    const start = priorDelegations.find(
+      (line): line is ParsedDelegationLine & { kind: "start" } =>
+        line.kind === "start" &&
+        line.record.delegationId === parsed.input.delegationId,
+    );
+    const stamped = {
+      kind: "end" as const,
+      ...parsed.input,
+      endedAt: new Date().toISOString(),
+    };
+    appendFileSync(delegationsPathOf(id), `${JSON.stringify(stamped)}\n`);
+    writeMeta({ ...meta, updatedAt: new Date().toISOString() });
+    if (start?.record.issueId && start.record.parentCallId) {
+      publishFrame(id, {
+        event: {
+          type: "delegation_end",
+          delegationId: stamped.delegationId,
+          parentCallId: start.record.parentCallId,
+          status: stamped.status,
+          endedAt: stamped.endedAt,
+          ...(stamped.failureClass !== undefined
+            ? { failureClass: stamped.failureClass }
+            : {}),
+        },
+        persist: false,
+      });
+    }
+    return stamped;
+  });
+}
+
 /** Load persisted nested-agent ids for a conversation (append order). */
-export function readDelegations(id: string): DelegationRecord[] {
+export function readDelegations(id: string): DelegationRecordWithEnd[] {
   readMetaRaw(id);
-  return readDelegationLines(id);
+  const lines = readDelegationLines(id);
+  const records: DelegationRecordWithEnd[] = [];
+  const byId = new Map<string, DelegationRecordWithEnd>();
+  for (const line of lines) {
+    if (line.kind === "end") {
+      const start = byId.get(line.record.delegationId);
+      if (!start) continue;
+      start.end = {
+        status: line.record.status,
+        endedAt: line.record.endedAt,
+        ...(line.record.failureClass !== undefined
+          ? { failureClass: line.record.failureClass }
+          : {}),
+      };
+      continue;
+    }
+    const withEnd: DelegationRecordWithEnd = { ...line.record };
+    records.push(withEnd);
+    byId.set(line.record.delegationId, withEnd);
+  }
+  return records;
 }
 
 /** True when `meta.json` exists for the conversation id. */
