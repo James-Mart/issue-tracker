@@ -10,7 +10,11 @@ import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessions } from "../services/agent-sessions.js";
-import type { DelegationRecord, TranscriptEvent } from "../schemas.js";
+import type {
+  DelegationRecord,
+  DelegationRecordWithEnd,
+  TranscriptEvent,
+} from "../schemas.js";
 import { pluginDir } from "../config.js";
 
 let server: Server;
@@ -57,7 +61,7 @@ async function getStepSource(stepId: string) {
 function writeConversation(
   id: string,
   opts: {
-    delegations?: DelegationRecord[];
+    delegations?: DelegationRecordWithEnd[];
     transcript?: TranscriptEvent[];
     meta?: Record<string, unknown>;
   } = {},
@@ -80,11 +84,26 @@ function writeConversation(
       2,
     )}\n`,
   );
-  const delegations = opts.delegations ?? [];
+  const lines: unknown[] = [];
+  for (const record of opts.delegations ?? []) {
+    const { end, ...start } = record;
+    lines.push(start);
+    if (end !== undefined) {
+      lines.push({
+        kind: "end",
+        delegationId: start.delegationId,
+        status: end.status,
+        endedAt: end.endedAt,
+        ...(end.failureClass !== undefined
+          ? { failureClass: end.failureClass }
+          : {}),
+      });
+    }
+  }
   writeFileSync(
     join(dir, "delegations.jsonl"),
-    delegations.map((d) => JSON.stringify(d)).join("\n") +
-      (delegations.length ? "\n" : ""),
+    lines.map((line) => JSON.stringify(line)).join("\n") +
+      (lines.length ? "\n" : ""),
   );
   const transcript = opts.transcript ?? [];
   writeFileSync(
@@ -95,18 +114,21 @@ function writeConversation(
 }
 
 function delegation(
-  overrides: Partial<DelegationRecord> &
+  overrides: Partial<DelegationRecordWithEnd> &
     Pick<
       DelegationRecord,
       "delegationId" | "agentId" | "role" | "model" | "at"
     >,
-): DelegationRecord {
+): DelegationRecordWithEnd {
+  const lifecycle =
+    "lifecycle" in overrides ? overrides.lifecycle : "tracked";
   return {
     delegationId: overrides.delegationId,
     agentId: overrides.agentId,
     role: overrides.role,
     model: overrides.model,
     at: overrides.at,
+    ...(lifecycle !== undefined ? { lifecycle } : {}),
     ...(overrides.issueId !== undefined ? { issueId: overrides.issueId } : {}),
     ...(overrides.parentCallId !== undefined
       ? { parentCallId: overrides.parentCallId }
@@ -114,6 +136,7 @@ function delegation(
     ...(overrides.parentDelegationId !== undefined
       ? { parentDelegationId: overrides.parentDelegationId }
       : {}),
+    ...(overrides.end !== undefined ? { end: overrides.end } : {}),
   };
 }
 
@@ -217,6 +240,7 @@ describe("pipeline runs routes", () => {
             at: AT_EARLY,
             issueId: "task-old",
             parentCallId: "call-old",
+            end: { status: "completed", endedAt: AT_END },
           }),
         ],
         transcript: [
@@ -308,6 +332,7 @@ describe("pipeline runs routes", () => {
             model: "composer-2.5",
             at: AT,
             parentCallId: "call-done",
+            end: { status: "completed", endedAt: AT_END },
           }),
         ],
         transcript: [

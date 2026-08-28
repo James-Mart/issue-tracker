@@ -2,7 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DelegationRecord, TranscriptEvent } from "../schemas.js";
+import type {
+  DelegationRecord,
+  DelegationRecordWithEnd,
+  TranscriptEvent,
+} from "../schemas.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const AT_EARLY = "2026-07-09T13:00:00.000Z";
@@ -19,7 +23,7 @@ let conversationsDir: string;
 function writeConversation(
   id: string,
   opts: {
-    delegations?: DelegationRecord[];
+    delegations?: DelegationRecordWithEnd[];
     transcript?: TranscriptEvent[];
     meta?: Record<string, unknown>;
   } = {},
@@ -42,11 +46,26 @@ function writeConversation(
       2,
     )}\n`,
   );
-  const delegations = opts.delegations ?? [];
+  const lines: unknown[] = [];
+  for (const record of opts.delegations ?? []) {
+    const { end, ...start } = record;
+    lines.push(start);
+    if (end !== undefined) {
+      lines.push({
+        kind: "end",
+        delegationId: start.delegationId,
+        status: end.status,
+        endedAt: end.endedAt,
+        ...(end.failureClass !== undefined
+          ? { failureClass: end.failureClass }
+          : {}),
+      });
+    }
+  }
   writeFileSync(
     join(dir, "delegations.jsonl"),
-    delegations.map((d) => JSON.stringify(d)).join("\n") +
-      (delegations.length ? "\n" : ""),
+    lines.map((line) => JSON.stringify(line)).join("\n") +
+      (lines.length ? "\n" : ""),
   );
   const transcript = opts.transcript ?? [];
   writeFileSync(
@@ -57,18 +76,21 @@ function writeConversation(
 }
 
 function delegation(
-  overrides: Partial<DelegationRecord> &
+  overrides: Partial<DelegationRecordWithEnd> &
     Pick<
       DelegationRecord,
       "delegationId" | "agentId" | "role" | "model" | "at"
     >,
-): DelegationRecord {
+): DelegationRecordWithEnd {
+  const lifecycle =
+    "lifecycle" in overrides ? overrides.lifecycle : "tracked";
   return {
     delegationId: overrides.delegationId,
     agentId: overrides.agentId,
     role: overrides.role,
     model: overrides.model,
     at: overrides.at,
+    ...(lifecycle !== undefined ? { lifecycle } : {}),
     ...(overrides.issueId !== undefined ? { issueId: overrides.issueId } : {}),
     ...(overrides.parentCallId !== undefined
       ? { parentCallId: overrides.parentCallId }
@@ -76,6 +98,7 @@ function delegation(
     ...(overrides.parentDelegationId !== undefined
       ? { parentDelegationId: overrides.parentDelegationId }
       : {}),
+    ...(overrides.end !== undefined ? { end: overrides.end } : {}),
   };
 }
 
@@ -134,6 +157,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT,
           parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_CHILD },
         }),
         delegation({
           delegationId: "del-mockup",
@@ -142,6 +166,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT_EARLY,
           parentCallId: "call-mockup",
+          end: { status: "completed", endedAt: AT },
         }),
       ],
       transcript: [
@@ -160,15 +185,15 @@ describe("runSequence", () => {
       "human replied",
       "spawn research",
       "spawn mockup-author",
-      "research returned",
       "mockup-author returned",
+      "research returned",
     ]);
     expect(sequence.beats.map((b) => [b.from, b.to])).toEqual([
       ["human", "coordinator"],
       ["coordinator", "research"],
       ["coordinator", "mockup-author"],
-      ["research", "coordinator"],
       ["mockup-author", "coordinator"],
+      ["research", "coordinator"],
     ]);
   });
 
@@ -183,6 +208,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT,
           parentCallId: "call-impl",
+          end: { status: "completed", endedAt: AT_CHILD },
         }),
         delegation({
           delegationId: "del-qa",
@@ -192,6 +218,7 @@ describe("runSequence", () => {
           at: AT,
           parentCallId: "call-qa",
           parentDelegationId: "del-impl",
+          end: { status: "completed", endedAt: AT_END },
         }),
       ],
       transcript: [
@@ -292,6 +319,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT,
           parentCallId: "call-mockup",
+          end: { status: "error", endedAt: AT_END },
         }),
         delegation({
           delegationId: "del-open",
@@ -334,6 +362,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT,
           parentCallId: "call-polish-1",
+          end: { status: "completed", endedAt: AT_ROUND1_END },
         }),
         delegation({
           delegationId: "del-polish-2",
@@ -342,6 +371,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT,
           parentCallId: "call-polish-2",
+          end: { status: "completed", endedAt: AT_ROUND2_END },
         }),
         delegation({
           delegationId: "del-polish-3",
@@ -350,6 +380,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT,
           parentCallId: "call-polish-3",
+          end: { status: "completed", endedAt: AT_ROUND3_END },
         }),
       ],
       transcript: [
@@ -430,6 +461,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT,
           parentCallId: "call-polish-1",
+          end: { status: "completed", endedAt: AT_ROUND1_END },
         }),
         delegation({
           delegationId: "del-research",
@@ -438,6 +470,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT_CHILD,
           parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_END },
         }),
         delegation({
           delegationId: "del-polish-2",
@@ -446,6 +479,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT_LATE,
           parentCallId: "call-polish-2",
+          end: { status: "completed", endedAt: AT_ROUND2_END },
         }),
       ],
       transcript: [
@@ -480,6 +514,7 @@ describe("runSequence", () => {
           model: "composer-2.5",
           at: AT,
           parentCallId: "call-polish",
+          end: { status: "completed", endedAt: AT_END },
         }),
       ],
       transcript: [
@@ -501,6 +536,166 @@ describe("runSequence", () => {
       parentCallId: "call-polish",
     });
     expect(sequence.beats[0]).not.toHaveProperty("turns");
+  });
+
+  it("closes a spawn from the end record when the transcript has no matching tool_call", async () => {
+    writeConversation("conv-end-without-call", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_END },
+        }),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-end-without-call");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.beats).toEqual([
+      {
+        from: "coordinator",
+        to: "research",
+        label: "spawn research",
+        startedAt: AT,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "spawn",
+        parentCallId: "call-research",
+      },
+      {
+        from: "research",
+        to: "coordinator",
+        label: "research returned",
+        startedAt: AT_END,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "return",
+      },
+    ]);
+  });
+
+  it("keeps a tracked record without an end open even when the transcript has a terminal tool_call", async () => {
+    writeConversation("conv-tracked-open", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+        }),
+      ],
+      transcript: [toolCall("call-research", "completed", AT_END, 1)],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-tracked-open");
+
+    expect(sequence.condition).toBe("in-flight");
+    expect(sequence.beats).toEqual([
+      {
+        from: "coordinator",
+        to: "research",
+        label: "spawn research",
+        startedAt: AT,
+        kind: "spawn",
+        parentCallId: "call-research",
+      },
+    ]);
+    expect(sequence.beats[0]).not.toHaveProperty("durationMs");
+  });
+
+  it("flags an untracked record without an end as indeterminate and derives completed", async () => {
+    writeConversation("conv-untracked", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          lifecycle: undefined,
+        }),
+      ],
+      transcript: [toolCall("call-research", "completed", AT_END, 1)],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-untracked");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.beats).toEqual([
+      {
+        from: "coordinator",
+        to: "research",
+        label: "spawn research",
+        startedAt: AT,
+        kind: "spawn",
+        parentCallId: "call-research",
+        indeterminate: true,
+      },
+    ]);
+    expect(sequence.beats[0]).not.toHaveProperty("durationMs");
+  });
+
+  it("collapses an indeterminate group without inventing a duration", async () => {
+    writeConversation("conv-indeterminate-collapse", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-polish-1",
+          agentId: "agent-polish-1",
+          role: "polish",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-polish-1",
+          lifecycle: undefined,
+        }),
+        delegation({
+          delegationId: "del-polish-2",
+          agentId: "agent-polish-2",
+          role: "polish",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-polish-2",
+          lifecycle: undefined,
+        }),
+      ],
+      transcript: [
+        toolCall("call-polish-1", "running", AT, 1),
+        toolCall("call-polish-2", "running", AT, 2),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-indeterminate-collapse");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.beats).toEqual([
+      {
+        from: "coordinator",
+        to: "polish",
+        label: "spawn polish",
+        startedAt: AT,
+        kind: "spawn",
+        parentCallId: "call-polish-2",
+        indeterminate: true,
+        turns: [
+          { label: "spawn polish", startedAt: AT },
+          { label: "spawn polish", startedAt: AT },
+        ],
+      },
+    ]);
+    expect(sequence.beats[0]).not.toHaveProperty("durationMs");
   });
 
   it("emits a human-turn beat on the human lifeline", async () => {
@@ -546,6 +741,7 @@ describe("recentRuns", () => {
           at: AT_EARLY,
           issueId: "task-old",
           parentCallId: "call-old",
+          end: { status: "completed", endedAt: AT_END },
         }),
       ],
       transcript: [
@@ -588,6 +784,7 @@ describe("recentRuns", () => {
           at: AT,
           issueId: "task-fail",
           parentCallId: "call-fail",
+          end: { status: "error", endedAt: AT_END },
         }),
       ],
       transcript: [
@@ -648,6 +845,7 @@ describe("recentRuns", () => {
           at: AT,
           issueId: "first-issue",
           parentCallId: "call-first",
+          end: { status: "completed", endedAt: AT_END },
         }),
         delegation({
           delegationId: "del-second",
@@ -657,6 +855,7 @@ describe("recentRuns", () => {
           at: AT_LATE,
           issueId: "second-issue",
           parentCallId: "call-second",
+          end: { status: "completed", endedAt: AT_LATE },
         }),
       ],
       transcript: [

@@ -27,6 +27,8 @@ export type SequenceBeat = {
   turns?: SequenceBeatTurn[];
   /** Parent tool call that spawned this beat — used to close it from a live frame. */
   parentCallId?: string;
+  /** Predates lifecycle recording — end cannot be judged. */
+  indeterminate?: true;
   /** Stream seq when this beat was appended live; fetched beats omit it. */
   seq?: number;
   /** Elapsed ms from live `subagent_update` frames; does not close the beat. */
