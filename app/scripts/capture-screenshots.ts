@@ -209,10 +209,12 @@ async function waitForPipelineRunsReady(page: Page, path: string): Promise<void>
     () => {
       const body = document.body.textContent ?? "";
       if (body.includes("Loading runs")) return false;
+      if (body.includes("Loading sequence")) return false;
       return (
         document.querySelector('[data-testid="pipeline-run-list"]') != null ||
         document.querySelector('[data-testid="pipeline-run-sequence-placeholder"]') !=
           null ||
+        document.querySelector('[data-testid="run-sequence-diagram"]') != null ||
         body.includes("No runs yet") ||
         body.includes("Check the server, then reload.")
       );

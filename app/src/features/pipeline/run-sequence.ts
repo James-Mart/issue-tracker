@@ -1,0 +1,131 @@
+import { formatRunDurationMs } from "@/features/issues/components/agent-runs-panel";
+import type { RunCondition } from "./run-list";
+
+export type SequenceLifelineKind = "human" | "coordinator" | "role";
+
+export type SequenceBeatKind = "spawn" | "return" | "human-turn";
+
+export type SequenceLifeline = {
+  id: string;
+  label: string;
+  kind: SequenceLifelineKind;
+};
+
+export type SequenceBeatTurn = {
+  label: string;
+  startedAt: string;
+  durationMs?: number;
+};
+
+export type SequenceBeat = {
+  from: string;
+  to: string;
+  label: string;
+  startedAt: string;
+  durationMs?: number;
+  kind: SequenceBeatKind;
+  turns?: SequenceBeatTurn[];
+};
+
+export type RunSequence = {
+  condition: RunCondition;
+  lifelines: SequenceLifeline[];
+  beats: SequenceBeat[];
+};
+
+export type BeatStrokeColor = "ink" | "mut" | "rail-lit" | "current" | "blocked";
+
+export type BeatStroke = {
+  color: BeatStrokeColor;
+  width: number;
+  dash?: "return";
+};
+
+export const RETURN_DASH = "4 3";
+export const LIFELINE_DASH = "4 4";
+export const OPEN_TAIL_DASH = "3 4";
+
+export function strokeCss(color: BeatStrokeColor): string {
+  return `hsl(var(--${color}))`;
+}
+
+/** Kind encodings the phone rail must carry unchanged. */
+export function beatStroke(
+  kind: SequenceBeatKind,
+  accent?: "live" | "failed",
+): BeatStroke {
+  if (accent === "failed") {
+    return {
+      color: "blocked",
+      width: kind === "human-turn" ? 2.5 : 2,
+      dash: kind === "return" ? "return" : undefined,
+    };
+  }
+  if (accent === "live") {
+    return {
+      color: "current",
+      width: kind === "human-turn" ? 2.5 : 1.75,
+    };
+  }
+  if (kind === "human-turn") return { color: "ink", width: 2.5 };
+  if (kind === "return") return { color: "mut", width: 1.5, dash: "return" };
+  return { color: "rail-lit", width: 1.5 };
+}
+
+export function isCollapsedBeat(beat: SequenceBeat): boolean {
+  return beat.turns !== undefined && beat.turns.length > 1;
+}
+
+/** Iteration count as its own datum — never folded into the label. */
+export function collapsedIterationCount(beat: SequenceBeat): number | undefined {
+  if (!isCollapsedBeat(beat) || beat.turns === undefined) return undefined;
+  return beat.turns.length;
+}
+
+export type LifelineTail = "extend" | "open-dash" | "stop";
+
+export function lifelineTail(condition: RunCondition): LifelineTail {
+  if (condition === "in-flight") return "open-dash";
+  if (condition === "failed") return "stop";
+  return "extend";
+}
+
+export function failedBeatIndex(beats: SequenceBeat[]): number | undefined {
+  for (let i = beats.length - 1; i >= 0; i -= 1) {
+    if (beats[i]!.label.endsWith(" failed")) return i;
+  }
+  for (let i = beats.length - 1; i >= 0; i -= 1) {
+    if (beats[i]!.kind !== "human-turn") return i;
+  }
+  return undefined;
+}
+
+/** The lifeline that failed — a return leaves it, a spawn enters it. */
+export function failedLifelineId(sequence: RunSequence): string | undefined {
+  if (sequence.condition !== "failed") return undefined;
+  const index = failedBeatIndex(sequence.beats);
+  if (index === undefined) return undefined;
+  const beat = sequence.beats[index]!;
+  return beat.kind === "return" ? beat.from : beat.to;
+}
+
+export function frontierBeatIndex(sequence: RunSequence): number | undefined {
+  if (sequence.condition !== "in-flight") return undefined;
+  for (let i = sequence.beats.length - 1; i >= 0; i -= 1) {
+    const beat = sequence.beats[i]!;
+    if (beat.kind === "spawn" && beat.durationMs === undefined) return i;
+  }
+  return undefined;
+}
+
+export function formatSequenceDuration(
+  durationMs: number | undefined,
+  isFrontier: boolean,
+): string | undefined {
+  if (durationMs !== undefined) {
+    const label = formatRunDurationMs(durationMs);
+    return isFrontier ? `${label}…` : label;
+  }
+  if (isFrontier) return "…";
+  return undefined;
+}

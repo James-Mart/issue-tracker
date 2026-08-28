@@ -9,6 +9,7 @@ import {
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PIPELINE_RUNS_LIMIT, type RecentRun } from "../run-list";
+import type { RunSequence } from "../run-sequence";
 import { pipelines } from "../shape";
 import { PipelinePage } from "./pipeline-page";
 
@@ -134,9 +135,29 @@ const FIVE_RUNS: RecentRun[] = [
   recentRun("e", "completed", "2026-08-28T11:00:00.000Z"),
 ];
 
-function stubRuns(runs: RecentRun[] = []) {
+function emptySequence(conversationId: string): RunSequence {
+  return {
+    condition: "completed",
+    lifelines: [
+      { id: "coordinator", label: conversationId, kind: "coordinator" },
+    ],
+    beats: [],
+  };
+}
+
+function stubRuns(
+  runs: RecentRun[] = [],
+  sequences: Record<string, RunSequence> = {},
+) {
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
     const url = String(input);
+    const runMatch = /^\/api\/pipeline\/runs\/([^?]+)$/.exec(url);
+    if (runMatch) {
+      const id = decodeURIComponent(runMatch[1]!);
+      return Promise.resolve(
+        jsonResponse(sequences[id] ?? emptySequence(id)),
+      );
+    }
     if (url.startsWith("/api/pipeline/runs")) {
       return Promise.resolve(jsonResponse({ runs }));
     }
@@ -315,6 +336,7 @@ describe("PipelinePage", () => {
     act(() => {
       runCard(container, "c").click();
     });
+    await flush();
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
     ).toBe("/pipeline/runs/c");
@@ -329,6 +351,42 @@ describe("PipelinePage", () => {
     expect(tab(container, "Runs").getAttribute("aria-selected")).toBe("true");
     expect(runCard(container, "d").getAttribute("data-current")).toBe("true");
     expect(runCard(container, "a").getAttribute("data-current")).toBeNull();
+  });
+
+  it("draws the selected run's sequence at desktop width", async () => {
+    const fetchMock = stubRuns(FIVE_RUNS, {
+      c: {
+        condition: "completed",
+        lifelines: [
+          { id: "human", label: "human", kind: "human" },
+          { id: "coordinator", label: "planning", kind: "coordinator" },
+        ],
+        beats: [
+          {
+            from: "human",
+            to: "coordinator",
+            label: "human replied",
+            startedAt: "2026-08-28T13:00:00.000Z",
+            kind: "human-turn",
+          },
+        ],
+      },
+    });
+    const { container } = mountPipelinePage("/pipeline/runs/c");
+    await flush();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/pipeline/runs/c",
+      expect.anything(),
+    );
+    const diagram = container.querySelector(
+      '[data-testid="run-sequence-diagram"]',
+    );
+    expect(diagram?.getAttribute("data-layout")).toBe("desktop");
+    expect(diagram?.getAttribute("data-condition")).toBe("completed");
+    expect(container.textContent).toContain("human replied");
+    expect(
+      container.querySelector('[data-testid="pipeline-run-sequence-placeholder"]'),
+    ).toBeNull();
   });
 
   it("pins the selected run and newest failed run when the phone list is truncated", async () => {
@@ -369,6 +427,7 @@ describe("PipelinePage", () => {
     act(() => {
       unselectedDone.click();
     });
+    await flush();
     const selectedDone = runCard(container, "done-run");
     const unselectedFailed = runCard(container, "fail-run");
     expect(selectedDone.getAttribute("data-current")).toBe("true");

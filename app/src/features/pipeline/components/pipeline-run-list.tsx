@@ -10,7 +10,7 @@ import {
 } from "@/app/shell-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
-import { usePipelineRunsQuery } from "../api/queries";
+import { usePipelineRunQuery, usePipelineRunsQuery } from "../api/queries";
 import {
   PHONE_RUN_LIST_SLOTS,
   conditionBadgeLabel,
@@ -19,6 +19,7 @@ import {
   type RecentRun,
   type RunCondition,
 } from "../run-list";
+import { RunSequenceDiagram } from "./run-sequence-diagram";
 
 function conditionBadgeVariant(
   condition: RunCondition,
@@ -121,6 +122,45 @@ function RunListElision({ omitted }: { omitted: RecentRun[] }) {
   );
 }
 
+function SelectedRunSequence({ conversationId }: { conversationId: string }) {
+  const { data, isLoading, error, refetch, isFetching } =
+    usePipelineRunQuery(conversationId);
+
+  if (isLoading) {
+    return (
+      <div className="min-w-0 flex-1">
+        <ShellLoadingState label="Loading sequence…" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-w-0 flex-1">
+        <ShellInlineFault
+          message={error.message}
+          hint="Check the server, then reload."
+        />
+        <Button
+          variant="primary"
+          size="sm"
+          className="mt-3"
+          disabled={isFetching}
+          onClick={() => {
+            void refetch();
+          }}
+        >
+          Reload
+        </Button>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  return <RunSequenceDiagram sequence={data} />;
+}
+
 export function PipelineRunsView({
   conversationId,
 }: {
@@ -207,14 +247,18 @@ export function PipelineRunsView({
               </div>
             )}
           </section>
-          <div
-            data-testid="pipeline-run-sequence-placeholder"
-            className="flex min-h-[16rem] min-w-0 flex-1 items-center justify-center rounded-lg border border-border bg-[hsl(var(--panel)/0.35)] px-6 py-10 text-center text-sm text-muted-foreground shell:min-h-[calc(100svh-14rem)]"
-          >
-            {conversationId
-              ? "Sequence for the selected run — lifelines, gates, and loops as they occurred."
-              : "Select a run to see its sequence — lifelines, gates, and loops as they occurred."}
-          </div>
+          {conversationId && !isMobile ? (
+            <SelectedRunSequence conversationId={conversationId} />
+          ) : (
+            <div
+              data-testid="pipeline-run-sequence-placeholder"
+              className="flex min-h-[16rem] min-w-0 flex-1 items-center justify-center rounded-lg border border-border bg-[hsl(var(--panel)/0.35)] px-6 py-10 text-center text-sm text-muted-foreground shell:min-h-[calc(100svh-14rem)]"
+            >
+              {conversationId
+                ? "Sequence for the selected run — lifelines, gates, and loops as they occurred."
+                : "Select a run to see its sequence — lifelines, gates, and loops as they occurred."}
+            </div>
+          )}
         </div>
       )}
     </div>
