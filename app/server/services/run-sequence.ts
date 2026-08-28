@@ -36,6 +36,8 @@ export type SequenceBeat = {
   durationMs?: number;
   kind: SequenceBeatKind;
   turns?: SequenceBeatTurn[];
+  /** Parent tool call that spawned this beat — used to close it from a live frame. */
+  parentCallId?: string;
 };
 
 export type RunSequence = {
@@ -161,6 +163,16 @@ function turnEndMs(beat: SequenceBeat, row: OrderedBeat): number {
   return Date.parse(row.at);
 }
 
+function groupParentCallId(group: OrderedBeat[]): string | undefined {
+  const open = [...group].reverse().find((row) => row.open);
+  if (open?.beat.parentCallId !== undefined) return open.beat.parentCallId;
+  for (let i = group.length - 1; i >= 0; i -= 1) {
+    const id = group[i]!.beat.parentCallId;
+    if (id !== undefined) return id;
+  }
+  return undefined;
+}
+
 function collapseGroup(group: OrderedBeat[]): OrderedBeat {
   if (group.length === 1) return group[0]!;
 
@@ -183,6 +195,7 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
     }
     durationMs = latestEnd - firstStart;
   }
+  const parentCallId = groupParentCallId(group);
 
   return {
     beat: {
@@ -193,6 +206,7 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
       kind: first.beat.kind,
       turns,
       ...(durationMs !== undefined ? { durationMs } : {}),
+      ...(parentCallId !== undefined ? { parentCallId } : {}),
     },
     seq: first.seq,
     at: first.at,
@@ -274,6 +288,9 @@ export function runSequence(conversationId: string): RunSequence {
         startedAt: record.at,
         kind: "spawn",
         ...(endedAt !== undefined ? closedDuration(record.at, endedAt) : {}),
+        ...(record.parentCallId !== undefined
+          ? { parentCallId: record.parentCallId }
+          : {}),
       },
       seq: startEvent?.seq,
       at: startEvent?.at ?? record.at,

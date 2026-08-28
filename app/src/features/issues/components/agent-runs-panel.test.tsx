@@ -2,7 +2,7 @@
 import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentRun, TranscriptEvent } from "@server/schemas";
 import type { TopicListener, TopicMessage } from "@/lib/ws/transport";
@@ -96,10 +96,27 @@ function testQueryClient(): QueryClient {
   });
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{location.pathname}</div>;
+}
+
 function panelTree(panel: ReactNode, client: QueryClient) {
   return (
     <QueryClientProvider client={client}>
-      <MemoryRouter>{panel}</MemoryRouter>
+      <MemoryRouter>
+        <Routes>
+          <Route
+            path="*"
+            element={
+              <>
+                {panel}
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -649,6 +666,66 @@ describe("AgentRunsPanel", () => {
     expect(container.querySelector('[data-run-id="del-1"]')).toBeTruthy();
   });
 
+  it("links each run card to that run's diagram", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-a",
+          conversationId: "conv-a",
+        }),
+        sampleRun({
+          delegationId: "del-b",
+          parentCallId: "call-2",
+          conversationId: "conv/b",
+        }),
+      ],
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    const hrefFor = (delegationId: string) =>
+      container
+        .querySelector(
+          `[data-run-id="${delegationId}"] [data-testid="agent-run-diagram-link"]`,
+        )
+        ?.getAttribute("href");
+
+    expect(hrefFor("del-a")).toBe("/pipeline/runs/conv-a");
+    expect(hrefFor("del-b")).toBe("/pipeline/runs/conv%2Fb");
+  });
+
+  it("does not expand a collapsed run when the diagram link is activated", () => {
+    queryState.data = {
+      runs: [
+        sampleRun({
+          delegationId: "del-done",
+          status: "completed",
+          endedAt: AT_END,
+        }),
+      ],
+    };
+
+    const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
+    const link = container.querySelector(
+      '[data-run-id="del-done"] [data-testid="agent-run-diagram-link"]',
+    ) as HTMLAnchorElement | null;
+    expect(link).toBeTruthy();
+    act(() => {
+      link!.click();
+    });
+
+    expect(
+      container.querySelector('[data-run-id="del-done"][data-expanded]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-run-id="del-done"] [data-slot="agent-run-body"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="location-probe"]')?.textContent,
+    ).toBe("/pipeline/runs/conv-1");
+  });
+
   it("subscribes to the work root conversation and appends a matching run in startedAt order", () => {
     queryState.data = {
       runs: [
@@ -951,16 +1028,23 @@ describe("AgentRunCard", () => {
     const root = createRoot(container);
     act(() => {
       root.render(
-        <AgentRunCard
-          issueId="task-1"
-          run={sampleRun({
-            startedAt: AT,
-            endedAt: "2026-07-09T14:00:12.000Z",
-          })}
-        />,
+        <MemoryRouter>
+          <AgentRunCard
+            issueId="task-1"
+            run={sampleRun({
+              startedAt: AT,
+              endedAt: "2026-07-09T14:00:12.000Z",
+            })}
+          />
+        </MemoryRouter>,
       );
     });
 
     expect(container.querySelector("[data-duration]")?.textContent).toBe("12s");
+    expect(
+      container
+        .querySelector('[data-testid="agent-run-diagram-link"]')
+        ?.getAttribute("href"),
+    ).toBe("/pipeline/runs/conv-1");
   });
 });
