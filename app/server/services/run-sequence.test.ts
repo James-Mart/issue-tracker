@@ -1,0 +1,339 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DelegationRecord, TranscriptEvent } from "../schemas.js";
+
+const AT = "2026-07-09T14:00:00.000Z";
+const AT_EARLY = "2026-07-09T13:00:00.000Z";
+const AT_CHILD = "2026-07-09T14:05:00.000Z";
+const AT_END = "2026-07-09T14:00:05.000Z";
+const AT_LATE = "2026-07-09T16:00:00.000Z";
+
+let root: string;
+let conversationsDir: string;
+
+function writeConversation(
+  id: string,
+  opts: {
+    delegations?: DelegationRecord[];
+    transcript?: TranscriptEvent[];
+    meta?: Record<string, unknown>;
+  } = {},
+): void {
+  const dir = join(conversationsDir, id);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "meta.json"),
+    `${JSON.stringify(
+      {
+        id,
+        title: "Test conversation",
+        projectId: "platform",
+        model: "composer-2.5",
+        createdAt: AT,
+        updatedAt: AT,
+        ...opts.meta,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const delegations = opts.delegations ?? [];
+  writeFileSync(
+    join(dir, "delegations.jsonl"),
+    delegations.map((d) => JSON.stringify(d)).join("\n") +
+      (delegations.length ? "\n" : ""),
+  );
+  const transcript = opts.transcript ?? [];
+  writeFileSync(
+    join(dir, "transcript.jsonl"),
+    transcript.map((e) => JSON.stringify(e)).join("\n") +
+      (transcript.length ? "\n" : ""),
+  );
+}
+
+function delegation(
+  overrides: Partial<DelegationRecord> &
+    Pick<
+      DelegationRecord,
+      "delegationId" | "agentId" | "role" | "model" | "at"
+    >,
+): DelegationRecord {
+  return {
+    delegationId: overrides.delegationId,
+    agentId: overrides.agentId,
+    role: overrides.role,
+    model: overrides.model,
+    at: overrides.at,
+    ...(overrides.issueId !== undefined ? { issueId: overrides.issueId } : {}),
+    ...(overrides.parentCallId !== undefined
+      ? { parentCallId: overrides.parentCallId }
+      : {}),
+    ...(overrides.parentDelegationId !== undefined
+      ? { parentDelegationId: overrides.parentDelegationId }
+      : {}),
+  };
+}
+
+function toolCall(
+  callId: string,
+  status: "running" | "completed" | "error",
+  at: string,
+  seq: number,
+): TranscriptEvent {
+  return {
+    type: "tool_call",
+    callId,
+    name: "delegate",
+    status,
+    at,
+    seq,
+  };
+}
+
+function prompt(text: string, at: string, seq: number): TranscriptEvent {
+  return { type: "prompt", text, at, seq };
+}
+
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), "issue-tracker-run-sequence-"));
+  conversationsDir = join(root, "conversations");
+  mkdirSync(conversationsDir, { recursive: true });
+  vi.resetModules();
+  vi.stubEnv("ISSUES_DIR", join(root, "issues"));
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  rmSync(root, { recursive: true, force: true });
+});
+
+async function loadRunSequence() {
+  const { runSequence } = await import("./run-sequence.js");
+  return runSequence;
+}
+
+describe("runSequence", () => {
+  it("orders beats by seq across interleaved lifelines", async () => {
+    writeConversation("conv-interleaved", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+        }),
+        delegation({
+          delegationId: "del-mockup",
+          agentId: "agent-mockup",
+          role: "mockup-author",
+          model: "composer-2.5",
+          at: AT_EARLY,
+          parentCallId: "call-mockup",
+        }),
+      ],
+      transcript: [
+        prompt("continue", AT_LATE, 1),
+        toolCall("call-research", "running", AT, 2),
+        toolCall("call-mockup", "running", AT_EARLY, 3),
+        toolCall("call-research", "completed", AT_CHILD, 4),
+        toolCall("call-mockup", "completed", AT, 5),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-interleaved");
+
+    expect(sequence.beats.map((b) => b.label)).toEqual([
+      "human replied",
+      "spawn research",
+      "spawn mockup-author",
+      "research returned",
+      "mockup-author returned",
+    ]);
+    expect(sequence.beats.map((b) => [b.from, b.to])).toEqual([
+      ["human", "coordinator"],
+      ["coordinator", "research"],
+      ["coordinator", "mockup-author"],
+      ["research", "coordinator"],
+      ["mockup-author", "coordinator"],
+    ]);
+  });
+
+  it("gives a completed run durations and nested from/to", async () => {
+    writeConversation("conv-done", {
+      meta: { issueId: "ship-it", channel: "implementing" },
+      delegations: [
+        delegation({
+          delegationId: "del-impl",
+          agentId: "agent-impl",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-impl",
+        }),
+        delegation({
+          delegationId: "del-qa",
+          agentId: "agent-qa",
+          role: "validator",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-qa",
+          parentDelegationId: "del-impl",
+        }),
+      ],
+      transcript: [
+        toolCall("call-impl", "running", AT, 1),
+        toolCall("call-qa", "running", AT, 2),
+        toolCall("call-qa", "completed", AT_END, 3),
+        toolCall("call-impl", "completed", AT_CHILD, 4),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-done");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.lifelines).toEqual([
+      { id: "coordinator", label: "implementing", kind: "coordinator" },
+      { id: "implementor", label: "implementor", kind: "role" },
+      { id: "validator", label: "validator", kind: "role" },
+    ]);
+    expect(sequence.beats).toEqual([
+      {
+        from: "coordinator",
+        to: "implementor",
+        label: "spawn implementor",
+        startedAt: AT,
+        durationMs: Date.parse(AT_CHILD) - Date.parse(AT),
+        kind: "spawn",
+      },
+      {
+        from: "implementor",
+        to: "validator",
+        label: "spawn validator",
+        startedAt: AT,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "spawn",
+      },
+      {
+        from: "validator",
+        to: "implementor",
+        label: "validator returned",
+        startedAt: AT_END,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "return",
+      },
+      {
+        from: "implementor",
+        to: "coordinator",
+        label: "implementor returned",
+        startedAt: AT_CHILD,
+        durationMs: Date.parse(AT_CHILD) - Date.parse(AT),
+        kind: "return",
+      },
+    ]);
+  });
+
+  it("leaves duration off an open beat and marks the run in-flight", async () => {
+    writeConversation("conv-open", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+        }),
+      ],
+      transcript: [toolCall("call-research", "running", AT, 1)],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-open");
+
+    expect(sequence.condition).toBe("in-flight");
+    expect(sequence.beats).toHaveLength(1);
+    expect(sequence.beats[0]).toEqual({
+      from: "coordinator",
+      to: "research",
+      label: "spawn research",
+      startedAt: AT,
+      kind: "spawn",
+    });
+    expect(sequence.beats[0]).not.toHaveProperty("durationMs");
+  });
+
+  it("marks the run failed when a beat ended in error", async () => {
+    writeConversation("conv-failed", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-mockup",
+          agentId: "agent-mockup",
+          role: "mockup-author",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-mockup",
+        }),
+        delegation({
+          delegationId: "del-open",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT_CHILD,
+          parentCallId: "call-research",
+        }),
+      ],
+      transcript: [
+        toolCall("call-mockup", "running", AT, 1),
+        toolCall("call-mockup", "error", AT_END, 2),
+        toolCall("call-research", "running", AT_CHILD, 3),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-failed");
+
+    expect(sequence.condition).toBe("failed");
+    expect(sequence.beats.find((b) => b.kind === "return")).toEqual({
+      from: "mockup-author",
+      to: "coordinator",
+      label: "mockup-author failed",
+      startedAt: AT_END,
+      durationMs: Date.parse(AT_END) - Date.parse(AT),
+      kind: "return",
+    });
+  });
+
+  it("emits a human-turn beat on the human lifeline", async () => {
+    writeConversation("conv-human", {
+      meta: { issueId: "capture", channel: "planning" },
+      transcript: [prompt("approve outline", AT, 1)],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-human");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.lifelines).toEqual([
+      { id: "human", label: "human", kind: "human" },
+      { id: "coordinator", label: "planning", kind: "coordinator" },
+    ]);
+    expect(sequence.beats).toEqual([
+      {
+        from: "human",
+        to: "coordinator",
+        label: "human replied",
+        startedAt: AT,
+        kind: "human-turn",
+      },
+    ]);
+  });
+});
