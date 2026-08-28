@@ -13,6 +13,7 @@ import {
   pipelines,
   type Pipeline,
   type PipelineEdge,
+  type PipelineId,
   type PipelineNode,
 } from "./shape";
 
@@ -52,6 +53,7 @@ const KINDS_PIPELINE: Pipeline = {
 function mountDiagram(
   pipeline: Pipeline,
   containerWidth?: number,
+  onHandoff?: (targetPipeline: PipelineId) => void,
 ): {
   container: HTMLDivElement;
   root: Root;
@@ -61,7 +63,11 @@ function mountDiagram(
   const root = createRoot(container);
   act(() => {
     root.render(
-      <PipelineDiagram pipeline={pipeline} containerWidth={containerWidth} />,
+      <PipelineDiagram
+        pipeline={pipeline}
+        containerWidth={containerWidth}
+        onHandoff={onHandoff}
+      />,
     );
   });
   return { container, root };
@@ -121,6 +127,20 @@ describe("PipelineDiagram", () => {
 
     expect(container.innerHTML).not.toContain("hsl(var(--current))");
     expect(container.innerHTML).not.toContain("hsl(var(--warn))");
+  });
+
+  it("activates a handoff toward its declared target pipeline", () => {
+    const targets: PipelineId[] = [];
+    const { container } = mountDiagram(KINDS_PIPELINE, undefined, (id) => {
+      targets.push(id);
+    });
+    const handoff = nodeEl(container, "work-handoff");
+    expect(handoff.tagName).toBe("BUTTON");
+    expect(handoff.getAttribute("data-target-pipeline")).toBe("work");
+    act(() => {
+      handoff.click();
+    });
+    expect(targets).toEqual(["work"]);
   });
 
   it("draws a loop as a dashed arc without changing layers", () => {

@@ -5,7 +5,12 @@ import {
   layoutPipelineDiagram,
   type PlacedPipelineNode,
 } from "./pipeline-layout";
-import type { Pipeline, PipelineEdge, PipelineNode } from "./shape";
+import type {
+  Pipeline,
+  PipelineEdge,
+  PipelineId,
+  PipelineNode,
+} from "./shape";
 
 const ARROW_LEN = 6;
 
@@ -130,10 +135,12 @@ export function PipelineDiagram({
   pipeline,
   className,
   containerWidth,
+  onHandoff,
 }: {
   pipeline: Pipeline;
   className?: string;
   containerWidth?: number;
+  onHandoff?: (targetPipeline: PipelineId) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [measuredWidth, setMeasuredWidth] = useState<number | undefined>(
@@ -166,7 +173,7 @@ export function PipelineDiagram({
   return (
     <div
       ref={rootRef}
-      role="img"
+      role="group"
       aria-label={`${pipeline.title} diagram`}
       data-testid="pipeline-diagram"
       data-pipeline={pipeline.id}
@@ -232,29 +239,53 @@ export function PipelineDiagram({
             );
           })}
         </svg>
-        {layout.nodes.map((node) => (
-          <div
-            key={node.id}
-            data-testid="pipeline-node"
-            data-id={node.id}
-            data-kind={node.kind}
-            data-label={node.label}
-            className="absolute"
-            style={{
-              left: node.x - node.cardW / 2,
-              top: node.y - layout.cardH / 2,
-              width: node.cardW,
-              height: layout.cardH,
-            }}
-          >
+        {layout.nodes.map((node) => {
+          const card = (
             <PipelineNodeCard
               node={node}
               label={node.label}
               compact={layout.compact}
               dense={node.dense}
             />
-          </div>
-        ))}
+          );
+          const boxStyle = {
+            left: node.x - node.cardW / 2,
+            top: node.y - layout.cardH / 2,
+            width: node.cardW,
+            height: layout.cardH,
+          };
+          if (node.kind === "handoff" && onHandoff) {
+            return (
+              <button
+                key={node.id}
+                type="button"
+                data-testid="pipeline-node"
+                data-id={node.id}
+                data-kind={node.kind}
+                data-label={node.label}
+                data-target-pipeline={node.targetPipeline}
+                className="absolute text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={boxStyle}
+                onClick={() => onHandoff(node.targetPipeline)}
+              >
+                {card}
+              </button>
+            );
+          }
+          return (
+            <div
+              key={node.id}
+              data-testid="pipeline-node"
+              data-id={node.id}
+              data-kind={node.kind}
+              data-label={node.label}
+              className="absolute"
+              style={boxStyle}
+            >
+              {card}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
