@@ -150,6 +150,48 @@ describe("attachment names", () => {
     expect(chosenArchiveName("direction-a")).toBe("mockup-direction-a.tar.gz");
   });
 
+  it("matches canonical and collision archive names for replace", async () => {
+    const { chosenArchiveName, matchesChosenArchiveForReplace } =
+      await loadPromote();
+
+    expect(
+      matchesChosenArchiveForReplace(
+        chosenArchiveName("inline-prominent"),
+        "inline-prominent",
+      ),
+    ).toBe(true);
+    expect(
+      matchesChosenArchiveForReplace(
+        "mockup-inline-prominent.tar-2.gz",
+        "inline-prominent",
+      ),
+    ).toBe(true);
+    expect(
+      matchesChosenArchiveForReplace(
+        "mockup-inline-prominent.tar-10.gz",
+        "inline-prominent",
+      ),
+    ).toBe(true);
+    expect(
+      matchesChosenArchiveForReplace(
+        "mockup-inline-prominent-v2.tar.gz",
+        "inline-prominent",
+      ),
+    ).toBe(false);
+    expect(
+      matchesChosenArchiveForReplace(
+        chosenArchiveName("grid-lightbox"),
+        "grid",
+      ),
+    ).toBe(false);
+    expect(
+      matchesChosenArchiveForReplace(
+        "mockup-inline-prominent.tar-1.gz",
+        "inline-prominent",
+      ),
+    ).toBe(false);
+  });
+
   it("strips one leading direction segment from state slugs and keeps prefix-safe matching", async () => {
     const {
       stateSlug,
@@ -441,6 +483,65 @@ describe("attachCapturedDirection", () => {
     expect(
       readFileSync(join(issuesDir, "src", "attachments", desktopName)).toString(),
     ).toBe("png:desktop-new");
+  });
+
+  it("replaces one direction's chosen archive on re-promote and sweeps collision copies", async () => {
+    const { directionDir, harnessConfigPath } = await loadScratch();
+    const {
+      attachCapturedDirection,
+      chosenAttachmentName,
+      chosenArchiveName,
+    } = await loadPromote();
+    const { listAttachments, putAttachment } = await loadAttachments();
+
+    const storiesDir = directionDir("promote-chat", "direction-a");
+    writeFileSync(join(storiesDir, "Card.stories.tsx"), "export const Default = {};");
+    const harnessPath = harnessConfigPath("promote-chat");
+    mkdirSync(join(harnessPath, ".."), { recursive: true });
+    writeFileSync(harnessPath, JSON.stringify({ ok: true }));
+
+    const phoneName = chosenAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "phone",
+    );
+    const archiveName = chosenArchiveName("direction-a");
+
+    await putAttachment("src", phoneName, Buffer.from("old-phone"));
+    await putAttachment("src", archiveName, Buffer.from("old-archive"));
+    await putAttachment(
+      "src",
+      "mockup-direction-a.tar-2.gz",
+      Buffer.from("leftover-archive-2"),
+    );
+    await putAttachment(
+      "src",
+      chosenArchiveName("direction-b"),
+      Buffer.from("direction-b-archive"),
+    );
+
+    const phone = join(root, "chosen-phone-new.png");
+    writePng(phone, "phone-new");
+
+    await attachCapturedDirection({
+      mode: "chosen",
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      issueId: "src",
+      captures: [capture("direction-a-card--default", "phone", phone)],
+    });
+
+    const names = listAttachments("src").map((att) => att.name).sort();
+    expect(names).toEqual([archiveName, phoneName, chosenArchiveName("direction-b")].sort());
+    expect(names.some((name) => name.endsWith(".tar-2.gz"))).toBe(false);
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", archiveName)).toString(),
+    ).not.toBe("old-archive");
+    expect(
+      readFileSync(
+        join(issuesDir, "src", "attachments", chosenArchiveName("direction-b")),
+      ).toString(),
+    ).toBe("direction-b-archive");
   });
 
   it("does not detach prefix-colliding directions during chosen re-promote", async () => {

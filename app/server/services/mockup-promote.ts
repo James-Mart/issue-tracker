@@ -163,6 +163,18 @@ export function matchesChosenPngForReplace(
   return true;
 }
 
+export function matchesChosenArchiveForReplace(
+  name: string,
+  directionId: string,
+): boolean {
+  if (name === chosenArchiveName(directionId)) return true;
+  const prefix = `mockup-${directionId}.tar-`;
+  if (!name.startsWith(prefix) || !name.endsWith(".gz")) return false;
+  const n = name.slice(prefix.length, -".gz".length);
+  const parsed = Number.parseInt(n, 10);
+  return Number.isInteger(parsed) && parsed >= 2 && String(parsed) === n;
+}
+
 export function matchesCandidatePrefix(
   name: string,
   directionId: string,
@@ -348,6 +360,19 @@ export async function detachChosenPngsForDirection(
   return names;
 }
 
+export async function detachChosenArchiveForDirection(
+  issueId: string,
+  directionId: string,
+): Promise<string[]> {
+  const names = listAttachments(issueId)
+    .map((att) => att.name)
+    .filter((name) => matchesChosenArchiveForReplace(name, directionId));
+  for (const name of names) {
+    await removeAttachment(issueId, name);
+  }
+  return names;
+}
+
 function pendingFromCaptures(
   mode: "candidate" | "chosen",
   directionId: string,
@@ -399,6 +424,10 @@ export async function attachCapturedDirection(options: {
       options.issueId,
       options.directionId,
       options.conversationId,
+    );
+    await detachChosenArchiveForDirection(
+      options.issueId,
+      options.directionId,
     );
     const archivePath = createDirectionArchive(
       options.conversationId,
