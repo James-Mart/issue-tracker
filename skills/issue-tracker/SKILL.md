@@ -139,9 +139,10 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
 - **`issue-tracker-plan-polish`** — polish an existing Epic or project-level
   Story plan tree with parallel check agents, then auto-apply when safe; use
   when polishing a plan, cleaning up a tracker tree, or running plan-polish.
-- **`issue-tracker-mockup`** — run one mockup round for one UI surface
-  (Storybook directions, capture, attach); use when the user asks for a mockup
-  round, UI mockups, or candidate design directions for an issue.
+- **`issue-tracker-mockup`** — run one mockup round for one UI surface via
+  the design-conformance agent (one conformant direction by default, capture,
+  attach); use when the user asks for a mockup round, UI mockups, or a design
+  direction for an issue.
 - **`issue-tracker-vision-docs`** — author or revise a Project vision doc (main
   vision or one subsystem vision) through a single grill and an approved
   draft; use when writing or refining project vision, authoring a subsystem

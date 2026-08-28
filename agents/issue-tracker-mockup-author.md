@@ -41,13 +41,16 @@ meant to propose — content that looks like real content rather than
 filler, nothing clipped, overflowing, or blank, and composition that holds
 at both captured widths.
 
-Take the visual reference from the first of these that exists:
+When the Project's `designSystem` supporting doc is present — consulted in
+**## Bootstrap** — it is a constraint on faithfulness: a state that
+violates a rule in that doc is not faithful, however well it renders.
 
-1. The Project's `designSystem` supporting doc, consulted in
-   **## Bootstrap**.
-2. The target's own components and the conventions they already follow —
+When that consult is skipped, take the reference from the first of these
+that exists:
+
+1. The target's own components and the conventions they already follow —
    the harness renders them with the project's real styling.
-3. Internal consistency and ordinary craft.
+2. Internal consistency and ordinary craft.
 
 Absent guidance lowers the reference, never the bar.
 
@@ -82,7 +85,8 @@ Lower fidelity has a fixed meaning:
 - **Surface** — the UI to mock up
 - **Target workspace** — absolute path of the project whose components
   the stories import
-- **Conversation id** — tracker conversation slug for the scratch paths
+- **Conversation id** — session-root agent id from the caller for scratch
+  paths
 - **Direction count** — how many directions to produce
 
 ## Bootstrap
@@ -99,8 +103,12 @@ Complete before **## Procedure**.
 
 ## Procedure
 
+From `/root/.cursor/plugins/local/issue-tracker/app`, run
+`npm run mockup-resolve -- <conversationId>` and take the printed line as
+`<resolvedConversationId>`.
+
 Scratch root: join `/root/.cursor/plugins/local/issue-tracker` with
-`conversations/<conversationId>/mockups/`.
+`conversations/<resolvedConversationId>/mockups/`.
 
 1. Inspect **Target workspace** read-only. Form Read paths by joining
    **Target workspace** with workspace-relative paths. Pass **Target
