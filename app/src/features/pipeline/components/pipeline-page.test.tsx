@@ -427,6 +427,47 @@ describe("PipelinePage", () => {
     ).toBeNull();
   });
 
+  it("draws an indeterminate spawn on the phone rail with a no-return caption", async () => {
+    mockViewport(390);
+    stubRuns(FIVE_RUNS, {
+      e: {
+        condition: "completed",
+        lifelines: [
+          { id: "human", label: "human", kind: "human" },
+          { id: "coordinator", label: "planning", kind: "coordinator" },
+          { id: "retro", label: "retro", kind: "role" },
+        ],
+        beats: [
+          {
+            from: "coordinator",
+            to: "retro",
+            label: "spawn retro",
+            startedAt: "2026-08-28T13:00:00.000Z",
+            kind: "spawn",
+            indeterminate: true,
+          },
+        ],
+      },
+    });
+    const { container } = mountPipelinePage("/pipeline/runs/e");
+    await flush();
+    const diagram = container.querySelector(
+      '[data-testid="run-sequence-diagram"]',
+    );
+    expect(diagram?.getAttribute("data-layout")).toBe("phone");
+    const label = container.querySelector('[data-testid="sequence-beat-label"]');
+    expect(label?.textContent).toBe("spawn retro · no return");
+    expect(label?.closest("p")?.className).toContain("hsl(var(--warn))");
+    expect(container.querySelector(".animate-spin")).toBeNull();
+    const arrow = container.querySelector(
+      '[data-testid="sequence-arrow"][data-kind="spawn"]',
+    );
+    expect(arrow?.getAttribute("data-indeterminate")).toBe("true");
+    expect(
+      arrow?.querySelector('[data-testid="sequence-arrow-open-terminus"]'),
+    ).not.toBeNull();
+  });
+
   it("pins the selected run and newest failed run when the phone list is truncated", async () => {
     mockViewport(390);
     stubRuns(FIVE_RUNS);

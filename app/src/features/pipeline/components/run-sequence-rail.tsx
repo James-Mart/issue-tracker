@@ -15,16 +15,19 @@ import {
   DirectedArrow,
   IterationCountChip,
   beatAccent,
+  beatCaptionLabel,
   displayBeatLabel,
   displayLifelineLabel,
+  type BeatAccent,
   type SequenceRenderRow,
 } from "./run-sequence-shared";
 
 const DURATION_COL = "10ch";
 
-function railState(accent: "live" | "failed" | undefined): RailNodeState {
+function railState(accent: BeatAccent | undefined): RailNodeState {
   if (accent === "live") return "in-flight";
   if (accent === "failed") return "blocked";
+  if (accent === "indeterminate") return "needs-attention";
   return "ready";
 }
 
@@ -41,7 +44,7 @@ function BeatKindArrow({
   accent,
 }: {
   kind: SequenceBeatKind;
-  accent?: "live" | "failed";
+  accent?: BeatAccent;
 }) {
   return (
     <svg
@@ -98,7 +101,7 @@ function FromTo({
   from: string;
   to: string;
   kind: SequenceBeatKind;
-  accent?: "live" | "failed";
+  accent?: BeatAccent;
 }) {
   return (
     <div className="mt-1 flex min-w-0 flex-1 items-center gap-1.5">
@@ -123,24 +126,28 @@ function BeatTitle({
   label,
   isLive,
   isFailed,
+  isIndeterminate,
 }: {
   label: string;
   isLive: boolean;
   isFailed: boolean;
+  isIndeterminate: boolean;
 }) {
   return (
     <p
       className={cn(
         "flex min-w-0 flex-wrap items-center gap-1.5 text-[12px] font-medium leading-snug",
-        isFailed
-          ? "text-[hsl(var(--blocked))]"
-          : isLive
-            ? "text-[hsl(var(--current))]"
-            : "text-foreground",
+        isIndeterminate
+          ? "text-[hsl(var(--warn))]"
+          : isFailed
+            ? "text-[hsl(var(--blocked))]"
+            : isLive
+              ? "text-[hsl(var(--current))]"
+              : "text-foreground",
       )}
     >
       <span data-testid="sequence-beat-label">{label}</span>
-      {isLive ? (
+      {isLive && !isIndeterminate ? (
         <Loader2
           className="h-3 w-3 shrink-0 motion-safe:animate-spin text-[hsl(var(--current))]"
           aria-hidden
@@ -195,6 +202,7 @@ export function RunSequenceRail({
           const accent = beatAccent(sequence, row.beatIndex);
           const isLive = accent === "live";
           const isFailed = accent === "failed";
+          const isIndeterminate = accent === "indeterminate";
           const count = collapsedIterationCount(row.beat);
 
           if (row.kind === "group_head") {
@@ -236,7 +244,8 @@ export function RunSequenceRail({
             );
           }
 
-          const label = displayBeatLabel(
+          const label = beatCaptionLabel(
+            row.beat,
             row.kind === "turn" ? row.turn.label : row.beat.label,
           );
           const duration = formatSequenceDuration(
@@ -268,7 +277,14 @@ export function RunSequenceRail({
                     className="min-w-0 w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => onToggle(row.beatIndex)}
                   >
-                    <p className="flex min-w-0 flex-wrap items-center gap-1.5 text-[12px] font-medium leading-snug text-foreground">
+                    <p
+                      className={cn(
+                        "flex min-w-0 flex-wrap items-center gap-1.5 text-[12px] font-medium leading-snug",
+                        isIndeterminate
+                          ? "text-[hsl(var(--warn))]"
+                          : "text-foreground",
+                      )}
+                    >
                       <ChevronRight
                         className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                         aria-hidden
@@ -331,6 +347,7 @@ export function RunSequenceRail({
                   label={label}
                   isLive={row.kind === "beat" && isLive}
                   isFailed={row.kind === "beat" && isFailed}
+                  isIndeterminate={row.kind === "beat" && isIndeterminate}
                 />
                 <div className="flex min-w-0 items-center gap-1.5">
                   <FromTo

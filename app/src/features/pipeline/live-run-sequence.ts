@@ -36,7 +36,14 @@ function derivedCondition(beats: SequenceBeat[]): RunSequence["condition"] {
   if (beats.some((beat) => beat.kind === "return" && beat.label.endsWith(" failed"))) {
     return "failed";
   }
-  if (beats.some((beat) => beat.kind === "spawn" && beat.durationMs === undefined)) {
+  if (
+    beats.some(
+      (beat) =>
+        beat.kind === "spawn" &&
+        beat.durationMs === undefined &&
+        !beat.indeterminate,
+    )
+  ) {
     return "in-flight";
   }
   return "completed";
