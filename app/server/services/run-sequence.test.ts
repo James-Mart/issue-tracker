@@ -8,6 +8,9 @@ const AT = "2026-07-09T14:00:00.000Z";
 const AT_EARLY = "2026-07-09T13:00:00.000Z";
 const AT_CHILD = "2026-07-09T14:05:00.000Z";
 const AT_END = "2026-07-09T14:00:05.000Z";
+const AT_ROUND1_END = "2026-07-09T14:00:03.000Z";
+const AT_ROUND2_END = "2026-07-09T14:00:06.000Z";
+const AT_ROUND3_END = "2026-07-09T14:00:09.000Z";
 const AT_LATE = "2026-07-09T16:00:00.000Z";
 
 let root: string;
@@ -310,6 +313,184 @@ describe("runSequence", () => {
       durationMs: Date.parse(AT_END) - Date.parse(AT),
       kind: "return",
     });
+  });
+
+  it("collapses three consecutive same-pair beats into one with turns", async () => {
+    writeConversation("conv-collapsed-polish", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-polish-1",
+          agentId: "agent-polish-1",
+          role: "polish",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-polish-1",
+        }),
+        delegation({
+          delegationId: "del-polish-2",
+          agentId: "agent-polish-2",
+          role: "polish",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-polish-2",
+        }),
+        delegation({
+          delegationId: "del-polish-3",
+          agentId: "agent-polish-3",
+          role: "polish",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-polish-3",
+        }),
+      ],
+      transcript: [
+        toolCall("call-polish-1", "running", AT, 1),
+        toolCall("call-polish-2", "running", AT, 2),
+        toolCall("call-polish-3", "running", AT, 3),
+        toolCall("call-polish-1", "completed", AT_ROUND1_END, 4),
+        toolCall("call-polish-2", "completed", AT_ROUND2_END, 5),
+        toolCall("call-polish-3", "completed", AT_ROUND3_END, 6),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-collapsed-polish");
+
+    expect(sequence.beats).toHaveLength(2);
+    expect(sequence.beats[0]).toEqual({
+      from: "coordinator",
+      to: "polish",
+      label: "spawn polish",
+      startedAt: AT,
+      durationMs: Date.parse(AT_ROUND3_END) - Date.parse(AT),
+      kind: "spawn",
+      turns: [
+        {
+          label: "spawn polish",
+          startedAt: AT,
+          durationMs: Date.parse(AT_ROUND1_END) - Date.parse(AT),
+        },
+        {
+          label: "spawn polish",
+          startedAt: AT,
+          durationMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
+        },
+        {
+          label: "spawn polish",
+          startedAt: AT,
+          durationMs: Date.parse(AT_ROUND3_END) - Date.parse(AT),
+        },
+      ],
+    });
+    expect(sequence.beats[1]).toEqual({
+      from: "polish",
+      to: "coordinator",
+      label: "polish returned",
+      startedAt: AT_ROUND1_END,
+      durationMs: Date.parse(AT_ROUND3_END) + 9000 - Date.parse(AT_ROUND1_END),
+      kind: "return",
+      turns: [
+        {
+          label: "polish returned",
+          startedAt: AT_ROUND1_END,
+          durationMs: Date.parse(AT_ROUND1_END) - Date.parse(AT),
+        },
+        {
+          label: "polish returned",
+          startedAt: AT_ROUND2_END,
+          durationMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
+        },
+        {
+          label: "polish returned",
+          startedAt: AT_ROUND3_END,
+          durationMs: Date.parse(AT_ROUND3_END) - Date.parse(AT),
+        },
+      ],
+    });
+  });
+
+  it("keeps non-consecutive same-pair beats separate", async () => {
+    writeConversation("conv-non-consecutive", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-polish-1",
+          agentId: "agent-polish-1",
+          role: "polish",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-polish-1",
+        }),
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT_CHILD,
+          parentCallId: "call-research",
+        }),
+        delegation({
+          delegationId: "del-polish-2",
+          agentId: "agent-polish-2",
+          role: "polish",
+          model: "composer-2.5",
+          at: AT_LATE,
+          parentCallId: "call-polish-2",
+        }),
+      ],
+      transcript: [
+        toolCall("call-polish-1", "running", AT, 1),
+        toolCall("call-polish-1", "completed", AT_ROUND1_END, 2),
+        toolCall("call-research", "running", AT_CHILD, 3),
+        toolCall("call-research", "completed", AT_END, 4),
+        toolCall("call-polish-2", "running", AT_LATE, 5),
+        toolCall("call-polish-2", "completed", AT_ROUND2_END, 6),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-non-consecutive");
+
+    const polishSpawns = sequence.beats.filter(
+      (b) => b.from === "coordinator" && b.to === "polish" && b.kind === "spawn",
+    );
+    expect(polishSpawns).toHaveLength(2);
+    expect(polishSpawns[0]).not.toHaveProperty("turns");
+    expect(polishSpawns[1]).not.toHaveProperty("turns");
+  });
+
+  it("omits turns on a single same-pair beat", async () => {
+    writeConversation("conv-single-polish", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-polish",
+          agentId: "agent-polish",
+          role: "polish",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-polish",
+        }),
+      ],
+      transcript: [
+        toolCall("call-polish", "running", AT, 1),
+        toolCall("call-polish", "completed", AT_END, 2),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-single-polish");
+
+    expect(sequence.beats[0]).toEqual({
+      from: "coordinator",
+      to: "polish",
+      label: "spawn polish",
+      startedAt: AT,
+      durationMs: Date.parse(AT_END) - Date.parse(AT),
+      kind: "spawn",
+    });
+    expect(sequence.beats[0]).not.toHaveProperty("turns");
   });
 
   it("emits a human-turn beat on the human lifeline", async () => {

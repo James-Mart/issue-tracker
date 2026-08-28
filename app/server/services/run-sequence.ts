@@ -18,6 +18,12 @@ export type SequenceLifeline = {
   kind: SequenceLifelineKind;
 };
 
+export type SequenceBeatTurn = {
+  label: string;
+  startedAt: string;
+  durationMs?: number;
+};
+
 export type SequenceBeat = {
   from: string;
   to: string;
@@ -25,6 +31,7 @@ export type SequenceBeat = {
   startedAt: string;
   durationMs?: number;
   kind: SequenceBeatKind;
+  turns?: SequenceBeatTurn[];
 };
 
 export type RunSequence = {
@@ -135,6 +142,75 @@ function runCondition(beats: OrderedBeat[]): RunCondition {
   return "completed";
 }
 
+function turnEndMs(beat: SequenceBeat, row: OrderedBeat): number {
+  if (beat.durationMs !== undefined) {
+    return Date.parse(beat.startedAt) + beat.durationMs;
+  }
+  return Date.parse(row.at);
+}
+
+function collapseGroup(group: OrderedBeat[]): OrderedBeat {
+  if (group.length === 1) return group[0]!;
+
+  const first = group[0]!;
+  const turns: SequenceBeatTurn[] = group.map((row) => ({
+    label: row.beat.label,
+    startedAt: row.beat.startedAt,
+    ...(row.beat.durationMs !== undefined
+      ? { durationMs: row.beat.durationMs }
+      : {}),
+  }));
+
+  const anyOpen = group.some((row) => row.open);
+  let durationMs: number | undefined;
+  if (!anyOpen) {
+    const firstStart = Date.parse(first.beat.startedAt);
+    let latestEnd = firstStart;
+    for (const row of group) {
+      latestEnd = Math.max(latestEnd, turnEndMs(row.beat, row));
+    }
+    durationMs = latestEnd - firstStart;
+  }
+
+  return {
+    beat: {
+      from: first.beat.from,
+      to: first.beat.to,
+      label: first.beat.label,
+      startedAt: first.beat.startedAt,
+      kind: first.beat.kind,
+      turns,
+      ...(durationMs !== undefined ? { durationMs } : {}),
+    },
+    seq: first.seq,
+    at: first.at,
+    open: anyOpen,
+    endedInError: group.some((row) => row.endedInError),
+  };
+}
+
+/** Merge consecutive beats that share the same lifeline pair. */
+function collapseConsecutiveBeats(rows: OrderedBeat[]): OrderedBeat[] {
+  if (rows.length === 0) return [];
+
+  const collapsed: OrderedBeat[] = [];
+  let group: OrderedBeat[] = [rows[0]!];
+
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    const anchor = group[0]!;
+    if (row.beat.from === anchor.beat.from && row.beat.to === anchor.beat.to) {
+      group.push(row);
+      continue;
+    }
+    collapsed.push(collapseGroup(group));
+    group = [row];
+  }
+
+  collapsed.push(collapseGroup(group));
+  return collapsed;
+}
+
 /** One conversation's lifelines, ordered beats, and derived condition. */
 export function runSequence(conversationId: string): RunSequence {
   const { meta, transcript } = readConversation(conversationId);
@@ -215,6 +291,7 @@ export function runSequence(conversationId: string): RunSequence {
   }
 
   ordered.sort(compareOrder);
+  const collapsed = collapseConsecutiveBeats(ordered);
 
   const roleIds: string[] = [];
   for (const record of delegations) {
@@ -237,6 +314,6 @@ export function runSequence(conversationId: string): RunSequence {
   return {
     condition: runCondition(ordered),
     lifelines,
-    beats: ordered.map((row) => row.beat),
+    beats: collapsed.map((row) => row.beat),
   };
 }
