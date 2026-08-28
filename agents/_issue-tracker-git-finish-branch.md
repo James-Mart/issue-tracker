@@ -28,10 +28,15 @@ idempotency, and recovery live there). This section is only the concrete
    - Then:
      - **manual** — stop (success).
      - **pull-request** — `gh pr create --draft --base <mergeBase> --head
-       <branchName> --title "<Story title>" --body "<body>"`, where `<body>`
-       is the Story's rendered `description.md` (`issue story view <storyId>`;
-       a one-line default if empty). Record it:
-       `issue story set <storyId> prUrl <url>`.
+       <branchName> --title "<Story title>" --body "<body>"`. Load intent
+       from the Story title and `issue story view <storyId>`. Load commit
+       subjects with `git log --format=%s <mergeBase>..<branchName>`.
+       Write `<body>` as one or two sentences of bare prose that say
+       what the change is and why it is needed. Write new sentences
+       from that intent and those subjects. If the description is empty
+       and the subjects do not help, one sentence from the title is
+       enough.
+       Record it: `issue story set <storyId> prUrl <url>`.
      - **merge** — `git checkout <mergeBase>`, `git merge --no-ff <branchName>`,
        `git push origin <mergeBase>`, `issue story set <storyId> merged true`.
        Then run step 3 with `Bp` = that `<mergeBase>`.
