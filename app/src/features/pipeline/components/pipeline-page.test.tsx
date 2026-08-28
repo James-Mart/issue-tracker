@@ -389,6 +389,44 @@ describe("PipelinePage", () => {
     ).toBeNull();
   });
 
+  it("draws the selected run on the Rail at phone width", async () => {
+    mockViewport(390);
+    stubRuns(FIVE_RUNS, {
+      e: {
+        condition: "completed",
+        lifelines: [
+          { id: "human", label: "human", kind: "human" },
+          { id: "coordinator", label: "planning", kind: "coordinator" },
+        ],
+        beats: [
+          {
+            from: "human",
+            to: "coordinator",
+            label: "human replied",
+            startedAt: "2026-08-28T13:00:00.000Z",
+            kind: "human-turn",
+          },
+        ],
+      },
+    });
+    const { container } = mountPipelinePage("/pipeline/runs/e");
+    await flush();
+    const diagram = container.querySelector(
+      '[data-testid="run-sequence-diagram"]',
+    );
+    expect(diagram?.getAttribute("data-layout")).toBe("phone");
+    expect(container.textContent).toContain("human replied");
+    expect(container.querySelector('[data-testid="sequence-from"]')?.textContent).toBe(
+      "human",
+    );
+    expect(container.querySelector('[data-testid="sequence-to"]')?.textContent).toBe(
+      "planning",
+    );
+    expect(
+      container.querySelector('[data-testid="pipeline-run-sequence-placeholder"]'),
+    ).toBeNull();
+  });
+
   it("pins the selected run and newest failed run when the phone list is truncated", async () => {
     mockViewport(390);
     stubRuns(FIVE_RUNS);

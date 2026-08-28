@@ -122,7 +122,13 @@ function RunListElision({ omitted }: { omitted: RecentRun[] }) {
   );
 }
 
-function SelectedRunSequence({ conversationId }: { conversationId: string }) {
+function SelectedRunSequence({
+  conversationId,
+  layout,
+}: {
+  conversationId: string;
+  layout: "desktop" | "phone";
+}) {
   const { data, isLoading, error, refetch, isFetching } =
     usePipelineRunQuery(conversationId);
 
@@ -158,7 +164,7 @@ function SelectedRunSequence({ conversationId }: { conversationId: string }) {
 
   if (!data) return null;
 
-  return <RunSequenceDiagram sequence={data} />;
+  return <RunSequenceDiagram sequence={data} layout={layout} />;
 }
 
 export function PipelineRunsView({
@@ -247,16 +253,18 @@ export function PipelineRunsView({
               </div>
             )}
           </section>
-          {conversationId && !isMobile ? (
-            <SelectedRunSequence conversationId={conversationId} />
+          {conversationId ? (
+            <SelectedRunSequence
+              conversationId={conversationId}
+              layout={isMobile ? "phone" : "desktop"}
+            />
           ) : (
             <div
               data-testid="pipeline-run-sequence-placeholder"
               className="flex min-h-[16rem] min-w-0 flex-1 items-center justify-center rounded-lg border border-border bg-[hsl(var(--panel)/0.35)] px-6 py-10 text-center text-sm text-muted-foreground shell:min-h-[calc(100svh-14rem)]"
             >
-              {conversationId
-                ? "Sequence for the selected run — lifelines, gates, and loops as they occurred."
-                : "Select a run to see its sequence — lifelines, gates, and loops as they occurred."}
+              Select a run to see its sequence — lifelines, gates, and loops as
+              they occurred.
             </div>
           )}
         </div>

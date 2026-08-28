@@ -8,29 +8,31 @@ import {
   UserRound,
   XCircle,
 } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
+import { RunSequenceRail } from "./run-sequence-rail";
 import {
   LIFELINE_DASH,
   OPEN_TAIL_DASH,
-  RETURN_DASH,
-  beatStroke,
   collapsedIterationCount,
   failedBeatIndex,
   failedLifelineId,
   formatSequenceDuration,
-  frontierBeatIndex,
   isCollapsedBeat,
   lifelineTail,
-  strokeCss,
   type RunSequence,
-  type SequenceBeat,
-  type SequenceBeatKind,
-  type SequenceBeatTurn,
   type SequenceLifeline,
   type SequenceLifelineKind,
 } from "../run-sequence";
-
-const ARROW_SIZE = 6;
+import {
+  DirectedArrow,
+  IterationCountChip,
+  beatAccent,
+  buildSequenceRows,
+  conditionCaption,
+  displayBeatLabel,
+  displayLifelineLabel,
+} from "./run-sequence-shared";
 
 export const DESKTOP_SEQUENCE_METRICS = {
   padLeft: 56,
@@ -47,40 +49,6 @@ export const DESKTOP_SEQUENCE_METRICS = {
 } as const;
 
 type Metrics = typeof DESKTOP_SEQUENCE_METRICS;
-
-type RenderRow =
-  | { kind: "beat"; beat: SequenceBeat; beatIndex: number }
-  | { kind: "collapsed"; beat: SequenceBeat; beatIndex: number }
-  | { kind: "group_head"; beat: SequenceBeat; beatIndex: number }
-  | {
-      kind: "turn";
-      beat: SequenceBeat;
-      beatIndex: number;
-      turn: SequenceBeatTurn;
-      turnIndex: number;
-    };
-
-export function buildSequenceRows(
-  beats: SequenceBeat[],
-  expanded: ReadonlySet<number>,
-): RenderRow[] {
-  const rows: RenderRow[] = [];
-  beats.forEach((beat, beatIndex) => {
-    if (isCollapsedBeat(beat) && beat.turns) {
-      if (expanded.has(beatIndex)) {
-        rows.push({ kind: "group_head", beat, beatIndex });
-        beat.turns.forEach((turn, turnIndex) => {
-          rows.push({ kind: "turn", beat, beatIndex, turn, turnIndex });
-        });
-      } else {
-        rows.push({ kind: "collapsed", beat, beatIndex });
-      }
-      return;
-    }
-    rows.push({ kind: "beat", beat, beatIndex });
-  });
-  return rows;
-}
 
 export function lifelineX(
   index: number,
@@ -114,90 +82,13 @@ export function rowCenterY(
   );
 }
 
-export function arrowHeadPoints(
-  tipX: number,
-  tipY: number,
-  fromX: number,
-  fromY: number,
-  size = ARROW_SIZE,
-): string {
-  const angle = Math.atan2(tipY - fromY, tipX - fromX);
-  const base1X = tipX - size * Math.cos(angle) + (size / 2) * Math.sin(angle);
-  const base1Y = tipY - size * Math.sin(angle) - (size / 2) * Math.cos(angle);
-  const base2X = tipX - size * Math.cos(angle) - (size / 2) * Math.sin(angle);
-  const base2Y = tipY - size * Math.sin(angle) + (size / 2) * Math.cos(angle);
-  return `${tipX},${tipY} ${base1X},${base1Y} ${base2X},${base2Y}`;
-}
+export { arrowHeadPoints, buildSequenceRows } from "./run-sequence-shared";
 
 function LifelineGlyph({ kind }: { kind: SequenceLifelineKind }) {
   const cls = "h-4 w-4 shrink-0 text-muted-foreground";
   if (kind === "human") return <UserRound className={cls} aria-hidden />;
   if (kind === "coordinator") return <Bot className={cls} aria-hidden />;
   return <Circle className={cls} aria-hidden />;
-}
-
-function IterationCountChip({ count }: { count: number }) {
-  return (
-    <span
-      data-testid="sequence-iteration-count"
-      className="inline-flex shrink-0 items-center rounded border border-[hsl(var(--rail-lit))] bg-[hsl(var(--panel))] px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums leading-none text-foreground"
-    >
-      ×{count}
-    </span>
-  );
-}
-
-function conditionCaption(sequence: RunSequence): string {
-  if (sequence.condition === "in-flight") return "updating live";
-  if (sequence.condition === "failed") return "failed run";
-  return "as-run trace";
-}
-
-function beatAccent(
-  sequence: RunSequence,
-  beatIndex: number,
-): "live" | "failed" | undefined {
-  if (failedBeatIndex(sequence.beats) === beatIndex) return "failed";
-  if (frontierBeatIndex(sequence) === beatIndex) return "live";
-  return undefined;
-}
-
-function DirectedArrow({
-  fromX,
-  toX,
-  y,
-  kind,
-  accent,
-}: {
-  fromX: number;
-  toX: number;
-  y: number;
-  kind: SequenceBeatKind;
-  accent?: "live" | "failed";
-}) {
-  const stroke = beatStroke(kind, accent);
-  const color = strokeCss(stroke.color);
-  const tipX = toX;
-  const lineEndX = toX - Math.sign(toX - fromX || 1) * ARROW_SIZE;
-  return (
-    <g data-testid="sequence-arrow" data-kind={kind}>
-      <line
-        x1={fromX}
-        y1={y}
-        x2={lineEndX}
-        y2={y}
-        stroke={color}
-        strokeWidth={stroke.width}
-        strokeDasharray={stroke.dash === "return" ? RETURN_DASH : undefined}
-        data-testid="sequence-arrow-shaft"
-      />
-      <polygon
-        points={arrowHeadPoints(tipX, y, fromX, y)}
-        fill={color}
-        data-testid="sequence-arrowhead"
-      />
-    </g>
-  );
 }
 
 function LoopBracket({
@@ -312,35 +203,38 @@ function DurationGutter({
   );
 }
 
-function displayLifelineLabel(line: SequenceLifeline): string {
-  if (line.kind !== "role") return line.label;
-  return line.label.replace(/^issue-tracker-/, "");
-}
-
-function displayBeatLabel(label: string): string {
-  return label.replace(/issue-tracker-/g, "");
-}
-
 function headerBorder(kind: SequenceLifelineKind): string {
   if (kind === "human") return "border-[hsl(var(--ink))]";
   if (kind === "coordinator") return "border-[hsl(var(--current)/0.5)]";
   return "border-[hsl(var(--rail))]";
 }
 
-/** Desktop sequence: lifelines, ordered beats, duration gutter. */
+/** Sequence diagram: lifelines at desktop width, Rail at phone width. */
 export function RunSequenceDiagram({
   sequence,
   className,
+  layout,
 }: {
   sequence: RunSequence;
   className?: string;
+  layout?: "desktop" | "phone";
 }) {
+  const isMobile = useIsMobile();
+  const resolvedLayout = layout ?? (isMobile ? "phone" : "desktop");
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const metrics = DESKTOP_SEQUENCE_METRICS;
   const rows = useMemo(
     () => buildSequenceRows(sequence.beats, expanded),
     [sequence.beats, expanded],
   );
+  const toggle = (beatIndex: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(beatIndex)) next.delete(beatIndex);
+      else next.add(beatIndex);
+      return next;
+    });
+  };
   const indexById = new Map(
     sequence.lifelines.map((line, index) => [line.id, index]),
   );
@@ -383,15 +277,6 @@ export function RunSequenceDiagram({
     return lifelineX(index, sequence.lifelines.length);
   };
 
-  const toggle = (beatIndex: number) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(beatIndex)) next.delete(beatIndex);
-      else next.add(beatIndex);
-      return next;
-    });
-  };
-
   return (
     <div className={cn("flex min-w-0 flex-1 flex-col", className)}>
       <div className="flex shrink-0 items-center justify-between gap-2 px-0.5 pb-1">
@@ -403,9 +288,20 @@ export function RunSequenceDiagram({
         </span>
       </div>
       <div
-        className="relative min-h-[16rem] min-w-0 flex-1 overflow-auto rounded-lg border border-border bg-[hsl(var(--panel)/0.35)] shell:min-h-[calc(100svh-14rem)]"
+        className={cn(
+          "relative min-h-[16rem] min-w-0 flex-1 overflow-auto rounded-lg border border-border bg-[hsl(var(--panel)/0.35)] shell:min-h-[calc(100svh-14rem)]",
+          resolvedLayout === "phone" &&
+            "max-h-[min(32rem,calc(100svh-16rem))]",
+        )}
         data-testid="run-sequence-frame"
       >
+        {resolvedLayout === "phone" ? (
+          <RunSequenceRail
+            sequence={sequence}
+            rows={rows}
+            onToggle={toggle}
+          />
+        ) : (
         <div className="flex min-w-0" style={{ minHeight: height }}>
         <div
           role="img"
@@ -672,6 +568,7 @@ export function RunSequenceDiagram({
           })}
         </div>
         </div>
+        )}
       </div>
     </div>
   );
