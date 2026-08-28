@@ -7,7 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
 import type { PrFacts, ProjectPrsResponse } from "@server/services/delivery";
 import { issuesKeys } from "../api/keys";
-import { PrStatusPanel, recentPrComments } from "./pr-status-panel";
+import {
+  PrStatusPanel,
+  recentPrComments,
+  UNKNOWN_MERGEABLE_REFETCH_MS,
+} from "./pr-status-panel";
 
 const queryState = vi.hoisted(() => ({
   data: undefined as ProjectPrsResponse | undefined,
@@ -138,6 +142,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -174,11 +179,25 @@ describe("PrStatusPanel", () => {
     expect(mounted.container.textContent).toContain("Mergeable");
     expect(mounted.container.textContent).toContain("Success · 3");
     expect(mounted.container.textContent).toContain("Approved");
+    const hostLink = mounted.container.querySelector(
+      '[data-testid="pr-number-link"]',
+    );
+    expect(hostLink?.textContent).toBe("#12");
+    expect(hostLink?.getAttribute("href")).toBe(
+      "https://github.com/acme/widgets/pull/12",
+    );
     expect(
-      mounted.container.querySelector(
+      mounted.container.querySelectorAll(
         'a[href="https://github.com/acme/widgets/pull/12"]',
       ),
-    ).toBeTruthy();
+    ).toHaveLength(1);
+    expect(mounted.container.textContent).not.toContain("Open on GitHub");
+    expect(mounted.container.textContent).not.toMatch(/\bLink\b/);
+    const merge = mounted.container.querySelector(
+      '[data-testid="pr-merge-open"]',
+    );
+    expect(merge?.textContent).toBe("Merge");
+    expect(merge?.parentElement?.className).toMatch(/flex-wrap/);
     unmount(mounted);
   });
 
@@ -221,7 +240,10 @@ describe("PrStatusPanel", () => {
       mounted.container.querySelector(
         'a[href="https://github.com/acme/widgets/pull/12"]',
       ),
-    ).toBeTruthy();
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-number-link"]'),
+    ).toBeNull();
     unmount(mounted);
   });
 
@@ -323,7 +345,7 @@ describe("PrStatusPanel merge control", () => {
     unmount(mounted);
   });
 
-  it("offers no merge or un-draft control for a draft PR and links to GitHub", () => {
+  it("offers no merge or un-draft control for a draft PR and shows the reason only", () => {
     queryState.data = {
       prs: {
         "ship-pr": prFacts({
@@ -344,10 +366,18 @@ describe("PrStatusPanel merge control", () => {
       "draft and must be marked ready on GitHub",
     );
     expect(mounted.container.textContent).not.toMatch(/mark ready|un-?draft/i);
+    expect(mounted.container.textContent).not.toContain("Open on GitHub");
     expect(
-      mounted.container.querySelector(
-        '[data-testid="pr-merge-github-link"]',
-      )?.getAttribute("href"),
+      mounted.container.querySelector('[data-testid="pr-merge-github-link"]'),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-merge-unavailable"]')
+        ?.parentElement?.className,
+    ).toMatch(/flex-wrap/);
+    expect(
+      mounted.container
+        .querySelector('[data-testid="pr-number-link"]')
+        ?.getAttribute("href"),
     ).toBe("https://github.com/acme/widgets/pull/12");
     unmount(mounted);
   });
@@ -366,9 +396,10 @@ describe("PrStatusPanel merge control", () => {
       mounted.container.querySelector('[data-testid="pr-merge-open"]'),
     ).toBeNull();
     expect(mounted.container.textContent).toContain("Review is required");
+    expect(mounted.container.textContent).not.toContain("Open on GitHub");
     expect(
       mounted.container.querySelector('[data-testid="pr-merge-github-link"]'),
-    ).toBeTruthy();
+    ).toBeNull();
     unmount(mounted);
   });
 
@@ -386,9 +417,58 @@ describe("PrStatusPanel merge control", () => {
       mounted.container.querySelector('[data-testid="pr-merge-open"]'),
     ).toBeNull();
     expect(mounted.container.textContent).toContain("merge conflicts");
+    expect(mounted.container.textContent).not.toContain("Open on GitHub");
     expect(
       mounted.container.querySelector('[data-testid="pr-merge-github-link"]'),
-    ).toBeTruthy();
+    ).toBeNull();
+    unmount(mounted);
+  });
+
+  it("refetches while mergeability is unknown and does not offer Merge", () => {
+    vi.useFakeTimers();
+    queryState.data = {
+      prs: {
+        "ship-pr": prFacts({
+          mergeable: "unknown",
+          mergeStateStatus: "UNKNOWN",
+        }),
+      },
+    };
+    const mounted = mountPanel();
+    expect(mounted.container.textContent).toContain("Unknown");
+    expect(
+      mounted.container.querySelector('[data-testid="pr-merge-open"]'),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-auto-merge-open"]'),
+    ).toBeNull();
+    expect(mounted.container.textContent).not.toContain("Open on GitHub");
+    expect(mounted.container.textContent).not.toContain(
+      "Mergeability is still unknown",
+    );
+    expect(mounted.invalidateSpy).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(UNKNOWN_MERGEABLE_REFETCH_MS);
+    });
+    expect(mounted.invalidateSpy).toHaveBeenCalledWith({
+      queryKey: issuesKeys.projectPullRequests("platform"),
+    });
+    const calls = mounted.invalidateSpy.mock.calls.length;
+    unmount(mounted);
+    act(() => {
+      vi.advanceTimersByTime(UNKNOWN_MERGEABLE_REFETCH_MS * 2);
+    });
+    expect(mounted.invalidateSpy.mock.calls.length).toBe(calls);
+  });
+
+  it("does not poll when mergeability is known", () => {
+    vi.useFakeTimers();
+    queryState.data = { prs: { "ship-pr": prFacts() } };
+    const mounted = mountPanel();
+    act(() => {
+      vi.advanceTimersByTime(UNKNOWN_MERGEABLE_REFETCH_MS * 3);
+    });
+    expect(mounted.invalidateSpy).not.toHaveBeenCalled();
     unmount(mounted);
   });
 

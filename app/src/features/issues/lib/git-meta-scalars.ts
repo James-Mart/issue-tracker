@@ -6,9 +6,6 @@ export type GitMetaScalarKey =
   | "branchName"
   | "mergeBase"
   | "stackedOn"
-  | "prUrl"
-  | "merged"
-  | "review"
   | "commitSha"
   | "noDiff"
   | "qa";
@@ -20,7 +17,7 @@ export type GitMetaScalar = {
 
 /**
  * Which git/spec scalars to show for a Story. Readonly values only when set;
- * `merged` and `stackedOn` always (editable).
+ * `stackedOn` always (editable). Merge and review live on the PR block.
  */
 export function storyGitMetaScalars(
   issue: Extract<IssueDetail, { kind: "story" }>,
@@ -34,13 +31,6 @@ export function storyGitMetaScalars(
     out.push({ key: "mergeBase", label: FIELD_LABELS.mergeBase });
   }
   out.push({ key: "stackedOn", label: FIELD_LABELS.stackedOn });
-  if (issue.prUrl) {
-    out.push({ key: "prUrl", label: FIELD_LABELS.prUrl });
-  }
-  out.push({ key: "merged", label: FIELD_LABELS.merged });
-  if (issue.review) {
-    out.push({ key: "review", label: FIELD_LABELS.review });
-  }
   return out;
 }
 

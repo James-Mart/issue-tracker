@@ -54,11 +54,5 @@ export function mergeControlFor(facts: PrFacts): MergeControl {
       reason: "This pull request is behind its base branch.",
     };
   }
-  if (facts.mergeable === "unknown") {
-    return {
-      mode: "unavailable",
-      reason: "Mergeability is still unknown.",
-    };
-  }
   return { mode: "merge", headRefOid: facts.headRefOid };
 }

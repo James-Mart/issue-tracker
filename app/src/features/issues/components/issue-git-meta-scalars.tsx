@@ -1,19 +1,14 @@
 import { CHIP_UNSET } from "@server/fields";
 import type { IssueDetail, IssueRecord } from "@server/schemas";
-import { QA_STATUS_LABEL, REVIEW_LABEL } from "../lib/derived";
+import { QA_STATUS_LABEL } from "../lib/derived";
 import {
   storyGitMetaScalars,
   taskGitMetaScalars,
   type GitMetaScalarKey,
 } from "../lib/git-meta-scalars";
 import { CompactMetaItem } from "./compact-meta";
-import { IssueMergedField } from "./issue-merged-field";
 import { IssueStackedOnField } from "./issue-stacked-on-field";
-import {
-  BranchNameDisplay,
-  CommitShaDisplay,
-  PrUrlDisplay,
-} from "./readonly-git-fields";
+import { BranchNameDisplay, CommitShaDisplay } from "./readonly-git-fields";
 
 function Mono({ children }: { children: string }) {
   return <span className="font-mono text-[13px] tabular-nums">{children}</span>;
@@ -31,14 +26,6 @@ function storyScalarValue(
       return <Mono>{mergeBase ?? CHIP_UNSET}</Mono>;
     case "stackedOn":
       return <IssueStackedOnField issue={issue} />;
-    case "prUrl":
-      return <PrUrlDisplay prUrl={issue.prUrl} />;
-    case "merged":
-      return <IssueMergedField issue={issue} />;
-    case "review":
-      return issue.review ? (
-        <span>{REVIEW_LABEL[issue.review]}</span>
-      ) : null;
     default:
       return null;
   }
