@@ -41,13 +41,16 @@ meant to propose — content that looks like real content rather than
 filler, nothing clipped, overflowing, or blank, and composition that holds
 at both captured widths.
 
-Take the visual reference from the first of these that exists:
+When the Project's `designSystem` supporting doc is present — consulted in
+**## Bootstrap** — it is a constraint on faithfulness: a state that
+violates a rule in that doc is not faithful, however well it renders.
 
-1. The Project's `designSystem` supporting doc, consulted in
-   **## Bootstrap**.
-2. The target's own components and the conventions they already follow —
+When that consult is skipped, take the reference from the first of these
+that exists:
+
+1. The target's own components and the conventions they already follow —
    the harness renders them with the project's real styling.
-3. Internal consistency and ordinary craft.
+2. Internal consistency and ordinary craft.
 
 Absent guidance lowers the reference, never the bar.
 
