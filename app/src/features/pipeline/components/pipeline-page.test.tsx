@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PIPELINE_RUNS_LIMIT, type RecentRun } from "../run-list";
 import { pipelines } from "../shape";
 import { PipelinePage } from "./pipeline-page";
 
@@ -108,6 +109,55 @@ function nodeEl(container: ParentNode, id: string): HTMLElement {
   );
   if (!(el instanceof HTMLElement)) {
     throw new Error(`Missing node: ${id}`);
+  }
+  return el;
+}
+
+function recentRun(
+  conversationId: string,
+  condition: RecentRun["condition"],
+  startedAt: string,
+): RecentRun {
+  return {
+    conversationId,
+    coordinatorLabel: conversationId,
+    startedAt,
+    condition,
+  };
+}
+
+const FIVE_RUNS: RecentRun[] = [
+  recentRun("a", "completed", "2026-08-28T15:00:00.000Z"),
+  recentRun("b", "completed", "2026-08-28T14:00:00.000Z"),
+  recentRun("c", "completed", "2026-08-28T13:00:00.000Z"),
+  recentRun("d", "failed", "2026-08-28T12:00:00.000Z"),
+  recentRun("e", "completed", "2026-08-28T11:00:00.000Z"),
+];
+
+function stubRuns(runs: RecentRun[] = []) {
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
+    const url = String(input);
+    if (url.startsWith("/api/pipeline/runs")) {
+      return Promise.resolve(jsonResponse({ runs }));
+    }
+    return Promise.resolve(jsonResponse({ error: `unhandled ${url}` }, 404));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function runCards(container: ParentNode): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll('[data-testid="pipeline-run-card"]'),
+  ) as HTMLElement[];
+}
+
+function runCard(container: ParentNode, conversationId: string): HTMLElement {
+  const el = container.querySelector(
+    `[data-testid="pipeline-run-card"][data-conversation-id="${conversationId}"]`,
+  );
+  if (!(el instanceof HTMLElement)) {
+    throw new Error(`Missing run card: ${conversationId}`);
   }
   return el;
 }
@@ -214,21 +264,22 @@ describe("PipelinePage", () => {
     ).toBe("/pipeline");
   });
 
-  it("navigates to /pipeline/runs when Runs is selected", () => {
+  it("navigates to /pipeline/runs when Runs is selected", async () => {
+    stubRuns();
     const { container } = mountPipelinePage("/pipeline");
     act(() => {
       tab(container, "Runs").click();
     });
+    await flush();
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
     ).toBe("/pipeline/runs");
-    expect(container.textContent).toContain(
-      "run-list-and-selection replaces this placeholder.",
-    );
+    expect(container.textContent).toContain("Recent runs");
     expect(tab(container, "Runs").getAttribute("aria-selected")).toBe("true");
   });
 
   it("navigates to /pipeline when Design is selected from runs", () => {
+    stubRuns();
     const { container } = mountPipelinePage("/pipeline/runs");
     act(() => {
       tab(container, "Design").click();
@@ -241,13 +292,91 @@ describe("PipelinePage", () => {
     ).not.toBeNull();
   });
 
-  it("renders the runs placeholder with conversationId from the route", () => {
-    const { container } = mountPipelinePage("/pipeline/runs/conv-abc");
-    expect(container.textContent).toContain(
-      "run-list-and-selection replaces this placeholder.",
+  it("renders every fetched run newest-first at desktop width", async () => {
+    const fetchMock = stubRuns(FIVE_RUNS);
+    const { container } = mountPipelinePage("/pipeline/runs");
+    await flush();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/pipeline/runs?limit=${PIPELINE_RUNS_LIMIT}`,
+      expect.anything(),
     );
-    expect(container.textContent).toContain("conv-abc");
+    expect(
+      runCards(container).map((el) => el.getAttribute("data-conversation-id")),
+    ).toEqual(["a", "b", "c", "d", "e"]);
+    expect(
+      container.querySelector('[data-testid="pipeline-run-elision"]'),
+    ).toBeNull();
+  });
+
+  it("routes selection to /pipeline/runs/:conversationId", async () => {
+    stubRuns(FIVE_RUNS);
+    const { container } = mountPipelinePage("/pipeline/runs");
+    await flush();
+    act(() => {
+      runCard(container, "c").click();
+    });
+    expect(
+      container.querySelector('[data-testid="location-probe"]')?.textContent,
+    ).toBe("/pipeline/runs/c");
+    expect(runCard(container, "c").getAttribute("data-current")).toBe("true");
+    expect(runCard(container, "c").getAttribute("aria-current")).toBe("true");
+  });
+
+  it("marks the run named in the route as selected", async () => {
+    stubRuns(FIVE_RUNS);
+    const { container } = mountPipelinePage("/pipeline/runs/d");
+    await flush();
     expect(tab(container, "Runs").getAttribute("aria-selected")).toBe("true");
+    expect(runCard(container, "d").getAttribute("data-current")).toBe("true");
+    expect(runCard(container, "a").getAttribute("data-current")).toBeNull();
+  });
+
+  it("pins the selected run and newest failed run when the phone list is truncated", async () => {
+    mockViewport(390);
+    stubRuns(FIVE_RUNS);
+    const { container } = mountPipelinePage("/pipeline/runs/e");
+    await flush();
+    expect(
+      runCards(container).map((el) => el.getAttribute("data-conversation-id")),
+    ).toEqual(["a", "d", "e"]);
+    const elision = container.querySelector(
+      '[data-testid="pipeline-run-elision"]',
+    );
+    if (!(elision instanceof HTMLElement)) {
+      throw new Error("Missing elision");
+    }
+    expect(elision.textContent).toContain("2 omitted");
+    expect(elision.textContent).toContain("b, c");
+    expect(elision.getAttribute("aria-label")).toBe("2 runs omitted: b, c");
+    const list = container.querySelector('[data-testid="pipeline-run-list"]');
+    expect(list?.textContent).toMatch(/a.*2 omitted.*b, c.*d.*e/s);
+  });
+
+  it("uses the current treatment for a selected failed run the same as a completed one", async () => {
+    stubRuns([
+      recentRun("done-run", "completed", "2026-08-28T15:00:00.000Z"),
+      recentRun("fail-run", "failed", "2026-08-28T14:00:00.000Z"),
+    ]);
+    const { container } = mountPipelinePage("/pipeline/runs/fail-run");
+    await flush();
+    const selectedFailed = runCard(container, "fail-run");
+    const unselectedDone = runCard(container, "done-run");
+    expect(selectedFailed.getAttribute("data-current")).toBe("true");
+    expect(unselectedDone.getAttribute("data-current")).toBeNull();
+    expect(selectedFailed.className).toContain("hsl(var(--current))");
+    expect(unselectedDone.className).not.toContain("hsl(var(--current))");
+
+    act(() => {
+      unselectedDone.click();
+    });
+    const selectedDone = runCard(container, "done-run");
+    const unselectedFailed = runCard(container, "fail-run");
+    expect(selectedDone.getAttribute("data-current")).toBe("true");
+    expect(unselectedFailed.getAttribute("data-current")).toBeNull();
+    expect(selectedDone.className).toContain("hsl(var(--current))");
+    expect(unselectedFailed.className).not.toContain("hsl(var(--current))");
+    expect(unselectedFailed.getAttribute("data-condition")).toBe("failed");
+    expect(selectedDone.getAttribute("data-condition")).toBe("completed");
   });
 
   it("shows pending while the step source is in flight", async () => {

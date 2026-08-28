@@ -1,6 +1,5 @@
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { PageShell } from "@/components/page-shell";
-import { ShellState } from "@/app/shell-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { PipelineDiagram } from "../pipeline-diagram";
@@ -12,6 +11,7 @@ import {
   writeStepParam,
 } from "../pipeline-selection";
 import { pipelines, type PipelineId } from "../shape";
+import { PipelineRunsView } from "./pipeline-run-list";
 import {
   PipelineStepSourcePanel,
   PipelineStepSourceSheet,
@@ -186,29 +186,6 @@ function PipelineDesignView() {
   );
 }
 
-function PipelineRunsPlaceholder({
-  conversationId,
-}: {
-  conversationId?: string;
-}) {
-  return (
-    <ShellState
-      eyebrow="Runs"
-      title="Pipeline runs placeholder"
-      detail={
-        conversationId ? (
-          <>
-            run-list-and-selection replaces this placeholder. Selected run:{" "}
-            <span className="font-mono text-xs">{conversationId}</span>
-          </>
-        ) : (
-          "run-list-and-selection replaces this placeholder."
-        )
-      }
-    />
-  );
-}
-
 /** Top-level Pipeline destination: design diagram and run history views. */
 export function PipelinePage() {
   const { pathname } = useLocation();
@@ -229,7 +206,7 @@ export function PipelinePage() {
         {activeView === "design" ? (
           <PipelineDesignView />
         ) : (
-          <PipelineRunsPlaceholder conversationId={conversationId} />
+          <PipelineRunsView conversationId={conversationId} />
         )}
       </div>
     </PageShell>

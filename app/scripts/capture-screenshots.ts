@@ -198,6 +198,28 @@ async function gotoPath(page: Page, baseUrl: string, path: string): Promise<void
 }
 
 const ISSUE_DETAIL_PATH = /^\/projects\/[^/]+\/issues\/[^/]+/;
+const PIPELINE_RUNS_PATH = /^\/pipeline\/runs(?:\/|$)/;
+
+/** Runs hydrate from a slow index; 800ms settle alone captures the skeleton. */
+async function waitForPipelineRunsReady(page: Page, path: string): Promise<void> {
+  const pathname = path.split("?")[0] ?? path;
+  if (!PIPELINE_RUNS_PATH.test(pathname)) return;
+
+  await page.waitForFunction(
+    () => {
+      const body = document.body.textContent ?? "";
+      if (body.includes("Loading runs")) return false;
+      return (
+        document.querySelector('[data-testid="pipeline-run-list"]') != null ||
+        document.querySelector('[data-testid="pipeline-run-sequence-placeholder"]') !=
+          null ||
+        body.includes("No runs yet") ||
+        body.includes("Check the server, then reload.")
+      );
+    },
+    { timeout: 20_000 },
+  );
+}
 
 /** Issue detail hydrates after theme reload; 800ms settle alone captures the skeleton. */
 async function waitForIssueDetailReady(page: Page, path: string): Promise<void> {
@@ -505,6 +527,7 @@ async function captureTarget(
   await gotoPath(page, baseUrl, target);
   await applyTheme(page, theme);
   await waitForIssueDetailReady(page, target);
+  await waitForPipelineRunsReady(page, target);
   await writeScreenshot(page, outDir, withThemeSuffix(pathFilename(target), themeSuffix));
   let count = 1;
 
