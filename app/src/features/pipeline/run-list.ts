@@ -103,3 +103,7 @@ export function conditionBadgeLabel(condition: RunCondition): string {
   if (condition === "completed") return "done";
   return "failed";
 }
+
+export function recoveredMarkerLabel(count: number): string {
+  return `↻${count}`;
+}

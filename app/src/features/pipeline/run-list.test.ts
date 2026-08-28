@@ -5,6 +5,7 @@ import {
   chooseVisibleRunIds,
   conditionBadgeLabel,
   formatRunStartedAt,
+  recoveredMarkerLabel,
   runListSegments,
   type RecentRun,
 } from "./run-list";
@@ -128,5 +129,12 @@ describe("conditionBadgeLabel", () => {
     expect(conditionBadgeLabel("in-flight")).toBe("live");
     expect(conditionBadgeLabel("completed")).toBe("done");
     expect(conditionBadgeLabel("failed")).toBe("failed");
+  });
+});
+
+describe("recoveredMarkerLabel", () => {
+  it("returns the recovered count in ↻ form", () => {
+    expect(recoveredMarkerLabel(1)).toBe("↻1");
+    expect(recoveredMarkerLabel(2)).toBe("↻2");
   });
 });

@@ -489,6 +489,38 @@ describe("PipelinePage", () => {
     expect(list?.textContent).toMatch(/a.*2 omitted.*b, c.*d.*e/s);
   });
 
+  it("shows the recovered marker beside the condition chip on recovered runs only", async () => {
+    stubRuns([
+      {
+        ...recentRun("clean", "completed", "2026-08-28T15:00:00.000Z"),
+      },
+      {
+        ...recentRun("recovered", "completed", "2026-08-28T14:00:00.000Z"),
+        recoveredErrors: 2,
+      },
+    ]);
+    const { container } = mountPipelinePage("/pipeline/runs");
+    await flush();
+
+    const clean = runCard(container, "clean");
+    expect(clean.querySelector('[data-condition="completed"]')?.textContent).toBe(
+      "done",
+    );
+    expect(
+      clean.querySelector('[data-testid="pipeline-run-recovered-marker"]'),
+    ).toBeNull();
+
+    const recovered = runCard(container, "recovered");
+    expect(
+      recovered.querySelector('[data-condition="completed"]')?.textContent,
+    ).toBe("done");
+    const marker = recovered.querySelector(
+      '[data-testid="pipeline-run-recovered-marker"]',
+    );
+    expect(marker?.textContent).toBe("↻2");
+    expect(marker?.className).toContain("hsl(var(--warn))");
+  });
+
   it("uses the current treatment for a selected failed run the same as a completed one", async () => {
     stubRuns([
       recentRun("done-run", "completed", "2026-08-28T15:00:00.000Z"),
