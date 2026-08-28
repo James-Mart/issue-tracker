@@ -382,6 +382,129 @@ describe("attachCapturedDirection", () => {
     expect(result.capturePaths).toEqual([phone, desktop]);
   });
 
+  it("replaces one direction's chosen PNGs on re-promote and sweeps collision copies", async () => {
+    const { directionDir, harnessConfigPath } = await loadScratch();
+    const {
+      attachCapturedDirection,
+      chosenAttachmentName,
+      chosenArchiveName,
+    } = await loadPromote();
+    const { listAttachments, putAttachment } = await loadAttachments();
+
+    const storiesDir = directionDir("promote-chat", "direction-a");
+    writeFileSync(join(storiesDir, "Card.stories.tsx"), "export const Default = {};");
+    const harnessPath = harnessConfigPath("promote-chat");
+    mkdirSync(join(harnessPath, ".."), { recursive: true });
+    writeFileSync(harnessPath, JSON.stringify({ ok: true }));
+
+    const phoneName = chosenAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "phone",
+    );
+    const desktopName = chosenAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "desktop",
+    );
+
+    await putAttachment("src", phoneName, Buffer.from("old-phone"));
+    await putAttachment("src", desktopName, Buffer.from("old-desktop"));
+    await putAttachment(
+      "src",
+      `${phoneName.replace(/\.png$/, "-2.png")}`,
+      Buffer.from("leftover-phone-2"),
+    );
+
+    const phone = join(root, "chosen-phone-new.png");
+    const desktop = join(root, "chosen-desktop-new.png");
+    writePng(phone, "phone-new");
+    writePng(desktop, "desktop-new");
+
+    await attachCapturedDirection({
+      mode: "chosen",
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      issueId: "src",
+      captures: [
+        capture("direction-a-card--default", "phone", phone),
+        capture("direction-a-card--default", "desktop", desktop),
+      ],
+    });
+
+    const names = listAttachments("src").map((att) => att.name).sort();
+    expect(names).toEqual([desktopName, phoneName, chosenArchiveName("direction-a")].sort());
+    expect(names.some((name) => name.endsWith("-2.png"))).toBe(false);
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", phoneName)).toString(),
+    ).toBe("png:phone-new");
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", desktopName)).toString(),
+    ).toBe("png:desktop-new");
+  });
+
+  it("does not detach prefix-colliding directions during chosen re-promote", async () => {
+    const { directionDir, harnessConfigPath } = await loadScratch();
+    const {
+      attachCapturedDirection,
+      chosenAttachmentName,
+      chosenArchiveName,
+    } = await loadPromote();
+    const { listAttachments, putAttachment } = await loadAttachments();
+
+    const gridDir = directionDir("promote-chat", "grid");
+    writeFileSync(join(gridDir, "Card.stories.tsx"), "export const Default = {};");
+    const lightboxDir = directionDir("promote-chat", "grid-lightbox");
+    writeFileSync(join(lightboxDir, "Card.stories.tsx"), "export const Default = {};");
+    const harnessPath = harnessConfigPath("promote-chat");
+    mkdirSync(join(harnessPath, ".."), { recursive: true });
+    writeFileSync(harnessPath, JSON.stringify({ ok: true }));
+
+    const gridPhoneName = chosenAttachmentName("grid", "grid/card--default", "phone");
+    const lightboxPhoneName = chosenAttachmentName(
+      "grid-lightbox",
+      "grid-lightbox/card--default",
+      "phone",
+    );
+
+    await putAttachment("src", gridPhoneName, Buffer.from("old-grid-phone"));
+    await putAttachment("src", lightboxPhoneName, Buffer.from("lightbox-phone"));
+    await putAttachment(
+      "src",
+      chosenArchiveName("grid-lightbox"),
+      Buffer.from("lightbox-archive"),
+    );
+
+    const gridPhoneNew = join(root, "grid-phone-new.png");
+    writePng(gridPhoneNew, "grid-new");
+
+    await attachCapturedDirection({
+      mode: "chosen",
+      conversationId: "promote-chat",
+      directionId: "grid",
+      issueId: "src",
+      captures: [capture("grid/card--default", "phone", gridPhoneNew)],
+    });
+
+    const names = listAttachments("src").map((att) => att.name).sort();
+    expect(names).toEqual(
+      [
+        gridPhoneName,
+        chosenArchiveName("grid"),
+        lightboxPhoneName,
+        chosenArchiveName("grid-lightbox"),
+      ].sort(),
+    );
+    expect(
+      readFileSync(join(issuesDir, "src", "attachments", gridPhoneName)).toString(),
+    ).toBe("png:grid-new");
+    expect(
+      readFileSync(
+        join(issuesDir, "src", "attachments", lightboxPhoneName),
+      ).toString(),
+    ).toBe("lightbox-phone");
+  });
+
   it("throws naming an oversize file and attaches nothing", async () => {
     const { attachCapturedDirection } = await loadPromote();
     const { listAttachments } = await loadAttachments();

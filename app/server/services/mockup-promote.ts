@@ -132,6 +132,37 @@ export function matchesChosenPngPrefix(
   return true;
 }
 
+const CHOSEN_PNG_COLLISION_SUFFIX_RE = /-(phone|desktop)-(\d+)\.png$/;
+
+function isChosenPngViewportSuffix(name: string): boolean {
+  if (name.endsWith("-phone.png") || name.endsWith("-desktop.png")) {
+    return true;
+  }
+  const match = name.match(CHOSEN_PNG_COLLISION_SUFFIX_RE);
+  if (!match) return false;
+  return Number.parseInt(match[2]!, 10) >= 2;
+}
+
+export function matchesChosenPngForReplace(
+  name: string,
+  directionId: string,
+  otherDirectionIds: Iterable<string> = [],
+): boolean {
+  const prefix = chosenPngPrefix(directionId);
+  if (!name.startsWith(prefix)) return false;
+  if (!isChosenPngViewportSuffix(name)) return false;
+  for (const other of otherDirectionIds) {
+    if (
+      other !== directionId &&
+      other.startsWith(`${directionId}-`) &&
+      name.startsWith(chosenPngPrefix(other))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function matchesCandidatePrefix(
   name: string,
   directionId: string,
@@ -301,6 +332,22 @@ export async function detachCandidateAttachmentsForDirection(
   return names;
 }
 
+export async function detachChosenPngsForDirection(
+  issueId: string,
+  directionId: string,
+  conversationId: string,
+): Promise<string[]> {
+  const allNames = listAttachments(issueId).map((att) => att.name);
+  const otherDirectionIds = knownDirectionIds(allNames, conversationId);
+  const names = allNames.filter((name) =>
+    matchesChosenPngForReplace(name, directionId, otherDirectionIds),
+  );
+  for (const name of names) {
+    await removeAttachment(issueId, name);
+  }
+  return names;
+}
+
 function pendingFromCaptures(
   mode: "candidate" | "chosen",
   directionId: string,
@@ -348,6 +395,11 @@ export async function attachCapturedDirection(options: {
     );
   }
   if (options.mode === "chosen") {
+    await detachChosenPngsForDirection(
+      options.issueId,
+      options.directionId,
+      options.conversationId,
+    );
     const archivePath = createDirectionArchive(
       options.conversationId,
       options.directionId,
