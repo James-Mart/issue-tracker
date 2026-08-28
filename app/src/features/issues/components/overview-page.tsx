@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import type {
   DerivedState,
@@ -27,6 +27,7 @@ import {
   writeOverviewLensParam,
   type OverviewLens,
 } from "../lib/overview-lens";
+import { projectBoardRoots } from "../lib/project-board-roots";
 import {
   structureIdeaNodes,
   structureScopedIssues,
@@ -163,6 +164,16 @@ function OverviewStructureLens({
     () => structureIdeaNodes(scoped, filters),
     [filters, scoped],
   );
+  const boardRootIds = useMemo(
+    () => projectBoardRoots(scoped, []).map((issue) => issue.id),
+    [scoped],
+  );
+  const ensureBoardRootsExpandedOnce = useIssueUiStore(
+    (s) => s.ensureBoardRootsExpandedOnce,
+  );
+  useLayoutEffect(() => {
+    ensureBoardRootsExpandedOnce(boardRootIds);
+  }, [boardRootIds, ensureBoardRootsExpandedOnce]);
   const hasStructureContent = nodes.length > 0 || ideaNodes.length > 0;
 
   const clearFilters = () => {
