@@ -1,14 +1,21 @@
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { PageShell } from "@/components/page-shell";
 import { ShellState } from "@/app/shell-state";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { PipelineDiagram } from "../pipeline-diagram";
 import {
   parsePipelineId,
+  parseStepId,
   pipelineById,
   writePipelineParam,
+  writeStepParam,
 } from "../pipeline-selection";
 import { pipelines, type PipelineId } from "../shape";
+import {
+  PipelineStepSourcePanel,
+  PipelineStepSourceSheet,
+} from "./pipeline-step-source";
 
 type PipelineView = "design" | "runs";
 
@@ -104,11 +111,34 @@ function PipelineSwitcher({
 
 function PipelineDesignView() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
   const activeId = parsePipelineId(searchParams.get("pipeline"));
   const pipeline = pipelineById(activeId);
+  const selectedStepId = parseStepId(searchParams.get("step"), pipeline);
+  const selectedNode = pipeline.nodes.find((node) => node.id === selectedStepId);
+  const selectedStep =
+    selectedNode && selectedNode.kind !== "handoff" ? selectedNode : undefined;
 
   const selectPipeline = (id: PipelineId, replace: boolean) => {
-    setSearchParams((prev) => writePipelineParam(prev, id), { replace });
+    setSearchParams((prev) => {
+      const next = writePipelineParam(prev, id);
+      if (id !== activeId) next.delete("step");
+      return next;
+    }, { replace });
+  };
+
+  const selectStep = (stepId: string) => {
+    setSearchParams(
+      (prev) =>
+        writeStepParam(prev, selectedStepId === stepId ? undefined : stepId),
+      { replace: true },
+    );
+  };
+
+  const dismissStep = () => {
+    setSearchParams((prev) => writeStepParam(prev, undefined), {
+      replace: true,
+    });
   };
 
   return (
@@ -126,11 +156,31 @@ function PipelineDesignView() {
         role="tabpanel"
         id="pipeline-diagram-panel"
         aria-labelledby={`pipeline-tab-${activeId}`}
+        className="flex flex-col gap-4 shell:flex-row shell:items-start"
       >
         <PipelineDiagram
+          className="min-w-0 flex-1"
           pipeline={pipeline}
+          selectedStepId={selectedStepId}
+          onSelectStep={selectStep}
           onHandoff={(target) => selectPipeline(target, false)}
         />
+        {selectedStep && !isMobile ? (
+          <PipelineStepSourcePanel
+            stepId={selectedStep.id}
+            title={selectedStep.name}
+            source={selectedStep.source}
+            onDismiss={dismissStep}
+          />
+        ) : null}
+        {selectedStep && isMobile ? (
+          <PipelineStepSourceSheet
+            stepId={selectedStep.id}
+            title={selectedStep.name}
+            source={selectedStep.source}
+            onDismiss={dismissStep}
+          />
+        ) : null}
       </div>
     </div>
   );
