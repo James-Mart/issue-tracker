@@ -614,7 +614,10 @@ function ProjectUnstackDropZone({
   );
 }
 
-function IdeasGroup({
+function CollapsibleStructureGroup({
+  testId,
+  headingId,
+  title,
   nodes,
   derived,
   catalog,
@@ -622,6 +625,9 @@ function IdeasGroup({
   byId,
   prQuery,
 }: {
+  testId: string;
+  headingId: string;
+  title: string;
   nodes: IssueNode[];
   derived: DerivedMap;
   catalog: ProjectLabel[];
@@ -631,10 +637,8 @@ function IdeasGroup({
 }) {
   if (nodes.length === 0) return null;
 
-  const headingId = "structure-ideas-group-heading";
-
   return (
-    <section aria-labelledby={headingId} data-testid="structure-ideas-group">
+    <section aria-labelledby={headingId} data-testid={testId}>
       <details className="group">
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
           <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
@@ -642,7 +646,7 @@ function IdeasGroup({
             id={headingId}
             className="font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--current))]"
           >
-            Ideas
+            {title}
             <span className="ml-2 font-mono text-[11px] tabular-nums text-muted-foreground">
               {nodes.length}
             </span>
@@ -671,6 +675,7 @@ function IdeasGroup({
 export function IssueTree({
   nodes,
   ideaNodes = [],
+  doneNodes = [],
   derived,
   issues,
   catalog,
@@ -678,6 +683,7 @@ export function IssueTree({
 }: {
   nodes: IssueNode[];
   ideaNodes?: IssueNode[];
+  doneNodes?: IssueNode[];
   derived: DerivedMap;
   issues: IssueRecord[];
   catalog: ProjectLabel[];
@@ -695,8 +701,9 @@ export function IssueTree({
   );
   const hasHierarchy = nodes.length > 0;
   const hasIdeas = ideaNodes.length > 0;
+  const hasDone = doneNodes.length > 0;
 
-  if (!hasHierarchy && !hasIdeas) {
+  if (!hasHierarchy && !hasIdeas && !hasDone) {
     return (
       <StoryTreeDnDProvider value={dnd}>
         <div className="flex flex-col gap-1.5">
@@ -731,8 +738,22 @@ export function IssueTree({
             ))}
           </Rail>
         ) : null}
-        <IdeasGroup
+        <CollapsibleStructureGroup
+          testId="structure-ideas-group"
+          headingId="structure-ideas-group-heading"
+          title="Ideas"
           nodes={ideaNodes}
+          derived={derived}
+          catalog={catalog}
+          issues={issues}
+          byId={byId}
+          prQuery={prQuery}
+        />
+        <CollapsibleStructureGroup
+          testId="structure-done-group"
+          headingId="structure-done-group-heading"
+          title="Done"
+          nodes={doneNodes}
           derived={derived}
           catalog={catalog}
           issues={issues}
