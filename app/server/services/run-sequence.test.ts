@@ -117,6 +117,11 @@ async function loadRunSequence() {
   return runSequence;
 }
 
+async function loadRecentRuns() {
+  const { recentRuns } = await import("./run-sequence.js");
+  return recentRuns;
+}
+
 describe("runSequence", () => {
   it("orders beats by seq across interleaved lifelines", async () => {
     writeConversation("conv-interleaved", {
@@ -516,5 +521,172 @@ describe("runSequence", () => {
         kind: "human-turn",
       },
     ]);
+  });
+});
+
+describe("recentRuns", () => {
+  it("returns newest-first across conversations, honors limit, and matches each run's condition", async () => {
+    writeConversation("conv-old", {
+      meta: {
+        channel: "implementing",
+        issueId: "task-old",
+        createdAt: AT_EARLY,
+      },
+      delegations: [
+        delegation({
+          delegationId: "del-old",
+          agentId: "agent-old",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT_EARLY,
+          issueId: "task-old",
+          parentCallId: "call-old",
+        }),
+      ],
+      transcript: [
+        toolCall("call-old", "running", AT_EARLY, 1),
+        toolCall("call-old", "completed", AT_END, 2),
+      ],
+    });
+
+    writeConversation("conv-new", {
+      meta: {
+        channel: "planning",
+        issueId: "task-new",
+        createdAt: AT_LATE,
+      },
+      delegations: [
+        delegation({
+          delegationId: "del-new",
+          agentId: "agent-new",
+          role: "planner",
+          model: "composer-2.5",
+          at: AT_LATE,
+          issueId: "task-new",
+          parentCallId: "call-new",
+        }),
+      ],
+      transcript: [toolCall("call-new", "running", AT_LATE, 1)],
+    });
+
+    writeConversation("conv-failed", {
+      meta: {
+        title: "Failed run",
+        createdAt: AT,
+      },
+      delegations: [
+        delegation({
+          delegationId: "del-fail",
+          agentId: "agent-fail",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "task-fail",
+          parentCallId: "call-fail",
+        }),
+      ],
+      transcript: [
+        toolCall("call-fail", "running", AT, 1),
+        toolCall("call-fail", "error", AT_END, 2),
+      ],
+    });
+
+    const recentRuns = await loadRecentRuns();
+    const runSequence = await loadRunSequence();
+
+    const all = recentRuns(10);
+    expect(all.map((row) => row.conversationId)).toEqual([
+      "conv-new",
+      "conv-failed",
+      "conv-old",
+    ]);
+
+    for (const row of all) {
+      expect(row.condition).toBe(runSequence(row.conversationId).condition);
+    }
+
+    expect(all[0]).toMatchObject({
+      conversationId: "conv-new",
+      coordinatorLabel: "planning",
+      issueId: "task-new",
+      startedAt: AT_LATE,
+      condition: "in-flight",
+    });
+    expect(all[1]).toMatchObject({
+      conversationId: "conv-failed",
+      coordinatorLabel: "Failed run",
+      issueId: "task-fail",
+      condition: "failed",
+    });
+    expect(all[2]).toMatchObject({
+      conversationId: "conv-old",
+      coordinatorLabel: "implementing",
+      issueId: "task-old",
+      condition: "completed",
+    });
+
+    expect(recentRuns(2).map((row) => row.conversationId)).toEqual([
+      "conv-new",
+      "conv-failed",
+    ]);
+  });
+
+  it("uses the earliest delegation issue id when rows disagree", async () => {
+    writeConversation("conv-mixed", {
+      meta: { channel: "implementing", issueId: "first-issue", createdAt: AT },
+      delegations: [
+        delegation({
+          delegationId: "del-first",
+          agentId: "agent-first",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "first-issue",
+          parentCallId: "call-first",
+        }),
+        delegation({
+          delegationId: "del-second",
+          agentId: "agent-second",
+          role: "validator",
+          model: "composer-2.5",
+          at: AT_LATE,
+          issueId: "second-issue",
+          parentCallId: "call-second",
+        }),
+      ],
+      transcript: [
+        toolCall("call-first", "running", AT, 1),
+        toolCall("call-first", "completed", AT_END, 2),
+        toolCall("call-second", "running", AT_LATE, 3),
+        toolCall("call-second", "completed", AT_LATE, 4),
+      ],
+    });
+
+    const recentRuns = await loadRecentRuns();
+    expect(recentRuns(1)[0]?.issueId).toBe("first-issue");
+  });
+
+  it("includes a conversation with no delegations via its session root", async () => {
+    writeConversation("conv-root-only", {
+      meta: {
+        channel: "planning",
+        issueId: "capture",
+        createdAt: AT,
+      },
+      transcript: [prompt("approve outline", AT, 1)],
+    });
+
+    const recentRuns = await loadRecentRuns();
+    const runSequence = await loadRunSequence();
+
+    expect(recentRuns(10)).toEqual([
+      {
+        conversationId: "conv-root-only",
+        coordinatorLabel: "planning",
+        startedAt: AT,
+        condition: runSequence("conv-root-only").condition,
+      },
+    ]);
+    expect(recentRuns(10)[0]).not.toHaveProperty("issueId");
   });
 });

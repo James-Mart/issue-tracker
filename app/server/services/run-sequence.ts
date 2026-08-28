@@ -3,7 +3,11 @@ import type {
   DelegationRecord,
   TranscriptEvent,
 } from "../schemas.js";
-import { readConversation, readDelegations } from "./conversations.js";
+import {
+  listConversationIds,
+  readConversation,
+  readDelegations,
+} from "./conversations.js";
 import { IssueError } from "./errors.js";
 
 export type RunCondition = "completed" | "in-flight" | "failed";
@@ -38,6 +42,14 @@ export type RunSequence = {
   condition: RunCondition;
   lifelines: SequenceLifeline[];
   beats: SequenceBeat[];
+};
+
+export type RecentRun = {
+  conversationId: string;
+  coordinatorLabel: string;
+  startedAt: string;
+  condition: RunCondition;
+  issueId?: string;
 };
 
 const HUMAN_ID = "human";
@@ -316,4 +328,41 @@ export function runSequence(conversationId: string): RunSequence {
     lifelines,
     beats: collapsed.map((row) => row.beat),
   };
+}
+
+function earliestIssueId(delegations: DelegationRecord[]): string | undefined {
+  let earliest: DelegationRecord | undefined;
+  for (const record of delegations) {
+    if (record.issueId === undefined) continue;
+    if (!earliest || record.at.localeCompare(earliest.at) < 0) {
+      earliest = record;
+    }
+  }
+  return earliest?.issueId;
+}
+
+/** Newest-first runs across all conversations; scan stays in this function. */
+export function recentRuns(limit: number): RecentRun[] {
+  const entries: RecentRun[] = [];
+
+  for (const conversationId of listConversationIds()) {
+    try {
+      const { meta } = readConversation(conversationId);
+      const delegations = readDelegations(conversationId);
+      const sequence = runSequence(conversationId);
+      const issueId = earliestIssueId(delegations);
+      entries.push({
+        conversationId,
+        coordinatorLabel: coordinatorLabel(meta),
+        startedAt: meta.createdAt,
+        condition: sequence.condition,
+        ...(issueId !== undefined ? { issueId } : {}),
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  entries.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  return entries.slice(0, limit);
 }
