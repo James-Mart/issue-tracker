@@ -7,7 +7,10 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { collectSpawnViolations } from "./check-agent-spawns.js";
+import {
+  collectSpawnEdges,
+  collectSpawnViolations,
+} from "./check-agent-spawns.js";
 
 let rootDir: string;
 let agentsDir: string;
@@ -131,6 +134,110 @@ describe("collectSpawnViolations — delegation vocabulary", () => {
           v.includes("omits delegate issueId argument"),
       ),
     ).toBe(true);
+  });
+});
+
+describe("collectSpawnEdges", () => {
+  it("returns an edge for a subagent_type stub", () => {
+    writeSkill(
+      "fixture/SKILL.md",
+      `${DELEGATION_READ}
+
+Task tool — subagent_type: pinned-role, model: composer-2.5
+
+> Do the thing.
+`,
+    );
+
+    expect(collectSpawnEdges(rootDir)).toEqual([
+      {
+        spawnerFile: "skills/fixture/SKILL.md",
+        spawnedRole: "pinned-role",
+        line: 3,
+      },
+    ]);
+  });
+
+  it("returns an edge for a role delegation stub", () => {
+    writeSkill(
+      "fixture/SKILL.md",
+      `${DELEGATION_READ}
+
+**Pinned** — \`role: pinned-role\`
+
+> Do the thing.
+`,
+    );
+
+    expect(collectSpawnEdges(rootDir)).toEqual([
+      {
+        spawnerFile: "skills/fixture/SKILL.md",
+        spawnedRole: "pinned-role",
+        line: 3,
+      },
+    ]);
+  });
+
+  it("expands a family-parameterized type to one edge per concrete role", () => {
+    for (const family of ["composer", "grok", "opus"] as const) {
+      writeAgent(
+        `implementor-${family}.md`,
+        `---
+name: implementor-${family}
+model: composer-2.5
+description: Family wrapper.
+---
+
+${IKIGAI_READ}
+
+You are the implementor.
+`,
+      );
+    }
+
+    writeSkill(
+      "fixture/SKILL.md",
+      `${DELEGATION_READ}
+
+Task tool — subagent_type: implementor-<family>, model from pin
+
+> Work the issue.
+`,
+    );
+
+    expect(collectSpawnEdges(rootDir)).toEqual([
+      {
+        spawnerFile: "skills/fixture/SKILL.md",
+        spawnedRole: "implementor-composer",
+        line: 3,
+      },
+      {
+        spawnerFile: "skills/fixture/SKILL.md",
+        spawnedRole: "implementor-grok",
+        line: 3,
+      },
+      {
+        spawnerFile: "skills/fixture/SKILL.md",
+        spawnedRole: "implementor-opus",
+        line: 3,
+      },
+    ]);
+  });
+
+  it("does not change collectSpawnViolations output", () => {
+    writeSkill(
+      "fixture/SKILL.md",
+      `${DELEGATION_READ}
+
+Task tool — subagent_type: pinned-role, model: composer-2.5
+
+> Do the thing.
+`,
+    );
+
+    const before = collectSpawnViolations(rootDir);
+    collectSpawnEdges(rootDir);
+    expect(collectSpawnViolations(rootDir)).toEqual(before);
   });
 });
 
