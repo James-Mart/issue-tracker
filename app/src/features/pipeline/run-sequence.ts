@@ -35,11 +35,18 @@ export type SequenceBeat = {
   liveElapsedMs?: number;
 };
 
+export type RunSequenceRootIssue = {
+  id: string;
+  kind: string;
+  title: string;
+};
+
 export type RunSequence = {
   condition: RunCondition;
   lifelines: SequenceLifeline[];
   beats: SequenceBeat[];
   recoveredErrors?: number;
+  rootIssue?: RunSequenceRootIssue;
 };
 
 export type BeatStrokeColor = "ink" | "mut" | "rail-lit" | "current" | "blocked";
