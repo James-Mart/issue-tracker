@@ -6,6 +6,7 @@ export type RecentRun = {
   startedAt: string;
   condition: RunCondition;
   issueId?: string;
+  recoveredErrors?: number;
 };
 
 export const PIPELINE_RUNS_LIMIT = 20;
@@ -101,4 +102,8 @@ export function conditionBadgeLabel(condition: RunCondition): string {
   if (condition === "in-flight") return "live";
   if (condition === "completed") return "done";
   return "failed";
+}
+
+export function recoveredMarkerLabel(count: number): string {
+  return `↻${count}`;
 }

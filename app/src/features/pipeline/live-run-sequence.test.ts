@@ -166,6 +166,70 @@ describe("applyLiveFrame", () => {
       kind: "return",
       label: "implementor failed",
     });
+    expect(next).not.toHaveProperty("recoveredErrors");
+  });
+
+  it("derives completed with recoveredErrors when an early failure is followed by later success", () => {
+    let seq = applyLiveFrame(inFlight(), {
+      type: "delegation_end",
+      delegationId: "del-impl",
+      parentCallId: "call-impl",
+      status: "error",
+      endedAt: AT_MID,
+      seq: 5,
+    });
+    expect(seq.condition).toBe("failed");
+    seq = applyLiveFrame(
+      seq,
+      delegationFrame(
+        { role: "validator", parentCallId: "call-val", startedAt: AT_NESTED },
+        6,
+      ),
+    );
+    expect(seq.condition).toBe("in-flight");
+    seq = applyLiveFrame(seq, {
+      type: "delegation_end",
+      delegationId: "del-val",
+      parentCallId: "call-val",
+      status: "completed",
+      endedAt: AT_END,
+      seq: 7,
+    });
+    expect(seq.condition).toBe("completed");
+    expect(seq.recoveredErrors).toBe(1);
+  });
+
+  it("does not treat an indeterminate open spawn as in-flight", () => {
+    const seq = inFlight({
+      beats: [
+        beat({
+          from: "coordinator",
+          to: "research",
+          label: "spawn research",
+          startedAt: AT,
+          kind: "spawn",
+          parentCallId: "call-research",
+          indeterminate: true,
+        }),
+        beat({
+          from: "coordinator",
+          to: "implementor",
+          label: "spawn implementor",
+          startedAt: AT,
+          kind: "spawn",
+          parentCallId: "call-impl",
+        }),
+      ],
+    });
+    const next = applyLiveFrame(seq, {
+      type: "delegation_end",
+      delegationId: "del-impl",
+      parentCallId: "call-impl",
+      status: "completed",
+      endedAt: AT_END,
+      seq: 12,
+    });
+    expect(next.condition).toBe("completed");
   });
 
   it("ignores a terminal tool_call", () => {

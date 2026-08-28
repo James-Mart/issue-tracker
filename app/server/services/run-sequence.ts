@@ -47,6 +47,7 @@ export type RunSequence = {
   condition: RunCondition;
   lifelines: SequenceLifeline[];
   beats: SequenceBeat[];
+  recoveredErrors?: number;
 };
 
 export type RecentRun = {
@@ -55,6 +56,7 @@ export type RecentRun = {
   startedAt: string;
   condition: RunCondition;
   issueId?: string;
+  recoveredErrors?: number;
 };
 
 const HUMAN_ID = "human";
@@ -125,10 +127,27 @@ function closedDuration(
   return { durationMs: durationMs(startedAt, endedAt) };
 }
 
-function runCondition(beats: OrderedBeat[]): RunCondition {
-  if (beats.some((row) => row.endedInError)) return "failed";
-  if (beats.some((row) => row.open)) return "in-flight";
-  return "completed";
+function runOutcome(beats: OrderedBeat[]): {
+  condition: RunCondition;
+  recoveredErrors: number;
+} {
+  const last = beats[beats.length - 1];
+  let condition: RunCondition;
+  if (last?.beat.kind === "return" && last.endedInError) {
+    condition = "failed";
+  } else if (beats.some((row) => row.open)) {
+    condition = "in-flight";
+  } else {
+    condition = "completed";
+  }
+
+  let recoveredErrors = 0;
+  for (let i = 0; i < beats.length - 1; i += 1) {
+    const row = beats[i]!;
+    if (row.beat.kind === "return" && row.endedInError) recoveredErrors += 1;
+  }
+
+  return { condition, recoveredErrors };
 }
 
 function turnEndMs(beat: SequenceBeat, row: OrderedBeat): number {
@@ -314,10 +333,13 @@ export function runSequence(conversationId: string): RunSequence {
     lifelines.push({ id: role, label: role, kind: "role" });
   }
 
+  const { condition, recoveredErrors } = runOutcome(ordered);
+
   return {
-    condition: runCondition(ordered),
+    condition,
     lifelines,
     beats: collapsed.map((row) => row.beat),
+    ...(recoveredErrors > 0 ? { recoveredErrors } : {}),
   };
 }
 
@@ -348,6 +370,9 @@ export function recentRuns(limit: number): RecentRun[] {
         startedAt: meta.createdAt,
         condition: sequence.condition,
         ...(issueId !== undefined ? { issueId } : {}),
+        ...(sequence.recoveredErrors !== undefined
+          ? { recoveredErrors: sequence.recoveredErrors }
+          : {}),
       });
     } catch {
       continue;

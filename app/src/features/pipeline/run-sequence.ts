@@ -39,6 +39,7 @@ export type RunSequence = {
   condition: RunCondition;
   lifelines: SequenceLifeline[];
   beats: SequenceBeat[];
+  recoveredErrors?: number;
 };
 
 export type BeatStrokeColor = "ink" | "mut" | "rail-lit" | "current" | "blocked";

@@ -32,11 +32,19 @@ function hasParentCallId(beat: SequenceBeat, callId: string): boolean {
   return beat.parentCallId === callId;
 }
 
-function derivedCondition(beats: SequenceBeat[]): RunSequence["condition"] {
-  if (beats.some((beat) => beat.kind === "return" && beat.label.endsWith(" failed"))) {
-    return "failed";
-  }
-  if (
+function isFailedReturn(beat: SequenceBeat): boolean {
+  return beat.kind === "return" && beat.label.endsWith(" failed");
+}
+
+function derivedOutcome(beats: SequenceBeat[]): {
+  condition: RunSequence["condition"];
+  recoveredErrors: number;
+} {
+  const last = beats[beats.length - 1];
+  let condition: RunSequence["condition"];
+  if (last !== undefined && isFailedReturn(last)) {
+    condition = "failed";
+  } else if (
     beats.some(
       (beat) =>
         beat.kind === "spawn" &&
@@ -44,13 +52,27 @@ function derivedCondition(beats: SequenceBeat[]): RunSequence["condition"] {
         !beat.indeterminate,
     )
   ) {
-    return "in-flight";
+    condition = "in-flight";
+  } else {
+    condition = "completed";
   }
-  return "completed";
+
+  let recoveredErrors = 0;
+  for (let i = 0; i < beats.length - 1; i += 1) {
+    if (isFailedReturn(beats[i]!)) recoveredErrors += 1;
+  }
+
+  return { condition, recoveredErrors };
 }
 
 function withCondition(sequence: RunSequence, beats: SequenceBeat[]): RunSequence {
-  return { ...sequence, beats, condition: derivedCondition(beats) };
+  const { condition, recoveredErrors } = derivedOutcome(beats);
+  return {
+    ...sequence,
+    beats,
+    condition,
+    ...(recoveredErrors > 0 ? { recoveredErrors } : {}),
+  };
 }
 
 function parentLifelineId(sequence: RunSequence): string {

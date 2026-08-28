@@ -17,6 +17,7 @@ import {
   PHONE_RUN_LIST_SLOTS,
   conditionBadgeLabel,
   formatRunStartedAt,
+  recoveredMarkerLabel,
   runListSegments,
   type RecentRun,
   type RunCondition,
@@ -47,6 +48,17 @@ function RunConditionBadge({ condition }: { condition: RunCondition }) {
       ) : null}
       {label}
     </Badge>
+  );
+}
+
+function RunRecoveredMarker({ count }: { count: number }) {
+  return (
+    <span
+      className="shrink-0 font-mono text-[10px] text-[hsl(var(--warn))]"
+      data-testid="pipeline-run-recovered-marker"
+    >
+      {recoveredMarkerLabel(count)}
+    </span>
   );
 }
 
@@ -90,7 +102,12 @@ function PipelineRunCard({
             {run.conversationId}
           </p>
         </div>
-        <RunConditionBadge condition={run.condition} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          <RunConditionBadge condition={run.condition} />
+          {run.recoveredErrors != null ? (
+            <RunRecoveredMarker count={run.recoveredErrors} />
+          ) : null}
+        </div>
       </div>
       <p
         className="mt-1.5 font-mono text-[10px] text-muted-foreground"
