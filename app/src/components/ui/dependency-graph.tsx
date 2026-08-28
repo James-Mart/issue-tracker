@@ -1,7 +1,5 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import type { DepGraphEdge, DepGraphModel, DepGraphNode } from "@/features/issues/lib/flow";
-import { RailPort } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
 
 const PORT = 12;
@@ -12,18 +10,53 @@ const PAD_Y = 16;
 const LABEL_H = 20;
 const LABEL_W = 112;
 
-type PlacedNode = DepGraphNode & { x: number; y: number };
+/** Minimum node payload the layered layout requires. */
+export type GraphNode = { id: string };
 
-export type GraphLayout = {
-  nodes: PlacedNode[];
-  edges: Array<DepGraphEdge & { x1: number; y1: number; x2: number; y2: number }>;
+/** Minimum edge payload the layered layout requires. */
+export type GraphEdge = { from: string; to: string };
+
+export type GraphModel<N extends GraphNode, E extends GraphEdge> = {
+  nodes: N[];
+  edges: E[];
+};
+
+export type PlacedNode<N extends GraphNode> = N & { x: number; y: number };
+
+export type GraphLayout<N extends GraphNode, E extends GraphEdge> = {
+  nodes: PlacedNode<N>[];
+  edges: Array<E & { x1: number; y1: number; x2: number; y2: number }>;
   width: number;
   height: number;
 };
 
-function assignLayers(
+/** Optional metrics and layering filter. Omitted fields keep the rail defaults. */
+export type GraphLayoutOptions<E extends GraphEdge = GraphEdge> = {
+  /** Edges that assign layers. Default: every edge. Back-edges should be omitted. */
+  layeringEdges?: (edge: E) => boolean;
+  colGap?: number;
+  rowGap?: number;
+  labelW?: number;
+  labelH?: number;
+  padX?: number;
+  padY?: number;
+  /** Extra left inset reserved for side arcs (loop gutters). */
+  gutterLeft?: number;
+  /** Card/node box height. When set, `y` is the vertical center of that box. */
+  nodeHeight?: number;
+};
+
+/** Caller-owned stroke treatment for one edge path. */
+export type GraphEdgeStroke = {
+  stroke: string;
+  strokeDasharray?: string;
+  opacity?: number;
+};
+
+/** Longest-path layer index per id. Callers that omit back-edges keep a DAG. */
+export function assignLayers(
   nodeIds: string[],
-  edges: DepGraphEdge[],
+  edges: GraphEdge[],
 ): Map<string, number> {
   const idSet = new Set(nodeIds);
   const preds = new Map<string, string[]>();
@@ -54,10 +87,27 @@ function assignLayers(
 }
 
 /** Layered top-down DAG layout: prerequisites above dependents. */
-export function layoutDepGraph(model: DepGraphModel): GraphLayout {
+export function layoutDepGraph<N extends GraphNode, E extends GraphEdge>(
+  model: GraphModel<N, E>,
+  options?: GraphLayoutOptions<E>,
+): GraphLayout<N, E> {
+  const colGap = options?.colGap ?? COL_GAP;
+  const rowGap = options?.rowGap ?? ROW_GAP;
+  const labelW = options?.labelW ?? LABEL_W;
+  const labelH = options?.labelH ?? LABEL_H;
+  const padX = options?.padX ?? PAD_X;
+  const padY = options?.padY ?? PAD_Y;
+  const gutterLeft = options?.gutterLeft ?? 0;
+  const nodeHeight = options?.nodeHeight ?? PORT + labelH + 4;
+  const anchorY =
+    options?.nodeHeight != null ? options.nodeHeight / 2 : PORT / 2;
+
   const nodeIds = model.nodes.map((n) => n.id);
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
-  const layers = assignLayers(nodeIds, model.edges);
+  const layering = options?.layeringEdges
+    ? model.edges.filter(options.layeringEdges)
+    : model.edges;
+  const layers = assignLayers(nodeIds, layering);
 
   const rows = new Map<number, string[]>();
   for (const id of nodeIds) {
@@ -76,17 +126,18 @@ export function layoutDepGraph(model: DepGraphModel): GraphLayout {
   const positions = new Map<string, { x: number; y: number }>();
   for (let row = 0; row <= maxRow; row++) {
     const ids = rows.get(row) ?? [];
-    const blockWidth = Math.max(0, ids.length - 1) * COL_GAP;
-    const startX = PAD_X + LABEL_W / 2 + ((maxCols - 1) * COL_GAP - blockWidth) / 2;
+    const blockWidth = Math.max(0, ids.length - 1) * colGap;
+    const startX =
+      padX + gutterLeft + labelW / 2 + ((maxCols - 1) * colGap - blockWidth) / 2;
     ids.forEach((id, col) => {
       positions.set(id, {
-        x: startX + col * COL_GAP,
-        y: PAD_Y + PORT / 2 + row * ROW_GAP,
+        x: startX + col * colGap,
+        y: padY + anchorY + row * rowGap,
       });
     });
   }
 
-  const placed: PlacedNode[] = nodeIds.flatMap((id) => {
+  const placed: PlacedNode<N>[] = nodeIds.flatMap((id) => {
     const node = byId.get(id);
     const pos = positions.get(id);
     if (!node || !pos) return [];
@@ -102,9 +153,8 @@ export function layoutDepGraph(model: DepGraphModel): GraphLayout {
     return [{ ...edge, x1: a.x, y1: a.y, x2: b.x, y2: b.y }];
   });
 
-  const width = PAD_X * 2 + LABEL_W + Math.max(0, maxCols - 1) * COL_GAP;
-  const height =
-    PAD_Y * 2 + PORT + LABEL_H + 4 + Math.max(0, maxRow) * ROW_GAP;
+  const width = padX * 2 + gutterLeft + labelW + Math.max(0, maxCols - 1) * colGap;
+  const height = padY * 2 + nodeHeight + Math.max(0, maxRow) * rowGap;
 
   return { nodes: placed, edges, width, height };
 }
@@ -120,24 +170,33 @@ function edgePath(
   return `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`;
 }
 
-export interface DependencyGraphProps
-  extends React.HTMLAttributes<HTMLDivElement> {
-  model: DepGraphModel;
-  /** When set, each node label/port links here (e.g. Epic detail). */
-  nodeHref?: (node: DepGraphNode) => string;
+export interface DependencyGraphProps<
+  N extends GraphNode,
+  E extends GraphEdge,
+> extends React.HTMLAttributes<HTMLDivElement> {
+  model: GraphModel<N, E>;
+  /** Node body; the graph owns placement, not appearance. */
+  renderNode: (node: PlacedNode<N>) => React.ReactNode;
+  /** Stroke, dash, and opacity for one edge — never inferred from the payload. */
+  edgeStroke: (edge: E) => GraphEdgeStroke;
+  /** When set, each node links here (e.g. Epic detail). */
+  nodeHref?: (node: N) => string;
 }
 
 /**
- * DAG node-link graph in Rail vocabulary: state-encoded ports, solid
- * satisfied edges, dashed blocked waiting edges.
+ * Layered node-link graph. Callers supply node appearance and edge stroke;
+ * every edge path carries an arrowhead marker.
  */
-export function DependencyGraph({
+export function DependencyGraph<N extends GraphNode, E extends GraphEdge>({
   model,
+  renderNode,
+  edgeStroke,
   nodeHref,
   className,
   ...props
-}: DependencyGraphProps) {
+}: DependencyGraphProps<N, E>) {
   const layout = React.useMemo(() => layoutDepGraph(model), [model]);
+  const markerId = `dep-graph-arrow-${React.useId().replace(/:/g, "")}`;
 
   if (layout.nodes.length === 0) {
     return (
@@ -165,52 +224,75 @@ export function DependencyGraph({
         className="absolute inset-0 block"
         aria-hidden="true"
       >
-        {layout.edges.map((edge) => (
-          <path
-            key={`${edge.from}->${edge.to}`}
-            d={edgePath(edge.x1, edge.y1, edge.x2, edge.y2)}
-            fill="none"
-            stroke={
-              edge.satisfied
-                ? "hsl(var(--rail-lit))"
-                : "hsl(var(--blocked))"
-            }
-            strokeWidth={2}
-            strokeDasharray={edge.satisfied ? undefined : "4 4"}
-            opacity={edge.satisfied ? 1 : 0.55}
-            data-testid="dep-graph-edge"
-            data-from={edge.from}
-            data-to={edge.to}
-            data-satisfied={edge.satisfied ? "true" : "false"}
-          />
-        ))}
+        <defs>
+          <marker
+            id={markerId}
+            viewBox="0 0 10 7"
+            refX="9"
+            refY="3.5"
+            markerWidth="8"
+            markerHeight="6"
+            orient="auto"
+          >
+            <path d="M 0 0 L 10 3.5 L 0 7 z" fill="context-stroke" />
+          </marker>
+        </defs>
+        {layout.edges.map((edge) => {
+          const stroke = edgeStroke(edge);
+          return (
+            <path
+              key={`${edge.from}->${edge.to}`}
+              d={edgePath(edge.x1, edge.y1, edge.x2, edge.y2)}
+              fill="none"
+              stroke={stroke.stroke}
+              strokeWidth={2}
+              strokeDasharray={stroke.strokeDasharray}
+              opacity={stroke.opacity}
+              markerEnd={`url(#${markerId})`}
+              data-testid="dep-graph-edge"
+              data-from={edge.from}
+              data-to={edge.to}
+            />
+          );
+        })}
       </svg>
       {layout.nodes.map((node) => (
-        <GraphPort
+        <GraphNodeSlot
           key={node.id}
           node={node}
           href={nodeHref?.(node)}
-        />
+        >
+          {renderNode(node)}
+        </GraphNodeSlot>
       ))}
     </div>
   );
 }
 
-function GraphPort({ node, href }: { node: PlacedNode; href?: string }) {
-  const port = (
-    <RailPort
-      state={node.state}
-      label={node.label}
-      className="flex w-full flex-col items-center"
-      labelClassName="mt-1 w-full truncate text-center text-xs"
-    />
+function GraphNodeSlot<N extends GraphNode>({
+  node,
+  href,
+  children,
+}: {
+  node: PlacedNode<N>;
+  href?: string;
+  children: React.ReactNode;
+}) {
+  const body = href != null ? (
+    <Link
+      to={href}
+      className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {children}
+    </Link>
+  ) : (
+    children
   );
 
   return (
     <div
       data-testid="dep-graph-node"
       data-id={node.id}
-      data-state={node.state}
       className="absolute"
       style={{
         left: node.x - LABEL_W / 2,
@@ -218,16 +300,7 @@ function GraphPort({ node, href }: { node: PlacedNode; href?: string }) {
         width: LABEL_W,
       }}
     >
-      {href != null ? (
-        <Link
-          to={href}
-          className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {port}
-        </Link>
-      ) : (
-        port
-      )}
+      {body}
     </div>
   );
 }

@@ -1,7 +1,14 @@
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { PageShell } from "@/components/page-shell";
 import { ShellState } from "@/app/shell-state";
 import { cn } from "@/lib/utils/cn";
+import { PipelineDiagram } from "../pipeline-diagram";
+import {
+  parsePipelineId,
+  pipelineById,
+  writePipelineParam,
+} from "../pipeline-selection";
+import { pipelines, type PipelineId } from "../shape";
 
 type PipelineView = "design" | "runs";
 
@@ -54,13 +61,78 @@ function PipelineViewSwitch({ activeView }: { activeView: PipelineView }) {
   );
 }
 
-function PipelineDesignPlaceholder() {
+function PipelineSwitcher({
+  activeId,
+  onSelect,
+}: {
+  activeId: PipelineId;
+  onSelect: (id: PipelineId) => void;
+}) {
   return (
-    <ShellState
-      eyebrow="Design"
-      title="Pipeline diagram placeholder"
-      detail="pipeline-diagram-kinds-and-loops replaces this placeholder."
-    />
+    <div
+      role="tablist"
+      aria-label="Pipeline"
+      className="flex w-full max-w-md flex-wrap items-center gap-0.5 rounded-md border border-border p-0.5 shell:w-auto"
+    >
+      {pipelines.map((pipeline) => {
+        const selected = activeId === pipeline.id;
+        return (
+          <button
+            key={pipeline.id}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            id={`pipeline-tab-${pipeline.id}`}
+            aria-controls="pipeline-diagram-panel"
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onSelect(pipeline.id)}
+            className={cn(
+              "flex-1 rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-xs font-medium transition-colors shell:flex-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              selected
+                ? "bg-secondary text-secondary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {pipeline.title}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PipelineDesignView() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeId = parsePipelineId(searchParams.get("pipeline"));
+  const pipeline = pipelineById(activeId);
+
+  const selectPipeline = (id: PipelineId, replace: boolean) => {
+    setSearchParams((prev) => writePipelineParam(prev, id), { replace });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 shell:flex-row shell:items-end shell:justify-between">
+        <h1 className="font-display text-xl font-semibold text-foreground">
+          {pipeline.title}
+        </h1>
+        <PipelineSwitcher
+          activeId={activeId}
+          onSelect={(id) => selectPipeline(id, true)}
+        />
+      </div>
+      <div
+        role="tabpanel"
+        id="pipeline-diagram-panel"
+        aria-labelledby={`pipeline-tab-${activeId}`}
+      >
+        <PipelineDiagram
+          pipeline={pipeline}
+          onHandoff={(target) => selectPipeline(target, false)}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -105,7 +177,7 @@ export function PipelinePage() {
         aria-labelledby={`pipeline-view-tab-${activeView}`}
       >
         {activeView === "design" ? (
-          <PipelineDesignPlaceholder />
+          <PipelineDesignView />
         ) : (
           <PipelineRunsPlaceholder conversationId={conversationId} />
         )}

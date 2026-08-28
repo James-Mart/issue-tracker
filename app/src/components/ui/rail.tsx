@@ -56,7 +56,7 @@ export interface RailPortProps {
   labelClassName?: string;
 }
 
-/** State-encoded port disc + optional label — shared by RailNode and DependencyGraph. */
+/** State-encoded port disc + optional label. */
 export function RailPort({
   state,
   label,

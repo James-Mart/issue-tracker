@@ -3,11 +3,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
+import { pipelines } from "../shape";
 import { PipelinePage } from "./pipeline-page";
 
 function LocationProbe() {
-  const { pathname } = useLocation();
-  return <div data-testid="location-probe">{pathname}</div>;
+  const { pathname, search } = useLocation();
+  return <div data-testid="location-probe">{pathname + search}</div>;
 }
 
 function mountPipelinePage(entry: string): {
@@ -35,14 +36,40 @@ function mountPipelinePage(entry: string): {
   return { container, root };
 }
 
-function tab(container: ParentNode, label: string): HTMLAnchorElement {
+function tab(container: ParentNode, label: string): HTMLElement {
   const match = Array.from(container.querySelectorAll('[role="tab"]')).find(
     (el) => el.textContent?.trim() === label,
   );
-  if (!(match instanceof HTMLAnchorElement)) {
+  if (!(match instanceof HTMLElement)) {
     throw new Error(`Missing tab: ${label}`);
   }
   return match;
+}
+
+function pipelineTabs(container: ParentNode): HTMLElement[] {
+  const list = container.querySelector('[role="tablist"][aria-label="Pipeline"]');
+  if (!(list instanceof HTMLElement)) {
+    throw new Error("Missing pipeline switch");
+  }
+  return Array.from(list.querySelectorAll('[role="tab"]'));
+}
+
+function diagram(container: ParentNode): HTMLElement {
+  const el = container.querySelector('[data-testid="pipeline-diagram"]');
+  if (!(el instanceof HTMLElement)) {
+    throw new Error("Missing pipeline diagram");
+  }
+  return el;
+}
+
+function nodeEl(container: ParentNode, id: string): HTMLElement {
+  const el = container.querySelector(
+    `[data-testid="pipeline-node"][data-id="${id}"]`,
+  );
+  if (!(el instanceof HTMLElement)) {
+    throw new Error(`Missing node: ${id}`);
+  }
+  return el;
 }
 
 afterEach(() => {
@@ -50,12 +77,69 @@ afterEach(() => {
 });
 
 describe("PipelinePage", () => {
-  it("renders the design placeholder on /pipeline", () => {
+  it("renders the planning pipeline diagram on /pipeline", () => {
     const { container } = mountPipelinePage("/pipeline");
-    expect(container.textContent).toContain(
-      "pipeline-diagram-kinds-and-loops replaces this placeholder.",
-    );
+    expect(diagram(container).getAttribute("data-pipeline")).toBe("planning");
+    expect(container.textContent).toContain("Planning");
     expect(tab(container, "Design").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("offers every declared pipeline and defaults to planning", () => {
+    const { container } = mountPipelinePage("/pipeline");
+    const tabs = pipelineTabs(container);
+    expect(tabs.map((el) => el.textContent?.trim())).toEqual(
+      pipelines.map((pipeline) => pipeline.title),
+    );
+    expect(tab(container, "Planning").getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(diagram(container).getAttribute("data-pipeline")).toBe("planning");
+  });
+
+  it("draws the selected pipeline when the switch is activated", () => {
+    const { container } = mountPipelinePage("/pipeline");
+    act(() => {
+      tab(container, "Work the stack").click();
+    });
+    expect(diagram(container).getAttribute("data-pipeline")).toBe("work");
+    expect(tab(container, "Work the stack").getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(
+      container.querySelector('[data-testid="location-probe"]')?.textContent,
+    ).toBe("/pipeline?pipeline=work");
+    expect(container.textContent).toContain("Implementor");
+    expect(container.textContent).not.toContain("Grill-me protocol");
+  });
+
+  it("draws the pipeline named in the query string", () => {
+    const { container } = mountPipelinePage("/pipeline?pipeline=work");
+    expect(diagram(container).getAttribute("data-pipeline")).toBe("work");
+    expect(tab(container, "Work the stack").getAttribute("aria-selected")).toBe(
+      "true",
+    );
+  });
+
+  it("switches the canvas when a handoff node is activated", () => {
+    const { container } = mountPipelinePage("/pipeline");
+    act(() => {
+      nodeEl(container, "work-handoff").click();
+    });
+    expect(diagram(container).getAttribute("data-pipeline")).toBe("work");
+    expect(nodeEl(container, "planning-handoff").getAttribute("data-target-pipeline")).toBe(
+      "planning",
+    );
+    expect(
+      container.querySelector('[data-testid="location-probe"]')?.textContent,
+    ).toBe("/pipeline?pipeline=work");
+
+    act(() => {
+      nodeEl(container, "planning-handoff").click();
+    });
+    expect(diagram(container).getAttribute("data-pipeline")).toBe("planning");
+    expect(
+      container.querySelector('[data-testid="location-probe"]')?.textContent,
+    ).toBe("/pipeline");
   });
 
   it("navigates to /pipeline/runs when Runs is selected", () => {
@@ -80,9 +164,9 @@ describe("PipelinePage", () => {
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
     ).toBe("/pipeline");
-    expect(container.textContent).toContain(
-      "pipeline-diagram-kinds-and-loops replaces this placeholder.",
-    );
+    expect(
+      container.querySelector('[data-testid="pipeline-diagram"]'),
+    ).not.toBeNull();
   });
 
   it("renders the runs placeholder with conversationId from the route", () => {
