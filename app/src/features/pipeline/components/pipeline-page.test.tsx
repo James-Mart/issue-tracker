@@ -1,8 +1,13 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import {
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { pipelines } from "../shape";
 import { PipelinePage } from "./pipeline-page";
 
@@ -11,29 +16,64 @@ function LocationProbe() {
   return <div data-testid="location-probe">{pathname + search}</div>;
 }
 
+function testQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+    },
+  });
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(body),
+  };
+}
+
 function mountPipelinePage(entry: string): {
   container: HTMLDivElement;
   root: Root;
+  client: QueryClient;
 } {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const client = testQueryClient();
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={[entry]}>
-        <Routes>
-          <Route path="/pipeline" element={<PipelinePage />} />
-          <Route path="/pipeline/runs" element={<PipelinePage />} />
-          <Route
-            path="/pipeline/runs/:conversationId"
-            element={<PipelinePage />}
-          />
-        </Routes>
-        <LocationProbe />
-      </MemoryRouter>,
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[entry]}>
+          <Routes>
+            <Route path="/pipeline" element={<PipelinePage />} />
+            <Route path="/pipeline/runs" element={<PipelinePage />} />
+            <Route
+              path="/pipeline/runs/:conversationId"
+              element={<PipelinePage />}
+            />
+          </Routes>
+          <LocationProbe />
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
   });
-  return { container, root };
+  return { container, root, client };
+}
+
+async function flush(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+function sourcePanel(container: ParentNode): HTMLElement {
+  const el = container.querySelector('[data-testid="pipeline-step-source-panel"]');
+  if (!(el instanceof HTMLElement)) {
+    throw new Error("Missing step source panel");
+  }
+  return el;
 }
 
 function tab(container: ParentNode, label: string): HTMLElement {
@@ -72,8 +112,40 @@ function nodeEl(container: ParentNode, id: string): HTMLElement {
   return el;
 }
 
+function mockViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+  window.matchMedia = vi.fn((query: string) => {
+    const max = /\(max-width:\s*(\d+)px\)/.exec(query);
+    const matches = max ? width <= Number(max[1]) : false;
+    return {
+      media: query,
+      matches,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    } as unknown as MediaQueryList;
+  });
+}
+
+beforeEach(() => {
+  (
+    globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
+  notifyManager.setScheduler((cb) => {
+    cb();
+  });
+  mockViewport(1280);
+});
+
 afterEach(() => {
   document.body.innerHTML = "";
+  notifyManager.setScheduler((cb) => {
+    setTimeout(cb, 0);
+  });
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("PipelinePage", () => {
@@ -176,5 +248,115 @@ describe("PipelinePage", () => {
     );
     expect(container.textContent).toContain("conv-abc");
     expect(tab(container, "Runs").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("shows pending while the step source is in flight", async () => {
+    vi.stubGlobal("fetch", () => new Promise(() => {}));
+    const { container } = mountPipelinePage("/pipeline?step=grill");
+    await flush();
+    const panel = sourcePanel(container);
+    expect(panel.textContent).toContain("Loading step source…");
+    expect(panel.textContent).toContain("skills/issue-tracker-plan/SKILL.md");
+    expect(panel.querySelector("h1")).toBeNull();
+  });
+
+  it("fetches and renders the selected step's markdown", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        source: "skills/issue-tracker-plan/SKILL.md",
+        markdown: "# Grill-me protocol\n\nA selected step's defining prose.",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = mountPipelinePage("/pipeline");
+    act(() => {
+      nodeEl(container, "grill").click();
+    });
+    expect(nodeEl(container, "grill").getAttribute("data-current")).toBe("true");
+    expect(container.textContent).toContain("Loading step source…");
+
+    await flush();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/pipeline/steps/grill/source",
+      expect.anything(),
+    );
+    const panel = sourcePanel(container);
+    expect(panel.textContent).toContain("skills/issue-tracker-plan/SKILL.md");
+    expect(panel.textContent).toContain("A selected step's defining prose.");
+    expect(panel.querySelector("h1")?.textContent).toBe("Grill-me protocol");
+    expect(
+      container.querySelector('[data-testid="location-probe"]')?.textContent,
+    ).toBe("/pipeline?step=grill");
+  });
+
+  it("shows a failed fetch and dismisses back to the undecorated diagram", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ error: "pipeline step not found: grill" }, 404),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = mountPipelinePage("/pipeline?step=grill");
+    await flush();
+
+    const panel = sourcePanel(container);
+    expect(panel.textContent).toContain("pipeline step not found: grill");
+    expect(panel.textContent).toContain("Check the server, then try again.");
+    expect(nodeEl(container, "grill").getAttribute("data-current")).toBe("true");
+
+    const close = panel.querySelector('[aria-label="Close"]');
+    if (!(close instanceof HTMLElement)) {
+      throw new Error("Missing close");
+    }
+    act(() => {
+      close.click();
+    });
+
+    expect(
+      container.querySelector('[data-testid="pipeline-step-source-panel"]'),
+    ).toBeNull();
+    expect(nodeEl(container, "grill").getAttribute("data-current")).toBeNull();
+    expect(
+      container.querySelector('[data-testid="location-probe"]')?.textContent,
+    ).toBe("/pipeline");
+  });
+
+  it("opens a bottom sheet at phone width", async () => {
+    mockViewport(390);
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        source: "skills/issue-tracker-plan/SKILL.md",
+        markdown: "Phone sheet prose.",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = mountPipelinePage("/pipeline?step=grill");
+    await flush();
+    expect(
+      container.querySelector('[data-testid="pipeline-step-source-panel"]'),
+    ).toBeNull();
+    const sheet = document.querySelector(
+      '[data-testid="pipeline-step-source-sheet"]',
+    );
+    if (!(sheet instanceof HTMLElement)) {
+      throw new Error("Missing step source sheet");
+    }
+    expect(sheet.textContent).toContain("Phone sheet prose.");
+    expect(sheet.textContent).toContain("skills/issue-tracker-plan/SKILL.md");
+  });
+
+  it("does not open a panel when a handoff node is activated", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = mountPipelinePage("/pipeline");
+    act(() => {
+      nodeEl(container, "work-handoff").click();
+    });
+    expect(diagram(container).getAttribute("data-pipeline")).toBe("work");
+    expect(
+      container.querySelector('[data-testid="pipeline-step-source-panel"]'),
+    ).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

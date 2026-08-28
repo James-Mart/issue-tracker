@@ -43,12 +43,17 @@ function loopArcPath(
   return `M ${startX} ${startY} C ${gutterX} ${startY}, ${gutterX} ${endY}, ${to.x} ${endY}`;
 }
 
-function HollowPort() {
+function HollowPort({ selected }: { selected: boolean }) {
   return (
     <span
       aria-hidden
       data-testid="pipeline-step-port"
-      className="h-3 w-3 shrink-0 rounded-full border-2 border-[hsl(var(--ink))] bg-[hsl(var(--void))]"
+      className={cn(
+        "h-3 w-3 shrink-0 rounded-full border-2",
+        selected
+          ? "border-[hsl(var(--current))] bg-[hsl(var(--current))] [box-shadow:var(--glow)]"
+          : "border-[hsl(var(--ink))] bg-[hsl(var(--void))]",
+      )}
     />
   );
 }
@@ -58,11 +63,13 @@ function PipelineNodeCard({
   label,
   compact,
   dense,
+  selected,
 }: {
   node: PipelineNode;
   label: string;
   compact: boolean;
   dense: boolean;
+  selected: boolean;
 }) {
   const labelClass = cn(
     "min-w-0 font-medium",
@@ -75,13 +82,16 @@ function PipelineNodeCard({
     : compact
       ? "gap-1.5 px-2 py-2"
       : "gap-2 px-3 py-2";
+  const current =
+    "border-[hsl(var(--current))] [box-shadow:var(--glow)]";
 
   if (node.kind === "gate") {
     // Attention hue waits for a published waiting-on-person state.
     return (
       <div
         className={cn(
-          "flex h-full w-full items-center rounded-none border-[3px] border-double border-foreground bg-card",
+          "flex h-full w-full items-center rounded-none border-[3px] border-double bg-card",
+          selected ? current : "border-foreground",
           pad,
         )}
       >
@@ -89,10 +99,20 @@ function PipelineNodeCard({
           <UserRound
             aria-hidden
             data-testid="pipeline-gate-glyph"
-            className="h-4 w-4 shrink-0 text-muted-foreground"
+            className={cn(
+              "h-4 w-4 shrink-0",
+              selected ? "text-[hsl(var(--current))]" : "text-muted-foreground",
+            )}
           />
         )}
-        <span className={cn(labelClass, "text-foreground")}>{label}</span>
+        <span
+          className={cn(
+            labelClass,
+            selected ? "text-[hsl(var(--current))]" : "text-foreground",
+          )}
+        >
+          {label}
+        </span>
       </div>
     );
   }
@@ -120,12 +140,20 @@ function PipelineNodeCard({
   return (
     <div
       className={cn(
-        "flex h-full w-full items-center rounded-md border border-border bg-card",
+        "flex h-full w-full items-center rounded-md border bg-card",
+        selected ? current : "border-border",
         pad,
       )}
     >
-      {dense ? null : <HollowPort />}
-      <span className={cn(labelClass, "text-foreground")}>{label}</span>
+      {dense ? null : <HollowPort selected={selected} />}
+      <span
+        className={cn(
+          labelClass,
+          selected ? "text-[hsl(var(--current))]" : "text-foreground",
+        )}
+      >
+        {label}
+      </span>
     </div>
   );
 }
@@ -135,11 +163,15 @@ export function PipelineDiagram({
   pipeline,
   className,
   containerWidth,
+  selectedStepId,
+  onSelectStep,
   onHandoff,
 }: {
   pipeline: Pipeline;
   className?: string;
   containerWidth?: number;
+  selectedStepId?: string;
+  onSelectStep?: (stepId: string) => void;
   onHandoff?: (targetPipeline: PipelineId) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -240,12 +272,14 @@ export function PipelineDiagram({
           })}
         </svg>
         {layout.nodes.map((node) => {
+          const selected = selectedStepId === node.id;
           const card = (
             <PipelineNodeCard
               node={node}
               label={node.label}
               compact={layout.compact}
               dense={node.dense}
+              selected={selected}
             />
           );
           const boxStyle = {
@@ -272,6 +306,26 @@ export function PipelineDiagram({
               </button>
             );
           }
+          if (node.kind !== "handoff" && onSelectStep) {
+            return (
+              <button
+                key={node.id}
+                type="button"
+                data-testid="pipeline-node"
+                data-id={node.id}
+                data-kind={node.kind}
+                data-label={node.label}
+                data-current={selected ? "true" : undefined}
+                aria-pressed={selected}
+                aria-controls={selected ? "pipeline-step-source" : undefined}
+                className="absolute text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={boxStyle}
+                onClick={() => onSelectStep(node.id)}
+              >
+                {card}
+              </button>
+            );
+          }
           return (
             <div
               key={node.id}
@@ -279,6 +333,7 @@ export function PipelineDiagram({
               data-id={node.id}
               data-kind={node.kind}
               data-label={node.label}
+              data-current={selected ? "true" : undefined}
               className="absolute"
               style={boxStyle}
             >

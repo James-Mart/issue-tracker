@@ -1,5 +1,33 @@
 import { pipelines, type Pipeline, type PipelineId } from "./shape";
 
+export function isSelectableStepId(
+  pipeline: Pipeline,
+  stepId: string,
+): boolean {
+  const node = pipeline.nodes.find((candidate) => candidate.id === stepId);
+  return node != null && node.kind !== "handoff";
+}
+
+/** Parse `step` query value; unknown, handoff, or absent → undefined. */
+export function parseStepId(
+  value: string | null,
+  pipeline: Pipeline,
+): string | undefined {
+  if (value != null && isSelectableStepId(pipeline, value)) return value;
+  return undefined;
+}
+
+/** Write the selected step into search params. Absent selection omits it. */
+export function writeStepParam(
+  params: URLSearchParams,
+  stepId: string | undefined,
+): URLSearchParams {
+  const next = new URLSearchParams(params);
+  if (stepId) next.set("step", stepId);
+  else next.delete("step");
+  return next;
+}
+
 /** Design view starts on planning; the URL omits the param when that is selected. */
 export const DEFAULT_PIPELINE_ID: PipelineId = "planning";
 

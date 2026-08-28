@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PIPELINE_ID,
   parsePipelineId,
+  parseStepId,
   pipelineById,
   writePipelineParam,
+  writeStepParam,
 } from "./pipeline-selection";
 import { pipelines } from "./shape";
 
@@ -40,5 +42,30 @@ describe("pipelineById", () => {
     for (const pipeline of pipelines) {
       expect(pipelineById(pipeline.id)).toBe(pipeline);
     }
+  });
+});
+
+const planning = pipelines.find((pipeline) => pipeline.id === "planning")!;
+
+describe("parseStepId", () => {
+  it("accepts a step or gate on the current pipeline", () => {
+    expect(parseStepId("grill", planning)).toBe("grill");
+    expect(parseStepId("outline-gate", planning)).toBe("outline-gate");
+  });
+
+  it("rejects absent, unknown, and handoff ids", () => {
+    expect(parseStepId(null, planning)).toBeUndefined();
+    expect(parseStepId("implement", planning)).toBeUndefined();
+    expect(parseStepId("work-handoff", planning)).toBeUndefined();
+  });
+});
+
+describe("writeStepParam", () => {
+  it("sets and clears the step param", () => {
+    const params = new URLSearchParams("pipeline=work");
+    expect(writeStepParam(params, "implement").toString()).toBe(
+      "pipeline=work&step=implement",
+    );
+    expect(writeStepParam(params, undefined).toString()).toBe("pipeline=work");
   });
 });

@@ -54,6 +54,8 @@ function mountDiagram(
   pipeline: Pipeline,
   containerWidth?: number,
   onHandoff?: (targetPipeline: PipelineId) => void,
+  onSelectStep?: (stepId: string) => void,
+  selectedStepId?: string,
 ): {
   container: HTMLDivElement;
   root: Root;
@@ -66,6 +68,8 @@ function mountDiagram(
       <PipelineDiagram
         pipeline={pipeline}
         containerWidth={containerWidth}
+        selectedStepId={selectedStepId}
+        onSelectStep={onSelectStep}
         onHandoff={onHandoff}
       />,
     );
@@ -141,6 +145,51 @@ describe("PipelineDiagram", () => {
       handoff.click();
     });
     expect(targets).toEqual(["work"]);
+  });
+
+  it("selects a step or gate and leaves a handoff to navigate", () => {
+    const selected: string[] = [];
+    const targets: PipelineId[] = [];
+    const { container } = mountDiagram(
+      KINDS_PIPELINE,
+      undefined,
+      (id) => {
+        targets.push(id);
+      },
+      (stepId) => {
+        selected.push(stepId);
+      },
+    );
+
+    const step = nodeEl(container, "research");
+    const gate = nodeEl(container, "outline-gate");
+    expect(step.tagName).toBe("BUTTON");
+    expect(gate.tagName).toBe("BUTTON");
+    act(() => {
+      step.click();
+      gate.click();
+      nodeEl(container, "work-handoff").click();
+    });
+    expect(selected).toEqual(["research", "outline-gate"]);
+    expect(targets).toEqual(["work"]);
+  });
+
+  it("marks the selected step with the current treatment", () => {
+    const { container } = mountDiagram(
+      KINDS_PIPELINE,
+      undefined,
+      undefined,
+      () => {},
+      "research",
+    );
+    const step = nodeEl(container, "research");
+    expect(step.getAttribute("data-current")).toBe("true");
+    expect(step.getAttribute("aria-pressed")).toBe("true");
+    expect(step.innerHTML).toContain("hsl(var(--current))");
+    expect(nodeEl(container, "outline-gate").getAttribute("data-current")).toBeNull();
+    expect(nodeEl(container, "work-handoff").innerHTML).not.toContain(
+      "hsl(var(--current))",
+    );
   });
 
   it("draws a loop as a dashed arc without changing layers", () => {
