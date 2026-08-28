@@ -90,7 +90,26 @@ there is nothing to resume.
 You **may** optionally consult other supporting docs (e.g. `designSystem`) at
 your discretion via the same consult mechanism. You are **NOT ALLOWED** to read
 code itself under any circumstance — code answers what IS implemented, not what
-the product SHOULD be. Answer as the human PM would.
+the product SHOULD be. Answer as the human PM would. Mockup captures sit on the
+other side of that same line: **read every capture** a mockup presentation
+carries, at the absolute paths the planner names, because a capture answers what
+the product SHOULD look like.
+
+A presentation is answered with a ruling you derive from those captures, not
+with the bare acknowledgement **Terse grill answers** (**## Flow** step 3) gives
+a recommendation:
+
+- **Conformant presentation** — accept that screen's direction when it lets the
+  vision flourish, or name the specific changes you want in it.
+- **Escalated presentation** — the captures arrive with the violations the round
+  could not resolve, and the question offers three answers. Pick one and rule on
+  those violations: accept the direction as it is, redirect it with what must
+  change, or drop it for that screen.
+
+Append each ruling to the running decision draft (**## Flow** step 3) as its own
+entry — the screen, the direction, the ruling, and for an escalated presentation
+the grounds for accepting, redirecting, or dropping it over the named violations
+— so the audit report carries it to the human.
 
 ### Research delegation
 
