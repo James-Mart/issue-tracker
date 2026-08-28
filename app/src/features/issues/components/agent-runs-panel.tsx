@@ -20,6 +20,7 @@ import {
   TranscriptThinking,
   TranscriptToolCall,
 } from "@/features/agents/components/transcript-ui";
+import { pipelineRunPath } from "@/features/pipeline/paths";
 import { cn } from "@/lib/utils/cn";
 import type { AgentRun, NestedStep, TranscriptEvent } from "@server/schemas";
 import type { IssueAgentRunsWorkRoot } from "../api/agent-runs";
@@ -253,57 +254,67 @@ export function AgentRunCard({
     <div
       className="min-w-0 overflow-hidden rounded-lg border border-border bg-card"
       data-run-id={run.delegationId}
+      data-conversation-id={run.conversationId}
       data-status={run.status}
       {...(expanded ? { "data-expanded": "" } : {})}
     >
-      <button
-        type="button"
-        className="flex min-h-11 w-full min-w-0 cursor-pointer flex-wrap items-center gap-x-1.5 gap-y-1 border-l-2 border-l-[hsl(var(--current))] px-3 py-2.5 text-left font-mono text-[11px] text-muted-foreground"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((open) => !open)}
-        data-testid="agent-run-card-header"
-      >
-        <ChevronRight
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 transition-transform",
-            expanded && "rotate-90",
-          )}
-          aria-hidden
-        />
-        <Badge
-          variant={toolStatusVariant(run.status)}
-          className={cn("shrink-0 text-[10px]", running && "animate-pulse")}
-          data-status-indicator={run.status}
+      <div className="flex min-w-0 items-stretch border-l-2 border-l-[hsl(var(--current))]">
+        <button
+          type="button"
+          className="flex min-h-11 min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-1.5 gap-y-1 px-3 py-2.5 text-left font-mono text-[11px] text-muted-foreground"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((open) => !open)}
+          data-testid="agent-run-card-header"
         >
-          {run.status}
-        </Badge>
-        <span className="shrink-0 text-xs font-medium text-foreground">
-          {run.role}
-        </span>
-        <span className="min-w-0 truncate text-[11px]">{run.model}</span>
-        <span
-          className="shrink-0 tabular-nums text-[hsl(var(--mut))]"
-          data-started-at={run.startedAt}
-        >
-          {formatRunStartTime(run.startedAt)}
-        </span>
-        {duration ? (
+          <ChevronRight
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 transition-transform",
+              expanded && "rotate-90",
+            )}
+            aria-hidden
+          />
+          <Badge
+            variant={toolStatusVariant(run.status)}
+            className={cn("shrink-0 text-[10px]", running && "animate-pulse")}
+            data-status-indicator={run.status}
+          >
+            {run.status}
+          </Badge>
+          <span className="shrink-0 text-xs font-medium text-foreground">
+            {run.role}
+          </span>
+          <span className="min-w-0 truncate text-[11px]">{run.model}</span>
           <span
             className="shrink-0 tabular-nums text-[hsl(var(--mut))]"
-            data-duration={duration}
+            data-started-at={run.startedAt}
           >
-            {duration}
+            {formatRunStartTime(run.startedAt)}
           </span>
-        ) : null}
-        {run.isResume ? (
-          <span
-            className="shrink-0 text-[10px] uppercase tracking-[0.1em] text-[hsl(var(--current))]"
-            data-resume-marker=""
-          >
-            Resume
-          </span>
-        ) : null}
-      </button>
+          {duration ? (
+            <span
+              className="shrink-0 tabular-nums text-[hsl(var(--mut))]"
+              data-duration={duration}
+            >
+              {duration}
+            </span>
+          ) : null}
+          {run.isResume ? (
+            <span
+              className="shrink-0 text-[10px] uppercase tracking-[0.1em] text-[hsl(var(--current))]"
+              data-resume-marker=""
+            >
+              Resume
+            </span>
+          ) : null}
+        </button>
+        <Link
+          to={pipelineRunPath(run.conversationId)}
+          className="flex min-h-11 shrink-0 items-center px-3 text-[11px] font-medium text-[hsl(var(--current))] no-underline hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid="agent-run-diagram-link"
+        >
+          Diagram
+        </Link>
+      </div>
       {expanded ? (
         <AgentRunBody
           issueId={issueId}

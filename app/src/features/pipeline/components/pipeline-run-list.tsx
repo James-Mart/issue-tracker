@@ -11,6 +11,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { usePipelineRunQuery, usePipelineRunsQuery } from "../api/queries";
+import { pipelineRunPath } from "../paths";
 import { useLiveRunSequence } from "../hooks/use-live-run-sequence";
 import {
   PHONE_RUN_LIST_SLOTS,
@@ -58,7 +59,7 @@ function PipelineRunCard({
 }) {
   return (
     <Link
-      to={`/pipeline/runs/${encodeURIComponent(run.conversationId)}`}
+      to={pipelineRunPath(run.conversationId)}
       aria-current={selected ? "true" : undefined}
       data-testid="pipeline-run-card"
       data-conversation-id={run.conversationId}
