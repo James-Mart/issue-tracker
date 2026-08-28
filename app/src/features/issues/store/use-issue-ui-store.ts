@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import type { IssueKind } from "@server/schemas";
 import type { BoardKindFilter } from "../lib/board-kind-filter";
+import {
+  ensureBoardRootsExpandedOnce,
+  loadExpanded,
+  saveExpanded,
+  toggleExpanded,
+} from "./expanded-state";
 
 export type { BoardKindFilter };
 
@@ -16,36 +22,6 @@ export interface ProjectDialogTarget {
   title?: string;
 }
 
-const EXPANDED_KEY = "issue-tracker.expanded";
-
-function loadExpanded(): Record<string, boolean> {
-  if (typeof localStorage === "undefined") return {};
-  const raw = localStorage.getItem(EXPANDED_KEY);
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const expanded: Record<string, boolean> = {};
-      for (const [id, value] of Object.entries(parsed)) {
-        if (value === false) expanded[id] = false;
-      }
-      return expanded;
-    }
-  } catch {
-    // ignore invalid stored value
-  }
-  return {};
-}
-
-function saveExpanded(expanded: Record<string, boolean>): void {
-  if (typeof localStorage === "undefined") return;
-  if (Object.keys(expanded).length === 0) {
-    localStorage.removeItem(EXPANDED_KEY);
-  } else {
-    localStorage.setItem(EXPANDED_KEY, JSON.stringify(expanded));
-  }
-}
-
 interface IssueUiState {
   search: string;
   setSearch: (value: string) => void;
@@ -57,7 +33,8 @@ interface IssueUiState {
   showArchived: boolean;
   setShowArchived: (value: boolean) => void;
   expanded: Record<string, boolean>;
-  toggle: (id: string) => void;
+  toggle: (id: string, fallbackExpanded: boolean) => void;
+  ensureBoardRootsExpandedOnce: (boardRootIds: readonly string[]) => void;
   projectDialog: ProjectDialogTarget | null;
   openProjectDialog: (target?: ProjectDialogTarget) => void;
   closeProjectDialog: () => void;
@@ -78,17 +55,21 @@ export const useIssueUiStore = create<IssueUiState>((set) => ({
   setBoardKindFilter: (value) => set({ boardKindFilter: value }),
   showArchived: false,
   setShowArchived: (value) => set({ showArchived: value }),
-  expanded: loadExpanded(),
-  toggle: (id) =>
+  expanded:
+    typeof localStorage === "undefined" ? {} : loadExpanded(),
+  toggle: (id, fallbackExpanded) =>
     set((state) => {
-      const nextExpanded = !(state.expanded[id] ?? true);
-      const expanded = { ...state.expanded };
-      if (nextExpanded) {
-        delete expanded[id];
-      } else {
-        expanded[id] = false;
-      }
+      const expanded = toggleExpanded(state.expanded, id, fallbackExpanded);
       saveExpanded(expanded);
+      return { expanded };
+    }),
+  ensureBoardRootsExpandedOnce: (boardRootIds) =>
+    set((state) => {
+      const expanded = ensureBoardRootsExpandedOnce(
+        state.expanded,
+        boardRootIds,
+      );
+      if (expanded === state.expanded) return state;
       return { expanded };
     }),
   projectDialog: null,

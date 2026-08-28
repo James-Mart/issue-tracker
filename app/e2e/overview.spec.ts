@@ -1,9 +1,39 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, test as baseTest, bootSeededApp } from "./fixtures";
 import {
   gotoOverviewStructure,
 } from "./seed-navigation";
 import { snapshotBothThemes } from "./snapshot-both-themes";
+
+const DONE_ROOT_TITLE = "Finished project story";
+
+const test = baseTest.extend<
+  Record<string, never>,
+  { seededAppWithDoneRoot: { baseURL: string } }
+>({
+  seededAppWithDoneRoot: [
+    async ({}, use) => {
+      const app = await bootSeededApp({
+        afterApply: async ({ create, update }) => {
+          await create({
+            kind: "idea",
+            title: "Backlog idea",
+            partOf: "seed-proj",
+          });
+          const story = await create({
+            kind: "story",
+            title: DONE_ROOT_TITLE,
+            partOf: "seed-proj",
+          });
+          await update(story.id, { merged: true });
+        },
+      });
+      await use({ baseURL: app.baseURL });
+      await app.stop();
+    },
+    { scope: "worker" },
+  ],
+});
 
 async function gotoOverviewOverview(page: Page, baseURL: string) {
   await page.goto(`${baseURL}/projects/seed-proj?lens=overview`);
@@ -125,6 +155,34 @@ test.describe("overview lenses", () => {
     await ideasGroup.locator("summary").click();
     await expect(
       ideasGroup.getByRole("link", { name: /^Capture me next\b/ }),
+    ).toBeVisible();
+  });
+
+  test("Done group sits under Ideas and opens to finished roots", async ({
+    page,
+    seededAppWithDoneRoot,
+  }) => {
+    await page.goto(`${seededAppWithDoneRoot.baseURL}/projects/seed-proj`);
+    const structurePanel = page.getByRole("tabpanel", { name: "Structure" });
+    await expect(structurePanel).toBeVisible();
+
+    const ideasGroup = structurePanel.getByTestId("structure-ideas-group");
+    const doneGroup = structurePanel.getByTestId("structure-done-group");
+    await expect(doneGroup).toBeVisible();
+    await expect(doneGroup.locator("details")).not.toHaveAttribute("open", "");
+    await expect(
+      doneGroup.getByRole("link", { name: new RegExp(`^${DONE_ROOT_TITLE}\\b`) }),
+    ).toHaveCount(0);
+
+    const ideasBox = await ideasGroup.boundingBox();
+    const doneBox = await doneGroup.boundingBox();
+    expect(ideasBox).not.toBeNull();
+    expect(doneBox).not.toBeNull();
+    expect(doneBox!.y).toBeGreaterThan(ideasBox!.y);
+
+    await doneGroup.locator("summary").click();
+    await expect(
+      doneGroup.getByRole("link", { name: new RegExp(`^${DONE_ROOT_TITLE}\\b`) }),
     ).toBeVisible();
   });
 

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import type {
   DerivedState,
@@ -27,7 +27,9 @@ import {
   writeOverviewLensParam,
   type OverviewLens,
 } from "../lib/overview-lens";
+import { projectBoardRoots } from "../lib/project-board-roots";
 import {
+  structureDoneNodes,
   structureIdeaNodes,
   structureScopedIssues,
   structureTreeNodes,
@@ -156,14 +158,29 @@ function OverviewStructureLens({
     [issues, projectId, showArchived],
   );
   const nodes = useMemo(
-    () => structureTreeNodes(scoped, filters),
-    [filters, scoped],
+    () => structureTreeNodes(scoped, filters, derived),
+    [derived, filters, scoped],
   );
   const ideaNodes = useMemo(
     () => structureIdeaNodes(scoped, filters),
     [filters, scoped],
   );
-  const hasStructureContent = nodes.length > 0 || ideaNodes.length > 0;
+  const doneNodes = useMemo(
+    () => structureDoneNodes(scoped, filters, derived),
+    [derived, filters, scoped],
+  );
+  const boardRootIds = useMemo(
+    () => projectBoardRoots(scoped, []).map((issue) => issue.id),
+    [scoped],
+  );
+  const ensureBoardRootsExpandedOnce = useIssueUiStore(
+    (s) => s.ensureBoardRootsExpandedOnce,
+  );
+  useLayoutEffect(() => {
+    ensureBoardRootsExpandedOnce(boardRootIds);
+  }, [boardRootIds, ensureBoardRootsExpandedOnce]);
+  const hasStructureContent =
+    nodes.length > 0 || ideaNodes.length > 0 || doneNodes.length > 0;
 
   const clearFilters = () => {
     setSearch("");
@@ -193,6 +210,7 @@ function OverviewStructureLens({
         <IssueTree
           nodes={nodes}
           ideaNodes={ideaNodes}
+          doneNodes={doneNodes}
           derived={derived}
           issues={scoped}
           catalog={catalog}

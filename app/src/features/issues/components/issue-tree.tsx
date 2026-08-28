@@ -9,8 +9,10 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { assigneeOf } from "@server/assignee";
+import { isProjectBoardChild } from "@server/order";
 import { hasAttention } from "@server/kind";
 import {
   CHILD_KIND,
@@ -37,6 +39,7 @@ import {
   useStoryTreeDnD,
   useStoryTreeDnDContext,
 } from "../hooks/use-story-tree-dnd";
+import { resolveExpanded } from "../store/expanded-state";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import type { IssueNode } from "../lib/build-tree";
 import {
@@ -427,6 +430,7 @@ function TreeRow({
   derived,
   catalog,
   issues,
+  byId,
   prQuery,
   guides = [],
 }: {
@@ -434,12 +438,16 @@ function TreeRow({
   derived: DerivedMap;
   catalog: ProjectLabel[];
   issues: IssueRecord[];
+  byId: ReadonlyMap<string, IssueRecord>;
   prQuery: ProjectPrQuery;
   guides?: boolean[];
 }) {
   const { projectId = "" } = useParams();
   const { issue } = node;
-  const expanded = useIssueUiStore((s) => s.expanded[issue.id] ?? true);
+  const fallbackExpanded = isProjectBoardChild(issue, byId) ? false : true;
+  const expanded = useIssueUiStore((s) =>
+    resolveExpanded(s.expanded, issue.id, fallbackExpanded),
+  );
   const toggle = useIssueUiStore((s) => s.toggle);
   const { getRowDnDProps, consumeDragGesture } = useStoryTreeDnDContext();
   const hasChildren = node.children.length > 0;
@@ -491,7 +499,7 @@ function TreeRow({
             hasChildren
               ? () => {
                   if (consumeDragGesture()) return;
-                  toggle(issue.id);
+                  toggle(issue.id, fallbackExpanded);
                 }
               : undefined
           }
@@ -499,7 +507,7 @@ function TreeRow({
           {hasChildren ? (
             <TreeExpander
               expanded={expanded}
-              onToggle={() => toggle(issue.id)}
+              onToggle={() => toggle(issue.id, fallbackExpanded)}
             />
           ) : (
             <span className="h-6 w-6 shrink-0" />
@@ -569,6 +577,7 @@ function TreeRow({
               derived={derived}
               catalog={catalog}
               issues={issues}
+              byId={byId}
               prQuery={prQuery}
               guides={[...guides, index < node.children.length - 1]}
             />
@@ -605,25 +614,31 @@ function ProjectUnstackDropZone({
   );
 }
 
-function IdeasGroup({
+function CollapsibleStructureGroup({
+  testId,
+  headingId,
+  title,
   nodes,
   derived,
   catalog,
   issues,
+  byId,
   prQuery,
 }: {
+  testId: string;
+  headingId: string;
+  title: string;
   nodes: IssueNode[];
   derived: DerivedMap;
   catalog: ProjectLabel[];
   issues: IssueRecord[];
+  byId: ReadonlyMap<string, IssueRecord>;
   prQuery: ProjectPrQuery;
 }) {
   if (nodes.length === 0) return null;
 
-  const headingId = "structure-ideas-group-heading";
-
   return (
-    <section aria-labelledby={headingId} data-testid="structure-ideas-group">
+    <section aria-labelledby={headingId} data-testid={testId}>
       <details className="group">
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
           <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
@@ -631,7 +646,7 @@ function IdeasGroup({
             id={headingId}
             className="font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--current))]"
           >
-            Ideas
+            {title}
             <span className="ml-2 font-mono text-[11px] tabular-nums text-muted-foreground">
               {nodes.length}
             </span>
@@ -646,6 +661,7 @@ function IdeasGroup({
                 derived={derived}
                 catalog={catalog}
                 issues={issues}
+                byId={byId}
                 prQuery={prQuery}
               />
             ))}
@@ -659,6 +675,7 @@ function IdeasGroup({
 export function IssueTree({
   nodes,
   ideaNodes = [],
+  doneNodes = [],
   derived,
   issues,
   catalog,
@@ -666,6 +683,7 @@ export function IssueTree({
 }: {
   nodes: IssueNode[];
   ideaNodes?: IssueNode[];
+  doneNodes?: IssueNode[];
   derived: DerivedMap;
   issues: IssueRecord[];
   catalog: ProjectLabel[];
@@ -677,10 +695,15 @@ export function IssueTree({
     data: prQueryResult.data,
     error: prQueryResult.error,
   };
+  const byId = useMemo(
+    () => new Map(issues.map((row) => [row.id, row])),
+    [issues],
+  );
   const hasHierarchy = nodes.length > 0;
   const hasIdeas = ideaNodes.length > 0;
+  const hasDone = doneNodes.length > 0;
 
-  if (!hasHierarchy && !hasIdeas) {
+  if (!hasHierarchy && !hasIdeas && !hasDone) {
     return (
       <StoryTreeDnDProvider value={dnd}>
         <div className="flex flex-col gap-1.5">
@@ -709,16 +732,32 @@ export function IssueTree({
                 derived={derived}
                 catalog={catalog}
                 issues={issues}
+                byId={byId}
                 prQuery={prQuery}
               />
             ))}
           </Rail>
         ) : null}
-        <IdeasGroup
+        <CollapsibleStructureGroup
+          testId="structure-ideas-group"
+          headingId="structure-ideas-group-heading"
+          title="Ideas"
           nodes={ideaNodes}
           derived={derived}
           catalog={catalog}
           issues={issues}
+          byId={byId}
+          prQuery={prQuery}
+        />
+        <CollapsibleStructureGroup
+          testId="structure-done-group"
+          headingId="structure-done-group-heading"
+          title="Done"
+          nodes={doneNodes}
+          derived={derived}
+          catalog={catalog}
+          issues={issues}
+          byId={byId}
           prQuery={prQuery}
         />
       </div>

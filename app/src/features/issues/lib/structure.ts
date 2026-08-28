@@ -1,9 +1,12 @@
 import { visibleIssues } from "@server/services/archived-visibility";
-import type { IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueRecord } from "@server/schemas";
 import { boardKindAllows, type BoardKindFilter } from "./board-kind-filter";
 import { buildTree, filterToProject, type IssueNode } from "./build-tree";
+import { isIssueComplete } from "./derived";
 import { filterIssuesBySearchAndLabels } from "./filter-by-search-labels";
 import { projectBoardRoots } from "./project-board-roots";
+
+export type StructureDerived = Record<string, DerivedState>;
 
 export type StructureFilters = {
   search: string;
@@ -37,23 +40,58 @@ function filteredBoardRoots(
   );
 }
 
-/**
- * Epic / Story hierarchy roots for the Structure lens after search / label /
- * kind filters. Ideas are excluded — they render in {@link structureIdeaNodes}.
- */
-export function structureTreeNodes(
+function epicStoryBoardRoots(
   scoped: IssueRecord[],
   filters: StructureFilters,
-): IssueNode[] {
-  const roots = filteredBoardRoots(scoped, filters).filter(
+): IssueRecord[] {
+  return filteredBoardRoots(scoped, filters).filter(
     (issue) => issue.kind !== "idea",
   );
+}
+
+function structureEpicStoryNodes(
+  scoped: IssueRecord[],
+  filters: StructureFilters,
+  roots: IssueRecord[],
+): IssueNode[] {
   const filtered = filterIssuesBySearchAndLabels(
     scoped,
     filters.search,
     filters.labelIds,
   );
   return buildTree(filtered, roots);
+}
+
+/**
+ * Epic / Story hierarchy roots for the Structure lens after search / label /
+ * kind filters. Complete board roots are excluded — they render in
+ * {@link structureDoneNodes}. Ideas are excluded — they render in
+ * {@link structureIdeaNodes}.
+ */
+export function structureTreeNodes(
+  scoped: IssueRecord[],
+  filters: StructureFilters,
+  derived: StructureDerived,
+): IssueNode[] {
+  const roots = epicStoryBoardRoots(scoped, filters).filter(
+    (issue) => !isIssueComplete(issue, derived[issue.id]),
+  );
+  return structureEpicStoryNodes(scoped, filters, roots);
+}
+
+/**
+ * Complete Epic / project-level Story roots for the Structure lens Done group
+ * (same search / label / kind filters and tree shape as the active rail).
+ */
+export function structureDoneNodes(
+  scoped: IssueRecord[],
+  filters: StructureFilters,
+  derived: StructureDerived,
+): IssueNode[] {
+  const roots = epicStoryBoardRoots(scoped, filters).filter((issue) =>
+    isIssueComplete(issue, derived[issue.id]),
+  );
+  return structureEpicStoryNodes(scoped, filters, roots);
 }
 
 /**
