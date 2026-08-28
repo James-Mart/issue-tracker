@@ -92,8 +92,10 @@ named no surface, ask for it before step 1.
 5. **Selection.** With the stakeholder's `<chosenDirectionId>`, run in order:
    - `npm run mockup-promote -- --conversation <conversationId> --direction <chosenDirectionId> --issue <issueId> --mode chosen`
      — captures every state at both widths, attaches those PNGs plus the
-     archive, and detaches every candidate attachment from the issue. It
-     prints the same three blocks as candidate mode.
+     archive, replaces that direction's earlier chosen attachments (PNGs and
+     archive) and keeps the same basenames, and detaches every candidate
+     attachment from the issue. Other directions' chosen files stay untouched.
+     It prints the same three blocks as candidate mode.
    - `npm run mockup-prune -- --conversation <conversationId> --keep <chosenDirectionId>`
    - `npm run mockup-stack -- stop <conversationId>`
 

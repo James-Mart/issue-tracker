@@ -24,7 +24,8 @@ chosen direction's artifacts from one issue to another.
 
 Modes:
   candidate  Capture both viewports and attach as mockup-candidate-...
-  chosen     Capture both viewports, attach PNGs plus archive, detach candidates
+  chosen     Capture both viewports, attach PNGs plus archive, replace that
+             direction's prior chosen set, detach candidates
   copy       Copy chosen PNGs and archive from --from-issue (no stack)
 
 Options:
