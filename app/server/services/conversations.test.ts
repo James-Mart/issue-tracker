@@ -534,6 +534,118 @@ describe("conversations store", () => {
       "del-root",
     );
   });
+
+  it("folds an end line onto its start record through readDelegations", async () => {
+    const { conversationsDir } = await loadConfig();
+    const {
+      createConversation,
+      appendDelegation,
+      appendDelegationEnd,
+      readDelegations,
+    } = await loadService();
+
+    const meta = await createConversation({
+      title: "End fold",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const start = await appendDelegation(meta.id, {
+      delegationId: "del-ended",
+      agentId: "agent-nested-1",
+      role: "pinned-role",
+      model: "auto",
+    });
+    await appendDelegationEnd(meta.id, {
+      delegationId: "del-ended",
+      status: "completed",
+    });
+
+    const records = readDelegations(meta.id);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      delegationId: "del-ended",
+      agentId: "agent-nested-1",
+      lifecycle: "tracked",
+      end: {
+        status: "completed",
+      },
+    });
+    expect(records[0]!.end!.endedAt).toEqual(expect.any(String));
+    expect(Number.isNaN(Date.parse(records[0]!.end!.endedAt))).toBe(false);
+
+    const raw = readFileSync(
+      join(conversationsDir, meta.id, "delegations.jsonl"),
+      "utf8",
+    );
+    const lines = raw.trim().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      delegationId: "del-ended",
+      lifecycle: "tracked",
+      at: start.at,
+    });
+    expect(JSON.parse(lines[1]!)).toMatchObject({
+      kind: "end",
+      delegationId: "del-ended",
+      status: "completed",
+    });
+  });
+
+  it("leaves start records without an end line without end", async () => {
+    const { createConversation, appendDelegation, readDelegations } =
+      await loadService();
+
+    const meta = await createConversation({
+      title: "Open delegation",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    await appendDelegation(meta.id, {
+      delegationId: "del-open",
+      agentId: "agent-nested-1",
+      role: "pinned-role",
+      model: "auto",
+    });
+
+    const records = readDelegations(meta.id);
+    expect(records).toHaveLength(1);
+    expect(records[0]).not.toHaveProperty("end");
+  });
+
+  it("reads legacy start records without lifecycle", async () => {
+    const { conversationsDir } = await loadConfig();
+    const { createConversation, readDelegations } = await loadService();
+
+    const meta = await createConversation({
+      title: "Legacy delegation",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const path = join(conversationsDir, meta.id, "delegations.jsonl");
+    writeFileSync(
+      path,
+      `${JSON.stringify({
+        delegationId: "del-legacy",
+        agentId: "agent-legacy",
+        role: "old-role",
+        model: "auto",
+        at: "2026-01-01T00:00:00.000Z",
+      })}\n`,
+    );
+
+    const records = readDelegations(meta.id);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      delegationId: "del-legacy",
+      agentId: "agent-legacy",
+      role: "old-role",
+    });
+    expect(records[0]).not.toHaveProperty("lifecycle");
+    expect(records[0]).not.toHaveProperty("end");
+  });
 });
 
 describe("appendDelegation live frames", () => {
