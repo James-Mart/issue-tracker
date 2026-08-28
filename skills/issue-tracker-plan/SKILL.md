@@ -150,7 +150,8 @@ mid-grill.
   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-mockup/SKILL.md`
   and follow it, naming that screen and passing the issue being planned as its
   argument. Do not ask whether to run a round; do not skip a round for any
-  affected screen.
+  affected screen. What you do with what a round returns is
+  **## What a round returns** below.
 - **Do not enact** the plan (no `apply`, no tracker writes that materialize the
   tree) until the user answers yes at the single post-outline gate below.
 - Do **not** ask a separate pre-outline “shared understanding?” confirm —
@@ -158,6 +159,36 @@ mid-grill.
 
 This protocol is **inlined here**. Do **not** add or invoke a separate
 plugin-local grill-me skill.
+
+## What a round returns
+
+A round posts its captures and then waits on you. Conformance is judged
+inside the round, so the stakeholder judges only whether the direction lets
+the vision flourish — no question you ask sends them to the `designSystem`
+doc.
+
+- **Conformant return** — post it, then ask **one** question about
+  vision-level fit: whether this direction serves the product the plan is
+  for. When the stakeholder is satisfied with it, take that direction id to
+  the round's acceptance beat.
+- **Escalated return** — post the captures together with the violations the
+  round named, labelled as failing conformance. Then ask **one** question
+  whose three answers each carry their consequence in the answer list:
+  - **Accept as it is** — the direction goes to the round's acceptance beat
+    exactly as a conformant one does, and migrate promotes it.
+  - **Redirect** — the stakeholder's redirection goes back as feedback to the
+    round already open, which resumes iterating on it with a fresh cap.
+  - **Drop** — the round ends for that screen with no direction, the plan
+    proceeds without one, and migrate promotes nothing for that screen.
+- **Requested changes or alternatives** — when the answer to a conformant
+  return asks for changes or for another direction, that request re-enters
+  the round already open as feedback, the same way a redirection does. It
+  never starts a second round for that screen.
+- **A new product question** — when a return raises a product or dependency
+  decision the grill has not settled, ask it and have it answered before the
+  next screen's round starts.
+- **Before the outline** — every affected screen's round ends in an accepted
+  direction or a drop before you show the outline.
 
 ## Single post-outline gate, then migrate
 

@@ -79,7 +79,8 @@ surface, for each chosen direction on that surface:
      harness is not a supported move, and the archive must not be described
      as though it were.
 
-Surfaces with no mockup round skip this step.
+Surfaces whose round ended with no chosen direction — a dropped escalation —
+skip this step.
 
 ### Single root (not splitting)
 
