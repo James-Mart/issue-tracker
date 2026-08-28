@@ -6,6 +6,7 @@ export type RecentRun = {
   startedAt: string;
   condition: RunCondition;
   issueId?: string;
+  recoveredErrors?: number;
 };
 
 export const PIPELINE_RUNS_LIMIT = 20;

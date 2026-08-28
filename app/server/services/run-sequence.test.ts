@@ -308,7 +308,7 @@ describe("runSequence", () => {
     expect(sequence.beats[0]).not.toHaveProperty("durationMs");
   });
 
-  it("marks the run failed when a beat ended in error", async () => {
+  it("marks the run in-flight when an error return is followed by an open spawn", async () => {
     writeConversation("conv-failed", {
       meta: { issueId: "capture", channel: "planning" },
       delegations: [
@@ -340,7 +340,8 @@ describe("runSequence", () => {
     const runSequence = await loadRunSequence();
     const sequence = runSequence("conv-failed");
 
-    expect(sequence.condition).toBe("failed");
+    expect(sequence.condition).toBe("in-flight");
+    expect(sequence.recoveredErrors).toBe(1);
     expect(sequence.beats.find((b) => b.kind === "return")).toEqual({
       from: "mockup-author",
       to: "coordinator",
@@ -349,6 +350,71 @@ describe("runSequence", () => {
       durationMs: Date.parse(AT_END) - Date.parse(AT),
       kind: "return",
     });
+  });
+
+  it("reports completed with recoveredErrors when an error is followed by later success", async () => {
+    writeConversation("conv-recovered", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-mockup",
+          agentId: "agent-mockup",
+          role: "mockup-author",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-mockup",
+          end: { status: "error", endedAt: AT_END },
+        }),
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT_CHILD,
+          parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_LATE },
+        }),
+      ],
+      transcript: [
+        toolCall("call-mockup", "running", AT, 1),
+        toolCall("call-mockup", "error", AT_END, 2),
+        toolCall("call-research", "running", AT_CHILD, 3),
+        toolCall("call-research", "completed", AT_LATE, 4),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-recovered");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.recoveredErrors).toBe(1);
+  });
+
+  it("marks the run failed when the final beat is an error return", async () => {
+    writeConversation("conv-terminal-failed", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-mockup",
+          agentId: "agent-mockup",
+          role: "mockup-author",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-mockup",
+          end: { status: "error", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-mockup", "running", AT, 1),
+        toolCall("call-mockup", "error", AT_END, 2),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-terminal-failed");
+
+    expect(sequence.condition).toBe("failed");
+    expect(sequence).not.toHaveProperty("recoveredErrors");
   });
 
   it("collapses three consecutive same-pair beats into one with turns", async () => {
