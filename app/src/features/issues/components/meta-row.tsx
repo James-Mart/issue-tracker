@@ -23,3 +23,12 @@ export function MetaRow({
     </div>
   );
 }
+
+/** Value and its actions share one cluster; wrap under the value, not the label. */
+export function MetaFieldActions({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex max-w-full flex-wrap items-center gap-1.5">
+      {children}
+    </span>
+  );
+}
