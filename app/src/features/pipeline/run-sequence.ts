@@ -41,10 +41,20 @@ export type RunSequenceRootIssue = {
   title: string;
 };
 
+export type RunSequenceSection = {
+  issueId?: string;
+  kind?: string;
+  title?: string;
+  beatStart: number;
+  beatEnd: number;
+  children: RunSequenceSection[];
+};
+
 export type RunSequence = {
   condition: RunCondition;
   lifelines: SequenceLifeline[];
   beats: SequenceBeat[];
+  sections: RunSequenceSection[];
   recoveredErrors?: number;
   rootIssue?: RunSequenceRootIssue;
 };

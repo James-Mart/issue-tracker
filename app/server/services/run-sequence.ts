@@ -3,6 +3,7 @@ import type {
   ConversationMeta,
   DelegationRecord,
   DelegationRecordWithEnd,
+  Issue,
   TranscriptEvent,
 } from "../schemas.js";
 import {
@@ -11,7 +12,7 @@ import {
   readDelegations,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
-import { readIssueOrThrow } from "./issues.js";
+import { readAll, readIssueOrThrow } from "./issues.js";
 
 export type RunCondition = "completed" | "in-flight" | "failed";
 
@@ -53,10 +54,20 @@ export type RunSequenceRootIssue = {
   title: string;
 };
 
+export type RunSequenceSection = {
+  issueId?: string;
+  kind?: string;
+  title?: string;
+  beatStart: number;
+  beatEnd: number;
+  children: RunSequenceSection[];
+};
+
 export type RunSequence = {
   condition: RunCondition;
   lifelines: SequenceLifeline[];
   beats: SequenceBeat[];
+  sections: RunSequenceSection[];
   recoveredErrors?: number;
   rootIssue?: RunSequenceRootIssue;
 };
@@ -81,6 +92,13 @@ type OrderedBeat = {
   at: string;
   open: boolean;
   endedInError: boolean;
+  issueId?: string;
+};
+
+type IssueAncestry = {
+  issueId: string;
+  kind: string;
+  title: string;
 };
 
 /** Session-root label: the conversation type on meta, or title when untyped. */
@@ -236,10 +254,19 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
     at: first.at,
     open: anyOpen,
     endedInError: group.some((row) => row.endedInError),
+    ...(first.issueId !== undefined ? { issueId: first.issueId } : {}),
   };
 }
 
-/** Merge consecutive beats that share the same lifeline pair. */
+function sameCollapseAnchor(row: OrderedBeat, anchor: OrderedBeat): boolean {
+  return (
+    row.beat.from === anchor.beat.from &&
+    row.beat.to === anchor.beat.to &&
+    row.issueId === anchor.issueId
+  );
+}
+
+/** Merge consecutive beats that share the same lifeline pair and issue. */
 function collapseConsecutiveBeats(rows: OrderedBeat[]): OrderedBeat[] {
   if (rows.length === 0) return [];
 
@@ -249,7 +276,7 @@ function collapseConsecutiveBeats(rows: OrderedBeat[]): OrderedBeat[] {
   for (let i = 1; i < rows.length; i += 1) {
     const row = rows[i]!;
     const anchor = group[0]!;
-    if (row.beat.from === anchor.beat.from && row.beat.to === anchor.beat.to) {
+    if (sameCollapseAnchor(row, anchor)) {
       group.push(row);
       continue;
     }
@@ -259,6 +286,107 @@ function collapseConsecutiveBeats(rows: OrderedBeat[]): OrderedBeat[] {
 
   collapsed.push(collapseGroup(group));
   return collapsed;
+}
+
+function issuesById(): Map<string, Issue> {
+  return new Map(readAll().issues.map((issue) => [issue.id, issue]));
+}
+
+function issueAncestry(
+  issueId: string,
+  byId: Map<string, Issue>,
+): IssueAncestry[] | undefined {
+  const issue = byId.get(issueId);
+  if (issue === undefined) return undefined;
+
+  const chain: IssueAncestry[] = [];
+  const seen = new Set<string>();
+  let current: Issue | undefined = issue;
+  while (current !== undefined && current.kind !== "project") {
+    // readAll() can include a cyclic partOf; stop rather than walk forever.
+    if (seen.has(current.id)) break;
+    seen.add(current.id);
+    chain.push({
+      issueId: current.id,
+      kind: current.kind,
+      title: current.title,
+    });
+    current = byId.get(current.partOf);
+  }
+  chain.reverse();
+  return chain.length > 0 ? chain : undefined;
+}
+
+function openSection(
+  roots: RunSequenceSection[],
+  stack: RunSequenceSection[],
+  index: number,
+  node?: IssueAncestry,
+): RunSequenceSection {
+  const section: RunSequenceSection = {
+    ...(node !== undefined
+      ? { issueId: node.issueId, kind: node.kind, title: node.title }
+      : {}),
+    beatStart: index,
+    beatEnd: index,
+    children: [],
+  };
+  const parent = stack[stack.length - 1];
+  if (parent === undefined) roots.push(section);
+  else parent.children.push(section);
+  stack.push(section);
+  return section;
+}
+
+function extendOpen(stack: RunSequenceSection[], index: number): void {
+  for (const section of stack) {
+    section.beatEnd = index;
+  }
+}
+
+/** Nested issue sections over collapsed beats; untagged beats join the open section. */
+function buildSections(
+  rows: OrderedBeat[],
+  byId: Map<string, Issue>,
+): RunSequenceSection[] {
+  const roots: RunSequenceSection[] = [];
+  const stack: RunSequenceSection[] = [];
+  let leading: RunSequenceSection | undefined;
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const issueId = rows[i]!.issueId;
+    const ancestry =
+      issueId !== undefined ? issueAncestry(issueId, byId) : undefined;
+
+    if (ancestry === undefined) {
+      if (stack.length === 0) {
+        leading = openSection(roots, stack, i);
+      } else {
+        extendOpen(stack, i);
+      }
+      continue;
+    }
+
+    if (stack.length === 1 && stack[0] === leading) {
+      stack.pop();
+    }
+
+    let common = 0;
+    while (
+      common < stack.length &&
+      common < ancestry.length &&
+      stack[common]!.issueId === ancestry[common]!.issueId
+    ) {
+      common += 1;
+    }
+    stack.length = common;
+    for (let depth = common; depth < ancestry.length; depth += 1) {
+      openSection(roots, stack, i, ancestry[depth]);
+    }
+    extendOpen(stack, i);
+  }
+
+  return roots;
 }
 
 /** One conversation's lifelines, ordered beats, and derived condition. */
@@ -320,6 +448,7 @@ export function runSequence(conversationId: string): RunSequence {
       at: startEvent?.at ?? record.at,
       open: !closed && !indeterminate,
       endedInError,
+      ...(record.issueId !== undefined ? { issueId: record.issueId } : {}),
     });
 
     if (!closed) continue;
@@ -337,11 +466,13 @@ export function runSequence(conversationId: string): RunSequence {
       at: end.endedAt,
       open: false,
       endedInError,
+      ...(record.issueId !== undefined ? { issueId: record.issueId } : {}),
     });
   }
 
   ordered.sort(compareOrder);
   const collapsed = collapseConsecutiveBeats(ordered);
+  const sections = buildSections(collapsed, issuesById());
 
   const familyIds: string[] = [];
   for (const record of delegations) {
@@ -369,6 +500,7 @@ export function runSequence(conversationId: string): RunSequence {
     condition,
     lifelines,
     beats: collapsed.map((row) => row.beat),
+    sections,
     ...(recoveredErrors > 0 ? { recoveredErrors } : {}),
     ...(rootIssue !== undefined ? { rootIssue } : {}),
   };

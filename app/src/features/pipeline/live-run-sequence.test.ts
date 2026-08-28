@@ -23,6 +23,7 @@ function inFlight(partial: Partial<RunSequence> = {}): RunSequence {
       { id: "coordinator", label: "implementing", kind: "coordinator" },
       { id: "implementor", label: "implementor", kind: "role" },
     ],
+    sections: [],
     beats: [
       beat({
         from: "coordinator",

@@ -160,6 +160,7 @@ function emptySequence(conversationId: string): RunSequence {
       { id: "coordinator", label: conversationId, kind: "coordinator" },
     ],
     beats: [],
+    sections: [],
   };
 }
 
@@ -419,6 +420,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [
           {
             from: "human",
@@ -456,6 +458,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [
           {
             from: "human",
@@ -498,6 +501,7 @@ describe("PipelinePage", () => {
             kind: "role",
           },
         ],
+        sections: [],
         beats: [
           {
             from: "coordinator",
@@ -560,6 +564,7 @@ describe("PipelinePage", () => {
           { id: "coordinator", label: "planning", kind: "coordinator" },
           { id: "retro", label: "retro", kind: "role" },
         ],
+        sections: [],
         beats: [
           {
             from: "coordinator",
@@ -791,6 +796,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [],
         rootIssue: {
           id: "root-task",
@@ -822,6 +828,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [],
       },
     });
@@ -846,6 +853,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [],
         rootIssue: {
           id: "root-task",
@@ -859,6 +867,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [],
       },
     });

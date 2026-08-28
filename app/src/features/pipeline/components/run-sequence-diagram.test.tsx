@@ -81,6 +81,7 @@ function sequence(partial: Partial<RunSequence>): RunSequence {
     condition: "completed",
     lifelines: BASE_LIFELINES,
     beats: [SPAWN, RETURN, HUMAN],
+    sections: [],
     ...partial,
   };
 }

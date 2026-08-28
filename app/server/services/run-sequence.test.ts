@@ -7,6 +7,7 @@ import type {
   DelegationRecordWithEnd,
   TranscriptEvent,
 } from "../schemas.js";
+import type { RunSequenceSection } from "./run-sequence.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const AT_EARLY = "2026-07-09T13:00:00.000Z";
@@ -16,6 +17,7 @@ const AT_ROUND1_END = "2026-07-09T14:00:03.000Z";
 const AT_ROUND2_END = "2026-07-09T14:00:06.000Z";
 const AT_ROUND3_END = "2026-07-09T14:00:09.000Z";
 const AT_LATE = "2026-07-09T16:00:00.000Z";
+const AT_LATE_END = "2026-07-09T16:00:06.000Z";
 
 let root: string;
 let conversationsDir: string;
@@ -129,6 +131,71 @@ function toolCall(
 
 function prompt(text: string, at: string, seq: number): TranscriptEvent {
   return { type: "prompt", text, at, seq };
+}
+
+function writeWorkTree(): void {
+  writeIssue("proj", {
+    kind: "project",
+    title: "Proj",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("epic-one", {
+    kind: "epic",
+    title: "Epic One",
+    partOf: "proj",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("story-one", {
+    kind: "story",
+    title: "Story One",
+    partOf: "epic-one",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("task-a", {
+    kind: "task",
+    title: "Task A",
+    partOf: "story-one",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("task-b", {
+    kind: "task",
+    title: "Task B",
+    partOf: "story-one",
+    createdAt: AT,
+    updatedAt: AT,
+  });
+}
+
+function expectLeafCoverage(
+  sections: RunSequenceSection[],
+  beatCount: number,
+): void {
+  const covered: number[] = [];
+  function walk(nodes: RunSequenceSection[]): void {
+    for (let i = 1; i < nodes.length; i += 1) {
+      expect(nodes[i]!.beatStart).toBe(nodes[i - 1]!.beatEnd + 1);
+    }
+    for (const node of nodes) {
+      expect(node.beatStart).toBeLessThanOrEqual(node.beatEnd);
+      if (node.children.length === 0) {
+        for (let i = node.beatStart; i <= node.beatEnd; i += 1) {
+          covered.push(i);
+        }
+      } else {
+        expect(node.children[0]!.beatStart).toBe(node.beatStart);
+        expect(node.children[node.children.length - 1]!.beatEnd).toBe(
+          node.beatEnd,
+        );
+        walk(node.children);
+      }
+    }
+  }
+  walk(sections);
+  expect(covered).toEqual([...Array(beatCount).keys()]);
 }
 
 beforeEach(() => {
@@ -998,6 +1065,148 @@ describe("runSequence", () => {
     const sequence = runSequence("conv-dangling");
 
     expect(sequence).not.toHaveProperty("rootIssue");
+    expect(sequence.sections).toEqual([
+      { beatStart: 0, beatEnd: 1, children: [] },
+    ]);
+  });
+
+  it("nests two Tasks under one Story and keeps a mid-run human in the open section", async () => {
+    writeWorkTree();
+    writeConversation("conv-nested-tasks", {
+      meta: { channel: "implementing", issueId: "task-a", createdAt: AT },
+      delegations: [
+        delegation({
+          delegationId: "del-a",
+          agentId: "agent-a",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "task-a",
+          parentCallId: "call-a",
+          end: { status: "completed", endedAt: AT_ROUND1_END },
+        }),
+        delegation({
+          delegationId: "del-b",
+          agentId: "agent-b",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT_LATE,
+          issueId: "task-b",
+          parentCallId: "call-b",
+          end: { status: "completed", endedAt: AT_LATE_END },
+        }),
+      ],
+      transcript: [
+        prompt("start", AT_EARLY, 1),
+        toolCall("call-a", "running", AT, 2),
+        toolCall("call-a", "completed", AT_ROUND1_END, 3),
+        prompt("continue", AT_CHILD, 4),
+        toolCall("call-b", "running", AT_LATE, 5),
+        toolCall("call-b", "completed", AT_LATE_END, 6),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-nested-tasks");
+
+    expect(sequence.beats.map((b) => b.label)).toEqual([
+      "human replied",
+      "spawn implementor",
+      "implementor returned",
+      "human replied",
+      "spawn implementor",
+      "implementor returned",
+    ]);
+    expect(sequence.sections).toEqual([
+      { beatStart: 0, beatEnd: 0, children: [] },
+      {
+        issueId: "epic-one",
+        kind: "epic",
+        title: "Epic One",
+        beatStart: 1,
+        beatEnd: 5,
+        children: [
+          {
+            issueId: "story-one",
+            kind: "story",
+            title: "Story One",
+            beatStart: 1,
+            beatEnd: 5,
+            children: [
+              {
+                issueId: "task-a",
+                kind: "task",
+                title: "Task A",
+                beatStart: 1,
+                beatEnd: 3,
+                children: [],
+              },
+              {
+                issueId: "task-b",
+                kind: "task",
+                title: "Task B",
+                beatStart: 4,
+                beatEnd: 5,
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    expectLeafCoverage(sequence.sections, sequence.beats.length);
+  });
+
+  it("does not collapse consecutive same-pair beats tagged with different issues", async () => {
+    writeWorkTree();
+    writeConversation("conv-no-cross-issue-collapse", {
+      meta: { channel: "implementing", issueId: "task-a", createdAt: AT },
+      delegations: [
+        delegation({
+          delegationId: "del-a",
+          agentId: "agent-a",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "task-a",
+          parentCallId: "call-a",
+          end: { status: "completed", endedAt: AT_ROUND1_END },
+        }),
+        delegation({
+          delegationId: "del-b",
+          agentId: "agent-b",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "task-b",
+          parentCallId: "call-b",
+          end: { status: "completed", endedAt: AT_ROUND2_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-a", "running", AT, 1),
+        toolCall("call-b", "running", AT, 2),
+        toolCall("call-a", "completed", AT_ROUND1_END, 3),
+        toolCall("call-b", "completed", AT_ROUND2_END, 4),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-no-cross-issue-collapse");
+
+    expect(sequence.beats.map((b) => [b.kind, b.from, b.to])).toEqual([
+      ["spawn", "coordinator", "implementor"],
+      ["spawn", "coordinator", "implementor"],
+      ["return", "implementor", "coordinator"],
+      ["return", "implementor", "coordinator"],
+    ]);
+    expect(sequence.beats[0]).not.toHaveProperty("turns");
+    expect(sequence.beats[1]).not.toHaveProperty("turns");
+    expect(sequence.beats[2]).not.toHaveProperty("turns");
+    expect(sequence.beats[3]).not.toHaveProperty("turns");
+    expect(
+      sequence.sections[0]?.children[0]?.children.map((s) => s.issueId),
+    ).toEqual(["task-a", "task-b", "task-a", "task-b"]);
   });
 });
 
