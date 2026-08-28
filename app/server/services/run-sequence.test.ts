@@ -219,6 +219,7 @@ describe("runSequence", () => {
         startedAt: AT,
         durationMs: Date.parse(AT_CHILD) - Date.parse(AT),
         kind: "spawn",
+        parentCallId: "call-impl",
       },
       {
         from: "implementor",
@@ -227,6 +228,7 @@ describe("runSequence", () => {
         startedAt: AT,
         durationMs: Date.parse(AT_END) - Date.parse(AT),
         kind: "spawn",
+        parentCallId: "call-qa",
       },
       {
         from: "validator",
@@ -274,6 +276,7 @@ describe("runSequence", () => {
       label: "spawn research",
       startedAt: AT,
       kind: "spawn",
+      parentCallId: "call-research",
     });
     expect(sequence.beats[0]).not.toHaveProperty("durationMs");
   });
@@ -370,6 +373,7 @@ describe("runSequence", () => {
       startedAt: AT,
       durationMs: Date.parse(AT_ROUND3_END) - Date.parse(AT),
       kind: "spawn",
+      parentCallId: "call-polish-3",
       turns: [
         {
           label: "spawn polish",
@@ -494,6 +498,7 @@ describe("runSequence", () => {
       startedAt: AT,
       durationMs: Date.parse(AT_END) - Date.parse(AT),
       kind: "spawn",
+      parentCallId: "call-polish",
     });
     expect(sequence.beats[0]).not.toHaveProperty("turns");
   });

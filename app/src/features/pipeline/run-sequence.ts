@@ -25,6 +25,12 @@ export type SequenceBeat = {
   durationMs?: number;
   kind: SequenceBeatKind;
   turns?: SequenceBeatTurn[];
+  /** Parent tool call that spawned this beat — used to close it from a live frame. */
+  parentCallId?: string;
+  /** Stream seq when this beat was appended live; fetched beats omit it. */
+  seq?: number;
+  /** Elapsed ms from live `subagent_update` frames; does not close the beat. */
+  liveElapsedMs?: number;
 };
 
 export type RunSequence = {
@@ -116,6 +122,14 @@ export function frontierBeatIndex(sequence: RunSequence): number | undefined {
     if (beat.kind === "spawn" && beat.durationMs === undefined) return i;
   }
   return undefined;
+}
+
+export function displayedDurationMs(
+  beat: SequenceBeat,
+  isFrontier: boolean,
+): number | undefined {
+  if (isFrontier && beat.liveElapsedMs !== undefined) return beat.liveElapsedMs;
+  return beat.durationMs;
 }
 
 export function formatSequenceDuration(

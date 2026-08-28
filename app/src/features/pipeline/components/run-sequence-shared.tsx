@@ -84,7 +84,12 @@ export function beatAccent(
   sequence: RunSequence,
   beatIndex: number,
 ): "live" | "failed" | undefined {
-  if (failedBeatIndex(sequence.beats) === beatIndex) return "failed";
+  if (
+    sequence.condition === "failed" &&
+    failedBeatIndex(sequence.beats) === beatIndex
+  ) {
+    return "failed";
+  }
   if (frontierBeatIndex(sequence) === beatIndex) return "live";
   return undefined;
 }

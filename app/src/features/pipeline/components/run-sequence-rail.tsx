@@ -5,6 +5,7 @@ import {
   OPEN_TAIL_DASH,
   collapsedIterationCount,
   failedLifelineId,
+  displayedDurationMs,
   formatSequenceDuration,
   lifelineTail,
   type RunSequence,
@@ -239,7 +240,9 @@ export function RunSequenceRail({
             row.kind === "turn" ? row.turn.label : row.beat.label,
           );
           const duration = formatSequenceDuration(
-            row.kind === "turn" ? row.turn.durationMs : row.beat.durationMs,
+            row.kind === "turn"
+              ? row.turn.durationMs
+              : displayedDurationMs(row.beat, isLive),
             row.kind !== "turn" && isLive,
           );
 

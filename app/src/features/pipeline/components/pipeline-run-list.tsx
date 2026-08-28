@@ -11,6 +11,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { usePipelineRunQuery, usePipelineRunsQuery } from "../api/queries";
+import { useLiveRunSequence } from "../hooks/use-live-run-sequence";
 import {
   PHONE_RUN_LIST_SLOTS,
   conditionBadgeLabel,
@@ -131,6 +132,7 @@ function SelectedRunSequence({
 }) {
   const { data, isLoading, error, refetch, isFetching } =
     usePipelineRunQuery(conversationId);
+  const sequence = useLiveRunSequence(conversationId, data);
 
   if (isLoading) {
     return (
@@ -162,9 +164,9 @@ function SelectedRunSequence({
     );
   }
 
-  if (!data) return null;
+  if (!sequence) return null;
 
-  return <RunSequenceDiagram sequence={data} layout={layout} />;
+  return <RunSequenceDiagram sequence={sequence} layout={layout} />;
 }
 
 export function PipelineRunsView({

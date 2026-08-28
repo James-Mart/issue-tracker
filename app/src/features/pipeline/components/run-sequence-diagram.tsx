@@ -17,6 +17,7 @@ import {
   collapsedIterationCount,
   failedBeatIndex,
   failedLifelineId,
+  displayedDurationMs,
   formatSequenceDuration,
   isCollapsedBeat,
   lifelineTail,
@@ -548,7 +549,9 @@ export function RunSequenceDiagram({
             const isFailed = accent === "failed";
             if (row.kind === "group_head") return null;
             const duration = formatSequenceDuration(
-              row.kind === "turn" ? row.turn.durationMs : row.beat.durationMs,
+              row.kind === "turn"
+                ? row.turn.durationMs
+                : displayedDurationMs(row.beat, isLive),
               row.kind !== "turn" && isLive,
             );
             if (!duration) return null;

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { beatAccent } from "./components/run-sequence-shared";
 import {
   beatStroke,
   collapsedIterationCount,
   failedLifelineId,
+  displayedDurationMs,
   formatSequenceDuration,
   frontierBeatIndex,
   isCollapsedBeat,
@@ -149,5 +151,48 @@ describe("formatSequenceDuration", () => {
     expect(formatSequenceDuration(45_000, true)).toBe("45s…");
     expect(formatSequenceDuration(undefined, true)).toBe("…");
     expect(formatSequenceDuration(undefined, false)).toBeUndefined();
+  });
+});
+
+describe("beatAccent", () => {
+  it("does not paint a later return as failed while the run is in-flight", () => {
+    const live: RunSequence = {
+      condition: "in-flight",
+      lifelines: completed.lifelines,
+      beats: [
+        beat({
+          from: "coordinator",
+          to: "research",
+          label: "spawn research",
+          startedAt: "2026-08-28T12:03:00.000Z",
+          kind: "spawn",
+        }),
+        beat({
+          from: "planner",
+          to: "coordinator",
+          label: "planner returned",
+          startedAt: "2026-08-28T12:04:00.000Z",
+          durationMs: 12_000,
+          kind: "return",
+        }),
+      ],
+    };
+    expect(beatAccent(live, 0)).toBe("live");
+    expect(beatAccent(live, 1)).toBeUndefined();
+  });
+});
+
+describe("displayedDurationMs", () => {
+  it("prefers a live elapsed tick on the frontier", () => {
+    const open = beat({
+      from: "coordinator",
+      to: "research",
+      label: "spawn research",
+      startedAt: "2026-08-28T12:03:00.000Z",
+      kind: "spawn",
+      liveElapsedMs: 12_000,
+    });
+    expect(displayedDurationMs(open, true)).toBe(12_000);
+    expect(displayedDurationMs(open, false)).toBeUndefined();
   });
 });
