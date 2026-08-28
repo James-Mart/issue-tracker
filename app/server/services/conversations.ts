@@ -500,6 +500,12 @@ export function appendDelegationEnd(
     const meta = readMetaRaw(id);
     const parsed = parseDelegationEndRecordInput(record);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
+    const priorDelegations = readDelegationLines(id);
+    const start = priorDelegations.find(
+      (line): line is ParsedDelegationLine & { kind: "start" } =>
+        line.kind === "start" &&
+        line.record.delegationId === parsed.input.delegationId,
+    );
     const stamped = {
       kind: "end" as const,
       ...parsed.input,
@@ -507,6 +513,21 @@ export function appendDelegationEnd(
     };
     appendFileSync(delegationsPathOf(id), `${JSON.stringify(stamped)}\n`);
     writeMeta({ ...meta, updatedAt: new Date().toISOString() });
+    if (start?.record.issueId && start.record.parentCallId) {
+      publishFrame(id, {
+        event: {
+          type: "delegation_end",
+          delegationId: stamped.delegationId,
+          parentCallId: start.record.parentCallId,
+          status: stamped.status,
+          endedAt: stamped.endedAt,
+          ...(stamped.failureClass !== undefined
+            ? { failureClass: stamped.failureClass }
+            : {}),
+        },
+        persist: false,
+      });
+    }
     return stamped;
   });
 }

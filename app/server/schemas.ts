@@ -713,6 +713,18 @@ const delegationFrameInput = z.object({
 
 export type DelegationFrameInput = z.infer<typeof delegationFrameInput>;
 
+/** Live-only watched delegation end on the event stream (never persisted). */
+const delegationEndFrameInput = z.object({
+  type: z.literal("delegation_end"),
+  delegationId: nonEmpty,
+  parentCallId: nonEmpty,
+  status: z.enum(["completed", "error"]),
+  endedAt: nonEmpty,
+  failureClass: agentFailureClassSchema.optional(),
+});
+
+export type DelegationEndFrameInput = z.infer<typeof delegationEndFrameInput>;
+
 /** Write-time frame union: transcript events plus live-only run signalling. */
 export const conversationFrameInputSchema = z.union([
   transcriptEventInputSchema,
@@ -768,6 +780,7 @@ export const conversationStreamEventSchema = z.union([
   withStreamFrameMeta(runFrameInput),
   withStreamFrameMeta(pendingFrameInput),
   withStreamFrameMeta(delegationFrameInput),
+  withStreamFrameMeta(delegationEndFrameInput),
 ]);
 
 export type ConversationStreamEvent = z.infer<

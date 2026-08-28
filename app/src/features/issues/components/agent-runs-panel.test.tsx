@@ -803,7 +803,7 @@ describe("AgentRunsPanel", () => {
     expect(container.querySelectorAll("[data-run-id]")).toHaveLength(1);
   });
 
-  it("flips status and fills duration when a terminal tool_call matches parentCallId", () => {
+  it("flips status and fills duration when a delegation_end matches parentCallId", () => {
     queryState.data = {
       runs: [
         sampleRun({
@@ -826,10 +826,11 @@ describe("AgentRunsPanel", () => {
       type: "event",
       seq: 12,
       event: {
-        type: "tool_call",
-        callId: "call-1",
-        name: "Task",
+        type: "delegation_end",
+        delegationId: "del-live",
+        parentCallId: "call-1",
         status: "completed",
+        endedAt: "2026-07-09T14:00:12.000Z",
         at: "2026-07-09T14:00:12.000Z",
         seq: 12,
       },

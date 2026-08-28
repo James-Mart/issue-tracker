@@ -18,6 +18,10 @@ function conversationTopic(conversationId: string): string {
 }
 
 type ToolCallFrame = Extract<ConversationStreamEvent, { type: "tool_call" }>;
+type DelegationEndFrame = Extract<
+  ConversationStreamEvent,
+  { type: "delegation_end" }
+>;
 type SubagentUpdateEvent = Extract<
   TranscriptEvent,
   { type: "subagent_update" }
@@ -40,10 +44,18 @@ export function applyParentToolCall(
 ): AgentRun[] {
   return runs.map((run) => {
     if (run.parentCallId !== event.callId) return run;
-    if (event.status === "completed" || event.status === "error") {
-      return { ...run, status: event.status, endedAt: event.at };
-    }
+    if (event.status === "completed" || event.status === "error") return run;
     return { ...run, status: event.status };
+  });
+}
+
+export function applyDelegationEnd(
+  runs: AgentRun[],
+  event: DelegationEndFrame,
+): AgentRun[] {
+  return runs.map((run) => {
+    if (run.parentCallId !== event.parentCallId) return run;
+    return { ...run, status: event.status, endedAt: event.endedAt };
   });
 }
 
@@ -58,6 +70,9 @@ function applyFrame(
   }
   if (event.type === "tool_call") {
     return applyParentToolCall(runs, event);
+  }
+  if (event.type === "delegation_end") {
+    return applyDelegationEnd(runs, event);
   }
   return runs;
 }
@@ -80,9 +95,10 @@ export type WorkRootAgentRuns = {
 
 /**
  * Overlay live work-root conversation frames on the fetched run list:
- * matching `delegation` frames append a run; top-level `tool_call` frames
- * update the run whose `parentCallId` they close; `subagent_update` frames
- * fold into that run's live event overlay in `seq` order.
+ * matching `delegation` frames append a run; `delegation_end` frames update
+ * the run whose `parentCallId` they close; non-terminal `tool_call` frames
+ * update in-flight status; `subagent_update` frames fold into that run's
+ * live event overlay in `seq` order.
  */
 export function useWorkRootAgentRuns(
   issueId: string,
