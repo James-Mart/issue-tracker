@@ -1,7 +1,18 @@
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useMemo } from "react";
+import type { IssueKind } from "@server/schemas";
 import { PageShell } from "@/components/page-shell";
+import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
+import {
+  ShellInlineFault,
+  ShellLoadingState,
+} from "@/app/shell-state";
+import { useIssuesQuery } from "@/features/issues/api/queries";
+import { issuesById, projectIdOf } from "@/features/issues/lib/build-tree";
+import { KIND_LABEL } from "@/features/issues/lib/kind";
+import { issuePath } from "@/features/issues/lib/links";
 import { PipelineDiagram } from "../pipeline-diagram";
 import {
   parsePipelineId,
@@ -11,6 +22,11 @@ import {
   writeStepParam,
 } from "../pipeline-selection";
 import { pipelines, type PipelineId } from "../shape";
+import { usePipelineRunQuery } from "../api/queries";
+import { useLiveRunSequence } from "../hooks/use-live-run-sequence";
+import type { RunSequence } from "../run-sequence";
+import { conditionCaption } from "./run-sequence-shared";
+import { RunSequenceDiagram } from "./run-sequence-diagram";
 import { PipelineRunsView } from "./pipeline-run-list";
 import {
   PipelineStepSourcePanel,
@@ -31,6 +47,104 @@ function PipelineHeader() {
         Pipeline
       </p>
     </header>
+  );
+}
+
+function RunSequencePaneHeader({ sequence }: { sequence: RunSequence }) {
+  const { data } = useIssuesQuery();
+  const byId = useMemo(
+    () => issuesById(data?.issues ?? []),
+    [data?.issues],
+  );
+  const rootIssue = sequence.rootIssue;
+  const projectId = rootIssue ? projectIdOf(rootIssue.id, byId) : null;
+  const rootIssueHref =
+    rootIssue && projectId ? issuePath(projectId, rootIssue.id) : null;
+
+  return (
+    <div
+      className="flex shrink-0 items-center justify-between gap-2 px-0.5 pb-1"
+      data-testid="run-sequence-pane-header"
+    >
+      <h2 className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        Sequence
+      </h2>
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+        <div
+          className="flex min-h-[1.375rem] min-w-[10rem] items-center justify-end gap-1.5"
+          data-testid="run-sequence-root-issue-slot"
+        >
+          {rootIssue && rootIssueHref ? (
+            <>
+              <p className="shrink-0 font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
+                {KIND_LABEL[rootIssue.kind as IssueKind]}
+              </p>
+              <Link
+                to={rootIssueHref}
+                className="min-w-0 truncate text-sm font-medium text-[hsl(var(--current))] no-underline hover:underline"
+                data-testid="run-sequence-root-issue-link"
+              >
+                {rootIssue.title}
+              </Link>
+            </>
+          ) : null}
+        </div>
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+          {conditionCaption(sequence)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SelectedRunSequence({
+  conversationId,
+  layout,
+}: {
+  conversationId: string;
+  layout: "desktop" | "phone";
+}) {
+  const { data, isLoading, error, refetch, isFetching } =
+    usePipelineRunQuery(conversationId);
+  const sequence = useLiveRunSequence(conversationId, data);
+
+  if (isLoading) {
+    return (
+      <div className="min-w-0 flex-1">
+        <ShellLoadingState label="Loading sequence…" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-w-0 flex-1">
+        <ShellInlineFault
+          message={error.message}
+          hint="Check the server, then reload."
+        />
+        <Button
+          variant="primary"
+          size="sm"
+          className="mt-3"
+          disabled={isFetching}
+          onClick={() => {
+            void refetch();
+          }}
+        >
+          Reload
+        </Button>
+      </div>
+    );
+  }
+
+  if (!sequence) return null;
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col">
+      <RunSequencePaneHeader sequence={sequence} />
+      <RunSequenceDiagram sequence={sequence} layout={layout} />
+    </div>
   );
 }
 
@@ -206,7 +320,12 @@ export function PipelinePage() {
         {activeView === "design" ? (
           <PipelineDesignView />
         ) : (
-          <PipelineRunsView conversationId={conversationId} />
+          <PipelineRunsView
+            conversationId={conversationId}
+            renderSequence={(id, layout) => (
+              <SelectedRunSequence conversationId={id} layout={layout} />
+            )}
+          />
         )}
       </div>
     </PageShell>

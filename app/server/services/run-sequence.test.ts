@@ -19,6 +19,15 @@ const AT_LATE = "2026-07-09T16:00:00.000Z";
 
 let root: string;
 let conversationsDir: string;
+let issuesDir: string;
+
+function writeIssue(id: string, body: Record<string, unknown>): void {
+  mkdirSync(join(issuesDir, id), { recursive: true });
+  writeFileSync(
+    join(issuesDir, id, "issue.json"),
+    JSON.stringify({ id, ...body }),
+  );
+}
 
 function writeConversation(
   id: string,
@@ -125,9 +134,11 @@ function prompt(text: string, at: string, seq: number): TranscriptEvent {
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-run-sequence-"));
   conversationsDir = join(root, "conversations");
+  issuesDir = join(root, "issues");
   mkdirSync(conversationsDir, { recursive: true });
+  mkdirSync(issuesDir, { recursive: true });
   vi.resetModules();
-  vi.stubEnv("ISSUES_DIR", join(root, "issues"));
+  vi.stubEnv("ISSUES_DIR", issuesDir);
 });
 
 afterEach(() => {
@@ -787,6 +798,120 @@ describe("runSequence", () => {
         kind: "human-turn",
       },
     ]);
+  });
+
+  it("resolves rootIssue from the earliest delegation issue", async () => {
+    writeIssue("first-issue", {
+      kind: "task",
+      title: "First task",
+      partOf: "platform",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("second-issue", {
+      kind: "task",
+      title: "Second task",
+      partOf: "platform",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeConversation("conv-root-issue", {
+      meta: {
+        channel: "implementing",
+        issueId: "first-issue",
+        createdAt: AT,
+      },
+      delegations: [
+        delegation({
+          delegationId: "del-first",
+          agentId: "agent-first",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "first-issue",
+          parentCallId: "call-first",
+          end: { status: "completed", endedAt: AT_END },
+        }),
+        delegation({
+          delegationId: "del-second",
+          agentId: "agent-second",
+          role: "validator",
+          model: "composer-2.5",
+          at: AT_LATE,
+          issueId: "second-issue",
+          parentCallId: "call-second",
+          end: { status: "completed", endedAt: AT_LATE },
+        }),
+      ],
+      transcript: [
+        toolCall("call-first", "running", AT, 1),
+        toolCall("call-first", "completed", AT_END, 2),
+        toolCall("call-second", "running", AT_LATE, 3),
+        toolCall("call-second", "completed", AT_LATE, 4),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-root-issue");
+
+    expect(sequence.rootIssue).toEqual({
+      id: "first-issue",
+      kind: "task",
+      title: "First task",
+    });
+  });
+
+  it("omits rootIssue when no delegation carries an issueId", async () => {
+    writeConversation("conv-no-issue", {
+      meta: { title: "Ad hoc debug", createdAt: AT },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-research", "running", AT, 1),
+        toolCall("call-research", "completed", AT_END, 2),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-no-issue");
+
+    expect(sequence).not.toHaveProperty("rootIssue");
+  });
+
+  it("omits rootIssue when the earliest issue id no longer resolves", async () => {
+    writeConversation("conv-dangling", {
+      meta: { title: "Historical run", createdAt: AT },
+      delegations: [
+        delegation({
+          delegationId: "del-gone",
+          agentId: "agent-gone",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "deleted-issue",
+          parentCallId: "call-gone",
+          end: { status: "completed", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-gone", "running", AT, 1),
+        toolCall("call-gone", "completed", AT_END, 2),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-dangling");
+
+    expect(sequence).not.toHaveProperty("rootIssue");
   });
 });
 

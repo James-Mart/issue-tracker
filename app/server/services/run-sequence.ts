@@ -10,6 +10,7 @@ import {
   readDelegations,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
+import { readIssueOrThrow } from "./issues.js";
 
 export type RunCondition = "completed" | "in-flight" | "failed";
 
@@ -43,11 +44,18 @@ export type SequenceBeat = {
   indeterminate?: true;
 };
 
+export type RunSequenceRootIssue = {
+  id: string;
+  kind: string;
+  title: string;
+};
+
 export type RunSequence = {
   condition: RunCondition;
   lifelines: SequenceLifeline[];
   beats: SequenceBeat[];
   recoveredErrors?: number;
+  rootIssue?: RunSequenceRootIssue;
 };
 
 export type RecentRun = {
@@ -334,12 +342,14 @@ export function runSequence(conversationId: string): RunSequence {
   }
 
   const { condition, recoveredErrors } = runOutcome(ordered);
+  const rootIssue = resolveRootIssue(delegations);
 
   return {
     condition,
     lifelines,
     beats: collapsed.map((row) => row.beat),
     ...(recoveredErrors > 0 ? { recoveredErrors } : {}),
+    ...(rootIssue !== undefined ? { rootIssue } : {}),
   };
 }
 
@@ -352,6 +362,20 @@ function earliestIssueId(delegations: DelegationRecord[]): string | undefined {
     }
   }
   return earliest?.issueId;
+}
+
+function resolveRootIssue(
+  delegations: DelegationRecord[],
+): RunSequenceRootIssue | undefined {
+  const issueId = earliestIssueId(delegations);
+  if (issueId === undefined) return undefined;
+  try {
+    const issue = readIssueOrThrow(issueId);
+    return { id: issueId, kind: issue.kind, title: issue.title };
+  } catch (err) {
+    if (err instanceof IssueError && err.code === "not_found") return undefined;
+    throw err;
+  }
 }
 
 /** Newest-first runs across all conversations; scan stays in this function. */

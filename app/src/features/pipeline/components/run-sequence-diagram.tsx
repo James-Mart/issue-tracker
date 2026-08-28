@@ -31,7 +31,6 @@ import {
   beatAccent,
   beatCaptionLabel,
   buildSequenceRows,
-  conditionCaption,
   displayBeatLabel,
   displayLifelineLabel,
 } from "./run-sequence-shared";
@@ -287,14 +286,6 @@ export function RunSequenceDiagram({
 
   return (
     <div className={cn("flex min-w-0 flex-1 flex-col", className)}>
-      <div className="flex shrink-0 items-center justify-between gap-2 px-0.5 pb-1">
-        <h2 className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          Sequence
-        </h2>
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {conditionCaption(sequence)}
-        </span>
-      </div>
       <div
         className={cn(
           "relative min-h-[16rem] min-w-0 flex-1 overflow-auto rounded-lg border border-border bg-[hsl(var(--panel)/0.35)] shell:min-h-[calc(100svh-14rem)]",

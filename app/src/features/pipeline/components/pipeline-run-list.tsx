@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Loader2, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,8 @@ import {
 } from "@/app/shell-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
-import { usePipelineRunQuery, usePipelineRunsQuery } from "../api/queries";
+import { usePipelineRunsQuery } from "../api/queries";
 import { pipelineRunPath } from "../paths";
-import { useLiveRunSequence } from "../hooks/use-live-run-sequence";
 import {
   PHONE_RUN_LIST_SLOTS,
   conditionBadgeLabel,
@@ -22,7 +22,6 @@ import {
   type RecentRun,
   type RunCondition,
 } from "../run-list";
-import { RunSequenceDiagram } from "./run-sequence-diagram";
 
 function conditionBadgeVariant(
   condition: RunCondition,
@@ -141,56 +140,15 @@ function RunListElision({ omitted }: { omitted: RecentRun[] }) {
   );
 }
 
-function SelectedRunSequence({
-  conversationId,
-  layout,
-}: {
-  conversationId: string;
-  layout: "desktop" | "phone";
-}) {
-  const { data, isLoading, error, refetch, isFetching } =
-    usePipelineRunQuery(conversationId);
-  const sequence = useLiveRunSequence(conversationId, data);
-
-  if (isLoading) {
-    return (
-      <div className="min-w-0 flex-1">
-        <ShellLoadingState label="Loading sequence…" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-w-0 flex-1">
-        <ShellInlineFault
-          message={error.message}
-          hint="Check the server, then reload."
-        />
-        <Button
-          variant="primary"
-          size="sm"
-          className="mt-3"
-          disabled={isFetching}
-          onClick={() => {
-            void refetch();
-          }}
-        >
-          Reload
-        </Button>
-      </div>
-    );
-  }
-
-  if (!sequence) return null;
-
-  return <RunSequenceDiagram sequence={sequence} layout={layout} />;
-}
-
 export function PipelineRunsView({
   conversationId,
+  renderSequence,
 }: {
   conversationId?: string;
+  renderSequence?: (
+    conversationId: string,
+    layout: "desktop" | "phone",
+  ) => ReactNode;
 }) {
   const isMobile = useIsMobile();
   const { data, isLoading, error, refetch, isFetching } =
@@ -273,12 +231,12 @@ export function PipelineRunsView({
               </div>
             )}
           </section>
-          {conversationId ? (
-            <SelectedRunSequence
-              conversationId={conversationId}
-              layout={isMobile ? "phone" : "desktop"}
-            />
-          ) : (
+          {conversationId && renderSequence ? (
+            renderSequence(
+              conversationId,
+              isMobile ? "phone" : "desktop",
+            )
+          ) : conversationId ? null : (
             <div
               data-testid="pipeline-run-sequence-placeholder"
               className="flex min-h-[16rem] min-w-0 flex-1 items-center justify-center rounded-lg border border-border bg-[hsl(var(--panel)/0.35)] px-6 py-10 text-center text-sm text-muted-foreground shell:min-h-[calc(100svh-14rem)]"
