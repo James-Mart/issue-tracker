@@ -153,6 +153,12 @@ interface Delegation {
   modelToken: string | null;
 }
 
+export type SpawnEdge = {
+  spawnerFile: string;
+  spawnedRole: string;
+  line: number;
+};
+
 function lineAt(src: string, index: number): number {
   return src.slice(0, index).split(/\r?\n/).length;
 }
@@ -295,6 +301,48 @@ function hasIncludeRead(src: string, basename: string): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Collect declared spawn edges from Task stubs and delegation stubs under
+ * `agents/` and `skills/`. Family-parameterized types expand to one edge per
+ * concrete role, matching the lint walk.
+ */
+export function collectSpawnEdges(rootDir: string): SpawnEdge[] {
+  const agentsDir = resolve(rootDir, "agents");
+  const skillsDir = resolve(rootDir, "skills");
+  const rel = (f: string) => relative(rootDir, f);
+  const edges: SpawnEdge[] = [];
+
+  const scanFiles = [...listAgentFiles(agentsDir), ...walkMd(skillsDir)];
+
+  for (const file of scanFiles) {
+    const src = readFileSync(file, "utf8");
+    const stubs = findStubs(file, src);
+    const delegations = findDelegations(file, src);
+
+    for (const stub of stubs) {
+      const spawnerFile = rel(stub.file);
+      const roles = isFamilyParameterized(stub.subagentType)
+        ? expandSubagentTypes(stub.subagentType)
+        : [stub.subagentType];
+      for (const spawnedRole of roles) {
+        edges.push({ spawnerFile, spawnedRole, line: stub.line });
+      }
+    }
+
+    for (const del of delegations) {
+      const spawnerFile = rel(del.file);
+      const roles = isFamilyParameterized(del.role)
+        ? expandSubagentTypes(del.role)
+        : [del.role];
+      for (const spawnedRole of roles) {
+        edges.push({ spawnerFile, spawnedRole, line: del.line });
+      }
+    }
+  }
+
+  return edges;
 }
 
 /**
