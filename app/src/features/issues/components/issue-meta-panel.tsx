@@ -37,7 +37,7 @@ export function IssueMetaPanel({
     rows.push(
       <MetaRow
         key="partOf"
-        label={FIELD_LABELS.partOf}
+        label="Parent issue"
         value={<IssuePartOfField issue={issue} />}
       />,
     );

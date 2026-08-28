@@ -38,17 +38,18 @@ function task(
 }
 
 describe("storyGitMetaScalars", () => {
-  it("always includes editable stackedOn and merged", () => {
+  it("always includes editable stackedOn", () => {
     const keys = storyGitMetaScalars(story()).map((s) => s.key);
-    expect(keys).toEqual(["stackedOn", "merged"]);
+    expect(keys).toEqual(["stackedOn"]);
   });
 
-  it("adds present readonly scalars with operator Voice labels", () => {
+  it("adds present readonly scalars and omits PR URL, merged, and review", () => {
     const scalars = storyGitMetaScalars(
       story({
         branchName: "feat/a",
         prUrl: "https://example.test/pr/1",
         review: "passed",
+        merged: true,
       }),
       "main",
     );
@@ -56,17 +57,13 @@ describe("storyGitMetaScalars", () => {
       { key: "branchName", label: FIELD_LABELS.branchName },
       { key: "mergeBase", label: FIELD_LABELS.mergeBase },
       { key: "stackedOn", label: FIELD_LABELS.stackedOn },
-      { key: "prUrl", label: FIELD_LABELS.prUrl },
-      { key: "merged", label: FIELD_LABELS.merged },
-      { key: "review", label: FIELD_LABELS.review },
     ]);
     expect(FIELD_LABELS.branchName).toBe("Branch");
-    expect(FIELD_LABELS.prUrl).toBe("Pull request");
   });
 
   it("omits unset mergeBase and absent readonly fields", () => {
     const keys = storyGitMetaScalars(story(), "(unset)").map((s) => s.key);
-    expect(keys).toEqual(["stackedOn", "merged"]);
+    expect(keys).toEqual(["stackedOn"]);
   });
 });
 

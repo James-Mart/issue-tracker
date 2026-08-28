@@ -20,7 +20,7 @@ test.describe("issue detail", () => {
     await expect(main.locator('[data-region="companion"]')).toHaveCount(0);
     await expect(main.locator('[data-region="comments"]')).toBeVisible();
     await expect(main.getByText("Description")).toBeVisible();
-    await expect(main.getByText("Part of")).toBeVisible();
+    await expect(main.getByText("Parent issue")).toBeVisible();
     await expect(main.locator('[data-region="meta-scalars"]')).toBeVisible();
     const ownFlow = main.locator('[data-region="own-flow"]');
     await expect(ownFlow).toBeAttached();

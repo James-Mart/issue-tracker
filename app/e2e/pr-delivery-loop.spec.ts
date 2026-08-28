@@ -109,8 +109,6 @@ test.describe("PR delivery loop", () => {
     await dialog.getByTestId("merge-pr-confirm").click();
     await expect(dialog).toHaveCount(0);
 
-    await expect(main.getByText("Merged", { exact: true })).toBeVisible();
-    await expect(main.getByText("yes", { exact: true })).toBeVisible();
     expect(prLoopApp.mergeCalls).toEqual([
       expect.objectContaining({
         args: [
@@ -142,6 +140,11 @@ test.describe("PR delivery loop", () => {
         "This pull request is a draft and must be marked ready on GitHub.",
       ),
     ).toBeVisible();
-    await expect(draftPanel.getByTestId("pr-merge-github-link")).toBeVisible();
+    await expect(draftPanel.getByTestId("pr-merge-github-link")).toHaveCount(0);
+    await expect(draftPanel.getByText("Open on GitHub")).toHaveCount(0);
+    await expect(draftPanel.getByTestId("pr-number-link")).toHaveAttribute(
+      "href",
+      DRAFT_PR_URL,
+    );
   });
 });

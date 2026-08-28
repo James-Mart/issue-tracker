@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ShellInlineFault } from "@/app/shell-state";
@@ -17,7 +17,10 @@ import { useProjectPullRequestsQuery } from "../api/queries";
 import { mergeControlFor } from "../lib/merge-control";
 import { CompactMetaItem } from "./compact-meta";
 import { MergePrDialog } from "./merge-pr-dialog";
-import { PrUrlDisplay } from "./readonly-git-fields";
+import { MetaFieldActions } from "./meta-row";
+
+/** Poll while GitHub still reports unknown mergeability and this panel is open. */
+export const UNKNOWN_MERGEABLE_REFETCH_MS = 3_000;
 
 type StoryWithPr = Extract<IssueDetail, { kind: "story" }> & {
   prUrl: string;
@@ -54,6 +57,16 @@ function isPrUnavailable(
   value: PrFacts | PrUnavailable,
 ): value is PrUnavailable {
   return "reason" in value;
+}
+
+function isUnknownMergeable(
+  value: PrFacts | PrUnavailable | undefined,
+): boolean {
+  return (
+    value !== undefined &&
+    !isPrUnavailable(value) &&
+    value.mergeable === "unknown"
+  );
 }
 
 function ghErrorCopy(code: GhErrorCode, message: string): {
@@ -252,6 +265,20 @@ function PanelHeader({
   );
 }
 
+function PrNumberLink({ url, number }: { url: string; number: number }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="font-mono text-[13px] tabular-nums text-primary hover:underline"
+      data-testid="pr-number-link"
+    >
+      #{number}
+    </a>
+  );
+}
+
 function MergeControl({
   storyId,
   projectId,
@@ -263,49 +290,29 @@ function MergeControl({
 }) {
   const [open, setOpen] = useState(false);
   const mergeStory = useMergeStory(projectId);
+  // Unknown mergeability is transient; the panel refetches instead of treating it as a gate.
+  if (facts.mergeable === "unknown") return null;
   const control = mergeControlFor(facts);
 
   if (control.mode === "unavailable") {
     return (
-      <CompactMetaItem
-        label="Merge"
-        value={
-          <div
-            className="flex flex-col gap-1.5"
-            data-testid="pr-merge-unavailable"
-          >
-            <p className="text-[13px] text-foreground">{control.reason}</p>
-            <a
-              href={facts.url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[13px] text-primary hover:underline"
-              data-testid="pr-merge-github-link"
-            >
-              Open on GitHub
-            </a>
-          </div>
-        }
-      />
+      <span className="text-[13px] text-foreground" data-testid="pr-merge-unavailable">
+        {control.reason}
+      </span>
     );
   }
 
   const auto = control.mode === "auto";
   return (
     <>
-      <CompactMetaItem
-        label="Merge"
-        value={
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => setOpen(true)}
-            data-testid={auto ? "pr-auto-merge-open" : "pr-merge-open"}
-          >
-            {auto ? "Enable auto-merge" : "Merge"}
-          </Button>
-        }
-      />
+      <Button
+        type="button"
+        size="sm"
+        onClick={() => setOpen(true)}
+        data-testid={auto ? "pr-auto-merge-open" : "pr-merge-open"}
+      >
+        {auto ? "Enable auto-merge" : "Merge"}
+      </Button>
       <MergePrDialog
         open={open}
         headRefOid={control.headRefOid}
@@ -349,29 +356,25 @@ function PrFactsRows({
       <CompactMetaItem
         label="Mergeability"
         value={
-          <span className="inline-flex flex-wrap items-center gap-2">
+          <MetaFieldActions>
             <span>{mergeableLabel(facts.mergeable)}</span>
             {facts.mergeStateStatus ? (
               <span className="font-mono text-[12px] text-muted-foreground">
                 {facts.mergeStateStatus}
               </span>
             ) : null}
-          </span>
+            <MergeControl
+              storyId={storyId}
+              projectId={projectId}
+              facts={facts}
+            />
+          </MetaFieldActions>
         }
       />
       <CompactMetaItem label="Checks" value={checksLabel(facts.checks)} />
       <CompactMetaItem
         label="Review"
         value={reviewLabel(facts.reviewDecision)}
-      />
-      <MergeControl
-        storyId={storyId}
-        projectId={projectId}
-        facts={facts}
-      />
-      <CompactMetaItem
-        label="Link"
-        value={<PrUrlDisplay prUrl={facts.url} />}
       />
       <PrCommentsSection facts={facts} />
     </>
@@ -393,8 +396,21 @@ export function PrStatusPanel({
   story: StoryWithPr;
   projectId: string;
 }) {
+  const qc = useQueryClient();
   const { data, error, isLoading, isFetching } =
     useProjectPullRequestsQuery(projectId);
+  const entry = entryForStory(data, story.id);
+  const pollUnknown = isUnknownMergeable(entry);
+
+  useEffect(() => {
+    if (!pollUnknown) return;
+    const id = window.setInterval(() => {
+      void qc.invalidateQueries({
+        queryKey: issuesKeys.projectPullRequests(projectId),
+      });
+    }, UNKNOWN_MERGEABLE_REFETCH_MS);
+    return () => window.clearInterval(id);
+  }, [pollUnknown, projectId, qc]);
 
   if (isLoading) {
     return (
@@ -431,7 +447,6 @@ export function PrStatusPanel({
     );
   }
 
-  const entry = entryForStory(data, story.id);
   if (!entry) {
     return (
       <div data-testid="pr-status-panel" data-state="missing">
@@ -458,10 +473,6 @@ export function PrStatusPanel({
           message="The recorded pull request URL no longer resolves on GitHub."
           hint="Confirm the PR still exists, or update the Story pull request URL."
         />
-        <CompactMetaItem
-          label="Link"
-          value={<PrUrlDisplay prUrl={story.prUrl} />}
-        />
       </div>
     );
   }
@@ -480,11 +491,7 @@ export function PrStatusPanel({
       <PanelHeader
         projectId={projectId}
         busy={isFetching}
-        trailing={
-          <span className="font-mono text-[13px] tabular-nums">
-            #{entry.number}
-          </span>
-        }
+        trailing={<PrNumberLink url={entry.url} number={entry.number} />}
       />
       <PrFactsRows
         facts={entry}
