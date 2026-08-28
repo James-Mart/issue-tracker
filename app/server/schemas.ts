@@ -671,7 +671,7 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
 
 export type TranscriptEventInput = z.infer<typeof transcriptEventInputSchema>;
 
-/** Resolved agent run on an issue — derived from delegations + transcript tool calls. */
+/** Resolved agent run on an issue — derived from the delegation store. */
 export const agentRunSchema = z.object({
   delegationId: nonEmpty,
   agentId: nonEmpty,
@@ -681,7 +681,7 @@ export const agentRunSchema = z.object({
   parentCallId: nonEmpty,
   conversationId: nonEmpty,
   startedAt: nonEmpty,
-  status: z.enum(["running", "completed", "error"]),
+  status: z.enum(["running", "completed", "error", "unknown"]),
   endedAt: nonEmpty.optional(),
   isResume: z.boolean(),
 });

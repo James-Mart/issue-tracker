@@ -2,7 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DelegationRecord, TranscriptEvent } from "../schemas.js";
+import type {
+  DelegationRecord,
+  DelegationRecordWithEnd,
+  TranscriptEvent,
+} from "../schemas.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const AT_LATER = "2026-07-09T15:00:00.000Z";
@@ -45,7 +49,7 @@ function writeConversationMeta(
 function writeConversation(
   id: string,
   opts: {
-    delegations: DelegationRecord[];
+    delegations: DelegationRecordWithEnd[];
     transcript: TranscriptEvent[];
   },
 ): void {
@@ -66,10 +70,26 @@ function writeConversation(
       2,
     )}\n`,
   );
+  const lines: unknown[] = [];
+  for (const record of opts.delegations) {
+    const { end, ...start } = record;
+    lines.push(start);
+    if (end !== undefined) {
+      lines.push({
+        kind: "end",
+        delegationId: start.delegationId,
+        status: end.status,
+        endedAt: end.endedAt,
+        ...(end.failureClass !== undefined
+          ? { failureClass: end.failureClass }
+          : {}),
+      });
+    }
+  }
   writeFileSync(
     join(dir, "delegations.jsonl"),
-    opts.delegations.map((d) => JSON.stringify(d)).join("\n") +
-      (opts.delegations.length ? "\n" : ""),
+    lines.map((line) => JSON.stringify(line)).join("\n") +
+      (lines.length ? "\n" : ""),
   );
   writeFileSync(
     join(dir, "transcript.jsonl"),
@@ -79,36 +99,26 @@ function writeConversation(
 }
 
 function delegation(
-  overrides: Partial<DelegationRecord> &
+  overrides: Partial<DelegationRecordWithEnd> &
     Pick<
       DelegationRecord,
       "delegationId" | "agentId" | "role" | "model" | "at"
     >,
-): DelegationRecord {
+): DelegationRecordWithEnd {
+  const lifecycle =
+    "lifecycle" in overrides ? overrides.lifecycle : "tracked";
   return {
     delegationId: overrides.delegationId,
     agentId: overrides.agentId,
     role: overrides.role,
     model: overrides.model,
     at: overrides.at,
+    ...(lifecycle !== undefined ? { lifecycle } : {}),
     ...(overrides.issueId !== undefined ? { issueId: overrides.issueId } : {}),
     ...(overrides.parentCallId !== undefined
       ? { parentCallId: overrides.parentCallId }
       : {}),
-  };
-}
-
-function toolCall(
-  callId: string,
-  status: "running" | "completed" | "error",
-  at: string,
-): TranscriptEvent {
-  return {
-    type: "tool_call",
-    callId,
-    name: "delegate",
-    status,
-    at,
+    ...(overrides.end !== undefined ? { end: overrides.end } : {}),
   };
 }
 
@@ -147,7 +157,7 @@ async function loadAgentRunsService() {
 }
 
 describe("listAgentRunsForIssue", () => {
-  it("resolves completed, running, errored, resumed, and legacy runs", async () => {
+  it("resolves completed, running, errored, resumed, and unknown runs from the delegation store", async () => {
     writeConversation("conv-main", {
       delegations: [
         delegation({
@@ -158,6 +168,7 @@ describe("listAgentRunsForIssue", () => {
           at: AT,
           issueId: ISSUE_ID,
           parentCallId: "call-completed",
+          end: { status: "completed", endedAt: AT_END },
         }),
         delegation({
           delegationId: "del-running",
@@ -176,6 +187,7 @@ describe("listAgentRunsForIssue", () => {
           at: AT_LATER,
           issueId: ISSUE_ID,
           parentCallId: "call-error",
+          end: { status: "error", endedAt: AT_END },
         }),
         delegation({
           delegationId: "del-resume-1",
@@ -185,6 +197,7 @@ describe("listAgentRunsForIssue", () => {
           at: AT,
           issueId: ISSUE_ID,
           parentCallId: "call-resume-1",
+          end: { status: "completed", endedAt: AT_LATER },
         }),
         delegation({
           delegationId: "del-resume-2",
@@ -194,6 +207,7 @@ describe("listAgentRunsForIssue", () => {
           at: AT_LATER,
           issueId: ISSUE_ID,
           parentCallId: "call-resume-2",
+          end: { status: "completed", endedAt: AT_END },
         }),
         delegation({
           delegationId: "del-legacy",
@@ -202,19 +216,19 @@ describe("listAgentRunsForIssue", () => {
           model: "composer-2.5",
           at: AT_LATER,
           issueId: ISSUE_ID,
+          parentCallId: "call-legacy",
+          lifecycle: undefined,
+        }),
+        delegation({
+          delegationId: "del-no-call",
+          agentId: "agent-no-call",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT_LATER,
+          issueId: ISSUE_ID,
         }),
       ],
-      transcript: [
-        toolCall("call-completed", "running", AT),
-        toolCall("call-completed", "completed", AT_END),
-        toolCall("call-running", "running", AT_LATER),
-        toolCall("call-error", "running", AT_LATER),
-        toolCall("call-error", "error", AT_END),
-        toolCall("call-resume-1", "running", AT),
-        toolCall("call-resume-1", "completed", AT_LATER),
-        toolCall("call-resume-2", "running", AT_LATER),
-        toolCall("call-resume-2", "completed", AT_END),
-      ],
+      transcript: [],
     });
 
     writeConversation("conv-other-issue", {
@@ -227,21 +241,23 @@ describe("listAgentRunsForIssue", () => {
           at: AT,
           issueId: "other-task",
           parentCallId: "call-other",
+          end: { status: "completed", endedAt: AT_END },
         }),
       ],
-      transcript: [toolCall("call-other", "completed", AT_END)],
+      transcript: [],
     });
 
     const { listAgentRunsForIssue } = await loadAgentRunsService();
     const runs = listAgentRunsForIssue(ISSUE_ID);
 
-    expect(runs).toHaveLength(5);
+    expect(runs).toHaveLength(6);
     expect(runs.map((r) => r.delegationId)).toEqual([
       "del-completed",
       "del-resume-1",
       "del-running",
       "del-error",
       "del-resume-2",
+      "del-legacy",
     ]);
 
     expect(runs[0]).toMatchObject({
@@ -281,6 +297,99 @@ describe("listAgentRunsForIssue", () => {
       endedAt: AT_END,
       isResume: true,
     });
+
+    expect(runs[5]).toMatchObject({
+      delegationId: "del-legacy",
+      status: "unknown",
+      isResume: false,
+    });
+    expect(runs[5]).not.toHaveProperty("endedAt");
+  });
+
+  it("reports terminal status from an end record without a matching transcript row", async () => {
+    writeConversation("conv-nested", {
+      delegations: [
+        delegation({
+          delegationId: "del-nested",
+          agentId: "agent-nested",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: ISSUE_ID,
+          parentCallId: "call-nested",
+          end: { status: "completed", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        subagentUpdate("call-nested", 1, "nested step only"),
+      ],
+    });
+
+    const { listAgentRunsForIssue } = await loadAgentRunsService();
+    const runs = listAgentRunsForIssue(ISSUE_ID);
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      delegationId: "del-nested",
+      status: "completed",
+      endedAt: AT_END,
+    });
+  });
+
+  it("reports running for a tracked record without an end", async () => {
+    writeConversation("conv-open", {
+      delegations: [
+        delegation({
+          delegationId: "del-open",
+          agentId: "agent-open",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: ISSUE_ID,
+          parentCallId: "call-open",
+          lifecycle: "tracked",
+        }),
+      ],
+      transcript: [],
+    });
+
+    const { listAgentRunsForIssue } = await loadAgentRunsService();
+    const runs = listAgentRunsForIssue(ISSUE_ID);
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      delegationId: "del-open",
+      status: "running",
+    });
+    expect(runs[0]).not.toHaveProperty("endedAt");
+  });
+
+  it("reports unknown for an untracked record without an end", async () => {
+    writeConversation("conv-untracked", {
+      delegations: [
+        delegation({
+          delegationId: "del-untracked",
+          agentId: "agent-untracked",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: ISSUE_ID,
+          parentCallId: "call-untracked",
+          lifecycle: undefined,
+        }),
+      ],
+      transcript: [],
+    });
+
+    const { listAgentRunsForIssue } = await loadAgentRunsService();
+    const runs = listAgentRunsForIssue(ISSUE_ID);
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      delegationId: "del-untracked",
+      status: "unknown",
+    });
+    expect(runs[0]).not.toHaveProperty("endedAt");
   });
 });
 
@@ -388,6 +497,7 @@ describe("listAgentRunEvents", () => {
           at: AT,
           issueId: ISSUE_ID,
           parentCallId: "call-a",
+          end: { status: "completed", endedAt: AT_END },
         }),
         delegation({
           delegationId: "del-b",
@@ -397,17 +507,14 @@ describe("listAgentRunEvents", () => {
           at: AT_LATER,
           issueId: ISSUE_ID,
           parentCallId: "call-b",
+          end: { status: "completed", endedAt: AT_END },
         }),
       ],
       transcript: [
-        toolCall("call-a", "running", AT),
         subagentUpdate("call-a", 2, "first run step 1"),
         subagentUpdate("call-b", 3, "sibling run step"),
         subagentUpdate("call-a", 4, "first run step 2"),
-        toolCall("call-a", "completed", AT_END),
-        toolCall("call-b", "running", AT_LATER),
         subagentUpdate("call-b", 6, "sibling run step 2"),
-        toolCall("call-b", "completed", AT_END),
       ],
     });
 
@@ -429,6 +536,35 @@ describe("listAgentRunEvents", () => {
     ]);
   });
 
+  it("returns events for an unknown run without treating it as still open", async () => {
+    writeConversation("conv-untracked", {
+      delegations: [
+        delegation({
+          delegationId: "del-untracked",
+          agentId: "agent-untracked",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: ISSUE_ID,
+          parentCallId: "call-untracked",
+          lifecycle: undefined,
+        }),
+      ],
+      transcript: [
+        subagentUpdate("call-untracked", 1, "legacy nested step"),
+      ],
+    });
+
+    const { listAgentRunEvents } = await loadAgentRunsService();
+    const events = listAgentRunEvents(ISSUE_ID, "del-untracked");
+
+    expect(events).toHaveLength(1);
+    expect(events![0]!.step).toEqual({
+      kind: "text",
+      text: "legacy nested step",
+    });
+  });
+
   it("returns undefined for an unknown delegationId", async () => {
     writeConversation("conv-main", {
       delegations: [
@@ -440,12 +576,10 @@ describe("listAgentRunEvents", () => {
           at: AT,
           issueId: ISSUE_ID,
           parentCallId: "call-a",
+          end: { status: "completed", endedAt: AT_END },
         }),
       ],
-      transcript: [
-        toolCall("call-a", "running", AT),
-        toolCall("call-a", "completed", AT_END),
-      ],
+      transcript: [],
     });
 
     const { listAgentRunEvents } = await loadAgentRunsService();

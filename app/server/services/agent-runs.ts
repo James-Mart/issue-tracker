@@ -1,4 +1,9 @@
-import type { AgentRun, DelegationRecord, Issue, TranscriptEvent } from "../schemas.js";
+import type {
+  AgentRun,
+  DelegationRecordWithEnd,
+  Issue,
+  TranscriptEvent,
+} from "../schemas.js";
 import {
   listConversations,
   readConversation,
@@ -12,35 +17,25 @@ export type AgentRunsWorkRoot = {
   conversationId: string;
 };
 
-type ToolCallEvent = Extract<TranscriptEvent, { type: "tool_call" }>;
 type SubagentUpdateEvent = Extract<TranscriptEvent, { type: "subagent_update" }>;
 
-function deriveRunStatus(
-  parentCallId: string,
-  toolCalls: ToolCallEvent[],
-): { status: AgentRun["status"]; endedAt?: string } | undefined {
-  const matching = toolCalls.filter((e) => e.callId === parentCallId);
-  if (matching.length === 0) return undefined;
-
-  for (let i = matching.length - 1; i >= 0; i -= 1) {
-    const row = matching[i]!;
-    if (row.status === "completed" || row.status === "error") {
-      return { status: row.status, endedAt: row.at };
-    }
+function deriveRunStatus(record: DelegationRecordWithEnd): {
+  status: AgentRun["status"];
+  endedAt?: string;
+} {
+  if (record.end !== undefined) {
+    return { status: record.end.status, endedAt: record.end.endedAt };
   }
-
-  if (matching.some((e) => e.status === "running")) {
+  if (record.lifecycle === "tracked") {
     return { status: "running" };
   }
-
-  return undefined;
+  return { status: "unknown" };
 }
 
 function runsForConversation(
   conversationId: string,
   issueId: string,
-  delegations: DelegationRecord[],
-  toolCalls: ToolCallEvent[],
+  delegations: DelegationRecordWithEnd[],
 ): AgentRun[] {
   const runs: AgentRun[] = [];
   const seenAgentIds = new Set<string>();
@@ -48,9 +43,7 @@ function runsForConversation(
   for (const record of delegations) {
     if (record.issueId !== issueId || !record.parentCallId) continue;
 
-    const derived = deriveRunStatus(record.parentCallId, toolCalls);
-    if (!derived) continue;
-
+    const derived = deriveRunStatus(record);
     const isResume = seenAgentIds.has(record.agentId);
     seenAgentIds.add(record.agentId);
 
@@ -114,20 +107,14 @@ export function listAgentRunsForIssue(issueId: string): AgentRun[] {
   const runs: AgentRun[] = [];
 
   for (const conversationId of listConversationIds()) {
-    let delegations: DelegationRecord[];
-    let toolCalls: ToolCallEvent[];
+    let delegations: DelegationRecordWithEnd[];
     try {
       delegations = readDelegations(conversationId);
-      toolCalls = readConversation(conversationId).transcript.filter(
-        (e): e is ToolCallEvent => e.type === "tool_call",
-      );
     } catch {
       continue;
     }
 
-    runs.push(
-      ...runsForConversation(conversationId, issueId, delegations, toolCalls),
-    );
+    runs.push(...runsForConversation(conversationId, issueId, delegations));
   }
 
   runs.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
@@ -152,13 +139,9 @@ export function listAgentRunEvents(
   delegationId: string,
 ): SubagentUpdateEvent[] | undefined {
   for (const conversationId of listConversationIds()) {
-    let delegations: DelegationRecord[];
-    let toolCalls: ToolCallEvent[];
+    let delegations: DelegationRecordWithEnd[];
     try {
       delegations = readDelegations(conversationId);
-      toolCalls = readConversation(conversationId).transcript.filter(
-        (e): e is ToolCallEvent => e.type === "tool_call",
-      );
     } catch {
       continue;
     }
@@ -167,7 +150,6 @@ export function listAgentRunEvents(
       (d) => d.delegationId === delegationId && d.issueId === issueId,
     );
     if (!record?.parentCallId) continue;
-    if (!deriveRunStatus(record.parentCallId, toolCalls)) continue;
 
     return subagentEventsForRun(conversationId, record.parentCallId);
   }
