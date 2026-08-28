@@ -74,6 +74,41 @@ describe("layoutDepGraph", () => {
       expect(edge.y1).toBeLessThan(edge.y2);
     }
   });
+
+  it("excludes declared back-edges from layer assignment", () => {
+    type LoopEdge = { from: string; to: string; kind: "flow" | "loop" };
+    const nodes = [{ id: "start" }, { id: "end" }];
+    const flow = { from: "start", to: "end", kind: "flow" as const };
+    const model = {
+      nodes,
+      edges: [flow, { from: "end", to: "start", kind: "loop" as const }],
+    } satisfies { nodes: { id: string }[]; edges: LoopEdge[] };
+
+    const forwardOnly = layoutDepGraph({ nodes, edges: [flow] });
+    const excluded = layoutDepGraph(model, {
+      layeringEdges: (edge) => edge.kind !== "loop",
+    });
+
+    const forwardY = Object.fromEntries(forwardOnly.nodes.map((n) => [n.id, n.y]));
+    const excludedY = Object.fromEntries(excluded.nodes.map((n) => [n.id, n.y]));
+
+    expect(excludedY).toEqual(forwardY);
+    expect(excludedY.start).toBeLessThan(excludedY.end!);
+    expect(excluded.edges).toHaveLength(2);
+  });
+
+  it("reserves a left gutter without changing layer y", () => {
+    const model = {
+      nodes: [{ id: "a" }, { id: "b" }],
+      edges: [{ from: "a", to: "b" }],
+    };
+    const plain = layoutDepGraph(model);
+    const guttered = layoutDepGraph(model, { gutterLeft: 40 });
+
+    expect(guttered.nodes.map((n) => n.y)).toEqual(plain.nodes.map((n) => n.y));
+    expect(guttered.nodes[0]!.x).toBe(plain.nodes[0]!.x + 40);
+    expect(guttered.width).toBe(plain.width + 40);
+  });
 });
 
 describe("DependencyGraph", () => {

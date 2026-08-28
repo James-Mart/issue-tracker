@@ -2,6 +2,8 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { PageShell } from "@/components/page-shell";
 import { ShellState } from "@/app/shell-state";
 import { cn } from "@/lib/utils/cn";
+import { PipelineDiagram } from "../pipeline-diagram";
+import { pipelines } from "../shape";
 
 type PipelineView = "design" | "runs";
 
@@ -54,13 +56,15 @@ function PipelineViewSwitch({ activeView }: { activeView: PipelineView }) {
   );
 }
 
-function PipelineDesignPlaceholder() {
+function PipelineDesignView() {
+  const pipeline = pipelines[0];
   return (
-    <ShellState
-      eyebrow="Design"
-      title="Pipeline diagram placeholder"
-      detail="pipeline-diagram-kinds-and-loops replaces this placeholder."
-    />
+    <div className="space-y-4">
+      <h1 className="font-display text-xl font-semibold text-foreground">
+        {pipeline.title}
+      </h1>
+      <PipelineDiagram pipeline={pipeline} />
+    </div>
   );
 }
 
@@ -105,7 +109,7 @@ export function PipelinePage() {
         aria-labelledby={`pipeline-view-tab-${activeView}`}
       >
         {activeView === "design" ? (
-          <PipelineDesignPlaceholder />
+          <PipelineDesignView />
         ) : (
           <PipelineRunsPlaceholder conversationId={conversationId} />
         )}

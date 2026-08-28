@@ -50,11 +50,12 @@ afterEach(() => {
 });
 
 describe("PipelinePage", () => {
-  it("renders the design placeholder on /pipeline", () => {
+  it("renders the planning pipeline diagram on /pipeline", () => {
     const { container } = mountPipelinePage("/pipeline");
-    expect(container.textContent).toContain(
-      "pipeline-diagram-kinds-and-loops replaces this placeholder.",
-    );
+    expect(
+      container.querySelector('[data-testid="pipeline-diagram"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("Planning");
     expect(tab(container, "Design").getAttribute("aria-selected")).toBe("true");
   });
 
@@ -80,9 +81,9 @@ describe("PipelinePage", () => {
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
     ).toBe("/pipeline");
-    expect(container.textContent).toContain(
-      "pipeline-diagram-kinds-and-loops replaces this placeholder.",
-    );
+    expect(
+      container.querySelector('[data-testid="pipeline-diagram"]'),
+    ).not.toBeNull();
   });
 
   it("renders the runs placeholder with conversationId from the route", () => {

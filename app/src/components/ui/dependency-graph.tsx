@@ -21,13 +21,29 @@ export type GraphModel<N extends GraphNode, E extends GraphEdge> = {
   edges: E[];
 };
 
-type PlacedNode<N extends GraphNode> = N & { x: number; y: number };
+export type PlacedNode<N extends GraphNode> = N & { x: number; y: number };
 
 export type GraphLayout<N extends GraphNode, E extends GraphEdge> = {
   nodes: PlacedNode<N>[];
   edges: Array<E & { x1: number; y1: number; x2: number; y2: number }>;
   width: number;
   height: number;
+};
+
+/** Optional metrics and layering filter. Omitted fields keep the rail defaults. */
+export type GraphLayoutOptions<E extends GraphEdge = GraphEdge> = {
+  /** Edges that assign layers. Default: every edge. Back-edges should be omitted. */
+  layeringEdges?: (edge: E) => boolean;
+  colGap?: number;
+  rowGap?: number;
+  labelW?: number;
+  labelH?: number;
+  padX?: number;
+  padY?: number;
+  /** Extra left inset reserved for side arcs (loop gutters). */
+  gutterLeft?: number;
+  /** Card/node box height. When set, `y` is the vertical center of that box. */
+  nodeHeight?: number;
 };
 
 /** Caller-owned stroke treatment for one edge path. */
@@ -72,10 +88,25 @@ function assignLayers(
 /** Layered top-down DAG layout: prerequisites above dependents. */
 export function layoutDepGraph<N extends GraphNode, E extends GraphEdge>(
   model: GraphModel<N, E>,
+  options?: GraphLayoutOptions<E>,
 ): GraphLayout<N, E> {
+  const colGap = options?.colGap ?? COL_GAP;
+  const rowGap = options?.rowGap ?? ROW_GAP;
+  const labelW = options?.labelW ?? LABEL_W;
+  const labelH = options?.labelH ?? LABEL_H;
+  const padX = options?.padX ?? PAD_X;
+  const padY = options?.padY ?? PAD_Y;
+  const gutterLeft = options?.gutterLeft ?? 0;
+  const nodeHeight = options?.nodeHeight ?? PORT + labelH + 4;
+  const anchorY =
+    options?.nodeHeight != null ? options.nodeHeight / 2 : PORT / 2;
+
   const nodeIds = model.nodes.map((n) => n.id);
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
-  const layers = assignLayers(nodeIds, model.edges);
+  const layering = options?.layeringEdges
+    ? model.edges.filter(options.layeringEdges)
+    : model.edges;
+  const layers = assignLayers(nodeIds, layering);
 
   const rows = new Map<number, string[]>();
   for (const id of nodeIds) {
@@ -94,12 +125,13 @@ export function layoutDepGraph<N extends GraphNode, E extends GraphEdge>(
   const positions = new Map<string, { x: number; y: number }>();
   for (let row = 0; row <= maxRow; row++) {
     const ids = rows.get(row) ?? [];
-    const blockWidth = Math.max(0, ids.length - 1) * COL_GAP;
-    const startX = PAD_X + LABEL_W / 2 + ((maxCols - 1) * COL_GAP - blockWidth) / 2;
+    const blockWidth = Math.max(0, ids.length - 1) * colGap;
+    const startX =
+      padX + gutterLeft + labelW / 2 + ((maxCols - 1) * colGap - blockWidth) / 2;
     ids.forEach((id, col) => {
       positions.set(id, {
-        x: startX + col * COL_GAP,
-        y: PAD_Y + PORT / 2 + row * ROW_GAP,
+        x: startX + col * colGap,
+        y: padY + anchorY + row * rowGap,
       });
     });
   }
@@ -120,9 +152,8 @@ export function layoutDepGraph<N extends GraphNode, E extends GraphEdge>(
     return [{ ...edge, x1: a.x, y1: a.y, x2: b.x, y2: b.y }];
   });
 
-  const width = PAD_X * 2 + LABEL_W + Math.max(0, maxCols - 1) * COL_GAP;
-  const height =
-    PAD_Y * 2 + PORT + LABEL_H + 4 + Math.max(0, maxRow) * ROW_GAP;
+  const width = padX * 2 + gutterLeft + labelW + Math.max(0, maxCols - 1) * colGap;
+  const height = padY * 2 + nodeHeight + Math.max(0, maxRow) * rowGap;
 
   return { nodes: placed, edges, width, height };
 }
