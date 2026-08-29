@@ -10,6 +10,7 @@ import {
   flowFiltersActive,
   flowItemNeedsAttention,
   inFlightTaskOf,
+  isReadyWorkFlowItem,
   type FlowBuckets,
   type FlowFilters,
 } from "./flow";
@@ -426,6 +427,35 @@ describe("flowItemNeedsAttention", () => {
       flowItemNeedsAttention({
         issue: story("implementing", "p"),
         state: { blocked: false, storyStatus: "in-progress" },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("isReadyWorkFlowItem", () => {
+  it("matches todo Epics and not-started Stories without attention", () => {
+    expect(
+      isReadyWorkFlowItem({
+        issue: epic("e", "p"),
+        state: { blocked: false, epicStatus: "todo" },
+      }),
+    ).toBe(true);
+    expect(
+      isReadyWorkFlowItem({
+        issue: story("s", "p"),
+        state: { blocked: false, storyStatus: "not-started" },
+      }),
+    ).toBe(true);
+    expect(
+      isReadyWorkFlowItem({
+        issue: { ...epic("flagged", "p"), needsAttention: true },
+        state: { blocked: false, epicStatus: "todo" },
+      }),
+    ).toBe(false);
+    expect(
+      isReadyWorkFlowItem({
+        issue: epic("flight", "p"),
+        state: { blocked: false, epicStatus: "in-progress" },
       }),
     ).toBe(false);
   });

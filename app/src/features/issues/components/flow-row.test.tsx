@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
@@ -38,14 +38,22 @@ function story(id: string): IssueRecord {
   };
 }
 
-function mountRow(issue: IssueRecord, state?: DerivedState): HTMLDivElement {
+function mountRow(
+  issue: IssueRecord,
+  state?: DerivedState,
+  actions?: ReactNode,
+): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
     root.render(
       <MemoryRouter>
-        <FlowRow item={{ issue, state }} issues={[issue]} />
+        <FlowRow
+          item={{ issue, state }}
+          issues={[issue]}
+          actions={actions}
+        />
       </MemoryRouter>,
     );
   });
@@ -57,56 +65,70 @@ afterEach(() => {
 });
 
 describe("FlowRow", () => {
-  it("shows a planning chip only on in-flight Ideas, not captured Ideas or Stories", () => {
+  it("puts the state disc on a rail node, not a planning chip", () => {
     const planningRow = mountRow(idea("grill"), {
       blocked: false,
       ideaStatus: "planning",
     });
-    expect(planningRow.textContent).toContain("planning");
+    expect(planningRow.querySelector('[data-testid="rail-port"]')).toBeTruthy();
+    expect(
+      planningRow.querySelector('[data-testid="progress-sparkline"]'),
+    ).toBeTruthy();
+    expect(planningRow.querySelector('[data-stage="planning"]')).toBeTruthy();
 
     const capturedRow = mountRow(idea("capture"), {
       blocked: false,
       ideaStatus: "captured",
     });
-    expect(capturedRow.textContent).not.toContain("planning");
-
-    const storyRow = mountRow(story("implementing"), {
-      blocked: false,
-      storyStatus: "in-progress",
-    });
-    expect(storyRow.textContent).not.toContain("planning");
+    expect(
+      capturedRow.querySelector('[data-testid="progress-sparkline"]'),
+    ).toBeNull();
   });
 
-  it("shows the planning chip without the at-rest attention warning icon on awaiting-direction Ideas", () => {
+  it("shows the demand icon on Needs attention Ideas", () => {
     const container = mountRow(idea("stalled"), {
       blocked: false,
       ideaStatus: "awaiting-direction",
     });
-    expect(container.textContent).toContain("planning");
     expect(
-      container.querySelector('[aria-label="needs attention"].h-3\\.5'),
+      container.querySelector('[aria-label="needs attention"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="progress-sparkline"]'),
     ).toBeNull();
   });
 
-  it("passes actions through the inline slot instead of the hover overlay", () => {
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    act(() => {
-      root.render(
-        <MemoryRouter>
-          <FlowRow
-            item={{
-              issue: idea("with-action"),
-              state: { blocked: false, ideaStatus: "captured" },
-            }}
-            issues={[idea("with-action")]}
-            actions={<button type="button">Start planning</button>}
-          />
-        </MemoryRouter>,
-      );
-    });
+  it("keeps title and actions on one line", () => {
+    const container = mountRow(
+      idea("with-action"),
+      { blocked: false, ideaStatus: "captured" },
+      <button type="button">Start planning</button>,
+    );
     expect(container.textContent).toContain("Start planning");
+    const actionButton = container.querySelector('button[type="button"]');
+    const actionWrapper = actionButton?.parentElement as HTMLElement;
+    expect(actionWrapper.className).toMatch(/flex-nowrap/);
+    expect(actionWrapper.className).not.toMatch(/flex-wrap/);
+    expect(actionWrapper.parentElement?.className).not.toMatch(/flex-col/);
     expect(container.querySelector(".pointer-events-none")).toBeNull();
+  });
+
+  it("shows a sparkline on moving Stories and not on Ready", () => {
+    const flying = mountRow(story("fly"), {
+      blocked: false,
+      storyStatus: "in-progress",
+    });
+    expect(flying.querySelector('[data-testid="progress-sparkline"]')).toBeTruthy();
+    expect(
+      flying.querySelector('[data-stage="in progress"]')?.getAttribute("title"),
+    ).toBe("in progress");
+
+    const ready = mountRow(story("ready"), {
+      blocked: false,
+      storyStatus: "not-started",
+    });
+    expect(
+      ready.querySelector('[data-testid="progress-sparkline"]'),
+    ).toBeNull();
   });
 });

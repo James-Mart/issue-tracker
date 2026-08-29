@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bot, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
 import { visibleIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
@@ -34,6 +34,8 @@ import {
   FlowBucketsSections,
   FlowPreviewedItems,
 } from "./flow-buckets-sections";
+import type { ImplementingLockRefusal } from "../lib/implementing-launch";
+import { ImplementingLockRefusalState } from "./implementing-launch-control";
 import { FlowRow } from "./flow-row";
 import { FlowRowActions } from "./flow-row-actions";
 
@@ -98,13 +100,6 @@ function CockpitHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
-        <Link
-          to="/agents"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[hsl(var(--rail-lit))] hover:text-foreground"
-        >
-          <Bot className="h-3.5 w-3.5" />
-          Agents
-        </Link>
       </div>
     </header>
   );
@@ -166,10 +161,18 @@ function CockpitProjectSubheader({
   );
 }
 
+type CockpitImplementingLockRefusal = {
+  projectId: string;
+  refusal: ImplementingLockRefusal;
+};
+
 export function CockpitPage() {
   const { data, isLoading, error, refetch, isFetching } = useIssuesQuery();
   const openProjectDialog = useIssueUiStore((s) => s.openProjectDialog);
   const [hiddenIds, setHiddenIds] = useState(() => readCockpitHiddenProjectIds());
+  const [implementingLockRefusal, setImplementingLockRefusal] = useState<
+    CockpitImplementingLockRefusal | undefined
+  >();
 
   const setHiddenIdsAndCookie = useCallback((ids: string[]) => {
     writeCockpitHiddenProjectIds(ids);
@@ -211,6 +214,7 @@ export function CockpitPage() {
               <FlowPreviewedItems
                 items={group.items}
                 previewLimit={previewLimit}
+                asRail
                 listClassName={compact ? "mt-1 gap-1" : "mt-1.5 gap-1"}
                 renderItem={(item) => (
                   <FlowRow
@@ -218,7 +222,15 @@ export function CockpitPage() {
                     issues={issues}
                     to={issuePath(group.projectId, item.issue.id)}
                     actions={
-                      <FlowRowActions item={item} projectId={group.projectId} />
+                      <FlowRowActions
+                        item={item}
+                        onImplementingLockRefusal={(refusal) =>
+                          setImplementingLockRefusal({
+                            projectId: group.projectId,
+                            refusal,
+                          })
+                        }
+                      />
                     }
                   />
                 )}
@@ -276,6 +288,11 @@ export function CockpitPage() {
                 Show all projects
               </Button>
             }
+          />
+        ) : implementingLockRefusal ? (
+          <ImplementingLockRefusalState
+            projectId={implementingLockRefusal.projectId}
+            refusal={implementingLockRefusal.refusal}
           />
         ) : (
           <FlowBucketsSections

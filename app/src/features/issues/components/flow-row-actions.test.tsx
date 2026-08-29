@@ -3,8 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api/errors";
 import type { DerivedState, IssueRecord } from "@server/schemas";
-import type { PrFacts } from "@server/services/delivery";
 import type { FlowItem } from "../lib/flow";
 import { skillPath } from "@/lib/plugin-paths";
 import { FlowRowActions } from "./flow-row-actions";
@@ -13,6 +13,11 @@ const mutate = vi.fn();
 const modelsState = vi.hoisted(() => ({
   models: [{ id: "composer-2.5", displayName: "Composer 2.5" }],
   isLoading: false,
+}));
+const liveRunConfirm = vi.hoisted(() => ({
+  midRun: false,
+  pending: null as null | (() => void | Promise<void>),
+  confirming: false,
 }));
 
 vi.mock("@/features/agents/api/queries", () => ({
@@ -36,26 +41,33 @@ vi.mock("../api/mutations", () => ({
   }),
 }));
 
-const prQueryState = vi.hoisted(() => ({
-  data: undefined as { prs: Record<string, PrFacts> } | undefined,
-  error: null as Error | null,
-}));
-
-vi.mock("../api/queries", () => ({
-  useProjectPullRequestsQuery: () => ({
-    data: prQueryState.data,
-    error: prQueryState.error,
-  }),
-}));
-
 vi.mock("../hooks/use-confirm-channel-live-run", () => ({
   useConfirmChannelLiveRun: () => ({
     confirmIfLiveRun: (action: () => void) => {
-      action();
+      if (!liveRunConfirm.midRun) {
+        action();
+        return;
+      }
+      liveRunConfirm.pending = action;
     },
-    awaitingConfirm: false,
-    confirming: false,
-    dialog: null,
+    awaitingConfirm: liveRunConfirm.pending !== null,
+    confirming: liveRunConfirm.confirming,
+    dialog:
+      liveRunConfirm.pending !== null ? (
+        <div data-testid="channel-kill-live-run-dialog">
+          <button
+            type="button"
+            data-testid="channel-kill-live-run-confirm"
+            onClick={() => {
+              const action = liveRunConfirm.pending;
+              liveRunConfirm.pending = null;
+              void action?.();
+            }}
+          >
+            Kill and archive
+          </button>
+        </div>
+      ) : null,
   }),
 }));
 
@@ -93,6 +105,22 @@ function story(id: string, prUrl?: string): IssueRecord {
   };
 }
 
+function epic(id: string): IssueRecord {
+  return {
+    id,
+    kind: "epic",
+    title: id,
+    partOf: "project-a",
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+    needsAttention: false,
+    attentionReason: null,
+    blockedBy: [],
+    archived: false,
+  };
+}
+
 function flowItem(
   issue: IssueRecord,
   state?: DerivedState,
@@ -102,7 +130,10 @@ function flowItem(
 
 function mountActions(
   item: FlowItem,
-  projectId = "project-a",
+  onImplementingLockRefusal?: (refusal: {
+    holderIssueId: string;
+    holderIssueTitle: string;
+  }) => void,
 ): {
   container: HTMLDivElement;
   root: Root;
@@ -113,7 +144,10 @@ function mountActions(
   act(() => {
     root.render(
       <MemoryRouter initialEntries={["/"]}>
-        <FlowRowActions item={item} projectId={projectId} />
+        <FlowRowActions
+          item={item}
+          onImplementingLockRefusal={onImplementingLockRefusal}
+        />
       </MemoryRouter>,
     );
   });
@@ -128,8 +162,9 @@ afterEach(() => {
   document.body.innerHTML = "";
   mutate.mockReset();
   modelsState.isLoading = false;
-  prQueryState.data = undefined;
-  prQueryState.error = null;
+  liveRunConfirm.midRun = false;
+  liveRunConfirm.pending = null;
+  liveRunConfirm.confirming = false;
 });
 
 describe("FlowRowActions start planning", () => {
@@ -195,74 +230,185 @@ describe("FlowRowActions start planning", () => {
   });
 });
 
+describe("FlowRowActions start work", () => {
+  it("shows start work only on ready Epic and not-started Story rows", () => {
+    const readyEpic = mountActions(
+      flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" }),
+      vi.fn(),
+    );
+    const startEpic = readyEpic.container.querySelector(
+      '[data-testid="flow-row-start-work"]',
+    );
+    expect(startEpic).toBeTruthy();
+    expect(startEpic?.getAttribute("aria-label")).toBe("Start work");
+    expect(startEpic?.getAttribute("title")).toBe("Start work");
+
+    const readyStory = mountActions(
+      flowItem(story("ship-story"), {
+        blocked: false,
+        storyStatus: "not-started",
+      }),
+      vi.fn(),
+    );
+    expect(
+      readyStory.container.querySelector('[data-testid="flow-row-start-work"]'),
+    ).toBeTruthy();
+
+    const inFlight = mountActions(
+      flowItem(epic("flight"), { blocked: false, epicStatus: "in-progress" }),
+      vi.fn(),
+    );
+    expect(
+      inFlight.container.querySelector('[data-testid="flow-row-start-work"]'),
+    ).toBeNull();
+
+    const attention = mountActions(
+      flowItem({ ...epic("flagged"), needsAttention: true }, {
+        blocked: false,
+        epicStatus: "todo",
+      }),
+      vi.fn(),
+    );
+    expect(
+      attention.container.querySelector('[data-testid="flow-row-start-work"]'),
+    ).toBeNull();
+  });
+
+  it("posts to the implementing channel sessions endpoint for that work root", () => {
+    const { container } = mountActions(
+      flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" }),
+      vi.fn(),
+    );
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="flow-row-start-work"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(mutate).toHaveBeenCalledWith(
+      "ship-epic",
+      "implementing",
+      {
+        title: "Implement ship-epic",
+        model: "composer-2.5",
+        message:
+          `Work ship-epic in the issue tracker using the issue-tracker-work skill. Read ${skillPath("issue-tracker-work")} and follow it.`,
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+
+  it("asks before starting when a session is mid-run", () => {
+    liveRunConfirm.midRun = true;
+    const item = flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" });
+    const renderActions = () => (
+      <MemoryRouter initialEntries={["/"]}>
+        <FlowRowActions item={item} onImplementingLockRefusal={vi.fn()} />
+      </MemoryRouter>
+    );
+    const { container, root } = mountActions(item, vi.fn());
+    act(() => {
+      root.render(renderActions());
+    });
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="flow-row-start-work"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    act(() => {
+      root.render(renderActions());
+    });
+
+    expect(mutate).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('[data-testid="channel-kill-live-run-dialog"]'),
+    ).toBeTruthy();
+  });
+
+  it("surfaces a project lock refusal via onImplementingLockRefusal", () => {
+    mutate.mockImplementation((_issueId, _channel, _body, options) => {
+      options?.onError?.(
+        new ApiError("conflict", 409, {
+          error: "locked",
+          holderIssueId: "other-epic",
+          holderIssueTitle: "Other epic",
+        }),
+      );
+    });
+    const onLockRefusal = vi.fn();
+    const { container } = mountActions(
+      flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" }),
+      onLockRefusal,
+    );
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="flow-row-start-work"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(onLockRefusal).toHaveBeenCalledWith({
+      holderIssueId: "other-epic",
+      holderIssueTitle: "Other epic",
+    });
+  });
+
+  it("renders nothing while coordinator models are loading", () => {
+    modelsState.isLoading = true;
+    const { container } = mountActions(
+      flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" }),
+      vi.fn(),
+    );
+    expect(buttonCount(container)).toBe(0);
+  });
+});
+
 describe("FlowRowActions open PR", () => {
-  it("shows labeled Open PR only when the Story has a prUrl", () => {
+  it("shows icon-only Open PR only when the Story has a prUrl", () => {
     const withPr = mountActions(
       flowItem(story("ship", "https://github.com/org/repo/pull/1"), {
         blocked: false,
         storyStatus: "in-progress",
       }),
     );
-    const link = withPr.container.querySelector('a[href="https://github.com/org/repo/pull/1"]');
+    const link = withPr.container.querySelector(
+      'a[href="https://github.com/org/repo/pull/1"]',
+    );
     expect(link).toBeTruthy();
-    expect(link?.textContent).toContain("Open PR");
+    expect(link?.getAttribute("aria-label")).toBe("Open PR");
+    expect(link?.getAttribute("title")).toBe("Open PR");
+    expect(link?.textContent?.trim()).toBe("");
+    expect(withPr.container.querySelector('[data-testid="pr-chip"]')).toBeNull();
 
     const withoutPr = mountActions(
       flowItem(story("no-pr"), { blocked: false, storyStatus: "in-progress" }),
     );
     expect(withoutPr.container.querySelector('a[href^="http"]')).toBeNull();
   });
-
-  it("shows the PR chip when projectId is supplied and PR facts are loaded", () => {
-    prQueryState.data = {
-      prs: {
-        ship: {
-          number: 1,
-          url: "https://github.com/org/repo/pull/1",
-          state: "open",
-          isDraft: false,
-          mergeable: "mergeable",
-          mergeStateStatus: "CLEAN",
-          reviewDecision: "approved",
-          checks: { state: "success", failing: 0, pending: 0, total: 1 },
-          commentCount: 0,
-          comments: [],
-          headRefOid: "abc",
-          baseRefName: "main",
-          updatedAt: "2026-08-01T00:00:00Z",
-        },
-      },
-    };
-
-    const { container } = mountActions(
-      flowItem(story("ship", "https://github.com/org/repo/pull/1"), {
-        blocked: false,
-        storyStatus: "in-progress",
-      }),
-    );
-
-    const chip = container.querySelector('[data-testid="pr-chip"]');
-    expect(chip).toBeTruthy();
-    expect(chip?.textContent).toContain("Ready");
-    expect(chip?.textContent).toContain("Success");
-    expect(chip?.textContent).toContain("Approved");
-  });
 });
 
 describe("FlowRowActions quiet buckets", () => {
-  it("renders no controls for needs-attention, ready, or recently merged rows", () => {
+  it("renders no controls for needs-attention, in-flight, or recently merged rows", () => {
     for (const item of [
-      flowItem(story("attention"), {
+      flowItem({ ...story("attention"), needsAttention: true }, {
         blocked: false,
-        storyStatus: "in-progress",
+        storyStatus: "not-started",
       }),
-      flowItem(story("ready"), { blocked: false, storyStatus: "ready" }),
+      flowItem(story("flight"), { blocked: false, storyStatus: "in-progress" }),
       flowItem({ ...story("merged"), merged: true }, {
         blocked: false,
         storyStatus: "merged",
       }),
     ]) {
-      const { container } = mountActions(item);
+      const { container } = mountActions(item, vi.fn());
       expect(buttonCount(container)).toBe(0);
     }
   });

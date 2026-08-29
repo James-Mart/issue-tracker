@@ -29,6 +29,22 @@ export function isAwaitingDirectionIdeaFlowItem(
   return item.issue.kind === "idea" && item.state?.ideaStatus === "awaiting-direction";
 }
 
+/** Ready-bucket Epic or project-level Story eligible for cockpit start-work. */
+export function isReadyWorkFlowItem(
+  item: FlowItem,
+): item is FlowItem & {
+  issue: Extract<IssueRecord, { kind: "epic" | "story" }>;
+} {
+  if (flowItemNeedsAttention(item) || item.state?.blocked) return false;
+  if (item.issue.kind === "epic") {
+    return item.state?.epicStatus === "todo";
+  }
+  if (item.issue.kind === "story") {
+    return item.state?.storyStatus === "not-started";
+  }
+  return false;
+}
+
 export type DepGraphNode = {
   id: string;
   label: string;

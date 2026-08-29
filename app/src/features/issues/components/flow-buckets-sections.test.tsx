@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import type { FlowBuckets, FlowItem } from "../lib/flow";
 import { projectLensPath } from "../lib/links";
+import { RailNode } from "@/components/ui/rail";
 import {
   AWAITING_PLANNING_PREVIEW_LIMIT,
   FlowBucketsSections,
@@ -365,7 +366,7 @@ describe("FlowBucketsSections", () => {
     expect(section(container, "inFlight")?.querySelector("a")).toBeTruthy();
   });
 
-  it("renders Ready before Awaiting planning and In flight", () => {
+  it("renders In flight before Ready and Awaiting planning", () => {
     const buckets = emptyBuckets({
       awaitingPlanning: [
         row(idea("captured"), { blocked: false, ideaStatus: "captured" }),
@@ -384,13 +385,13 @@ describe("FlowBucketsSections", () => {
       node.textContent?.replace(/\d+/g, "").trim(),
     );
     expect(headings.indexOf("Needs attention")).toBeLessThan(
+      headings.indexOf("In flight"),
+    );
+    expect(headings.indexOf("In flight")).toBeLessThan(
       headings.indexOf("Ready"),
     );
     expect(headings.indexOf("Ready")).toBeLessThan(
       headings.indexOf("Awaiting planning"),
-    );
-    expect(headings.indexOf("Awaiting planning")).toBeLessThan(
-      headings.indexOf("In flight"),
     );
 
     const awaiting = section(container, "awaitingPlanning");
@@ -481,6 +482,35 @@ describe("FlowPreviewedItems", () => {
     expect(a?.textContent).toContain("a-5");
     expect(b?.querySelectorAll("a")).toHaveLength(2);
 
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("renders cockpit rows on a bucket rail", () => {
+    const items = [
+      row(idea("a-0"), { blocked: false, ideaStatus: "captured" }),
+      row(idea("a-1"), { blocked: false, ideaStatus: "planning" }),
+    ];
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <FlowPreviewedItems
+          items={items}
+          asRail
+          renderItem={(item) => (
+            <RailNode state="ready" edge="solid">
+              {item.issue.title}
+            </RailNode>
+          )}
+        />,
+      );
+    });
+    expect(container.querySelector('[data-testid="flow-bucket-rail"]')).toBeTruthy();
+    expect(container.querySelector("ul")).toBeNull();
+    expect(container.querySelectorAll('[role="listitem"]')).toHaveLength(2);
     act(() => {
       root.unmount();
     });

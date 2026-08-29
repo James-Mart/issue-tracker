@@ -1,3 +1,4 @@
+import { Play } from "lucide-react";
 import type { ConversationChannel } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -67,7 +68,7 @@ function ImplementingLaunchButton({
 }: {
   issue: ImplementingWorkRoot;
   channel: ConversationChannel;
-  variant: "primary" | "secondary";
+  variant: "primary" | "secondary" | "icon";
   onStarted: (session: ImplementingSessionStarted) => void;
   onLockRefusal: (refusal: ImplementingLockRefusal) => void;
 }) {
@@ -118,6 +119,27 @@ function ImplementingLaunchButton({
   const label =
     variant === "secondary" ? "New run" : copy.actionLabel;
 
+  if (variant === "icon") {
+    if (modelsLoading || !coordinatorModel) return null;
+
+    return (
+      <>
+        <Button
+          type="button"
+          variant="default"
+          size="icon-sm"
+          title="Start work"
+          aria-label="Start work"
+          data-testid="flow-row-start-work"
+          onClick={start}
+        >
+          <Play className="h-3.5 w-3.5" />
+        </Button>
+        {dialog}
+      </>
+    );
+  }
+
   return (
     <>
       <Button
@@ -136,6 +158,25 @@ function ImplementingLaunchButton({
       </Button>
       {dialog}
     </>
+  );
+}
+
+/** Icon-only implementing launch for Flow row steering. */
+export function ImplementingFlowRowLaunch({
+  issue,
+  onLockRefusal,
+}: {
+  issue: ImplementingWorkRoot;
+  onLockRefusal: (refusal: ImplementingLockRefusal) => void;
+}) {
+  return (
+    <ImplementingLaunchButton
+      issue={issue}
+      channel="implementing"
+      variant="icon"
+      onStarted={() => {}}
+      onLockRefusal={onLockRefusal}
+    />
   );
 }
 
