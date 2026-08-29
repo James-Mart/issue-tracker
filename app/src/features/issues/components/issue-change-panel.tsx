@@ -46,7 +46,10 @@ function apiErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
-export type IssueChangePanelFault = "workspace-unset" | "commit-unreachable";
+export type IssueChangePanelFault =
+  | "workspace-unset"
+  | "commit-unreachable"
+  | "commits-not-contiguous";
 
 export function classifyIssueChangePanelFault(
   error: unknown,
@@ -54,6 +57,7 @@ export function classifyIssueChangePanelFault(
   if (!(error instanceof ApiError)) return undefined;
   const code = apiErrorCode(error);
   if (code === "commit-unreachable") return "commit-unreachable";
+  if (code === "commits-not-contiguous") return "commits-not-contiguous";
   if (code === "validation" && error.message === "Project workspace is not set") {
     return "workspace-unset";
   }
@@ -107,6 +111,16 @@ function faultStateCopy(
           <ShellFaultDetail
             message={message}
             hint="Fetch the commit into the project workspace or update the recorded sha on this task."
+          />
+        ),
+      };
+    case "commits-not-contiguous":
+      return {
+        title: "Commits are not contiguous in history",
+        detail: (
+          <ShellFaultDetail
+            message={message}
+            hint="Child tasks recorded commits that are not adjacent in git history, so no combined diff can be shown for this issue."
           />
         ),
       };

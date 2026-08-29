@@ -102,6 +102,16 @@ describe("classifyIssueChangePanelFault", () => {
       ),
     ).toBeUndefined();
   });
+
+  it("maps commits-not-contiguous API failures", () => {
+    expect(
+      classifyIssueChangePanelFault(
+        new ApiError("commits are not contiguous in history between a and b", 400, {
+          code: "commits-not-contiguous",
+        }),
+      ),
+    ).toBe("commits-not-contiguous");
+  });
 });
 
 describe("IssueChangePanel", () => {
@@ -153,6 +163,22 @@ describe("IssueChangePanel", () => {
     expect(container.querySelector('[data-testid="issue-change-fault-state"]')).toBeNull();
   });
 
+  it("renders distinct empty content for no-descendant-commits", () => {
+    changeQueryState.data = { state: "empty", reason: "no-descendant-commits" };
+
+    const container = mountPanel();
+    const empty = container.querySelector('[data-testid="issue-change-empty-state"]');
+
+    expect(empty?.getAttribute("data-empty-reason")).toBe("no-descendant-commits");
+    expect(container.textContent).toContain(
+      "No descendant tasks have recorded commits yet.",
+    );
+    expect(container.textContent).toContain(
+      "Rollup diffs appear when child tasks finish with commits.",
+    );
+    expect(container.querySelector('[data-testid="issue-change-fault-state"]')).toBeNull();
+  });
+
   it("renders workspace-unset as a fault with project settings action", () => {
     changeQueryState.error = new ApiError("Project workspace is not set", 400, {
       code: "validation",
@@ -197,6 +223,28 @@ describe("IssueChangePanel", () => {
       reloadButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(changeQueryState.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders commits-not-contiguous as a fault explaining why no rollup diff", () => {
+    changeQueryState.error = new ApiError(
+      "commits are not contiguous in history between abc and def",
+      400,
+      { code: "commits-not-contiguous" },
+    );
+
+    const container = mountPanel();
+    const fault = container.querySelector('[data-testid="issue-change-fault-state"]');
+
+    expect(fault?.getAttribute("data-fault")).toBe("commits-not-contiguous");
+    expect(container.textContent).toContain("Diff unavailable");
+    expect(container.textContent).toContain("Commits are not contiguous in history");
+    expect(container.textContent).toContain(
+      "Child tasks recorded commits that are not adjacent in git history, so no combined diff can be shown for this issue.",
+    );
+    expect(container.textContent).toContain(
+      "commits are not contiguous in history between abc and def",
+    );
+    expect(container.querySelector('[data-testid="issue-change-empty-state"]')).toBeNull();
   });
 
   it("does not render empty-state chrome for faults", () => {
