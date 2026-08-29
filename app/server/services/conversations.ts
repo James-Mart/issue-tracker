@@ -42,8 +42,9 @@ import { uniqueSlug } from "./slug.js";
 
 let writeChain: Promise<unknown> = Promise.resolve();
 
-/** Serialize conversation writes on a single in-process promise chain. */
-function serialize<T>(fn: () => T): Promise<T> {
+// Exported so sibling writers (e.g. conversation-attachments) share this
+// in-process chain and cannot race deleteConversation or other mutations.
+export function serialize<T>(fn: () => T): Promise<T> {
   const run = writeChain.then(fn, fn);
   writeChain = run.then(
     () => undefined,
