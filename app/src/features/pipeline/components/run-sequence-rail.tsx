@@ -79,7 +79,7 @@ function RailDuration({
       data-beat-index={beatIndex}
       data-row={rowKind}
       className={cn(
-        "shrink-0 whitespace-nowrap text-right font-mono text-[11px] tabular-nums leading-none",
+        "shrink-0 overflow-hidden whitespace-nowrap text-right font-mono text-[11px] tabular-nums leading-none",
         isFailed
           ? "text-[hsl(var(--blocked))]"
           : isLive
@@ -286,7 +286,6 @@ export function RunSequenceRail({
             row.kind === "turn"
               ? row.turn.durationMs
               : displayedDurationMs(row.beat, isLive),
-            row.kind !== "turn" && isLive,
           );
 
           if (row.kind === "collapsed") {

@@ -164,12 +164,7 @@ export function displayedDurationMs(
 
 export function formatSequenceDuration(
   durationMs: number | undefined,
-  isFrontier: boolean,
 ): string | undefined {
-  if (durationMs !== undefined) {
-    const label = formatRunDurationMs(durationMs);
-    return isFrontier ? `${label}…` : label;
-  }
-  if (isFrontier) return "…";
-  return undefined;
+  if (durationMs === undefined) return undefined;
+  return formatRunDurationMs(durationMs);
 }

@@ -125,6 +125,52 @@ function beatEl(container: ParentNode, from: string, to: string): HTMLElement {
   return el;
 }
 
+function durationText(container: ParentNode, beatIndex: number): string | null {
+  return (
+    container.querySelector(
+      `[data-testid="sequence-duration"][data-beat-index="${beatIndex}"]`,
+    )?.textContent ?? null
+  );
+}
+
+function sectionHeaders(container: ParentNode) {
+  return Array.from(
+    container.querySelectorAll('[data-testid="sequence-section"]'),
+  ).map((el) => ({
+    kind: el.getAttribute("data-kind"),
+    title: el.querySelector('[data-testid="sequence-section-title"]')
+      ?.textContent,
+    expanded: el.getAttribute("aria-expanded"),
+  }));
+}
+
+const RECONSTRUCTED_CLOSE = beat({
+  from: "coordinator",
+  to: "research",
+  label: "spawn research",
+  startedAt: AT,
+  durationMs: 42_000,
+  kind: "spawn",
+});
+
+const LIVE_FRONTIER = beat({
+  from: "coordinator",
+  to: "research",
+  label: "spawn research",
+  startedAt: "2026-08-28T12:03:00.000Z",
+  kind: "spawn",
+  liveElapsedMs: 2 * 60_000 + 14_000,
+});
+
+const PLANNING_SESSION_SECTION: RunSequenceSection = {
+  issueId: "diff-views",
+  kind: "idea",
+  title: "Diff views",
+  beatStart: 0,
+  beatEnd: 2,
+  children: [],
+};
+
 beforeEach(() => {
   (
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -491,17 +537,6 @@ describe("RunSequenceDiagram issue sections", () => {
       ],
     },
   ];
-
-  function sectionHeaders(container: ParentNode) {
-    return Array.from(
-      container.querySelectorAll('[data-testid="sequence-section"]'),
-    ).map((el) => ({
-      kind: el.getAttribute("data-kind"),
-      title: el.querySelector('[data-testid="sequence-section-title"]')
-        ?.textContent,
-      expanded: el.getAttribute("aria-expanded"),
-    }));
-  }
 
   it("renders sections expanded with their headers", () => {
     const { container } = mountDiagram(
@@ -953,5 +988,85 @@ describe("RunSequenceDiagram phone rail", () => {
       '[data-testid="sequence-termination-cap"]',
     );
     expect(cap?.getAttribute("data-lifeline")).toBe("research");
+  });
+});
+
+describe("RunSequenceDiagram chosen direction", () => {
+  const layouts = ["desktop", "phone"] as const;
+
+  for (const layout of layouts) {
+    it(`shows a gutter duration and no no-return suffix on a reconstructed close (${layout})`, () => {
+      const { container } = mountDiagram(
+        sequence({ beats: [RECONSTRUCTED_CLOSE, RETURN] }),
+        layout,
+      );
+      const row = beatEl(container, "coordinator", "research");
+      expect(
+        row.querySelector('[data-testid="sequence-beat-label"]')?.textContent,
+      ).toBe("spawn research");
+      expect(row.textContent).not.toMatch(/no return/);
+      expect(durationText(container, 0)).toBe("42s");
+      expect(durationText(container, 1)).toBe("1m 32s");
+    });
+
+    it(`shows live elapsed on the frontier without a gutter ellipsis (${layout})`, () => {
+      const { container } = mountDiagram(
+        sequence({
+          condition: "in-flight",
+          beats: [SPAWN, LIVE_FRONTIER],
+        }),
+        layout,
+      );
+      const row = beatEl(container, "coordinator", "research");
+      const liveRows = Array.from(
+        container.querySelectorAll(
+          '[data-testid="sequence-beat"][data-from="coordinator"][data-to="research"]',
+        ),
+      );
+      const frontier = liveRows[liveRows.length - 1]!;
+      expect(
+        frontier.querySelector('[data-testid="sequence-beat-label"]')
+          ?.textContent,
+      ).toBe("spawn research");
+      expect(frontier.textContent).not.toMatch(/no return/);
+      expect(durationText(container, 1)).toBe("2m 14s");
+      expect(durationText(container, 1)).not.toMatch(/…/);
+      expect(frontier.querySelector('[class*="animate-spin"]')).not.toBeNull();
+      expect(row.querySelector('[class*="animate-spin"]')).toBeNull();
+    });
+
+    it(`renders one session section wrapper and no extra headers (${layout})`, () => {
+      const { container } = mountDiagram(
+        sequence({
+          beats: [HUMAN, SPAWN, RETURN],
+          sections: [PLANNING_SESSION_SECTION],
+        }),
+        layout,
+      );
+      expect(sectionHeaders(container)).toEqual([
+        { kind: "idea", title: "Diff views", expanded: "true" },
+      ]);
+      expect(
+        container.querySelectorAll('[data-testid="sequence-section"]'),
+      ).toHaveLength(1);
+      expect(
+        Array.from(
+          container.querySelectorAll('[data-testid="sequence-beat"]'),
+        ).map((el) => el.getAttribute("data-beat-index")),
+      ).toEqual(["0", "1", "2"]);
+    });
+  }
+
+  it("hugs phone sequence rows so the card does not clip a beat", () => {
+    const { container } = mountDiagram(
+      sequence({ beats: [RECONSTRUCTED_CLOSE, RETURN] }),
+      "phone",
+    );
+    const frame = container.querySelector(
+      '[data-testid="run-sequence-frame"]',
+    );
+    expect(frame?.className).toMatch(/overflow-visible/);
+    expect(frame?.className).not.toMatch(/min-h-\[16rem\]/);
+    expect(frame?.className).not.toMatch(/max-h-/);
   });
 });

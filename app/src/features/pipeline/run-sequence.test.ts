@@ -149,11 +149,10 @@ describe("frontierBeatIndex", () => {
 });
 
 describe("formatSequenceDuration", () => {
-  it("keeps a frontier duration visually open", () => {
-    expect(formatSequenceDuration(45_000, false)).toBe("45s");
-    expect(formatSequenceDuration(45_000, true)).toBe("45s…");
-    expect(formatSequenceDuration(undefined, true)).toBe("…");
-    expect(formatSequenceDuration(undefined, false)).toBeUndefined();
+  it("formats a duration without a live suffix", () => {
+    expect(formatSequenceDuration(45_000)).toBe("45s");
+    expect(formatSequenceDuration(2 * 60_000 + 14_000)).toBe("2m 14s");
+    expect(formatSequenceDuration(undefined)).toBeUndefined();
   });
 });
 
