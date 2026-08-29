@@ -199,7 +199,7 @@ function DurationGutter({
       data-beat-index={beatIndex}
       data-row={rowKind}
       className={cn(
-        "absolute z-10 whitespace-nowrap font-mono text-[11px] tabular-nums leading-none",
+        "absolute z-10 overflow-hidden whitespace-nowrap font-mono text-[11px] tabular-nums leading-none",
         isFailed
           ? "text-[hsl(var(--blocked))]"
           : isLive
@@ -330,12 +330,19 @@ export function RunSequenceDiagram({
   };
 
   return (
-    <div className={cn("flex min-w-0 flex-1 flex-col", className)}>
+    <div
+      className={cn(
+        "flex min-w-0 flex-col",
+        resolvedLayout === "phone" ? "flex-none" : "flex-1",
+        className,
+      )}
+    >
       <div
         className={cn(
-          "relative min-h-[16rem] min-w-0 flex-1 overflow-auto rounded-lg border border-border bg-[hsl(var(--panel)/0.35)] shell:min-h-[calc(100svh-14rem)]",
-          resolvedLayout === "phone" &&
-            "max-h-[min(32rem,calc(100svh-16rem))]",
+          "relative min-w-0 rounded-lg border border-border bg-[hsl(var(--panel)/0.35)]",
+          resolvedLayout === "phone"
+            ? "overflow-visible"
+            : "min-h-[16rem] flex-1 overflow-auto shell:min-h-[calc(100svh-14rem)]",
         )}
         data-testid="run-sequence-frame"
       >
@@ -625,7 +632,6 @@ export function RunSequenceDiagram({
               row.kind === "turn"
                 ? row.turn.durationMs
                 : displayedDurationMs(row.beat, isLive),
-              row.kind !== "turn" && isLive,
             );
             if (!duration) return null;
             return (

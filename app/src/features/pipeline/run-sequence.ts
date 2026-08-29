@@ -27,7 +27,7 @@ export type SequenceBeat = {
   turns?: SequenceBeatTurn[];
   /** Parent tool call that spawned this beat — used to close it from a live frame. */
   parentCallId?: string;
-  /** Predates lifecycle recording — end cannot be judged. */
+  /** No persisted end and no terminal transcript signal — end cannot be judged. */
   indeterminate?: true;
   /** Stream seq when this beat was appended live; fetched beats omit it. */
   seq?: number;
@@ -164,12 +164,7 @@ export function displayedDurationMs(
 
 export function formatSequenceDuration(
   durationMs: number | undefined,
-  isFrontier: boolean,
 ): string | undefined {
-  if (durationMs !== undefined) {
-    const label = formatRunDurationMs(durationMs);
-    return isFrontier ? `${label}…` : label;
-  }
-  if (isFrontier) return "…";
-  return undefined;
+  if (durationMs === undefined) return undefined;
+  return formatRunDurationMs(durationMs);
 }
