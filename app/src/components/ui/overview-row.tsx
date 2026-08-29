@@ -17,6 +17,8 @@ export interface OverviewRowProps extends React.HTMLAttributes<HTMLDivElement> {
   stateIcon?: React.ReactNode;
   /** At-rest status chips (e.g. planning) — sit after the title, before the disc. */
   chips?: React.ReactNode;
+  /** Word-sized lifecycle rail — sit after title/chips, before icon signals. */
+  sparkline?: React.ReactNode;
   /** Tabular quantity (e.g. `3/4`). */
   count?: React.ReactNode;
   /** Inline action controls — sit after count in the row flex line. */
@@ -44,15 +46,17 @@ const overlayReveal =
   "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100";
 
 /**
- * Dense overview row shell: avatar · title · chips · state icon · icon signals · count.
- * At rest, attention/blocked are hue-coded icons only; optional chips are for
- * phase (e.g. planning), not those signals.
+ * Dense overview row shell: avatar · title · chips · sparkline · state icon ·
+ * icon signals · count · actions. Title cluster and actions stay one horizontal
+ * line; actions do not wrap. At rest, attention/blocked are hue-coded icons
+ * only; optional chips are for phase (e.g. planning), not those signals.
  * Optional overlay fades in on hover/focus; touch uses a separate flat menu.
  */
 export function OverviewRow({
   avatar,
   stateIcon,
   chips,
+  sparkline,
   count,
   actions,
   attention = false,
@@ -90,10 +94,7 @@ export function OverviewRow({
 
       <div
         className={cn(
-          "relative z-[1] flex min-w-0 flex-1 gap-3.5",
-          actions != null
-            ? "flex-col sm:flex-row sm:items-center"
-            : "flex-row items-center",
+          "relative z-[1] flex min-w-0 flex-1 flex-nowrap items-center gap-3.5",
           drillInTo != null && "pointer-events-none",
         )}
       >
@@ -106,6 +107,9 @@ export function OverviewRow({
           </div>
           {chips != null ? (
             <span className="inline-flex shrink-0">{chips}</span>
+          ) : null}
+          {sparkline != null ? (
+            <span className="inline-flex shrink-0">{sparkline}</span>
           ) : null}
           {stateIcon != null ? (
             <span className="inline-flex shrink-0">{stateIcon}</span>
@@ -131,7 +135,7 @@ export function OverviewRow({
         {actions != null ? (
           <span
             className={cn(
-              "inline-flex flex-wrap items-center justify-end gap-2 sm:shrink-0",
+              "inline-flex shrink-0 flex-nowrap items-center justify-end gap-2",
               drillInTo != null && "pointer-events-auto",
             )}
           >

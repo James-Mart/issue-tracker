@@ -204,15 +204,14 @@ export function CockpitPage() {
               <FlowPreviewedItems
                 items={group.items}
                 previewLimit={previewLimit}
+                asRail
                 listClassName={compact ? "mt-1 gap-1" : "mt-1.5 gap-1"}
                 renderItem={(item) => (
                   <FlowRow
                     item={item}
                     issues={issues}
                     to={issuePath(group.projectId, item.issue.id)}
-                    actions={
-                      <FlowRowActions item={item} projectId={group.projectId} />
-                    }
+                    actions={<FlowRowActions item={item} />}
                   />
                 )}
               />

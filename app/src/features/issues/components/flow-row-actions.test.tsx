@@ -4,7 +4,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
-import type { PrFacts } from "@server/services/delivery";
 import type { FlowItem } from "../lib/flow";
 import { skillPath } from "@/lib/plugin-paths";
 import { FlowRowActions } from "./flow-row-actions";
@@ -33,18 +32,6 @@ vi.mock("../api/mutations", () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn(),
     isPending: false,
-  }),
-}));
-
-const prQueryState = vi.hoisted(() => ({
-  data: undefined as { prs: Record<string, PrFacts> } | undefined,
-  error: null as Error | null,
-}));
-
-vi.mock("../api/queries", () => ({
-  useProjectPullRequestsQuery: () => ({
-    data: prQueryState.data,
-    error: prQueryState.error,
   }),
 }));
 
@@ -100,10 +87,7 @@ function flowItem(
   return { issue, state };
 }
 
-function mountActions(
-  item: FlowItem,
-  projectId = "project-a",
-): {
+function mountActions(item: FlowItem): {
   container: HTMLDivElement;
   root: Root;
 } {
@@ -113,7 +97,7 @@ function mountActions(
   act(() => {
     root.render(
       <MemoryRouter initialEntries={["/"]}>
-        <FlowRowActions item={item} projectId={projectId} />
+        <FlowRowActions item={item} />
       </MemoryRouter>,
     );
   });
@@ -128,8 +112,6 @@ afterEach(() => {
   document.body.innerHTML = "";
   mutate.mockReset();
   modelsState.isLoading = false;
-  prQueryState.data = undefined;
-  prQueryState.error = null;
 });
 
 describe("FlowRowActions start planning", () => {
@@ -196,56 +178,26 @@ describe("FlowRowActions start planning", () => {
 });
 
 describe("FlowRowActions open PR", () => {
-  it("shows labeled Open PR only when the Story has a prUrl", () => {
+  it("shows icon-only Open PR only when the Story has a prUrl", () => {
     const withPr = mountActions(
       flowItem(story("ship", "https://github.com/org/repo/pull/1"), {
         blocked: false,
         storyStatus: "in-progress",
       }),
     );
-    const link = withPr.container.querySelector('a[href="https://github.com/org/repo/pull/1"]');
+    const link = withPr.container.querySelector(
+      'a[href="https://github.com/org/repo/pull/1"]',
+    );
     expect(link).toBeTruthy();
-    expect(link?.textContent).toContain("Open PR");
+    expect(link?.getAttribute("aria-label")).toBe("Open PR");
+    expect(link?.getAttribute("title")).toBe("Open PR");
+    expect(link?.textContent?.trim()).toBe("");
+    expect(withPr.container.querySelector('[data-testid="pr-chip"]')).toBeNull();
 
     const withoutPr = mountActions(
       flowItem(story("no-pr"), { blocked: false, storyStatus: "in-progress" }),
     );
     expect(withoutPr.container.querySelector('a[href^="http"]')).toBeNull();
-  });
-
-  it("shows the PR chip when projectId is supplied and PR facts are loaded", () => {
-    prQueryState.data = {
-      prs: {
-        ship: {
-          number: 1,
-          url: "https://github.com/org/repo/pull/1",
-          state: "open",
-          isDraft: false,
-          mergeable: "mergeable",
-          mergeStateStatus: "CLEAN",
-          reviewDecision: "approved",
-          checks: { state: "success", failing: 0, pending: 0, total: 1 },
-          commentCount: 0,
-          comments: [],
-          headRefOid: "abc",
-          baseRefName: "main",
-          updatedAt: "2026-08-01T00:00:00Z",
-        },
-      },
-    };
-
-    const { container } = mountActions(
-      flowItem(story("ship", "https://github.com/org/repo/pull/1"), {
-        blocked: false,
-        storyStatus: "in-progress",
-      }),
-    );
-
-    const chip = container.querySelector('[data-testid="pr-chip"]');
-    expect(chip).toBeTruthy();
-    expect(chip?.textContent).toContain("Ready");
-    expect(chip?.textContent).toContain("Success");
-    expect(chip?.textContent).toContain("Approved");
   });
 });
 

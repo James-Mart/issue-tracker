@@ -102,7 +102,7 @@ describe("OverviewRow overlay", () => {
     expect(container.querySelector(".pointer-events-none")).toBeTruthy();
   });
 
-  it("renders inline actions beside the title cluster on sm+ and wraps on narrow", () => {
+  it("renders inline actions on one line without wrapping", () => {
     const { container } = mountRow({
       count: "3/4",
       actions: <button type="button">Inline action</button>,
@@ -119,9 +119,30 @@ describe("OverviewRow overlay", () => {
     const actionButton = container.querySelector('button[type="button"]');
     expect(actionButton?.textContent).toBe("Inline action");
     const actionWrapper = actionButton?.parentElement as HTMLElement;
-    expect(actionWrapper.className).toMatch(/flex-wrap/);
-    expect(actionWrapper.className).toMatch(/sm:shrink-0/);
+    expect(actionWrapper.className).toMatch(/flex-nowrap/);
+    expect(actionWrapper.className).toMatch(/shrink-0/);
+    expect(actionWrapper.className).not.toMatch(/flex-wrap/);
+    const line = actionWrapper.parentElement as HTMLElement;
+    expect(line.className).toMatch(/flex-nowrap/);
+    expect(line.className).toMatch(/items-center/);
+    expect(line.className).not.toMatch(/flex-col/);
     expect(container.querySelector(".pointer-events-none")).toBeNull();
+  });
+
+  it("places a sparkline after the title cluster and before count", () => {
+    const { container } = mountRow({
+      count: "3/4",
+      sparkline: <span data-testid="sparkline">spark</span>,
+      overlay: undefined,
+      touchMenu: undefined,
+    });
+    const title = container.querySelector(".min-w-0.flex-1.truncate");
+    const spark = container.querySelector('[data-testid="sparkline"]');
+    expect(spark).toBeTruthy();
+    expect(
+      title?.compareDocumentPosition(spark as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("keeps inline actions clickable when drillInTo is set", () => {

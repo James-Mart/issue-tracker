@@ -1,7 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Rail } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
+import { issueRailNodeState } from "../lib/rail-state";
 import { parentOf } from "../lib/build-tree";
 import {
   flowItemNeedsAttention,
@@ -211,26 +213,47 @@ export function FlowPreviewedItems({
   previewLimit,
   listClassName,
   renderItem,
+  asRail,
 }: {
   items: FlowItem[];
   previewLimit?: number;
   listClassName?: string;
   renderItem: (item: FlowItem) => ReactNode;
+  /** Cockpit lists: one spine, state disc on each row. */
+  asRail?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
   const capped =
     previewLimit != null && !showAll && items.length > previewLimit;
   const visible = capped ? items.slice(0, previewLimit) : items;
+  const live = visible.some(
+    (item) => issueRailNodeState(item.issue, item.state) === "in-flight",
+  );
+
+  const rows = visible.map((item) => {
+    const row = renderItem(item);
+    if (row == null) return null;
+    if (asRail && isValidElement(row)) {
+      return cloneElement(row, { key: item.issue.id });
+    }
+    return <li key={item.issue.id}>{row}</li>;
+  });
 
   return (
     <>
-      <ul className={cn("flex list-none flex-col p-0", listClassName)}>
-        {visible.map((item) => {
-          const row = renderItem(item);
-          if (row == null) return null;
-          return <li key={item.issue.id}>{row}</li>;
-        })}
-      </ul>
+      {asRail ? (
+        <Rail
+          live={live}
+          data-testid="flow-bucket-rail"
+          className={cn("flex flex-col", listClassName)}
+        >
+          {rows}
+        </Rail>
+      ) : (
+        <ul className={cn("flex list-none flex-col p-0", listClassName)}>
+          {rows}
+        </ul>
+      )}
       {capped ? (
         <Button
           type="button"
