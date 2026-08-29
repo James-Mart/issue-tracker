@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { MERGE_POLICIES } from "@server/schemas";
+import { MERGE_POLICIES } from "../issue-constants.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const AT = "2026-07-09T14:00:00.000Z";

@@ -1071,3 +1071,26 @@ describe("POST /api/conversations/:id/interrupt", () => {
     ).toEqual(["hold please", "redirect now"]);
   });
 });
+
+describe("published conversation payload validation", () => {
+  it("returns 500 when the list payload fails conversationListItemSchema", async () => {
+    const conversations = await import("../services/conversations.js");
+    vi.spyOn(conversations, "listConversations").mockReturnValue([
+      {
+        id: "bad",
+        title: "",
+        projectId: "platform",
+        model: "composer-2.5",
+        createdAt: AT,
+        updatedAt: AT,
+        archived: false,
+      },
+    ]);
+
+    const res = await fetch(`${baseUrl}/api/conversations`);
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(typeof body.error).toBe("string");
+    expect(body.error.length).toBeGreaterThan(0);
+  });
+});

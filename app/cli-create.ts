@@ -6,8 +6,8 @@ import {
 } from "./cli-io.js";
 import { assertAllowedAgentModelSlug } from "./server/agent-model-slugs.js";
 import { KIND_CAPABILITIES } from "./server/kind.js";
+import { PARENT_KINDS } from "./server/issue-constants.js";
 import {
-  PARENT_KINDS,
   type CreateInput,
   type IssueKind,
 } from "./server/schemas.js";

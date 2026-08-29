@@ -173,6 +173,73 @@ describe("conversation-stream catch-up buffer", () => {
       frames: [],
     });
   });
+
+  it("drops a malformed frame while still publishing a valid one", async () => {
+    const { publishFrame, subscribeFrames, getFramesSince } = await load();
+    const received: Array<{ event: { seq?: number; text?: string } }> = [];
+    const unsubscribe = subscribeFrames("conv-a", (frame) => {
+      received.push(frame);
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    publishFrame("conv-a", {
+      event: { type: "assistant" as const },
+      persist: false,
+    });
+    publishFrame("conv-a", {
+      event: { type: "assistant" as const, text: "ok" },
+      persist: false,
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      "dropping malformed conversation frame:",
+      "conv-a",
+      expect.objectContaining({ type: "assistant", seq: 1 }),
+      expect.any(String),
+    );
+    expect(received).toHaveLength(1);
+    expect(received[0]?.event).toMatchObject({
+      type: "assistant",
+      text: "ok",
+      seq: 2,
+    });
+
+    const catchup = getFramesSince("conv-a", 1);
+    expect(catchup.resetRequired).toBe(false);
+    if (catchup.resetRequired) return;
+    expect(catchup.frames).toHaveLength(1);
+    expect(catchup.frames[0]?.event).toMatchObject({
+      type: "assistant",
+      text: "ok",
+      seq: 2,
+    });
+
+    unsubscribe();
+    warnSpy.mockRestore();
+  });
+
+  it("still publishes issue-topic frames without conversation schema validation", async () => {
+    const { publishFrame, subscribeFrames } = await load();
+    const received: Array<{ event: { type?: string; id?: string } }> = [];
+    const unsubscribe = subscribeFrames("issues", (frame) => {
+      received.push(frame);
+    });
+
+    publishFrame("issues", {
+      event: { type: "change", id: "platform", scope: "issue" },
+      persist: false,
+    });
+
+    expect(received).toHaveLength(1);
+    expect(received[0]?.event).toMatchObject({
+      type: "change",
+      id: "platform",
+      scope: "issue",
+      seq: 1,
+    });
+
+    unsubscribe();
+  });
 });
 
 describe("conversation-stream sequence numbers", () => {

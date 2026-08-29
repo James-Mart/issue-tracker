@@ -1,22 +1,19 @@
 import { describe, expect, it } from "vitest";
-import {
-  EPIC_STATUSES,
-  QA_STATUSES,
-  RETRO_STATUSES,
-  REVIEW_STATUSES,
-  STORY_STATUSES,
-  TASK_STATUSES,
-  type DerivedState,
-  type IssueRecord,
-} from "@server/schemas";
+import type { DerivedState, IssueRecord } from "@server/schemas";
 import { BADGE_VARIANTS } from "@/components/ui/badge";
 import {
   EPIC_STATUS_BADGE_VARIANT,
+  EPIC_STATUS_LABEL,
   QA_STATUS_BADGE_VARIANT,
+  QA_STATUS_LABEL,
   RETRO_BADGE_VARIANT,
+  RETRO_LABEL,
   REVIEW_BADGE_VARIANT,
+  REVIEW_LABEL,
   STORY_STATUS_BADGE_VARIANT,
+  STORY_STATUS_LABEL,
   TASK_STATUS_BADGE_VARIANT,
+  TASK_STATUS_LABEL,
   hasInFlightWork,
   isInFlight,
   isIssueComplete,
@@ -67,18 +64,22 @@ function epic(id: string): IssueRecord {
 
 const badgeVariantSet = new Set<string>(BADGE_VARIANTS);
 
-function expectMapCovers<S extends string>(
-  statuses: readonly S[],
-  map: Record<S, string>,
+function expectLabelAndBadgeMapsAlign(
+  labelMap: Record<string, string>,
+  badgeMap: Record<string, string>,
 ) {
-  for (const status of statuses) {
-    expect(badgeVariantSet.has(map[status])).toBe(true);
+  expect(Object.keys(labelMap).sort()).toEqual(Object.keys(badgeMap).sort());
+  for (const status of Object.keys(badgeMap)) {
+    expect(badgeVariantSet.has(badgeMap[status]!)).toBe(true);
   }
 }
 
 describe("status badge variant maps", () => {
   it("maps every task status to an existing Badge variant", () => {
-    expectMapCovers(TASK_STATUSES, TASK_STATUS_BADGE_VARIANT);
+    expectLabelAndBadgeMapsAlign(
+      TASK_STATUS_LABEL,
+      TASK_STATUS_BADGE_VARIANT,
+    );
   });
 
   it("maps fixing to the current hue (not warn)", () => {
@@ -88,23 +89,29 @@ describe("status badge variant maps", () => {
   });
 
   it("maps every qa status to an existing Badge variant", () => {
-    expectMapCovers(QA_STATUSES, QA_STATUS_BADGE_VARIANT);
+    expectLabelAndBadgeMapsAlign(QA_STATUS_LABEL, QA_STATUS_BADGE_VARIANT);
   });
 
   it("maps every story status to an existing Badge variant", () => {
-    expectMapCovers(STORY_STATUSES, STORY_STATUS_BADGE_VARIANT);
+    expectLabelAndBadgeMapsAlign(
+      STORY_STATUS_LABEL,
+      STORY_STATUS_BADGE_VARIANT,
+    );
   });
 
   it("maps every epic status to an existing Badge variant", () => {
-    expectMapCovers(EPIC_STATUSES, EPIC_STATUS_BADGE_VARIANT);
+    expectLabelAndBadgeMapsAlign(
+      EPIC_STATUS_LABEL,
+      EPIC_STATUS_BADGE_VARIANT,
+    );
   });
 
   it("maps every review status to an existing Badge variant", () => {
-    expectMapCovers(REVIEW_STATUSES, REVIEW_BADGE_VARIANT);
+    expectLabelAndBadgeMapsAlign(REVIEW_LABEL, REVIEW_BADGE_VARIANT);
   });
 
   it("maps every retro status to an existing Badge variant", () => {
-    expectMapCovers(RETRO_STATUSES, RETRO_BADGE_VARIANT);
+    expectLabelAndBadgeMapsAlign(RETRO_LABEL, RETRO_BADGE_VARIANT);
   });
 });
 

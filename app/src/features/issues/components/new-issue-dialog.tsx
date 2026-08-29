@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FIELD_LABELS } from "@server/fields";
-import { KINDS, PARENT_KINDS, type IssueKind } from "@server/schemas";
+import { KINDS, PARENT_KINDS } from "@server/issue-constants";
+import type { IssueKind } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

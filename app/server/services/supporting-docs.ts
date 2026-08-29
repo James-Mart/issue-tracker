@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, statSync } from "fs";
+import { SUPPORTING_DOC_KEYS } from "../issue-constants.js";
 import type {
   Issue,
   IssuePatch,
@@ -6,7 +7,6 @@ import type {
   SupportingDocRef,
   SupportingDocs,
 } from "../schemas.js";
-import { SUPPORTING_DOC_KEYS } from "../schemas.js";
 import { IssueError } from "./errors.js";
 import { attachmentPath, listAttachments } from "./attachments.js";
 import { resolveUnderWorkspace } from "./workspace.js";

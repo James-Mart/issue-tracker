@@ -3,7 +3,7 @@
 //
 // Pure data with no imports: server code and the `lint:pipeline-shape` script
 // read this module, so it must never reach into `@server/` (that direction is
-// what `npm run lint:boundary` bans).
+// what `npm run lint:boundary` bans — Node builtins and the zod package).
 //
 // `source` is the plugin-relative path of the `agents/*.md` or
 // `skills/*/SKILL.md` file that defines the step, which is how the drift guard

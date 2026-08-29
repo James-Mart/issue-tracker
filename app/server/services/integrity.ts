@@ -1,5 +1,5 @@
+import { PARENT_KINDS } from "../issue-constants.js";
 import {
-  PARENT_KINDS,
   type Issue,
   type IssueKind,
   type Problem,

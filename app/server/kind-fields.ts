@@ -1,9 +1,9 @@
 import { CLEARABLE_KEYS } from "./fields.js";
+import { MERGE_POLICIES } from "./issue-constants.js";
 import {
   TASK_STATUSES,
   QA_STATUSES,
   RETRO_STATUSES,
-  MERGE_POLICIES,
   REVIEW_STATUSES,
   type IssueKind,
 } from "./schemas.js";

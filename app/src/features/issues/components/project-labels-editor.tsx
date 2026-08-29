@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { FIELD_LABELS } from "@server/fields";
-import { LABEL_COLOR_RE } from "@server/schemas";
+import { LABEL_COLOR_RE } from "@server/issue-constants";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import {
