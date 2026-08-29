@@ -10,7 +10,14 @@ type Story = Extract<Issue, { kind: "story" }>;
 type Task = Extract<Issue, { kind: "task" }>;
 
 /** Keep server responses within what @pierre/diffs can render in the browser. */
-export const MAX_PATCH_BYTES = 2 * 1024 * 1024;
+export const MAX_PATCH_BYTES = (() => {
+  const raw = process.env.ISSUE_TRACKER_MAX_PATCH_BYTES;
+  if (raw != null && raw !== "") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return 2 * 1024 * 1024;
+})();
 
 function isChildOf(issue: Issue, parentId: string): boolean {
   return issue.kind !== "project" && issue.partOf === parentId;

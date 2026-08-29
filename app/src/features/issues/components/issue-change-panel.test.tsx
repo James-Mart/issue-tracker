@@ -8,6 +8,7 @@ import type { IssueChange } from "@server/schemas";
 import {
   classifyIssueChangePanelFault,
   IssueChangePanel,
+  parseChangeTooLarge,
 } from "./issue-change-panel";
 
 const changeQueryState = vi.hoisted(() => ({
@@ -123,6 +124,31 @@ describe("classifyIssueChangePanelFault", () => {
         }),
       ),
     ).toBe("commits-not-contiguous");
+  });
+});
+
+describe("parseChangeTooLarge", () => {
+  it("reads stats and commit count from change-too-large API failures", () => {
+    expect(
+      parseChangeTooLarge(
+        new ApiError("patch exceeds render ceiling", 413, {
+          code: "change-too-large",
+          stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
+          commitCount: 2,
+        }),
+      ),
+    ).toEqual({
+      stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
+      commitCount: 2,
+    });
+  });
+
+  it("ignores unrelated API failures", () => {
+    expect(
+      parseChangeTooLarge(
+        new ApiError("fatal: bad object abc", 404, { code: "commit-unreachable" }),
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -373,5 +399,42 @@ describe("IssueChangePanel", () => {
     expect(container.querySelector('[data-testid="issue-change-fault-state"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="issue-change-empty-state"]')).toBeNull();
     expect(container.textContent).not.toContain("No commit recorded for this task yet.");
+  });
+
+  it("renders change-too-large as a deliberate refusal with stats and git guidance", () => {
+    changeQueryState.error = new ApiError("patch exceeds render ceiling", 413, {
+      code: "change-too-large",
+      stats: { filesChanged: 100, insertions: 50000, deletions: 100 },
+      commitCount: 1,
+    });
+
+    const container = mountPanel();
+    const refusal = container.querySelector('[data-testid="issue-change-too-large-state"]');
+
+    expect(refusal).not.toBeNull();
+    expect(container.textContent).toContain("This change is too large to render in the browser.");
+    expect(container.textContent).toContain("100 files +50000 -100 1 commit");
+    expect(container.textContent).toContain("git show");
+    expect(container.textContent).toContain("git show <commit-sha>");
+    expect(container.textContent).not.toContain("Diff unavailable");
+    expect(container.querySelector('[data-testid="issue-change-fault-state"]')).toBeNull();
+    expect(container.querySelector('[data-testid="issue-change-empty-state"]')).toBeNull();
+    expect(container.querySelector('[data-testid="file-diff"]')).toBeNull();
+    expect(container.querySelector('[data-testid="issue-change-panel"]')).toBeNull();
+  });
+
+  it("renders rollup git guidance when multiple commits exceed the ceiling", () => {
+    changeQueryState.error = new ApiError("patch exceeds render ceiling", 413, {
+      code: "change-too-large",
+      stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
+      commitCount: 2,
+    });
+
+    const container = mountPanel();
+
+    expect(container.querySelector('[data-testid="issue-change-too-large-state"]')).not.toBeNull();
+    expect(container.textContent).toContain("50 files +20000 -500 2 commits");
+    expect(container.textContent).toContain("git diff");
+    expect(container.textContent).toContain("git diff <first-sha>^..<last-sha>");
   });
 });
