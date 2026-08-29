@@ -1,4 +1,10 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   FileDiff,
   type FileDiffContentsLoader,
@@ -12,11 +18,19 @@ import {
   ShellState,
 } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError } from "@/lib/api/errors";
 import type { ChangeCommit, IssueChange } from "@server/schemas";
 import { useIssueChangeQuery } from "../api/queries";
 import { loadFileDiffContents } from "../lib/issue-change-file-contents";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
+import {
+  effectiveDiffLayout,
+  readStoredDiffLayout,
+  writeStoredDiffLayout,
+  type DiffLayout,
+} from "../lib/diff-layout-preference";
+import { DiffLayoutToggle } from "./diff-layout-toggle";
 import { IssueChangeFileNavigator } from "./issue-change-file-navigator";
 
 function shortSha(sha: string): string {
@@ -217,11 +231,13 @@ function IssueChangeFileDiff({
   issueId,
   sha,
   contentsCache,
+  diffLayout,
 }: {
   fileDiff: FileDiffMetadata;
   issueId: string;
   sha: string;
   contentsCache: Map<string, Promise<string>>;
+  diffLayout: DiffLayout;
 }) {
   const [loading, setLoading] = useState(false);
   const loadDiffFiles: FileDiffContentsLoader = useCallback(
@@ -260,7 +276,7 @@ function IssueChangeFileDiff({
       <FileDiff
         fileDiff={fileDiff}
         disableWorkerPool
-        options={{ loadDiffFiles }}
+        options={{ loadDiffFiles, diffStyle: diffLayout }}
       />
     </div>
   );
@@ -276,6 +292,13 @@ function IssueChangeLoadedPanel({
   const files = useMemo(() => fileDiffsFromPatch(change.patch), [change.patch]);
   const contentsCache = useRef(new Map<string, Promise<string>>()).current;
   const sha = change.commits[change.commits.length - 1]!.sha;
+  const isMobile = useIsMobile();
+  const [layout, setLayoutState] = useState<DiffLayout>(() => readStoredDiffLayout());
+  const diffLayout = effectiveDiffLayout(layout, isMobile);
+  const setLayout = useCallback((next: DiffLayout) => {
+    writeStoredDiffLayout(next);
+    setLayoutState(next);
+  }, []);
   const [filter, setFilter] = useState("");
   const [selectedName, setSelectedName] = useState<string | undefined>();
   const matched = useMemo(() => filterFilesByPath(files, filter), [files, filter]);
@@ -284,12 +307,17 @@ function IssueChangeLoadedPanel({
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="issue-change-panel">
-      <p
-        className="font-mono text-[11px] tabular-nums text-muted-foreground"
-        data-testid="issue-change-scope-header"
-      >
-        {scopeHeaderStats(change)}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p
+          className="font-mono text-[11px] tabular-nums text-muted-foreground"
+          data-testid="issue-change-scope-header"
+        >
+          {scopeHeaderStats(change)}
+        </p>
+        {!isMobile ? (
+          <DiffLayoutToggle layout={layout} onLayoutChange={setLayout} />
+        ) : null}
+      </div>
       {files.length > 1 ? (
         <div className="flex min-w-0 flex-col gap-3 shell:flex-row shell:items-start">
           <IssueChangeFileNavigator
@@ -308,6 +336,7 @@ function IssueChangeLoadedPanel({
                 issueId={issueId}
                 sha={sha}
                 contentsCache={contentsCache}
+                diffLayout={diffLayout}
               />
             </div>
           ) : null}
@@ -321,6 +350,7 @@ function IssueChangeLoadedPanel({
               issueId={issueId}
               sha={sha}
               contentsCache={contentsCache}
+              diffLayout={diffLayout}
             />
           ))}
         </div>
