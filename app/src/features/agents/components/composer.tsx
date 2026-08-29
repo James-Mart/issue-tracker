@@ -3,10 +3,13 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
 } from "react";
-import { Paperclip, Send, Square, X, Zap } from "lucide-react";
+import { Paperclip, Send, Square, Upload, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { currentGlow } from "@/components/ui/overlay-surfaces";
 import {
   Select,
   SelectContent,
@@ -16,6 +19,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useIsCoarsePointer } from "@/hooks/use-coarse-pointer";
+import { cn } from "@/lib/utils/cn";
+import {
+  dataTransferHasFiles,
+  ensureAttachmentFileName,
+  filesFromDataTransfer,
+} from "@/features/issues/lib/attachment-files";
 import {
   formatAttachmentSize,
   isImageMime,
@@ -120,6 +129,27 @@ function FileStagedChip({
   );
 }
 
+function DragActiveOverlay() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md"
+      style={{ backgroundColor: "hsl(var(--panel) / 0.72)" }}
+      aria-hidden="true"
+      data-testid="composer-drag-active"
+    >
+      <div className="mx-3 rounded-md border border-border bg-[hsl(var(--panel-2))] px-4 py-3 text-center">
+        <Upload className="mx-auto h-5 w-5 text-[hsl(var(--current))]" />
+        <p className="mt-2 text-xs font-medium text-foreground">
+          Drop files to attach
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Images and files up to {MAX_ATTACHMENT_MB} MB
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function UploadErrorBanner({ error }: { error: UploadError }) {
   return (
     <div
@@ -167,6 +197,7 @@ export function Composer({
     ConversationAttachment[]
   >([]);
   const [uploadError, setUploadError] = useState<UploadError | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const isCoarsePointer = useIsCoarsePointer();
 
   const models = modelsData?.models ?? [];
@@ -179,12 +210,15 @@ export function Composer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const refocusAfterSendRef = useRef(false);
+  const dragDepthRef = useRef(0);
 
   useEffect(() => {
     skipDraftPersistRef.current = true;
     setDraft(readComposerDraft(conversationId));
     setStagedAttachments([]);
     setUploadError(null);
+    dragDepthRef.current = 0;
+    setDragActive(false);
   }, [conversationId]);
 
   useEffect(() => {
@@ -266,12 +300,16 @@ export function Composer({
     fileInputRef.current?.click();
   };
 
-  const onFileInputChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    e.target.value = "";
-    if (!files?.length) return;
+  const clearDrag = () => {
+    dragDepthRef.current = 0;
+    setDragActive(false);
+  };
 
-    for (const file of Array.from(files)) {
+  const stageFiles = async (files: File[]) => {
+    if (composerBusy || files.length === 0) return;
+
+    for (const raw of files) {
+      const file = ensureAttachmentFileName(raw);
       try {
         setUploadError(null);
         const meta = await uploadConversationAttachment(conversationId, file);
@@ -280,6 +318,48 @@ export function Composer({
         setUploadError({ name: file.name, size: file.size });
       }
     }
+  };
+
+  const onFileInputChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    e.target.value = "";
+    if (!files?.length) return;
+    await stageFiles(Array.from(files));
+  };
+
+  const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    const files = filesFromDataTransfer(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault();
+    void stageFiles(files);
+  };
+
+  const onDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    if (composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    setDragActive(true);
+  };
+
+  const onDragLeave = () => {
+    // dragleave often has an empty dataTransfer; still pair with enter depth.
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragActive(false);
+  };
+
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    clearDrag();
+    if (composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
+    const files = filesFromDataTransfer(e.dataTransfer);
+    if (files.length === 0) return;
+    e.preventDefault();
+    void stageFiles(files);
   };
 
   const removeStagedAttachment = async (name: string) => {
@@ -296,8 +376,24 @@ export function Composer({
     <div
       className="shrink-0 border-t border-border bg-card px-3 py-3"
       data-testid="conversation-composer"
+      onPaste={onPaste}
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
-      <div className="flex flex-col gap-2">
+      <div
+        className={cn(
+          "relative flex flex-col gap-2 rounded-md",
+          dragActive &&
+            cn(
+              "border-2 border-dashed border-[hsl(var(--current))]",
+              currentGlow,
+            ),
+        )}
+      >
+        {dragActive ? <DragActiveOverlay /> : null}
+
         {uploadError ? <UploadErrorBanner error={uploadError} /> : null}
 
         {stagedAttachments.length > 0 ? (

@@ -698,3 +698,142 @@ describe("Composer attachments", () => {
     ).toBeNull()
   })
 })
+
+function fileClipboardData(files: File[]) {
+  return {
+    files,
+    items: files.map((file) => ({
+      kind: "file" as const,
+      type: file.type,
+      getAsFile: () => file,
+    })),
+    types: ["Files"],
+  }
+}
+
+function fileDataTransfer(files: File[] = [new File(["x"], "notes.txt")]) {
+  return {
+    files,
+    items: files.map((file) => ({
+      kind: "file" as const,
+      type: file.type,
+      getAsFile: () => file,
+    })),
+    types: files.length > 0 ? ["Files"] : [],
+    dropEffect: "none",
+  }
+}
+
+function dispatchPaste(target: EventTarget, files: File[]): Event {
+  const event = new Event("paste", { bubbles: true, cancelable: true })
+  Object.defineProperty(event, "clipboardData", {
+    value: fileClipboardData(files),
+  })
+  act(() => {
+    target.dispatchEvent(event)
+  })
+  return event
+}
+
+function dispatchDrag(
+  target: EventTarget,
+  type: "dragenter" | "dragleave" | "dragover" | "drop",
+  dataTransfer: ReturnType<typeof fileDataTransfer> = fileDataTransfer(),
+): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, "dataTransfer", { value: dataTransfer })
+  act(() => {
+    target.dispatchEvent(event)
+  })
+  return event
+}
+
+describe("Composer paste and drop", () => {
+  let container: HTMLDivElement | undefined
+  let root: Root | undefined
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount())
+    container?.remove()
+    container = undefined
+    root = undefined
+    sendMutate.mockClear()
+    interruptMutate.mockClear()
+    uploadConversationAttachment.mockReset()
+    deleteConversationAttachment.mockReset()
+    coarsePointer.value = false
+  })
+
+  it("stages a chip on paste and leaves the draft text alone", async () => {
+    uploadConversationAttachment.mockResolvedValue({
+      name: "shot.png",
+      size: 20,
+      mimeType: "image/png",
+    })
+    ;({ container, root } = mountComposer())
+
+    setDraft(textarea(container!), "Keep this draft")
+    const file = new File(["pixels"], "shot.png", { type: "image/png" })
+    const event = dispatchPaste(textarea(container!), [file])
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(uploadConversationAttachment).toHaveBeenCalledWith("conv-1", file)
+    expect(
+      container!.querySelector('[data-testid="staged-attachment-shot.png"]'),
+    ).toBeTruthy()
+    expect(textarea(container!).value).toBe("Keep this draft")
+  })
+
+  it("stages a chip on drop", async () => {
+    uploadConversationAttachment.mockResolvedValue({
+      name: "notes.txt",
+      size: 12,
+      mimeType: "text/plain",
+    })
+    ;({ container, root } = mountComposer())
+
+    const composer = container!.querySelector(
+      '[data-testid="conversation-composer"]',
+    )!
+    const file = new File(["hello world"], "notes.txt", { type: "text/plain" })
+    dispatchDrag(composer, "drop", fileDataTransfer([file]))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(uploadConversationAttachment).toHaveBeenCalledWith("conv-1", file)
+    expect(
+      container!.querySelector('[data-testid="staged-attachment-notes.txt"]'),
+    ).toBeTruthy()
+  })
+
+  it("keeps the drag-active state when enter then leave happen over a child", () => {
+    ;({ container, root } = mountComposer())
+
+    const composer = container!.querySelector(
+      '[data-testid="conversation-composer"]',
+    )!
+    const child = textarea(container!)
+
+    dispatchDrag(composer, "dragenter")
+    expect(
+      container!.querySelector('[data-testid="composer-drag-active"]'),
+    ).toBeTruthy()
+
+    dispatchDrag(child, "dragenter")
+    dispatchDrag(child, "dragleave")
+    expect(
+      container!.querySelector('[data-testid="composer-drag-active"]'),
+    ).toBeTruthy()
+
+    dispatchDrag(composer, "dragleave")
+    expect(
+      container!.querySelector('[data-testid="composer-drag-active"]'),
+    ).toBeNull()
+  })
+})
