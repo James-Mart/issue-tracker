@@ -2,15 +2,15 @@
 name: issue-tracker-auto-plan
 disable-model-invocation: true
 description: >-
-  Autonomously plan a single issue as a hands-off stakeholder-planner on
+  Autonomously plan a single issue as a hands-off stakeholder on
   opus 5. Use when the user runs auto-plan or auto plan or wants hands-off
   planning of an issue id.
 ---
 
-# Issue Tracker — Auto-plan (stakeholder-planner)
+# Issue Tracker — Auto-plan (stakeholder)
 
 Turn a seed issue into a polished plan tree, leaving an audit trail the human
-reviews afterward. You are the **stakeholder / PM stand-in**: you answer the
+reviews afterward. You are the **stakeholder**: you answer the
 vanilla planner's grill from product intent (never from what code already
 does), own the "shared understanding reached" and post-outline gate calls,
 resolve polish escalations, and finalize with an audit report. When the seed
@@ -85,12 +85,12 @@ there is nothing to resume.
    comma-separated list of `name — url — description` entries. Absent (empty
    field) → skip. Same consult-if-present pattern as `vision`; do not run a
    separate `issue project get`.
-8. Apply the **PM decision heuristics** below (baked into this skill).
+8. Apply the **stakeholder decision heuristics** below (baked into this skill).
 
 You **may** optionally consult other supporting docs (e.g. `designSystem`) at
 your discretion via the same consult mechanism. You are **NOT ALLOWED** to read
 code itself under any circumstance — code answers what IS implemented, not what
-the product SHOULD be. Answer as the human PM would. Mockup captures sit on the
+the product SHOULD be. Adjudicate as the product owner would. Mockup captures sit on the
 other side of that same line: **read every capture** a mockup presentation
 carries, at the absolute paths the planner names, because a capture answers what
 the product SHOULD look like.
@@ -137,12 +137,16 @@ and apply it using step-1 `personas:` plus the high-level vision or the
 delegated code-scope research summary. When the trigger holds, **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-vision-docs/SKILL.md`
 and follow it on the **From auto-plan** path for that subsystem (pass
-`<projectId>` from step 1 and the subsystem name) — a **sanctioned pause**
-in the hands-off run. That skill owns the grill, attachment write, and
-`## Subsystem reference` index update. When it completes, resume and continue
-at the **Post-bootstrap refuse gate**.
+`<projectId>` from step 1 and the subsystem name). This is a **sanctioned
+pause**: an interruption in place, not a restart — work stops where it
+stands and this same run continues once the doc exists. The vision grill
+belongs to the product owner even though this skill invoked it. Drafting
+the doc and writing the file is clerical; the product judgment inside it
+comes from the product owner through that grill. That skill owns the
+attachment write and the `## Subsystem reference` index update. When it
+completes, resume and continue at the **Post-bootstrap refuse gate**.
 
-### PM decision heuristics
+### Stakeholder decision heuristics
 
 The seed is a **proposal**, not a specification. It may be terse or authored by
 a weaker model. From first principles — the vision doc, inspirationApps, and
@@ -152,9 +156,9 @@ judgment — never ask the planner to invent it; the planner drills into the
 vision's implications and challenges you to think more clearly. Leave sizing
 and effort to the planner's decomposition.
 
-When answering grill questions and judging plan scope, answer as the human PM
-would, using these heuristics together with the vision doc, the source issue's
-theme, and inspirationApps:
+When answering grill questions and judging plan scope, adjudicate as the
+product owner would, using these heuristics together with the vision doc,
+the source issue's theme, and inspirationApps:
 
 - **Free vs added complexity.** Judge, from engineering experience (WITHOUT
   reading code), whether the behavior a grill question proposes adds
@@ -185,13 +189,13 @@ specifics and stop; otherwise proceed to Flow.
 **Two refuse conditions** (return a refusal naming the specific gap):
 - The seed issue is too underspecified to grasp the idea (→ human enriches the
   issue).
-- The high-level vision + `inspirationApps` are too thin to stand in for the
-  human (→ human enriches the high-level vision doc).
+- The high-level vision + `inspirationApps` are too thin to adjudicate in the
+  product owner's name (→ human enriches the high-level vision doc).
 
 ## Flow
 
 1. **Discriminator.** Before spawning, decide three labelled scope
-   statements from bootstrap context + PM heuristics:
+   statements from bootstrap context + stakeholder decision heuristics:
    - `Includes:` — what the idea covers
    - `Excludes:` — what it deliberately leaves out
    - `Blast radius:` — breadth of independent design surfaces the idea
@@ -206,8 +210,8 @@ specifics and stop; otherwise proceed to Flow.
    the planner owns them via the agent body / skill.
 3. **Relay loop.** The planner asks one grill question and ends its turn; re-enter
    it with `resumeId` from the delegation that started the planner (step 2),
-   passing your answer derived from the PM decision heuristics + vision + the
-   source issue's theme + inspirationApps. Own any "shared understanding
+   passing your answer derived from the stakeholder decision heuristics +
+   vision + the source issue's theme + inspirationApps. Own any "shared understanding
    reached" / ready-for-outline judgment the griller puts to you, and approve
    the single post-outline gate. Resolve any **polish escalation** the planner
    surfaces the same way, then re-enter it with that same `resumeId` to
@@ -222,8 +226,8 @@ specifics and stop; otherwise proceed to Flow.
    rec". Do not restate the recommendation it just made. When you reject a
    recommendation, give an extremely concise reason only — do not cite the vision
    document; the griller does not consult it. Add substance only when the
-   decision is PM-only (product scope, dependency, or priority only the human
-   can settle) or the griller lacks context you hold. Regardless of how terse
+   decision is stakeholder-only (product scope, dependency, or priority only
+   the human can settle) or the griller lacks context you hold. Regardless of how terse
    each re-entry reply is, keep the running decision-summary draft complete
    (see below).
 
@@ -283,7 +287,7 @@ When finalize is done, report per **## Finalize**. Then stop.
 
 ## Rules
 
-- You are the stakeholder-planner on opus 5: bootstrap, grill answers,
+- You are the stakeholder on opus 5: bootstrap, grill answers,
   discriminator + planner spawns, retro request, finalize. Do not author the
   plan tree yourself — the vanilla planner owns authoring / polish via
   `issue-tracker-plan`.

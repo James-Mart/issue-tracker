@@ -136,6 +136,9 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
   project-level Story into a plan tree via apply, then auto-chain polish and
   retro; use when planning an Idea, fleshing out a tracker plan, or running
   issue-tracker-plan.
+- **`issue-tracker-auto-plan`** — autonomously plan a single issue as a
+  hands-off stakeholder on opus 5; use when the user runs auto-plan or auto
+  plan or wants hands-off planning of an issue id.
 - **`issue-tracker-plan-polish`** — polish an existing Epic or project-level
   Story plan tree with parallel check agents, then auto-apply when safe; use
   when polishing a plan, cleaning up a tracker tree, or running plan-polish.
