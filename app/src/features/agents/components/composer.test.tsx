@@ -7,6 +7,19 @@ import { composerDraftStorageKey } from "../lib/composer-draft-storage"
 
 const sendMutate = vi.fn()
 const interruptMutate = vi.fn()
+const uploadConversationAttachment = vi.fn()
+const deleteConversationAttachment = vi.fn()
+
+vi.mock("../api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/client")>()
+  return {
+    ...actual,
+    uploadConversationAttachment: (...args: unknown[]) =>
+      uploadConversationAttachment(...args),
+    deleteConversationAttachment: (...args: unknown[]) =>
+      deleteConversationAttachment(...args),
+  }
+})
 
 vi.mock("../api/mutations", () => ({
   useSendConversationMessage: () => ({
@@ -507,5 +520,181 @@ describe("Composer draft persistence", () => {
     })
 
     expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBeNull()
+  })
+})
+
+describe("Composer attachments", () => {
+  let container: HTMLDivElement | undefined
+  let root: Root | undefined
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount())
+    container?.remove()
+    container = undefined
+    root = undefined
+    sendMutate.mockClear()
+    interruptMutate.mockClear()
+    uploadConversationAttachment.mockReset()
+    deleteConversationAttachment.mockReset()
+    coarsePointer.value = false
+  })
+
+  function attachButton(container: ParentNode): HTMLButtonElement {
+    const el = container.querySelector('button[aria-label="Attach files"]')
+    expect(el).toBeTruthy()
+    return el as HTMLButtonElement
+  }
+
+  function fileInput(container: ParentNode): HTMLInputElement {
+    const el = container.querySelector('input[type="file"]')
+    expect(el).toBeTruthy()
+    return el as HTMLInputElement
+  }
+
+  function pickFile(input: HTMLInputElement, file: File) {
+    act(() => {
+      Object.defineProperty(input, "files", {
+        configurable: true,
+        value: [file],
+      })
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+  }
+
+  it("stages a chip when a file is picked", async () => {
+    uploadConversationAttachment.mockResolvedValue({
+      name: "notes.txt",
+      size: 12,
+      mimeType: "text/plain",
+    })
+    ;({ container, root } = mountComposer())
+
+    const file = new File(["hello world"], "notes.txt", { type: "text/plain" })
+    pickFile(fileInput(container!), file)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(uploadConversationAttachment).toHaveBeenCalledWith("conv-1", file)
+    expect(
+      container!.querySelector('[data-testid="staged-attachments"]'),
+    ).toBeTruthy()
+    expect(
+      container!.querySelector('[data-testid="staged-attachment-notes.txt"]'),
+    ).toBeTruthy()
+    expect(
+      container!.querySelector('[data-staged-kind="file"]'),
+    ).toBeTruthy()
+  })
+
+  it("removes a staged chip and deletes the attachment", async () => {
+    uploadConversationAttachment.mockResolvedValue({
+      name: "notes.txt",
+      size: 12,
+      mimeType: "text/plain",
+    })
+    deleteConversationAttachment.mockResolvedValue(undefined)
+    ;({ container, root } = mountComposer())
+
+    const file = new File(["hello world"], "notes.txt", { type: "text/plain" })
+    pickFile(fileInput(container!), file)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const remove = container!.querySelector(
+      'button[aria-label="Remove notes.txt"]',
+    ) as HTMLButtonElement
+
+    await act(async () => {
+      remove.click()
+      await Promise.resolve()
+    })
+
+    expect(deleteConversationAttachment).toHaveBeenCalledWith(
+      "conv-1",
+      "notes.txt",
+    )
+    expect(
+      container!.querySelector('[data-testid="staged-attachments"]'),
+    ).toBeNull()
+  })
+
+  it("shows an upload error banner without clearing the draft or staged chips", async () => {
+    uploadConversationAttachment
+      .mockResolvedValueOnce({
+        name: "palette.png",
+        size: 100,
+        mimeType: "image/png",
+      })
+      .mockRejectedValueOnce(new Error("attachment too large"))
+    ;({ container, root } = mountComposer())
+
+    setDraft(textarea(container!), "Keep this draft")
+
+    pickFile(
+      fileInput(container!),
+      new File(["pixels"], "palette.png", { type: "image/png" }),
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    pickFile(
+      fileInput(container!),
+      new File(["big"], "huge.mov", { type: "video/quicktime" }),
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(container!.querySelector('[data-testid="upload-error"]')).toBeTruthy()
+    expect(textarea(container!).value).toBe("Keep this draft")
+    expect(
+      container!.querySelector('[data-testid="staged-attachment-palette.png"]'),
+    ).toBeTruthy()
+  })
+
+  it("sends staged attachment names and clears staged state on success", async () => {
+    uploadConversationAttachment.mockResolvedValue({
+      name: "notes.txt",
+      size: 12,
+      mimeType: "text/plain",
+    })
+    sendMutate.mockImplementation((_args, opts) => {
+      opts?.onSuccess?.()
+    })
+    ;({ container, root } = mountComposer())
+
+    pickFile(
+      fileInput(container!),
+      new File(["hello world"], "notes.txt", { type: "text/plain" }),
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(sendButton(container!).disabled).toBe(false)
+
+    act(() => {
+      sendButton(container!).click()
+    })
+
+    expect(sendMutate).toHaveBeenCalledWith(
+      {
+        id: "conv-1",
+        body: {
+          prompt: "",
+          model: "composer-2.5-fast",
+          attachments: ["notes.txt"],
+        },
+      },
+      expect.any(Object),
+    )
+    expect(
+      container!.querySelector('[data-testid="staged-attachments"]'),
+    ).toBeNull()
   })
 })
