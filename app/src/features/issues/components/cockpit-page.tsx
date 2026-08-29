@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bot, Plus } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
@@ -8,6 +8,10 @@ import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
 import { useIssuesQuery } from "../api/queries";
+import {
+  readCockpitHiddenProjectIds,
+  writeCockpitHiddenProjectIds,
+} from "../lib/cockpit-hidden-projects";
 import { issuesById, listProjects, projectIdOf } from "../lib/build-tree";
 import { flowBuckets, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
@@ -95,16 +99,33 @@ function CockpitProjectSubheader({
 export function CockpitPage() {
   const { data, isLoading, error, refetch, isFetching } = useIssuesQuery();
   const openProjectDialog = useIssueUiStore((s) => s.openProjectDialog);
+  const [hiddenIds, setHiddenIds] = useState(() => readCockpitHiddenProjectIds());
+
+  const setHiddenIdsAndCookie = useCallback((ids: string[]) => {
+    writeCockpitHiddenProjectIds(ids);
+    setHiddenIds(ids);
+  }, []);
 
   const issues = data?.issues ?? [];
   const derived = data?.derived ?? {};
   const byId = useMemo(() => issuesById(issues), [issues]);
   const projects = useMemo(() => listProjects(issues), [issues]);
   const projectOrder = useMemo(() => projects.map((project) => project.id), [projects]);
-  const buckets = useMemo(
-    () => flowBuckets(visibleIssues(issues, false), derived, {}),
-    [derived, issues],
-  );
+  const buckets = useMemo(() => {
+    const visible = visibleIssues(issues, false);
+    const hidden = new Set(hiddenIds);
+    const filtered =
+      hidden.size === 0
+        ? visible
+        : visible.filter((issue) => {
+            const projectId = projectIdOf(issue.id, byId);
+            return !projectId || !hidden.has(projectId);
+          });
+    return flowBuckets(filtered, derived, {});
+  }, [byId, derived, hiddenIds, issues]);
+  const allProjectsHidden =
+    projects.length > 0 &&
+    projects.every((project) => hiddenIds.includes(project.id));
 
   const renderBucketItems = useCallback(
     (items: FlowItem[], compact?: boolean, previewLimit?: number) => {
@@ -164,6 +185,21 @@ export function CockpitPage() {
               >
                 <Plus className="h-4 w-4" />
                 New project
+              </Button>
+            }
+          />
+        ) : allProjectsHidden ? (
+          <ShellState
+            eyebrow="Filtered"
+            title="No projects in view."
+            detail="Every project is hidden from the Cockpit. Show them again to see work across the line."
+            action={
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => setHiddenIdsAndCookie([])}
+              >
+                Show all projects
               </Button>
             }
           />
