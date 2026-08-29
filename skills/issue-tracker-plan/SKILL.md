@@ -62,7 +62,7 @@ Before grilling:
    and apply it using this summary output (codebase lookup during the grill
    needs cwd = `Workspace:`).
 2. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
-   then consult `vision` and `codingStandards` per that file using the step-1
+   then consult `codingStandards` per that file using the step-1
    summary output (`codingStandards` to avoid locking a plan direction the
    standards forbid — not for implementation detail in Task prose).
 3. Kind / status gates:
@@ -138,10 +138,10 @@ mid-grill.
   Project `Workspace:`), **delegate** research rather than reading widely
   yourself — spawn **Focused codebase research** (Spawn stubs); wait for its
   summary, then continue the grill.
-- Product and dependency decisions remain the **stakeholder's** — the user who
-  launched the planner and controls the vision — including questions that impact
-  **user or developer experience** (UX/DX). When unsure about any of these, do
-  not resolve product direction yourself; put each decision to them and wait.
+- Product and dependency decisions remain the **stakeholder's** — including
+  questions that impact **user or developer experience** (UX/DX). When unsure
+  about any of these, do not resolve product direction yourself; put each
+  decision to them and wait.
 - **Raised mockup round per screen** — judge whether the plan will create or
   change UI. When it will, run one mockup round per **screen** — the unit is
   the screen: changes that land together on one screen are one round. Run
