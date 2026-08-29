@@ -17,6 +17,11 @@ import {
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
 import { useIssuesQuery } from "../api/queries";
 import {
+  readCockpitCollapsedSectionKeys,
+  toggleCockpitCollapsedSectionKey,
+  writeCockpitCollapsedSectionKeys,
+} from "../lib/cockpit-collapsed-sections";
+import {
   readCockpitHiddenProjectIds,
   toggleCockpitHiddenProjectId,
   writeCockpitHiddenProjectIds,
@@ -33,6 +38,7 @@ import { useIssueUiStore } from "../store/use-issue-ui-store";
 import {
   FlowBucketsSections,
   FlowPreviewedItems,
+  type FlowBucketKey,
 } from "./flow-buckets-sections";
 import type { ImplementingLockRefusal } from "../lib/implementing-launch";
 import { ImplementingLockRefusalState } from "./implementing-launch-control";
@@ -170,6 +176,9 @@ export function CockpitPage() {
   const { data, isLoading, error, refetch, isFetching } = useIssuesQuery();
   const openProjectDialog = useIssueUiStore((s) => s.openProjectDialog);
   const [hiddenIds, setHiddenIds] = useState(() => readCockpitHiddenProjectIds());
+  const [collapsedSectionKeys, setCollapsedSectionKeys] = useState(
+    () => readCockpitCollapsedSectionKeys(),
+  );
   const [implementingLockRefusal, setImplementingLockRefusal] = useState<
     CockpitImplementingLockRefusal | undefined
   >();
@@ -177,6 +186,14 @@ export function CockpitPage() {
   const setHiddenIdsAndCookie = useCallback((ids: string[]) => {
     writeCockpitHiddenProjectIds(ids);
     setHiddenIds(ids);
+  }, []);
+
+  const onToggleSection = useCallback((key: FlowBucketKey) => {
+    setCollapsedSectionKeys((prev) => {
+      const next = toggleCockpitCollapsedSectionKey(prev, key);
+      writeCockpitCollapsedSectionKeys(next);
+      return next;
+    });
   }, []);
 
   const issues = data?.issues ?? [];
@@ -299,6 +316,8 @@ export function CockpitPage() {
             buckets={buckets}
             idPrefix="cockpit"
             renderItems={renderBucketItems}
+            collapsedSectionKeys={collapsedSectionKeys}
+            onToggleSection={onToggleSection}
           />
         )}
       </PageShell>

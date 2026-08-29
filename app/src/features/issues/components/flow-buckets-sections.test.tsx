@@ -81,6 +81,19 @@ function emptyBuckets(
   };
 }
 
+const FLOW_BUCKET_HEADING_ORDER = [
+  "Needs attention",
+  "In flight",
+  "Ready",
+  "Awaiting planning",
+] as const;
+
+function headingLabels(container: ParentNode): string[] {
+  return [...container.querySelectorAll("section button[type='button']")].map(
+    (node) => node.textContent?.replace(/\d+/g, "").trim() ?? "",
+  );
+}
+
 function mountSections(
   buckets: FlowBuckets,
 ): { container: HTMLDivElement; root: Root } {
@@ -103,6 +116,14 @@ function mountSections(
 
 function section(container: ParentNode, key: string): HTMLElement | null {
   return container.querySelector(`section[aria-labelledby="test-${key}"]`);
+}
+
+function headingButton(container: ParentNode, key: string): HTMLButtonElement | null {
+  return container.querySelector(`#test-${key}`);
+}
+
+function sectionBody(container: ParentNode, key: string): HTMLElement | null {
+  return container.querySelector(`#test-${key}-body`);
 }
 
 afterEach(() => {
@@ -356,12 +377,10 @@ describe("FlowBucketsSections", () => {
     });
 
     const { container } = mountSections(buckets);
-    const headings = [...container.querySelectorAll("h2")].map((node) =>
-      node.textContent?.replace(/\d+/g, "").trim(),
+    const headings = FLOW_BUCKET_HEADING_ORDER.map((label) =>
+      headingLabels(container).indexOf(label),
     );
-    expect(headings.indexOf("Needs attention")).toBeLessThan(
-      headings.indexOf("In flight"),
-    );
+    expect(headings[0]).toBeLessThan(headings[1]);
     expect(section(container, "needsAttention")?.textContent).toContain("1");
     expect(section(container, "inFlight")?.querySelector("a")).toBeTruthy();
   });
@@ -381,18 +400,12 @@ describe("FlowBucketsSections", () => {
     });
 
     const { container } = mountSections(buckets);
-    const headings = [...container.querySelectorAll("h2")].map((node) =>
-      node.textContent?.replace(/\d+/g, "").trim(),
+    const headings = FLOW_BUCKET_HEADING_ORDER.map((label) =>
+      headingLabels(container).indexOf(label),
     );
-    expect(headings.indexOf("Needs attention")).toBeLessThan(
-      headings.indexOf("In flight"),
-    );
-    expect(headings.indexOf("In flight")).toBeLessThan(
-      headings.indexOf("Ready"),
-    );
-    expect(headings.indexOf("Ready")).toBeLessThan(
-      headings.indexOf("Awaiting planning"),
-    );
+    expect(headings[0]).toBeLessThan(headings[1]);
+    expect(headings[1]).toBeLessThan(headings[2]);
+    expect(headings[2]).toBeLessThan(headings[3]);
 
     const awaiting = section(container, "awaitingPlanning");
     expect(awaiting).toBeTruthy();
@@ -425,6 +438,101 @@ describe("FlowBucketsSections", () => {
     expect(awaiting?.querySelectorAll("a")).toHaveLength(6);
     expect(awaiting?.textContent).toContain("idea-5");
     expect(awaiting?.textContent).not.toContain("Show all");
+  });
+
+  it("starts with every visible section body open", () => {
+    const buckets = emptyBuckets({
+      ready: [row(epic("ready"), { blocked: false, epicStatus: "todo" })],
+      inFlight: [
+        row(epic("flight"), { blocked: false, epicStatus: "in-progress" }),
+      ],
+    });
+    const { container } = mountSections(buckets);
+
+    expect(sectionBody(container, "ready")).toBeTruthy();
+    expect(sectionBody(container, "inFlight")).toBeTruthy();
+    expect(headingButton(container, "ready")?.getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    expect(
+      headingButton(container, "inFlight")?.getAttribute("aria-expanded"),
+    ).toBe("true");
+  });
+
+  it("hides only the toggled section body while keeping label and count", () => {
+    const buckets = emptyBuckets({
+      ready: [row(epic("ready"), { blocked: false, epicStatus: "todo" })],
+      inFlight: [
+        row(epic("flight"), { blocked: false, epicStatus: "in-progress" }),
+      ],
+    });
+    const { container } = mountSections(buckets);
+    const inFlightHeading = headingButton(container, "inFlight");
+    expect(inFlightHeading?.textContent).toContain("In flight");
+    expect(inFlightHeading?.textContent).toContain("1");
+    expect(sectionBody(container, "inFlight")).toBeTruthy();
+
+    act(() => {
+      inFlightHeading?.click();
+    });
+
+    expect(inFlightHeading?.textContent).toContain("In flight");
+    expect(inFlightHeading?.textContent).toContain("1");
+    expect(sectionBody(container, "inFlight")).toBeNull();
+    expect(sectionBody(container, "ready")).toBeTruthy();
+    expect(inFlightHeading?.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("toggles two bands independently", () => {
+    const buckets = emptyBuckets({
+      ready: [row(epic("ready"), { blocked: false, epicStatus: "todo" })],
+      inFlight: [
+        row(epic("flight"), { blocked: false, epicStatus: "in-progress" }),
+      ],
+    });
+    const { container } = mountSections(buckets);
+
+    act(() => {
+      headingButton(container, "inFlight")?.click();
+    });
+    expect(sectionBody(container, "inFlight")).toBeNull();
+    expect(sectionBody(container, "ready")).toBeTruthy();
+
+    act(() => {
+      headingButton(container, "ready")?.click();
+    });
+    expect(sectionBody(container, "inFlight")).toBeNull();
+    expect(sectionBody(container, "ready")).toBeNull();
+
+    act(() => {
+      headingButton(container, "inFlight")?.click();
+    });
+    expect(sectionBody(container, "inFlight")).toBeTruthy();
+    expect(sectionBody(container, "ready")).toBeNull();
+  });
+
+  it("hides Ready blocked-hint body when collapsed", () => {
+    const buckets = emptyBuckets({
+      blocked: [
+        row(epic("blocked", false, "alpha"), {
+          blocked: true,
+          epicStatus: "todo",
+        }),
+      ],
+    });
+    const { container } = mountSections(buckets);
+    const ready = section(container, "ready");
+    expect(ready?.textContent).toContain("Blocked work is waiting");
+    expect(sectionBody(container, "ready")).toBeTruthy();
+
+    act(() => {
+      headingButton(container, "ready")?.click();
+    });
+
+    expect(section(container, "ready")).toBeTruthy();
+    expect(sectionBody(container, "ready")).toBeNull();
+    expect(ready?.textContent).toContain("Ready");
+    expect(ready?.textContent).not.toContain("Blocked work is waiting");
   });
 });
 

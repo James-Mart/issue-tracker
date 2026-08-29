@@ -1,4 +1,5 @@
 import { cloneElement, isValidElement, useState, type ReactNode } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Rail } from "@/components/ui/rail";
@@ -12,7 +13,7 @@ import {
 } from "../lib/flow";
 import { projectLensPath } from "../lib/links";
 
-type FlowBucketKey = keyof FlowBuckets | "needsAttention";
+export type FlowBucketKey = keyof FlowBuckets | "needsAttention";
 
 export const AWAITING_PLANNING_PREVIEW_LIMIT = 5;
 
@@ -144,30 +145,58 @@ function bucketItems(
   return buckets[key];
 }
 
-function BucketHeading({
+function BucketHeadingToggle({
   id,
   label,
   count,
   compact,
+  expanded,
+  onToggle,
 }: {
   id: string;
   label: string;
   count: number;
   compact?: boolean;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
+  const bodyId = `${id}-body`;
   return (
-    <h2
+    <button
+      type="button"
       id={id}
+      aria-expanded={expanded}
+      aria-controls={bodyId}
+      onClick={onToggle}
       className={cn(
-        "font-display font-semibold uppercase tracking-[0.16em] text-[hsl(var(--current))]",
-        compact ? "text-[10px]" : "text-[11px]",
+        "flex w-full items-center gap-2 rounded px-1 py-0.5 text-left",
+        "hover:bg-[hsl(var(--panel-2))]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
     >
-      {label}
-      <span className="ml-2 font-mono text-[11px] tabular-nums text-muted-foreground">
-        {count}
+      <span
+        className={cn(
+          "font-display font-semibold uppercase tracking-[0.16em] text-[hsl(var(--current))]",
+          compact ? "text-[10px]" : "text-[11px]",
+        )}
+      >
+        {label}
+        <span className="ml-2 font-mono text-[11px] tabular-nums text-muted-foreground">
+          {count}
+        </span>
       </span>
-    </h2>
+      {expanded ? (
+        <ChevronDown
+          className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      ) : (
+        <ChevronRight
+          className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      )}
+    </button>
   );
 }
 
@@ -276,6 +305,8 @@ function FlowBucketSection({
   idPrefix,
   renderRow,
   renderItems,
+  collapsed,
+  onToggle,
 }: {
   def: FlowBucketDef;
   items: FlowItem[];
@@ -287,8 +318,11 @@ function FlowBucketSection({
     compact?: boolean,
     previewLimit?: number,
   ) => ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   const headingId = `${idPrefix}-${def.key}`;
+  const bodyId = `${headingId}-body`;
   const count = items.length;
   const hideWhenEmpty = def.hideWhenEmpty;
   const compact = def.compact;
@@ -313,13 +347,15 @@ function FlowBucketSection({
 
   return (
     <section key={def.key} aria-labelledby={headingId}>
-      <BucketHeading
+      <BucketHeadingToggle
         id={headingId}
         label={def.label}
         count={count}
         compact={compact}
+        expanded={!collapsed}
+        onToggle={onToggle}
       />
-      {body}
+      {!collapsed ? <div id={bodyId}>{body}</div> : null}
     </section>
   );
 }
@@ -333,6 +369,8 @@ export function FlowBucketsSections({
   idPrefix,
   renderRow,
   renderItems,
+  collapsedSectionKeys: controlledCollapsed,
+  onToggleSection: controlledOnToggle,
 }: {
   buckets: FlowBuckets;
   idPrefix: string;
@@ -343,7 +381,25 @@ export function FlowBucketsSections({
     compact?: boolean,
     previewLimit?: number,
   ) => ReactNode;
+  collapsedSectionKeys?: ReadonlySet<FlowBucketKey>;
+  onToggleSection?: (key: FlowBucketKey) => void;
 }) {
+  const [internalCollapsed, setInternalCollapsed] = useState<
+    ReadonlySet<FlowBucketKey>
+  >(() => new Set());
+
+  const collapsedSectionKeys = controlledCollapsed ?? internalCollapsed;
+  const onToggleSection =
+    controlledOnToggle ??
+    ((key: FlowBucketKey) => {
+      setInternalCollapsed((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    });
+
   const { needsAttention, buckets: displayBuckets } =
     partitionCockpitBuckets(buckets);
 
@@ -358,6 +414,8 @@ export function FlowBucketsSections({
           idPrefix={idPrefix}
           renderRow={renderRow}
           renderItems={renderItems}
+          collapsed={collapsedSectionKeys.has(def.key)}
+          onToggle={() => onToggleSection(def.key)}
         />
       ))}
     </div>
