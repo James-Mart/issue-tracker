@@ -5,6 +5,8 @@ export type IssueErrorCode =
   | "gh-missing"
   | "gh-unauthenticated"
   | "gh-failed"
+  | "git-missing"
+  | "git-failed"
   | "not-github-pr-url";
 
 const STATUS: Record<IssueErrorCode, number> = {
@@ -14,6 +16,8 @@ const STATUS: Record<IssueErrorCode, number> = {
   "gh-missing": 503,
   "gh-unauthenticated": 401,
   "gh-failed": 502,
+  "git-missing": 503,
+  "git-failed": 502,
   "not-github-pr-url": 400,
 };
 

@@ -1516,13 +1516,18 @@ that disagrees with reality. A Task's `status` (the one genuine human/agent
 decision) and sibling `order` (authored implicitly via doc position or
 imperative append) are stored.
 
-**Metadata-only with respect to git.** The tracker never shells out to git and
-never touches a working tree. It reads external delivery state by shelling out
+**Read-only git from the server; agents write.** The server never mutates a
+repository — no refs, objects, index, or working tree — and never runs git
+commands outside the read-only allow-list enforced in
+`app/server/services/git-read.ts` (`show`, `diff`, `cat-file`, `rev-list`,
+`rev-parse`, `merge-base`), always with `cwd` set to the Project `workspace`
+via `requireProjectWorkspace`. It reads external delivery state by shelling out
 to `gh` with ambient auth and owns no credentials; PR facts are read live and
-never stored. Agents run git themselves and record durable git facts —
-`branchName`, `prUrl`, `commitSha`, `merged` — through the CLI. The tracker's
-job is to model the stacked-PR *plan* and its progress, not to drive git. This
-keeps it safe to run anywhere and impossible for it to corrupt a repo.
+never stored. Agents run git themselves for writes and record durable git facts
+— `branchName`, `prUrl`, `commitSha`, `merged` — through the CLI. The tracker's
+job is to model the stacked-PR *plan* and its progress, not to drive git writes.
+This keeps it safe to run anywhere and impossible for the server to corrupt a
+repo.
 
 **Correct-by-construction over defensive layering.** Malformed files and
 integrity violations become `problems` that are surfaced in the UI and CLI, not
