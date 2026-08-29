@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bot, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
 import { visibleIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
@@ -98,13 +98,6 @@ function CockpitHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
-        <Link
-          to="/agents"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[hsl(var(--rail-lit))] hover:text-foreground"
-        >
-          <Bot className="h-3.5 w-3.5" />
-          Agents
-        </Link>
       </div>
     </header>
   );

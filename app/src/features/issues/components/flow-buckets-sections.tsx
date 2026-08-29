@@ -80,6 +80,12 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     hideWhenEmpty: true,
   },
   {
+    key: "inFlight",
+    label: "In flight",
+    empty: "Nothing in flight. Pick up Ready work or start a Story.",
+    hideWhenEmpty: true,
+  },
+  {
     key: "ready",
     label: "Ready",
     empty: READY_EMPTY_COPY,
@@ -91,12 +97,6 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     label: "Awaiting planning",
     hideWhenEmpty: true,
     previewLimit: AWAITING_PLANNING_PREVIEW_LIMIT,
-  },
-  {
-    key: "inFlight",
-    label: "In flight",
-    empty: "Nothing in flight. Pick up Ready work or start a Story.",
-    hideWhenEmpty: true,
   },
   {
     key: "recentlyMerged",

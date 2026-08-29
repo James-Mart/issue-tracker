@@ -365,7 +365,7 @@ describe("FlowBucketsSections", () => {
     expect(section(container, "inFlight")?.querySelector("a")).toBeTruthy();
   });
 
-  it("renders Ready before Awaiting planning and In flight", () => {
+  it("renders In flight before Ready and Awaiting planning", () => {
     const buckets = emptyBuckets({
       awaitingPlanning: [
         row(idea("captured"), { blocked: false, ideaStatus: "captured" }),
@@ -384,13 +384,13 @@ describe("FlowBucketsSections", () => {
       node.textContent?.replace(/\d+/g, "").trim(),
     );
     expect(headings.indexOf("Needs attention")).toBeLessThan(
+      headings.indexOf("In flight"),
+    );
+    expect(headings.indexOf("In flight")).toBeLessThan(
       headings.indexOf("Ready"),
     );
     expect(headings.indexOf("Ready")).toBeLessThan(
       headings.indexOf("Awaiting planning"),
-    );
-    expect(headings.indexOf("Awaiting planning")).toBeLessThan(
-      headings.indexOf("In flight"),
     );
 
     const awaiting = section(container, "awaitingPlanning");
