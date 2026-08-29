@@ -826,6 +826,72 @@ export type ConversationTranscriptPage = z.infer<
   typeof conversationTranscriptPageSchema
 >;
 
+/** One conversation attachment's metadata (store is source of truth for mime). */
+export const conversationAttachmentMetaSchema = z.object({
+  name: nonEmpty,
+  size: z.number().int().nonnegative(),
+  mimeType: nonEmpty,
+});
+
+export type ConversationAttachmentMeta = z.infer<
+  typeof conversationAttachmentMetaSchema
+>;
+
+/** GET /api/conversations/:id/attachments response. */
+export const conversationAttachmentsListSchema = z.object({
+  attachments: z.array(conversationAttachmentMetaSchema),
+});
+
+export type ConversationAttachmentsList = z.infer<
+  typeof conversationAttachmentsListSchema
+>;
+
+export type ConversationAttachmentMetaParseResult =
+  | { ok: true; meta: ConversationAttachmentMeta }
+  | { ok: false; message: string };
+
+export function parseConversationAttachmentMeta(
+  raw: unknown,
+): ConversationAttachmentMetaParseResult {
+  const result = conversationAttachmentMetaSchema.safeParse(raw);
+  if (result.success) return { ok: true, meta: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid conversation attachment"),
+  };
+}
+
+export type ConversationAttachmentsListParseResult =
+  | { ok: true; list: ConversationAttachmentsList }
+  | { ok: false; message: string };
+
+export function parseConversationAttachmentsList(
+  raw: unknown,
+): ConversationAttachmentsListParseResult {
+  const result = conversationAttachmentsListSchema.safeParse(raw);
+  if (result.success) return { ok: true, list: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid conversation attachments list"),
+  };
+}
+
+export function assertConversationAttachmentMeta(
+  raw: unknown,
+): ConversationAttachmentMeta {
+  const result = parseConversationAttachmentMeta(raw);
+  if (!result.ok) throwInvalidPublishedPayload(result.message);
+  return result.meta;
+}
+
+export function assertConversationAttachmentsList(
+  raw: unknown,
+): ConversationAttachmentsList {
+  const result = parseConversationAttachmentsList(raw);
+  if (!result.ok) throwInvalidPublishedPayload(result.message);
+  return result.list;
+}
+
 /** Write-time input: stored shape minus the server-stamped `at`. */
 export const delegationRecordInputSchema = z.object({
   delegationId: nonEmpty,

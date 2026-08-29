@@ -100,7 +100,7 @@ export function putConversationAttachment(
   return withAttachmentOp(conversationId, filename, (dir) => {
     if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
       throw new IssueError(
-        "validation",
+        "attachment-too-large",
         `attachment exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
       );
     }

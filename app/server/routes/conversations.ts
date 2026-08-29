@@ -1,8 +1,17 @@
 import { Router, type RequestHandler, type Response } from "express";
+import { basename } from "path";
+import { uploadConversationAttachment } from "../middleware/upload-conversation-attachment.js";
 import {
   agentSessions,
   type AgentSessions,
 } from "../services/agent-sessions.js";
+import {
+  getConversationAttachment,
+  listConversationAttachments,
+  putConversationAttachment,
+  removeConversationAttachment,
+} from "../services/conversation-attachments.js";
+import { IssueError } from "../services/errors.js";
 import {
   createConversation,
   deleteConversation,
@@ -15,6 +24,8 @@ import {
 import { requireProjectWorkspace } from "../services/project-workspace.js";
 import {
   assertConversationActiveRun,
+  assertConversationAttachmentMeta,
+  assertConversationAttachmentsList,
   assertConversationListItem,
   assertConversationTranscriptPage,
   type ConversationActiveRun,
@@ -268,6 +279,58 @@ export function createConversationsRouter(
     "/:id/pending",
     asyncRoute(async (req, res) => {
       await setPendingMessage(req.params.id, null);
+      res.status(204).end();
+    }),
+  );
+
+  router.get(
+    "/:id/attachments",
+    asyncRoute(async (req, res) => {
+      const attachments = await listConversationAttachments(req.params.id);
+      res.json(
+        assertConversationAttachmentsList({
+          attachments: attachments.map((meta) =>
+            assertConversationAttachmentMeta(meta),
+          ),
+        }),
+      );
+    }),
+  );
+
+  router.post(
+    "/:id/attachments",
+    uploadConversationAttachment,
+    asyncRoute(async (req, res) => {
+      const file = req.file;
+      if (!file) {
+        throw new IssueError("validation", "attachment is required");
+      }
+      const name = basename(file.originalname);
+      const meta = await putConversationAttachment(
+        req.params.id,
+        name,
+        file.buffer,
+      );
+      res.status(201).json(assertConversationAttachmentMeta(meta));
+    }),
+  );
+
+  router.get(
+    "/:id/attachments/:name",
+    asyncRoute(async (req, res) => {
+      const { bytes, mimeType } = await getConversationAttachment(
+        req.params.id,
+        req.params.name,
+      );
+      res.type(mimeType);
+      res.send(bytes);
+    }),
+  );
+
+  router.delete(
+    "/:id/attachments/:name",
+    asyncRoute(async (req, res) => {
+      await removeConversationAttachment(req.params.id, req.params.name);
       res.status(204).end();
     }),
   );
