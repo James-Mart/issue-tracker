@@ -52,28 +52,42 @@ function nestedWorkChildren(parent: Issue, issues: Issue[]): Issue[] {
     .sort(bySequence);
 }
 
-function collectFrom(issue: Issue, issues: Issue[], out: ChangeCommit[]): void {
-  if (issue.kind === "task") {
-    const commit = taskCommit(issue);
-    if (commit) out.push(commit);
-    return;
-  }
+function collectOwnTaskCommits(
+  parentId: string,
+  issues: Issue[],
+  out: ChangeCommit[],
+): void {
   const tasks = issues
     .filter(
-      (child): child is Task => child.kind === "task" && isChildOf(child, issue.id),
+      (child): child is Task => child.kind === "task" && isChildOf(child, parentId),
     )
     .sort(bySequence);
-  for (const task of tasks) collectFrom(task, issues, out);
+  for (const task of tasks) {
+    const commit = taskCommit(task);
+    if (commit) out.push(commit);
+  }
+}
+
+function collectFrom(issue: Issue, issues: Issue[], out: ChangeCommit[]): void {
+  collectOwnTaskCommits(issue.id, issues, out);
   for (const child of nestedWorkChildren(issue, issues)) {
     collectFrom(child, issues, out);
   }
 }
 
-/** Descendant Task shas in implementation order: tasks, then stacked stories, depth-first. */
+/**
+ * Task shas in implementation order. A Story yields only its own Tasks;
+ * an Epic walks child Stories (including stacked) depth-first.
+ */
 export function collectDescendantCommits(issueId: string): ChangeCommit[] {
   const issue = readIssueOrThrow(issueId);
+  const issues = readAll().issues;
   const commits: ChangeCommit[] = [];
-  collectFrom(issue, readAll().issues, commits);
+  if (issue.kind === "story") {
+    collectOwnTaskCommits(issue.id, issues, commits);
+  } else {
+    collectFrom(issue, issues, commits);
+  }
   return commits;
 }
 
