@@ -147,3 +147,46 @@ export function interruptConversationRun(
     { method: "POST", body },
   );
 }
+
+export type ConversationAttachment = {
+  name: string;
+  size: number;
+  mimeType: string;
+};
+
+export function conversationAttachmentApiPath(
+  conversationId: string,
+  name: string,
+): string {
+  return `/api/conversations/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(name)}`;
+}
+
+export function uploadConversationAttachment(
+  conversationId: string,
+  file: File,
+): Promise<ConversationAttachment> {
+  const form = new FormData();
+  form.append("attachment", file);
+  return request<ConversationAttachment>(
+    `/api/conversations/${encodeURIComponent(conversationId)}/attachments`,
+    { method: "POST", body: form },
+  );
+}
+
+export function deleteConversationAttachment(
+  conversationId: string,
+  name: string,
+): Promise<void> {
+  return request<void>(conversationAttachmentApiPath(conversationId, name), {
+    method: "DELETE",
+  });
+}
+
+export async function listConversationAttachments(
+  conversationId: string,
+): Promise<ConversationAttachment[]> {
+  const data = await request<{ attachments: ConversationAttachment[] }>(
+    `/api/conversations/${encodeURIComponent(conversationId)}/attachments`,
+  );
+  return data.attachments;
+}

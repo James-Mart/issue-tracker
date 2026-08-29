@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TRANSCRIPT_FETCH_TIMEOUT_MS,
+  conversationAttachmentApiPath,
   getConversationRun,
   getConversationTranscript,
   listConversations,
+  uploadConversationAttachment,
 } from "./client";
 
 function hangingFetch(): ReturnType<typeof vi.fn> {
@@ -81,6 +83,57 @@ describe("getConversationTranscript", () => {
     caller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  });
+});
+
+describe("conversationAttachmentApiPath", () => {
+  it("builds item paths with consistent encoding", () => {
+    expect(conversationAttachmentApiPath("conv-1", "mock.tsx")).toBe(
+      "/api/conversations/conv-1/attachments/mock.tsx",
+    );
+    expect(conversationAttachmentApiPath("conv-1", "a b.png")).toBe(
+      "/api/conversations/conv-1/attachments/a%20b.png",
+    );
+    expect(conversationAttachmentApiPath("conv/special", "file.txt")).toBe(
+      "/api/conversations/conv%2Fspecial/attachments/file.txt",
+    );
+  });
+});
+
+describe("uploadConversationAttachment", () => {
+  it("posts multipart form data with field attachment and returns metadata", async () => {
+    const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+      const body = init?.body;
+      expect(body).toBeInstanceOf(FormData);
+      const form = body as FormData;
+      expect(form.has("attachment")).toBe(true);
+      expect(form.get("attachment")).toBeInstanceOf(File);
+      expect((form.get("attachment") as File).name).toBe("shot.png");
+
+      return Promise.resolve(
+        jsonResponse({
+          name: "shot.png",
+          size: 42,
+          mimeType: "image/png",
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File(["pixels"], "shot.png", { type: "image/png" });
+    await expect(
+      uploadConversationAttachment("conv-1", file),
+    ).resolves.toEqual({
+      name: "shot.png",
+      size: 42,
+      mimeType: "image/png",
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/conversations/conv-1/attachments",
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
   });
 });
 

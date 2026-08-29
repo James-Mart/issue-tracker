@@ -10,6 +10,7 @@ export type IssueErrorCode =
   | "commit-unreachable"
   | "commits-not-contiguous"
   | "change-too-large"
+  | "attachment-too-large"
   | "not-github-pr-url";
 
 const STATUS: Record<IssueErrorCode, number> = {
@@ -24,6 +25,7 @@ const STATUS: Record<IssueErrorCode, number> = {
   "commit-unreachable": 404,
   "commits-not-contiguous": 400,
   "change-too-large": 413,
+  "attachment-too-large": 413,
   "not-github-pr-url": 400,
 };
 
