@@ -6,13 +6,27 @@ import { visibleIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
 import { useIssuesQuery } from "../api/queries";
 import {
   readCockpitHiddenProjectIds,
+  toggleCockpitHiddenProjectId,
   writeCockpitHiddenProjectIds,
 } from "../lib/cockpit-hidden-projects";
-import { issuesById, listProjects, projectIdOf } from "../lib/build-tree";
+import {
+  issuesById,
+  listProjects,
+  projectIdOf,
+  type ProjectRecord,
+} from "../lib/build-tree";
 import { flowBuckets, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
@@ -23,19 +37,75 @@ import {
 import { FlowRow } from "./flow-row";
 import { FlowRowActions } from "./flow-row-actions";
 
-function CockpitHeader() {
+function CockpitHeader({
+  projects,
+  hiddenIds,
+  onHiddenIdsChange,
+}: {
+  projects: ProjectRecord[];
+  hiddenIds: string[];
+  onHiddenIdsChange: (ids: string[]) => void;
+}) {
+  const hiddenCount = hiddenIds.length;
+  const filterActive = hiddenCount > 0;
+
   return (
     <header className="flex items-center justify-between gap-2">
       <p className="min-w-0 font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
         Cockpit
       </p>
-      <Link
-        to="/agents"
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[hsl(var(--rail-lit))] hover:text-foreground"
-      >
-        <Bot className="h-3.5 w-3.5" />
-        Agents
-      </Link>
+      <div className="flex shrink-0 items-center gap-2">
+        {projects.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant={filterActive ? "secondary" : "outline"}
+                size="sm"
+                className="shrink-0"
+                aria-label="Projects"
+                title="Projects"
+              >
+                Projects
+                {hiddenCount > 0 ? (
+                  <span className="ml-1 tabular-nums text-muted-foreground">
+                    ({hiddenCount})
+                  </span>
+                ) : null}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Projects in Cockpit</DropdownMenuLabel>
+              {projects.map((project) => (
+                <DropdownMenuCheckboxItem
+                  key={project.id}
+                  checked={!hiddenIds.includes(project.id)}
+                  onCheckedChange={() =>
+                    onHiddenIdsChange(
+                      toggleCockpitHiddenProjectId(hiddenIds, project.id),
+                    )
+                  }
+                  onSelect={(event) => event.preventDefault()}
+                >
+                  {project.title}
+                </DropdownMenuCheckboxItem>
+              ))}
+              {filterActive ? (
+                <DropdownMenuItem onSelect={() => onHiddenIdsChange([])}>
+                  Show all
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+        <Link
+          to="/agents"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[hsl(var(--rail-lit))] hover:text-foreground"
+        >
+          <Bot className="h-3.5 w-3.5" />
+          Agents
+        </Link>
+      </div>
     </header>
   );
 }
@@ -171,7 +241,11 @@ export function CockpitPage() {
       errorTitle="Couldn't load the line."
     >
       <PageShell>
-        <CockpitHeader />
+        <CockpitHeader
+          projects={projects}
+          hiddenIds={hiddenIds}
+          onHiddenIdsChange={setHiddenIdsAndCookie}
+        />
         {projects.length === 0 ? (
           <ShellState
             eyebrow="Empty"

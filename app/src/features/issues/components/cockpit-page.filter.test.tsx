@@ -98,7 +98,50 @@ function projectLink(
   return match instanceof HTMLAnchorElement ? match : null;
 }
 
+function projectsTrigger(container: ParentNode): HTMLButtonElement | null {
+  const match = container.querySelector('button[aria-label="Projects"]');
+  return match instanceof HTMLButtonElement ? match : null;
+}
+
+function menuCheckbox(label: string): HTMLElement | null {
+  return (
+    Array.from(
+      document.querySelectorAll('[role="menuitemcheckbox"]'),
+    ).find((el) => el.textContent?.trim() === label) ?? null
+  );
+}
+
+function menuItem(label: string): HTMLElement | null {
+  return (
+    Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+      (el) => el.textContent?.trim() === label,
+    ) ?? null
+  );
+}
+
+function openProjectsMenu(container: ParentNode): HTMLButtonElement {
+  const trigger = projectsTrigger(container);
+  expect(trigger).toBeTruthy();
+  if (trigger!.getAttribute("data-state") !== "open") {
+    act(() => {
+      trigger!.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: 1,
+          pointerType: "mouse",
+        }),
+      );
+      trigger!.click();
+    });
+  }
+  return trigger!;
+}
+
 beforeEach(() => {
+  (
+    globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
   document.cookie = "cockpit_hidden_project_ids=; path=/; max-age=0";
   mockState.issues = [];
   mockState.derived = {};
@@ -186,5 +229,57 @@ describe("CockpitPage project filter", () => {
     expect(container.textContent).toContain("No projects on the line.");
     expect(container.textContent).toContain("Empty");
     expect(container.textContent).not.toContain("No projects in view.");
+    expect(projectsTrigger(container)).toBeNull();
+  });
+
+  it("filters projects from the header control", () => {
+    mockState.issues = [
+      project("p-alpha", "Alpha", 0),
+      project("p-beta", "Beta", 1),
+      epic("ready-alpha", "p-alpha"),
+      epic("ready-beta", "p-beta"),
+    ];
+    mockState.derived = {
+      "ready-alpha": { blocked: false, epicStatus: "todo" },
+      "ready-beta": { blocked: false, epicStatus: "todo" },
+    };
+
+    const { container } = mountCockpit();
+    const trigger = projectsTrigger(container);
+
+    expect(trigger?.textContent).toContain("Projects");
+    expect(trigger?.textContent).not.toContain("(");
+    expect(trigger?.className).not.toContain("bg-secondary");
+
+    openProjectsMenu(container);
+    expect(menuCheckbox("Alpha")?.getAttribute("aria-checked")).toBe("true");
+    expect(menuCheckbox("Beta")?.getAttribute("aria-checked")).toBe("true");
+    expect(menuItem("Show all")).toBeNull();
+
+    act(() => {
+      menuCheckbox("Alpha")!.click();
+    });
+
+    expect(readCockpitHiddenProjectIds()).toEqual(["p-alpha"]);
+    expect(projectLink(container, "Alpha")).toBeNull();
+    expect(projectLink(container, "Beta")).toBeTruthy();
+    expect(bucketCount(section(container, "ready"))).toBe(1);
+    expect(projectsTrigger(container)?.textContent).toContain("(1)");
+    expect(projectsTrigger(container)?.className).toContain("bg-secondary");
+
+    openProjectsMenu(container);
+    const showAll = menuItem("Show all");
+    expect(showAll).toBeTruthy();
+    act(() => {
+      showAll!.click();
+    });
+
+    expect(readCockpitHiddenProjectIds()).toEqual([]);
+    expect(projectLink(container, "Alpha")).toBeTruthy();
+    expect(projectLink(container, "Beta")).toBeTruthy();
+    expect(bucketCount(section(container, "ready"))).toBe(2);
+    expect(projectsTrigger(container)?.textContent).toContain("Projects");
+    expect(projectsTrigger(container)?.textContent).not.toContain("(");
+    expect(projectsTrigger(container)?.className).not.toContain("bg-secondary");
   });
 });
