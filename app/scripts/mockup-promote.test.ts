@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { attachmentEmbedMarkdown, parseArgs } from "./mockup-promote.js";
+import {
+  attachmentEmbedMarkdown,
+  conversationAttachmentEmbedMarkdown,
+  parseArgs,
+} from "./mockup-promote.js";
 
 describe("attachmentEmbedMarkdown", () => {
   it("matches the transcript attachment image markdown form", () => {
@@ -11,14 +15,22 @@ describe("attachmentEmbedMarkdown", () => {
   });
 });
 
+describe("conversationAttachmentEmbedMarkdown", () => {
+  it("URL-encodes the attachment name in the markdown path", () => {
+    const conversationId = "my-chat";
+    const name = "a b.png";
+    expect(conversationAttachmentEmbedMarkdown(conversationId, name)).toBe(
+      `![${name}](/api/conversations/${conversationId}/attachments/a%20b.png)`,
+    );
+  });
+});
+
 describe("parseArgs", () => {
   it("parses capturing flags", () => {
     expect(
       parseArgs([
         "--direction",
         "direction-a",
-        "--issue",
-        "idea-1",
         "--mode",
         "candidate",
         "--conversation",
@@ -27,7 +39,7 @@ describe("parseArgs", () => {
     ).toEqual({
       mode: "candidate",
       directionId: "direction-a",
-      issueId: "idea-1",
+      issueId: undefined,
       conversationId: "my-chat",
       fromIssueId: undefined,
     });
@@ -77,5 +89,20 @@ describe("parseArgs", () => {
     expect(() =>
       parseArgs(["--direction", "direction-a", "--issue", "idea-1"]),
     ).toThrow(/--mode is required/);
+  });
+
+  it("refuses --issue with candidate mode", () => {
+    expect(() =>
+      parseArgs([
+        "--direction",
+        "direction-a",
+        "--issue",
+        "idea-1",
+        "--mode",
+        "candidate",
+        "--conversation",
+        "my-chat",
+      ]),
+    ).toThrow(/--issue is not used with --mode candidate/);
   });
 });

@@ -70,6 +70,10 @@ async function loadAttachments() {
   return import("./attachments.js");
 }
 
+async function loadConversationAttachments() {
+  return import("./conversation-attachments.js");
+}
+
 async function loadConfig() {
   return import("../config.js");
 }
@@ -135,15 +139,16 @@ describe("attachment names", () => {
     } = await loadPromote();
 
     expect(
-      candidateAttachmentName("direction-a", "direction-a-card--default", "phone"),
-    ).toBe("mockup-candidate-direction-a-card-default-phone.png");
+      candidateAttachmentName("direction-a", "direction-a-card--default", "phone", 1),
+    ).toBe("mockup-candidate-direction-a-r1-card-default-phone.png");
     expect(
       candidateAttachmentName(
         "direction-a",
         "direction-a-card--default",
         "desktop",
+        2,
       ),
-    ).toBe("mockup-candidate-direction-a-card-default-desktop.png");
+    ).toBe("mockup-candidate-direction-a-r2-card-default-desktop.png");
     expect(
       chosenAttachmentName("direction-a", "direction-a-card--default", "desktop"),
     ).toBe("mockup-direction-a-card-default-desktop.png");
@@ -212,16 +217,17 @@ describe("attachment names", () => {
     );
 
     expect(
-      candidateAttachmentName("grid", "grid/gallery-grid-attachmentspanel-empty", "phone"),
-    ).toBe("mockup-candidate-grid-gallery-grid-attachmentspanel-empty-phone.png");
+      candidateAttachmentName("grid", "grid/gallery-grid-attachmentspanel-empty", "phone", 1),
+    ).toBe("mockup-candidate-grid-r1-gallery-grid-attachmentspanel-empty-phone.png");
     expect(
       candidateAttachmentName(
         "grid-lightbox",
         "grid-lightbox/gallery-grid-attachmentspanel-empty",
         "phone",
+        1,
       ),
     ).toBe(
-      "mockup-candidate-grid-lightbox-gallery-grid-attachmentspanel-empty-phone.png",
+      "mockup-candidate-grid-lightbox-r1-gallery-grid-attachmentspanel-empty-phone.png",
     );
     expect(
       chosenAttachmentName("grid", "grid/card--default", "desktop"),
@@ -329,9 +335,11 @@ describe("createDirectionArchive", () => {
 });
 
 describe("attachCapturedDirection", () => {
-  it("attaches candidate PNGs under mockup-candidate- names with viewport suffixes", async () => {
+  it("attaches candidate PNGs to the conversation store with revision names", async () => {
     const { attachCapturedDirection } = await loadPromote();
     const { listAttachments } = await loadAttachments();
+    const { listConversationAttachments } = await loadConversationAttachments();
+    const { conversationsDir } = await loadConfig();
 
     const phone = join(root, "a-phone.png");
     writePng(phone, "a");
@@ -340,18 +348,27 @@ describe("attachCapturedDirection", () => {
       mode: "candidate",
       conversationId: "promote-chat",
       directionId: "direction-a",
-      issueId: "src",
       captures: [capture("direction-a-card--default", "phone", phone)],
     });
 
     expect(result.attached).toEqual([
-      "mockup-candidate-direction-a-card-default-phone.png",
+      "mockup-candidate-direction-a-r1-card-default-phone.png",
     ]);
     expect(result.capturePaths).toEqual([phone]);
-    expect(listAttachments("src").map((att) => att.name)).toEqual(result.attached);
+    expect(listAttachments("src")).toEqual([]);
+    expect(await listConversationAttachments("promote-chat")).toEqual([
+      expect.objectContaining({
+        name: "mockup-candidate-direction-a-r1-card-default-phone.png",
+      }),
+    ]);
     expect(
       readFileSync(
-        join(issuesDir, "src", "attachments", result.attached[0]!),
+        join(
+          conversationsDir,
+          "promote-chat",
+          "attachments",
+          result.attached[0]!,
+        ),
       ).toString(),
     ).toBe("png:a");
   });
@@ -370,6 +387,7 @@ describe("attachCapturedDirection", () => {
         "direction-a",
         "direction-a-card--default",
         "phone",
+        1,
       ),
       Buffer.from("old-a"),
     );
@@ -379,6 +397,7 @@ describe("attachCapturedDirection", () => {
         "direction-b",
         "direction-b-list--default",
         "desktop",
+        1,
       ),
       Buffer.from("old-b"),
     );
@@ -620,22 +639,25 @@ describe("attachCapturedDirection", () => {
         mode: "candidate",
         conversationId: "promote-chat",
         directionId: "direction-a",
-        issueId: "src",
         captures: [
           capture("direction-a-card--default", "phone", small),
           capture("direction-a-card--hover", "phone", huge),
         ],
       }),
     ).rejects.toThrow(
-      `attachment "mockup-candidate-direction-a-card-hover-phone.png" exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
+      `attachment "mockup-candidate-direction-a-r1-card-hover-phone.png" exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
     );
     expect(listAttachments("src")).toEqual([]);
+    const { listConversationAttachments } = await loadConversationAttachments();
+    expect(await listConversationAttachments("promote-chat")).toEqual([]);
   });
 
-  it("replaces one direction's candidates on repeat without touching others", async () => {
+  it("stores a second revision alongside the first without replacing it", async () => {
     const { attachCapturedDirection, candidateAttachmentName } =
       await loadPromote();
     const { listAttachments } = await loadAttachments();
+    const { listConversationAttachments } = await loadConversationAttachments();
+    const { conversationsDir } = await loadConfig();
 
     const aPhoneFirst = join(root, "a-phone-first.png");
     const aDesktopFirst = join(root, "a-desktop-first.png");
@@ -648,27 +670,41 @@ describe("attachCapturedDirection", () => {
     writePng(aPhoneSecond, "a-phone-second");
     writePng(aDesktopSecond, "a-desktop-second");
 
-    const aPhoneName = candidateAttachmentName(
+    const aPhoneR1 = candidateAttachmentName(
       "direction-a",
       "direction-a-card--default",
       "phone",
+      1,
     );
-    const aDesktopName = candidateAttachmentName(
+    const aDesktopR1 = candidateAttachmentName(
       "direction-a",
       "direction-a-card--default",
       "desktop",
+      1,
     );
-    const bPhoneName = candidateAttachmentName(
+    const bPhoneR1 = candidateAttachmentName(
       "direction-b",
       "direction-b-list--default",
       "phone",
+      1,
+    );
+    const aPhoneR2 = candidateAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "phone",
+      2,
+    );
+    const aDesktopR2 = candidateAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "desktop",
+      2,
     );
 
     await attachCapturedDirection({
       mode: "candidate",
       conversationId: "promote-chat",
       directionId: "direction-a",
-      issueId: "src",
       captures: [
         capture("direction-a-card--default", "phone", aPhoneFirst),
         capture("direction-a-card--default", "desktop", aDesktopFirst),
@@ -679,7 +715,6 @@ describe("attachCapturedDirection", () => {
       mode: "candidate",
       conversationId: "promote-chat",
       directionId: "direction-b",
-      issueId: "src",
       captures: [capture("direction-b-list--default", "phone", bPhone)],
     });
 
@@ -687,25 +722,33 @@ describe("attachCapturedDirection", () => {
       mode: "candidate",
       conversationId: "promote-chat",
       directionId: "direction-a",
-      issueId: "src",
       captures: [
         capture("direction-a-card--default", "phone", aPhoneSecond),
         capture("direction-a-card--default", "desktop", aDesktopSecond),
       ],
     });
 
-    const names = listAttachments("src").map((att) => att.name).sort();
-    expect(names).toEqual([aDesktopName, aPhoneName, bPhoneName].sort());
+    expect(listAttachments("src")).toEqual([]);
+    const names = (await listConversationAttachments("promote-chat"))
+      .map((att) => att.name)
+      .sort();
+    expect(names).toEqual(
+      [aDesktopR1, aDesktopR2, aPhoneR1, aPhoneR2, bPhoneR1].sort(),
+    );
     expect(
-      readFileSync(join(issuesDir, "src", "attachments", aPhoneName)).toString(),
+      readFileSync(
+        join(conversationsDir, "promote-chat", "attachments", aPhoneR1),
+      ).toString(),
+    ).toBe("png:a-phone-first");
+    expect(
+      readFileSync(
+        join(conversationsDir, "promote-chat", "attachments", aPhoneR2),
+      ).toString(),
     ).toBe("png:a-phone-second");
     expect(
       readFileSync(
-        join(issuesDir, "src", "attachments", aDesktopName),
+        join(conversationsDir, "promote-chat", "attachments", bPhoneR1),
       ).toString(),
-    ).toBe("png:a-desktop-second");
-    expect(
-      readFileSync(join(issuesDir, "src", "attachments", bPhoneName)).toString(),
     ).toBe("png:b-phone");
   });
 
@@ -713,7 +756,8 @@ describe("attachCapturedDirection", () => {
     const { attachCapturedDirection, candidateAttachmentName } =
       await loadPromote();
     const { directionDir } = await loadScratch();
-    const { listAttachments } = await loadAttachments();
+    const { listConversationAttachments } = await loadConversationAttachments();
+    const { conversationsDir } = await loadConfig();
 
     directionDir("promote-chat", "grid");
     directionDir("promote-chat", "grid-lightbox");
@@ -725,22 +769,29 @@ describe("attachCapturedDirection", () => {
     writePng(lightboxPhone, "lightbox");
     writePng(gridPhoneSecond, "grid-second");
 
-    const gridPhoneName = candidateAttachmentName(
+    const gridPhoneR1 = candidateAttachmentName(
       "grid",
       "grid/card--default",
       "phone",
+      1,
     );
-    const lightboxPhoneName = candidateAttachmentName(
+    const lightboxPhoneR1 = candidateAttachmentName(
       "grid-lightbox",
       "grid-lightbox/card--default",
       "phone",
+      1,
+    );
+    const gridPhoneR2 = candidateAttachmentName(
+      "grid",
+      "grid/card--default",
+      "phone",
+      2,
     );
 
     await attachCapturedDirection({
       mode: "candidate",
       conversationId: "promote-chat",
       directionId: "grid",
-      issueId: "src",
       captures: [capture("grid/card--default", "phone", gridPhoneFirst)],
     });
 
@@ -748,7 +799,6 @@ describe("attachCapturedDirection", () => {
       mode: "candidate",
       conversationId: "promote-chat",
       directionId: "grid-lightbox",
-      issueId: "src",
       captures: [
         capture("grid-lightbox/card--default", "phone", lightboxPhone),
       ],
@@ -758,18 +808,21 @@ describe("attachCapturedDirection", () => {
       mode: "candidate",
       conversationId: "promote-chat",
       directionId: "grid",
-      issueId: "src",
       captures: [capture("grid/card--default", "phone", gridPhoneSecond)],
     });
 
-    const names = listAttachments("src").map((att) => att.name).sort();
-    expect(names).toEqual([gridPhoneName, lightboxPhoneName].sort());
+    const names = (await listConversationAttachments("promote-chat"))
+      .map((att) => att.name)
+      .sort();
+    expect(names).toEqual([gridPhoneR1, gridPhoneR2, lightboxPhoneR1].sort());
     expect(
-      readFileSync(join(issuesDir, "src", "attachments", gridPhoneName)).toString(),
+      readFileSync(
+        join(conversationsDir, "promote-chat", "attachments", gridPhoneR2),
+      ).toString(),
     ).toBe("png:grid-second");
     expect(
       readFileSync(
-        join(issuesDir, "src", "attachments", lightboxPhoneName),
+        join(conversationsDir, "promote-chat", "attachments", lightboxPhoneR1),
       ).toString(),
     ).toBe("png:lightbox");
   });
@@ -885,7 +938,6 @@ describe("promoteMockup", () => {
     const result = await promoteMockup({
       mode: "candidate",
       directionId: "direction-a",
-      issueId: "src",
       conversationId: "promote-chat",
     });
 
@@ -895,9 +947,15 @@ describe("promoteMockup", () => {
       viewports: ["phone", "desktop"],
     });
     expect(result.attached.sort()).toEqual([
-      "mockup-candidate-direction-a-card-default-desktop.png",
-      "mockup-candidate-direction-a-card-default-phone.png",
+      "mockup-candidate-direction-a-r1-card-default-desktop.png",
+      "mockup-candidate-direction-a-r1-card-default-phone.png",
     ]);
+    const { listConversationAttachments } = await loadConversationAttachments();
+    expect(
+      (await listConversationAttachments("promote-chat")).map((att) => att.name).sort(),
+    ).toEqual(result.attached.sort());
+    const { listAttachments } = await loadAttachments();
+    expect(listAttachments("src")).toEqual([]);
   });
 
   it("throws naming the conversation when no stack is running", async () => {
@@ -915,7 +973,6 @@ describe("promoteMockup", () => {
       promoteMockup({
         mode: "candidate",
         directionId: "direction-a",
-        issueId: "src",
         conversationId: "missing-conversation",
       }),
     ).rejects.toThrow(
@@ -939,6 +996,15 @@ describe("promoteMockup", () => {
     await expect(
       promoteMockup({
         mode: "candidate",
+        directionId: "direction-a",
+        issueId: "src",
+        conversationId: "promote-chat",
+      }),
+    ).rejects.toThrow(/--issue is not used with --mode candidate/);
+
+    await expect(
+      promoteMockup({
+        mode: "chosen",
         directionId: "direction-a",
         issueId: "src",
         conversationId: "promote-chat",

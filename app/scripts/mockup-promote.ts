@@ -10,7 +10,9 @@ import {
   type PromoteMode,
   type PromoteOptions,
 } from "../server/services/mockup-promote.js";
+import { resolveMockupConversationId } from "../server/services/mockup-scratch.js";
 import { attachmentsApiPath } from "../src/features/issues/lib/attachments.js";
+import { conversationAttachmentApiPath } from "../src/features/agents/api/client.js";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -88,8 +90,14 @@ export function parseArgs(argv: string[]): MockupPromoteCliOptions {
   }
 
   if (!directionId) throw new Error("--direction is required");
-  if (!issueId) throw new Error("--issue is required");
   if (!mode) throw new Error("--mode is required");
+  if (mode === "candidate") {
+    if (issueId !== undefined) {
+      throw new Error("--issue is not used with --mode candidate");
+    }
+  } else if (!issueId) {
+    throw new Error("--issue is required");
+  }
 
   return { mode, directionId, issueId, conversationId, fromIssueId };
 }
@@ -98,9 +106,20 @@ export function attachmentEmbedMarkdown(issueId: string, name: string): string {
   return `![${name}](${attachmentsApiPath(issueId, name)})`;
 }
 
+export function conversationAttachmentEmbedMarkdown(
+  conversationId: string,
+  name: string,
+): string {
+  return `![${name}](${conversationAttachmentApiPath(conversationId, name)})`;
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const result = await promoteMockup(options);
+  const resolvedConversationId =
+    options.mode === "candidate" && options.conversationId
+      ? resolveMockupConversationId(options.conversationId)
+      : undefined;
   for (const name of result.attached) {
     process.stdout.write(`${name}\n`);
   }
@@ -109,7 +128,15 @@ async function main(): Promise<void> {
   }
   for (const name of result.attached) {
     if (!name.endsWith(".png")) continue;
-    process.stdout.write(`${attachmentEmbedMarkdown(options.issueId, name)}\n`);
+    if (options.mode === "candidate") {
+      process.stdout.write(
+        `${conversationAttachmentEmbedMarkdown(resolvedConversationId!, name)}\n`,
+      );
+    } else {
+      process.stdout.write(
+        `${attachmentEmbedMarkdown(options.issueId!, name)}\n`,
+      );
+    }
   }
 }
 
