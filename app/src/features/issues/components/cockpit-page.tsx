@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bot, Plus } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
@@ -6,9 +6,27 @@ import { visibleIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { IssuesQueryShell, ShellState } from "@/app/shell-state";
 import { useIssuesQuery } from "../api/queries";
-import { issuesById, listProjects, projectIdOf } from "../lib/build-tree";
+import {
+  readCockpitHiddenProjectIds,
+  toggleCockpitHiddenProjectId,
+  writeCockpitHiddenProjectIds,
+} from "../lib/cockpit-hidden-projects";
+import {
+  issuesById,
+  listProjects,
+  projectIdOf,
+  type ProjectRecord,
+} from "../lib/build-tree";
 import { flowBuckets, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
@@ -19,19 +37,75 @@ import {
 import { FlowRow } from "./flow-row";
 import { FlowRowActions } from "./flow-row-actions";
 
-function CockpitHeader() {
+function CockpitHeader({
+  projects,
+  hiddenIds,
+  onHiddenIdsChange,
+}: {
+  projects: ProjectRecord[];
+  hiddenIds: string[];
+  onHiddenIdsChange: (ids: string[]) => void;
+}) {
+  const hiddenCount = hiddenIds.length;
+  const filterActive = hiddenCount > 0;
+
   return (
     <header className="flex items-center justify-between gap-2">
       <p className="min-w-0 font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
         Cockpit
       </p>
-      <Link
-        to="/agents"
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[hsl(var(--rail-lit))] hover:text-foreground"
-      >
-        <Bot className="h-3.5 w-3.5" />
-        Agents
-      </Link>
+      <div className="flex shrink-0 items-center gap-2">
+        {projects.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant={filterActive ? "secondary" : "outline"}
+                size="sm"
+                className="shrink-0"
+                aria-label="Projects"
+                title="Projects"
+              >
+                Projects
+                {hiddenCount > 0 ? (
+                  <span className="ml-1 tabular-nums text-muted-foreground">
+                    ({hiddenCount})
+                  </span>
+                ) : null}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Projects in Cockpit</DropdownMenuLabel>
+              {projects.map((project) => (
+                <DropdownMenuCheckboxItem
+                  key={project.id}
+                  checked={!hiddenIds.includes(project.id)}
+                  onCheckedChange={() =>
+                    onHiddenIdsChange(
+                      toggleCockpitHiddenProjectId(hiddenIds, project.id),
+                    )
+                  }
+                  onSelect={(event) => event.preventDefault()}
+                >
+                  {project.title}
+                </DropdownMenuCheckboxItem>
+              ))}
+              {filterActive ? (
+                <DropdownMenuItem onSelect={() => onHiddenIdsChange([])}>
+                  Show all
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+        <Link
+          to="/agents"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[hsl(var(--rail-lit))] hover:text-foreground"
+        >
+          <Bot className="h-3.5 w-3.5" />
+          Agents
+        </Link>
+      </div>
     </header>
   );
 }
@@ -95,16 +169,33 @@ function CockpitProjectSubheader({
 export function CockpitPage() {
   const { data, isLoading, error, refetch, isFetching } = useIssuesQuery();
   const openProjectDialog = useIssueUiStore((s) => s.openProjectDialog);
+  const [hiddenIds, setHiddenIds] = useState(() => readCockpitHiddenProjectIds());
+
+  const setHiddenIdsAndCookie = useCallback((ids: string[]) => {
+    writeCockpitHiddenProjectIds(ids);
+    setHiddenIds(ids);
+  }, []);
 
   const issues = data?.issues ?? [];
   const derived = data?.derived ?? {};
   const byId = useMemo(() => issuesById(issues), [issues]);
   const projects = useMemo(() => listProjects(issues), [issues]);
   const projectOrder = useMemo(() => projects.map((project) => project.id), [projects]);
-  const buckets = useMemo(
-    () => flowBuckets(visibleIssues(issues, false), derived, {}),
-    [derived, issues],
-  );
+  const buckets = useMemo(() => {
+    const visible = visibleIssues(issues, false);
+    const hidden = new Set(hiddenIds);
+    const filtered =
+      hidden.size === 0
+        ? visible
+        : visible.filter((issue) => {
+            const projectId = projectIdOf(issue.id, byId);
+            return !projectId || !hidden.has(projectId);
+          });
+    return flowBuckets(filtered, derived, {});
+  }, [byId, derived, hiddenIds, issues]);
+  const allProjectsHidden =
+    projects.length > 0 &&
+    projects.every((project) => hiddenIds.includes(project.id));
 
   const renderBucketItems = useCallback(
     (items: FlowItem[], compact?: boolean, previewLimit?: number) => {
@@ -150,7 +241,11 @@ export function CockpitPage() {
       errorTitle="Couldn't load the line."
     >
       <PageShell>
-        <CockpitHeader />
+        <CockpitHeader
+          projects={projects}
+          hiddenIds={hiddenIds}
+          onHiddenIdsChange={setHiddenIdsAndCookie}
+        />
         {projects.length === 0 ? (
           <ShellState
             eyebrow="Empty"
@@ -164,6 +259,21 @@ export function CockpitPage() {
               >
                 <Plus className="h-4 w-4" />
                 New project
+              </Button>
+            }
+          />
+        ) : allProjectsHidden ? (
+          <ShellState
+            eyebrow="Filtered"
+            title="No projects in view."
+            detail="Every project is hidden from the Cockpit. Show them again to see work across the line."
+            action={
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => setHiddenIdsAndCookie([])}
+              >
+                Show all projects
               </Button>
             }
           />
