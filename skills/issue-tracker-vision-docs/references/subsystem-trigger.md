@@ -14,9 +14,9 @@ idiomatically. What that machinery does to the people above it gets documented
 under whichever persona-facing surface exposes it, so the index stays organized
 by surface rather than by module.
 
-When two personas meet the same machinery through two surfaces, that is two
-docs rather than one — agents chat faces the human, the delegation contract
-faces the agent.
+For how many docs when two personas meet the same machinery through different
+surfaces, and for the silence-versus-gap escalation test when a subsystem has
+no governing vision, see [SPEC.md § Project supporting docs](../../../SPEC.md#project-supporting-docs).
 
 A candidate that fails the trigger still has a home: name the persona-facing
 surface whose doc should absorb it.
