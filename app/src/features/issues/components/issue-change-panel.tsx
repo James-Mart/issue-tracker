@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { FileDiff } from "@pierre/diffs/react";
+import { useMemo, useState, type ReactNode } from "react";
+import { FileDiff, type FileDiffMetadata } from "@pierre/diffs/react";
 import { Link } from "react-router-dom";
 import {
   ShellFaultDetail,
@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/errors";
 import type { ChangeCommit, IssueChange } from "@server/schemas";
 import { useIssueChangeQuery } from "../api/queries";
-import { fileDiffsFromPatch } from "../lib/issue-change-file-diffs";
+import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
+import { IssueChangeFileNavigator } from "./issue-change-file-navigator";
 
 function shortSha(sha: string): string {
   return sha.slice(0, 7);
@@ -203,26 +204,64 @@ export function IssueChangePanel({
     );
   }
 
+  return <IssueChangeLoadedPanel change={data} />;
+}
+
+function IssueChangeFileDiff({ fileDiff }: { fileDiff: FileDiffMetadata }) {
+  return (
+    <div
+      className="min-w-0 overflow-hidden rounded-lg border border-border"
+      data-testid="issue-change-file-diff"
+      data-file-name={fileDiff.name}
+    >
+      <FileDiff fileDiff={fileDiff} disableWorkerPool />
+    </div>
+  );
+}
+
+function IssueChangeLoadedPanel({
+  change,
+}: {
+  change: Extract<IssueChange, { state: "loaded" }>;
+}) {
+  const files = useMemo(() => fileDiffsFromPatch(change.patch), [change.patch]);
+  const [filter, setFilter] = useState("");
+  const [selectedName, setSelectedName] = useState<string | undefined>();
+  const matched = useMemo(() => filterFilesByPath(files, filter), [files, filter]);
+  const selectedFile =
+    matched.find((file) => file.name === selectedName) ?? matched[0];
+
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="issue-change-panel">
       <p
         className="font-mono text-[11px] tabular-nums text-muted-foreground"
         data-testid="issue-change-scope-header"
       >
-        {scopeHeaderStats(data)}
+        {scopeHeaderStats(change)}
       </p>
-      <div className="flex min-w-0 flex-col gap-3">
-        {fileDiffsFromPatch(data.patch).map((fileDiff, index) => (
-          <div
-            key={`${fileDiff.name}-${index}`}
-            className="min-w-0 overflow-hidden rounded-lg border border-border"
-            data-testid="issue-change-file-diff"
-            data-file-name={fileDiff.name}
-          >
-            <FileDiff fileDiff={fileDiff} disableWorkerPool />
-          </div>
-        ))}
-      </div>
+      {files.length > 1 ? (
+        <div className="flex min-w-0 flex-col gap-3 shell:flex-row shell:items-start">
+          <IssueChangeFileNavigator
+            files={files}
+            matched={matched}
+            filter={filter}
+            onFilterChange={setFilter}
+            selectedName={selectedFile?.name ?? ""}
+            onSelect={setSelectedName}
+          />
+          {selectedFile ? (
+            <div className="min-w-0 flex-1">
+              <IssueChangeFileDiff fileDiff={selectedFile} />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex min-w-0 flex-col gap-3">
+          {files.map((fileDiff, index) => (
+            <IssueChangeFileDiff key={`${fileDiff.name}-${index}`} fileDiff={fileDiff} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
