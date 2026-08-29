@@ -192,8 +192,8 @@ describe("createDelegateCustomTools", () => {
       resolveModelSelection("cursor-grok-4.5-high-fast"),
     );
     expect(fake.handles[0]!.sends).toHaveLength(1);
-    expect(fake.handles[0]!.sends[0]!.prompt.startsWith(roleBody)).toBe(true);
-    expect(fake.handles[0]!.sends[0]!.prompt.endsWith("do the thing")).toBe(
+    expect(fake.handles[0]!.sends[0]!.message.startsWith(roleBody)).toBe(true);
+    expect(fake.handles[0]!.sends[0]!.message.endsWith("do the thing")).toBe(
       true,
     );
     expect(result).toEqual({
@@ -335,8 +335,8 @@ describe("createDelegateCustomTools", () => {
       },
     ]);
     expect(fake.handles[1]!.sends).toHaveLength(1);
-    expect(fake.handles[1]!.sends[0]!.prompt).toBe("second turn");
-    expect(fake.handles[1]!.sends[0]!.prompt.startsWith(roleBody)).toBe(
+    expect(fake.handles[1]!.sends[0]!.message).toBe("second turn");
+    expect(fake.handles[1]!.sends[0]!.message.startsWith(roleBody)).toBe(
       false,
     );
     expect(second).toEqual({
@@ -356,7 +356,7 @@ describe("createDelegateCustomTools", () => {
     expect(fake.created).toHaveLength(1);
     expect(fake.resumed).toHaveLength(2);
     expect(third.agentId).toBe(first.agentId);
-    expect(fake.handles[2]!.sends[0]!.prompt).toBe("third turn");
+    expect(fake.handles[2]!.sends[0]!.message).toBe("third turn");
   });
 
   it("errors on an unknown resumeId without creating a fresh agent", async () => {
@@ -1581,7 +1581,7 @@ describe("delegate publishes nested run frames", () => {
       },
     ]);
     expect(second.agentId).toBe(agentId);
-    expect(fake.handles[1]!.sends[0]!.prompt).toBe("after restart");
+    expect(fake.handles[1]!.sends[0]!.message).toBe("after restart");
 
     const after = readDelegations(meta.id);
     expect(after).toHaveLength(2);
@@ -1794,7 +1794,7 @@ describe("delegate publishes nested run frames", () => {
     expect(fake.resumed).toHaveLength(1);
     expect(fake.resumed[0]!.agentId).toBe(record!.agentId);
     expect(resumed.agentId).toBe(record!.agentId);
-    expect(fake.handles[1]!.sends[0]!.prompt).toBe("after lookup");
+    expect(fake.handles[1]!.sends[0]!.message).toBe("after lookup");
   });
 
   it("writes a completed end record on ok true", async () => {

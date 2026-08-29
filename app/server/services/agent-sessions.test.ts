@@ -135,7 +135,7 @@ describe("agent sessions manager", () => {
     expect(fake.created[0]?.agents).toBeUndefined();
     expect(fake.resumed).toHaveLength(0);
     expect(fake.handles[0]?.sends).toEqual([
-      { prompt: "go", options: {} },
+      { message: "go", options: {} },
     ]);
 
     expect(readConversation(meta.id).meta.agentId).toBe(FAKE_AGENT_ID);
@@ -238,7 +238,54 @@ describe("agent sessions manager", () => {
       },
     ]);
     expect(fake.handles[0]?.sends).toEqual([
-      { prompt: "again", options: { model: { id: "composer-2.5" } } },
+      { message: "again", options: { model: { id: "composer-2.5" } } },
+    ]);
+  });
+
+  it("passes a plain string to the handle when send has no images", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Text only",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "hello" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    expect(fake.handles[0]?.sends).toEqual([{ message: "hello", options: {} }]);
+  });
+
+  it("passes a message object with images to the handle when send includes images", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "With image",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const images = [{ data: "aGVsbG8=", mimeType: "image/png" }];
+
+    const result = await sessions.sendPrompt(meta.id, {
+      prompt: "what is this?",
+      images,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    expect(fake.handles[0]?.sends).toEqual([
+      {
+        message: { text: "what is this?", images },
+        options: {},
+      },
     ]);
   });
 
@@ -348,7 +395,7 @@ describe("agent sessions manager", () => {
     });
     expect(fake.created[0]?.customTools?.delegate).toBeDefined();
     expect(readConversation(meta.id).meta.agentId).toBe(FAKE_AGENT_ID);
-    expect(fake.handles[0]?.sends).toEqual([{ prompt: "continue", options: {} }]);
+    expect(fake.handles[0]?.sends).toEqual([{ message: "continue", options: {} }]);
 
     const { transcript } = readConversation(meta.id);
     expect(transcript.slice(0, priorTranscript.length)).toEqual(priorTranscript);
@@ -1410,8 +1457,8 @@ describe("pending message firing", () => {
       },
     });
     expect(fake.handles[0]?.sends).toEqual([
-      { prompt: "first turn", options: {} },
-      { prompt: "follow up", options: {} },
+      { message: "first turn", options: {} },
+      { message: "follow up", options: {} },
     ]);
   });
 
@@ -1499,8 +1546,8 @@ describe("pending message firing", () => {
       message: "Invalid API key",
     });
     expect(fake.handles[0]?.sends).toEqual([
-      { prompt: "first turn", options: {} },
-      { prompt: "follow up", options: {} },
+      { message: "first turn", options: {} },
+      { message: "follow up", options: {} },
     ]);
   });
 
@@ -1537,7 +1584,7 @@ describe("pending message firing", () => {
     const { meta: nextMeta, transcript } = readConversation(meta.id);
     expect(nextMeta.pendingMessage?.text).toBe("still waiting");
     expect(transcript.some((e) => e.type === "prompt")).toBe(false);
-    expect(fake.handles[0]?.sends).toEqual([{ prompt: "fail me", options: {} }]);
+    expect(fake.handles[0]?.sends).toEqual([{ message: "fail me", options: {} }]);
   });
 
   it("leaves a pending message in place after a cancelled run", async () => {
@@ -1610,7 +1657,7 @@ describe("expired access token recovery", () => {
     // again on its replacement.
     expect(fake.handles[0]?.disposed).toBe(true);
     expect(fake.handles).toHaveLength(2);
-    expect(fake.handles[1]?.sends).toEqual([{ prompt: "go", options: {} }]);
+    expect(fake.handles[1]?.sends).toEqual([{ message: "go", options: {} }]);
     expect(fake.handles[1]?.disposed).toBe(false);
 
     const { transcript } = readConversation(meta.id);
@@ -1640,7 +1687,7 @@ describe("expired access token recovery", () => {
     await result.run.wait();
 
     expect(fake.handles[1]?.sends).toEqual([
-      { prompt: "go", options: { model: { id: "auto" } } },
+      { message: "go", options: { model: { id: "auto" } } },
     ]);
   });
 
@@ -1841,7 +1888,7 @@ describe("delegation auth escalation", () => {
     // executor cache reach zero and mint a new token.
     expect(fake.handles[0]?.disposed).toBe(true);
     expect(fake.resumed[0]?.agentId).toBe(FAKE_AGENT_ID);
-    expect(fake.handles[2]?.sends).toEqual([{ prompt: "go", options: {} }]);
+    expect(fake.handles[2]?.sends).toEqual([{ message: "go", options: {} }]);
 
     const { transcript } = readConversation(meta.id);
     expect(
@@ -1944,7 +1991,7 @@ describe("delegation auth escalation", () => {
     // The per-send model override rides along untouched; only the prompt
     // changes, and it prescribes nothing beyond carrying on.
     expect(fake.handles[2]?.sends).toEqual([
-      { prompt: CUT_SHORT_MESSAGE, options: { model: { id: "auto" } } },
+      { message: CUT_SHORT_MESSAGE, options: { model: { id: "auto" } } },
     ]);
 
     const { transcript } = readConversation(meta.id);

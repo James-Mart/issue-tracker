@@ -9,6 +9,7 @@ import {
   agentSdk,
   CursorAgentError,
   type AgentHandle,
+  type AgentImage,
   type AgentRun,
   type AgentRunResult,
   type AgentSdk,
@@ -53,6 +54,7 @@ export interface SendPromptOptions {
   prompt: string;
   /** Per-send model override (not written to conversation meta). */
   model?: string;
+  images?: AgentImage[];
 }
 
 export interface AgentSessions {
@@ -463,7 +465,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     options: SendPromptOptions,
     isReplay: boolean,
   ): Promise<SendPromptResult> {
-    const { prompt, model } = options;
+    const { prompt, model, images } = options;
 
     let handle: AgentHandle;
     let entry: SessionEntry;
@@ -476,12 +478,13 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       throw err;
     }
 
+    const sendOptions = model ? { model: { id: model } } : {};
+    const message =
+      images && images.length > 0 ? { text: prompt, images } : prompt;
+
     let agentRun: AgentRun;
     try {
-      agentRun = await handle.send(
-        prompt,
-        model ? { model: { id: model } } : {},
-      );
+      agentRun = await handle.send(message, sendOptions);
     } catch (err) {
       if (err instanceof CursorAgentError) {
         return { ok: false, cause: "never_started", error: err };
