@@ -174,7 +174,7 @@ test.describe("channel tabs", () => {
     );
   });
 
-  test("Task detail has no issue-detail tab bar", async ({
+  test("Task detail offers Overview, Agents, and Diff", async ({
     page,
     seededApp,
   }) => {
@@ -183,9 +183,10 @@ test.describe("channel tabs", () => {
     );
     const main = page.getByRole("main");
     await expect(main.getByText("Task", { exact: true }).first()).toBeVisible();
-    await expect(
-      main.getByRole("tablist", { name: "Issue detail" }),
-    ).toHaveCount(0);
+    const tablist = main.getByRole("tablist", { name: "Issue detail" });
+    await expect(tablist.getByRole("tab", { name: "Overview" })).toBeVisible();
+    await expect(tablist.getByRole("tab", { name: "Agents" })).toBeVisible();
+    await expect(tablist.getByRole("tab", { name: "Diff" })).toBeVisible();
   });
 
   test("transcript scrolls inside the channel pane; composer stays visible", async ({
