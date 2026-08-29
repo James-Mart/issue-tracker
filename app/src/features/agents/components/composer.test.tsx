@@ -7,19 +7,8 @@ import { composerDraftStorageKey } from "../lib/composer-draft-storage"
 
 const sendMutate = vi.fn()
 const interruptMutate = vi.fn()
-const uploadConversationAttachment = vi.fn()
-const deleteConversationAttachment = vi.fn()
-
-vi.mock("../api/client", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../api/client")>()
-  return {
-    ...actual,
-    uploadConversationAttachment: (...args: unknown[]) =>
-      uploadConversationAttachment(...args),
-    deleteConversationAttachment: (...args: unknown[]) =>
-      deleteConversationAttachment(...args),
-  }
-})
+const uploadMutateAsync = vi.fn()
+const deleteMutateAsync = vi.fn()
 
 vi.mock("../api/mutations", () => ({
   useSendConversationMessage: () => ({
@@ -36,6 +25,14 @@ vi.mock("../api/mutations", () => ({
   }),
   useUpdateConversation: () => ({
     mutate: vi.fn(),
+  }),
+  useUploadConversationAttachment: () => ({
+    mutateAsync: uploadMutateAsync,
+    isPending: false,
+  }),
+  useDeleteConversationAttachment: () => ({
+    mutateAsync: deleteMutateAsync,
+    isPending: false,
   }),
 }))
 
@@ -534,8 +531,8 @@ describe("Composer attachments", () => {
     root = undefined
     sendMutate.mockClear()
     interruptMutate.mockClear()
-    uploadConversationAttachment.mockReset()
-    deleteConversationAttachment.mockReset()
+    uploadMutateAsync.mockReset()
+    deleteMutateAsync.mockReset()
     coarsePointer.value = false
   })
 
@@ -562,7 +559,7 @@ describe("Composer attachments", () => {
   }
 
   it("stages a chip when a file is picked", async () => {
-    uploadConversationAttachment.mockResolvedValue({
+    uploadMutateAsync.mockResolvedValue({
       name: "notes.txt",
       size: 12,
       mimeType: "text/plain",
@@ -576,7 +573,7 @@ describe("Composer attachments", () => {
       await Promise.resolve()
     })
 
-    expect(uploadConversationAttachment).toHaveBeenCalledWith("conv-1", file)
+    expect(uploadMutateAsync).toHaveBeenCalledWith(file)
     expect(
       container!.querySelector('[data-testid="staged-attachments"]'),
     ).toBeTruthy()
@@ -589,12 +586,12 @@ describe("Composer attachments", () => {
   })
 
   it("removes a staged chip and deletes the attachment", async () => {
-    uploadConversationAttachment.mockResolvedValue({
+    uploadMutateAsync.mockResolvedValue({
       name: "notes.txt",
       size: 12,
       mimeType: "text/plain",
     })
-    deleteConversationAttachment.mockResolvedValue(undefined)
+    deleteMutateAsync.mockResolvedValue(undefined)
     ;({ container, root } = mountComposer())
 
     const file = new File(["hello world"], "notes.txt", { type: "text/plain" })
@@ -613,17 +610,14 @@ describe("Composer attachments", () => {
       await Promise.resolve()
     })
 
-    expect(deleteConversationAttachment).toHaveBeenCalledWith(
-      "conv-1",
-      "notes.txt",
-    )
+    expect(deleteMutateAsync).toHaveBeenCalledWith("notes.txt")
     expect(
       container!.querySelector('[data-testid="staged-attachments"]'),
     ).toBeNull()
   })
 
   it("shows an upload error banner without clearing the draft or staged chips", async () => {
-    uploadConversationAttachment
+    uploadMutateAsync
       .mockResolvedValueOnce({
         name: "palette.png",
         size: 100,
@@ -658,7 +652,7 @@ describe("Composer attachments", () => {
   })
 
   it("sends staged attachment names and clears staged state on success", async () => {
-    uploadConversationAttachment.mockResolvedValue({
+    uploadMutateAsync.mockResolvedValue({
       name: "notes.txt",
       size: 12,
       mimeType: "text/plain",
@@ -759,13 +753,13 @@ describe("Composer paste and drop", () => {
     root = undefined
     sendMutate.mockClear()
     interruptMutate.mockClear()
-    uploadConversationAttachment.mockReset()
-    deleteConversationAttachment.mockReset()
+    uploadMutateAsync.mockReset()
+    deleteMutateAsync.mockReset()
     coarsePointer.value = false
   })
 
   it("stages a chip on paste and leaves the draft text alone", async () => {
-    uploadConversationAttachment.mockResolvedValue({
+    uploadMutateAsync.mockResolvedValue({
       name: "shot.png",
       size: 20,
       mimeType: "image/png",
@@ -781,7 +775,7 @@ describe("Composer paste and drop", () => {
     })
 
     expect(event.defaultPrevented).toBe(true)
-    expect(uploadConversationAttachment).toHaveBeenCalledWith("conv-1", file)
+    expect(uploadMutateAsync).toHaveBeenCalledWith(file)
     expect(
       container!.querySelector('[data-testid="staged-attachment-shot.png"]'),
     ).toBeTruthy()
@@ -789,7 +783,7 @@ describe("Composer paste and drop", () => {
   })
 
   it("stages a chip on drop", async () => {
-    uploadConversationAttachment.mockResolvedValue({
+    uploadMutateAsync.mockResolvedValue({
       name: "notes.txt",
       size: 12,
       mimeType: "text/plain",
@@ -806,7 +800,7 @@ describe("Composer paste and drop", () => {
       await Promise.resolve()
     })
 
-    expect(uploadConversationAttachment).toHaveBeenCalledWith("conv-1", file)
+    expect(uploadMutateAsync).toHaveBeenCalledWith(file)
     expect(
       container!.querySelector('[data-testid="staged-attachment-notes.txt"]'),
     ).toBeTruthy()

@@ -31,15 +31,15 @@ import {
 } from "@/features/issues/lib/attachments";
 import {
   useCancelConversationRun,
+  useDeleteConversationAttachment,
   useInterruptConversationRun,
   useSendConversationMessage,
   useUpdateConversation,
+  useUploadConversationAttachment,
 } from "../api/mutations";
 import { useAgentModelsQuery } from "../api/queries";
 import {
   conversationAttachmentApiPath,
-  deleteConversationAttachment,
-  uploadConversationAttachment,
   type ConversationAttachment,
 } from "../api/client";
 import {
@@ -190,6 +190,8 @@ export function Composer({
   const interruptRun = useInterruptConversationRun();
   const cancelRun = useCancelConversationRun();
   const updateConversation = useUpdateConversation();
+  const uploadAttachment = useUploadConversationAttachment(conversationId);
+  const deleteAttachment = useDeleteConversationAttachment(conversationId);
 
   const [draft, setDraft] = useState("");
   const [model, setModel] = useState(initialModel);
@@ -312,7 +314,7 @@ export function Composer({
       const file = ensureAttachmentFileName(raw);
       try {
         setUploadError(null);
-        const meta = await uploadConversationAttachment(conversationId, file);
+        const meta = await uploadAttachment.mutateAsync(file);
         setStagedAttachments((prev) => [...prev, meta]);
       } catch {
         setUploadError({ name: file.name, size: file.size });
@@ -363,7 +365,7 @@ export function Composer({
   };
 
   const removeStagedAttachment = async (name: string) => {
-    await deleteConversationAttachment(conversationId, name);
+    await deleteAttachment.mutateAsync(name);
     setStagedAttachments((prev) => prev.filter((item) => item.name !== name));
   };
 
