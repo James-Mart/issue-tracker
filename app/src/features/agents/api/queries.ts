@@ -6,6 +6,7 @@ import type {
 import {
   getConversationTranscript,
   listAgentModels,
+  listConversationAttachments,
   listConversations,
   type AgentModelsResponse,
 } from "./client";
@@ -45,5 +46,17 @@ export function useAgentModelsQuery(): UseQueryResult<
   return useQuery({
     queryKey: agentsKeys.models(),
     queryFn: listAgentModels,
+  });
+}
+
+export function useConversationAttachmentsQuery(
+  conversationId: string,
+): UseQueryResult<
+  Awaited<ReturnType<typeof listConversationAttachments>>,
+  Error
+> {
+  return useQuery({
+    queryKey: agentsKeys.attachments(conversationId),
+    queryFn: () => listConversationAttachments(conversationId),
   });
 }

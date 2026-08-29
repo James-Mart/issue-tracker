@@ -6,10 +6,13 @@ import {
   clearConversationPending,
   createConversation,
   deleteConversation,
+  deleteConversationAttachment,
   interruptConversationRun,
   sendConversationMessage,
   updateConversation,
   updateConversationPending,
+  uploadConversationAttachment,
+  type ConversationAttachment,
   type CreateConversationBody,
   type InterruptConversationRunBody,
   type InterruptConversationRunResult,
@@ -73,6 +76,11 @@ export function useSendConversationMessage() {
         patchChannelSessionActiveRunInCache(qc, id, true);
       }
     },
+    onSettled: (_result, _err, { id, body }) => {
+      if (body.attachments?.length) {
+        void qc.invalidateQueries({ queryKey: agentsKeys.attachments(id) });
+      }
+    },
   });
 }
 
@@ -98,6 +106,39 @@ export function useInterruptConversationRun() {
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (_result, { id }) => {
       patchChannelSessionActiveRunInCache(qc, id, true);
+    },
+    onSettled: (_result, _err, { id, body }) => {
+      if (body.attachments?.length) {
+        void qc.invalidateQueries({ queryKey: agentsKeys.attachments(id) });
+      }
+    },
+  });
+}
+
+export function useUploadConversationAttachment(conversationId: string) {
+  const qc = useQueryClient();
+  return useMutation<ConversationAttachment, Error, File>({
+    mutationFn: (file) => uploadConversationAttachment(conversationId, file),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (meta) => {
+      qc.setQueryData<ConversationAttachment[]>(
+        agentsKeys.attachments(conversationId),
+        (prev) => [...(prev ?? []), meta],
+      );
+    },
+  });
+}
+
+export function useDeleteConversationAttachment(conversationId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (name) => deleteConversationAttachment(conversationId, name),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (_data, name) => {
+      qc.setQueryData<ConversationAttachment[]>(
+        agentsKeys.attachments(conversationId),
+        (prev) => (prev ?? []).filter((item) => item.name !== name),
+      );
     },
   });
 }

@@ -1,15 +1,28 @@
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Send, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Download, Paperclip, Send, X } from "lucide-react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { cn } from "@/lib/utils/cn";
-import { useConversationsQuery } from "../api/queries";
+import {
+  formatAttachmentSize,
+  isImageMime,
+} from "@/features/issues/lib/attachments";
+import { useConversationsQuery, useConversationAttachmentsQuery } from "../api/queries";
+import {
+  conversationAttachmentApiPath,
+  type ConversationAttachment,
+} from "../api/client";
 import {
   useClearConversationPending,
   useSendConversationMessage,
@@ -89,16 +102,202 @@ function ErrorEvent({ message }: { message: string }) {
   );
 }
 
-function PromptEvent({ text }: { text: string }) {
+function PromptAttachmentImage({
+  conversationId,
+  name,
+}: {
+  conversationId: string;
+  name: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const src = conversationAttachmentApiPath(conversationId, name);
+
+  return (
+    <>
+      <button
+        type="button"
+        data-prompt-attachment-image={name}
+        className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => setOpen(true)}
+        title={name}
+        aria-label={name}
+      >
+        <img src={src} alt="" className="h-full w-full object-cover" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="w-auto max-w-[min(96vw,80rem)] p-3">
+          <DialogTitle className="sr-only">{name}</DialogTitle>
+          <img
+            src={src}
+            alt=""
+            className="max-h-[85vh] w-auto max-w-full rounded-md"
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function PromptAttachmentFileRow({
+  conversationId,
+  item,
+}: {
+  conversationId: string;
+  item: ConversationAttachment;
+}) {
+  const href = conversationAttachmentApiPath(conversationId, item.name);
+  return (
+    <div
+      className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-[hsl(var(--panel))] px-2 py-1.5"
+      data-prompt-attachment-file={item.name}
+    >
+      <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <p
+          className="truncate font-mono text-[11px] leading-tight text-foreground sm:text-xs"
+          title={item.name}
+        >
+          {item.name}
+        </p>
+        <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
+          {formatAttachmentSize(item.size)}
+        </p>
+      </div>
+      <a
+        href={href}
+        download={item.name}
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        title={`Download ${item.name}`}
+        aria-label={`Download ${item.name}`}
+      >
+        <Download className="h-3.5 w-3.5" />
+      </a>
+    </div>
+  );
+}
+
+function PromptAttachmentMissingRow({ name }: { name: string }) {
+  return (
+    <div
+      className="min-w-0 rounded-md border border-border bg-[hsl(var(--panel))] px-2 py-1.5"
+      data-prompt-attachment-missing={name}
+    >
+      <p
+        className="truncate font-mono text-[11px] leading-tight text-muted-foreground sm:text-xs"
+        title={name}
+      >
+        {name}
+      </p>
+    </div>
+  );
+}
+
+function PromptEventAttachments({
+  conversationId,
+  names,
+  attachmentByName,
+  attachmentsLoading,
+}: {
+  conversationId: string;
+  names: string[];
+  attachmentByName: Map<string, ConversationAttachment>;
+  attachmentsLoading: boolean;
+}) {
+  if (names.length === 0) return null;
+
+  if (attachmentsLoading) {
+    return (
+      <div
+        className="mt-2 flex min-w-0 flex-col gap-2"
+        data-testid="prompt-attachments-loading"
+        aria-busy="true"
+        aria-label="Loading attachments"
+      >
+        {names.map((name) => (
+          <Skeleton key={name} className="h-10 w-full max-w-xs rounded-md" />
+        ))}
+      </div>
+    );
+  }
+
+  const segments: ReactNode[] = [];
+  let imageBatch: string[] = [];
+
+  const flushImages = () => {
+    if (imageBatch.length === 0) return;
+    segments.push(
+      <div
+        key={`images-${imageBatch[0]}`}
+        className="flex flex-wrap gap-2"
+        data-testid="prompt-attachment-images"
+      >
+        {imageBatch.map((name) => (
+          <PromptAttachmentImage
+            key={name}
+            conversationId={conversationId}
+            name={name}
+          />
+        ))}
+      </div>,
+    );
+    imageBatch = [];
+  };
+
+  for (const name of names) {
+    const meta = attachmentByName.get(name);
+    if (meta && isImageMime(meta.mimeType)) {
+      imageBatch.push(name);
+      continue;
+    }
+    flushImages();
+    if (meta) {
+      segments.push(
+        <PromptAttachmentFileRow
+          key={name}
+          conversationId={conversationId}
+          item={meta}
+        />,
+      );
+    } else {
+      segments.push(<PromptAttachmentMissingRow key={name} name={name} />);
+    }
+  }
+  flushImages();
+
+  return <div className="mt-2 flex min-w-0 flex-col gap-2">{segments}</div>;
+}
+
+function PromptEvent({
+  text,
+  attachments,
+  conversationId,
+  attachmentByName,
+  attachmentsLoading,
+}: {
+  text: string;
+  attachments?: string[];
+  conversationId: string;
+  attachmentByName: Map<string, ConversationAttachment>;
+  attachmentsLoading: boolean;
+}) {
+  const names = attachments ?? [];
   return (
     <div className="flex min-w-0 justify-end" data-event="prompt">
       <div className="min-w-0 max-w-[min(85%,100%)] rounded-lg border border-border bg-[hsl(var(--panel-2))] px-3.5 py-2.5">
         <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
           You
         </p>
-        <p className="whitespace-pre-wrap break-words text-sm text-foreground">
-          {text}
-        </p>
+        {text ? (
+          <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+            {text}
+          </p>
+        ) : null}
+        <PromptEventAttachments
+          conversationId={conversationId}
+          names={names}
+          attachmentByName={attachmentByName}
+          attachmentsLoading={attachmentsLoading}
+        />
       </div>
     </div>
   );
@@ -153,14 +352,28 @@ function TranscriptEventRow({
   event,
   subAgentsByCallId,
   thinkingOpen,
+  conversationId,
+  attachmentByName,
+  attachmentsLoading,
 }: {
   event: TranscriptEvent;
   subAgentsByCallId: Map<string, SubAgent>;
   thinkingOpen?: boolean;
+  conversationId: string;
+  attachmentByName: Map<string, ConversationAttachment>;
+  attachmentsLoading: boolean;
 }) {
   switch (event.type) {
     case "prompt":
-      return <PromptEvent text={event.text} />;
+      return (
+        <PromptEvent
+          text={event.text}
+          attachments={event.attachments}
+          conversationId={conversationId}
+          attachmentByName={attachmentByName}
+          attachmentsLoading={attachmentsLoading}
+        />
+      );
     case "assistant":
       return <AssistantEvent text={event.text} />;
     case "thinking":
@@ -382,6 +595,13 @@ function ThreadBody({
   model: string;
   keyboardInset: number;
 }) {
+  const { data: storeAttachments, isLoading: attachmentsLoading } =
+    useConversationAttachmentsQuery(conversationId);
+  const attachmentByName = useMemo(
+    () => new Map((storeAttachments ?? []).map((item) => [item.name, item])),
+    [storeAttachments],
+  );
+
   if (historyFailed) {
     return (
       <TranscriptHistoryFailed
@@ -455,6 +675,9 @@ function ThreadBody({
               segment.event.type === "thinking" &&
               isLiveThinking(events, index)
             }
+            conversationId={conversationId}
+            attachmentByName={attachmentByName}
+            attachmentsLoading={attachmentsLoading}
           />
         );
       })}
