@@ -10,6 +10,8 @@ import {
 } from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
+import type { AgentImage } from "./agent-sdk.js";
+import { getConversationAttachment } from "./conversation-attachments.js";
 import {
   parseConversationMeta,
   parseDelegationEndRecord,
@@ -568,16 +570,63 @@ export function conversationExists(id: string): boolean {
 export async function setPendingMessage(
   id: string,
   text: string | null,
+  attachments?: string[],
 ): Promise<ConversationMeta> {
   const meta = await updateMeta(id, {
     pendingMessage:
-      text === null ? null : { text, at: new Date().toISOString() },
+      text === null
+        ? null
+        : {
+            text,
+            at: new Date().toISOString(),
+            ...(attachments && attachments.length > 0 ? { attachments } : {}),
+          },
   });
   publishFrame(id, {
     event: { type: "pending", text },
     persist: false,
   });
   return meta;
+}
+
+function conversationAttachmentPath(
+  conversationId: string,
+  name: string,
+): string {
+  return join(conversationsDir, conversationId, "attachments", name);
+}
+
+/** Human text plus attachment block and image payloads for `sessions.sendPrompt`. */
+export async function assembleAgentPrompt(
+  conversationId: string,
+  text: string,
+  attachmentNames?: readonly string[],
+): Promise<{ prompt: string; images?: AgentImage[] }> {
+  if (!attachmentNames?.length) {
+    return { prompt: text };
+  }
+
+  const blockLines = ["Attachments:"];
+  const images: AgentImage[] = [];
+
+  for (const name of attachmentNames) {
+    const absolutePath = conversationAttachmentPath(conversationId, name);
+    blockLines.push(`- ${name} — ${absolutePath}`);
+    const { bytes, mimeType } = await getConversationAttachment(
+      conversationId,
+      name,
+    );
+    if (mimeType.startsWith("image/")) {
+      images.push({
+        data: bytes.toString("base64"),
+        mimeType,
+      });
+    }
+  }
+
+  const block = blockLines.join("\n");
+  const prompt = text ? `${text}\n\n${block}` : block;
+  return images.length > 0 ? { prompt, images } : { prompt };
 }
 
 /**
@@ -590,21 +639,32 @@ export async function startConversationPrompt(
   prompt: string,
   model: string | undefined,
   sessions: AgentSessions,
-  opts?: { persistPrompt?: boolean },
+  opts?: { persistPrompt?: boolean; attachments?: string[] },
 ): Promise<{ ok: true; runId: string } | { ok: false; message: string }> {
   const persistPrompt = opts?.persistPrompt !== false;
+  const attachments = opts?.attachments;
   const { meta } = readConversation(conversationId);
   if (meta.pendingMessage) {
     await setPendingMessage(conversationId, null);
   }
 
   if (persistPrompt) {
-    await appendEvent(conversationId, { type: "prompt", text: prompt });
+    await appendEvent(conversationId, {
+      type: "prompt",
+      text: prompt,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+    });
   }
 
-  const result = await sessions.sendPrompt(conversationId, {
+  const assembled = await assembleAgentPrompt(
+    conversationId,
     prompt,
+    attachments,
+  );
+  const result = await sessions.sendPrompt(conversationId, {
+    prompt: assembled.prompt,
     model,
+    ...(assembled.images ? { images: assembled.images } : {}),
   });
   if (!result.ok) {
     const message = result.error.message;

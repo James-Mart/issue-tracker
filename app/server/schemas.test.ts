@@ -729,6 +729,72 @@ describe("parseConversationMeta", () => {
   });
 });
 
+describe("prompt transcript event attachments", () => {
+  it("round-trips attachments on a prompt event", () => {
+    const input = parseTranscriptEventInput({
+      type: "prompt",
+      text: "see attached",
+      attachments: ["mock.tsx", "shot.png"],
+    });
+    expect(input.ok).toBe(true);
+    if (!input.ok) return;
+    const stored = parseTranscriptEvent({
+      ...input.input,
+      at: "2026-07-25T12:00:00.000Z",
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    expect(stored.event).toMatchObject({
+      type: "prompt",
+      text: "see attached",
+      attachments: ["mock.tsx", "shot.png"],
+    });
+  });
+
+  it("accepts an attachments-only prompt event", () => {
+    const input = parseTranscriptEventInput({
+      type: "prompt",
+      text: "",
+      attachments: ["notes.txt"],
+    });
+    expect(input.ok).toBe(true);
+  });
+});
+
+describe("pending message attachments", () => {
+  const base = {
+    id: "chat-1",
+    title: "Chat",
+    projectId: "platform",
+    model: "composer-2.5",
+    createdAt: "2026-07-09T14:00:00.000Z",
+    updatedAt: "2026-07-09T14:00:00.000Z",
+  };
+
+  it("accepts attachments-only pending text", () => {
+    const result = parseConversationMeta({
+      ...base,
+      pendingMessage: {
+        text: "",
+        at: "2026-07-09T14:00:00.000Z",
+        attachments: ["mock.tsx"],
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects pending with neither text nor attachments", () => {
+    const result = parseConversationMeta({
+      ...base,
+      pendingMessage: {
+        text: "",
+        at: "2026-07-09T14:00:00.000Z",
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+
 describe("delegation_recovery transcript event", () => {
   it("round-trips a recovery record", () => {
     const input = parseTranscriptEventInput({

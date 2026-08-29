@@ -16,6 +16,7 @@ import {
   type SDKCustomTool,
   type SDKMessage,
   type SDKModel,
+  type SDKUserMessage,
   type SendOptions,
 } from "@cursor/sdk";
 import { cursorApiKey } from "../config.js";
@@ -76,6 +77,12 @@ export interface AgentSendOptions {
   model?: ModelSelection;
 }
 
+/** Base64 image payload accepted at the app's SDK send boundary. */
+export interface AgentImage {
+  data: string;
+  mimeType: string;
+}
+
 /**
  * Terminal outcome of one `send`. Mirrors the SDK's `RunResult` status so
  * callers can distinguish a finished run from a started-then-errored one
@@ -119,7 +126,10 @@ export interface AgentRun extends AsyncIterable<AgentStreamEvent> {
  */
 export interface AgentHandle extends AsyncDisposable {
   readonly agentId: string;
-  send(prompt: string, options?: AgentSendOptions): Promise<AgentRun>;
+  send(
+    message: string | { text: string; images?: AgentImage[] },
+    options?: AgentSendOptions,
+  ): Promise<AgentRun>;
   cancel(): Promise<void>;
 }
 
@@ -268,8 +278,8 @@ function wrapAgent(sdkAgent: SDKAgent): AgentHandle {
   return {
     agentId: sdkAgent.agentId,
 
-    send(prompt, options = {}) {
-      return startSend(sdkAgent, prompt, options, (run) => {
+    send(message, options = {}) {
+      return startSend(sdkAgent, message, options, (run) => {
         activeRun = run;
       });
     },
@@ -294,7 +304,7 @@ function wrapAgent(sdkAgent: SDKAgent): AgentHandle {
  */
 async function startSend(
   sdkAgent: SDKAgent,
-  prompt: string,
+  message: string | { text: string; images?: AgentImage[] },
   options: AgentSendOptions,
   onRun: (run: Run) => void,
 ): Promise<AgentRun> {
@@ -308,7 +318,12 @@ async function startSend(
     },
   };
 
-  const run = await sdkAgent.send(prompt, sendOptions);
+  const sdkMessage: string | SDKUserMessage =
+    typeof message === "string"
+      ? message
+      : { text: message.text, images: message.images };
+
+  const run = await sdkAgent.send(sdkMessage, sendOptions);
   onRun(run);
 
   let settleWait!: (result: AgentRunResult) => void;

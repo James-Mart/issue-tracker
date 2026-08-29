@@ -5,6 +5,7 @@ import type {
 } from "@cursor/sdk";
 import type {
   AgentHandle,
+  AgentImage,
   AgentRun,
   AgentRunResult,
   AgentSdk,
@@ -184,7 +185,7 @@ export function buildScriptedStreamWithAgentIdHint(): AgentStreamEvent[] {
 }
 
 export interface FakeSend {
-  prompt: string;
+  message: string | { text: string; images?: AgentImage[] };
   options: AgentSendOptions;
 }
 
@@ -279,8 +280,8 @@ export function createFakeAgentSdk(
       sends: [],
       cancelled: false,
       disposed: false,
-      async send(prompt, sendOptions = {}) {
-        handle.sends.push({ prompt, options: sendOptions });
+      async send(message, sendOptions = {}) {
+        handle.sends.push({ message, options: sendOptions });
         const scripted = sendScript.shift();
         if (scripted?.sendError) throw scripted.sendError;
         if (options.sendError) throw options.sendError;

@@ -8,6 +8,7 @@ import {
 import {
   getConversationAttachment,
   listConversationAttachments,
+  missingConversationAttachments,
   putConversationAttachment,
   removeConversationAttachment,
 } from "../services/conversation-attachments.js";
@@ -64,10 +65,66 @@ function activeRunState(
   return { active: true, runId: run.id, startedAt: run.startedAt };
 }
 
+function parseAttachmentNames(
+  raw: unknown,
+): { ok: true; names: string[] } | { ok: false; error: string } {
+  if (raw === undefined) return { ok: true, names: [] };
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: "attachments must be an array" };
+  }
+  const names: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string" || !item.trim()) {
+      return {
+        ok: false,
+        error: "attachments must be an array of non-empty strings",
+      };
+    }
+    names.push(item.trim());
+  }
+  return { ok: true, names };
+}
+
+type ParsedPromptBody =
+  | { ok: true; prompt: string; attachments: string[]; model?: string }
+  | { ok: false; error: string };
+
+function parsePromptBody(body: {
+  prompt?: unknown;
+  model?: unknown;
+  attachments?: unknown;
+}): ParsedPromptBody {
+  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  const attachmentsResult = parseAttachmentNames(body.attachments);
+  if (!attachmentsResult.ok) {
+    return { ok: false, error: attachmentsResult.error };
+  }
+  const attachments = attachmentsResult.names;
+  if (!prompt && attachments.length === 0) {
+    return { ok: false, error: "prompt is required" };
+  }
+  const model =
+    typeof body.model === "string" && body.model.trim()
+      ? body.model.trim()
+      : undefined;
+  return { ok: true, prompt, attachments, model };
+}
+
+function attachmentValidationError(
+  conversationId: string,
+  attachments: string[],
+): string | null {
+  if (attachments.length === 0) return null;
+  const missing = missingConversationAttachments(conversationId, attachments);
+  if (missing.length === 0) return null;
+  return `attachment not found: ${missing.join(", ")}`;
+}
+
 async function deliverPrompt(
   conversationId: string,
   prompt: string,
   model: string | undefined,
+  attachments: string[],
   sessions: AgentSessions,
   res: Response,
 ): Promise<void> {
@@ -76,6 +133,7 @@ async function deliverPrompt(
     prompt,
     model,
     sessions,
+    { attachments },
   );
   if (!result.ok) {
     res.status(502).json({ error: result.message });
@@ -263,14 +321,26 @@ export function createConversationsRouter(
   router.patch(
     "/:id/pending",
     asyncRoute(async (req, res) => {
-      const body = req.body as { text?: unknown };
+      const body = req.body as { text?: unknown; attachments?: unknown };
       const text = typeof body.text === "string" ? body.text.trim() : "";
-      if (!text) {
-        res.status(400).json({ error: "text is required" });
+      const attachmentsResult = parseAttachmentNames(body.attachments);
+      if (!attachmentsResult.ok) {
+        res.status(400).json({ error: attachmentsResult.error });
+        return;
+      }
+      const attachments = attachmentsResult.names;
+      if (!text && attachments.length === 0) {
+        res.status(400).json({ error: "text or attachments is required" });
         return;
       }
 
-      const meta = await setPendingMessage(req.params.id, text);
+      const attachmentError = attachmentValidationError(req.params.id, attachments);
+      if (attachmentError) {
+        res.status(400).json({ error: attachmentError });
+        return;
+      }
+
+      const meta = await setPendingMessage(req.params.id, text, attachments);
       res.json(meta);
     }),
   );
@@ -338,28 +408,38 @@ export function createConversationsRouter(
   router.post(
     "/:id/messages",
     asyncRoute(async (req, res) => {
-      const body = req.body as { prompt?: unknown; model?: unknown };
-      const prompt =
-        typeof body.prompt === "string" ? body.prompt.trim() : "";
-      if (!prompt) {
-        res.status(400).json({ error: "prompt is required" });
+      const parsed = parsePromptBody(req.body as Record<string, unknown>);
+      if (!parsed.ok) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+      const { prompt, attachments, model } = parsed;
+
+      const conversationId = req.params.id;
+      const attachmentError = attachmentValidationError(
+        conversationId,
+        attachments,
+      );
+      if (attachmentError) {
+        res.status(400).json({ error: attachmentError });
         return;
       }
 
-      const conversationId = req.params.id;
       const activeRun = sessions.getActiveRun(conversationId);
       if (activeRun) {
-        await setPendingMessage(conversationId, prompt);
+        await setPendingMessage(conversationId, prompt, attachments);
         res.status(202).json({ pending: true });
         return;
       }
 
-      const model =
-        typeof body.model === "string" && body.model.trim()
-          ? body.model.trim()
-          : undefined;
-
-      await deliverPrompt(conversationId, prompt, model, sessions, res);
+      await deliverPrompt(
+        conversationId,
+        prompt,
+        model,
+        attachments,
+        sessions,
+        res,
+      );
     }),
   );
 
@@ -386,7 +466,7 @@ export function createConversationsRouter(
         await activeRun.wait();
       }
 
-      await deliverPrompt(conversationId, prompt, model, sessions, res);
+      await deliverPrompt(conversationId, prompt, model, [], sessions, res);
     }),
   );
 
