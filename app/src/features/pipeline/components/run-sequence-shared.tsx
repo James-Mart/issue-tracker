@@ -1,11 +1,17 @@
+import { ChevronDown, ChevronRight } from "lucide-react";
+import type { IssueKind } from "@server/schemas";
+import { KIND_LABEL } from "@/features/issues/lib/kind";
+import { cn } from "@/lib/utils/cn";
 import {
   failedBeatIndex,
   frontierBeatIndex,
   isCollapsedBeat,
+  maxSectionBeatEnd,
   RETURN_DASH,
   beatStroke,
   strokeCss,
   type RunSequence,
+  type RunSequenceSection,
   type SequenceBeat,
   type SequenceBeatKind,
   type SequenceBeatTurn,
@@ -46,6 +52,147 @@ export function buildSequenceRows(
     rows.push({ kind: "beat", beat, beatIndex });
   });
   return rows;
+}
+
+export function isUnlabeledSection(section: RunSequenceSection): boolean {
+  return (
+    section.issueId === undefined &&
+    section.kind === undefined &&
+    section.title === undefined
+  );
+}
+
+export function sectionKey(section: RunSequenceSection): string {
+  return `${section.issueId ?? ""}:${section.beatStart}:${section.beatEnd}`;
+}
+
+export type SequenceDisplayItem =
+  | {
+      kind: "section";
+      section: RunSequenceSection;
+      key: string;
+      depth: number;
+      expanded: boolean;
+    }
+  | { kind: "row"; row: SequenceRenderRow };
+
+/** Interleave section headers with beat rows; collapsed sections hide descendants. */
+export function buildSequenceDisplay(
+  sections: RunSequenceSection[],
+  rows: SequenceRenderRow[],
+  collapsed: ReadonlySet<string>,
+): SequenceDisplayItem[] {
+  if (sections.length === 0) {
+    return rows.map((row) => ({ kind: "row" as const, row }));
+  }
+  const items: SequenceDisplayItem[] = [];
+  const rowsByBeat = new Map<number, SequenceRenderRow[]>();
+  for (const row of rows) {
+    const list = rowsByBeat.get(row.beatIndex);
+    if (list) list.push(row);
+    else rowsByBeat.set(row.beatIndex, [row]);
+  }
+
+  const emitBeat = (beatIndex: number) => {
+    const beatRows = rowsByBeat.get(beatIndex);
+    if (!beatRows) return;
+    for (const row of beatRows) items.push({ kind: "row", row });
+  };
+
+  const walk = (nodes: RunSequenceSection[], depth: number) => {
+    for (const section of nodes) {
+      const unlabeled = isUnlabeledSection(section);
+      const key = sectionKey(section);
+      const expanded = unlabeled || !collapsed.has(key);
+      if (!unlabeled) {
+        items.push({ kind: "section", section, key, depth, expanded });
+      }
+      if (!expanded) continue;
+      const children = section.children
+        .slice()
+        .sort((a, b) => a.beatStart - b.beatStart);
+      let beat = section.beatStart;
+      let childIdx = 0;
+      while (beat <= section.beatEnd) {
+        const child = children[childIdx];
+        if (child !== undefined && beat === child.beatStart) {
+          walk([child], unlabeled ? depth : depth + 1);
+          beat = child.beatEnd + 1;
+          childIdx += 1;
+          continue;
+        }
+        emitBeat(beat);
+        beat += 1;
+      }
+    }
+  };
+
+  walk(sections, 0);
+
+  const uncoveredFrom = maxSectionBeatEnd(sections) + 1;
+  const lastBeat = Math.max(-1, ...rowsByBeat.keys());
+  for (let index = uncoveredFrom; index <= lastBeat; index += 1) {
+    emitBeat(index);
+  }
+
+  return items;
+}
+
+export function SectionHeader({
+  kind,
+  title,
+  expanded,
+  onToggle,
+}: {
+  kind?: string;
+  title?: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const kindLabel =
+    kind !== undefined && kind in KIND_LABEL
+      ? KIND_LABEL[kind as IssueKind]
+      : kind;
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-label={`${expanded ? "Collapse" : "Expand"} ${[kindLabel, title].filter(Boolean).join(" ")}`}
+      data-testid="sequence-section"
+      data-kind={kind}
+      className={cn(
+        "flex w-full min-w-0 items-center gap-2 rounded border px-2 py-1 text-left",
+        "border-[hsl(var(--rail))] bg-[hsl(var(--panel))] hover:border-[hsl(var(--rail-lit))]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+      onClick={onToggle}
+    >
+      {expanded ? (
+        <ChevronDown
+          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      ) : (
+        <ChevronRight
+          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      )}
+      {kindLabel ? (
+        <span className="shrink-0 font-display text-[9px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--current))]">
+          {kindLabel}
+        </span>
+      ) : null}
+      {title ? (
+        <span
+          data-testid="sequence-section-title"
+          className="min-w-0 truncate text-[11px] font-medium text-foreground"
+        >
+          {title}
+        </span>
+      ) : null}
+    </button>
+  );
 }
 
 export function arrowHeadPoints(

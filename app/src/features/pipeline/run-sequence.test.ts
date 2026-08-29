@@ -32,6 +32,7 @@ const completed: RunSequence = {
     lifeline("coordinator", "coordinator"),
     lifeline("research"),
   ],
+  sections: [],
   beats: [
     beat({
       from: "coordinator",
@@ -108,6 +109,7 @@ describe("failedLifelineId", () => {
     const failed: RunSequence = {
       condition: "failed",
       lifelines: completed.lifelines,
+      sections: [],
       beats: [
         ...completed.beats.slice(0, 2),
         beat({
@@ -129,6 +131,7 @@ describe("frontierBeatIndex", () => {
     const live: RunSequence = {
       condition: "in-flight",
       lifelines: completed.lifelines,
+      sections: [],
       beats: [
         completed.beats[0]!,
         beat({
@@ -159,6 +162,7 @@ describe("beatAccent", () => {
     const live: RunSequence = {
       condition: "in-flight",
       lifelines: completed.lifelines,
+      sections: [],
       beats: [
         beat({
           from: "coordinator",

@@ -44,6 +44,7 @@ function sequence(
       { id: "coordinator", label: "implementing", kind: "coordinator" },
       { id: "implementor", label: "implementor", kind: "role" },
     ],
+    sections: [],
     beats:
       conversationBeats ??
       [

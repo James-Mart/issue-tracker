@@ -10,7 +10,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IssueRecord } from "@server/schemas";
 import { PIPELINE_RUNS_LIMIT, type RecentRun } from "../run-list";
-import type { RunSequence } from "../run-sequence";
+import type { RunSequence, RunSequenceSection } from "../run-sequence";
 import { pipelines } from "../shape";
 import { PipelinePage } from "./pipeline-page";
 
@@ -160,6 +160,7 @@ function emptySequence(conversationId: string): RunSequence {
       { id: "coordinator", label: conversationId, kind: "coordinator" },
     ],
     beats: [],
+    sections: [],
   };
 }
 
@@ -419,6 +420,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [
           {
             from: "human",
@@ -456,6 +458,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [
           {
             from: "human",
@@ -498,6 +501,7 @@ describe("PipelinePage", () => {
             kind: "role",
           },
         ],
+        sections: [],
         beats: [
           {
             from: "coordinator",
@@ -560,6 +564,7 @@ describe("PipelinePage", () => {
           { id: "coordinator", label: "planning", kind: "coordinator" },
           { id: "retro", label: "retro", kind: "role" },
         ],
+        sections: [],
         beats: [
           {
             from: "coordinator",
@@ -589,6 +594,201 @@ describe("PipelinePage", () => {
     expect(
       arrow?.querySelector('[data-testid="sequence-arrow-open-terminus"]'),
     ).not.toBeNull();
+  });
+
+  const PHONE_NESTED_SECTIONS: RunSequenceSection[] = [
+    { beatStart: 0, beatEnd: 0, children: [] },
+    {
+      issueId: "pipeline-fixes",
+      kind: "epic",
+      title: "Pipeline fixes",
+      beatStart: 1,
+      beatEnd: 4,
+      children: [
+        {
+          issueId: "run-status-semantics",
+          kind: "story",
+          title: "Run status semantics",
+          beatStart: 1,
+          beatEnd: 2,
+          children: [],
+        },
+        {
+          issueId: "diagram-grouping",
+          kind: "story",
+          title: "Diagram issue grouping",
+          beatStart: 3,
+          beatEnd: 4,
+          children: [],
+        },
+      ],
+    },
+  ];
+
+  function phoneSectionHeaders(container: ParentNode) {
+    return Array.from(
+      container.querySelectorAll('[data-testid="sequence-section"]'),
+    ).map((el) => ({
+      kind: el.getAttribute("data-kind"),
+      title: el.querySelector('[data-testid="sequence-section-title"]')
+        ?.textContent,
+      expanded: el.getAttribute("aria-expanded"),
+    }));
+  }
+
+  it("renders issue section headers on the phone rail", async () => {
+    mockViewport(390);
+    stubRuns(FIVE_RUNS, {
+      e: {
+        condition: "completed",
+        lifelines: [
+          { id: "human", label: "human", kind: "human" },
+          { id: "coordinator", label: "planning", kind: "coordinator" },
+          { id: "research", label: "research", kind: "role" },
+        ],
+        sections: PHONE_NESTED_SECTIONS,
+        beats: [
+          {
+            from: "human",
+            to: "coordinator",
+            label: "human replied",
+            startedAt: "2026-08-28T12:00:00.000Z",
+            kind: "human-turn",
+          },
+          {
+            from: "coordinator",
+            to: "research",
+            label: "spawn research",
+            startedAt: "2026-08-28T12:01:00.000Z",
+            durationMs: 45_000,
+            kind: "spawn",
+          },
+          {
+            from: "research",
+            to: "coordinator",
+            label: "research returned",
+            startedAt: "2026-08-28T12:01:45.000Z",
+            durationMs: 92_000,
+            kind: "return",
+          },
+          {
+            from: "coordinator",
+            to: "research",
+            label: "spawn git",
+            startedAt: "2026-08-28T12:03:00.000Z",
+            durationMs: 22_000,
+            kind: "spawn",
+          },
+          {
+            from: "research",
+            to: "coordinator",
+            label: "git returned",
+            startedAt: "2026-08-28T12:03:22.000Z",
+            durationMs: 180_000,
+            kind: "return",
+          },
+        ],
+      },
+    });
+    const { container } = mountPipelinePage("/pipeline/runs/e");
+    await flush();
+    expect(
+      container.querySelector('[data-testid="run-sequence-diagram"]')?.getAttribute(
+        "data-layout",
+      ),
+    ).toBe("phone");
+    expect(phoneSectionHeaders(container)).toEqual([
+      { kind: "epic", title: "Pipeline fixes", expanded: "true" },
+      { kind: "story", title: "Run status semantics", expanded: "true" },
+      { kind: "story", title: "Diagram issue grouping", expanded: "true" },
+    ]);
+    expect(
+      Array.from(
+        container.querySelectorAll('[data-testid="sequence-beat"]'),
+      ).map((el) => el.getAttribute("data-beat-index")),
+    ).toEqual(["0", "1", "2", "3", "4"]);
+  });
+
+  it("collapsing a phone rail section hides only its own beats", async () => {
+    mockViewport(390);
+    stubRuns(FIVE_RUNS, {
+      e: {
+        condition: "completed",
+        lifelines: [
+          { id: "human", label: "human", kind: "human" },
+          { id: "coordinator", label: "planning", kind: "coordinator" },
+          { id: "research", label: "research", kind: "role" },
+        ],
+        sections: PHONE_NESTED_SECTIONS,
+        beats: [
+          {
+            from: "human",
+            to: "coordinator",
+            label: "human replied",
+            startedAt: "2026-08-28T12:00:00.000Z",
+            kind: "human-turn",
+          },
+          {
+            from: "coordinator",
+            to: "research",
+            label: "spawn research",
+            startedAt: "2026-08-28T12:01:00.000Z",
+            durationMs: 45_000,
+            kind: "spawn",
+          },
+          {
+            from: "research",
+            to: "coordinator",
+            label: "research returned",
+            startedAt: "2026-08-28T12:01:45.000Z",
+            durationMs: 92_000,
+            kind: "return",
+          },
+          {
+            from: "coordinator",
+            to: "research",
+            label: "spawn git",
+            startedAt: "2026-08-28T12:03:00.000Z",
+            durationMs: 22_000,
+            kind: "spawn",
+          },
+          {
+            from: "research",
+            to: "coordinator",
+            label: "git returned",
+            startedAt: "2026-08-28T12:03:22.000Z",
+            durationMs: 180_000,
+            kind: "return",
+          },
+        ],
+      },
+    });
+    const { container } = mountPipelinePage("/pipeline/runs/e");
+    await flush();
+    const story = Array.from(
+      container.querySelectorAll('[data-testid="sequence-section"]'),
+    ).find(
+      (el) =>
+        el.querySelector('[data-testid="sequence-section-title"]')
+          ?.textContent === "Run status semantics",
+    );
+    if (!(story instanceof HTMLElement)) {
+      throw new Error("missing story section header");
+    }
+    act(() => {
+      story.click();
+    });
+    expect(story.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      Array.from(
+        container.querySelectorAll('[data-testid="sequence-beat"]'),
+      ).map((el) => el.getAttribute("data-beat-index")),
+    ).toEqual(["0", "3", "4"]);
+    expect(phoneSectionHeaders(container)).toEqual([
+      { kind: "epic", title: "Pipeline fixes", expanded: "true" },
+      { kind: "story", title: "Run status semantics", expanded: "false" },
+      { kind: "story", title: "Diagram issue grouping", expanded: "true" },
+    ]);
   });
 
   it("pins the selected run and newest failed run when the phone list is truncated", async () => {
@@ -791,6 +991,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [],
         rootIssue: {
           id: "root-task",
@@ -822,6 +1023,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [],
       },
     });
@@ -846,6 +1048,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [],
         rootIssue: {
           id: "root-task",
@@ -859,6 +1062,7 @@ describe("PipelinePage", () => {
           { id: "human", label: "human", kind: "human" },
           { id: "coordinator", label: "planning", kind: "coordinator" },
         ],
+        sections: [],
         beats: [],
       },
     });

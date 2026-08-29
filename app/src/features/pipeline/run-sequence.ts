@@ -41,13 +41,32 @@ export type RunSequenceRootIssue = {
   title: string;
 };
 
+export type RunSequenceSection = {
+  issueId?: string;
+  kind?: string;
+  title?: string;
+  beatStart: number;
+  beatEnd: number;
+  children: RunSequenceSection[];
+};
+
 export type RunSequence = {
   condition: RunCondition;
   lifelines: SequenceLifeline[];
   beats: SequenceBeat[];
+  sections: RunSequenceSection[];
   recoveredErrors?: number;
   rootIssue?: RunSequenceRootIssue;
 };
+
+/** Greatest `beatEnd` in the section tree; `-1` when there are no sections. */
+export function maxSectionBeatEnd(sections: RunSequenceSection[]): number {
+  let max = -1;
+  for (const section of sections) {
+    max = Math.max(max, section.beatEnd, maxSectionBeatEnd(section.children));
+  }
+  return max;
+}
 
 export type BeatStrokeColor = "ink" | "mut" | "rail-lit" | "current" | "blocked";
 

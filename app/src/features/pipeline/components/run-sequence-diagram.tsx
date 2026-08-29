@@ -28,8 +28,10 @@ import {
 import {
   DirectedArrow,
   IterationCountChip,
+  SectionHeader,
   beatAccent,
   beatCaptionLabel,
+  buildSequenceDisplay,
   buildSequenceRows,
   displayBeatLabel,
   displayLifelineLabel,
@@ -42,6 +44,7 @@ export const DESKTOP_SEQUENCE_METRICS = {
   padBottom: 24,
   lifelineHeader: 56,
   rowHeight: 48,
+  sectionHeaderHeight: 36,
   lifelineGap: 116,
   labelW: 88,
   durationCol: 68,
@@ -228,17 +231,51 @@ export function RunSequenceDiagram({
 }) {
   const isMobile = useIsMobile();
   const resolvedLayout = layout ?? (isMobile ? "phone" : "desktop");
-  const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
+  const [loopExpanded, setLoopExpanded] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    () => new Set(),
+  );
   const metrics = DESKTOP_SEQUENCE_METRICS;
   const rows = useMemo(
-    () => buildSequenceRows(sequence.beats, expanded),
-    [sequence.beats, expanded],
+    () => buildSequenceRows(sequence.beats, loopExpanded),
+    [sequence.beats, loopExpanded],
+  );
+  const displayItems = useMemo(
+    () => buildSequenceDisplay(sequence.sections, rows, collapsedSections),
+    [sequence.sections, rows, collapsedSections],
+  );
+  const placed = useMemo(() => {
+    let yCursor = metrics.padTop + metrics.lifelineHeader;
+    return displayItems.map((item) => {
+      if (item.kind === "section") {
+        const y = yCursor + metrics.sectionHeaderHeight / 2;
+        yCursor += metrics.sectionHeaderHeight;
+        return { ...item, y };
+      }
+      const y = yCursor + metrics.rowHeight / 2;
+      yCursor += metrics.rowHeight;
+      return { ...item, y };
+    });
+  }, [displayItems, metrics]);
+  const placedRows = placed.filter(
+    (item): item is Extract<(typeof placed)[number], { kind: "row" }> =>
+      item.kind === "row",
   );
   const toggle = (beatIndex: number) => {
-    setExpanded((prev) => {
+    setLoopExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(beatIndex)) next.delete(beatIndex);
       else next.add(beatIndex);
+      return next;
+    });
+  };
+  const toggleSection = (key: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -250,22 +287,30 @@ export function RunSequenceDiagram({
   const failedIndex = failedBeatIndex(sequence.beats);
   const width = sequenceDiagramWidth(sequence.lifelines.length);
   const lastBeatY =
-    rows.length > 0
-      ? rowCenterY(rows.length - 1)
+    placedRows.length > 0
+      ? placedRows[placedRows.length - 1]!.y
       : metrics.padTop + metrics.lifelineHeader;
-  const failedRowIndex = rows.findIndex(
-    (row) =>
-      row.kind !== "group_head" && row.beatIndex === failedIndex,
+  const failedPlaced = placedRows.find(
+    (item) =>
+      item.row.kind !== "group_head" && item.row.beatIndex === failedIndex,
   );
-  const failedBeatY =
-    failedRowIndex >= 0 ? rowCenterY(failedRowIndex) : lastBeatY;
+  const failedBeatY = failedPlaced?.y ?? lastBeatY;
+  const contentBottom =
+    metrics.padTop +
+    metrics.lifelineHeader +
+    displayItems.reduce(
+      (sum, item) =>
+        sum +
+        (item.kind === "section"
+          ? metrics.sectionHeaderHeight
+          : metrics.rowHeight),
+      0,
+    );
   // Failed condition is "any error," not a terminal cut: later beats stay.
   // The stop tail contrasts completed's post-last-beat extension; the cap
   // marks the failed lifeline at the error beat.
   const height =
-    metrics.padTop +
-    metrics.lifelineHeader +
-    rows.length * metrics.rowHeight +
+    contentBottom +
     (tail === "stop"
       ? metrics.failedCap
       : metrics.padBottom + (tail === "open-dash" ? metrics.openTail : 0));
@@ -297,8 +342,9 @@ export function RunSequenceDiagram({
         {resolvedLayout === "phone" ? (
           <RunSequenceRail
             sequence={sequence}
-            rows={rows}
+            displayItems={displayItems}
             onToggle={toggle}
+            onToggleSection={toggleSection}
           />
         ) : (
         <div className="flex min-w-0" style={{ minHeight: height }}>
@@ -356,40 +402,38 @@ export function RunSequenceDiagram({
                 </g>
               );
             })}
-            {rows.map((row, rowIndex) => {
-              if (row.kind === "group_head") return null;
-              const y = rowCenterY(rowIndex);
-              const accent = beatAccent(sequence, row.beatIndex);
+            {placedRows.map((item, rowIndex) => {
+              if (item.row.kind === "group_head") return null;
+              const accent = beatAccent(sequence, item.row.beatIndex);
               return (
                 <DirectedArrow
-                  key={`${row.kind}-${row.beatIndex}-${rowIndex}`}
-                  fromX={xFor(row.beat.from)}
-                  toX={xFor(row.beat.to)}
-                  y={y}
-                  kind={row.beat.kind}
+                  key={`${item.row.kind}-${item.row.beatIndex}-${rowIndex}`}
+                  fromX={xFor(item.row.beat.from)}
+                  toX={xFor(item.row.beat.to)}
+                  y={item.y}
+                  kind={item.row.beat.kind}
                   accent={accent}
                 />
               );
             })}
             {sequence.beats.map((beat, beatIndex) => {
-              if (!expanded.has(beatIndex) || !isCollapsedBeat(beat)) {
+              if (!loopExpanded.has(beatIndex) || !isCollapsedBeat(beat)) {
                 return null;
               }
-              const turnRows = rows
-                .map((row, index) =>
-                  row.kind === "turn" && row.beatIndex === beatIndex
-                    ? index
-                    : -1,
+              const turnYs = placedRows
+                .filter(
+                  (item) =>
+                    item.row.kind === "turn" && item.row.beatIndex === beatIndex,
                 )
-                .filter((index) => index >= 0);
-              if (turnRows.length === 0) return null;
+                .map((item) => item.y);
+              if (turnYs.length === 0) return null;
               return (
                 <LoopBracket
                   key={`bracket-${beatIndex}`}
                   fromX={xFor(beat.from)}
                   toX={xFor(beat.to)}
-                  topY={rowCenterY(turnRows[0]!)}
-                  bottomY={rowCenterY(turnRows[turnRows.length - 1]!)}
+                  topY={turnYs[0]!}
+                  bottomY={turnYs[turnYs.length - 1]!}
                 />
               );
             })}
@@ -407,6 +451,29 @@ export function RunSequenceDiagram({
             );
           })}
 
+          {placed.map((item) => {
+            if (item.kind !== "section") return null;
+            const indent = item.depth * 16;
+            return (
+              <div
+                key={item.key}
+                className="absolute z-20"
+                style={{
+                  left: metrics.padLeft + indent,
+                  top: item.y - 14,
+                  width: width - metrics.padLeft - metrics.padRight - indent,
+                }}
+              >
+                <SectionHeader
+                  kind={item.section.kind}
+                  title={item.section.title}
+                  expanded={item.expanded}
+                  onToggle={() => toggleSection(item.key)}
+                />
+              </div>
+            );
+          })}
+
           {tail === "stop" && failedId ? (
             <span
               aria-hidden
@@ -421,8 +488,9 @@ export function RunSequenceDiagram({
             </span>
           ) : null}
 
-          {rows.map((row, rowIndex) => {
-            const y = rowCenterY(rowIndex);
+          {placedRows.map((item, rowIndex) => {
+            const row = item.row;
+            const y = item.y;
             const fromX = xFor(row.beat.from);
             const toX = xFor(row.beat.to);
             const midX = (fromX + toX) / 2;
@@ -546,8 +614,9 @@ export function RunSequenceDiagram({
           className="sticky right-0 z-20 shrink-0 border-l border-[hsl(var(--rail))] bg-[hsl(var(--panel)/0.92)] relative"
           style={{ width: metrics.durationCol, height }}
         >
-          {rows.map((row, rowIndex) => {
-            const y = rowCenterY(rowIndex);
+          {placedRows.map((item, rowIndex) => {
+            const row = item.row;
+            const y = item.y;
             const accent = beatAccent(sequence, row.beatIndex);
             const isLive = accent === "live";
             const isFailed = accent === "failed";

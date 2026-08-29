@@ -5,7 +5,7 @@ import {
   applyLiveFrames,
   insertFrameBySeq,
 } from "./live-run-sequence";
-import type { RunSequence, SequenceBeat } from "./run-sequence";
+import type { RunSequence, RunSequenceSection, SequenceBeat } from "./run-sequence";
 
 const AT = "2026-08-28T12:00:00.000Z";
 const AT_MID = "2026-08-28T12:00:08.000Z";
@@ -23,6 +23,7 @@ function inFlight(partial: Partial<RunSequence> = {}): RunSequence {
       { id: "coordinator", label: "implementing", kind: "coordinator" },
       { id: "implementor", label: "implementor", kind: "role" },
     ],
+    sections: [],
     beats: [
       beat({
         from: "coordinator",
@@ -256,6 +257,81 @@ describe("applyLiveFrame", () => {
       seq: 5,
     });
     expect(next).toBe(seed);
+  });
+
+  it("extends the matching issue section to cover a live-appended beat", () => {
+    const sections: RunSequenceSection[] = [
+      {
+        issueId: "pipeline-fixes",
+        kind: "epic",
+        title: "Pipeline fixes",
+        beatStart: 0,
+        beatEnd: 0,
+        children: [
+          {
+            issueId: "run-live-updates",
+            kind: "task",
+            title: "Keep live-appended beats visible",
+            beatStart: 0,
+            beatEnd: 0,
+            children: [],
+          },
+        ],
+      },
+    ];
+    const next = applyLiveFrame(inFlight({ sections }), delegationFrame());
+    expect(next.beats).toHaveLength(2);
+    expect(next.beats[1]).toMatchObject({
+      label: "spawn validator",
+      parentCallId: "call-qa",
+    });
+    expect(next.sections).toEqual([
+      {
+        issueId: "pipeline-fixes",
+        kind: "epic",
+        title: "Pipeline fixes",
+        beatStart: 0,
+        beatEnd: 1,
+        children: [
+          {
+            issueId: "run-live-updates",
+            kind: "task",
+            title: "Keep live-appended beats visible",
+            beatStart: 0,
+            beatEnd: 1,
+            children: [],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("extends the last open section when the appended beat has no matching issue", () => {
+    const next = applyLiveFrame(
+      inFlight({
+        sections: [
+          {
+            issueId: "other-task",
+            kind: "task",
+            title: "Other task",
+            beatStart: 0,
+            beatEnd: 0,
+            children: [],
+          },
+        ],
+      }),
+      delegationFrame(),
+    );
+    expect(next.sections).toEqual([
+      {
+        issueId: "other-task",
+        kind: "task",
+        title: "Other task",
+        beatStart: 0,
+        beatEnd: 1,
+        children: [],
+      },
+    ]);
   });
 
   it("ticks the frontier elapsed time without closing the beat", () => {

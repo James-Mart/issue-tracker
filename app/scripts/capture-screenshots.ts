@@ -183,11 +183,20 @@ async function applyTheme(page: Page, theme: Theme): Promise<void> {
     },
     { key: THEME_STORAGE_KEY, theme },
   );
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForFunction(
-    (expected) => document.documentElement.getAttribute("data-theme") === expected,
-    theme,
+  const current = await page.evaluate(() =>
+    document.documentElement.getAttribute("data-theme"),
   );
+  // Default theme is already dark; a reload re-fetches /api/pipeline/runs
+  // (~40s) and blows the ready waiter. Only reload when the document
+  // theme does not yet match.
+  if (current !== theme) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      (expected) =>
+        document.documentElement.getAttribute("data-theme") === expected,
+      theme,
+    );
+  }
   await settle(page);
 }
 
@@ -199,28 +208,70 @@ async function gotoPath(page: Page, baseUrl: string, path: string): Promise<void
 
 const ISSUE_DETAIL_PATH = /^\/projects\/[^/]+\/issues\/[^/]+/;
 const PIPELINE_RUNS_PATH = /^\/pipeline\/runs(?:\/|$)/;
+const PIPELINE_SELECTED_RUN_PATH = /^\/pipeline\/runs\/.+/;
+
+/** Index scan runs `runSequence` per conversation; 20s misses a cold load. */
+export const PIPELINE_RUNS_READY_MS = 90_000;
+
+export type PipelineRunsReadySnap = {
+  pathname: string;
+  body: string;
+  hasList: boolean;
+  hasDiagram: boolean;
+  hasPlaceholder: boolean;
+};
+
+/** Selected-run looks wait on the sequence, not the slow runs index. */
+export function pipelineRunsPageReady(snap: PipelineRunsReadySnap): boolean {
+  if (snap.body.includes("Loading sequence")) return false;
+  if (PIPELINE_SELECTED_RUN_PATH.test(snap.pathname)) {
+    return (
+      snap.hasDiagram ||
+      snap.hasPlaceholder ||
+      snap.body.includes("Check the server, then reload.")
+    );
+  }
+  if (snap.body.includes("Loading runs")) return false;
+  return (
+    snap.hasList ||
+    snap.hasPlaceholder ||
+    snap.hasDiagram ||
+    snap.body.includes("No runs yet") ||
+    snap.body.includes("Check the server, then reload.")
+  );
+}
 
 /** Runs hydrate from a slow index; 800ms settle alone captures the skeleton. */
 async function waitForPipelineRunsReady(page: Page, path: string): Promise<void> {
   const pathname = path.split("?")[0] ?? path;
   if (!PIPELINE_RUNS_PATH.test(pathname)) return;
 
-  await page.waitForFunction(
-    () => {
+  const deadline = Date.now() + PIPELINE_RUNS_READY_MS;
+  for (;;) {
+    const snap = await page.evaluate((pathName) => {
       const body = document.body.textContent ?? "";
-      if (body.includes("Loading runs")) return false;
-      if (body.includes("Loading sequence")) return false;
-      return (
-        document.querySelector('[data-testid="pipeline-run-list"]') != null ||
-        document.querySelector('[data-testid="pipeline-run-sequence-placeholder"]') !=
-          null ||
-        document.querySelector('[data-testid="run-sequence-diagram"]') != null ||
-        body.includes("No runs yet") ||
-        body.includes("Check the server, then reload.")
+      return {
+        pathname: pathName,
+        body,
+        hasList:
+          document.querySelector('[data-testid="pipeline-run-list"]') != null,
+        hasDiagram:
+          document.querySelector('[data-testid="run-sequence-diagram"]') !=
+          null,
+        hasPlaceholder:
+          document.querySelector(
+            '[data-testid="pipeline-run-sequence-placeholder"]',
+          ) != null,
+      };
+    }, pathname);
+    if (pipelineRunsPageReady(snap)) return;
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `pipeline runs page not ready after ${PIPELINE_RUNS_READY_MS}ms: ${pathname}`,
       );
-    },
-    { timeout: 20_000 },
-  );
+    }
+    await page.waitForTimeout(250);
+  }
 }
 
 /** Issue detail hydrates after theme reload; 800ms settle alone captures the skeleton. */
