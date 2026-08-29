@@ -8,6 +8,7 @@ import { useIssueAgentRunsQuery } from "../api/queries";
 import { useChannelTabIndicator } from "../hooks/use-channel-tab-indicator";
 import {
   AGENTS_DETAIL_TAB,
+  DIFF_DETAIL_TAB,
   issueDetailTabNeedsBoundedShell,
   resolveIssueDetailTab,
   tabsForIssueDetail,
@@ -19,6 +20,7 @@ import type { ChannelTabIndicator } from "../lib/channel-tab-indicator";
 import type { SupportingDocPreviewTab } from "../lib/supporting-docs";
 import { AgentRunsPanel } from "./agent-runs-panel";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
+import { IssueChangePanel } from "./issue-change-panel";
 import { SupportingDocPreview } from "./supporting-doc-preview";
 
 function isDocTab(tab: IssueDetailTab): tab is SupportingDocPreviewTab {
@@ -29,6 +31,12 @@ function isAgentsTab(
   tab: IssueDetailTab,
 ): tab is Extract<IssueDetailTab, { key: typeof AGENTS_DETAIL_TAB }> {
   return tab.key === AGENTS_DETAIL_TAB;
+}
+
+function isDiffTab(
+  tab: IssueDetailTab,
+): tab is Extract<IssueDetailTab, { key: typeof DIFF_DETAIL_TAB }> {
+  return tab.key === DIFF_DETAIL_TAB;
 }
 
 function isChannelTab(
@@ -73,6 +81,7 @@ export function IssueDetailTabs({
 
   const channelTabs = tabs.filter(isChannelTab);
   const agentsTabs = tabs.filter(isAgentsTab);
+  const diffTabs = tabs.filter(isDiffTab);
   const docTabs = tabs.filter(isDocTab);
   const showBar = tabs.length > 1;
   const overviewSelected = active === "overview";
@@ -178,6 +187,23 @@ export function IssueDetailTabs({
             {...tabPanelVisibility(selected)}
           >
             <AgentRunsPanel issueId={issue.id} projectId={projectId} />
+          </div>
+        );
+      })}
+
+      {diffTabs.map((tab) => {
+        const selected = active === tab.key;
+        return (
+          <div
+            key={tab.key}
+            role="tabpanel"
+            className={cn(
+              "min-h-0 min-w-0 flex-1 overflow-y-auto",
+              !selected && "hidden",
+            )}
+            {...tabPanelVisibility(selected)}
+          >
+            <IssueChangePanel issueId={issue.id} />
           </div>
         );
       })}

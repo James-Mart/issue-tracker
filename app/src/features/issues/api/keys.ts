@@ -15,6 +15,7 @@ export const issuesKeys = {
     [...issuesKeys.all, "planningWorkRoot", ideaId] as const,
   projectPullRequests: (projectId: string) =>
     [...issuesKeys.all, "projectPullRequests", projectId] as const,
+  change: (issueId: string) => [...issuesKeys.all, "change", issueId] as const,
 };
 
 export const healthKeys = {

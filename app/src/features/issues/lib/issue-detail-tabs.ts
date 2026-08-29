@@ -7,16 +7,19 @@ import {
 
 export const DEFAULT_ISSUE_DETAIL_TAB = "overview" as const;
 export const AGENTS_DETAIL_TAB = "agents" as const;
+export const DIFF_DETAIL_TAB = "diff" as const;
 
 export type IssueDetailTabKey =
   | typeof DEFAULT_ISSUE_DETAIL_TAB
   | typeof AGENTS_DETAIL_TAB
+  | typeof DIFF_DETAIL_TAB
   | ConversationChannel
   | SupportingDocPreviewTab["key"];
 
 export type IssueDetailTab =
   | { key: typeof DEFAULT_ISSUE_DETAIL_TAB; label: "Overview" }
   | { key: typeof AGENTS_DETAIL_TAB; label: "Agents" }
+  | { key: typeof DIFF_DETAIL_TAB; label: "Diff" }
   | { key: ConversationChannel; label: string; channel: ConversationChannel }
   | SupportingDocPreviewTab;
 
@@ -71,6 +74,9 @@ export function tabsForIssueDetail(
   }
   if (agentsTabForIssue(issue, parentKind)) {
     tabs.push({ key: AGENTS_DETAIL_TAB, label: "Agents" });
+  }
+  if (issue.kind === "task") {
+    tabs.push({ key: DIFF_DETAIL_TAB, label: "Diff" });
   }
   if (issue.kind === "project") {
     tabs.push(...previewableSupportingDocs(issue.supportingDocs));
