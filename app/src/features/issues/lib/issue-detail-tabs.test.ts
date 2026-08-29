@@ -93,10 +93,11 @@ describe("agentsTabForIssue", () => {
 });
 
 describe("tabsForIssueDetail", () => {
-  it("Task: Overview + Agents", () => {
+  it("Task: Overview + Agents + Diff", () => {
     expect(tabsForIssueDetail(task).map((t) => t.key)).toEqual([
       "overview",
       "agents",
+      "diff",
     ]);
   });
 
@@ -160,6 +161,7 @@ describe("resolveIssueDetailTab", () => {
     expect(resolveIssueDetailTab("overview", ideaTabs)).toBe("overview");
     const taskTabs = tabsForIssueDetail(task);
     expect(resolveIssueDetailTab("agents", taskTabs)).toBe("agents");
+    expect(resolveIssueDetailTab("diff", taskTabs)).toBe("diff");
   });
 
   it("falls back when the key is not in this issue's set", () => {

@@ -4,8 +4,9 @@ A local Cursor plugin: a dark shadcn/ui web app plus a CLI over a file-backed,
 hierarchical work tracker (**Project > Epic > Story > Task**) that maps
 directly onto git stacked PRs. A directory per issue on disk is the source of
 truth; all writes funnel through one validated service layer so issues cannot be
-misconfigured. It is metadata-only with respect to git — it records the git state
-agents set (`branchName`, `prUrl`, `commitSha`, `merged`) and never runs git itself.
+misconfigured. The server never writes to git — agents record git facts
+(`branchName`, `prUrl`, `commitSha`, `merged`) through the CLI — and shells out
+to git only for read-only history inspection via `app/server/services/git-read.ts`.
 
 It replaces the giant "plan" doc: an agent authors a spec into a
 Project > Epic > Story > Task tree, then works the tree — updating state and

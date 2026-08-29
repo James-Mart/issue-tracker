@@ -49,6 +49,7 @@ import {
 import { moveStory } from "../services/move-story.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
 import { findPlanningWorkRoot } from "../services/planning-work-root.js";
+import { readIssueChange } from "../services/change.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
 import { ancestorChain } from "../services/subtree.js";
 
@@ -101,6 +102,13 @@ export function createIssuesRouter(
     "/:id/comments",
     asyncRoute((req, res) => {
       res.json(readComments(req.params.id));
+    }),
+  );
+
+  router.get(
+    "/:id/change",
+    asyncRoute(async (req, res) => {
+      res.json(await readIssueChange(req.params.id));
     }),
   );
 

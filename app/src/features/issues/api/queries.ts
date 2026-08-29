@@ -4,6 +4,7 @@ import type {
   ChannelSessionListItem,
   CommentsResponse,
   ConversationChannel,
+  IssueChange,
   IssueDetail,
   IssuesResponse,
 } from "@server/schemas";
@@ -137,5 +138,17 @@ export function useProjectPullRequestsQuery(
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+  });
+}
+
+export function useIssueChangeQuery(
+  issueId: string,
+): UseQueryResult<IssueChange, Error> {
+  return useQuery({
+    queryKey: issuesKeys.change(issueId),
+    queryFn: () => request<IssueChange>(`/api/issues/${issueId}/change`),
+    enabled: Boolean(issueId),
+    retry: (count, error) =>
+      !(error instanceof ApiError && error.status === 404) && count < 2,
   });
 }
