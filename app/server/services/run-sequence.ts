@@ -410,13 +410,14 @@ function extendOpen(stack: RunSequenceSection[], index: number): void {
 function buildSections(
   rows: OrderedBeat[],
   byId: Map<string, Issue>,
+  sessionIssueId?: string,
 ): RunSequenceSection[] {
   const roots: RunSequenceSection[] = [];
   const stack: RunSequenceSection[] = [];
   let leading: RunSequenceSection | undefined;
 
   for (let i = 0; i < rows.length; i += 1) {
-    const issueId = rows[i]!.issueId;
+    const issueId = sessionIssueId ?? rows[i]!.issueId;
     const ancestry =
       issueId !== undefined ? issueAncestry(issueId, byId) : undefined;
 
@@ -542,7 +543,11 @@ export function runSequence(conversationId: string): RunSequence {
 
   ordered.sort(compareOrder);
   const collapsed = collapseConsecutiveBeats(ordered);
-  const sections = buildSections(collapsed, issuesById());
+  const sessionIssueId =
+    meta.channel === "planning" && meta.issueId !== undefined
+      ? meta.issueId
+      : undefined;
+  const sections = buildSections(collapsed, issuesById(), sessionIssueId);
 
   const familyIds: string[] = [];
   for (const record of delegations) {
@@ -564,7 +569,7 @@ export function runSequence(conversationId: string): RunSequence {
   }
 
   const { condition, recoveredErrors } = runOutcome(ordered);
-  const rootIssue = resolveRootIssue(delegations);
+  const rootIssue = resolveRootIssue(delegations, meta);
 
   return {
     condition,
@@ -602,10 +607,21 @@ function projectIdOfIssue(
   return undefined;
 }
 
+function runIssueId(
+  meta: ConversationMeta,
+  delegations: DelegationRecord[],
+): string | undefined {
+  if (meta.channel === "planning" && meta.issueId !== undefined) {
+    return meta.issueId;
+  }
+  return earliestIssueId(delegations);
+}
+
 function resolveRootIssue(
   delegations: DelegationRecord[],
+  meta: ConversationMeta,
 ): RunSequenceRootIssue | undefined {
-  const issueId = earliestIssueId(delegations);
+  const issueId = runIssueId(meta, delegations);
   if (issueId === undefined) return undefined;
   try {
     const issue = readIssueOrThrow(issueId);
@@ -627,7 +643,7 @@ export function recentRuns(limit: number): RecentRun[] {
       const { meta } = readConversation(conversationId);
       const delegations = readDelegations(conversationId);
       const sequence = runSequence(conversationId);
-      const issueId = earliestIssueId(delegations);
+      const issueId = runIssueId(meta, delegations);
       entries.push({
         conversationId,
         coordinatorLabel: coordinatorLabel(meta),
