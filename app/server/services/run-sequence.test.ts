@@ -868,6 +868,12 @@ describe("runSequence", () => {
   });
 
   it("resolves rootIssue from the earliest delegation issue", async () => {
+    writeIssue("platform", {
+      kind: "project",
+      title: "Platform",
+      createdAt: AT,
+      updatedAt: AT,
+    });
     writeIssue("first-issue", {
       kind: "task",
       title: "First task",
@@ -925,6 +931,7 @@ describe("runSequence", () => {
       id: "first-issue",
       kind: "task",
       title: "First task",
+      projectId: "platform",
     });
   });
 

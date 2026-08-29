@@ -8,28 +8,10 @@ import {
 } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { IssueRecord } from "@server/schemas";
 import { PIPELINE_RUNS_LIMIT, type RecentRun } from "../run-list";
 import type { RunSequence, RunSequenceSection } from "../run-sequence";
 import { pipelines } from "../shape";
 import { PipelinePage } from "./pipeline-page";
-
-const issuesCatalog = vi.hoisted(() => ({
-  issues: [] as IssueRecord[],
-}));
-
-vi.mock("@/features/issues/api/queries", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/features/issues/api/queries")>();
-  return {
-    ...actual,
-    useIssuesQuery: () => ({
-      data: { issues: issuesCatalog.issues, problems: [], derived: {} },
-      isLoading: false,
-      error: null,
-    }),
-  };
-});
 
 function LocationProbe() {
   const { pathname, search } = useLocation();
@@ -210,37 +192,6 @@ function sequencePaneHeader(container: ParentNode): HTMLElement {
   return el;
 }
 
-const ISSUE_TREE_T0 = "2026-08-01T00:00:00.000Z";
-
-function seedRootIssueCatalog() {
-  issuesCatalog.issues = [
-    {
-      id: "issue-tracker",
-      kind: "project",
-      title: "issue-tracker",
-      order: 0,
-      createdAt: ISSUE_TREE_T0,
-      updatedAt: ISSUE_TREE_T0,
-      archived: false,
-      description: "",
-      labels: [],
-      workspace: "/tmp/ws",
-    },
-    {
-      id: "root-task",
-      kind: "task",
-      title: "First task",
-      partOf: "issue-tracker",
-      order: 0,
-      createdAt: ISSUE_TREE_T0,
-      updatedAt: ISSUE_TREE_T0,
-      archived: false,
-      description: "",
-      labels: [],
-    },
-  ];
-}
-
 function mockViewport(width: number) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -259,7 +210,6 @@ function mockViewport(width: number) {
 }
 
 beforeEach(() => {
-  issuesCatalog.issues = [];
   (
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
@@ -983,7 +933,6 @@ describe("PipelinePage", () => {
   });
 
   it("links the selected run root issue from the sequence pane header", async () => {
-    seedRootIssueCatalog();
     stubRuns(FIVE_RUNS, {
       c: {
         condition: "completed",
@@ -997,6 +946,7 @@ describe("PipelinePage", () => {
           id: "root-task",
           kind: "task",
           title: "First task",
+          projectId: "issue-tracker",
         },
       },
     });
@@ -1015,7 +965,6 @@ describe("PipelinePage", () => {
   });
 
   it("renders no root issue link when the run has no root issue", async () => {
-    seedRootIssueCatalog();
     stubRuns(FIVE_RUNS, {
       c: {
         condition: "completed",
@@ -1036,7 +985,6 @@ describe("PipelinePage", () => {
   });
 
   it("keeps the sequence pane header height when root issue is absent", async () => {
-    seedRootIssueCatalog();
     const runs = [
       recentRun("with-root", "completed", "2026-08-28T15:00:00.000Z"),
       recentRun("no-root", "completed", "2026-08-28T14:00:00.000Z"),
@@ -1054,6 +1002,7 @@ describe("PipelinePage", () => {
           id: "root-task",
           kind: "task",
           title: "First task",
+          projectId: "issue-tracker",
         },
       },
       "no-root": {
