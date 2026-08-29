@@ -1,9 +1,7 @@
 import { useRef } from "react";
 import { FIELD_LABELS } from "@server/fields";
-import {
-  SUPPORTING_DOC_KEYS,
-  type SupportingDocKey,
-} from "@server/schemas";
+import { SUPPORTING_DOC_KEYS } from "@server/issue-constants";
+import type { SupportingDocKey } from "@server/schemas";
 import type { Attachment } from "@server/services/attachments";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Input } from "@/components/ui/input";

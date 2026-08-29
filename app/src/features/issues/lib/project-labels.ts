@@ -1,9 +1,9 @@
-import {
-  LABEL_COLOR_RE,
-  type Issue,
-  type IssueKind,
-  type IssueRecord,
-  type ProjectLabel,
+import { LABEL_COLOR_RE } from "@server/issue-constants";
+import type {
+  Issue,
+  IssueKind,
+  IssueRecord,
+  ProjectLabel,
 } from "@server/schemas";
 import { SLUG_RE } from "@server/slug";
 

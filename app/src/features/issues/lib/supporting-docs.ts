@@ -1,8 +1,8 @@
-import {
-  SUPPORTING_DOC_KEYS,
-  type SupportingDocKey,
-  type SupportingDocRef,
-  type SupportingDocs,
+import { SUPPORTING_DOC_KEYS } from "@server/issue-constants";
+import type {
+  SupportingDocKey,
+  SupportingDocRef,
+  SupportingDocs,
 } from "@server/schemas";
 import { attachmentsApiPath } from "./attachments";
 

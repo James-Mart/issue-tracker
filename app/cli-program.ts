@@ -3,8 +3,8 @@ import { format } from "util";
 import { Command, CommanderError } from "commander";
 import { parse as parseYaml } from "yaml";
 import { list } from "./server/services/issues.js";
+import { KINDS } from "./server/issue-constants.js";
 import {
-  KINDS,
   type DerivedState,
   type IssueRecord,
 } from "./server/schemas.js";

@@ -14,12 +14,12 @@ import { Link, useParams } from "react-router-dom";
 import { assigneeOf } from "@server/assignee";
 import { isProjectBoardChild } from "@server/order";
 import { hasAttention } from "@server/kind";
-import {
-  CHILD_KIND,
-  type DerivedState,
-  type IssueKind,
-  type IssueRecord,
-  type ProjectLabel,
+import { CHILD_KIND } from "@server/issue-constants";
+import type {
+  DerivedState,
+  IssueKind,
+  IssueRecord,
+  ProjectLabel,
 } from "@server/schemas";
 import { cn } from "@/lib/utils/cn";
 import { Avatar } from "@/components/ui/avatar";

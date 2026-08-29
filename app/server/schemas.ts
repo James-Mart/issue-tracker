@@ -1,21 +1,20 @@
 import { z } from "zod";
 import type { ClearableKey, NullClearableObjectKey } from "./fields.js";
+import {
+  LABEL_COLOR_RE,
+  MERGE_POLICIES,
+  PARENT_KINDS,
+  SUPPORTING_DOC_KEYS,
+  type IssueKind,
+} from "./issue-constants.js";
 import { SLUG_RE } from "./slug.js";
 
-export const KINDS = ["project", "epic", "idea", "story", "task"] as const;
+export type { IssueKind, MergePolicy, SupportingDocKey } from "./issue-constants.js";
+
 export const TASK_STATUSES = ["todo", "in-progress", "fixing", "done"] as const;
 export const QA_STATUSES = ["reviewing", "changes-requested", "passed"] as const;
 export const RETRO_STATUSES = ["in-progress", "done"] as const;
-export const MERGE_POLICIES = ["merge", "pull-request", "manual", "fast-forward"] as const;
 export const REVIEW_STATUSES = ["passed", "failed"] as const;
-export const SUPPORTING_DOC_KEYS = [
-  "vision",
-  "codingStandards",
-  "designSystem",
-] as const;
-
-/** Chip color for a Project catalog label (`#RRGGBB` only). */
-export const LABEL_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 
 const nonEmpty = z.string().min(1);
 
@@ -135,7 +134,6 @@ export const supportingDocsSchema = z
   })
   .strict();
 
-export type SupportingDocKey = (typeof SUPPORTING_DOC_KEYS)[number];
 export type SupportingDocRef = z.infer<typeof supportingDocRefSchema>;
 export type SupportingDocs = z.infer<typeof supportingDocsSchema>;
 
@@ -292,33 +290,14 @@ export const issueSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type Issue = z.infer<typeof issueSchema>;
-export type IssueKind = (typeof KINDS)[number];
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type QaStatus = (typeof QA_STATUSES)[number];
 export type RetroStatus = (typeof RETRO_STATUSES)[number];
-export type MergePolicy = (typeof MERGE_POLICIES)[number];
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
-
-/** Allowed `partOf` parent kinds per child kind (empty = no parent). */
-export const PARENT_KINDS: Record<IssueKind, readonly IssueKind[]> = {
-  project: [],
-  epic: ["project"],
-  idea: ["project"],
-  story: ["project", "epic"],
-  task: ["story"],
-};
 
 export function requiresPartOf(kind: IssueKind): boolean {
   return PARENT_KINDS[kind].length > 0;
 }
-
-export const CHILD_KIND: Record<IssueKind, IssueKind | null> = {
-  project: "epic",
-  epic: "story",
-  idea: null,
-  story: "task",
-  task: null,
-};
 
 type IssueFields = Omit<z.infer<typeof projectSchema>, "kind" | "labels"> &
   Omit<z.infer<typeof epicSchema>, "kind" | "labels"> &

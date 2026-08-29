@@ -12,6 +12,7 @@ import {
 } from "./server/kind-fields.js";
 import { list, read, renameProjectLabel, update } from "./server/services/issues.js";
 import { validateFullCommitSha } from "./server/services/commit-sha.js";
+import { MERGE_POLICIES } from "./server/issue-constants.js";
 import {
   projectLabelSchema,
   type IssueDetail,
@@ -28,7 +29,6 @@ import {
   inspirationAppsSchema,
   personaEntrySchema,
   personasSchema,
-  MERGE_POLICIES,
 } from "./server/schemas.js";
 import { isSupportingDocKey } from "./server/services/supporting-docs.js";
 
