@@ -344,6 +344,34 @@ export type IssueDetail = IssueRecord & {
   version: string;
 };
 
+export const changeCommitSchema = z.object({
+  sha: nonEmpty,
+  subject: z.string(),
+});
+
+export const changeStatsSchema = z.object({
+  filesChanged: z.number().int().nonnegative(),
+  insertions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+});
+
+export const issueChangeSchema = z.discriminatedUnion("state", [
+  z.object({
+    state: z.literal("loaded"),
+    commits: z.array(changeCommitSchema),
+    patch: z.string(),
+    stats: changeStatsSchema,
+  }),
+  z.object({
+    state: z.literal("empty"),
+    reason: z.enum(["no-commit", "no-diff", "no-descendant-commits"]),
+  }),
+]);
+
+export type ChangeCommit = z.infer<typeof changeCommitSchema>;
+export type ChangeStats = z.infer<typeof changeStatsSchema>;
+export type IssueChange = z.infer<typeof issueChangeSchema>;
+
 export interface Problem {
   id: string;
   message: string;
