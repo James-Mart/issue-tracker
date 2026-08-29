@@ -53,11 +53,9 @@ export function agentsTabForIssue(
   return false;
 }
 
-/** Diff tab for Task, Story, and Epic — kind-only, not data-dependent. */
+/** Diff tab for Task and Story — kind-only, not data-dependent. */
 export function diffTabForIssue(issue: Issue): boolean {
-  return (
-    issue.kind === "task" || issue.kind === "story" || issue.kind === "epic"
-  );
+  return issue.kind === "task" || issue.kind === "story";
 }
 
 /**

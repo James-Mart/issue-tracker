@@ -158,7 +158,7 @@ afterEach(() => {
 });
 
 describe("IssueDetailTabs diff tab", () => {
-  it("offers Diff for Task, Story, and Epic but not for Idea", () => {
+  it("offers Diff for Task and Story but not for Epic or Idea", () => {
     const taskTabLabels = Array.from(
       mountTabs(task()).container.querySelectorAll('[role="tab"]'),
     ).map((el) => el.textContent?.trim());
@@ -172,7 +172,7 @@ describe("IssueDetailTabs diff tab", () => {
     const epicTabLabels = Array.from(
       mountTabs(epic()).container.querySelectorAll('[role="tab"]'),
     ).map((el) => el.textContent?.trim());
-    expect(epicTabLabels.some((label) => label?.includes("Diff"))).toBe(true);
+    expect(epicTabLabels.some((label) => label?.includes("Diff"))).toBe(false);
 
     const ideaTabLabels = Array.from(
       mountTabs(idea()).container.querySelectorAll('[role="tab"]'),

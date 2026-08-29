@@ -52,28 +52,42 @@ function nestedWorkChildren(parent: Issue, issues: Issue[]): Issue[] {
     .sort(bySequence);
 }
 
-function collectFrom(issue: Issue, issues: Issue[], out: ChangeCommit[]): void {
-  if (issue.kind === "task") {
-    const commit = taskCommit(issue);
-    if (commit) out.push(commit);
-    return;
-  }
+function collectOwnTaskCommits(
+  parentId: string,
+  issues: Issue[],
+  out: ChangeCommit[],
+): void {
   const tasks = issues
     .filter(
-      (child): child is Task => child.kind === "task" && isChildOf(child, issue.id),
+      (child): child is Task => child.kind === "task" && isChildOf(child, parentId),
     )
     .sort(bySequence);
-  for (const task of tasks) collectFrom(task, issues, out);
+  for (const task of tasks) {
+    const commit = taskCommit(task);
+    if (commit) out.push(commit);
+  }
+}
+
+function collectFrom(issue: Issue, issues: Issue[], out: ChangeCommit[]): void {
+  collectOwnTaskCommits(issue.id, issues, out);
   for (const child of nestedWorkChildren(issue, issues)) {
     collectFrom(child, issues, out);
   }
 }
 
-/** Descendant Task shas in implementation order: tasks, then stacked stories, depth-first. */
+/**
+ * Task shas in implementation order. A Story yields only its own Tasks;
+ * an Epic walks child Stories (including stacked) depth-first.
+ */
 export function collectDescendantCommits(issueId: string): ChangeCommit[] {
   const issue = readIssueOrThrow(issueId);
+  const issues = readAll().issues;
   const commits: ChangeCommit[] = [];
-  collectFrom(issue, readAll().issues, commits);
+  if (issue.kind === "story") {
+    collectOwnTaskCommits(issue.id, issues, commits);
+  } else {
+    collectFrom(issue, issues, commits);
+  }
   return commits;
 }
 
@@ -232,12 +246,22 @@ async function readTaskChange(
   };
 }
 
+const EPIC_CHANGE_UNSUPPORTED =
+  "Epic diffs are not supported; use Story or Task detail instead";
+
+function assertChangeSupported(issue: Issue): void {
+  if (issue.kind === "epic") {
+    throw new IssueError("validation", EPIC_CHANGE_UNSUPPORTED);
+  }
+}
+
 function allowedCommitShas(issue: Issue, issueId: string): string[] {
+  assertChangeSupported(issue);
   if (issue.kind === "task") {
     if (!issue.commitSha || issue.noDiff) return [];
     return [issue.commitSha];
   }
-  if (issue.kind === "story" || issue.kind === "epic") {
+  if (issue.kind === "story") {
     return collectDescendantCommits(issueId).map((commit) => commit.sha);
   }
   throw new IssueError(
@@ -286,6 +310,7 @@ export async function readIssueChangeFile(
 
 export async function readIssueChange(issueId: string): Promise<IssueChange> {
   const issue = readIssueOrThrow(issueId);
+  assertChangeSupported(issue);
   const chain = ancestorChain(issueId, readAll().issues);
   const project = chain[0]!;
   const workspace = requireProjectWorkspace(project.id);
@@ -293,7 +318,7 @@ export async function readIssueChange(issueId: string): Promise<IssueChange> {
   if (issue.kind === "task") {
     return readTaskChange(issue, workspace);
   }
-  if (issue.kind === "story" || issue.kind === "epic") {
+  if (issue.kind === "story") {
     return readRollupChange(issueId, workspace);
   }
 

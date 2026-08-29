@@ -257,6 +257,70 @@ describe("readIssueChange rollup", () => {
     });
   });
 
+  it("loads a Story from own-Task shas when a stacked Story would break contiguity", async () => {
+    const c1 = sha(1);
+    const c2 = sha(2);
+    const stacked = sha(9);
+    const base = sha(0);
+    writeRollupFixture([
+      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
+      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
+    ]);
+    writeStory("s-stacked-on-rollup", {
+      partOf: "e",
+      order: 0,
+      stackedOn: "rollup",
+    });
+    writeTask("t-stacked-foreign", {
+      partOf: "s-stacked-on-rollup",
+      order: 0,
+      commitSha: stacked,
+    });
+
+    await stubGitSpawner((args) => {
+      if (args[0] === "rev-list" && args.includes("--count")) {
+        const range = args[args.length - 1]!;
+        if (range === `${c1}..${c2}`) {
+          return mockGitChild({ stdout: "1\n" });
+        }
+        return mockGitChild({ stdout: "3\n" });
+      }
+      if (args[0] === "rev-parse" && args[1] === `${c1}^`) {
+        return mockGitChild({ stdout: `${base}\n` });
+      }
+      if (args[0] === "diff" && args.includes("--shortstat")) {
+        return mockGitChild({
+          stdout: " 2 files changed, 4 insertions(+), 1 deletion(-)\n",
+        });
+      }
+      if (args[0] === "diff") {
+        return mockGitChild({
+          stdout: "diff --git a/own.ts b/own.ts\n+own\n",
+        });
+      }
+      if (args[0] === "show" && args.includes("--format=%s")) {
+        const shaArg = args[args.length - 1]!;
+        const subjects: Record<string, string> = {
+          [c1]: "First",
+          [c2]: "Second",
+        };
+        return mockGitChild({ stdout: `${subjects[shaArg] ?? "?"}\n` });
+      }
+      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("rollup")).resolves.toEqual({
+      state: "loaded",
+      commits: [
+        { sha: c1, subject: "First" },
+        { sha: c2, subject: "Second" },
+      ],
+      patch: "diff --git a/own.ts b/own.ts\n+own\n",
+      stats: { filesChanged: 2, insertions: 4, deletions: 1 },
+    });
+  });
+
   it("raises commits-not-contiguous when foreign commits sit between recorded shas", async () => {
     const c1 = sha(1);
     const c2 = sha(2);
@@ -276,6 +340,15 @@ describe("readIssueChange rollup", () => {
     await expect(readIssueChange("rollup")).rejects.toMatchObject({
       code: "commits-not-contiguous",
       message: expect.stringContaining(c1),
+    });
+  });
+
+  it("refuses Epic change requests", async () => {
+    writeTask("t-epic-child", { partOf: "b", commitSha: sha(1) });
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("e")).rejects.toMatchObject({
+      code: "validation",
+      message: expect.stringContaining("Epic diffs are not supported"),
     });
   });
 });
@@ -413,6 +486,19 @@ describe("readIssueChange", () => {
   });
 });
 
+describe("readIssueChangeFile", () => {
+  it("refuses Epic change file requests", async () => {
+    writeTask("t-epic-child", { partOf: "b", commitSha: SHA });
+    const { readIssueChangeFile } = await loadChange();
+    await expect(
+      readIssueChangeFile("e", SHA, "src/foo.ts"),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: expect.stringContaining("Epic diffs are not supported"),
+    });
+  });
+});
+
 describe("collectDescendantCommits", () => {
   function writeFixtureTree(): void {
     writeIssue("tree", {
@@ -452,7 +538,6 @@ describe("collectDescendantCommits", () => {
     expect(collectDescendantCommits("s-a").map((c) => c.sha)).toEqual([
       sha(1),
       sha(3),
-      sha(4),
     ]);
   });
 });

@@ -171,4 +171,17 @@ describe("issue change file HTTP API", () => {
     expect(body.code).toBe("validation");
     expect(body.error).toContain(OTHER_SHA);
   });
+
+  it("refuses Epic change file requests", async () => {
+    writeTask("t-epic-child", { commitSha: SHA });
+
+    const url = new URL(`${baseUrl}/api/issues/e/change/file`);
+    url.searchParams.set("path", FILE_PATH);
+    url.searchParams.set("sha", SHA);
+    const res = await fetch(url);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe("validation");
+    expect(body.error).toContain("Epic diffs are not supported");
+  });
 });
