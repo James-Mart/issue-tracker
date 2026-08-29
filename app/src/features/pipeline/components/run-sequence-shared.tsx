@@ -6,6 +6,7 @@ import {
   failedBeatIndex,
   frontierBeatIndex,
   isCollapsedBeat,
+  maxSectionBeatEnd,
   RETURN_DASH,
   beatStroke,
   strokeCss,
@@ -127,6 +128,13 @@ export function buildSequenceDisplay(
   };
 
   walk(sections, 0);
+
+  const uncoveredFrom = maxSectionBeatEnd(sections) + 1;
+  const lastBeat = Math.max(-1, ...rowsByBeat.keys());
+  for (let index = uncoveredFrom; index <= lastBeat; index += 1) {
+    emitBeat(index);
+  }
+
   return items;
 }
 

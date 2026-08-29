@@ -59,6 +59,15 @@ export type RunSequence = {
   rootIssue?: RunSequenceRootIssue;
 };
 
+/** Greatest `beatEnd` in the section tree; `-1` when there are no sections. */
+export function maxSectionBeatEnd(sections: RunSequenceSection[]): number {
+  let max = -1;
+  for (const section of sections) {
+    max = Math.max(max, section.beatEnd, maxSectionBeatEnd(section.children));
+  }
+  return max;
+}
+
 export type BeatStrokeColor = "ink" | "mut" | "rail-lit" | "current" | "blocked";
 
 export type BeatStroke = {
