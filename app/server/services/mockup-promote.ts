@@ -18,11 +18,16 @@ import {
   putAttachment,
   removeAttachment,
 } from "./attachments.js";
+import {
+  listConversationAttachments,
+  putConversationAttachment,
+} from "./conversation-attachments.js";
 import { captureMockupStoryStates } from "./mockup-capture.js";
 import {
   directionDir,
   harnessConfigPath,
   listDirectionIds,
+  resolveMockupConversationId,
 } from "./mockup-scratch.js";
 import type { CaptureResult, ViewportName } from "./mockup-story-capture.js";
 import { slugify } from "./slug.js";
@@ -32,7 +37,7 @@ export type PromoteMode = "candidate" | "chosen" | "copy";
 export interface PromoteOptions {
   mode: PromoteMode;
   directionId: string;
-  issueId: string;
+  issueId?: string;
   conversationId?: string;
   fromIssueId?: string;
 }
@@ -63,8 +68,27 @@ export function candidateAttachmentName(
   directionId: string,
   storyId: string,
   viewport: ViewportName,
+  revision: number,
 ): string {
-  return `${CANDIDATE_PREFIX}${directionId}-${stateSlug(storyId, directionId)}-${viewport}.png`;
+  return `${CANDIDATE_PREFIX}${directionId}-r${revision}-${stateSlug(storyId, directionId)}-${viewport}.png`;
+}
+
+export async function nextCandidateRevision(
+  conversationId: string,
+  directionId: string,
+): Promise<number> {
+  const attachments = await listConversationAttachments(conversationId);
+  const prefix = candidateAttachmentPrefix(directionId);
+  let max = 0;
+  for (const attachment of attachments) {
+    if (!attachment.name.startsWith(prefix)) continue;
+    const rest = attachment.name.slice(prefix.length);
+    const match = rest.match(/^r(\d+)-/);
+    if (match) {
+      max = Math.max(max, Number.parseInt(match[1]!, 10));
+    }
+  }
+  return max + 1;
 }
 
 export function chosenAttachmentName(
@@ -175,44 +199,34 @@ export function matchesChosenArchiveForReplace(
   return Number.isInteger(parsed) && parsed >= 2 && String(parsed) === n;
 }
 
-export function matchesCandidatePrefix(
-  name: string,
-  directionId: string,
-  otherDirectionIds: Iterable<string> = [],
-): boolean {
-  const prefix = candidateAttachmentPrefix(directionId);
-  if (!name.startsWith(prefix)) return false;
-  if (!name.endsWith("-phone.png") && !name.endsWith("-desktop.png")) {
-    return false;
-  }
-  for (const other of otherDirectionIds) {
-    if (
-      other !== directionId &&
-      other.startsWith(`${directionId}-`) &&
-      name.startsWith(candidateAttachmentPrefix(other))
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
 type CopyPromoteOptions = PromoteOptions & {
   mode: "copy";
+  issueId: string;
   fromIssueId: string;
   conversationId?: undefined;
 };
 
-type CapturePromoteOptions = PromoteOptions & {
-  mode: "candidate" | "chosen";
+type CandidatePromoteOptions = PromoteOptions & {
+  mode: "candidate";
+  conversationId: string;
+  issueId?: undefined;
+  fromIssueId?: undefined;
+};
+
+type ChosenPromoteOptions = PromoteOptions & {
+  mode: "chosen";
+  issueId: string;
   conversationId: string;
   fromIssueId?: undefined;
 };
 
 function assertModeFlags(
   options: PromoteOptions,
-): CopyPromoteOptions | CapturePromoteOptions {
+): CopyPromoteOptions | CandidatePromoteOptions | ChosenPromoteOptions {
   if (options.mode === "copy") {
+    if (!options.issueId) {
+      throw new Error("--issue is required for --mode copy");
+    }
     if (!options.fromIssueId) {
       throw new Error("--from-issue is required for --mode copy");
     }
@@ -228,7 +242,16 @@ function assertModeFlags(
   if (options.fromIssueId !== undefined) {
     throw new Error("--from-issue is not used with capturing modes");
   }
-  return options as CapturePromoteOptions;
+  if (options.mode === "candidate") {
+    if (options.issueId !== undefined) {
+      throw new Error("--issue is not used with --mode candidate");
+    }
+    return options as CandidatePromoteOptions;
+  }
+  if (!options.issueId) {
+    throw new Error("--issue is required for --mode chosen");
+  }
+  return options as ChosenPromoteOptions;
 }
 
 function collectStoryRelPaths(dir: string, relative = ""): string[] {
@@ -316,32 +339,21 @@ async function attachAll(
   return attached;
 }
 
-export async function detachCandidateAttachments(
-  issueId: string,
-): Promise<string[]> {
-  const names = listAttachments(issueId)
-    .map((att) => att.name)
-    .filter((name) => name.startsWith(CANDIDATE_PREFIX));
-  for (const name of names) {
-    await removeAttachment(issueId, name);
-  }
-  return names;
-}
-
-export async function detachCandidateAttachmentsForDirection(
-  issueId: string,
-  directionId: string,
+async function attachAllConversation(
   conversationId: string,
+  files: PendingAttachment[],
 ): Promise<string[]> {
-  const allNames = listAttachments(issueId).map((att) => att.name);
-  const otherDirectionIds = knownDirectionIds(allNames, conversationId);
-  const names = allNames.filter((name) =>
-    matchesCandidatePrefix(name, directionId, otherDirectionIds),
-  );
-  for (const name of names) {
-    await removeAttachment(issueId, name);
+  assertAttachmentSizes(files);
+  const attached: string[] = [];
+  for (const file of files) {
+    const meta = await putConversationAttachment(
+      conversationId,
+      file.name,
+      Buffer.from(file.bytes),
+    );
+    attached.push(meta.name);
   }
-  return names;
+  return attached;
 }
 
 export async function detachChosenPngsForDirection(
@@ -377,6 +389,7 @@ function pendingFromCaptures(
   mode: "candidate" | "chosen",
   directionId: string,
   captures: CaptureResult[],
+  candidateRevision?: number,
 ): { files: PendingAttachment[]; capturePaths: string[] } {
   const files: PendingAttachment[] = [];
   const capturePaths: string[] = [];
@@ -387,6 +400,7 @@ function pendingFromCaptures(
             directionId,
             capture.storyId,
             capture.viewport,
+            candidateRevision!,
           )
         : chosenAttachmentName(directionId, capture.storyId, capture.viewport);
     files.push({
@@ -402,31 +416,46 @@ export async function attachCapturedDirection(options: {
   mode: "candidate" | "chosen";
   conversationId: string;
   directionId: string;
-  issueId: string;
+  issueId?: string;
   captures: CaptureResult[];
 }): Promise<PromoteResult> {
-  listAttachments(options.issueId);
+  const resolvedConversationId = resolveMockupConversationId(
+    options.conversationId,
+  );
+
+  if (options.mode === "candidate") {
+    const revision = await nextCandidateRevision(
+      resolvedConversationId,
+      options.directionId,
+    );
+    const pending = pendingFromCaptures(
+      options.mode,
+      options.directionId,
+      options.captures,
+      revision,
+    );
+    const attached = await attachAllConversation(
+      resolvedConversationId,
+      pending.files,
+    );
+    return { attached, capturePaths: pending.capturePaths };
+  }
+
+  listAttachments(options.issueId!);
 
   const pending = pendingFromCaptures(
     options.mode,
     options.directionId,
     options.captures,
   );
-  if (options.mode === "candidate") {
-    await detachCandidateAttachmentsForDirection(
-      options.issueId,
-      options.directionId,
-      options.conversationId,
-    );
-  }
   if (options.mode === "chosen") {
     await detachChosenPngsForDirection(
-      options.issueId,
+      options.issueId!,
       options.directionId,
       options.conversationId,
     );
     await detachChosenArchiveForDirection(
-      options.issueId,
+      options.issueId!,
       options.directionId,
     );
     const archivePath = createDirectionArchive(
@@ -443,10 +472,7 @@ export async function attachCapturedDirection(options: {
     }
   }
 
-  const attached = await attachAll(options.issueId, pending.files);
-  if (options.mode === "chosen") {
-    await detachCandidateAttachments(options.issueId);
-  }
+  const attached = await attachAll(options.issueId!, pending.files);
   return { attached, capturePaths: pending.capturePaths };
 }
 
@@ -509,7 +535,7 @@ export async function promoteMockup(
     mode: checked.mode,
     conversationId: checked.conversationId,
     directionId: checked.directionId,
-    issueId: checked.issueId,
+    issueId: checked.mode === "chosen" ? checked.issueId : undefined,
     captures,
   });
 }

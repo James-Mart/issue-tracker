@@ -84,9 +84,9 @@ Otherwise run **## Round** from step 1's spawn branch.
    handed by the caller starts a fresh count because it is a new
    instruction, not another unaided attempt.
 5. **Promote.** For each direction id:
-   `npm run mockup-promote -- --conversation <conversationId> --direction <directionId> --issue <issueId> --mode candidate`
-   Candidate mode prints stored attachment basenames, then one absolute
-   capture path per line, then one embed line per PNG.
+   `npm run mockup-promote -- --conversation <conversationId> --direction <directionId> --mode candidate`
+   Candidate mode stores the captures on the conversation, then prints one
+   absolute capture path per line, then one embed line per PNG.
 6. Return per **## Return**. Leave the stack running.
 
 ## Acceptance
