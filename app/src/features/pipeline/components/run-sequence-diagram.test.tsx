@@ -2,7 +2,12 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { RunSequence, SequenceBeat, SequenceLifeline } from "../run-sequence";
+import type {
+  RunSequence,
+  RunSequenceSection,
+  SequenceBeat,
+  SequenceLifeline,
+} from "../run-sequence";
 import { RETURN_DASH, beatStroke } from "../run-sequence";
 import {
   RunSequenceDiagram,
@@ -435,6 +440,146 @@ describe("RunSequenceDiagram", () => {
       expect(y2).toBeGreaterThan(lastY);
       expect(y2).toBeLessThanOrEqual(lastY + 12);
     }
+  });
+});
+
+describe("RunSequenceDiagram issue sections", () => {
+  const SPAWN_B = beat({
+    from: "coordinator",
+    to: "research",
+    label: "spawn git",
+    startedAt: "2026-08-28T12:03:00.000Z",
+    durationMs: 22_000,
+    kind: "spawn",
+  });
+  const RETURN_B = beat({
+    from: "research",
+    to: "coordinator",
+    label: "git returned",
+    startedAt: "2026-08-28T12:03:22.000Z",
+    durationMs: 180_000,
+    kind: "return",
+  });
+
+  const NESTED_SECTIONS: RunSequenceSection[] = [
+    { beatStart: 0, beatEnd: 0, children: [] },
+    {
+      issueId: "pipeline-fixes",
+      kind: "epic",
+      title: "Pipeline fixes",
+      beatStart: 1,
+      beatEnd: 4,
+      children: [
+        {
+          issueId: "run-status-semantics",
+          kind: "story",
+          title: "Run status semantics",
+          beatStart: 1,
+          beatEnd: 2,
+          children: [],
+        },
+        {
+          issueId: "diagram-grouping",
+          kind: "story",
+          title: "Diagram issue grouping",
+          beatStart: 3,
+          beatEnd: 4,
+          children: [],
+        },
+      ],
+    },
+  ];
+
+  function sectionHeaders(container: ParentNode) {
+    return Array.from(
+      container.querySelectorAll('[data-testid="sequence-section"]'),
+    ).map((el) => ({
+      kind: el.getAttribute("data-kind"),
+      title: el.querySelector('[data-testid="sequence-section-title"]')
+        ?.textContent,
+      expanded: el.getAttribute("aria-expanded"),
+    }));
+  }
+
+  it("renders sections expanded with their headers", () => {
+    const { container } = mountDiagram(
+      sequence({
+        beats: [HUMAN, SPAWN, RETURN, SPAWN_B, RETURN_B],
+        sections: NESTED_SECTIONS,
+      }),
+    );
+    expect(sectionHeaders(container)).toEqual([
+      { kind: "epic", title: "Pipeline fixes", expanded: "true" },
+      { kind: "story", title: "Run status semantics", expanded: "true" },
+      { kind: "story", title: "Diagram issue grouping", expanded: "true" },
+    ]);
+    expect(
+      Array.from(
+        container.querySelectorAll('[data-testid="sequence-beat"]'),
+      ).map((el) => el.getAttribute("data-beat-index")),
+    ).toEqual(["0", "1", "2", "3", "4"]);
+  });
+
+  it("collapsing a Story section hides its beats while a sibling stays expanded", () => {
+    const { container } = mountDiagram(
+      sequence({
+        beats: [HUMAN, SPAWN, RETURN, SPAWN_B, RETURN_B],
+        sections: NESTED_SECTIONS,
+      }),
+    );
+    const story = Array.from(
+      container.querySelectorAll('[data-testid="sequence-section"]'),
+    ).find(
+      (el) =>
+        el.querySelector('[data-testid="sequence-section-title"]')
+          ?.textContent === "Run status semantics",
+    );
+    if (!(story instanceof HTMLElement)) {
+      throw new Error("missing story section header");
+    }
+    act(() => {
+      story.click();
+    });
+    expect(story.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      Array.from(
+        container.querySelectorAll('[data-testid="sequence-beat"]'),
+      ).map((el) => el.getAttribute("data-beat-index")),
+    ).toEqual(["0", "3", "4"]);
+    expect(sectionHeaders(container)).toEqual([
+      { kind: "epic", title: "Pipeline fixes", expanded: "true" },
+      { kind: "story", title: "Run status semantics", expanded: "false" },
+      { kind: "story", title: "Diagram issue grouping", expanded: "true" },
+    ]);
+  });
+
+  it("keeps a loop group collapsed inside an expanded section", () => {
+    const { container } = mountDiagram(
+      sequence({
+        beats: [COLLAPSED, RETURN],
+        sections: [
+          {
+            issueId: "update-badge-logic",
+            kind: "task",
+            title: "Update badge logic",
+            beatStart: 0,
+            beatEnd: 1,
+            children: [],
+          },
+        ],
+      }),
+    );
+    expect(sectionHeaders(container)).toEqual([
+      { kind: "task", title: "Update badge logic", expanded: "true" },
+    ]);
+    expect(
+      container.querySelector(
+        '[data-testid="sequence-beat"][data-row="collapsed"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="sequence-beat"][data-row="turn"]'),
+    ).toBeNull();
   });
 });
 

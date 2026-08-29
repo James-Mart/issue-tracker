@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_BASE_URL,
   parseArgs,
+  pipelineRunsPageReady,
   resolveDefaultBaseUrl,
 } from "./capture-screenshots.js";
 
@@ -43,5 +44,56 @@ describe("parseArgs base URL", () => {
   it("falls back to 8060 when env is unset", () => {
     delete process.env.AGENT_STACK_BASE_URL;
     expect(parseArgs(["--list"]).baseUrl).toBe(DEFAULT_BASE_URL);
+  });
+});
+
+describe("pipelineRunsPageReady", () => {
+  const listIdle = {
+    body: "Recent runs",
+    hasList: true,
+    hasDiagram: false,
+    hasPlaceholder: true,
+  };
+
+  it("treats a selected run as ready when the diagram is up and the list is still loading", () => {
+    expect(
+      pipelineRunsPageReady({
+        pathname: "/pipeline/runs/plan-pipeline-fixes",
+        body: "Loading runs… SEQUENCE",
+        hasList: false,
+        hasDiagram: true,
+        hasPlaceholder: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("waits while a selected run's sequence is still loading", () => {
+    expect(
+      pipelineRunsPageReady({
+        pathname: "/pipeline/runs/plan-pipeline-fixes",
+        body: "Loading sequence…",
+        hasList: true,
+        hasDiagram: false,
+        hasPlaceholder: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("still requires the index to leave Loading runs on /pipeline/runs", () => {
+    expect(
+      pipelineRunsPageReady({
+        pathname: "/pipeline/runs",
+        body: "Loading runs…",
+        hasList: false,
+        hasDiagram: false,
+        hasPlaceholder: false,
+      }),
+    ).toBe(false);
+    expect(
+      pipelineRunsPageReady({
+        pathname: "/pipeline/runs",
+        ...listIdle,
+      }),
+    ).toBe(true);
   });
 });
