@@ -1,3 +1,4 @@
+import compression from "compression";
 import express, {
   type Express,
   type NextFunction,
@@ -71,6 +72,7 @@ export function createApp(
 ): Express {
   const app = express();
   app.use(express.json());
+  app.use(compression());
   app.use(requestLogger);
 
   const serveStatic = isProdEnv && hasBuiltClient;

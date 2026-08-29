@@ -39,6 +39,7 @@ export type RunSequenceRootIssue = {
   id: string;
   kind: string;
   title: string;
+  projectId: string;
 };
 
 export type RunSequenceSection = {

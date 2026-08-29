@@ -1,5 +1,4 @@
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
-import { useMemo } from "react";
 import type { IssueKind } from "@server/schemas";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
@@ -9,8 +8,6 @@ import {
   ShellInlineFault,
   ShellLoadingState,
 } from "@/app/shell-state";
-import { useIssuesQuery } from "@/features/issues/api/queries";
-import { issuesById, projectIdOf } from "@/features/issues/lib/build-tree";
 import { KIND_LABEL } from "@/features/issues/lib/kind";
 import { issuePath } from "@/features/issues/lib/links";
 import { PipelineDiagram } from "../pipeline-diagram";
@@ -51,15 +48,10 @@ function PipelineHeader() {
 }
 
 function RunSequencePaneHeader({ sequence }: { sequence: RunSequence }) {
-  const { data } = useIssuesQuery();
-  const byId = useMemo(
-    () => issuesById(data?.issues ?? []),
-    [data?.issues],
-  );
   const rootIssue = sequence.rootIssue;
-  const projectId = rootIssue ? projectIdOf(rootIssue.id, byId) : null;
-  const rootIssueHref =
-    rootIssue && projectId ? issuePath(projectId, rootIssue.id) : null;
+  const rootIssueHref = rootIssue
+    ? issuePath(rootIssue.projectId, rootIssue.id)
+    : null;
 
   return (
     <div

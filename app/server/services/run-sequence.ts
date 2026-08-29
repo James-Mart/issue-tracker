@@ -52,6 +52,7 @@ export type RunSequenceRootIssue = {
   id: string;
   kind: string;
   title: string;
+  projectId: string;
 };
 
 export type RunSequenceSection = {
@@ -517,6 +518,21 @@ function earliestIssueId(delegations: DelegationRecord[]): string | undefined {
   return earliest?.issueId;
 }
 
+function projectIdOfIssue(
+  issue: Issue,
+  byId: Map<string, Issue>,
+): string | undefined {
+  let current: Issue | undefined = issue;
+  const seen = new Set<string>();
+  while (current !== undefined) {
+    if (current.kind === "project") return current.id;
+    if (seen.has(current.id)) return undefined;
+    seen.add(current.id);
+    current = byId.get(current.partOf);
+  }
+  return undefined;
+}
+
 function resolveRootIssue(
   delegations: DelegationRecord[],
 ): RunSequenceRootIssue | undefined {
@@ -524,7 +540,9 @@ function resolveRootIssue(
   if (issueId === undefined) return undefined;
   try {
     const issue = readIssueOrThrow(issueId);
-    return { id: issueId, kind: issue.kind, title: issue.title };
+    const projectId = projectIdOfIssue(issue, issuesById());
+    if (projectId === undefined) return undefined;
+    return { id: issueId, kind: issue.kind, title: issue.title, projectId };
   } catch (err) {
     if (err instanceof IssueError && err.code === "not_found") return undefined;
     throw err;
