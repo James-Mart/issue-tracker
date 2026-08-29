@@ -204,6 +204,58 @@ async function readTaskChange(
   };
 }
 
+function allowedCommitShas(issue: Issue, issueId: string): string[] {
+  if (issue.kind === "task") {
+    if (!issue.commitSha || issue.noDiff) return [];
+    return [issue.commitSha];
+  }
+  if (issue.kind === "story" || issue.kind === "epic") {
+    return collectDescendantCommits(issueId).map((commit) => commit.sha);
+  }
+  throw new IssueError(
+    "validation",
+    `change is not implemented for kind "${issue.kind}"`,
+  );
+}
+
+function isPathMissingAtCommitMessage(message: string): boolean {
+  return message.toLowerCase().includes("does not exist in");
+}
+
+export async function readIssueChangeFile(
+  issueId: string,
+  sha: string,
+  path: string,
+): Promise<{ contents: string }> {
+  const issue = readIssueOrThrow(issueId);
+  const chain = ancestorChain(issueId, readAll().issues);
+  const project = chain[0]!;
+  const workspace = requireProjectWorkspace(project.id);
+
+  const allowed = allowedCommitShas(issue, issueId);
+  if (!allowed.includes(sha)) {
+    throw new IssueError(
+      "validation",
+      `sha "${sha}" is not one of this issue's commits`,
+    );
+  }
+
+  try {
+    const contents = await runGitOrCommitUnreachable(
+      ["show", `${sha}:${path}`],
+      workspace,
+    );
+    return { contents };
+  } catch (err) {
+    if (err instanceof IssueError && err.code === "git-failed") {
+      if (isPathMissingAtCommitMessage(err.message)) {
+        throw new IssueError("not_found", err.message);
+      }
+    }
+    throw err;
+  }
+}
+
 export async function readIssueChange(issueId: string): Promise<IssueChange> {
   const issue = readIssueOrThrow(issueId);
   const chain = ancestorChain(issueId, readAll().issues);
