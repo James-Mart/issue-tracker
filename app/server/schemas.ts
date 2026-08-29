@@ -1039,3 +1039,38 @@ export function parseConversationFrame(
     message: formatZodError(result.error, "invalid conversation frame"),
   };
 }
+
+/** Server-assembled payload failed its own schema — treat as a server bug. */
+function throwInvalidPublishedPayload(message: string): never {
+  throw new Error(message);
+}
+
+export function assertConversationListItem(raw: unknown): ConversationListItem {
+  const result = parseConversationListItem(raw);
+  if (!result.ok) throwInvalidPublishedPayload(result.message);
+  return result.item;
+}
+
+export function assertChannelSessionListItem(
+  raw: unknown,
+): ChannelSessionListItem {
+  const result = parseChannelSessionListItem(raw);
+  if (!result.ok) throwInvalidPublishedPayload(result.message);
+  return result.item;
+}
+
+export function assertConversationActiveRun(
+  raw: unknown,
+): ConversationActiveRun {
+  const result = parseConversationActiveRun(raw);
+  if (!result.ok) throwInvalidPublishedPayload(result.message);
+  return result.state;
+}
+
+export function assertConversationTranscriptPage(
+  raw: unknown,
+): ConversationTranscriptPage {
+  const result = parseConversationTranscriptPage(raw);
+  if (!result.ok) throwInvalidPublishedPayload(result.message);
+  return result.page;
+}

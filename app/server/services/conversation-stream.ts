@@ -1,6 +1,13 @@
 import { EventEmitter } from "events";
 import { maxSeqFromTranscriptFile } from "./conversation-transcript-seq.js";
-import type { ConversationFrameInput, IssueEvent } from "../schemas.js";
+import {
+  parseConversationFrame,
+  type ConversationFrameInput,
+  type IssueEvent,
+} from "../schemas.js";
+
+/** Non-conversation multiplex topic — frames are IssueEvent, not stream events. */
+const ISSUES_TOPIC = "issues";
 
 /**
  * One live frame on the in-process subscriber tap. Conversation topics carry
@@ -147,6 +154,20 @@ export function publishFrame(
       ? existingAt
       : new Date().toISOString();
   Object.assign(frame.event, { seq, at });
+
+  if (conversationId !== ISSUES_TOPIC) {
+    const parsed = parseConversationFrame(frame.event);
+    if (!parsed.ok) {
+      console.warn(
+        "dropping malformed conversation frame:",
+        conversationId,
+        frame.event,
+        parsed.message,
+      );
+      return;
+    }
+  }
+
   retainForCatchup(conversationId, frame);
 
   const emitter = emitters.get(conversationId);

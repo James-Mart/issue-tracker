@@ -13,9 +13,12 @@ import {
   updateMeta,
 } from "../services/conversations.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
-import type {
-  ConversationActiveRun,
-  ConversationMetaPatch,
+import {
+  assertConversationActiveRun,
+  assertConversationListItem,
+  assertConversationTranscriptPage,
+  type ConversationActiveRun,
+  type ConversationMetaPatch,
 } from "../schemas.js";
 
 const DEFAULT_TITLE = "New conversation";
@@ -81,10 +84,12 @@ export function createConversationsRouter(
       listConversations()
         .filter((meta) => !meta.issueId)
         .filter((meta) => showArchived || !meta.archived)
-        .map((meta) => ({
-          ...meta,
-          activeRun: activeRunState(sessions, meta.id).active,
-        })),
+        .map((meta) =>
+          assertConversationListItem({
+            ...meta,
+            activeRun: activeRunState(sessions, meta.id).active,
+          }),
+        ),
     );
   });
 
@@ -208,7 +213,9 @@ export function createConversationsRouter(
     "/:id/run",
     asyncRoute(async (req, res) => {
       readConversation(req.params.id);
-      res.json(activeRunState(sessions, req.params.id));
+      res.json(
+        assertConversationActiveRun(activeRunState(sessions, req.params.id)),
+      );
     }),
   );
 
@@ -224,7 +231,9 @@ export function createConversationsRouter(
       const { transcript } = readConversation(req.params.id);
       const latestSeq = transcript.at(-1)?.seq ?? 0;
       const events = transcript.filter((event) => (event.seq ?? 0) > sinceSeq);
-      res.json({ events, latestSeq });
+      res.json(
+        assertConversationTranscriptPage({ events, latestSeq }),
+      );
     }),
   );
 

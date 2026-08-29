@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { basename } from "path";
 import { mergeStory } from "../../cli-ops.js";
 import {
+  assertChannelSessionListItem,
   CONVERSATION_CHANNELS,
   type CommentInput,
   type ConversationChannel,
@@ -163,7 +164,7 @@ export function createIssuesRouter(
           )
           .map((meta) => {
             const { transcript } = readConversation(meta.id);
-            return {
+            return assertChannelSessionListItem({
               id: meta.id,
               title: meta.title,
               model: meta.model,
@@ -172,7 +173,7 @@ export function createIssuesRouter(
               archived: meta.archived,
               activeRun: activeRunFlag(sessions, meta.id),
               awaitingHuman: awaitingHumanFromTranscript(transcript),
-            };
+            });
           }),
       );
     }),
