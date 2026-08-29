@@ -128,7 +128,7 @@ describe("issue change HTTP API", () => {
           stdout: "diff --git a/foo.ts b/foo.ts\n+line\n",
         });
       }
-      if (args[0] === "show" && args.includes("--stat")) {
+      if (args[0] === "show" && args.includes("--shortstat")) {
         return mockGitChild({
           stdout: " 2 files changed, 5 insertions(+), 1 deletion(-)\n",
         });

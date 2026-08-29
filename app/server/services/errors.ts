@@ -9,6 +9,7 @@ export type IssueErrorCode =
   | "git-failed"
   | "commit-unreachable"
   | "commits-not-contiguous"
+  | "change-too-large"
   | "not-github-pr-url";
 
 const STATUS: Record<IssueErrorCode, number> = {
@@ -22,18 +23,19 @@ const STATUS: Record<IssueErrorCode, number> = {
   "git-failed": 502,
   "commit-unreachable": 404,
   "commits-not-contiguous": 400,
+  "change-too-large": 413,
   "not-github-pr-url": 400,
 };
 
 export class IssueError extends Error {
   readonly code: IssueErrorCode;
   /** Extra JSON fields merged into the HTTP `{ error }` body (e.g. holder ids). */
-  readonly details?: Record<string, string>;
+  readonly details?: Record<string, unknown>;
 
   constructor(
     code: IssueErrorCode,
     message: string,
-    details?: Record<string, string>,
+    details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "IssueError";

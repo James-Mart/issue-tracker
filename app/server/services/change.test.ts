@@ -176,7 +176,7 @@ describe("readIssueChange rollup", () => {
       if (args[0] === "rev-parse" && args[1] === `${c1}^`) {
         return mockGitChild({ stdout: `${base}\n` });
       }
-      if (args[0] === "diff" && args.includes("--stat")) {
+      if (args[0] === "diff" && args.includes("--shortstat")) {
         return mockGitChild({
           stdout: " 3 files changed, 10 insertions(+), 2 deletions(-)\n",
         });
@@ -208,6 +208,52 @@ describe("readIssueChange rollup", () => {
       ],
       patch: "diff --git a/net.ts b/net.ts\n+rollup\n",
       stats: { filesChanged: 3, insertions: 10, deletions: 2 },
+    });
+  });
+
+  it("raises change-too-large with stats when a rollup patch exceeds the ceiling", async () => {
+    const c1 = sha(1);
+    const c2 = sha(2);
+    const base = sha(0);
+    const hugePatch = "x".repeat(2 * 1024 * 1024 + 1);
+    writeRollupFixture([
+      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
+      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
+    ]);
+
+    await stubGitSpawner((args) => {
+      if (args[0] === "rev-list" && args.includes("--count")) {
+        return mockGitChild({ stdout: "1\n" });
+      }
+      if (args[0] === "rev-parse" && args[1] === `${c1}^`) {
+        return mockGitChild({ stdout: `${base}\n` });
+      }
+      if (args[0] === "diff" && args.includes("--shortstat")) {
+        return mockGitChild({
+          stdout: " 50 files changed, 20000 insertions(+), 500 deletions(-)\n",
+        });
+      }
+      if (args[0] === "diff") {
+        return mockGitChild({ stdout: hugePatch });
+      }
+      if (args[0] === "show" && args.includes("--format=%s")) {
+        const shaArg = args[args.length - 1]!;
+        const subjects: Record<string, string> = {
+          [c1]: "First",
+          [c2]: "Second",
+        };
+        return mockGitChild({ stdout: `${subjects[shaArg] ?? "?"}\n` });
+      }
+      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("rollup")).rejects.toMatchObject({
+      code: "change-too-large",
+      details: {
+        stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
+        commitCount: 2,
+      },
     });
   });
 
@@ -264,7 +310,7 @@ describe("readIssueChange", () => {
           stdout: "diff --git a/foo.ts b/foo.ts\n+line\n",
         });
       }
-      if (args[0] === "show" && args.includes("--stat")) {
+      if (args[0] === "show" && args.includes("--shortstat")) {
         return mockGitChild({
           stdout: " 2 files changed, 5 insertions(+), 1 deletion(-)\n",
         });
@@ -309,6 +355,60 @@ describe("readIssueChange", () => {
     const { readIssueChange } = await loadChange();
     await expect(readIssueChange("t5")).rejects.toMatchObject({
       code: "git-failed",
+    });
+  });
+
+  it("returns a loaded change when the patch is within the render ceiling", async () => {
+    writeTask("t-under", { commitSha: SHA });
+    await stubGitSpawner((args) => {
+      if (args[0] === "show" && args.includes("--format=%s")) {
+        return mockGitChild({ stdout: "Small change\n" });
+      }
+      if (args[0] === "show" && args.includes("--shortstat")) {
+        return mockGitChild({
+          stdout: " 1 file changed, 1 insertion(+)\n",
+        });
+      }
+      if (args[0] === "show" && args.includes("--patch")) {
+        return mockGitChild({ stdout: "+small\n" });
+      }
+      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("t-under")).resolves.toEqual({
+      state: "loaded",
+      commits: [{ sha: SHA, subject: "Small change" }],
+      patch: "+small\n",
+      stats: { filesChanged: 1, insertions: 1, deletions: 0 },
+    });
+  });
+
+  it("raises change-too-large with stats and no patch when a Task patch exceeds the ceiling", async () => {
+    writeTask("t-over", { commitSha: SHA });
+    const hugePatch = "x".repeat(2 * 1024 * 1024 + 1);
+    await stubGitSpawner((args) => {
+      if (args[0] === "show" && args.includes("--format=%s")) {
+        return mockGitChild({ stdout: "Huge change\n" });
+      }
+      if (args[0] === "show" && args.includes("--shortstat")) {
+        return mockGitChild({
+          stdout: " 100 files changed, 50000 insertions(+), 100 deletions(-)\n",
+        });
+      }
+      if (args[0] === "show" && args.includes("--patch")) {
+        return mockGitChild({ stdout: hugePatch });
+      }
+      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("t-over")).rejects.toMatchObject({
+      code: "change-too-large",
+      details: {
+        stats: { filesChanged: 100, insertions: 50000, deletions: 100 },
+        commitCount: 1,
+      },
     });
   });
 });

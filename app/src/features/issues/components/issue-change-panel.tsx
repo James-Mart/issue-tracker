@@ -24,7 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError } from "@/lib/api/errors";
-import type { ChangeCommit, IssueChange } from "@server/schemas";
+import type { ChangeCommit, ChangeStats, IssueChange } from "@server/schemas";
 import { useIssueChangeQuery } from "../api/queries";
 import { loadFileDiffContents } from "../lib/issue-change-file-contents";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
@@ -41,19 +41,47 @@ function shortSha(sha: string): string {
   return sha.slice(0, 7);
 }
 
-function commitSummary(commits: ChangeCommit[]): string {
-  const count = commits.length;
-  const label = count === 1 ? "1 commit" : `${count} commits`;
-  if (count === 1) {
-    return `${label} · ${shortSha(commits[0]!.sha)}`;
-  }
-  return label;
+function changeScopeStats(stats: ChangeStats, commitCount: number): string {
+  const fileLabel = stats.filesChanged === 1 ? "1 file" : `${stats.filesChanged} files`;
+  const commitLabel = commitCount === 1 ? "1 commit" : `${commitCount} commits`;
+  return `${fileLabel} +${stats.insertions} -${stats.deletions} ${commitLabel}`;
 }
 
 function scopeHeaderStats(change: Extract<IssueChange, { state: "loaded" }>): string {
-  const { stats, commits } = change;
-  const fileLabel = stats.filesChanged === 1 ? "1 file" : `${stats.filesChanged} files`;
-  return `${fileLabel} +${stats.insertions} -${stats.deletions} ${commitSummary(commits)}`;
+  const base = changeScopeStats(change.stats, change.commits.length);
+  if (change.commits.length === 1) {
+    return `${base} · ${shortSha(change.commits[0]!.sha)}`;
+  }
+  return base;
+}
+
+export type ChangeTooLargeDetails = {
+  stats: ChangeStats;
+  commitCount: number;
+};
+
+function isChangeStats(value: unknown): value is ChangeStats {
+  if (!value || typeof value !== "object") return false;
+  const stats = value as Record<string, unknown>;
+  return (
+    typeof stats.filesChanged === "number" &&
+    typeof stats.insertions === "number" &&
+    typeof stats.deletions === "number"
+  );
+}
+
+export function parseChangeTooLarge(error: unknown): ChangeTooLargeDetails | undefined {
+  if (!(error instanceof ApiError) || apiErrorCode(error) !== "change-too-large") {
+    return undefined;
+  }
+  const body = error.body;
+  if (!body || typeof body !== "object") return undefined;
+  const { stats, commitCount } = body as Record<string, unknown>;
+  if (!isChangeStats(stats)) return undefined;
+  if (typeof commitCount !== "number" || !Number.isInteger(commitCount) || commitCount < 1) {
+    return undefined;
+  }
+  return { stats, commitCount };
 }
 
 function apiErrorCode(error: unknown): string | undefined {
@@ -113,6 +141,32 @@ function emptyStateCopy(reason: Extract<IssueChange, { state: "empty" }>["reason
   }
 }
 
+function tooLargeStateCopy(details: ChangeTooLargeDetails): {
+  title: string;
+  detail: ReactNode;
+} {
+  const { stats, commitCount } = details;
+  const gitCommand =
+    commitCount === 1
+      ? "git show <commit-sha>"
+      : "git diff <first-sha>^..<last-sha>";
+  const gitHint =
+    commitCount === 1
+      ? "Read it in the project workspace with git show on the commit sha recorded on this task."
+      : "Read it in the project workspace with git diff from the parent of the first descendant commit through the last.";
+
+  return {
+    title: "This change is too large to render in the browser.",
+    detail: (
+      <>
+        <p className="font-mono text-xs tabular-nums">{changeScopeStats(stats, commitCount)}</p>
+        <p className="mt-2">{gitHint}</p>
+        <p className="mt-2 font-mono text-xs">{gitCommand}</p>
+      </>
+    ),
+  };
+}
+
 function faultStateCopy(
   fault: IssueChangePanelFault,
   message: string,
@@ -165,6 +219,21 @@ export function IssueChangePanel({
   }
 
   if (error) {
+    const tooLarge = parseChangeTooLarge(error);
+    if (tooLarge) {
+      const copy = tooLargeStateCopy(tooLarge);
+      return (
+        <div data-testid="issue-change-too-large-state">
+          <ShellState
+            className="border-0 bg-transparent px-4 py-8 shadow-none"
+            eyebrow="Diff"
+            title={copy.title}
+            detail={copy.detail}
+          />
+        </div>
+      );
+    }
+
     const fault = classifyIssueChangePanelFault(error);
     if (fault) {
       const copy = faultStateCopy(fault, error.message);
