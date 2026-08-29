@@ -9,6 +9,7 @@ import type {
 import {
   listConversationIds,
   readConversation,
+  readConversationMeta,
   readDelegations,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
@@ -452,19 +453,19 @@ function buildSections(
   return roots;
 }
 
-/** One conversation's lifelines, ordered beats, and derived condition. */
-export function runSequence(conversationId: string): RunSequence {
-  const { meta, transcript } = readConversation(conversationId);
-  const delegations = readDelegations(conversationId);
+function orderedBeats(
+  conversationId: string,
+  transcript: TranscriptEvent[],
+  delegations: DelegationRecordWithEnd[],
+): OrderedBeat[] {
   const toolCalls = transcript.filter(
     (e): e is ToolCallEvent => e.type === "tool_call",
   );
-  const prompts = transcript.filter((e) => e.type === "prompt");
   const byId = new Map(delegations.map((row) => [row.delegationId, row]));
-
   const ordered: OrderedBeat[] = [];
 
-  for (const prompt of prompts) {
+  for (const prompt of transcript) {
+    if (prompt.type !== "prompt") continue;
     ordered.push({
       beat: {
         from: HUMAN_ID,
@@ -542,6 +543,15 @@ export function runSequence(conversationId: string): RunSequence {
   }
 
   ordered.sort(compareOrder);
+  return ordered;
+}
+
+/** One conversation's lifelines, ordered beats, and derived condition. */
+export function runSequence(conversationId: string): RunSequence {
+  const { meta, transcript } = readConversation(conversationId);
+  const delegations = readDelegations(conversationId);
+  const prompts = transcript.filter((e) => e.type === "prompt");
+  const ordered = orderedBeats(conversationId, transcript, delegations);
   const collapsed = collapseConsecutiveBeats(ordered);
   const sessionIssueId =
     meta.channel === "planning" && meta.issueId !== undefined
@@ -634,31 +644,38 @@ function resolveRootIssue(
   }
 }
 
-/** Newest-first runs across all conversations; scan stays in this function. */
+/** Newest-first runs; hydrate transcript and delegations only for the limit slice. */
 export function recentRuns(limit: number): RecentRun[] {
-  const entries: RecentRun[] = [];
-
+  const metas: ConversationMeta[] = [];
   for (const conversationId of listConversationIds()) {
     try {
-      const { meta } = readConversation(conversationId);
-      const delegations = readDelegations(conversationId);
-      const sequence = runSequence(conversationId);
+      metas.push(readConversationMeta(conversationId));
+    } catch {
+      continue;
+    }
+  }
+  metas.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const entries: RecentRun[] = [];
+  for (const listed of metas.slice(0, limit)) {
+    try {
+      const { meta, transcript } = readConversation(listed.id);
+      const delegations = readDelegations(listed.id);
+      const { condition, recoveredErrors } = runOutcome(
+        orderedBeats(listed.id, transcript, delegations),
+      );
       const issueId = runIssueId(meta, delegations);
       entries.push({
-        conversationId,
+        conversationId: listed.id,
         coordinatorLabel: coordinatorLabel(meta),
         startedAt: meta.createdAt,
-        condition: sequence.condition,
+        condition,
         ...(issueId !== undefined ? { issueId } : {}),
-        ...(sequence.recoveredErrors !== undefined
-          ? { recoveredErrors: sequence.recoveredErrors }
-          : {}),
+        ...(recoveredErrors > 0 ? { recoveredErrors } : {}),
       });
     } catch {
       continue;
     }
   }
-
-  entries.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-  return entries.slice(0, limit);
+  return entries;
 }
