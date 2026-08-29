@@ -10,6 +10,8 @@ import {
 } from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
+import type { AgentImage } from "./agent-sdk.js";
+import { getConversationAttachment } from "./conversation-attachments.js";
 import {
   parseConversationMeta,
   parseDelegationEndRecord,
@@ -587,6 +589,46 @@ export async function setPendingMessage(
   return meta;
 }
 
+function conversationAttachmentPath(
+  conversationId: string,
+  name: string,
+): string {
+  return join(conversationsDir, conversationId, "attachments", name);
+}
+
+/** Human text plus attachment block and image payloads for `sessions.sendPrompt`. */
+export async function assembleAgentPrompt(
+  conversationId: string,
+  text: string,
+  attachmentNames?: readonly string[],
+): Promise<{ prompt: string; images?: AgentImage[] }> {
+  if (!attachmentNames?.length) {
+    return { prompt: text };
+  }
+
+  const blockLines = ["Attachments:"];
+  const images: AgentImage[] = [];
+
+  for (const name of attachmentNames) {
+    const absolutePath = conversationAttachmentPath(conversationId, name);
+    blockLines.push(`- ${name} — ${absolutePath}`);
+    const { bytes, mimeType } = await getConversationAttachment(
+      conversationId,
+      name,
+    );
+    if (mimeType.startsWith("image/")) {
+      images.push({
+        data: bytes.toString("base64"),
+        mimeType,
+      });
+    }
+  }
+
+  const block = blockLines.join("\n");
+  const prompt = text ? `${text}\n\n${block}` : block;
+  return images.length > 0 ? { prompt, images } : { prompt };
+}
+
 /**
  * Start a run from a user prompt (shared by /messages and channel-session create).
  * Pass `persistPrompt: false` when the prompt event was already written (e.g. inside
@@ -614,9 +656,15 @@ export async function startConversationPrompt(
     });
   }
 
-  const result = await sessions.sendPrompt(conversationId, {
+  const assembled = await assembleAgentPrompt(
+    conversationId,
     prompt,
+    attachments,
+  );
+  const result = await sessions.sendPrompt(conversationId, {
+    prompt: assembled.prompt,
     model,
+    ...(assembled.images ? { images: assembled.images } : {}),
   });
   if (!result.ok) {
     const message = result.error.message;

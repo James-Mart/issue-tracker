@@ -1463,12 +1463,16 @@ describe("pending message firing", () => {
   });
 
   it("fires a pending message with attachments on the prompt event", async () => {
+    const { conversationsDir } = await import("../config.js");
     const {
       createConversation,
       readConversation,
       updateMeta,
       createAgentSessions,
     } = await load();
+    const { putConversationAttachment } = await import(
+      "./conversation-attachments.js"
+    );
     const fake = createFakeAgentSdk({
       stream: buildScriptedStreamWithAgentIdHint(),
     });
@@ -1479,6 +1483,11 @@ describe("pending message firing", () => {
       projectId: "platform",
       model: "composer-2.5",
     });
+    await putConversationAttachment(
+      meta.id,
+      "mock.tsx",
+      Buffer.from("export const x = 1;\n"),
+    );
     await updateMeta(meta.id, {
       pendingMessage: {
         text: "see file",
@@ -1498,6 +1507,12 @@ describe("pending message firing", () => {
       await new Promise((r) => setTimeout(r, 20));
     }
 
+    const absolutePath = join(
+      conversationsDir,
+      meta.id,
+      "attachments",
+      "mock.tsx",
+    );
     const { transcript } = readConversation(meta.id);
     expect(
       transcript.filter((e) => e.type === "prompt").map((e) => ({
@@ -1505,6 +1520,13 @@ describe("pending message firing", () => {
         attachments: e.type === "prompt" ? e.attachments : undefined,
       })),
     ).toEqual([{ text: "see file", attachments: ["mock.tsx"] }]);
+    expect(fake.handles[0]?.sends).toEqual([
+      { message: "first turn", options: {} },
+      {
+        message: `see file\n\nAttachments:\n- mock.tsx — ${absolutePath}`,
+        options: {},
+      },
+    ]);
   });
 
   it("restores pending and surfaces an error when firing fails to start a run", async () => {

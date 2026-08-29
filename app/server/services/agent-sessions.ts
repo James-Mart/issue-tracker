@@ -18,6 +18,7 @@ import { isAuthFailureEvent, isAuthFailureText } from "./agent-failure.js";
 import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import {
   appendEvent,
+  assembleAgentPrompt,
   listConversationIds,
   readConversation,
   setPendingMessage,
@@ -568,9 +569,17 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
               ? { attachments: pending.attachments }
               : {}),
           });
+          const assembled = await assembleAgentPrompt(
+            conversationId,
+            pending.text,
+            pending.attachments,
+          );
           const fired = await sendPromptInternal(
             conversationId,
-            { prompt: pending.text },
+            {
+              prompt: assembled.prompt,
+              ...(assembled.images ? { images: assembled.images } : {}),
+            },
             false,
           );
           if (!fired.ok) {
