@@ -82,6 +82,29 @@ function withAttachmentOp<T>(
   });
 }
 
+/** Basenames in `names` that are unsafe or not present in the conversation store. */
+export function missingConversationAttachments(
+  conversationId: string,
+  names: readonly string[],
+): string[] {
+  requireConversation(conversationId);
+  const dir = attachmentsDir(conversationId);
+  const existing = new Set(attachmentFilenames(dir));
+  const missing: string[] = [];
+  for (const name of names) {
+    try {
+      assertSafeBasename(name);
+    } catch {
+      missing.push(name);
+      continue;
+    }
+    if (!existing.has(name)) {
+      missing.push(name);
+    }
+  }
+  return missing;
+}
+
 export function listConversationAttachments(
   conversationId: string,
 ): Promise<ConversationAttachmentInfo[]> {

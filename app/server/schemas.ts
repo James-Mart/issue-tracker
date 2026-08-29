@@ -485,7 +485,23 @@ export const conversationMetaSchema = z
     channel: z.enum(CONVERSATION_CHANNELS).optional(),
     agentId: nonEmpty.optional(),
     model: nonEmpty,
-    pendingMessage: z.object({ text: nonEmpty, at: nonEmpty }).optional(),
+    pendingMessage: z
+      .object({
+        text: z.string(),
+        at: nonEmpty,
+        attachments: z.array(nonEmpty).optional(),
+      })
+      .superRefine((pending, ctx) => {
+        const hasText = pending.text.length > 0;
+        const hasAttachments = (pending.attachments?.length ?? 0) > 0;
+        if (hasText || hasAttachments) return;
+        ctx.addIssue({
+          code: "custom",
+          message: "pending message requires text or attachments",
+          path: ["text"],
+        });
+      })
+      .optional(),
     archived: z.boolean().default(false),
     createdAt: nonEmpty,
     updatedAt: nonEmpty,
@@ -596,6 +612,7 @@ export type NestedStep = z.infer<typeof nestedStepSchema>;
 const promptEventInput = z.object({
   type: z.literal("prompt"),
   text: z.string(),
+  attachments: z.array(nonEmpty).optional(),
 });
 const assistantEventInput = z.object({
   type: z.literal("assistant"),

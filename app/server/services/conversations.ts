@@ -568,10 +568,17 @@ export function conversationExists(id: string): boolean {
 export async function setPendingMessage(
   id: string,
   text: string | null,
+  attachments?: string[],
 ): Promise<ConversationMeta> {
   const meta = await updateMeta(id, {
     pendingMessage:
-      text === null ? null : { text, at: new Date().toISOString() },
+      text === null
+        ? null
+        : {
+            text,
+            at: new Date().toISOString(),
+            ...(attachments && attachments.length > 0 ? { attachments } : {}),
+          },
   });
   publishFrame(id, {
     event: { type: "pending", text },
@@ -590,16 +597,21 @@ export async function startConversationPrompt(
   prompt: string,
   model: string | undefined,
   sessions: AgentSessions,
-  opts?: { persistPrompt?: boolean },
+  opts?: { persistPrompt?: boolean; attachments?: string[] },
 ): Promise<{ ok: true; runId: string } | { ok: false; message: string }> {
   const persistPrompt = opts?.persistPrompt !== false;
+  const attachments = opts?.attachments;
   const { meta } = readConversation(conversationId);
   if (meta.pendingMessage) {
     await setPendingMessage(conversationId, null);
   }
 
   if (persistPrompt) {
-    await appendEvent(conversationId, { type: "prompt", text: prompt });
+    await appendEvent(conversationId, {
+      type: "prompt",
+      text: prompt,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+    });
   }
 
   const result = await sessions.sendPrompt(conversationId, {

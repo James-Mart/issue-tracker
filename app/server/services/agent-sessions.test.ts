@@ -1415,6 +1415,51 @@ describe("pending message firing", () => {
     ]);
   });
 
+  it("fires a pending message with attachments on the prompt event", async () => {
+    const {
+      createConversation,
+      readConversation,
+      updateMeta,
+      createAgentSessions,
+    } = await load();
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Fire pending attachments",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    await updateMeta(meta.id, {
+      pendingMessage: {
+        text: "see file",
+        at: AT,
+        attachments: ["mock.tsx"],
+      },
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "first turn" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    for (let i = 0; i < 50; i += 1) {
+      const { transcript } = readConversation(meta.id);
+      if (transcript.some((e) => e.type === "assistant")) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    const { transcript } = readConversation(meta.id);
+    expect(
+      transcript.filter((e) => e.type === "prompt").map((e) => ({
+        text: e.text,
+        attachments: e.type === "prompt" ? e.attachments : undefined,
+      })),
+    ).toEqual([{ text: "see file", attachments: ["mock.tsx"] }]);
+  });
+
   it("restores pending and surfaces an error when firing fails to start a run", async () => {
     const {
       createConversation,

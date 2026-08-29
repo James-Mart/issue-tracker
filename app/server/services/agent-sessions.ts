@@ -561,6 +561,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           await appendEvent(conversationId, {
             type: "prompt",
             text: pending.text,
+            ...(pending.attachments?.length
+              ? { attachments: pending.attachments }
+              : {}),
           });
           const fired = await sendPromptInternal(
             conversationId,
@@ -568,7 +571,11 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
             false,
           );
           if (!fired.ok) {
-            await setPendingMessage(conversationId, pending.text);
+            await setPendingMessage(
+              conversationId,
+              pending.text,
+              pending.attachments,
+            );
             const message = fired.error.message;
             const event = { type: "error" as const, message };
             publishFrame(conversationId, { event, persist: true });
