@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  parseConversationFrame,
-  type AgentRun,
-  type ConversationStreamEvent,
-  type TranscriptEvent,
+import type {
+  AgentRun,
+  ConversationStreamEvent,
+  TranscriptEvent,
 } from "@server/schemas";
 import { applyTranscriptDelta } from "@/features/agents/lib/conversation-events-state";
 import {
@@ -134,18 +133,7 @@ export function useWorkRootAgentRuns(
         });
         return;
       }
-      const parsed = parseConversationFrame(message.event);
-      if (!parsed.ok) {
-        if (import.meta.env.DEV) {
-          console.warn(
-            "ignoring malformed conversation event:",
-            message.event,
-            parsed.message,
-          );
-        }
-        return;
-      }
-      const { event } = parsed;
+      const event = message.event as ConversationStreamEvent;
       if (event.type === "subagent_update") {
         setLiveEventsByParentCallId((prev) =>
           appendLiveSubagentUpdate(prev, event),

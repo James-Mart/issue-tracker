@@ -1,20 +1,8 @@
 import { request } from "@/lib/api/client";
-import {
-  parseChannelSessionListItem,
-  type ChannelSessionListItem,
-  type ConversationChannel,
+import type {
+  ChannelSessionListItem,
+  ConversationChannel,
 } from "@server/schemas";
-
-function parseChannelSessionList(raw: unknown): ChannelSessionListItem[] {
-  if (!Array.isArray(raw)) {
-    throw new Error("invalid channel sessions list");
-  }
-  return raw.map((entry) => {
-    const parsed = parseChannelSessionListItem(entry);
-    if (!parsed.ok) throw new Error(parsed.message);
-    return parsed.item;
-  });
-}
 
 export type CreateChannelSessionBody = {
   model: string;
@@ -43,9 +31,9 @@ export function listChannelSessions(
   issueId: string,
   channel: ConversationChannel,
 ): Promise<ChannelSessionListItem[]> {
-  return request<unknown>(
+  return request<ChannelSessionListItem[]>(
     `/api/issues/${encodeURIComponent(issueId)}/channels/${encodeURIComponent(channel)}/sessions`,
-  ).then(parseChannelSessionList);
+  );
 }
 
 /** Most recent non-archived session, or undefined when the channel is idle. */

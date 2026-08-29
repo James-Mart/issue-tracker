@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  parseConversationFrame,
-  type ConversationStreamEvent,
-} from "@server/schemas";
+import type { ConversationStreamEvent } from "@server/schemas";
 import {
   subscribeTopic,
   type TopicMessage,
@@ -54,18 +51,8 @@ export function useLiveRunSequence(
         void qc.invalidateQueries({ queryKey: pipelineKeys.runs() });
         return;
       }
-      const parsed = parseConversationFrame(message.event);
-      if (!parsed.ok) {
-        if (import.meta.env.DEV) {
-          console.warn(
-            "ignoring malformed conversation event:",
-            message.event,
-            parsed.message,
-          );
-        }
-        return;
-      }
-      setFrames((prev) => insertFrameBySeq(prev, parsed.event));
+      const event = message.event as ConversationStreamEvent;
+      setFrames((prev) => insertFrameBySeq(prev, event));
     };
 
     const unsubscribe = subscribeTopic(

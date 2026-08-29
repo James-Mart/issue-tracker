@@ -1,13 +1,10 @@
 import { request } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
-import {
-  parseConversationActiveRun,
-  parseConversationListItem,
-  parseConversationTranscriptPage,
-  type ConversationActiveRun,
-  type ConversationListItem,
-  type ConversationMeta,
-  type ConversationTranscriptPage,
+import type {
+  ConversationActiveRun,
+  ConversationListItem,
+  ConversationMeta,
+  ConversationTranscriptPage,
 } from "@server/schemas";
 
 export type AgentModel = {
@@ -32,22 +29,11 @@ export type UpdateConversationBody = {
   archived?: boolean;
 };
 
-function parseConversationList(raw: unknown): ConversationListItem[] {
-  if (!Array.isArray(raw)) {
-    throw new Error("invalid conversations list");
-  }
-  return raw.map((entry) => {
-    const parsed = parseConversationListItem(entry);
-    if (!parsed.ok) throw new Error(parsed.message);
-    return parsed.item;
-  });
-}
-
 export function listConversations(
   showArchived = false,
 ): Promise<ConversationListItem[]> {
   const qs = showArchived ? "?showArchived=true" : "";
-  return request<unknown>(`/api/conversations${qs}`).then(parseConversationList);
+  return request<ConversationListItem[]>(`/api/conversations${qs}`);
 }
 
 export function createConversation(
@@ -74,11 +60,7 @@ export function deleteConversation(id: string): Promise<void> {
 }
 
 export function getConversationRun(id: string): Promise<ConversationActiveRun> {
-  return request<unknown>(`/api/conversations/${id}/run`).then((raw) => {
-    const parsed = parseConversationActiveRun(raw);
-    if (!parsed.ok) throw new Error(parsed.message);
-    return parsed.state;
-  });
+  return request<ConversationActiveRun>(`/api/conversations/${id}/run`);
 }
 
 /** Transcript GET is the only client helper that takes this deadline. */
@@ -93,14 +75,10 @@ export function getConversationTranscript(
     sinceSeq === undefined ? "" : `?sinceSeq=${encodeURIComponent(String(sinceSeq))}`;
   const timeout = AbortSignal.timeout(TRANSCRIPT_FETCH_TIMEOUT_MS);
   const abort = signal ? AbortSignal.any([timeout, signal]) : timeout;
-  return request<unknown>(
+  return request<ConversationTranscriptPage>(
     `/api/conversations/${encodeURIComponent(id)}/transcript${qs}`,
     { signal: abort },
-  ).then((raw) => {
-    const parsed = parseConversationTranscriptPage(raw);
-    if (!parsed.ok) throw new Error(parsed.message);
-    return parsed.page;
-  });
+  );
 }
 
 export function listAgentModels(): Promise<AgentModelsResponse> {

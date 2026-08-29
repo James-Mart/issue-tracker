@@ -1,7 +1,6 @@
-import {
-  parseConversationFrame,
-  type ConversationStreamEvent,
-  type ConversationTranscriptPage,
+import type {
+  ConversationStreamEvent,
+  ConversationTranscriptPage,
 } from "@server/schemas";
 import { getConversationTranscript } from "../api/client";
 import {
@@ -149,18 +148,7 @@ function openEntry(
       reseedFromHistory();
       return;
     }
-    const parsed = parseConversationFrame(message.event);
-    if (!parsed.ok) {
-      if (import.meta.env.DEV) {
-        console.warn(
-          "ignoring malformed conversation event:",
-          message.event,
-          parsed.message,
-        );
-      }
-      return;
-    }
-    applyLiveEvent(parsed.event);
+    applyLiveEvent(message.event as ConversationStreamEvent);
   };
 
   unsubscribeTopic = subscribeTopic(
