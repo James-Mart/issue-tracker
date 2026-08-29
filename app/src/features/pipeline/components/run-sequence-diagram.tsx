@@ -342,8 +342,9 @@ export function RunSequenceDiagram({
         {resolvedLayout === "phone" ? (
           <RunSequenceRail
             sequence={sequence}
-            rows={rows}
+            displayItems={displayItems}
             onToggle={toggle}
+            onToggleSection={toggleSection}
           />
         ) : (
         <div className="flex min-w-0" style={{ minHeight: height }}>

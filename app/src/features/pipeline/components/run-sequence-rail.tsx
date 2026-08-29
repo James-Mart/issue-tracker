@@ -14,13 +14,16 @@ import {
 import {
   DirectedArrow,
   IterationCountChip,
+  SectionHeader,
   beatAccent,
   beatCaptionLabel,
   displayBeatLabel,
   displayLifelineLabel,
   type BeatAccent,
-  type SequenceRenderRow,
+  type SequenceDisplayItem,
 } from "./run-sequence-shared";
+
+const RAIL_SECTION_INDENT = 10;
 
 const DURATION_COL = "10ch";
 
@@ -163,19 +166,27 @@ function BeatTitle({
   );
 }
 
+function railBeatIndent(depth: number): number {
+  return depth * RAIL_SECTION_INDENT;
+}
+
 /** Phone sequence: one beat per Rail row, from/to named, duration gutter. */
 export function RunSequenceRail({
   sequence,
-  rows,
+  displayItems,
   onToggle,
+  onToggleSection,
 }: {
   sequence: RunSequence;
-  rows: SequenceRenderRow[];
+  displayItems: SequenceDisplayItem[];
   onToggle: (beatIndex: number) => void;
+  onToggleSection: (key: string) => void;
 }) {
   const tail = lifelineTail(sequence.condition);
   const failedId = failedLifelineId(sequence);
-  const hasExpandedTurns = rows.some((row) => row.kind === "turn");
+  const hasExpandedTurns = displayItems.some(
+    (item) => item.kind === "row" && item.row.kind === "turn",
+  );
 
   return (
     <div
@@ -198,20 +209,43 @@ export function RunSequenceRail({
         live={sequence.condition === "in-flight"}
         className={cn(tail === "extend" && "pb-6")}
       >
-        {rows.map((row) => {
-          const accent = beatAccent(sequence, row.beatIndex);
-          const isLive = accent === "live";
-          const isFailed = accent === "failed";
-          const isIndeterminate = accent === "indeterminate";
-          const count = collapsedIterationCount(row.beat);
+        {(() => {
+          let beatContainerDepth = 0;
+          return displayItems.map((item) => {
+            if (item.kind === "section") {
+              beatContainerDepth = item.depth + 1;
+              return (
+                <div
+                  key={item.key}
+                  className="py-1"
+                  style={{ paddingLeft: railBeatIndent(item.depth) }}
+                >
+                  <SectionHeader
+                    kind={item.section.kind}
+                    title={item.section.title}
+                    expanded={item.expanded}
+                    onToggle={() => onToggleSection(item.key)}
+                  />
+                </div>
+              );
+            }
 
-          if (row.kind === "group_head") {
+            const row = item.row;
+            const beatIndent = railBeatIndent(beatContainerDepth);
+            const accent = beatAccent(sequence, row.beatIndex);
+            const isLive = accent === "live";
+            const isFailed = accent === "failed";
+            const isIndeterminate = accent === "indeterminate";
+            const count = collapsedIterationCount(row.beat);
+
+            if (row.kind === "group_head") {
             return (
               <div
                 key={`head-${row.beatIndex}`}
                 data-testid="sequence-group-head"
                 data-beat-index={row.beatIndex}
                 className="relative flex items-start gap-2 py-2"
+                style={{ paddingLeft: beatIndent }}
               >
                 <button
                   type="button"
@@ -268,6 +302,7 @@ export function RunSequenceRail({
                 data-to={row.beat.to}
                 data-beat-index={row.beatIndex}
                 className="items-start rounded-md border border-[hsl(var(--rail))] bg-[hsl(var(--panel)/0.45)] px-1"
+                style={{ marginLeft: beatIndent }}
               >
                 <div className="min-w-0 flex-1">
                   <button
@@ -341,6 +376,7 @@ export function RunSequenceRail({
                 row.kind === "turn" &&
                   "border-l-2 border-[hsl(var(--rail-lit))]/80",
               )}
+              style={{ marginLeft: beatIndent }}
             >
               <div className="min-w-0 flex-1">
                 <BeatTitle
@@ -386,7 +422,8 @@ export function RunSequenceRail({
               </div>
             </RailNode>
           );
-        })}
+          });
+        })()}
       </Rail>
       {tail === "open-dash" ? (
         <svg
