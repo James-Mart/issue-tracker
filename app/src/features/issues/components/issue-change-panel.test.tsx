@@ -1,14 +1,21 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api/errors";
 import type { IssueChange } from "@server/schemas";
-import { IssueChangePanel } from "./issue-change-panel";
+import {
+  classifyIssueChangePanelFault,
+  IssueChangePanel,
+} from "./issue-change-panel";
 
 const changeQueryState = vi.hoisted(() => ({
   data: undefined as IssueChange | undefined,
   isLoading: false,
   error: null as Error | null,
+  isFetching: false,
+  refetch: vi.fn(),
 }));
 
 vi.mock("@pierre/diffs/react", () => ({
@@ -22,6 +29,8 @@ vi.mock("../api/queries", () => ({
     data: changeQueryState.data,
     isLoading: changeQueryState.isLoading,
     error: changeQueryState.error,
+    isFetching: changeQueryState.isFetching,
+    refetch: changeQueryState.refetch,
   }),
 }));
 
@@ -47,7 +56,11 @@ function mountPanel(): HTMLDivElement {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<IssueChangePanel issueId="task-1" />);
+    root.render(
+      <MemoryRouter>
+        <IssueChangePanel issueId="task-1" projectId="platform" />
+      </MemoryRouter>,
+    );
   });
   return container;
 }
@@ -57,6 +70,38 @@ afterEach(() => {
   changeQueryState.data = undefined;
   changeQueryState.isLoading = false;
   changeQueryState.error = null;
+  changeQueryState.isFetching = false;
+  changeQueryState.refetch.mockReset();
+});
+
+describe("classifyIssueChangePanelFault", () => {
+  it("maps commit-unreachable API failures", () => {
+    expect(
+      classifyIssueChangePanelFault(
+        new ApiError("fatal: bad object abc", 404, {
+          code: "commit-unreachable",
+        }),
+      ),
+    ).toBe("commit-unreachable");
+  });
+
+  it("maps workspace-unset validation failures", () => {
+    expect(
+      classifyIssueChangePanelFault(
+        new ApiError("Project workspace is not set", 400, {
+          code: "validation",
+        }),
+      ),
+    ).toBe("workspace-unset");
+  });
+
+  it("ignores unrelated API failures", () => {
+    expect(
+      classifyIssueChangePanelFault(
+        new ApiError("git binary not found", 503, { code: "git-missing" }),
+      ),
+    ).toBeUndefined();
+  });
 });
 
 describe("IssueChangePanel", () => {
@@ -78,5 +123,91 @@ describe("IssueChangePanel", () => {
     expect(fileDiffs).toHaveLength(2);
     expect(fileDiffs[0]?.textContent).toBe("foo.ts");
     expect(fileDiffs[1]?.textContent).toBe("bar.ts");
+  });
+
+  it("renders distinct empty content for no-commit", () => {
+    changeQueryState.data = { state: "empty", reason: "no-commit" };
+
+    const container = mountPanel();
+    const empty = container.querySelector('[data-testid="issue-change-empty-state"]');
+
+    expect(empty?.getAttribute("data-empty-reason")).toBe("no-commit");
+    expect(container.textContent).toContain("No commit recorded for this task yet.");
+    expect(container.textContent).toContain(
+      "When implementation lands and records a commit sha, the combined diff will appear here.",
+    );
+    expect(container.querySelector('[data-testid="issue-change-fault-state"]')).toBeNull();
+  });
+
+  it("renders distinct empty content for no-diff", () => {
+    changeQueryState.data = { state: "empty", reason: "no-diff" };
+
+    const container = mountPanel();
+    const empty = container.querySelector('[data-testid="issue-change-empty-state"]');
+
+    expect(empty?.getAttribute("data-empty-reason")).toBe("no-diff");
+    expect(container.textContent).toContain("This task has no code change.");
+    expect(container.textContent).toContain(
+      "The tracker has no diff to load for this task. Record a commit if a change should appear here.",
+    );
+    expect(container.querySelector('[data-testid="issue-change-fault-state"]')).toBeNull();
+  });
+
+  it("renders workspace-unset as a fault with project settings action", () => {
+    changeQueryState.error = new ApiError("Project workspace is not set", 400, {
+      code: "validation",
+    });
+
+    const container = mountPanel();
+    const fault = container.querySelector('[data-testid="issue-change-fault-state"]');
+
+    expect(fault?.getAttribute("data-fault")).toBe("workspace-unset");
+    expect(container.textContent).toContain("Diff unavailable");
+    expect(container.textContent).toContain("Project workspace is not set");
+    expect(container.textContent).toContain(
+      "Set the project workspace to a checkout on this machine, then reload.",
+    );
+    expect(container.querySelector('[data-testid="issue-change-empty-state"]')).toBeNull();
+
+    const settingsLink = container.querySelector("a");
+    expect(settingsLink?.getAttribute("href")).toBe("/projects/platform");
+    expect(settingsLink?.textContent).toBe("Open project settings");
+  });
+
+  it("renders commit-unreachable as a fault with reload action", () => {
+    changeQueryState.error = new ApiError("fatal: bad object abc", 404, {
+      code: "commit-unreachable",
+    });
+
+    const container = mountPanel();
+    const fault = container.querySelector('[data-testid="issue-change-fault-state"]');
+
+    expect(fault?.getAttribute("data-fault")).toBe("commit-unreachable");
+    expect(container.textContent).toContain("Diff unavailable");
+    expect(container.textContent).toContain("Commit not found in workspace");
+    expect(container.textContent).toContain(
+      "Fetch the commit into the project workspace or update the recorded sha on this task.",
+    );
+    expect(container.textContent).toContain("fatal: bad object abc");
+    expect(container.querySelector('[data-testid="issue-change-empty-state"]')).toBeNull();
+
+    const reloadButton = container.querySelector("button");
+    expect(reloadButton?.textContent).toBe("Reload diff");
+    act(() => {
+      reloadButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(changeQueryState.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not render empty-state chrome for faults", () => {
+    changeQueryState.error = new ApiError("fatal: bad object abc", 404, {
+      code: "commit-unreachable",
+    });
+
+    const container = mountPanel();
+
+    expect(container.querySelector('[data-testid="issue-change-fault-state"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="issue-change-empty-state"]')).toBeNull();
+    expect(container.textContent).not.toContain("No commit recorded for this task yet.");
   });
 });

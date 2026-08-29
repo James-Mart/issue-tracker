@@ -203,7 +203,7 @@ export function IssueDetailTabs({
             )}
             {...tabPanelVisibility(selected)}
           >
-            <IssueChangePanel issueId={issue.id} />
+            <IssueChangePanel issueId={issue.id} projectId={projectId} />
           </div>
         );
       })}
