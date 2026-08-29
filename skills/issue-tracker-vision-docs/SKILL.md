@@ -38,8 +38,10 @@ They differ after the human approves the draft:
   has already chosen the target. Hand the approved draft back and stop;
   project-docs writes the file and sets `supportingDocs`.
 - **From auto-plan** — `issue-tracker-auto-plan` § Subsystem vision consult,
-  for a subsystem the plan needs governing vision for. Subsystem doc only.
-  Write per **## Write**, then return to auto-plan.
+  for a subsystem the plan needs governing vision for. Subsystem doc only. An
+  agent invoked this skill, and the grill it runs still belongs to the product
+  owner: the seat that asked for the doc does not answer for it. Write per
+  **## Write**, then return to auto-plan.
 
 ## Bootstrap
 
@@ -64,9 +66,9 @@ Settle the target doc first. The other two paths arrive with it already
 fixed — project-docs on the main vision at the target it chose, auto-plan on
 the subsystem it named. On the standalone path:
 
-1. Ask the human (never a stakeholder stand-in) whether this run is the
-   **main vision** or a **subsystem doc**
-   when the invocation did not say.
+1. Ask the product owner whether this run is the **main vision** or a
+   **subsystem doc** when the invocation did not say. An agent stakeholder
+   holds that seat legitimately; answering for the vision is not part of it.
 2. For a subsystem, ask which subsystem when the invocation did not name it.
    Match that name against the `## Subsystem reference` entries loaded in
    Bootstrap step 4: a matching entry makes its attachment the target doc; no

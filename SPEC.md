@@ -53,8 +53,9 @@ Every issue has a `kind`, one of:
   and humans mine later into real work. Leaf kind: no children, no
   assignee/needs-attention, no stored status or git fields (planning phase is
   derived as **`ideaStatus`** — see [Derived state](#derived-state)). `stakeholder` picks who
-  drives planning in the Planning channel: a model slug for auto-plan, or unset
-  for manual planning where the human drives the grill. Supports comments and
+  holds the stakeholder seat (see [Roles](#roles)): a model slug means an
+  agent holds it; unset means the product owner takes the seat personally
+  and drives the grill. Supports comments and
   kind-scoped CLI `comment` (same path as other kinds). Is `partOf` a Project
   (required). Epics, Ideas, and
   *root* project-level Stories share one Project-child sibling `order` space.
@@ -250,6 +251,27 @@ These are computed by `derive()` and never written to disk (see
 - **problems** — integrity issues that are surfaced, never silently ignored:
   dependency cycles, dangling `partOf`/`stackedOn`/`blockedBy` ids, kind
   violations, and malformed/invalid files.
+
+### Roles
+
+Three distinct roles; the harness never conflates them.
+
+- **product owner** — authors the vision: the one artifact nobody produces
+  on their behalf.
+- **stakeholder** — consumes the vision, controlling how an idea becomes
+  implementable tasks and adjudicating the ambiguities a planner surfaces;
+  usually an agent, sometimes the product owner in person.
+- **planner** — a third and technical role that reads the code and surfaces
+  an idea's ambiguities rather than resolving them.
+
+The boundary an agent stakeholder does not cross runs through the source of
+the content rather than the typing: drafting a vision doc and writing the
+file is clerical, supplying the product judgment inside it is authorship,
+and authorship is not in the seat. The vision is read from the seat that
+answers, not the seat that asks — a role that puts questions to the
+stakeholder does not consult it, while a validator that reports a
+tree-versus-intent mismatch and escalates it does, because reporting a
+contradiction is not answering in the owner's name.
 
 <a id="cli-invariants"></a>
 
@@ -580,9 +602,12 @@ the YAML doc.
 
 | Doc key | Who consults |
 | --- | --- |
-| `vision` | `issue-tracker-plan`, plan-polish check agents (shared bootstrap + internal-consistency cohesion), implementor bootstrap |
+| `vision` | plan-polish check agents (shared bootstrap + internal-consistency cohesion), implementor bootstrap |
 | `codingStandards` | implementor, code-quality validator; plan-polish internal-consistency when tree prose makes claims the doc governs |
 | `designSystem` | implementor + code-quality validator when the Task appears UI-related (judgment from prose + paths; no Task flag) |
+
+`issue-tracker-plan` is absent from `vision` because the vision is read from
+the seat that answers, not the seat that asks ([Roles](#roles)).
 
 Agents load these at bootstrap; coordinators do not pass doc paths in Task
 prompts.
@@ -601,6 +626,17 @@ Each entry is a markdown list item:
 Agents discover and consult a subsystem doc via the existing vision path:
 read the vision doc, find a matching `## Subsystem reference` entry, then
 Read that attachment.
+
+Personas are the unit of vision, so a vision doc describes and justifies
+persona interactions and the index is organized by surface. Machinery two
+personas meet through two genuinely different surfaces is two docs; one
+surface two personas share is one doc naming both; machinery no persona
+touches is not vision material at all.
+
+Silence inside a surface that already has governing vision is the
+stakeholder's to judge. A persona-facing surface with no governing vision
+at all is a structural gap only the product owner can close, because
+closing it means authoring intent.
 
 **Mission paragraph (convention only).** The main vision doc (the
 `supportingDocs.vision` target) may include a `## Mission` section: one
@@ -854,7 +890,7 @@ Idea — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Project id (required) |
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
-| `stakeholder` | string? | optional agent model slug; unset means manual planning — the human drives the grill |
+| `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
 No assignee, needs-attention, stored status, git fields, or comments. Derived
