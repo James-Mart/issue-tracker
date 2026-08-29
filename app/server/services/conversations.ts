@@ -377,6 +377,11 @@ export function listConversations(): ConversationMeta[] {
   return metas;
 }
 
+/** Conversation `meta.json` only — no transcript or delegations. */
+export function readConversationMeta(id: string): ConversationMeta {
+  return readMetaRaw(id);
+}
+
 export function readConversation(id: string): ConversationDetail {
   const meta = readMetaRaw(id);
   return { meta, transcript: readTranscriptLines(id) };

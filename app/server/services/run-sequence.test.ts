@@ -1703,4 +1703,129 @@ describe("recentRuns", () => {
       },
     ]);
   });
+
+  it("hydrates transcript and delegations only for the newest limit slice", async () => {
+    writeConversation("conv-oldest", {
+      meta: { title: "Oldest", createdAt: AT_EARLY },
+      delegations: [
+        delegation({
+          delegationId: "del-oldest",
+          agentId: "agent-oldest",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT_EARLY,
+          issueId: "task-oldest",
+          parentCallId: "call-oldest",
+          end: { status: "completed", endedAt: AT },
+        }),
+      ],
+      transcript: [
+        toolCall("call-oldest", "running", AT_EARLY, 1),
+        toolCall("call-oldest", "completed", AT, 2),
+      ],
+    });
+    writeConversation("conv-old", {
+      meta: { title: "Old", createdAt: AT },
+      delegations: [
+        delegation({
+          delegationId: "del-old",
+          agentId: "agent-old",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "task-old",
+          parentCallId: "call-old",
+          end: { status: "error", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-old", "running", AT, 1),
+        toolCall("call-old", "error", AT_END, 2),
+      ],
+    });
+    writeConversation("conv-newer", {
+      meta: {
+        channel: "planning",
+        issueId: "task-newer",
+        createdAt: AT_CHILD,
+      },
+      delegations: [
+        delegation({
+          delegationId: "del-newer",
+          agentId: "agent-newer",
+          role: "planner",
+          model: "composer-2.5",
+          at: AT_CHILD,
+          issueId: "task-newer",
+          parentCallId: "call-newer",
+        }),
+      ],
+      transcript: [toolCall("call-newer", "running", AT_CHILD, 1)],
+    });
+    writeConversation("conv-newest", {
+      meta: {
+        channel: "implementing",
+        issueId: "task-newest",
+        createdAt: AT_LATE,
+      },
+      delegations: [
+        delegation({
+          delegationId: "del-newest-fail",
+          agentId: "agent-newest-fail",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "task-newest",
+          parentCallId: "call-newest-fail",
+          end: { status: "error", endedAt: AT_END },
+        }),
+        delegation({
+          delegationId: "del-newest-ok",
+          agentId: "agent-newest-ok",
+          role: "validator",
+          model: "composer-2.5",
+          at: AT_CHILD,
+          issueId: "task-newest",
+          parentCallId: "call-newest-ok",
+          end: { status: "completed", endedAt: AT_LATE },
+        }),
+      ],
+      transcript: [
+        toolCall("call-newest-fail", "running", AT, 1),
+        toolCall("call-newest-fail", "error", AT_END, 2),
+        toolCall("call-newest-ok", "running", AT_CHILD, 3),
+        toolCall("call-newest-ok", "completed", AT_LATE, 4),
+      ],
+    });
+
+    const conversations = await import("./conversations.js");
+    const readConversation = vi.spyOn(conversations, "readConversation");
+    const readDelegations = vi.spyOn(conversations, "readDelegations");
+    const { recentRuns } = await import("./run-sequence.js");
+
+    const runs = recentRuns(2);
+    const hydrated = new Set([
+      ...readConversation.mock.calls.map(([id]) => id),
+      ...readDelegations.mock.calls.map(([id]) => id),
+    ]);
+
+    expect([...hydrated].sort()).toEqual(["conv-newer", "conv-newest"]);
+    expect(runs).toEqual([
+      {
+        conversationId: "conv-newest",
+        coordinatorLabel: "implementing",
+        startedAt: AT_LATE,
+        condition: "completed",
+        issueId: "task-newest",
+        recoveredErrors: 1,
+      },
+      {
+        conversationId: "conv-newer",
+        coordinatorLabel: "planning",
+        startedAt: AT_CHILD,
+        condition: "in-flight",
+        issueId: "task-newer",
+      },
+    ]);
+  });
 });
