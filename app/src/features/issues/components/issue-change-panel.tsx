@@ -1,5 +1,9 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { FileDiff, type FileDiffMetadata } from "@pierre/diffs/react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  FileDiff,
+  type FileDiffContentsLoader,
+  type FileDiffMetadata,
+} from "@pierre/diffs/react";
 import { Link } from "react-router-dom";
 import {
   ShellFaultDetail,
@@ -11,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/errors";
 import type { ChangeCommit, IssueChange } from "@server/schemas";
 import { useIssueChangeQuery } from "../api/queries";
+import { loadFileDiffContents } from "../lib/issue-change-file-contents";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
 import { IssueChangeFileNavigator } from "./issue-change-file-navigator";
 
@@ -204,27 +209,73 @@ export function IssueChangePanel({
     );
   }
 
-  return <IssueChangeLoadedPanel change={data} />;
+  return <IssueChangeLoadedPanel change={data} issueId={issueId} />;
 }
 
-function IssueChangeFileDiff({ fileDiff }: { fileDiff: FileDiffMetadata }) {
+function IssueChangeFileDiff({
+  fileDiff,
+  issueId,
+  sha,
+  contentsCache,
+}: {
+  fileDiff: FileDiffMetadata;
+  issueId: string;
+  sha: string;
+  contentsCache: Map<string, Promise<string>>;
+}) {
+  const [loading, setLoading] = useState(false);
+  const loadDiffFiles: FileDiffContentsLoader = useCallback(
+    async (diff) => {
+      setLoading(true);
+      try {
+        return await loadFileDiffContents({
+          issueId,
+          sha,
+          fileDiff: diff,
+          cache: contentsCache,
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [contentsCache, issueId, sha],
+  );
+
   return (
     <div
       className="min-w-0 overflow-hidden rounded-lg border border-border"
       data-testid="issue-change-file-diff"
       data-file-name={fileDiff.name}
+      data-context-loading={loading ? "true" : undefined}
     >
-      <FileDiff fileDiff={fileDiff} disableWorkerPool />
+      {loading ? (
+        <p
+          className="border-b border-border px-3 py-1.5 font-mono text-[11px] text-muted-foreground"
+          data-testid="issue-change-context-loading"
+          role="status"
+        >
+          Loading context…
+        </p>
+      ) : null}
+      <FileDiff
+        fileDiff={fileDiff}
+        disableWorkerPool
+        options={{ loadDiffFiles }}
+      />
     </div>
   );
 }
 
 function IssueChangeLoadedPanel({
   change,
+  issueId,
 }: {
   change: Extract<IssueChange, { state: "loaded" }>;
+  issueId: string;
 }) {
   const files = useMemo(() => fileDiffsFromPatch(change.patch), [change.patch]);
+  const contentsCache = useRef(new Map<string, Promise<string>>()).current;
+  const sha = change.commits[change.commits.length - 1]!.sha;
   const [filter, setFilter] = useState("");
   const [selectedName, setSelectedName] = useState<string | undefined>();
   const matched = useMemo(() => filterFilesByPath(files, filter), [files, filter]);
@@ -251,14 +302,26 @@ function IssueChangeLoadedPanel({
           />
           {selectedFile ? (
             <div className="min-w-0 flex-1">
-              <IssueChangeFileDiff fileDiff={selectedFile} />
+              <IssueChangeFileDiff
+                key={selectedFile.name}
+                fileDiff={selectedFile}
+                issueId={issueId}
+                sha={sha}
+                contentsCache={contentsCache}
+              />
             </div>
           ) : null}
         </div>
       ) : (
         <div className="flex min-w-0 flex-col gap-3">
           {files.map((fileDiff, index) => (
-            <IssueChangeFileDiff key={`${fileDiff.name}-${index}`} fileDiff={fileDiff} />
+            <IssueChangeFileDiff
+              key={`${fileDiff.name}-${index}`}
+              fileDiff={fileDiff}
+              issueId={issueId}
+              sha={sha}
+              contentsCache={contentsCache}
+            />
           ))}
         </div>
       )}

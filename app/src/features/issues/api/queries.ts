@@ -153,3 +153,23 @@ export function useIssueChangeQuery(
       count < 2,
   });
 }
+
+export function issueChangeFileUrl(
+  issueId: string,
+  sha: string,
+  path: string,
+): string {
+  const params = new URLSearchParams({ path, sha });
+  return `/api/issues/${encodeURIComponent(issueId)}/change/file?${params}`;
+}
+
+export async function fetchIssueChangeFile(
+  issueId: string,
+  sha: string,
+  path: string,
+): Promise<string> {
+  const { contents } = await request<{ contents: string }>(
+    issueChangeFileUrl(issueId, sha, path),
+  );
+  return contents;
+}
