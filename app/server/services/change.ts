@@ -9,6 +9,9 @@ import { ancestorChain } from "./subtree.js";
 type Story = Extract<Issue, { kind: "story" }>;
 type Task = Extract<Issue, { kind: "task" }>;
 
+/** Keep server responses within what @pierre/diffs can render in the browser. */
+export const MAX_PATCH_BYTES = 2 * 1024 * 1024;
+
 function isChildOf(issue: Issue, parentId: string): boolean {
   return issue.kind !== "project" && issue.partOf === parentId;
 }
@@ -103,6 +106,18 @@ function parseShortstat(text: string): ChangeStats {
   };
 }
 
+function assertPatchWithinCeiling(
+  patch: string,
+  stats: ChangeStats,
+  commitCount: number,
+): void {
+  if (Buffer.byteLength(patch, "utf8") <= MAX_PATCH_BYTES) return;
+  throw new IssueError("change-too-large", "patch exceeds render ceiling", {
+    stats,
+    commitCount,
+  });
+}
+
 async function assertCommitsContiguous(
   shas: string[],
   workspace: string,
@@ -143,11 +158,12 @@ async function readRollupChange(
     await runGitOrCommitUnreachable(["rev-parse", `${first}^`], workspace)
   ).trim();
   const range = `${base}..${last}`;
-  const patch = await runGitOrCommitUnreachable(["diff", range], workspace);
   const statOut = await runGitOrCommitUnreachable(
-    ["diff", "--stat", range],
+    ["diff", "--shortstat", range],
     workspace,
   );
+  const stats = parseShortstat(statOut);
+  const patch = await runGitOrCommitUnreachable(["diff", range], workspace);
 
   const withSubjects = await Promise.all(
     commits.map(async (commit) => ({
@@ -161,11 +177,13 @@ async function readRollupChange(
     })),
   );
 
+  assertPatchWithinCeiling(patch, stats, withSubjects.length);
+
   return {
     state: "loaded",
     commits: withSubjects,
     patch,
-    stats: parseShortstat(statOut),
+    stats,
   };
 }
 
@@ -187,20 +205,23 @@ async function readTaskChange(
       workspace,
     )
   ).trimEnd();
+  const statOut = await runGitOrCommitUnreachable(
+    ["show", "--shortstat", "--format=", sha],
+    workspace,
+  );
+  const stats = parseShortstat(statOut);
   const patch = await runGitOrCommitUnreachable(
     ["show", "--format=", "--patch", sha],
     workspace,
   );
-  const statOut = await runGitOrCommitUnreachable(
-    ["show", "--stat", "--format=", sha],
-    workspace,
-  );
+
+  assertPatchWithinCeiling(patch, stats, 1);
 
   return {
     state: "loaded",
     commits: [{ sha, subject }],
     patch,
-    stats: parseShortstat(statOut),
+    stats,
   };
 }
 
