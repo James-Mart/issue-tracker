@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -37,6 +37,8 @@ vi.mock("@pierre/diffs/react", () => ({
   FileDiff: ({ fileDiff }: { fileDiff: { name: string } }) => (
     <div data-testid="file-diff">{fileDiff.name}</div>
   ),
+  Virtualizer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  useVirtualizer: () => undefined,
 }));
 
 vi.mock("../api/queries", async (importOriginal) => {

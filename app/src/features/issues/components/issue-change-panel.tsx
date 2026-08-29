@@ -1,5 +1,19 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { FileDiff, type FileDiffMetadata } from "@pierre/diffs/react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
+import {
+  FileDiff,
+  Virtualizer,
+  useVirtualizer,
+  type FileDiffContentsLoader,
+  type FileDiffMetadata,
+} from "@pierre/diffs/react";
 import { Link } from "react-router-dom";
 import {
   ShellFaultDetail,
@@ -8,10 +22,19 @@ import {
   ShellState,
 } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError } from "@/lib/api/errors";
 import type { ChangeCommit, IssueChange } from "@server/schemas";
 import { useIssueChangeQuery } from "../api/queries";
+import { loadFileDiffContents } from "../lib/issue-change-file-contents";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
+import {
+  effectiveDiffLayout,
+  readStoredDiffLayout,
+  writeStoredDiffLayout,
+  type DiffLayout,
+} from "../lib/diff-layout-preference";
+import { DiffLayoutToggle } from "./diff-layout-toggle";
 import { IssueChangeFileNavigator } from "./issue-change-file-navigator";
 
 function shortSha(sha: string): string {
@@ -204,43 +227,113 @@ export function IssueChangePanel({
     );
   }
 
-  return <IssueChangeLoadedPanel change={data} />;
+  return <IssueChangeLoadedPanel change={data} issueId={issueId} />;
 }
 
-function IssueChangeFileDiff({ fileDiff }: { fileDiff: FileDiffMetadata }) {
+function IssueChangeFileDiff({
+  fileDiff,
+  issueId,
+  sha,
+  contentsCache,
+  diffLayout,
+  fileRef,
+}: {
+  fileDiff: FileDiffMetadata;
+  issueId: string;
+  sha: string;
+  contentsCache: Map<string, Promise<string>>;
+  diffLayout: DiffLayout;
+  fileRef?: Ref<HTMLDivElement>;
+}) {
+  const [loading, setLoading] = useState(false);
+  const loadDiffFiles: FileDiffContentsLoader = useCallback(
+    async (diff) => {
+      setLoading(true);
+      try {
+        return await loadFileDiffContents({
+          issueId,
+          sha,
+          fileDiff: diff,
+          cache: contentsCache,
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [contentsCache, issueId, sha],
+  );
+
   return (
     <div
+      ref={fileRef}
       className="min-w-0 overflow-hidden rounded-lg border border-border"
       data-testid="issue-change-file-diff"
       data-file-name={fileDiff.name}
+      data-context-loading={loading ? "true" : undefined}
     >
-      <FileDiff fileDiff={fileDiff} disableWorkerPool />
+      {loading ? (
+        <p
+          className="border-b border-border px-3 py-1.5 font-mono text-[11px] text-muted-foreground"
+          data-testid="issue-change-context-loading"
+          role="status"
+        >
+          Loading context…
+        </p>
+      ) : null}
+      <FileDiff
+        fileDiff={fileDiff}
+        disableWorkerPool
+        options={{ loadDiffFiles, diffStyle: diffLayout }}
+      />
     </div>
   );
 }
 
 function IssueChangeLoadedPanel({
   change,
+  issueId,
 }: {
   change: Extract<IssueChange, { state: "loaded" }>;
+  issueId: string;
 }) {
   const files = useMemo(() => fileDiffsFromPatch(change.patch), [change.patch]);
+  const contentsCache = useRef(new Map<string, Promise<string>>()).current;
+  const sha = change.commits[change.commits.length - 1]!.sha;
+  const isMobile = useIsMobile();
+  const [layout, setLayoutState] = useState<DiffLayout>(() => readStoredDiffLayout());
+  const diffLayout = effectiveDiffLayout(layout, isMobile);
+  const setLayout = useCallback((next: DiffLayout) => {
+    writeStoredDiffLayout(next);
+    setLayoutState(next);
+  }, []);
   const [filter, setFilter] = useState("");
   const [selectedName, setSelectedName] = useState<string | undefined>();
   const matched = useMemo(() => filterFilesByPath(files, filter), [files, filter]);
   const selectedFile =
     matched.find((file) => file.name === selectedName) ?? matched[0];
+  const rollupFiles = files.length > 1 ? matched : files;
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="issue-change-panel">
-      <p
-        className="font-mono text-[11px] tabular-nums text-muted-foreground"
-        data-testid="issue-change-scope-header"
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p
+          className="font-mono text-[11px] tabular-nums text-muted-foreground"
+          data-testid="issue-change-scope-header"
+        >
+          {scopeHeaderStats(change)}
+        </p>
+        {!isMobile ? (
+          <DiffLayoutToggle layout={layout} onLayoutChange={setLayout} />
+        ) : null}
+      </div>
+      <div
+        className={
+          files.length > 1
+            ? "flex min-w-0 flex-col gap-3 shell:flex-row shell:items-start"
+            : "flex min-w-0 flex-col gap-3"
+        }
       >
-        {scopeHeaderStats(change)}
-      </p>
-      {files.length > 1 ? (
-        <div className="flex min-w-0 flex-col gap-3 shell:flex-row shell:items-start">
+        {files.length > 1 ? (
           <IssueChangeFileNavigator
             files={files}
             matched={matched}
@@ -249,19 +342,98 @@ function IssueChangeLoadedPanel({
             selectedName={selectedFile?.name ?? ""}
             onSelect={setSelectedName}
           />
-          {selectedFile ? (
-            <div className="min-w-0 flex-1">
-              <IssueChangeFileDiff fileDiff={selectedFile} />
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="flex min-w-0 flex-col gap-3">
-          {files.map((fileDiff, index) => (
-            <IssueChangeFileDiff key={`${fileDiff.name}-${index}`} fileDiff={fileDiff} />
-          ))}
-        </div>
-      )}
+        ) : null}
+        {rollupFiles.length > 0 ? (
+          <IssueChangeVirtualizedRollup
+            files={rollupFiles}
+            selectedName={selectedFile?.name}
+            issueId={issueId}
+            sha={sha}
+            contentsCache={contentsCache}
+            diffLayout={diffLayout}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function IssueChangeVirtualizedRollup({
+  files,
+  selectedName,
+  issueId,
+  sha,
+  contentsCache,
+  diffLayout,
+}: {
+  files: FileDiffMetadata[];
+  selectedName: string | undefined;
+  issueId: string;
+  sha: string;
+  contentsCache: Map<string, Promise<string>>;
+  diffLayout: DiffLayout;
+}) {
+  return (
+    <div className="min-w-0 flex-1" data-testid="issue-change-rollup">
+      <Virtualizer className="max-h-[min(70vh,56rem)] overflow-auto">
+        <IssueChangeVirtualizedFiles
+          files={files}
+          selectedName={selectedName}
+          issueId={issueId}
+          sha={sha}
+          contentsCache={contentsCache}
+          diffLayout={diffLayout}
+        />
+      </Virtualizer>
+    </div>
+  );
+}
+
+function IssueChangeVirtualizedFiles({
+  files,
+  selectedName,
+  issueId,
+  sha,
+  contentsCache,
+  diffLayout,
+}: {
+  files: FileDiffMetadata[];
+  selectedName: string | undefined;
+  issueId: string;
+  sha: string;
+  contentsCache: Map<string, Promise<string>>;
+  diffLayout: DiffLayout;
+}) {
+  const virtualizer = useVirtualizer();
+  const fileNodes = useRef(new Map<string, HTMLDivElement>());
+
+  useLayoutEffect(() => {
+    if (selectedName == null || virtualizer == null || virtualizer.getRoot() == null) {
+      return;
+    }
+    const node = fileNodes.current.get(selectedName);
+    if (node == null) return;
+    virtualizer.scrollTo({
+      top: virtualizer.getOffsetInScrollContainer(node),
+    });
+  }, [selectedName, virtualizer]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {files.map((fileDiff, index) => (
+        <IssueChangeFileDiff
+          key={`${fileDiff.name}-${index}`}
+          fileRef={(node) => {
+            if (node) fileNodes.current.set(fileDiff.name, node);
+            else fileNodes.current.delete(fileDiff.name);
+          }}
+          fileDiff={fileDiff}
+          issueId={issueId}
+          sha={sha}
+          contentsCache={contentsCache}
+          diffLayout={diffLayout}
+        />
+      ))}
     </div>
   );
 }

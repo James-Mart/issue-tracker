@@ -49,7 +49,7 @@ import {
 import { moveStory } from "../services/move-story.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
 import { findPlanningWorkRoot } from "../services/planning-work-root.js";
-import { readIssueChange } from "../services/change.js";
+import { readIssueChange, readIssueChangeFile } from "../services/change.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
 import { ancestorChain } from "../services/subtree.js";
 
@@ -109,6 +109,21 @@ export function createIssuesRouter(
     "/:id/change",
     asyncRoute(async (req, res) => {
       res.json(await readIssueChange(req.params.id));
+    }),
+  );
+
+  router.get(
+    "/:id/change/file",
+    asyncRoute(async (req, res) => {
+      const path = req.query.path;
+      const sha = req.query.sha;
+      if (typeof path !== "string" || !path) {
+        throw new IssueError("validation", "path is required");
+      }
+      if (typeof sha !== "string" || !sha) {
+        throw new IssueError("validation", "sha is required");
+      }
+      res.json(await readIssueChangeFile(req.params.id, sha, path));
     }),
   );
 
