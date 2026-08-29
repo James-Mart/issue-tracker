@@ -34,6 +34,8 @@ import {
   FlowBucketsSections,
   FlowPreviewedItems,
 } from "./flow-buckets-sections";
+import type { ImplementingLockRefusal } from "../lib/implementing-launch";
+import { ImplementingLockRefusalState } from "./implementing-launch-control";
 import { FlowRow } from "./flow-row";
 import { FlowRowActions } from "./flow-row-actions";
 
@@ -159,10 +161,18 @@ function CockpitProjectSubheader({
   );
 }
 
+type CockpitImplementingLockRefusal = {
+  projectId: string;
+  refusal: ImplementingLockRefusal;
+};
+
 export function CockpitPage() {
   const { data, isLoading, error, refetch, isFetching } = useIssuesQuery();
   const openProjectDialog = useIssueUiStore((s) => s.openProjectDialog);
   const [hiddenIds, setHiddenIds] = useState(() => readCockpitHiddenProjectIds());
+  const [implementingLockRefusal, setImplementingLockRefusal] = useState<
+    CockpitImplementingLockRefusal | undefined
+  >();
 
   const setHiddenIdsAndCookie = useCallback((ids: string[]) => {
     writeCockpitHiddenProjectIds(ids);
@@ -211,7 +221,17 @@ export function CockpitPage() {
                     item={item}
                     issues={issues}
                     to={issuePath(group.projectId, item.issue.id)}
-                    actions={<FlowRowActions item={item} />}
+                    actions={
+                      <FlowRowActions
+                        item={item}
+                        onImplementingLockRefusal={(refusal) =>
+                          setImplementingLockRefusal({
+                            projectId: group.projectId,
+                            refusal,
+                          })
+                        }
+                      />
+                    }
                   />
                 )}
               />
@@ -268,6 +288,11 @@ export function CockpitPage() {
                 Show all projects
               </Button>
             }
+          />
+        ) : implementingLockRefusal ? (
+          <ImplementingLockRefusalState
+            projectId={implementingLockRefusal.projectId}
+            refusal={implementingLockRefusal.refusal}
           />
         ) : (
           <FlowBucketsSections

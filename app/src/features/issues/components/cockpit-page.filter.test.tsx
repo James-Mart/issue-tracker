@@ -29,6 +29,36 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useAgentModelsQuery: () => ({
+    data: { models: [{ id: "composer-2.5", displayName: "Composer 2.5" }] },
+    isLoading: false,
+  }),
+}));
+
+vi.mock("../api/mutations", () => ({
+  useCreateChannelSession: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useUpdateIssue: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
+
+vi.mock("../hooks/use-confirm-channel-live-run", () => ({
+  useConfirmChannelLiveRun: () => ({
+    confirmIfLiveRun: (action: () => void) => {
+      action();
+    },
+    awaitingConfirm: false,
+    confirming: false,
+    dialog: null,
+  }),
+}));
+
 vi.mock("../store/use-issue-ui-store", () => ({
   useIssueUiStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({ openProjectDialog: vi.fn() }),
