@@ -103,6 +103,72 @@ function parseShortstat(text: string): ChangeStats {
   };
 }
 
+async function assertCommitsContiguous(
+  shas: string[],
+  workspace: string,
+): Promise<void> {
+  for (let i = 0; i < shas.length - 1; i++) {
+    const from = shas[i]!;
+    const to = shas[i + 1]!;
+    const count = (
+      await runGitOrCommitUnreachable(
+        ["rev-list", "--count", `${from}..${to}`],
+        workspace,
+      )
+    ).trim();
+    if (count !== "1") {
+      throw new IssueError(
+        "commits-not-contiguous",
+        `commits are not contiguous in history between ${from} and ${to}`,
+      );
+    }
+  }
+}
+
+async function readRollupChange(
+  issueId: string,
+  workspace: string,
+): Promise<IssueChange> {
+  const commits = collectDescendantCommits(issueId);
+  if (commits.length === 0) {
+    return { state: "empty", reason: "no-descendant-commits" };
+  }
+
+  const shas = commits.map((commit) => commit.sha);
+  await assertCommitsContiguous(shas, workspace);
+
+  const first = shas[0]!;
+  const last = shas[shas.length - 1]!;
+  const base = (
+    await runGitOrCommitUnreachable(["rev-parse", `${first}^`], workspace)
+  ).trim();
+  const range = `${base}..${last}`;
+  const patch = await runGitOrCommitUnreachable(["diff", range], workspace);
+  const statOut = await runGitOrCommitUnreachable(
+    ["diff", "--stat", range],
+    workspace,
+  );
+
+  const withSubjects = await Promise.all(
+    commits.map(async (commit) => ({
+      sha: commit.sha,
+      subject: (
+        await runGitOrCommitUnreachable(
+          ["show", "-s", "--format=%s", commit.sha],
+          workspace,
+        )
+      ).trimEnd(),
+    })),
+  );
+
+  return {
+    state: "loaded",
+    commits: withSubjects,
+    patch,
+    stats: parseShortstat(statOut),
+  };
+}
+
 async function readTaskChange(
   task: Extract<Issue, { kind: "task" }>,
   workspace: string,
@@ -140,15 +206,19 @@ async function readTaskChange(
 
 export async function readIssueChange(issueId: string): Promise<IssueChange> {
   const issue = readIssueOrThrow(issueId);
-  if (issue.kind !== "task") {
-    throw new IssueError(
-      "validation",
-      `change is not implemented for kind "${issue.kind}"`,
-    );
-  }
-
   const chain = ancestorChain(issueId, readAll().issues);
   const project = chain[0]!;
   const workspace = requireProjectWorkspace(project.id);
-  return readTaskChange(issue, workspace);
+
+  if (issue.kind === "task") {
+    return readTaskChange(issue, workspace);
+  }
+  if (issue.kind === "story" || issue.kind === "epic") {
+    return readRollupChange(issueId, workspace);
+  }
+
+  throw new IssueError(
+    "validation",
+    `change is not implemented for kind "${issue.kind}"`,
+  );
 }
