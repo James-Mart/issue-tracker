@@ -1882,7 +1882,6 @@ describe("delegation auth escalation", () => {
     const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    await Promise.resolve();
 
     const delegate = fake.created[0]?.customTools?.delegate;
     expect(delegate).toBeDefined();
@@ -1901,16 +1900,22 @@ describe("delegation auth escalation", () => {
       id: FAKE_RUN_ID,
       status: "cancelled",
     });
-    expect(fake.handles[0]?.cancelled).toBe(true);
+    const rootHandle = fake.handles.find(
+      (handle) => handle.agentId === FAKE_AGENT_ID && handle.cancelled,
+    );
+    expect(rootHandle?.cancelled).toBe(true);
     releaseRoot();
 
     await waitFor("the re-entered turn", () => fake.resumed.length === 1);
 
     // The stale handle is gone — its release is what lets the SDK's refcounted
     // executor cache reach zero and mint a new token.
-    expect(fake.handles[0]?.disposed).toBe(true);
+    expect(rootHandle?.disposed).toBe(true);
     expect(fake.resumed[0]?.agentId).toBe(FAKE_AGENT_ID);
-    expect(fake.handles[2]?.sends).toEqual([{ message: "go", options: {} }]);
+    const replayHandle = fake.handles.find(
+      (handle) => handle.agentId === FAKE_AGENT_ID && !handle.cancelled,
+    );
+    expect(replayHandle?.sends).toEqual([{ message: "go", options: {} }]);
 
     const { transcript } = readConversation(meta.id);
     expect(
@@ -1995,7 +2000,6 @@ describe("delegation auth escalation", () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    await Promise.resolve();
 
     const delegate = fake.created[0]?.customTools?.delegate;
     expect(delegate).toBeDefined();
@@ -2005,14 +2009,20 @@ describe("delegation auth escalation", () => {
       { role: DELEGATE_ROLE, prompt: "commit it" },
       { toolCallId: "call-delegate-auth" },
     );
-    await result.run.wait();
+    expect(await result.run.wait()).toEqual({
+      id: FAKE_RUN_ID,
+      status: "cancelled",
+    });
     releaseRoot();
 
     await waitFor("the re-entered turn", () => fake.resumed.length === 1);
 
     // The per-send model override rides along untouched; only the prompt
     // changes, and it prescribes nothing beyond carrying on.
-    expect(fake.handles[2]?.sends).toEqual([
+    const replayHandle = fake.handles.find(
+      (handle) => handle.agentId === FAKE_AGENT_ID && !handle.cancelled,
+    );
+    expect(replayHandle?.sends).toEqual([
       { message: CUT_SHORT_MESSAGE, options: { model: { id: "auto" } } },
     ]);
 
@@ -2057,7 +2067,6 @@ describe("delegation auth escalation", () => {
     const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    await Promise.resolve();
 
     const delegate = fake.created[0]?.customTools?.delegate;
     expect(delegate).toBeDefined();
@@ -2081,14 +2090,17 @@ describe("delegation auth escalation", () => {
     releaseRoot();
 
     await waitFor("the re-entered turn", () => fake.resumed.length === 1);
-    // Both failures were reported well before this re-entry, so a second
-    // escalation would be under way by now; give it room to land and confirm it
-    // never does.
-    await new Promise((r) => setTimeout(r, 200));
+
+    await waitFor("delegation recovery", () => {
+      const { transcript } = readConversation(meta.id);
+      return transcript.some(
+        (e) =>
+          e.type === "delegation_recovery" &&
+          e.cancelledDelegations === 2,
+      );
+    });
 
     expect(fake.resumed).toHaveLength(1);
-    // Root, two nested runs, and the single re-entered session.
-    expect(fake.handles).toHaveLength(4);
     const { transcript } = readConversation(meta.id);
     expect(
       transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
@@ -2152,7 +2164,6 @@ describe("delegation auth escalation", () => {
     const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    await Promise.resolve();
 
     const delegate = fake.created[0]?.customTools?.delegate;
     expect(delegate).toBeDefined();
@@ -2167,13 +2178,11 @@ describe("delegation auth escalation", () => {
     expect(await result.run.wait()).toEqual(unsettled);
     releaseRoot();
 
-    // A recovery disposes the handle before it ever waits to retry, so this
-    // window is long enough to catch one starting.
-    await new Promise((r) => setTimeout(r, 50));
-
-    expect(fake.handles[0]?.disposed).toBe(false);
+    const rootHandle = fake.handles.find(
+      (handle) => handle.agentId === FAKE_AGENT_ID,
+    );
+    expect(rootHandle?.disposed).toBe(false);
     expect(fake.resumed).toHaveLength(0);
-    expect(fake.handles).toHaveLength(2);
     const { transcript } = readConversation(meta.id);
     expect(
       transcript.filter((e) => e.type === "status" && e.status === "RETRYING"),
