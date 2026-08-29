@@ -89,6 +89,19 @@ async function loadChange() {
   return import("./change.js");
 }
 
+function writeStory(id: string, extra: Record<string, unknown> = {}): void {
+  writeIssue(id, {
+    kind: "story",
+    title: id,
+    partOf: "e",
+    merged: false,
+    order: 0,
+    createdAt: AT,
+    updatedAt: AT,
+    ...extra,
+  });
+}
+
 function writeTask(id: string, extra: Record<string, unknown> = {}): void {
   writeIssue(id, {
     kind: "task",
@@ -100,6 +113,10 @@ function writeTask(id: string, extra: Record<string, unknown> = {}): void {
     updatedAt: AT,
     ...extra,
   });
+}
+
+function sha(n: number): string {
+  return n.toString(16).padStart(40, "0");
 }
 
 describe("readIssueChange", () => {
@@ -178,5 +195,49 @@ describe("readIssueChange", () => {
     await expect(readIssueChange("t5")).rejects.toMatchObject({
       code: "git-failed",
     });
+  });
+});
+
+describe("collectDescendantCommits", () => {
+  function writeFixtureTree(): void {
+    writeIssue("tree", {
+      kind: "epic",
+      title: "Tree",
+      partOf: "p",
+      order: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeStory("s-a", { partOf: "tree", order: 0 });
+    writeStory("s-b", { partOf: "tree", order: 1 });
+    writeStory("s-stacked", { partOf: "tree", order: 0, stackedOn: "s-a" });
+    writeTask("t-a1", { partOf: "s-a", order: 0, commitSha: sha(1) });
+    writeTask("t-missing", { partOf: "s-a", order: 1 });
+    writeTask("t-nodiff", {
+      partOf: "s-a",
+      order: 2,
+      commitSha: sha(2),
+      noDiff: true,
+    });
+    writeTask("t-a2", { partOf: "s-a", order: 3, commitSha: sha(3) });
+    writeTask("t-stacked", { partOf: "s-stacked", order: 0, commitSha: sha(4) });
+    writeTask("t-b1", { partOf: "s-b", order: 0, commitSha: sha(5) });
+  }
+
+  it("returns recorded shas in implementation order and skips empty tasks", async () => {
+    writeFixtureTree();
+    const { collectDescendantCommits } = await loadChange();
+
+    expect(collectDescendantCommits("tree").map((c) => c.sha)).toEqual([
+      sha(1),
+      sha(3),
+      sha(4),
+      sha(5),
+    ]);
+    expect(collectDescendantCommits("s-a").map((c) => c.sha)).toEqual([
+      sha(1),
+      sha(3),
+      sha(4),
+    ]);
   });
 });

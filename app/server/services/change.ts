@@ -1,9 +1,71 @@
-import type { ChangeStats, Issue, IssueChange } from "../schemas.js";
+import { bySequence } from "../order.js";
+import type { ChangeCommit, ChangeStats, Issue, IssueChange } from "../schemas.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { ancestorChain } from "./subtree.js";
+
+type Story = Extract<Issue, { kind: "story" }>;
+type Task = Extract<Issue, { kind: "task" }>;
+
+function isChildOf(issue: Issue, parentId: string): boolean {
+  return issue.kind !== "project" && issue.partOf === parentId;
+}
+
+function taskCommit(task: Task): ChangeCommit | undefined {
+  if (!task.commitSha || task.noDiff) return undefined;
+  return { sha: task.commitSha, subject: "" };
+}
+
+/** Stories / Epics nested under `parent` for the implementation-order walk. */
+function nestedWorkChildren(parent: Issue, issues: Issue[]): Issue[] {
+  if (parent.kind === "story") {
+    return issues
+      .filter(
+        (child): child is Story =>
+          child.kind === "story" && child.stackedOn === parent.id,
+      )
+      .sort(bySequence);
+  }
+  const siblingStories = issues.filter(
+    (child): child is Story => child.kind === "story" && isChildOf(child, parent.id),
+  );
+  const siblingIds = new Set(siblingStories.map((story) => story.id));
+  return issues
+    .filter((child) => {
+      if (!isChildOf(child, parent.id)) return false;
+      if (child.kind === "epic") return true;
+      if (child.kind !== "story") return false;
+      return !child.stackedOn || !siblingIds.has(child.stackedOn);
+    })
+    .sort(bySequence);
+}
+
+function collectFrom(issue: Issue, issues: Issue[], out: ChangeCommit[]): void {
+  if (issue.kind === "task") {
+    const commit = taskCommit(issue);
+    if (commit) out.push(commit);
+    return;
+  }
+  const tasks = issues
+    .filter(
+      (child): child is Task => child.kind === "task" && isChildOf(child, issue.id),
+    )
+    .sort(bySequence);
+  for (const task of tasks) collectFrom(task, issues, out);
+  for (const child of nestedWorkChildren(issue, issues)) {
+    collectFrom(child, issues, out);
+  }
+}
+
+/** Descendant Task shas in implementation order: tasks, then stacked stories, depth-first. */
+export function collectDescendantCommits(issueId: string): ChangeCommit[] {
+  const issue = readIssueOrThrow(issueId);
+  const commits: ChangeCommit[] = [];
+  collectFrom(issue, readAll().issues, commits);
+  return commits;
+}
 
 function isCommitUnreachableMessage(message: string): boolean {
   const lower = message.toLowerCase();
