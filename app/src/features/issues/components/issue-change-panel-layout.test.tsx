@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,6 +53,8 @@ vi.mock("@pierre/diffs/react", () => ({
       {fileDiff.name}
     </div>
   ),
+  Virtualizer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  useVirtualizer: () => undefined,
 }));
 
 vi.mock("../api/queries", () => ({

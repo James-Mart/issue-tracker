@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +22,10 @@ vi.mock("@pierre/diffs/react", () => ({
   FileDiff: ({ fileDiff }: { fileDiff: { name: string } }) => (
     <div data-testid="file-diff">{fileDiff.name}</div>
   ),
+  Virtualizer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="issue-change-virtualizer">{children}</div>
+  ),
+  useVirtualizer: () => undefined,
 }));
 
 vi.mock("../api/queries", () => ({
@@ -163,9 +167,14 @@ describe("IssueChangePanel", () => {
       "3 of 3",
     );
     expect(
-      container.querySelector('[data-testid="issue-change-file-diff"]')?.getAttribute("data-file-name"),
-    ).toBe("app/foo.ts");
-    expect(container.querySelector('[data-testid="file-diff"]')?.textContent).toBe("app/foo.ts");
+      Array.from(container.querySelectorAll('[data-testid="issue-change-file-diff"]')).map((el) =>
+        el.getAttribute("data-file-name"),
+      ),
+    ).toEqual(["app/foo.ts", "app/bar.ts", "lib/baz.ts"]);
+    expect(
+      Array.from(container.querySelectorAll('[data-testid="file-diff"]')).map((el) => el.textContent),
+    ).toEqual(["app/foo.ts", "app/bar.ts", "lib/baz.ts"]);
+    expect(container.querySelector('[data-testid="issue-change-virtualizer"]')).not.toBeNull();
     expect(
       container
         .querySelector('[data-testid="issue-change-file"][data-file-name="app/foo.ts"]')
@@ -185,8 +194,10 @@ describe("IssueChangePanel", () => {
       "2 of 3",
     );
     expect(
-      container.querySelector('[data-testid="issue-change-file-diff"]')?.getAttribute("data-file-name"),
-    ).toBe("app/foo.ts");
+      Array.from(container.querySelectorAll('[data-testid="issue-change-file-diff"]')).map((el) =>
+        el.getAttribute("data-file-name"),
+      ),
+    ).toEqual(["app/foo.ts", "app/bar.ts"]);
 
     act(() => {
       container
@@ -195,10 +206,11 @@ describe("IssueChangePanel", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="issue-change-file-diff"]')?.getAttribute("data-file-name"),
+      container
+        .querySelector('[data-testid="issue-change-file-diff"][data-file-name="app/bar.ts"]')
+        ?.querySelector('[data-testid="file-diff"]')?.textContent,
     ).toBe("app/bar.ts");
-    expect(container.querySelector('[data-testid="file-diff"]')?.textContent).toBe("app/bar.ts");
-    expect(container.querySelectorAll('[data-testid="file-diff"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-testid="file-diff"]')).toHaveLength(2);
     expect(
       container
         .querySelector('[data-testid="issue-change-file"][data-file-name="app/bar.ts"]')

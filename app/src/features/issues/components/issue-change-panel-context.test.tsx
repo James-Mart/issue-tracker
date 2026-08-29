@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
-import { useState } from "react";
-import { act } from "react";
+import { act, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -58,6 +57,8 @@ const changeQueryState = vi.hoisted(() => ({
 }));
 
 vi.mock("@pierre/diffs/react", () => ({
+  Virtualizer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  useVirtualizer: () => undefined,
   FileDiff: function FileDiffMock({
     fileDiff,
     options,

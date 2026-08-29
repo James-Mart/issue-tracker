@@ -1,12 +1,16 @@
 import {
   useCallback,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from "react";
 import {
   FileDiff,
+  Virtualizer,
+  useVirtualizer,
   type FileDiffContentsLoader,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
@@ -232,12 +236,14 @@ function IssueChangeFileDiff({
   sha,
   contentsCache,
   diffLayout,
+  fileRef,
 }: {
   fileDiff: FileDiffMetadata;
   issueId: string;
   sha: string;
   contentsCache: Map<string, Promise<string>>;
   diffLayout: DiffLayout;
+  fileRef?: Ref<HTMLDivElement>;
 }) {
   const [loading, setLoading] = useState(false);
   const loadDiffFiles: FileDiffContentsLoader = useCallback(
@@ -259,6 +265,7 @@ function IssueChangeFileDiff({
 
   return (
     <div
+      ref={fileRef}
       className="min-w-0 overflow-hidden rounded-lg border border-border"
       data-testid="issue-change-file-diff"
       data-file-name={fileDiff.name}
@@ -304,6 +311,7 @@ function IssueChangeLoadedPanel({
   const matched = useMemo(() => filterFilesByPath(files, filter), [files, filter]);
   const selectedFile =
     matched.find((file) => file.name === selectedName) ?? matched[0];
+  const rollupFiles = files.length > 1 ? matched : files;
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="issue-change-panel">
@@ -318,8 +326,14 @@ function IssueChangeLoadedPanel({
           <DiffLayoutToggle layout={layout} onLayoutChange={setLayout} />
         ) : null}
       </div>
-      {files.length > 1 ? (
-        <div className="flex min-w-0 flex-col gap-3 shell:flex-row shell:items-start">
+      <div
+        className={
+          files.length > 1
+            ? "flex min-w-0 flex-col gap-3 shell:flex-row shell:items-start"
+            : "flex min-w-0 flex-col gap-3"
+        }
+      >
+        {files.length > 1 ? (
           <IssueChangeFileNavigator
             files={files}
             matched={matched}
@@ -328,33 +342,98 @@ function IssueChangeLoadedPanel({
             selectedName={selectedFile?.name ?? ""}
             onSelect={setSelectedName}
           />
-          {selectedFile ? (
-            <div className="min-w-0 flex-1">
-              <IssueChangeFileDiff
-                key={selectedFile.name}
-                fileDiff={selectedFile}
-                issueId={issueId}
-                sha={sha}
-                contentsCache={contentsCache}
-                diffLayout={diffLayout}
-              />
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="flex min-w-0 flex-col gap-3">
-          {files.map((fileDiff, index) => (
-            <IssueChangeFileDiff
-              key={`${fileDiff.name}-${index}`}
-              fileDiff={fileDiff}
-              issueId={issueId}
-              sha={sha}
-              contentsCache={contentsCache}
-              diffLayout={diffLayout}
-            />
-          ))}
-        </div>
-      )}
+        ) : null}
+        {rollupFiles.length > 0 ? (
+          <IssueChangeVirtualizedRollup
+            files={rollupFiles}
+            selectedName={selectedFile?.name}
+            issueId={issueId}
+            sha={sha}
+            contentsCache={contentsCache}
+            diffLayout={diffLayout}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function IssueChangeVirtualizedRollup({
+  files,
+  selectedName,
+  issueId,
+  sha,
+  contentsCache,
+  diffLayout,
+}: {
+  files: FileDiffMetadata[];
+  selectedName: string | undefined;
+  issueId: string;
+  sha: string;
+  contentsCache: Map<string, Promise<string>>;
+  diffLayout: DiffLayout;
+}) {
+  return (
+    <div className="min-w-0 flex-1" data-testid="issue-change-rollup">
+      <Virtualizer className="max-h-[min(70vh,56rem)] overflow-auto">
+        <IssueChangeVirtualizedFiles
+          files={files}
+          selectedName={selectedName}
+          issueId={issueId}
+          sha={sha}
+          contentsCache={contentsCache}
+          diffLayout={diffLayout}
+        />
+      </Virtualizer>
+    </div>
+  );
+}
+
+function IssueChangeVirtualizedFiles({
+  files,
+  selectedName,
+  issueId,
+  sha,
+  contentsCache,
+  diffLayout,
+}: {
+  files: FileDiffMetadata[];
+  selectedName: string | undefined;
+  issueId: string;
+  sha: string;
+  contentsCache: Map<string, Promise<string>>;
+  diffLayout: DiffLayout;
+}) {
+  const virtualizer = useVirtualizer();
+  const fileNodes = useRef(new Map<string, HTMLDivElement>());
+
+  useLayoutEffect(() => {
+    if (selectedName == null || virtualizer == null || virtualizer.getRoot() == null) {
+      return;
+    }
+    const node = fileNodes.current.get(selectedName);
+    if (node == null) return;
+    virtualizer.scrollTo({
+      top: virtualizer.getOffsetInScrollContainer(node),
+    });
+  }, [selectedName, virtualizer]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {files.map((fileDiff, index) => (
+        <IssueChangeFileDiff
+          key={`${fileDiff.name}-${index}`}
+          fileRef={(node) => {
+            if (node) fileNodes.current.set(fileDiff.name, node);
+            else fileNodes.current.delete(fileDiff.name);
+          }}
+          fileDiff={fileDiff}
+          issueId={issueId}
+          sha={sha}
+          contentsCache={contentsCache}
+          diffLayout={diffLayout}
+        />
+      ))}
     </div>
   );
 }
