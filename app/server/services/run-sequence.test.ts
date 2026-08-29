@@ -1828,4 +1828,79 @@ describe("recentRuns", () => {
       },
     ]);
   });
+
+  it("derives list badges without reading the issue store or calling runSequence", async () => {
+    writeWorkTree();
+    writeIssue("task-on-disk", {
+      kind: "task",
+      title: "On disk",
+      partOf: "story-one",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    writeConversation("conv-recovered", {
+      meta: {
+        channel: "implementing",
+        issueId: "task-on-disk",
+        createdAt: AT_LATE,
+      },
+      delegations: [
+        delegation({
+          delegationId: "del-fail",
+          agentId: "agent-fail",
+          role: "implementor",
+          model: "composer-2.5",
+          at: AT,
+          issueId: "task-on-disk",
+          parentCallId: "call-fail",
+          end: { status: "error", endedAt: AT_END },
+        }),
+        delegation({
+          delegationId: "del-ok",
+          agentId: "agent-ok",
+          role: "validator",
+          model: "composer-2.5",
+          at: AT_CHILD,
+          issueId: "task-on-disk",
+          parentCallId: "call-ok",
+          end: { status: "completed", endedAt: AT_LATE },
+        }),
+      ],
+      transcript: [
+        toolCall("call-fail", "running", AT, 1),
+        toolCall("call-fail", "error", AT_END, 2),
+        toolCall("call-ok", "running", AT_CHILD, 3),
+        toolCall("call-ok", "completed", AT_LATE, 4),
+      ],
+    });
+
+    const issues = await import("./issues.js");
+    const readAllSpy = vi.spyOn(issues, "readAll");
+    const readIssueOrThrowSpy = vi.spyOn(issues, "readIssueOrThrow");
+    const readSpy = vi.spyOn(issues, "read");
+    const readDescriptionSpy = vi.spyOn(issues, "readDescription");
+
+    const runSequenceModule = await import("./run-sequence.js");
+    const runSequenceSpy = vi.spyOn(runSequenceModule, "runSequence");
+
+    const runs = runSequenceModule.recentRuns(10);
+
+    expect(readAllSpy).not.toHaveBeenCalled();
+    expect(readIssueOrThrowSpy).not.toHaveBeenCalled();
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(readDescriptionSpy).not.toHaveBeenCalled();
+    expect(runSequenceSpy).not.toHaveBeenCalled();
+
+    expect(runs).toEqual([
+      {
+        conversationId: "conv-recovered",
+        coordinatorLabel: "implementing",
+        startedAt: AT_LATE,
+        condition: "completed",
+        issueId: "task-on-disk",
+        recoveredErrors: 1,
+      },
+    ]);
+  });
 });
