@@ -35,20 +35,28 @@ vi.mock("../api/queries", () => ({
 }));
 
 const MULTI_FILE_PATCH = [
-  "diff --git a/foo.ts b/foo.ts",
+  "diff --git a/app/foo.ts b/app/foo.ts",
   "index 1111111..2222222 100644",
-  "--- a/foo.ts",
-  "+++ b/foo.ts",
-  "@@ -1 +1,2 @@",
+  "--- a/app/foo.ts",
+  "+++ b/app/foo.ts",
+  "@@ -1 +1,3 @@",
   " line",
   "+added",
-  "diff --git a/bar.ts b/bar.ts",
+  "+again",
+  "diff --git a/app/bar.ts b/app/bar.ts",
   "index 3333333..4444444 100644",
-  "--- a/bar.ts",
-  "+++ b/bar.ts",
-  "@@ -1 +1,2 @@",
+  "--- a/app/bar.ts",
+  "+++ b/app/bar.ts",
+  "@@ -1,2 +1 @@",
+  "-gone",
   " other",
-  "+added too",
+  "diff --git a/lib/baz.ts b/lib/baz.ts",
+  "index 5555555..6666666 100644",
+  "--- a/lib/baz.ts",
+  "+++ b/lib/baz.ts",
+  "@@ -1 +1,2 @@",
+  " keep",
+  "+new",
 ].join("\n");
 
 function mountPanel(): HTMLDivElement {
@@ -102,27 +110,133 @@ describe("classifyIssueChangePanelFault", () => {
       ),
     ).toBeUndefined();
   });
+
+  it("maps commits-not-contiguous API failures", () => {
+    expect(
+      classifyIssueChangePanelFault(
+        new ApiError("commits are not contiguous in history between a and b", 400, {
+          code: "commits-not-contiguous",
+        }),
+      ),
+    ).toBe("commits-not-contiguous");
+  });
 });
 
+function setInputValue(input: HTMLInputElement, next: string) {
+  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  )!.set!;
+  act(() => {
+    nativeInputValueSetter.call(input, next);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 describe("IssueChangePanel", () => {
-  it("renders one FileDiff per file in a multi-file patch", () => {
+  it("lists files from a multi-file patch, filters them, and moves the diff on select", () => {
     changeQueryState.data = {
       state: "loaded",
       patch: MULTI_FILE_PATCH,
       commits: [{ sha: "0123456789abcdef0123456789abcdef01234567", subject: "Multi" }],
-      stats: { filesChanged: 2, insertions: 2, deletions: 0 },
+      stats: { filesChanged: 3, insertions: 3, deletions: 1 },
     };
 
     const container = mountPanel();
 
     expect(container.querySelector('[data-testid="issue-change-scope-header"]')?.textContent).toBe(
-      "2 files +2 -0 1 commit · 0123456",
+      "3 files +3 -1 1 commit · 0123456",
     );
 
-    const fileDiffs = container.querySelectorAll('[data-testid="file-diff"]');
-    expect(fileDiffs).toHaveLength(2);
-    expect(fileDiffs[0]?.textContent).toBe("foo.ts");
-    expect(fileDiffs[1]?.textContent).toBe("bar.ts");
+    const listed = Array.from(
+      container.querySelectorAll('[data-testid="issue-change-file"]'),
+    ).map((el) => ({
+      name: el.getAttribute("data-file-name"),
+      label: el.textContent,
+    }));
+    expect(listed).toEqual([
+      { name: "app/foo.ts", label: "app/foo.ts+2 -0" },
+      { name: "app/bar.ts", label: "app/bar.ts+0 -1" },
+      { name: "lib/baz.ts", label: "lib/baz.ts+1 -0" },
+    ]);
+    expect(container.querySelector('[data-testid="issue-change-file-match-count"]')?.textContent).toBe(
+      "3 of 3",
+    );
+    expect(
+      container.querySelector('[data-testid="issue-change-file-diff"]')?.getAttribute("data-file-name"),
+    ).toBe("app/foo.ts");
+    expect(container.querySelector('[data-testid="file-diff"]')?.textContent).toBe("app/foo.ts");
+    expect(
+      container
+        .querySelector('[data-testid="issue-change-file"][data-file-name="app/foo.ts"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+
+    setInputValue(
+      container.querySelector('[data-testid="issue-change-file-filter"]') as HTMLInputElement,
+      "app/",
+    );
+
+    const narrowed = Array.from(
+      container.querySelectorAll('[data-testid="issue-change-file"]'),
+    ).map((el) => el.getAttribute("data-file-name"));
+    expect(narrowed).toEqual(["app/foo.ts", "app/bar.ts"]);
+    expect(container.querySelector('[data-testid="issue-change-file-match-count"]')?.textContent).toBe(
+      "2 of 3",
+    );
+    expect(
+      container.querySelector('[data-testid="issue-change-file-diff"]')?.getAttribute("data-file-name"),
+    ).toBe("app/foo.ts");
+
+    act(() => {
+      container
+        .querySelector('[data-testid="issue-change-file"][data-file-name="app/bar.ts"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(
+      container.querySelector('[data-testid="issue-change-file-diff"]')?.getAttribute("data-file-name"),
+    ).toBe("app/bar.ts");
+    expect(container.querySelector('[data-testid="file-diff"]')?.textContent).toBe("app/bar.ts");
+    expect(container.querySelectorAll('[data-testid="file-diff"]')).toHaveLength(1);
+    expect(
+      container
+        .querySelector('[data-testid="issue-change-file"][data-file-name="app/bar.ts"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+
+    setInputValue(
+      container.querySelector('[data-testid="issue-change-file-filter"]') as HTMLInputElement,
+      "baz",
+    );
+
+    expect(
+      Array.from(container.querySelectorAll('[data-testid="issue-change-file"]')).map((el) =>
+        el.getAttribute("data-file-name"),
+      ),
+    ).toEqual(["lib/baz.ts"]);
+    expect(container.querySelector('[data-testid="issue-change-file-match-count"]')?.textContent).toBe(
+      "1 of 3",
+    );
+    expect(
+      container.querySelector('[data-testid="issue-change-file-diff"]')?.getAttribute("data-file-name"),
+    ).toBe("lib/baz.ts");
+    expect(
+      container
+        .querySelector('[data-testid="issue-change-file"][data-file-name="lib/baz.ts"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+
+    setInputValue(
+      container.querySelector('[data-testid="issue-change-file-filter"]') as HTMLInputElement,
+      "no-such-file",
+    );
+
+    expect(container.querySelectorAll('[data-testid="issue-change-file"]')).toHaveLength(0);
+    expect(container.querySelector('[data-testid="issue-change-file-match-count"]')?.textContent).toBe(
+      "0 of 3",
+    );
+    expect(container.querySelector('[data-testid="issue-change-file-diff"]')).toBeNull();
   });
 
   it("renders distinct empty content for no-commit", () => {
@@ -149,6 +263,22 @@ describe("IssueChangePanel", () => {
     expect(container.textContent).toContain("This task has no code change.");
     expect(container.textContent).toContain(
       "The tracker has no diff to load for this task. Record a commit if a change should appear here.",
+    );
+    expect(container.querySelector('[data-testid="issue-change-fault-state"]')).toBeNull();
+  });
+
+  it("renders distinct empty content for no-descendant-commits", () => {
+    changeQueryState.data = { state: "empty", reason: "no-descendant-commits" };
+
+    const container = mountPanel();
+    const empty = container.querySelector('[data-testid="issue-change-empty-state"]');
+
+    expect(empty?.getAttribute("data-empty-reason")).toBe("no-descendant-commits");
+    expect(container.textContent).toContain(
+      "No descendant tasks have recorded commits yet.",
+    );
+    expect(container.textContent).toContain(
+      "Rollup diffs appear when child tasks finish with commits.",
     );
     expect(container.querySelector('[data-testid="issue-change-fault-state"]')).toBeNull();
   });
@@ -197,6 +327,28 @@ describe("IssueChangePanel", () => {
       reloadButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(changeQueryState.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders commits-not-contiguous as a fault explaining why no rollup diff", () => {
+    changeQueryState.error = new ApiError(
+      "commits are not contiguous in history between abc and def",
+      400,
+      { code: "commits-not-contiguous" },
+    );
+
+    const container = mountPanel();
+    const fault = container.querySelector('[data-testid="issue-change-fault-state"]');
+
+    expect(fault?.getAttribute("data-fault")).toBe("commits-not-contiguous");
+    expect(container.textContent).toContain("Diff unavailable");
+    expect(container.textContent).toContain("Commits are not contiguous in history");
+    expect(container.textContent).toContain(
+      "Child tasks recorded commits that are not adjacent in git history, so no combined diff can be shown for this issue.",
+    );
+    expect(container.textContent).toContain(
+      "commits are not contiguous in history between abc and def",
+    );
+    expect(container.querySelector('[data-testid="issue-change-empty-state"]')).toBeNull();
   });
 
   it("does not render empty-state chrome for faults", () => {

@@ -149,6 +149,7 @@ export function useIssueChangeQuery(
     queryFn: () => request<IssueChange>(`/api/issues/${issueId}/change`),
     enabled: Boolean(issueId),
     retry: (count, error) =>
-      !(error instanceof ApiError && error.status === 404) && count < 2,
+      !(error instanceof ApiError && error.status >= 400 && error.status < 500) &&
+      count < 2,
   });
 }

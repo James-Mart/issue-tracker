@@ -8,6 +8,7 @@ export type IssueErrorCode =
   | "git-missing"
   | "git-failed"
   | "commit-unreachable"
+  | "commits-not-contiguous"
   | "not-github-pr-url";
 
 const STATUS: Record<IssueErrorCode, number> = {
@@ -20,6 +21,7 @@ const STATUS: Record<IssueErrorCode, number> = {
   "git-missing": 503,
   "git-failed": 502,
   "commit-unreachable": 404,
+  "commits-not-contiguous": 400,
   "not-github-pr-url": 400,
 };
 

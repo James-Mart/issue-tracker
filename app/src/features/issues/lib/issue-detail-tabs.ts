@@ -53,6 +53,13 @@ export function agentsTabForIssue(
   return false;
 }
 
+/** Diff tab for Task, Story, and Epic — kind-only, not data-dependent. */
+export function diffTabForIssue(issue: Issue): boolean {
+  return (
+    issue.kind === "task" || issue.kind === "story" || issue.kind === "epic"
+  );
+}
+
 /**
  * Page-level tab set for issue detail: Overview always; optional channel;
  * Project keeps supporting-doc preview tabs.
@@ -75,7 +82,7 @@ export function tabsForIssueDetail(
   if (agentsTabForIssue(issue, parentKind)) {
     tabs.push({ key: AGENTS_DETAIL_TAB, label: "Agents" });
   }
-  if (issue.kind === "task") {
+  if (diffTabForIssue(issue)) {
     tabs.push({ key: DIFF_DETAIL_TAB, label: "Diff" });
   }
   if (issue.kind === "project") {

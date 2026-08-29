@@ -113,20 +113,22 @@ describe("tabsForIssueDetail", () => {
     });
   });
 
-  it("Epic: Overview + Implementing", () => {
+  it("Epic: Overview + Implementing + Diff", () => {
     expect(tabsForIssueDetail(epic).map((t) => t.key)).toEqual([
       "overview",
       "implementing",
+      "diff",
     ]);
   });
 
-  it("Story: channel only when parent is Project", () => {
+  it("Story: channel when parent is Project, plus Diff", () => {
     expect(
       tabsForIssueDetail(projectStory, "project").map((t) => t.key),
-    ).toEqual(["overview", "implementing"]);
+    ).toEqual(["overview", "implementing", "diff"]);
     expect(tabsForIssueDetail(epicStory, "epic").map((t) => t.key)).toEqual([
       "overview",
       "agents",
+      "diff",
     ]);
   });
 

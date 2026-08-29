@@ -90,6 +90,38 @@ function idea(): IssueDetail {
   };
 }
 
+function epic(): IssueDetail {
+  return {
+    id: "epic-1",
+    kind: "epic",
+    title: "Hierarchical diff views",
+    partOf: "issue-tracker",
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+    blockedBy: [],
+    archived: false,
+    description: "",
+    labels: [],
+  };
+}
+
+function story(): IssueDetail {
+  return {
+    id: "story-1",
+    kind: "story",
+    title: "Rollup grain",
+    partOf: "epic-1",
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+    blockedBy: [],
+    archived: false,
+    description: "",
+    labels: [],
+  };
+}
+
 function mountTabs(
   issue: IssueDetail,
   initialEntry = "/",
@@ -124,17 +156,25 @@ afterEach(() => {
 });
 
 describe("IssueDetailTabs diff tab", () => {
-  it("offers Diff for a Task and not for an Idea", () => {
-    const taskContainer = mountTabs(task()).container;
-    const taskTabLabels = Array.from(taskContainer.querySelectorAll('[role="tab"]')).map(
-      (el) => el.textContent?.trim(),
-    );
+  it("offers Diff for Task, Story, and Epic but not for Idea", () => {
+    const taskTabLabels = Array.from(
+      mountTabs(task()).container.querySelectorAll('[role="tab"]'),
+    ).map((el) => el.textContent?.trim());
     expect(taskTabLabels.some((label) => label?.includes("Diff"))).toBe(true);
 
-    const ideaContainer = mountTabs(idea()).container;
-    const ideaTabLabels = Array.from(ideaContainer.querySelectorAll('[role="tab"]')).map(
-      (el) => el.textContent?.trim(),
-    );
+    const storyTabLabels = Array.from(
+      mountTabs(story()).container.querySelectorAll('[role="tab"]'),
+    ).map((el) => el.textContent?.trim());
+    expect(storyTabLabels.some((label) => label?.includes("Diff"))).toBe(true);
+
+    const epicTabLabels = Array.from(
+      mountTabs(epic()).container.querySelectorAll('[role="tab"]'),
+    ).map((el) => el.textContent?.trim());
+    expect(epicTabLabels.some((label) => label?.includes("Diff"))).toBe(true);
+
+    const ideaTabLabels = Array.from(
+      mountTabs(idea()).container.querySelectorAll('[role="tab"]'),
+    ).map((el) => el.textContent?.trim());
     expect(ideaTabLabels.some((label) => label?.includes("Diff"))).toBe(false);
   });
 
