@@ -199,28 +199,6 @@ export function matchesChosenArchiveForReplace(
   return Number.isInteger(parsed) && parsed >= 2 && String(parsed) === n;
 }
 
-export function matchesCandidatePrefix(
-  name: string,
-  directionId: string,
-  otherDirectionIds: Iterable<string> = [],
-): boolean {
-  const prefix = candidateAttachmentPrefix(directionId);
-  if (!name.startsWith(prefix)) return false;
-  if (!name.endsWith("-phone.png") && !name.endsWith("-desktop.png")) {
-    return false;
-  }
-  for (const other of otherDirectionIds) {
-    if (
-      other !== directionId &&
-      other.startsWith(`${directionId}-`) &&
-      name.startsWith(candidateAttachmentPrefix(other))
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
 type CopyPromoteOptions = PromoteOptions & {
   mode: "copy";
   issueId: string;
@@ -378,34 +356,6 @@ async function attachAllConversation(
   return attached;
 }
 
-export async function detachCandidateAttachments(
-  issueId: string,
-): Promise<string[]> {
-  const names = listAttachments(issueId)
-    .map((att) => att.name)
-    .filter((name) => name.startsWith(CANDIDATE_PREFIX));
-  for (const name of names) {
-    await removeAttachment(issueId, name);
-  }
-  return names;
-}
-
-export async function detachCandidateAttachmentsForDirection(
-  issueId: string,
-  directionId: string,
-  conversationId: string,
-): Promise<string[]> {
-  const allNames = listAttachments(issueId).map((att) => att.name);
-  const otherDirectionIds = knownDirectionIds(allNames, conversationId);
-  const names = allNames.filter((name) =>
-    matchesCandidatePrefix(name, directionId, otherDirectionIds),
-  );
-  for (const name of names) {
-    await removeAttachment(issueId, name);
-  }
-  return names;
-}
-
 export async function detachChosenPngsForDirection(
   issueId: string,
   directionId: string,
@@ -523,9 +473,6 @@ export async function attachCapturedDirection(options: {
   }
 
   const attached = await attachAll(options.issueId!, pending.files);
-  if (options.mode === "chosen") {
-    await detachCandidateAttachments(options.issueId!);
-  }
   return { attached, capturePaths: pending.capturePaths };
 }
 

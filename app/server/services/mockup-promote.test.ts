@@ -373,34 +373,10 @@ describe("attachCapturedDirection", () => {
     ).toBe("png:a");
   });
 
-  it("attaches both-viewport PNGs and the archive, then detaches every candidate", async () => {
+  it("attaches both-viewport PNGs and the archive for chosen mode", async () => {
     const { directionDir, harnessConfigPath } = await loadScratch();
-    const {
-      attachCapturedDirection,
-      candidateAttachmentName,
-    } = await loadPromote();
-    const { listAttachments, putAttachment } = await loadAttachments();
-
-    await putAttachment(
-      "src",
-      candidateAttachmentName(
-        "direction-a",
-        "direction-a-card--default",
-        "phone",
-        1,
-      ),
-      Buffer.from("old-a"),
-    );
-    await putAttachment(
-      "src",
-      candidateAttachmentName(
-        "direction-b",
-        "direction-b-list--default",
-        "desktop",
-        1,
-      ),
-      Buffer.from("old-b"),
-    );
+    const { attachCapturedDirection } = await loadPromote();
+    const { listAttachments } = await loadAttachments();
 
     const storiesDir = directionDir("promote-chat", "direction-a");
     writeFileSync(join(storiesDir, "Card.stories.tsx"), "export const Default = {};");
@@ -432,15 +408,100 @@ describe("attachCapturedDirection", () => {
         "mockup-direction-a.tar.gz",
       ].sort(),
     );
-    expect(names.some((name) => name.startsWith("mockup-candidate-"))).toBe(
-      false,
-    );
     expect(result.attached).toEqual([
       "mockup-direction-a-card-default-phone.png",
       "mockup-direction-a-card-default-desktop.png",
       "mockup-direction-a.tar.gz",
     ]);
     expect(result.capturePaths).toEqual([phone, desktop]);
+  });
+
+  it("leaves conversation candidate attachments untouched on chosen promote", async () => {
+    const { directionDir, harnessConfigPath } = await loadScratch();
+    const {
+      attachCapturedDirection,
+      candidateAttachmentName,
+    } = await loadPromote();
+    const { listAttachments } = await loadAttachments();
+    const { listConversationAttachments } = await loadConversationAttachments();
+    const { conversationsDir } = await loadConfig();
+
+    const aPhone = join(root, "a-phone.png");
+    const bDesktop = join(root, "b-desktop.png");
+    writePng(aPhone, "a-phone");
+    writePng(bDesktop, "b-desktop");
+
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      captures: [capture("direction-a-card--default", "phone", aPhone)],
+    });
+    await attachCapturedDirection({
+      mode: "candidate",
+      conversationId: "promote-chat",
+      directionId: "direction-b",
+      captures: [capture("direction-b-list--default", "desktop", bDesktop)],
+    });
+
+    const candidateA = candidateAttachmentName(
+      "direction-a",
+      "direction-a-card--default",
+      "phone",
+      1,
+    );
+    const candidateB = candidateAttachmentName(
+      "direction-b",
+      "direction-b-list--default",
+      "desktop",
+      1,
+    );
+
+    const storiesDir = directionDir("promote-chat", "direction-a");
+    writeFileSync(join(storiesDir, "Card.stories.tsx"), "export const Default = {};");
+    const harnessPath = harnessConfigPath("promote-chat");
+    mkdirSync(join(harnessPath, ".."), { recursive: true });
+    writeFileSync(harnessPath, JSON.stringify({ ok: true }));
+
+    const chosenPhone = join(root, "chosen-phone.png");
+    const chosenDesktop = join(root, "chosen-desktop.png");
+    writePng(chosenPhone, "chosen-phone");
+    writePng(chosenDesktop, "chosen-desktop");
+
+    await attachCapturedDirection({
+      mode: "chosen",
+      conversationId: "promote-chat",
+      directionId: "direction-a",
+      issueId: "src",
+      captures: [
+        capture("direction-a-card--default", "phone", chosenPhone),
+        capture("direction-a-card--default", "desktop", chosenDesktop),
+      ],
+    });
+
+    const issueNames = listAttachments("src").map((att) => att.name).sort();
+    expect(issueNames).toEqual(
+      [
+        "mockup-direction-a-card-default-desktop.png",
+        "mockup-direction-a-card-default-phone.png",
+        "mockup-direction-a.tar.gz",
+      ].sort(),
+    );
+
+    const conversationNames = (await listConversationAttachments("promote-chat"))
+      .map((att) => att.name)
+      .sort();
+    expect(conversationNames).toEqual([candidateA, candidateB].sort());
+    expect(
+      readFileSync(
+        join(conversationsDir, "promote-chat", "attachments", candidateA),
+      ).toString(),
+    ).toBe("png:a-phone");
+    expect(
+      readFileSync(
+        join(conversationsDir, "promote-chat", "attachments", candidateB),
+      ).toString(),
+    ).toBe("png:b-desktop");
   });
 
   it("replaces one direction's chosen PNGs on re-promote and sweeps collision copies", async () => {
