@@ -44,7 +44,7 @@ export type SequenceBeat = {
   variant?: string;
   /** Parent tool call that spawned this beat — used to close it from a live frame. */
   parentCallId?: string;
-  /** Predates lifecycle recording — end cannot be judged. */
+  /** No persisted end and no terminal transcript signal — end cannot be judged. */
   indeterminate?: true;
 };
 
@@ -86,6 +86,12 @@ const HUMAN_ID = "human";
 const COORDINATOR_ID = "coordinator";
 
 type ToolCallEvent = Extract<TranscriptEvent, { type: "tool_call" }>;
+type SubagentUpdateEvent = Extract<TranscriptEvent, { type: "subagent_update" }>;
+
+type TranscriptClose = {
+  endedAt: string;
+  endedInError: boolean;
+};
 
 type OrderedBeat = {
   beat: SequenceBeat;
@@ -131,6 +137,61 @@ function earliestCallEvent(
     if (!best || compareOrder(event, best) < 0) best = event;
   }
   return best;
+}
+
+function isTerminalToolStatus(
+  status: ToolCallEvent["status"],
+): status is "completed" | "error" {
+  return status === "completed" || status === "error";
+}
+
+function subagentUpdateMatchesSpawn(
+  event: SubagentUpdateEvent,
+  record: DelegationRecord,
+): boolean {
+  if (event.delegationId === record.delegationId) return true;
+  return (
+    record.parentCallId !== undefined &&
+    event.parentCallId === record.parentCallId
+  );
+}
+
+/** Latest terminal transcript signal for a spawn that has no persisted end. */
+function terminalTranscriptClose(
+  record: DelegationRecord,
+  transcript: TranscriptEvent[],
+): TranscriptClose | undefined {
+  let best: { at: string; seq?: number; endedInError: boolean } | undefined;
+  for (const event of transcript) {
+    if (event.type === "tool_call") {
+      if (
+        record.parentCallId === undefined ||
+        event.callId !== record.parentCallId ||
+        !isTerminalToolStatus(event.status)
+      ) {
+        continue;
+      }
+      const row = {
+        at: event.at,
+        seq: event.seq,
+        endedInError: event.status === "error",
+      };
+      if (!best || compareOrder(best, row) < 0) best = row;
+      continue;
+    }
+    if (event.type !== "subagent_update") continue;
+    if (!subagentUpdateMatchesSpawn(event, record)) continue;
+    if (event.step.kind !== "tool_call") continue;
+    if (!isTerminalToolStatus(event.step.status)) continue;
+    const row = {
+      at: event.at,
+      seq: event.seq,
+      endedInError: event.step.status === "error",
+    };
+    if (!best || compareOrder(best, row) < 0) best = row;
+  }
+  if (best === undefined) return undefined;
+  return { endedAt: best.at, endedInError: best.endedInError };
 }
 
 function parentLifelineId(
@@ -427,9 +488,17 @@ export function runSequence(conversationId: string): RunSequence {
         ? earliestCallEvent(record.parentCallId, toolCalls)
         : undefined;
     const end = record.end;
-    const closed = end !== undefined;
+    const transcriptClose =
+      end === undefined
+        ? terminalTranscriptClose(record, transcript)
+        : undefined;
+    const endedAt = end?.endedAt ?? transcriptClose?.endedAt;
+    const closed = endedAt !== undefined;
     const indeterminate = !closed && record.lifecycle !== "tracked";
-    const endedInError = end?.status === "error";
+    const endedInError =
+      end !== undefined
+        ? end.status === "error"
+        : (transcriptClose?.endedInError ?? false);
 
     ordered.push({
       beat: {
@@ -439,7 +508,7 @@ export function runSequence(conversationId: string): RunSequence {
         startedAt: record.at,
         kind: "spawn",
         ...(variant !== undefined ? { variant } : {}),
-        ...(closed ? closedDuration(record.at, end.endedAt) : {}),
+        ...(endedAt !== undefined ? closedDuration(record.at, endedAt) : {}),
         ...(record.parentCallId !== undefined
           ? { parentCallId: record.parentCallId }
           : {}),
@@ -452,19 +521,19 @@ export function runSequence(conversationId: string): RunSequence {
       ...(record.issueId !== undefined ? { issueId: record.issueId } : {}),
     });
 
-    if (!closed) continue;
+    if (endedAt === undefined) continue;
 
     ordered.push({
       beat: {
         from: to,
         to: from,
-        label: returnLabel(family, variant, end.status === "error"),
-        startedAt: end.endedAt,
+        label: returnLabel(family, variant, endedInError),
+        startedAt: endedAt,
         kind: "return",
         ...(variant !== undefined ? { variant } : {}),
-        ...closedDuration(record.at, end.endedAt),
+        ...closedDuration(record.at, endedAt),
       },
-      at: end.endedAt,
+      at: endedAt,
       open: false,
       endedInError,
       ...(record.issueId !== undefined ? { issueId: record.issueId } : {}),

@@ -129,6 +129,33 @@ function toolCall(
   };
 }
 
+function subagentToolCall(
+  opts: {
+    parentCallId: string;
+    callId: string;
+    status: "running" | "completed" | "error";
+    at: string;
+    seq: number;
+    delegationId?: string;
+  },
+): TranscriptEvent {
+  return {
+    type: "subagent_update",
+    parentCallId: opts.parentCallId,
+    step: {
+      kind: "tool_call",
+      callId: opts.callId,
+      name: "delegate",
+      status: opts.status,
+    },
+    at: opts.at,
+    seq: opts.seq,
+    ...(opts.delegationId !== undefined
+      ? { delegationId: opts.delegationId }
+      : {}),
+  };
+}
+
 function prompt(text: string, at: string, seq: number): TranscriptEvent {
   return { type: "prompt", text, at, seq };
 }
@@ -723,8 +750,8 @@ describe("runSequence", () => {
     ]);
   });
 
-  it("keeps a tracked record without an end open even when the transcript has a terminal tool_call", async () => {
-    writeConversation("conv-tracked-open", {
+  it("closes a tracked record without an end from a terminal tool_call", async () => {
+    writeConversation("conv-tracked-terminal", {
       meta: { issueId: "capture", channel: "planning" },
       delegations: [
         delegation({
@@ -740,23 +767,32 @@ describe("runSequence", () => {
     });
 
     const runSequence = await loadRunSequence();
-    const sequence = runSequence("conv-tracked-open");
+    const sequence = runSequence("conv-tracked-terminal");
 
-    expect(sequence.condition).toBe("in-flight");
+    expect(sequence.condition).toBe("completed");
     expect(sequence.beats).toEqual([
       {
         from: "coordinator",
         to: "research",
         label: "spawn research",
         startedAt: AT,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
         kind: "spawn",
         parentCallId: "call-research",
       },
+      {
+        from: "research",
+        to: "coordinator",
+        label: "research returned",
+        startedAt: AT_END,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "return",
+      },
     ]);
-    expect(sequence.beats[0]).not.toHaveProperty("durationMs");
+    expect(sequence.beats[0]).not.toHaveProperty("indeterminate");
   });
 
-  it("flags an untracked record without an end as indeterminate and derives completed", async () => {
+  it("closes an untracked record without an end from a terminal tool_call", async () => {
     writeConversation("conv-untracked", {
       meta: { issueId: "capture", channel: "planning" },
       delegations: [
@@ -775,6 +811,210 @@ describe("runSequence", () => {
 
     const runSequence = await loadRunSequence();
     const sequence = runSequence("conv-untracked");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.beats).toEqual([
+      {
+        from: "coordinator",
+        to: "research",
+        label: "spawn research",
+        startedAt: AT,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "spawn",
+        parentCallId: "call-research",
+      },
+      {
+        from: "research",
+        to: "coordinator",
+        label: "research returned",
+        startedAt: AT_END,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "return",
+      },
+    ]);
+    expect(sequence.beats[0]).not.toHaveProperty("indeterminate");
+  });
+
+  it("closes an untracked record from a terminal subagent_update", async () => {
+    writeConversation("conv-untracked-subagent", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          lifecycle: undefined,
+        }),
+      ],
+      transcript: [
+        subagentToolCall({
+          parentCallId: "call-research",
+          callId: "call-nested",
+          status: "completed",
+          at: AT_END,
+          seq: 1,
+          delegationId: "del-research",
+        }),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-untracked-subagent");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.beats).toEqual([
+      {
+        from: "coordinator",
+        to: "research",
+        label: "spawn research",
+        startedAt: AT,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "spawn",
+        parentCallId: "call-research",
+      },
+      {
+        from: "research",
+        to: "coordinator",
+        label: "research returned",
+        startedAt: AT_END,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "return",
+      },
+    ]);
+  });
+
+  it("maps a transcript error signal like a persisted error end", async () => {
+    writeConversation("conv-transcript-error", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          lifecycle: undefined,
+        }),
+      ],
+      transcript: [toolCall("call-research", "error", AT_END, 1)],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-transcript-error");
+
+    expect(sequence.condition).toBe("failed");
+    expect(sequence.beats.find((b) => b.kind === "return")).toEqual({
+      from: "research",
+      to: "coordinator",
+      label: "research failed",
+      startedAt: AT_END,
+      durationMs: Date.parse(AT_END) - Date.parse(AT),
+      kind: "return",
+    });
+  });
+
+  it("prefers a persisted end over a terminal transcript signal", async () => {
+    writeConversation("conv-end-wins", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-research", "running", AT, 1),
+        toolCall("call-research", "error", AT_LATE, 2),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-end-wins");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.beats).toEqual([
+      {
+        from: "coordinator",
+        to: "research",
+        label: "spawn research",
+        startedAt: AT,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "spawn",
+        parentCallId: "call-research",
+      },
+      {
+        from: "research",
+        to: "coordinator",
+        label: "research returned",
+        startedAt: AT_END,
+        durationMs: Date.parse(AT_END) - Date.parse(AT),
+        kind: "return",
+      },
+    ]);
+  });
+
+  it("flags an untracked record as indeterminate when the transcript has no signals", async () => {
+    writeConversation("conv-untracked-empty", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          lifecycle: undefined,
+        }),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-untracked-empty");
+
+    expect(sequence.condition).toBe("completed");
+    expect(sequence.beats).toEqual([
+      {
+        from: "coordinator",
+        to: "research",
+        label: "spawn research",
+        startedAt: AT,
+        kind: "spawn",
+        parentCallId: "call-research",
+        indeterminate: true,
+      },
+    ]);
+    expect(sequence.beats[0]).not.toHaveProperty("durationMs");
+  });
+
+  it("flags an untracked record as indeterminate when the transcript has only a running signal", async () => {
+    writeConversation("conv-untracked-running", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          lifecycle: undefined,
+        }),
+      ],
+      transcript: [toolCall("call-research", "running", AT, 1)],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-untracked-running");
 
     expect(sequence.condition).toBe("completed");
     expect(sequence.beats).toEqual([
