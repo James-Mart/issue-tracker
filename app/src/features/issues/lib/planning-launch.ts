@@ -26,7 +26,7 @@ export function planningSessionMessage(
     return (
       `Plan ${ideaId} in the issue tracker using the issue-tracker-auto-plan skill. ` +
       `Read ${skillPath("issue-tracker-auto-plan")} and follow it. ` +
-      `Stakeholder stand-in model: ${stakeholder}.`
+      `Stakeholder model: ${stakeholder}.`
     );
   }
   return (
@@ -57,7 +57,7 @@ export function planningLaunchCopy(
     const name = stakeholderDisplayName(stakeholder, models);
     return {
       title: "No planning session.",
-      detail: `Start auto-plan with ${name} standing in as stakeholder. You can watch and interject, but the grill runs without your answers.`,
+      detail: `Start auto-plan with ${name} as stakeholder. You can watch and interject, but the grill runs without your answers.`,
       actionLabel: `Start auto-plan on ${name}`,
     };
   }

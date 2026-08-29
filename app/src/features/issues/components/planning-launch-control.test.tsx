@@ -299,7 +299,7 @@ describe("PlanningChannelEmptyState", () => {
         title: "Plan Capture",
         model: "claude-opus-5",
         message:
-          `Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Read ${skillPath("issue-tracker-auto-plan")} and follow it. Stakeholder stand-in model: claude-opus-5.`,
+          `Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Read ${skillPath("issue-tracker-auto-plan")} and follow it. Stakeholder model: claude-opus-5.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
@@ -545,7 +545,7 @@ describe("PlanningNewRunControl", () => {
         title: "Plan Capture",
         model: "claude-opus-5",
         message:
-          `Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Read ${skillPath("issue-tracker-auto-plan")} and follow it. Stakeholder stand-in model: claude-opus-5.`,
+          `Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Read ${skillPath("issue-tracker-auto-plan")} and follow it. Stakeholder model: claude-opus-5.`,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
