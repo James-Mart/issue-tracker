@@ -246,12 +246,22 @@ async function readTaskChange(
   };
 }
 
+const EPIC_CHANGE_UNSUPPORTED =
+  "Epic diffs are not supported; use Story or Task detail instead";
+
+function assertChangeSupported(issue: Issue): void {
+  if (issue.kind === "epic") {
+    throw new IssueError("validation", EPIC_CHANGE_UNSUPPORTED);
+  }
+}
+
 function allowedCommitShas(issue: Issue, issueId: string): string[] {
+  assertChangeSupported(issue);
   if (issue.kind === "task") {
     if (!issue.commitSha || issue.noDiff) return [];
     return [issue.commitSha];
   }
-  if (issue.kind === "story" || issue.kind === "epic") {
+  if (issue.kind === "story") {
     return collectDescendantCommits(issueId).map((commit) => commit.sha);
   }
   throw new IssueError(
@@ -300,6 +310,7 @@ export async function readIssueChangeFile(
 
 export async function readIssueChange(issueId: string): Promise<IssueChange> {
   const issue = readIssueOrThrow(issueId);
+  assertChangeSupported(issue);
   const chain = ancestorChain(issueId, readAll().issues);
   const project = chain[0]!;
   const workspace = requireProjectWorkspace(project.id);
@@ -307,7 +318,7 @@ export async function readIssueChange(issueId: string): Promise<IssueChange> {
   if (issue.kind === "task") {
     return readTaskChange(issue, workspace);
   }
-  if (issue.kind === "story" || issue.kind === "epic") {
+  if (issue.kind === "story") {
     return readRollupChange(issueId, workspace);
   }
 

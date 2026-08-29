@@ -113,11 +113,10 @@ describe("tabsForIssueDetail", () => {
     });
   });
 
-  it("Epic: Overview + Implementing + Diff", () => {
+  it("Epic: Overview + Implementing only", () => {
     expect(tabsForIssueDetail(epic).map((t) => t.key)).toEqual([
       "overview",
       "implementing",
-      "diff",
     ]);
   });
 
@@ -169,6 +168,8 @@ describe("resolveIssueDetailTab", () => {
   it("falls back when the key is not in this issue's set", () => {
     const taskTabs = tabsForIssueDetail(task);
     expect(resolveIssueDetailTab("planning", taskTabs)).toBe("overview");
+    const epicTabs = tabsForIssueDetail(epic);
+    expect(resolveIssueDetailTab("diff", epicTabs)).toBe("overview");
   });
 });
 

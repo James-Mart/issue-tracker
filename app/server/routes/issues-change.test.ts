@@ -172,4 +172,12 @@ describe("issue change HTTP API", () => {
     expect(body.code).toBe("commit-unreachable");
     expect(body.error).toContain("bad object");
   });
+
+  it("refuses Epic change requests", async () => {
+    const res = await fetch(`${baseUrl}/api/issues/e/change`);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe("validation");
+    expect(body.error).toContain("Epic diffs are not supported");
+  });
 });

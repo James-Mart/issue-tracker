@@ -342,6 +342,15 @@ describe("readIssueChange rollup", () => {
       message: expect.stringContaining(c1),
     });
   });
+
+  it("refuses Epic change requests", async () => {
+    writeTask("t-epic-child", { partOf: "b", commitSha: sha(1) });
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("e")).rejects.toMatchObject({
+      code: "validation",
+      message: expect.stringContaining("Epic diffs are not supported"),
+    });
+  });
 });
 
 describe("readIssueChange", () => {
@@ -473,6 +482,19 @@ describe("readIssueChange", () => {
         stats: { filesChanged: 100, insertions: 50000, deletions: 100 },
         commitCount: 1,
       },
+    });
+  });
+});
+
+describe("readIssueChangeFile", () => {
+  it("refuses Epic change file requests", async () => {
+    writeTask("t-epic-child", { partOf: "b", commitSha: SHA });
+    const { readIssueChangeFile } = await loadChange();
+    await expect(
+      readIssueChangeFile("e", SHA, "src/foo.ts"),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: expect.stringContaining("Epic diffs are not supported"),
     });
   });
 });

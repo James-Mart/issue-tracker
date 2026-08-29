@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ConversationChannel, IssueDetail, IssueKind } from "@server/schemas";
 import { RosterActiveRunIndicator } from "@/features/agents/components/conversation-list-item";
@@ -70,6 +70,15 @@ export function IssueDetailTabs({
   const isMobile = useIsMobile();
   const mobileChannelChrome =
     isMobile && issueDetailTabNeedsBoundedShell(active, tabs);
+
+  useEffect(() => {
+    const raw = searchParams.get("tab");
+    if (raw != null && !tabs.some((tab) => tab.key === raw)) {
+      setSearchParams((prev) => writeIssueDetailTabParam(prev, active), {
+        replace: true,
+      });
+    }
+  }, [active, searchParams, setSearchParams, tabs]);
 
   const setActive = (next: IssueDetailTabKey) => {
     setSearchParams((prev) => writeIssueDetailTabParam(prev, next), {

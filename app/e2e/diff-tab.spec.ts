@@ -84,6 +84,7 @@ function seedFixtureRepo(): {
 type DiffTabApp = {
   baseURL: string;
   namesTaskId: string;
+  rollupStoryId: string;
   epicId: string;
   unreachableTaskId: string;
   oversizedTaskId: string;
@@ -98,6 +99,7 @@ const test = base.extend<Record<string, never>, { diffTabApp: DiffTabApp }>({
       process.env.ISSUE_TRACKER_MAX_PATCH_BYTES = CEILING_BYTES;
 
       let namesTaskId = "";
+      let rollupStoryId = "";
       let epicId = "";
       let unreachableTaskId = "";
       let oversizedTaskId = "";
@@ -117,6 +119,7 @@ const test = base.extend<Record<string, never>, { diffTabApp: DiffTabApp }>({
             title: "Diff rollup story",
             partOf: epic.id,
           });
+          rollupStoryId = story.id;
           const namesTask = await create({
             kind: "task",
             title: "Record names change",
@@ -177,6 +180,7 @@ const test = base.extend<Record<string, never>, { diffTabApp: DiffTabApp }>({
       await use({
         baseURL: app.baseURL,
         namesTaskId,
+        rollupStoryId,
         epicId,
         unreachableTaskId,
         oversizedTaskId,
@@ -246,11 +250,15 @@ test.describe("Diff tab", () => {
     await expect(file.getByText("INDIA", { exact: true })).toBeVisible();
   });
 
-  test("opens on an Epic and renders the combined change", async ({
+  test("opens on a Story and renders the combined change", async ({
     page,
     diffTabApp,
   }) => {
-    const main = await openDiffTab(page, diffTabApp.baseURL, diffTabApp.epicId);
+    const main = await openDiffTab(
+      page,
+      diffTabApp.baseURL,
+      diffTabApp.rollupStoryId,
+    );
     const panel = main.getByTestId("issue-change-panel");
     await expect(panel).toBeVisible();
     await expect(main.getByTestId("issue-change-scope-header")).toHaveText(
@@ -268,8 +276,56 @@ test.describe("Diff tab", () => {
     ).toBeVisible();
   });
 
+  test("Epic detail has no Diff tab and ignores ?tab=diff", async ({
+    page,
+    diffTabApp,
+  }) => {
+    const main = await openIssue(page, diffTabApp.baseURL, diffTabApp.epicId);
+    const tablist = main.getByRole("tablist", { name: "Issue detail" });
+    await expect(tablist.getByRole("tab", { name: "Diff" })).toHaveCount(0);
+    await expect(tablist.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(tablist.getByRole("tab", { name: "Implementing" })).toBeVisible();
+
+    await page.goto(
+      `${diffTabApp.baseURL}/projects/seed-proj/issues/${diffTabApp.epicId}?tab=diff`,
+    );
+    await expect(page).not.toHaveURL(/[?&]tab=diff(?:&|$)/);
+    const tablistAfter = page
+      .getByRole("main")
+      .getByRole("tablist", { name: "Issue detail" });
+    await expect(tablistAfter.getByRole("tab", { name: "Diff" })).toHaveCount(0);
+    await expect(tablistAfter.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  test("change endpoints refuse an Epic id", async ({ request, diffTabApp }) => {
+    const changeRes = await request.get(
+      `${diffTabApp.baseURL}/api/issues/${diffTabApp.epicId}/change`,
+    );
+    expect(changeRes.status()).toBe(400);
+    const changeBody = await changeRes.json();
+    expect(changeBody.code).toBe("validation");
+    expect(changeBody.error).toContain("Epic diffs are not supported");
+
+    const fileUrl = new URL(
+      `${diffTabApp.baseURL}/api/issues/${diffTabApp.epicId}/change/file`,
+    );
+    fileUrl.searchParams.set("path", "names.txt");
+    fileUrl.searchParams.set("sha", diffTabApp.namesSha);
+    const fileRes = await request.get(fileUrl.toString());
+    expect(fileRes.status()).toBe(400);
+    const fileBody = await fileRes.json();
+    expect(fileBody.code).toBe("validation");
+    expect(fileBody.error).toContain("Epic diffs are not supported");
+  });
+
   test("file navigator filters and moves the view", async ({ page, diffTabApp }) => {
-    const main = await gotoDiff(page, diffTabApp.baseURL, diffTabApp.epicId);
+    const main = await gotoDiff(page, diffTabApp.baseURL, diffTabApp.rollupStoryId);
     const navigator = main.getByTestId("issue-change-file-navigator");
     await expect(navigator).toBeVisible();
     await expect(main.getByTestId("issue-change-file")).toHaveCount(3);
