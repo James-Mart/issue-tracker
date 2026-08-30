@@ -1,4 +1,10 @@
-import type { ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Loader2, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -15,11 +21,9 @@ import { usePipelineRunsLive } from "../api/live";
 import { usePipelineRunsQuery } from "../api/queries";
 import { pipelineRunPath } from "../paths";
 import {
-  PHONE_RUN_LIST_SLOTS,
   conditionBadgeLabel,
   formatRunStartedAt,
   recoveredMarkerLabel,
-  runListSegments,
   type RecentRun,
   type RunCondition,
 } from "../run-list";
@@ -119,25 +123,85 @@ function PipelineRunCard({
   );
 }
 
-function RunListElision({ omitted }: { omitted: RecentRun[] }) {
-  const labels = omitted.map((run) => run.coordinatorLabel).join(", ");
-  const count = omitted.length;
+function RunsScrollPagingFoot({
+  hasNextPage,
+  isFetchingNextPage,
+  fetchNextPage,
+  scrollRootRef,
+  isMobile,
+  loadedPageCount,
+}: {
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => Promise<unknown>;
+  scrollRootRef: RefObject<HTMLElement | null>;
+  isMobile: boolean;
+  loadedPageCount: number;
+}) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const pagingRef = useRef(false);
+
+  const loadNextPage = useCallback(() => {
+    if (!hasNextPage || isFetchingNextPage || pagingRef.current) return;
+    pagingRef.current = true;
+    void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+
+    pagingRef.current = false;
+
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const root = isMobile ? null : scrollRootRef.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadNextPage();
+        }
+      },
+      { root, threshold: 0 },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    hasNextPage,
+    isFetchingNextPage,
+    isMobile,
+    loadNextPage,
+    scrollRootRef,
+    loadedPageCount,
+  ]);
+
+  if (!hasNextPage) return null;
+
+  if (isFetchingNextPage) {
+    return (
+      <div
+        className="flex items-center justify-center gap-2 py-3 font-mono text-[11px] text-muted-foreground"
+        data-testid="pipeline-run-list-loading-foot"
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2
+          className="h-3.5 w-3.5 motion-safe:animate-spin"
+          aria-hidden
+        />
+        Loading older runs…
+      </div>
+    );
+  }
+
   return (
     <div
-      className="flex items-center gap-2 py-0.5"
-      role="note"
-      data-testid="pipeline-run-elision"
-      aria-label={`${count} run${count === 1 ? "" : "s"} omitted: ${labels}`}
-    >
-      <span className="h-px min-w-4 flex-1 bg-[hsl(var(--rail))]" aria-hidden />
-      <span className="min-w-0 truncate font-mono text-[10px] leading-tight text-muted-foreground">
-        <span aria-hidden>↕ </span>
-        {count} omitted
-        <span aria-hidden> · </span>
-        <span className="text-foreground/75">{labels}</span>
-      </span>
-      <span className="h-px min-w-4 flex-1 bg-[hsl(var(--rail))]" aria-hidden />
-    </div>
+      ref={sentinelRef}
+      data-testid="pipeline-run-list-sentinel"
+      aria-hidden
+      className="h-px w-full shrink-0"
+    />
   );
 }
 
@@ -152,15 +216,19 @@ export function PipelineRunsView({
   ) => ReactNode;
 }) {
   const isMobile = useIsMobile();
+  const scrollRootRef = useRef<HTMLElement>(null);
   usePipelineRunsLive();
-  const { data, isLoading, error, refetch, isFetching } =
-    usePipelineRunsQuery();
-  const runs = data?.runs ?? [];
-  const segments = runListSegments(
-    runs,
-    conversationId,
-    isMobile ? PHONE_RUN_LIST_SLOTS : null,
-  );
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = usePipelineRunsQuery();
+  const runs = data?.pages.flatMap((page) => page.runs) ?? [];
 
   return (
     <div className="space-y-4">
@@ -196,6 +264,7 @@ export function PipelineRunsView({
       ) : (
         <div className="flex min-w-0 flex-col gap-3 shell:flex-row shell:items-start shell:gap-4">
           <section
+            ref={scrollRootRef}
             className="min-w-0 shell:max-h-[calc(100svh-14rem)] shell:w-[16.5rem] shell:shrink-0 shell:overflow-y-auto"
             aria-label="Recent runs"
           >
@@ -214,22 +283,21 @@ export function PipelineRunsView({
                 className="flex flex-col gap-2"
                 data-testid="pipeline-run-list"
               >
-                {segments.map((segment, index) =>
-                  segment.kind === "run" ? (
-                    <PipelineRunCard
-                      key={segment.run.conversationId}
-                      run={segment.run}
-                      selected={
-                        segment.run.conversationId === conversationId
-                      }
-                    />
-                  ) : (
-                    <RunListElision
-                      key={`elision-${index}`}
-                      omitted={segment.omitted}
-                    />
-                  ),
-                )}
+                {runs.map((run) => (
+                  <PipelineRunCard
+                    key={run.conversationId}
+                    run={run}
+                    selected={run.conversationId === conversationId}
+                  />
+                ))}
+                <RunsScrollPagingFoot
+                  hasNextPage={hasNextPage === true}
+                  isFetchingNextPage={isFetchingNextPage}
+                  fetchNextPage={fetchNextPage}
+                  scrollRootRef={scrollRootRef}
+                  isMobile={isMobile}
+                  loadedPageCount={data?.pages.length ?? 0}
+                />
               </div>
             )}
           </section>

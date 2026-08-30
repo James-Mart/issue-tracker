@@ -252,9 +252,9 @@ async function loadRunSequence() {
   return runSequence;
 }
 
-async function loadRecentRuns() {
-  const { recentRuns } = await import("./run-sequence.js");
-  return recentRuns;
+async function loadRecentRunsPage() {
+  const { recentRunsPage } = await import("./run-sequence.js");
+  return recentRunsPage;
 }
 
 describe("runSequence", () => {
@@ -1590,7 +1590,7 @@ describe("runSequence", () => {
   });
 });
 
-describe("recentRuns", () => {
+describe("recentRunsPage", () => {
   it("returns newest-first across conversations, honors limit, and matches each run's condition", async () => {
     writeConversation("conv-old", {
       meta: {
@@ -1659,10 +1659,10 @@ describe("recentRuns", () => {
       ],
     });
 
-    const recentRuns = await loadRecentRuns();
+    const recentRunsPage = await loadRecentRunsPage();
     const runSequence = await loadRunSequence();
 
-    const all = recentRuns(10);
+    const all = recentRunsPage({ limit: 10 }).runs;
     expect(all.map((row) => row.conversationId)).toEqual([
       "conv-new",
       "conv-failed",
@@ -1693,10 +1693,9 @@ describe("recentRuns", () => {
       condition: "completed",
     });
 
-    expect(recentRuns(2).map((row) => row.conversationId)).toEqual([
-      "conv-new",
-      "conv-failed",
-    ]);
+    expect(
+      recentRunsPage({ limit: 2 }).runs.map((row) => row.conversationId),
+    ).toEqual(["conv-new", "conv-failed"]);
   });
 
   it("uses the earliest delegation issue id when rows disagree", async () => {
@@ -1732,8 +1731,8 @@ describe("recentRuns", () => {
       ],
     });
 
-    const recentRuns = await loadRecentRuns();
-    expect(recentRuns(1)[0]?.issueId).toBe("first-issue");
+    const recentRunsPage = await loadRecentRunsPage();
+    expect(recentRunsPage({ limit: 1 }).runs[0]?.issueId).toBe("first-issue");
   });
 
   it("includes a conversation with no delegations via its session root", async () => {
@@ -1746,18 +1745,21 @@ describe("recentRuns", () => {
       transcript: [prompt("approve outline", AT, 1)],
     });
 
-    const recentRuns = await loadRecentRuns();
+    const recentRunsPage = await loadRecentRunsPage();
     const runSequence = await loadRunSequence();
 
-    expect(recentRuns(10)).toEqual([
-      {
-        conversationId: "conv-root-only",
-        coordinatorLabel: "planning",
-        startedAt: AT,
-        condition: runSequence("conv-root-only").condition,
-        issueId: "capture",
-      },
-    ]);
+    expect(recentRunsPage({ limit: 10 })).toEqual({
+      runs: [
+        {
+          conversationId: "conv-root-only",
+          coordinatorLabel: "planning",
+          startedAt: AT,
+          condition: runSequence("conv-root-only").condition,
+          issueId: "capture",
+        },
+      ],
+      nextCursor: null,
+    });
   });
 
   it("hydrates transcript and delegations only for the newest limit slice", async () => {
@@ -1857,9 +1859,9 @@ describe("recentRuns", () => {
     const conversations = await import("./conversations.js");
     const readConversation = vi.spyOn(conversations, "readConversation");
     const readDelegations = vi.spyOn(conversations, "readDelegations");
-    const { recentRuns } = await import("./run-sequence.js");
+    const { recentRunsPage } = await import("./run-sequence.js");
 
-    const runs = recentRuns(2);
+    const { runs } = recentRunsPage({ limit: 2 });
     const hydrated = new Set([
       ...readConversation.mock.calls.map(([id]) => id),
       ...readDelegations.mock.calls.map(([id]) => id),
@@ -1940,7 +1942,7 @@ describe("recentRuns", () => {
     const runSequenceModule = await import("./run-sequence.js");
     const runSequenceSpy = vi.spyOn(runSequenceModule, "runSequence");
 
-    const runs = runSequenceModule.recentRuns(10);
+    const { runs } = runSequenceModule.recentRunsPage({ limit: 10 });
 
     expect(readAllSpy).not.toHaveBeenCalled();
     expect(readIssueOrThrowSpy).not.toHaveBeenCalled();
@@ -1986,11 +1988,11 @@ describe("recentRuns", () => {
     });
     writeRunLiveMarker("conv-live-list");
 
-    const recentRuns = await loadRecentRuns();
-    expect(recentRuns(1)[0]?.condition).toBe("in-flight");
+    const recentRunsPage = await loadRecentRunsPage();
+    expect(recentRunsPage({ limit: 1 }).runs[0]?.condition).toBe("in-flight");
   });
 
-  it("reports completed from recentRuns when no run-live marker is present", async () => {
+  it("reports completed from recentRunsPage when no run-live marker is present", async () => {
     writeConversation("conv-completed-list", {
       meta: {
         channel: "planning",
@@ -2015,7 +2017,74 @@ describe("recentRuns", () => {
       ],
     });
 
-    const recentRuns = await loadRecentRuns();
-    expect(recentRuns(1)[0]?.condition).toBe("completed");
+    const recentRunsPage = await loadRecentRunsPage();
+    expect(recentRunsPage({ limit: 1 }).runs[0]?.condition).toBe("completed");
+  });
+
+  it("pages newest-first with a nextCursor, no overlap or gap, and null at the end", async () => {
+    writeConversation("conv-a", {
+      meta: { title: "A", createdAt: AT_EARLY },
+      transcript: [prompt("hi", AT_EARLY, 1)],
+    });
+    writeConversation("conv-b", {
+      meta: { title: "B", createdAt: AT },
+      transcript: [prompt("hi", AT, 1)],
+    });
+    writeConversation("conv-c", {
+      meta: { title: "C", createdAt: AT_LATE },
+      transcript: [prompt("hi", AT_LATE, 1)],
+    });
+
+    const recentRunsPage = await loadRecentRunsPage();
+
+    const first = recentRunsPage({ limit: 2 });
+    expect(first.runs.map((row) => row.conversationId)).toEqual([
+      "conv-c",
+      "conv-b",
+    ]);
+    expect(first.nextCursor).toBe(`${AT}|conv-b`);
+
+    const second = recentRunsPage({ limit: 2, cursor: first.nextCursor! });
+    expect(second.runs.map((row) => row.conversationId)).toEqual(["conv-a"]);
+    expect(second.nextCursor).toBeNull();
+
+    const ids = [...first.runs, ...second.runs].map((row) => row.conversationId);
+    expect(ids).toEqual(["conv-c", "conv-b", "conv-a"]);
+  });
+
+  it("pages conversations that share a createdAt by conversationId descending", async () => {
+    writeConversation("conv-a", {
+      meta: { title: "A", createdAt: AT },
+      transcript: [prompt("hi", AT, 1)],
+    });
+    writeConversation("conv-z", {
+      meta: { title: "Z", createdAt: AT },
+      transcript: [prompt("hi", AT, 1)],
+    });
+
+    const recentRunsPage = await loadRecentRunsPage();
+
+    const first = recentRunsPage({ limit: 1 });
+    expect(first.runs.map((row) => row.conversationId)).toEqual(["conv-z"]);
+    expect(first.nextCursor).toBe(`${AT}|conv-z`);
+
+    const second = recentRunsPage({ limit: 1, cursor: first.nextCursor! });
+    expect(second.runs.map((row) => row.conversationId)).toEqual(["conv-a"]);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it("rejects a malformed cursor", async () => {
+    const recentRunsPage = await loadRecentRunsPage();
+    expect(() =>
+      recentRunsPage({ limit: 1, cursor: "not-a-cursor" }),
+    ).toThrow(/cursor must be createdAt\|conversationId/);
+    try {
+      recentRunsPage({ limit: 1, cursor: "not-a-cursor" });
+    } catch (err) {
+      expect(err).toMatchObject({
+        code: "validation",
+        message: "cursor must be createdAt|conversationId",
+      });
+    }
   });
 });

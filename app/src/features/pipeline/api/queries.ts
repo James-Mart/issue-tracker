@@ -1,4 +1,9 @@
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  type UseInfiniteQueryResult,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import { request } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import { PIPELINE_RUNS_LIMIT, type RecentRun } from "../run-list";
@@ -12,18 +17,26 @@ export type PipelineStepSource = {
 
 export type PipelineRunsResponse = {
   runs: RecentRun[];
+  nextCursor: string | null;
 };
 
-export function usePipelineRunsQuery(): UseQueryResult<
+export function usePipelineRunsQuery(): UseInfiniteQueryResult<
   PipelineRunsResponse,
   Error
 > {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: pipelineKeys.runs(),
-    queryFn: () =>
-      request<PipelineRunsResponse>(
-        `/api/pipeline/runs?limit=${PIPELINE_RUNS_LIMIT}`,
-      ),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        limit: String(PIPELINE_RUNS_LIMIT),
+      });
+      if (pageParam != null) {
+        params.set("cursor", pageParam);
+      }
+      return request<PipelineRunsResponse>(`/api/pipeline/runs?${params}`);
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
   });
 }
 

@@ -1,7 +1,7 @@
 import { Router, type RequestHandler } from "express";
 import { IssueError } from "../services/errors.js";
 import { getPipelineStepSource } from "../services/pipeline-step-source.js";
-import { recentRuns, runSequence } from "../services/run-sequence.js";
+import { recentRunsPage, runSequence } from "../services/run-sequence.js";
 
 const DEFAULT_RUNS_LIMIT = 20;
 
@@ -16,6 +16,15 @@ function parseLimitQuery(raw: unknown): number | { error: string } {
     return { error: "limit must be a positive integer" };
   }
   return value;
+}
+
+function parseCursorQuery(raw: unknown): string | undefined | { error: string } {
+  if (raw === undefined) return undefined;
+  const text = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof text !== "string") {
+    return { error: "cursor must be createdAt|conversationId" };
+  }
+  return text;
 }
 
 const asyncRoute =
@@ -40,7 +49,16 @@ export function createPipelineRouter(): Router {
       if (typeof limit === "object") {
         throw new IssueError("validation", limit.error);
       }
-      res.json({ runs: recentRuns(limit) });
+      const cursor = parseCursorQuery(req.query.cursor);
+      if (typeof cursor === "object") {
+        throw new IssueError("validation", cursor.error);
+      }
+      res.json(
+        recentRunsPage({
+          limit,
+          ...(cursor !== undefined ? { cursor } : {}),
+        }),
+      );
     }),
   );
 
