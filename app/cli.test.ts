@@ -395,6 +395,56 @@ describe("view", () => {
     expect(storyUnset.stdout).not.toContain("sourceIdea:");
   });
 
+  it("prints plan not final on tree for roots whose source Idea is unarchived", async () => {
+    writeIssue("idea-v", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "p",
+      order: 10,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("e-with-idea", {
+      kind: "epic",
+      title: "Epic with idea",
+      partOf: "p",
+      order: 11,
+      blockedBy: [],
+      sourceIdea: "idea-v",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("s-with-idea", {
+      kind: "story",
+      title: "Story with idea",
+      partOf: "p",
+      order: 12,
+      merged: false,
+      sourceIdea: "idea-v",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const treeOpen = await runIssueCli(["tree", "p"], { env: env() });
+    expect(treeOpen.status).toBe(0);
+    expect(treeOpen.stdout).toMatch(/^ {2}epic e-with-idea\b.*\bplan not final\b/m);
+    expect(treeOpen.stdout).toMatch(/^ {2}story s-with-idea\b.*\bplan not final\b/m);
+    expect(treeOpen.stdout).not.toMatch(/^ {2}epic e  Epic\b.*\bplan not final\b/m);
+
+    writeIssue("idea-v", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "p",
+      order: 10,
+      archived: true,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    const treeFinal = await runIssueCli(["tree", "p"], { env: env() });
+    expect(treeFinal.status).toBe(0);
+    expect(treeFinal.stdout).not.toMatch(/\bplan not final\b/);
+  });
+
   it("prints workspace when set on a project", async () => {
     const ws = makeGitWorkspace();
     try {

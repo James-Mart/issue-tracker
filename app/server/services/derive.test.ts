@@ -538,6 +538,64 @@ describe("derive - planRoots", () => {
   });
 });
 
+describe("derive - planNotFinal", () => {
+  it("is true when sourceIdea names an unarchived Idea", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p"),
+      epic("e", "p", 0, { sourceIdea: "i" }),
+      branch("s", "p", { sourceIdea: "i" }, 1),
+    ];
+    const { byId } = derive(issues);
+    expect(byId.e.planNotFinal).toBe(true);
+    expect(byId.s.planNotFinal).toBe(true);
+  });
+
+  it("is false when the source Idea is archived", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p", 0, { archived: true }),
+      epic("e", "p", 0, { sourceIdea: "i" }),
+      branch("s", "p", { sourceIdea: "i" }, 1),
+    ];
+    const { byId } = derive(issues);
+    expect(byId.e.planNotFinal).toBe(false);
+    expect(byId.s.planNotFinal).toBe(false);
+  });
+
+  it("is false when sourceIdea is absent or dangling", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p"),
+      epic("e", "p"),
+      branch("s", "p", { sourceIdea: "ghost" }, 1),
+    ];
+    const { byId } = derive(issues);
+    expect(byId.e.planNotFinal).toBe(false);
+    expect(byId.s.planNotFinal).toBe(false);
+  });
+
+  it("is false on a stacked story even with sourceIdea", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p"),
+      branch("base", "p", { branchName: "feat/base" }, 0),
+      branch("child", "p", { stackedOn: "base", sourceIdea: "i" }, 1),
+    ];
+    expect(derive(issues).byId.child.planNotFinal).toBe(false);
+  });
+
+  it("is false on an epic-child story even with sourceIdea", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p"),
+      epic("e", "p"),
+      branch("s", "e", { sourceIdea: "i" }),
+    ];
+    expect(derive(issues).byId.s.planNotFinal).toBe(false);
+  });
+});
+
 describe("derive - purity", () => {
   it("takes only Issue[] and does not attach ideaStatus", () => {
     const issues = [project("p"), idea("capture", "p")];

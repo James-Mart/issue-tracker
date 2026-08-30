@@ -178,6 +178,7 @@ export const EPIC_GET_FIELDS = {
   epicStatus: DERIVED,
   mergePolicy: DERIVED,
   blocked: DERIVED,
+  planNotFinal: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const IDEA_GET_FIELDS = {
@@ -223,6 +224,7 @@ export const STORY_GET_FIELDS = {
   reviewCurrent: DERIVED,
   mergePolicy: DERIVED,
   blocked: DERIVED,
+  planNotFinal: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const TASK_GET_FIELDS = {

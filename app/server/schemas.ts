@@ -431,6 +431,8 @@ export interface DerivedState {
   mergePolicy?: MergePolicy;
   /** Epic and root project-level Story ids whose stored sourceIdea points here. */
   planRoots?: string[];
+  /** True when sourceIdea names an Idea present in the set and not archived. */
+  planNotFinal?: boolean;
 }
 
 export interface IssuesResponse {
