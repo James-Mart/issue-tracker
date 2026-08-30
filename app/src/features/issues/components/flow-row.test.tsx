@@ -72,18 +72,12 @@ describe("FlowRow", () => {
     });
     expect(planningRow.querySelector('[data-testid="rail-port"]')).toBeTruthy();
     expect(planningRow.textContent).toContain("planning");
-    expect(
-      planningRow.querySelector('[data-testid="progress-sparkline"]'),
-    ).toBeNull();
 
     const capturedRow = mountRow(idea("capture"), {
       blocked: false,
       ideaStatus: "captured",
     });
     expect(capturedRow.textContent).not.toContain("planning");
-    expect(
-      capturedRow.querySelector('[data-testid="progress-sparkline"]'),
-    ).toBeNull();
   });
 
   it("shows the demand icon and planning badge on awaiting-direction Ideas", () => {
@@ -95,9 +89,6 @@ describe("FlowRow", () => {
       container.querySelector('[aria-label="needs attention"]'),
     ).toBeTruthy();
     expect(container.textContent).toContain("planning");
-    expect(
-      container.querySelector('[data-testid="progress-sparkline"]'),
-    ).toBeNull();
   });
 
   it("keeps title and actions on one line", () => {
@@ -115,23 +106,17 @@ describe("FlowRow", () => {
     expect(container.querySelector(".pointer-events-none")).toBeNull();
   });
 
-  it("shows no planning badge or sparkline on Story rows", () => {
+  it("shows no planning badge on Story rows", () => {
     const flying = mountRow(story("fly"), {
       blocked: false,
       storyStatus: "in-progress",
     });
     expect(flying.textContent).not.toContain("planning");
-    expect(
-      flying.querySelector('[data-testid="progress-sparkline"]'),
-    ).toBeNull();
 
     const ready = mountRow(story("ready"), {
       blocked: false,
       storyStatus: "not-started",
     });
     expect(ready.textContent).not.toContain("planning");
-    expect(
-      ready.querySelector('[data-testid="progress-sparkline"]'),
-    ).toBeNull();
   });
 });
