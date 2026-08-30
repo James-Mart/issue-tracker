@@ -157,6 +157,14 @@ describe("liveness helpers", () => {
     expect(hasInFlightWork([task("t", "fixing")], idle)).toBe(true);
     expect(hasInFlightWork([task("t", "in-progress")], idle)).toBe(true);
   });
+
+  it("detects in-flight work when derived liveRun is true without a Task status write", () => {
+    const issues = [epic("e")];
+    const derived = {
+      e: { blocked: false, epicStatus: "todo" as const, liveRun: true },
+    };
+    expect(hasInFlightWork(issues, derived)).toBe(true);
+  });
 });
 
 describe("leafTaskProgressCount", () => {

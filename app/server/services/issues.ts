@@ -35,6 +35,7 @@ import {
 import { IssueError } from "./errors.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
+import { mergeImplementingOverlay } from "./implementing-status.js";
 import { planningStatusById } from "./planning-status.js";
 import { checkIntegrity, problemsFor } from "./integrity.js";
 import { mergeIssue } from "./merge.js";
@@ -200,6 +201,7 @@ export function list(): IssuesResponse {
     if (existing) existing.ideaStatus = ideaStatus;
     else derived.byId[id] = { blocked: false, ideaStatus };
   }
+  mergeImplementingOverlay(issues, derived.byId);
   // Parse each comments.jsonl so out-of-band corruption surfaces in the tree/CLI,
   // not just the comments panel. Comments are small local files, so the extra reads
   // are cheap; list() is not invalidated on every comment append (see events).
