@@ -13,6 +13,10 @@ import type { RunSequence, RunSequenceSection } from "../run-sequence";
 import { pipelines } from "../shape";
 import { PipelinePage } from "./pipeline-page";
 
+vi.mock("@/lib/ws/transport", () => ({
+  subscribeTopic: () => () => {},
+}));
+
 function LocationProbe() {
   const { pathname, search } = useLocation();
   return <div data-testid="location-probe">{pathname + search}</div>;

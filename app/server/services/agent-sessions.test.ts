@@ -1036,6 +1036,51 @@ describe("agent sessions manager", () => {
     });
   });
 
+  it("publishes pipeline-run frames on pipeline:runs when a run starts and finishes", async () => {
+    const { createConversation, createAgentSessions, subscribeFrames } =
+      await load();
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Pipeline runs live",
+      projectId: "platform",
+      model: "auto",
+    });
+
+    const pipelineFrames: ConversationFrame[] = [];
+    const unsubscribe = subscribeFrames("pipeline:runs", (frame) => {
+      pipelineFrames.push(frame);
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    await result.run.wait();
+    unsubscribe();
+
+    expect(pipelineFrames).toHaveLength(2);
+    expect(pipelineFrames[0]).toMatchObject({
+      event: {
+        type: "pipeline-run",
+        status: "started",
+        conversationId: meta.id,
+      },
+      persist: false,
+    });
+    expect(pipelineFrames[1]).toMatchObject({
+      event: {
+        type: "pipeline-run",
+        status: "finished",
+        conversationId: meta.id,
+      },
+      persist: false,
+    });
+  });
+
   it("publishes finished when a run is cancelled mid-flight", async () => {
     const { createConversation, createAgentSessions, subscribeFrames } =
       await load();

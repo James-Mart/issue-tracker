@@ -30,6 +30,7 @@ import {
 } from "./delegate-tool.js";
 import { clearCatchupBuffer, publishFrame } from "./conversation-stream.js";
 import { ISSUES_TOPIC } from "./issue-events.js";
+import { publishPipelineRunEvent } from "./pipeline-runs-events.js";
 import {
   EventPipeline,
   type NormalizedStep,
@@ -361,6 +362,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     entry.pump = undefined;
     entry.turn = undefined;
     clearRunLiveMarker(conversationId);
+    publishPipelineRunEvent("finished", conversationId);
     sessions.delete(conversationId);
     await tearDownEntry(conversationId, entry);
 
@@ -511,6 +513,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     };
     entry.turn = turn;
     writeRunLiveMarker(conversationId);
+    publishPipelineRunEvent("started", conversationId);
 
     publishFrame(conversationId, {
       event: { type: "run", status: "started", runId: agentRun.id },
@@ -536,6 +539,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       if (entry.turn === turn) {
         entry.turn = undefined;
         clearRunLiveMarker(conversationId);
+        publishPipelineRunEvent("finished", conversationId);
       }
 
       // An escalation from a delegation already owns this turn's recovery, and
