@@ -333,7 +333,7 @@ export function RunSequenceDiagram({
     <div
       className={cn(
         "flex min-w-0 flex-col",
-        resolvedLayout === "phone" ? "flex-none" : "flex-1",
+        resolvedLayout === "phone" ? "min-h-0 w-full" : "flex-1",
         className,
       )}
     >

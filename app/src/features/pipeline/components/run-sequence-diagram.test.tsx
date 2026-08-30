@@ -1057,7 +1057,7 @@ describe("RunSequenceDiagram chosen direction", () => {
     });
   }
 
-  it("hugs phone sequence rows so the card does not clip a beat", () => {
+  it("lets the phone sheet body scroll a rail taller than the viewport", () => {
     const { container } = mountDiagram(
       sequence({ beats: [RECONSTRUCTED_CLOSE, RETURN] }),
       "phone",
@@ -1067,6 +1067,7 @@ describe("RunSequenceDiagram chosen direction", () => {
     );
     expect(frame?.className).toMatch(/overflow-visible/);
     expect(frame?.className).not.toMatch(/min-h-\[16rem\]/);
+    expect(frame?.className).not.toMatch(/overflow-auto/);
     expect(frame?.className).not.toMatch(/max-h-/);
   });
 });

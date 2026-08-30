@@ -216,10 +216,14 @@ function sheetCloseControl(sheet: ParentNode): HTMLElement {
   return close;
 }
 
-function mockViewport(width: number) {
+function mockViewport(width: number, height = 700) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
     value: width,
+  });
+  Object.defineProperty(window, "innerHeight", {
+    configurable: true,
+    value: height,
   });
   window.matchMedia = vi.fn((query: string) => {
     const max = /\(max-width:\s*(\d+)px\)/.exec(query);
@@ -231,6 +235,50 @@ function mockViewport(width: number) {
       removeEventListener: () => {},
     } as unknown as MediaQueryList;
   });
+}
+
+function tallRunSequence(beatCount: number): RunSequence {
+  const beats = Array.from({ length: beatCount }, (_, index) => ({
+    from: index % 2 === 0 ? "coordinator" : "research",
+    to: index % 2 === 0 ? "research" : "coordinator",
+    label: `beat ${index + 1}`,
+    startedAt: new Date(Date.UTC(2026, 7, 28, 12, index)).toISOString(),
+    durationMs: 30_000,
+    kind: (index % 2 === 0 ? "spawn" : "return") as const,
+  }));
+  return {
+    condition: "completed",
+    lifelines: [
+      { id: "coordinator", label: "planning", kind: "coordinator" },
+      { id: "research", label: "research", kind: "role" },
+    ],
+    sections: [],
+    beats,
+  };
+}
+
+function sequenceScrollBody(sheet: ParentNode): HTMLElement {
+  const el = sheet.querySelector('[data-testid="run-sequence-scroll-body"]');
+  if (!(el instanceof HTMLElement)) {
+    throw new Error("Missing run sequence scroll body");
+  }
+  return el;
+}
+
+function mockScrollOverflow(
+  scroller: HTMLElement,
+  scrollHeight: number,
+  clientHeight: number,
+) {
+  Object.defineProperty(scroller, "scrollHeight", {
+    configurable: true,
+    value: scrollHeight,
+  });
+  Object.defineProperty(scroller, "clientHeight", {
+    configurable: true,
+    value: clientHeight,
+  });
+  scroller.scrollTop = 0;
 }
 
 beforeEach(() => {
@@ -424,6 +472,87 @@ describe("PipelinePage", () => {
     expect(
       document.querySelector('[data-testid="pipeline-run-sequence-sheet"]'),
     ).toBeNull();
+  });
+
+  it("scrolls a tall phone rail inside the sequence body while the header and handle stay pinned", async () => {
+    mockViewport(390, 640);
+    stubRuns(FIVE_RUNS, { e: tallRunSequence(24) });
+    mountPipelinePage("/pipeline/runs/e");
+    await flush();
+
+    const sheet = sequenceSheet();
+    const scrollBody = sequenceScrollBody(sheet);
+    const header = sheet.querySelector('[data-testid="run-sequence-pane-header"]');
+    const close = sheetCloseControl(sheet);
+
+    expect(scrollBody.className).toMatch(/overflow-y-auto/);
+    expect(header).not.toBeNull();
+    expect(scrollBody.contains(header)).toBe(false);
+    expect(scrollBody.contains(close)).toBe(false);
+    expect(close.className).toMatch(/\bmt-auto\b/);
+
+    const beats = Array.from(
+      scrollBody.querySelectorAll('[data-testid="sequence-beat"]'),
+    ) as HTMLElement[];
+    expect(beats.length).toBe(24);
+
+    mockScrollOverflow(scrollBody, 2400, 200);
+    expect(scrollBody.scrollHeight).toBeGreaterThan(scrollBody.clientHeight);
+
+    const lastBeat = beats[beats.length - 1]!;
+    const bodyBottom = 400;
+    lastBeat.getBoundingClientRect = () =>
+      ({
+        top: bodyBottom + 40,
+        bottom: bodyBottom + 80,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: 40,
+        x: 0,
+        y: bodyBottom + 40,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    scrollBody.getBoundingClientRect = () =>
+      ({
+        top: 200,
+        bottom: bodyBottom,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: 200,
+        x: 0,
+        y: 200,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    expect(lastBeat.getBoundingClientRect().bottom).toBeGreaterThan(
+      scrollBody.getBoundingClientRect().bottom,
+    );
+
+    act(() => {
+      scrollBody.scrollTop = scrollBody.scrollHeight;
+    });
+
+    lastBeat.getBoundingClientRect = () =>
+      ({
+        top: bodyBottom - 60,
+        bottom: bodyBottom - 20,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: 40,
+        x: 0,
+        y: bodyBottom - 60,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    expect(lastBeat.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      scrollBody.getBoundingClientRect().bottom + 1,
+    );
+    expect(lastBeat.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      scrollBody.getBoundingClientRect().top - 1,
+    );
   });
 
   it("draws the selected run on the Rail at phone width", async () => {
