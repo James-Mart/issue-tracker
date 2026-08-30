@@ -26,6 +26,7 @@ export interface FlowRowProps {
   actions?: ReactNode;
   /** When set, the full row drills in here; actions stay outside the link. */
   to?: string;
+  drillInState?: unknown;
 }
 
 /**
@@ -38,6 +39,7 @@ export function FlowRow({
   avatar,
   actions,
   to,
+  drillInState,
 }: FlowRowProps) {
   const railState = issueRailNodeState(item.issue, item.state);
   const live = railState === "in-flight";
@@ -59,6 +61,7 @@ export function FlowRow({
         count={count}
         actions={actions}
         drillInTo={to}
+        drillInState={drillInState}
         drillInLabel={item.issue.title}
       >
         {item.issue.title}

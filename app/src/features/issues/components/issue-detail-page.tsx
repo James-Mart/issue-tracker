@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import type { IssueDetail, IssueKind, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
@@ -26,6 +26,12 @@ import {
   tabsForIssueDetail,
 } from "../lib/issue-detail-tabs";
 import { projectPath } from "../lib/links";
+import {
+  issueBackTo,
+  peekIssueBack,
+  popIssueBack,
+  type IssueBackLocationState,
+} from "../lib/issue-back";
 import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
@@ -217,6 +223,7 @@ function useIssueDetailShellFlags(
 
 export function IssueDetailPage() {
   const { projectId = "", id = "" } = useParams();
+  const location = useLocation();
 
   const { data: issue, isLoading, error } = useIssueDetailQuery(id);
   const { data: list } = useIssuesQuery();
@@ -249,13 +256,19 @@ export function IssueDetailPage() {
   // navigations on bare skeletons until the slower list settled.
   const loading = isLoading && !issue;
 
+  const issueBackStack = (location.state as IssueBackLocationState | null)
+    ?.issueBackStack;
+  const backEntry = peekIssueBack(issueBackStack);
+  const backTo = backEntry ? issueBackTo(backEntry) : projectPath(projectId);
+
   const backLink = (
     <Link
-      to={projectPath(projectId)}
+      to={backTo}
+      state={{ issueBackStack: popIssueBack(issueBackStack) }}
       className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
     >
       <ArrowLeft className="h-4 w-4" />
-      Back to tree
+      Back
     </Link>
   );
 
