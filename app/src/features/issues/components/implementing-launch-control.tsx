@@ -3,9 +3,13 @@ import type { ConversationChannel } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { useAgentModelsQuery } from "@/features/agents/api/queries";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useCreateChannelSession } from "../api/mutations";
 import { useConfirmChannelLiveRun } from "../hooks/use-confirm-channel-live-run";
+import {
+  type IssueBackLocationState,
+  issueBackNavigateState,
+} from "../lib/issue-back";
 import {
   implementingLaunchCopy,
   implementingLockRefusalCopy,
@@ -31,6 +35,12 @@ export function ImplementingLockRefusalState({
   projectId: string;
   refusal: ImplementingLockRefusal;
 }) {
+  const location = useLocation();
+  const linkState = issueBackNavigateState(
+    location.pathname,
+    location.search,
+    (location.state as IssueBackLocationState | null)?.issueBackStack,
+  );
   const copy = implementingLockRefusalCopy(refusal.holderIssueTitle);
   return (
     <ShellState
@@ -47,6 +57,7 @@ export function ImplementingLockRefusalState({
               refusal.holderIssueId,
               "implementing",
             )}
+            state={linkState}
             className="font-medium text-foreground underline underline-offset-2 hover:text-[hsl(var(--current))]"
             data-testid="implementing-lock-holder-link"
           >

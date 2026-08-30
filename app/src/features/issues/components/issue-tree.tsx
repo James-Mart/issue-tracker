@@ -557,6 +557,9 @@ function TreeRow({
           >
             <Link
               to={issuePath(projectId, issue.id)}
+              state={{
+                issueBackStack: [{ kind: "structure", projectId }],
+              }}
               className={cn(
                 "truncate text-inherit no-underline hover:underline",
                 container ? "font-semibold" : "font-normal",

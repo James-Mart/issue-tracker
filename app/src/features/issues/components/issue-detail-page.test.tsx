@@ -105,7 +105,9 @@ vi.mock("./comments/comments-section", () => ({
   IssueCommentsSection: () => null,
 }));
 
-function mountPage(entry: string): { container: HTMLDivElement; root: Root } {
+function mountPage(
+  entry: string | { pathname: string; state?: unknown },
+): { container: HTMLDivElement; root: Root } {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -124,10 +126,46 @@ function mountPage(entry: string): { container: HTMLDivElement; root: Root } {
   return { container, root };
 }
 
+function backLink(container: ParentNode): HTMLAnchorElement | null {
+  return container.querySelector('[data-testid="issue-detail-back"] a');
+}
+
 afterEach(() => {
   document.body.innerHTML = "";
   mobileState.value = false;
   derivedState.ideaStatus = undefined;
+});
+
+describe("IssueDetailPage back navigation", () => {
+  it("returns to cockpit when opened from the cockpit list", () => {
+    const { container } = mountPage({
+      pathname: "/projects/issue-tracker/issues/capture",
+      state: { issueBackStack: [{ kind: "cockpit" }] },
+    });
+    const link = backLink(container);
+    expect(link).toBeTruthy();
+    expect(link!.textContent?.trim()).toBe("Back");
+    expect(link!.getAttribute("href")).toBe("/");
+  });
+
+  it("falls back to structure when opened without origin state", () => {
+    const { container } = mountPage("/projects/issue-tracker/issues/capture");
+    const link = backLink(container);
+    expect(link).toBeTruthy();
+    expect(link!.textContent?.trim()).toBe("Back");
+    expect(link!.getAttribute("href")).toBe("/projects/issue-tracker");
+  });
+
+  it("returns to agents when opened from the agents surface", () => {
+    const { container } = mountPage({
+      pathname: "/projects/issue-tracker/issues/capture",
+      state: { issueBackStack: [{ kind: "agents" }] },
+    });
+    const link = backLink(container);
+    expect(link).toBeTruthy();
+    expect(link!.textContent?.trim()).toBe("Back");
+    expect(link!.getAttribute("href")).toBe("/agents");
+  });
 });
 
 describe("IssueDetailPage mobile channel chrome", () => {

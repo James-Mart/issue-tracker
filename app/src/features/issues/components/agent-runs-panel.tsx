@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +29,10 @@ import {
   useIssueAgentRunsQuery,
 } from "../api/queries";
 import { useWorkRootAgentRuns } from "../hooks/use-work-root-agent-runs";
+import {
+  type IssueBackLocationState,
+  issueBackNavigateState,
+} from "../lib/issue-back";
 import { issueChannelPath } from "../lib/links";
 
 type SubagentUpdateEvent = Extract<TranscriptEvent, { type: "subagent_update" }>;
@@ -224,10 +228,18 @@ function AgentRunsCoordinatorLink({
   projectId: string;
   workRoot: IssueAgentRunsWorkRoot;
 }) {
+  const location = useLocation();
+  const linkState = issueBackNavigateState(
+    location.pathname,
+    location.search,
+    (location.state as IssueBackLocationState | null)?.issueBackStack,
+  );
+
   return (
     <p className="text-sm text-muted-foreground">
       <Link
         to={issueChannelPath(projectId, workRoot.issueId, "implementing")}
+        state={linkState}
         className="font-medium text-foreground underline underline-offset-2 hover:text-[hsl(var(--current))]"
         data-testid="agent-runs-coordinator-link"
       >

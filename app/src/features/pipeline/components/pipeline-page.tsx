@@ -15,6 +15,10 @@ import {
   ShellLoadingState,
 } from "@/app/shell-state";
 import { KIND_LABEL } from "@/features/issues/lib/kind";
+import {
+  type IssueBackLocationState,
+  issueBackNavigateState,
+} from "@/features/issues/lib/issue-back";
 import { issuePath } from "@/features/issues/lib/links";
 import { PipelineDiagram } from "../pipeline-diagram";
 import {
@@ -54,10 +58,16 @@ function PipelineHeader() {
 }
 
 function RunSequencePaneHeader({ sequence }: { sequence: RunSequence }) {
+  const location = useLocation();
   const rootIssue = sequence.rootIssue;
   const rootIssueHref = rootIssue
     ? issuePath(rootIssue.projectId, rootIssue.id)
     : null;
+  const linkState = issueBackNavigateState(
+    location.pathname,
+    location.search,
+    (location.state as IssueBackLocationState | null)?.issueBackStack,
+  );
 
   return (
     <div
@@ -79,6 +89,7 @@ function RunSequencePaneHeader({ sequence }: { sequence: RunSequence }) {
               </p>
               <Link
                 to={rootIssueHref}
+                state={linkState}
                 className="min-w-0 truncate text-sm font-medium text-[hsl(var(--current))] no-underline hover:underline"
                 data-testid="run-sequence-root-issue-link"
               >

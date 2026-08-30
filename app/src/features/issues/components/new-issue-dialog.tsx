@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { FIELD_LABELS } from "@server/fields";
 import { KINDS, PARENT_KINDS } from "@server/issue-constants";
 import type { IssueKind } from "@server/schemas";
@@ -27,6 +27,10 @@ import { useCreateIssue } from "../api/mutations";
 import { useIssuesQuery } from "../api/queries";
 import { useRouteProjectId } from "../hooks/use-route-project-id";
 import { issuesById, projectIdOf } from "../lib/build-tree";
+import {
+  type IssueBackLocationState,
+  issueBackNavigateState,
+} from "../lib/issue-back";
 import { issuePath } from "../lib/links";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { KIND_LABEL } from "../lib/kind";
@@ -52,6 +56,7 @@ function descriptionFor(kind: IssueKind): string {
 
 export function NewIssueDialog() {
   const navigate = useNavigate();
+  const location = useLocation();
   const routeProjectId = useRouteProjectId();
   const target = useIssueUiStore((s) => s.newIssue);
   const closeNew = useIssueUiStore((s) => s.closeNew);
@@ -109,7 +114,15 @@ export function NewIssueDialog() {
           withNew.set(issue.id, issue);
           const projectId = projectIdOf(issue.id, withNew) ?? routeProjectId;
           if (projectId) {
-            navigate(issuePath(projectId, issue.id));
+            const navigateState = issueBackNavigateState(
+              location.pathname,
+              location.search,
+              (location.state as IssueBackLocationState | null)?.issueBackStack,
+            );
+            navigate(
+              issuePath(projectId, issue.id),
+              navigateState ? { state: navigateState } : undefined,
+            );
           }
           closeNew();
         },

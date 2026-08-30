@@ -29,7 +29,7 @@ test.describe("shell at phone width", () => {
     // is the only thing that can put the nav within reach here.
     await page.goto(`${seededApp.baseURL}/projects/seed-proj/issues/seed-epic-b`);
     await expect(
-      page.getByRole("main").getByRole("link", { name: "Back to tree" }),
+      page.getByRole("main").getByRole("link", { name: "Back" }),
     ).toBeVisible();
 
     const nav = page.getByRole("dialog", { name: "Sidebar" });

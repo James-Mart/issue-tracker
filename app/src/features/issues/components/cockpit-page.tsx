@@ -238,6 +238,9 @@ export function CockpitPage() {
                     item={item}
                     issues={issues}
                     to={issuePath(group.projectId, item.issue.id)}
+                    drillInState={{
+                      issueBackStack: [{ kind: "cockpit" }],
+                    }}
                     actions={
                       <FlowRowActions
                         item={item}

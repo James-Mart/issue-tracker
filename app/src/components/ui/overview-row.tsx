@@ -38,6 +38,8 @@ export interface OverviewRowProps extends React.HTMLAttributes<HTMLDivElement> {
   drillInTo?: string;
   /** Accessible name for the stretched drill-in link. */
   drillInLabel?: string;
+  /** Router state for the stretched drill-in link. */
+  drillInState?: unknown;
 }
 
 const overlayReveal =
@@ -63,6 +65,7 @@ export function OverviewRow({
   overlayGroup = true,
   drillInTo,
   drillInLabel,
+  drillInState,
   className,
   children,
   ...props
@@ -84,6 +87,7 @@ export function OverviewRow({
       {drillInTo != null ? (
         <Link
           to={drillInTo}
+          state={drillInState}
           aria-label={drillInLabel}
           className="absolute inset-0 z-0 rounded-lg"
         />

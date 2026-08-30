@@ -1,8 +1,12 @@
 import { useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import type { DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
 import { Rail, RailNode } from "@/components/ui/rail";
 import { useIssuesQuery } from "../api/queries";
+import {
+  type IssueBackLocationState,
+  issueBackNavigateState,
+} from "../lib/issue-back";
 import { issuePath } from "../lib/links";
 import {
   epicStoriesForRail,
@@ -19,9 +23,17 @@ function StoryRailLabel({
   story: Extract<IssueRecord, { kind: "story" }>;
   projectId: string;
 }) {
+  const location = useLocation();
+  const linkState = issueBackNavigateState(
+    location.pathname,
+    location.search,
+    (location.state as IssueBackLocationState | null)?.issueBackStack,
+  );
+
   return (
     <Link
       to={issuePath(projectId, story.id)}
+      state={linkState}
       className="truncate text-sm hover:underline"
     >
       {story.title}

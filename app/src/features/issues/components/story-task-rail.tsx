@@ -1,8 +1,12 @@
 import { useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import type { IssueDetail, IssueRecord } from "@server/schemas";
 import { Rail, RailNode } from "@/components/ui/rail";
 import { useIssuesQuery } from "../api/queries";
+import {
+  type IssueBackLocationState,
+  issueBackNavigateState,
+} from "../lib/issue-back";
 import { issuePath } from "../lib/links";
 import {
   storyTasksForRail,
@@ -16,11 +20,18 @@ function TaskRailLabel({
   task: Extract<IssueRecord, { kind: "task" }>;
   projectId: string;
 }) {
+  const location = useLocation();
+  const linkState = issueBackNavigateState(
+    location.pathname,
+    location.search,
+    (location.state as IssueBackLocationState | null)?.issueBackStack,
+  );
   const shortSha = task.commitSha?.slice(0, 7);
   return (
     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
       <Link
         to={issuePath(projectId, task.id)}
+        state={linkState}
         className="truncate text-sm hover:underline"
       >
         {task.title}
