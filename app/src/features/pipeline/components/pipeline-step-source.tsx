@@ -18,21 +18,25 @@ function StepSourceStatus({
   title,
   source,
   children,
+  omitHeader = false,
 }: {
   title: string;
   source: string;
   children: ReactNode;
+  omitHeader?: boolean;
 }) {
   return (
     <div className="min-w-0 space-y-3">
-      <header className="min-w-0 space-y-1.5 pr-8">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">
-          {title}
-        </h2>
-        <p className="break-all font-mono text-[11px] text-muted-foreground">
-          {source}
-        </p>
-      </header>
+      {omitHeader ? null : (
+        <header className="min-w-0 space-y-1.5 pr-8">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">
+            {title}
+          </h2>
+          <p className="break-all font-mono text-[11px] text-muted-foreground">
+            {source}
+          </p>
+        </header>
+      )}
       {children}
     </div>
   );
@@ -42,17 +46,19 @@ export function PipelineStepSourceBody({
   stepId,
   title,
   source,
+  omitHeader = false,
 }: {
   stepId: string;
   title: string;
   source: string;
+  omitHeader?: boolean;
 }) {
   const { data, isLoading, error, refetch, isFetching } =
     usePipelineStepSourceQuery(stepId);
 
   if (isLoading) {
     return (
-      <StepSourceStatus title={title} source={source}>
+      <StepSourceStatus title={title} source={source} omitHeader={omitHeader}>
         <div role="status" aria-live="polite">
           <p className="mb-3 font-mono text-[11px] text-muted-foreground">
             Loading step source…
@@ -68,7 +74,7 @@ export function PipelineStepSourceBody({
 
   if (error) {
     return (
-      <StepSourceStatus title={title} source={source}>
+      <StepSourceStatus title={title} source={source} omitHeader={omitHeader}>
         <div
           className="rounded-md border border-[hsl(var(--blocked)/0.45)] bg-[hsl(var(--blocked)/0.08)] px-3 py-2.5 text-sm text-muted-foreground"
           role="alert"
@@ -95,7 +101,11 @@ export function PipelineStepSourceBody({
   }
 
   return (
-    <StepSourceStatus title={title} source={data!.source}>
+    <StepSourceStatus
+      title={title}
+      source={data!.source}
+      omitHeader={omitHeader}
+    >
       <TranscriptMarkdownText text={data!.markdown} />
     </StepSourceStatus>
   );
@@ -140,6 +150,31 @@ export function PipelineStepSourcePanel({
   );
 }
 
+function PipelineStepSourceSheetHeader({
+  title,
+  source,
+}: {
+  title: string;
+  source: string;
+}) {
+  return (
+    <SheetHeader
+      className="shrink-0 space-y-0.5 border-b border-border bg-[hsl(var(--panel))] px-6 py-2.5 text-left"
+      data-testid="pipeline-step-source-header"
+    >
+      <p className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        Source
+      </p>
+      <SheetTitle className="text-base font-semibold tracking-tight">
+        {title}
+      </SheetTitle>
+      <SheetDescription className="break-all font-mono text-[11px]">
+        {source}
+      </SheetDescription>
+    </SheetHeader>
+  );
+}
+
 export function PipelineStepSourceSheet({
   stepId,
   title,
@@ -159,17 +194,24 @@ export function PipelineStepSourceSheet({
       }}
     >
       <SheetContent
-        side="bottom"
+        side="top"
+        dismissAffordance="bottom-handle"
         id="pipeline-step-source"
         data-testid="pipeline-step-source-sheet"
-        className="flex max-h-[85vh] flex-col gap-0 overflow-y-auto p-4"
+        className="max-h-[85vh] overflow-hidden"
         aria-label={`${title} source`}
       >
-        <SheetHeader className="sr-only">
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>{source}</SheetDescription>
-        </SheetHeader>
-        <PipelineStepSourceBody stepId={stepId} title={title} source={source} />
+        <div className="-mx-6 -mt-6 flex min-h-0 flex-1 flex-col">
+          <PipelineStepSourceSheetHeader title={title} source={source} />
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            <PipelineStepSourceBody
+              stepId={stepId}
+              title={title}
+              source={source}
+              omitHeader
+            />
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
   );

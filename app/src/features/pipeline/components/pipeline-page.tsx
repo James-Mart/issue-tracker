@@ -1,7 +1,13 @@
-import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { IssueKind } from "@server/schemas";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -89,17 +95,17 @@ function RunSequencePaneHeader({ sequence }: { sequence: RunSequence }) {
   );
 }
 
-function SelectedRunSequence({
-  conversationId,
-  layout,
+function SelectedRunSequenceStatus({
+  isLoading,
+  error,
+  isFetching,
+  onReload,
 }: {
-  conversationId: string;
-  layout: "desktop" | "phone";
+  isLoading: boolean;
+  error: Error | null;
+  isFetching: boolean;
+  onReload: () => void;
 }) {
-  const { data, isLoading, error, refetch, isFetching } =
-    usePipelineRunQuery(conversationId);
-  const sequence = useLiveRunSequence(conversationId, data);
-
   if (isLoading) {
     return (
       <div className="min-w-0 flex-1">
@@ -120,9 +126,7 @@ function SelectedRunSequence({
           size="sm"
           className="mt-3"
           disabled={isFetching}
-          onClick={() => {
-            void refetch();
-          }}
+          onClick={onReload}
         >
           Reload
         </Button>
@@ -130,6 +134,66 @@ function SelectedRunSequence({
     );
   }
 
+  return null;
+}
+
+function SelectedRunSequence({
+  conversationId,
+  layout,
+}: {
+  conversationId: string;
+  layout: "desktop" | "phone";
+}) {
+  const navigate = useNavigate();
+  const { data, isLoading, error, refetch, isFetching } =
+    usePipelineRunQuery(conversationId);
+  const sequence = useLiveRunSequence(conversationId, data);
+  const status = (
+    <SelectedRunSequenceStatus
+      isLoading={isLoading}
+      error={error}
+      isFetching={isFetching}
+      onReload={() => {
+        void refetch();
+      }}
+    />
+  );
+
+  if (layout === "phone") {
+    return (
+      <Sheet
+        open
+        onOpenChange={(open) => {
+          if (!open) navigate("/pipeline/runs", { replace: true });
+        }}
+      >
+        <SheetContent
+          side="top"
+          dismissAffordance="bottom-handle"
+          data-testid="pipeline-run-sequence-sheet"
+          className="max-h-[85vh] overflow-hidden"
+          aria-label="Run sequence"
+        >
+          <div className="-mx-6 -mt-6 flex min-h-0 flex-1 flex-col">
+            <SheetTitle className="sr-only">Sequence</SheetTitle>
+            {status}
+            {sequence && !isLoading && !error ? (
+              <>
+                <SheetHeader className="shrink-0 space-y-0 border-b border-border bg-[hsl(var(--panel))] px-6 py-2.5 text-left">
+                  <RunSequencePaneHeader sequence={sequence} />
+                </SheetHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+                  <RunSequenceDiagram sequence={sequence} layout="phone" />
+                </div>
+              </>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  if (isLoading || error) return status;
   if (!sequence) return null;
 
   return (

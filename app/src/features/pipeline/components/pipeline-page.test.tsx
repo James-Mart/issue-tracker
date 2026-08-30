@@ -196,6 +196,26 @@ function sequencePaneHeader(container: ParentNode): HTMLElement {
   return el;
 }
 
+function sequenceSheet(): HTMLElement {
+  const el = document.querySelector(
+    '[data-testid="pipeline-run-sequence-sheet"]',
+  );
+  if (!(el instanceof HTMLElement)) {
+    throw new Error("Missing run sequence sheet");
+  }
+  return el;
+}
+
+function sheetCloseControl(sheet: ParentNode): HTMLElement {
+  const close = Array.from(sheet.querySelectorAll("button")).find((el) =>
+    el.textContent?.includes("Close"),
+  );
+  if (!(close instanceof HTMLElement)) {
+    throw new Error("Missing sheet close control");
+  }
+  return close;
+}
+
 function mockViewport(width: number) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -401,6 +421,9 @@ describe("PipelinePage", () => {
     expect(
       container.querySelector('[data-testid="pipeline-run-sequence-placeholder"]'),
     ).toBeNull();
+    expect(
+      document.querySelector('[data-testid="pipeline-run-sequence-sheet"]'),
+    ).toBeNull();
   });
 
   it("draws the selected run on the Rail at phone width", async () => {
@@ -426,20 +449,46 @@ describe("PipelinePage", () => {
     });
     const { container } = mountPipelinePage("/pipeline/runs/e");
     await flush();
-    const diagram = container.querySelector(
-      '[data-testid="run-sequence-diagram"]',
-    );
+    const sheet = sequenceSheet();
+    expect(sheet.className).toMatch(/\btop-0\b/);
+    expect(sheet.className).toMatch(/\bslide-in-from-top\b/);
+    expect(sheet.querySelector('[data-testid="run-sequence-pane-header"]')).toBeTruthy();
+    const diagram = sheet.querySelector('[data-testid="run-sequence-diagram"]');
     expect(diagram?.getAttribute("data-layout")).toBe("phone");
-    expect(container.textContent).toContain("human replied");
-    expect(container.querySelector('[data-testid="sequence-from"]')?.textContent).toBe(
+    expect(sheet.textContent).toContain("human replied");
+    expect(sheet.querySelector('[data-testid="sequence-from"]')?.textContent).toBe(
       "human",
     );
-    expect(container.querySelector('[data-testid="sequence-to"]')?.textContent).toBe(
+    expect(sheet.querySelector('[data-testid="sequence-to"]')?.textContent).toBe(
       "planning",
     );
+    expect(sheetCloseControl(sheet).className).toMatch(/\bmt-auto\b/);
+    expect(
+      container.querySelector('[data-testid="pipeline-run-list"]')
+        ?.querySelector('[data-testid="run-sequence-diagram"]'),
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="pipeline-run-sequence-placeholder"]'),
     ).toBeNull();
+  });
+
+  it("dismisses the phone sequence sheet back to /pipeline/runs", async () => {
+    mockViewport(390);
+    stubRuns(FIVE_RUNS);
+    const { container } = mountPipelinePage("/pipeline/runs/e");
+    await flush();
+    const sheet = sequenceSheet();
+    act(() => {
+      sheetCloseControl(sheet).click();
+    });
+    await flush();
+    expect(
+      document.querySelector('[data-testid="pipeline-run-sequence-sheet"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="location-probe"]')?.textContent,
+    ).toBe("/pipeline/runs");
+    expect(runCard(container, "e").getAttribute("data-current")).toBeNull();
   });
 
   it("names each model variant on the phone rail caption", async () => {
@@ -480,12 +529,13 @@ describe("PipelinePage", () => {
         ],
       },
     });
-    const { container } = mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/pipeline/runs/e");
     await flush();
+    const sheet = sequenceSheet();
     expect(
-      container.querySelector('[data-testid="sequence-beat-label"]')?.textContent,
+      sheet.querySelector('[data-testid="sequence-beat-label"]')?.textContent,
     ).toBe("spawn implementor (composer)");
-    const expand = container.querySelector(
+    const expand = sheet.querySelector(
       '[data-testid="sequence-beat"][data-row="collapsed"] button',
     );
     if (!(expand instanceof HTMLElement)) {
@@ -495,7 +545,7 @@ describe("PipelinePage", () => {
       expand.click();
     });
     const turnLabels = Array.from(
-      container.querySelectorAll(
+      sheet.querySelectorAll(
         '[data-testid="sequence-beat"][data-row="turn"] [data-testid="sequence-beat-label"]',
       ),
     ).map((el) => el.textContent);
@@ -503,9 +553,9 @@ describe("PipelinePage", () => {
       "spawn implementor (composer)",
       "spawn implementor (sonnet)",
     ]);
-    expect(
-      container.querySelector('[data-testid="sequence-to"]')?.textContent,
-    ).toBe("implementor");
+    expect(sheet.querySelector('[data-testid="sequence-to"]')?.textContent).toBe(
+      "implementor",
+    );
   });
 
   it("draws an indeterminate spawn on the phone rail with a no-return caption", async () => {
@@ -531,17 +581,16 @@ describe("PipelinePage", () => {
         ],
       },
     });
-    const { container } = mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/pipeline/runs/e");
     await flush();
-    const diagram = container.querySelector(
-      '[data-testid="run-sequence-diagram"]',
-    );
+    const sheet = sequenceSheet();
+    const diagram = sheet.querySelector('[data-testid="run-sequence-diagram"]');
     expect(diagram?.getAttribute("data-layout")).toBe("phone");
-    const label = container.querySelector('[data-testid="sequence-beat-label"]');
+    const label = sheet.querySelector('[data-testid="sequence-beat-label"]');
     expect(label?.textContent).toBe("spawn retro · no return");
     expect(label?.closest("p")?.className).toContain("hsl(var(--warn))");
-    expect(container.querySelector(".animate-spin")).toBeNull();
-    const arrow = container.querySelector(
+    expect(sheet.querySelector(".animate-spin")).toBeNull();
+    const arrow = sheet.querySelector(
       '[data-testid="sequence-arrow"][data-kind="spawn"]',
     );
     expect(arrow?.getAttribute("data-indeterminate")).toBe("true");
@@ -644,22 +693,23 @@ describe("PipelinePage", () => {
         ],
       },
     });
-    const { container } = mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/pipeline/runs/e");
     await flush();
+    const sheet = sequenceSheet();
     expect(
-      container.querySelector('[data-testid="run-sequence-diagram"]')?.getAttribute(
+      sheet.querySelector('[data-testid="run-sequence-diagram"]')?.getAttribute(
         "data-layout",
       ),
     ).toBe("phone");
-    expect(phoneSectionHeaders(container)).toEqual([
+    expect(phoneSectionHeaders(sheet)).toEqual([
       { kind: "epic", title: "Pipeline fixes", expanded: "true" },
       { kind: "story", title: "Run status semantics", expanded: "true" },
       { kind: "story", title: "Diagram issue grouping", expanded: "true" },
     ]);
     expect(
-      Array.from(
-        container.querySelectorAll('[data-testid="sequence-beat"]'),
-      ).map((el) => el.getAttribute("data-beat-index")),
+      Array.from(sheet.querySelectorAll('[data-testid="sequence-beat"]')).map(
+        (el) => el.getAttribute("data-beat-index"),
+      ),
     ).toEqual(["0", "1", "2", "3", "4"]);
   });
 
@@ -717,10 +767,11 @@ describe("PipelinePage", () => {
         ],
       },
     });
-    const { container } = mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/pipeline/runs/e");
     await flush();
+    const sheet = sequenceSheet();
     const story = Array.from(
-      container.querySelectorAll('[data-testid="sequence-section"]'),
+      sheet.querySelectorAll('[data-testid="sequence-section"]'),
     ).find(
       (el) =>
         el.querySelector('[data-testid="sequence-section-title"]')
@@ -734,11 +785,11 @@ describe("PipelinePage", () => {
     });
     expect(story.getAttribute("aria-expanded")).toBe("false");
     expect(
-      Array.from(
-        container.querySelectorAll('[data-testid="sequence-beat"]'),
-      ).map((el) => el.getAttribute("data-beat-index")),
+      Array.from(sheet.querySelectorAll('[data-testid="sequence-beat"]')).map(
+        (el) => el.getAttribute("data-beat-index"),
+      ),
     ).toEqual(["0", "3", "4"]);
-    expect(phoneSectionHeaders(container)).toEqual([
+    expect(phoneSectionHeaders(sheet)).toEqual([
       { kind: "epic", title: "Pipeline fixes", expanded: "true" },
       { kind: "story", title: "Run status semantics", expanded: "false" },
       { kind: "story", title: "Diagram issue grouping", expanded: "true" },
@@ -890,7 +941,7 @@ describe("PipelinePage", () => {
     ).toBe("/pipeline");
   });
 
-  it("opens a bottom sheet at phone width", async () => {
+  it("opens a top sheet with a pinned header at phone width", async () => {
     mockViewport(390);
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -910,8 +961,12 @@ describe("PipelinePage", () => {
     if (!(sheet instanceof HTMLElement)) {
       throw new Error("Missing step source sheet");
     }
+    expect(sheet.className).toMatch(/\btop-0\b/);
+    expect(sheet.querySelector('[data-testid="pipeline-step-source-header"]'))
+      .toBeTruthy();
     expect(sheet.textContent).toContain("Phone sheet prose.");
     expect(sheet.textContent).toContain("skills/issue-tracker-plan/SKILL.md");
+    expect(sheet.querySelector("button")?.className).toMatch(/\bmt-auto\b/);
   });
 
   it("does not open a panel when a handoff node is activated", () => {
