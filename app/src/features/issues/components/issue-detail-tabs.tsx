@@ -72,7 +72,6 @@ export function IssueDetailTabs({
   const isMobile = useIsMobile();
   const mobileChannelChrome =
     isMobile && issueDetailTabNeedsBoundedShell(active, tabs);
-  const pending = useCockpitLaunchStore((s) => s.pending);
 
   useEffect(() => {
     const raw = searchParams.get("tab");
@@ -84,15 +83,23 @@ export function IssueDetailTabs({
   }, [active, searchParams, setSearchParams, tabs]);
 
   useEffect(() => {
-    if (!pending || pending.issueId !== issue.id || active !== "overview") {
-      return;
-    }
-    const next = channelForLaunchKind(pending.kind);
-    if (!tabs.some((tab) => tab.key === next)) return;
-    setSearchParams((prev) => writeIssueDetailTabParam(prev, next), {
-      replace: true,
+    return useCockpitLaunchStore.subscribe((state, prev) => {
+      const pending = state.pending;
+      if (!pending || pending === prev.pending) return;
+      if (pending.issueId !== issue.id) return;
+      const next = channelForLaunchKind(pending.kind);
+      if (!tabs.some((tab) => tab.key === next)) return;
+      setSearchParams(
+        (params) => {
+          if (resolveIssueDetailTab(params.get("tab"), tabs) === next) {
+            return params;
+          }
+          return writeIssueDetailTabParam(params, next);
+        },
+        { replace: true },
+      );
     });
-  }, [active, issue.id, pending, setSearchParams, tabs]);
+  }, [issue.id, setSearchParams, tabs]);
 
   const setActive = (next: IssueDetailTabKey) => {
     setSearchParams((prev) => writeIssueDetailTabParam(prev, next), {
