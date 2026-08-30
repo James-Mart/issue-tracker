@@ -890,7 +890,7 @@ describe("PipelinePage", () => {
     ).toBe("/pipeline");
   });
 
-  it("opens a bottom sheet at phone width", async () => {
+  it("opens a top sheet with a pinned header at phone width", async () => {
     mockViewport(390);
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -910,8 +910,12 @@ describe("PipelinePage", () => {
     if (!(sheet instanceof HTMLElement)) {
       throw new Error("Missing step source sheet");
     }
+    expect(sheet.className).toMatch(/\btop-0\b/);
+    expect(sheet.querySelector('[data-testid="pipeline-step-source-header"]'))
+      .toBeTruthy();
     expect(sheet.textContent).toContain("Phone sheet prose.");
     expect(sheet.textContent).toContain("skills/issue-tracker-plan/SKILL.md");
+    expect(sheet.querySelector("button")?.className).toMatch(/\bmt-auto\b/);
   });
 
   it("does not open a panel when a handoff node is activated", () => {
