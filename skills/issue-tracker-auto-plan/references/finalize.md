@@ -8,7 +8,8 @@ Then resolve finalize target(s) from the **source kind** (known from Bootstrap):
 
 ### Idea source
 
-The seed Idea is archived after migration — use the Bootstrap `<issueId>`.
+The seed Idea is archived once planning finishes — use the Bootstrap
+`<issueId>`.
 Write a **single** combined audit trail onto that archived Idea (one target),
 even when the Idea migrated into multiple roots. The resulting roots get
 neither the attachment nor the comment — their provenance is the planner's

@@ -84,26 +84,28 @@ skip this step.
 
 ### Single root (not splitting)
 
-One epic-form or story-form apply. Keep existing in-place / Idea-archive
-behavior:
+One epic-form or story-form apply.
+
+When the source is an **Idea**, leave it **unarchived** after `apply` — the
+Idea is the record that keeps the resulting root from reporting ready until
+plan-polish finishes.
 
 **Story-form** — `project: <projectId>` string + `story:` object (no `epic:`):
 
 | Source | Story id in the doc | After successful `apply` |
 | --- | --- | --- |
-| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | `issue idea set <ideaId> archived true` |
+| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | (none) |
 | **project-level Story** (`not-started`) | **Keep** the existing Story id | (none) |
 
 **Epic-form** — `project: <projectId>` string + `epic:` object:
 
 | Source | Epic id in the doc | After successful `apply` |
 | --- | --- | --- |
-| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | `issue idea set <ideaId> archived true` |
+| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | (none) |
 | **Epic** (`todo`) | **Keep** the existing Epic id | (none) |
 | **project-level Story** (`not-started`) | Mint a **new** kebab Epic id; **keep** the existing Story id as a child under that Epic | (none) |
 
-Show `apply` stdout (and archive outcome on the Idea path). Report the
-resulting Story or Epic id.
+Show `apply` stdout. Report the resulting Story or Epic id.
 
 ### Multi-root (splitting)
 
@@ -115,10 +117,12 @@ the source Idea / Epic / Story id as any new root id).
    otherwise any order.
 2. On **first apply failure:** stop. Leave already-written roots in place. Do
    **not** delete the source. No automatic rollback.
-3. Only after **every** apply in the migrate succeeds: archive or delete the
-   source — `issue idea set <ideaId> archived true`, `issue epic delete
-   <epicId>` (source was `todo`), or `issue story delete <storyId>` (source
-   was not-started project-level Story), as appropriate.
+3. Only after **every** apply in the migrate succeeds: delete the source when
+   it is not an Idea — `issue epic delete <epicId>` (source was `todo`), or
+   `issue story delete <storyId>` (source was not-started project-level
+   Story), as appropriate. When the source is an **Idea**, leave it
+   **unarchived** — the Idea is the record that keeps the resulting roots
+   from reporting ready until every root's plan-polish has finished.
 
-Show each `apply` stdout and the final archive/delete outcome. Report every
-resulting root id.
+Show each `apply` stdout and the final delete outcome when the source was
+not an Idea. Report every resulting root id.

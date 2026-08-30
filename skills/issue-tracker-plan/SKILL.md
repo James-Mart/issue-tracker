@@ -229,6 +229,13 @@ polish spawns parallel check agents; concurrent polish runs overload CPU):
    (e.g. the user asks to grill more before polish runs), the polish
    obligation for that root persists — deferral does not reset or cancel it.
 
+When every resulting root's polish has finished, archive the source Idea
+when the migrate source was an Idea: `issue idea set <ideaId> archived
+true`. That is a no-op in the single-root case — polish already archived it
+when `planRoots` held exactly that one root — and it closes the multi-root
+case after the last root's polish. Keep the serial ordering above; this
+archive is the last action, not an extra gate.
+
 ## Spawn stubs
 
 Pass these as the Cursor Task `prompt`. Inline the fields each stub lists.

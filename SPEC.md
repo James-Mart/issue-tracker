@@ -219,7 +219,9 @@ These are computed by `derive()` and never written to disk (see
   when the issue stores `sourceIdea`, the referenced Idea is present in the
   issue set, and that Idea's `archived` is not true; otherwise `false`; also
   `issue epic get … planNotFinal` / `issue story get … planNotFinal`. Tree
-  chip `plan not final` when true.
+  chip `plan not final` when true. A work root reports ready on every surface
+  a worker reads only when `planNotFinal` is `false`; archiving the source
+  Idea is the act that declares planning finished.
 - **mergeBase** — tree chip `mergeBase=<ref>` / `mergeBase=(unset)`;
   also `issue story get … mergeBase`. Resolution:
   [stacked-PR merge model](#the-stacked-pr-merge-model). No second name
@@ -1465,7 +1467,9 @@ so cannot drift:
   `sourceIdea`, the referenced Idea is present in the pass's issue set, and that
   Idea's `archived` is not true; otherwise `false` (including when `sourceIdea`
   is absent or names an Idea missing from the set). Computed by `derive()` for
-  every Epic and root project-level Story.
+  every Epic and root project-level Story. Readiness surfaces exclude roots
+  while `planNotFinal` is `true`; `issue idea set … archived true` on the
+  source Idea is what clears it.
 - **problems** — the integrity checks `derive()` runs over the parsed issues:
   dependency cycles over `stackedOn`/`blockedBy`; dangling
   `partOf`/`stackedOn`/`blockedBy` ids; a Story whose `stackedOn` entry is not a
