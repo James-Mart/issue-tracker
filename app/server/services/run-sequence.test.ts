@@ -86,6 +86,13 @@ function writeConversation(
   );
 }
 
+function writeRunLiveMarker(conversationId: string): void {
+  writeFileSync(
+    join(conversationsDir, conversationId, "run-live.json"),
+    `${JSON.stringify({ pid: process.pid })}\n`,
+  );
+}
+
 function delegation(
   overrides: Partial<DelegationRecordWithEnd> &
     Pick<
@@ -1532,6 +1539,55 @@ describe("runSequence", () => {
       sequence.sections[0]?.children[0]?.children.map((s) => s.issueId),
     ).toEqual(["task-a", "task-b", "task-a", "task-b"]);
   });
+
+  it("reports in-flight when delegations are closed but the run-live marker is present", async () => {
+    writeConversation("conv-live-marker", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-research", "running", AT, 1),
+        toolCall("call-research", "completed", AT_END, 2),
+      ],
+    });
+    writeRunLiveMarker("conv-live-marker");
+
+    const runSequence = await loadRunSequence();
+    expect(runSequence("conv-live-marker").condition).toBe("in-flight");
+  });
+
+  it("reports completed when delegations are closed and no run-live marker", async () => {
+    writeConversation("conv-no-marker", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-research", "running", AT, 1),
+        toolCall("call-research", "completed", AT_END, 2),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    expect(runSequence("conv-no-marker").condition).toBe("completed");
+  });
 });
 
 describe("recentRuns", () => {
@@ -1902,5 +1958,64 @@ describe("recentRuns", () => {
         recoveredErrors: 1,
       },
     ]);
+  });
+
+  it("reports in-flight when the run-live marker overrides a completed beat verdict", async () => {
+    writeConversation("conv-live-list", {
+      meta: {
+        channel: "planning",
+        issueId: "task-live",
+        createdAt: AT_LATE,
+      },
+      delegations: [
+        delegation({
+          delegationId: "del-live",
+          agentId: "agent-live",
+          role: "planner",
+          model: "composer-2.5",
+          at: AT_LATE,
+          issueId: "task-live",
+          parentCallId: "call-live",
+          end: { status: "completed", endedAt: AT_LATE_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-live", "running", AT_LATE, 1),
+        toolCall("call-live", "completed", AT_LATE_END, 2),
+      ],
+    });
+    writeRunLiveMarker("conv-live-list");
+
+    const recentRuns = await loadRecentRuns();
+    expect(recentRuns(1)[0]?.condition).toBe("in-flight");
+  });
+
+  it("reports completed from recentRuns when no run-live marker is present", async () => {
+    writeConversation("conv-completed-list", {
+      meta: {
+        channel: "planning",
+        issueId: "task-done",
+        createdAt: AT_LATE,
+      },
+      delegations: [
+        delegation({
+          delegationId: "del-done",
+          agentId: "agent-done",
+          role: "planner",
+          model: "composer-2.5",
+          at: AT_LATE,
+          issueId: "task-done",
+          parentCallId: "call-done",
+          end: { status: "completed", endedAt: AT_LATE_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-done", "running", AT_LATE, 1),
+        toolCall("call-done", "completed", AT_LATE_END, 2),
+      ],
+    });
+
+    const recentRuns = await loadRecentRuns();
+    expect(recentRuns(1)[0]?.condition).toBe("completed");
   });
 });
