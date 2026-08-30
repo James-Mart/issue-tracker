@@ -230,6 +230,27 @@ describe("partitionCockpitBuckets", () => {
       "implementing",
     ]);
   });
+
+  it("lifts planned Ideas into needs attention", () => {
+    const planned = row(idea("planned"), {
+      blocked: false,
+      ideaStatus: "planned",
+    });
+    const ready = row(epic("ready"), { blocked: false, epicStatus: "todo" });
+
+    const partitioned = partitionCockpitBuckets(
+      emptyBuckets({
+        ready: [planned, ready],
+      }),
+    );
+
+    expect(partitioned.needsAttention.map((item) => item.issue.id)).toEqual([
+      "planned",
+    ]);
+    expect(partitioned.buckets.ready.map((item) => item.issue.id)).toEqual([
+      "ready",
+    ]);
+  });
 });
 
 describe("FlowBucketsSections", () => {
@@ -271,6 +292,25 @@ describe("FlowBucketsSections", () => {
     expect(section(container, "inFlight")?.textContent).toContain(
       "implementing",
     );
+  });
+
+  it("partitions planned Ideas into attention", () => {
+    const buckets = emptyBuckets({
+      ready: [
+        row(idea("planned"), {
+          blocked: false,
+          ideaStatus: "planned",
+        }),
+        row(epic("ready"), { blocked: false, epicStatus: "todo" }),
+      ],
+    });
+
+    const { container } = mountSections(buckets);
+    expect(section(container, "needsAttention")?.textContent).toContain(
+      "planned",
+    );
+    expect(section(container, "ready")?.textContent).toContain("ready");
+    expect(section(container, "ready")?.textContent).not.toContain("planned");
   });
 
   it("does not render blocked work on the cockpit", () => {

@@ -103,6 +103,9 @@ describe("issueRailNodeState", () => {
         ideaStatus: "awaiting-direction",
       }),
     ).toBe("needs-attention");
+    expect(
+      issueRailNodeState(idea(), { blocked: false, ideaStatus: "planned" }),
+    ).toBe("needs-attention");
   });
 
   it("maps blocked ahead of in-flight", () => {

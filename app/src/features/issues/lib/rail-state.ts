@@ -24,7 +24,11 @@ export function issueRailNodeState(
   state: DerivedState | undefined,
 ): RailNodeState {
   if (hasAttention(issue) && issue.needsAttention) return "needs-attention";
-  if (issue.kind === "idea" && state?.ideaStatus === "awaiting-direction") {
+  if (
+    issue.kind === "idea" &&
+    (state?.ideaStatus === "awaiting-direction" ||
+      state?.ideaStatus === "planned")
+  ) {
     return "needs-attention";
   }
   if (state?.blocked) return "blocked";

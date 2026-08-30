@@ -205,16 +205,18 @@ describe("flowBuckets", () => {
     expect(ids(buckets.recentlyMerged)).toEqual(["mid-epic", "old-epic"]);
   });
 
-  it("excludes Epic-child Stories, Tasks, Projects, and planned Ideas", () => {
+  it("excludes Epic-child Stories, Tasks, Projects, and archived planned Ideas", () => {
     const issues = [
       project("p"),
       idea("i", "p"),
+      { ...idea("arch-planned", "p"), archived: true },
       epic("e", "p"),
       story("s", "e"),
       task("t", "s"),
     ];
     const derived: Record<string, DerivedState> = {
       i: { blocked: false, ideaStatus: "planned" },
+      "arch-planned": { blocked: false, ideaStatus: "planned" },
       e: { blocked: false, epicStatus: "todo" },
       s: { blocked: false, storyStatus: "not-started" },
       t: { blocked: false },
@@ -222,11 +224,29 @@ describe("flowBuckets", () => {
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
 
-    expect(ids(buckets.ready).sort()).toEqual(["e"].sort());
+    expect(ids(buckets.ready).sort()).toEqual(["e", "i"].sort());
     expect(buckets.awaitingPlanning).toEqual([]);
     expect(buckets.inFlight).toEqual([]);
     expect(buckets.blocked).toEqual([]);
     expect(buckets.recentlyMerged).toEqual([]);
+    expect(ids(buckets.ready)).not.toContain("arch-planned");
+  });
+
+  it("excludes archived planned Ideas even when archived rows are visible", () => {
+    const issues = [
+      project("p"),
+      idea("live-planned", "p"),
+      { ...idea("arch-planned", "p"), archived: true },
+    ];
+    const derived: Record<string, DerivedState> = {
+      "live-planned": { blocked: false, ideaStatus: "planned" },
+      "arch-planned": { blocked: false, ideaStatus: "planned" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(ids(buckets.ready)).toEqual(["live-planned"]);
+    expect(ids(buckets.ready)).not.toContain("arch-planned");
   });
 
   it("places a captured Idea in awaitingPlanning and a planning Idea in inFlight", () => {
@@ -248,7 +268,9 @@ describe("flowBuckets", () => {
 
     expect(ids(buckets.awaitingPlanning)).toEqual(["captured-idea"]);
     expect(ids(buckets.inFlight)).toEqual(["planning-idea"]);
-    expect(ids(buckets.ready)).toEqual(["awaiting-idea"]);
+    expect(ids(buckets.ready).sort()).toEqual(
+      ["awaiting-idea", "planned-idea"].sort(),
+    );
     expect(ids(buckets.blocked)).toEqual([]);
     expect(ids(buckets.recentlyMerged)).toEqual([]);
   });
@@ -501,11 +523,17 @@ describe("flowBuckets", () => {
 });
 
 describe("flowItemNeedsAttention", () => {
-  it("treats awaiting-direction Ideas as attention and ignores implementing Stories", () => {
+  it("treats awaiting-direction and planned Ideas as attention and ignores implementing Stories", () => {
     expect(
       flowItemNeedsAttention({
         issue: idea("awaiting", "p"),
         state: { blocked: false, ideaStatus: "awaiting-direction" },
+      }),
+    ).toBe(true);
+    expect(
+      flowItemNeedsAttention({
+        issue: idea("planned", "p"),
+        state: { blocked: false, ideaStatus: "planned" },
       }),
     ).toBe(true);
     expect(

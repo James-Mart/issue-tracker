@@ -96,8 +96,8 @@ export function flowFiltersActive(filters: FlowFilters): boolean {
 }
 
 /**
- * Epic, project-level Story, or Idea that is not `planned`. Tasks and
- * Epic-child Stories stay out. A planned Idea's plan root is already a row.
+ * Epic, project-level Story, or Idea. Tasks and Epic-child Stories stay out.
+ * A `planned` Idea is a row only while unarchived; its plan root is already a row.
  */
 function isFlowTopLevelRow(
   issue: IssueRecord,
@@ -112,7 +112,12 @@ function isFlowTopLevelRow(
   // parent so an epic nested under another epic (writable via the API) stays out.
   if (byId.get(issue.partOf)?.kind !== "project") return false;
   if (issue.kind === "idea") {
-    return derived[issue.id]?.ideaStatus !== "planned";
+    if (
+      derived[issue.id]?.ideaStatus === "planned" &&
+      issue.archived
+    ) {
+      return false;
+    }
   }
   return true;
 }
@@ -120,7 +125,8 @@ function isFlowTopLevelRow(
 /** Attention for Flow: stored flag on Epics/Stories, stall only on planning. */
 export function flowItemNeedsAttention(item: FlowItem): boolean {
   if (item.issue.kind === "idea") {
-    return item.state?.ideaStatus === "awaiting-direction";
+    const status = item.state?.ideaStatus;
+    return status === "awaiting-direction" || status === "planned";
   }
   return hasAttention(item.issue) && item.issue.needsAttention;
 }
