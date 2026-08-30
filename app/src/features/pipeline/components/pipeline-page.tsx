@@ -185,7 +185,7 @@ function SelectedRunSequence({
           className="max-h-[85vh] overflow-hidden"
           aria-label="Run sequence"
         >
-          <div className="-mx-6 -mt-6 flex max-h-[calc(85vh-3.25rem)] min-h-0 flex-col overflow-hidden">
+          <div className="-mx-6 -mt-6 flex min-h-0 flex-1 flex-col overflow-hidden">
             <SheetTitle className="sr-only">Sequence</SheetTitle>
             {status}
             {sequence && !isLoading && !error ? (
