@@ -11,6 +11,7 @@ import {
 } from "@/app/shell-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
+import { usePipelineRunsLive } from "../api/live";
 import { usePipelineRunsQuery } from "../api/queries";
 import { pipelineRunPath } from "../paths";
 import {
@@ -151,6 +152,7 @@ export function PipelineRunsView({
   ) => ReactNode;
 }) {
   const isMobile = useIsMobile();
+  usePipelineRunsLive();
   const { data, isLoading, error, refetch, isFetching } =
     usePipelineRunsQuery();
   const runs = data?.runs ?? [];

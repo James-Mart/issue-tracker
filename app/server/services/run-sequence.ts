@@ -14,6 +14,7 @@ import {
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
+import { isRunLive } from "./run-live.js";
 
 export type RunCondition = "completed" | "in-flight" | "failed";
 
@@ -257,6 +258,13 @@ function runOutcome(beats: OrderedBeat[]): {
   }
 
   return { condition, recoveredErrors };
+}
+
+export function conditionWithLiveness(
+  conversationId: string,
+  beatCondition: RunCondition,
+): RunCondition {
+  return isRunLive(conversationId) ? "in-flight" : beatCondition;
 }
 
 function turnEndMs(beat: SequenceBeat, row: OrderedBeat): number {
@@ -578,11 +586,11 @@ export function runSequence(conversationId: string): RunSequence {
     lifelines.push({ id: family, label: family, kind: "role" });
   }
 
-  const { condition, recoveredErrors } = runOutcome(ordered);
+  const { condition: beatCondition, recoveredErrors } = runOutcome(ordered);
   const rootIssue = resolveRootIssue(delegations, meta);
 
   return {
-    condition,
+    condition: conditionWithLiveness(conversationId, beatCondition),
     lifelines,
     beats: collapsed.map((row) => row.beat),
     sections,
@@ -661,7 +669,7 @@ export function recentRuns(limit: number): RecentRun[] {
     try {
       const { meta, transcript } = readConversation(listed.id);
       const delegations = readDelegations(listed.id);
-      const { condition, recoveredErrors } = runOutcome(
+      const { condition: beatCondition, recoveredErrors } = runOutcome(
         orderedBeats(listed.id, transcript, delegations),
       );
       const issueId = runIssueId(meta, delegations);
@@ -669,7 +677,7 @@ export function recentRuns(limit: number): RecentRun[] {
         conversationId: listed.id,
         coordinatorLabel: coordinatorLabel(meta),
         startedAt: meta.createdAt,
-        condition,
+        condition: conditionWithLiveness(listed.id, beatCondition),
         ...(issueId !== undefined ? { issueId } : {}),
         ...(recoveredErrors > 0 ? { recoveredErrors } : {}),
       });

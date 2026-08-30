@@ -4,7 +4,9 @@ import {
   parseConversationFrame,
   type ConversationFrameInput,
   type IssueEvent,
+  type PipelineRunsEvent,
 } from "../schemas.js";
+import { PIPELINE_RUNS_TOPIC } from "./pipeline-runs-events.js";
 
 /** Non-conversation multiplex topic — frames are IssueEvent, not stream events. */
 const ISSUES_TOPIC = "issues";
@@ -16,7 +18,9 @@ const ISSUES_TOPIC = "issues";
  * incremental deltas from finalized events that also land on disk.
  */
 export type ConversationFrame = {
-  event: (ConversationFrameInput | IssueEvent) & { seq?: number };
+  event: (ConversationFrameInput | IssueEvent | PipelineRunsEvent) & {
+    seq?: number;
+  };
   persist: boolean;
 };
 
@@ -155,7 +159,7 @@ export function publishFrame(
       : new Date().toISOString();
   Object.assign(frame.event, { seq, at });
 
-  if (conversationId !== ISSUES_TOPIC) {
+  if (conversationId !== ISSUES_TOPIC && conversationId !== PIPELINE_RUNS_TOPIC) {
     const parsed = parseConversationFrame(frame.event);
     if (!parsed.ok) {
       console.warn(

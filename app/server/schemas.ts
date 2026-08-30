@@ -390,6 +390,15 @@ export interface IssueEvent {
   scope: IssueEventScope;
 }
 
+/** Live-only run list signalling on the `pipeline:runs` multiplex topic. */
+export const pipelineRunsEventSchema = z.object({
+  type: z.literal("pipeline-run"),
+  status: z.enum(["started", "finished"]),
+  conversationId: nonEmpty,
+});
+
+export type PipelineRunsEvent = z.infer<typeof pipelineRunsEventSchema>;
+
 export const STORY_STATUSES = [
   "not-started",
   "in-progress",
