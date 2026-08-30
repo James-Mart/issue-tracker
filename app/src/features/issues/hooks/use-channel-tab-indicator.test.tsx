@@ -4,6 +4,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelSessionListItem } from "@server/schemas";
+import {
+  resetCockpitLaunchStore,
+  useCockpitLaunchStore,
+} from "../store/use-cockpit-launch-store";
 import { useChannelTabIndicator } from "./use-channel-tab-indicator";
 import { channelSessionListItem } from "../test/channel-session-list-item";
 
@@ -70,6 +74,7 @@ afterEach(() => {
   sessionsState.data = [];
   conversationEvents.mockClear();
   conversationRunActive.mockClear();
+  resetCockpitLaunchStore();
 });
 
 describe("useChannelTabIndicator", () => {
@@ -117,6 +122,13 @@ describe("useChannelTabIndicator", () => {
         awaitingHuman: true,
       }),
     ];
+    const { getIndicator } = mountProbe();
+    expect(getIndicator()).toBe("active-run");
+  });
+
+  it("shows active-run from an optimistic launch before a session exists", () => {
+    sessionsState.data = [];
+    useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
     const { getIndicator } = mountProbe();
     expect(getIndicator()).toBe("active-run");
   });

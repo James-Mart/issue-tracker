@@ -3,6 +3,7 @@ import type { DerivedState, IssueRecord } from "@server/schemas";
 import {
   cockpitLaunchAckIsStale,
   cockpitLaunchFaultMessage,
+  cockpitLaunchOverlayForIssue,
   overlayCockpitLaunchAck,
 } from "./cockpit-launch-sync";
 
@@ -134,6 +135,28 @@ describe("overlayCockpitLaunchAck", () => {
       blocked: false,
       storyStatus: "not-started",
     });
+  });
+});
+
+describe("cockpitLaunchOverlayForIssue", () => {
+  it("prefers pending over ack for the same issue", () => {
+    expect(
+      cockpitLaunchOverlayForIssue(
+        "auth",
+        { issueId: "auth", kind: "work" },
+        { issueId: "auth", kind: "work" },
+      ),
+    ).toEqual({ issueId: "auth", kind: "work" });
+  });
+
+  it("returns ack when pending is for another issue", () => {
+    expect(
+      cockpitLaunchOverlayForIssue(
+        "auth",
+        { issueId: "other", kind: "work" },
+        { issueId: "auth", kind: "work" },
+      ),
+    ).toEqual({ issueId: "auth", kind: "work" });
   });
 });
 

@@ -15,11 +15,20 @@ type CockpitLaunchState = {
   ack: CockpitLaunchAck | null;
   seenDerived: Record<string, DerivedState> | undefined;
   beginLaunch: (issueId: string, kind: CockpitLaunchKind) => void;
-  ackLaunch: (issueId: string, kind: CockpitLaunchKind) => void;
+  ackLaunch: (
+    issueId: string,
+    kind: CockpitLaunchKind,
+    session?: CockpitLaunchAck["session"],
+  ) => void;
   failLaunch: (
     issueId: string,
     kind: CockpitLaunchKind,
-    options?: { lockRefusal?: boolean },
+    options?: {
+      lockRefusal?: boolean;
+      lockHolderTitle?: string;
+      status?: number;
+      errorMessage?: string;
+    },
   ) => void;
   reconcileDerived: (derived: Record<string, DerivedState>) => void;
 };
@@ -41,12 +50,12 @@ export const useCockpitLaunchStore = create<CockpitLaunchState>((set, get) => ({
       ack: ack?.issueId === issueId ? null : ack,
     });
   },
-  ackLaunch: (issueId, kind) => {
+  ackLaunch: (issueId, kind, session) => {
     const { pending, fault } = get();
     set({
       pending: pending?.issueId === issueId ? null : pending,
       fault: fault?.issueId === issueId ? null : fault,
-      ack: { issueId, kind },
+      ack: { issueId, kind, session },
     });
   },
   failLaunch: (issueId, kind, options) => {
@@ -58,7 +67,13 @@ export const useCockpitLaunchStore = create<CockpitLaunchState>((set, get) => ({
         ? fault?.issueId === issueId
           ? null
           : fault
-        : { issueId, kind },
+        : {
+            issueId,
+            kind,
+            lockHolderTitle: options?.lockHolderTitle,
+            status: options?.status,
+            errorMessage: options?.errorMessage,
+          },
     });
   },
   reconcileDerived: (derived) => {

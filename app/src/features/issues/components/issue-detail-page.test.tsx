@@ -60,6 +60,11 @@ vi.mock("../api/queries", () => ({
       },
     },
   }),
+  useChannelSessionsQuery: () => ({
+    data: [{ id: "existing" }],
+    isLoading: false,
+    error: null,
+  }),
 }));
 
 vi.mock("../api/mutations", () => ({

@@ -10,12 +10,33 @@ export type CockpitLaunchPending = {
 export type CockpitLaunchFault = {
   issueId: string;
   kind: CockpitLaunchKind;
+  lockHolderTitle?: string;
+  status?: number;
+  errorMessage?: string;
+};
+
+export type CockpitLaunchAckSession = {
+  id: string;
+  title: string;
+  model: string;
 };
 
 export type CockpitLaunchAck = {
   issueId: string;
   kind: CockpitLaunchKind;
+  session?: CockpitLaunchAckSession;
 };
+
+/** Pending or ack overlay for the same issue — both flip status the same way. */
+export function cockpitLaunchOverlayForIssue(
+  issueId: string,
+  pending: CockpitLaunchPending | null,
+  ack: CockpitLaunchAck | null,
+): CockpitLaunchPending | CockpitLaunchAck | null {
+  if (pending?.issueId === issueId) return pending;
+  if (ack?.issueId === issueId) return ack;
+  return null;
+}
 
 /** Row-attached copy after a failed cockpit session-create. */
 export function cockpitLaunchFaultMessage(

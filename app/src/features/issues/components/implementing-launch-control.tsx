@@ -76,6 +76,7 @@ function ImplementingLaunchButton({
   channel,
   variant,
   optimistic,
+  testId,
   onStarted,
   onLockRefusal,
 }: {
@@ -83,6 +84,7 @@ function ImplementingLaunchButton({
   channel: ConversationChannel;
   variant: "primary" | "secondary" | "icon";
   optimistic?: boolean;
+  testId?: string;
   onStarted: (session: ImplementingSessionStarted) => void;
   onLockRefusal: (refusal: ImplementingLockRefusal) => void;
 }) {
@@ -135,13 +137,21 @@ function ImplementingLaunchButton({
         },
         {
           onSuccess: ({ id }) => {
-            if (optimistic) ackLaunch(issue.id, "work");
+            if (optimistic) {
+              ackLaunch(issue.id, "work", { id, title, model });
+            }
             onStarted({ id, title, model });
           },
           onError: (err) => {
             const refusal = parseImplementingLockRefusal(err);
             if (optimistic) {
-              failLaunch(issue.id, "work", { lockRefusal: Boolean(refusal) });
+              failLaunch(issue.id, "work", {
+                // Cockpit icon launch shows a page-level lock panel instead.
+                lockRefusal: variant === "icon" && Boolean(refusal),
+                lockHolderTitle: refusal?.holderIssueTitle,
+                status: refusal ? 409 : undefined,
+                errorMessage: err instanceof Error ? err.message : undefined,
+              });
             }
             if (refusal) onLockRefusal(refusal);
           },
@@ -190,9 +200,10 @@ function ImplementingLaunchButton({
         size="sm"
         disabled={!canStart}
         data-testid={
-          variant === "secondary"
+          testId ??
+          (variant === "secondary"
             ? "implementing-new-run"
-            : "implementing-start-session"
+            : "implementing-start-session")
         }
         onClick={start}
       >
@@ -217,6 +228,27 @@ export function ImplementingFlowRowLaunch({
       channel="implementing"
       variant="icon"
       optimistic
+      onStarted={() => {}}
+      onLockRefusal={onLockRefusal}
+    />
+  );
+}
+
+/** Overview-tab launch: same optimistic start as the empty state. */
+export function ImplementingOverviewLaunch({
+  issue,
+  onLockRefusal,
+}: {
+  issue: ImplementingWorkRoot;
+  onLockRefusal: (refusal: ImplementingLockRefusal) => void;
+}) {
+  return (
+    <ImplementingLaunchButton
+      issue={issue}
+      channel="implementing"
+      variant="primary"
+      optimistic
+      testId="implementing-overview-start-session"
       onStarted={() => {}}
       onLockRefusal={onLockRefusal}
     />
@@ -248,6 +280,7 @@ export function ImplementingChannelEmptyState({
           issue={issue}
           channel={channel}
           variant="primary"
+          optimistic
           onStarted={onStarted}
           onLockRefusal={onLockRefusal}
         />

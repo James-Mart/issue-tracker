@@ -121,6 +121,7 @@ function PlanningLaunchButton({
   variant,
   disabled,
   optimistic,
+  testId,
   onStarted,
 }: {
   issue: IdeaDetail;
@@ -130,6 +131,7 @@ function PlanningLaunchButton({
   variant: "primary" | "secondary" | "icon";
   disabled?: boolean;
   optimistic?: boolean;
+  testId?: string;
   onStarted: (session: PlanningSessionStarted) => void;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
@@ -186,11 +188,17 @@ function PlanningLaunchButton({
         },
         {
           onSuccess: ({ id }) => {
-            if (optimistic) ackLaunch(issue.id, "planning");
+            if (optimistic) {
+              ackLaunch(issue.id, "planning", { id, title, model });
+            }
             onStarted({ id, title, model });
           },
-          onError: () => {
-            if (optimistic) failLaunch(issue.id, "planning");
+          onError: (err) => {
+            if (optimistic) {
+              failLaunch(issue.id, "planning", {
+                errorMessage: err instanceof Error ? err.message : undefined,
+              });
+            }
           },
         },
       );
@@ -237,9 +245,10 @@ function PlanningLaunchButton({
         size="sm"
         disabled={!canStart}
         data-testid={
-          variant === "secondary"
+          testId ??
+          (variant === "secondary"
             ? "planning-new-run"
-            : "planning-start-session"
+            : "planning-start-session")
         }
         onClick={start}
       >
@@ -259,6 +268,21 @@ export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
       stakeholder={issue.stakeholder}
       variant="icon"
       optimistic
+      onStarted={() => {}}
+    />
+  );
+}
+
+/** Overview-tab launch: same optimistic start as the empty state. */
+export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
+  return (
+    <PlanningLaunchButton
+      issue={issue}
+      channel="planning"
+      stakeholder={issue.stakeholder}
+      variant="primary"
+      optimistic
+      testId="planning-overview-start-session"
       onStarted={() => {}}
     />
   );
@@ -325,6 +349,7 @@ export function PlanningChannelEmptyState({
             stakeholder={stakeholder}
             fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
             variant="primary"
+            optimistic
             disabled={saving}
             onStarted={onStarted}
           />

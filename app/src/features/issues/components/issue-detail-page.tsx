@@ -12,15 +12,21 @@ import {
 import { PageShell } from "@/components/page-shell";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
-import { useIssueDetailQuery, useIssuesQuery } from "../api/queries";
+import {
+  useChannelSessionsQuery,
+  useIssueDetailQuery,
+  useIssuesQuery,
+} from "../api/queries";
 import { useUploadAttachment } from "../api/mutations";
 import {
   useIssueDetailFileUpload,
   type UploadAttachmentMutation,
 } from "../hooks/use-issue-detail-file-upload";
+import { isImplementingWorkRoot } from "../lib/implementing-launch";
 import { kindHasOwnFlow } from "../lib/own-flow";
 import { issueBelongsToProject, issuesById } from "../lib/build-tree";
 import {
+  channelTabForIssue,
   issueDetailTabNeedsBoundedShell,
   resolveIssueDetailTab,
   tabsForIssueDetail,
@@ -43,6 +49,8 @@ import { IssueDescriptionField } from "./issue-description-field";
 import { IssueCommentsSection } from "./comments/comments-section";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { DeletePartialPlanDetailAction } from "./delete-partial-plan-control";
+import { ImplementingOverviewLaunch } from "./implementing-launch-control";
+import { PlanningOverviewLaunch } from "./planning-launch-control";
 import { supportsAttachments } from "../lib/attachments";
 
 /** Match Agents: subtract the app top bar (3rem), not raw 100svh. */
@@ -64,14 +72,49 @@ function OwnFlowSlot({ issue }: { issue: IssueDetail }) {
   );
 }
 
+function IssueOverviewLaunch({
+  issue,
+  parentKind,
+}: {
+  issue: IssueDetail;
+  parentKind?: IssueKind;
+}) {
+  const channel = channelTabForIssue(issue, parentKind);
+  const { data: sessions, isLoading } = useChannelSessionsQuery(
+    channel ? issue.id : "",
+    channel ?? "implementing",
+  );
+  if (!channel || isLoading || (sessions?.length ?? 0) > 0) return null;
+  if (channel === "planning" && issue.kind === "idea") {
+    return (
+      <div data-testid="issue-overview-launch">
+        <PlanningOverviewLaunch issue={issue} />
+      </div>
+    );
+  }
+  if (isImplementingWorkRoot(channel, issue, parentKind)) {
+    return (
+      <div data-testid="issue-overview-launch">
+        <ImplementingOverviewLaunch
+          issue={issue}
+          onLockRefusal={() => {}}
+        />
+      </div>
+    );
+  }
+  return null;
+}
+
 function IssueOverviewPanel({
   issue,
   upload,
   catalog,
+  parentKind,
 }: {
   issue: IssueDetail;
   upload?: UploadAttachmentMutation;
   catalog: ProjectLabel[];
+  parentKind?: IssueKind;
 }) {
   const { data: list } = useIssuesQuery();
   const awaitingDirection =
@@ -85,6 +128,7 @@ function IssueOverviewPanel({
   return (
     <div className="flex flex-col gap-4">
       <IssueMetaPanel issue={issue} catalog={catalog} />
+      <IssueOverviewLaunch issue={issue} parentKind={parentKind} />
       {awaitingDirection ? (
         <DeletePartialPlanDetailAction issue={issue} />
       ) : null}
@@ -143,6 +187,7 @@ function IssueDetailBody({
             issue={issue}
             upload={upload}
             catalog={catalog}
+            parentKind={parentKind}
           />
         }
       />
