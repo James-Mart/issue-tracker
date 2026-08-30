@@ -1,6 +1,12 @@
 import type { IssueDetail } from "@server/schemas";
 import { useIssuesQuery } from "../api/queries";
 import {
+  cockpitLaunchOverlayForIssue,
+  overlayCockpitLaunchAck,
+} from "../lib/cockpit-launch-sync";
+import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
+import {
+  AxisChips,
   EpicAxisChips,
   StoryAxisChips,
   epicAxesVisible,
@@ -17,7 +23,16 @@ export function IssueDetailStatusChips({
   className?: string;
 }) {
   const { data } = useIssuesQuery();
-  const derived = data?.derived;
+  const pending = useCockpitLaunchStore((s) => s.pending);
+  const ack = useCockpitLaunchStore((s) => s.ack);
+  const overlay = cockpitLaunchOverlayForIssue(issue.id, pending, ack);
+  const derived = overlay
+    ? overlayCockpitLaunchAck(
+        data?.derived ?? {},
+        data?.issues ?? [],
+        overlay,
+      )
+    : data?.derived;
 
   if (issue.kind === "task") {
     return (
@@ -56,6 +71,20 @@ export function IssueDetailStatusChips({
       <EpicAxisChips
         epicStatus={state?.epicStatus}
         retro={issue.retro}
+        className={className}
+      />
+    );
+  }
+
+  if (issue.kind === "idea") {
+    const state = derived?.[issue.id];
+    const status = state?.ideaStatus;
+    if (status !== "planning" && status !== "awaiting-direction") {
+      return null;
+    }
+    return (
+      <AxisChips
+        chips={[{ variant: "inProgress", label: "planning" }]}
         className={className}
       />
     );

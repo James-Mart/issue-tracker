@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api/errors";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import type { FlowItem } from "../lib/flow";
 import { skillPath } from "@/lib/plugin-paths";
+import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { FlowRowActions } from "./flow-row-actions";
 
 const mutate = vi.fn();
@@ -165,6 +166,7 @@ afterEach(() => {
   liveRunConfirm.midRun = false;
   liveRunConfirm.pending = null;
   liveRunConfirm.confirming = false;
+  resetCockpitLaunchStore();
 });
 
 describe("FlowRowActions start planning", () => {

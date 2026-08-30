@@ -421,6 +421,8 @@ export interface DerivedState {
   storyStatus?: StoryStatus;
   epicStatus?: EpicStatus;
   ideaStatus?: IdeaStatus;
+  /** True when any issue-anchored conversation on this issue is live. */
+  liveRun?: boolean;
   /** True when a stored review still covers every done Task on the Story. */
   reviewCurrent?: boolean;
   /** Derived git fork-point ref (see resolveMergeBase). */

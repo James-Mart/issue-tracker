@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { skillPath } from "@/lib/plugin-paths";
 import { MANUAL_STAKEHOLDER_LABEL } from "@server/fields";
+import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   PlanningChannelEmptyState,
   PlanningNewRunControl,
@@ -194,6 +195,7 @@ afterEach(() => {
   liveRunConfirm.midRun = false;
   liveRunConfirm.pending = null;
   liveRunConfirm.confirming = false;
+  resetCockpitLaunchStore();
 });
 
 describe("PlanningChannelEmptyState", () => {

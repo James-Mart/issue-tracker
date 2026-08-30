@@ -8,6 +8,7 @@ import {
   readCockpitHiddenProjectIds,
   writeCockpitHiddenProjectIds,
 } from "../lib/cockpit-hidden-projects";
+import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { CockpitPage } from "./cockpit-page";
 
 const mockState = vi.hoisted(() => ({
@@ -179,6 +180,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  resetCockpitLaunchStore();
 });
 
 describe("CockpitPage project filter", () => {

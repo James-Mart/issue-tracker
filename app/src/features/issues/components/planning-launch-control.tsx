@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Play } from "lucide-react";
+import { Loader2, Play } from "lucide-react";
 import type { ConversationChannel, IssueDetail } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
   planningSessionModel,
   planningSessionTitle,
 } from "../lib/planning-launch";
+import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { StakeholderSelect } from "./stakeholder-select";
 
 type IdeaDetail = Extract<IssueDetail, { kind: "idea" }>;
@@ -119,6 +120,8 @@ function PlanningLaunchButton({
   fallbackCatalogId,
   variant,
   disabled,
+  optimistic,
+  testId,
   onStarted,
 }: {
   issue: IdeaDetail;
@@ -127,17 +130,26 @@ function PlanningLaunchButton({
   fallbackCatalogId?: string;
   variant: "primary" | "secondary" | "icon";
   disabled?: boolean;
+  optimistic?: boolean;
+  testId?: string;
   onStarted: (session: PlanningSessionStarted) => void;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const models = modelsData?.models ?? [];
-  const createSession = useCreateChannelSession(issue.id, channel);
+  const createSession = useCreateChannelSession(issue.id, channel, {
+    suppressToast: optimistic ? () => true : undefined,
+  });
   const {
     confirmIfLiveRun,
     awaitingConfirm,
     confirming,
     dialog,
   } = useConfirmChannelLiveRun(issue.id, channel);
+  const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
+  const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
+  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
+  const pending = useCockpitLaunchStore((s) => s.pending);
+  const launching = Boolean(optimistic) && pending?.issueId === issue.id;
   const copy = planningLaunchCopy(stakeholder, models);
   const defaultModel = defaultConversationModel(models);
   const catalogId = fallbackCatalogId ?? defaultModel;
@@ -147,10 +159,17 @@ function PlanningLaunchButton({
     !modelsLoading &&
     !createSession.isPending &&
     !blocked &&
-    !disabled;
+    !disabled &&
+    !launching;
 
   const start = () => {
-    if (!catalogId || modelsLoading || createSession.isPending || blocked) {
+    if (
+      !catalogId ||
+      modelsLoading ||
+      createSession.isPending ||
+      blocked ||
+      launching
+    ) {
       return;
     }
     if (disabled) return;
@@ -160,6 +179,7 @@ function PlanningLaunchButton({
       fallbackCatalogId ?? defaultModel!,
     );
     confirmIfLiveRun(() => {
+      if (optimistic) beginLaunch(issue.id, "planning");
       createSession.mutate(
         {
           title,
@@ -167,7 +187,19 @@ function PlanningLaunchButton({
           message: planningSessionMessage(issue.id, stakeholder),
         },
         {
-          onSuccess: ({ id }) => onStarted({ id, title, model }),
+          onSuccess: ({ id }) => {
+            if (optimistic) {
+              ackLaunch(issue.id, "planning", { id, title, model });
+            }
+            onStarted({ id, title, model });
+          },
+          onError: (err) => {
+            if (optimistic) {
+              failLaunch(issue.id, "planning", {
+                errorMessage: err instanceof Error ? err.message : undefined,
+              });
+            }
+          },
         },
       );
     });
@@ -185,12 +217,20 @@ function PlanningLaunchButton({
           type="button"
           variant="default"
           size="icon-sm"
-          title="Begin planning"
-          aria-label="Begin planning"
-          data-testid="flow-row-start-planning"
+          title={launching ? "Starting planning" : "Begin planning"}
+          aria-label={launching ? "Starting planning" : "Begin planning"}
+          aria-busy={launching || undefined}
+          data-testid={
+            launching ? "flow-row-launch-pending" : "flow-row-start-planning"
+          }
+          disabled={launching}
           onClick={start}
         >
-          <Play className="h-3.5 w-3.5" />
+          {launching ? (
+            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
         </Button>
         {dialog}
       </>
@@ -205,9 +245,10 @@ function PlanningLaunchButton({
         size="sm"
         disabled={!canStart}
         data-testid={
-          variant === "secondary"
+          testId ??
+          (variant === "secondary"
             ? "planning-new-run"
-            : "planning-start-session"
+            : "planning-start-session")
         }
         onClick={start}
       >
@@ -226,6 +267,22 @@ export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
       channel="planning"
       stakeholder={issue.stakeholder}
       variant="icon"
+      optimistic
+      onStarted={() => {}}
+    />
+  );
+}
+
+/** Overview-tab launch: same optimistic start as the empty state. */
+export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
+  return (
+    <PlanningLaunchButton
+      issue={issue}
+      channel="planning"
+      stakeholder={issue.stakeholder}
+      variant="primary"
+      optimistic
+      testId="planning-overview-start-session"
       onStarted={() => {}}
     />
   );
@@ -292,6 +349,7 @@ export function PlanningChannelEmptyState({
             stakeholder={stakeholder}
             fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
             variant="primary"
+            optimistic
             disabled={saving}
             onStarted={onStarted}
           />

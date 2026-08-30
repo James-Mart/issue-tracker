@@ -42,6 +42,7 @@ function mountRow(
   issue: IssueRecord,
   state?: DerivedState,
   actions?: ReactNode,
+  launchFault?: string,
 ): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -53,6 +54,7 @@ function mountRow(
           item={{ issue, state }}
           issues={[issue]}
           actions={actions}
+          launchFault={launchFault}
         />
       </MemoryRouter>,
     );
@@ -104,6 +106,19 @@ describe("FlowRow", () => {
     expect(actionWrapper.className).not.toMatch(/flex-wrap/);
     expect(actionWrapper.parentElement?.className).not.toMatch(/flex-col/);
     expect(container.querySelector(".pointer-events-none")).toBeNull();
+  });
+
+  it("attaches a launch fault under the row", () => {
+    const container = mountRow(
+      story("ready"),
+      { blocked: false, storyStatus: "not-started" },
+      <button type="button">Start work</button>,
+      "Auth hardening — Work loop didn't start. Start work again.",
+    );
+    expect(
+      container.querySelector('[data-testid="flow-row-launch-fault"]')
+        ?.textContent,
+    ).toBe("Auth hardening — Work loop didn't start. Start work again.");
   });
 
   it("shows no planning badge on Story rows", () => {

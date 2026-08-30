@@ -24,6 +24,8 @@ export interface FlowRowProps {
   issues: IssueRecord[];
   avatar?: ReactNode;
   actions?: ReactNode;
+  /** Row-attached launch fault; retry is the restored Play control. */
+  launchFault?: string;
   /** When set, the full row drills in here; actions stay outside the link. */
   to?: string;
   drillInState?: unknown;
@@ -38,6 +40,7 @@ export function FlowRow({
   issues,
   avatar,
   actions,
+  launchFault,
   to,
   drillInState,
 }: FlowRowProps) {
@@ -52,20 +55,31 @@ export function FlowRow({
       glow={live}
       className="items-center py-1"
     >
-      <OverviewRow
-        className="min-w-0 flex-1"
-        avatar={avatar}
-        chips={flowRowPlanningBadge(item)}
-        blocked={Boolean(item.state?.blocked)}
-        attention={flowItemNeedsAttention(item)}
-        count={count}
-        actions={actions}
-        drillInTo={to}
-        drillInState={drillInState}
-        drillInLabel={item.issue.title}
-      >
-        {item.issue.title}
-      </OverviewRow>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <OverviewRow
+          className="min-w-0"
+          avatar={avatar}
+          chips={flowRowPlanningBadge(item)}
+          blocked={Boolean(item.state?.blocked)}
+          attention={flowItemNeedsAttention(item)}
+          count={count}
+          actions={actions}
+          drillInTo={to}
+          drillInState={drillInState}
+          drillInLabel={item.issue.title}
+        >
+          {item.issue.title}
+        </OverviewRow>
+        {launchFault ? (
+          <p
+            role="alert"
+            data-testid="flow-row-launch-fault"
+            className="rounded-md border border-[hsl(var(--blocked))]/35 bg-[hsl(var(--blocked))]/10 px-2.5 py-1.5 font-mono text-[11px] leading-snug text-[hsl(var(--blocked))]"
+          >
+            {launchFault}
+          </p>
+        ) : null}
+      </div>
     </RailNode>
   );
 }

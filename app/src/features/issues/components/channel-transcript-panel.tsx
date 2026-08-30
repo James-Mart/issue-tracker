@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   ChannelSessionListItem,
   ConversationChannel,
@@ -7,6 +7,7 @@ import type {
 } from "@server/schemas";
 import {
   ShellFaultDetail,
+  ShellInlineFault,
   ShellLoadingState,
   ShellState,
 } from "@/app/shell-state";
@@ -17,7 +18,17 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { defaultChannelSession } from "../api/channel-sessions";
 import { useChannelSessionsQuery } from "../api/queries";
-import { isImplementingWorkRoot, type ImplementingLockRefusal } from "../lib/implementing-launch";
+import { cockpitLaunchOverlayForIssue } from "../lib/cockpit-launch-sync";
+import {
+  detailLaunchFaultCopy,
+  detailLaunchPendingCopy,
+  launchOverlaysChannel,
+} from "../lib/detail-launch-sync";
+import {
+  isImplementingWorkRoot,
+  type ImplementingLockRefusal,
+} from "../lib/implementing-launch";
+import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelSessionOverflowMenu } from "./channel-session-overflow-menu";
 import { ChannelSessionSwitcher } from "./channel-session-switcher";
 import { ChannelRetroControl } from "./channel-retro-control";
@@ -111,10 +122,37 @@ export function ChannelTranscriptPanel({
   const [implementingLockRefusal, setImplementingLockRefusal] = useState<
     ImplementingLockRefusal | undefined
   >();
+  const pending = useCockpitLaunchStore((s) => s.pending);
+  const ack = useCockpitLaunchStore((s) => s.ack);
+  const fault = useCockpitLaunchStore((s) => s.fault);
+  const overlay = cockpitLaunchOverlayForIssue(issueId, pending, ack);
+  const launchingThis = launchOverlaysChannel(issueId, channel, overlay);
+  const pendingLaunch = launchingThis && pending?.issueId === issueId ? pending : null;
+  const thisFault =
+    fault?.issueId === issueId &&
+    launchOverlaysChannel(issueId, channel, fault)
+      ? fault
+      : null;
   const planningIdea = isPlanningIdea(channel, issue) ? issue : undefined;
   const implementingWorkRoot = isImplementingWorkRoot(channel, issue, parentKind)
     ? issue
     : undefined;
+
+  const sawLaunchOverlay = useRef(false);
+  useEffect(() => {
+    if (pending?.issueId === issueId || ack?.issueId === issueId) {
+      sawLaunchOverlay.current = true;
+      return;
+    }
+    if (!sawLaunchOverlay.current || !pendingStart) return;
+    if ((data ?? []).some((session) => session.id === pendingStart.id)) {
+      sawLaunchOverlay.current = false;
+      return;
+    }
+    sawLaunchOverlay.current = false;
+    setPendingStart(undefined);
+    setSelectedId((id) => (id === pendingStart.id ? undefined : id));
+  }, [ack?.issueId, data, issueId, pending?.issueId, pendingStart]);
 
   const mobileBack =
     mobileFullViewport && onBackToOverview
@@ -173,7 +211,7 @@ export function ChannelTranscriptPanel({
     return fault;
   }
 
-  if (implementingLockRefusal && projectId) {
+  if (implementingLockRefusal && projectId && !thisFault) {
     const refusal = (
       <ImplementingLockRefusalState
         projectId={projectId}
@@ -202,9 +240,12 @@ export function ChannelTranscriptPanel({
   const selectedFromList = selectedId
     ? sessions.find((session) => session.id === selectedId)
     : undefined;
+  const started = pendingStart ?? (launchingThis ? ack?.session : undefined);
   const pendingSession =
-    pendingStart && pendingStart.id === selectedId && !selectedFromList
-      ? pendingChannelSession(pendingStart)
+    started &&
+    !selectedFromList &&
+    (selectedId === undefined || selectedId === started.id)
+      ? pendingChannelSession(started)
       : undefined;
   // Keep the thread mounted after create even before list invalidation lands.
   const selectedSession =
@@ -220,8 +261,37 @@ export function ChannelTranscriptPanel({
     setImplementingLockRefusal(refusal);
   };
 
+  if (pendingLaunch) {
+    const copy = detailLaunchPendingCopy(pendingLaunch.kind);
+    const pendingBody = (
+      <ShellState
+        className="border-0 bg-transparent px-4 py-8 shadow-none"
+        eyebrow={label}
+        title={copy.title}
+        detail={copy.detail}
+      />
+    );
+    return (
+      <ChannelPanelFrame mobileFullViewport={mobileFullViewport}>
+        <OpenThreadChrome
+          title={label}
+          onBack={mobileBack?.onBack}
+          backAriaLabel={mobileBack?.backAriaLabel}
+          runActive
+          events={[]}
+        />
+        <div
+          className="min-h-0 flex-1 overflow-y-auto"
+          data-testid="channel-launch-pending"
+        >
+          {pendingBody}
+        </div>
+      </ChannelPanelFrame>
+    );
+  }
+
   if (!selectedSession) {
-    const emptyBody = planningIdea ? (
+    const emptyAction = planningIdea ? (
       <PlanningChannelEmptyState
         issue={planningIdea}
         channel={channel}
@@ -241,6 +311,17 @@ export function ChannelTranscriptPanel({
         title={`No ${label.toLowerCase()} session.`}
         detail={`This channel is for ${label.toLowerCase()} work on this issue.`}
       />
+    );
+    const faultBanner = thisFault ? (
+      <div className="px-4 pt-4" data-testid="channel-launch-fault">
+        <ShellInlineFault {...detailLaunchFaultCopy(thisFault)} />
+      </div>
+    ) : null;
+    const emptyBody = (
+      <>
+        {faultBanner}
+        {emptyAction}
+      </>
     );
 
     if (mobileFullViewport && mobileBack) {

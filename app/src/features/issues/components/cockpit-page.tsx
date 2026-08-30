@@ -34,6 +34,14 @@ import {
 } from "../lib/build-tree";
 import { flowBuckets, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
+import {
+  cockpitLaunchFaultMessage,
+  overlayCockpitLaunchAck,
+} from "../lib/cockpit-launch-sync";
+import {
+  useCockpitLaunchIssuesSync,
+  useCockpitLaunchStore,
+} from "../store/use-cockpit-launch-store";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import {
   FlowBucketsSections,
@@ -198,6 +206,13 @@ export function CockpitPage() {
 
   const issues = data?.issues ?? [];
   const derived = data?.derived ?? {};
+  const ack = useCockpitLaunchStore((s) => s.ack);
+  const fault = useCockpitLaunchStore((s) => s.fault);
+  useCockpitLaunchIssuesSync(data?.derived);
+  const derivedForBuckets = useMemo(
+    () => (ack ? overlayCockpitLaunchAck(derived, issues, ack) : derived),
+    [ack, derived, issues],
+  );
   const byId = useMemo(() => issuesById(issues), [issues]);
   const projects = useMemo(() => listProjects(issues), [issues]);
   const projectOrder = useMemo(() => projects.map((project) => project.id), [projects]);
@@ -211,8 +226,8 @@ export function CockpitPage() {
             const projectId = projectIdOf(issue.id, byId);
             return !projectId || !hidden.has(projectId);
           });
-    return flowBuckets(filtered, derived, {});
-  }, [byId, derived, hiddenIds, issues]);
+    return flowBuckets(filtered, derivedForBuckets, {});
+  }, [byId, derivedForBuckets, hiddenIds, issues]);
   const allProjectsHidden =
     projects.length > 0 &&
     projects.every((project) => hiddenIds.includes(project.id));
@@ -237,6 +252,14 @@ export function CockpitPage() {
                   <FlowRow
                     item={item}
                     issues={issues}
+                    launchFault={
+                      fault?.issueId === item.issue.id
+                        ? cockpitLaunchFaultMessage(
+                            item.issue.title,
+                            fault.kind,
+                          )
+                        : undefined
+                    }
                     to={issuePath(group.projectId, item.issue.id)}
                     drillInState={{
                       issueBackStack: [{ kind: "cockpit" }],
@@ -260,7 +283,7 @@ export function CockpitPage() {
         </div>
       );
     },
-    [byId, issues, projectOrder],
+    [byId, fault, issues, projectOrder],
   );
 
   return (

@@ -116,7 +116,11 @@ export function hasInFlightWork(
   issues: IssueRecord[],
   derived: Record<string, DerivedState>,
 ): boolean {
-  return issues.some((issue) => isInFlight(issue, derived[issue.id]));
+  return issues.some(
+    (issue) =>
+      derived[issue.id]?.liveRun === true ||
+      isInFlight(issue, derived[issue.id]),
+  );
 }
 
 /**

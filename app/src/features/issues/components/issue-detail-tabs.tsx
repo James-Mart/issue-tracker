@@ -6,6 +6,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { useIssueAgentRunsQuery } from "../api/queries";
 import { useChannelTabIndicator } from "../hooks/use-channel-tab-indicator";
+import { channelForLaunchKind } from "../lib/detail-launch-sync";
 import {
   AGENTS_DETAIL_TAB,
   DIFF_DETAIL_TAB,
@@ -16,6 +17,7 @@ import {
   type IssueDetailTab,
   type IssueDetailTabKey,
 } from "../lib/issue-detail-tabs";
+import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import type { ChannelTabIndicator } from "../lib/channel-tab-indicator";
 import type { SupportingDocPreviewTab } from "../lib/supporting-docs";
 import { AgentRunsPanel } from "./agent-runs-panel";
@@ -70,6 +72,7 @@ export function IssueDetailTabs({
   const isMobile = useIsMobile();
   const mobileChannelChrome =
     isMobile && issueDetailTabNeedsBoundedShell(active, tabs);
+  const pending = useCockpitLaunchStore((s) => s.pending);
 
   useEffect(() => {
     const raw = searchParams.get("tab");
@@ -79,6 +82,17 @@ export function IssueDetailTabs({
       });
     }
   }, [active, searchParams, setSearchParams, tabs]);
+
+  useEffect(() => {
+    if (!pending || pending.issueId !== issue.id || active !== "overview") {
+      return;
+    }
+    const next = channelForLaunchKind(pending.kind);
+    if (!tabs.some((tab) => tab.key === next)) return;
+    setSearchParams((prev) => writeIssueDetailTabParam(prev, next), {
+      replace: true,
+    });
+  }, [active, issue.id, pending, setSearchParams, tabs]);
 
   const setActive = (next: IssueDetailTabKey) => {
     setSearchParams((prev) => writeIssueDetailTabParam(prev, next), {

@@ -3,6 +3,7 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelSessionListItem } from "@server/schemas";
+import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 
 const queryState = vi.hoisted(() => ({
@@ -320,6 +321,7 @@ afterEach(() => {
   threadProps.onBack = undefined;
   threadProps.headerActions = false;
   deleteMutate.mockReset();
+  resetCockpitLaunchStore();
 });
 
 describe("ChannelTranscriptPanel", () => {
