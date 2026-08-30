@@ -33,6 +33,12 @@ export type SequenceBeat = {
   seq?: number;
   /** Elapsed ms from live `subagent_update` frames; does not close the beat. */
   liveElapsedMs?: number;
+  /** Model variant when the role name carries a suffix (e.g. composer). */
+  variant?: string;
+  /** Sum of attributed `usage.totalTokens` for this beat. */
+  tokenTotal?: number;
+  /** Wall-clock ms from run start to this closed beat's end. */
+  cumulativeMs?: number;
 };
 
 export type RunSequenceRootIssue = {
@@ -58,6 +64,8 @@ export type RunSequence = {
   sections: RunSequenceSection[];
   recoveredErrors?: number;
   rootIssue?: RunSequenceRootIssue;
+  /** Sum of every persisted `usage.totalTokens` on the conversation. */
+  tokenTotal?: number;
 };
 
 /** Greatest `beatEnd` in the section tree; `-1` when there are no sections. */

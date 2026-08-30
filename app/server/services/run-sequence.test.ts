@@ -167,6 +167,29 @@ function prompt(text: string, at: string, seq: number): TranscriptEvent {
   return { type: "prompt", text, at, seq };
 }
 
+function usage(opts: {
+  totalTokens: number;
+  at: string;
+  seq: number;
+  parentCallId?: string;
+}): TranscriptEvent {
+  return {
+    type: "usage",
+    usage: {
+      inputTokens: opts.totalTokens,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: opts.totalTokens,
+    },
+    at: opts.at,
+    seq: opts.seq,
+    ...(opts.parentCallId !== undefined
+      ? { parentCallId: opts.parentCallId }
+      : {}),
+  };
+}
+
 function writeWorkTree(): void {
   writeIssue("proj", {
     kind: "project",
@@ -295,17 +318,13 @@ describe("runSequence", () => {
 
     expect(sequence.beats.map((b) => b.label)).toEqual([
       "human replied",
-      "spawn research",
-      "spawn mockup-author",
-      "mockup-author returned",
-      "research returned",
+      "spawn Research",
+      "spawn Mockup author",
     ]);
     expect(sequence.beats.map((b) => [b.from, b.to])).toEqual([
       ["human", "coordinator"],
       ["coordinator", "research"],
       ["coordinator", "mockup-author"],
-      ["mockup-author", "coordinator"],
-      ["research", "coordinator"],
     ]);
   });
 
@@ -346,17 +365,18 @@ describe("runSequence", () => {
 
     expect(sequence.condition).toBe("completed");
     expect(sequence.lifelines).toEqual([
-      { id: "coordinator", label: "implementing", kind: "coordinator" },
-      { id: "implementor", label: "implementor", kind: "role" },
+      { id: "coordinator", label: "Coordinator", kind: "coordinator" },
+      { id: "implementor", label: "Implementor", kind: "role" },
       { id: "validator", label: "validator", kind: "role" },
     ]);
     expect(sequence.beats).toEqual([
       {
         from: "coordinator",
         to: "implementor",
-        label: "spawn implementor",
+        label: "spawn Implementor",
         startedAt: AT,
         durationMs: Date.parse(AT_CHILD) - Date.parse(AT),
+        cumulativeMs: Date.parse(AT_CHILD) - Date.parse(AT),
         kind: "spawn",
         parentCallId: "call-impl",
       },
@@ -366,24 +386,9 @@ describe("runSequence", () => {
         label: "spawn validator",
         startedAt: AT,
         durationMs: Date.parse(AT_END) - Date.parse(AT),
+        cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
         kind: "spawn",
         parentCallId: "call-qa",
-      },
-      {
-        from: "validator",
-        to: "implementor",
-        label: "validator returned",
-        startedAt: AT_END,
-        durationMs: Date.parse(AT_END) - Date.parse(AT),
-        kind: "return",
-      },
-      {
-        from: "implementor",
-        to: "coordinator",
-        label: "implementor returned",
-        startedAt: AT_CHILD,
-        durationMs: Date.parse(AT_CHILD) - Date.parse(AT),
-        kind: "return",
       },
     ]);
   });
@@ -412,7 +417,7 @@ describe("runSequence", () => {
     expect(sequence.beats[0]).toEqual({
       from: "coordinator",
       to: "research",
-      label: "spawn research",
+      label: "spawn Research",
       startedAt: AT,
       kind: "spawn",
       parentCallId: "call-research",
@@ -457,9 +462,10 @@ describe("runSequence", () => {
     expect(sequence.beats.find((b) => b.kind === "return")).toEqual({
       from: "mockup-author",
       to: "coordinator",
-      label: "mockup-author failed",
+      label: "Mockup author failed",
       startedAt: AT_END,
       durationMs: Date.parse(AT_END) - Date.parse(AT),
+      cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
       kind: "return",
     });
   });
@@ -574,13 +580,14 @@ describe("runSequence", () => {
     const runSequence = await loadRunSequence();
     const sequence = runSequence("conv-collapsed-polish");
 
-    expect(sequence.beats).toHaveLength(2);
+    expect(sequence.beats).toHaveLength(1);
     expect(sequence.beats[0]).toEqual({
       from: "coordinator",
       to: "polish",
       label: "spawn polish",
       startedAt: AT,
       durationMs: Date.parse(AT_ROUND3_END) - Date.parse(AT),
+      cumulativeMs: Date.parse(AT_ROUND3_END) - Date.parse(AT),
       kind: "spawn",
       parentCallId: "call-polish-3",
       turns: [
@@ -597,31 +604,6 @@ describe("runSequence", () => {
         {
           label: "spawn polish",
           startedAt: AT,
-          durationMs: Date.parse(AT_ROUND3_END) - Date.parse(AT),
-        },
-      ],
-    });
-    expect(sequence.beats[1]).toEqual({
-      from: "polish",
-      to: "coordinator",
-      label: "polish returned",
-      startedAt: AT_ROUND1_END,
-      durationMs: Date.parse(AT_ROUND3_END) + 9000 - Date.parse(AT_ROUND1_END),
-      kind: "return",
-      turns: [
-        {
-          label: "polish returned",
-          startedAt: AT_ROUND1_END,
-          durationMs: Date.parse(AT_ROUND1_END) - Date.parse(AT),
-        },
-        {
-          label: "polish returned",
-          startedAt: AT_ROUND2_END,
-          durationMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
-        },
-        {
-          label: "polish returned",
-          startedAt: AT_ROUND3_END,
           durationMs: Date.parse(AT_ROUND3_END) - Date.parse(AT),
         },
       ],
@@ -710,6 +692,7 @@ describe("runSequence", () => {
       label: "spawn polish",
       startedAt: AT,
       durationMs: Date.parse(AT_END) - Date.parse(AT),
+      cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
       kind: "spawn",
       parentCallId: "call-polish",
     });
@@ -740,19 +723,12 @@ describe("runSequence", () => {
       {
         from: "coordinator",
         to: "research",
-        label: "spawn research",
+        label: "spawn Research",
         startedAt: AT,
         durationMs: Date.parse(AT_END) - Date.parse(AT),
+        cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
         kind: "spawn",
         parentCallId: "call-research",
-      },
-      {
-        from: "research",
-        to: "coordinator",
-        label: "research returned",
-        startedAt: AT_END,
-        durationMs: Date.parse(AT_END) - Date.parse(AT),
-        kind: "return",
       },
     ]);
   });
@@ -781,19 +757,12 @@ describe("runSequence", () => {
       {
         from: "coordinator",
         to: "research",
-        label: "spawn research",
+        label: "spawn Research",
         startedAt: AT,
         durationMs: Date.parse(AT_END) - Date.parse(AT),
+        cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
         kind: "spawn",
         parentCallId: "call-research",
-      },
-      {
-        from: "research",
-        to: "coordinator",
-        label: "research returned",
-        startedAt: AT_END,
-        durationMs: Date.parse(AT_END) - Date.parse(AT),
-        kind: "return",
       },
     ]);
     expect(sequence.beats[0]).not.toHaveProperty("indeterminate");
@@ -824,19 +793,12 @@ describe("runSequence", () => {
       {
         from: "coordinator",
         to: "research",
-        label: "spawn research",
+        label: "spawn Research",
         startedAt: AT,
         durationMs: Date.parse(AT_END) - Date.parse(AT),
+        cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
         kind: "spawn",
         parentCallId: "call-research",
-      },
-      {
-        from: "research",
-        to: "coordinator",
-        label: "research returned",
-        startedAt: AT_END,
-        durationMs: Date.parse(AT_END) - Date.parse(AT),
-        kind: "return",
       },
     ]);
     expect(sequence.beats[0]).not.toHaveProperty("indeterminate");
@@ -876,19 +838,12 @@ describe("runSequence", () => {
       {
         from: "coordinator",
         to: "research",
-        label: "spawn research",
+        label: "spawn Research",
         startedAt: AT,
         durationMs: Date.parse(AT_END) - Date.parse(AT),
+        cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
         kind: "spawn",
         parentCallId: "call-research",
-      },
-      {
-        from: "research",
-        to: "coordinator",
-        label: "research returned",
-        startedAt: AT_END,
-        durationMs: Date.parse(AT_END) - Date.parse(AT),
-        kind: "return",
       },
     ]);
   });
@@ -917,9 +872,10 @@ describe("runSequence", () => {
     expect(sequence.beats.find((b) => b.kind === "return")).toEqual({
       from: "research",
       to: "coordinator",
-      label: "research failed",
+      label: "Research failed",
       startedAt: AT_END,
       durationMs: Date.parse(AT_END) - Date.parse(AT),
+      cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
       kind: "return",
     });
   });
@@ -952,19 +908,12 @@ describe("runSequence", () => {
       {
         from: "coordinator",
         to: "research",
-        label: "spawn research",
+        label: "spawn Research",
         startedAt: AT,
         durationMs: Date.parse(AT_END) - Date.parse(AT),
+        cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
         kind: "spawn",
         parentCallId: "call-research",
-      },
-      {
-        from: "research",
-        to: "coordinator",
-        label: "research returned",
-        startedAt: AT_END,
-        durationMs: Date.parse(AT_END) - Date.parse(AT),
-        kind: "return",
       },
     ]);
   });
@@ -993,7 +942,7 @@ describe("runSequence", () => {
       {
         from: "coordinator",
         to: "research",
-        label: "spawn research",
+        label: "spawn Research",
         startedAt: AT,
         kind: "spawn",
         parentCallId: "call-research",
@@ -1028,7 +977,7 @@ describe("runSequence", () => {
       {
         from: "coordinator",
         to: "research",
-        label: "spawn research",
+        label: "spawn Research",
         startedAt: AT,
         kind: "spawn",
         parentCallId: "call-research",
@@ -1100,8 +1049,8 @@ describe("runSequence", () => {
 
     expect(sequence.condition).toBe("completed");
     expect(sequence.lifelines).toEqual([
-      { id: "human", label: "human", kind: "human" },
-      { id: "coordinator", label: "planning", kind: "coordinator" },
+      { id: "human", label: "Human", kind: "human" },
+      { id: "coordinator", label: "Stakeholder", kind: "coordinator" },
     ]);
     expect(sequence.beats).toEqual([
       {
@@ -1110,6 +1059,7 @@ describe("runSequence", () => {
         label: "human replied",
         startedAt: AT,
         kind: "human-turn",
+        cumulativeMs: 0,
       },
     ]);
   });
@@ -1243,51 +1193,32 @@ describe("runSequence", () => {
     const sequence = runSequence("conv-variant-implementors");
 
     expect(sequence.lifelines).toEqual([
-      { id: "coordinator", label: "implementing", kind: "coordinator" },
+      { id: "coordinator", label: "Coordinator", kind: "coordinator" },
       {
         id: "issue-tracker-implementor",
-        label: "issue-tracker-implementor",
+        label: "Implementor",
         kind: "role",
       },
     ]);
-    expect(sequence.beats).toHaveLength(2);
+    expect(sequence.beats).toHaveLength(1);
     expect(sequence.beats[0]).toEqual({
       from: "coordinator",
       to: "issue-tracker-implementor",
-      label: "spawn issue-tracker-implementor (composer)",
+      label: "spawn Implementor (composer)",
       startedAt: AT,
       durationMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
+      cumulativeMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
       kind: "spawn",
       parentCallId: "call-sonnet",
       turns: [
         {
-          label: "spawn issue-tracker-implementor (composer)",
+          label: "spawn Implementor (composer)",
           startedAt: AT,
           durationMs: Date.parse(AT_ROUND1_END) - Date.parse(AT),
         },
         {
-          label: "spawn issue-tracker-implementor (sonnet)",
+          label: "spawn Implementor (sonnet)",
           startedAt: AT,
-          durationMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
-        },
-      ],
-    });
-    expect(sequence.beats[1]).toEqual({
-      from: "issue-tracker-implementor",
-      to: "coordinator",
-      label: "issue-tracker-implementor (composer) returned",
-      startedAt: AT_ROUND1_END,
-      durationMs: 9000,
-      kind: "return",
-      turns: [
-        {
-          label: "issue-tracker-implementor (composer) returned",
-          startedAt: AT_ROUND1_END,
-          durationMs: Date.parse(AT_ROUND1_END) - Date.parse(AT),
-        },
-        {
-          label: "issue-tracker-implementor (sonnet) returned",
-          startedAt: AT_ROUND2_END,
           durationMs: Date.parse(AT_ROUND2_END) - Date.parse(AT),
         },
       ],
@@ -1320,7 +1251,7 @@ describe("runSequence", () => {
 
     expect(sequence).not.toHaveProperty("rootIssue");
     expect(sequence.sections).toEqual([
-      { beatStart: 0, beatEnd: 1, children: [] },
+      { beatStart: 0, beatEnd: 0, children: [] },
     ]);
   });
 
@@ -1385,14 +1316,14 @@ describe("runSequence", () => {
         kind: "epic",
         title: "Epic One",
         beatStart: 0,
-        beatEnd: 6,
+        beatEnd: 3,
         children: [
           {
             issueId: "story-one",
             kind: "story",
             title: "Story One",
             beatStart: 0,
-            beatEnd: 6,
+            beatEnd: 3,
             children: [],
           },
         ],
@@ -1442,11 +1373,9 @@ describe("runSequence", () => {
 
     expect(sequence.beats.map((b) => b.label)).toEqual([
       "human replied",
-      "spawn implementor",
-      "implementor returned",
+      "spawn Implementor",
       "human replied",
-      "spawn implementor",
-      "implementor returned",
+      "spawn Implementor",
     ]);
     expect(sequence.sections).toEqual([
       { beatStart: 0, beatEnd: 0, children: [] },
@@ -1455,29 +1384,29 @@ describe("runSequence", () => {
         kind: "epic",
         title: "Epic One",
         beatStart: 1,
-        beatEnd: 5,
+        beatEnd: 3,
         children: [
           {
             issueId: "story-one",
             kind: "story",
             title: "Story One",
             beatStart: 1,
-            beatEnd: 5,
+            beatEnd: 3,
             children: [
               {
                 issueId: "task-a",
                 kind: "task",
                 title: "Task A",
                 beatStart: 1,
-                beatEnd: 3,
+                beatEnd: 2,
                 children: [],
               },
               {
                 issueId: "task-b",
                 kind: "task",
                 title: "Task B",
-                beatStart: 4,
-                beatEnd: 5,
+                beatStart: 3,
+                beatEnd: 3,
                 children: [],
               },
             ],
@@ -1528,16 +1457,12 @@ describe("runSequence", () => {
     expect(sequence.beats.map((b) => [b.kind, b.from, b.to])).toEqual([
       ["spawn", "coordinator", "implementor"],
       ["spawn", "coordinator", "implementor"],
-      ["return", "implementor", "coordinator"],
-      ["return", "implementor", "coordinator"],
     ]);
     expect(sequence.beats[0]).not.toHaveProperty("turns");
     expect(sequence.beats[1]).not.toHaveProperty("turns");
-    expect(sequence.beats[2]).not.toHaveProperty("turns");
-    expect(sequence.beats[3]).not.toHaveProperty("turns");
     expect(
       sequence.sections[0]?.children[0]?.children.map((s) => s.issueId),
-    ).toEqual(["task-a", "task-b", "task-a", "task-b"]);
+    ).toEqual(["task-a", "task-b"]);
   });
 
   it("reports in-flight when delegations are closed but the run-live marker is present", async () => {
@@ -1587,6 +1512,107 @@ describe("runSequence", () => {
 
     const runSequence = await loadRunSequence();
     expect(runSequence("conv-no-marker").condition).toBe("completed");
+  });
+
+  it("attributes nested and root usage, stamps wall-clock cumulativeMs, and folds a successful spawn", async () => {
+    writeConversation("conv-usage-fold", {
+      meta: { channel: "planning", issueId: "capture", createdAt: AT },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT_END,
+          parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_CHILD },
+        }),
+      ],
+      transcript: [
+        prompt("go", AT, 1),
+        usage({ totalTokens: 420, at: AT_END, seq: 2 }),
+        toolCall("call-research", "running", AT_END, 3),
+        usage({
+          totalTokens: 19000,
+          at: AT_CHILD,
+          seq: 4,
+          parentCallId: "call-research",
+        }),
+        toolCall("call-research", "completed", AT_CHILD, 5),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-usage-fold");
+
+    expect(sequence.tokenTotal).toBe(19_420);
+    expect(sequence.lifelines.map((line) => line.label)).toEqual([
+      "Human",
+      "Stakeholder",
+      "Research",
+    ]);
+    expect(sequence.beats.map((b) => b.kind)).toEqual(["human-turn", "spawn"]);
+    expect(sequence.beats[0]).toMatchObject({
+      kind: "human-turn",
+      tokenTotal: 420,
+      cumulativeMs: 0,
+    });
+    expect(sequence.beats[1]).toMatchObject({
+      kind: "spawn",
+      label: "spawn Research",
+      tokenTotal: 19_000,
+      durationMs: Date.parse(AT_CHILD) - Date.parse(AT_END),
+      cumulativeMs: Date.parse(AT_CHILD) - Date.parse(AT),
+    });
+    expect(sequence.beats.some((b) => b.kind === "return")).toBe(false);
+  });
+
+  it("keeps a failed spawn's own return beat and still totals its usage", async () => {
+    writeConversation("conv-usage-fail", {
+      meta: { channel: "implementing", issueId: "ship-it", createdAt: AT },
+      delegations: [
+        delegation({
+          delegationId: "del-planner",
+          agentId: "agent-planner",
+          role: "planner-grok",
+          model: "grok-4.5",
+          at: AT,
+          parentCallId: "call-planner",
+          end: { status: "error", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-planner", "running", AT, 1),
+        usage({
+          totalTokens: 34_000,
+          at: AT_END,
+          seq: 2,
+          parentCallId: "call-planner",
+        }),
+        toolCall("call-planner", "error", AT_END, 3),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-usage-fail");
+
+    expect(sequence.condition).toBe("failed");
+    expect(sequence.tokenTotal).toBe(34_000);
+    expect(sequence.lifelines).toEqual([
+      { id: "coordinator", label: "Coordinator", kind: "coordinator" },
+      { id: "planner", label: "Planner", kind: "role" },
+    ]);
+    expect(sequence.beats[0]).toMatchObject({
+      kind: "spawn",
+      label: "spawn Planner (grok)",
+      tokenTotal: 34_000,
+      cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
+    });
+    expect(sequence.beats[1]).toMatchObject({
+      kind: "return",
+      label: "Planner (grok) failed",
+      cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
+    });
   });
 });
 
@@ -1675,7 +1701,7 @@ describe("recentRunsPage", () => {
 
     expect(all[0]).toMatchObject({
       conversationId: "conv-new",
-      coordinatorLabel: "planning",
+      coordinatorLabel: "Stakeholder",
       issueId: "task-new",
       startedAt: AT_LATE,
       condition: "in-flight",
@@ -1688,7 +1714,7 @@ describe("recentRunsPage", () => {
     });
     expect(all[2]).toMatchObject({
       conversationId: "conv-old",
-      coordinatorLabel: "implementing",
+      coordinatorLabel: "Coordinator",
       issueId: "task-old",
       condition: "completed",
     });
@@ -1752,7 +1778,7 @@ describe("recentRunsPage", () => {
       runs: [
         {
           conversationId: "conv-root-only",
-          coordinatorLabel: "planning",
+          coordinatorLabel: "Stakeholder",
           startedAt: AT,
           condition: runSequence("conv-root-only").condition,
           issueId: "capture",
@@ -1871,7 +1897,7 @@ describe("recentRunsPage", () => {
     expect(runs).toEqual([
       {
         conversationId: "conv-newest",
-        coordinatorLabel: "implementing",
+        coordinatorLabel: "Coordinator",
         startedAt: AT_LATE,
         condition: "completed",
         issueId: "task-newest",
@@ -1879,7 +1905,7 @@ describe("recentRunsPage", () => {
       },
       {
         conversationId: "conv-newer",
-        coordinatorLabel: "planning",
+        coordinatorLabel: "Stakeholder",
         startedAt: AT_CHILD,
         condition: "in-flight",
         issueId: "task-newer",
@@ -1953,7 +1979,7 @@ describe("recentRunsPage", () => {
     expect(runs).toEqual([
       {
         conversationId: "conv-recovered",
-        coordinatorLabel: "implementing",
+        coordinatorLabel: "Coordinator",
         startedAt: AT_LATE,
         condition: "completed",
         issueId: "task-on-disk",

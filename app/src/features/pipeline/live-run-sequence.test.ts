@@ -139,18 +139,14 @@ describe("applyLiveFrame", () => {
       seq: 12,
     });
     expect(next.condition).toBe("completed");
+    expect(next.beats).toHaveLength(1);
     expect(next.beats[0]).toMatchObject({
       durationMs: 20_000,
+      cumulativeMs: 20_000,
       parentCallId: "call-impl",
     });
     expect(next.beats[0]).not.toHaveProperty("liveElapsedMs");
-    expect(next.beats[1]).toMatchObject({
-      kind: "return",
-      from: "implementor",
-      to: "coordinator",
-      label: "implementor returned",
-      durationMs: 20_000,
-    });
+    expect(next.beats.some((beat) => beat.kind === "return")).toBe(false);
   });
 
   it("marks the run failed when delegation_end errors", () => {
@@ -165,7 +161,7 @@ describe("applyLiveFrame", () => {
     expect(next.condition).toBe("failed");
     expect(next.beats[1]).toMatchObject({
       kind: "return",
-      label: "implementor failed",
+      label: "Implementor failed",
     });
     expect(next).not.toHaveProperty("recoveredErrors");
   });
@@ -334,6 +330,44 @@ describe("applyLiveFrame", () => {
     ]);
   });
 
+  it("groups a variant role onto the family lifeline and title", () => {
+    const next = applyLiveFrame(
+      inFlight(),
+      delegationFrame({
+        role: "issue-tracker-implementor-composer",
+        parentCallId: "call-composer",
+      }),
+    );
+    expect(next.lifelines.map((line) => [line.id, line.label])).toEqual([
+      ["coordinator", "implementing"],
+      ["implementor", "implementor"],
+      ["issue-tracker-implementor", "Implementor"],
+    ]);
+    expect(next.beats[1]).toMatchObject({
+      to: "issue-tracker-implementor",
+      label: "spawn Implementor (composer)",
+      variant: "composer",
+    });
+  });
+
+  it("attributes live usage to the spawn and the run total", () => {
+    const next = applyLiveFrame(inFlight(), {
+      type: "usage",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 15,
+      },
+      parentCallId: "call-impl",
+      at: AT_MID,
+      seq: 8,
+    });
+    expect(next.tokenTotal).toBe(15);
+    expect(next.beats[0]).toMatchObject({ tokenTotal: 15 });
+  });
+
   it("ticks the frontier elapsed time without closing the beat", () => {
     const next = applyLiveFrame(inFlight(), {
       type: "subagent_update",
@@ -373,8 +407,11 @@ describe("insertFrameBySeq / applyLiveFrames", () => {
     expect(next.beats.map((row) => row.label)).toEqual([
       "spawn implementor",
       "spawn validator",
-      "validator returned",
     ]);
+    expect(next.beats[1]).toMatchObject({
+      durationMs: Date.parse(AT_END) - Date.parse(AT_NESTED),
+      cumulativeMs: Date.parse(AT_END) - Date.parse(AT),
+    });
     expect(next.condition).toBe("in-flight");
   });
 

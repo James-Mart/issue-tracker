@@ -653,6 +653,8 @@ const statusEventInput = z.object({
 const usageEventInput = z.object({
   type: z.literal("usage"),
   usage: usageMetricsSchema,
+  /** Nested run this usage belongs to; unset on session-root usage. */
+  parentCallId: nonEmpty.optional(),
 });
 const requestEventInput = z.object({
   type: z.literal("request"),

@@ -278,14 +278,14 @@ describe("pipeline runs routes", () => {
         runs: [
           {
             conversationId: "conv-new",
-            coordinatorLabel: "planning",
+            coordinatorLabel: "Stakeholder",
             startedAt: AT_LATE,
             condition: "in-flight",
             issueId: "task-new",
           },
           {
             conversationId: "conv-old",
-            coordinatorLabel: "implementing",
+            coordinatorLabel: "Coordinator",
             startedAt: AT_EARLY,
             condition: "completed",
             issueId: "task-old",
