@@ -41,11 +41,26 @@ function stubRuns(runs: RecentRun[]) {
     vi.fn().mockImplementation((input: RequestInfo) => {
       const url = String(input);
       if (url.startsWith("/api/pipeline/runs")) {
-        return Promise.resolve(jsonResponse({ runs }));
+        return Promise.resolve(jsonResponse({ runs, nextCursor: null }));
       }
       return Promise.resolve(jsonResponse({ error: `unhandled ${url}` }, 404));
     }),
   );
+}
+
+function mockViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+  window.dispatchEvent(new Event("resize"));
+}
+
+function runCards(container: ParentNode): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll('[data-testid="pipeline-run-card"]'),
+  ) as HTMLElement[];
 }
 
 function testQueryClient(): QueryClient {
@@ -116,6 +131,43 @@ afterEach(() => {
 });
 
 describe("PipelineRunsView", () => {
+  it("renders one card per fetched run with no elision at desktop width", async () => {
+    stubRuns([
+      recentRun("a", "completed"),
+      recentRun("b", "completed"),
+      recentRun("c", "failed"),
+    ]);
+    const { container } = mountRunsView();
+    await flush();
+
+    expect(
+      runCards(container).map((el) => el.getAttribute("data-conversation-id")),
+    ).toEqual(["a", "b", "c"]);
+    expect(
+      container.querySelector('[data-testid="pipeline-run-elision"]'),
+    ).toBeNull();
+  });
+
+  it("renders one card per fetched run with no elision at phone width", async () => {
+    mockViewport(390);
+    stubRuns([
+      recentRun("a", "completed"),
+      recentRun("b", "completed"),
+      recentRun("c", "failed"),
+      recentRun("d", "completed"),
+      recentRun("e", "completed"),
+    ]);
+    const { container } = mountRunsView();
+    await flush();
+
+    expect(
+      runCards(container).map((el) => el.getAttribute("data-conversation-id")),
+    ).toEqual(["a", "b", "c", "d", "e"]);
+    expect(
+      container.querySelector('[data-testid="pipeline-run-elision"]'),
+    ).toBeNull();
+  });
+
   it("renders a spinner on the live condition badge only", async () => {
     stubRuns([
       recentRun("live-run", "in-flight"),

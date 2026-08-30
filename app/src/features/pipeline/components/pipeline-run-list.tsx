@@ -15,11 +15,9 @@ import { usePipelineRunsLive } from "../api/live";
 import { usePipelineRunsQuery } from "../api/queries";
 import { pipelineRunPath } from "../paths";
 import {
-  PHONE_RUN_LIST_SLOTS,
   conditionBadgeLabel,
   formatRunStartedAt,
   recoveredMarkerLabel,
-  runListSegments,
   type RecentRun,
   type RunCondition,
 } from "../run-list";
@@ -119,28 +117,6 @@ function PipelineRunCard({
   );
 }
 
-function RunListElision({ omitted }: { omitted: RecentRun[] }) {
-  const labels = omitted.map((run) => run.coordinatorLabel).join(", ");
-  const count = omitted.length;
-  return (
-    <div
-      className="flex items-center gap-2 py-0.5"
-      role="note"
-      data-testid="pipeline-run-elision"
-      aria-label={`${count} run${count === 1 ? "" : "s"} omitted: ${labels}`}
-    >
-      <span className="h-px min-w-4 flex-1 bg-[hsl(var(--rail))]" aria-hidden />
-      <span className="min-w-0 truncate font-mono text-[10px] leading-tight text-muted-foreground">
-        <span aria-hidden>↕ </span>
-        {count} omitted
-        <span aria-hidden> · </span>
-        <span className="text-foreground/75">{labels}</span>
-      </span>
-      <span className="h-px min-w-4 flex-1 bg-[hsl(var(--rail))]" aria-hidden />
-    </div>
-  );
-}
-
 export function PipelineRunsView({
   conversationId,
   renderSequence,
@@ -155,12 +131,7 @@ export function PipelineRunsView({
   usePipelineRunsLive();
   const { data, isLoading, error, refetch, isFetching } =
     usePipelineRunsQuery();
-  const runs = data?.runs ?? [];
-  const segments = runListSegments(
-    runs,
-    conversationId,
-    isMobile ? PHONE_RUN_LIST_SLOTS : null,
-  );
+  const runs = data?.pages.flatMap((page) => page.runs) ?? [];
 
   return (
     <div className="space-y-4">
@@ -214,22 +185,13 @@ export function PipelineRunsView({
                 className="flex flex-col gap-2"
                 data-testid="pipeline-run-list"
               >
-                {segments.map((segment, index) =>
-                  segment.kind === "run" ? (
-                    <PipelineRunCard
-                      key={segment.run.conversationId}
-                      run={segment.run}
-                      selected={
-                        segment.run.conversationId === conversationId
-                      }
-                    />
-                  ) : (
-                    <RunListElision
-                      key={`elision-${index}`}
-                      omitted={segment.omitted}
-                    />
-                  ),
-                )}
+                {runs.map((run) => (
+                  <PipelineRunCard
+                    key={run.conversationId}
+                    run={run}
+                    selected={run.conversationId === conversationId}
+                  />
+                ))}
               </div>
             )}
           </section>

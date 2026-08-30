@@ -164,7 +164,7 @@ function stubRuns(
       );
     }
     if (url.startsWith("/api/pipeline/runs")) {
-      return Promise.resolve(jsonResponse({ runs }));
+      return Promise.resolve(jsonResponse({ runs, nextCursor: null }));
     }
     return Promise.resolve(jsonResponse({ error: `unhandled ${url}` }, 404));
   });
@@ -745,25 +745,17 @@ describe("PipelinePage", () => {
     ]);
   });
 
-  it("pins the selected run and newest failed run when the phone list is truncated", async () => {
+  it("renders every fetched run at phone width with no elision", async () => {
     mockViewport(390);
     stubRuns(FIVE_RUNS);
     const { container } = mountPipelinePage("/pipeline/runs/e");
     await flush();
     expect(
       runCards(container).map((el) => el.getAttribute("data-conversation-id")),
-    ).toEqual(["a", "d", "e"]);
-    const elision = container.querySelector(
-      '[data-testid="pipeline-run-elision"]',
-    );
-    if (!(elision instanceof HTMLElement)) {
-      throw new Error("Missing elision");
-    }
-    expect(elision.textContent).toContain("2 omitted");
-    expect(elision.textContent).toContain("b, c");
-    expect(elision.getAttribute("aria-label")).toBe("2 runs omitted: b, c");
-    const list = container.querySelector('[data-testid="pipeline-run-list"]');
-    expect(list?.textContent).toMatch(/a.*2 omitted.*b, c.*d.*e/s);
+    ).toEqual(["a", "b", "c", "d", "e"]);
+    expect(
+      container.querySelector('[data-testid="pipeline-run-elision"]'),
+    ).toBeNull();
   });
 
   it("shows the recovered marker beside the condition chip on recovered runs only", async () => {
