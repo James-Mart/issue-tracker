@@ -5,6 +5,10 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IssueDetail } from "@server/schemas";
 import type { ChannelTabIndicator } from "../lib/channel-tab-indicator";
+import {
+  resetCockpitLaunchStore,
+  useCockpitLaunchStore,
+} from "../store/use-cockpit-launch-store";
 import { IssueDetailTabs } from "./issue-detail-tabs";
 
 const indicatorState = vi.hoisted(() => ({
@@ -81,9 +85,28 @@ function idea(): IssueDetail {
   };
 }
 
+function epic(): IssueDetail {
+  return {
+    id: "auth",
+    kind: "epic",
+    title: "Auth",
+    partOf: "issue-tracker",
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+    blockedBy: [],
+    archived: false,
+    description: "",
+    labels: [],
+    needsAttention: false,
+    attentionReason: null,
+  };
+}
+
 function mountTabs(
   indicator: ChannelTabIndicator | null = null,
   initialEntry = "/",
+  issue: IssueDetail = idea(),
 ): {
   container: HTMLDivElement;
   root: Root;
@@ -96,7 +119,7 @@ function mountTabs(
     root.render(
       <MemoryRouter initialEntries={[initialEntry]}>
         <IssueDetailTabs
-          issue={idea()}
+          issue={issue}
           projectId="issue-tracker"
           overview={<div>Overview body</div>}
         />
@@ -106,6 +129,18 @@ function mountTabs(
   return { container, root };
 }
 
+function selectedTab(container: ParentNode): string | undefined {
+  return Array.from(container.querySelectorAll('[role="tab"]'))
+    .find((tab) => tab.getAttribute("aria-selected") === "true")
+    ?.textContent?.trim();
+}
+
+function tabNamed(container: ParentNode, label: string): HTMLButtonElement {
+  return Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>
+    el.textContent?.includes(label),
+  ) as HTMLButtonElement;
+}
+
 afterEach(() => {
   document.body.innerHTML = "";
   indicatorState.value = null;
@@ -113,6 +148,7 @@ afterEach(() => {
   panelProps.mobileFullViewport = false;
   panelProps.onBackToOverview = undefined;
   panelProps.mounted = false;
+  resetCockpitLaunchStore();
 });
 
 describe("IssueDetailTabs channel panel mount", () => {
@@ -186,6 +222,63 @@ describe("IssueDetailTabs channel indicator", () => {
       container.querySelector('[data-testid="roster-active-run"]'),
     ).toBeNull();
     expect(planning?.className).not.toContain("--warning");
+  });
+});
+
+describe("IssueDetailTabs once-only launch channel open", () => {
+  it("selects Planning when beginLaunch runs from Overview", () => {
+    const { container } = mountTabs(null, "/");
+    expect(selectedTab(container)).toContain("Overview");
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
+    });
+
+    expect(selectedTab(container)).toContain("Planning");
+    expect(useCockpitLaunchStore.getState().pending).toEqual({
+      issueId: "capture",
+      kind: "planning",
+    });
+  });
+
+  it("selects Implementing when beginLaunch runs a work launch from Overview", () => {
+    const { container } = mountTabs(null, "/", epic());
+    expect(selectedTab(container)).toContain("Overview");
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("auth", "work");
+    });
+
+    expect(selectedTab(container)).toContain("Implementing");
+  });
+
+  it("keeps Overview after a later write while the same pending is still set", () => {
+    const { container } = mountTabs(null, "/");
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
+    });
+    expect(selectedTab(container)).toContain("Planning");
+
+    act(() => {
+      tabNamed(container, "Overview").click();
+    });
+
+    expect(selectedTab(container)).toContain("Overview");
+    expect(useCockpitLaunchStore.getState().pending).toEqual({
+      issueId: "capture",
+      kind: "planning",
+    });
+  });
+
+  it("does not switch tabs when beginLaunch is for another issue", () => {
+    const { container } = mountTabs(null, "/");
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("other", "planning");
+    });
+
+    expect(selectedTab(container)).toContain("Overview");
   });
 });
 
