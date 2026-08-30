@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { COCKPIT_COLLAPSED_SECTIONS_STORAGE_KEY } from "../lib/cockpit-collapsed-sections";
+import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { CockpitPage } from "./cockpit-page";
 
 const mockState = vi.hoisted(() => ({
@@ -133,6 +134,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  resetCockpitLaunchStore();
 });
 
 describe("CockpitPage collapse persistence", () => {

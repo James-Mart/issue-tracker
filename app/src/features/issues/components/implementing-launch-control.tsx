@@ -1,4 +1,4 @@
-import { Play } from "lucide-react";
+import { Loader2, Play } from "lucide-react";
 import type { ConversationChannel } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { useAgentModelsQuery } from "@/features/agents/api/queries";
 import { Link, useLocation } from "react-router-dom";
 import { useCreateChannelSession } from "../api/mutations";
 import { useConfirmChannelLiveRun } from "../hooks/use-confirm-channel-live-run";
+import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   type IssueBackLocationState,
   issueBackNavigateState,
@@ -74,19 +75,22 @@ function ImplementingLaunchButton({
   issue,
   channel,
   variant,
+  optimistic,
   onStarted,
   onLockRefusal,
 }: {
   issue: ImplementingWorkRoot;
   channel: ConversationChannel;
   variant: "primary" | "secondary" | "icon";
+  optimistic?: boolean;
   onStarted: (session: ImplementingSessionStarted) => void;
   onLockRefusal: (refusal: ImplementingLockRefusal) => void;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const models = modelsData?.models ?? [];
   const createSession = useCreateChannelSession(issue.id, channel, {
-    suppressToast: (err) => parseImplementingLockRefusal(err) !== undefined,
+    suppressToast: (err) =>
+      Boolean(optimistic) || parseImplementingLockRefusal(err) !== undefined,
   });
   const {
     confirmIfLiveRun,
@@ -94,6 +98,11 @@ function ImplementingLaunchButton({
     confirming,
     dialog,
   } = useConfirmChannelLiveRun(issue.id, channel);
+  const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
+  const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
+  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
+  const pending = useCockpitLaunchStore((s) => s.pending);
+  const launching = Boolean(optimistic) && pending?.issueId === issue.id;
   const copy = implementingLaunchCopy();
   const coordinatorModel = implementingSessionModel(models);
   const blocked = awaitingConfirm || confirming;
@@ -101,15 +110,23 @@ function ImplementingLaunchButton({
     Boolean(coordinatorModel) &&
     !modelsLoading &&
     !createSession.isPending &&
-    !blocked;
+    !blocked &&
+    !launching;
 
   const start = () => {
-    if (!coordinatorModel || modelsLoading || createSession.isPending || blocked) {
+    if (
+      !coordinatorModel ||
+      modelsLoading ||
+      createSession.isPending ||
+      blocked ||
+      launching
+    ) {
       return;
     }
     const title = implementingSessionTitle(issue.title);
     const model = coordinatorModel;
     confirmIfLiveRun(() => {
+      if (optimistic) beginLaunch(issue.id, "work");
       createSession.mutate(
         {
           title,
@@ -117,9 +134,15 @@ function ImplementingLaunchButton({
           message: implementingSessionMessage(issue.id),
         },
         {
-          onSuccess: ({ id }) => onStarted({ id, title, model }),
+          onSuccess: ({ id }) => {
+            if (optimistic) ackLaunch(issue.id, "work");
+            onStarted({ id, title, model });
+          },
           onError: (err) => {
             const refusal = parseImplementingLockRefusal(err);
+            if (optimistic) {
+              failLaunch(issue.id, "work", { lockRefusal: Boolean(refusal) });
+            }
             if (refusal) onLockRefusal(refusal);
           },
         },
@@ -139,12 +162,20 @@ function ImplementingLaunchButton({
           type="button"
           variant="default"
           size="icon-sm"
-          title="Start work"
-          aria-label="Start work"
-          data-testid="flow-row-start-work"
+          title={launching ? "Starting work" : "Start work"}
+          aria-label={launching ? "Starting work" : "Start work"}
+          aria-busy={launching || undefined}
+          data-testid={
+            launching ? "flow-row-launch-pending" : "flow-row-start-work"
+          }
+          disabled={launching}
           onClick={start}
         >
-          <Play className="h-3.5 w-3.5" />
+          {launching ? (
+            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
         </Button>
         {dialog}
       </>
@@ -185,6 +216,7 @@ export function ImplementingFlowRowLaunch({
       issue={issue}
       channel="implementing"
       variant="icon"
+      optimistic
       onStarted={() => {}}
       onLockRefusal={onLockRefusal}
     />

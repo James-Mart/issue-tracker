@@ -252,6 +252,7 @@ export function useCreateChannelSession(
           return [created, ...rest];
         },
       );
+      void qc.invalidateQueries({ queryKey: issuesKeys.list() });
     },
     onSettled: () => {
       qc.invalidateQueries({

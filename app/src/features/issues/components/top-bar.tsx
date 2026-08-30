@@ -6,19 +6,31 @@ import { cn } from "@/lib/utils/cn";
 import { useIssuesQuery } from "../api/queries";
 import { useRouteProjectId } from "../hooks/use-route-project-id";
 import { filterToProject } from "../lib/build-tree";
+import { overlayCockpitLaunchAck } from "../lib/cockpit-launch-sync";
 import { hasInFlightWork } from "../lib/derived";
+import {
+  useCockpitLaunchIssuesSync,
+  useCockpitLaunchStore,
+} from "../store/use-cockpit-launch-store";
 import { RestartControl } from "./restart-control";
 
 export function TopBar() {
   const projectId = useRouteProjectId();
   const { data } = useIssuesQuery();
+  const pending = useCockpitLaunchStore((s) => s.pending);
+  const ack = useCockpitLaunchStore((s) => s.ack);
+  useCockpitLaunchIssuesSync(data?.derived);
 
   const live = useMemo(() => {
     const all = data?.issues ?? [];
     // Cockpit (`/`) has no project scope — aggregate liveness across all work.
     const issues = projectId ? filterToProject(all, projectId) : all;
-    return hasInFlightWork(issues, data?.derived ?? {});
-  }, [data?.derived, data?.issues, projectId]);
+    const derived = data?.derived ?? {};
+    const derivedForLive = ack
+      ? overlayCockpitLaunchAck(derived, issues, ack)
+      : derived;
+    return Boolean(pending) || hasInFlightWork(issues, derivedForLive);
+  }, [ack, data?.derived, data?.issues, pending, projectId]);
 
   return (
     <header className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-3 shell:px-4">

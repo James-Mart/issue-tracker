@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/errors";
 import { skillPath } from "@/lib/plugin-paths";
+import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   ImplementingChannelEmptyState,
   ImplementingLockRefusalState,
@@ -113,6 +114,7 @@ afterEach(() => {
   liveRunConfirm.midRun = false;
   liveRunConfirm.pending = null;
   liveRunConfirm.confirming = false;
+  resetCockpitLaunchStore();
 });
 
 describe("ImplementingChannelEmptyState", () => {
