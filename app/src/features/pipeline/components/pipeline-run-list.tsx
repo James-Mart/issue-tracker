@@ -301,11 +301,8 @@ export function PipelineRunsView({
               </div>
             )}
           </section>
-          {conversationId && renderSequence ? (
-            renderSequence(
-              conversationId,
-              isMobile ? "phone" : "desktop",
-            )
+          {conversationId && renderSequence && !isMobile ? (
+            renderSequence(conversationId, "desktop")
           ) : conversationId ? null : (
             <div
               data-testid="pipeline-run-sequence-placeholder"
@@ -317,6 +314,9 @@ export function PipelineRunsView({
           )}
         </div>
       )}
+      {conversationId && renderSequence && isMobile
+        ? renderSequence(conversationId, "phone")
+        : null}
     </div>
   );
 }
