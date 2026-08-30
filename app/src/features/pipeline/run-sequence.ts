@@ -88,6 +88,7 @@ export type BeatStroke = {
 export const RETURN_DASH = "4 3";
 export const LIFELINE_DASH = "4 4";
 export const OPEN_TAIL_DASH = "3 4";
+export const OPEN_SPAWN_DASH = "5 4";
 
 export function strokeCss(color: BeatStrokeColor): string {
   return `hsl(var(--${color}))`;
@@ -175,4 +176,29 @@ export function formatSequenceDuration(
 ): string | undefined {
   if (durationMs === undefined) return undefined;
   return formatRunDurationMs(durationMs);
+}
+
+/** Compact beat/header token count — `428`, `8.4k`, `184k`, `1.9M`. */
+export function formatSequenceTokens(
+  tokenTotal: number | undefined,
+): string | undefined {
+  if (tokenTotal === undefined) return undefined;
+  if (tokenTotal < 1000) return String(tokenTotal);
+  if (tokenTotal >= 1_000_000) {
+    const m = tokenTotal / 1_000_000;
+    if (m >= 10 || Number.isInteger(m)) return `${Math.round(m)}M`;
+    return `${m.toFixed(1)}M`;
+  }
+  const k = tokenTotal / 1000;
+  if (k >= 10 || Number.isInteger(k)) return `${Math.round(k)}k`;
+  return `${k.toFixed(1)}k`;
+}
+
+/** Run-header phrase — `184k tokens`. */
+export function formatSequenceTokenTotal(
+  tokenTotal: number | undefined,
+): string | undefined {
+  const compact = formatSequenceTokens(tokenTotal);
+  if (compact === undefined) return undefined;
+  return `${compact} tokens`;
 }

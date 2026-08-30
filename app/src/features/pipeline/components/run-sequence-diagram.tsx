@@ -15,10 +15,6 @@ import {
   LIFELINE_DASH,
   OPEN_TAIL_DASH,
   collapsedIterationCount,
-  failedBeatIndex,
-  failedLifelineId,
-  displayedDurationMs,
-  formatSequenceDuration,
   isCollapsedBeat,
   lifelineTail,
   type RunSequence,
@@ -29,12 +25,14 @@ import {
   DirectedArrow,
   IterationCountChip,
   SectionHeader,
+  SequenceMetricCells,
   beatAccent,
   beatCaptionLabel,
   buildSequenceDisplay,
   buildSequenceRows,
   displayBeatLabel,
   displayLifelineLabel,
+  rowMetricLabels,
 } from "./run-sequence-shared";
 
 export const DESKTOP_SEQUENCE_METRICS = {
@@ -47,7 +45,7 @@ export const DESKTOP_SEQUENCE_METRICS = {
   sectionHeaderHeight: 36,
   lifelineGap: 116,
   labelW: 88,
-  durationCol: 68,
+  durationCol: 168,
   openTail: 40,
   failedCap: 20,
 } as const;
@@ -147,12 +145,11 @@ function BeatLabel({
       className={cn(
         "absolute z-10 inline-flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium leading-none",
         "bg-[hsl(var(--panel-2))]",
-        isIndeterminate
-          ? "text-[hsl(var(--warn))]"
-          : isLive
+        isFailed
+          ? "text-[hsl(var(--blocked))]"
+          : isLive || isIndeterminate
             ? "text-[hsl(var(--current))]"
             : "text-foreground",
-        isFailed && "text-[hsl(var(--blocked))]",
       )}
       style={{ left: x, top: y - 20 }}
       data-testid="sequence-beat-label"
@@ -166,49 +163,11 @@ function BeatLabel({
       {label}
       {isFailed ? (
         <XCircle
+          data-testid="sequence-failure-mark"
           className="h-3 w-3 shrink-0 text-[hsl(var(--blocked))]"
           aria-hidden
         />
       ) : null}
-    </span>
-  );
-}
-
-function DurationGutter({
-  label,
-  x,
-  y,
-  width,
-  isLive,
-  isFailed,
-  beatIndex,
-  rowKind,
-}: {
-  label: string;
-  x: number;
-  y: number;
-  width: number;
-  isLive: boolean;
-  isFailed: boolean;
-  beatIndex: number;
-  rowKind: string;
-}) {
-  return (
-    <span
-      data-testid="sequence-duration"
-      data-beat-index={beatIndex}
-      data-row={rowKind}
-      className={cn(
-        "absolute z-10 overflow-hidden whitespace-nowrap font-mono text-[11px] tabular-nums leading-none",
-        isFailed
-          ? "text-[hsl(var(--blocked))]"
-          : isLive
-            ? "text-[hsl(var(--current))]"
-            : "text-[hsl(var(--mut))]",
-      )}
-      style={{ top: y - 6, left: x, width, textAlign: "right" }}
-    >
-      {label}
     </span>
   );
 }
@@ -283,18 +242,11 @@ export function RunSequenceDiagram({
     sequence.lifelines.map((line, index) => [line.id, index]),
   );
   const tail = lifelineTail(sequence.condition);
-  const failedId = failedLifelineId(sequence);
-  const failedIndex = failedBeatIndex(sequence.beats);
   const width = sequenceDiagramWidth(sequence.lifelines.length);
   const lastBeatY =
     placedRows.length > 0
       ? placedRows[placedRows.length - 1]!.y
       : metrics.padTop + metrics.lifelineHeader;
-  const failedPlaced = placedRows.find(
-    (item) =>
-      item.row.kind !== "group_head" && item.row.beatIndex === failedIndex,
-  );
-  const failedBeatY = failedPlaced?.y ?? lastBeatY;
   const contentBottom =
     metrics.padTop +
     metrics.lifelineHeader +
@@ -307,8 +259,7 @@ export function RunSequenceDiagram({
       0,
     );
   // Failed condition is "any error," not a terminal cut: later beats stay.
-  // The stop tail contrasts completed's post-last-beat extension; the cap
-  // marks the failed lifeline at the error beat.
+  // The stop tail contrasts completed's post-last-beat extension.
   const height =
     contentBottom +
     (tail === "stop"
@@ -481,20 +432,6 @@ export function RunSequenceDiagram({
             );
           })}
 
-          {tail === "stop" && failedId ? (
-            <span
-              aria-hidden
-              data-testid="sequence-termination-cap"
-              data-lifeline={failedId}
-              className="absolute z-10 flex -translate-x-1/2 items-center justify-center"
-              style={{ left: xFor(failedId), top: failedBeatY + 8 }}
-            >
-              <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-[hsl(var(--blocked))] bg-[hsl(var(--panel-2))]">
-                <XCircle className="h-3.5 w-3.5 text-[hsl(var(--blocked))]" />
-              </span>
-            </span>
-          ) : null}
-
           {placedRows.map((item, rowIndex) => {
             const row = item.row;
             const y = item.y;
@@ -528,7 +465,7 @@ export function RunSequenceDiagram({
                       "border-[hsl(var(--rail))] bg-[hsl(var(--panel-2))] hover:border-[hsl(var(--rail-lit))]",
                       "text-[11px] font-medium",
                       isIndeterminate
-                        ? "text-[hsl(var(--warn))]"
+                        ? "text-[hsl(var(--current))]"
                         : "text-foreground",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     )}
@@ -540,7 +477,7 @@ export function RunSequenceDiagram({
                       aria-hidden
                     />
                     <span data-testid="sequence-beat-label">
-                      {beatCaptionLabel(row.beat, row.beat.label)}
+                      {beatCaptionLabel(row.beat.label)}
                     </span>
                     {count !== undefined ? (
                       <IterationCountChip count={count} />
@@ -590,7 +527,6 @@ export function RunSequenceDiagram({
             }
 
             const label = beatCaptionLabel(
-              row.beat,
               row.kind === "turn" ? row.turn.label : row.beat.label,
             );
             return (
@@ -617,35 +553,31 @@ export function RunSequenceDiagram({
           })}
         </div>
         <div
-          data-testid="sequence-duration-gutter"
-          className="sticky right-0 z-20 shrink-0 border-l border-[hsl(var(--rail))] bg-[hsl(var(--panel)/0.92)] relative"
+          data-testid="sequence-metrics-gutter"
+          className="sticky right-0 z-20 relative shrink-0 border-l border-[hsl(var(--rail))] bg-[hsl(var(--panel)/0.92)]"
           style={{ width: metrics.durationCol, height }}
         >
           {placedRows.map((item, rowIndex) => {
             const row = item.row;
             const y = item.y;
-            const accent = beatAccent(sequence, row.beatIndex);
-            const isLive = accent === "live";
-            const isFailed = accent === "failed";
             if (row.kind === "group_head") return null;
-            const duration = formatSequenceDuration(
-              row.kind === "turn"
-                ? row.turn.durationMs
-                : displayedDurationMs(row.beat, isLive),
-            );
-            if (!duration) return null;
+            const metricsRow = rowMetricLabels(sequence, row);
             return (
-              <DurationGutter
+              <span
                 key={`${row.kind}-${row.beatIndex}-${rowIndex}`}
-                label={duration}
-                x={8}
-                y={y}
-                width={metrics.durationCol - 16}
-                isLive={row.kind !== "turn" && isLive}
-                isFailed={row.kind !== "turn" && isFailed}
-                beatIndex={row.beatIndex}
-                rowKind={row.kind}
-              />
+                className="absolute z-10"
+                style={{ top: y - 6, right: 8 }}
+              >
+                <SequenceMetricCells
+                  tokenLabel={metricsRow.token}
+                  durationLabel={metricsRow.duration}
+                  cumulativeLabel={metricsRow.cumulative}
+                  isLive={metricsRow.isLive}
+                  isFailed={metricsRow.isFailed}
+                  beatIndex={row.beatIndex}
+                  rowKind={row.kind}
+                />
+              </span>
             );
           })}
         </div>

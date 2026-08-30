@@ -4,9 +4,6 @@ import { cn } from "@/lib/utils/cn";
 import {
   OPEN_TAIL_DASH,
   collapsedIterationCount,
-  failedLifelineId,
-  displayedDurationMs,
-  formatSequenceDuration,
   lifelineTail,
   type RunSequence,
   type SequenceBeatKind,
@@ -15,23 +12,35 @@ import {
   DirectedArrow,
   IterationCountChip,
   SectionHeader,
+  SequenceMetricCells,
+  SEQUENCE_METRIC_COLS,
   beatAccent,
   beatCaptionLabel,
   displayBeatLabel,
   displayLifelineLabel,
+  rowMetricLabels,
   type BeatAccent,
   type SequenceDisplayItem,
 } from "./run-sequence-shared";
 
 const RAIL_SECTION_INDENT = 10;
 
-const DURATION_COL = "10ch";
-
 function railState(accent: BeatAccent | undefined): RailNodeState {
-  if (accent === "live") return "in-flight";
+  if (accent === "live" || accent === "indeterminate") return "in-flight";
   if (accent === "failed") return "blocked";
-  if (accent === "indeterminate") return "needs-attention";
-  return "ready";
+  return "merged";
+}
+
+function metricsSpacer() {
+  return (
+    <span
+      className="inline-flex shrink-0 gap-1.5"
+      style={{
+        width: `calc(${SEQUENCE_METRIC_COLS.token} + ${SEQUENCE_METRIC_COLS.duration} + ${SEQUENCE_METRIC_COLS.cumulative} + 0.75rem)`,
+      }}
+      aria-hidden
+    />
+  );
 }
 
 function lifelineOf(sequence: RunSequence, id: string) {
@@ -57,39 +66,6 @@ function BeatKindArrow({
     >
       <DirectedArrow fromX={2} toX={98} y={6} kind={kind} accent={accent} />
     </svg>
-  );
-}
-
-function RailDuration({
-  label,
-  isLive,
-  isFailed,
-  beatIndex,
-  rowKind,
-}: {
-  label: string;
-  isLive: boolean;
-  isFailed: boolean;
-  beatIndex: number;
-  rowKind: string;
-}) {
-  return (
-    <span
-      data-testid="sequence-duration"
-      data-beat-index={beatIndex}
-      data-row={rowKind}
-      className={cn(
-        "shrink-0 overflow-hidden whitespace-nowrap text-right font-mono text-[11px] tabular-nums leading-none",
-        isFailed
-          ? "text-[hsl(var(--blocked))]"
-          : isLive
-            ? "text-[hsl(var(--current))]"
-            : "text-[hsl(var(--mut))]",
-      )}
-      style={{ width: DURATION_COL }}
-    >
-      {label}
-    </span>
   );
 }
 
@@ -140,13 +116,11 @@ function BeatTitle({
     <p
       className={cn(
         "flex min-w-0 flex-wrap items-center gap-1.5 text-[12px] font-medium leading-snug",
-        isIndeterminate
-          ? "text-[hsl(var(--warn))]"
-          : isFailed
-            ? "text-[hsl(var(--blocked))]"
-            : isLive
-              ? "text-[hsl(var(--current))]"
-              : "text-foreground",
+        isFailed
+          ? "text-[hsl(var(--blocked))]"
+          : isLive || isIndeterminate
+            ? "text-[hsl(var(--current))]"
+            : "text-foreground",
       )}
     >
       <span data-testid="sequence-beat-label">{label}</span>
@@ -158,6 +132,7 @@ function BeatTitle({
       ) : null}
       {isFailed ? (
         <XCircle
+          data-testid="sequence-failure-mark"
           className="h-3 w-3 shrink-0 text-[hsl(var(--blocked))]"
           aria-hidden
         />
@@ -183,7 +158,6 @@ export function RunSequenceRail({
   onToggleSection: (key: string) => void;
 }) {
   const tail = lifelineTail(sequence.condition);
-  const failedId = failedLifelineId(sequence);
   const hasExpandedTurns = displayItems.some(
     (item) => item.kind === "row" && item.row.kind === "turn",
   );
@@ -269,24 +243,15 @@ export function RunSequenceRail({
                     <IterationCountChip count={count} />
                   ) : null}
                 </button>
-                <span
-                  className="shrink-0"
-                  style={{ width: DURATION_COL }}
-                  aria-hidden
-                />
+                {metricsSpacer()}
               </div>
             );
           }
 
           const label = beatCaptionLabel(
-            row.beat,
             row.kind === "turn" ? row.turn.label : row.beat.label,
           );
-          const duration = formatSequenceDuration(
-            row.kind === "turn"
-              ? row.turn.durationMs
-              : displayedDurationMs(row.beat, isLive),
-          );
+          const metricsRow = rowMetricLabels(sequence, row);
 
           if (row.kind === "collapsed") {
             return (
@@ -315,7 +280,7 @@ export function RunSequenceRail({
                       className={cn(
                         "flex min-w-0 flex-wrap items-center gap-1.5 text-[12px] font-medium leading-snug",
                         isIndeterminate
-                          ? "text-[hsl(var(--warn))]"
+                          ? "text-[hsl(var(--current))]"
                           : "text-foreground",
                       )}
                     >
@@ -337,21 +302,15 @@ export function RunSequenceRail({
                       kind={row.beat.kind}
                       accent={accent}
                     />
-                    {duration ? (
-                      <RailDuration
-                        label={duration}
-                        isLive={false}
-                        isFailed={false}
-                        beatIndex={row.beatIndex}
-                        rowKind="collapsed"
-                      />
-                    ) : (
-                      <span
-                        className="shrink-0"
-                        style={{ width: DURATION_COL }}
-                        aria-hidden
-                      />
-                    )}
+                    <SequenceMetricCells
+                      tokenLabel={metricsRow.token}
+                      durationLabel={metricsRow.duration}
+                      cumulativeLabel={metricsRow.cumulative}
+                      isLive={metricsRow.isLive}
+                      isFailed={metricsRow.isFailed}
+                      beatIndex={row.beatIndex}
+                      rowKind="collapsed"
+                    />
                   </div>
                 </div>
               </RailNode>
@@ -392,32 +351,16 @@ export function RunSequenceRail({
                     kind={row.beat.kind}
                     accent={row.kind === "beat" ? accent : undefined}
                   />
-                  {duration ? (
-                    <RailDuration
-                      label={duration}
-                      isLive={row.kind !== "turn" && isLive}
-                      isFailed={row.kind !== "turn" && isFailed}
-                      beatIndex={row.beatIndex}
-                      rowKind={row.kind}
-                    />
-                  ) : (
-                    <span
-                      className="shrink-0"
-                      style={{ width: DURATION_COL }}
-                      aria-hidden
-                    />
-                  )}
+                  <SequenceMetricCells
+                    tokenLabel={metricsRow.token}
+                    durationLabel={metricsRow.duration}
+                    cumulativeLabel={metricsRow.cumulative}
+                    isLive={metricsRow.isLive}
+                    isFailed={metricsRow.isFailed}
+                    beatIndex={row.beatIndex}
+                    rowKind={row.kind}
+                  />
                 </div>
-                {row.kind === "beat" && isFailed && failedId ? (
-                  <span
-                    aria-hidden
-                    data-testid="sequence-termination-cap"
-                    data-lifeline={failedId}
-                    className="mt-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border-2 border-[hsl(var(--blocked))] bg-[hsl(var(--panel-2))]"
-                  >
-                    <XCircle className="h-3.5 w-3.5 text-[hsl(var(--blocked))]" />
-                  </span>
-                ) : null}
               </div>
             </RailNode>
           );

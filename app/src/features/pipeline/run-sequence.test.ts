@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { beatAccent } from "./components/run-sequence-shared";
+import {
+  beatAccent,
+  displayBeatLabel,
+  displayLifelineLabel,
+} from "./components/run-sequence-shared";
 import {
   beatStroke,
   collapsedIterationCount,
   failedLifelineId,
   displayedDurationMs,
   formatSequenceDuration,
+  formatSequenceTokenTotal,
+  formatSequenceTokens,
   frontierBeatIndex,
   isCollapsedBeat,
   lifelineTail,
@@ -152,7 +158,52 @@ describe("formatSequenceDuration", () => {
   it("formats a duration without a live suffix", () => {
     expect(formatSequenceDuration(45_000)).toBe("45s");
     expect(formatSequenceDuration(2 * 60_000 + 14_000)).toBe("2m 14s");
+    expect(formatSequenceDuration((10 * 60 + 44) * 1000)).toBe("10m 44s");
     expect(formatSequenceDuration(undefined)).toBeUndefined();
+  });
+});
+
+describe("formatSequenceTokens", () => {
+  it("compacts thousands the way the header and gutter show them", () => {
+    expect(formatSequenceTokens(428)).toBe("428");
+    expect(formatSequenceTokens(8_400)).toBe("8.4k");
+    expect(formatSequenceTokens(19_000)).toBe("19k");
+    expect(formatSequenceTokens(184_420)).toBe("184k");
+    expect(formatSequenceTokens(1_918_558)).toBe("1.9M");
+    expect(formatSequenceTokens(undefined)).toBeUndefined();
+    expect(formatSequenceTokenTotal(184_420)).toBe("184k tokens");
+  });
+});
+
+describe("shared labels", () => {
+  it("leaves server seat titles and beat captions alone", () => {
+    expect(
+      displayLifelineLabel({
+        id: "coordinator",
+        label: "Stakeholder",
+        kind: "coordinator",
+      }),
+    ).toBe("Stakeholder");
+    expect(
+      displayLifelineLabel({
+        id: "coordinator",
+        label: "Coordinator",
+        kind: "coordinator",
+      }),
+    ).toBe("Coordinator");
+    expect(
+      displayLifelineLabel({
+        id: "planner",
+        label: "Planner",
+        kind: "role",
+      }),
+    ).toBe("Planner");
+    expect(displayBeatLabel("spawn Planner (grok)")).toBe(
+      "spawn Planner (grok)",
+    );
+    expect(displayBeatLabel("issue-tracker-implementor (composer)")).toBe(
+      "issue-tracker-implementor (composer)",
+    );
   });
 });
 
