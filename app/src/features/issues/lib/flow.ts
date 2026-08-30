@@ -35,7 +35,13 @@ export function isReadyWorkFlowItem(
 ): item is FlowItem & {
   issue: Extract<IssueRecord, { kind: "epic" | "story" }>;
 } {
-  if (flowItemNeedsAttention(item) || item.state?.blocked) return false;
+  if (
+    flowItemNeedsAttention(item) ||
+    item.state?.blocked ||
+    item.state?.planNotFinal
+  ) {
+    return false;
+  }
   if (item.issue.kind === "epic") {
     return item.state?.epicStatus === "todo";
   }
@@ -192,7 +198,7 @@ export function flowBuckets(
     const item: FlowItem = { issue, state };
     if (issue.kind === "idea" && state?.ideaStatus === "captured") {
       awaitingPlanning.push(item);
-    } else if (state?.blocked) {
+    } else if (state?.blocked || state?.planNotFinal) {
       blocked.push(item);
     } else if (isInFlightBucket(issue, state)) {
       inFlight.push(item);
