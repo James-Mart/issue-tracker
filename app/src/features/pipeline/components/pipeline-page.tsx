@@ -31,7 +31,10 @@ import {
 import { pipelines, type PipelineId } from "../shape";
 import { usePipelineRunQuery } from "../api/queries";
 import { useLiveRunSequence } from "../hooks/use-live-run-sequence";
-import type { RunSequence } from "../run-sequence";
+import {
+  formatSequenceTokenTotal,
+  type RunSequence,
+} from "../run-sequence";
 import { conditionCaption } from "./run-sequence-shared";
 import { RunSequenceDiagram } from "./run-sequence-diagram";
 import { PipelineRunsView } from "./pipeline-run-list";
@@ -57,7 +60,13 @@ function PipelineHeader() {
   );
 }
 
-function RunSequencePaneHeader({ sequence }: { sequence: RunSequence }) {
+function RunSequencePaneHeader({
+  sequence,
+  layout,
+}: {
+  sequence: RunSequence;
+  layout: "desktop" | "phone";
+}) {
   const location = useLocation();
   const rootIssue = sequence.rootIssue;
   const rootIssueHref = rootIssue
@@ -68,18 +77,36 @@ function RunSequencePaneHeader({ sequence }: { sequence: RunSequence }) {
     location.search,
     (location.state as IssueBackLocationState | null)?.issueBackStack,
   );
+  const tokenTotalLabel = formatSequenceTokenTotal(sequence.tokenTotal);
+  const compact = layout === "phone";
 
   return (
     <div
-      className="flex shrink-0 items-center justify-between gap-2 px-0.5 pb-1"
+      className={cn(
+        "flex shrink-0 gap-2 px-0.5 pb-1",
+        compact ? "flex-col items-stretch" : "items-center justify-between",
+      )}
       data-testid="run-sequence-pane-header"
+      data-layout={layout}
     >
-      <h2 className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        Sequence
-      </h2>
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+      {compact ? null : (
+        <h2 className="font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Sequence
+        </h2>
+      )}
+      <div
+        className={cn(
+          "flex min-w-0",
+          compact
+            ? "flex-col items-start gap-1"
+            : "flex-1 items-center justify-end gap-2",
+        )}
+      >
         <div
-          className="flex min-h-[1.375rem] min-w-[10rem] items-center justify-end gap-1.5"
+          className={cn(
+            "flex min-h-[1.375rem] min-w-0 items-center gap-1.5",
+            !compact && "min-w-[10rem] justify-end",
+          )}
           data-testid="run-sequence-root-issue-slot"
         >
           {rootIssue && rootIssueHref ? (
@@ -98,9 +125,22 @@ function RunSequencePaneHeader({ sequence }: { sequence: RunSequence }) {
             </>
           ) : null}
         </div>
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-          {conditionCaption(sequence)}
-        </span>
+        <div
+          className="flex shrink-0 items-center gap-2"
+          data-testid="run-sequence-header-meta"
+        >
+          {tokenTotalLabel ? (
+            <span
+              data-testid="run-sequence-token-total"
+              className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground"
+            >
+              {tokenTotalLabel}
+            </span>
+          ) : null}
+          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+            {conditionCaption(sequence)}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -191,7 +231,7 @@ function SelectedRunSequence({
             {sequence && !isLoading && !error ? (
               <>
                 <SheetHeader className="shrink-0 space-y-0 border-b border-border bg-[hsl(var(--panel))] px-6 py-2.5 text-left">
-                  <RunSequencePaneHeader sequence={sequence} />
+                  <RunSequencePaneHeader sequence={sequence} layout="phone" />
                 </SheetHeader>
                 <div
                   className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
@@ -212,7 +252,7 @@ function SelectedRunSequence({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <RunSequencePaneHeader sequence={sequence} />
+      <RunSequencePaneHeader sequence={sequence} layout={layout} />
       <RunSequenceDiagram sequence={sequence} layout={layout} />
     </div>
   );

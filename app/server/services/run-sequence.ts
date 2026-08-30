@@ -1,4 +1,8 @@
-import { roleFamily } from "@/features/pipeline/role-family";
+import {
+  roleFamily,
+  roleFamilyCaption,
+  roleFamilyTitle,
+} from "@/features/pipeline/role-family";
 import type {
   ConversationMeta,
   DelegationRecord,
@@ -48,6 +52,10 @@ export type SequenceBeat = {
   parentCallId?: string;
   /** No persisted end and no terminal transcript signal — end cannot be judged. */
   indeterminate?: true;
+  /** Sum of attributed `usage.totalTokens` for this beat. */
+  tokenTotal?: number;
+  /** Wall-clock ms from run start to this closed beat's end. */
+  cumulativeMs?: number;
 };
 
 export type RunSequenceRootIssue = {
@@ -73,6 +81,8 @@ export type RunSequence = {
   sections: RunSequenceSection[];
   recoveredErrors?: number;
   rootIssue?: RunSequenceRootIssue;
+  /** Sum of every persisted `usage.totalTokens` on the conversation. */
+  tokenTotal?: number;
 };
 
 export type RecentRun = {
@@ -102,7 +112,10 @@ type OrderedBeat = {
   open: boolean;
   endedInError: boolean;
   issueId?: string;
+  endedAt?: string;
 };
+
+type UsageEvent = Extract<TranscriptEvent, { type: "usage" }>;
 
 type IssueAncestry = {
   issueId: string;
@@ -110,9 +123,11 @@ type IssueAncestry = {
   title: string;
 };
 
-/** Session-root label: the conversation type on meta, or title when untyped. */
+/** Seat title: planning → Stakeholder, implementing → Coordinator, else title. */
 function coordinatorLabel(meta: ConversationMeta): string {
-  return meta.channel ?? meta.title;
+  if (meta.channel === "planning") return "Stakeholder";
+  if (meta.channel === "implementing") return "Coordinator";
+  return meta.title;
 }
 
 function compareOrder(
@@ -213,21 +228,8 @@ function parentLifelineId(
   return roleFamily(parent.role).family;
 }
 
-function roleCaption(family: string, variant?: string): string {
-  return variant ? `${family} (${variant})` : family;
-}
-
-function spawnLabel(family: string, variant?: string): string {
-  return `spawn ${roleCaption(family, variant)}`;
-}
-
-function returnLabel(
-  family: string,
-  variant: string | undefined,
-  failed: boolean,
-): string {
-  const role = roleCaption(family, variant);
-  return failed ? `${role} failed` : `${role} returned`;
+function spawnLabel(caption: string): string {
+  return `spawn ${caption}`;
 }
 
 function closedDuration(
@@ -308,6 +310,29 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
     durationMs = latestEnd - firstStart;
   }
   const parentCallId = groupParentCallId(group);
+  let tokenTotal = 0;
+  let hasTokens = false;
+  for (const row of group) {
+    if (row.beat.tokenTotal === undefined) continue;
+    tokenTotal += row.beat.tokenTotal;
+    hasTokens = true;
+  }
+  let endedAt: string | undefined;
+  let cumulativeMs: number | undefined;
+  if (!anyOpen && !indeterminate) {
+    for (const row of group) {
+      if (row.endedAt === undefined) continue;
+      if (endedAt === undefined || row.endedAt.localeCompare(endedAt) > 0) {
+        endedAt = row.endedAt;
+      }
+      if (
+        row.beat.cumulativeMs !== undefined &&
+        (cumulativeMs === undefined || row.beat.cumulativeMs > cumulativeMs)
+      ) {
+        cumulativeMs = row.beat.cumulativeMs;
+      }
+    }
+  }
 
   return {
     beat: {
@@ -320,12 +345,15 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
       ...(durationMs !== undefined ? { durationMs } : {}),
       ...(parentCallId !== undefined ? { parentCallId } : {}),
       ...(indeterminate ? { indeterminate: true } : {}),
+      ...(hasTokens ? { tokenTotal } : {}),
+      ...(cumulativeMs !== undefined ? { cumulativeMs } : {}),
     },
     seq: first.seq,
     at: first.at,
     open: anyOpen,
     endedInError: group.some((row) => row.endedInError),
     ...(first.issueId !== undefined ? { issueId: first.issueId } : {}),
+    ...(endedAt !== undefined ? { endedAt } : {}),
   };
 }
 
@@ -486,11 +514,12 @@ function orderedBeats(
       at: prompt.at,
       open: false,
       endedInError: false,
+      endedAt: prompt.at,
     });
   }
 
   for (const record of delegations) {
-    const { family, variant } = roleFamily(record.role);
+    const { family, variant, caption } = roleFamilyCaption(record.role);
     const from = parentLifelineId(record, byId, conversationId);
     const to = family;
     const startEvent =
@@ -514,7 +543,7 @@ function orderedBeats(
       beat: {
         from,
         to,
-        label: spawnLabel(family, variant),
+        label: spawnLabel(caption),
         startedAt: record.at,
         kind: "spawn",
         ...(variant !== undefined ? { variant } : {}),
@@ -529,15 +558,16 @@ function orderedBeats(
       open: !closed && !indeterminate,
       endedInError,
       ...(record.issueId !== undefined ? { issueId: record.issueId } : {}),
+      ...(endedAt !== undefined ? { endedAt } : {}),
     });
 
-    if (endedAt === undefined) continue;
+    if (endedAt === undefined || !endedInError) continue;
 
     ordered.push({
       beat: {
         from: to,
         to: from,
-        label: returnLabel(family, variant, endedInError),
+        label: `${caption} failed`,
         startedAt: endedAt,
         kind: "return",
         ...(variant !== undefined ? { variant } : {}),
@@ -547,11 +577,62 @@ function orderedBeats(
       open: false,
       endedInError,
       ...(record.issueId !== undefined ? { issueId: record.issueId } : {}),
+      endedAt,
     });
   }
 
   ordered.sort(compareOrder);
   return ordered;
+}
+
+function addTokenTotal(row: OrderedBeat, tokens: number): void {
+  row.beat.tokenTotal = (row.beat.tokenTotal ?? 0) + tokens;
+}
+
+function enclosingHumanTurn(
+  rows: OrderedBeat[],
+  event: UsageEvent,
+): OrderedBeat | undefined {
+  let best: OrderedBeat | undefined;
+  for (const row of rows) {
+    if (row.beat.kind !== "human-turn") continue;
+    if (compareOrder(row, event) > 0) continue;
+    if (!best || compareOrder(row, best) > 0) best = row;
+  }
+  return best;
+}
+
+function attributeUsage(
+  rows: OrderedBeat[],
+  transcript: TranscriptEvent[],
+): number | undefined {
+  let tokenTotal = 0;
+  let sawUsage = false;
+  for (const event of transcript) {
+    if (event.type !== "usage") continue;
+    sawUsage = true;
+    const tokens = event.usage.totalTokens;
+    tokenTotal += tokens;
+    if (event.parentCallId !== undefined) {
+      const spawn = rows.find(
+        (row) =>
+          row.beat.kind === "spawn" &&
+          row.beat.parentCallId === event.parentCallId,
+      );
+      if (spawn) addTokenTotal(spawn, tokens);
+      continue;
+    }
+    const human = enclosingHumanTurn(rows, event);
+    if (human) addTokenTotal(human, tokens);
+  }
+  return sawUsage ? tokenTotal : undefined;
+}
+
+function stampCumulativeMs(rows: OrderedBeat[], runStartMs: number): void {
+  for (const row of rows) {
+    if (row.endedAt === undefined) continue;
+    row.beat.cumulativeMs = Date.parse(row.endedAt) - runStartMs;
+  }
 }
 
 /** One conversation's lifelines, ordered beats, and derived condition. */
@@ -560,6 +641,8 @@ export function runSequence(conversationId: string): RunSequence {
   const delegations = readDelegations(conversationId);
   const prompts = transcript.filter((e) => e.type === "prompt");
   const ordered = orderedBeats(conversationId, transcript, delegations);
+  const usageTotal = attributeUsage(ordered, transcript);
+  stampCumulativeMs(ordered, Date.parse(meta.createdAt));
   const collapsed = collapseConsecutiveBeats(ordered);
   const sessionIssueId =
     meta.channel === "planning" && meta.issueId !== undefined
@@ -575,7 +658,7 @@ export function runSequence(conversationId: string): RunSequence {
 
   const lifelines: SequenceLifeline[] = [];
   if (prompts.length > 0) {
-    lifelines.push({ id: HUMAN_ID, label: "human", kind: "human" });
+    lifelines.push({ id: HUMAN_ID, label: "Human", kind: "human" });
   }
   lifelines.push({
     id: COORDINATOR_ID,
@@ -583,7 +666,11 @@ export function runSequence(conversationId: string): RunSequence {
     kind: "coordinator",
   });
   for (const family of familyIds) {
-    lifelines.push({ id: family, label: family, kind: "role" });
+    lifelines.push({
+      id: family,
+      label: roleFamilyTitle(family),
+      kind: "role",
+    });
   }
 
   const { condition: beatCondition, recoveredErrors } = runOutcome(ordered);
@@ -596,6 +683,7 @@ export function runSequence(conversationId: string): RunSequence {
     sections,
     ...(recoveredErrors > 0 ? { recoveredErrors } : {}),
     ...(rootIssue !== undefined ? { rootIssue } : {}),
+    ...(usageTotal !== undefined ? { tokenTotal: usageTotal } : {}),
   };
 }
 

@@ -10,7 +10,7 @@ import type {
   SequenceBeat,
   SequenceLifeline,
 } from "../run-sequence";
-import { RETURN_DASH, beatStroke } from "../run-sequence";
+import { OPEN_SPAWN_DASH, RETURN_DASH, beatStroke } from "../run-sequence";
 import {
   RunSequenceDiagram,
   lifelineX,
@@ -130,6 +130,31 @@ function durationText(container: ParentNode, beatIndex: number): string | null {
     container.querySelector(
       `[data-testid="sequence-duration"][data-beat-index="${beatIndex}"]`,
     )?.textContent ?? null
+  );
+}
+
+function tokenText(container: ParentNode, beatIndex: number): string | null {
+  return (
+    container.querySelector(
+      `[data-testid="sequence-tokens"][data-beat-index="${beatIndex}"]`,
+    )?.textContent ?? null
+  );
+}
+
+function cumulativeText(
+  container: ParentNode,
+  beatIndex: number,
+): string | null {
+  return (
+    container.querySelector(
+      `[data-testid="sequence-cumulative"][data-beat-index="${beatIndex}"]`,
+    )?.textContent ?? null
+  );
+}
+
+function failureMarks(container: ParentNode): Element[] {
+  return Array.from(
+    container.querySelectorAll('[data-testid="sequence-failure-mark"]'),
   );
 }
 
@@ -372,20 +397,20 @@ describe("RunSequenceDiagram", () => {
     expect(
       container.querySelector('[data-testid="sequence-lifeline-open-tail"]'),
     ).toBeNull();
-    const cap = container.querySelector(
-      '[data-testid="sequence-termination-cap"]',
-    );
-    expect(cap?.getAttribute("data-lifeline")).toBe("research");
+    expect(
+      container.querySelector('[data-testid="sequence-termination-cap"]'),
+    ).toBeNull();
+    expect(failureMarks(container)).toHaveLength(1);
   });
 
-  it("renders an indeterminate beat with a no-return caption and no spinner", () => {
+  it("renders an open spawn with a cyan dashed shaft and open head", () => {
     const { container } = mountDiagram(
       sequence({
         beats: [
           beat({
             from: "coordinator",
             to: "research",
-            label: "spawn research",
+            label: "spawn Research",
             startedAt: AT,
             kind: "spawn",
             indeterminate: true,
@@ -393,62 +418,63 @@ describe("RunSequenceDiagram", () => {
         ],
       }),
     );
-    const label = beatEl(container, "coordinator", "research").querySelector(
-      '[data-testid="sequence-beat-label"]',
-    );
-    expect(label?.textContent).toBe("spawn research · no return");
-    expect(label?.className).toContain("hsl(var(--warn))");
+    const row = beatEl(container, "coordinator", "research");
+    const label = row.querySelector('[data-testid="sequence-beat-label"]');
+    expect(label?.textContent).toBe("spawn Research");
+    expect(label?.textContent).not.toMatch(/no return/);
+    expect(label?.className).toContain("hsl(var(--current))");
+    expect(label?.className).not.toContain("hsl(var(--warn))");
     expect(label?.querySelector(".animate-spin")).toBeNull();
     const arrow = container.querySelector(
       '[data-testid="sequence-arrow"][data-kind="spawn"]',
     );
     expect(arrow?.getAttribute("data-indeterminate")).toBe("true");
+    expect(arrow?.getAttribute("data-open")).toBe("true");
     expect(
       arrow?.querySelector('[data-testid="sequence-arrowhead"]'),
     ).toBeNull();
     expect(
-      arrow?.querySelector('[data-testid="sequence-arrow-open-terminus"]'),
+      arrow?.querySelector('[data-testid="sequence-arrow-open-head"]'),
     ).not.toBeNull();
     const shaft = arrow?.querySelector('[data-testid="sequence-arrow-shaft"]');
-    expect(shaft?.getAttribute("stroke")).toBe("hsl(var(--warn))");
-    expect(shaft?.getAttribute("stroke-dasharray")).toBe("5 4");
+    expect(shaft?.getAttribute("stroke")).toBe("hsl(var(--current))");
+    expect(shaft?.getAttribute("stroke-dasharray")).toBe(OPEN_SPAWN_DASH);
   });
 
-  it("strips the harness prefix from variant captions without touching the model name", () => {
+  it("shows curated server titles without re-stripping them into kebab", () => {
     const { container } = mountDiagram(
       sequence({
         lifelines: [
-          lifeline("human", "human"),
-          lifeline("coordinator", "coordinator"),
-          lifeline("issue-tracker-implementor"),
+          { id: "human", label: "Human", kind: "human" },
+          { id: "coordinator", label: "Stakeholder", kind: "coordinator" },
+          { id: "implementor", label: "Implementor", kind: "role" },
         ],
         beats: [
           beat({
             from: "coordinator",
-            to: "issue-tracker-implementor",
-            label: "spawn issue-tracker-implementor (composer)",
+            to: "implementor",
+            label: "spawn Implementor (composer)",
             startedAt: AT,
             durationMs: 45_000,
             kind: "spawn",
           }),
-          beat({
-            from: "issue-tracker-implementor",
-            to: "coordinator",
-            label: "issue-tracker-implementor (sonnet) returned",
-            startedAt: "2026-08-28T12:00:45.000Z",
-            durationMs: 12_000,
-            kind: "return",
-          }),
         ],
       }),
     );
-    const labels = Array.from(
-      container.querySelectorAll('[data-testid="sequence-beat-label"]'),
-    ).map((el) => el.textContent);
-    expect(labels).toEqual([
-      "spawn implementor (composer)",
-      "implementor (sonnet) returned",
-    ]);
+    expect(
+      Array.from(
+        container.querySelectorAll('[data-testid="sequence-lifeline-header"]'),
+      ).map((el) => el.textContent),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining("Human"),
+      expect.stringContaining("Stakeholder"),
+      expect.stringContaining("Implementor"),
+    ]));
+    expect(
+      container.querySelector('[data-testid="sequence-beat-label"]')
+        ?.textContent,
+    ).toBe("spawn Implementor (composer)");
+    expect(container.textContent).not.toMatch(/issue-tracker-/);
   });
 
   it("still draws beats after a mid-run failure", () => {
@@ -475,11 +501,13 @@ describe("RunSequenceDiagram", () => {
     const lastY = Number(later.dataset.y);
     expect(later.getAttribute("data-kind")).toBe("human-turn");
     expect(lastY).toBeGreaterThan(failY);
-    const cap = container.querySelector(
-      '[data-testid="sequence-termination-cap"]',
-    );
-    expect(cap?.getAttribute("data-lifeline")).toBe("research");
-    expect(Number.parseFloat((cap as HTMLElement).style.top)).toBe(failY + 8);
+    expect(
+      container.querySelector('[data-testid="sequence-termination-cap"]'),
+    ).toBeNull();
+    expect(failureMarks(container)).toHaveLength(1);
+    expect(
+      failed.querySelector('[data-testid="sequence-failure-mark"]'),
+    ).not.toBeNull();
     const bodies = Array.from(
       container.querySelectorAll('[data-testid="sequence-lifeline-body"]'),
     );
@@ -928,14 +956,14 @@ describe("RunSequenceDiagram phone rail", () => {
     ).toBeNull();
   });
 
-  it("renders an indeterminate beat with a no-return caption and no spinner", () => {
+  it("renders an open spawn with a cyan dashed shaft and open head", () => {
     const { container } = mountPhone(
       sequence({
         beats: [
           beat({
             from: "coordinator",
             to: "research",
-            label: "spawn research",
+            label: "spawn Research",
             startedAt: AT,
             kind: "spawn",
             indeterminate: true,
@@ -945,22 +973,28 @@ describe("RunSequenceDiagram phone rail", () => {
     );
     const row = beatEl(container, "coordinator", "research");
     const label = row.querySelector('[data-testid="sequence-beat-label"]');
-    expect(label?.textContent).toBe("spawn research · no return");
-    expect(label?.closest("p")?.className).toContain("hsl(var(--warn))");
+    expect(label?.textContent).toBe("spawn Research");
+    expect(label?.textContent).not.toMatch(/no return/);
+    expect(label?.closest("p")?.className).toContain("hsl(var(--current))");
+    expect(label?.closest("p")?.className).not.toContain("hsl(var(--warn))");
     expect(row.querySelector(".animate-spin")).toBeNull();
     const arrow = row.querySelector(
       '[data-testid="sequence-arrow"][data-kind="spawn"]',
     );
     expect(arrow?.getAttribute("data-indeterminate")).toBe("true");
+    expect(arrow?.getAttribute("data-open")).toBe("true");
     expect(
       arrow?.querySelector('[data-testid="sequence-arrowhead"]'),
     ).toBeNull();
     expect(
-      arrow?.querySelector('[data-testid="sequence-arrow-open-terminus"]'),
+      arrow?.querySelector('[data-testid="sequence-arrow-open-head"]'),
     ).not.toBeNull();
+    const shaft = arrow?.querySelector('[data-testid="sequence-arrow-shaft"]');
+    expect(shaft?.getAttribute("stroke")).toBe("hsl(var(--current))");
+    expect(shaft?.getAttribute("stroke-dasharray")).toBe(OPEN_SPAWN_DASH);
   });
 
-  it("stops a failed rail at a termination cap on the lifeline that failed", () => {
+  it("stops a failed rail with one failure mark and no off-spine cap", () => {
     const { container } = mountPhone(
       sequence({
         condition: "failed",
@@ -984,10 +1018,21 @@ describe("RunSequenceDiagram phone rail", () => {
     expect(
       container.querySelector('[data-testid="sequence-lifeline-open-tail"]'),
     ).toBeNull();
-    const cap = container.querySelector(
-      '[data-testid="sequence-termination-cap"]',
+    expect(
+      container.querySelector('[data-testid="sequence-termination-cap"]'),
+    ).toBeNull();
+    expect(failureMarks(container)).toHaveLength(1);
+  });
+
+  it("reads completed ports as done, not ready", () => {
+    const { container } = mountPhone(sequence({ beats: [SPAWN] }));
+    const ports = Array.from(
+      container.querySelectorAll('[data-testid="rail-port"]'),
     );
-    expect(cap?.getAttribute("data-lifeline")).toBe("research");
+    expect(ports.length).toBeGreaterThan(0);
+    for (const port of ports) {
+      expect(port.getAttribute("data-state")).toBe("merged");
+    }
   });
 });
 
@@ -1069,5 +1114,148 @@ describe("RunSequenceDiagram chosen direction", () => {
     expect(frame?.className).not.toMatch(/min-h-\[16rem\]/);
     expect(frame?.className).not.toMatch(/overflow-auto/);
     expect(frame?.className).not.toMatch(/max-h-/);
+  });
+
+  const PLANNING_FOLDED: RunSequence = sequence({
+    lifelines: [
+      { id: "human", label: "Human", kind: "human" },
+      { id: "coordinator", label: "Stakeholder", kind: "coordinator" },
+      { id: "planner", label: "Planner", kind: "role" },
+    ],
+    beats: [
+      beat({
+        from: "human",
+        to: "coordinator",
+        label: "human replied",
+        startedAt: AT,
+        durationMs: 18_000,
+        kind: "human-turn",
+        tokenTotal: 428,
+        cumulativeMs: 18_000,
+      }),
+      beat({
+        from: "coordinator",
+        to: "planner",
+        label: "spawn Planner (grok)",
+        startedAt: "2026-08-28T12:00:18.000Z",
+        durationMs: (10 * 60 + 44) * 1000,
+        kind: "spawn",
+        tokenTotal: 20_000,
+        cumulativeMs: (10 * 60 + 44) * 1000,
+      }),
+    ],
+    tokenTotal: 184_420,
+  });
+
+  const FAILED_SPAWN: RunSequence = sequence({
+    condition: "failed",
+    lifelines: [
+      { id: "human", label: "Human", kind: "human" },
+      { id: "coordinator", label: "Stakeholder", kind: "coordinator" },
+      { id: "planner", label: "Planner", kind: "role" },
+    ],
+    beats: [
+      HUMAN,
+      beat({
+        from: "coordinator",
+        to: "planner",
+        label: "spawn Planner (grok)",
+        startedAt: AT,
+        durationMs: 128_000,
+        kind: "spawn",
+        tokenTotal: 34_000,
+        cumulativeMs: 128_000,
+      }),
+      beat({
+        from: "planner",
+        to: "coordinator",
+        label: "Planner (grok) failed",
+        startedAt: "2026-08-28T12:02:08.000Z",
+        durationMs: 128_000,
+        kind: "return",
+        cumulativeMs: 128_000,
+      }),
+    ],
+  });
+
+  const LIVE_OPEN: RunSequence = sequence({
+    condition: "in-flight",
+    lifelines: [
+      { id: "coordinator", label: "Stakeholder", kind: "coordinator" },
+      { id: "mockup-author", label: "Mockup author", kind: "role" },
+    ],
+    beats: [
+      beat({
+        from: "coordinator",
+        to: "mockup-author",
+        label: "spawn Mockup author",
+        startedAt: AT,
+        kind: "spawn",
+        liveElapsedMs: 2 * 60_000 + 14_000,
+        tokenTotal: 88_000,
+      }),
+    ],
+  });
+
+  for (const layout of layouts) {
+    it(`omits a successful-return row on a completed planning fixture (${layout})`, () => {
+      const { container } = mountDiagram(PLANNING_FOLDED, layout);
+      const kinds = Array.from(
+        container.querySelectorAll('[data-testid="sequence-beat"]'),
+      ).map((el) => el.getAttribute("data-kind"));
+      expect(kinds).toEqual(["human-turn", "spawn"]);
+      expect(kinds).not.toContain("return");
+      expect(tokenText(container, 0)).toBe("428");
+      expect(durationText(container, 1)).toBe("10m 44s");
+      expect(cumulativeText(container, 1)).toBe("10m 44s");
+    });
+
+    it(`keeps exactly one failure mark on a failed fixture (${layout})`, () => {
+      const { container } = mountDiagram(FAILED_SPAWN, layout);
+      expect(failureMarks(container)).toHaveLength(1);
+      expect(
+        container.querySelector('[data-testid="sequence-termination-cap"]'),
+      ).toBeNull();
+      const failed = beatEl(container, "planner", "coordinator");
+      expect(
+        failed.querySelector('[data-testid="sequence-failure-mark"]'),
+      ).not.toBeNull();
+      expect(
+        failed.querySelector('[data-testid="sequence-beat-label"]')
+          ?.textContent,
+      ).toBe("Planner (grok) failed");
+    });
+
+    it(`uses cyan for the live open arrow (${layout})`, () => {
+      const { container } = mountDiagram(LIVE_OPEN, layout);
+      const arrow = container.querySelector(
+        '[data-testid="sequence-arrow"][data-kind="spawn"]',
+      );
+      expect(arrow?.getAttribute("data-open")).toBe("true");
+      const shaft = arrow?.querySelector('[data-testid="sequence-arrow-shaft"]');
+      expect(shaft?.getAttribute("stroke")).toBe("hsl(var(--current))");
+      expect(shaft?.getAttribute("stroke-dasharray")).toBe(OPEN_SPAWN_DASH);
+      expect(shaft?.getAttribute("stroke")).not.toBe("hsl(var(--warn))");
+      expect(
+        arrow?.querySelector('[data-testid="sequence-arrow-open-head"]'),
+      ).not.toBeNull();
+      expect(durationText(container, 0)).toBe("2m 14s");
+    });
+  }
+
+  it("does not clip 10m 44s in metric columns at phone width", () => {
+    const { container } = mountDiagram(PLANNING_FOLDED, "phone");
+    const duration = container.querySelector(
+      '[data-testid="sequence-duration"][data-beat-index="1"]',
+    );
+    const cumulative = container.querySelector(
+      '[data-testid="sequence-cumulative"][data-beat-index="1"]',
+    );
+    expect(duration?.textContent).toBe("10m 44s");
+    expect(cumulative?.textContent).toBe("10m 44s");
+    expect(duration?.className).not.toMatch(/overflow-hidden/);
+    expect(cumulative?.className).not.toMatch(/overflow-hidden/);
+    expect(duration?.className).toMatch(/whitespace-nowrap/);
+    expect(duration?.className).toMatch(/shrink-0/);
   });
 });

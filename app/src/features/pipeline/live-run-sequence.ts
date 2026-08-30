@@ -2,6 +2,7 @@ import type {
   AgentRun,
   ConversationStreamEvent,
 } from "@server/schemas";
+import { roleFamilyCaption, roleFamilyTitle } from "./role-family";
 import {
   frontierBeatIndex,
   maxSectionBeatEnd,
@@ -213,27 +214,58 @@ function parentLifelineId(sequence: RunSequence): string {
   return sequence.beats[frontier]!.to;
 }
 
-function ensureRoleLifeline(sequence: RunSequence, role: string): RunSequence {
-  if (sequence.lifelines.some((line) => line.id === role)) return sequence;
+function ensureRoleLifeline(sequence: RunSequence, family: string): RunSequence {
+  if (sequence.lifelines.some((line) => line.id === family)) return sequence;
   return {
     ...sequence,
     lifelines: [
       ...sequence.lifelines,
-      { id: role, label: role, kind: "role" },
+      { id: family, label: roleFamilyTitle(family), kind: "role" },
     ],
   };
 }
 
 function spawnBeat(run: AgentRun, from: string, seq: number): SequenceBeat {
+  const { family, variant, caption } = roleFamilyCaption(run.role);
   return {
     from,
-    to: run.role,
-    label: `spawn ${run.role}`,
+    to: family,
+    label: `spawn ${caption}`,
     startedAt: run.startedAt,
     kind: "spawn",
     parentCallId: run.parentCallId,
     seq,
+    ...(variant !== undefined ? { variant } : {}),
   };
+}
+
+function beatEndMs(beat: SequenceBeat): number | undefined {
+  const start = Date.parse(beat.startedAt);
+  if (Number.isNaN(start)) return undefined;
+  if (beat.kind === "return") return start;
+  if (beat.durationMs !== undefined) return start + beat.durationMs;
+  return start;
+}
+
+function runStartMs(sequence: RunSequence): number | undefined {
+  for (const beat of sequence.beats) {
+    if (beat.cumulativeMs === undefined) continue;
+    const end = beatEndMs(beat);
+    if (end === undefined) continue;
+    return end - beat.cumulativeMs;
+  }
+  let earliest: number | undefined;
+  for (const beat of sequence.beats) {
+    const start = Date.parse(beat.startedAt);
+    if (Number.isNaN(start)) continue;
+    if (earliest === undefined || start < earliest) earliest = start;
+  }
+  return earliest;
+}
+
+function failedReturnCaption(beat: SequenceBeat): string {
+  const title = roleFamilyTitle(beat.to);
+  return beat.variant !== undefined ? `${title} (${beat.variant})` : title;
 }
 
 function applyDelegation(
@@ -244,7 +276,8 @@ function applyDelegation(
   if (sequence.beats.some((beat) => hasParentCallId(beat, run.parentCallId))) {
     return sequence;
   }
-  const withLifeline = ensureRoleLifeline(sequence, run.role);
+  const { family } = roleFamilyCaption(run.role);
+  const withLifeline = ensureRoleLifeline(sequence, family);
   const beat = spawnBeat(run, parentLifelineId(withLifeline), event.seq);
   const inserted = insertBeat(withLifeline.beats, beat);
   return withInsertedBeat(
@@ -269,9 +302,16 @@ function applyDelegationEnd(
   if (duration === undefined) return sequence;
 
   const { liveElapsedMs: _closedElapsed, ...rest } = beat;
+  const startMs = runStartMs(sequence);
+  const endMs = Date.parse(event.endedAt);
+  const cumulativeMs =
+    startMs !== undefined && !Number.isNaN(endMs)
+      ? endMs - startMs
+      : duration;
   const closed: SequenceBeat = {
     ...rest,
     durationMs: duration,
+    cumulativeMs,
   };
   if (closed.turns && closed.turns.length > 0) {
     const turns = closed.turns.slice();
@@ -288,16 +328,21 @@ function applyDelegationEnd(
 
   const beats = sequence.beats.slice();
   beats[index] = closed;
+  if (event.status !== "error") {
+    return withCondition(sequence, beats);
+  }
   const role = beat.to;
   const returnBeat: SequenceBeat = {
     from: role,
     to: beat.from,
-    label: event.status === "error" ? `${role} failed` : `${role} returned`,
+    label: `${failedReturnCaption(beat)} failed`,
     startedAt: event.endedAt,
     durationMs: duration,
     kind: "return",
     parentCallId: beat.parentCallId,
     seq: event.seq,
+    cumulativeMs,
+    ...(beat.variant !== undefined ? { variant: beat.variant } : {}),
   };
   const inserted = insertBeat(beats, returnBeat);
   return withInsertedBeat(sequence, inserted.beats, inserted.index);
@@ -318,6 +363,44 @@ function applySubagentUpdate(
   return { ...sequence, beats };
 }
 
+function applyUsage(
+  sequence: RunSequence,
+  event: Extract<ConversationStreamEvent, { type: "usage" }>,
+): RunSequence {
+  const tokens = event.usage.totalTokens;
+  const tokenTotal = (sequence.tokenTotal ?? 0) + tokens;
+  const beats = sequence.beats.slice();
+  if (event.parentCallId !== undefined) {
+    const index = beats.findIndex(
+      (beat) =>
+        beat.kind === "spawn" && beat.parentCallId === event.parentCallId,
+    );
+    if (index >= 0) {
+      beats[index] = {
+        ...beats[index]!,
+        tokenTotal: (beats[index]!.tokenTotal ?? 0) + tokens,
+      };
+    }
+  } else {
+    let best = -1;
+    for (let i = 0; i < beats.length; i += 1) {
+      const beat = beats[i]!;
+      if (beat.kind !== "human-turn") continue;
+      if (beat.startedAt.localeCompare(event.at) > 0) continue;
+      if (best < 0 || beats[best]!.startedAt.localeCompare(beat.startedAt) <= 0) {
+        best = i;
+      }
+    }
+    if (best >= 0) {
+      beats[best] = {
+        ...beats[best]!,
+        tokenTotal: (beats[best]!.tokenTotal ?? 0) + tokens,
+      };
+    }
+  }
+  return { ...sequence, beats, tokenTotal };
+}
+
 /** Fold one conversation frame onto a fetched (or already-overlaid) sequence. */
 export function applyLiveFrame(
   sequence: RunSequence,
@@ -330,6 +413,7 @@ export function applyLiveFrame(
   if (event.type === "subagent_update") {
     return applySubagentUpdate(sequence, event);
   }
+  if (event.type === "usage") return applyUsage(sequence, event);
   return sequence;
 }
 

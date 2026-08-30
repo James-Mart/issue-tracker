@@ -112,3 +112,83 @@ describe("extractTaskHints", () => {
     expect(extractTaskHints(null)).toEqual({});
   });
 });
+
+describe("EventPipeline.handleDelegation usage", () => {
+  let root: string;
+  let issuesRoot: string;
+  let workspaceDir: string;
+
+  const AT = "2026-07-25T12:00:00.000Z";
+  const usage = {
+    inputTokens: 12,
+    outputTokens: 3,
+    cacheReadTokens: 1,
+    cacheWriteTokens: 0,
+    totalTokens: 16,
+    reasoningTokens: 2,
+  };
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "issue-pipeline-usage-"));
+    issuesRoot = join(root, "issues");
+    mkdirSync(issuesRoot, { recursive: true });
+    workspaceDir = mkdtempSync(join(tmpdir(), "issue-pipeline-ws-"));
+    mkdirSync(join(workspaceDir, ".git"));
+    vi.resetModules();
+    vi.stubEnv("ISSUES_DIR", issuesRoot);
+    mkdirSync(join(issuesRoot, "platform"), { recursive: true });
+    writeFileSync(
+      join(issuesRoot, "platform", "issue.json"),
+      JSON.stringify({
+        id: "platform",
+        kind: "project",
+        title: "Platform",
+        workspace: workspaceDir,
+        createdAt: AT,
+        updatedAt: AT,
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  it("persists nested usage with parentCallId and the same usage shape", async () => {
+    const { createConversation, readConversation } = await import(
+      "./conversations.js"
+    );
+    const { EventPipeline } = await import("./event-pipeline.js");
+    const meta = await createConversation({
+      title: "Nested usage",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const pipeline = new EventPipeline(meta.id);
+    await pipeline.handleDelegation(
+      "call-nested",
+      { delegationId: "del-nested", model: "composer-2.5" },
+      {
+        kind: "message",
+        message: {
+          type: "usage",
+          agent_id: "agent-nested",
+          run_id: "run-nested",
+          usage,
+        },
+      },
+    );
+
+    const { transcript } = readConversation(meta.id);
+    expect(transcript).toEqual([
+      expect.objectContaining({
+        type: "usage",
+        usage,
+        parentCallId: "call-nested",
+      }),
+    ]);
+  });
+});

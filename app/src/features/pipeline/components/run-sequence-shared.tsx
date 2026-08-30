@@ -7,8 +7,12 @@ import {
   frontierBeatIndex,
   isCollapsedBeat,
   maxSectionBeatEnd,
+  OPEN_SPAWN_DASH,
   RETURN_DASH,
   beatStroke,
+  displayedDurationMs,
+  formatSequenceDuration,
+  formatSequenceTokens,
   strokeCss,
   type RunSequence,
   type RunSequenceSection,
@@ -245,12 +249,8 @@ export function beatAccent(
   return undefined;
 }
 
-const INDETERMINATE_DASH = "5 4";
-const OPEN_TERMINUS_DASH = "2 2";
-
-export function beatCaptionLabel(beat: SequenceBeat, label: string): string {
-  const base = displayBeatLabel(label);
-  return beat.indeterminate ? `${base} · no return` : base;
+export function beatCaptionLabel(label: string): string {
+  return displayBeatLabel(label);
 }
 
 export function DirectedArrow({
@@ -266,26 +266,26 @@ export function DirectedArrow({
   kind: SequenceBeatKind;
   accent?: BeatAccent;
 }) {
+  const isOpen = accent === "live" || accent === "indeterminate";
   const isIndeterminate = accent === "indeterminate";
   const stroke = beatStroke(
     kind,
-    isIndeterminate ? undefined : accent,
+    accent === "failed" ? "failed" : isOpen ? "live" : undefined,
   );
-  const color = isIndeterminate ? "hsl(var(--warn))" : strokeCss(stroke.color);
+  const color = strokeCss(stroke.color);
   const tipX = toX;
-  const lineEndX = isIndeterminate
-    ? toX - 12
-    : toX - Math.sign(toX - fromX || 1) * ARROW_SIZE;
-  const dash = isIndeterminate
-    ? INDETERMINATE_DASH
+  const lineEndX = toX - Math.sign(toX - fromX || 1) * ARROW_SIZE;
+  const dash = isOpen
+    ? OPEN_SPAWN_DASH
     : stroke.dash === "return"
       ? RETURN_DASH
       : undefined;
-  const width = isIndeterminate ? 1.75 : stroke.width;
+  const width = isOpen ? 1.75 : stroke.width;
   return (
     <g
       data-testid="sequence-arrow"
       data-kind={kind}
+      data-open={isOpen ? "true" : undefined}
       data-indeterminate={isIndeterminate ? "true" : undefined}
     >
       <line
@@ -298,16 +298,13 @@ export function DirectedArrow({
         strokeDasharray={dash}
         data-testid="sequence-arrow-shaft"
       />
-      {isIndeterminate ? (
-        <circle
-          cx={toX - 8}
-          cy={y}
-          r={3}
+      {isOpen ? (
+        <polygon
+          points={arrowHeadPoints(tipX, y, fromX, y)}
           fill="none"
           stroke={color}
           strokeWidth={1.5}
-          strokeDasharray={OPEN_TERMINUS_DASH}
-          data-testid="sequence-arrow-open-terminus"
+          data-testid="sequence-arrow-open-head"
         />
       ) : (
         <polygon
@@ -320,16 +317,112 @@ export function DirectedArrow({
   );
 }
 
+/** Server titles are already curated — do not re-strip into kebab. */
 export function displayLifelineLabel(line: SequenceLifeline): string {
-  if (line.kind !== "role") return line.label;
-  return line.label.replace(/^issue-tracker-/, "");
+  return line.label;
 }
 
 export function displayBeatLabel(label: string): string {
-  const variantStart = label.indexOf(" (");
-  if (variantStart === -1) return label.replace(/issue-tracker-/g, "");
+  return label;
+}
+
+export const SEQUENCE_METRIC_COLS = {
+  token: "5.5ch",
+  duration: "7.5ch",
+  cumulative: "7.5ch",
+} as const;
+
+export function SequenceMetricCells({
+  tokenLabel,
+  durationLabel,
+  cumulativeLabel,
+  isLive,
+  isFailed,
+  beatIndex,
+  rowKind,
+}: {
+  tokenLabel?: string;
+  durationLabel?: string;
+  cumulativeLabel?: string;
+  isLive: boolean;
+  isFailed: boolean;
+  beatIndex: number;
+  rowKind: string;
+}) {
+  const color = isFailed
+    ? "text-[hsl(var(--blocked))]"
+    : isLive
+      ? "text-[hsl(var(--current))]"
+      : "text-[hsl(var(--mut))]";
   return (
-    label.slice(0, variantStart).replace(/issue-tracker-/g, "") +
-    label.slice(variantStart)
+    <span
+      data-testid="sequence-metrics"
+      data-beat-index={beatIndex}
+      data-row={rowKind}
+      className={cn(
+        "inline-flex shrink-0 items-baseline gap-1.5 font-mono text-[11px] tabular-nums leading-none",
+        color,
+      )}
+    >
+      <span
+        data-testid="sequence-tokens"
+        data-beat-index={beatIndex}
+        data-row={rowKind}
+        className="shrink-0 whitespace-nowrap text-right"
+        style={{ width: SEQUENCE_METRIC_COLS.token }}
+      >
+        {tokenLabel ?? ""}
+      </span>
+      <span
+        data-testid="sequence-duration"
+        data-beat-index={beatIndex}
+        data-row={rowKind}
+        className="shrink-0 whitespace-nowrap text-right"
+        style={{ width: SEQUENCE_METRIC_COLS.duration }}
+      >
+        {durationLabel ?? ""}
+      </span>
+      <span
+        data-testid="sequence-cumulative"
+        data-beat-index={beatIndex}
+        data-row={rowKind}
+        className="shrink-0 whitespace-nowrap text-right"
+        style={{ width: SEQUENCE_METRIC_COLS.cumulative }}
+      >
+        {cumulativeLabel ?? ""}
+      </span>
+    </span>
   );
+}
+
+export function rowMetricLabels(
+  sequence: RunSequence,
+  row: SequenceRenderRow,
+): {
+  token?: string;
+  duration?: string;
+  cumulative?: string;
+  isLive: boolean;
+  isFailed: boolean;
+} {
+  const accent = beatAccent(sequence, row.beatIndex);
+  const isLive = accent === "live";
+  const isFailed = accent === "failed";
+  if (row.kind === "turn") {
+    return {
+      duration: formatSequenceDuration(row.turn.durationMs),
+      isLive: false,
+      isFailed: false,
+    };
+  }
+  if (row.kind === "group_head") {
+    return { isLive: false, isFailed: false };
+  }
+  return {
+    token: formatSequenceTokens(row.beat.tokenTotal),
+    duration: formatSequenceDuration(displayedDurationMs(row.beat, isLive)),
+    cumulative: formatSequenceDuration(row.beat.cumulativeMs),
+    isLive,
+    isFailed,
+  };
 }

@@ -886,6 +886,50 @@ describe("subagent_update delegation fields", () => {
   });
 });
 
+describe("usage transcript event", () => {
+  const usage = {
+    inputTokens: 10,
+    outputTokens: 4,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 14,
+  };
+
+  it("round-trips nested usage with parentCallId", () => {
+    const input = parseTranscriptEventInput({
+      type: "usage",
+      usage,
+      parentCallId: "call-nested",
+    });
+    expect(input.ok).toBe(true);
+    if (!input.ok) return;
+    expect(input.input).toEqual({
+      type: "usage",
+      usage,
+      parentCallId: "call-nested",
+    });
+    const stored = parseTranscriptEvent({
+      ...input.input,
+      at: "2026-07-25T12:00:00.000Z",
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    expect(stored.event).toMatchObject({
+      type: "usage",
+      parentCallId: "call-nested",
+      usage,
+    });
+  });
+
+  it("still parses session-root usage without parentCallId", () => {
+    const input = parseTranscriptEventInput({ type: "usage", usage });
+    expect(input.ok).toBe(true);
+    if (!input.ok) return;
+    expect(input.input).toEqual({ type: "usage", usage });
+    expect("parentCallId" in input.input).toBe(false);
+  });
+});
+
 describe("parseChannelSessionListItem", () => {
   const item = {
     id: "plan-capture",

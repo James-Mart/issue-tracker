@@ -243,6 +243,38 @@ describe("PipelineRunsView", () => {
     ).toBeNull();
   });
 
+  it("renders Stakeholder and Coordinator seat titles, not channel names", async () => {
+    stubRuns([
+      {
+        conversationId: "plan-scrollable-runs-done",
+        coordinatorLabel: "Stakeholder",
+        startedAt: "2026-08-28T15:00:00.000Z",
+        condition: "completed",
+      },
+      {
+        conversationId: "implement-cockpit-improvements",
+        coordinatorLabel: "Coordinator",
+        startedAt: "2026-08-28T14:00:00.000Z",
+        condition: "completed",
+      },
+    ]);
+    const { container } = mountRunsView();
+    await flush();
+
+    const titles = runCards(container).map((el) =>
+      el.querySelector("p")?.textContent,
+    );
+    expect(titles).toEqual(["Stakeholder", "Coordinator"]);
+    expect(container.textContent).not.toMatch(/\bplanning\b/);
+    expect(container.textContent).not.toMatch(/\bimplementing\b/);
+    expect(
+      container.querySelector('[data-testid="sequence-tokens"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="sequence-duration"]'),
+    ).toBeNull();
+  });
+
   it("renders a spinner on the live condition badge only", async () => {
     stubRuns([
       recentRun("live-run", "in-flight"),

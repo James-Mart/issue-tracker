@@ -275,6 +275,19 @@ export class EventPipeline {
         } as NestedUpdate);
         return;
       }
+      case "usage": {
+        await this.flushNestedText(parentCallId);
+        await this.flushNestedThinking(parentCallId);
+        await this.emit({
+          event: {
+            type: "usage",
+            usage: message.usage,
+            parentCallId,
+          },
+          persist: true,
+        });
+        return;
+      }
       default:
         return;
     }

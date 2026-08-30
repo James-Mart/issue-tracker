@@ -526,6 +526,7 @@ describe("PipelinePage", () => {
             kind: "human-turn",
           },
         ],
+        tokenTotal: 184_420,
       },
     });
     const { container } = mountPipelinePage("/pipeline/runs/c");
@@ -540,6 +541,13 @@ describe("PipelinePage", () => {
     expect(diagram?.getAttribute("data-layout")).toBe("desktop");
     expect(diagram?.getAttribute("data-condition")).toBe("completed");
     expect(container.textContent).toContain("human replied");
+    const desktopHeader = sequencePaneHeader(container);
+    expect(desktopHeader.getAttribute("data-layout")).toBe("desktop");
+    expect(desktopHeader.querySelector("h2")?.textContent).toBe("Sequence");
+    expect(
+      container.querySelector('[data-testid="run-sequence-token-total"]')
+        ?.textContent,
+    ).toBe("184k tokens");
     expect(
       container.querySelector('[data-testid="pipeline-run-sequence-placeholder"]'),
     ).toBeNull();
@@ -735,7 +743,8 @@ describe("PipelinePage", () => {
     const sheet = sequenceSheet();
     expect(sheet.className).toMatch(/\btop-0\b/);
     expect(sheet.className).toMatch(/\bslide-in-from-top\b/);
-    expect(sheet.querySelector('[data-testid="run-sequence-pane-header"]')).toBeTruthy();
+    const header = sheet.querySelector('[data-testid="run-sequence-pane-header"]');
+    expect(header).toBeTruthy();
     const diagram = sheet.querySelector('[data-testid="run-sequence-diagram"]');
     expect(diagram?.getAttribute("data-layout")).toBe("phone");
     expect(sheet.textContent).toContain("human replied");
@@ -753,6 +762,46 @@ describe("PipelinePage", () => {
     expect(
       container.querySelector('[data-testid="pipeline-run-sequence-placeholder"]'),
     ).toBeNull();
+  });
+
+  it("stacks the phone sheet header so Sequence does not collide with issue and tokens", async () => {
+    mockViewport(390);
+    stubRuns(FIVE_RUNS, {
+      e: {
+        condition: "completed",
+        lifelines: [
+          { id: "coordinator", label: "Stakeholder", kind: "coordinator" },
+        ],
+        sections: [],
+        beats: [],
+        tokenTotal: 1_918_558,
+        rootIssue: {
+          id: "scrollable-runs",
+          kind: "idea",
+          title: "Scrollable runs",
+          projectId: "issue-tracker",
+        },
+      },
+    });
+    mountPipelinePage("/pipeline/runs/e");
+    await flush();
+    const header = sequenceSheet().querySelector(
+      '[data-testid="run-sequence-pane-header"]',
+    );
+    expect(header?.getAttribute("data-layout")).toBe("phone");
+    expect(header?.className).toMatch(/flex-col/);
+    expect(header?.querySelector("h2")).toBeNull();
+    expect(
+      header?.querySelector('[data-testid="run-sequence-root-issue-link"]')
+        ?.textContent,
+    ).toBe("Scrollable runs");
+    expect(
+      header?.querySelector('[data-testid="run-sequence-token-total"]')
+        ?.textContent,
+    ).toBe("1.9M tokens");
+    expect(
+      header?.querySelector('[data-testid="run-sequence-header-meta"]'),
+    ).not.toBeNull();
   });
 
   it("dismisses the phone sequence sheet back to /pipeline/runs", async () => {
@@ -780,10 +829,10 @@ describe("PipelinePage", () => {
       e: {
         condition: "completed",
         lifelines: [
-          { id: "coordinator", label: "implementing", kind: "coordinator" },
+          { id: "coordinator", label: "Coordinator", kind: "coordinator" },
           {
-            id: "issue-tracker-implementor",
-            label: "issue-tracker-implementor",
+            id: "implementor",
+            label: "Implementor",
             kind: "role",
           },
         ],
@@ -791,19 +840,19 @@ describe("PipelinePage", () => {
         beats: [
           {
             from: "coordinator",
-            to: "issue-tracker-implementor",
-            label: "spawn issue-tracker-implementor (composer)",
+            to: "implementor",
+            label: "spawn Implementor (composer)",
             startedAt: "2026-08-28T13:00:00.000Z",
             durationMs: 30_000,
             kind: "spawn",
             turns: [
               {
-                label: "spawn issue-tracker-implementor (composer)",
+                label: "spawn Implementor (composer)",
                 startedAt: "2026-08-28T13:00:00.000Z",
                 durationMs: 12_000,
               },
               {
-                label: "spawn issue-tracker-implementor (sonnet)",
+                label: "spawn Implementor (sonnet)",
                 startedAt: "2026-08-28T13:00:00.000Z",
                 durationMs: 18_000,
               },
@@ -817,7 +866,7 @@ describe("PipelinePage", () => {
     const sheet = sequenceSheet();
     expect(
       sheet.querySelector('[data-testid="sequence-beat-label"]')?.textContent,
-    ).toBe("spawn implementor (composer)");
+    ).toBe("spawn Implementor (composer)");
     const expand = sheet.querySelector(
       '[data-testid="sequence-beat"][data-row="collapsed"] button',
     );
@@ -833,30 +882,30 @@ describe("PipelinePage", () => {
       ),
     ).map((el) => el.textContent);
     expect(turnLabels).toEqual([
-      "spawn implementor (composer)",
-      "spawn implementor (sonnet)",
+      "spawn Implementor (composer)",
+      "spawn Implementor (sonnet)",
     ]);
     expect(sheet.querySelector('[data-testid="sequence-to"]')?.textContent).toBe(
-      "implementor",
+      "Implementor",
     );
   });
 
-  it("draws an indeterminate spawn on the phone rail with a no-return caption", async () => {
+  it("draws an open spawn on the phone rail with a cyan dashed arrow", async () => {
     mockViewport(390);
     stubRuns(FIVE_RUNS, {
       e: {
         condition: "completed",
         lifelines: [
-          { id: "human", label: "human", kind: "human" },
-          { id: "coordinator", label: "planning", kind: "coordinator" },
-          { id: "retro", label: "retro", kind: "role" },
+          { id: "human", label: "Human", kind: "human" },
+          { id: "coordinator", label: "Stakeholder", kind: "coordinator" },
+          { id: "retro", label: "Retro", kind: "role" },
         ],
         sections: [],
         beats: [
           {
             from: "coordinator",
             to: "retro",
-            label: "spawn retro",
+            label: "spawn Retro",
             startedAt: "2026-08-28T13:00:00.000Z",
             kind: "spawn",
             indeterminate: true,
@@ -870,15 +919,16 @@ describe("PipelinePage", () => {
     const diagram = sheet.querySelector('[data-testid="run-sequence-diagram"]');
     expect(diagram?.getAttribute("data-layout")).toBe("phone");
     const label = sheet.querySelector('[data-testid="sequence-beat-label"]');
-    expect(label?.textContent).toBe("spawn retro · no return");
-    expect(label?.closest("p")?.className).toContain("hsl(var(--warn))");
+    expect(label?.textContent).toBe("spawn Retro");
+    expect(label?.textContent).not.toMatch(/no return/);
+    expect(label?.closest("p")?.className).toContain("hsl(var(--current))");
     expect(sheet.querySelector(".animate-spin")).toBeNull();
     const arrow = sheet.querySelector(
       '[data-testid="sequence-arrow"][data-kind="spawn"]',
     );
     expect(arrow?.getAttribute("data-indeterminate")).toBe("true");
     expect(
-      arrow?.querySelector('[data-testid="sequence-arrow-open-terminus"]'),
+      arrow?.querySelector('[data-testid="sequence-arrow-open-head"]'),
     ).not.toBeNull();
   });
 
