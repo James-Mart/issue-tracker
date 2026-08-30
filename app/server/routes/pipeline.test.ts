@@ -224,7 +224,7 @@ describe("pipeline runs routes", () => {
   });
 
   describe("GET /api/pipeline/runs", () => {
-    it("returns { runs: RecentRun[] } newest-first", async () => {
+    it("returns { runs, nextCursor } newest-first", async () => {
       writeConversation("conv-old", {
         meta: {
           channel: "implementing",
@@ -291,6 +291,7 @@ describe("pipeline runs routes", () => {
             issueId: "task-old",
           },
         ],
+        nextCursor: null,
       });
     });
 
@@ -317,6 +318,49 @@ describe("pipeline runs routes", () => {
       expect(
         body.runs.map((row: { conversationId: string }) => row.conversationId),
       ).toEqual(["conv-c", "conv-b"]);
+      expect(body.nextCursor).toBe(`${AT}|conv-b`);
+    });
+
+    it("pages with ?cursor= and rejects a malformed cursor", async () => {
+      writeConversation("conv-a", {
+        meta: { title: "Run A", createdAt: AT_EARLY },
+        transcript: [{ type: "prompt", text: "hi", at: AT_EARLY, seq: 1 }],
+      });
+      writeConversation("conv-b", {
+        meta: { title: "Run B", createdAt: AT },
+        transcript: [{ type: "prompt", text: "hi", at: AT, seq: 1 }],
+      });
+      writeConversation("conv-c", {
+        meta: { title: "Run C", createdAt: AT_LATE },
+        transcript: [{ type: "prompt", text: "hi", at: AT_LATE, seq: 1 }],
+      });
+
+      await startApp();
+
+      const first = await fetch(`${baseUrl}/api/pipeline/runs?limit=2`);
+      expect(first.status).toBe(200);
+      const firstBody = await first.json();
+      expect(
+        firstBody.runs.map((row: { conversationId: string }) => row.conversationId),
+      ).toEqual(["conv-c", "conv-b"]);
+      expect(firstBody.nextCursor).toBe(`${AT}|conv-b`);
+
+      const second = await fetch(
+        `${baseUrl}/api/pipeline/runs?limit=2&cursor=${encodeURIComponent(firstBody.nextCursor)}`,
+      );
+      expect(second.status).toBe(200);
+      const secondBody = await second.json();
+      expect(
+        secondBody.runs.map((row: { conversationId: string }) => row.conversationId),
+      ).toEqual(["conv-a"]);
+      expect(secondBody.nextCursor).toBeNull();
+
+      const bad = await fetch(`${baseUrl}/api/pipeline/runs?cursor=not-a-cursor`);
+      expect(bad.status).toBe(400);
+      expect(await bad.json()).toEqual({
+        error: "cursor must be createdAt|conversationId",
+        code: "validation",
+      });
     });
   });
 

@@ -652,8 +652,48 @@ function resolveRootIssue(
   }
 }
 
-/** Newest-first runs; hydrate transcript and delegations only for the limit slice. */
-export function recentRuns(limit: number): RecentRun[] {
+function runCursorKey(createdAt: string, conversationId: string): string {
+  return `${createdAt}|${conversationId}`;
+}
+
+function parseRunCursor(cursor: string): {
+  createdAt: string;
+  conversationId: string;
+} {
+  const sep = cursor.indexOf("|");
+  if (sep <= 0 || sep === cursor.length - 1) {
+    throw new IssueError("validation", "cursor must be createdAt|conversationId");
+  }
+  return {
+    createdAt: cursor.slice(0, sep),
+    conversationId: cursor.slice(sep + 1),
+  };
+}
+
+function compareRecentRunMeta(a: ConversationMeta, b: ConversationMeta): number {
+  const byCreated = b.createdAt.localeCompare(a.createdAt);
+  if (byCreated !== 0) return byCreated;
+  return b.id.localeCompare(a.id);
+}
+
+/** True when `meta` is strictly after `cursor` in newest-first, id-desc order. */
+function isAfterRunCursor(
+  meta: ConversationMeta,
+  cursor: { createdAt: string; conversationId: string },
+): boolean {
+  const byCreated = meta.createdAt.localeCompare(cursor.createdAt);
+  if (byCreated !== 0) return byCreated < 0;
+  return meta.id.localeCompare(cursor.conversationId) < 0;
+}
+
+/** Newest-first page; hydrate transcript and delegations only for the page slice. */
+export function recentRunsPage(options: {
+  limit: number;
+  cursor?: string;
+}): { runs: RecentRun[]; nextCursor: string | null } {
+  const parsedCursor =
+    options.cursor === undefined ? undefined : parseRunCursor(options.cursor);
+
   const metas: ConversationMeta[] = [];
   for (const conversationId of listConversationIds()) {
     try {
@@ -662,10 +702,16 @@ export function recentRuns(limit: number): RecentRun[] {
       continue;
     }
   }
-  metas.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  metas.sort(compareRecentRunMeta);
 
-  const entries: RecentRun[] = [];
-  for (const listed of metas.slice(0, limit)) {
+  const afterCursor =
+    parsedCursor === undefined
+      ? metas
+      : metas.filter((meta) => isAfterRunCursor(meta, parsedCursor));
+  const pageMetas = afterCursor.slice(0, options.limit);
+
+  const runs: RecentRun[] = [];
+  for (const listed of pageMetas) {
     try {
       const { meta, transcript } = readConversation(listed.id);
       const delegations = readDelegations(listed.id);
@@ -673,7 +719,7 @@ export function recentRuns(limit: number): RecentRun[] {
         orderedBeats(listed.id, transcript, delegations),
       );
       const issueId = runIssueId(meta, delegations);
-      entries.push({
+      runs.push({
         conversationId: listed.id,
         coordinatorLabel: coordinatorLabel(meta),
         startedAt: meta.createdAt,
@@ -685,5 +731,11 @@ export function recentRuns(limit: number): RecentRun[] {
       continue;
     }
   }
-  return entries;
+
+  const last = runs[runs.length - 1];
+  const nextCursor =
+    last === undefined || afterCursor.length <= options.limit
+      ? null
+      : runCursorKey(last.startedAt, last.conversationId);
+  return { runs, nextCursor };
 }

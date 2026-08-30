@@ -12,6 +12,7 @@ export type PipelineStepSource = {
 
 export type PipelineRunsResponse = {
   runs: RecentRun[];
+  nextCursor: string | null;
 };
 
 export function usePipelineRunsQuery(): UseQueryResult<
