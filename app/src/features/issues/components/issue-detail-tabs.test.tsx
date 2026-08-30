@@ -305,3 +305,104 @@ describe("IssueDetailTabs mobile channel chrome", () => {
     expect(panelProps.mobileFullViewport).toBe(false);
   });
 });
+
+describe("IssueDetailTabs keep later choice while pending", () => {
+  it("keeps Overview after mobile Back during a planning pending", () => {
+    mobileState.value = true;
+    const { container } = mountTabs(null, "/");
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
+    });
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(panelProps.mounted).toBe(true);
+
+    act(() => {
+      (container.querySelector("button") as HTMLButtonElement).click();
+    });
+
+    expect(selectedTab(container)).toContain("Overview");
+    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(container.textContent).toContain("Overview body");
+    expect(useCockpitLaunchStore.getState().pending).toEqual({
+      issueId: "capture",
+      kind: "planning",
+    });
+    expect(
+      container.querySelector('[data-testid="channel-launch-fault"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("Session create rejected");
+  });
+
+  it("keeps Overview after mobile Back during a work pending", () => {
+    mobileState.value = true;
+    const { container } = mountTabs(null, "/", epic());
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("auth", "work");
+    });
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+
+    act(() => {
+      (container.querySelector("button") as HTMLButtonElement).click();
+    });
+
+    expect(selectedTab(container)).toContain("Overview");
+    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(container.textContent).toContain("Overview body");
+    expect(useCockpitLaunchStore.getState().pending).toEqual({
+      issueId: "auth",
+      kind: "work",
+    });
+    expect(
+      container.querySelector('[data-testid="channel-launch-fault"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("Session create rejected");
+  });
+
+  it("keeps Overview after the Overview tab during a work pending", () => {
+    const { container } = mountTabs(null, "/", epic());
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("auth", "work");
+    });
+    expect(selectedTab(container)).toContain("Implementing");
+
+    act(() => {
+      tabNamed(container, "Overview").click();
+    });
+
+    expect(selectedTab(container)).toContain("Overview");
+    expect(useCockpitLaunchStore.getState().pending).toEqual({
+      issueId: "auth",
+      kind: "work",
+    });
+    expect(
+      container.querySelector('[data-testid="channel-launch-fault"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("Session create rejected");
+  });
+
+  it("surfaces failLaunch only on the channel, not Overview", () => {
+    const { container } = mountTabs(null, "/");
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
+    });
+    act(() => {
+      tabNamed(container, "Overview").click();
+    });
+    act(() => {
+      useCockpitLaunchStore.getState().failLaunch("capture", "planning", {
+        errorMessage: "the session was not created",
+      });
+    });
+
+    expect(selectedTab(container)).toContain("Overview");
+    expect(container.textContent).toContain("Overview body");
+    expect(
+      container.querySelector('[data-testid="channel-launch-fault"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("Session create rejected");
+  });
+});
