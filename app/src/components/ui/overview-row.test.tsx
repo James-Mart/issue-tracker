@@ -129,22 +129,6 @@ describe("OverviewRow overlay", () => {
     expect(container.querySelector(".pointer-events-none")).toBeNull();
   });
 
-  it("places a sparkline after the title cluster and before count", () => {
-    const { container } = mountRow({
-      count: "3/4",
-      sparkline: <span data-testid="sparkline">spark</span>,
-      overlay: undefined,
-      touchMenu: undefined,
-    });
-    const title = container.querySelector(".min-w-0.flex-1.truncate");
-    const spark = container.querySelector('[data-testid="sparkline"]');
-    expect(spark).toBeTruthy();
-    expect(
-      title?.compareDocumentPosition(spark as Node) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
   it("keeps inline actions clickable when drillInTo is set", () => {
     const { container } = mountRow({
       drillInTo: "/projects/p/issues/e",

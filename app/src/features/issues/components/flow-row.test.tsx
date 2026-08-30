@@ -65,27 +65,22 @@ afterEach(() => {
 });
 
 describe("FlowRow", () => {
-  it("puts the state disc on a rail node, not a planning chip", () => {
+  it("puts the state disc on a rail node and shows a planning badge on directed Ideas", () => {
     const planningRow = mountRow(idea("grill"), {
       blocked: false,
       ideaStatus: "planning",
     });
     expect(planningRow.querySelector('[data-testid="rail-port"]')).toBeTruthy();
-    expect(
-      planningRow.querySelector('[data-testid="progress-sparkline"]'),
-    ).toBeTruthy();
-    expect(planningRow.querySelector('[data-stage="planning"]')).toBeTruthy();
+    expect(planningRow.textContent).toContain("planning");
 
     const capturedRow = mountRow(idea("capture"), {
       blocked: false,
       ideaStatus: "captured",
     });
-    expect(
-      capturedRow.querySelector('[data-testid="progress-sparkline"]'),
-    ).toBeNull();
+    expect(capturedRow.textContent).not.toContain("planning");
   });
 
-  it("shows the demand icon on Needs attention Ideas", () => {
+  it("shows the demand icon and planning badge on awaiting-direction Ideas", () => {
     const container = mountRow(idea("stalled"), {
       blocked: false,
       ideaStatus: "awaiting-direction",
@@ -93,9 +88,7 @@ describe("FlowRow", () => {
     expect(
       container.querySelector('[aria-label="needs attention"]'),
     ).toBeTruthy();
-    expect(
-      container.querySelector('[data-testid="progress-sparkline"]'),
-    ).toBeNull();
+    expect(container.textContent).toContain("planning");
   });
 
   it("keeps title and actions on one line", () => {
@@ -113,22 +106,17 @@ describe("FlowRow", () => {
     expect(container.querySelector(".pointer-events-none")).toBeNull();
   });
 
-  it("shows a sparkline on moving Stories and not on Ready", () => {
+  it("shows no planning badge on Story rows", () => {
     const flying = mountRow(story("fly"), {
       blocked: false,
       storyStatus: "in-progress",
     });
-    expect(flying.querySelector('[data-testid="progress-sparkline"]')).toBeTruthy();
-    expect(
-      flying.querySelector('[data-stage="in progress"]')?.getAttribute("title"),
-    ).toBe("in progress");
+    expect(flying.textContent).not.toContain("planning");
 
     const ready = mountRow(story("ready"), {
       blocked: false,
       storyStatus: "not-started",
     });
-    expect(
-      ready.querySelector('[data-testid="progress-sparkline"]'),
-    ).toBeNull();
+    expect(ready.textContent).not.toContain("planning");
   });
 });

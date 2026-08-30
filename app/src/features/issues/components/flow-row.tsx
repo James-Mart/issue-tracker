@@ -1,13 +1,23 @@
 import type { ReactNode } from "react";
 import { OverviewRow } from "@/components/ui/overview-row";
-import { ProgressSparkline } from "@/components/ui/progress-sparkline";
 import { RailNode } from "@/components/ui/rail";
 import type { IssueRecord } from "@server/schemas";
+import { AxisChips } from "./axis-chips";
 import { leafTaskProgressCount } from "../lib/derived";
 import type { FlowItem } from "../lib/flow";
 import { flowItemNeedsAttention } from "../lib/flow";
-import { flowItemSparkline } from "../lib/flow-sparkline";
 import { issueRailNodeState } from "../lib/rail-state";
+
+function flowRowPlanningBadge(item: FlowItem): ReactNode | undefined {
+  if (item.issue.kind !== "idea") return undefined;
+  const status = item.state?.ideaStatus;
+  if (status !== "planning" && status !== "awaiting-direction") {
+    return undefined;
+  }
+  return (
+    <AxisChips chips={[{ variant: "inProgress", label: "planning" }]} />
+  );
+}
 
 export interface FlowRowProps {
   item: FlowItem;
@@ -20,7 +30,7 @@ export interface FlowRowProps {
 
 /**
  * Cockpit flow row: one horizontal line, state disc on the bucket rail spine,
- * demand icon on Needs attention, sparkline on moving work, icon-only actions.
+ * planning badge on directed Ideas, demand icon on Needs attention, icon-only actions.
  */
 export function FlowRow({
   item,
@@ -32,7 +42,6 @@ export function FlowRow({
   const railState = issueRailNodeState(item.issue, item.state);
   const live = railState === "in-flight";
   const count = leafTaskProgressCount(item.issue, issues);
-  const stages = flowItemSparkline(item);
 
   return (
     <RailNode
@@ -44,9 +53,7 @@ export function FlowRow({
       <OverviewRow
         className="min-w-0 flex-1"
         avatar={avatar}
-        sparkline={
-          stages ? <ProgressSparkline stages={stages} /> : undefined
-        }
+        chips={flowRowPlanningBadge(item)}
         blocked={Boolean(item.state?.blocked)}
         attention={flowItemNeedsAttention(item)}
         count={count}

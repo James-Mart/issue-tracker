@@ -17,8 +17,6 @@ export interface OverviewRowProps extends React.HTMLAttributes<HTMLDivElement> {
   stateIcon?: React.ReactNode;
   /** At-rest status chips (e.g. planning) — sit after the title, before the disc. */
   chips?: React.ReactNode;
-  /** Word-sized lifecycle rail — sit after title/chips, before icon signals. */
-  sparkline?: React.ReactNode;
   /** Tabular quantity (e.g. `3/4`). */
   count?: React.ReactNode;
   /** Inline action controls — sit after count in the row flex line. */
@@ -46,7 +44,7 @@ const overlayReveal =
   "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100";
 
 /**
- * Dense overview row shell: avatar · title · chips · sparkline · state icon ·
+ * Dense overview row shell: avatar · title · chips · state icon ·
  * icon signals · count · actions. Title cluster and actions stay one horizontal
  * line; actions do not wrap. At rest, attention/blocked are hue-coded icons
  * only; optional chips are for phase (e.g. planning), not those signals.
@@ -56,7 +54,6 @@ export function OverviewRow({
   avatar,
   stateIcon,
   chips,
-  sparkline,
   count,
   actions,
   attention = false,
@@ -107,9 +104,6 @@ export function OverviewRow({
           </div>
           {chips != null ? (
             <span className="inline-flex shrink-0">{chips}</span>
-          ) : null}
-          {sparkline != null ? (
-            <span className="inline-flex shrink-0">{sparkline}</span>
           ) : null}
           {stateIcon != null ? (
             <span className="inline-flex shrink-0">{stateIcon}</span>
