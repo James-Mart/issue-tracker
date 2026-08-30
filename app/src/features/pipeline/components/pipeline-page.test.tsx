@@ -8,14 +8,33 @@ import {
 } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentRun } from "@server/schemas";
+import type { TopicListener, TopicMessage } from "@/lib/ws/transport";
 import { PIPELINE_RUNS_LIMIT, type RecentRun } from "../run-list";
 import type { RunSequence, RunSequenceSection } from "../run-sequence";
 import { pipelines } from "../shape";
 import { PipelinePage } from "./pipeline-page";
 
+const topicState = vi.hoisted(() => {
+  const listeners = new Map<string, TopicListener>();
+  return {
+    listeners,
+    subscribe: (topic: string, listener: TopicListener) => {
+      listeners.set(topic, listener);
+      return () => {
+        listeners.delete(topic);
+      };
+    },
+  };
+});
+
 vi.mock("@/lib/ws/transport", () => ({
-  subscribeTopic: () => () => {},
+  subscribeTopic: (topic: string, listener: TopicListener) =>
+    topicState.subscribe(topic, listener),
 }));
+
+const LIVE_AT_NESTED = "2026-08-28T12:00:12.000Z";
+const LIVE_AT_APPEND = "2026-08-28T13:00:00.000Z";
 
 function LocationProbe() {
   const { pathname, search } = useLocation();
@@ -257,6 +276,60 @@ function tallRunSequence(beatCount: number): RunSequence {
   };
 }
 
+function inFlightTallRunSequence(beatCount: number): RunSequence {
+  const closed = Array.from({ length: beatCount - 1 }, (_, index) => ({
+    from: index % 2 === 0 ? "coordinator" : "research",
+    to: index % 2 === 0 ? "research" : "coordinator",
+    label: `beat ${index + 1}`,
+    startedAt: new Date(Date.UTC(2026, 7, 28, 12, index)).toISOString(),
+    durationMs: 30_000,
+    kind: (index % 2 === 0 ? "spawn" : "return") as const,
+  }));
+  return {
+    condition: "in-flight",
+    lifelines: [
+      { id: "coordinator", label: "planning", kind: "coordinator" },
+      { id: "research", label: "research", kind: "role" },
+    ],
+    sections: [],
+    beats: [
+      ...closed,
+      {
+        from: "coordinator",
+        to: "research",
+        label: "spawn research",
+        startedAt: new Date(Date.UTC(2026, 7, 28, 12, beatCount - 1)).toISOString(),
+        kind: "spawn" as const,
+        parentCallId: "call-open",
+      },
+    ],
+  };
+}
+
+function liveSampleRun(overrides: Partial<AgentRun> = {}): AgentRun {
+  return {
+    delegationId: "del-live",
+    agentId: "agent-live",
+    role: "validator",
+    model: "composer-2.5",
+    issueId: "run-live-updates",
+    parentCallId: "call-live",
+    conversationId: "e",
+    startedAt: LIVE_AT_APPEND,
+    status: "running",
+    isResume: false,
+    ...overrides,
+  };
+}
+
+function deliverTopic(topic: string, message: TopicMessage) {
+  const listener = topicState.listeners.get(topic);
+  expect(listener).toBeTruthy();
+  act(() => {
+    listener!(message);
+  });
+}
+
 function sequenceScrollBody(sheet: ParentNode): HTMLElement {
   const el = sheet.querySelector('[data-testid="run-sequence-scroll-body"]');
   if (!(el instanceof HTMLElement)) {
@@ -293,6 +366,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  topicState.listeners.clear();
   notifyManager.setScheduler((cb) => {
     setTimeout(cb, 0);
   });
@@ -552,6 +626,86 @@ describe("PipelinePage", () => {
     );
     expect(lastBeat.getBoundingClientRect().top).toBeGreaterThanOrEqual(
       scrollBody.getBoundingClientRect().top - 1,
+    );
+  });
+
+  it("preserves mid-trace scroll when a live beat appends on an in-flight phone run", async () => {
+    mockViewport(390, 640);
+    stubRuns(FIVE_RUNS, { e: inFlightTallRunSequence(24) });
+    mountPipelinePage("/pipeline/runs/e");
+    await flush();
+
+    expect(topicState.listeners.has("conversation:e")).toBe(true);
+
+    const sheet = sequenceSheet();
+    const scrollBody = sequenceScrollBody(sheet);
+    mockScrollOverflow(scrollBody, 2400, 200);
+
+    const midScrollTop = 400;
+    act(() => {
+      scrollBody.scrollTop = midScrollTop;
+    });
+    expect(scrollBody.scrollTop).toBe(midScrollTop);
+
+    const bodyBottom = 400;
+    scrollBody.getBoundingClientRect = () =>
+      ({
+        top: 200,
+        bottom: bodyBottom,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: 200,
+        x: 0,
+        y: 200,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    deliverTopic("conversation:e", {
+      type: "event",
+      seq: 10,
+      event: {
+        type: "delegation",
+        run: liveSampleRun(),
+        at: LIVE_AT_APPEND,
+        seq: 10,
+      },
+    });
+    await flush();
+
+    expect(scrollBody.scrollTop).toBe(midScrollTop);
+
+    const beats = Array.from(
+      scrollBody.querySelectorAll('[data-testid="sequence-beat"]'),
+    ) as HTMLElement[];
+    expect(beats.length).toBe(25);
+    const appended = beats.find(
+      (beat) =>
+        beat.querySelector('[data-testid="sequence-beat-label"]')?.textContent ===
+        "spawn validator",
+    );
+    if (!appended) {
+      throw new Error("missing appended live beat");
+    }
+
+    appended.getBoundingClientRect = () =>
+      ({
+        top: bodyBottom + 40,
+        bottom: bodyBottom + 80,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: 40,
+        x: 0,
+        y: bodyBottom + 40,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    expect(appended.getBoundingClientRect().bottom).toBeGreaterThan(
+      scrollBody.getBoundingClientRect().bottom,
+    );
+    expect(appended.getBoundingClientRect().top).toBeGreaterThan(
+      scrollBody.getBoundingClientRect().bottom,
     );
   });
 
