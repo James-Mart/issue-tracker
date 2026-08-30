@@ -185,7 +185,7 @@ function SelectedRunSequence({
           className="max-h-[85vh] overflow-hidden"
           aria-label="Run sequence"
         >
-          <div className="-mx-6 -mt-6 flex min-h-0 flex-1 flex-col">
+          <div className="-mx-6 -mt-6 flex min-h-0 flex-1 flex-col overflow-hidden">
             <SheetTitle className="sr-only">Sequence</SheetTitle>
             {status}
             {sequence && !isLoading && !error ? (
@@ -193,7 +193,10 @@ function SelectedRunSequence({
                 <SheetHeader className="shrink-0 space-y-0 border-b border-border bg-[hsl(var(--panel))] px-6 py-2.5 text-left">
                   <RunSequencePaneHeader sequence={sequence} />
                 </SheetHeader>
-                <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+                <div
+                  className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
+                  data-testid="run-sequence-scroll-body"
+                >
                   <RunSequenceDiagram sequence={sequence} layout="phone" />
                 </div>
               </>

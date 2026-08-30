@@ -91,7 +91,7 @@ const SheetContent = React.forwardRef<
           </SheetPrimitive.Close>
         ) : null}
         {dismissAffordance === "bottom-handle" ? (
-          <div className="min-h-0 flex-1 px-6 pt-6">{children}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pt-6">{children}</div>
         ) : (
           children
         )}
