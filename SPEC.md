@@ -50,7 +50,10 @@ Every issue has a `kind`, one of:
 - **Idea** — a Project-level capture item (title, description, attachments,
   archive, optional `stakeholder` model slug, and optional `labels` assignments
   from the Project catalog — see [Project labels](#project-labels)) that agents
-  and humans mine later into real work. Leaf kind: no children, no
+  and humans mine later into real work. The sole valid seed for
+  `issue-tracker-plan` and `issue-tracker-auto-plan` — re-shaping an existing
+  tree uses `issue-tracker-plan-polish`; authoring a tree directly uses
+  `issue-tracker-authoring`. Leaf kind: no children, no
   assignee/needs-attention, no stored status or git fields (planning phase is
   derived as **`ideaStatus`** — see [Derived state](#derived-state)). `stakeholder` picks who
   holds the stakeholder seat (see [Roles](#roles)): a model slug means an

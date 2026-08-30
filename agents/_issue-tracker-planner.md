@@ -17,7 +17,7 @@ into a plan someone else can build from.
 
 ## Inputs (from invoking prompt)
 
-- **Issue id** — Idea, todo Epic, or not-started project-level Story to plan
+- **Issue id** — Idea to plan
 
 ## Procedure
 

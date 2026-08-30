@@ -2,9 +2,9 @@
 name: issue-tracker-auto-plan
 disable-model-invocation: true
 description: >-
-  Autonomously plan a single issue as a hands-off stakeholder on
-  opus 5. Use when the user runs auto-plan or auto plan or wants hands-off
-  planning of an issue id.
+  Autonomously plan a single Idea as a hands-off stakeholder on opus 5. Use
+  when the user runs auto-plan or auto plan or wants hands-off planning of an
+  Idea id.
 ---
 
 # Issue Tracker — Auto-plan (stakeholder)
@@ -13,9 +13,8 @@ Turn a seed issue into a polished plan tree, leaving an audit trail the human
 reviews afterward. You are the **stakeholder**: you answer the
 vanilla planner's grill from product intent (never from what code already
 does), own the "shared understanding reached" and post-outline gate calls,
-resolve polish escalations, and finalize with an audit report. When the seed
-was an Idea, that report lands on the archived source Idea; otherwise on each
-resulting plan root. Provenance (`sourceIdea`) lands on each resulting root
+resolve polish escalations, and finalize with an audit report on the archived
+source Idea. Provenance (`sourceIdea`) lands on each resulting root
 from the planner's migrate step — not from finalize.
 You do **not** author the plan tree yourself — the vanilla planner does
 (`issue-tracker-plan` unchanged; Story *"Reuse over reinvention"* invariant).
@@ -28,11 +27,9 @@ the spawned discriminator / planner.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-**Allowed writes:** finalize `attach` + `comment` only, target per
-**## Finalize** — (a) **Idea source:** `issue idea attach` and
-`issue idea comment` on the archived source Idea (the seed after migration);
-(b) **Epic / project-level Story source:** `issue attach` and
-`issue comment` on each resulting plan root. Standout-decisions comments use
+**Allowed writes:** finalize `attach` + `comment` only — `issue idea attach`
+and `issue idea comment` on the archived source Idea (the seed after
+migration). Standout-decisions comments use
 `--role stakeholder`. The only other writes are those owned by skills this
 skill itself directs you to follow — today, **`issue-tracker-vision-docs`**
 on the **§ Subsystem vision consult** path. All other `issue` use is
@@ -40,9 +37,8 @@ read-only (`summary`, `view`, `tree`, `get`). Do not set any status.
 
 ## Argument
 
-A single **issue id** — an **Idea**, a **todo** Epic, or a **not-started
-project-level Story** (issue-id-only; the human authors the seed beforehand).
-If none is given, ask the user for the issue id; do not guess or run a picker.
+A single **Idea** id (issue-id-only; the human authors the seed beforehand).
+If none is given, ask the user for the Idea id; do not guess or run a picker.
 
 ## Delegation
 
@@ -70,12 +66,10 @@ there is nothing to resume.
    `supportingDocs:` for a `vision=` entry. **Absent → refuse**: tell the human
    to add a `vision` supportingDoc to the Project, and do **not** proceed.
    (Presence only here; content judgment comes in the reads below.)
-4. **Kind / status gate** — apply
+4. **Kind gate** — apply
    [issue-tracker-plan § Bootstrap](../issue-tracker-plan/SKILL.md#bootstrap)
-   step 3 gate conditions verbatim (Idea → proceed; Epic `epicStatus` must be
-   `todo`; project-level Story `storyStatus` must be `not-started`; any other
-   kind/status → refuse). Treat a refuse here as a **preflight-gate refusal**,
-   not plan's plan-polish / work redirect.
+   step 3 (Idea → proceed; any other kind → refuse). Treat a refuse here as a
+   **preflight-gate refusal**.
 5. `issue view <issueId>` — the full source `description.md`.
 6. The Project **vision** doc via the shared consult mechanism: **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
@@ -241,7 +235,7 @@ specifics and stop; otherwise proceed to Flow.
    the planning session per
    [issue-tracker-retro](../issue-tracker-retro/SKILL.md). Wait for that
    re-entry to finish.
-5. **Finalize** per **## Finalize** (target depends on source kind).
+5. **Finalize** per **## Finalize**.
 
 ## Spawn stubs
 
