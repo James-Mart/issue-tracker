@@ -50,7 +50,10 @@ Every issue has a `kind`, one of:
 - **Idea** — a Project-level capture item (title, description, attachments,
   archive, optional `stakeholder` model slug, and optional `labels` assignments
   from the Project catalog — see [Project labels](#project-labels)) that agents
-  and humans mine later into real work. Leaf kind: no children, no
+  and humans mine later into real work. The sole valid seed for
+  `issue-tracker-plan` and `issue-tracker-auto-plan` — re-shaping an existing
+  tree uses `issue-tracker-plan-polish`; authoring a tree directly uses
+  `issue-tracker-authoring`. Leaf kind: no children, no
   assignee/needs-attention, no stored status or git fields (planning phase is
   derived as **`ideaStatus`** — see [Derived state](#derived-state)). `stakeholder` picks who
   holds the stakeholder seat (see [Roles](#roles)): a model slug means an
@@ -215,6 +218,13 @@ These are computed by `derive()` and never written to disk (see
   project-level Stories in the same Project whose stored `sourceIdea` points at
   this Idea, in ascending `order`; also `issue idea get … planRoots` (JSON
   array; `[]` when none).
+- **planNotFinal** — derived on Epics and root project-level Stories: `true`
+  when the issue stores `sourceIdea`, the referenced Idea is present in the
+  issue set, and that Idea's `archived` is not true; otherwise `false`; also
+  `issue epic get … planNotFinal` / `issue story get … planNotFinal`. Tree
+  chip `plan not final` when true. A work root reports ready on every surface
+  a worker reads only when `planNotFinal` is `false`; archiving the source
+  Idea is the act that declares planning finished.
 - **mergeBase** — tree chip `mergeBase=<ref>` / `mergeBase=(unset)`;
   also `issue story get … mergeBase`. Resolution:
   [stacked-PR merge model](#the-stacked-pr-merge-model). No second name
@@ -416,7 +426,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `blocked`, `mergeBase`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -1456,6 +1466,13 @@ so cannot drift:
 - **Idea `planRoots`** — the ids of Epics and root project-level Stories in
   the same Project whose stored `sourceIdea` equals the Idea's id, sorted by
   ascending `order`; `[]` when none. Computed by `derive()` for every Idea.
+- **Epic / root Story `planNotFinal`** — `true` when the issue stores
+  `sourceIdea`, the referenced Idea is present in the pass's issue set, and that
+  Idea's `archived` is not true; otherwise `false` (including when `sourceIdea`
+  is absent or names an Idea missing from the set). Computed by `derive()` for
+  every Epic and root project-level Story. Readiness surfaces exclude roots
+  while `planNotFinal` is `true`; `issue idea set … archived true` on the
+  source Idea is what clears it.
 - **problems** — the integrity checks `derive()` runs over the parsed issues:
   dependency cycles over `stackedOn`/`blockedBy`; dangling
   `partOf`/`stackedOn`/`blockedBy` ids; a Story whose `stackedOn` entry is not a

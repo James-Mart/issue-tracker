@@ -205,16 +205,18 @@ describe("flowBuckets", () => {
     expect(ids(buckets.recentlyMerged)).toEqual(["mid-epic", "old-epic"]);
   });
 
-  it("excludes Epic-child Stories, Tasks, Projects, and planned Ideas", () => {
+  it("excludes Epic-child Stories, Tasks, Projects, and archived planned Ideas", () => {
     const issues = [
       project("p"),
       idea("i", "p"),
+      { ...idea("arch-planned", "p"), archived: true },
       epic("e", "p"),
       story("s", "e"),
       task("t", "s"),
     ];
     const derived: Record<string, DerivedState> = {
       i: { blocked: false, ideaStatus: "planned" },
+      "arch-planned": { blocked: false, ideaStatus: "planned" },
       e: { blocked: false, epicStatus: "todo" },
       s: { blocked: false, storyStatus: "not-started" },
       t: { blocked: false },
@@ -222,11 +224,29 @@ describe("flowBuckets", () => {
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
 
-    expect(ids(buckets.ready).sort()).toEqual(["e"].sort());
+    expect(ids(buckets.ready).sort()).toEqual(["e", "i"].sort());
     expect(buckets.awaitingPlanning).toEqual([]);
     expect(buckets.inFlight).toEqual([]);
     expect(buckets.blocked).toEqual([]);
     expect(buckets.recentlyMerged).toEqual([]);
+    expect(ids(buckets.ready)).not.toContain("arch-planned");
+  });
+
+  it("excludes archived planned Ideas even when archived rows are visible", () => {
+    const issues = [
+      project("p"),
+      idea("live-planned", "p"),
+      { ...idea("arch-planned", "p"), archived: true },
+    ];
+    const derived: Record<string, DerivedState> = {
+      "live-planned": { blocked: false, ideaStatus: "planned" },
+      "arch-planned": { blocked: false, ideaStatus: "planned" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(ids(buckets.ready)).toEqual(["live-planned"]);
+    expect(ids(buckets.ready)).not.toContain("arch-planned");
   });
 
   it("places a captured Idea in awaitingPlanning and a planning Idea in inFlight", () => {
@@ -248,7 +268,9 @@ describe("flowBuckets", () => {
 
     expect(ids(buckets.awaitingPlanning)).toEqual(["captured-idea"]);
     expect(ids(buckets.inFlight)).toEqual(["planning-idea"]);
-    expect(ids(buckets.ready)).toEqual(["awaiting-idea"]);
+    expect(ids(buckets.ready).sort()).toEqual(
+      ["awaiting-idea", "planned-idea"].sort(),
+    );
     expect(ids(buckets.blocked)).toEqual([]);
     expect(ids(buckets.recentlyMerged)).toEqual([]);
   });
@@ -388,6 +410,97 @@ describe("flowBuckets", () => {
     expect(projectAReady).toEqual(["a-live-ready"]);
   });
 
+  it("routes planNotFinal roots to blocked instead of ready", () => {
+    const issues = [
+      project("p"),
+      epic("pending-epic", "p"),
+      story("pending-story", "p"),
+      epic("ready-epic", "p"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      "pending-epic": { blocked: false, epicStatus: "todo", planNotFinal: true },
+      "pending-story": {
+        blocked: false,
+        storyStatus: "not-started",
+        planNotFinal: true,
+      },
+      "ready-epic": { blocked: false, epicStatus: "todo", planNotFinal: false },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(ids(buckets.blocked).sort()).toEqual(
+      ["pending-epic", "pending-story"].sort(),
+    );
+    expect(ids(buckets.ready)).toEqual(["ready-epic"]);
+  });
+
+  it("returns planNotFinal roots to ready when planNotFinal is false", () => {
+    const issues = [project("p"), epic("e", "p"), story("s", "p")];
+    const derived: Record<string, DerivedState> = {
+      e: { blocked: false, epicStatus: "todo", planNotFinal: false },
+      s: { blocked: false, storyStatus: "not-started", planNotFinal: false },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(buckets.blocked).toEqual([]);
+    expect(ids(buckets.ready).sort()).toEqual(["e", "s"].sort());
+  });
+
+  it("prefers planNotFinal over inFlight and recentlyMerged", () => {
+    const issues = [
+      project("p"),
+      epic("flight", "p"),
+      story("merged", "p", t2),
+    ];
+    const derived: Record<string, DerivedState> = {
+      flight: {
+        blocked: false,
+        epicStatus: "in-progress",
+        planNotFinal: true,
+      },
+      merged: {
+        blocked: false,
+        storyStatus: "merged",
+        planNotFinal: true,
+      },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(ids(buckets.blocked).sort()).toEqual(["flight", "merged"].sort());
+    expect(buckets.inFlight).toEqual([]);
+    expect(buckets.recentlyMerged).toEqual([]);
+    expect(buckets.ready).toEqual([]);
+  });
+
+  it("buckets roots without planNotFinal exactly as before", () => {
+    const issues = [
+      project("p"),
+      epic("blocked-epic", "p"),
+      epic("flight-epic", "p"),
+      epic("done-epic", "p", t1),
+      epic("ready-epic", "p"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      "blocked-epic": { blocked: true, epicStatus: "todo" },
+      "flight-epic": { blocked: false, epicStatus: "in-progress" },
+      "done-epic": { blocked: false, epicStatus: "done" },
+      "ready-epic": { blocked: false, epicStatus: "todo" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(bucketIds(buckets)).toEqual({
+      awaitingPlanning: [],
+      ready: ["ready-epic"],
+      inFlight: ["flight-epic"],
+      blocked: ["blocked-epic"],
+      recentlyMerged: ["done-epic"],
+    });
+  });
+
   it("excludes an Epic nested under another Epic", () => {
     const issues = [
       project("p"),
@@ -410,11 +523,17 @@ describe("flowBuckets", () => {
 });
 
 describe("flowItemNeedsAttention", () => {
-  it("treats awaiting-direction Ideas as attention and ignores implementing Stories", () => {
+  it("treats awaiting-direction and planned Ideas as attention and ignores implementing Stories", () => {
     expect(
       flowItemNeedsAttention({
         issue: idea("awaiting", "p"),
         state: { blocked: false, ideaStatus: "awaiting-direction" },
+      }),
+    ).toBe(true);
+    expect(
+      flowItemNeedsAttention({
+        issue: idea("planned", "p"),
+        state: { blocked: false, ideaStatus: "planned" },
       }),
     ).toBe(true);
     expect(
@@ -456,6 +575,25 @@ describe("isReadyWorkFlowItem", () => {
       isReadyWorkFlowItem({
         issue: epic("flight", "p"),
         state: { blocked: false, epicStatus: "in-progress" },
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false when planNotFinal is true", () => {
+    expect(
+      isReadyWorkFlowItem({
+        issue: epic("e", "p"),
+        state: { blocked: false, epicStatus: "todo", planNotFinal: true },
+      }),
+    ).toBe(false);
+    expect(
+      isReadyWorkFlowItem({
+        issue: story("s", "p"),
+        state: {
+          blocked: false,
+          storyStatus: "not-started",
+          planNotFinal: true,
+        },
       }),
     ).toBe(false);
   });

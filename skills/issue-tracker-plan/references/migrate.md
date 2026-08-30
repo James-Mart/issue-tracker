@@ -17,13 +17,12 @@ skill):
 `<rootKind>` is `story` or `epic` matching the apply shape; `<rootId>` is the
 resulting root id from that apply. Imperative only — not in the YAML doc.
 
-- When the source is an **Idea**, after each successful root `apply`:
+- After each successful root `apply`:
   `issue epic set <rootId> sourceIdea <ideaId>` for an epic-form root, or
   `issue story set <rootId> sourceIdea <ideaId>` for a story-form root.
   `<rootId>` is the resulting root id from that apply; `<ideaId>` is the
-  source Idea's id. Applies to **single-root** and **multi-root** Idea
-  migrations alike. **Non-Idea** sources (**Epic**, **project-level Story**)
-  record nothing — imperative only, not in the YAML doc.
+  source Idea's id. Applies to **single-root** and **multi-root** migrations
+  alike. Imperative only — not in the YAML doc.
 - Verification-only Tasks (intentionally no source-controlled edits): after
   `apply`, `issue task set <taskId> noDiff true` per
   [Verification-only Tasks (noDiff)](../../issue-tracker-authoring/SKILL.md#verification-only-tasks-nodiff)
@@ -38,8 +37,8 @@ surface, for each chosen direction on that surface:
 1. From `/root/.cursor/plugins/local/issue-tracker/app`, run
    `npm run mockup-promote -- --from-issue <fromIssueId> --direction <directionId> --issue <storyId> --mode copy`
    where:
-   - `<fromIssueId>` — the Idea or work root this migration is rewriting,
-     where the round already attached the chosen direction
+   - `<fromIssueId>` — the source Idea this migration is from, where the round
+     already attached the chosen direction
    - `<directionId>` — the direction the stakeholder chose for that surface,
      carried forward from the grill the same way the merge-base is (one round
      covers one surface, so there is exactly one chosen direction per surface)
@@ -84,41 +83,36 @@ skip this step.
 
 ### Single root (not splitting)
 
-One epic-form or story-form apply. Keep existing in-place / Idea-archive
-behavior:
+One epic-form or story-form apply. Leave the source Idea **unarchived** after
+`apply` — the Idea is the record that keeps the resulting root from reporting
+ready until plan-polish finishes.
 
 **Story-form** — `project: <projectId>` string + `story:` object (no `epic:`):
 
 | Source | Story id in the doc | After successful `apply` |
 | --- | --- | --- |
-| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | `issue idea set <ideaId> archived true` |
-| **project-level Story** (`not-started`) | **Keep** the existing Story id | (none) |
+| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | (none) |
 
 **Epic-form** — `project: <projectId>` string + `epic:` object:
 
 | Source | Epic id in the doc | After successful `apply` |
 | --- | --- | --- |
-| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | `issue idea set <ideaId> archived true` |
-| **Epic** (`todo`) | **Keep** the existing Epic id | (none) |
-| **project-level Story** (`not-started`) | Mint a **new** kebab Epic id; **keep** the existing Story id as a child under that Epic | (none) |
+| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | (none) |
 
-Show `apply` stdout (and archive outcome on the Idea path). Report the
-resulting Story or Epic id.
+Show `apply` stdout. Report the resulting Story or Epic id.
 
 ### Multi-root (splitting)
 
 N separate epic-form / story-form applies — one per resulting root. Roots may
 mix Epics and project-level Stories. **Always mint new root ids** (do not reuse
-the source Idea / Epic / Story id as any new root id).
+the source Idea id as any new root id).
 
 1. Apply in **`blockedBy` order** when deps exist among the new Epic roots;
    otherwise any order.
 2. On **first apply failure:** stop. Leave already-written roots in place. Do
    **not** delete the source. No automatic rollback.
-3. Only after **every** apply in the migrate succeeds: archive or delete the
-   source — `issue idea set <ideaId> archived true`, `issue epic delete
-   <epicId>` (source was `todo`), or `issue story delete <storyId>` (source
-   was not-started project-level Story), as appropriate.
+3. Only after **every** apply succeeds: leave the source Idea **unarchived** —
+   the Idea is the record that keeps the resulting roots from reporting ready
+   until every root's plan-polish has finished.
 
-Show each `apply` stdout and the final archive/delete outcome. Report every
-resulting root id.
+Show each `apply` stdout. Report every resulting root id.

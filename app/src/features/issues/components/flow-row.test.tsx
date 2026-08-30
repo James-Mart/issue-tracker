@@ -93,6 +93,17 @@ describe("FlowRow", () => {
     expect(container.textContent).toContain("planning");
   });
 
+  it("shows the demand icon and no planning badge on planned Ideas", () => {
+    const container = mountRow(idea("planned"), {
+      blocked: false,
+      ideaStatus: "planned",
+    });
+    expect(
+      container.querySelector('[aria-label="needs attention"]'),
+    ).toBeTruthy();
+    expect(container.textContent).not.toContain("planning");
+  });
+
   it("keeps title and actions on one line", () => {
     const container = mountRow(
       idea("with-action"),

@@ -27,6 +27,22 @@ export function epicIsDone(state: DerivedState | undefined): boolean {
 
 type Story = Extract<Issue, { kind: "story" }>;
 type Task = Extract<Issue, { kind: "task" }>;
+type Epic = Extract<Issue, { kind: "epic" }>;
+
+function planNotFinalOf(
+  issue: Epic | Story,
+  byId: Map<string, Issue>,
+): boolean {
+  if (!issue.sourceIdea) return false;
+  const idea = byId.get(issue.sourceIdea);
+  if (idea?.kind !== "idea") return false;
+  if (issue.kind === "story") {
+    if (issue.stackedOn) return false;
+    const parent = byId.get(issue.partOf);
+    if (parent?.kind !== "project") return false;
+  }
+  return !idea.archived;
+}
 
 export function derive(issues: Issue[]): DeriveResult {
   const problems = checkIntegrity(issues);
@@ -117,6 +133,7 @@ export function derive(issues: Issue[]): DeriveResult {
       blocked: storyStatus === "not-started" && !parentTipDone(story),
       storyStatus,
       reviewCurrent: reviewCurrentOf(story),
+      planNotFinal: planNotFinalOf(story, byId),
       ...(mergeBase !== undefined ? { mergeBase } : {}),
     };
   }
@@ -146,7 +163,11 @@ export function derive(issues: Issue[]): DeriveResult {
         : started.length > 0
           ? "in-progress"
           : "todo";
-    state[epic.id] = { blocked: false, epicStatus };
+    state[epic.id] = {
+      blocked: false,
+      epicStatus,
+      planNotFinal: planNotFinalOf(epic, byId),
+    };
   }
 
   // An Epic is blocked while any Epic it `blockedBy` is not done (done = all its

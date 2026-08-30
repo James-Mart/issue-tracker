@@ -98,6 +98,8 @@ Run these commands in order (use `<rootId>` throughout):
    - `branch=(unset)` — no git branch recorded yet; spawn start-branch (see
      Start a Story). Do **not** invent or substitute a branch name — not the
      Story id, not a guess from the title.
+   - `plan not final` — the root's plan polish is not finished; stop per CLI
+     checks step 5 rather than working Tasks.
    - `pr=`, `merged`, `blocked` — progress signals only; ignore for spawn
      *inputs*.
 2. `issue summary <rootId>` — read `Project:` and `Workspace:`.
@@ -116,7 +118,15 @@ Run these commands in order (use `<rootId>` throughout):
    attempt fixes, and do not work a tree with integrity problems. (`list` /
    `tree` hide archived rows by default; pass `--show-archived` when you need
    them — see [SPEC.md](../../SPEC.md#archived-visibility).)
-5. **Epic only** (`<rootKind>` = `epic`): `issue epic get <rootId> blocked` —
+5. For both root kinds (`<rootKind>` `epic` or `story`): `issue get <rootId>
+   planNotFinal` — if stdout is `true`, the root's plan is not final (its
+   source Idea is still unarchived). **Stop and hand back to the user** rather
+   than working any Task. What clears it: let the plan's polish finish, or
+   archive the source Idea with `issue idea set <ideaId> archived true` (read
+   `<ideaId>` from `issue get <rootId> sourceIdea`) — the same escape hatch
+   the Cockpit's archive control performs. There is nothing stored on the root
+   to change.
+6. **Epic only** (`<rootKind>` = `epic`): `issue epic get <rootId> blocked` —
    if stdout is `true`, the Epic is `blockedBy` a blocker that has not fully
    merged, so — per Argument — it **cannot start**. Stop and hand back to the
    user rather than working any Task. Skip this check when `<rootKind>` is

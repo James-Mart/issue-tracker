@@ -74,3 +74,6 @@ After all six return:
    **zero findings** (truly clean). Do **not** dump the apply YAML into
    chat. Show `apply` stdout (created/updated/deleted + subtree outline)
    when apply ran.
+7. **Archive source Idea.** When this run completes successfully (no
+   unresolved escalate from step 2), follow **## Archive source Idea** in
+   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`.

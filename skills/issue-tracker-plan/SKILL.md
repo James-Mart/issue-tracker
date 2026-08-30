@@ -2,10 +2,9 @@
 name: issue-tracker-plan
 disable-model-invocation: true
 description: >-
-  Grill an Idea, todo Epic, or not-started project-level Story into a plan
-  tree via apply, raising a mockup round per affected screen, then auto-chain
-  polish. Use when the user asks to plan an Idea, flesh out a tracker plan, or
-  run issue-tracker-plan.
+  Grill an Idea into a plan tree via apply, raising a mockup round per affected
+  screen, then auto-chain polish. Use when the user asks to plan an Idea, flesh
+  out a tracker plan, or run issue-tracker-plan.
 ---
 
 # Issue Tracker — Plan (grill → plan tree)
@@ -38,20 +37,13 @@ for when one capture becomes multiple roots; do not duplicate that rule text.
 
 ## Argument
 
-An **Idea** id, an **Epic** id whose derived
-`issue epic get <id> epicStatus` is `todo`, or a **project-level Story** id
-whose derived `issue story get <id> storyStatus` is `not-started`.
+An **Idea** id.
 
 If none is given:
 
 1. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-resolve-project.md`
    and follow it. Never bare `issue list`.
-2. Run `issue tree <projectId>`. Offer only **Ideas**, Epics whose status
-   chip is `todo` (or confirm with `issue epic get <id> epicStatus`), and
-   **project-level** Stories whose status chip is `not-started` (or confirm
-   with `issue story get <id> storyStatus`; project-level = `partOf` is the
-   Project). **Do not offer** `in-progress` / `done` Epics, or Stories at
-   `in-progress` / `pr-open` / `merged` — they fail §Bootstrap gates.
+2. Run `issue tree <projectId>`. Offer only **Ideas**.
 
 ## Bootstrap
 
@@ -65,27 +57,9 @@ Before grilling:
    then consult `codingStandards` per that file using the step-1
    summary output (`codingStandards` to avoid locking a plan direction the
    standards forbid — not for implementation detail in Task prose).
-3. Kind / status gates:
-   - **Idea** — proceed.
-   - **Epic** — run `issue epic get <id> epicStatus`.
-     - `todo` → proceed.
-     - `in-progress` or `done` → **refuse** and stop. Tell the user this skill
-       only rewrites pre-implementation Epics; for an existing tree use
-       `issue-tracker-plan-polish` (or work it with `issue-tracker-work`).
-   - **Story** — confirm it is **project-level** (`issue story get <id> partOf`
-     equals `<projectId>` from step 1; refuse Epic-child Stories). Then run
-     `issue story get <id> storyStatus`.
-     - `not-started` → proceed.
-     - `in-progress`, `pr-open`, or `merged` → **refuse** and stop. Tell the
-       user this skill only rewrites not-started project-level Stories; for an
-       existing tree use `issue-tracker-plan-polish` (or work it with
-       `issue-tracker-work`).
-   - Any other kind → refuse.
-4. `issue view <id>` — load the full capture (`description.md`)
-   (`idea`, `epic`, or `story` from step 3).
-5. If the source is an **Epic** or **project-level Story**, also
-   `issue tree <id>` so the existing subtree is in context before grilling.
-6. `issue project get <projectId> trunk` — default merge-base for the
+3. Kind gate — **Idea** → proceed; any other kind → refuse.
+4. `issue view <id>` — load the full capture (`description.md`).
+5. `issue project get <projectId> trunk` — default merge-base for the
    mandatory first grill question (`<projectId>` from step 1).
 
 ## Grill-me protocol (inline)
@@ -107,12 +81,12 @@ mid-grill.
 
 - **Merge-base first** — before any other grill question, ask **one**
   question about which git ref the plan should be built on. Recommend the
-  Project **trunk** from Bootstrap step 6 via `(recommended)` in the answer
+  Project **trunk** from Bootstrap step 5 via `(recommended)` in the answer
   list. **Trunk** — proceed with the rest of the grill; Focused codebase
   research uses the workspace working tree only (omit `Ref` in spawn stubs).
   Carry the chosen merge-base and merge-policy (when non-trunk) through to
-  outline and migrate — the migrate step records them on the root (and
-  `sourceIdea` on each resulting root when the source is an Idea).
+  outline and migrate — the migrate step records them on the root and
+  `sourceIdea` on each resulting root.
   - **Non-trunk branch** — ask **one** merge-policy question for the
     resulting root (Epic or project-level Story) next. Recommend
     **`pull-request`** via `(recommended)` in the answer list. Valid values:
@@ -228,6 +202,12 @@ polish spawns parallel check agents; concurrent polish runs overload CPU):
    an approve-before-apply beat here. If polish is deferred in this session
    (e.g. the user asks to grill more before polish runs), the polish
    obligation for that root persists — deferral does not reset or cancel it.
+
+When every resulting root's polish has finished, archive the source Idea:
+`issue idea set <ideaId> archived true`. That is a no-op in the single-root
+case — polish already archived it when `planRoots` held exactly that one root
+— and it closes the multi-root case after the last root's polish. Keep the
+serial ordering above; this archive is the last action, not an extra gate.
 
 ## Spawn stubs
 

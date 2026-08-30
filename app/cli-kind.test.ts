@@ -811,3 +811,79 @@ describe("planRoots get", () => {
     expect((await runIssueCli(["idea", "get", "idea-a", "planRoots"], { env: env() })).stdout.trim()).toBe("[]");
   });
 });
+
+describe("planNotFinal get", () => {
+  let dir: string;
+  let clock = 0;
+
+  function env() {
+    return {
+      ISSUES_DIR: dir,
+      ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
+    };
+  }
+
+  function nextAt(): string {
+    clock += 1;
+    return new Date(Date.UTC(2026, 6, 10, 14, 0, clock)).toISOString();
+  }
+
+  function writeIssue(id: string, body: Record<string, unknown>): void {
+    mkdirSync(join(dir, id), { recursive: true });
+    writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
+  }
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  beforeEach(() => {
+    clock = 0;
+    dir = mkdtempSync(join(tmpdir(), "cli-kind-plan-not-final-"));
+    writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
+    writeIssue("idea-a", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("e", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      order: 1,
+      blockedBy: [],
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("s", {
+      kind: "story",
+      title: "Root story",
+      partOf: "p",
+      order: 2,
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+  });
+
+  it("returns true on epic and root story when source Idea is unarchived", async () => {
+    expect((await runIssueCli(["epic", "set", "e", "sourceIdea", "idea-a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "set", "s", "sourceIdea", "idea-a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "get", "e", "planNotFinal"], { env: env() })).stdout.trim()).toBe("true");
+    expect((await runIssueCli(["story", "get", "s", "planNotFinal"], { env: env() })).stdout.trim()).toBe("true");
+  });
+
+  it("returns false after the source Idea is archived", async () => {
+    expect((await runIssueCli(["epic", "set", "e", "sourceIdea", "idea-a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "set", "idea-a", "archived", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["epic", "get", "e", "planNotFinal"], { env: env() })).stdout.trim()).toBe("false");
+  });
+
+  it("returns false when sourceIdea is unset", async () => {
+    expect((await runIssueCli(["epic", "get", "e", "planNotFinal"], { env: env() })).stdout.trim()).toBe("false");
+    expect((await runIssueCli(["story", "get", "s", "planNotFinal"], { env: env() })).stdout.trim()).toBe("false");
+  });
+});
