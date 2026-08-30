@@ -1,9 +1,13 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useIssuesQuery } from "../api/queries";
 import { issuesById, projectIdOf } from "../lib/build-tree";
+import {
+  type IssueBackLocationState,
+  issueBackNavigateState,
+} from "../lib/issue-back";
 import { issuePath, linkNotFoundMessage } from "../lib/links";
 
 export function useIssueLinkNavigate(): {
@@ -11,6 +15,7 @@ export function useIssueLinkNavigate(): {
   hrefFor: (id: string) => string;
 } {
   const navigate = useNavigate();
+  const location = useLocation();
   const { projectId: routeProjectId } = useParams();
   const { data } = useIssuesQuery();
   const byId = useMemo(
@@ -33,7 +38,15 @@ export function useIssueLinkNavigate(): {
       toast.error(linkNotFoundMessage(id));
       return;
     }
-    navigate(issuePath(projectId, id));
+    const navigateState = issueBackNavigateState(
+      location.pathname,
+      location.search,
+      (location.state as IssueBackLocationState | null)?.issueBackStack,
+    );
+    navigate(
+      issuePath(projectId, id),
+      navigateState ? { state: navigateState } : undefined,
+    );
   };
 
   return { go, hrefFor };

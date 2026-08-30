@@ -155,6 +155,17 @@ describe("IssueDetailPage back navigation", () => {
     expect(link!.textContent?.trim()).toBe("Back");
     expect(link!.getAttribute("href")).toBe("/projects/issue-tracker");
   });
+
+  it("returns to agents when opened from the agents surface", () => {
+    const { container } = mountPage({
+      pathname: "/projects/issue-tracker/issues/capture",
+      state: { issueBackStack: [{ kind: "agents" }] },
+    });
+    const link = backLink(container);
+    expect(link).toBeTruthy();
+    expect(link!.textContent?.trim()).toBe("Back");
+    expect(link!.getAttribute("href")).toBe("/agents");
+  });
 });
 
 describe("IssueDetailPage mobile channel chrome", () => {
