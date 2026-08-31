@@ -10,6 +10,16 @@ export const BACKUP_ENGINE_STATES = ["idle", "retrying", "diverged"] as const;
 
 export type BackupEngineState = (typeof BACKUP_ENGINE_STATES)[number];
 
+export const BACKUP_SURFACE_STATES = [
+  "unconfigured",
+  "stale",
+  "retrying",
+  "diverged",
+  "healthy",
+] as const;
+
+export type BackupSurfaceState = (typeof BACKUP_SURFACE_STATES)[number];
+
 export type BackupEngineStatus = {
   lastSuccessAt: string | null;
   state: BackupEngineState;
@@ -102,6 +112,22 @@ export function writeBackupStatus(
 ): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, formatBackupStatus(status));
+}
+
+/**
+ * Surface state a caller renders. `unconfigured` / `stale` / `healthy` are
+ * derived from the remote and timestamps; `retrying` / `diverged` come from
+ * the engine record.
+ */
+export function deriveBackupSurfaceState(
+  remote: string | null | undefined,
+  engine: BackupEngineStatus,
+): BackupSurfaceState {
+  if (remote == null) return "unconfigured";
+  if (engine.state === "retrying") return "retrying";
+  if (engine.state === "diverged") return "diverged";
+  if (isBackupStale(engine.lastSuccessAt, new Date())) return "stale";
+  return "healthy";
 }
 
 /** Stale when there has never been a success, or the last one is older than 24h. */

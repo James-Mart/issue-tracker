@@ -9,6 +9,7 @@ import { join } from "path";
 import { distDir, hasBuiltClient, isProdEnv } from "./config.js";
 import { errorHandler } from "./errors.js";
 import { agentModelsRouter } from "./routes/agent-models.js";
+import { createBackupRouter } from "./routes/backup.js";
 import { createConversationsRouter } from "./routes/conversations.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { createHealthRouter } from "./routes/health.js";
@@ -87,6 +88,7 @@ export function createApp(
   app.use("/api/agent-models", agentModelsRouter);
   app.use("/api/health", createHealthRouter());
   app.use("/api/restart", createRestartRouter(sessions, initiateRestart));
+  app.use("/api/backup", createBackupRouter());
   app.get("/api/diagnostics/connections", (_req, res) => {
     res.json(getConnectionDiagnostics());
   });

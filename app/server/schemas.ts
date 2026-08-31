@@ -1213,6 +1213,15 @@ export const backupConfigSchema = z.object({
   enabled: z.boolean(),
 });
 
+export const backupPutBodySchema = z
+  .object({
+    remote: z.string(),
+    enabled: z.boolean(),
+  })
+  .strict();
+
+export type BackupPutBody = z.infer<typeof backupPutBodySchema>;
+
 export const appConfigSchema = z
   .object({
     backup: backupConfigSchema.optional(),

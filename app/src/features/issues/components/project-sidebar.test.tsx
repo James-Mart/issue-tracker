@@ -117,3 +117,37 @@ describe("ProjectSidebar pipeline destination", () => {
     );
   });
 });
+
+describe("ProjectSidebar settings entry", () => {
+  it("renders Settings with href /settings", () => {
+    const { container } = mountSidebar("/");
+    expect(navLink(container, "Settings").getAttribute("href")).toBe("/settings");
+  });
+
+  it("renders Settings at collapsed width", () => {
+    const { container } = mountSidebar("/", false);
+    expect(navLink(container, "Settings").getAttribute("href")).toBe("/settings");
+  });
+
+  it("appears after Cockpit, Agents, and Pipeline", () => {
+    const { container } = mountSidebar("/");
+    const labels = Array.from(container.querySelectorAll("a"))
+      .map((el) => el.textContent?.trim())
+      .filter((label): label is string => Boolean(label));
+    const cockpitIndex = labels.indexOf("Cockpit");
+    const agentsIndex = labels.indexOf("Agents");
+    const pipelineIndex = labels.indexOf("Pipeline");
+    const settingsIndex = labels.indexOf("Settings");
+    expect(cockpitIndex).toBeGreaterThanOrEqual(0);
+    expect(agentsIndex).toBeGreaterThan(cockpitIndex);
+    expect(pipelineIndex).toBeGreaterThan(agentsIndex);
+    expect(settingsIndex).toBeGreaterThan(pipelineIndex);
+  });
+
+  it("marks Settings selected on /settings", () => {
+    const { container } = mountSidebar("/settings");
+    expect(navButton(container, "Settings").getAttribute("data-active")).toBe(
+      "true",
+    );
+  });
+});
