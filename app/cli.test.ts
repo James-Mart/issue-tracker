@@ -981,6 +981,15 @@ describe("idea add / get / set", () => {
     expect((await runIssueCli(["idea", "get", "gate-me", "approvePlan"], { env: env() })).stdout).toBe("true\n");
   });
 
+  it("gets and sets approvalPending", async () => {
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Gate pending"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "gate-pending", "approvalPending"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["idea", "set", "gate-pending", "approvalPending", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "gate-pending", "approvalPending"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["idea", "set", "gate-pending", "approvalPending", "false"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "gate-pending", "approvalPending"], { env: env() })).stdout).toBe("");
+  });
+
   it("rejects add and set when the parent is not a project", async () => {
     const badAdd = await runIssueCli(["idea", "add", "--part-of", "e", "Bad parent"], { env: env() });
     expect(badAdd.status).toBe(1);

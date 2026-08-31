@@ -84,6 +84,7 @@ export const IDEA_RUNTIME_OPTIONAL_KEYS = [
   "labels",
   "stakeholder",
   "approvePlan",
+  "approvalPending",
 ] as const;
 
 // Task mergeable keys that are not imperative-only. Imperative-only keys
@@ -135,6 +136,7 @@ export type NullClearableObjectKey = (typeof NULL_CLEARABLE_OBJECT_KEYS)[number]
 export const FALSE_CLEARS_KEYS = [
   "noDiff",
   "approvePlan",
+  "approvalPending",
 ] as const satisfies readonly (keyof IssuePatch)[];
 
 export type FalseClearsKey = (typeof FALSE_CLEARS_KEYS)[number];
@@ -176,6 +178,7 @@ export const FIELD_LABELS = {
   personas: "Personas",
   stakeholder: "Stakeholder",
   approvePlan: "Approve plan",
+  approvalPending: "Approval pending",
   sourceIdea: "Source idea",
   generatedIssues: "Generated issues",
 } as const;

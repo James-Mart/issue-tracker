@@ -399,6 +399,9 @@ export function create(input: CreateInput): Promise<IssueRecord> {
       if (input.approvePlan === true) {
         draft.approvePlan = true;
       }
+      if (input.approvalPending === true) {
+        draft.approvalPending = true;
+      }
     }
     if (input.kind === "story") {
       draft.merged = false;
