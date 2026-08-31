@@ -19,6 +19,13 @@ Model availability is therefore never a reason to refuse or escalate.
   On resume: re-read ALL mandatory sources (source issue + vision +
   inspirationApps) and re-run **both** refuse checks. Proceed only if the gap
   is closed; otherwise refuse again with specifics.
+- **Subsystem-vision consult** — a **sanctioned pause**: an interruption in
+  place, not a restart — work stops where it stands and this same run
+  continues once the doc exists. No re-invoke and no new session.
+- **Human approval gate** — a **sanctioned pause**: an interruption in
+  place, not a restart — work stops where it stands and this same
+  stakeholder agent resumes when the human replies. No re-invoke and no
+  new session.
 - **Subagent-failure escalation** (a discriminator / planner returned `ok: false`
   or an unusable result) — report which delegated role failed and how to the human
   with no silent fallback and no model-defaulting. Once the human addresses the

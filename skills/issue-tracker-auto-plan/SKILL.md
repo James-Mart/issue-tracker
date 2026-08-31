@@ -219,13 +219,28 @@ specifics and stop; otherwise proceed to Flow.
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
 
-   **Post-outline gate.** The planner puts this gate to you once. With the
-   approval-gate flag empty (**## Bootstrap** step 6), answer it yourself from
-   the stakeholder decision heuristics. With the flag `true` it is the human's:
-   run `issue idea set <issueId> approvalPending true`, then end your turn with
-   one message in this order — the planner's outline exactly as it was returned,
-   a `---` rule, then a `## Stakeholder recommendation` heading over the answer
-   you would have given.
+   **Post-outline gate.** The planner puts this gate to you after each
+   outline. With the approval-gate flag empty (**## Bootstrap** step 6),
+   answer it yourself from the stakeholder decision heuristics. With the
+   flag `true` it is the human's: run
+   `issue idea set <issueId> approvalPending true`, then end your turn
+   with one message in this order — the planner's outline exactly as it
+   was returned, a `---` rule, then a `## Stakeholder recommendation`
+   heading over the answer you would have given.
+
+   When the human replies, re-enter the same planner with its `resumeId`
+   from step 2 — a yes as the gate answer, or the rejection together with
+   the human's reason. A rejection comes back as a revised outline; post
+   it the same way as the first. On the approved path, inside the turn
+   that relays the yes, run
+   `issue idea set <issueId> approvalPending false`. The marker's
+   lifecycle across rejection rounds is fixed by
+   `issue:awaiting-approval-status`.
+
+   **Abandon** is the human saying to stop rather than answering the
+   gate. Run `issue idea set <issueId> approvalPending false`, leave the
+   planner un-resumed, write nothing to the tree, and end the run. The
+   Idea falls back to `awaiting-direction`.
 
    **Terse grill answers.** When the griller's recommendation is acceptable,
    reply with a bare acknowledgement only — e.g. "I agree" or "agreed with your
