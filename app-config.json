@@ -1,6 +1,0 @@
-{
-  "backup": {
-    "remote": "git@github.com:test/backup.git",
-    "enabled": true
-  }
-}
