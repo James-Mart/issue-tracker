@@ -82,37 +82,69 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("ProjectSidebar pipeline destination", () => {
-  it("renders Pipeline at expanded width with href /pipeline", () => {
+describe("ProjectSidebar pipeline destinations", () => {
+  it("renders Pipelines at expanded width with href /pipelines", () => {
     const { container } = mountSidebar("/");
-    expect(navLink(container, "Pipeline").getAttribute("href")).toBe("/pipeline");
+    expect(navLink(container, "Pipelines").getAttribute("href")).toBe("/pipelines");
   });
 
-  it("renders Pipeline at collapsed width", () => {
+  it("renders Runs at expanded width with href /runs", () => {
+    const { container } = mountSidebar("/");
+    expect(navLink(container, "Runs").getAttribute("href")).toBe("/runs");
+  });
+
+  it("renders Pipelines and Runs at collapsed width", () => {
     const { container } = mountSidebar("/", false);
-    expect(navLink(container, "Pipeline").getAttribute("href")).toBe("/pipeline");
+    expect(navLink(container, "Pipelines").getAttribute("href")).toBe("/pipelines");
+    expect(navLink(container, "Runs").getAttribute("href")).toBe("/runs");
   });
 
-  it("navigates to /pipeline when Pipeline is activated", () => {
+  it("navigates to /pipelines when Pipelines is activated", () => {
     const { container } = mountSidebar("/");
     act(() => {
-      navLink(container, "Pipeline").click();
+      navLink(container, "Pipelines").click();
     });
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline");
+    ).toBe("/pipelines");
   });
 
-  it("marks Pipeline selected on /pipeline/runs/:conversationId", () => {
-    const { container } = mountSidebar("/pipeline/runs/conv-abc");
-    expect(navButton(container, "Pipeline").getAttribute("data-active")).toBe(
+  it("navigates to /runs when Runs is activated", () => {
+    const { container } = mountSidebar("/");
+    act(() => {
+      navLink(container, "Runs").click();
+    });
+    expect(
+      container.querySelector('[data-testid="location-probe"]')?.textContent,
+    ).toBe("/runs");
+  });
+
+  it("marks Pipelines selected on /pipelines", () => {
+    const { container } = mountSidebar("/pipelines");
+    expect(navButton(container, "Pipelines").getAttribute("data-active")).toBe(
+      "true",
+    );
+    expect(navButton(container, "Runs").getAttribute("data-active")).not.toBe(
       "true",
     );
   });
 
-  it("marks Pipeline selected on /pipeline/runs", () => {
-    const { container } = mountSidebar("/pipeline/runs");
-    expect(navButton(container, "Pipeline").getAttribute("data-active")).toBe(
+  it("marks Runs selected on /runs/:conversationId", () => {
+    const { container } = mountSidebar("/runs/conv-abc");
+    expect(navButton(container, "Runs").getAttribute("data-active")).toBe(
+      "true",
+    );
+    expect(navButton(container, "Pipelines").getAttribute("data-active")).not.toBe(
+      "true",
+    );
+  });
+
+  it("marks Runs selected on /runs", () => {
+    const { container } = mountSidebar("/runs");
+    expect(navButton(container, "Runs").getAttribute("data-active")).toBe(
+      "true",
+    );
+    expect(navButton(container, "Pipelines").getAttribute("data-active")).not.toBe(
       "true",
     );
   });
@@ -129,19 +161,21 @@ describe("ProjectSidebar settings entry", () => {
     expect(navLink(container, "Settings").getAttribute("href")).toBe("/settings");
   });
 
-  it("appears after Cockpit, Agents, and Pipeline", () => {
+  it("appears after Cockpit, Agents, Pipelines, and Runs", () => {
     const { container } = mountSidebar("/");
     const labels = Array.from(container.querySelectorAll("a"))
       .map((el) => el.textContent?.trim())
       .filter((label): label is string => Boolean(label));
     const cockpitIndex = labels.indexOf("Cockpit");
     const agentsIndex = labels.indexOf("Agents");
-    const pipelineIndex = labels.indexOf("Pipeline");
+    const pipelinesIndex = labels.indexOf("Pipelines");
+    const runsIndex = labels.indexOf("Runs");
     const settingsIndex = labels.indexOf("Settings");
     expect(cockpitIndex).toBeGreaterThanOrEqual(0);
     expect(agentsIndex).toBeGreaterThan(cockpitIndex);
-    expect(pipelineIndex).toBeGreaterThan(agentsIndex);
-    expect(settingsIndex).toBeGreaterThan(pipelineIndex);
+    expect(pipelinesIndex).toBeGreaterThan(agentsIndex);
+    expect(runsIndex).toBeGreaterThan(pipelinesIndex);
+    expect(settingsIndex).toBeGreaterThan(runsIndex);
   });
 
   it("marks Settings selected on /settings", () => {

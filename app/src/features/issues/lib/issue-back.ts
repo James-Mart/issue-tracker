@@ -32,7 +32,14 @@ export function originEntryFromLocation(
   if (projectMatch) {
     return { kind: "structure", projectId: projectMatch[1] };
   }
-  if (pathname === "/pipeline" || pathname.startsWith("/pipeline/")) {
+  if (
+    pathname === "/pipelines" ||
+    pathname.startsWith("/pipelines/") ||
+    pathname === "/runs" ||
+    pathname.startsWith("/runs/") ||
+    pathname === "/pipeline" ||
+    pathname.startsWith("/pipeline/")
+  ) {
     return { kind: "pipeline", to: pathname + search };
   }
   if (pathname === "/agents" || pathname.startsWith("/agents/")) {

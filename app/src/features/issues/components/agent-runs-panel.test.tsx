@@ -689,8 +689,8 @@ describe("AgentRunsPanel", () => {
         )
         ?.getAttribute("href");
 
-    expect(hrefFor("del-a")).toBe("/pipeline/runs/conv-a");
-    expect(hrefFor("del-b")).toBe("/pipeline/runs/conv%2Fb");
+    expect(hrefFor("del-a")).toBe("/runs/conv-a");
+    expect(hrefFor("del-b")).toBe("/runs/conv%2Fb");
   });
 
   it("does not expand a collapsed run when the diagram link is activated", () => {
@@ -723,7 +723,7 @@ describe("AgentRunsPanel", () => {
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline/runs/conv-1");
+    ).toBe("/runs/conv-1");
   });
 
   it("subscribes to the work root conversation and appends a matching run in startedAt order", () => {
@@ -1046,6 +1046,6 @@ describe("AgentRunCard", () => {
       container
         .querySelector('[data-testid="agent-run-diagram-link"]')
         ?.getAttribute("href"),
-    ).toBe("/pipeline/runs/conv-1");
+    ).toBe("/runs/conv-1");
   });
 });

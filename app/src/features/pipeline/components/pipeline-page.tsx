@@ -43,18 +43,11 @@ import {
   PipelineStepSourceSheet,
 } from "./pipeline-step-source";
 
-type PipelineView = "design" | "runs";
-
-const PIPELINE_VIEWS: { id: PipelineView; label: string; to: string }[] = [
-  { id: "design", label: "Design", to: "/pipeline" },
-  { id: "runs", label: "Runs", to: "/pipeline/runs" },
-];
-
-function PipelineHeader() {
+function PageEyebrow({ label }: { label: string }) {
   return (
     <header>
       <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
-        Pipeline
+        {label}
       </p>
     </header>
   );
@@ -215,7 +208,7 @@ function SelectedRunSequence({
       <Sheet
         open
         onOpenChange={(open) => {
-          if (!open) navigate("/pipeline/runs", { replace: true });
+          if (!open) navigate("/runs", { replace: true });
         }}
       >
         <SheetContent
@@ -254,40 +247,6 @@ function SelectedRunSequence({
     <div className="flex min-w-0 flex-1 flex-col">
       <RunSequencePaneHeader sequence={sequence} layout={layout} />
       <RunSequenceDiagram sequence={sequence} layout={layout} />
-    </div>
-  );
-}
-
-function PipelineViewSwitch({ activeView }: { activeView: PipelineView }) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Pipeline view"
-      className="flex flex-wrap items-center gap-0.5 rounded-md border border-border p-0.5"
-    >
-      {PIPELINE_VIEWS.map(({ id, label, to }) => {
-        const selected = activeView === id;
-        return (
-          <Link
-            key={id}
-            to={to}
-            role="tab"
-            aria-selected={selected}
-            id={`pipeline-view-tab-${id}`}
-            aria-controls={`pipeline-view-panel-${id}`}
-            tabIndex={selected ? 0 : -1}
-            className={cn(
-              "rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-xs font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              selected
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </Link>
-        );
-      })}
     </div>
   );
 }
@@ -410,34 +369,26 @@ function PipelineDesignView() {
   );
 }
 
-/** Top-level Pipeline destination: design diagram and run history views. */
+/** Top-level Pipelines and Runs destinations. */
 export function PipelinePage() {
   const { pathname } = useLocation();
   const { conversationId } = useParams<{ conversationId?: string }>();
-  const activeView: PipelineView = pathname.startsWith("/pipeline/runs")
-    ? "runs"
-    : "design";
+  const isRunsView =
+    pathname === "/runs" || pathname.startsWith("/runs/");
 
   return (
     <PageShell>
-      <PipelineHeader />
-      <PipelineViewSwitch activeView={activeView} />
-      <div
-        role="tabpanel"
-        id={`pipeline-view-panel-${activeView}`}
-        aria-labelledby={`pipeline-view-tab-${activeView}`}
-      >
-        {activeView === "design" ? (
-          <PipelineDesignView />
-        ) : (
-          <PipelineRunsView
-            conversationId={conversationId}
-            renderSequence={(id, layout) => (
-              <SelectedRunSequence conversationId={id} layout={layout} />
-            )}
-          />
-        )}
-      </div>
+      <PageEyebrow label={isRunsView ? "Runs" : "Pipelines"} />
+      {isRunsView ? (
+        <PipelineRunsView
+          conversationId={conversationId}
+          renderSequence={(id, layout) => (
+            <SelectedRunSequence conversationId={id} layout={layout} />
+          )}
+        />
+      ) : (
+        <PipelineDesignView />
+      )}
     </PageShell>
   );
 }

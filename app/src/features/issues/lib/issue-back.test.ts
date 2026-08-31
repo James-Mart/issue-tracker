@@ -26,6 +26,22 @@ describe("originEntryFromLocation", () => {
   });
 
   it("maps pipeline routes with pathname and search", () => {
+    expect(originEntryFromLocation("/pipelines", "")).toEqual({
+      kind: "pipeline",
+      to: "/pipelines",
+    });
+    expect(originEntryFromLocation("/pipelines", "?pipeline=work")).toEqual({
+      kind: "pipeline",
+      to: "/pipelines?pipeline=work",
+    });
+    expect(originEntryFromLocation("/runs", "")).toEqual({
+      kind: "pipeline",
+      to: "/runs",
+    });
+    expect(originEntryFromLocation("/runs/conv-1", "")).toEqual({
+      kind: "pipeline",
+      to: "/runs/conv-1",
+    });
     expect(originEntryFromLocation("/pipeline", "")).toEqual({
       kind: "pipeline",
       to: "/pipeline",
@@ -69,8 +85,8 @@ describe("issueBackTo", () => {
 
   it("routes pipeline, agents, and issue entries", () => {
     expect(
-      issueBackTo({ kind: "pipeline", to: "/pipeline/runs/conv-1" }),
-    ).toBe("/pipeline/runs/conv-1");
+      issueBackTo({ kind: "pipeline", to: "/runs/conv-1" }),
+    ).toBe("/runs/conv-1");
     expect(issueBackTo({ kind: "agents" })).toBe("/agents");
     expect(
       issueBackTo({ kind: "issue", projectId: "p1", issueId: "story-1" }),
