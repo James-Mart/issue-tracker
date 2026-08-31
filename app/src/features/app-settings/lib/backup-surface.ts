@@ -56,3 +56,48 @@ export function formatBackupLastPush(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/** Compact duration since last push for the top-bar chip (e.g. 2h, 45m). */
+export function formatBackupChipDuration(
+  lastSuccessAt: string | null,
+  now: Date = new Date(),
+): string {
+  if (lastSuccessAt === null) return "—";
+  const then = Date.parse(lastSuccessAt);
+  if (Number.isNaN(then)) return "—";
+  const ms = now.getTime() - then;
+  if (ms < 0) return "—";
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24 * 7) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
+/** Warning chip treatment — configured mirror not protecting data (not retrying). */
+export function backupChipIsWarning(state: BackupSurfaceState): boolean {
+  return state === "stale" || state === "diverged";
+}
+
+/** Load-bearing hover title and accessible label for the top-bar backup chip. */
+export function backupChipAccessibleLabel(
+  state: BackupSurfaceState,
+  lastSuccessAt: string | null,
+  error: string | null,
+): string {
+  if (state === "healthy") {
+    if (lastSuccessAt) {
+      return `Last backup push: ${formatBackupLastPush(lastSuccessAt)}`;
+    }
+    return "No backup push yet";
+  }
+  const problem = backupProblem(state, error);
+  if (problem) return problem.message;
+  if (lastSuccessAt) {
+    return `Last backup push: ${formatBackupLastPush(lastSuccessAt)}`;
+  }
+  return "Backup mirror is not protecting data";
+}

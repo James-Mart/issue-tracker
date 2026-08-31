@@ -12,6 +12,7 @@ import {
   useCockpitLaunchIssuesSync,
   useCockpitLaunchStore,
 } from "../store/use-cockpit-launch-store";
+import { BackupChip } from "./backup-chip";
 import { RestartControl } from "./restart-control";
 
 export function TopBar() {
@@ -57,6 +58,7 @@ export function TopBar() {
             {live ? "agents on the line" : "all quiet"}
           </span>
         </span>
+        <BackupChip />
       </div>
       <div className="flex min-w-0 items-start justify-end gap-2">
         <RestartControl />
