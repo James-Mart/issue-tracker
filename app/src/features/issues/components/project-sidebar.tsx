@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Settings,
   Trash2,
   Workflow,
   type LucideIcon,
@@ -22,6 +23,7 @@ import {
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupAction,
   SidebarGroupContent,
@@ -132,6 +134,8 @@ export function ProjectSidebar() {
   const isAgents = pathname === "/agents" || pathname.startsWith("/agents/");
   const isPipeline =
     pathname === "/pipeline" || pathname.startsWith("/pipeline/");
+  const isSettings =
+    pathname === "/settings" || pathname.startsWith("/settings/");
   const showProjectRows =
     sidebarState === "collapsed" || projectsSectionOpen;
 
@@ -280,6 +284,17 @@ export function ProjectSidebar() {
           ) : null}
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu>
+          <NavItem
+            to="/settings"
+            isActive={isSettings}
+            tooltip="Settings"
+            label="Settings"
+            icon={Settings}
+          />
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }
