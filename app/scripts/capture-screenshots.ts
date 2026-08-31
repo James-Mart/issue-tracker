@@ -207,8 +207,8 @@ async function gotoPath(page: Page, baseUrl: string, path: string): Promise<void
 }
 
 const ISSUE_DETAIL_PATH = /^\/projects\/[^/]+\/issues\/[^/]+/;
-const PIPELINE_RUNS_PATH = /^\/pipeline\/runs(?:\/|$)/;
-const PIPELINE_SELECTED_RUN_PATH = /^\/pipeline\/runs\/.+/;
+const PIPELINE_RUNS_PATH = /^\/runs(?:\/|$)/;
+const PIPELINE_SELECTED_RUN_PATH = /^\/runs\/.+/;
 
 /** Index scan runs `runSequence` per conversation; 20s misses a cold load. */
 export const PIPELINE_RUNS_READY_MS = 90_000;

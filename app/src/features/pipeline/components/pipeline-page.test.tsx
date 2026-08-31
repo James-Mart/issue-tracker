@@ -133,6 +133,11 @@ function pipelineTabs(container: ParentNode): HTMLElement[] {
   return Array.from(list.querySelectorAll('[role="tab"]'));
 }
 
+function pageEyebrow(container: ParentNode): string | null {
+  const header = container.querySelector("header p");
+  return header?.textContent?.trim() ?? null;
+}
+
 function diagram(container: ParentNode): HTMLElement {
   const el = container.querySelector('[data-testid="pipeline-diagram"]');
   if (!(el instanceof HTMLElement)) {
@@ -389,11 +394,14 @@ afterEach(() => {
 });
 
 describe("PipelinePage", () => {
-  it("renders the planning pipeline diagram on /pipeline", () => {
+  it("renders the planning pipeline diagram on /pipelines with a Pipelines eyebrow", () => {
     const { container } = mountPipelinePage("/pipelines");
+    expect(pageEyebrow(container)).toBe("Pipelines");
     expect(diagram(container).getAttribute("data-pipeline")).toBe("planning");
     expect(container.textContent).toContain("Planning");
-    expect(tab(container, "Design").getAttribute("aria-selected")).toBe("true");
+    expect(
+      container.querySelector('[role="tablist"][aria-label="Pipeline view"]'),
+    ).toBeNull();
   });
 
   it("offers every declared pipeline and defaults to planning", () => {
@@ -454,32 +462,25 @@ describe("PipelinePage", () => {
     ).toBe("/pipelines");
   });
 
-  it("navigates to /pipeline/runs when Runs is selected", async () => {
+  it("renders a Runs eyebrow on /runs", async () => {
     stubRuns();
-    const { container } = mountPipelinePage("/pipelines");
-    act(() => {
-      tab(container, "Runs").click();
-    });
+    const { container } = mountPipelinePage("/runs");
+    await flush();
+    expect(pageEyebrow(container)).toBe("Runs");
+    expect(container.textContent).toContain("Recent runs");
+    expect(
+      container.querySelector('[role="tablist"][aria-label="Pipeline view"]'),
+    ).toBeNull();
+  });
+
+  it("redirects /pipeline/runs/:conversationId to /runs/:conversationId", async () => {
+    stubRuns(FIVE_RUNS);
+    const { container } = mountPipelinePage("/pipeline/runs/c");
     await flush();
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/runs");
-    expect(container.textContent).toContain("Recent runs");
-    expect(tab(container, "Runs").getAttribute("aria-selected")).toBe("true");
-  });
-
-  it("navigates to /pipeline when Design is selected from runs", () => {
-    stubRuns();
-    const { container } = mountPipelinePage("/runs");
-    act(() => {
-      tab(container, "Design").click();
-    });
-    expect(
-      container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipelines");
-    expect(
-      container.querySelector('[data-testid="pipeline-diagram"]'),
-    ).not.toBeNull();
+    ).toBe("/runs/c");
+    expect(pageEyebrow(container)).toBe("Runs");
   });
 
   it("renders every fetched run newest-first at desktop width", async () => {
@@ -498,7 +499,7 @@ describe("PipelinePage", () => {
     ).toBeNull();
   });
 
-  it("routes selection to /pipeline/runs/:conversationId", async () => {
+  it("routes selection to /runs/:conversationId", async () => {
     stubRuns(FIVE_RUNS);
     const { container } = mountPipelinePage("/runs");
     await flush();
@@ -517,7 +518,6 @@ describe("PipelinePage", () => {
     stubRuns(FIVE_RUNS);
     const { container } = mountPipelinePage("/runs/d");
     await flush();
-    expect(tab(container, "Runs").getAttribute("aria-selected")).toBe("true");
     expect(runCard(container, "d").getAttribute("data-current")).toBe("true");
     expect(runCard(container, "a").getAttribute("data-current")).toBeNull();
   });
@@ -818,7 +818,7 @@ describe("PipelinePage", () => {
     ).not.toBeNull();
   });
 
-  it("dismisses the phone sequence sheet back to /pipeline/runs", async () => {
+  it("dismisses the phone sequence sheet back to /runs", async () => {
     mockViewport(390);
     stubRuns(FIVE_RUNS);
     const { container } = mountPipelinePage("/runs/e");

@@ -58,7 +58,7 @@ describe("pipelineRunsPageReady", () => {
   it("treats a selected run as ready when the diagram is up and the list is still loading", () => {
     expect(
       pipelineRunsPageReady({
-        pathname: "/pipeline/runs/plan-pipeline-fixes",
+        pathname: "/runs/plan-pipeline-fixes",
         body: "Loading runs… SEQUENCE",
         hasList: false,
         hasDiagram: true,
@@ -70,7 +70,7 @@ describe("pipelineRunsPageReady", () => {
   it("waits while a selected run's sequence is still loading", () => {
     expect(
       pipelineRunsPageReady({
-        pathname: "/pipeline/runs/plan-pipeline-fixes",
+        pathname: "/runs/plan-pipeline-fixes",
         body: "Loading sequence…",
         hasList: true,
         hasDiagram: false,
@@ -79,10 +79,10 @@ describe("pipelineRunsPageReady", () => {
     ).toBe(false);
   });
 
-  it("still requires the index to leave Loading runs on /pipeline/runs", () => {
+  it("still requires the index to leave Loading runs on /runs", () => {
     expect(
       pipelineRunsPageReady({
-        pathname: "/pipeline/runs",
+        pathname: "/runs",
         body: "Loading runs…",
         hasList: false,
         hasDiagram: false,
@@ -91,7 +91,7 @@ describe("pipelineRunsPageReady", () => {
     ).toBe(false);
     expect(
       pipelineRunsPageReady({
-        pathname: "/pipeline/runs",
+        pathname: "/runs",
         ...listIdle,
       }),
     ).toBe(true);

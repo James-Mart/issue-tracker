@@ -10,6 +10,7 @@ import {
   Plus,
   Settings,
   Trash2,
+  History,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -132,8 +133,9 @@ export function ProjectSidebar() {
 
   const isCockpit = pathname === "/";
   const isAgents = pathname === "/agents" || pathname.startsWith("/agents/");
-  const isPipeline =
-    pathname === "/pipeline" || pathname.startsWith("/pipeline/");
+  const isPipelines =
+    pathname === "/pipelines" || pathname.startsWith("/pipelines/");
+  const isRuns = pathname === "/runs" || pathname.startsWith("/runs/");
   const isSettings =
     pathname === "/settings" || pathname.startsWith("/settings/");
   const showProjectRows =
@@ -178,11 +180,18 @@ export function ProjectSidebar() {
               icon={Bot}
             />
             <NavItem
-              to="/pipeline"
-              isActive={isPipeline}
-              tooltip="Pipeline"
-              label="Pipeline"
+              to="/pipelines"
+              isActive={isPipelines}
+              tooltip="Pipelines"
+              label="Pipelines"
               icon={Workflow}
+            />
+            <NavItem
+              to="/runs"
+              isActive={isRuns}
+              tooltip="Runs"
+              label="Runs"
+              icon={History}
             />
           </SidebarMenu>
         </SidebarGroup>
