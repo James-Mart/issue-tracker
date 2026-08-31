@@ -93,6 +93,18 @@ describe("FlowRow", () => {
     expect(container.textContent).toContain("planning");
   });
 
+  it("shows the amber awaiting approval badge without a demand icon", () => {
+    const container = mountRow(idea("gate"), {
+      blocked: false,
+      ideaStatus: "awaiting-approval",
+    });
+    expect(
+      container.querySelector('[aria-label="needs attention"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("awaiting approval");
+    expect(container.textContent).not.toContain("planning");
+  });
+
   it("shows the demand icon and no planning badge on planned Ideas", () => {
     const container = mountRow(idea("planned"), {
       blocked: false,

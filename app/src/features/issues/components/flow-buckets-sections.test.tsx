@@ -251,6 +251,33 @@ describe("partitionCockpitBuckets", () => {
       "ready",
     ]);
   });
+
+  it("orders awaiting-approval above stalled and flagged rows", () => {
+    const approval = row(idea("approval"), {
+      blocked: false,
+      ideaStatus: "awaiting-approval",
+    });
+    const stalled = row(idea("stalled"), {
+      blocked: false,
+      ideaStatus: "awaiting-direction",
+    });
+    const flagged = row(epic("flagged", true), {
+      blocked: false,
+      epicStatus: "todo",
+    });
+
+    const partitioned = partitionCockpitBuckets(
+      emptyBuckets({
+        ready: [stalled, approval, flagged],
+      }),
+    );
+
+    expect(partitioned.needsAttention.map((item) => item.issue.id)).toEqual([
+      "approval",
+      "stalled",
+      "flagged",
+    ]);
+  });
 });
 
 describe("FlowBucketsSections", () => {

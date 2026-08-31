@@ -523,11 +523,17 @@ describe("flowBuckets", () => {
 });
 
 describe("flowItemNeedsAttention", () => {
-  it("treats awaiting-direction and planned Ideas as attention and ignores implementing Stories", () => {
+  it("treats awaiting-direction, awaiting-approval, and planned Ideas as attention and ignores implementing Stories", () => {
     expect(
       flowItemNeedsAttention({
         issue: idea("awaiting", "p"),
         state: { blocked: false, ideaStatus: "awaiting-direction" },
+      }),
+    ).toBe(true);
+    expect(
+      flowItemNeedsAttention({
+        issue: idea("approval", "p"),
+        state: { blocked: false, ideaStatus: "awaiting-approval" },
       }),
     ).toBe(true);
     expect(
@@ -548,6 +554,29 @@ describe("flowItemNeedsAttention", () => {
         state: { blocked: false, storyStatus: "in-progress" },
       }),
     ).toBe(false);
+  });
+});
+
+describe("partitionCockpitBuckets awaiting-approval ordering", () => {
+  it("orders awaiting-approval Ideas above awaiting-direction in needs attention", () => {
+    const issues = [
+      project("p"),
+      idea("stalled", "p"),
+      idea("approval", "p"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      stalled: { blocked: false, ideaStatus: "awaiting-direction" },
+      approval: { blocked: false, ideaStatus: "awaiting-approval" },
+    };
+
+    const { needsAttention } = partitionCockpitBuckets(
+      flowBuckets(issues, derived, { projectId: "p" }),
+    );
+
+    expect(needsAttention.map((item) => item.issue.id)).toEqual([
+      "approval",
+      "stalled",
+    ]);
   });
 });
 

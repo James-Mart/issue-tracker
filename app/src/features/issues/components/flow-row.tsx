@@ -11,12 +11,27 @@ import { issueRailNodeState } from "../lib/rail-state";
 function flowRowPlanningBadge(item: FlowItem): ReactNode | undefined {
   if (item.issue.kind !== "idea") return undefined;
   const status = item.state?.ideaStatus;
+  if (status === "awaiting-approval") {
+    return (
+      <AxisChips chips={[{ variant: "warn", label: "awaiting approval" }]} />
+    );
+  }
   if (status !== "planning" && status !== "awaiting-direction") {
     return undefined;
   }
   return (
     <AxisChips chips={[{ variant: "inProgress", label: "planning" }]} />
   );
+}
+
+function flowRowShowsAttentionTriangle(item: FlowItem): boolean {
+  if (
+    item.issue.kind === "idea" &&
+    item.state?.ideaStatus === "awaiting-approval"
+  ) {
+    return false;
+  }
+  return flowItemNeedsAttention(item);
 }
 
 export interface FlowRowProps {
@@ -61,7 +76,7 @@ export function FlowRow({
           avatar={avatar}
           chips={flowRowPlanningBadge(item)}
           blocked={Boolean(item.state?.blocked)}
-          attention={flowItemNeedsAttention(item)}
+          attention={flowRowShowsAttentionTriangle(item)}
           count={count}
           actions={actions}
           drillInTo={to}

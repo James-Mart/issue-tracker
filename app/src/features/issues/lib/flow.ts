@@ -126,7 +126,11 @@ function isFlowTopLevelRow(
 export function flowItemNeedsAttention(item: FlowItem): boolean {
   if (item.issue.kind === "idea") {
     const status = item.state?.ideaStatus;
-    return status === "awaiting-direction" || status === "planned";
+    return (
+      status === "awaiting-approval" ||
+      status === "awaiting-direction" ||
+      status === "planned"
+    );
   }
   return hasAttention(item.issue) && item.issue.needsAttention;
 }
