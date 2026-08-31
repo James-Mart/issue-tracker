@@ -723,6 +723,34 @@ describe("apply — prune by default", () => {
   });
 });
 
+describe("apply — Idea approvePlan", () => {
+  it("preserves approvePlan when re-applying the Idea doc", async () => {
+    const { apply, update } = await loadService();
+    await apply({
+      project: {
+        id: "p1",
+        title: "P1",
+        children: [{ kind: "idea", id: "i1", title: "Capture" }],
+      },
+    });
+    await update("i1", { approvePlan: true });
+    expect(readIssue("i1").approvePlan).toBe(true);
+
+    const summary = await apply({
+      project: {
+        id: "p1",
+        title: "P1",
+        children: [{ kind: "idea", id: "i1", title: "Capture renamed" }],
+      },
+    });
+    expect(summary.updated).toContain("i1");
+    expect(readIssue("i1")).toMatchObject({
+      title: "Capture renamed",
+      approvePlan: true,
+    });
+  });
+});
+
 describe("apply — interleaved project children", () => {
   it("creates interleaved Epics and Ideas with shared order from children index", async () => {
     const { apply, list } = await loadService();

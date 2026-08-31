@@ -391,9 +391,14 @@ export function create(input: CreateInput): Promise<IssueRecord> {
       draft.partOf = input.partOf;
     }
     if (input.kind === "epic") draft.blockedBy = [];
-    if (input.kind === "idea" && input.stakeholder) {
-      assertAllowedAgentModelSlug(input.stakeholder);
-      draft.stakeholder = input.stakeholder;
+    if (input.kind === "idea") {
+      if (input.stakeholder) {
+        assertAllowedAgentModelSlug(input.stakeholder);
+        draft.stakeholder = input.stakeholder;
+      }
+      if (input.approvePlan === true) {
+        draft.approvePlan = true;
+      }
     }
     if (input.kind === "story") {
       draft.merged = false;

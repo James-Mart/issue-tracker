@@ -187,6 +187,81 @@ describe("channel sessions HTTP API", () => {
     expect(listed[0].updatedAt).toEqual(expect.any(String));
   });
 
+  it("refuses planning when approvePlan is set without a stakeholder", async () => {
+    writeIssue("gate-me", {
+      kind: "idea",
+      title: "Gate me",
+      partOf: "platform",
+      order: 1,
+      archived: false,
+      approvePlan: true,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    await startApp();
+
+    const res = await fetch(
+      `${baseUrl}/api/issues/gate-me/channels/planning/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Blocked" }),
+      },
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error:
+        "approvePlan is set but this Idea has no stakeholder; approvePlan governs auto-plan only",
+      code: "conflict",
+    });
+
+    const listed = await fetch(
+      `${baseUrl}/api/issues/gate-me/channels/planning/sessions`,
+    ).then((r) => r.json());
+    expect(listed).toEqual([]);
+  });
+
+  it("creates a planning session when approvePlan is set with a stakeholder", async () => {
+    writeIssue("gated-auto", {
+      kind: "idea",
+      title: "Gated auto",
+      partOf: "platform",
+      order: 1,
+      archived: false,
+      approvePlan: true,
+      stakeholder: "composer-2.5",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    await startApp();
+
+    const res = await fetch(
+      `${baseUrl}/api/issues/gated-auto/channels/planning/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Auto plan" }),
+      },
+    );
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ id: expect.any(String) });
+  });
+
+  it("creates a planning session when approvePlan is unset without a stakeholder", async () => {
+    await startApp();
+
+    const res = await fetch(
+      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Manual grill" }),
+      },
+    );
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ id: expect.any(String) });
+  });
+
   it("refuses creation when the issue does not offer the channel", async () => {
     await startApp();
 

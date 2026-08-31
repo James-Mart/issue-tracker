@@ -85,6 +85,7 @@ export const EPIC_SET_FIELDS = {
 export const IDEA_SET_FIELDS = {
   title: { type: "string" },
   archived: { type: "boolean" },
+  approvePlan: { type: "boolean" },
   partOf: { type: "string" },
   stakeholder: { type: "agentModelSlug" },
   labels: { type: "array" },
@@ -187,6 +188,7 @@ export const IDEA_GET_FIELDS = {
   title: STORED,
   partOf: STORED,
   archived: STORED,
+  approvePlan: STORED,
   stakeholder: STORED,
   labels: STORED,
   order: STORED,
