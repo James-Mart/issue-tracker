@@ -22,6 +22,7 @@ import {
   BACKUP_IDENTITY_FILENAME,
   ensureBackupIdentity,
 } from "./store-backup-identity.js";
+import { PROJECTS_MANIFEST_FILENAME } from "./store-backup-projects-manifest.js";
 import {
   createStoreBackupSnapshotDriver,
   formatSnapshotCommitMessage,
@@ -105,6 +106,7 @@ function createTestDriver(
     },
     formatCommitMessage: formatSnapshotCommitMessage,
     ensureBackupIdentity: () => ({ storeId: "test-store-id" }),
+    writeProjectsManifest: async () => {},
     pushIfAllowed: async (workspace) => {
       gitCalls.push({ op: "push", workspace });
       return "pushed";
@@ -450,6 +452,38 @@ describe("createStoreBackupSnapshotDriver", () => {
     await first;
     expect(pushes).toBe(2);
     expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(2);
+  });
+
+  it("writes projects.json at the mirror root before staging", async () => {
+    const layout = tempStoreLayout();
+    const callOrder: string[] = [];
+    const { driver } = createTestDriver(layout, {
+      writeProjectsManifest: async (mirrorDir) => {
+        callOrder.push("manifest");
+        writeFileSync(
+          join(mirrorDir, PROJECTS_MANIFEST_FILENAME),
+          '{"generatedAt":"2026-01-01T00:00:00.000Z","projects":[]}\n',
+        );
+      },
+      stageAllChanges: async (workspace) => {
+        callOrder.push("stage");
+        expect(
+          existsSync(join(workspace, PROJECTS_MANIFEST_FILENAME)),
+        ).toBe(true);
+      },
+    });
+
+    await driver.takeSnapshot();
+
+    expect(callOrder).toEqual(["manifest", "stage"]);
+    expect(
+      existsSync(join(layout.backupMirrorDir, PROJECTS_MANIFEST_FILENAME)),
+    ).toBe(true);
+    expect(
+      existsSync(
+        join(layout.backupMirrorDir, "issues", PROJECTS_MANIFEST_FILENAME),
+      ),
+    ).toBe(false);
   });
 
   it("logs snapshot failures from the debounced callback", async () => {
