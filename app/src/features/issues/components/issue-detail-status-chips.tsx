@@ -79,6 +79,14 @@ export function IssueDetailStatusChips({
   if (issue.kind === "idea") {
     const state = derived?.[issue.id];
     const status = state?.ideaStatus;
+    if (status === "awaiting-approval") {
+      return (
+        <AxisChips
+          chips={[{ variant: "warn", label: "awaiting approval" }]}
+          className={className}
+        />
+      );
+    }
     if (status !== "planning" && status !== "awaiting-direction") {
       return null;
     }
