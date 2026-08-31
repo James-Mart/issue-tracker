@@ -15,6 +15,7 @@ import {
   STALE_COPY,
 } from "@/features/app-settings/lib/backup-surface";
 import type { BackupResponse } from "@/features/app-settings/api/queries";
+import { BACKUP_SETUP_NUDGE_STORAGE_KEY } from "@/lib/backup-setup-nudge";
 import { TopBar } from "./top-bar";
 
 const requestMock = vi.hoisted(() => vi.fn());
@@ -143,6 +144,37 @@ function backupChip(container: HTMLElement): HTMLAnchorElement {
   return chip;
 }
 
+function unconfiguredBackup(): BackupResponse {
+  return {
+    config: { remote: null, enabled: false },
+    status: {
+      state: "unconfigured",
+      lastSuccessAt: null,
+      error: null,
+    },
+  };
+}
+
+function setupNudge(container: HTMLElement): HTMLElement {
+  const nudge = container.querySelector('[data-testid="backup-setup-nudge"]');
+  if (!(nudge instanceof HTMLElement)) {
+    throw new Error("Missing backup setup nudge");
+  }
+  return nudge;
+}
+
+function dismissNudge(container: HTMLElement): void {
+  const button = container.querySelector(
+    '[data-testid="backup-setup-nudge-dismiss"]',
+  );
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error("Missing backup setup nudge dismiss");
+  }
+  act(() => {
+    button.click();
+  });
+}
+
 let mounted: ReturnType<typeof mountTopBar> | null = null;
 
 beforeEach(() => {
@@ -153,6 +185,7 @@ beforeEach(() => {
     cb();
   });
   requestMock.mockReset();
+  window.localStorage.removeItem(BACKUP_SETUP_NUDGE_STORAGE_KEY);
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-08-30T19:04:11.000Z"));
 });
@@ -264,20 +297,69 @@ describe("TopBar backup chip", () => {
     expect(backupChip(mounted.container).getAttribute("href")).toBe("/settings");
   });
 
-  it("omits the chip when backup is unconfigured", async () => {
-    stubBackup({
-      config: { remote: null, enabled: false },
-      status: {
-        state: "unconfigured",
-        lastSuccessAt: null,
-        error: null,
-      },
-    });
+  it("renders the setup nudge when backup is unconfigured", async () => {
+    stubBackup(unconfiguredBackup());
+    mounted = mountTopBar();
+    await flush();
+
+    const nudge = setupNudge(mounted.container);
+    const link = nudge.querySelector("a");
+    const dismiss = nudge.querySelector(
+      '[data-testid="backup-setup-nudge-dismiss"]',
+    );
+    expect(mounted.container.querySelector('[data-testid="backup-chip"]')).toBeNull();
+    expect(link).toBeInstanceOf(HTMLAnchorElement);
+    expect(link?.getAttribute("href")).toBe("/settings");
+    expect(nudge.textContent).toContain("Set up");
+    expect(dismiss).toBeInstanceOf(HTMLButtonElement);
+    expect(dismiss).not.toBe(link);
+  });
+
+  it("hides the setup nudge after dismiss", async () => {
+    stubBackup(unconfiguredBackup());
+    mounted = mountTopBar();
+    await flush();
+
+    dismissNudge(mounted.container);
+
+    expect(
+      mounted.container.querySelector('[data-testid="backup-setup-nudge"]'),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="backup-chip"]'),
+    ).toBeNull();
+  });
+
+  it("keeps the setup nudge dismissed across remount from persisted state", async () => {
+    stubBackup(unconfiguredBackup());
+    mounted = mountTopBar();
+    await flush();
+    dismissNudge(mounted.container);
+    unmount(mounted);
+    mounted = null;
+
     mounted = mountTopBar();
     await flush();
 
     expect(
+      mounted.container.querySelector('[data-testid="backup-setup-nudge"]'),
+    ).toBeNull();
+    expect(
       mounted.container.querySelector('[data-testid="backup-chip"]'),
     ).toBeNull();
+  });
+
+  it("renders the chip, not the nudge, when configured even if dismissal is stored", async () => {
+    window.localStorage.setItem(BACKUP_SETUP_NUDGE_STORAGE_KEY, "1");
+    stubBackup(backupResponse({ state: "healthy" }));
+    mounted = mountTopBar();
+    await flush();
+
+    expect(
+      mounted.container.querySelector('[data-testid="backup-setup-nudge"]'),
+    ).toBeNull();
+    expect(backupChip(mounted.container).getAttribute("data-backup-state")).toBe(
+      "healthy",
+    );
   });
 });
