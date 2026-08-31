@@ -8,6 +8,9 @@ const WRITE_GIT_SUBCOMMANDS = new Set([
   "commit",
   "push",
   "status",
+  "ls-remote",
+  "fetch",
+  "show",
 ]);
 
 /** @internal Test seam for stubbing git spawn. */
@@ -89,6 +92,38 @@ export async function setOriginRemote(
   url: string,
 ): Promise<void> {
   await runGitWrite(["remote", "add", "origin", url], workspace);
+}
+
+/** Add origin or replace its URL so the configured remote is what we push to. */
+export async function ensureOriginRemote(
+  workspace: string,
+  url: string,
+): Promise<void> {
+  const remotes = await runGitWrite(["remote"], workspace);
+  const names = remotes
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (names.includes("origin")) {
+    await runGitWrite(["remote", "set-url", "origin", url], workspace);
+    return;
+  }
+  await runGitWrite(["remote", "add", "origin", url], workspace);
+}
+
+export async function lsRemoteOrigin(workspace: string): Promise<string> {
+  return runGitWrite(["ls-remote", "origin"], workspace);
+}
+
+export async function fetchOrigin(workspace: string): Promise<void> {
+  await runGitWrite(["fetch", "origin"], workspace);
+}
+
+export async function showFileAtRef(
+  workspace: string,
+  spec: string,
+): Promise<string> {
+  return runGitWrite(["show", spec], workspace);
 }
 
 export async function stageAllChanges(workspace: string): Promise<void> {

@@ -3,12 +3,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { IssueError } from "./errors.js";
 import {
   commitChanges,
+  ensureOriginRemote,
+  fetchOrigin,
   hasStagedChanges,
   initRepository,
+  lsRemoteOrigin,
   pushMainToOrigin,
   runGitWrite,
   setGitWriteSpawnerForTests,
   setOriginRemote,
+  showFileAtRef,
   stageAllChanges,
   type GitWriteSpawner,
 } from "./git-write.js";
@@ -79,6 +83,83 @@ describe("setOriginRemote", () => {
       "origin",
       "git@github.com:org/backup.git",
     ]);
+  });
+});
+
+describe("ensureOriginRemote", () => {
+  it("adds origin when the remote list is empty", async () => {
+    const seen: string[][] = [];
+    stubGitWriteSpawner((args) => {
+      seen.push(args);
+      if (args[0] === "remote" && args.length === 1) {
+        return mockGitChild({ stdout: "" });
+      }
+      return mockGitChild({});
+    });
+
+    await ensureOriginRemote("/mirror/root", "git@github.com:org/backup.git");
+    expect(seen).toEqual([
+      ["remote"],
+      ["remote", "add", "origin", "git@github.com:org/backup.git"],
+    ]);
+  });
+
+  it("updates origin when it already exists", async () => {
+    const seen: string[][] = [];
+    stubGitWriteSpawner((args) => {
+      seen.push(args);
+      if (args[0] === "remote" && args.length === 1) {
+        return mockGitChild({ stdout: "origin\n" });
+      }
+      return mockGitChild({});
+    });
+
+    await ensureOriginRemote("/mirror/root", "git@github.com:org/other.git");
+    expect(seen).toEqual([
+      ["remote"],
+      ["remote", "set-url", "origin", "git@github.com:org/other.git"],
+    ]);
+  });
+});
+
+describe("lsRemoteOrigin", () => {
+  it("lists refs at origin", async () => {
+    let seenArgs: string[] = [];
+    stubGitWriteSpawner((args) => {
+      seenArgs = args;
+      return mockGitChild({ stdout: "" });
+    });
+
+    await expect(lsRemoteOrigin("/mirror/root")).resolves.toBe("");
+    expect(seenArgs).toEqual(["ls-remote", "origin"]);
+  });
+});
+
+describe("fetchOrigin", () => {
+  it("fetches origin without merging", async () => {
+    let seenArgs: string[] = [];
+    stubGitWriteSpawner((args) => {
+      seenArgs = args;
+      return mockGitChild({});
+    });
+
+    await fetchOrigin("/mirror/root");
+    expect(seenArgs).toEqual(["fetch", "origin"]);
+  });
+});
+
+describe("showFileAtRef", () => {
+  it("shows a path at a ref", async () => {
+    let seenArgs: string[] = [];
+    stubGitWriteSpawner((args) => {
+      seenArgs = args;
+      return mockGitChild({ stdout: '{"storeId":"abc"}\n' });
+    });
+
+    await expect(
+      showFileAtRef("/mirror/root", "origin/main:backup-identity.json"),
+    ).resolves.toBe('{"storeId":"abc"}\n');
+    expect(seenArgs).toEqual(["show", "origin/main:backup-identity.json"]);
   });
 });
 
@@ -163,7 +244,7 @@ describe("runGitWrite", () => {
     });
 
     await expect(
-      runGitWrite(["show", "HEAD"], "/mirror/root"),
+      runGitWrite(["merge", "origin/main"], "/mirror/root"),
     ).rejects.toMatchObject({
       code: "validation",
     });

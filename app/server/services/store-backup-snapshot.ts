@@ -14,7 +14,12 @@ import {
   backupMirrorDir,
   issuesDir,
 } from "../config.js";
-import type { AppConfig } from "../schemas.js";
+import type { AppConfig, BackupConfig } from "../schemas.js";
+import {
+  ensureBackupIdentity,
+  pushMirrorIfAllowed,
+  type BackupIdentity,
+} from "./store-backup-identity.js";
 import {
   commitChanges,
   hasStagedChanges,
@@ -25,7 +30,9 @@ import {
 export const SNAPSHOT_DEBOUNCE_MS = 60_000;
 
 /** Backup is active only when configured, enabled, and has a remote target. */
-export function isBackupMirrorActive(config: AppConfig): boolean {
+export function isBackupMirrorActive(
+  config: AppConfig,
+): config is AppConfig & { backup: BackupConfig & { remote: string } } {
   const backup = config.backup;
   if (!backup) return false;
   if (!backup.enabled) return false;
@@ -125,6 +132,12 @@ export type StoreBackupSnapshotDeps = {
   hasStagedChanges: (workspace: string) => Promise<boolean>;
   commitChanges: (workspace: string, message: string) => Promise<void>;
   formatCommitMessage: () => string;
+  ensureBackupIdentity: (mirrorDir: string) => BackupIdentity;
+  pushIfAllowed: (
+    workspace: string,
+    remoteUrl: string,
+    localStoreId: string,
+  ) => Promise<"pushed" | "refused">;
 };
 
 export function createStoreBackupSnapshotDriver(
@@ -146,7 +159,8 @@ export function createStoreBackupSnapshotDriver(
   }
 
   async function takeSnapshot(): Promise<void> {
-    if (!isBackupMirrorActive(deps.readAppConfig())) return;
+    const config = deps.readAppConfig();
+    if (!isBackupMirrorActive(config)) return;
 
     const mirrorIssuesDir = join(deps.backupMirrorDir, "issues");
     deps.syncIssuesToMirror(deps.issuesDir, mirrorIssuesDir);
@@ -155,11 +169,20 @@ export function createStoreBackupSnapshotDriver(
       await deps.initRepository(deps.backupMirrorDir);
     }
 
+    const identity = deps.ensureBackupIdentity(deps.backupMirrorDir);
+
     await deps.stageAllChanges(deps.backupMirrorDir);
-    if (!(await deps.hasStagedChanges(deps.backupMirrorDir))) return;
-    await deps.commitChanges(
+    if (await deps.hasStagedChanges(deps.backupMirrorDir)) {
+      await deps.commitChanges(
+        deps.backupMirrorDir,
+        deps.formatCommitMessage(),
+      );
+    }
+
+    await deps.pushIfAllowed(
       deps.backupMirrorDir,
-      deps.formatCommitMessage(),
+      config.backup.remote,
+      identity.storeId,
     );
   }
 
@@ -209,6 +232,9 @@ const defaultDeps = (): StoreBackupSnapshotDeps => ({
   hasStagedChanges,
   commitChanges,
   formatCommitMessage: formatSnapshotCommitMessage,
+  ensureBackupIdentity,
+  pushIfAllowed: (workspace, remoteUrl, localStoreId) =>
+    pushMirrorIfAllowed(workspace, remoteUrl, localStoreId),
 });
 
 let activeDriver: ReturnType<typeof createStoreBackupSnapshotDriver> | null =

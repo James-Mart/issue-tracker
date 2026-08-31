@@ -19,6 +19,10 @@ import {
   vi,
 } from "vitest";
 import {
+  BACKUP_IDENTITY_FILENAME,
+  ensureBackupIdentity,
+} from "./store-backup-identity.js";
+import {
   createStoreBackupSnapshotDriver,
   formatSnapshotCommitMessage,
   isBackupMirrorActive,
@@ -100,6 +104,11 @@ function createTestDriver(
       gitCalls.push({ op: "commit", workspace, message });
     },
     formatCommitMessage: formatSnapshotCommitMessage,
+    ensureBackupIdentity: () => ({ storeId: "test-store-id" }),
+    pushIfAllowed: async (workspace) => {
+      gitCalls.push({ op: "push", workspace });
+      return "pushed";
+    },
     ...overrides,
   };
 
@@ -212,9 +221,40 @@ describe("createStoreBackupSnapshotDriver", () => {
     await flushAsyncWork();
 
     expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(1);
+    expect(gitCalls.filter((call) => call.op === "push")).toHaveLength(1);
     expect(gitCalls.every((call) => call.workspace !== layout.issuesDir)).toBe(
       true,
     );
+  });
+
+  it("passes the local store identity and configured remote to the push gate", async () => {
+    const layout = tempStoreLayout();
+    let seen: { remoteUrl?: string; localStoreId?: string } = {};
+    const { driver } = createTestDriver(layout, {
+      ensureBackupIdentity: () => ({ storeId: "wired-store-id" }),
+      pushIfAllowed: async (_workspace, remoteUrl, localStoreId) => {
+        seen = { remoteUrl, localStoreId };
+        return "pushed";
+      },
+    });
+
+    await driver.takeSnapshot();
+
+    expect(seen).toEqual({
+      remoteUrl: "git@github.com:me/tracker-backup.git",
+      localStoreId: "wired-store-id",
+    });
+  });
+
+  it("keeps the local snapshot when the remote identity check refuses", async () => {
+    const layout = tempStoreLayout();
+    const { driver, gitCalls } = createTestDriver(layout, {
+      pushIfAllowed: async () => "refused",
+    });
+
+    await expect(driver.takeSnapshot()).resolves.toBeUndefined();
+    expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(1);
+    expect(gitCalls.filter((call) => call.op === "push")).toHaveLength(0);
   });
 
   it("restarts the window when a change arrives during debounce", async () => {
@@ -246,6 +286,7 @@ describe("createStoreBackupSnapshotDriver", () => {
 
     expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(0);
     expect(gitCalls.filter((call) => call.op === "stage")).toHaveLength(1);
+    expect(gitCalls.filter((call) => call.op === "push")).toHaveLength(1);
   });
 
   it("initializes the mirror directory when it is not yet a repository", async () => {
@@ -260,6 +301,31 @@ describe("createStoreBackupSnapshotDriver", () => {
 
     expect(gitCalls.some((call) => call.op === "init")).toBe(true);
     expect(existsSync(join(layout.backupMirrorDir, ".git"))).toBe(true);
+  });
+
+  it("writes backup-identity.json at the mirror root when initializing", async () => {
+    const layout = tempStoreLayout();
+    writeFileSync(join(layout.issuesDir, "seed.txt"), "seed");
+    const { driver, triggerChange } = createTestDriver(layout, {
+      ensureBackupIdentity,
+    });
+    driver.start();
+
+    triggerChange();
+    await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS);
+    await flushAsyncWork();
+
+    const identityPath = join(layout.backupMirrorDir, BACKUP_IDENTITY_FILENAME);
+    expect(existsSync(identityPath)).toBe(true);
+    expect(
+      JSON.parse(readFileSync(identityPath, "utf8")).storeId,
+    ).toEqual(expect.any(String));
+    expect(
+      JSON.parse(readFileSync(identityPath, "utf8")).storeId.length,
+    ).toBeGreaterThan(0);
+    expect(
+      existsSync(join(layout.backupMirrorDir, "issues", BACKUP_IDENTITY_FILENAME)),
+    ).toBe(false);
   });
 
   it("does nothing when backup configuration is disabled", async () => {
@@ -332,6 +398,11 @@ describe("createStoreBackupSnapshotDriver", () => {
       hasStagedChanges: async () => true,
       commitChanges: async (workspace) => {
         gitWorkspaces.push(workspace);
+      },
+      ensureBackupIdentity: () => ({ storeId: "test-store-id" }),
+      pushIfAllowed: async (workspace) => {
+        gitWorkspaces.push(workspace);
+        return "pushed";
       },
     });
 
