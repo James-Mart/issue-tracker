@@ -19,6 +19,8 @@ export let modelSlugCatalogPath = join(
 );
 /** Peer of `issuesDir` — persisted app-level settings edited at runtime. */
 export let appConfigPath = join(dirname(issuesDir), "app-config.json");
+/** Peer of `issuesDir` — local git mirror of the store; never nested under issues. */
+export let backupMirrorDir = join(dirname(issuesDir), "backup-mirror");
 
 export function refreshStorePathsFromEnv(): void {
   issuesDir = process.env.ISSUES_DIR ?? defaultIssuesDir;
@@ -28,6 +30,7 @@ export function refreshStorePathsFromEnv(): void {
     "model-slug-catalog.json",
   );
   appConfigPath = join(dirname(issuesDir), "app-config.json");
+  backupMirrorDir = join(dirname(issuesDir), "backup-mirror");
 }
 
 // Cursor SDK credential. Read once here so every `@cursor/sdk` call can pass it
