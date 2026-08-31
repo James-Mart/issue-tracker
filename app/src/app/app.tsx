@@ -35,6 +35,11 @@ const IssueDetailPage = lazy(() =>
     default: m.IssueDetailPage,
   })),
 );
+const AppSettingsPage = lazy(() =>
+  import("@/features/app-settings/components/app-settings-page").then((m) => ({
+    default: m.AppSettingsPage,
+  })),
+);
 
 const LEGACY_SELECTED_PROJECT_KEY = "issue-tracker.selectedProject";
 
@@ -65,6 +70,7 @@ export function App() {
               path="/pipeline/runs/:conversationId"
               element={<PipelinePage />}
             />
+            <Route path="/settings" element={<AppSettingsPage />} />
             <Route path="/projects/:projectId" element={<OverviewPage />} />
             <Route
               path="/projects/:projectId/issues/:id"
