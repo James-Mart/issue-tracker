@@ -206,8 +206,19 @@ export function createIssuesRouter(
     "/:id/channels/:channel/sessions",
     asyncRoute(async (req, res) => {
       const issueId = req.params.id;
-      readIssueOrThrow(issueId);
+      const issue = readIssueOrThrow(issueId);
       const channel = parseChannelParam(req.params.channel);
+      if (
+        channel === "planning" &&
+        issue.kind === "idea" &&
+        issue.approvePlan === true &&
+        !issue.stakeholder
+      ) {
+        throw new IssueError(
+          "conflict",
+          'approvePlan is set but this Idea has no stakeholder; approvePlan governs auto-plan only',
+        );
+      }
       const body = req.body as {
         model?: unknown;
         title?: unknown;
