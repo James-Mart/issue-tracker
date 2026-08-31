@@ -34,6 +34,11 @@ validateHookRegistration();
 
 await refreshAgentModelSlugCatalog();
 
+const { startStoreBackupSnapshotDriver } = await import(
+  "./services/store-backup-snapshot.js"
+);
+startStoreBackupSnapshotDriver();
+
 const app = createApp();
 
 const server = app.listen(listenPort, () => {
