@@ -29,9 +29,10 @@ the spawned discriminator / planner.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
 **Allowed writes:** `issue idea set <issueId> approvalPending` (**## Flow**
-step 3), plus finalize `attach` + `comment` — `issue idea attach`
-and `issue idea comment` on the archived source Idea (the seed after
-migration). Standout-decisions comments use
+step 3), `issue comment <rootId> --role human` on each resulting root
+after an approved gate (**## Flow** step 3), plus finalize `attach` +
+`comment` — `issue idea attach` and `issue idea comment` on the archived
+source Idea (the seed after migration). Standout-decisions comments use
 `--role stakeholder`. The only other writes are those owned by skills this
 skill itself directs you to follow — today, **`issue-tracker-vision-docs`**
 on the **§ Subsystem vision consult** path. All other `issue` use is
@@ -235,7 +236,15 @@ specifics and stop; otherwise proceed to Flow.
    that relays the yes, run
    `issue idea set <issueId> approvalPending false`. The marker's
    lifecycle across rejection rounds is fixed by
-   `issue:awaiting-approval-status`.
+   `issue:awaiting-approval-status`. After the planner returns the
+   resulting root id(s) on that approved path, comment on each with
+   `issue comment <rootId> --role human --body <text>`. The body
+   records that a human approved the plan and names the Idea
+   (`<issueId>`). This is your write, not the planner's: the planner
+   cannot tell whether a human or an agent answered its gate, so you
+   are the only party that knows a human signed off. That is what
+   makes "was this plan human-approved, or self-approved?" answerable
+   from the tracker once the planning conversation is archived.
 
    **Abandon** is the human saying to stop rather than answering the
    gate. Run `issue idea set <issueId> approvalPending false`, leave the
