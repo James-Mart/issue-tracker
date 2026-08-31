@@ -1,4 +1,9 @@
 import { Route, Routes } from "react-router-dom";
+import {
+  LegacyPipelineRedirect,
+  LegacyPipelineRunRedirect,
+  LegacyPipelineRunsRedirect,
+} from "@/features/pipeline/pipeline-legacy-redirects";
 import { Suspense, lazy, useEffect } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { PageShell } from "@/components/page-shell";
@@ -64,12 +69,21 @@ export function App() {
           <Routes>
             <Route path="/" element={<CockpitPage />} />
             <Route path="/agents" element={<AgentsPage />} />
-            <Route path="/pipeline" element={<PipelinePage />} />
-            <Route path="/pipeline/runs" element={<PipelinePage />} />
+            <Route path="/pipelines" element={<PipelinePage />} />
+            <Route path="/runs" element={<PipelinePage />} />
             <Route
-              path="/pipeline/runs/:conversationId"
+              path="/runs/:conversationId"
               element={<PipelinePage />}
             />
+            <Route
+              path="/pipeline/runs/:conversationId"
+              element={<LegacyPipelineRunRedirect />}
+            />
+            <Route
+              path="/pipeline/runs"
+              element={<LegacyPipelineRunsRedirect />}
+            />
+            <Route path="/pipeline" element={<LegacyPipelineRedirect />} />
             <Route path="/settings" element={<AppSettingsPage />} />
             <Route path="/projects/:projectId" element={<OverviewPage />} />
             <Route

@@ -215,7 +215,7 @@ function SelectedRunSequence({
       <Sheet
         open
         onOpenChange={(open) => {
-          if (!open) navigate("/pipeline/runs", { replace: true });
+          if (!open) navigate("/runs", { replace: true });
         }}
       >
         <SheetContent
@@ -414,9 +414,10 @@ function PipelineDesignView() {
 export function PipelinePage() {
   const { pathname } = useLocation();
   const { conversationId } = useParams<{ conversationId?: string }>();
-  const activeView: PipelineView = pathname.startsWith("/pipeline/runs")
-    ? "runs"
-    : "design";
+  const activeView: PipelineView =
+    pathname === "/runs" || pathname.startsWith("/runs/")
+      ? "runs"
+      : "design";
 
   return (
     <PageShell>

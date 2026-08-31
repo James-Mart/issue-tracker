@@ -14,6 +14,11 @@ import { PIPELINE_RUNS_LIMIT, type RecentRun } from "../run-list";
 import type { RunSequence, RunSequenceSection } from "../run-sequence";
 import { pipelines } from "../shape";
 import { PipelinePage } from "./pipeline-page";
+import {
+  LegacyPipelineRedirect,
+  LegacyPipelineRunRedirect,
+  LegacyPipelineRunsRedirect,
+} from "../pipeline-legacy-redirects";
 
 const topicState = vi.hoisted(() => {
   const listeners = new Map<string, TopicListener>();
@@ -71,12 +76,21 @@ function mountPipelinePage(entry: string): {
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[entry]}>
           <Routes>
-            <Route path="/pipeline" element={<PipelinePage />} />
-            <Route path="/pipeline/runs" element={<PipelinePage />} />
+            <Route path="/pipelines" element={<PipelinePage />} />
+            <Route path="/runs" element={<PipelinePage />} />
             <Route
-              path="/pipeline/runs/:conversationId"
+              path="/runs/:conversationId"
               element={<PipelinePage />}
             />
+            <Route
+              path="/pipeline/runs/:conversationId"
+              element={<LegacyPipelineRunRedirect />}
+            />
+            <Route
+              path="/pipeline/runs"
+              element={<LegacyPipelineRunsRedirect />}
+            />
+            <Route path="/pipeline" element={<LegacyPipelineRedirect />} />
           </Routes>
           <LocationProbe />
         </MemoryRouter>
@@ -376,14 +390,14 @@ afterEach(() => {
 
 describe("PipelinePage", () => {
   it("renders the planning pipeline diagram on /pipeline", () => {
-    const { container } = mountPipelinePage("/pipeline");
+    const { container } = mountPipelinePage("/pipelines");
     expect(diagram(container).getAttribute("data-pipeline")).toBe("planning");
     expect(container.textContent).toContain("Planning");
     expect(tab(container, "Design").getAttribute("aria-selected")).toBe("true");
   });
 
   it("offers every declared pipeline and defaults to planning", () => {
-    const { container } = mountPipelinePage("/pipeline");
+    const { container } = mountPipelinePage("/pipelines");
     const tabs = pipelineTabs(container);
     expect(tabs.map((el) => el.textContent?.trim())).toEqual(
       pipelines.map((pipeline) => pipeline.title),
@@ -395,7 +409,7 @@ describe("PipelinePage", () => {
   });
 
   it("draws the selected pipeline when the switch is activated", () => {
-    const { container } = mountPipelinePage("/pipeline");
+    const { container } = mountPipelinePage("/pipelines");
     act(() => {
       tab(container, "Work the stack").click();
     });
@@ -405,13 +419,13 @@ describe("PipelinePage", () => {
     );
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline?pipeline=work");
+    ).toBe("/pipelines?pipeline=work");
     expect(container.textContent).toContain("Implementor");
     expect(container.textContent).not.toContain("Grill-me protocol");
   });
 
   it("draws the pipeline named in the query string", () => {
-    const { container } = mountPipelinePage("/pipeline?pipeline=work");
+    const { container } = mountPipelinePage("/pipelines?pipeline=work");
     expect(diagram(container).getAttribute("data-pipeline")).toBe("work");
     expect(tab(container, "Work the stack").getAttribute("aria-selected")).toBe(
       "true",
@@ -419,7 +433,7 @@ describe("PipelinePage", () => {
   });
 
   it("switches the canvas when a handoff node is activated", () => {
-    const { container } = mountPipelinePage("/pipeline");
+    const { container } = mountPipelinePage("/pipelines");
     act(() => {
       nodeEl(container, "work-handoff").click();
     });
@@ -429,7 +443,7 @@ describe("PipelinePage", () => {
     );
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline?pipeline=work");
+    ).toBe("/pipelines?pipeline=work");
 
     act(() => {
       nodeEl(container, "planning-handoff").click();
@@ -437,32 +451,32 @@ describe("PipelinePage", () => {
     expect(diagram(container).getAttribute("data-pipeline")).toBe("planning");
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline");
+    ).toBe("/pipelines");
   });
 
   it("navigates to /pipeline/runs when Runs is selected", async () => {
     stubRuns();
-    const { container } = mountPipelinePage("/pipeline");
+    const { container } = mountPipelinePage("/pipelines");
     act(() => {
       tab(container, "Runs").click();
     });
     await flush();
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline/runs");
+    ).toBe("/runs");
     expect(container.textContent).toContain("Recent runs");
     expect(tab(container, "Runs").getAttribute("aria-selected")).toBe("true");
   });
 
   it("navigates to /pipeline when Design is selected from runs", () => {
     stubRuns();
-    const { container } = mountPipelinePage("/pipeline/runs");
+    const { container } = mountPipelinePage("/runs");
     act(() => {
       tab(container, "Design").click();
     });
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline");
+    ).toBe("/pipelines");
     expect(
       container.querySelector('[data-testid="pipeline-diagram"]'),
     ).not.toBeNull();
@@ -470,7 +484,7 @@ describe("PipelinePage", () => {
 
   it("renders every fetched run newest-first at desktop width", async () => {
     const fetchMock = stubRuns(FIVE_RUNS);
-    const { container } = mountPipelinePage("/pipeline/runs");
+    const { container } = mountPipelinePage("/runs");
     await flush();
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/pipeline/runs?limit=${PIPELINE_RUNS_LIMIT}`,
@@ -486,7 +500,7 @@ describe("PipelinePage", () => {
 
   it("routes selection to /pipeline/runs/:conversationId", async () => {
     stubRuns(FIVE_RUNS);
-    const { container } = mountPipelinePage("/pipeline/runs");
+    const { container } = mountPipelinePage("/runs");
     await flush();
     act(() => {
       runCard(container, "c").click();
@@ -494,14 +508,14 @@ describe("PipelinePage", () => {
     await flush();
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline/runs/c");
+    ).toBe("/runs/c");
     expect(runCard(container, "c").getAttribute("data-current")).toBe("true");
     expect(runCard(container, "c").getAttribute("aria-current")).toBe("true");
   });
 
   it("marks the run named in the route as selected", async () => {
     stubRuns(FIVE_RUNS);
-    const { container } = mountPipelinePage("/pipeline/runs/d");
+    const { container } = mountPipelinePage("/runs/d");
     await flush();
     expect(tab(container, "Runs").getAttribute("aria-selected")).toBe("true");
     expect(runCard(container, "d").getAttribute("data-current")).toBe("true");
@@ -529,7 +543,7 @@ describe("PipelinePage", () => {
         tokenTotal: 184_420,
       },
     });
-    const { container } = mountPipelinePage("/pipeline/runs/c");
+    const { container } = mountPipelinePage("/runs/c");
     await flush();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/pipeline/runs/c",
@@ -559,7 +573,7 @@ describe("PipelinePage", () => {
   it("scrolls a tall phone rail inside the sequence body while the header and handle stay pinned", async () => {
     mockViewport(390, 640);
     stubRuns(FIVE_RUNS, { e: tallRunSequence(24) });
-    mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/runs/e");
     await flush();
 
     const sheet = sequenceSheet();
@@ -640,7 +654,7 @@ describe("PipelinePage", () => {
   it("preserves mid-trace scroll when a live beat appends on an in-flight phone run", async () => {
     mockViewport(390, 640);
     stubRuns(FIVE_RUNS, { e: inFlightTallRunSequence(24) });
-    mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/runs/e");
     await flush();
 
     expect(topicState.listeners.has("conversation:e")).toBe(true);
@@ -738,7 +752,7 @@ describe("PipelinePage", () => {
         ],
       },
     });
-    const { container } = mountPipelinePage("/pipeline/runs/e");
+    const { container } = mountPipelinePage("/runs/e");
     await flush();
     const sheet = sequenceSheet();
     expect(sheet.className).toMatch(/\btop-0\b/);
@@ -783,7 +797,7 @@ describe("PipelinePage", () => {
         },
       },
     });
-    mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/runs/e");
     await flush();
     const header = sequenceSheet().querySelector(
       '[data-testid="run-sequence-pane-header"]',
@@ -807,7 +821,7 @@ describe("PipelinePage", () => {
   it("dismisses the phone sequence sheet back to /pipeline/runs", async () => {
     mockViewport(390);
     stubRuns(FIVE_RUNS);
-    const { container } = mountPipelinePage("/pipeline/runs/e");
+    const { container } = mountPipelinePage("/runs/e");
     await flush();
     const sheet = sequenceSheet();
     act(() => {
@@ -819,7 +833,7 @@ describe("PipelinePage", () => {
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline/runs");
+    ).toBe("/runs");
     expect(runCard(container, "e").getAttribute("data-current")).toBeNull();
   });
 
@@ -861,7 +875,7 @@ describe("PipelinePage", () => {
         ],
       },
     });
-    mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/runs/e");
     await flush();
     const sheet = sequenceSheet();
     expect(
@@ -913,7 +927,7 @@ describe("PipelinePage", () => {
         ],
       },
     });
-    mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/runs/e");
     await flush();
     const sheet = sequenceSheet();
     const diagram = sheet.querySelector('[data-testid="run-sequence-diagram"]');
@@ -1026,7 +1040,7 @@ describe("PipelinePage", () => {
         ],
       },
     });
-    mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/runs/e");
     await flush();
     const sheet = sequenceSheet();
     expect(
@@ -1100,7 +1114,7 @@ describe("PipelinePage", () => {
         ],
       },
     });
-    mountPipelinePage("/pipeline/runs/e");
+    mountPipelinePage("/runs/e");
     await flush();
     const sheet = sequenceSheet();
     const story = Array.from(
@@ -1132,7 +1146,7 @@ describe("PipelinePage", () => {
   it("renders every fetched run at phone width with no elision", async () => {
     mockViewport(390);
     stubRuns(FIVE_RUNS);
-    const { container } = mountPipelinePage("/pipeline/runs/e");
+    const { container } = mountPipelinePage("/runs/e");
     await flush();
     expect(
       runCards(container).map((el) => el.getAttribute("data-conversation-id")),
@@ -1152,7 +1166,7 @@ describe("PipelinePage", () => {
         recoveredErrors: 2,
       },
     ]);
-    const { container } = mountPipelinePage("/pipeline/runs");
+    const { container } = mountPipelinePage("/runs");
     await flush();
 
     const clean = runCard(container, "clean");
@@ -1179,7 +1193,7 @@ describe("PipelinePage", () => {
       recentRun("done-run", "completed", "2026-08-28T15:00:00.000Z"),
       recentRun("fail-run", "failed", "2026-08-28T14:00:00.000Z"),
     ]);
-    const { container } = mountPipelinePage("/pipeline/runs/fail-run");
+    const { container } = mountPipelinePage("/runs/fail-run");
     await flush();
     const selectedFailed = runCard(container, "fail-run");
     const unselectedDone = runCard(container, "done-run");
@@ -1204,7 +1218,7 @@ describe("PipelinePage", () => {
 
   it("shows pending while the step source is in flight", async () => {
     vi.stubGlobal("fetch", () => new Promise(() => {}));
-    const { container } = mountPipelinePage("/pipeline?step=grill");
+    const { container } = mountPipelinePage("/pipelines?step=grill");
     await flush();
     const panel = sourcePanel(container);
     expect(panel.textContent).toContain("Loading step source…");
@@ -1221,7 +1235,7 @@ describe("PipelinePage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const { container } = mountPipelinePage("/pipeline");
+    const { container } = mountPipelinePage("/pipelines");
     act(() => {
       nodeEl(container, "grill").click();
     });
@@ -1240,7 +1254,7 @@ describe("PipelinePage", () => {
     expect(panel.querySelector("h1")?.textContent).toBe("Grill-me protocol");
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline?step=grill");
+    ).toBe("/pipelines?step=grill");
   });
 
   it("shows a failed fetch and dismisses back to the undecorated diagram", async () => {
@@ -1249,7 +1263,7 @@ describe("PipelinePage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const { container } = mountPipelinePage("/pipeline?step=grill");
+    const { container } = mountPipelinePage("/pipelines?step=grill");
     await flush();
 
     const panel = sourcePanel(container);
@@ -1271,7 +1285,7 @@ describe("PipelinePage", () => {
     expect(nodeEl(container, "grill").getAttribute("data-current")).toBeNull();
     expect(
       container.querySelector('[data-testid="location-probe"]')?.textContent,
-    ).toBe("/pipeline");
+    ).toBe("/pipelines");
   });
 
   it("opens a top sheet with a pinned header at phone width", async () => {
@@ -1283,7 +1297,7 @@ describe("PipelinePage", () => {
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
-    const { container } = mountPipelinePage("/pipeline?step=grill");
+    const { container } = mountPipelinePage("/pipelines?step=grill");
     await flush();
     expect(
       container.querySelector('[data-testid="pipeline-step-source-panel"]'),
@@ -1305,7 +1319,7 @@ describe("PipelinePage", () => {
   it("does not open a panel when a handoff node is activated", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const { container } = mountPipelinePage("/pipeline");
+    const { container } = mountPipelinePage("/pipelines");
     act(() => {
       nodeEl(container, "work-handoff").click();
     });
@@ -1334,7 +1348,7 @@ describe("PipelinePage", () => {
         },
       },
     });
-    const { container } = mountPipelinePage("/pipeline/runs/c");
+    const { container } = mountPipelinePage("/runs/c");
     await flush();
 
     const link = container.querySelector(
@@ -1360,7 +1374,7 @@ describe("PipelinePage", () => {
         beats: [],
       },
     });
-    const { container } = mountPipelinePage("/pipeline/runs/c");
+    const { container } = mountPipelinePage("/runs/c");
     await flush();
 
     expect(
@@ -1399,11 +1413,11 @@ describe("PipelinePage", () => {
         beats: [],
       },
     });
-    const withIssue = mountPipelinePage("/pipeline/runs/with-root");
+    const withIssue = mountPipelinePage("/runs/with-root");
     await flush();
     const withHeight = sequencePaneHeader(withIssue.container).offsetHeight;
 
-    const withoutIssue = mountPipelinePage("/pipeline/runs/no-root");
+    const withoutIssue = mountPipelinePage("/runs/no-root");
     await flush();
     const withoutHeight = sequencePaneHeader(withoutIssue.container).offsetHeight;
 
