@@ -413,8 +413,9 @@ export const EPIC_STATUSES = ["todo", "in-progress", "done"] as const;
 export const IDEA_STATUSES = [
   "captured",
   "planning",
-  "awaiting-direction",
   "planned",
+  "awaiting-approval",
+  "awaiting-direction",
 ] as const;
 export type StoryStatus = (typeof STORY_STATUSES)[number];
 export type EpicStatus = (typeof EPIC_STATUSES)[number];

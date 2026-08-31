@@ -211,8 +211,9 @@ These are computed by `derive()` and never written to disk (see
   [Derived state](#derived-state)).
 - **Story status** — `not-started` / `in-progress` / `pr-open` / `merged`.
 - **Epic status** — `todo` / `in-progress` / `done` (rollup of its Stories).
-- **Idea status** — `captured` / `planning` / `awaiting-direction` / `planned`
-  (planning phase from sessions, live runs, and stored `sourceIdea` edges); also
+- **Idea status** — `captured` / `planning` / `planned` / `awaiting-approval` /
+  `awaiting-direction` (planning phase from sessions, live runs,
+  `approvalPending`, and stored `sourceIdea` edges); also
   `issue idea get … ideaStatus`. Tree chip `status=<value>`.
 - **planRoots** — derived reverse of `sourceIdea`: the ids of Epics and root
   project-level Stories in the same Project whose stored `sourceIdea` points at
@@ -1461,13 +1462,14 @@ so cannot drift:
   Epic `blocked` does **not** cascade onto descendant Stories'/Tasks' own
   `blocked` flags — `tree`/`list` still show per-node stacking/sibling blocking
   under a blocked Epic.
-- **Idea status** — `captured` when no planning session has run;
-  `planning` when a planning-session run is live; `awaiting-direction` when a
-  session ran and stopped without a plan root; `planned` when an Epic or root
-  project-level Story in the same Project stores `sourceIdea` pointing at the
-  Idea. Computed by `planningStatusById()` (I/O over planning sessions and
-  live-run markers) and merged into `derived` by `list()` — not by the pure
-  `derive()` pass.
+- **Idea status** — ranked highest first: `planning` when a planning-session
+  run is live; `planned` when an Epic or root project-level Story in the same
+  Project stores `sourceIdea` pointing at the Idea; `awaiting-approval` when
+  `approvalPending` is true; `awaiting-direction` when a session ran and stopped
+  without a plan root and no gate is pending; `captured` when no planning
+  session has run. Computed by `planningStatusById()` (I/O over planning
+  sessions, live-run markers, and each Idea's stored `approvalPending`) and
+  merged into `derived` by `list()` — not by the pure `derive()` pass.
 - **Idea `planRoots`** — the ids of Epics and root project-level Stories in
   the same Project whose stored `sourceIdea` equals the Idea's id, sorted by
   ascending `order`; `[]` when none. Computed by `derive()` for every Idea.
