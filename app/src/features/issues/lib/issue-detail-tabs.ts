@@ -1,5 +1,11 @@
 import { channelForIssue } from "@server/kind";
-import type { ConversationChannel, Issue, IssueKind } from "@server/schemas";
+import type {
+  ConversationChannel,
+  IdeaStatus,
+  Issue,
+  IssueKind,
+} from "@server/schemas";
+import type { ChannelTabIndicator } from "./channel-tab-indicator";
 import {
   previewableSupportingDocs,
   type SupportingDocPreviewTab,
@@ -127,4 +133,45 @@ export function issueDetailTabNeedsBoundedShell(
   tabs: readonly IssueDetailTab[],
 ): boolean {
   return tabs.some((tab) => tab.key === active && "channel" in tab);
+}
+
+/** Planning tab shows awaiting-human when the Idea awaits approval. */
+export function channelTabIndicatorFromIdeaStatus(
+  issue: Issue,
+  channel: ConversationChannel,
+  ideaStatus: IdeaStatus | undefined,
+): ChannelTabIndicator | null {
+  if (
+    issue.kind === "idea" &&
+    channel === "planning" &&
+    ideaStatus === "awaiting-approval"
+  ) {
+    return "awaiting-human";
+  }
+  return null;
+}
+
+/** Merge session decoration with idea-status decoration; active-run wins. */
+export function mergeChannelTabIndicators(
+  session: ChannelTabIndicator | null,
+  fromIdeaStatus: ChannelTabIndicator | null,
+): ChannelTabIndicator | null {
+  if (session === "active-run") return "active-run";
+  if (session === "awaiting-human" || fromIdeaStatus === "awaiting-human") {
+    return "awaiting-human";
+  }
+  return null;
+}
+
+/** Resolve channel tab decoration for issue detail. */
+export function resolveChannelTabIndicator(
+  issue: Issue,
+  channel: ConversationChannel,
+  ideaStatus: IdeaStatus | undefined,
+  sessionIndicator: ChannelTabIndicator | null,
+): ChannelTabIndicator | null {
+  return mergeChannelTabIndicators(
+    sessionIndicator,
+    channelTabIndicatorFromIdeaStatus(issue, channel, ideaStatus),
+  );
 }

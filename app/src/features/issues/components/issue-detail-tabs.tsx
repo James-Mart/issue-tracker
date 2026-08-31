@@ -1,16 +1,21 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { ConversationChannel, IssueDetail, IssueKind } from "@server/schemas";
+import type { ConversationChannel, IdeaStatus, IssueDetail, IssueKind } from "@server/schemas";
 import { RosterActiveRunIndicator } from "@/features/agents/components/conversation-list-item";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
-import { useIssueAgentRunsQuery } from "../api/queries";
+import { useIssueAgentRunsQuery, useIssuesQuery } from "../api/queries";
 import { useChannelTabIndicator } from "../hooks/use-channel-tab-indicator";
+import {
+  cockpitLaunchOverlayForIssue,
+  overlayCockpitLaunchAck,
+} from "../lib/cockpit-launch-sync";
 import { channelForLaunchKind } from "../lib/detail-launch-sync";
 import {
   AGENTS_DETAIL_TAB,
   DIFF_DETAIL_TAB,
   issueDetailTabNeedsBoundedShell,
+  resolveChannelTabIndicator,
   resolveIssueDetailTab,
   tabsForIssueDetail,
   writeIssueDetailTabParam,
@@ -67,6 +72,19 @@ export function IssueDetailTabs({
     () => tabsForIssueDetail(issue, parentKind),
     [issue, parentKind],
   );
+  const { data: list } = useIssuesQuery();
+  const pending = useCockpitLaunchStore((s) => s.pending);
+  const ack = useCockpitLaunchStore((s) => s.ack);
+  const overlay = cockpitLaunchOverlayForIssue(issue.id, pending, ack);
+  const derived = overlay
+    ? overlayCockpitLaunchAck(
+        list?.derived ?? {},
+        list?.issues ?? [],
+        overlay,
+      )
+    : list?.derived;
+  const ideaStatus =
+    issue.kind === "idea" ? derived?.[issue.id]?.ideaStatus : undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const active = resolveIssueDetailTab(searchParams.get("tab"), tabs);
   const isMobile = useIsMobile();
@@ -139,8 +157,9 @@ export function IssueDetailTabs({
             isChannelTab(tab) ? (
               <ChannelTabButton
                 key={tab.key}
-                issueId={issue.id}
+                issue={issue}
                 channel={tab.channel}
+                ideaStatus={ideaStatus}
                 selected={active === tab.key}
                 onClick={() => setActive(tab.key)}
               >
@@ -266,19 +285,27 @@ function tabPanelVisibility(selected: boolean): Record<string, unknown> {
 }
 
 function ChannelTabButton({
-  issueId,
+  issue,
   channel,
+  ideaStatus,
   selected,
   onClick,
   children,
 }: {
-  issueId: string;
+  issue: IssueDetail;
   channel: ConversationChannel;
+  ideaStatus: IdeaStatus | undefined;
   selected: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
-  const indicator = useChannelTabIndicator(issueId, channel);
+  const sessionIndicator = useChannelTabIndicator(issue.id, channel);
+  const indicator = resolveChannelTabIndicator(
+    issue,
+    channel,
+    ideaStatus,
+    sessionIndicator,
+  );
   return (
     <TabButton
       selected={selected}

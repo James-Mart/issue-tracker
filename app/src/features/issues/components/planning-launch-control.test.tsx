@@ -9,6 +9,7 @@ import {
   PlanningChannelEmptyState,
   PlanningFlowRowLaunch,
   PlanningNewRunControl,
+  PlanningOverviewLaunch,
 } from "./planning-launch-control";
 
 const mutate = vi.fn();
@@ -347,6 +348,182 @@ describe("PlanningChannelEmptyState", () => {
 
     expect(select().value).toBe("__manual__");
     expect(container.textContent).toContain("Start planning grill");
+  });
+
+  it("hides the approve plan chip when no stakeholder is set", () => {
+    const { container } = mount(
+      <PlanningChannelEmptyState
+        issue={idea}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    expect(
+      container.querySelector('[data-testid="detail-approve-plan"]'),
+    ).toBeNull();
+  });
+
+  it("shows the approve plan chip in both states when a stakeholder is set", () => {
+    const ideaOff = {
+      ...idea,
+      stakeholder: "claude-opus-5",
+    };
+    const { container: offContainer } = mount(
+      <PlanningChannelEmptyState
+        issue={ideaOff}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    const offChip = offContainer.querySelector(
+      '[data-testid="detail-approve-plan"]',
+    ) as HTMLButtonElement;
+    expect(offChip).toBeTruthy();
+    expect(offChip.textContent).toContain("off");
+    expect(offChip.getAttribute("aria-pressed")).toBe("false");
+
+    const ideaOn = {
+      ...idea,
+      stakeholder: "claude-opus-5",
+      approvePlan: true as const,
+    };
+    const { container: onContainer } = mount(
+      <PlanningChannelEmptyState
+        issue={ideaOn}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    const onChip = onContainer.querySelector(
+      '[data-testid="detail-approve-plan"]',
+    ) as HTMLButtonElement;
+    expect(onChip.textContent).toContain("on");
+    expect(onChip.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("uses gate copy when approve plan is on and auto-plan copy when off", () => {
+    const ideaOff = {
+      ...idea,
+      stakeholder: "claude-opus-5",
+    };
+    const { container: offContainer } = mount(
+      <PlanningChannelEmptyState
+        issue={ideaOff}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    expect(offContainer.textContent).toContain("without your answers");
+    expect(offContainer.textContent).not.toContain(
+      "pauses for your approval",
+    );
+
+    const ideaOn = {
+      ...idea,
+      stakeholder: "claude-opus-5",
+      approvePlan: true as const,
+    };
+    const { container: onContainer } = mount(
+      <PlanningChannelEmptyState
+        issue={ideaOn}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    expect(onContainer.textContent).toContain("pauses for your approval");
+    expect(onContainer.textContent).not.toContain("without your answers");
+  });
+
+  it("updates empty-state copy optimistically when the chip is toggled", async () => {
+    mutateAsync.mockImplementation(() => new Promise(() => {}));
+    const ideaWithStakeholder = {
+      ...idea,
+      stakeholder: "claude-opus-5",
+    };
+    const { container } = mount(
+      <PlanningChannelEmptyState
+        issue={ideaWithStakeholder}
+        channel="planning"
+        onStarted={vi.fn()}
+      />,
+    );
+    expect(container.textContent).toContain("without your answers");
+
+    await act(async () => {
+      (
+        container.querySelector(
+          '[data-testid="detail-approve-plan"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(container.textContent).toContain("pauses for your approval");
+    expect(container.textContent).not.toContain("without your answers");
+  });
+});
+
+describe("PlanningOverviewLaunch approve plan chip", () => {
+  it("hides the chip when no stakeholder is set", () => {
+    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
+    expect(
+      container.querySelector('[data-testid="detail-approve-plan"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="planning-overview-start-session"]'),
+    ).toBeTruthy();
+  });
+
+  it("shows the chip in both states when a stakeholder is set", () => {
+    const ideaOff = {
+      ...idea,
+      stakeholder: "claude-opus-5",
+    };
+    const { container: offContainer } = mount(
+      <PlanningOverviewLaunch issue={ideaOff} />,
+    );
+    const offChip = offContainer.querySelector(
+      '[data-testid="detail-approve-plan"]',
+    ) as HTMLButtonElement;
+    expect(offChip).toBeTruthy();
+    expect(offChip.textContent).toContain("off");
+
+    const ideaOn = {
+      ...idea,
+      stakeholder: "claude-opus-5",
+      approvePlan: true as const,
+    };
+    const { container: onContainer } = mount(
+      <PlanningOverviewLaunch issue={ideaOn} />,
+    );
+    const onChip = onContainer.querySelector(
+      '[data-testid="detail-approve-plan"]',
+    ) as HTMLButtonElement;
+    expect(onChip.textContent).toContain("on");
+  });
+
+  it("toggles approvePlan through the Idea update endpoint", async () => {
+    mutateAsync.mockResolvedValueOnce({});
+    const ideaWithStakeholder = {
+      ...idea,
+      id: "overview-toggle",
+      stakeholder: "claude-opus-5",
+    };
+    const { container } = mount(
+      <PlanningOverviewLaunch issue={ideaWithStakeholder} />,
+    );
+
+    await act(async () => {
+      (
+        container.querySelector(
+          '[data-testid="detail-approve-plan"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: "overview-toggle",
+      patch: { approvePlan: true },
+    });
   });
 });
 

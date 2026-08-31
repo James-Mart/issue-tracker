@@ -92,8 +92,19 @@ function useApprovePlan(issue: IdeaDetail) {
   return { approvePlan, onToggle, saving };
 }
 
-function ApprovePlanChip({ issue }: { issue: IdeaDetail }) {
-  const { approvePlan, onToggle, saving } = useApprovePlan(issue);
+function ApprovePlanChipButton({
+  issue,
+  approvePlan,
+  onToggle,
+  saving,
+  testId = "flow-row-approve-plan",
+}: {
+  issue: IdeaDetail;
+  approvePlan: boolean;
+  onToggle: () => void;
+  saving: boolean;
+  testId?: string;
+}) {
   const stateLabel = approvePlan ? "on" : "off";
 
   return (
@@ -102,7 +113,7 @@ function ApprovePlanChip({ issue }: { issue: IdeaDetail }) {
       variant="default"
       id={`approve-plan-${issue.id}`}
       aria-pressed={approvePlan}
-      data-testid="flow-row-approve-plan"
+      data-testid={testId}
       disabled={saving}
       className="h-7 px-2 font-mono text-[10px] tracking-[0.08em]"
       onClick={onToggle}
@@ -118,6 +129,19 @@ function ApprovePlanChip({ issue }: { issue: IdeaDetail }) {
         {stateLabel}
       </span>
     </Button>
+  );
+}
+
+function ApprovePlanChip({
+  issue,
+  testId = "flow-row-approve-plan",
+}: {
+  issue: IdeaDetail;
+  testId?: string;
+}) {
+  const control = useApprovePlan(issue);
+  return (
+    <ApprovePlanChipButton issue={issue} testId={testId} {...control} />
   );
 }
 
@@ -339,16 +363,23 @@ export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
 
 /** Overview-tab launch: same optimistic start as the empty state. */
 export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
+  const stakeholder = issue.stakeholder;
+
   return (
-    <PlanningLaunchButton
-      issue={issue}
-      channel="planning"
-      stakeholder={issue.stakeholder}
-      variant="primary"
-      optimistic
-      testId="planning-overview-start-session"
-      onStarted={() => {}}
-    />
+    <div className="flex flex-wrap items-center gap-2">
+      {stakeholder ? (
+        <ApprovePlanChip issue={issue} testId="detail-approve-plan" />
+      ) : null}
+      <PlanningLaunchButton
+        issue={issue}
+        channel="planning"
+        stakeholder={stakeholder}
+        variant="primary"
+        optimistic
+        testId="planning-overview-start-session"
+        onStarted={() => {}}
+      />
+    </div>
   );
 }
 
@@ -366,8 +397,13 @@ export function PlanningChannelEmptyState({
   const models = modelsData?.models ?? [];
   const defaultModel = defaultConversationModel(models);
   const { stakeholder, onChange, saving, error } = usePlanningStakeholder(issue);
+  const approvePlanControl = useApprovePlan(issue);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
-  const copy = planningLaunchCopy(stakeholder, models);
+  const copy = planningLaunchCopy(
+    stakeholder,
+    models,
+    approvePlanControl.approvePlan,
+  );
 
   useEffect(() => {
     if (defaultModel && selectedCatalogId === undefined) {
@@ -405,6 +441,13 @@ export function PlanningChannelEmptyState({
               loading={modelsLoading}
               disabled={saving}
               onChange={setSelectedCatalogId}
+            />
+          ) : null}
+          {stakeholder ? (
+            <ApprovePlanChipButton
+              issue={issue}
+              testId="detail-approve-plan"
+              {...approvePlanControl}
             />
           ) : null}
           <PlanningLaunchButton

@@ -3,8 +3,11 @@ import type { Issue } from "@server/schemas";
 import {
   agentsTabForIssue,
   channelTabForIssue,
+  channelTabIndicatorFromIdeaStatus,
   DEFAULT_ISSUE_DETAIL_TAB,
   issueDetailTabNeedsBoundedShell,
+  mergeChannelTabIndicators,
+  resolveChannelTabIndicator,
   resolveIssueDetailTab,
   tabsForIssueDetail,
   writeIssueDetailTabParam,
@@ -198,5 +201,47 @@ describe("issueDetailTabNeedsBoundedShell", () => {
     const taskTabs = tabsForIssueDetail(task);
     expect(issueDetailTabNeedsBoundedShell("overview", taskTabs)).toBe(false);
     expect(issueDetailTabNeedsBoundedShell("planning", taskTabs)).toBe(false);
+  });
+});
+
+describe("channelTabIndicatorFromIdeaStatus", () => {
+  it("returns awaiting-human for planning on awaiting-approval Ideas", () => {
+    expect(
+      channelTabIndicatorFromIdeaStatus(idea, "planning", "awaiting-approval"),
+    ).toBe("awaiting-human");
+  });
+
+  it("returns null for other statuses and channels", () => {
+    expect(
+      channelTabIndicatorFromIdeaStatus(idea, "planning", "captured"),
+    ).toBeNull();
+    expect(
+      channelTabIndicatorFromIdeaStatus(epic, "implementing", "awaiting-approval"),
+    ).toBeNull();
+  });
+});
+
+describe("mergeChannelTabIndicators", () => {
+  it("prefers active-run over awaiting-human", () => {
+    expect(mergeChannelTabIndicators("active-run", "awaiting-human")).toBe(
+      "active-run",
+    );
+    expect(mergeChannelTabIndicators("awaiting-human", null)).toBe(
+      "awaiting-human",
+    );
+  });
+});
+
+describe("resolveChannelTabIndicator", () => {
+  it("combines session and idea-status decorations", () => {
+    expect(
+      resolveChannelTabIndicator(idea, "planning", "awaiting-approval", null),
+    ).toBe("awaiting-human");
+    expect(
+      resolveChannelTabIndicator(idea, "planning", "captured", "awaiting-human"),
+    ).toBe("awaiting-human");
+    expect(
+      resolveChannelTabIndicator(idea, "planning", "awaiting-approval", "active-run"),
+    ).toBe("active-run");
   });
 });
