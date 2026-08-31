@@ -8,6 +8,7 @@ const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   "rev-list",
   "rev-parse",
   "merge-base",
+  "remote",
 ]);
 
 /** @internal Test seam for stubbing git spawn. */
@@ -36,6 +37,12 @@ function assertReadOnlyGitSubcommand(args: string[]): void {
     throw new IssueError(
       "validation",
       `git subcommand "${subcommand ?? ""}" is not allowed; only read-only history inspection is permitted`,
+    );
+  }
+  if (subcommand === "remote" && args[1] !== "get-url") {
+    throw new IssueError(
+      "validation",
+      `git subcommand "remote ${args[1] ?? ""}" is not allowed; only remote get-url is permitted`,
     );
   }
 }
@@ -78,4 +85,16 @@ export async function runGit(
       reject(new IssueError("git-failed", errText));
     });
   });
+}
+
+/** Return the workspace's `origin` URL, or null when it has no origin. */
+export async function getOriginRemoteUrl(
+  workspace: string,
+): Promise<string | null> {
+  try {
+    const url = (await runGit(["remote", "get-url", "origin"], workspace)).trim();
+    return url.length > 0 ? url : null;
+  } catch {
+    return null;
+  }
 }

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { IssueError } from "./errors.js";
 import {
   runGit,
+  getOriginRemoteUrl,
   setGitSpawnerForTests,
   type GitSpawner,
 } from "./git-read.js";
@@ -77,6 +78,29 @@ describe("runGit", () => {
     expect(spawned).toBe(false);
   });
 
+  it("permits remote get-url while refusing write subcommands", async () => {
+    let seenArgs: string[] = [];
+    stubGitSpawner((args) => {
+      seenArgs = args;
+      return mockGitChild({ stdout: "git@github.com:org/repo.git\n" });
+    });
+
+    await expect(
+      runGit(["remote", "get-url", "origin"], "/repo/root"),
+    ).resolves.toBe("git@github.com:org/repo.git\n");
+    expect(seenArgs).toEqual(["remote", "get-url", "origin"]);
+
+    let spawned = false;
+    stubGitSpawner(() => {
+      spawned = true;
+      return mockGitChild({ stdout: "ok" });
+    });
+    await expect(
+      runGit(["remote", "add", "origin", "git@github.com:org/repo.git"], "/repo/root"),
+    ).rejects.toMatchObject({ code: "validation" });
+    expect(spawned).toBe(false);
+  });
+
   it("throws git-missing when the binary is absent", async () => {
     stubGitSpawner(() =>
       mockGitChild({
@@ -105,5 +129,28 @@ describe("runGit", () => {
         err.code === "git-failed" &&
         err.message === "fatal: bad object HEAD",
     );
+  });
+});
+
+describe("getOriginRemoteUrl", () => {
+  it("returns the trimmed origin URL", async () => {
+    stubGitSpawner(() =>
+      mockGitChild({ stdout: "git@github.com:org/repo.git\n" }),
+    );
+
+    await expect(getOriginRemoteUrl("/repo/root")).resolves.toBe(
+      "git@github.com:org/repo.git",
+    );
+  });
+
+  it("returns null when origin is missing", async () => {
+    stubGitSpawner(() =>
+      mockGitChild({
+        code: 2,
+        stderr: "fatal: No such remote 'origin'",
+      }),
+    );
+
+    await expect(getOriginRemoteUrl("/repo/root")).resolves.toBeNull();
   });
 });

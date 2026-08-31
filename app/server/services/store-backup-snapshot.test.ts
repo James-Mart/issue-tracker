@@ -22,6 +22,8 @@ import {
   BACKUP_IDENTITY_FILENAME,
   ensureBackupIdentity,
 } from "./store-backup-identity.js";
+import { PROJECTS_MANIFEST_FILENAME } from "./store-backup-projects-manifest.js";
+import { RESTORE_RUNBOOK_FILENAME } from "./store-backup-restore-runbook.js";
 import {
   createStoreBackupSnapshotDriver,
   formatSnapshotCommitMessage,
@@ -105,6 +107,8 @@ function createTestDriver(
     },
     formatCommitMessage: formatSnapshotCommitMessage,
     ensureBackupIdentity: () => ({ storeId: "test-store-id" }),
+    writeProjectsManifest: async () => {},
+    writeRestoreRunbook: () => {},
     pushIfAllowed: async (workspace) => {
       gitCalls.push({ op: "push", workspace });
       return "pushed";
@@ -450,6 +454,75 @@ describe("createStoreBackupSnapshotDriver", () => {
     await first;
     expect(pushes).toBe(2);
     expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(2);
+  });
+
+  it("writes projects.json at the mirror root before staging", async () => {
+    const layout = tempStoreLayout();
+    const callOrder: string[] = [];
+    const { driver } = createTestDriver(layout, {
+      writeProjectsManifest: async (mirrorDir) => {
+        callOrder.push("manifest");
+        writeFileSync(
+          join(mirrorDir, PROJECTS_MANIFEST_FILENAME),
+          '{"generatedAt":"2026-01-01T00:00:00.000Z","projects":[]}\n',
+        );
+      },
+      writeRestoreRunbook: () => {
+        callOrder.push("runbook");
+      },
+      stageAllChanges: async (workspace) => {
+        callOrder.push("stage");
+        expect(
+          existsSync(join(workspace, PROJECTS_MANIFEST_FILENAME)),
+        ).toBe(true);
+      },
+    });
+
+    await driver.takeSnapshot();
+
+    expect(callOrder).toEqual(["manifest", "runbook", "stage"]);
+    expect(
+      existsSync(join(layout.backupMirrorDir, PROJECTS_MANIFEST_FILENAME)),
+    ).toBe(true);
+    expect(
+      existsSync(
+        join(layout.backupMirrorDir, "issues", PROJECTS_MANIFEST_FILENAME),
+      ),
+    ).toBe(false);
+  });
+
+  it("writes RESTORE.md at the mirror root before staging", async () => {
+    const layout = tempStoreLayout();
+    const callOrder: string[] = [];
+    const { driver } = createTestDriver(layout, {
+      writeProjectsManifest: async (mirrorDir) => {
+        callOrder.push("manifest");
+        writeFileSync(
+          join(mirrorDir, PROJECTS_MANIFEST_FILENAME),
+          '{"generatedAt":"2026-01-01T00:00:00.000Z","projects":[]}\n',
+        );
+      },
+      writeRestoreRunbook: (mirrorDir) => {
+        callOrder.push("runbook");
+        writeFileSync(join(mirrorDir, RESTORE_RUNBOOK_FILENAME), "# Restore\n");
+      },
+      stageAllChanges: async (workspace) => {
+        callOrder.push("stage");
+        expect(existsSync(join(workspace, RESTORE_RUNBOOK_FILENAME))).toBe(
+          true,
+        );
+      },
+    });
+
+    await driver.takeSnapshot();
+
+    expect(callOrder).toEqual(["manifest", "runbook", "stage"]);
+    expect(
+      existsSync(join(layout.backupMirrorDir, RESTORE_RUNBOOK_FILENAME)),
+    ).toBe(true);
+    expect(
+      existsSync(join(layout.backupMirrorDir, "issues", RESTORE_RUNBOOK_FILENAME)),
+    ).toBe(false);
   });
 
   it("logs snapshot failures from the debounced callback", async () => {
