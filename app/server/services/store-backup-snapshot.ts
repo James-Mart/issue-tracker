@@ -12,14 +12,17 @@ import { dirname, join, relative } from "path";
 import { readAppConfig } from "../app-config.js";
 import {
   backupMirrorDir,
+  backupStatusPath,
   issuesDir,
 } from "../config.js";
 import type { AppConfig, BackupConfig } from "../schemas.js";
 import {
   ensureBackupIdentity,
+  getCurrentBackupProblem,
   pushMirrorIfAllowed,
   type BackupIdentity,
 } from "./store-backup-identity.js";
+import { pushWithRetry } from "./store-backup-status.js";
 import {
   commitChanges,
   hasStagedChanges,
@@ -145,6 +148,8 @@ export function createStoreBackupSnapshotDriver(
 ) {
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let watcher: { close: () => void } | undefined;
+  let snapshotInFlight = false;
+  let snapshotQueued = false;
 
   function scheduleSnapshot(): void {
     if (debounceTimer !== undefined) {
@@ -158,7 +163,7 @@ export function createStoreBackupSnapshotDriver(
     }, deps.debounceMs);
   }
 
-  async function takeSnapshot(): Promise<void> {
+  async function runSnapshot(): Promise<void> {
     const config = deps.readAppConfig();
     if (!isBackupMirrorActive(config)) return;
 
@@ -184,6 +189,24 @@ export function createStoreBackupSnapshotDriver(
       config.backup.remote,
       identity.storeId,
     );
+  }
+
+  // Retry can hold a snapshot for a long time; collapse overlapping
+  // requests into one trailing run so git writes stay serial.
+  async function takeSnapshot(): Promise<void> {
+    if (snapshotInFlight) {
+      snapshotQueued = true;
+      return;
+    }
+    snapshotInFlight = true;
+    try {
+      do {
+        snapshotQueued = false;
+        await runSnapshot();
+      } while (snapshotQueued);
+    } finally {
+      snapshotInFlight = false;
+    }
   }
 
   function start(): void {
@@ -234,7 +257,17 @@ const defaultDeps = (): StoreBackupSnapshotDeps => ({
   formatCommitMessage: formatSnapshotCommitMessage,
   ensureBackupIdentity,
   pushIfAllowed: (workspace, remoteUrl, localStoreId) =>
-    pushMirrorIfAllowed(workspace, remoteUrl, localStoreId),
+    pushWithRetry({
+      push: () => pushMirrorIfAllowed(workspace, remoteUrl, localStoreId),
+      refusalMessage: () => {
+        const problem = getCurrentBackupProblem();
+        if (problem === null) {
+          throw new Error("backup push refused without a recorded problem");
+        }
+        return problem.message;
+      },
+      statusPath: backupStatusPath,
+    }),
 });
 
 let activeDriver: ReturnType<typeof createStoreBackupSnapshotDriver> | null =

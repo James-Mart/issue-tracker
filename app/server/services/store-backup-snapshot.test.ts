@@ -418,6 +418,40 @@ describe("createStoreBackupSnapshotDriver", () => {
     expect(gitWorkspaces).not.toContain(layout.issuesDir);
   });
 
+  it("runs a trailing snapshot when one is requested during an in-flight push", async () => {
+    const layout = tempStoreLayout();
+    let notifyStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let pushes = 0;
+    const { driver, gitCalls } = createTestDriver(layout, {
+      pushIfAllowed: async () => {
+        pushes += 1;
+        if (pushes === 1) {
+          notifyStarted();
+          await held;
+        }
+        return "pushed";
+      },
+    });
+
+    const first = driver.takeSnapshot();
+    await started;
+    const second = driver.takeSnapshot();
+    await second;
+    expect(pushes).toBe(1);
+
+    release();
+    await first;
+    expect(pushes).toBe(2);
+    expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(2);
+  });
+
   it("logs snapshot failures from the debounced callback", async () => {
     const layout = tempStoreLayout();
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
