@@ -12,10 +12,11 @@ description: >-
 Turn a seed issue into a polished plan tree, leaving an audit trail the human
 reviews afterward. You are the **stakeholder**: you answer the
 vanilla planner's grill from product intent (never from what code already
-does), own the "shared understanding reached" and post-outline gate calls,
-resolve polish escalations, and finalize with an audit report on the archived
-source Idea. Provenance (`sourceIdea`) lands on each resulting root
-from the planner's migrate step — not from finalize.
+does), own the "shared understanding reached" call, route the post-outline gate
+per the Idea's `approvePlan` flag (**## Flow** step 3), resolve polish
+escalations, and finalize with an audit report on the archived source Idea.
+Provenance (`sourceIdea`) lands on each resulting root from the planner's
+migrate step — not from finalize.
 You do **not** author the plan tree yourself — the vanilla planner does
 (`issue-tracker-plan` unchanged; Story *"Reuse over reinvention"* invariant).
 
@@ -27,9 +28,11 @@ the spawned discriminator / planner.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-**Allowed writes:** finalize `attach` + `comment` only — `issue idea attach`
-and `issue idea comment` on the archived source Idea (the seed after
-migration). Standout-decisions comments use
+**Allowed writes:** `issue idea set <issueId> approvalPending` (**## Flow**
+step 3), `issue comment <rootId> --role human` on each resulting root
+after an approved gate (**## Flow** step 3), plus finalize `attach` +
+`comment` — `issue idea attach` and `issue idea comment` on the archived
+source Idea (the seed after migration). Standout-decisions comments use
 `--role stakeholder`. The only other writes are those owned by skills this
 skill itself directs you to follow — today, **`issue-tracker-vision-docs`**
 on the **§ Subsystem vision consult** path. All other `issue` use is
@@ -71,15 +74,18 @@ there is nothing to resume.
    step 3 (Idea → proceed; any other kind → refuse). Treat a refuse here as a
    **preflight-gate refusal**.
 5. `issue view <issueId>` — the full source `description.md`.
-6. The Project **vision** doc via the shared consult mechanism: **Read**
+6. **Approval-gate flag** — `issue idea get <issueId> approvePlan`. `true` → the
+   human answers the post-outline gate; empty output → you answer it. Carry the
+   value through the run; do not re-read it.
+7. The Project **vision** doc via the shared consult mechanism: **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
    then consult key `vision` per that file using the step-1 summary output.
-7. The Project's **`inspirationApps`** field (consult-if-present): use the
+8. The Project's **`inspirationApps`** field (consult-if-present): use the
    `inspirationApps:` line already on the step-1 summary's Project section — a
    comma-separated list of `name — url — description` entries. Absent (empty
    field) → skip. Same consult-if-present pattern as `vision`; do not run a
    separate `issue project get`.
-8. Apply the **stakeholder decision heuristics** below (baked into this skill).
+9. Apply the **stakeholder decision heuristics** below (baked into this skill).
 
 You **may** optionally consult other supporting docs (e.g. `designSystem`) at
 your discretion via the same consult mechanism. You are **NOT ALLOWED** to read
@@ -176,7 +182,7 @@ the source issue's theme, and inspirationApps:
   - Off-theme, not worthwhile, or unbounded → reject; bound by the vision doc
     and the idea's theme.
 
-**Post-bootstrap refuse gate.** After steps 1–8 and before **## Flow** step 1,
+**Post-bootstrap refuse gate.** After steps 1–9 and before **## Flow** step 1,
 evaluate **both** refuse conditions below. If either holds, refuse with
 specifics and stop; otherwise proceed to Flow.
 
@@ -205,15 +211,45 @@ specifics and stop; otherwise proceed to Flow.
 3. **Relay loop.** The planner asks one grill question and ends its turn; re-enter
    it with `resumeId` from the delegation that started the planner (step 2),
    passing your answer derived from the stakeholder decision heuristics +
-   vision + the source issue's theme + inspirationApps. Own any "shared understanding
-   reached" / ready-for-outline judgment the griller puts to you, and approve
-   the single post-outline gate. Resolve any **polish escalation** the planner
-   surfaces the same way, then re-enter it with that same `resumeId` to
-   continue. Repeat until the planner returns the resulting plan root id(s)
-   (it has already migrated / polished).
+   vision + the source issue's theme + inspirationApps. Own any "shared
+   understanding reached" / ready-for-outline judgment the griller puts to you.
+   Resolve any **polish escalation** the planner surfaces the same way, then
+   re-enter it with that same `resumeId` to continue. Repeat until the planner
+   returns the resulting plan root id(s) (it has already migrated / polished).
 
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
+
+   **Post-outline gate.** The planner puts this gate to you after each
+   outline. With the approval-gate flag empty (**## Bootstrap** step 6),
+   answer it yourself from the stakeholder decision heuristics. With the
+   flag `true` it is the human's: run
+   `issue idea set <issueId> approvalPending true`, then end your turn
+   with one message in this order — the planner's outline exactly as it
+   was returned, a `---` rule, then a `## Stakeholder recommendation`
+   heading over the answer you would have given.
+
+   When the human replies, re-enter the same planner with its `resumeId`
+   from step 2 — a yes as the gate answer, or the rejection together with
+   the human's reason. A rejection comes back as a revised outline; post
+   it the same way as the first. On the approved path, inside the turn
+   that relays the yes, run
+   `issue idea set <issueId> approvalPending false`. The marker's
+   lifecycle across rejection rounds is fixed by
+   `issue:awaiting-approval-status`. After the planner returns the
+   resulting root id(s) on that approved path, comment on each with
+   `issue comment <rootId> --role human --body <text>`. The body
+   records that a human approved the plan and names the Idea
+   (`<issueId>`). This is your write, not the planner's: the planner
+   cannot tell whether a human or an agent answered its gate, so you
+   are the only party that knows a human signed off. That is what
+   makes "was this plan human-approved, or self-approved?" answerable
+   from the tracker once the planning conversation is archived.
+
+   **Abandon** is the human saying to stop rather than answering the
+   gate. Run `issue idea set <issueId> approvalPending false`, leave the
+   planner un-resumed, write nothing to the tree, and end the run. The
+   Idea falls back to `awaiting-direction`.
 
    **Terse grill answers.** When the griller's recommendation is acceptable,
    reply with a bare acknowledgement only — e.g. "I agree" or "agreed with your
@@ -285,6 +321,4 @@ When finalize is done, report per **## Finalize**. Then stop.
   discriminator + planner spawns, retro request, finalize. Do not author the
   plan tree yourself — the vanilla planner owns authoring / polish via
   `issue-tracker-plan`.
-- Honor the intro **Allowed writes** contract (finalize attach/comment; writes
-  only via directed skills such as **`issue-tracker-vision-docs`** on the
-  consult path; no status changes).
+- Honor the intro **Allowed writes** contract.

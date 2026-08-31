@@ -7,9 +7,10 @@ back-and-forth transcript). Run this after Flow step 4 (Retro) completes.
 
 The seed Idea is archived once planning finishes — use the Bootstrap
 `<issueId>`. Write a **single** combined audit trail onto that archived Idea
-(one target), even when the Idea migrated into multiple roots. The resulting
-roots get neither the attachment nor the comment — their provenance is the
-planner's imperative `sourceIdea` write on each root (not part of finalize).
+(one target), even when the Idea migrated into multiple roots. The
+decision-summary attachment and standout-decisions comment land on that
+Idea, not on the resulting roots — their provenance is the planner's
+imperative `sourceIdea` write on each root (not part of finalize).
 
 - **Target list:** one entry — kind `idea`, id `<issueId>`.
 
