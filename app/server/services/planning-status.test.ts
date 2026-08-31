@@ -239,6 +239,103 @@ describe("planningStatusById", () => {
     });
     expect(statusOf()).toBe("captured");
   });
+
+  it("is awaiting-approval when approvalPending is set and no run is live", async () => {
+    seedProjectAndIdea();
+    writeIssue("capture", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "platform",
+      order: 0,
+      archived: false,
+      approvalPending: true,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { statusOf, createConversation, appendEvent } = await load();
+    const meta = await createConversation({
+      title: "Plan capture",
+      projectId: "platform",
+      model: "auto",
+      issueId: "capture",
+      channel: "planning",
+    });
+    await appendEvent(meta.id, {
+      type: "assistant",
+      text: "Does this outline look right?",
+    });
+    expect(statusOf()).toBe("awaiting-approval");
+  });
+
+  it("is planning when approvalPending is set and a run is live", async () => {
+    seedProjectAndIdea();
+    writeIssue("capture", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "platform",
+      order: 0,
+      archived: false,
+      approvalPending: true,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { statusOf, createConversation, conversationsDir } = await load();
+    const meta = await createConversation({
+      title: "Plan capture",
+      projectId: "platform",
+      model: "auto",
+      issueId: "capture",
+      channel: "planning",
+    });
+    writeFileSync(
+      join(conversationsDir, meta.id, "run-live.json"),
+      `${JSON.stringify({ pid: process.pid })}\n`,
+    );
+    expect(statusOf()).toBe("planning");
+  });
+
+  it("is planned when approvalPending is set and a plan root exists", async () => {
+    seedProjectAndIdea();
+    writeIssue("capture", {
+      kind: "idea",
+      title: "Capture",
+      partOf: "platform",
+      order: 0,
+      archived: false,
+      approvalPending: true,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("ship-it", {
+      kind: "epic",
+      title: "Ship it",
+      partOf: "platform",
+      order: 1,
+      archived: false,
+      sourceIdea: "capture",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { statusOf } = await load();
+    expect(statusOf()).toBe("planned");
+  });
+
+  it("is awaiting-direction when approvalPending is unset and a session has transcript bytes", async () => {
+    seedProjectAndIdea();
+    const { statusOf, createConversation, appendEvent } = await load();
+    const meta = await createConversation({
+      title: "Plan capture",
+      projectId: "platform",
+      model: "auto",
+      issueId: "capture",
+      channel: "planning",
+    });
+    await appendEvent(meta.id, {
+      type: "assistant",
+      text: "What should this Idea become?",
+    });
+    expect(statusOf()).toBe("awaiting-direction");
+  });
 });
 
 describe("GET /api/issues ideaStatus", () => {

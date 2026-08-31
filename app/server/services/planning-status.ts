@@ -28,9 +28,11 @@ function planningSessionsByIssueId(): Map<string, string[]> {
 function statusForIdea(
   conversationIds: string[] | undefined,
   hasPlanRoot: boolean,
+  approvalPending: boolean,
 ): IdeaStatus {
   if (conversationIds?.some((id) => isRunLive(id))) return "planning";
   if (hasPlanRoot) return "planned";
+  if (approvalPending) return "awaiting-approval";
   if (conversationIds?.some((id) => conversationHasTranscript(id))) {
     return "awaiting-direction";
   }
@@ -47,6 +49,7 @@ export function planningStatusById(issues: Issue[]): Record<string, IdeaStatus> 
     byId[issue.id] = statusForIdea(
       sessionsByIdea.get(issue.id),
       plannedIds.has(issue.id),
+      issue.approvalPending === true,
     );
   }
   return byId;

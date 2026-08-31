@@ -211,8 +211,9 @@ These are computed by `derive()` and never written to disk (see
   [Derived state](#derived-state)).
 - **Story status** — `not-started` / `in-progress` / `pr-open` / `merged`.
 - **Epic status** — `todo` / `in-progress` / `done` (rollup of its Stories).
-- **Idea status** — `captured` / `planning` / `awaiting-direction` / `planned`
-  (planning phase from sessions, live runs, and stored `sourceIdea` edges); also
+- **Idea status** — `captured` / `planning` / `planned` / `awaiting-approval` /
+  `awaiting-direction` (planning phase from sessions, live runs,
+  `approvalPending`, and stored `sourceIdea` edges); also
   `issue idea get … ideaStatus`. Tree chip `status=<value>`.
 - **planRoots** — derived reverse of `sourceIdea`: the ids of Epics and root
   project-level Stories in the same Project whose stored `sourceIdea` points at
@@ -449,7 +450,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | --- | --- |
 | project | `title`, `workspace`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
-| idea | `title`, `archived`, `approvePlan`, `partOf`, `labels`, `description` |
+| idea | `title`, `archived`, `approvePlan`, `approvalPending`, `partOf`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commitSha`, `noDiff`, `description` |
 
@@ -900,7 +901,8 @@ Idea — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Project id (required) |
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
-| `approvePlan` | boolean? | absent until set; when true, the human must answer the post-outline auto-plan gate (see [Roles](#roles)) |
+| `approvePlan` | boolean? | absent until set; when true, the human must answer the post-outline auto-plan gate (see [Roles](#roles)); written by the human |
+| `approvalPending` | boolean? | absent until set; when true, a post-outline gate is posted and waiting on the human; written by the stakeholder agent; `apply` preserves it alongside `approvePlan` |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
@@ -1408,7 +1410,8 @@ preserves everything else from the existing same-kind issue.
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Project catalog) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Epic / Idea / Story assignments) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
-| `approvePlan` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `approvePlan` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
+| `approvalPending` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); stakeholder-agent writer; `apply` preserves |
 | `stakeholder` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `kind` | explicit on every `children:` entry (allow-lists above); omitted on root nodes (form key implies kind) |
 | `partOf`, `stackedOn` | inferred from nesting (a story-rooted doc has no nesting, so it preserves the on-disk `stackedOn`); runtime `partOf`/`stackedOn` edits use kind [`set`](#kind-scoped-get--set) |
@@ -1459,13 +1462,14 @@ so cannot drift:
   Epic `blocked` does **not** cascade onto descendant Stories'/Tasks' own
   `blocked` flags — `tree`/`list` still show per-node stacking/sibling blocking
   under a blocked Epic.
-- **Idea status** — `captured` when no planning session has run;
-  `planning` when a planning-session run is live; `awaiting-direction` when a
-  session ran and stopped without a plan root; `planned` when an Epic or root
-  project-level Story in the same Project stores `sourceIdea` pointing at the
-  Idea. Computed by `planningStatusById()` (I/O over planning sessions and
-  live-run markers) and merged into `derived` by `list()` — not by the pure
-  `derive()` pass.
+- **Idea status** — ranked highest first: `planning` when a planning-session
+  run is live; `planned` when an Epic or root project-level Story in the same
+  Project stores `sourceIdea` pointing at the Idea; `awaiting-approval` when
+  `approvalPending` is true; `awaiting-direction` when a session ran and stopped
+  without a plan root and no gate is pending; `captured` when no planning
+  session has run. Computed by `planningStatusById()` (I/O over planning
+  sessions, live-run markers, and each Idea's stored `approvalPending`) and
+  merged into `derived` by `list()` — not by the pure `derive()` pass.
 - **Idea `planRoots`** — the ids of Epics and root project-level Stories in
   the same Project whose stored `sourceIdea` equals the Idea's id, sorted by
   ascending `order`; `[]` when none. Computed by `derive()` for every Idea.

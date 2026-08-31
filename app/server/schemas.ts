@@ -241,6 +241,7 @@ export const ideaSchema = z.object({
   title: nonEmpty,
   archived: z.boolean().default(false),
   approvePlan: z.boolean().optional(),
+  approvalPending: z.boolean().optional(),
   stakeholder: stakeholderField,
   labels: assignmentLabelsSchema,
   ...orderField,
@@ -333,6 +334,7 @@ export type CreateInput = Pick<IssueFields, "title"> &
       | "mergePolicy"
       | "stakeholder"
       | "approvePlan"
+      | "approvalPending"
     >
   > & {
     kind: IssueKind;
@@ -411,8 +413,9 @@ export const EPIC_STATUSES = ["todo", "in-progress", "done"] as const;
 export const IDEA_STATUSES = [
   "captured",
   "planning",
-  "awaiting-direction",
   "planned",
+  "awaiting-approval",
+  "awaiting-direction",
 ] as const;
 export type StoryStatus = (typeof STORY_STATUSES)[number];
 export type EpicStatus = (typeof EPIC_STATUSES)[number];
