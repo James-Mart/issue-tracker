@@ -23,6 +23,7 @@ import {
   type BackupIdentity,
 } from "./store-backup-identity.js";
 import { writeProjectsManifest } from "./store-backup-projects-manifest.js";
+import { writeRestoreRunbook } from "./store-backup-restore-runbook.js";
 import { pushWithRetry } from "./store-backup-status.js";
 import {
   commitChanges,
@@ -138,6 +139,7 @@ export type StoreBackupSnapshotDeps = {
   formatCommitMessage: () => string;
   ensureBackupIdentity: (mirrorDir: string) => BackupIdentity;
   writeProjectsManifest: (mirrorDir: string) => Promise<void>;
+  writeRestoreRunbook: (mirrorDir: string) => void;
   pushIfAllowed: (
     workspace: string,
     remoteUrl: string,
@@ -179,6 +181,7 @@ export function createStoreBackupSnapshotDriver(
     const identity = deps.ensureBackupIdentity(deps.backupMirrorDir);
 
     await deps.writeProjectsManifest(deps.backupMirrorDir);
+    deps.writeRestoreRunbook(deps.backupMirrorDir);
 
     await deps.stageAllChanges(deps.backupMirrorDir);
     if (await deps.hasStagedChanges(deps.backupMirrorDir)) {
@@ -261,6 +264,7 @@ const defaultDeps = (): StoreBackupSnapshotDeps => ({
   formatCommitMessage: formatSnapshotCommitMessage,
   ensureBackupIdentity,
   writeProjectsManifest,
+  writeRestoreRunbook,
   pushIfAllowed: (workspace, remoteUrl, localStoreId) =>
     pushWithRetry({
       push: () => pushMirrorIfAllowed(workspace, remoteUrl, localStoreId),
