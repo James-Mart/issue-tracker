@@ -240,6 +240,7 @@ export const ideaSchema = z.object({
   partOf: nonEmpty,
   title: nonEmpty,
   archived: z.boolean().default(false),
+  approvePlan: z.boolean().optional(),
   stakeholder: stakeholderField,
   labels: assignmentLabelsSchema,
   ...orderField,
@@ -331,6 +332,7 @@ export type CreateInput = Pick<IssueFields, "title"> &
       | "workspace"
       | "mergePolicy"
       | "stakeholder"
+      | "approvePlan"
     >
   > & {
     kind: IssueKind;

@@ -449,7 +449,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | --- | --- |
 | project | `title`, `workspace`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
-| idea | `title`, `archived`, `partOf`, `labels`, `description` |
+| idea | `title`, `archived`, `approvePlan`, `partOf`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commitSha`, `noDiff`, `description` |
 
@@ -900,6 +900,7 @@ Idea — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Project id (required) |
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
+| `approvePlan` | boolean? | absent until set; when true, the human must answer the post-outline auto-plan gate (see [Roles](#roles)) |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
@@ -1407,6 +1408,8 @@ preserves everything else from the existing same-kind issue.
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Project catalog) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Epic / Idea / Story assignments) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `approvePlan` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `stakeholder` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `kind` | explicit on every `children:` entry (allow-lists above); omitted on root nodes (form key implies kind) |
 | `partOf`, `stackedOn` | inferred from nesting (a story-rooted doc has no nesting, so it preserves the on-disk `stackedOn`); runtime `partOf`/`stackedOn` edits use kind [`set`](#kind-scoped-get--set) |
 | `id`, `createdAt` | set on create; `apply` preserves them, never rewrites |

@@ -80,7 +80,11 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
 ] as const;
 
 // Idea has no mergeable runtime keys besides imperative label assignments.
-export const IDEA_RUNTIME_OPTIONAL_KEYS = ["labels", "stakeholder"] as const;
+export const IDEA_RUNTIME_OPTIONAL_KEYS = [
+  "labels",
+  "stakeholder",
+  "approvePlan",
+] as const;
 
 // Task mergeable keys that are not imperative-only. Imperative-only keys
 // (e.g. noDiff) live in TASK_IMPERATIVE_ONLY_KEYS and are excluded.
@@ -128,7 +132,10 @@ export const NULL_CLEARABLE_OBJECT_KEYS = [
 export type NullClearableObjectKey = (typeof NULL_CLEARABLE_OBJECT_KEYS)[number];
 
 // Mergeable patch keys cleared when patched with `false` (absent-until-true booleans).
-export const FALSE_CLEARS_KEYS = ["noDiff"] as const satisfies readonly (keyof IssuePatch)[];
+export const FALSE_CLEARS_KEYS = [
+  "noDiff",
+  "approvePlan",
+] as const satisfies readonly (keyof IssuePatch)[];
 
 export type FalseClearsKey = (typeof FALSE_CLEARS_KEYS)[number];
 
@@ -168,6 +175,7 @@ export const FIELD_LABELS = {
   inspirationApps: "Inspiration apps",
   personas: "Personas",
   stakeholder: "Stakeholder",
+  approvePlan: "Approve plan",
   sourceIdea: "Source idea",
   generatedIssues: "Generated issues",
 } as const;

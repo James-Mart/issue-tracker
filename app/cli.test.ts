@@ -974,6 +974,13 @@ describe("idea add / get / set", () => {
     expect((await runIssueCli(["idea", "get", "mine-later", "description"], { env: env() })).stdout).toBe("updated\n");
   });
 
+  it("gets and sets approvePlan", async () => {
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Gate me"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "gate-me", "approvePlan"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["idea", "set", "gate-me", "approvePlan", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "gate-me", "approvePlan"], { env: env() })).stdout).toBe("true\n");
+  });
+
   it("rejects add and set when the parent is not a project", async () => {
     const badAdd = await runIssueCli(["idea", "add", "--part-of", "e", "Bad parent"], { env: env() });
     expect(badAdd.status).toBe(1);
