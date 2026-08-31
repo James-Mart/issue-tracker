@@ -26,7 +26,8 @@ export function issueRailNodeState(
   if (hasAttention(issue) && issue.needsAttention) return "needs-attention";
   if (
     issue.kind === "idea" &&
-    (state?.ideaStatus === "awaiting-direction" ||
+    (state?.ideaStatus === "awaiting-approval" ||
+      state?.ideaStatus === "awaiting-direction" ||
       state?.ideaStatus === "planned")
   ) {
     return "needs-attention";

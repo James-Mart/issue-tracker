@@ -104,6 +104,12 @@ describe("issueRailNodeState", () => {
       }),
     ).toBe("needs-attention");
     expect(
+      issueRailNodeState(idea(), {
+        blocked: false,
+        ideaStatus: "awaiting-approval",
+      }),
+    ).toBe("needs-attention");
+    expect(
       issueRailNodeState(idea(), { blocked: false, ideaStatus: "planned" }),
     ).toBe("needs-attention");
   });

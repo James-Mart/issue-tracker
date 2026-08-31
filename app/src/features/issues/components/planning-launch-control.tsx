@@ -3,6 +3,7 @@ import { Loader2, Play } from "lucide-react";
 import type { ConversationChannel, IssueDetail } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils/cn";
 import {
   Select,
   SelectContent,
@@ -60,6 +61,64 @@ function usePlanningStakeholder(issue: IdeaDetail) {
   };
 
   return { stakeholder, onChange, saving, error };
+}
+
+function useApprovePlan(issue: IdeaDetail) {
+  const [approvePlan, setApprovePlan] = useState(issue.approvePlan === true);
+  const update = useUpdateIssue();
+  const { saving, run } = useIssuePatchAction();
+
+  useEffect(() => {
+    setApprovePlan(issue.approvePlan === true);
+  }, [issue.approvePlan]);
+
+  const onToggle = () => {
+    const next = !approvePlan;
+    const previous = approvePlan;
+    setApprovePlan(next);
+    void run(async () => {
+      try {
+        await update.mutateAsync({
+          id: issue.id,
+          patch: { approvePlan: next },
+        });
+      } catch (err) {
+        setApprovePlan(previous);
+        throw err;
+      }
+    });
+  };
+
+  return { approvePlan, onToggle, saving };
+}
+
+function ApprovePlanChip({ issue }: { issue: IdeaDetail }) {
+  const { approvePlan, onToggle, saving } = useApprovePlan(issue);
+  const stateLabel = approvePlan ? "on" : "off";
+
+  return (
+    <Button
+      type="button"
+      variant="default"
+      id={`approve-plan-${issue.id}`}
+      aria-pressed={approvePlan}
+      data-testid="flow-row-approve-plan"
+      disabled={saving}
+      className="h-7 px-2 font-mono text-[10px] tracking-[0.08em]"
+      onClick={onToggle}
+    >
+      <span className="text-muted-foreground">Approve plan ·</span>{" "}
+      <span
+        className={cn(
+          approvePlan
+            ? "text-[hsl(var(--current))]"
+            : "text-muted-foreground",
+        )}
+      >
+        {stateLabel}
+      </span>
+    </Button>
+  );
 }
 
 export type PlanningSessionStarted = {
@@ -261,15 +320,20 @@ function PlanningLaunchButton({
 
 /** Icon-only planning launch for Flow row steering. */
 export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
+  const stakeholder = issue.stakeholder;
+
   return (
-    <PlanningLaunchButton
-      issue={issue}
-      channel="planning"
-      stakeholder={issue.stakeholder}
-      variant="icon"
-      optimistic
-      onStarted={() => {}}
-    />
+    <div className="flex items-center gap-1">
+      {stakeholder ? <ApprovePlanChip issue={issue} /> : null}
+      <PlanningLaunchButton
+        issue={issue}
+        channel="planning"
+        stakeholder={stakeholder}
+        variant="icon"
+        optimistic
+        onStarted={() => {}}
+      />
+    </div>
   );
 }
 

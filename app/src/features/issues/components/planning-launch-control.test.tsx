@@ -7,6 +7,7 @@ import { MANUAL_STAKEHOLDER_LABEL } from "@server/fields";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   PlanningChannelEmptyState,
+  PlanningFlowRowLaunch,
   PlanningNewRunControl,
 } from "./planning-launch-control";
 
@@ -346,6 +347,112 @@ describe("PlanningChannelEmptyState", () => {
 
     expect(select().value).toBe("__manual__");
     expect(container.textContent).toContain("Start planning grill");
+  });
+});
+
+describe("PlanningFlowRowLaunch approve plan chip", () => {
+  it("hides the chip when no stakeholder is set", () => {
+    const { container } = mount(
+      <PlanningFlowRowLaunch issue={idea} />,
+    );
+    expect(
+      container.querySelector('[data-testid="flow-row-approve-plan"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="flow-row-start-planning"]'),
+    ).toBeTruthy();
+  });
+
+  it("shows the chip in the off state when a stakeholder is set", () => {
+    const ideaWithStakeholder = {
+      ...idea,
+      id: "offline-sync",
+      stakeholder: "claude-opus-5",
+    };
+    const { container } = mount(
+      <PlanningFlowRowLaunch issue={ideaWithStakeholder} />,
+    );
+    const chip = container.querySelector(
+      '[data-testid="flow-row-approve-plan"]',
+    ) as HTMLButtonElement;
+    expect(chip).toBeTruthy();
+    expect(chip.textContent).toContain("Approve plan ·");
+    expect(chip.textContent).toContain("off");
+    expect(chip.getAttribute("aria-pressed")).toBe("false");
+    expect(chip.id).toBe("approve-plan-offline-sync");
+  });
+
+  it("shows the chip in the on state when approvePlan is set", () => {
+    const ideaWithApprovePlan = {
+      ...idea,
+      id: "gate-me",
+      stakeholder: "claude-opus-5",
+      approvePlan: true as const,
+    };
+    const { container } = mount(
+      <PlanningFlowRowLaunch issue={ideaWithApprovePlan} />,
+    );
+    const chip = container.querySelector(
+      '[data-testid="flow-row-approve-plan"]',
+    ) as HTMLButtonElement;
+    expect(chip.textContent).toContain("on");
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("toggles approvePlan through the Idea update endpoint", async () => {
+    mutateAsync.mockResolvedValueOnce({});
+    const ideaWithStakeholder = {
+      ...idea,
+      id: "toggle-me",
+      stakeholder: "claude-opus-5",
+    };
+    const { container } = mount(
+      <PlanningFlowRowLaunch issue={ideaWithStakeholder} />,
+    );
+
+    await act(async () => {
+      (
+        container.querySelector(
+          '[data-testid="flow-row-approve-plan"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: "toggle-me",
+      patch: { approvePlan: true },
+    });
+  });
+
+  it("assigns distinct control ids when two rows render together", () => {
+    const first = {
+      ...idea,
+      id: "idea-a",
+      stakeholder: "claude-opus-5",
+    };
+    const second = {
+      ...idea,
+      id: "idea-b",
+      stakeholder: "claude-opus-5",
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <>
+          <PlanningFlowRowLaunch issue={first} />
+          <PlanningFlowRowLaunch issue={second} />
+        </>,
+      );
+    });
+
+    const chips = container.querySelectorAll(
+      '[data-testid="flow-row-approve-plan"]',
+    );
+    expect(chips).toHaveLength(2);
+    expect(chips[0]?.id).toBe("approve-plan-idea-a");
+    expect(chips[1]?.id).toBe("approve-plan-idea-b");
   });
 });
 

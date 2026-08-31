@@ -4,16 +4,30 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
+import { issueChannelPath, issuePath } from "../lib/links";
 import { FlowRow } from "./flow-row";
 
 const t0 = "2026-07-01T00:00:00.000Z";
+const projectId = "p";
 
-function idea(id: string): IssueRecord {
+function project(id: string): IssueRecord {
+  return {
+    id,
+    kind: "project",
+    title: id,
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+    archived: false,
+  };
+}
+
+function idea(id: string, partOf = projectId): IssueRecord {
   return {
     id,
     kind: "idea",
     title: id,
-    partOf: "p",
+    partOf,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
@@ -43,7 +57,10 @@ function mountRow(
   state?: DerivedState,
   actions?: ReactNode,
   launchFault?: string,
+  to?: string,
+  issues?: IssueRecord[],
 ): HTMLDivElement {
+  const rowIssues = issues ?? [project(projectId), issue];
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -52,9 +69,10 @@ function mountRow(
       <MemoryRouter>
         <FlowRow
           item={{ issue, state }}
-          issues={[issue]}
+          issues={rowIssues}
           actions={actions}
           launchFault={launchFault}
+          to={to}
         />
       </MemoryRouter>,
     );
@@ -91,6 +109,52 @@ describe("FlowRow", () => {
       container.querySelector('[aria-label="needs attention"]'),
     ).toBeTruthy();
     expect(container.textContent).toContain("planning");
+  });
+
+  it("shows the amber awaiting approval badge without a demand icon", () => {
+    const container = mountRow(idea("gate"), {
+      blocked: false,
+      ideaStatus: "awaiting-approval",
+    });
+    expect(
+      container.querySelector('[aria-label="needs attention"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("awaiting approval");
+    expect(container.textContent).not.toContain("planning");
+  });
+
+  it("drills awaiting-approval Ideas into the Planning tab", () => {
+    const gate = idea("gate");
+    const container = mountRow(
+      gate,
+      {
+        blocked: false,
+        ideaStatus: "awaiting-approval",
+      },
+      undefined,
+      undefined,
+      issuePath(projectId, gate.id),
+    );
+    const link = container.querySelector('a[aria-label="gate"]');
+    expect(link?.getAttribute("href")).toBe(
+      issueChannelPath(projectId, gate.id, "planning"),
+    );
+  });
+
+  it("keeps the default issue drill-in for other Idea statuses", () => {
+    const grill = idea("grill");
+    const container = mountRow(
+      grill,
+      {
+        blocked: false,
+        ideaStatus: "planning",
+      },
+      undefined,
+      undefined,
+      issuePath(projectId, grill.id),
+    );
+    const link = container.querySelector('a[aria-label="grill"]');
+    expect(link?.getAttribute("href")).toBe(issuePath(projectId, grill.id));
   });
 
   it("shows the demand icon and no planning badge on planned Ideas", () => {

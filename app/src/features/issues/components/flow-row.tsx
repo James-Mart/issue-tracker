@@ -4,19 +4,54 @@ import { RailNode } from "@/components/ui/rail";
 import type { IssueRecord } from "@server/schemas";
 import { AxisChips } from "./axis-chips";
 import { leafTaskProgressCount } from "../lib/derived";
+import { issuesById, projectIdOf } from "../lib/build-tree";
 import type { FlowItem } from "../lib/flow";
 import { flowItemNeedsAttention } from "../lib/flow";
+import { issueChannelPath } from "../lib/links";
 import { issueRailNodeState } from "../lib/rail-state";
 
 function flowRowPlanningBadge(item: FlowItem): ReactNode | undefined {
   if (item.issue.kind !== "idea") return undefined;
   const status = item.state?.ideaStatus;
+  if (status === "awaiting-approval") {
+    return (
+      <AxisChips chips={[{ variant: "warn", label: "awaiting approval" }]} />
+    );
+  }
   if (status !== "planning" && status !== "awaiting-direction") {
     return undefined;
   }
   return (
     <AxisChips chips={[{ variant: "inProgress", label: "planning" }]} />
   );
+}
+
+function flowRowDrillInTo(
+  item: FlowItem,
+  issues: IssueRecord[],
+  to: string | undefined,
+): string | undefined {
+  if (to == null) return undefined;
+  if (
+    item.issue.kind === "idea" &&
+    item.state?.ideaStatus === "awaiting-approval"
+  ) {
+    const projectId = projectIdOf(item.issue.id, issuesById(issues));
+    if (projectId) {
+      return issueChannelPath(projectId, item.issue.id, "planning");
+    }
+  }
+  return to;
+}
+
+function flowRowShowsAttentionTriangle(item: FlowItem): boolean {
+  if (
+    item.issue.kind === "idea" &&
+    item.state?.ideaStatus === "awaiting-approval"
+  ) {
+    return false;
+  }
+  return flowItemNeedsAttention(item);
 }
 
 export interface FlowRowProps {
@@ -47,6 +82,7 @@ export function FlowRow({
   const railState = issueRailNodeState(item.issue, item.state);
   const live = railState === "in-flight";
   const count = leafTaskProgressCount(item.issue, issues);
+  const drillInTo = flowRowDrillInTo(item, issues, to);
 
   return (
     <RailNode
@@ -61,10 +97,10 @@ export function FlowRow({
           avatar={avatar}
           chips={flowRowPlanningBadge(item)}
           blocked={Boolean(item.state?.blocked)}
-          attention={flowItemNeedsAttention(item)}
+          attention={flowRowShowsAttentionTriangle(item)}
           count={count}
           actions={actions}
-          drillInTo={to}
+          drillInTo={drillInTo}
           drillInState={drillInState}
           drillInLabel={item.issue.title}
         >
