@@ -15,6 +15,10 @@ const indicatorState = vi.hoisted(() => ({
   value: null as ChannelTabIndicator | null,
 }));
 
+const derivedState = vi.hoisted(() => ({
+  ideaStatus: undefined as string | undefined,
+}));
+
 const mobileState = vi.hoisted(() => ({
   value: false,
 }));
@@ -27,6 +31,18 @@ const panelProps = vi.hoisted(() => ({
 
 vi.mock("../hooks/use-channel-tab-indicator", () => ({
   useChannelTabIndicator: () => indicatorState.value,
+}));
+
+vi.mock("../api/queries", () => ({
+  useIssuesQuery: () => ({
+    data: {
+      issues: [],
+      derived: {
+        capture: { blocked: false, ideaStatus: derivedState.ideaStatus },
+      },
+    },
+  }),
+  useIssueAgentRunsQuery: () => ({ data: undefined }),
 }));
 
 vi.mock("@/hooks/use-mobile", () => ({
@@ -144,6 +160,7 @@ function tabNamed(container: ParentNode, label: string): HTMLButtonElement {
 afterEach(() => {
   document.body.innerHTML = "";
   indicatorState.value = null;
+  derivedState.ideaStatus = undefined;
   mobileState.value = false;
   panelProps.mobileFullViewport = false;
   panelProps.onBackToOverview = undefined;
@@ -221,6 +238,31 @@ describe("IssueDetailTabs channel indicator", () => {
     expect(
       container.querySelector('[data-testid="roster-active-run"]'),
     ).toBeNull();
+    expect(planning?.className).not.toContain("--warning");
+  });
+});
+
+describe("IssueDetailTabs awaiting-approval planning indicator", () => {
+  it("shows awaiting-human on Planning while Overview is selected", () => {
+    derivedState.ideaStatus = "awaiting-approval";
+    const { container } = mountTabs(null, "/");
+    expect(selectedTab(container)).toContain("Overview");
+    const planning = container.querySelector(
+      '[data-channel-tab-indicator="awaiting-human"]',
+    );
+    expect(planning).toBeTruthy();
+    expect(planning?.textContent).toContain("Planning");
+    expect(planning?.className).toContain("--warning");
+  });
+
+  it("shows no indicator on Planning for captured Ideas", () => {
+    derivedState.ideaStatus = "captured";
+    const { container } = mountTabs(null, "/");
+    const planning = Array.from(container.querySelectorAll('[role="tab"]')).find(
+      (el) => el.textContent?.includes("Planning"),
+    );
+    expect(planning).toBeTruthy();
+    expect(planning?.getAttribute("data-channel-tab-indicator")).toBeNull();
     expect(planning?.className).not.toContain("--warning");
   });
 });
