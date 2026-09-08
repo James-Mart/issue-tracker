@@ -93,10 +93,8 @@ export async function deriveAnchoredOutdated(
         showPathAtCommit(workspace, commitSha, path),
         showPathAtCommit(workspace, head, path),
       ]);
-      return {
-        ...comment,
-        outdated: rangeOutdated(atAnchor, atHead, start, line),
-      };
+      if (!rangeOutdated(atAnchor, atHead, start, line)) return comment;
+      return { ...comment, outdated: true };
     }),
   );
 }

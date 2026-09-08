@@ -160,7 +160,7 @@ describe("deriveAnchoredOutdated", () => {
         commitSha: shaInitial,
       }),
     ]);
-    expect(result?.outdated).toBe(false);
+    expect(result).not.toHaveProperty("outdated");
   });
 
   it("marks a line whose content changed in a later commit", async () => {
