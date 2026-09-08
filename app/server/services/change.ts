@@ -24,10 +24,9 @@ function isChildOf(issue: Issue, parentId: string): boolean {
   return issue.kind !== "project" && issue.partOf === parentId;
 }
 
-function taskCommit(task: Task): ChangeCommit | undefined {
-  const sha = taskHeadCommit(task);
-  if (!sha || task.noDiff) return undefined;
-  return { sha, subject: "" };
+function taskCommitsForCollect(task: Task): ChangeCommit[] {
+  if (task.noDiff || task.commits.length === 0) return [];
+  return task.commits.map((sha) => ({ sha, subject: "" }));
 }
 
 /** Stories / Epics nested under `parent` for the implementation-order walk. */
@@ -65,8 +64,7 @@ function collectOwnTaskCommits(
     )
     .sort(bySequence);
   for (const task of tasks) {
-    const commit = taskCommit(task);
-    if (commit) out.push(commit);
+    out.push(...taskCommitsForCollect(task));
   }
 }
 
@@ -214,34 +212,43 @@ async function readTaskChange(
   task: Extract<Issue, { kind: "task" }>,
   workspace: string,
 ): Promise<IssueChange> {
-  const sha = taskHeadCommit(task);
-  if (!sha) {
+  if (task.commits.length === 0) {
     return { state: "empty", reason: "no-commit" };
   }
   if (task.noDiff) {
     return { state: "empty", reason: "no-diff" };
   }
-  const subject = (
-    await runGitOrCommitUnreachable(
-      ["show", "-s", "--format=%s", sha],
-      workspace,
-    )
-  ).trimEnd();
+
+  const first = task.commits[0]!;
+  const last = task.commits[task.commits.length - 1]!;
+  const base = (
+    await runGitOrCommitUnreachable(["rev-parse", `${first}^`], workspace)
+  ).trim();
+  const range = `${base}..${last}`;
   const statOut = await runGitOrCommitUnreachable(
-    ["show", "--shortstat", "--format=", sha],
+    ["diff", "--shortstat", range],
     workspace,
   );
   const stats = parseShortstat(statOut);
-  const patch = await runGitOrCommitUnreachable(
-    ["show", "--format=", "--patch", sha],
-    workspace,
+  const patch = await runGitOrCommitUnreachable(["diff", range], workspace);
+
+  const withSubjects = await Promise.all(
+    task.commits.map(async (sha) => ({
+      sha,
+      subject: (
+        await runGitOrCommitUnreachable(
+          ["show", "-s", "--format=%s", sha],
+          workspace,
+        )
+      ).trimEnd(),
+    })),
   );
 
-  assertPatchWithinCeiling(patch, stats, 1);
+  assertPatchWithinCeiling(patch, stats, withSubjects.length);
 
   return {
     state: "loaded",
-    commits: [{ sha, subject }],
+    commits: withSubjects,
     patch,
     stats,
   };

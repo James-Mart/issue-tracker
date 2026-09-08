@@ -1250,6 +1250,40 @@ integrity check that the linked file exists.
 `comments.jsonl`). Rewriting `description.md` via apply leaves attachments
 untouched; only deleting the issue (or apply-pruning it) removes them.
 
+## Issue change
+
+Read-only git in the Project `workspace` (see [Read-only git from the
+server](#read-only-git-from-the-server-agents-write)) computes an issue's
+code change from recorded Task `commits`, never from a branch tip.
+
+**Task.** A Task's change is the patch over its own commit series:
+`git diff <first>^..<last>` where `first` is the oldest element of
+`commits` and `last` the newest. An empty series (or a `noDiff` Task)
+returns an empty change. The response lists every commit in the series with
+its subject.
+
+**Story.** A Story's change is one combined net diff across its descendant
+Tasks in implementation order — each Task contributes its full series,
+oldest-first within the Task and Tasks in sibling order (stacked Stories
+depth-first). The range spans from the first commit of the first
+contributing Task to the last commit of the last one (`git diff <first>^..<last>`).
+Before computing the patch, every consecutive pair in that flattened list
+must be adjacent in history (`git rev-list --count A..B === 1`); otherwise
+the change is refused as non-contiguous. Tasks with no commits and `noDiff`
+Tasks contribute nothing.
+
+**Epic.** Epic change is not supported; open a Story or Task instead.
+
+**HTTP** (thin adapter over `readIssueChange` / `readIssueChangeFile`):
+
+| method | path | behavior |
+| --- | --- | --- |
+| `GET` | `/api/issues/:id/change` | loaded patch + stats, or empty / fault envelope |
+| `GET` | `/api/issues/:id/change/file?sha=&path=` | file contents at an explicit recorded sha |
+
+Per-file reads take an explicit `sha` query parameter (for anchors later);
+Task file access is limited to the Task's recorded shas (head today).
+
 ## `apply` doc format
 
 `apply` (`app/server/services/apply.ts`, schema in `apply-schema.ts`) is the
