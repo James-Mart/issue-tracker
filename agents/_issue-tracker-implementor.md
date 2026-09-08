@@ -9,6 +9,10 @@ fits the codebase it lands in.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+## Delegation
+
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
+
 ## Bootstrap
 
 1. Set Task `status` from Mode (before any other step):
@@ -51,3 +55,16 @@ is `revise`, **Read**
 and follow it. Otherwise **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-implement.md`
 and follow it.
+
+## Spawn stubs
+
+Pass each stub's delegate arguments (`role`, `issueId`, `prompt`) and inline
+the fields it lists. Channel rules are in the Delegation include already
+Read above.
+
+**Record commit** — `role: issue-tracker-git`, `issueId: <id>`
+
+`<id>` is this Task. `<branchName>` is the parent Story `branchName` from
+bootstrap.
+
+> Mode: record-commit. Issue: `<id>`. Story branch: `<branchName>`.

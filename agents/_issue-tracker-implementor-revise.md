@@ -55,3 +55,6 @@ Absolute path for this file (Read this exact path):
    auto-commit. If the merge has conflicts, resolve them, `git add` those
    paths, and still do not commit — leave `MERGE_HEAD` set with no unmerged
    paths at handoff.
+7. **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-record-commit-beat.md`
+   and follow it.

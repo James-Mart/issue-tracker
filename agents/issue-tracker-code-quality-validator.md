@@ -19,9 +19,9 @@ only looks wrong.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
 **Allowed writes:** `issue task set` for `qa` (`reviewing` | `changes-requested` |
-`passed`, or `qa --clear` if needed) and `needsAttention`; `issue task comment`;
-`issue attach` for judged UI-look PNGs. Do not run any other mutating `issue`
-command.
+`passed`, or `qa --clear` if needed), `status` (`done` on the clean Outcome
+path only), and `needsAttention`; `issue task comment`; `issue attach` for
+judged UI-look PNGs. Do not run any other mutating `issue` command.
 
 ## Bootstrap
 
@@ -36,10 +36,10 @@ command.
    Consult per that file using the step-2 summary output:
    - `codingStandards`
    - `designSystem` when this Task appears UI-related (judgment from Task prose
-     plus paths in the uncommitted change; no Task flag)
-4. The summary carries the Project **workspace** — inspect the whole
-   uncommitted change and read files with it as the cwd, and honor the unset
-   escalation, per **SPEC § Project workspace**.
+     plus paths in the recorded commit range; no Task flag)
+4. The summary carries the Project **workspace** — read the Task's recorded
+   commit range with read-only git there and honor the unset escalation, per
+   **SPEC § Project workspace**.
 
 Do **not** clear `qa` as part of a normal pass; the implementor never clears
 `qa` either. Use `qa --clear` only if you must recover from a stuck/invalid
@@ -58,6 +58,11 @@ gate state before re-entering `reviewing`.
 ## What you do
 
 Complete all of **## Bootstrap** (steps 1–4) first.
+
+**`done` implies committed.** When `noDiff` is absent/false and
+`issue task get <taskId> commits` is `[]`, you cannot pass review — treat
+empty commits as actionable (the implementor must record a commit before
+review can pass). Do not wait for a commit or write terminal `qa passed`.
 
 Check the Task's `noDiff` flag via `issue task get <taskId> noDiff` (empty stdout
 means unset — take the diff-review include) and follow exactly one review

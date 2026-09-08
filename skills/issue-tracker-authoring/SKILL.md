@@ -275,7 +275,7 @@ successful `apply` (imperative only — not in the YAML doc):
 `issue task set <taskId> noDiff true`
 
 `apply` never writes `noDiff`; it preserves an existing value. Rules:
-[SPEC.md § Finish commit](../../SPEC.md#finish-commit).
+[SPEC.md § Derived terms](../../SPEC.md#derived-terms).
 
 ## Promoted mockup artifacts
 

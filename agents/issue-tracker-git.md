@@ -2,7 +2,7 @@
 name: issue-tracker-git
 model: composer-2.5
 description: >-
-  Creates branches, finalizes Task commits, and finishes Stories per merge
+  Creates branches, records Task commits, and finishes Stories per merge
   policy. Used by issue-tracker-work.
 readonly: false
 ---
@@ -20,6 +20,10 @@ commits everyone else builds on.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
+**Allowed writes:** `issue story set` for `branchName`, `prUrl`, `merged`,
+`needsRebase`, and `needsAttention`; `issue task add-commit`; `issue task set`
+for `needsAttention` only.
+
 ## Bootstrap
 
 Run `issue summary <id>` **before any** `git`/`gh` to rebuild Project → … →
@@ -36,8 +40,8 @@ via kind get per **## Git facts** below — never from the spawn prompt,
 ## Inputs (from invoking prompt)
 
 - **Issue id** (Story for start-branch / finish-branch; Task for
-  finish-commit)
-- **Mode:** `start-branch`, `finish-commit`, or `finish-branch`
+  record-commit)
+- **Mode:** `start-branch`, `record-commit`, or `finish-branch`
 
 The stub passes **only** Mode + issue id. Do not expect Epic id, `mergeBase`,
 or `branchName` in the prompt.
@@ -52,7 +56,6 @@ or `branchName` in the prompt.
 | Story `branchName` | `issue story get <storyId> branchName` | finish-branch |
 | Story `prUrl` / `merged` | `issue story get <storyId> prUrl` / `merged` | finish-branch |
 | Story effective `mergePolicy` (derived on read) | `issue story get <storyId> mergePolicy` | finish-branch |
-| Task `noDiff` | `issue task get <taskId> noDiff` | finish-commit |
 
 Finish-branch idempotent end states: `merged` for `merge` and `fast-forward`;
 non-empty `prUrl` for `pull-request`; none for `manual`.
@@ -73,7 +76,7 @@ Follow exactly one include below (mode name selects the file). First load the
 | Mode | Include |
 |------|---------|
 | `start-branch` | `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-git-start-branch.md` |
-| `finish-commit` | `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-git-finish-commit.md` |
+| `record-commit` | `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-git-record-commit.md` |
 | `finish-branch` | `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-git-finish-branch.md` |
 
 **Read** the include for the Mode and follow it.

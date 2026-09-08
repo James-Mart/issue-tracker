@@ -22,7 +22,7 @@ writer; all state that could drift is derived, never stored.
 Kind names are **Story** and **Task**. A Story is planned as one git branch +
 PR; a Task as an ordered series of git commits. Git fact field names
 (`branchName`, `commits`, `mergeBase`, …) and git-subagent modes
-(`start-branch`, `finish-commit`, `finish-branch`) stay **git-shaped** —
+(`start-branch`, `record-commit`, `finish-branch`) stay **git-shaped** —
 they are not renamed to match kinds.
 
 Every issue has a `kind`, one of:
@@ -256,7 +256,7 @@ These are computed by `derive()` and never written to disk (see
   files (e.g. under the gitignored `issues/` store) still warrant `noDiff`; do
   not read the flag as "nothing was done." Surfaced in the detail panel when
   set; omitted from the tree outline. An empty working tree alone is **not** a
-  completion signal — see [Finish commit](#finish-commit).
+  completion signal.
 - **archived** — stored visibility flag on Epic / Idea / Story / Task (never
   Project). Explicit; **not** auto-derived from Done. Cascade and CLI/UI
   filtering — see [Archived visibility](#archived-visibility).
@@ -961,42 +961,19 @@ authored as a separate priority field), freeform per-issue labels outside the
 Project catalog (see [Project labels](#project-labels)), inline
 `description`/comment log (they are separate files), and status history.
 
-### Finish commit
+### Record commit
 
-When the work loop spawns the git subagent in `finish-commit` mode, it finalizes
-one Task. The coordinator never inspects the working tree or the `noDiff` flag —
-only the git subagent does. The subagent reads the Task's `noDiff` (via
-`issue task get <taskId> noDiff`) and the working-tree state (`git status`),
-then applies:
+When the git subagent runs in `record-commit` mode, it records one commit for
+one Task — or none, when the working tree is clean. It writes no Task `status`
+and no other Task field. The mode commits the working tree on the Story branch
+and has no merge or conflict handling (that stays with `finish-branch`).
 
-| `noDiff` | Tree | Action |
-| --- | --- | --- |
-| `true` | clean (empty) | `issue task set <taskId> status done` only — no `git commit`, no `add-commit`; leave `noDiff` set. |
-| `true` | dirty | Escalate: `issue task set <taskId> needsAttention true --reason "…"` — the flag contradicts a non-empty tree. |
-| absent / `false` | clean (empty) | Escalate: `issue task set <taskId> needsAttention true --reason "…"` — an empty tree without `noDiff` is not a completion signal. |
-| absent / `false` | dirty | Stage, commit, and record — steps below. |
-
-The `true` / clean row is a legitimate `done` outcome even when a
-non-source-controlled file was edited (git status stays clean); that is not a
-contradiction with `noDiff`. The implementor sets `noDiff` via kind
-[`set`](#kind-scoped-get--set) (and explains why in a comment) when the correct
-outcome is no source-controlled file changes; validators and the git subagent
-honor the flag. Clearing it (`noDiff false`) is required if a revision later
-lands source-controlled file changes.
-
-For the **dirty + no `noDiff`** row:
-
-1. Detect an in-progress merge with `git rev-parse -q --verify MERGE_HEAD`.
-2. **When it succeeds:** if unmerged paths remain (`git diff --name-only
-   --diff-filter=U` is non-empty), escalate:
-   `issue task set <taskId> needsAttention true --reason "…"` and stop.
-   Otherwise `git add -A`, then `git commit --no-edit` with no `-m` (Git uses
-   `MERGE_MSG`).
-3. **When it fails** (no merge in progress): `git add -A`, read the staged diff
-   and compose a single-line subject (lowercase imperative, fewer than 80 chars;
-   Task title is context only), then `git commit -m "<subject>"`.
-4. `issue task set <taskId> status done`, `issue task add-commit <taskId>
-   $(git rev-parse HEAD)`.
+1. If `git status` is clean (empty): report that there is nothing to commit,
+   and stop. A clean tree is a normal outcome, not an error.
+2. Otherwise `git add -A`, read the staged diff and compose a single-line
+   subject (lowercase imperative, fewer than 80 chars; Task title is context
+   only), then `git commit -m "<subject>"`.
+3. `issue task add-commit <taskId> $(git rev-parse HEAD)`.
 
 ### Tree nesting and order
 
