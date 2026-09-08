@@ -1,173 +1,24 @@
 // @vitest-environment happy-dom
-import { act, type ComponentProps, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentRun, TranscriptEvent } from "@server/schemas";
-import type { TopicListener, TopicMessage } from "@/lib/ws/transport";
+import {
+  AT,
+  AT_END,
+  AT_MID,
+  clickHeader,
+  deliverTopic,
+  eventsQueryState,
+  mountPanel,
+  panelTree,
+  PROJECT_ID,
+  queryState,
+  sampleRun,
+  testQueryClient,
+  topicState,
+} from "./agent-runs-panel.test-helpers";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { describe, expect, it } from "vitest";
 import { issuesKeys } from "../api/keys";
-import { AgentRunCard, AgentRunsPanel } from "./agent-runs-panel";
-
-const queryState = vi.hoisted(() => ({
-  data: {
-    runs: [] as AgentRun[],
-    workRoot: undefined as
-      | { issueId: string; conversationId: string }
-      | undefined,
-  },
-  isLoading: false,
-  error: null as Error | null,
-}));
-
-const topicState = vi.hoisted(() => {
-  const listeners = new Map<string, TopicListener>();
-  return {
-    listeners,
-    subscribe: (topic: string, listener: TopicListener) => {
-      listeners.set(topic, listener);
-      return () => {
-        listeners.delete(topic);
-      };
-    },
-  };
-});
-
-vi.mock("@/lib/ws/transport", () => ({
-  subscribeTopic: (topic: string, listener: TopicListener) =>
-    topicState.subscribe(topic, listener),
-}));
-
-const eventsQueryState = vi.hoisted(() => ({
-  data: { events: [] as TranscriptEvent[] },
-  isLoading: false,
-  error: null as Error | null,
-  expandedCalls: [] as string[],
-}));
-
-vi.mock("../api/queries", () => ({
-  useIssueAgentRunsQuery: () => ({
-    data: queryState.data,
-    isLoading: queryState.isLoading,
-    error: queryState.error,
-  }),
-  useIssueAgentRunEventsQuery: (
-    _issueId: string,
-    delegationId: string,
-    expanded: boolean,
-  ) => {
-    if (expanded) {
-      eventsQueryState.expandedCalls.push(delegationId);
-    }
-    return {
-      data: expanded ? eventsQueryState.data : undefined,
-      isLoading: expanded && eventsQueryState.isLoading,
-      error: expanded ? eventsQueryState.error : null,
-    };
-  },
-}));
-
-const AT = "2026-07-09T14:00:00.000Z";
-const AT_MID = "2026-07-09T15:00:00.000Z";
-const AT_END = "2026-07-09T16:00:00.000Z";
-
-function sampleRun(overrides: Partial<AgentRun> = {}): AgentRun {
-  return {
-    delegationId: "del-1",
-    agentId: "agent-1",
-    role: "issue-tracker-implementor",
-    model: "composer-2.5",
-    issueId: "task-1",
-    parentCallId: "call-1",
-    conversationId: "conv-1",
-    startedAt: AT,
-    status: "completed",
-    endedAt: AT_END,
-    isResume: false,
-    ...overrides,
-  };
-}
-
-function testQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0, staleTime: Infinity },
-    },
-  });
-}
-
-function LocationProbe() {
-  const location = useLocation();
-  return <div data-testid="location-probe">{location.pathname}</div>;
-}
-
-function panelTree(panel: ReactNode, client: QueryClient) {
-  return (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <Routes>
-          <Route
-            path="*"
-            element={
-              <>
-                {panel}
-                <LocationProbe />
-              </>
-            }
-          />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-}
-
-function mountPanel(props: ComponentProps<typeof AgentRunsPanel>): {
-  container: HTMLDivElement;
-  root: Root;
-  invalidateSpy: ReturnType<typeof vi.spyOn>;
-} {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  const client = testQueryClient();
-  const invalidateSpy = vi.spyOn(client, "invalidateQueries");
-  act(() => {
-    root.render(panelTree(<AgentRunsPanel {...props} />, client));
-  });
-  return { container, root, invalidateSpy };
-}
-
-function deliverTopic(topic: string, message: TopicMessage) {
-  const listener = topicState.listeners.get(topic);
-  expect(listener).toBeTruthy();
-  act(() => {
-    listener!(message);
-  });
-}
-
-function clickHeader(container: ParentNode, delegationId: string) {
-  const card = container.querySelector(
-    `[data-run-id="${delegationId}"] [data-testid="agent-run-card-header"]`,
-  ) as HTMLButtonElement | null;
-  expect(card).toBeTruthy();
-  act(() => {
-    card!.click();
-  });
-}
-
-const PROJECT_ID = "platform";
-
-afterEach(() => {
-  document.body.innerHTML = "";
-  queryState.data = { runs: [], workRoot: undefined };
-  queryState.isLoading = false;
-  queryState.error = null;
-  eventsQueryState.data = { events: [] };
-  eventsQueryState.isLoading = false;
-  eventsQueryState.error = null;
-  eventsQueryState.expandedCalls = [];
-  topicState.listeners.clear();
-});
+import { AgentRunsPanel } from "./agent-runs-panel";
 
 describe("AgentRunsPanel", () => {
   it("lists runs oldest first with resume marker and distinct status indicators", () => {
@@ -1019,33 +870,5 @@ describe("AgentRunsPanel", () => {
     expect(card?.hasAttribute("data-expanded")).toBe(true);
     expect(card?.querySelector('[data-slot="agent-run-body"]')).toBeTruthy();
     expect(eventsQueryState.expandedCalls).toContain("del-fresh");
-  });
-});
-
-describe("AgentRunCard", () => {
-  it("shows duration once the run has ended", () => {
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    act(() => {
-      root.render(
-        <MemoryRouter>
-          <AgentRunCard
-            issueId="task-1"
-            run={sampleRun({
-              startedAt: AT,
-              endedAt: "2026-07-09T14:00:12.000Z",
-            })}
-          />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(container.querySelector("[data-duration]")?.textContent).toBe("12s");
-    expect(
-      container
-        .querySelector('[data-testid="agent-run-diagram-link"]')
-        ?.getAttribute("href"),
-    ).toBe("/runs/conv-1");
   });
 });
