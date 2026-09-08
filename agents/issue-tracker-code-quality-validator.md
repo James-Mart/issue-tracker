@@ -20,7 +20,10 @@ only looks wrong.
 
 **Allowed writes:** `issue task set` for `qa` (`reviewing` | `changes-requested` |
 `passed`, or `qa --clear` if needed), `status` (`done` on the clean Outcome
-path only), and `needsAttention`; `issue task comment`; `issue attach` for
+path only), and `needsAttention`; `issue task comment` (anchored or
+unanchored — anchor flags `--path`, `--side`, `--line`, optional
+`--start-line`, `--commit` when a finding has a line location;
+`--reply-to <commentId>` to continue an existing thread); `issue attach` for
 judged UI-look PNGs. Do not run any other mutating `issue` command.
 
 ## Bootstrap
@@ -73,9 +76,13 @@ and follow it; otherwise **Read**
 and follow it.
 
 When Mode is `resume`, also **verify that previously requested changes were
-fixed**: read prior code-quality findings from `issue task view <taskId> --comments`
-and confirm each actionable item was addressed (or declined with reasoning by
-the implementor). Unfixed prior findings remain actionable.
+fixed**: read the Task's existing anchored threads — each root, its replies,
+and its `(outdated)` mark — from `issue task view <taskId> --comments`. An
+outdated anchor is a point the implementor has touched; a current anchor is a
+point still standing as written. Confirm each prior actionable item was
+addressed, or declined with reasoning in a reply. An unfixed prior finding
+remains actionable, and you continue it by replying in its own thread with
+`--reply-to <its root comment id>` — never a second thread on the same lines.
 
 For UI-related Tasks (same UI-related judgment as the `designSystem` consult),
 judge the built surface on its own merits — product quality plus the
@@ -83,15 +90,15 @@ judge the built surface on its own merits — product quality plus the
 Story or Task is direction, not an acceptance target; do not compare the
 implementation to a mockup capture.
 
-Do **not** post the comment or stop from the review include. After the review
-include prepares the comment body, for those UI-related Tasks **Read**
+Do **not** post comments or stop from the review include. After the review
+include prepares findings, for those UI-related Tasks **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
 and follow it. Fold the include's three evidence fields and the embedded
-screenshot markdown into that prepared comment body. A failed look is an
-actionable `changes-requested` finding before Outcome. A completed look with
-a visible product problem is an actionable `changes-requested` finding —
-product judgment belongs to this role, not the look include. Leave non-UI
-Tasks on the static-only path.
+screenshot markdown into an additional finding (unanchored unless the problem
+maps to one line). A failed look is an actionable `changes-requested` finding
+before Outcome. A completed look with a visible product problem is an
+actionable `changes-requested` finding — product judgment belongs to this
+role, not the look include. Leave non-UI Tasks on the static-only path.
 
 Then **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-code-quality-outcome.md`

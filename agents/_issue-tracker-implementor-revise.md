@@ -7,17 +7,20 @@ Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-revise.md`
 
-1. Read feedback with `issue task view <id> --comments`.
+1. Read the Task's threads with `issue task view <id> --comments`: each thread
+   root, its replies, and — on an anchored root — the location it points at and
+   any `(outdated)` mark. Those threads are the findings this entry answers; a
+   finding with no single location is an unanchored root and counts the same.
 2. The feedback was delivered by a weaker engineer. You are the senior engineer.
    You should not take them at face value, but instead re-evaluate the findings
-   for yourself and decide whether they are valid. For each finding, pick one
+   for yourself and decide whether they are valid. For each thread, pick one
    of three outcomes:
    - **Fix it** — you agree and it is in scope for this Task.
    - **Push back** — you disagree with the finding (wrong, or not worth doing).
      "Not worth doing" means rejecting the finding's value, not deferring good
      work to another Task.
    - **Park it** — you agree in principle but decline as out of scope; follow
-     step 3 before posting step 5.
+     step 3 before replying in step 5.
 3. **Park out-of-scope declines.** For each finding you bucketed as **Park it**
    in step 2:
    1. Resolve `<projectId>` from `issue summary` on the Task.
@@ -31,30 +34,35 @@ Absolute path for this file (Read this exact path):
       where `<title>` names the proposed change/refactor and `<text>` covers the
       change plus provenance (source Task id and a short quote/paraphrase of the
       finding).
-   5. Record each created or reused Idea id for step 5; the step 5 comment must
+   5. Record each created or reused Idea id for step 5; the step 5 reply must
       name them alongside the decline reasoning.
    6. If Idea creation fails: `issue task set <id> needsAttention true --reason
-      "..."` immediately; include the failure in the step 5 comment.
+      "..."` immediately; include the failure in the step 5 reply.
 4. **Keep `noDiff` honest.** If your revision lands source-controlled file
    changes, clear the flag (`issue task set <id> noDiff false`). If you now
    conclude the correct outcome is no source-controlled file changes, set it
-   (`issue task set <id> noDiff true`) and say why in your reply.
+   (`issue task set <id> noDiff true`) and say why in your step 6 reply.
    When the Task appears UI-related (same judgment as the `designSystem`
-   consult), before step 5 **Read**
+   consult), before step 6 **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
    and follow it.
-5. Post a succinct reply:
-   `issue task comment <id> --role implementor --body "..."` (what you
-   changed, what you declined and why — including Idea ids from step 3 and any
-   Idea-creation failure noted there). When the Task is UI-related, put the
+5. **Answer each declined finding where it was made.** Every thread you
+   bucketed **Push back** or **Park it** gets a reply in that thread:
+   `issue task comment <id> --role implementor --body "..." --reply-to <that
+   thread's root comment id>`, saying why the finding is declined — a **Park
+   it** reply names the Idea ids from step 3 and any Idea-creation failure noted
+   there. A thread you fixed takes no reply; the changed code is the answer.
+6. Post a succinct reply for the entry as a whole:
+   `issue task comment <id> --role implementor --body "..."` (what you changed,
+   without restating the step 5 declines). When the Task is UI-related, put the
    include's three evidence fields in this comment. If the look failed, still
    post this comment, then `issue task set <id> needsAttention true --reason
    "..."` and stop.
-6. Leave changes uncommitted. When you start a merge, run
+7. Leave changes uncommitted. When you start a merge, run
    `git merge --no-commit <ref>` — not a default `git merge` that may
    auto-commit. If the merge has conflicts, resolve them, `git add` those
    paths, and still do not commit — leave `MERGE_HEAD` set with no unmerged
    paths at handoff.
-7. **Read**
+8. **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-record-commit-beat.md`
    and follow it.

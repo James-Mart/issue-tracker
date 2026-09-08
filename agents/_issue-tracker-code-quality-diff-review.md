@@ -28,10 +28,18 @@ Absolute path for this file (Read this exact path):
    search for "code judo" moves: restructurings that preserve behavior while
    making the implementation dramatically simpler, smaller, more direct, and
    more elegant.
-4. Prepare the comment body:
-   - **Only actionable problems** as a concrete list.
+4. Prepare findings for Outcome:
+   - **Only actionable problems** — one finding per actionable item.
+   - Each finding body carries the judgement only; record the line location
+     separately for Outcome anchor flags (`--path`, `--side new`, `--line`,
+     optional `--start-line`, `--commit` set to `<last>` from step 1).
+   - A finding with no single location — a missing file, an absent test — has
+     no anchor; Outcome posts it unanchored.
+   - A finding that continues a point you already raised carries that thread
+     root's comment id for `--reply-to` instead of anchor flags; do not
+     prepare a second thread on the same lines.
    - Do **not** list things you judge correct or acceptable — the implementor
      treats anything unmentioned as fine.
-   - If nothing actionable, a single line saying so.
-   Then return to the parent **What you do** section (do **not** post the
-   comment or stop from this file).
+   - If nothing actionable, a single clean-pass line (no findings list).
+   Then return to the parent **What you do** section (do **not** post comments
+   or stop from this file).

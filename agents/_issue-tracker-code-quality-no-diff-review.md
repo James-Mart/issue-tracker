@@ -21,7 +21,9 @@ to code-review. Instead:
    changes" actually correct here? A weak or wrong rationale, or a spec that
    plainly demands source-controlled changes, is actionable. Do not treat
    `noDiff` as "nothing was done" when a non-source-controlled file was edited.
-4. Prepare the comment body: list any actionable problems from above as a
-   concrete list, or — if the no-op is justified — a single line approving it.
-   Never edit files or the `noDiff` flag. Then return to the parent **What you
-   do** section (do **not** post the comment or stop from this file).
+4. Prepare findings for Outcome: one finding per actionable problem from
+   above (typically unanchored — there is no diff line to point at), or — if
+   the no-op is justified — a single clean-pass line. Each finding body
+   carries the judgement only. Never edit files or the `noDiff` flag. Then
+   return to the parent **What you do** section (do **not** post comments or
+   stop from this file).
