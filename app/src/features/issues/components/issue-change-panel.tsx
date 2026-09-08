@@ -11,6 +11,7 @@ import {
   FileDiff,
   Virtualizer,
   useVirtualizer,
+  type DiffLineAnnotation,
   type FileDiffContentsLoader,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
@@ -25,9 +26,12 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError } from "@/lib/api/errors";
 import type { ChangeCommit, ChangeStats, IssueChange } from "@server/schemas";
-import { useIssueChangeQuery } from "../api/queries";
+import { useCommentThreads, useIssueChangeQuery } from "../api/queries";
 import { loadFileDiffContents } from "../lib/issue-change-file-contents";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
+import { placeThreadsInFile } from "../lib/issue-change-inline-threads";
+import type { CommentThread as CommentThreadData } from "../lib/comment-threads";
+import { CommentThread } from "./comments/comment-thread";
 import {
   effectiveDiffLayout,
   readStoredDiffLayout,
@@ -299,12 +303,49 @@ export function IssueChangePanel({
   return <IssueChangeLoadedPanel change={data} issueId={issueId} />;
 }
 
+function noopReply(): void {}
+
+function FileLineThreads({
+  threads,
+  issueId,
+  lineNumber,
+  side,
+}: {
+  threads: CommentThreadData[];
+  issueId: string;
+  lineNumber?: number;
+  side?: "old" | "new";
+}) {
+  return (
+    <div
+      data-testid={
+        lineNumber == null
+          ? "issue-change-unlocated-threads"
+          : "issue-change-line-threads"
+      }
+      data-line={lineNumber != null ? String(lineNumber) : undefined}
+      data-side={side}
+      className="flex flex-col gap-2 px-3 py-2"
+    >
+      {threads.map((thread) => (
+        <CommentThread
+          key={thread.root.id}
+          thread={thread}
+          issueId={issueId}
+          onReply={noopReply}
+        />
+      ))}
+    </div>
+  );
+}
+
 function IssueChangeFileDiff({
   fileDiff,
   issueId,
   sha,
   contentsCache,
   diffLayout,
+  threads,
   fileRef,
 }: {
   fileDiff: FileDiffMetadata;
@@ -312,6 +353,7 @@ function IssueChangeFileDiff({
   sha: string;
   contentsCache: Map<string, Promise<string>>;
   diffLayout: DiffLayout;
+  threads: CommentThreadData[];
   fileRef?: Ref<HTMLDivElement>;
 }) {
   const [loading, setLoading] = useState(false);
@@ -330,6 +372,21 @@ function IssueChangeFileDiff({
       }
     },
     [contentsCache, issueId, sha],
+  );
+  const { located, unlocated } = useMemo(
+    () => placeThreadsInFile(threads, fileDiff),
+    [fileDiff, threads],
+  );
+  const renderAnnotation = useCallback(
+    (annotation: DiffLineAnnotation<CommentThreadData[]>) => (
+      <FileLineThreads
+        threads={annotation.metadata}
+        issueId={issueId}
+        lineNumber={annotation.lineNumber}
+        side={annotation.side === "deletions" ? "old" : "new"}
+      />
+    ),
+    [issueId],
   );
 
   return (
@@ -353,7 +410,12 @@ function IssueChangeFileDiff({
         fileDiff={fileDiff}
         disableWorkerPool
         options={{ loadDiffFiles, diffStyle: diffLayout }}
+        lineAnnotations={located}
+        renderAnnotation={renderAnnotation}
       />
+      {unlocated.length > 0 ? (
+        <FileLineThreads threads={unlocated} issueId={issueId} />
+      ) : null}
     </div>
   );
 }
@@ -366,6 +428,7 @@ function IssueChangeLoadedPanel({
   issueId: string;
 }) {
   const files = useMemo(() => fileDiffsFromPatch(change.patch), [change.patch]);
+  const { threads } = useCommentThreads(issueId);
   const contentsCache = useRef(new Map<string, Promise<string>>()).current;
   const sha = change.commits[change.commits.length - 1]!.sha;
   const isMobile = useIsMobile();
@@ -420,6 +483,7 @@ function IssueChangeLoadedPanel({
             sha={sha}
             contentsCache={contentsCache}
             diffLayout={diffLayout}
+            threads={threads}
           />
         ) : null}
       </div>
@@ -434,6 +498,7 @@ function IssueChangeVirtualizedRollup({
   sha,
   contentsCache,
   diffLayout,
+  threads,
 }: {
   files: FileDiffMetadata[];
   selectedName: string | undefined;
@@ -441,6 +506,7 @@ function IssueChangeVirtualizedRollup({
   sha: string;
   contentsCache: Map<string, Promise<string>>;
   diffLayout: DiffLayout;
+  threads: CommentThreadData[];
 }) {
   return (
     <div className="min-w-0 flex-1" data-testid="issue-change-rollup">
@@ -452,6 +518,7 @@ function IssueChangeVirtualizedRollup({
           sha={sha}
           contentsCache={contentsCache}
           diffLayout={diffLayout}
+          threads={threads}
         />
       </Virtualizer>
     </div>
@@ -465,6 +532,7 @@ function IssueChangeVirtualizedFiles({
   sha,
   contentsCache,
   diffLayout,
+  threads,
 }: {
   files: FileDiffMetadata[];
   selectedName: string | undefined;
@@ -472,6 +540,7 @@ function IssueChangeVirtualizedFiles({
   sha: string;
   contentsCache: Map<string, Promise<string>>;
   diffLayout: DiffLayout;
+  threads: CommentThreadData[];
 }) {
   const virtualizer = useVirtualizer();
   const fileNodes = useRef(new Map<string, HTMLDivElement>());
@@ -501,6 +570,7 @@ function IssueChangeVirtualizedFiles({
           sha={sha}
           contentsCache={contentsCache}
           diffLayout={diffLayout}
+          threads={threads}
         />
       ))}
     </div>

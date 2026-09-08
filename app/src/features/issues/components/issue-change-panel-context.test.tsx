@@ -114,6 +114,7 @@ vi.mock("../api/queries", async (importOriginal) => {
       isFetching: changeQueryState.isFetching,
       refetch: changeQueryState.refetch,
     }),
+    useCommentThreads: () => ({ threads: [], problems: [] }),
   };
 });
 

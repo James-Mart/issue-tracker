@@ -65,6 +65,7 @@ vi.mock("../api/queries", () => ({
     isFetching: changeQueryState.isFetching,
     refetch: changeQueryState.refetch,
   }),
+  useCommentThreads: () => ({ threads: [], problems: [] }),
 }));
 
 function mountPanel(): { container: HTMLDivElement; root: Root } {
