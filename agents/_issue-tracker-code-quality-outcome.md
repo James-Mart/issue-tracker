@@ -19,7 +19,7 @@ commit series (the head the review was against).
 
 ```bash
 issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
-<body prepared above>
+<clean-pass line>
 EOF
 )" && issue task set <taskId> qa passed && issue task set <taskId> status done
 ```
@@ -55,23 +55,15 @@ EOF
 - A finding with no single location — a missing file, an absent test — stays
   unanchored (no anchor flags).
 
-Chain every comment with `&&`, then the terminal `qa` write:
+Chain every comment with `&&`, then the terminal `qa` write. Build the chain
+from the findings the review include prepared — one `issue task comment` per
+finding, using the anchored or unanchored pattern above; do not emit fixed
+example invocations for findings you do not have.
 
 - **1st or 2nd** `changes-requested`:
 
 ```bash
-issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
-<judgement only>
-EOF
-)" --path <path> --side new --line <n> --commit <head> && \
-issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
-<judgement only>
-EOF
-)" --path <path> --side new --line <n> --start-line <n> --commit <head> && \
-issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
-<judgement only — no anchor>
-EOF
-)" && \
+<one issue task comment per finding, chained with &&> && \
 issue task set <taskId> qa changes-requested
 ```
 
@@ -80,10 +72,7 @@ issue task set <taskId> qa changes-requested
   again:
 
 ```bash
-issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
-<judgement only>
-EOF
-)" --path <path> --side new --line <n> --commit <head> && \
+<one issue task comment per finding, chained with &&> && \
 issue task set <taskId> qa changes-requested && issue task set <taskId> needsAttention true --reason "code-quality: 3rd changes-requested in this QA session — <short summary>"
 ```
 
