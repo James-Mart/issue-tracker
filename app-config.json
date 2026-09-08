@@ -1,6 +1,0 @@
-{
-  "backup": {
-    "remote": "git@github.com:James-Mart/issue-tracker-store.git",
-    "enabled": true
-  }
-}
