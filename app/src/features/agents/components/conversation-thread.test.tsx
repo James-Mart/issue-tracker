@@ -1,489 +1,16 @@
 // @vitest-environment happy-dom
+import {
+  attachmentStore,
+  mountThread,
+  refetchHistory,
+  renderThread,
+  resetThreadMocks,
+  threadUi,
+  transcriptState,
+} from "./conversation-thread.test-helpers";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TranscriptEvent } from "@server/schemas";
-import { isScrollPinned } from "@/components/ui/message-scroller";
-import { ConversationThread } from "./conversation-thread";
-
-const initialEvents: TranscriptEvent[] = [
-  { type: "prompt", text: "First turn", at: "2026-07-24T00:00:00.000Z" },
-  {
-    type: "assistant",
-    text: "First reply with enough body to exceed one viewport.",
-    at: "2026-07-24T00:00:01.000Z",
-  },
-  { type: "prompt", text: "Second turn", at: "2026-07-24T00:00:02.000Z" },
-  {
-    type: "assistant",
-    text: "Latest reply — opening the thread should land here.",
-    at: "2026-07-24T00:00:03.000Z",
-  },
-];
-
-const transcriptState: { events: TranscriptEvent[] } = {
-  events: [...initialEvents],
-};
-
-const threadUi = vi.hoisted(() => ({
-  pendingText: undefined as string | null | undefined,
-  runActive: false,
-  metaPending: undefined as { text: string; at: string } | undefined,
-  ready: true,
-  historyFailed: false,
-  historyErrorMessage: undefined as string | undefined,
-  isRefetchingHistory: false,
-}));
-
-const attachmentStore = vi.hoisted(() => ({
-  attachments: [] as Array<{ name: string; size: number; mimeType: string }>,
-  isLoading: false,
-}));
-
-const refetchHistory = vi.hoisted(() => vi.fn());
-
-const updatePendingMutate = vi.hoisted(() => vi.fn());
-const clearPendingMutate = vi.hoisted(() => vi.fn());
-const sendMutate = vi.hoisted(() => vi.fn());
-
-vi.mock("../api/queries", () => ({
-  useConversationsQuery: () => ({
-    data: [
-      {
-        id: "conv-1",
-        title: "Test thread",
-        model: "composer-2.5-fast",
-        pendingMessage: threadUi.metaPending,
-      },
-      { id: "conv-2", title: "Other thread", model: "composer-2.5-fast" },
-    ],
-  }),
-  useConversationAttachmentsQuery: () => ({
-    data: attachmentStore.attachments,
-    isLoading: attachmentStore.isLoading,
-  }),
-}));
-
-vi.mock("../api/mutations", () => ({
-  useUpdateConversationPending: () => ({
-    mutate: updatePendingMutate,
-    isPending: false,
-  }),
-  useClearConversationPending: () => ({
-    mutate: clearPendingMutate,
-    isPending: false,
-  }),
-  useSendConversationMessage: () => ({
-    mutate: sendMutate,
-    isPending: false,
-  }),
-}));
-
-vi.mock("../hooks/use-conversation-events", () => ({
-  useConversationEvents: () => ({
-    events: transcriptState.events,
-    ready: threadUi.ready,
-    streamRunActive: threadUi.runActive,
-    runResyncKey: 0,
-    pendingText: threadUi.pendingText,
-    historyFailed: threadUi.historyFailed,
-    refetchHistory,
-    isRefetchingHistory: threadUi.isRefetchingHistory,
-    historyError: threadUi.historyErrorMessage
-      ? new Error(threadUi.historyErrorMessage)
-      : null,
-  }),
-}));
-
-vi.mock("../hooks/use-conversation-run-active", () => ({
-  useConversationRunActive: () => ({ runActive: threadUi.runActive }),
-}));
-
-vi.mock("./composer", () => ({
-  Composer: ({ model }: { model: string }) => (
-    <div data-testid="conversation-composer" data-model={model} />
-  ),
-}));
-
-function mountThread(
-  conversationId: string,
-  options?: { width?: string },
-): {
-  container: HTMLDivElement;
-  root: Root;
-} {
-  const container = document.createElement("div");
-  container.style.height = "240px";
-  container.style.width = options?.width ?? "480px";
-  container.style.display = "flex";
-  container.style.flexDirection = "column";
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(<ConversationThread conversationId={conversationId} />);
-  });
-  return { container, root };
-}
-
-function threadScroller(container: ParentNode): HTMLDivElement {
-  const scroller = container.querySelector('[data-pinned="true"]');
-  expect(scroller).toBeTruthy();
-  return scroller as HTMLDivElement;
-}
-
-function mockOverflow(scroller: HTMLDivElement) {
-  Object.defineProperty(scroller, "scrollHeight", {
-    configurable: true,
-    value: 1200,
-  });
-  Object.defineProperty(scroller, "clientHeight", {
-    configurable: true,
-    value: 240,
-  });
-  scroller.scrollTop = 0;
-}
-
-describe("ConversationThread scroller", () => {
-  let container: HTMLDivElement | undefined;
-  let root: Root | undefined;
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount());
-    container?.remove();
-    container = undefined;
-    root = undefined;
-    transcriptState.events = [...initialEvents];
-    threadUi.pendingText = undefined;
-    threadUi.runActive = false;
-    threadUi.metaPending = undefined;
-    threadUi.ready = true;
-    threadUi.historyFailed = false;
-    threadUi.historyErrorMessage = undefined;
-    threadUi.isRefetchingHistory = false;
-    updatePendingMutate.mockClear();
-    clearPendingMutate.mockClear();
-    sendMutate.mockClear();
-    refetchHistory.mockClear();
-  });
-
-  it("positions at the bottom when a conversation opens", () => {
-    ({ container, root } = mountThread("conv-1"));
-    act(() => root!.unmount());
-
-    root = createRoot(container!);
-    act(() => {
-      root!.render(<ConversationThread conversationId="conv-2" />);
-    });
-
-    const scroller = threadScroller(container!);
-    expect(scroller.getAttribute("role")).toBe("log");
-    mockOverflow(scroller);
-
-    transcriptState.events = [
-      ...initialEvents,
-      {
-        type: "assistant",
-        text: "Newest message on open",
-        at: "2026-07-24T00:00:04.000Z",
-      },
-    ];
-
-    act(() => {
-      root!.render(<ConversationThread conversationId="conv-2" />);
-    });
-
-    expect(scroller.scrollTop).toBe(1200);
-    expect(isScrollPinned(scroller)).toBe(true);
-  });
-
-  it("follows in-place assistant streaming while pinned", () => {
-    ({ container, root } = mountThread("conv-1"));
-    const scroller = threadScroller(container!);
-    mockOverflow(scroller);
-
-    const last = transcriptState.events.at(-1);
-    expect(last?.type).toBe("assistant");
-    transcriptState.events = [
-      ...transcriptState.events.slice(0, -1),
-      {
-        type: "assistant",
-        text: `${(last as Extract<TranscriptEvent, { type: "assistant" }>).text} streaming tokens`,
-        at: "2026-07-24T00:00:04.000Z",
-      },
-    ];
-    expect(transcriptState.events.length).toBe(initialEvents.length);
-
-    act(() => {
-      root!.render(<ConversationThread conversationId="conv-1" />);
-    });
-
-    expect(scroller.scrollTop).toBe(1200);
-    expect(isScrollPinned(scroller)).toBe(true);
-  });
-});
-
-describe("ConversationThread pending message", () => {
-  let container: HTMLDivElement | undefined;
-  let root: Root | undefined;
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount());
-    container?.remove();
-    container = undefined;
-    root = undefined;
-    transcriptState.events = [...initialEvents];
-    threadUi.pendingText = undefined;
-    threadUi.runActive = false;
-    threadUi.metaPending = undefined;
-    threadUi.ready = true;
-    threadUi.historyFailed = false;
-    threadUi.historyErrorMessage = undefined;
-    threadUi.isRefetchingHistory = false;
-    updatePendingMutate.mockClear();
-    clearPendingMutate.mockClear();
-    sendMutate.mockClear();
-    refetchHistory.mockClear();
-  });
-
-  it("renders a pending message row from conversation meta", () => {
-    threadUi.metaPending = {
-      text: "follow up after this run",
-      at: "2026-07-24T00:00:05.000Z",
-    };
-    threadUi.runActive = true;
-    ({ container, root } = mountThread("conv-1"));
-
-    const row = container!.querySelector('[data-testid="pending-message-row"]');
-    expect(row).toBeTruthy();
-    expect(row!.textContent).toContain("follow up after this run");
-    expect(row!.getAttribute("data-run-active")).toBe("true");
-    expect(row!.textContent).toContain("Queued");
-  });
-
-  it("edits the pending message in place", () => {
-    threadUi.pendingText = "edit me";
-    threadUi.runActive = true;
-    ({ container, root } = mountThread("conv-1"));
-
-    act(() => {
-      (
-        container!.querySelector(
-          '[data-testid="pending-message-row"] button[type="button"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    const input = container!.querySelector(
-      'input[aria-label="Edit queued message"]',
-    ) as HTMLInputElement;
-    expect(input).toBeTruthy();
-
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype,
-      "value",
-    )!.set!;
-    act(() => {
-      nativeInputValueSetter.call(input, "edited text");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    act(() => {
-      input.form!.requestSubmit();
-    });
-
-    expect(updatePendingMutate).toHaveBeenCalledWith(
-      { id: "conv-1", text: "edited text" },
-      expect.any(Object),
-    );
-  });
-
-  it("removes the pending message row", () => {
-    threadUi.pendingText = "remove me";
-    ({ container, root } = mountThread("conv-1"));
-
-    act(() => {
-      (
-        container!.querySelector(
-          'button[aria-label="Remove queued message"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(clearPendingMutate).toHaveBeenCalledWith("conv-1");
-  });
-
-  it("shows not-sent state when pending coexists with no active run", () => {
-    threadUi.pendingText = "never sent";
-    threadUi.runActive = false;
-    ({ container, root } = mountThread("conv-1"));
-
-    const row = container!.querySelector('[data-testid="pending-message-row"]');
-    expect(row!.textContent).toContain("Not sent");
-    expect(row!.textContent).toContain(
-      "The run ended before this message could send.",
-    );
-    expect(
-      container!.querySelector('[data-testid="pending-send-now"]'),
-    ).toBeTruthy();
-  });
-
-  it("sends the pending message now and clears via the ordinary send path", () => {
-    threadUi.pendingText = "send when idle";
-    threadUi.runActive = false;
-    ({ container, root } = mountThread("conv-1"));
-
-    act(() => {
-      (
-        container!.querySelector(
-          '[data-testid="pending-send-now"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(sendMutate).toHaveBeenCalledWith({
-      id: "conv-1",
-      body: { prompt: "send when idle", model: "composer-2.5-fast" },
-    });
-  });
-});
-
-const AMBIENT_INNER_HEIGHT_PX = window.innerHeight;
-const LAYOUT_HEIGHT_PX = 800;
-
-function setInnerHeight(px: number) {
-  Object.defineProperty(window, "innerHeight", {
-    configurable: true,
-    value: px,
-  });
-}
-
-function mockSoftKeyboard() {
-  const state = { coveredPx: 0 };
-  const listeners = new Set<() => void>();
-  setInnerHeight(LAYOUT_HEIGHT_PX);
-  Object.defineProperty(window, "visualViewport", {
-    configurable: true,
-    value: {
-      get height() {
-        return LAYOUT_HEIGHT_PX - state.coveredPx;
-      },
-      offsetTop: 0,
-      scale: 1,
-      addEventListener: (_event: string, cb: () => void) => {
-        listeners.add(cb);
-      },
-      removeEventListener: (_event: string, cb: () => void) => {
-        listeners.delete(cb);
-      },
-    } as unknown as VisualViewport,
-  });
-
-  return {
-    open(coveredPx: number) {
-      state.coveredPx = coveredPx;
-      act(() => {
-        for (const cb of listeners) cb();
-      });
-    },
-  };
-}
-
-describe("ConversationThread keyboard inset", () => {
-  let container: HTMLDivElement | undefined;
-  let root: Root | undefined;
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount());
-    container?.remove();
-    container = undefined;
-    root = undefined;
-    transcriptState.events = [...initialEvents];
-    Reflect.deleteProperty(window, "visualViewport");
-    setInnerHeight(AMBIENT_INNER_HEIGHT_PX);
-  });
-
-  it("shortens the thread by the covered height so the composer stays reachable", () => {
-    const keyboard = mockSoftKeyboard();
-    ({ container, root } = mountThread("conv-1"));
-    const thread = container!.querySelector(
-      '[data-testid="conversation-thread"]',
-    ) as HTMLDivElement;
-    expect(thread.style.paddingBottom).toBe("0px");
-
-    keyboard.open(320);
-
-    expect(thread.style.paddingBottom).toBe("320px");
-    expect(
-      container!.querySelector('[data-testid="open-thread-chrome"]'),
-    ).toBeTruthy();
-    expect(
-      container!.querySelector('[data-testid="conversation-composer"]'),
-    ).toBeTruthy();
-  });
-
-  it("re-lands on the latest messages when the keyboard shortens the transcript", () => {
-    const keyboard = mockSoftKeyboard();
-    ({ container, root } = mountThread("conv-1"));
-    const scroller = threadScroller(container!);
-    mockOverflow(scroller);
-    expect(scroller.scrollTop).toBe(0);
-
-    keyboard.open(320);
-
-    expect(scroller.scrollTop).toBe(1200);
-    expect(isScrollPinned(scroller)).toBe(true);
-  });
-});
-
-describe("ConversationThread anchored meta", () => {
-  let container: HTMLDivElement | undefined;
-  let root: Root | undefined;
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount());
-    container?.remove();
-    container = undefined;
-    root = undefined;
-    transcriptState.events = [...initialEvents];
-  });
-
-  it("mounts the composer from meta when the id is absent from the Agents roster", () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-    act(() => {
-      root!.render(
-        <ConversationThread
-          conversationId="anchored-1"
-          meta={{ title: "Plan capture", model: "composer-2.5" }}
-        />,
-      );
-    });
-    const composer = container.querySelector(
-      '[data-testid="conversation-composer"]',
-    );
-    expect(composer?.getAttribute("data-model")).toBe("composer-2.5");
-    expect(container.textContent).toContain("Plan capture");
-  });
-
-  it("omits the composer when hideComposer is set for archived history", () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-    act(() => {
-      root!.render(
-        <ConversationThread
-          conversationId="anchored-archived"
-          meta={{ title: "Old plan", model: "composer-2.5" }}
-          hideComposer
-        />,
-      );
-    });
-    expect(
-      container.querySelector('[data-testid="conversation-composer"]'),
-    ).toBeNull();
-    expect(container.textContent).toContain("Old plan");
-  });
-});
+import { type Root } from "react-dom/client";
+import { afterEach, describe, expect, it } from "vitest";
 
 describe("ConversationThread Tool use groups", () => {
   let container: HTMLDivElement | undefined;
@@ -494,7 +21,7 @@ describe("ConversationThread Tool use groups", () => {
     container?.remove();
     container = undefined;
     root = undefined;
-    transcriptState.events = [...initialEvents];
+    resetThreadMocks();
   });
 
   it("folds consecutive ordinary tools into one collapsed Tool use block", () => {
@@ -606,9 +133,7 @@ describe("ConversationThread Tool use groups", () => {
         at: "2026-07-24T00:00:03.000Z",
       },
     ];
-    act(() => {
-      root!.render(<ConversationThread conversationId="conv-1" />);
-    });
+    renderThread(root!, "conv-1");
 
     expect(group.open).toBe(false);
     expect(group.getAttribute("data-status")).toBe("running");
@@ -621,9 +146,7 @@ describe("ConversationThread Tool use groups", () => {
         ? { ...event, status: "completed" as const }
         : event,
     );
-    act(() => {
-      root!.render(<ConversationThread conversationId="conv-1" />);
-    });
+    renderThread(root!, "conv-1");
 
     expect(group.open).toBe(false);
     expect(group.getAttribute("data-status")).toBe("completed");
@@ -704,12 +227,7 @@ describe("ConversationThread transcript load failure", () => {
     container?.remove();
     container = undefined;
     root = undefined;
-    transcriptState.events = [...initialEvents];
-    threadUi.ready = true;
-    threadUi.historyFailed = false;
-    threadUi.historyErrorMessage = undefined;
-    threadUi.isRefetchingHistory = false;
-    refetchHistory.mockClear();
+    resetThreadMocks();
   });
 
   it("shows retry rather than skeletons over painted events when a seeded refetch fails", () => {
@@ -823,9 +341,7 @@ describe("ConversationThread prompt attachments", () => {
     container?.remove();
     container = undefined;
     root = undefined;
-    transcriptState.events = [...initialEvents];
-    attachmentStore.attachments = [];
-    attachmentStore.isLoading = false;
+    resetThreadMocks();
   });
 
   it("renders image attachment thumbnails at the conversation attachment path", () => {
@@ -956,7 +472,7 @@ describe("ConversationThread attachment images", () => {
     container?.remove();
     container = undefined;
     root = undefined;
-    transcriptState.events = [...initialEvents];
+    resetThreadMocks();
   });
 
   it("renders an attachment image and opens the zoom view", () => {
@@ -1018,4 +534,3 @@ describe("ConversationThread attachment images", () => {
     expect(container!.scrollWidth).toBeLessThanOrEqual(390);
   });
 });
-
