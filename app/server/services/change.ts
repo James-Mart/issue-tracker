@@ -1,5 +1,6 @@
 import { bySequence } from "../order.js";
 import type { ChangeCommit, ChangeStats, Issue, IssueChange } from "../schemas.js";
+import { taskHeadCommit } from "./commit-sha.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
@@ -23,9 +24,9 @@ function isChildOf(issue: Issue, parentId: string): boolean {
   return issue.kind !== "project" && issue.partOf === parentId;
 }
 
-function taskCommit(task: Task): ChangeCommit | undefined {
-  if (!task.commitSha || task.noDiff) return undefined;
-  return { sha: task.commitSha, subject: "" };
+function taskCommitsForCollect(task: Task): ChangeCommit[] {
+  if (task.noDiff || task.commits.length === 0) return [];
+  return task.commits.map((sha) => ({ sha, subject: "" }));
 }
 
 /** Stories / Epics nested under `parent` for the implementation-order walk. */
@@ -63,8 +64,7 @@ function collectOwnTaskCommits(
     )
     .sort(bySequence);
   for (const task of tasks) {
-    const commit = taskCommit(task);
-    if (commit) out.push(commit);
+    out.push(...taskCommitsForCollect(task));
   }
 }
 
@@ -212,35 +212,43 @@ async function readTaskChange(
   task: Extract<Issue, { kind: "task" }>,
   workspace: string,
 ): Promise<IssueChange> {
-  if (!task.commitSha) {
+  if (task.commits.length === 0) {
     return { state: "empty", reason: "no-commit" };
   }
   if (task.noDiff) {
     return { state: "empty", reason: "no-diff" };
   }
 
-  const sha = task.commitSha;
-  const subject = (
-    await runGitOrCommitUnreachable(
-      ["show", "-s", "--format=%s", sha],
-      workspace,
-    )
-  ).trimEnd();
+  const first = task.commits[0]!;
+  const last = task.commits[task.commits.length - 1]!;
+  const base = (
+    await runGitOrCommitUnreachable(["rev-parse", `${first}^`], workspace)
+  ).trim();
+  const range = `${base}..${last}`;
   const statOut = await runGitOrCommitUnreachable(
-    ["show", "--shortstat", "--format=", sha],
+    ["diff", "--shortstat", range],
     workspace,
   );
   const stats = parseShortstat(statOut);
-  const patch = await runGitOrCommitUnreachable(
-    ["show", "--format=", "--patch", sha],
-    workspace,
+  const patch = await runGitOrCommitUnreachable(["diff", range], workspace);
+
+  const withSubjects = await Promise.all(
+    task.commits.map(async (sha) => ({
+      sha,
+      subject: (
+        await runGitOrCommitUnreachable(
+          ["show", "-s", "--format=%s", sha],
+          workspace,
+        )
+      ).trimEnd(),
+    })),
   );
 
-  assertPatchWithinCeiling(patch, stats, 1);
+  assertPatchWithinCeiling(patch, stats, withSubjects.length);
 
   return {
     state: "loaded",
-    commits: [{ sha, subject }],
+    commits: withSubjects,
     patch,
     stats,
   };
@@ -258,8 +266,9 @@ function assertChangeSupported(issue: Issue): void {
 function allowedCommitShas(issue: Issue, issueId: string): string[] {
   assertChangeSupported(issue);
   if (issue.kind === "task") {
-    if (!issue.commitSha || issue.noDiff) return [];
-    return [issue.commitSha];
+    const sha = taskHeadCommit(issue);
+    if (!sha || issue.noDiff) return [];
+    return [sha];
   }
   if (issue.kind === "story") {
     return collectDescendantCommits(issueId).map((commit) => commit.sha);

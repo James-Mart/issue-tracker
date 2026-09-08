@@ -144,10 +144,16 @@ describe("task get/set", () => {
     expect(invalidQa.status).toBe(1);
     expect(invalidQa.stderr).toMatch(/invalid qa "pending"/);
 
-    expect((await runIssueCli(["task", "set", "c1", "commitSha", sha1], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["task", "get", "c1", "commitSha"], { env: env() })).stdout).toBe(`${sha1}\n`);
-    expect((await runIssueCli(["task", "set", "c1", "commitSha", "--clear"], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["task", "get", "c1", "commitSha"], { env: env() })).stdout).toBe("");
+    expect(
+      (await runIssueCli(["task", "set", "c1", "commits", JSON.stringify([sha1])], { env: env() })).status,
+    ).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "commits"], { env: env() })).stdout).toBe(
+      `${JSON.stringify([sha1])}\n`,
+    );
+    expect(
+      (await runIssueCli(["task", "set", "c1", "commits", "[]"], { env: env() })).status,
+    ).toBe(0);
+    expect((await runIssueCli(["task", "get", "c1", "commits"], { env: env() })).stdout).toBe("[]\n");
 
     expect((await runIssueCli(["task", "set", "c1", "noDiff", "true"], { env: env() })).status).toBe(0);
     expect((await runIssueCli(["task", "get", "c1", "noDiff"], { env: env() })).stdout).toBe("true\n");
@@ -187,7 +193,7 @@ describe("task get/set", () => {
     expect((await runIssueCli(["task", "get", "c2", "blocked"], { env: env() })).stdout).toBe("false\n");
   });
 
-  it("refuses kind mismatch, unknown fields, and invalid commitSha / noDiff", async () => {
+  it("refuses kind mismatch, unknown fields, and invalid commits / noDiff", async () => {
     const mismatch = await runIssueCli(["task", "get", "a", "title"], { env: env() });
     expect(mismatch.status).toBe(1);
     expect(mismatch.stderr).toContain('"a" is a story, not a task');
@@ -206,7 +212,10 @@ describe("task get/set", () => {
       'unknown or unsettable field "branchName" for task',
     );
 
-    const badSha = await runIssueCli(["task", "set", "c1", "commitSha", "4019c25"], { env: env() });
+    const badSha = await runIssueCli(
+      ["task", "set", "c1", "commits", JSON.stringify(["4019c25"])],
+      { env: env() },
+    );
     expect(badSha.status).toBe(1);
     expect(badSha.stderr).toMatch(/invalid commit sha "4019c25"/);
 
@@ -214,8 +223,8 @@ describe("task get/set", () => {
       "task",
       "set",
       "c1",
-      "commitSha",
-      "0123456789abcdef0123456789abcdef0123456",
+      "commits",
+      JSON.stringify(["0123456789abcdef0123456789abcdef0123456"]),
     ], { env: env() });
     expect(shortSha.status).toBe(1);
     expect(shortSha.stderr).toMatch(/invalid commit sha/);
@@ -224,8 +233,8 @@ describe("task get/set", () => {
       "task",
       "set",
       "c1",
-      "commitSha",
-      "ghijghijghijghijghijghijghijghijghijghij",
+      "commits",
+      JSON.stringify(["ghijghijghijghijghijghijghijghijghijghij"]),
     ], { env: env() });
     expect(nonHex.status).toBe(1);
     expect(nonHex.stderr).toMatch(/invalid commit sha/);
@@ -234,15 +243,15 @@ describe("task get/set", () => {
       "task",
       "set",
       "c1",
-      "commitSha",
-      "0123456789ABCDEF0123456789ABCDEF01234567",
+      "commits",
+      JSON.stringify(["0123456789ABCDEF0123456789ABCDEF01234567"]),
     ], { env: env() });
     expect(upper.status).toBe(1);
     expect(upper.stderr).toMatch(/invalid commit sha/);
 
-    expect((await runIssueCli(["task", "set", "a", "commitSha", sha1], { env: env() })).stderr).toMatch(
-      /"a" is a story, not a task/,
-    );
+    expect(
+      (await runIssueCli(["task", "set", "a", "commits", JSON.stringify([sha1])], { env: env() })).stderr,
+    ).toMatch(/"a" is a story, not a task/);
     expect((await runIssueCli(["task", "set", "a", "noDiff", "true"], { env: env() })).stderr).toMatch(
       /"a" is a story, not a task/,
     );
@@ -289,10 +298,13 @@ epic:
     expect((await runIssueCli(["tree", "p"], { env: env() })).stdout).not.toMatch(/^ {6}task c1\b.*\bqa=/m);
   });
 
-  it("accepts sha256 commitSha and surfaces noDiff in view/summary", async () => {
-    expect((await runIssueCli(["task", "set", "c1", "commitSha", sha256], { env: env() })).status).toBe(0);
-    expect(JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8")).commitSha).toBe(
-      sha256,
+  it("accepts sha256 commits and surfaces noDiff in view/summary", async () => {
+    expect(
+      (await runIssueCli(["task", "set", "c1", "commits", JSON.stringify([sha256])], { env: env() }))
+        .status,
+    ).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8")).commits).toEqual(
+      [sha256],
     );
 
     expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).not.toContain("noDiff:");
@@ -337,5 +349,44 @@ epic:
     const unknown = await runIssueCli(["task", "set", "c1", "partOf", "ghost"], { env: env() });
     expect(unknown.status).toBe(1);
     expect(unknown.stderr).toMatch(/references unknown issue "ghost"/);
+  });
+
+  it("appends commits, refuses duplicates, sets the series, and chips the head", async () => {
+    const sha2 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const append = await runIssueCli(["task", "add-commit", "c1", sha1], { env: env() });
+    expect(append.status).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8")).commits).toEqual([
+      sha1,
+    ]);
+
+    const again = await runIssueCli(["task", "add-commit", "c1", sha1], { env: env() });
+    expect(again.status).toBe(1);
+    expect(again.stderr).toMatch(/already on this Task/);
+
+    const set = await runIssueCli(
+      ["task", "set", "c1", "commits", JSON.stringify([sha1, sha2])],
+      { env: env() },
+    );
+    expect(set.status).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8")).commits).toEqual([
+      sha1,
+      sha2,
+    ]);
+
+    const malformed = await runIssueCli(
+      ["task", "set", "c1", "commits", JSON.stringify(["not-a-sha"])],
+      { env: env() },
+    );
+    expect(malformed.status).toBe(1);
+    expect(malformed.stderr).toMatch(/invalid commit sha "not-a-sha"/);
+    expect(JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8")).commits).toEqual([
+      sha1,
+      sha2,
+    ]);
+
+    const tree = await runIssueCli(["tree", "p"], { env: env() });
+    expect(tree.status).toBe(0);
+    expect(tree.stdout).toMatch(/^ {6}task c1\b.*\bsha=bbbbbbb\b/m);
+    expect(tree.stdout).not.toMatch(/^ {6}task c1\b.*\bsha=0123456\b/m);
   });
 });

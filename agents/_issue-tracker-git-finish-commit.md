@@ -13,7 +13,7 @@ Never parse chat.
 
 | `noDiff` | Tree | Action |
 |----------|------|--------|
-| true | clean (empty) | `issue task set <taskId> status done` only — no `git commit`, no `commitSha`; leave `noDiff` set. Then finish and stop. |
+| true | clean (empty) | `issue task set <taskId> status done` only — no `git commit`, no `add-commit`; leave `noDiff` set. Then finish and stop. |
 | true | dirty | `issue task set <taskId> needsAttention true --reason "..."` — the flag contradicts a non-empty tree. Then stop. |
 | absent/false | clean (empty) | `issue task set <taskId> needsAttention true --reason "..."` — an empty tree without `noDiff` is not a completion signal. Then stop. |
 | absent/false | dirty | Stage, commit, and record — steps below. |
@@ -39,5 +39,5 @@ For the **dirty + no `noDiff`** row:
    ("when applied, this commit will X"), fewer than 80 characters, no
    title/body. Then `git commit -m "<subject>"`.
 4. `issue task set <taskId> status done`
-5. `issue task set <taskId> commitSha $(git rev-parse HEAD)`
+5. `issue task add-commit <taskId> $(git rev-parse HEAD)`
 6. Finish and stop.

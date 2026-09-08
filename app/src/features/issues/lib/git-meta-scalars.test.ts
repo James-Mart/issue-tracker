@@ -31,6 +31,7 @@ function task(
     partOf: "s",
     order: 0,
     status: "todo",
+    commits: [],
     createdAt: "",
     updatedAt: "",
     ...overrides,
@@ -74,7 +75,7 @@ describe("taskGitMetaScalars", () => {
 
   it("includes present parent branch, commit, noDiff, and qa", () => {
     const scalars = taskGitMetaScalars(
-      task({ commitSha: "abc123", noDiff: true, qa: "passed" }),
+      task({ commits: ["abc123"], noDiff: true, qa: "passed" }),
       "feat/a",
     );
     expect(scalars.map((s) => s.key)).toEqual([

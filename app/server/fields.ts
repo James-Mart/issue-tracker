@@ -89,11 +89,11 @@ export const IDEA_RUNTIME_OPTIONAL_KEYS = [
 
 // Task mergeable keys that are not imperative-only. Imperative-only keys
 // (e.g. noDiff) live in TASK_IMPERATIVE_ONLY_KEYS and are excluded.
-export const TASK_FORM_FIELD_KEYS = ["status", "commitSha"] as const;
+export const TASK_FORM_FIELD_KEYS = ["status", "commits"] as const;
 
 export const TASK_IMPERATIVE_ONLY_KEYS = ["noDiff", "qa"] as const;
 
-export const TASK_RUNTIME_OPTIONAL_KEYS = ["commitSha", "noDiff", "qa"] as const;
+export const TASK_RUNTIME_OPTIONAL_KEYS = ["commits", "noDiff", "qa"] as const;
 
 export const TASK_FIELD_KEYS = [
   ...TASK_FORM_FIELD_KEYS,
@@ -110,7 +110,6 @@ export type IdeaRuntimeOptionalKey = (typeof IDEA_RUNTIME_OPTIONAL_KEYS)[number]
 export const CLEARABLE_KEYS = [
   "assignee",
   "stakeholder",
-  "commitSha",
   "branchName",
   "stackedOn",
   "prUrl",

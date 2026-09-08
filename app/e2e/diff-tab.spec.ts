@@ -138,15 +138,15 @@ const test = base.extend<Record<string, never>, { diffTabApp: DiffTabApp }>({
           });
           await update(namesTask.id, {
             status: "done",
-            commitSha: fixture.namesSha,
+            commits: [fixture.namesSha],
           });
           await update(alphaTask.id, {
             status: "done",
-            commitSha: fixture.alphaSha,
+            commits: [fixture.alphaSha],
           });
           await update(bravoTask.id, {
             status: "done",
-            commitSha: fixture.bravoSha,
+            commits: [fixture.bravoSha],
           });
 
           const faultStory = await create({
@@ -168,11 +168,11 @@ const test = base.extend<Record<string, never>, { diffTabApp: DiffTabApp }>({
           oversizedTaskId = oversized.id;
           await update(unreachable.id, {
             status: "done",
-            commitSha: UNREACHABLE_SHA,
+            commits: [UNREACHABLE_SHA],
           });
           await update(oversized.id, {
             status: "done",
-            commitSha: fixture.oversizedSha,
+            commits: [fixture.oversizedSha],
           });
         },
       });

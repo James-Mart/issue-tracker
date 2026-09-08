@@ -118,20 +118,24 @@ afterEach(async () => {
 
 describe("issue change HTTP API", () => {
   it("returns a loaded change when the Task commit resolves", async () => {
-    writeTask("t-loaded", { commitSha: SHA });
+    writeTask("t-loaded", { commits: [SHA] });
+    const parent = "0123456789abcdef0123456789abcdef01234566";
     await stubGitSpawner((args) => {
-      if (args[0] === "show" && args.includes("--format=%s")) {
-        return mockGitChild({ stdout: "Add feature\n" });
+      if (args[0] === "rev-parse" && args[1] === `${SHA}^`) {
+        return mockGitChild({ stdout: `${parent}\n` });
       }
-      if (args[0] === "show" && args.includes("--patch")) {
+      if (args[0] === "diff" && args.includes("--shortstat")) {
+        return mockGitChild({
+          stdout: " 2 files changed, 5 insertions(+), 1 deletion(-)\n",
+        });
+      }
+      if (args[0] === "diff") {
         return mockGitChild({
           stdout: "diff --git a/foo.ts b/foo.ts\n+line\n",
         });
       }
-      if (args[0] === "show" && args.includes("--shortstat")) {
-        return mockGitChild({
-          stdout: " 2 files changed, 5 insertions(+), 1 deletion(-)\n",
-        });
+      if (args[0] === "show" && args.includes("--format=%s")) {
+        return mockGitChild({ stdout: "Add feature\n" });
       }
       return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
     });
@@ -158,7 +162,7 @@ describe("issue change HTTP API", () => {
   });
 
   it("returns a failure status when the recorded sha is unreachable", async () => {
-    writeTask("t-unreachable", { commitSha: SHA });
+    writeTask("t-unreachable", { commits: [SHA] });
     await stubGitSpawner(() =>
       mockGitChild({
         code: 128,

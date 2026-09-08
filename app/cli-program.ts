@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { format } from "util";
 import { Command, CommanderError } from "commander";
 import { parse as parseYaml } from "yaml";
-import { list } from "./server/services/issues.js";
+import { list, update } from "./server/services/issues.js";
 import { KINDS } from "./server/issue-constants.js";
 import {
   type DerivedState,
@@ -32,8 +32,9 @@ import { formatSummary, summarize } from "./server/services/summary.js";
 import { hasAttention } from "./server/kind.js";
 import { registerKindAdd } from "./cli-create.js";
 import { bindCliStdin } from "./cli-io.js";
-import { registerKindGetSet } from "./cli-kind.js";
+import { assertKind, registerKindGetSet } from "./cli-kind.js";
 import { registerBareIdOps, registerKindOps } from "./cli-ops.js";
+import { appendTaskCommit, taskHeadCommit } from "./server/services/commit-sha.js";
 import { refreshAgentModelSlugCatalog } from "./server/agent-model-slugs-sync.js";
 import { refreshStorePathsFromEnv } from "./server/config.js";
 import { DELETED_FIELD_VERBS } from "./deleted-field-verbs.js";
@@ -161,7 +162,8 @@ function storyChips(story: StoryRecord, derived: Record<string, DerivedState>): 
 function taskChips(task: TaskRecord, derived: Record<string, DerivedState>): string[] {
   const chips = [`status=${task.status}`];
   if (task.qa) chips.push(`qa=${task.qa}`);
-  if (task.commitSha) chips.push(`sha=${task.commitSha.slice(0, 7)}`);
+  const head = taskHeadCommit(task);
+  if (head) chips.push(`sha=${head.slice(0, 7)}`);
   if (derived[task.id]?.blocked) chips.push("blocked");
   return [...chips, ...attentionChip(task)];
 }
@@ -322,6 +324,18 @@ function createIssueProgram(run: Run): Command {
     const kindCmd = registerKindGetSet(program, kind, run);
     registerKindAdd(kindCmd, kind, run);
     registerKindOps(kindCmd, kind, run);
+    if (kind === "task") {
+      kindCmd
+        .command("add-commit")
+        .argument("<taskId>", "task id")
+        .argument("<sha>", "full commit sha")
+        .action((taskId: string, sha: string) =>
+          run(async () => {
+            const detail = assertKind("task", taskId);
+            await update(taskId, { commits: appendTaskCommit(detail, sha) });
+          }),
+        );
+    }
   }
 
   registerBareIdOps(program, run);

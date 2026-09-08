@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const SHA1 = "0123456789abcdef0123456789abcdef01234567";
+const SHA1B = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SHA256 =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -50,70 +51,70 @@ async function loadService() {
   return import("./issues.js");
 }
 
-describe("commit sha", () => {
-  it("accepts a full 40-character sha1 via update", async () => {
+describe("commits", () => {
+  it("accepts a full 40-character sha1 series via update", async () => {
     const { update, read } = await loadService();
-    await update("c", { commitSha: SHA1 });
+    await update("c", { commits: [SHA1] });
     const detail = read("c");
     expect(detail.kind).toBe("task");
     if (detail.kind === "task") {
-      expect(detail.commitSha).toBe(SHA1);
+      expect(detail.commits).toEqual([SHA1]);
     }
   });
 
-  it("accepts a full 64-character sha256 via update", async () => {
+  it("accepts a full 64-character sha256 series via update", async () => {
     const { update, read } = await loadService();
-    await update("c", { commitSha: SHA256 });
+    await update("c", { commits: [SHA256] });
     const detail = read("c");
     if (detail.kind === "task") {
-      expect(detail.commitSha).toBe(SHA256);
+      expect(detail.commits).toEqual([SHA256]);
     }
   });
 
-  it("clears commitSha with null", async () => {
+  it("replaces the series and accepts an empty array", async () => {
     const { update, read } = await loadService();
-    await update("c", { commitSha: SHA1 });
-    await update("c", { commitSha: null });
+    await update("c", { commits: [SHA1, SHA1B] });
+    await update("c", { commits: [] });
     const detail = read("c");
     if (detail.kind === "task") {
-      expect(detail.commitSha).toBeUndefined();
+      expect(detail.commits).toEqual([]);
     }
     const raw = JSON.parse(readFileSync(join(dir, "c", "issue.json"), "utf8"));
-    expect(raw).not.toHaveProperty("commitSha");
+    expect(raw.commits).toEqual([]);
   });
 
   it("rejects an abbreviated sha", async () => {
     const { update } = await loadService();
-    await expect(update("c", { commitSha: "4019c25" })).rejects.toThrow(
+    await expect(update("c", { commits: ["4019c25"] })).rejects.toThrow(
       /invalid commit sha "4019c25"/,
     );
     const raw = JSON.parse(readFileSync(join(dir, "c", "issue.json"), "utf8"));
-    expect(raw).not.toHaveProperty("commitSha");
+    expect(raw.commits ?? []).toEqual([]);
   });
 
   it("rejects a 39-character sha", async () => {
     const { update } = await loadService();
     await expect(
-      update("c", { commitSha: "0123456789abcdef0123456789abcdef0123456" }),
+      update("c", { commits: ["0123456789abcdef0123456789abcdef0123456"] }),
     ).rejects.toThrow(/invalid commit sha/);
   });
 
   it("rejects non-hex characters", async () => {
     const { update } = await loadService();
     await expect(
-      update("c", { commitSha: "ghijghijghijghijghijghijghijghijghijghij" }),
+      update("c", { commits: ["ghijghijghijghijghijghijghijghijghijghij"] }),
     ).rejects.toThrow(/invalid commit sha/);
   });
 
   it("rejects uppercase hex", async () => {
     const { update } = await loadService();
     await expect(
-      update("c", { commitSha: "0123456789ABCDEF0123456789ABCDEF01234567" }),
+      update("c", { commits: ["0123456789ABCDEF0123456789ABCDEF01234567"] }),
     ).rejects.toThrow(/invalid commit sha/);
   });
 
-  it("rejects commitSha on a non-commit issue", async () => {
+  it("rejects commits on a non-task issue", async () => {
     const { update } = await loadService();
-    await expect(update("b", { commitSha: SHA1 })).rejects.toThrow(/commitSha/i);
+    await expect(update("b", { commits: [SHA1] })).rejects.toThrow(/commits/i);
   });
 });

@@ -119,6 +119,36 @@ function sha(n: number): string {
   return n.toString(16).padStart(40, "0");
 }
 
+function parentSha(shaValue: string): string {
+  const n = Number.parseInt(shaValue.slice(0, 8), 16);
+  return (n - 1).toString(16).padStart(40, "0");
+}
+
+function stubTaskRangeGit(opts: {
+  commits: string[];
+  patch: string;
+  shortstat: string;
+  subjects: Record<string, string>;
+}): Promise<void> {
+  const first = opts.commits[0]!;
+  return stubGitSpawner((args) => {
+    if (args[0] === "rev-parse" && args[1] === `${first}^`) {
+      return mockGitChild({ stdout: `${parentSha(first)}\n` });
+    }
+    if (args[0] === "diff" && args.includes("--shortstat")) {
+      return mockGitChild({ stdout: opts.shortstat });
+    }
+    if (args[0] === "diff") {
+      return mockGitChild({ stdout: opts.patch });
+    }
+    if (args[0] === "show" && args.includes("--format=%s")) {
+      const shaArg = args[args.length - 1]!;
+      return mockGitChild({ stdout: `${opts.subjects[shaArg] ?? "?"}\n` });
+    }
+    return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+  });
+}
+
 describe("readIssueChange rollup", () => {
   function writeRollupFixture(
     tasks: Array<{ id: string; partOf: string; sha?: string; order?: number }>,
@@ -141,7 +171,7 @@ describe("readIssueChange rollup", () => {
         order: task.order ?? 0,
         createdAt: AT,
         updatedAt: AT,
-        ...(task.sha ? { commitSha: task.sha } : {}),
+        ...(task.sha ? { commits: [task.sha] } : {}),
       });
     }
   }
@@ -274,7 +304,7 @@ describe("readIssueChange rollup", () => {
     writeTask("t-stacked-foreign", {
       partOf: "s-stacked-on-rollup",
       order: 0,
-      commitSha: stacked,
+      commits: [stacked],
     });
 
     await stubGitSpawner((args) => {
@@ -344,7 +374,7 @@ describe("readIssueChange rollup", () => {
   });
 
   it("refuses Epic change requests", async () => {
-    writeTask("t-epic-child", { partOf: "b", commitSha: sha(1) });
+    writeTask("t-epic-child", { partOf: "b", commits: [sha(1)] });
     const { readIssueChange } = await loadChange();
     await expect(readIssueChange("e")).rejects.toMatchObject({
       code: "validation",
@@ -364,7 +394,7 @@ describe("readIssueChange", () => {
   });
 
   it("returns empty no-diff when the Task is flagged noDiff", async () => {
-    writeTask("t2", { commitSha: SHA, noDiff: true });
+    writeTask("t2", { commits: [SHA], noDiff: true });
     const { readIssueChange } = await loadChange();
     await expect(readIssueChange("t2")).resolves.toEqual({
       state: "empty",
@@ -373,22 +403,12 @@ describe("readIssueChange", () => {
   });
 
   it("returns a loaded change with patch and stats when the commit resolves", async () => {
-    writeTask("t3", { commitSha: SHA });
-    await stubGitSpawner((args) => {
-      if (args[0] === "show" && args.includes("--format=%s")) {
-        return mockGitChild({ stdout: "Add feature\n" });
-      }
-      if (args[0] === "show" && args.includes("--patch")) {
-        return mockGitChild({
-          stdout: "diff --git a/foo.ts b/foo.ts\n+line\n",
-        });
-      }
-      if (args[0] === "show" && args.includes("--shortstat")) {
-        return mockGitChild({
-          stdout: " 2 files changed, 5 insertions(+), 1 deletion(-)\n",
-        });
-      }
-      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    writeTask("t3", { commits: [SHA] });
+    await stubTaskRangeGit({
+      commits: [SHA],
+      patch: "diff --git a/foo.ts b/foo.ts\n+line\n",
+      shortstat: " 2 files changed, 5 insertions(+), 1 deletion(-)\n",
+      subjects: { [SHA]: "Add feature" },
     });
 
     const { readIssueChange } = await loadChange();
@@ -400,14 +420,45 @@ describe("readIssueChange", () => {
     });
   });
 
+  it("returns a loaded range diff when the Task has three commits", async () => {
+    const c1 = sha(1);
+    const c2 = sha(2);
+    const c3 = sha(3);
+    writeTask("t-series", { commits: [c1, c2, c3] });
+    await stubTaskRangeGit({
+      commits: [c1, c2, c3],
+      patch: "diff --git a/a.ts b/a.ts\n+one\n+two\n+three\n",
+      shortstat: " 1 file changed, 3 insertions(+)\n",
+      subjects: { [c1]: "First", [c2]: "Second", [c3]: "Third" },
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("t-series")).resolves.toEqual({
+      state: "loaded",
+      commits: [
+        { sha: c1, subject: "First" },
+        { sha: c2, subject: "Second" },
+        { sha: c3, subject: "Third" },
+      ],
+      patch: "diff --git a/a.ts b/a.ts\n+one\n+two\n+three\n",
+      stats: { filesChanged: 1, insertions: 3, deletions: 0 },
+    });
+  });
+
   it("raises commit-unreachable when the recorded sha does not resolve", async () => {
-    writeTask("t4", { commitSha: SHA });
-    await stubGitSpawner(() =>
-      mockGitChild({
+    writeTask("t4", { commits: [SHA] });
+    await stubGitSpawner((args) => {
+      if (args[0] === "rev-parse" && args[1] === `${SHA}^`) {
+        return mockGitChild({
+          code: 128,
+          stderr: `fatal: bad object ${SHA}`,
+        });
+      }
+      return mockGitChild({
         code: 128,
         stderr: `fatal: bad object ${SHA}`,
-      }),
-    );
+      });
+    });
 
     const { readIssueChange } = await loadChange();
     await expect(readIssueChange("t4")).rejects.toMatchObject({
@@ -417,7 +468,7 @@ describe("readIssueChange", () => {
   });
 
   it("propagates other git failures without mapping to commit-unreachable", async () => {
-    writeTask("t5", { commitSha: SHA });
+    writeTask("t5", { commits: [SHA] });
     await stubGitSpawner(() =>
       mockGitChild({
         code: 128,
@@ -432,20 +483,12 @@ describe("readIssueChange", () => {
   });
 
   it("returns a loaded change when the patch is within the render ceiling", async () => {
-    writeTask("t-under", { commitSha: SHA });
-    await stubGitSpawner((args) => {
-      if (args[0] === "show" && args.includes("--format=%s")) {
-        return mockGitChild({ stdout: "Small change\n" });
-      }
-      if (args[0] === "show" && args.includes("--shortstat")) {
-        return mockGitChild({
-          stdout: " 1 file changed, 1 insertion(+)\n",
-        });
-      }
-      if (args[0] === "show" && args.includes("--patch")) {
-        return mockGitChild({ stdout: "+small\n" });
-      }
-      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    writeTask("t-under", { commits: [SHA] });
+    await stubTaskRangeGit({
+      commits: [SHA],
+      patch: "+small\n",
+      shortstat: " 1 file changed, 1 insertion(+)\n",
+      subjects: { [SHA]: "Small change" },
     });
 
     const { readIssueChange } = await loadChange();
@@ -458,19 +501,22 @@ describe("readIssueChange", () => {
   });
 
   it("raises change-too-large with stats and no patch when a Task patch exceeds the ceiling", async () => {
-    writeTask("t-over", { commitSha: SHA });
+    writeTask("t-over", { commits: [SHA] });
     const hugePatch = "x".repeat(2 * 1024 * 1024 + 1);
     await stubGitSpawner((args) => {
-      if (args[0] === "show" && args.includes("--format=%s")) {
-        return mockGitChild({ stdout: "Huge change\n" });
+      if (args[0] === "rev-parse" && args[1] === `${SHA}^`) {
+        return mockGitChild({ stdout: `${parentSha(SHA)}\n` });
       }
-      if (args[0] === "show" && args.includes("--shortstat")) {
+      if (args[0] === "diff" && args.includes("--shortstat")) {
         return mockGitChild({
           stdout: " 100 files changed, 50000 insertions(+), 100 deletions(-)\n",
         });
       }
-      if (args[0] === "show" && args.includes("--patch")) {
+      if (args[0] === "diff") {
         return mockGitChild({ stdout: hugePatch });
+      }
+      if (args[0] === "show" && args.includes("--format=%s")) {
+        return mockGitChild({ stdout: "Huge change\n" });
       }
       return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
     });
@@ -488,7 +534,7 @@ describe("readIssueChange", () => {
 
 describe("readIssueChangeFile", () => {
   it("refuses Epic change file requests", async () => {
-    writeTask("t-epic-child", { partOf: "b", commitSha: SHA });
+    writeTask("t-epic-child", { partOf: "b", commits: [SHA] });
     const { readIssueChangeFile } = await loadChange();
     await expect(
       readIssueChangeFile("e", SHA, "src/foo.ts"),
@@ -512,21 +558,26 @@ describe("collectDescendantCommits", () => {
     writeStory("s-a", { partOf: "tree", order: 0 });
     writeStory("s-b", { partOf: "tree", order: 1 });
     writeStory("s-stacked", { partOf: "tree", order: 0, stackedOn: "s-a" });
-    writeTask("t-a1", { partOf: "s-a", order: 0, commitSha: sha(1) });
+    writeTask("t-a1", { partOf: "s-a", order: 0, commits: [sha(1)] });
     writeTask("t-missing", { partOf: "s-a", order: 1 });
     writeTask("t-nodiff", {
       partOf: "s-a",
       order: 2,
-      commitSha: sha(2),
+      commits: [sha(2)],
       noDiff: true,
     });
-    writeTask("t-a2", { partOf: "s-a", order: 3, commitSha: sha(3) });
-    writeTask("t-stacked", { partOf: "s-stacked", order: 0, commitSha: sha(4) });
-    writeTask("t-b1", { partOf: "s-b", order: 0, commitSha: sha(5) });
+    writeTask("t-a2", { partOf: "s-a", order: 3, commits: [sha(3)] });
+    writeTask("t-stacked", { partOf: "s-stacked", order: 0, commits: [sha(4)] });
+    writeTask("t-b1", { partOf: "s-b", order: 0, commits: [sha(5)] });
   }
 
   it("returns recorded shas in implementation order and skips empty tasks", async () => {
     writeFixtureTree();
+    writeTask("t-multi", {
+      partOf: "s-b",
+      order: 1,
+      commits: [sha(6), sha(7)],
+    });
     const { collectDescendantCommits } = await loadChange();
 
     expect(collectDescendantCommits("tree").map((c) => c.sha)).toEqual([
@@ -534,6 +585,8 @@ describe("collectDescendantCommits", () => {
       sha(3),
       sha(4),
       sha(5),
+      sha(6),
+      sha(7),
     ]);
     expect(collectDescendantCommits("s-a").map((c) => c.sha)).toEqual([
       sha(1),

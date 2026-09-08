@@ -452,7 +452,7 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
   bootstrap line and `tree` chips for walk order).
 - Never write Task `status` or Task `qa` yourself (Field ownership).
 - Never run `git`/`gh` or the git-fact record commands (`issue story set …
-  branchName` / `issue task set … commitSha` / `issue story set … prUrl` /
+  branchName` / `issue task add-commit` / `issue story set … prUrl` /
   `issue story set … merged`) yourself — spawn `issue-tracker-git` for Story
   start, Task finalize, and Story finish only. Git sets Task `status` `done`
   on finish-commit; implementor owns `in-progress` / `fixing`.

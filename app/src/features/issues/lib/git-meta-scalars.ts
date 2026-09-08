@@ -1,5 +1,6 @@
 import { CHIP_UNSET, FIELD_LABELS } from "@server/fields";
 import type { IssueDetail } from "@server/schemas";
+import { taskHeadCommit } from "@server/services/commit-sha";
 
 /** Keys rendered in the detail compact git/spec meta block. */
 export type GitMetaScalarKey =
@@ -46,7 +47,7 @@ export function taskGitMetaScalars(
   if (parentBranchName) {
     out.push({ key: "branchName", label: FIELD_LABELS.branchName });
   }
-  if (issue.commitSha) {
+  if (taskHeadCommit(issue)) {
     out.push({ key: "commitSha", label: FIELD_LABELS.commitSha });
   }
   if (issue.noDiff) {
