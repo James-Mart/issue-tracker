@@ -39,6 +39,10 @@ Absolute path for this file (Read this exact path):
    an empty tree on its own is **not** a completion signal, so never rely on it
    alone.
 5. If blocked, raise `issue task set <id> needsAttention true --reason "..."`
-   and stop. Otherwise stop with the tree uncommitted. Git sets Task
-   `status done` on finish-commit; this role's only status writes are
-   Bootstrap's entry `in-progress` / `fixing`.
+   and stop. This role's only status writes are Bootstrap's entry
+   `in-progress` / `fixing`.
+6. **Record commit.** Last beat of the entry: spawn the **Record commit**
+   stub. An implement or revise entry records one commit, and none at all
+   when the Task is flagged `noDiff` or when the entry answers feedback
+   without changing code. A zero-commit entry is a normal outcome, not a
+   failure.

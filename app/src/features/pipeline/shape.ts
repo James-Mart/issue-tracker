@@ -270,6 +270,7 @@ const work: Pipeline = {
     },
   ],
   edges: [
+    { from: "implement", to: "finish", kind: "spawn" },
     // The look runs inside a UI Task's Verify; other Tasks go straight to QA.
     { from: "implement", to: "ui-look", kind: "flow" },
     { from: "ui-look", to: "code-quality", kind: "flow" },

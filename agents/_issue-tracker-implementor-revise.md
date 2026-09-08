@@ -50,8 +50,12 @@ Absolute path for this file (Read this exact path):
    include's three evidence fields in this comment. If the look failed, still
    post this comment, then `issue task set <id> needsAttention true --reason
    "..."` and stop.
-6. Leave changes uncommitted. When you start a merge, run
-   `git merge --no-commit <ref>` — not a default `git merge` that may
-   auto-commit. If the merge has conflicts, resolve them, `git add` those
-   paths, and still do not commit — leave `MERGE_HEAD` set with no unmerged
-   paths at handoff.
+6. When you start a merge, run `git merge --no-commit <ref>` — not a
+   default `git merge` that may auto-commit. If the merge has conflicts,
+   resolve them, `git add` those paths, and still do not commit — leave
+   `MERGE_HEAD` set with no unmerged paths at handoff.
+7. **Record commit.** Last beat of the entry: spawn the **Record commit**
+   stub. An implement or revise entry records one commit, and none at all
+   when the Task is flagged `noDiff` or when the entry answers feedback
+   without changing code. A zero-commit entry is a normal outcome, not a
+   failure.
