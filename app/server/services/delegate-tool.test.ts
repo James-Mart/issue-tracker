@@ -1,25 +1,22 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
-import { tmpdir } from "os";
+import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import type { ConversationFrame } from "./conversation-stream.js";
-import {
-  NESTED_RUN_HEARTBEAT_MS,
-  resetDelegationConcurrencyForTests,
-} from "./delegate-tool.js";
+import { NESTED_RUN_HEARTBEAT_MS } from "./delegate-tool.js";
 import {
   agentsDir,
   ASSISTANT_STREAM,
   cwd,
+  loadNestedRunPublishModules,
+  nestedRunIssuesRoot,
+  NESTED_RUN_PUBLISH_AT,
   setupDelegateToolTest,
+  setupNestedRunPublishTest,
   storeDir,
   teardownDelegateToolTest,
+  teardownNestedRunPublishTest,
+  waitForHandleSend,
 } from "./delegate-tool.fixtures.js";
 import {
   formatEffectiveModel,
@@ -35,80 +32,20 @@ afterEach(() => {
 });
 
 describe("delegate publishes nested run frames", () => {
-  let root: string;
-  let issuesRoot: string;
-  let workspaceDir: string;
-
-  const AT = "2026-07-25T12:00:00.000Z";
-
   beforeEach(() => {
-    // Nest issues/ under a unique root so conversations/ is not shared at
-    // tmpdir()/conversations with other parallel Vitest workers.
-    root = mkdtempSync(join(tmpdir(), "issue-delegate-publish-"));
-    issuesRoot = join(root, "issues");
-    mkdirSync(issuesRoot, { recursive: true });
-    workspaceDir = mkdtempSync(join(tmpdir(), "issue-delegate-ws-"));
-    mkdirSync(join(workspaceDir, ".git"));
-    vi.resetModules();
-    vi.stubEnv("ISSUES_DIR", issuesRoot);
-    mkdirSync(join(issuesRoot, "platform"), { recursive: true });
-    writeFileSync(
-      join(issuesRoot, "platform", "issue.json"),
-      JSON.stringify({
-        id: "platform",
-        kind: "project",
-        title: "Platform",
-        workspace: workspaceDir,
-        createdAt: AT,
-        updatedAt: AT,
-      }),
-    );
+    setupNestedRunPublishTest();
   });
 
   afterEach(() => {
-    resetDelegationConcurrencyForTests();
-    vi.unstubAllEnvs();
-    rmSync(root, { recursive: true, force: true });
-    rmSync(workspaceDir, { recursive: true, force: true });
+    teardownNestedRunPublishTest();
   });
-
-  async function load() {
-    const { createConversation, readConversation, readDelegations, updateMeta } =
-      await import("./conversations.js");
-    const { conversationsDir } = await import("../config.js");
-    const { subscribeFrames } = await import("./conversation-stream.js");
-    const { createDelegateCustomTools: createTools } = await import(
-      "./delegate-tool.js"
-    );
-    return {
-      createConversation,
-      readConversation,
-      readDelegations,
-      updateMeta,
-      conversationsDir,
-      subscribeFrames,
-      createDelegateCustomTools: createTools,
-    };
-  }
-
-  async function waitForSend(
-    fake: ReturnType<typeof createFakeAgentSdk>,
-    handleIndex: number,
-  ): Promise<void> {
-    const deadline = Date.now() + 2000;
-    while (Date.now() < deadline) {
-      if (fake.handles[handleIndex]?.sends.length === 1) return;
-      await new Promise((r) => setTimeout(r, 10));
-    }
-    throw new Error(`timed out waiting for handle[${handleIndex}] send`);
-  }
 
   it("persists a terminal delegate tool_call when a caller error throws with pipeline context", async () => {
     const {
       createConversation,
       readConversation,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "Throw persists",
       projectId: "platform",
@@ -158,7 +95,7 @@ describe("delegate publishes nested run frames", () => {
       readConversation,
       subscribeFrames,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "Delegate publish",
       projectId: "platform",
@@ -217,7 +154,7 @@ describe("delegate publishes nested run frames", () => {
       createConversation,
       subscribeFrames,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "Nested parentage",
       projectId: "platform",
@@ -246,7 +183,7 @@ describe("delegate publishes nested run frames", () => {
       { role: "pinned-role", prompt: "outer" },
       { toolCallId: "call-outer" },
     );
-    await waitForSend(fake, 0);
+    await waitForHandleSend(fake, 0);
 
     // Nest through the outer agent's bound delegate tools while the outer run
     // is still held mid-stream. Both sends share the fake's hold, so await
@@ -255,7 +192,7 @@ describe("delegate publishes nested run frames", () => {
       { role: "pinned-role", prompt: "inner" },
       { toolCallId: "call-inner" },
     );
-    await waitForSend(fake, 1);
+    await waitForHandleSend(fake, 1);
 
     release();
     await Promise.all([outerPromise, innerPromise]);
@@ -294,7 +231,7 @@ describe("delegate publishes nested run frames", () => {
         readConversation,
         subscribeFrames,
         createDelegateCustomTools: createTools,
-      } = await load();
+      } = await loadNestedRunPublishModules();
       const meta = await createConversation({
         title: "Liveness heartbeat",
         projectId: "platform",
@@ -390,18 +327,18 @@ describe("delegate publishes nested run frames", () => {
       createConversation,
       readDelegations,
       createDelegateCustomTools: createTools,
-    } = await load();
-    mkdirSync(join(issuesRoot, "linked-task"), { recursive: true });
+    } = await loadNestedRunPublishModules();
+    mkdirSync(join(nestedRunIssuesRoot, "linked-task"), { recursive: true });
     writeFileSync(
-      join(issuesRoot, "linked-task", "issue.json"),
+      join(nestedRunIssuesRoot, "linked-task", "issue.json"),
       JSON.stringify({
         id: "linked-task",
         kind: "task",
         partOf: "platform",
         title: "Linked task",
         status: "todo",
-        createdAt: AT,
-        updatedAt: AT,
+        createdAt: NESTED_RUN_PUBLISH_AT,
+        updatedAt: NESTED_RUN_PUBLISH_AT,
       }),
     );
 
@@ -444,7 +381,7 @@ describe("delegate publishes nested run frames", () => {
       createConversation,
       readDelegations,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "Unknown issue link",
       projectId: "platform",
@@ -479,7 +416,7 @@ describe("delegate publishes nested run frames", () => {
       createConversation,
       readDelegations,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "Persist ids",
       projectId: "platform",
@@ -524,7 +461,7 @@ describe("delegate publishes nested run frames", () => {
       readDelegations,
       conversationsDir,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "Rehydrate resume",
       projectId: "platform",
@@ -595,7 +532,7 @@ describe("delegate publishes nested run frames", () => {
       createConversation,
       updateMeta,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
 
     const metaA = await createConversation({
       title: "Lookup A",
@@ -674,7 +611,7 @@ describe("delegate publishes nested run frames", () => {
       createConversation,
       updateMeta,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
 
     const meta = await createConversation({
       title: "Root lookup",
@@ -722,7 +659,7 @@ describe("delegate publishes nested run frames", () => {
 
   it("delegations omits root and returns empty delegations when no session root is recorded", async () => {
     const { createConversation, createDelegateCustomTools: createTools } =
-      await load();
+      await loadNestedRunPublishModules();
 
     const meta = await createConversation({
       title: "No root yet",
@@ -755,7 +692,7 @@ describe("delegate publishes nested run frames", () => {
       conversationsDir,
       updateMeta,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "Resume via lookup",
       projectId: "platform",
@@ -801,7 +738,7 @@ describe("delegate publishes nested run frames", () => {
 
   it("writes a completed end record on ok true", async () => {
     const { createConversation, readDelegations, createDelegateCustomTools: createTools } =
-      await load();
+      await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "End completed",
       projectId: "platform",
@@ -831,7 +768,7 @@ describe("delegate publishes nested run frames", () => {
 
   it("writes an error end record with failureClass on reportFailure", async () => {
     const { createConversation, readDelegations, createDelegateCustomTools: createTools } =
-      await load();
+      await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "End error",
       projectId: "platform",
@@ -879,7 +816,7 @@ describe("delegate publishes nested run frames", () => {
       readConversation,
       readDelegations,
       createDelegateCustomTools: createTools,
-    } = await load();
+    } = await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "End throw",
       projectId: "platform",
@@ -943,7 +880,7 @@ describe("delegate publishes nested run frames", () => {
 
   it("writes no end record when execute throws before the start record", async () => {
     const { createConversation, readDelegations, createDelegateCustomTools: createTools } =
-      await load();
+      await loadNestedRunPublishModules();
     const meta = await createConversation({
       title: "No end before start",
       projectId: "platform",

@@ -6,6 +6,7 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { vi } from "vitest";
 import type { AgentStreamEvent } from "./agent-sdk.js";
 import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import { resetDelegationConcurrencyForTests } from "./delegate-tool.js";
@@ -116,4 +117,60 @@ export async function waitForHandleSend(
     await new Promise((r) => setTimeout(r, 10));
   }
   throw new Error(`timed out waiting for handle[${handleIndex}] send`);
+}
+
+export const NESTED_RUN_PUBLISH_AT = "2026-07-25T12:00:00.000Z";
+
+export let nestedRunPublishRoot: string;
+export let nestedRunIssuesRoot: string;
+export let nestedRunWorkspaceDir: string;
+
+export function setupNestedRunPublishTest(): void {
+  // Nest issues/ under a unique root so conversations/ is not shared at
+  // tmpdir()/conversations with other parallel Vitest workers.
+  nestedRunPublishRoot = mkdtempSync(join(tmpdir(), "issue-delegate-publish-"));
+  nestedRunIssuesRoot = join(nestedRunPublishRoot, "issues");
+  mkdirSync(nestedRunIssuesRoot, { recursive: true });
+  nestedRunWorkspaceDir = mkdtempSync(join(tmpdir(), "issue-delegate-ws-"));
+  mkdirSync(join(nestedRunWorkspaceDir, ".git"));
+  vi.resetModules();
+  vi.stubEnv("ISSUES_DIR", nestedRunIssuesRoot);
+  mkdirSync(join(nestedRunIssuesRoot, "platform"), { recursive: true });
+  writeFileSync(
+    join(nestedRunIssuesRoot, "platform", "issue.json"),
+    JSON.stringify({
+      id: "platform",
+      kind: "project",
+      title: "Platform",
+      workspace: nestedRunWorkspaceDir,
+      createdAt: NESTED_RUN_PUBLISH_AT,
+      updatedAt: NESTED_RUN_PUBLISH_AT,
+    }),
+  );
+}
+
+export function teardownNestedRunPublishTest(): void {
+  resetDelegationConcurrencyForTests();
+  vi.unstubAllEnvs();
+  rmSync(nestedRunPublishRoot, { recursive: true, force: true });
+  rmSync(nestedRunWorkspaceDir, { recursive: true, force: true });
+}
+
+export async function loadNestedRunPublishModules() {
+  const { createConversation, readConversation, readDelegations, updateMeta } =
+    await import("./conversations.js");
+  const { conversationsDir } = await import("../config.js");
+  const { subscribeFrames } = await import("./conversation-stream.js");
+  const { createDelegateCustomTools: createTools } = await import(
+    "./delegate-tool.js"
+  );
+  return {
+    createConversation,
+    readConversation,
+    readDelegations,
+    updateMeta,
+    conversationsDir,
+    subscribeFrames,
+    createDelegateCustomTools: createTools,
+  };
 }
