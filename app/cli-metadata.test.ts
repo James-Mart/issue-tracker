@@ -274,7 +274,7 @@ describe("kind-scoped view / delete / comment / attach", () => {
     writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
     writeFileSync(
       join(dir, "a", "comments.jsonl"),
-      JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
+      JSON.stringify({ id: "c1", role: "agent", name: "bot", body: "first note", at: nextAt() }) +
         "\n",
     );
   });
@@ -458,7 +458,7 @@ describe("bare-id view / get / comment / attach", () => {
     writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
     writeFileSync(
       join(dir, "a", "comments.jsonl"),
-      JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
+      JSON.stringify({ id: "c1", role: "agent", name: "bot", body: "first note", at: nextAt() }) +
         "\n",
     );
   });

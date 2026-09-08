@@ -68,15 +68,26 @@ const assignmentLabelsSchema = z
   .transform(dedupePreserveOrder)
   .optional();
 
+export const commentAnchorSchema = z.object({
+  path: nonEmpty,
+  side: z.enum(["old", "new"]),
+  line: z.number().int().positive(),
+  startLine: z.number().int().positive().optional(),
+  commitSha: nonEmpty,
+});
+
 export const commentSchema = z.object({
+  id: nonEmpty,
   role: nonEmpty,
   name: z.string().optional(),
   body: nonEmpty,
   at: nonEmpty,
+  replyTo: nonEmpty.optional(),
+  anchor: commentAnchorSchema.optional(),
 });
 
-// The write-time input is the stored shape minus the server-stamped `at`.
-export const commentInputSchema = commentSchema.omit({ at: true });
+// The write-time input is the stored shape minus server-stamped `id` and `at`.
+export const commentInputSchema = commentSchema.omit({ at: true, id: true });
 
 export type Comment = z.infer<typeof commentSchema>;
 export type CommentInput = z.infer<typeof commentInputSchema>;

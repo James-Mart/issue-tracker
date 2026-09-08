@@ -8,7 +8,7 @@ import {
   statSync,
   writeFileSync,
 } from "fs";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { join } from "path";
 import { issuesDir } from "../config.js";
 import {
@@ -55,7 +55,7 @@ import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import { uniqueSlug } from "./slug.js";
 import { validateNonClearablePatch, validateSourceIdeaPatch } from "./patch.js";
-import { validateCommitShaPatch } from "./commit-sha.js";
+import { validateCommitShaPatch, validateFullCommitSha } from "./commit-sha.js";
 import { validateMergePolicyPatch } from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
 import { validateSupportingDocsPatch } from "./supporting-docs.js";
@@ -709,6 +709,45 @@ export function readComments(id: string): CommentsResponse {
   return { messages, problems };
 }
 
+function validateCommentAppend(issueId: string, input: CommentInput): void {
+  if (input.anchor) {
+    validateFullCommitSha(input.anchor.commitSha);
+    if (
+      input.anchor.startLine !== undefined &&
+      input.anchor.startLine > input.anchor.line
+    ) {
+      throw new IssueError(
+        "validation",
+        `anchor.startLine (${input.anchor.startLine}) must not be greater than anchor.line (${input.anchor.line})`,
+      );
+    }
+  }
+
+  if (!input.replyTo) return;
+
+  if (input.anchor) {
+    throw new IssueError(
+      "validation",
+      "replyTo and anchor cannot be set on the same comment",
+    );
+  }
+
+  const { messages } = readComments(issueId);
+  const root = messages.find((message) => message.id === input.replyTo);
+  if (!root) {
+    throw new IssueError(
+      "validation",
+      `replyTo references unknown comment "${input.replyTo}"`,
+    );
+  }
+  if (root.replyTo) {
+    throw new IssueError(
+      "validation",
+      `replyTo must name a thread root, not a reply (comment "${input.replyTo}" has replyTo "${root.replyTo}")`,
+    );
+  }
+}
+
 export function appendComment(
   id: string,
   input: CommentInput,
@@ -717,7 +756,12 @@ export function appendComment(
     requireKindCapability(id, "comments");
     const parsed = parseCommentInput(input);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
-    const message: Comment = { ...parsed.input, at: new Date().toISOString() };
+    validateCommentAppend(id, parsed.input);
+    const message: Comment = {
+      ...parsed.input,
+      id: randomUUID(),
+      at: new Date().toISOString(),
+    };
     appendFileSync(commentsPathOf(id), `${JSON.stringify(message)}\n`);
     return message;
   });
