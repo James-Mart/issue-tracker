@@ -35,6 +35,9 @@ Absolute path for this file (Read this exact path):
      optional `--start-line`, `--commit` set to `<last>` from step 1).
    - A finding with no single location — a missing file, an absent test — has
      no anchor; Outcome posts it unanchored.
+   - A finding that continues a point you already raised carries that thread
+     root's comment id for `--reply-to` instead of anchor flags; do not
+     prepare a second thread on the same lines.
    - Do **not** list things you judge correct or acceptable — the implementor
      treats anything unmentioned as fine.
    - If nothing actionable, a single clean-pass line (no findings list).

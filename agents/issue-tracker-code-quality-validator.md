@@ -22,8 +22,9 @@ only looks wrong.
 `passed`, or `qa --clear` if needed), `status` (`done` on the clean Outcome
 path only), and `needsAttention`; `issue task comment` (anchored or
 unanchored — anchor flags `--path`, `--side`, `--line`, optional
-`--start-line`, `--commit` when a finding has a line location); `issue attach`
-for judged UI-look PNGs. Do not run any other mutating `issue` command.
+`--start-line`, `--commit` when a finding has a line location;
+`--reply-to <commentId>` to continue an existing thread); `issue attach` for
+judged UI-look PNGs. Do not run any other mutating `issue` command.
 
 ## Bootstrap
 
@@ -75,9 +76,13 @@ and follow it; otherwise **Read**
 and follow it.
 
 When Mode is `resume`, also **verify that previously requested changes were
-fixed**: read prior code-quality findings from `issue task view <taskId> --comments`
-and confirm each actionable item was addressed (or declined with reasoning by
-the implementor). Unfixed prior findings remain actionable.
+fixed**: read the Task's existing anchored threads — each root, its replies,
+and its `(outdated)` mark — from `issue task view <taskId> --comments`. An
+outdated anchor is a point the implementor has touched; a current anchor is a
+point still standing as written. Confirm each prior actionable item was
+addressed, or declined with reasoning in a reply. An unfixed prior finding
+remains actionable, and you continue it by replying in its own thread with
+`--reply-to <its root comment id>` — never a second thread on the same lines.
 
 For UI-related Tasks (same UI-related judgment as the `designSystem` consult),
 judge the built surface on its own merits — product quality plus the

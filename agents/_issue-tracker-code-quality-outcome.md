@@ -55,10 +55,21 @@ EOF
 - A finding with no single location — a missing file, an absent test — stays
   unanchored (no anchor flags).
 
+- A finding that continues a point you already raised is a reply in that
+  thread, and takes no anchor flags — the root's anchor already holds the
+  location:
+
+```bash
+issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
+<judgement only>
+EOF
+)" --reply-to <thread root commentId>
+```
+
 Chain every comment with `&&`, then the terminal `qa` write. Build the chain
 from the findings the review include prepared — one `issue task comment` per
-finding, using the anchored or unanchored pattern above; do not emit fixed
-example invocations for findings you do not have.
+finding, using the anchored, unanchored, or reply pattern above; do not emit
+fixed example invocations for findings you do not have.
 
 - **1st or 2nd** `changes-requested`:
 
