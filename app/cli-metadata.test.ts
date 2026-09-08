@@ -274,7 +274,7 @@ describe("kind-scoped view / delete / comment / attach", () => {
     writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
     writeFileSync(
       join(dir, "a", "comments.jsonl"),
-      JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
+      JSON.stringify({ id: "c1", role: "agent", name: "bot", body: "first note", at: nextAt() }) +
         "\n",
     );
   });
@@ -296,6 +296,56 @@ describe("kind-scoped view / delete / comment / attach", () => {
     expect(status).toBe(0);
     expect(stdout).toContain("--- comments ---");
     expect(stdout).toContain("bot: first note");
+  });
+
+  it("groups threads and renders anchors on view --comments", async () => {
+    const at = nextAt();
+    const commitSha = "deadbeef00000000000000000000000000000000";
+    writeFileSync(
+      join(dir, "a", "comments.jsonl"),
+      [
+        JSON.stringify({
+          id: "plain-id",
+          role: "human",
+          name: "Ada",
+          body: "standalone note",
+          at,
+        }),
+        JSON.stringify({
+          id: "anchor-id",
+          role: "agent",
+          name: "reviewer",
+          body: "fix this",
+          at,
+          anchor: {
+            path: "app/cli-ops.ts",
+            side: "new",
+            line: 42,
+            startLine: 40,
+            commitSha,
+          },
+        }),
+        JSON.stringify({
+          id: "reply-id",
+          role: "agent",
+          body: "will do",
+          at,
+          replyTo: "anchor-id",
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const { stdout, status } = await runIssueCli(["story", "view", "a", "--comments"], {
+      env: env(),
+    });
+    expect(status).toBe(0);
+
+    const comments = stdout.split("--- comments ---")[1]!.trim().split("\n");
+    expect(comments).toEqual([
+      `plain-id [${at}] Ada: standalone note`,
+      `anchor-id [${at}] reviewer @ app/cli-ops.ts:40-42 new deadbee: fix this`,
+      `  reply-id [${at}] agent: will do`,
+    ]);
   });
 
   it.each([
@@ -346,7 +396,9 @@ describe("kind-scoped view / delete / comment / attach", () => {
         `note on ${id}`,
       ], { env: env() });
       expect(status, kind).toBe(0);
-      expect(stdout, kind).toContain(`commented on ${id}`);
+      expect(stdout, kind).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\n$/,
+      );
       expect(readFileSync(join(dir, id, "comments.jsonl"), "utf8")).toContain(
         `note on ${id}`,
       );
@@ -458,7 +510,7 @@ describe("bare-id view / get / comment / attach", () => {
     writeFileSync(join(dir, "a", "description.md"), "# Story A\n\nthe body\n");
     writeFileSync(
       join(dir, "a", "comments.jsonl"),
-      JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) +
+      JSON.stringify({ id: "c1", role: "agent", name: "bot", body: "first note", at: nextAt() }) +
         "\n",
     );
   });
@@ -520,7 +572,9 @@ describe("bare-id view / get / comment / attach", () => {
       "impl",
     ], { env: env() });
     expect(bare.status).toBe(0);
-    expect(bare.stdout).toBe("commented on a as impl\n");
+    expect(bare.stdout).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\n$/,
+    );
 
     const scoped = await runIssueCli([
       "story",
@@ -534,7 +588,9 @@ describe("bare-id view / get / comment / attach", () => {
       "impl",
     ], { env: env() });
     expect(scoped.status).toBe(0);
-    expect(scoped.stdout).toBe("commented on a as impl\n");
+    expect(scoped.stdout).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\n$/,
+    );
 
     const chat = readFileSync(join(dir, "a", "comments.jsonl"), "utf8");
     expect(chat).toContain('"body":"bare-id note"');

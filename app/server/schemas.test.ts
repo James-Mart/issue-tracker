@@ -649,7 +649,12 @@ describe("parseIssue - malformed is rejected with a message", () => {
 });
 
 describe("parseComment", () => {
-  const valid = { role: "agent", body: "hello", at: "2026-07-09T14:00:00.000Z" };
+  const valid = {
+    id: "c1",
+    role: "agent",
+    body: "hello",
+    at: "2026-07-09T14:00:00.000Z",
+  };
 
   it("parses a stored message with an optional name", () => {
     const result = parseComment({ ...valid, name: "codex" });
@@ -666,10 +671,13 @@ describe("parseComment", () => {
 });
 
 describe("parseCommentInput", () => {
-  it("accepts role + body (+ optional name) and omits at", () => {
+  it("accepts role + body (+ optional name) and omits id and at", () => {
     const result = parseCommentInput({ role: "human", body: "hi" });
     expect(result.ok).toBe(true);
-    if (result.ok) expect("at" in result.input).toBe(false);
+    if (result.ok) {
+      expect("at" in result.input).toBe(false);
+      expect("id" in result.input).toBe(false);
+    }
   });
 
   it("rejects a missing role, an empty body, and a null/undefined body", () => {

@@ -85,7 +85,7 @@ describe("view", () => {
     writeFileSync(join(dir, "a", "description.md"), "# Branch A\n\nthe body\n");
     writeFileSync(
       join(dir, "a", "comments.jsonl"),
-      JSON.stringify({ role: "agent", name: "bot", body: "first note", at: nextAt() }) + "\n",
+      JSON.stringify({ id: "c1", role: "agent", name: "bot", body: "first note", at: nextAt() }) + "\n",
     );
   });
 

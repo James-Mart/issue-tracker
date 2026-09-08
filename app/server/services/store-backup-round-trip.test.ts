@@ -169,7 +169,7 @@ function seedStore(issuesDir: string): void {
   );
   writeFileSync(
     join(issuesDir, ISSUE_ID, "comments.jsonl"),
-    `${JSON.stringify({ role: "human", body: COMMENT_BODY, at: AT })}\n`,
+    `${JSON.stringify({ id: "c1", role: "human", body: COMMENT_BODY, at: AT })}\n`,
   );
   mkdirSync(join(issuesDir, ISSUE_ID, "attachments"), { recursive: true });
   writeFileSync(

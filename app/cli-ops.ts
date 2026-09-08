@@ -9,7 +9,12 @@ import {
   kindHas,
   KIND_LABEL,
 } from "./server/kind.js";
-import type { IssueDetail, IssueKind } from "./server/schemas.js";
+import type {
+  Comment,
+  CommentInput,
+  IssueDetail,
+  IssueKind,
+} from "./server/schemas.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
 import {
   appendComment,
@@ -28,6 +33,7 @@ import { formatAttachmentsSection } from "./server/services/summary.js";
 import { formatInspirationAppsLine } from "./server/services/inspiration-apps.js";
 import { formatPersonasLine } from "./server/services/personas.js";
 import { formatSupportingDocsLine } from "./server/services/supporting-docs.js";
+import { coerceEnum, coercePositiveInt } from "./cli-coerce.js";
 import { assertKind, kindGetValue, resolveIssueKind } from "./cli-kind.js";
 import { parsePrUrl, runGh } from "./server/services/delivery.js";
 import { applyMergeConsequences } from "./server/services/merge-consequences.js";
@@ -84,6 +90,51 @@ export async function mergeStory(
 type ViewOptions = {
   comments?: boolean;
 };
+
+function commentAuthor(message: Comment): string {
+  return message.name ?? message.role;
+}
+
+function formatAnchorLocation(anchor: NonNullable<Comment["anchor"]>): string {
+  const linePart =
+    anchor.startLine !== undefined
+      ? `${anchor.startLine}-${anchor.line}`
+      : String(anchor.line);
+  return `${anchor.path}:${linePart} ${anchor.side} ${anchor.commitSha.slice(0, 7)}`;
+}
+
+function formatCommentLine(message: Comment, indent = ""): string {
+  const author = commentAuthor(message);
+  const head = `${indent}${message.id} [${message.at}] ${author}`;
+  if (message.anchor) {
+    return `${head} @ ${formatAnchorLocation(message.anchor)}: ${message.body}`;
+  }
+  return `${head}: ${message.body}`;
+}
+
+function formatCommentsForView(messages: Comment[]): string[] {
+  const rootIds = new Set(
+    messages.filter((message) => !message.replyTo).map((message) => message.id),
+  );
+  const repliesByRoot = new Map<string, Comment[]>();
+  for (const message of messages) {
+    if (message.replyTo && rootIds.has(message.replyTo)) {
+      const list = repliesByRoot.get(message.replyTo) ?? [];
+      list.push(message);
+      repliesByRoot.set(message.replyTo, list);
+    }
+  }
+
+  const lines: string[] = [];
+  for (const message of messages) {
+    if (message.replyTo && rootIds.has(message.replyTo)) continue;
+    lines.push(formatCommentLine(message));
+    for (const reply of repliesByRoot.get(message.id) ?? []) {
+      lines.push(formatCommentLine(reply, "  "));
+    }
+  }
+  return lines;
+}
 
 function labelIdsForView(detail: IssueDetail): string[] {
   if (detail.kind === "project") {
@@ -172,8 +223,8 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
     console.log();
     console.log("--- comments ---");
     if (messages.length === 0) console.log("(no messages)");
-    for (const message of messages) {
-      console.log(`[${message.at}] ${message.name ?? message.role}: ${message.body}`);
+    for (const line of formatCommentsForView(messages)) {
+      console.log(line);
     }
     // Malformed comment lines are surfaced as stderr warnings but deliberately
     // do not fail the command: like list()'s `problems`, they are data
@@ -249,16 +300,94 @@ function registerMergeCommand(parent: Command, run: Run, kind: IssueKind): void 
     );
 }
 
-async function printComment(
-  id: string,
-  opts: { role: string; body: string; name?: string },
-): Promise<void> {
-  const message = await appendComment(id, {
+type CommentCliOptions = {
+  role: string;
+  body: string;
+  name?: string;
+  path?: string;
+  side?: string;
+  line?: string;
+  startLine?: string;
+  commit?: string;
+  replyTo?: string;
+};
+
+function commentInputFromCliOpts(opts: CommentCliOptions): CommentInput {
+  const anyAnchor =
+    opts.path !== undefined ||
+    opts.side !== undefined ||
+    opts.line !== undefined ||
+    opts.startLine !== undefined ||
+    opts.commit !== undefined;
+
+  if (opts.replyTo && anyAnchor) {
+    throw new Error(
+      "--reply-to cannot be combined with anchor flags (--path, --side, --line, --start-line, --commit)",
+    );
+  }
+
+  if (anyAnchor) {
+    if (!opts.path || !opts.side || !opts.line || !opts.commit) {
+      throw new Error(
+        "anchor requires --path, --side, --line, and --commit",
+      );
+    }
+    return {
+      role: opts.role,
+      name: opts.name,
+      body: opts.body,
+      anchor: {
+        path: opts.path,
+        side: coerceEnum(opts.side, "side", ["old", "new"]) as "old" | "new",
+        line: coercePositiveInt(opts.line, "line"),
+        commitSha: opts.commit,
+        ...(opts.startLine !== undefined
+          ? { startLine: coercePositiveInt(opts.startLine, "start-line") }
+          : {}),
+      },
+    };
+  }
+
+  if (opts.replyTo) {
+    return {
+      role: opts.role,
+      name: opts.name,
+      body: opts.body,
+      replyTo: opts.replyTo,
+    };
+  }
+
+  return {
     role: opts.role,
     name: opts.name,
     body: opts.body,
-  });
-  console.log(`commented on ${id} as ${message.name ?? message.role}`);
+  };
+}
+
+function applyCommentOptions(cmd: Command): Command {
+  return cmd
+    .option("--path <path>", "repository-relative file path for a line anchor")
+    .option(
+      "--side <old|new>",
+      "which side of the diff the anchor points at",
+    )
+    .option("--line <n>", "anchored line (1-based) on that side")
+    .option("--start-line <n>", "optional range start (1-based)")
+    .option(
+      "--commit <sha>",
+      "full commit sha the anchor binds to (never inferred from the issue)",
+    )
+    .option(
+      "--reply-to <commentId>",
+      "post as a reply to that thread root (mutually exclusive with anchor flags)",
+    );
+}
+
+async function printComment(
+  id: string,
+  opts: CommentCliOptions,
+): Promise<Comment> {
+  return appendComment(id, commentInputFromCliOpts(opts));
 }
 
 function registerViewCommand(parent: Command, run: Run, kind: IssueKind): void {
@@ -293,22 +422,20 @@ function registerDeleteCommand(parent: Command, run: Run, kind: IssueKind): void
 }
 
 function registerCommentCommand(parent: Command, run: Run, kind: IssueKind): void {
-  parent
-    .command("comment")
-    .argument("<id>", "issue id")
-    .requiredOption("--role <role>", "message author role (e.g. agent, human)")
-    .requiredOption("--body <text>", "message body (Markdown)")
-    .option("--name <name>", "author display name")
-    .action(
-      (
-        id: string,
-        opts: { role: string; body: string; name?: string },
-      ) =>
-        run(async () => {
-          assertKind(kind, id);
-          await printComment(id, opts);
-        }),
-    );
+  applyCommentOptions(
+    parent
+      .command("comment")
+      .argument("<id>", "issue id")
+      .requiredOption("--role <role>", "message author role (e.g. agent, human)")
+      .requiredOption("--body <text>", "message body (Markdown)")
+      .option("--name <name>", "author display name"),
+  ).action(
+    (id: string, opts: CommentCliOptions) =>
+      run(async () => {
+        assertKind(kind, id);
+        return printComment(id, opts);
+      }),
+  );
 }
 
 function registerAttachCommands(parent: Command, run: Run, kind: IssueKind): void {
@@ -395,27 +522,25 @@ export function registerBareIdOps(program: Command, run: Run): void {
       }),
     );
 
-  program
-    .command("comment")
-    .argument("<id>", "issue id")
-    .requiredOption("--role <role>", "message author role (e.g. agent, human)")
-    .requiredOption("--body <text>", "message body (Markdown)")
-    .option("--name <name>", "author display name")
-    .action(
-      (
-        id: string,
-        opts: { role: string; body: string; name?: string },
-      ) =>
-        run(async () => {
-          const kind = resolveIssueKind(id);
-          if (!kindHas(kind, "comment")) {
-            throw new Error(
-              `"${id}" is ${articleForKind(kind)} ${KIND_LABEL[kind]}; projects have no comment log`,
-            );
-          }
-          await printComment(id, opts);
-        }),
-    );
+  applyCommentOptions(
+    program
+      .command("comment")
+      .argument("<id>", "issue id")
+      .requiredOption("--role <role>", "message author role (e.g. agent, human)")
+      .requiredOption("--body <text>", "message body (Markdown)")
+      .option("--name <name>", "author display name"),
+  ).action(
+    (id: string, opts: CommentCliOptions) =>
+      run(async () => {
+        const kind = resolveIssueKind(id);
+        if (!kindHas(kind, "comment")) {
+          throw new Error(
+            `"${id}" is ${articleForKind(kind)} ${KIND_LABEL[kind]}; projects have no comment log`,
+          );
+        }
+        return printComment(id, opts);
+      }),
+  );
 
   program
     .command("attach")
