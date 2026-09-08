@@ -12,15 +12,16 @@ import {
 import type {
   Comment,
   CommentInput,
+  CommentMessage,
   IssueDetail,
   IssueKind,
 } from "./server/schemas.js";
+import { readCommentsWithOutdated } from "./server/services/anchor-outdated.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
 import {
   appendComment,
   list,
   read,
-  readComments,
   remove,
 } from "./server/services/issues.js";
 import {
@@ -104,16 +105,17 @@ function formatAnchorLocation(anchor: NonNullable<Comment["anchor"]>): string {
   return `${anchor.path}:${linePart} ${anchor.side} ${anchor.commitSha.slice(0, 7)}`;
 }
 
-function formatCommentLine(message: Comment, indent = ""): string {
+function formatCommentLine(message: CommentMessage, indent = ""): string {
   const author = commentAuthor(message);
   const head = `${indent}${message.id} [${message.at}] ${author}`;
   if (message.anchor) {
-    return `${head} @ ${formatAnchorLocation(message.anchor)}: ${message.body}`;
+    const outdated = message.outdated ? " (outdated)" : "";
+    return `${head} @ ${formatAnchorLocation(message.anchor)}${outdated}: ${message.body}`;
   }
   return `${head}: ${message.body}`;
 }
 
-function formatCommentsForView(messages: Comment[]): string[] {
+function formatCommentsForView(messages: CommentMessage[]): string[] {
   const rootIds = new Set(
     messages.filter((message) => !message.replyTo).map((message) => message.id),
   );
@@ -147,7 +149,7 @@ function labelIdsForView(detail: IssueDetail): string[] {
   return [];
 }
 
-function printIssueView(id: string, opts: ViewOptions = {}): void {
+async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void> {
   const detail = read(id);
   const lines = [
     `id: ${detail.id}`,
@@ -221,7 +223,7 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
   console.log(detail.description || "(no description)");
 
   if (opts.comments) {
-    const { messages, problems } = readComments(id);
+    const { messages, problems } = await readCommentsWithOutdated(id);
     console.log();
     console.log("--- comments ---");
     if (messages.length === 0) console.log("(no messages)");
@@ -401,9 +403,9 @@ function registerViewCommand(parent: Command, run: Run, kind: IssueKind): void {
     )
     .option("--comments", "also print the comment log")
     .action((id: string, opts: ViewOptions) =>
-      run(() => {
+      run(async () => {
         assertKind(kind, id);
-        printIssueView(id, opts);
+        await printIssueView(id, opts);
       }),
     );
 }
@@ -505,9 +507,9 @@ export function registerBareIdOps(program: Command, run: Run): void {
     )
     .option("--comments", "also print the comment log")
     .action((id: string, opts: ViewOptions) =>
-      run(() => {
+      run(async () => {
         resolveIssueKind(id);
-        printIssueView(id, opts);
+        await printIssueView(id, opts);
       }),
     );
 

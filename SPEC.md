@@ -340,7 +340,8 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   under its root; every line is
   `{id} [{at}] {author}: {body}` or, when anchored,
   `{id} [{at}] {author} @ {path}:{line} {side} {sha7}: {body}` (a range uses
-  `{startLine}-{line}`). `{author}` is `name` when set, else `role`. See
+  `{startLine}-{line}`; append ` (outdated)` after the location when the anchor
+  is outdated). `{author}` is `name` when set, else `role`. See
   [`comments.jsonl` message shape](#commentsjsonl-message-shape). Prefer
   `issue get <id> <field>` for a single field. Label lines: see
   [Project labels](#project-labels).
@@ -1060,6 +1061,15 @@ an immutable commit. Object members:
 | `line` | number | anchored line (1-based) on that side |
 | `startLine` | number? | when set, range start (1-based); must satisfy `startLine <= line` |
 | `commitSha` | string | full 40- or 64-character hex object name; validated on append; never inferred from the issue |
+
+**Outdated (`outdated`).** Read-time only — never stored in `comments.jsonl`.
+Present on anchored comments when the anchored line or range at
+`anchor.commitSha` differs from the same path at the issue's head commit
+(Task: last commit in its series; Story: last commit rolled up from
+descendant Tasks; no commits on the issue → outdated). Omitted on
+unanchored comments and on current anchors. `issue view --comments` appends
+` (outdated)` after the location on outdated anchored roots; the HTTP
+comments payload carries the boolean field instead.
 
 Malformed lines are skipped into `problems` on read, never thrown.
 
