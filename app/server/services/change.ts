@@ -1,6 +1,5 @@
 import { bySequence } from "../order.js";
 import type { ChangeCommit, ChangeStats, Issue, IssueChange } from "../schemas.js";
-import { taskHeadCommit } from "./commit-sha.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
@@ -263,15 +262,30 @@ function assertChangeSupported(issue: Issue): void {
   }
 }
 
-function allowedCommitShas(issue: Issue, issueId: string): string[] {
-  assertChangeSupported(issue);
+/**
+ * Commit shas of this issue's change, in implementation order.
+ * Empty when the change is empty (no commits, noDiff, or a kind with no range).
+ */
+export function issueChangeCommitShas(issue: Issue): string[] {
   if (issue.kind === "task") {
-    const sha = taskHeadCommit(issue);
-    if (!sha || issue.noDiff) return [];
-    return [sha];
+    if (issue.commits.length === 0 || issue.noDiff) return [];
+    return issue.commits;
   }
   if (issue.kind === "story") {
-    return collectDescendantCommits(issueId).map((commit) => commit.sha);
+    return collectDescendantCommits(issue.id).map((commit) => commit.sha);
+  }
+  return [];
+}
+
+function allowedCommitShas(issue: Issue): string[] {
+  assertChangeSupported(issue);
+  const shas = issueChangeCommitShas(issue);
+  if (issue.kind === "task") {
+    const sha = shas.at(-1);
+    return sha ? [sha] : [];
+  }
+  if (issue.kind === "story") {
+    return shas;
   }
   throw new IssueError(
     "validation",
@@ -293,7 +307,7 @@ export async function readIssueChangeFile(
   const project = chain[0]!;
   const workspace = requireProjectWorkspace(project.id);
 
-  const allowed = allowedCommitShas(issue, issueId);
+  const allowed = allowedCommitShas(issue);
   if (!allowed.includes(sha)) {
     throw new IssueError(
       "validation",

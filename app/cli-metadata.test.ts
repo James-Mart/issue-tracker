@@ -1,5 +1,7 @@
-import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { execFileSync } from "child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { dirname, join } from "path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runIssueCli } from "./cli-program.js";
 import {
@@ -12,6 +14,22 @@ import {
 } from "./cli.test-helpers.js";
 
 useCliTestFixtures();
+
+const GIT = [
+  "-c",
+  "user.name=test",
+  "-c",
+  "user.email=test@example.com",
+  "-c",
+  "commit.gpgsign=false",
+];
+
+function git(repo: string, args: string[]): string {
+  return execFileSync("git", [...GIT, ...args], {
+    cwd: repo,
+    encoding: "utf8",
+  }).trim();
+}
 
 describe("archived field, cascade, and CLI filtering", () => {
   beforeEach(() => {
@@ -299,53 +317,101 @@ describe("kind-scoped view / delete / comment / attach", () => {
   });
 
   it("groups threads and renders anchors on view --comments", async () => {
-    const at = nextAt();
-    const commitSha = "deadbeef00000000000000000000000000000000";
-    writeFileSync(
-      join(dir, "a", "comments.jsonl"),
-      [
-        JSON.stringify({
-          id: "plain-id",
-          role: "human",
-          name: "Ada",
-          body: "standalone note",
-          at,
-        }),
-        JSON.stringify({
-          id: "anchor-id",
-          role: "agent",
-          name: "reviewer",
-          body: "fix this",
-          at,
-          anchor: {
-            path: "app/cli-ops.ts",
-            side: "new",
-            line: 42,
-            startLine: 40,
-            commitSha,
-          },
-        }),
-        JSON.stringify({
-          id: "reply-id",
-          role: "agent",
-          body: "will do",
-          at,
-          replyTo: "anchor-id",
-        }),
-      ].join("\n") + "\n",
-    );
+    const workspace = mkdtempSync(join(tmpdir(), "issue-cli-anchor-ws-"));
+    try {
+      git(workspace, ["init", "-b", "main"]);
+      const relPath = "src/review.ts";
+      const absPath = join(workspace, relPath);
+      mkdirSync(dirname(absPath), { recursive: true });
+      writeFileSync(absPath, "line one\nline two\nline three\n");
+      git(workspace, ["add", "-A"]);
+      git(workspace, ["commit", "-m", "initial"]);
+      const shaInitial = git(workspace, ["rev-parse", "HEAD"]);
+      writeFileSync(absPath, "line one\nLINE TWO\nline three\n");
+      git(workspace, ["add", "-A"]);
+      git(workspace, ["commit", "-m", "change line two"]);
+      const shaChanged = git(workspace, ["rev-parse", "HEAD"]);
 
-    const { stdout, status } = await runIssueCli(["story", "view", "a", "--comments"], {
-      env: env(),
-    });
-    expect(status).toBe(0);
+      writeIssue("p", {
+        kind: "project",
+        title: "Proj",
+        workspace,
+        createdAt: nextAt(),
+        updatedAt: nextAt(),
+      });
+      writeIssue("c1", {
+        kind: "task",
+        title: "C1",
+        partOf: "a",
+        order: 0,
+        status: "done",
+        commits: [shaInitial, shaChanged],
+        createdAt: nextAt(),
+        updatedAt: nextAt(),
+      });
 
-    const comments = stdout.split("--- comments ---")[1]!.trim().split("\n");
-    expect(comments).toEqual([
-      `plain-id [${at}] Ada: standalone note`,
-      `anchor-id [${at}] reviewer @ app/cli-ops.ts:40-42 new deadbee: fix this`,
-      `  reply-id [${at}] agent: will do`,
-    ]);
+      const at = nextAt();
+      writeFileSync(
+        join(dir, "a", "comments.jsonl"),
+        [
+          JSON.stringify({
+            id: "plain-id",
+            role: "human",
+            name: "Ada",
+            body: "standalone note",
+            at,
+          }),
+          JSON.stringify({
+            id: "current-id",
+            role: "agent",
+            name: "reviewer",
+            body: "still valid",
+            at,
+            anchor: {
+              path: relPath,
+              side: "new",
+              line: 1,
+              commitSha: shaInitial,
+            },
+          }),
+          JSON.stringify({
+            id: "outdated-id",
+            role: "agent",
+            name: "reviewer",
+            body: "fix this",
+            at,
+            anchor: {
+              path: relPath,
+              side: "new",
+              line: 2,
+              commitSha: shaInitial,
+            },
+          }),
+          JSON.stringify({
+            id: "reply-id",
+            role: "agent",
+            body: "will do",
+            at,
+            replyTo: "outdated-id",
+          }),
+        ].join("\n") + "\n",
+      );
+
+      const { stdout, status } = await runIssueCli(["story", "view", "a", "--comments"], {
+        env: env(),
+      });
+      expect(status).toBe(0);
+
+      const comments = stdout.split("--- comments ---")[1]!.trim().split("\n");
+      expect(comments).toEqual([
+        `plain-id [${at}] Ada: standalone note`,
+        `current-id [${at}] reviewer @ ${relPath}:1 new ${shaInitial.slice(0, 7)}: still valid`,
+        `outdated-id [${at}] reviewer @ ${relPath}:2 new ${shaInitial.slice(0, 7)} (outdated): fix this`,
+        `  reply-id [${at}] agent: will do`,
+      ]);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   });
 
   it.each([

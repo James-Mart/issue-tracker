@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -7,11 +8,19 @@ import {
 } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const COMMIT_SHA = "deadbeef00000000000000000000000000000000";
+const GIT = [
+  "-c",
+  "user.name=test",
+  "-c",
+  "user.email=test@example.com",
+  "-c",
+  "commit.gpgsign=false",
+];
 let dir: string;
 let server: Server;
 let baseUrl: string;
@@ -19,6 +28,25 @@ let baseUrl: string;
 function writeIssue(id: string, body: Record<string, unknown>): void {
   mkdirSync(join(dir, id), { recursive: true });
   writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
+}
+
+function git(repo: string, args: string[]): string {
+  return execFileSync("git", [...GIT, ...args], {
+    cwd: repo,
+    encoding: "utf8",
+  }).trim();
+}
+
+function writeRepoFile(repo: string, rel: string, contents: string): void {
+  const dest = join(repo, rel);
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, contents);
+}
+
+function commit(repo: string, message: string): string {
+  git(repo, ["add", "-A"]);
+  git(repo, ["commit", "-m", message]);
+  return git(repo, ["rev-parse", "HEAD"]);
 }
 
 beforeEach(async () => {
@@ -169,6 +197,7 @@ describe("comments HTTP API", () => {
         body: string;
         anchor?: typeof anchor;
         replyTo?: string;
+        outdated?: boolean;
       }>;
       problems: unknown[];
     };
@@ -179,16 +208,108 @@ describe("comments HTTP API", () => {
     expect(anchored?.body).toBe("anchored");
     expect(anchored?.anchor).toEqual(anchor);
     expect(anchored?.replyTo).toBeUndefined();
+    expect(anchored?.outdated).toBe(true);
 
     const root = body.messages.find((m) => m.id === rootId);
     expect(root?.body).toBe("root for reply");
     expect(root?.anchor).toBeUndefined();
     expect(root?.replyTo).toBeUndefined();
+    expect(root).not.toHaveProperty("outdated");
 
     const reply = body.messages.find((m) => m.id === replyId);
     expect(reply?.body).toBe("thread reply");
     expect(reply?.replyTo).toBe(rootId);
     expect(reply?.anchor).toBeUndefined();
+    expect(reply).not.toHaveProperty("outdated");
+  });
+
+  it("GET omits outdated on current anchors and sets it on stale ones", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "issue-tracker-comments-ws-"));
+    try {
+      git(workspace, ["init", "-b", "main"]);
+      const relPath = "src/review.ts";
+      writeRepoFile(workspace, relPath, "line one\nline two\nline three\n");
+      const shaInitial = commit(workspace, "initial");
+      writeRepoFile(workspace, relPath, "line one\nLINE TWO\nline three\n");
+      const shaChanged = commit(workspace, "change line two");
+
+      writeIssue("p", {
+        kind: "project",
+        title: "P",
+        workspace,
+        order: 0,
+        createdAt: AT,
+        updatedAt: AT,
+      });
+      writeIssue("e-git", {
+        kind: "epic",
+        title: "E",
+        partOf: "p",
+        order: 0,
+        createdAt: AT,
+        updatedAt: AT,
+      });
+      writeIssue("s-git", {
+        kind: "story",
+        title: "S",
+        partOf: "e-git",
+        merged: false,
+        order: 0,
+        createdAt: AT,
+        updatedAt: AT,
+      });
+      writeIssue("t-git", {
+        kind: "task",
+        title: "T",
+        partOf: "s-git",
+        status: "done",
+        order: 0,
+        commits: [shaInitial, shaChanged],
+        createdAt: AT,
+        updatedAt: AT,
+      });
+
+      const { json: currentJson } = await postComment("t-git", {
+        role: "agent",
+        body: "still valid",
+        anchor: {
+          path: relPath,
+          side: "new",
+          line: 1,
+          commitSha: shaInitial,
+        },
+      });
+      const currentId = (currentJson as { id: string }).id;
+
+      const { json: staleJson } = await postComment("t-git", {
+        role: "agent",
+        body: "fix this",
+        anchor: {
+          path: relPath,
+          side: "new",
+          line: 2,
+          commitSha: shaInitial,
+        },
+      });
+      const staleId = (staleJson as { id: string }).id;
+
+      const { status, json } = await getComments("t-git");
+      expect(status).toBe(200);
+      const body = json as {
+        messages: Array<{ id: string; outdated?: boolean }>;
+        problems: unknown[];
+      };
+      expect(body.problems).toEqual([]);
+
+      const current = body.messages.find((m) => m.id === currentId);
+      expect(current).toBeDefined();
+      expect(current).not.toHaveProperty("outdated");
+
+      const stale = body.messages.find((m) => m.id === staleId);
+      expect(stale?.outdated).toBe(true);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   });
 
   it("returns 400 with the service reason when replyTo is unknown", async () => {

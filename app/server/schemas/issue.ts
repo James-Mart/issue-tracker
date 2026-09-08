@@ -92,6 +92,9 @@ export const commentInputSchema = commentSchema.omit({ at: true, id: true });
 export type Comment = z.infer<typeof commentSchema>;
 export type CommentInput = z.infer<typeof commentInputSchema>;
 
+/** Stored comment plus read-time `outdated` on anchored messages only. */
+export type CommentMessage = Comment & { outdated?: boolean };
+
 export const mergeStoryBodySchema = z.object({
   auto: z.boolean().optional(),
   matchHeadCommit: z.string().optional(),
@@ -100,7 +103,7 @@ export const mergeStoryBodySchema = z.object({
 export type MergeStoryBody = z.infer<typeof mergeStoryBodySchema>;
 
 export interface CommentsResponse {
-  messages: Comment[];
+  messages: CommentMessage[];
   problems: Problem[];
 }
 
