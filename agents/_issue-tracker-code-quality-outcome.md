@@ -20,7 +20,7 @@ for the comment body:
 issue task comment <taskId> --role code-quality-validator --body "$(cat <<'EOF'
 <body prepared above>
 EOF
-)" && issue task set <taskId> qa passed
+)" && issue task set <taskId> qa passed && issue task set <taskId> status done
 ```
 
 **Actionable findings** — count how many times **you** have already set
