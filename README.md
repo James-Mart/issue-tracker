@@ -113,6 +113,14 @@ stores derived state.
 Three thin adapters sit over it:
 
 - **CLI** (`app/cli.ts`) — the interface agents use to author and work the stack.
+  Per-issue comments live in `comments.jsonl` (append-only; see
+  [SPEC § `comments.jsonl` message shape](./SPEC.md#commentsjsonl-message-shape)).
+  `issue comment <id> --role … --body …` appends a message and prints its
+  server-stamped `id`; optional `--reply-to` posts a one-level reply, and
+  optional anchor flags (`--path`, `--side`, `--line`, `--commit`, optional
+  `--start-line`) bind a root comment to a diff line at a commit sha.
+  `issue view <id> --comments` prints the log with threads grouped (replies
+  indented) and anchors rendered inline.
 - **HTTP API** (`routes/issues.ts`) — `GET /api/issues` (issues + derived +
   ready + problems), `GET /api/issues/:id`, `GET /api/issues/:id/comments`,
   `POST /api/issues`, `PATCH /api/issues/:id`, `DELETE /api/issues/:id`,

@@ -334,14 +334,26 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
 | `merge` | story only |
 
 - **`view`** — `issue view <id>` (pass `--comments` for the comment log).
-  Prefer `issue get <id> <field>` for a single field. Label lines: see
+  With `--comments`, appends a `--- comments ---` section after the
+  description: thread roots in append order, each reply indented two spaces
+  under its root; every line is
+  `{id} [{at}] {author}: {body}` or, when anchored,
+  `{id} [{at}] {author} @ {path}:{line} {side} {sha7}: {body}` (a range uses
+  `{startLine}-{line}`). `{author}` is `name` when set, else `role`. See
+  [`comments.jsonl` message shape](#commentsjsonl-message-shape). Prefer
+  `issue get <id> <field>` for a single field. Label lines: see
   [Project labels](#project-labels).
 - **`get`** — `issue get <id> <field>`; field rules match kind-scoped
   [get / set](#kind-scoped-get--set).
 - **`comment`** — `issue comment <id> --role <role> --body <text>`
-  (optional `--name`); appends to `comments.jsonl` (the CLI verb is `comment`;
-  the on-disk log is `comments.jsonl`); refuses a Project id; see
-  [Service layer](#service-layer).
+  (optional `--name`; optional anchor flags `--path`, `--side`, `--line`,
+  optional `--start-line`, `--commit`; optional `--reply-to <commentId>`).
+  Appends one message to `comments.jsonl` (the CLI verb is `comment`; the
+  on-disk log is `comments.jsonl`); prints the server-stamped `id` on stdout;
+  refuses a Project id. Anchor flags require all of `--path`, `--side`,
+  `--line`, and `--commit` together; `--reply-to` is mutually exclusive with
+  anchor flags. See [`comments.jsonl` message shape](#commentsjsonl-message-shape)
+  and [Service layer](#service-layer).
 - **`merge`** — `issue merge <storyId> [--auto] [--match-head-commit <sha>]`;
   shells out to `gh pr merge --merge` with owner/repo/number from the Story's
   stored `prUrl` and cwd = the Project `workspace`; refuses other kinds and
@@ -1034,14 +1046,38 @@ header and tree-row hover expose Archive / Unarchive actions that PATCH
 
 ## `comments.jsonl` message shape
 
-Each line of `comments.jsonl` is one JSON message object (`app/server/schemas.ts`):
+Each line of `comments.jsonl` is one JSON message object
+(`commentSchema` in `app/server/schemas/issue.ts`). The log stays
+**append-only** — messages are never edited or deleted in place, and there is
+**no resolution state** (no resolved/unresolved flag or count).
 
 | field | type | notes |
 | --- | --- | --- |
+| `id` | string | non-empty; server-stamped UUID on append (absent from caller input) |
 | `role` | string | non-empty; the author role (e.g. `agent`, `human`) |
 | `name` | string? | optional author display name |
 | `body` | string | non-empty; Markdown, may contain `issue:` links |
 | `at` | ISO string | server-stamped on append (not supplied by the caller) |
+| `replyTo` | string? | when set, the `id` of the thread **root** this message replies to |
+| `anchor` | object? | optional line anchor on a root comment only (see below) |
+
+**Threading (`replyTo`).** A thread is one root plus an ordered list of
+replies. Threads are exactly **one level deep**: `replyTo` must name a comment
+that has no `replyTo` of its own. A reply to a reply is **refused** at append
+time (not flattened silently). `replyTo` referencing an unknown id is refused.
+`replyTo` and `anchor` cannot both be set on the same comment; replies carry
+no anchor of their own.
+
+**Anchor (`anchor`).** Binds the comment to a line or line range in a diff at
+an immutable commit. Object members:
+
+| member | type | notes |
+| --- | --- | --- |
+| `path` | string | repository-relative file path |
+| `side` | `"old"` \| `"new"` | which side of the diff the anchor points at |
+| `line` | number | anchored line (1-based) on that side |
+| `startLine` | number? | when set, range start (1-based); must satisfy `startLine <= line` |
+| `commitSha` | string | full 40- or 64-character hex object name; validated on append; never inferred from the issue |
 
 Malformed lines are skipped into `problems` on read, never thrown.
 
@@ -1081,9 +1117,13 @@ no consumer can persist a broken file.
 - `remove(id)` — deletes the issue and its containment subtree, repairing every
   surviving reference into it (see [Deletion policy](#deletion-policy)). Exposed
   over HTTP as `DELETE /api/issues/:id` and via `issue <kind> delete`.
-- `appendComment(id, {role, name?, body})` — appends one JSONL line to
-  `comments.jsonl` with a server-stamped `at` (`issue epic|idea|story|task comment`
-  and comments HTTP share this path).
+- `appendComment(id, CommentInput)` — appends one JSONL line to
+  `comments.jsonl` with server-stamped `id` and `at` (`issue epic|idea|story|task comment`
+  and `POST /api/issues/:id/comments` share this path). `CommentInput` is the
+  stored shape minus `id` and `at` — `{role, name?, body}` plus optional
+  `replyTo` and/or `anchor`; see [`comments.jsonl` message shape](#commentsjsonl-message-shape).
+  Append-time validation refuses invalid `replyTo`, `anchor`, and `commitSha`
+  values.
 - `readComments(id)` — reads/parses `comments.jsonl`, skipping malformed lines into
   `problems`. An issue with no comment log returns empty messages.
 - Attachment bytes (`attachments.ts`): `listAttachments` / `getAttachment` /
