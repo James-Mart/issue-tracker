@@ -31,7 +31,7 @@ describe("apply — update preserves imperative progress state", () => {
     await update("c1", {
       status: "fixing",
       qa: "changes-requested",
-      commitSha: "deadbeef00000000000000000000000000000000",
+      commits: ["deadbeef00000000000000000000000000000000"],
       noDiff: true,
       assignee: "bob",
       needsAttention: true,
@@ -68,7 +68,7 @@ describe("apply — update preserves imperative progress state", () => {
     expect(c1.title).toBe("Commit one renamed");
     expect(c1.status).toBe("fixing");
     expect(c1.qa).toBe("changes-requested");
-    expect(c1.commitSha).toBe("deadbeef00000000000000000000000000000000");
+    expect(c1.commits).toEqual(["deadbeef00000000000000000000000000000000"]);
     expect(c1.noDiff).toBe(true);
     expect(c1.assignee).toBe("bob");
     expect(c1.needsAttention).toBe(true);

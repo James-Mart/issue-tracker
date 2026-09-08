@@ -12,10 +12,30 @@ export function validateFullCommitSha(sha: string): void {
   }
 }
 
-export function validateCommitShaPatch(patch: IssuePatch): void {
-  if (!("commitSha" in patch)) return;
-  const { commitSha } = patch;
-  if (commitSha !== null && commitSha !== undefined) {
-    validateFullCommitSha(commitSha);
+/** Head of a Task's commit series — the last element, or undefined when empty. */
+export function taskHeadCommit(task: { commits: string[] }): string | undefined {
+  return task.commits.at(-1);
+}
+
+export function appendTaskCommit(
+  task: { commits: string[] },
+  sha: string,
+): string[] {
+  validateFullCommitSha(sha);
+  if (task.commits.includes(sha)) {
+    throw new IssueError(
+      "validation",
+      `commit sha "${sha}" is already on this Task`,
+    );
+  }
+  return [...task.commits, sha];
+}
+
+export function validateCommitsPatch(patch: IssuePatch): void {
+  if (!("commits" in patch)) return;
+  const { commits } = patch;
+  if (commits === undefined) return;
+  for (const sha of commits) {
+    validateFullCommitSha(sha);
   }
 }

@@ -615,9 +615,16 @@ export function coerceSetPatch(
     case "agentModelSlug":
       assertAllowedAgentModelSlug(raw);
       return { [storeKey]: raw } as IssuePatch;
-    case "commitSha":
-      validateFullCommitSha(raw);
-      return { commitSha: raw };
+    case "commits": {
+      const parsed = coerceJson(raw, field);
+      if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === "string")) {
+        throw new Error(`invalid ${field}: expected a JSON array of strings`);
+      }
+      for (const sha of parsed) {
+        validateFullCommitSha(sha);
+      }
+      return { commits: parsed };
+    }
     case "boolean":
       return { [storeKey]: coerceBoolean(raw, field) } as IssuePatch;
     case "enum":

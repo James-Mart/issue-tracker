@@ -1,5 +1,6 @@
 import { bySequence } from "../order.js";
 import type { ChangeCommit, ChangeStats, Issue, IssueChange } from "../schemas.js";
+import { taskHeadCommit } from "./commit-sha.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
@@ -24,8 +25,9 @@ function isChildOf(issue: Issue, parentId: string): boolean {
 }
 
 function taskCommit(task: Task): ChangeCommit | undefined {
-  if (!task.commitSha || task.noDiff) return undefined;
-  return { sha: task.commitSha, subject: "" };
+  const sha = taskHeadCommit(task);
+  if (!sha || task.noDiff) return undefined;
+  return { sha, subject: "" };
 }
 
 /** Stories / Epics nested under `parent` for the implementation-order walk. */
@@ -212,14 +214,13 @@ async function readTaskChange(
   task: Extract<Issue, { kind: "task" }>,
   workspace: string,
 ): Promise<IssueChange> {
-  if (!task.commitSha) {
+  const sha = taskHeadCommit(task);
+  if (!sha) {
     return { state: "empty", reason: "no-commit" };
   }
   if (task.noDiff) {
     return { state: "empty", reason: "no-diff" };
   }
-
-  const sha = task.commitSha;
   const subject = (
     await runGitOrCommitUnreachable(
       ["show", "-s", "--format=%s", sha],
@@ -258,8 +259,9 @@ function assertChangeSupported(issue: Issue): void {
 function allowedCommitShas(issue: Issue, issueId: string): string[] {
   assertChangeSupported(issue);
   if (issue.kind === "task") {
-    if (!issue.commitSha || issue.noDiff) return [];
-    return [issue.commitSha];
+    const sha = taskHeadCommit(issue);
+    if (!sha || issue.noDiff) return [];
+    return [sha];
   }
   if (issue.kind === "story") {
     return collectDescendantCommits(issueId).map((commit) => commit.sha);

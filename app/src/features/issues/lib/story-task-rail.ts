@@ -10,7 +10,7 @@ type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
 /**
  * Map a Story's task onto a Rail port state.
  * In-flight delegates to `isInFlight`; done reads as landed (`merged`);
- * everything else ready. `commitSha` is label-only (see TaskRailLabel), not
+ * everything else ready. The head of `commits` is label-only (see TaskRailLabel), not
  * a gate on merged. Story-task spines have no blockedBy edges.
  */
 export function taskRailNodeState(task: TaskRecord): RailNodeState {

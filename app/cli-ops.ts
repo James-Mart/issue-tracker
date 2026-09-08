@@ -40,6 +40,7 @@ import { applyMergeConsequences } from "./server/services/merge-consequences.js"
 import { readAll } from "./server/services/issues.js";
 import { requireProjectWorkspace } from "./server/services/project-workspace.js";
 import { ancestorChain } from "./server/services/subtree.js";
+import { taskHeadCommit } from "./server/services/commit-sha.js";
 
 type Run = (action: () => unknown) => Promise<void>;
 
@@ -201,7 +202,8 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
   if (detail.kind === "task") {
     lines.push(`status: ${detail.status}`);
     if (detail.qa) lines.push(`qa: ${detail.qa}`);
-    if (detail.commitSha) lines.push(`commitSha: ${detail.commitSha}`);
+    const head = taskHeadCommit(detail);
+    if (head) lines.push(`commitSha: ${head}`);
     if (detail.noDiff) lines.push(`noDiff: true`);
   }
   if (hasPartOf(detail)) {

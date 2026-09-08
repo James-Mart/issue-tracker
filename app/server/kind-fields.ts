@@ -46,7 +46,7 @@ export type FieldCoerce =
   | { type: "personas" }
   | { type: "description" }
   | { type: "needsAttention" }
-  | { type: "commitSha" }
+  | { type: "commits" }
   | { type: "agentModelSlug" };
 
 export type SetFieldSpec = FieldCoerce;
@@ -121,7 +121,7 @@ export const TASK_SET_FIELDS = {
   partOf: { type: "string" },
   status: { type: "enum", values: TASK_STATUSES },
   qa: { type: "enum", values: QA_STATUSES },
-  commitSha: { type: "commitSha" },
+  commits: { type: "commits" },
   noDiff: { type: "boolean" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
@@ -242,7 +242,7 @@ export const TASK_GET_FIELDS = {
   archived: STORED,
   status: STORED,
   qa: STORED,
-  commitSha: STORED,
+  commits: STORED,
   noDiff: STORED,
   order: STORED,
   createdAt: STORED,

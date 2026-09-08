@@ -141,7 +141,7 @@ describe("readIssueChange rollup", () => {
         order: task.order ?? 0,
         createdAt: AT,
         updatedAt: AT,
-        ...(task.sha ? { commitSha: task.sha } : {}),
+        ...(task.sha ? { commits: [task.sha] } : {}),
       });
     }
   }
@@ -274,7 +274,7 @@ describe("readIssueChange rollup", () => {
     writeTask("t-stacked-foreign", {
       partOf: "s-stacked-on-rollup",
       order: 0,
-      commitSha: stacked,
+      commits: [stacked],
     });
 
     await stubGitSpawner((args) => {
@@ -344,7 +344,7 @@ describe("readIssueChange rollup", () => {
   });
 
   it("refuses Epic change requests", async () => {
-    writeTask("t-epic-child", { partOf: "b", commitSha: sha(1) });
+    writeTask("t-epic-child", { partOf: "b", commits: [sha(1)] });
     const { readIssueChange } = await loadChange();
     await expect(readIssueChange("e")).rejects.toMatchObject({
       code: "validation",
@@ -364,7 +364,7 @@ describe("readIssueChange", () => {
   });
 
   it("returns empty no-diff when the Task is flagged noDiff", async () => {
-    writeTask("t2", { commitSha: SHA, noDiff: true });
+    writeTask("t2", { commits: [SHA], noDiff: true });
     const { readIssueChange } = await loadChange();
     await expect(readIssueChange("t2")).resolves.toEqual({
       state: "empty",
@@ -373,7 +373,7 @@ describe("readIssueChange", () => {
   });
 
   it("returns a loaded change with patch and stats when the commit resolves", async () => {
-    writeTask("t3", { commitSha: SHA });
+    writeTask("t3", { commits: [SHA] });
     await stubGitSpawner((args) => {
       if (args[0] === "show" && args.includes("--format=%s")) {
         return mockGitChild({ stdout: "Add feature\n" });
@@ -401,7 +401,7 @@ describe("readIssueChange", () => {
   });
 
   it("raises commit-unreachable when the recorded sha does not resolve", async () => {
-    writeTask("t4", { commitSha: SHA });
+    writeTask("t4", { commits: [SHA] });
     await stubGitSpawner(() =>
       mockGitChild({
         code: 128,
@@ -417,7 +417,7 @@ describe("readIssueChange", () => {
   });
 
   it("propagates other git failures without mapping to commit-unreachable", async () => {
-    writeTask("t5", { commitSha: SHA });
+    writeTask("t5", { commits: [SHA] });
     await stubGitSpawner(() =>
       mockGitChild({
         code: 128,
@@ -432,7 +432,7 @@ describe("readIssueChange", () => {
   });
 
   it("returns a loaded change when the patch is within the render ceiling", async () => {
-    writeTask("t-under", { commitSha: SHA });
+    writeTask("t-under", { commits: [SHA] });
     await stubGitSpawner((args) => {
       if (args[0] === "show" && args.includes("--format=%s")) {
         return mockGitChild({ stdout: "Small change\n" });
@@ -458,7 +458,7 @@ describe("readIssueChange", () => {
   });
 
   it("raises change-too-large with stats and no patch when a Task patch exceeds the ceiling", async () => {
-    writeTask("t-over", { commitSha: SHA });
+    writeTask("t-over", { commits: [SHA] });
     const hugePatch = "x".repeat(2 * 1024 * 1024 + 1);
     await stubGitSpawner((args) => {
       if (args[0] === "show" && args.includes("--format=%s")) {
@@ -488,7 +488,7 @@ describe("readIssueChange", () => {
 
 describe("readIssueChangeFile", () => {
   it("refuses Epic change file requests", async () => {
-    writeTask("t-epic-child", { partOf: "b", commitSha: SHA });
+    writeTask("t-epic-child", { partOf: "b", commits: [SHA] });
     const { readIssueChangeFile } = await loadChange();
     await expect(
       readIssueChangeFile("e", SHA, "src/foo.ts"),
@@ -512,17 +512,17 @@ describe("collectDescendantCommits", () => {
     writeStory("s-a", { partOf: "tree", order: 0 });
     writeStory("s-b", { partOf: "tree", order: 1 });
     writeStory("s-stacked", { partOf: "tree", order: 0, stackedOn: "s-a" });
-    writeTask("t-a1", { partOf: "s-a", order: 0, commitSha: sha(1) });
+    writeTask("t-a1", { partOf: "s-a", order: 0, commits: [sha(1)] });
     writeTask("t-missing", { partOf: "s-a", order: 1 });
     writeTask("t-nodiff", {
       partOf: "s-a",
       order: 2,
-      commitSha: sha(2),
+      commits: [sha(2)],
       noDiff: true,
     });
-    writeTask("t-a2", { partOf: "s-a", order: 3, commitSha: sha(3) });
-    writeTask("t-stacked", { partOf: "s-stacked", order: 0, commitSha: sha(4) });
-    writeTask("t-b1", { partOf: "s-b", order: 0, commitSha: sha(5) });
+    writeTask("t-a2", { partOf: "s-a", order: 3, commits: [sha(3)] });
+    writeTask("t-stacked", { partOf: "s-stacked", order: 0, commits: [sha(4)] });
+    writeTask("t-b1", { partOf: "s-b", order: 0, commits: [sha(5)] });
   }
 
   it("returns recorded shas in implementation order and skips empty tasks", async () => {

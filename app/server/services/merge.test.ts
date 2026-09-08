@@ -12,6 +12,7 @@ const commit: Issue = {
   partOf: "auth-endpoints",
   order: 0,
   status: "todo",
+  commits: [],
   needsAttention: false,
   attentionReason: null,
   createdAt: "2026-07-09T14:36:00.000Z",
@@ -29,7 +30,7 @@ describe("mergeIssue", () => {
 
   it("does not mutate the input", () => {
     const before = JSON.stringify(commit);
-    mergeIssue(commit, { status: "done", commitSha: "abc123" });
+    mergeIssue(commit, { status: "done", commits: ["abc123"] });
     expect(JSON.stringify(commit)).toBe(before);
   });
 
@@ -56,12 +57,12 @@ describe("mergeIssue", () => {
     const merged = asCommit(
       mergeIssue(commit, {
         status: "done",
-        commitSha: "deadbeef",
+        commits: ["deadbeef"],
         assignee: "codex",
       }),
     );
     expect(merged.status).toBe("done");
-    expect(merged.commitSha).toBe("deadbeef");
+    expect(merged.commits).toEqual(["deadbeef"]);
     expect(merged.assignee).toBe("codex");
   });
 
@@ -72,12 +73,12 @@ describe("mergeIssue", () => {
 
   it("clears a clearable optional field when patched with null", () => {
     const assigned = asCommit(
-      mergeIssue(commit, { assignee: "codex", commitSha: "abc" }),
+      mergeIssue(commit, { assignee: "codex", commits: ["abc"] }),
     );
     expect(assigned.assignee).toBe("codex");
-    const cleared = mergeIssue(assigned, { assignee: null, commitSha: null });
+    const cleared = mergeIssue(assigned, { assignee: null, commits: [] });
     expect("assignee" in cleared).toBe(false);
-    expect(cleared.kind === "task" && "commitSha" in cleared).toBe(false);
+    expect(cleared.kind === "task" && cleared.commits).toEqual([]);
   });
 
   it("keeps a null attentionReason as an explicit value, not a deletion", () => {

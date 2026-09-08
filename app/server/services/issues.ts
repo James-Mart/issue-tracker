@@ -55,7 +55,7 @@ import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import { uniqueSlug } from "./slug.js";
 import { validateNonClearablePatch, validateSourceIdeaPatch } from "./patch.js";
-import { validateCommitShaPatch, validateFullCommitSha } from "./commit-sha.js";
+import { validateCommitsPatch, validateFullCommitSha } from "./commit-sha.js";
 import { validateMergePolicyPatch } from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
 import { validateSupportingDocsPatch } from "./supporting-docs.js";
@@ -558,7 +558,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     validateSupportingDocsPatch(existing, jsonPatch);
     validateInspirationAppsPatch(existing, jsonPatch);
     validatePersonasPatch(existing, jsonPatch);
-    validateCommitShaPatch(jsonPatch);
+    validateCommitsPatch(jsonPatch);
     validateNonClearablePatch(existing, jsonPatch);
     validateMergePolicyPatch(existing, jsonPatch, issues);
     validateSourceIdeaPatch(existing, jsonPatch, issues);

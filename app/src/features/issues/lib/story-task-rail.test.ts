@@ -19,6 +19,7 @@ function task(
     createdAt: t0,
     updatedAt: t0,
     status,
+    commits: [],
     ...extras,
   };
 }
@@ -29,11 +30,11 @@ describe("taskRailNodeState", () => {
     expect(taskRailNodeState(task("b", "s", "fixing"))).toBe("in-flight");
   });
 
-  it("maps done to merged whether or not commitSha is set", () => {
+  it("maps done to merged whether or not commits is set", () => {
     expect(
       taskRailNodeState(
         task("a", "s", "done", {
-          commitSha: "deadbeef00000000000000000000000000000000",
+          commits: ["deadbeef00000000000000000000000000000000"],
         }),
       ),
     ).toBe("merged");

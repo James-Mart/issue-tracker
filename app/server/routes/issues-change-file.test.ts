@@ -121,7 +121,7 @@ afterEach(async () => {
 
 describe("issue change file HTTP API", () => {
   it("returns file contents when the path exists at the requested commit", async () => {
-    writeTask("t-file", { commitSha: SHA });
+    writeTask("t-file", { commits: [SHA] });
     await stubGitSpawner((args) => {
       if (args[0] === "show" && args[1] === `${SHA}:${FILE_PATH}`) {
         return mockGitChild({ stdout: FILE_CONTENTS });
@@ -138,7 +138,7 @@ describe("issue change file HTTP API", () => {
   });
 
   it("returns not_found when the path does not exist at the commit", async () => {
-    writeTask("t-missing", { commitSha: SHA });
+    writeTask("t-missing", { commits: [SHA] });
     await stubGitSpawner((args) => {
       if (args[0] === "show" && args[1] === `${SHA}:${FILE_PATH}`) {
         return mockGitChild({
@@ -160,7 +160,7 @@ describe("issue change file HTTP API", () => {
   });
 
   it("refuses a sha outside the issue commit set", async () => {
-    writeTask("t-refused", { commitSha: SHA });
+    writeTask("t-refused", { commits: [SHA] });
 
     const url = new URL(`${baseUrl}/api/issues/t-refused/change/file`);
     url.searchParams.set("path", FILE_PATH);
@@ -173,7 +173,7 @@ describe("issue change file HTTP API", () => {
   });
 
   it("refuses Epic change file requests", async () => {
-    writeTask("t-epic-child", { commitSha: SHA });
+    writeTask("t-epic-child", { commits: [SHA] });
 
     const url = new URL(`${baseUrl}/api/issues/e/change/file`);
     url.searchParams.set("path", FILE_PATH);

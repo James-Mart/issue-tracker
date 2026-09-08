@@ -15,6 +15,7 @@ import { assigneeOf } from "@server/assignee";
 import { isProjectBoardChild } from "@server/order";
 import { hasAttention } from "@server/kind";
 import { CHILD_KIND } from "@server/issue-constants";
+import { taskHeadCommit } from "@server/services/commit-sha";
 import type {
   DerivedState,
   IssueKind,
@@ -220,12 +221,15 @@ function TreeRowDerivedMeta({
       <EpicAxisChips epicStatus={derived?.epicStatus} retro={issue.retro} />
     );
   }
-  if (issue.kind === "task" && issue.commitSha) {
-    return (
-      <span className="font-mono text-xs text-muted-foreground">
-        {issue.commitSha.slice(0, 7)}
-      </span>
-    );
+  if (issue.kind === "task") {
+    const head = taskHeadCommit(issue);
+    if (head) {
+      return (
+        <span className="font-mono text-xs text-muted-foreground">
+          {head.slice(0, 7)}
+        </span>
+      );
+    }
   }
   return null;
 }
@@ -353,8 +357,9 @@ export function treeRowTouchChipLabels(
     if (issue.qa) {
       labels.push(`qa: ${QA_STATUS_LABEL[issue.qa]}`);
     }
-    if (issue.commitSha) {
-      labels.push(issue.commitSha.slice(0, 7));
+    const head = taskHeadCommit(issue);
+    if (head) {
+      labels.push(head.slice(0, 7));
     }
   }
 

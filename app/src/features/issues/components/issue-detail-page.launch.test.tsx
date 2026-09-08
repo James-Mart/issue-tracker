@@ -98,6 +98,10 @@ vi.mock("./restart-control", () => ({
   RestartControl: () => null,
 }));
 
+vi.mock("./backup-chip", () => ({
+  BackupChip: () => null,
+}));
+
 vi.mock("@/features/agents/components/conversation-thread", () => ({
   ConversationThread: ({ conversationId }: { conversationId: string }) => (
     <div data-testid="conversation-thread" data-conversation-id={conversationId}>

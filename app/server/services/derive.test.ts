@@ -59,6 +59,7 @@ const commit = (
   partOf,
   order,
   status: "todo",
+  commits: [],
   needsAttention: false,
   attentionReason: null,
   createdAt: nextAt(),
@@ -102,7 +103,7 @@ describe("derive - commit blocked", () => {
       project("p"),
       epic("e"),
       branch("b", "e", { branchName: "feat/b" }),
-      commit("c1", "b", { status: "done", commitSha: "aaa" }, 0),
+      commit("c1", "b", { status: "done", commits: ["aaa"] }, 0),
       commit("c2", "b", {}, 1),
     ];
     const { byId } = derive(issues);
@@ -133,7 +134,7 @@ describe("derive - commit blocked", () => {
       epic("e"),
       branch("b", "e", { branchName: "feat/b" }),
       commit("c1", "b", { status: "in-progress" }),
-      commit("c2", "b", { status: "done", commitSha: "z" }),
+      commit("c2", "b", { status: "done", commits: ["z"] }),
     ];
     const { byId } = derive(issues);
     expect(byId.c1.blocked).toBe(false);
@@ -243,8 +244,8 @@ describe("derive - branch status", () => {
     const issues = [
       epic("e"),
       branch("b", "e", { branchName: "feat/b", prUrl: "http://pr/1" }),
-      commit("c1", "b", { status: "done", commitSha: "a" }),
-      commit("c2", "b", { status: "done", commitSha: "b" }),
+      commit("c1", "b", { status: "done", commits: ["a"] }),
+      commit("c2", "b", { status: "done", commits: ["b"] }),
     ];
     expect(derive(issues).byId.b.storyStatus).toBe("pr-open");
   });
@@ -253,7 +254,7 @@ describe("derive - branch status", () => {
     const issues = [
       epic("e"),
       branch("b", "e", { branchName: "feat/b", prUrl: "http://pr/1" }),
-      commit("c1", "b", { status: "done", commitSha: "a" }),
+      commit("c1", "b", { status: "done", commits: ["a"] }),
       commit("c2", "b"),
     ];
     expect(derive(issues).byId.b.storyStatus).toBe("in-progress");
@@ -305,7 +306,7 @@ describe("derive - branch start gating", () => {
     const issues = [
       epic("e"),
       branch("base", "e", { branchName: "feat/base" }),
-      commit("bc", "base", { status: "done", commitSha: "aaa" }, 0),
+      commit("bc", "base", { status: "done", commits: ["aaa"] }, 0),
       branch("b", "e", { stackedOn: "base" }),
     ];
     const d = derive(issues).byId.b;
@@ -380,7 +381,7 @@ describe("derive - review coverage", () => {
     const issues = [
       epic("e"),
       branch("b", "e", { branchName: "feat/b" }),
-      commit("c1", "b", { status: "done", commitSha: "a" }),
+      commit("c1", "b", { status: "done", commits: ["a"] }),
     ];
     expect(derive(issues).byId.b.reviewCurrent).toBe(false);
   });
@@ -393,8 +394,8 @@ describe("derive - review coverage", () => {
         review: "passed",
         reviewedTasks: ["c1", "c2"],
       }),
-      commit("c1", "b", { status: "done", commitSha: "a" }, 0),
-      commit("c2", "b", { status: "done", commitSha: "b" }, 1),
+      commit("c1", "b", { status: "done", commits: ["a"] }, 0),
+      commit("c2", "b", { status: "done", commits: ["b"] }, 1),
     ];
     expect(derive(issues).byId.b.reviewCurrent).toBe(true);
   });
@@ -407,8 +408,8 @@ describe("derive - review coverage", () => {
         review: "passed",
         reviewedTasks: ["c1"],
       }),
-      commit("c1", "b", { status: "done", commitSha: "a" }, 0),
-      commit("c2", "b", { status: "done", commitSha: "b" }, 1),
+      commit("c1", "b", { status: "done", commits: ["a"] }, 0),
+      commit("c2", "b", { status: "done", commits: ["b"] }, 1),
     ];
     expect(derive(issues).byId.b.reviewCurrent).toBe(false);
   });
@@ -421,7 +422,7 @@ describe("derive - review coverage", () => {
         review: "passed",
         reviewedTasks: ["c1", "c2"],
       }),
-      commit("c1", "b", { status: "done", commitSha: "a" }, 0),
+      commit("c1", "b", { status: "done", commits: ["a"] }, 0),
       commit("c2", "b", { status: "in-progress" }, 1),
     ];
     expect(derive(issues).byId.b.reviewCurrent).toBe(false);

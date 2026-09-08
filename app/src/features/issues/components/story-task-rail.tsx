@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import type { IssueDetail, IssueRecord } from "@server/schemas";
+import { taskHeadCommit } from "@server/services/commit-sha";
 import { Rail, RailNode } from "@/components/ui/rail";
 import { useIssuesQuery } from "../api/queries";
 import {
@@ -26,7 +27,7 @@ function TaskRailLabel({
     location.search,
     (location.state as IssueBackLocationState | null)?.issueBackStack,
   );
-  const shortSha = task.commitSha?.slice(0, 7);
+  const shortSha = taskHeadCommit(task)?.slice(0, 7);
   return (
     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
       <Link

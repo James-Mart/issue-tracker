@@ -79,6 +79,10 @@ vi.mock("./restart-control", () => ({
   RestartControl: () => null,
 }));
 
+vi.mock("./backup-chip", () => ({
+  BackupChip: () => null,
+}));
+
 const t0 = "2026-07-01T00:00:00.000Z";
 
 function project(id: string): IssueRecord {

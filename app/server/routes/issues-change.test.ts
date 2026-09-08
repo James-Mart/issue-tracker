@@ -118,7 +118,7 @@ afterEach(async () => {
 
 describe("issue change HTTP API", () => {
   it("returns a loaded change when the Task commit resolves", async () => {
-    writeTask("t-loaded", { commitSha: SHA });
+    writeTask("t-loaded", { commits: [SHA] });
     await stubGitSpawner((args) => {
       if (args[0] === "show" && args.includes("--format=%s")) {
         return mockGitChild({ stdout: "Add feature\n" });
@@ -158,7 +158,7 @@ describe("issue change HTTP API", () => {
   });
 
   it("returns a failure status when the recorded sha is unreachable", async () => {
-    writeTask("t-unreachable", { commitSha: SHA });
+    writeTask("t-unreachable", { commits: [SHA] });
     await stubGitSpawner(() =>
       mockGitChild({
         code: 128,

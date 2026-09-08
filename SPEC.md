@@ -20,9 +20,10 @@ writer; all state that could drift is derived, never stored.
 #### Kinds vs git vocabulary
 
 Kind names are **Story** and **Task**. A Story is planned as one git branch +
-PR; a Task as one git commit. Git fact field names (`branchName`, `commitSha`,
-`mergeBase`, …) and git-subagent modes (`start-branch`, `finish-commit`,
-`finish-branch`) stay **git-shaped** — they are not renamed to match kinds.
+PR; a Task as an ordered series of git commits. Git fact field names
+(`branchName`, `commits`, `mergeBase`, …) and git-subagent modes
+(`start-branch`, `finish-commit`, `finish-branch`) stay **git-shaped** —
+they are not renamed to match kinds.
 
 Every issue has a `kind`, one of:
 
@@ -87,8 +88,8 @@ Every issue has a `kind`, one of:
   `assignee` (Task-only ownership; in the work loop, overloaded as the
   implementor model family key — `composer`, `grok`, or `opus`), an optional
   `qa` gate (`reviewing` /
-  `changes-requested` / `passed`), an optional `commitSha` (set when done with a
-  real git commit), and an optional `noDiff` flag (set via kind
+  `changes-requested` / `passed`), `commits` (ordered oldest-first full shas;
+  empty until a commit is recorded, and empty for a `noDiff` Task), and an optional `noDiff` flag (set via kind
   [`set`](#kind-scoped-get--set) when the implementor deliberately lands no
   source-controlled file changes).
 
@@ -464,7 +465,11 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
 | idea | `title`, `archived`, `approvePlan`, `approvalPending`, `partOf`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
-| task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commitSha`, `noDiff`, `description` |
+| task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commits`, `noDiff`, `description` |
+
+`issue task add-commit <taskId> <sha>` appends one full sha to Task `commits`
+and refuses a sha already present on that Task. Whole-series replace uses
+`issue task set <taskId> commits '<json array>'`.
 
 ##### Value parsing
 
@@ -485,7 +490,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   [Project supporting docs](#project-supporting-docs).
 - `--clear` (mutually exclusive with a positional value / `--add` / `--remove` /
   `--rename`):
-  - **Clearable scalars** (`assignee`, `commitSha`, `branchName`, `stackedOn`,
+  - **Clearable scalars** (`assignee`, `branchName`, `stackedOn`,
     `prUrl`, `workspace`, `qa`, `retro`, `sourceIdea`): blanks the field (absent / `null`).
   - **`blockedBy`** / **`reviewedTasks`** / assignment **`labels`**: sets `[]` (empty array, not null).
   - **Project `labels`**: sets `[]` (empty catalog).
@@ -948,7 +953,7 @@ Task — the Epic/Story/Task needs-attention common fields plus:
 | `partOf` | string | the Story id (required) |
 | `status` | `"todo"` \| `"in-progress"` \| `"fixing"` \| `"done"` | defaults `todo`; the only stored status |
 | `qa` | `"reviewing"` \| `"changes-requested"` \| `"passed"`? | absent until set; machine-readable QA gate |
-| `commitSha` | string? | set when done |
+| `commits` | string[] | ordered oldest first; each element a full 40- or 64-character hex object name; defaults `[]`; set via `issue task set <taskId> commits '<json array>'` or appended with `issue task add-commit <taskId> <sha>` (refuses a sha already on that Task); presentation surfaces show the head (last element) |
 | `noDiff` | boolean? | absent until set; signals no source-controlled implementor changes |
 
 Deliberately excluded: `rank`/priority (sibling order is stored as `order`, not
@@ -966,7 +971,7 @@ then applies:
 
 | `noDiff` | Tree | Action |
 | --- | --- | --- |
-| `true` | clean (empty) | `issue task set <taskId> status done` only — no `git commit`, no `commitSha`; leave `noDiff` set. |
+| `true` | clean (empty) | `issue task set <taskId> status done` only — no `git commit`, no `add-commit`; leave `noDiff` set. |
 | `true` | dirty | Escalate: `issue task set <taskId> needsAttention true --reason "…"` — the flag contradicts a non-empty tree. |
 | absent / `false` | clean (empty) | Escalate: `issue task set <taskId> needsAttention true --reason "…"` — an empty tree without `noDiff` is not a completion signal. |
 | absent / `false` | dirty | Stage, commit, and record — steps below. |
@@ -990,7 +995,7 @@ For the **dirty + no `noDiff`** row:
 3. **When it fails** (no merge in progress): `git add -A`, read the staged diff
    and compose a single-line subject (lowercase imperative, fewer than 80 chars;
    Task title is context only), then `git commit -m "<subject>"`.
-4. `issue task set <taskId> status done`, `issue task set <taskId> commitSha
+4. `issue task set <taskId> status done`, `issue task add-commit <taskId>
    $(git rev-parse HEAD)`.
 
 ### Tree nesting and order
@@ -1105,7 +1110,7 @@ no consumer can persist a broken file.
   `needsAttention`/`attentionReason`, `archived` (Epic / Idea / Story / Task;
   cascades to
   descendants — see [Archived visibility](#archived-visibility)), `partOf`, the
-  kind-specific fields (`blockedBy` for an Epic; `status`/`qa`/`commitSha`/`noDiff`
+  kind-specific fields (`blockedBy` for an Epic; `status`/`qa`/`commits`/`noDiff`
   for a Task; `branchName`/`stackedOn`/`prUrl`/`merged`/
   `review` for a Story), `labels` (Project catalog; Epic / Idea / Story
   assignments — see [Project labels](#project-labels)), and `description`
@@ -1456,7 +1461,7 @@ preserves everything else from the existing same-kind issue.
 | `kind` | explicit on every `children:` entry (allow-lists above); omitted on root nodes (form key implies kind) |
 | `partOf`, `stackedOn` | inferred from nesting (a story-rooted doc has no nesting, so it preserves the on-disk `stackedOn`); runtime `partOf`/`stackedOn` edits use kind [`set`](#kind-scoped-get--set) |
 | `id`, `createdAt` | set on create; `apply` preserves them, never rewrites |
-| `status`, `qa`, `commitSha`, `noDiff` (Task) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `status`, `qa`, `commits`, `noDiff` (Task) | imperative only (kind [`set`](#kind-scoped-get--set) / `issue task add-commit`); `apply` preserves |
 | `branchName`, `prUrl`, `merged`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `mergeBaseOverride` (Epic / Story) | imperative only via kind [`set`](#kind-scoped-get--set) field `mergeBase` (stores as `mergeBaseOverride`); `apply` preserves |
 | `sourceIdea` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
@@ -1624,7 +1629,7 @@ commands outside the read-only allow-list enforced in
 via `requireProjectWorkspace`. It reads external delivery state by shelling out
 to `gh` with ambient auth and owns no credentials; PR facts are read live and
 never stored. Agents run git themselves for writes and record durable git facts
-— `branchName`, `prUrl`, `commitSha`, `merged` — through the CLI. The tracker's
+— `branchName`, `prUrl`, `commits`, `merged` — through the CLI. The tracker's
 job is to model the stacked-PR *plan* and its progress, not to drive git writes.
 This keeps it safe to run anywhere and impossible for the server to corrupt a
 repo.

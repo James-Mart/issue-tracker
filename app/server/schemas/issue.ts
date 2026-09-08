@@ -290,7 +290,7 @@ export const taskSchema = z.object({
   partOf: nonEmpty,
   status: z.enum(TASK_STATUSES).default("todo"),
   qa: z.enum(QA_STATUSES).optional(),
-  commitSha: z.string().optional(),
+  commits: z.array(z.string()).default([]),
   noDiff: z.boolean().optional(),
   ...taskMutable,
   ...orderField,

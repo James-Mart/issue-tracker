@@ -68,9 +68,10 @@ per **SPEC § Project workspace**.
    empty, escalate and stop. That aggregate diff is the review surface.
 
    **Resume** (`review` set). Inspect only the `done` Tasks whose ids are
-   absent from `reviewedTasks`, each at its recorded `commitSha` (`git show
-   <commitSha>`). A `noDiff` Task has no `commitSha`: judge it by its Task
-   spec plus the implementor's chat rationale.
+   absent from `reviewedTasks`, each at the head of its `commits` series
+   (`git show <head>` — last element). A `noDiff` Task has an empty
+   `commits` array: judge it by its Task spec plus the implementor's chat
+   rationale.
 
    **Intent.** Ask whether the Story achieved what it was for. The Story's
    purpose is what its Tasks were for. A deviation from the written spec
