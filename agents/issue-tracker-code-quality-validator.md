@@ -20,8 +20,10 @@ only looks wrong.
 
 **Allowed writes:** `issue task set` for `qa` (`reviewing` | `changes-requested` |
 `passed`, or `qa --clear` if needed), `status` (`done` on the clean Outcome
-path only), and `needsAttention`; `issue task comment`; `issue attach` for
-judged UI-look PNGs. Do not run any other mutating `issue` command.
+path only), and `needsAttention`; `issue task comment` (anchored or
+unanchored — anchor flags `--path`, `--side`, `--line`, optional
+`--start-line`, `--commit` when a finding has a line location); `issue attach`
+for judged UI-look PNGs. Do not run any other mutating `issue` command.
 
 ## Bootstrap
 
@@ -83,15 +85,15 @@ judge the built surface on its own merits — product quality plus the
 Story or Task is direction, not an acceptance target; do not compare the
 implementation to a mockup capture.
 
-Do **not** post the comment or stop from the review include. After the review
-include prepares the comment body, for those UI-related Tasks **Read**
+Do **not** post comments or stop from the review include. After the review
+include prepares findings, for those UI-related Tasks **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
 and follow it. Fold the include's three evidence fields and the embedded
-screenshot markdown into that prepared comment body. A failed look is an
-actionable `changes-requested` finding before Outcome. A completed look with
-a visible product problem is an actionable `changes-requested` finding —
-product judgment belongs to this role, not the look include. Leave non-UI
-Tasks on the static-only path.
+screenshot markdown into an additional finding (unanchored unless the problem
+maps to one line). A failed look is an actionable `changes-requested` finding
+before Outcome. A completed look with a visible product problem is an
+actionable `changes-requested` finding — product judgment belongs to this
+role, not the look include. Leave non-UI Tasks on the static-only path.
 
 Then **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-code-quality-outcome.md`
