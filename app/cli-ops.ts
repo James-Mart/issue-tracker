@@ -91,6 +91,51 @@ type ViewOptions = {
   comments?: boolean;
 };
 
+function commentAuthor(message: Comment): string {
+  return message.name ?? message.role;
+}
+
+function formatAnchorLocation(anchor: NonNullable<Comment["anchor"]>): string {
+  const linePart =
+    anchor.startLine !== undefined
+      ? `${anchor.startLine}-${anchor.line}`
+      : String(anchor.line);
+  return `${anchor.path}:${linePart} ${anchor.side} ${anchor.commitSha.slice(0, 7)}`;
+}
+
+function formatCommentLine(message: Comment, indent = ""): string {
+  const author = commentAuthor(message);
+  const head = `${indent}${message.id} [${message.at}] ${author}`;
+  if (message.anchor) {
+    return `${head} @ ${formatAnchorLocation(message.anchor)}: ${message.body}`;
+  }
+  return `${head}: ${message.body}`;
+}
+
+function formatCommentsForView(messages: Comment[]): string[] {
+  const rootIds = new Set(
+    messages.filter((message) => !message.replyTo).map((message) => message.id),
+  );
+  const repliesByRoot = new Map<string, Comment[]>();
+  for (const message of messages) {
+    if (message.replyTo && rootIds.has(message.replyTo)) {
+      const list = repliesByRoot.get(message.replyTo) ?? [];
+      list.push(message);
+      repliesByRoot.set(message.replyTo, list);
+    }
+  }
+
+  const lines: string[] = [];
+  for (const message of messages) {
+    if (message.replyTo && rootIds.has(message.replyTo)) continue;
+    lines.push(formatCommentLine(message));
+    for (const reply of repliesByRoot.get(message.id) ?? []) {
+      lines.push(formatCommentLine(reply, "  "));
+    }
+  }
+  return lines;
+}
+
 function labelIdsForView(detail: IssueDetail): string[] {
   if (detail.kind === "project") {
     return (detail.labels ?? []).map((label) => label.id);
@@ -178,8 +223,8 @@ function printIssueView(id: string, opts: ViewOptions = {}): void {
     console.log();
     console.log("--- comments ---");
     if (messages.length === 0) console.log("(no messages)");
-    for (const message of messages) {
-      console.log(`[${message.at}] ${message.name ?? message.role}: ${message.body}`);
+    for (const line of formatCommentsForView(messages)) {
+      console.log(line);
     }
     // Malformed comment lines are surfaced as stderr warnings but deliberately
     // do not fail the command: like list()'s `problems`, they are data
