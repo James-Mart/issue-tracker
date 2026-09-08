@@ -225,6 +225,13 @@ const work: Pipeline = {
       source: "agents/_issue-tracker-implementor.md",
     },
     {
+      id: "record-commit",
+      name: "Record commit",
+      kind: "step",
+      pipeline: "work",
+      source: "agents/issue-tracker-git.md",
+    },
+    {
       id: "ui-look",
       name: "UI look",
       kind: "gate",
@@ -270,7 +277,7 @@ const work: Pipeline = {
     },
   ],
   edges: [
-    { from: "implement", to: "finish", kind: "spawn" },
+    { from: "implement", to: "record-commit", kind: "spawn" },
     // The look runs inside a UI Task's Verify; other Tasks go straight to QA.
     { from: "implement", to: "ui-look", kind: "flow" },
     { from: "ui-look", to: "code-quality", kind: "flow" },

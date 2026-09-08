@@ -16,7 +16,7 @@ Everything lives on disk and every derived fact is recomputed on read, so the
 loop is **resumable** for unambiguous gates: re-running the skill on the work
 root re-reads `issue tree <id>`, continues from the first not-`done` Task,
 and the Per-Task **entry gate** branches on `needsAttention` / `qa` (`passed`
-→ finalize, `reviewing` → resume code-quality, `changes-requested` → revise
+→ advance, `reviewing` → resume code-quality, `changes-requested` → revise
 rather than Mode `implement`). Cold-restart windows that disk cannot
 disambiguate are listed under that entry gate — do not claim they are fully
 handled (or, when all Tasks are already `done`, continue from Completion

@@ -21,18 +21,18 @@ of CLI commands, and spawns subagents in a fixed order — so it should itself r
 on the cheap model, **Composer 2.5**, not a premium model (see **Models and
 subagent roles**). The model discriminator assigns an implementor model onto
 each Task; the implementor writes code; the code-quality validator owns Task
-`qa` (writes the gate, resumes across rounds, three-strike escalate); the
-story-review agent records the Story gate (`review`, `reviewedTasks`, optional
-remediation Tasks) without editing workspace source; the git subagent owns
-branch create, Task finalize, and Story finish.
+`qa` (writes the gate, resumes across rounds, three-strike escalate) and Task
+`status done` at the terminal gate; the story-review agent records the Story
+gate (`review`, `reviewedTasks`, optional remediation Tasks) without editing
+workspace source; the git subagent owns branch create and Story finish.
 
 **You do not write code, run the app, or verify the work yourself.** You read the
 plan with `issue tree` and spawn subagents. Do **essentially no reasoning**:
 every coordinator step below is a CLI invocation or a fixed linear action —
 this skill is meant to be replaced by a deterministic script. Never set status
 on a Story or Epic — Story/Epic status derives automatically (see SPEC.md).
-Task `status` / `qa` writes are subagent-owned — see **Field ownership**. Git
-and git-fact recording are delegated — see Rules. Task
+Task `status` / `qa` / `commits` writes are subagent-owned — see **Field
+ownership**. Git and git-fact recording are delegated — see Rules. Task
 `assignee` holds the implementor **family key** (or a legacy model slug).
 Before each implementor spawn, **Resolve implementor family** (below) and
 delegate `issue-tracker-implementor-<family>`; the pin comes from the role —
@@ -188,22 +188,23 @@ not from a spawn-time argument.
 | Role | `role` | When | Model (role pin) | Mode |
 |------|--------|------|------------------|------|
 | Coordinator (you) | — | Drive the whole run: thin CLI + spawn subagents | Composer 2.5 (`composer-2.5`) | spawn/CLI only |
-| Git | `issue-tracker-git` | Start a Story; finish a Task after `qa=passed`; finish a Story | `composer-2.5` | writes |
+| Git | `issue-tracker-git` | Start a Story; finish a Story | `composer-2.5` | writes |
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
 | Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via **resume** | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.6-high-fast`; `opus`→`claude-opus-5-thinking-high` | writes (see Field ownership) |
-| Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `needsAttention`; `issue task comment`) |
+| Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `status` / `needsAttention`; `issue task comment`) |
 | Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue task add`; `issue story comment`) |
 
 ### Field ownership
 
-Coordinator never sets Task `status` or Task `qa`.
+Coordinator never sets Task `status`, Task `qa`, or Task `commits`.
 
 | Field | Owner | When |
 |-------|-------|------|
 | Task `status` `in-progress` | Implementor | on first implement entry |
 | Task `status` `fixing` | Implementor | on every revise entry |
-| Task `status` `done` | Git (finish-commit) | Task finalize |
+| Task `status` `done` | Code-quality | at the terminal gate |
 | Task `qa` | Code-quality | on each entry `reviewing`, then terminal `passed` / `changes-requested` (three-strike → `needsAttention`); never the coordinator |
+| Task `commits` | Git | spawned by the implementor |
 | Story `review` | Story review | on each review round `passed` / `failed` |
 | Story `reviewedTasks` | Story review | all `done` Tasks inspected in that round |
 | Story `needsAttention` (review three-strike) | Coordinator | on the 3rd story-review reopen in one session — see **Close a Story** |
@@ -241,8 +242,8 @@ creates and records the git branch.
 
 **Canonical** definition of implementor / code-quality spawn and resume.
 Other sections only cross-reference this. Status transitions during this cycle
-are owned by subagents — see **Field ownership**. Do not set Task `status` or
-`qa` yourself. Do not count QA rounds.
+are owned by subagents — see **Field ownership**. Do not set Task `status`,
+`qa`, or `commits` yourself. Do not count QA rounds.
 
 0. **Entry gate.** On every entry to this cycle for `<task>` (including skill
    re-run and Close-Story not-done), read via `issue task get` — in order —
@@ -250,7 +251,7 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
    continue the numbered flow from there. Do **not** re-run this gate
    mid-cycle (after a subagent returns, follow the step that sent you there).
    - `needsAttention` is `true` → stop (Escalation).
-   - `qa` is `passed` → step 5 (Finalize).
+   - `qa` is `passed` → step 5 (Advance).
    - `qa` is `reviewing` → step 3 (resume code-quality; stuck mid-review).
    - `qa` is `changes-requested` → step 2b (revise; do not Mode `implement`).
    - otherwise (`qa` unset) → step 1.
@@ -300,7 +301,7 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
      the most recent entry in the returned `delegations` array whose `role`
      is `issue-tracker-code-quality-validator` — rather than starting a
      second code-quality agent.
-   - `passed` → skip to step 5 (Finalize); do not spawn or resume
+   - `passed` → skip to step 5 (Advance); do not spawn or resume
      code-quality again.
    Wait until a spawn/resume finishes (or raises needsAttention) before
    step 4.
@@ -315,9 +316,7 @@ are owned by subagents — see **Field ownership**. Do not set Task `status` or
    - `qa` is `changes-requested` and `needsAttention` is `false` →
      step 2b (revise), which then continues at step 3.
 
-5. **Finalize.** Delegate `issue-tracker-git` with the finish-commit stub.
-
-6. **Advance** to the next Task.
+5. **Advance** to the next Task.
 
 ### Close a Story
 
@@ -392,17 +391,13 @@ code-quality, story-review, and revise stubs:
 
 > Work root: `<rootId>`. Issue: `<id>` (`<title>`).
 
-Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
+Git stubs (`start-branch`, `finish-branch`): coordinator passes
 **only** Mode + issue id — no work-root id, tree chips, or git facts
 (`mergeBase`, `branchName`).
 
 **Start branch** — `role: issue-tracker-git`, `issueId: <storyId>`
 
 > Mode: start-branch. Issue: `<storyId>`.
-
-**Finish commit** — `role: issue-tracker-git`, `issueId: <taskId>`
-
-> Mode: finish-commit. Issue: `<taskId>`.
 
 **Finish branch** — `role: issue-tracker-git`, `issueId: <storyId>`
 
@@ -450,33 +445,26 @@ Git stubs (`start-branch`, `finish-commit`, `finish-branch`): coordinator passes
 - Prefer `issue get` for scalar field reads — do not parse `view` /
   `summary` / `tree` for a single field (except `summary`'s `Workspace:`
   bootstrap line and `tree` chips for walk order).
-- Never write Task `status` or Task `qa` yourself (Field ownership).
+- Never write Task `status`, Task `qa`, or Task `commits` yourself (Field
+  ownership).
 - Never run `git`/`gh` or the git-fact record commands (`issue story set …
   branchName` / `issue task add-commit` / `issue story set … prUrl` /
   `issue story set … merged`) yourself — spawn `issue-tracker-git` for Story
-  start, Task finalize, and Story finish only. Git sets Task `status` `done`
-  on finish-commit; implementor owns `in-progress` / `fixing`.
+  start and Story finish only. Code-quality sets Task `status` `done` at the
+  terminal gate; implementor owns `in-progress` / `fixing`.
 - Work one root, one Task at a time, in the Story order `issue tree` prints;
   finish a Story before the Stories stacked on it.
 - Re-read `issue tree <id>` every time control returns to you and re-sync
   your todo list, so Stories or Tasks injected into the in-progress work root
   mid-run are picked up. Never act from a cached outline.
-- The implementor leaves work uncommitted; the **git** subagent finalizes per
-  its Finish Commit matrix (the authority for these outcomes): a normal Task
-  is committed and recorded `done` with its sha, while
-  a Task the implementor deliberately marked `noDiff` (no source-controlled
-  changes) is recorded `done` with **no** git commit and no sha — do not treat
-  that as "nothing was done" when a non-source-controlled file was edited.
-  Either way the coordinator just spawns finish-commit — it never inspects the
-  tree or the `noDiff` flag, and an empty tree alone is never a completion
-  signal.
 - Per-Task QA loop (entry gate, spawn/resume, three-strike): see **Per-Task
   cycle** — single canonical definition; you never count QA rounds.
   Story-review spawn/resume and reopen cap: see **Close a Story** — single
   canonical definition. Story-review remediation is Close-Story's job — no
   story-level revise.
 - Never let a validator edit workspace source (write scopes: Models table).
-  Code-quality may write Task `qa` / `needsAttention` and comments only.
+  Code-quality may write Task `qa` / `status` / `needsAttention` and comments
+  only.
 - Never set status on a Story or Epic. Do not decide whether to open or merge a
   PR — that is the Story's effective `mergePolicy`, applied by
   `issue-tracker-git` on finish-branch. Always spawn finish-branch; never read
