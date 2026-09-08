@@ -1,21 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import type { Server } from "http";
-import { tmpdir } from "os";
-import { join } from "path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { MAX_ATTACHMENT_BYTES } from "../services/attachments.js";
+import {
+  baseUrl,
+  startHeldConversationRouter,
+  useConversationsTestFixtures,
+} from "./conversations.test-harness.js";
 
-const AT = "2026-07-09T14:00:00.000Z";
-let root: string;
-let issuesRoot: string;
-let workspaceDir: string;
-let server: Server;
-let baseUrl: string;
-
-function writeIssue(id: string, body: Record<string, unknown>): void {
-  mkdirSync(join(issuesRoot, id), { recursive: true });
-  writeFileSync(join(issuesRoot, id, "issue.json"), JSON.stringify({ id, ...body }));
-}
+useConversationsTestFixtures();
 
 async function createConversation(): Promise<string> {
   const res = await fetch(`${baseUrl}/api/conversations`, {
@@ -43,43 +34,24 @@ async function upload(
   });
 }
 
-beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), "issue-tracker-conv-attachments-route-"));
-  issuesRoot = join(root, "issues");
-  mkdirSync(issuesRoot, { recursive: true });
-  workspaceDir = mkdtempSync(join(tmpdir(), "issue-conv-attach-ws-"));
-  mkdirSync(join(workspaceDir, ".git"));
-  vi.resetModules();
-  vi.stubEnv("ISSUES_DIR", issuesRoot);
-
-  writeIssue("platform", {
-    kind: "project",
-    title: "Platform",
-    workspace: workspaceDir,
-    createdAt: AT,
-    updatedAt: AT,
-  });
-
-  const { createApp } = await import("../app.js");
-  const app = createApp();
-  await new Promise<void>((resolve) => {
-    server = app.listen(0, "127.0.0.1", () => resolve());
-  });
-  const addr = server.address();
-  if (!addr || typeof addr === "string") {
-    throw new Error("expected TCP listen address");
-  }
-  baseUrl = `http://127.0.0.1:${addr.port}`;
-});
-
-afterEach(async () => {
-  vi.unstubAllEnvs();
-  await new Promise<void>((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()));
-  });
-  rmSync(root, { recursive: true, force: true });
-  rmSync(workspaceDir, { recursive: true, force: true });
-});
+async function uploadConversationAttachment(
+  apiBaseUrl: string,
+  conversationId: string,
+  filename: string,
+  body: string,
+): Promise<void> {
+  const form = new FormData();
+  form.append(
+    "attachment",
+    new Blob([new TextEncoder().encode(body)]),
+    filename,
+  );
+  const res = await fetch(
+    `${apiBaseUrl}/api/conversations/${conversationId}/attachments`,
+    { method: "POST", body: form },
+  );
+  expect(res.status).toBe(201);
+}
 
 describe("conversation attachments HTTP API", () => {
   it("upload then fetch returns the same bytes and content type", async () => {
@@ -167,5 +139,201 @@ describe("conversation attachments HTTP API", () => {
       error: 'unknown conversation "ghost"',
       code: "not_found",
     });
+  });
+});
+
+describe("POST /api/conversations/:id/messages with attachments", () => {
+  it("persists attachments on the prompt event", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Attach send" }),
+    }).then((r) => r.json());
+
+    await uploadConversationAttachment(baseUrl, created.id, "mock.tsx", "export const x = 1;\n");
+
+    const send = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/messages`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: "review this",
+          attachments: ["mock.tsx"],
+        }),
+      },
+    );
+    expect(send.status).toBe(202);
+
+    const detail = await fetch(`${baseUrl}/api/conversations/${created.id}`).then(
+      (r) => r.json(),
+    );
+    const prompt = detail.transcript.find(
+      (e: { type: string }) => e.type === "prompt",
+    );
+    expect(prompt).toMatchObject({
+      type: "prompt",
+      text: "review this",
+      attachments: ["mock.tsx"],
+    });
+  });
+
+  it("returns 400 for unknown attachment names", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Missing attach" }),
+    }).then((r) => r.json());
+
+    const send = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/messages`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: "hello",
+          attachments: ["ghost.png"],
+        }),
+      },
+    );
+    expect(send.status).toBe(400);
+    expect(await send.json()).toEqual({
+      error: "attachment not found: ghost.png",
+    });
+  });
+
+  it("accepts an attachments-only send", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Attach only" }),
+    }).then((r) => r.json());
+
+    await uploadConversationAttachment(baseUrl, created.id, "notes.txt", "context\n");
+
+    const send = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/messages`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "", attachments: ["notes.txt"] }),
+      },
+    );
+    expect(send.status).toBe(202);
+
+    const detail = await fetch(`${baseUrl}/api/conversations/${created.id}`).then(
+      (r) => r.json(),
+    );
+    const prompt = detail.transcript.find(
+      (e: { type: string }) => e.type === "prompt",
+    );
+    expect(prompt).toMatchObject({
+      type: "prompt",
+      text: "",
+      attachments: ["notes.txt"],
+    });
+  });
+
+  it("rejects a send with neither prompt nor attachments", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Empty send" }),
+    }).then((r) => r.json());
+
+    const send = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/messages`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "   ", attachments: [] }),
+      },
+    );
+    expect(send.status).toBe(400);
+    expect(await send.json()).toEqual({ error: "prompt is required" });
+  });
+
+  it("queues attachments on a pending message and delivers them when the run drains", async () => {
+    const held = await startHeldConversationRouter();
+    try {
+      const created = await fetch(`${held.baseUrl}/api/conversations`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId: "platform", title: "Pending attach" }),
+      }).then((r) => r.json());
+
+      await uploadConversationAttachment(
+        held.baseUrl,
+        created.id,
+        "mock.tsx",
+        "export const x = 1;\n",
+      );
+
+      const first = await fetch(
+        `${held.baseUrl}/api/conversations/${created.id}/messages`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt: "hold please" }),
+        },
+      );
+      expect(first.status).toBe(202);
+      await Promise.resolve();
+
+      const queued = await fetch(
+        `${held.baseUrl}/api/conversations/${created.id}/messages`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            prompt: "review",
+            attachments: ["mock.tsx"],
+          }),
+        },
+      );
+      expect(queued.status).toBe(202);
+      expect(await queued.json()).toEqual({ pending: true });
+
+      let detail: {
+        meta: { pendingMessage?: { attachments?: string[] } };
+        transcript: { type: string; attachments?: string[]; text?: string }[];
+      };
+      detail = await fetch(`${held.baseUrl}/api/conversations/${created.id}`).then(
+        (r) => r.json(),
+      );
+      expect(detail.meta.pendingMessage?.attachments).toEqual(["mock.tsx"]);
+
+      held.releaseHold();
+
+      for (let i = 0; i < 50; i += 1) {
+        detail = await fetch(`${held.baseUrl}/api/conversations/${created.id}`).then(
+          (r) => r.json(),
+        );
+        const prompts = detail.transcript.filter((e) => e.type === "prompt");
+        if (
+          detail.meta.pendingMessage === undefined &&
+          prompts.some((e) => e.attachments?.includes("mock.tsx"))
+        ) {
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 20));
+      }
+
+      expect(detail!.meta.pendingMessage).toBeUndefined();
+      expect(
+        detail!.transcript.filter((e) => e.type === "prompt").map((e) => ({
+          text: e.text,
+          attachments: e.attachments,
+        })),
+      ).toEqual([
+        { text: "hold please", attachments: undefined },
+        { text: "review", attachments: ["mock.tsx"] },
+      ]);
+    } finally {
+      await held.sessions.disposeAll();
+      await new Promise<void>((resolve, reject) => {
+        held.server.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
   });
 });
