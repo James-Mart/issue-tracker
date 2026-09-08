@@ -18,6 +18,14 @@ export function coerceEnum(
   return value;
 }
 
+export function coercePositiveInt(value: string, field: string): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`invalid ${field} "${value}" (expected a positive integer)`);
+  }
+  return n;
+}
+
 export function coerceJson(value: string, field: string): unknown {
   try {
     return JSON.parse(value);

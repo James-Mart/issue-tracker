@@ -346,7 +346,9 @@ describe("kind-scoped view / delete / comment / attach", () => {
         `note on ${id}`,
       ], { env: env() });
       expect(status, kind).toBe(0);
-      expect(stdout, kind).toContain(`commented on ${id}`);
+      expect(stdout, kind).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\n$/,
+      );
       expect(readFileSync(join(dir, id, "comments.jsonl"), "utf8")).toContain(
         `note on ${id}`,
       );
@@ -520,7 +522,9 @@ describe("bare-id view / get / comment / attach", () => {
       "impl",
     ], { env: env() });
     expect(bare.status).toBe(0);
-    expect(bare.stdout).toBe("commented on a as impl\n");
+    expect(bare.stdout).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\n$/,
+    );
 
     const scoped = await runIssueCli([
       "story",
@@ -534,7 +538,9 @@ describe("bare-id view / get / comment / attach", () => {
       "impl",
     ], { env: env() });
     expect(scoped.status).toBe(0);
-    expect(scoped.stdout).toBe("commented on a as impl\n");
+    expect(scoped.stdout).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\n$/,
+    );
 
     const chat = readFileSync(join(dir, "a", "comments.jsonl"), "utf8");
     expect(chat).toContain('"body":"bare-id note"');
