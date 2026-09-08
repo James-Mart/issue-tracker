@@ -34,11 +34,11 @@ import {
   list,
   read,
   readAll,
-  readComments,
   readIssueOrThrow,
   remove,
   update,
 } from "../services/issues.js";
+import { readCommentsWithOutdated } from "../services/anchor-outdated.js";
 import { awaitingHumanFromTranscript } from "../services/awaiting-human.js";
 import {
   createIssueChannelSession,
@@ -100,8 +100,8 @@ export function createIssuesRouter(
 
   router.get(
     "/:id/comments",
-    asyncRoute((req, res) => {
-      res.json(readComments(req.params.id));
+    asyncRoute(async (req, res) => {
+      res.json(await readCommentsWithOutdated(req.params.id));
     }),
   );
 

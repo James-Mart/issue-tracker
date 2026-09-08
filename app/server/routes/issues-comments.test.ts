@@ -169,6 +169,7 @@ describe("comments HTTP API", () => {
         body: string;
         anchor?: typeof anchor;
         replyTo?: string;
+        outdated?: boolean;
       }>;
       problems: unknown[];
     };
@@ -179,16 +180,19 @@ describe("comments HTTP API", () => {
     expect(anchored?.body).toBe("anchored");
     expect(anchored?.anchor).toEqual(anchor);
     expect(anchored?.replyTo).toBeUndefined();
+    expect(anchored?.outdated).toBe(true);
 
     const root = body.messages.find((m) => m.id === rootId);
     expect(root?.body).toBe("root for reply");
     expect(root?.anchor).toBeUndefined();
     expect(root?.replyTo).toBeUndefined();
+    expect(root).not.toHaveProperty("outdated");
 
     const reply = body.messages.find((m) => m.id === replyId);
     expect(reply?.body).toBe("thread reply");
     expect(reply?.replyTo).toBe(rootId);
     expect(reply?.anchor).toBeUndefined();
+    expect(reply).not.toHaveProperty("outdated");
   });
 
   it("returns 400 with the service reason when replyTo is unknown", async () => {
