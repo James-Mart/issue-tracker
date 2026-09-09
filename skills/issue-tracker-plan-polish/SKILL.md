@@ -2,21 +2,23 @@
 name: issue-tracker-plan-polish
 disable-model-invocation: true
 description: >-
-  Polish an existing Epic or project-level Story plan tree with parallel
-  check agents, then auto-apply when safe. Use when the user asks to polish
-  a plan, clean up a tracker tree, or run plan-polish.
+  Polish an existing Epic, project-level Story, or append-target Story
+  plan with parallel check agents, then auto-apply when safe. Use when
+  the user asks to polish a plan, clean up a tracker tree, or run
+  plan-polish.
 ---
 
 # Issue Tracker — Plan Polish
 
-Polish one **work root** — an **Epic** or a **project-level Story** — already
-in the tracker. You are the **coordinator**: spawn read-only check agents,
-compose a full apply doc from their findings (keep it internal), auto-apply
-when safe, then show a short findings + changes summary in chat. Checkers
-advise; the planner may stop continued polish (veto) when returns diminish —
-leftover findings still appear in the summary. Behavioral contract: Epic
-**auto-plan-polish-confirm** invariants (auto-apply + post-summary; escalate
-only when unsafe) — do not restate that list here.
+Polish one **work root** already in the tracker: an **Epic**, a
+**project-level Story**, or an **append-target Story**. You are the
+**coordinator**: spawn read-only check agents, compose a full apply doc
+from their findings (keep it internal), auto-apply when safe, then show
+a short findings + changes summary in chat. Checkers advise; the planner
+may stop continued polish (veto) when returns diminish — leftover
+findings still appear in the summary. Behavioral contract: Epic
+**auto-plan-polish-confirm** invariants (auto-apply + post-summary;
+escalate only when unsafe) — do not restate that list here.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
@@ -24,12 +26,21 @@ only when unsafe) — do not restate that list here.
 
 ## Argument
 
-An **Epic** id (any `epicStatus` — not limited to `todo`) or a
-**project-level Story** id (`partOf` the Project). If none is given:
+An **Epic** id (any `epicStatus` — not limited to `todo`), a
+**project-level Story** id (`partOf` the Project), or a **Story** id
+that is an **append target**. A Story is an append target when
+`issue list task --in <id>` includes a Task with `appended` true.
+That Story's container may be the Project or an Epic.
+
+A run pointed at an append-target Story reads that Story's other Tasks
+for context and edits the Tasks whose `appended` flag is set.
+
+If none is given:
 
 1. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-resolve-project.md`
    and follow it. Never bare `issue list`.
-2. Run `issue tree <projectId>` and ask which Epic or project-level Story.
+2. Run `issue tree <projectId>` and ask which Epic, project-level Story,
+   or append-target Story.
 
 ## Bootstrap
 

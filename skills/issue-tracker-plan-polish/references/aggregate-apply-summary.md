@@ -23,8 +23,13 @@ After all six return:
    YAML internal — do not paste it into chat.
    - **Epic** (`<rootKind>` = `epic`) — epic-form: `project: <projectId>`
      string + `epic:` object.
-   - **project-level Story** (`<rootKind>` = `story`) — story-form:
-     `project: <projectId>` string + `story:` object (**no** `epic:` key).
+   - **Story** (`<rootKind>` = `story`) — story-form:
+     `project: <projectId>` string + `story:` object. When
+     `issue story get <rootId> partOf` is an Epic id, include
+     `epic: <epicId>` as that existing-epic reference. When `partOf` is
+     `<projectId>`, omit the `epic:` key. When the work root is an
+     append-target Story, the changes in that YAML are the Tasks whose
+     `appended` flag is set.
    - Or, when there are **zero** `error` findings and you are not adopting
      warning fixes, retain nothing (no apply). Warnings that remain must
      still appear in the step-6 summary.
