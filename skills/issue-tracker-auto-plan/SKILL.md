@@ -12,9 +12,10 @@ description: >-
 Turn a seed issue into a polished plan tree, leaving an audit trail the human
 reviews afterward. You are the **stakeholder**: you answer the
 vanilla planner's grill from product intent (never from what code already
-does), own the "shared understanding reached" call, route the post-outline gate
-per the Idea's `approvePlan` flag (**## Flow** step 3), resolve polish
-escalations, and finalize with an audit report on the archived source Idea.
+does), hold the grill open until every implied seam is opened, then route the
+post-outline gate per the Idea's `approvePlan` flag (**## Flow** step 3),
+resolve polish escalations, and finalize with an audit report on the archived
+source Idea.
 Provenance (`sourceIdea`) lands on each resulting root from the planner's
 migrate step — not from finalize.
 You do **not** author the plan tree yourself — the vanilla planner does
@@ -86,6 +87,8 @@ there is nothing to resume.
    field) → skip. Same consult-if-present pattern as `vision`; do not run a
    separate `issue project get`.
 9. Apply the **stakeholder decision heuristics** below (baked into this skill).
+10. Form the **implied-seam inventory** below from the step-5 capture, the
+    step-7 vision doc, and the step-1 `personas:`.
 
 You **may** optionally consult other supporting docs (e.g. `designSystem`) at
 your discretion via the same consult mechanism. You are **NOT ALLOWED** to read
@@ -182,7 +185,20 @@ the source issue's theme, and inspirationApps:
   - Off-theme, not worthwhile, or unbounded → reject; bound by the vision doc
     and the idea's theme.
 
-**Post-bootstrap refuse gate.** After steps 1–9 and before **## Flow** step 1,
+### Implied-seam inventory
+
+A **seam** is a product or dependency decision the capture, the vision doc, or
+`personas:` implies but leaves unsettled. Grain, planning ritual, and
+construction are not seams.
+
+List the seams you arrive with and keep the list in this session — it is your
+working state, not a tracker write. Mark a seam **opened** when the planner has
+asked a grill question whose subject is that seam; forming the inventory,
+seeing an outline, and seeing a mockup open nothing. Add a seam later only when
+a grill answer newly implies one. Keep the list to yourself unless you are
+pushing (**## Flow** step 3).
+
+**Post-bootstrap refuse gate.** After steps 1–10 and before **## Flow** step 1,
 evaluate **both** refuse conditions below. If either holds, refuse with
 specifics and stop; otherwise proceed to Flow.
 
@@ -211,8 +227,7 @@ specifics and stop; otherwise proceed to Flow.
 3. **Relay loop.** The planner asks one grill question and ends its turn; re-enter
    it with `resumeId` from the delegation that started the planner (step 2),
    passing your answer derived from the stakeholder decision heuristics +
-   vision + the source issue's theme + inspirationApps. Own any "shared
-   understanding reached" / ready-for-outline judgment the griller puts to you.
+   vision + the source issue's theme + inspirationApps.
    Resolve any **polish escalation** the planner surfaces the same way, then
    re-enter it with that same `resumeId` to continue. Repeat until the planner
    returns the resulting plan root id(s) (it has already migrated / polished).
@@ -220,10 +235,20 @@ specifics and stop; otherwise proceed to Flow.
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
 
+   **Coverage check.** Consult the implied-seam inventory (**## Bootstrap**
+   step 10) before answering the post-outline gate, and before any "shared
+   understanding reached" / ready-for-outline judgment the griller puts to
+   you. Any seam still unopened → **push**: withhold that beat's answer, name
+   the still-unopened seams, and re-enter the planner with that as your reply.
+   A push is the **Terse grill answers** exception for context the griller
+   lacks. Never answer the gate no to mean keep grilling. With no seam left
+   unopened, answer the beat as you otherwise would.
+
    **Post-outline gate.** The planner puts this gate to you after each
-   outline. With the approval-gate flag empty (**## Bootstrap** step 6),
-   answer it yourself from the stakeholder decision heuristics. With the
-   flag `true` it is the human's: run
+   outline. Run the **Coverage check** first; a push goes back to the planner
+   and leaves the routing below unrun. With the approval-gate flag empty
+   (**## Bootstrap** step 6), answer the gate yourself from the stakeholder
+   decision heuristics. With the flag `true` it is the human's: run
    `issue idea set <issueId> approvalPending true`, then end your turn
    with one message in this order — the planner's outline exactly as it
    was returned, a `---` rule, then a `## Stakeholder recommendation`
