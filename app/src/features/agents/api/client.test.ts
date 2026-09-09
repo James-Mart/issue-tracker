@@ -5,6 +5,7 @@ import {
   getConversationRun,
   getConversationTranscript,
   listConversations,
+  transcribeAudio,
   uploadConversationAttachment,
 } from "./client";
 
@@ -133,6 +134,28 @@ describe("uploadConversationAttachment", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "/api/conversations/conv-1/attachments",
     );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
+  });
+});
+
+describe("transcribeAudio", () => {
+  it("posts multipart form data with field audio and returns response text", async () => {
+    const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+      const body = init?.body;
+      expect(body).toBeInstanceOf(FormData);
+      const form = body as FormData;
+      expect(form.has("audio")).toBe(true);
+      expect(form.get("audio")).toBeInstanceOf(Blob);
+
+      return Promise.resolve(jsonResponse({ text: "Hello there." }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const samples = Float32Array.from([0.1, -0.2, 0.3]);
+    await expect(transcribeAudio(samples)).resolves.toBe("Hello there.");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/transcriptions");
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
   });
 });
