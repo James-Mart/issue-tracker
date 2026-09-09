@@ -1,9 +1,37 @@
 # Migrate
 
-Never a project-form `apply` for this migration. Use the **story-form** or
-**epic-form** already chosen for the approved outline.
+### Append
+
+When the Idea's `appendTo` names a Story, write a story-form apply doc
+(`project: <projectId>` + `story:` object; include `epic: <id>` when the
+target sits under an Epic) whose `story.id` is that Story and whose
+`children:` are the outlined Tasks.
+
+`issue story append <storyId> <file>`
+
+`<storyId>` is the Idea's `appendTo`. Show append stdout. Report each
+created Task id.
+
+Leave the source Idea **unarchived** after append — the Idea is the
+record that keeps the work from reporting ready until plan-polish
+finishes.
+
+After a successful append:
+`issue task set <taskId> sourceIdea <ideaId>` for each created Task id.
+`<ideaId>` is the source Idea's id. Imperative only — not in the YAML doc.
+
+Verification-only Tasks: after append, `issue task set <taskId> noDiff true`
+per
+[Verification-only Tasks (noDiff)](../../issue-tracker-authoring/SKILL.md#verification-only-tasks-nodiff)
+— imperative only, not in the YAML doc.
+
+When the grill included mockup rounds with chosen directions, follow
+**### Promoted mockup artifacts** using the target Story as `<storyId>`.
 
 ### Merge-base and policy
+
+Never a project-form `apply` for this migration. Use the **story-form** or
+**epic-form** already chosen for the approved outline.
 
 After **each** successful root `apply`, record the merge-base and policy from
 the grill (**Merge-base first** bullet in **Rules (mandatory):** in the parent
@@ -31,8 +59,8 @@ resulting root id from that apply. Imperative only — not in the YAML doc.
 ### Promoted mockup artifacts
 
 When the grill included mockup rounds with chosen directions, after **each**
-successful root `apply` that creates or updates a Story implementing a mocked
-surface, for each chosen direction on that surface:
+successful migrate that lands work on a Story implementing a mocked surface,
+for each chosen direction on that surface:
 
 1. From `/root/.cursor/plugins/local/issue-tracker/app`, run
    `npm run mockup-promote -- --from-issue <fromIssueId> --direction <directionId> --issue <storyId> --mode copy`

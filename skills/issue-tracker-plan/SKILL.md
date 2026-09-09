@@ -9,13 +9,10 @@ description: >-
 
 # Issue Tracker — Plan (grill → plan tree)
 
-Turn a rough capture into one or more detailed plan trees — each a
-**project-level Story > Task** tree or an **Epic > Story > Task** tree, per
-authoring Epic grain and [Multi-Epic split](../issue-tracker-authoring/SKILL.md#multi-epic-split).
-You grill the user, raise a mockup round for each screen the plan affects,
-show the outline, get one explicit-consequence yes, then migrate via
-`issue apply` (issue-tracker-authoring), auto-chain
-`issue-tracker-plan-polish` on every resulting root. Behavioral contract:
+Turn a rough capture into a detailed plan. You grill the user, raise a
+mockup round for each screen the plan affects, show the outline, get one
+explicit-consequence yes, then migrate and auto-chain
+`issue-tracker-plan-polish`. Behavioral contract:
 Epic **auto-plan-polish-confirm** invariants (single post-outline gate +
 auto-chain polish) — do not restate that list here. Do not implement product
 code; this skill only authors the plan artifact.
@@ -32,8 +29,7 @@ Grain, multi-Epic split, apply doc shape, parent-prose, and prune-by-default
 rules live in issue-tracker-authoring and [SPEC.md](../../SPEC.md) — when
 proposing the tree(s), apply those rules yourself; only ask the user when a
 product or dependency choice remains after those rules. Do not restate them
-here. Reference authoring [Multi-Epic split](../issue-tracker-authoring/SKILL.md#multi-epic-split)
-for when one capture becomes multiple roots; do not duplicate that rule text.
+here.
 
 ## Argument
 
@@ -61,6 +57,9 @@ Before grilling:
 4. `issue view <id>` — load the full capture (`description.md`).
 5. `issue project get <projectId> trunk` — default merge-base for the
    mandatory first grill question (`<projectId>` from step 1).
+6. `issue idea get <id> appendTo` — when this prints a Story id, `issue
+   view` that Story. After the grill (including mockup rounds), continue
+   at **## Append**.
 
 ## Grill-me protocol (inline)
 
@@ -85,8 +84,7 @@ mid-grill.
   list. **Trunk** — proceed with the rest of the grill; Focused codebase
   research uses the workspace working tree only (omit `Ref` in spawn stubs).
   Carry the chosen merge-base and merge-policy (when non-trunk) through to
-  outline and migrate — the migrate step records them on the root and
-  `sourceIdea` on each resulting root.
+  outline and migrate.
   - **Non-trunk branch** — ask **one** merge-policy question for the
     resulting root (Epic or project-level Story) next. Recommend
     **`pull-request`** via `(recommended)` in the answer list. Valid values:
@@ -126,8 +124,8 @@ mid-grill.
   argument. Do not ask whether to run a round; do not skip a round for any
   affected screen. What you do with what a round returns is
   **## What a round returns** below.
-- **Do not enact** the plan (no `apply`, no tracker writes that materialize the
-  tree) until the user answers yes at the single post-outline gate below.
+- **Do not enact** the plan (no tracker writes that materialize the
+  tree) until the user answers yes at the single post-outline gate.
 - Do **not** ask a separate pre-outline “shared understanding?” confirm —
   when the grill is ready, go straight to the outline + gate.
 
@@ -165,6 +163,8 @@ doc.
   direction or a drop before you show the outline.
 
 ## Single post-outline gate, then migrate
+
+When Bootstrap printed a Story id for `appendTo`, continue at **## Append**.
 
 When the grill is ready (no extra pre-outline confirm):
 
@@ -209,6 +209,28 @@ case — polish already archived it when `planRoots` held exactly that one root
 — and it closes the multi-root case after the last root's polish. Keep the
 serial ordering above; this archive is the last action, not an extra gate.
 
+## Append
+
+When Bootstrap printed a Story id for `appendTo`:
+
+1. **Outline.** Name the target Story and list Task titles. When the work
+   does not fit a Task series, state that here and stop.
+2. **One gate.** Ask **one** yes/no whose lead-in states that **yes** means:
+   migrate the plan, run `issue-tracker-plan-polish` on the target Story,
+   and auto-apply polish fixes.
+3. On **yes** → **Read**
+   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`
+   and follow **### Append**. On **no** → stop.
+4. Auto-chain **`issue-tracker-plan-polish`** on the target Story — **Read**
+   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
+   and follow it; no polish yes/no. Polish itself auto-applies when safe
+   (see that skill); do not add an approve-before-apply beat here. If
+   polish is deferred in this session (e.g. the user asks to grill more
+   before polish runs), the polish obligation for that Story persists —
+   deferral does not reset or cancel it.
+5. When that polish has finished, archive the source Idea:
+   `issue idea set <ideaId> archived true`.
+
 ## Spawn stubs
 
 Pass these as the Cursor Task `prompt`. Inline the fields each stub lists.
@@ -230,4 +252,4 @@ workflow instructions here.
 - Do not edit workspace product source as part of planning (plan artifact /
   grill research reads only).
 - Do not auto-start `issue-tracker-work`. After a successful migrate, always
-  auto-chain polish as in **After success** (no second yes/no).
+  auto-chain polish (no second yes/no).
