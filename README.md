@@ -43,6 +43,11 @@ selects one Project and scopes the tree and Ready view to it.
 cd app && npm install && npm run dev
 ```
 
+First `npm install` also downloads the local speech-to-text model weights
+(~460 MB compressed, ~631 MB extracted) into `app/.asr-models/` (CC-BY-4.0;
+ignored by git). Set `ISSUE_TRACKER_SKIP_ASR_MODEL_SETUP=1` to skip that
+download, or `ISSUE_TRACKER_ASR_MODEL_DIR` to store the weights elsewhere.
+
 - Frontend (Vite): http://localhost:8060 by default (`VITE_DEV_PORT` overrides)
 - Backend (Express API + WebSocket): http://localhost:8061 by default (`PORT` overrides)
 - Vite proxies `/api` to `VITE_API_PROXY_TARGET` (default

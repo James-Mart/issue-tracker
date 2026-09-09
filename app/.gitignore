@@ -1,4 +1,5 @@
 node_modules/
+.asr-models/
 dist/
 .agent-state-test/
 test-results/
