@@ -205,7 +205,7 @@ export async function transcribeAudio(samples: Float32Array): Promise<string> {
   const form = new FormData();
   form.append(
     "audio",
-    new Blob([samples.buffer], { type: "application/octet-stream" }),
+    new Blob([samples], { type: "application/octet-stream" }),
     "audio.raw",
   );
   const data = await request<{ text: string }>("/api/transcriptions", {
