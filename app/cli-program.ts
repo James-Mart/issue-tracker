@@ -10,6 +10,7 @@ import {
 } from "./server/schemas.js";
 import { visibleIssues } from "./server/services/archived-visibility.js";
 import { appendTasks } from "./server/services/append.js";
+import { appendUpdateFromMergeBase } from "./server/services/merge-base-task.js";
 import { apply } from "./server/services/apply.js";
 import {
   parseApplyDoc,
@@ -366,6 +367,21 @@ function createIssueProgram(run: Run): Command {
               console.log();
               console.log(treeLines.join("\n"));
             }
+          }),
+        );
+      kindCmd
+        .command("update-from-merge-base")
+        .argument("<storyId>", "story id")
+        .description(
+          "append a predefined Task to merge the Story branch from its merge base",
+        )
+        .action((storyId: string) =>
+          run(async () => {
+            const summary = await appendUpdateFromMergeBase(storyId);
+            const line = (label: string, ids: string[]): string =>
+              `${label}: ${ids.length}${ids.length ? ` (${ids.join(", ")})` : ""}`;
+            console.log(line("created", summary.created));
+            console.log(line("updated", summary.updated));
           }),
         );
     }
