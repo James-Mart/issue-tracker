@@ -191,3 +191,26 @@ export async function listConversationAttachments(
   );
   return data.attachments;
 }
+
+export type TranscriptionCapability = {
+  available: boolean;
+  reason?: string;
+};
+
+export function fetchTranscriptionCapability(): Promise<TranscriptionCapability> {
+  return request<TranscriptionCapability>("/api/transcriptions/capability");
+}
+
+export async function transcribeAudio(samples: Float32Array): Promise<string> {
+  const form = new FormData();
+  form.append(
+    "audio",
+    new Blob([samples], { type: "application/octet-stream" }),
+    "audio.raw",
+  );
+  const data = await request<{ text: string }>("/api/transcriptions", {
+    method: "POST",
+    body: form,
+  });
+  return data.text;
+}

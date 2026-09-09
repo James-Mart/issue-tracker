@@ -5,6 +5,7 @@ import {
   getConversationRun,
   getConversationTranscript,
   listConversations,
+  transcribeAudio,
   uploadConversationAttachment,
 } from "./client";
 
@@ -134,6 +135,45 @@ describe("uploadConversationAttachment", () => {
       "/api/conversations/conv-1/attachments",
     );
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
+  });
+});
+
+describe("transcribeAudio", () => {
+  it("posts multipart form data with field audio and returns response text", async () => {
+    const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+      const body = init?.body;
+      expect(body).toBeInstanceOf(FormData);
+      const form = body as FormData;
+      expect(form.has("audio")).toBe(true);
+      expect(form.get("audio")).toBeInstanceOf(Blob);
+
+      return Promise.resolve(jsonResponse({ text: "Hello there." }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const samples = Float32Array.from([0.1, -0.2, 0.3]);
+    await expect(transcribeAudio(samples)).resolves.toBe("Hello there.");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/transcriptions");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
+  });
+
+  it("uploads only the viewed samples when given a subarray", async () => {
+    const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+      const form = init?.body as FormData;
+      const blob = form.get("audio") as Blob;
+      return blob.arrayBuffer().then((buf) => {
+        expect(buf.byteLength).toBe(8);
+        expect(Array.from(new Float32Array(buf))).toEqual([0.5, -0.25]);
+        return jsonResponse({ text: "slice" });
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const backing = Float32Array.from([0, 0.5, -0.25, 0]);
+    const view = backing.subarray(1, 3);
+    await expect(transcribeAudio(view)).resolves.toBe("slice");
   });
 });
 

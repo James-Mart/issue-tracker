@@ -64,6 +64,8 @@ export interface CreateAgentOptions {
   storeDir: string;
   agents?: Record<string, AgentDefinition>;
   customTools?: Record<string, SDKCustomTool>;
+  /** Restrict built-in tools; `[]` is text-only. Omitted keeps the default set. */
+  tools?: NonNullable<AgentOptions["tools"]>;
 }
 
 export interface ResumeAgentOptions {
@@ -190,12 +192,21 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       return deps.listSdkModels({ apiKey: deps.apiKey });
     },
 
-    async createAgent({ cwd, model, agentId, storeDir, agents, customTools }) {
+    async createAgent({
+      cwd,
+      model,
+      agentId,
+      storeDir,
+      agents,
+      customTools,
+      tools,
+    }) {
       const sdkAgent = await deps.createSdkAgent({
         apiKey: deps.apiKey,
         model,
         agentId,
         agents,
+        ...(tools !== undefined ? { tools } : {}),
         disallowedTools: DISALLOWED_BUILTIN_TOOLS,
         local: localRuntime(cwd, storeDir, customTools),
       });

@@ -10,6 +10,24 @@ const interruptMutate = vi.fn()
 const uploadMutateAsync = vi.fn()
 const deleteMutateAsync = vi.fn()
 
+vi.mock("../hooks/use-voice-recording", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../hooks/use-voice-recording")>()
+  return {
+    ...original,
+    useVoiceRecording: () => ({
+      state: "idle" as const,
+      elapsedSeconds: 0,
+      errorKind: null,
+      errorReason: null,
+      start: vi.fn(),
+      cancel: vi.fn(),
+      confirm: vi.fn(),
+      retry: vi.fn(),
+    }),
+  }
+})
+
 vi.mock("../api/mutations", () => ({
   useSendConversationMessage: () => ({
     mutate: sendMutate,
@@ -41,6 +59,10 @@ vi.mock("../api/queries", () => ({
     data: {
       models: [{ id: "composer-2.5-fast", displayName: "Composer" }],
     },
+    isLoading: false,
+  }),
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
     isLoading: false,
   }),
 }))

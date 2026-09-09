@@ -4,11 +4,13 @@ import type {
   ConversationTranscriptPage,
 } from "@server/schemas";
 import {
+  fetchTranscriptionCapability,
   getConversationTranscript,
   listAgentModels,
   listConversationAttachments,
   listConversations,
   type AgentModelsResponse,
+  type TranscriptionCapability,
 } from "./client";
 import { agentsKeys } from "./keys";
 
@@ -58,5 +60,16 @@ export function useConversationAttachmentsQuery(
   return useQuery({
     queryKey: agentsKeys.attachments(conversationId),
     queryFn: () => listConversationAttachments(conversationId),
+  });
+}
+
+export function useTranscriptionCapabilityQuery(): UseQueryResult<
+  TranscriptionCapability,
+  Error
+> {
+  return useQuery({
+    queryKey: agentsKeys.transcriptionCapability(),
+    queryFn: fetchTranscriptionCapability,
+    staleTime: 60_000,
   });
 }
