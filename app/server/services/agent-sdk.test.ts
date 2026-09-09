@@ -205,6 +205,22 @@ describe("createAgent", () => {
       SAMPLE_CUSTOM_TOOLS,
     );
   });
+
+  it("forwards tools to Agent.create when set", async () => {
+    const createSdkAgent = vi.fn(
+      async (_options: AgentOptions) => makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key-abc" });
+
+    await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+      tools: [],
+    });
+
+    expect(createSdkAgent.mock.calls[0]![0].tools).toEqual([]);
+  });
 });
 
 describe("resumeAgent", () => {
