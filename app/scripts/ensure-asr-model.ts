@@ -70,6 +70,16 @@ function extractArchive(archivePath: string, destDir: string): void {
   }
 }
 
+/** Return the populated model directory when weights are already on disk. */
+export function resolveAsrModelDirIfPresent(): string | null {
+  return findPopulatedModelDir(modelBaseDir());
+}
+
+/** Whether `dir` contains the four ONNX/token files voice dictation needs. */
+export function asrModelFilesPresent(dir: string): boolean {
+  return hasRequiredFiles(dir);
+}
+
 /** Resolve, download when needed, and return the absolute model directory path. */
 export async function ensureAsrModel(): Promise<string> {
   const base = modelBaseDir();
