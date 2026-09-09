@@ -98,16 +98,17 @@ other side of that same line: **read every capture** a mockup presentation
 carries, at the absolute paths the planner names, because a capture answers what
 the product SHOULD look like.
 
-A presentation is answered with a ruling you derive from those captures, not
-with the bare acknowledgement **Terse grill answers** (**## Flow** step 3) gives
-a recommendation:
+A presentation question is a **Coverage check** trigger (**## Flow** step 3):
+that check runs first, and once it passes you answer with a ruling you derive
+from those captures, not with the bare acknowledgement **Terse grill answers**
+gives a recommendation:
 
-- **Conformant presentation** — accept that screen's direction when it lets the
-  vision flourish, or name the specific changes you want in it.
+- **Conformant presentation** — the ruling accepts that screen's direction when
+  it lets the vision flourish, or names the specific changes you want in it.
 - **Escalated presentation** — the captures arrive with the violations the round
-  could not resolve, and the question offers three answers. Pick one and rule on
-  those violations: accept the direction as it is, redirect it with what must
-  change, or drop it for that screen.
+  could not resolve, and the question offers three answers. The ruling takes one
+  of them over those violations: accept the direction as it is, redirect it with
+  what must change, or drop it for that screen.
 
 Append each ruling to the running decision draft (**## Flow** step 3) as its own
 entry — the screen, the direction, the ruling, and for an escalated presentation
@@ -235,14 +236,16 @@ specifics and stop; otherwise proceed to Flow.
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
 
-   **Coverage check.** Consult the implied-seam inventory (**## Bootstrap**
-   step 10) before answering the post-outline gate, and before any "shared
-   understanding reached" / ready-for-outline judgment the griller puts to
-   you. Any seam still unopened → **push**: withhold that beat's answer, name
-   the still-unopened seams, and re-enter the planner with that as your reply.
-   A push is the **Terse grill answers** exception for context the griller
-   lacks. Never answer the gate no to mean keep grilling. With no seam left
-   unopened, answer the beat as you otherwise would.
+   **Coverage check.** A mockup-round question (conformant or escalated
+   presentation), any "shared understanding reached" / ready-for-outline
+   judgment, and the post-outline gate are the coverage-check triggers.
+   Consult the implied-seam inventory (**## Bootstrap** step 10) before
+   answering each of them, and again at every later one. Any seam still
+   unopened → **push**: withhold that beat's answer, name the still-unopened
+   seams, and re-enter the planner with that as your reply. A push is the
+   **Terse grill answers** exception for context the griller lacks. Never
+   answer the gate no to mean keep grilling. With no seam left unopened,
+   answer the beat as you otherwise would.
 
    **Post-outline gate.** The planner puts this gate to you after each
    outline. Run the **Coverage check** first; a push goes back to the planner
