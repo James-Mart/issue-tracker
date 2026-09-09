@@ -6,11 +6,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { ApiError } from "@/lib/api/errors";
 import type { ChannelSessionListItem, DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
-import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
+import {
+  resetCockpitLaunchStore,
+  useCockpitLaunchStore,
+} from "../store/use-cockpit-launch-store";
 import { IssueDetailPage } from "./issue-detail-page";
 import { TopBar } from "./top-bar";
 
 const mutate = vi.fn();
+const sendMessageMutate = vi.fn();
 const mockState = vi.hoisted(() => ({
   issue: null as IssueDetail | null,
   issues: [] as IssueRecord[],
@@ -42,6 +46,7 @@ vi.mock("../api/queries", () => ({
   }),
   useCommentsQuery: () => ({ data: { messages: [] }, isLoading: false }),
   useIssueAgentRunsQuery: () => ({ data: { runs: [] }, isLoading: false }),
+  useIssueChangeQuery: () => ({ data: undefined, isLoading: false, error: null }),
 }));
 
 vi.mock("@/features/agents/api/queries", () => ({
@@ -63,8 +68,29 @@ vi.mock("../api/mutations", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+  useCreateIssue: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useUpdateFromMergeBase: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
   useUploadAttachment: () => ({
     mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useDeleteChannelSession: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+
+vi.mock("@/features/agents/api/mutations", () => ({
+  useSendConversationMessage: () => ({
+    mutate: (...args: unknown[]) => {
+      sendMessageMutate(...args);
+    },
     isPending: false,
   }),
 }));
@@ -143,7 +169,7 @@ vi.mock("./epic-story-rail", () => ({
   EpicStoryRail: () => null,
 }));
 vi.mock("./story-task-rail", () => ({
-  StoryTaskRail: () => null,
+  StoryTaskRail: () => <div data-testid="story-task-rail">rail</div>,
 }));
 vi.mock("./delete-partial-plan-control", () => ({
   DeletePartialPlanDetailAction: () => null,
@@ -265,6 +291,88 @@ function mutateOptions(): {
   };
 }
 
+function sendMessageOptions(): {
+  onSuccess?: () => void;
+  onError?: (err: Error) => void;
+} {
+  return sendMessageMutate.mock.calls[0]?.[1] as {
+    onSuccess?: () => void;
+    onError?: (err: Error) => void;
+  };
+}
+
+function storyRecord(
+  id: string,
+  partOf: string,
+  title: string,
+): IssueRecord {
+  return {
+    id,
+    kind: "story",
+    title,
+    partOf,
+    order: 0,
+    branchName: id,
+    merged: false,
+    createdAt: t0,
+    updatedAt: t0,
+    archived: false,
+  };
+}
+
+function storyDetail(id: string, partOf: string, title: string): IssueDetail {
+  return {
+    ...storyRecord(id, partOf, title),
+    description: "",
+    labels: [],
+  };
+}
+
+function taskRecord(
+  id: string,
+  partOf: string,
+  status: "todo" | "done" | "in-progress",
+): IssueRecord {
+  return {
+    id,
+    kind: "task",
+    title: id,
+    partOf,
+    status,
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+    archived: false,
+  };
+}
+
+function sessionItem(
+  overrides: Partial<ChannelSessionListItem> & Pick<ChannelSessionListItem, "id">,
+): ChannelSessionListItem {
+  return {
+    title: "Implement Auth hardening",
+    model: "composer-2.5",
+    createdAt: t0,
+    updatedAt: t0,
+    archived: false,
+    activeRun: false,
+    awaitingHuman: false,
+    ...overrides,
+  };
+}
+
+function workLoopControlIndex(container: ParentNode): number {
+  const nodes = Array.from(container.querySelectorAll("*"));
+  return nodes.findIndex((node) =>
+    node.matches('[data-testid="post-rail-work-loop"]'),
+  );
+}
+
+function ownFlowIndex(container: ParentNode): number {
+  const nodes = Array.from(container.querySelectorAll("*"));
+  return nodes.findIndex((node) => node.matches('[data-region="own-flow"]'));
+}
+
 function selectedTab(container: ParentNode): string | undefined {
   return Array.from(container.querySelectorAll('[role="tab"]'))
     .find((tab) => tab.getAttribute("aria-selected") === "true")
@@ -274,6 +382,7 @@ function selectedTab(container: ParentNode): string | undefined {
 afterEach(() => {
   document.body.innerHTML = "";
   mutate.mockReset();
+  sendMessageMutate.mockReset();
   mockState.issue = null;
   mockState.issues = [];
   mockState.derived = {};
@@ -417,6 +526,9 @@ describe("Issue detail launch — Epic implementing", () => {
     expect(selectedTab(container)).toContain("Overview");
 
     expect(
+      container.querySelector('[data-testid="issue-overview-launch"]'),
+    ).toBeNull();
+    expect(
       container.querySelectorAll(
         '[data-testid="implementing-overview-start-session"]',
       ).length,
@@ -424,6 +536,7 @@ describe("Issue detail launch — Epic implementing", () => {
     expect(
       container.querySelector('[data-testid="implementing-start-session"]'),
     ).toBeNull();
+    expect(workLoopControlIndex(container)).toBeGreaterThan(ownFlowIndex(container));
 
     act(() => {
       (
@@ -438,6 +551,110 @@ describe("Issue detail launch — Epic implementing", () => {
       container.querySelector('[data-testid="channel-launch-pending"]')
         ?.textContent,
     ).toContain("Starting the work loop…");
+  });
+
+  it("hides the post-rail control while liveRun is true", () => {
+    seedEpic();
+    mockState.derived = {
+      "auth-hardening": { blocked: false, epicStatus: "in-progress", liveRun: true },
+    };
+    const { container } = mountDetail("/projects/p-a/issues/auth-hardening");
+    expect(
+      container.querySelector('[data-testid="post-rail-work-loop"]'),
+    ).toBeNull();
+  });
+
+  it("hides the post-rail control when every leaf task is done", () => {
+    seedEpic();
+    mockState.issues = [
+      project("p-a"),
+      epicRecord("auth-hardening", "p-a", "Auth hardening"),
+      storyRecord("story-1", "auth-hardening", "Story one"),
+      taskRecord("task-1", "story-1", "done"),
+    ];
+    mockState.sessions = [sessionItem({ id: "sess-1" })];
+    const { container } = mountDetail("/projects/p-a/issues/auth-hardening");
+    expect(
+      container.querySelector('[data-testid="post-rail-work-loop"]'),
+    ).toBeNull();
+  });
+
+  it("resumes the current session from Overview below the rail", () => {
+    seedEpic();
+    mockState.issues = [
+      project("p-a"),
+      epicRecord("auth-hardening", "p-a", "Auth hardening"),
+      storyRecord("story-1", "auth-hardening", "Story one"),
+      taskRecord("task-1", "story-1", "todo"),
+    ];
+    mockState.sessions = [
+      sessionItem({
+        id: "sess-1",
+        title: "Implement Auth hardening",
+        updatedAt: "2026-09-09T10:00:00.000Z",
+      }),
+    ];
+    const { container } = mountDetail("/projects/p-a/issues/auth-hardening");
+
+    expect(workLoopControlIndex(container)).toBeGreaterThan(ownFlowIndex(container));
+    expect(
+      container.querySelector('[data-testid="implementing-overview-resume-session"]')
+        ?.textContent,
+    ).toContain("Resume work loop");
+    expect(
+      container.querySelector('[data-testid="work-loop-session-ref"]')?.textContent,
+    ).toContain("sess-1");
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="implementing-overview-resume-session"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(sendMessageMutate).toHaveBeenCalledWith(
+      {
+        id: "sess-1",
+        body: {
+          prompt: "Resume coordination to complete any unfinished tasks.",
+        },
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(mutate).not.toHaveBeenCalled();
+    expect(selectedTab(container)).toContain("Implementing");
+  });
+
+  it("does not create a session when resume send fails", () => {
+    seedEpic();
+    mockState.issues = [
+      project("p-a"),
+      epicRecord("auth-hardening", "p-a", "Auth hardening"),
+      storyRecord("story-1", "auth-hardening", "Story one"),
+      taskRecord("task-1", "story-1", "todo"),
+    ];
+    mockState.sessions = [sessionItem({ id: "sess-1" })];
+    sendMessageMutate.mockImplementation((_body, options) => {
+      options?.onError?.(new ApiError("upstream refused", 500));
+    });
+    mountDetail("/projects/p-a/issues/auth-hardening");
+
+    act(() => {
+      (
+        document.querySelector(
+          '[data-testid="implementing-overview-resume-session"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(mutate).not.toHaveBeenCalled();
+    expect(useCockpitLaunchStore.getState().fault).toEqual({
+      issueId: "auth-hardening",
+      kind: "work",
+      errorMessage: "upstream refused",
+      status: 500,
+    });
   });
 
   it("silently follows a later issues GET that disagrees with the optimistic instrument", () => {
@@ -477,6 +694,41 @@ describe("Issue detail launch — Epic implementing", () => {
     expect(container.querySelector('[data-testid="channel-launch-fault"]')).toBeNull();
   });
 
+  it("surfaces a named 409 fault when Overview start hits an implementing lock", () => {
+    seedEpic();
+    mockState.issues = [
+      project("p-a"),
+      epicRecord("auth-hardening", "p-a", "Auth hardening"),
+      epicRecord("push", "p-a", "Push notifications"),
+    ];
+    const { container } = mountDetail("/projects/p-a/issues/auth-hardening");
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="implementing-overview-start-session"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    act(() => {
+      mutateOptions().onError?.(
+        new ApiError("conflict", 409, {
+          error: "locked",
+          holderIssueId: "push",
+          holderIssueTitle: "Push notifications",
+        }),
+      );
+    });
+
+    expect(selectedTab(container)).toContain("Implementing");
+    expect(
+      container.querySelector('[data-testid="channel-launch-fault"]')
+        ?.textContent,
+    ).toContain(
+      "Session create rejected — implementing lock held by Push notifications (409).",
+    );
+  });
+
   it("keeps the top bar live on a failed launch when another issue already has a live run", () => {
     seedEpic();
     mockState.issues = [
@@ -508,6 +760,94 @@ describe("Issue detail launch — Epic implementing", () => {
     expect(
       container.querySelector('[data-testid="implementing-start-session"]'),
     ).toBeTruthy();
+  });
+});
+
+describe("Issue detail launch — project-level Story implementing", () => {
+  function seedStory(): void {
+    mockState.issue = storyDetail("oauth-hardening", "p-a", "OAuth hardening");
+    mockState.issues = [
+      project("p-a"),
+      storyRecord("oauth-hardening", "p-a", "OAuth hardening"),
+      taskRecord("task-1", "oauth-hardening", "todo"),
+    ];
+    mockState.derived = {
+      "oauth-hardening": { blocked: false, storyStatus: "not-started" },
+    };
+  }
+
+  it("places the post-rail control below the task rail and starts a session", () => {
+    seedStory();
+    const { container } = mountDetail("/projects/p-a/issues/oauth-hardening");
+
+    expect(
+      container.querySelector('[data-testid="story-task-rail"]'),
+    ).toBeTruthy();
+    expect(workLoopControlIndex(container)).toBeGreaterThan(ownFlowIndex(container));
+    expect(
+      container.querySelector('[data-testid="implementing-overview-start-session"]')
+        ?.textContent,
+    ).toContain("Start work loop");
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="implementing-overview-start-session"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(mutate).toHaveBeenCalledWith(
+      "oauth-hardening",
+      "implementing",
+      expect.objectContaining({
+        title: "Implement OAuth hardening",
+        model: "composer-2.5",
+      }),
+      expect.any(Object),
+    );
+    expect(selectedTab(container)).toContain("Implementing");
+  });
+
+  it("resumes the current session from Overview below the task rail", () => {
+    seedStory();
+    mockState.sessions = [
+      sessionItem({
+        id: "sess-oauth",
+        title: "Implement OAuth hardening",
+        updatedAt: "2026-09-09T10:00:00.000Z",
+      }),
+    ];
+    const { container } = mountDetail("/projects/p-a/issues/oauth-hardening");
+
+    expect(workLoopControlIndex(container)).toBeGreaterThan(ownFlowIndex(container));
+    expect(
+      container.querySelector('[data-testid="implementing-overview-resume-session"]')
+        ?.textContent,
+    ).toContain("Resume work loop");
+    expect(
+      container.querySelector('[data-testid="work-loop-session-ref"]')?.textContent,
+    ).toContain("sess-oauth");
+
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="implementing-overview-resume-session"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(sendMessageMutate).toHaveBeenCalledWith(
+      {
+        id: "sess-oauth",
+        body: {
+          prompt: "Resume coordination to complete any unfinished tasks.",
+        },
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(mutate).not.toHaveBeenCalled();
+    expect(selectedTab(container)).toContain("Implementing");
   });
 });
 

@@ -23,6 +23,7 @@ import {
   type UploadAttachmentMutation,
 } from "../hooks/use-issue-detail-file-upload";
 import { isImplementingWorkRoot } from "../lib/implementing-launch";
+import type { ImplementingWorkRoot } from "../lib/implementing-launch";
 import { kindHasOwnFlow } from "../lib/own-flow";
 import { issueBelongsToProject, issuesById } from "../lib/build-tree";
 import {
@@ -93,16 +94,6 @@ function IssueOverviewLaunch({
       </div>
     );
   }
-  if (isImplementingWorkRoot(channel, issue, parentKind)) {
-    return (
-      <div data-testid="issue-overview-launch">
-        <ImplementingOverviewLaunch
-          issue={issue}
-          onLockRefusal={() => {}}
-        />
-      </div>
-    );
-  }
   return null;
 }
 
@@ -137,6 +128,13 @@ function IssueOverviewPanel({
         <StoryAppendActionsCard issue={issue} />
       ) : null}
       <OwnFlowSlot issue={issue} />
+      {isImplementingWorkRoot("implementing", issue, parentKind) ? (
+        <ImplementingOverviewLaunch
+          issue={issue as ImplementingWorkRoot}
+          parentKind={parentKind}
+          onLockRefusal={() => {}}
+        />
+      ) : null}
       <IssueAttachmentsSection issue={issue} upload={upload} />
       <IssueDescriptionField issue={issue} upload={upload} />
       <IssueCommentsSection issue={issue} />
