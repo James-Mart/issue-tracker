@@ -17,6 +17,7 @@ const DIALOGS = [
   "new-story",
   "delete-issue",
   "restart-live-turns",
+  "merge-base-confirm",
 ] as const;
 
 type DialogId = (typeof DIALOGS)[number];
@@ -30,6 +31,8 @@ type IssueRecord = {
   partOf?: string | null;
   archived?: boolean;
   title?: string;
+  branchName?: string;
+  merged?: boolean;
 };
 
 type Viewport = { width: number; height: number };
@@ -380,13 +383,18 @@ function samplesForProject(issues: IssueRecord[], projectId: string) {
   const epic = issues.find((i) => i.kind === "epic" && active(i) && i.partOf === projectId);
   const idea = issues.find((i) => i.kind === "idea" && active(i) && i.partOf === projectId);
   const story = issues.find((i) => i.kind === "story" && active(i) && i.partOf === projectId);
+  const storyWithBranch = issues.find((i) => {
+    if (i.kind !== "story" || !active(i) || i.merged === true || !i.branchName)
+      return false;
+    return storyUnderProject(i, projectId, byId);
+  });
   const task = issues.find((i) => {
     if (i.kind !== "task" || !active(i) || !i.partOf) return false;
     const parent = byId.get(i.partOf);
     return Boolean(parent && storyUnderProject(parent, projectId, byId));
   });
 
-  return { epic, idea, story, task };
+  return { epic, idea, story, task, storyWithBranch };
 }
 
 function expandAll(projectId: string, samples: ReturnType<typeof samplesForProject>): string[] {
@@ -448,7 +456,11 @@ async function openNewStoryDialog(page: Page): Promise<void> {
   await page.getByTestId("new-issue-dialog").waitFor({ state: "visible" });
 }
 
-function dialogPrepPath(projectId: string, dialogId: DialogId): string {
+function dialogPrepPath(
+  projectId: string,
+  dialogId: DialogId,
+  samples: ReturnType<typeof samplesForProject>,
+): string {
   switch (dialogId) {
     case "new-project":
       return "/";
@@ -460,6 +472,15 @@ function dialogPrepPath(projectId: string, dialogId: DialogId): string {
       return `/projects/${projectId}?lens=structure`;
     case "restart-live-turns":
       return `/projects/${projectId}`;
+    case "merge-base-confirm": {
+      const story = samples.storyWithBranch;
+      if (!story) {
+        throw new Error(
+          `no Story with a branch under project ${projectId} for merge-base-confirm`,
+        );
+      }
+      return `/projects/${projectId}/issues/${story.id}`;
+    }
   }
 }
 
@@ -495,6 +516,12 @@ async function openDialog(
       await page.getByTestId("delete-issue-dialog").waitFor({ state: "visible" });
       break;
     }
+    case "merge-base-confirm":
+      await page.getByTestId("story-append-update-merge-base").click();
+      await page
+        .getByTestId("merge-base-confirm-dialog")
+        .waitFor({ state: "visible" });
+      break;
     case "restart-live-turns": {
       await page.route("**/api/health", async (route) => {
         const response = await route.fetch();
@@ -565,7 +592,7 @@ async function captureTarget(
 
   if (isDialog(target)) {
     // Theme reload closes dialogs — land on prep page, apply theme, then open.
-    await gotoPath(page, baseUrl, dialogPrepPath(projectId, target));
+    await gotoPath(page, baseUrl, dialogPrepPath(projectId, target, samples));
     await applyTheme(page, theme);
     await openDialog(page, projectId, target, samples);
     await settle(page);

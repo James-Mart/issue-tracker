@@ -23,6 +23,8 @@ const buttonVariants = cva(
           "border border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
         destructive:
           "border border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        current:
+          "border border-[hsl(var(--current)/0.4)] bg-primary/20 [color:hsl(var(--current))] hover:border-[hsl(var(--current)/0.6)] hover:bg-primary/25",
       },
       // `touch:` lifts every control to a ~44px tap target on touch pointers
       // and at mobile-shell widths; the instrument stays dense on a mouse.

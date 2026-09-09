@@ -276,7 +276,14 @@ describe("StoryAppendActionsCard actions", () => {
     );
   });
 
-  it("calls update-from-merge-base on the Story", () => {
+  it("opens a confirm dialog that names both refs before calling the route", () => {
+    derivedState.value = {
+      "story-oauth-hardening": {
+        blocked: false,
+        storyStatus: "in-progress",
+        mergeBase: "main @ c4d91e2",
+      },
+    };
     const { container } = mountCard(
       story({ branchName: "story/oauth-hardening" }),
     );
@@ -285,7 +292,47 @@ describe("StoryAppendActionsCard actions", () => {
       actionButton(container, "story-append-update-merge-base").click();
     });
 
-    expect(updateFromMergeBaseMutate).toHaveBeenCalled();
+    const dialog = document.body.querySelector(
+      '[data-testid="merge-base-confirm-dialog"]',
+    );
+    expect(dialog?.textContent).toContain("main @ c4d91e2");
+    expect(dialog?.textContent).toContain("story/oauth-hardening");
+    expect(updateFromMergeBaseMutate).not.toHaveBeenCalled();
+
+    act(() => {
+      (
+        document.body.querySelector(
+          '[data-testid="merge-base-confirm"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+
+    expect(updateFromMergeBaseMutate).toHaveBeenCalledOnce();
+  });
+
+  it("does not call update-from-merge-base when the confirm dialog is cancelled", () => {
+    derivedState.value = {
+      "story-oauth-hardening": {
+        blocked: false,
+        storyStatus: "in-progress",
+        mergeBase: "main @ c4d91e2",
+      },
+    };
+    const { container } = mountCard(
+      story({ branchName: "story/oauth-hardening" }),
+    );
+
+    act(() => {
+      actionButton(container, "story-append-update-merge-base").click();
+    });
+    act(() => {
+      const cancel = [...document.body.querySelectorAll("button")].find(
+        (button) => button.textContent === "Cancel",
+      );
+      cancel?.click();
+    });
+
+    expect(updateFromMergeBaseMutate).not.toHaveBeenCalled();
   });
 
   it("does not create an Idea when the Story is merged", () => {

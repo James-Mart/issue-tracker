@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { GitBranchPlus, MessageSquarePlus } from "lucide-react";
 import type { IssueDetail } from "@server/schemas";
@@ -20,6 +21,7 @@ import {
   storyAppendAvailability,
 } from "../lib/story-append-actions";
 import { SettingsCard } from "./detail-section";
+import { MergeBaseConfirmDialog } from "./merge-base-confirm-dialog";
 
 type StoryDetail = Extract<IssueDetail, { kind: "story" }>;
 
@@ -51,6 +53,7 @@ export function StoryAppendActionsCard({ issue }: { issue: StoryDetail }) {
   const updateFromMergeBase = useUpdateFromMergeBase(issue.id);
   const availability = storyAppendAvailability(issue);
   const mergeBase = data?.derived[issue.id]?.mergeBase;
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const pending =
     createIssue.isPending ||
     updateIssue.isPending ||
@@ -88,8 +91,20 @@ export function StoryAppendActionsCard({ issue }: { issue: StoryDetail }) {
     );
   };
 
-  const updateMergeBase = () => {
+  const openMergeBaseConfirm = () => {
+    if (
+      !availability.mergeBaseEnabled ||
+      pending ||
+      !issue.branchName ||
+      !mergeBase
+    )
+      return;
+    setConfirmOpen(true);
+  };
+
+  const confirmMergeBase = () => {
     if (!availability.mergeBaseEnabled || pending) return;
+    setConfirmOpen(false);
     updateFromMergeBase.mutate();
   };
 
@@ -145,7 +160,7 @@ export function StoryAppendActionsCard({ issue }: { issue: StoryDetail }) {
             data-testid="story-append-update-merge-base"
             disabled={!availability.mergeBaseEnabled || pending}
             aria-describedby={mergeBaseDescribedBy}
-            onClick={updateMergeBase}
+            onClick={openMergeBaseConfirm}
           >
             <GitBranchPlus className="h-3.5 w-3.5" />
             Update from merge base
@@ -162,6 +177,15 @@ export function StoryAppendActionsCard({ issue }: { issue: StoryDetail }) {
           ) : null}
         </div>
       </div>
+      {issue.branchName && mergeBase ? (
+        <MergeBaseConfirmDialog
+          open={confirmOpen}
+          mergeBase={mergeBase}
+          branchName={issue.branchName}
+          onOpenChange={setConfirmOpen}
+          onConfirm={confirmMergeBase}
+        />
+      ) : null}
     </SettingsCard>
   );
 }
