@@ -2,9 +2,10 @@
 name: issue-tracker-plan
 disable-model-invocation: true
 description: >-
-  Grill an Idea into a plan tree via apply, raising a mockup round per affected
-  screen, then auto-chain polish. Use when the user asks to plan an Idea, flesh
-  out a tracker plan, or run issue-tracker-plan.
+  Grill an Idea into a plan tree via apply or story append (when appendTo is
+  set), raising a mockup round per affected screen, then auto-chain polish. Use
+  when the user asks to plan an Idea, flesh out a tracker plan, or run
+  issue-tracker-plan.
 ---
 
 # Issue Tracker — Plan (grill → plan tree)

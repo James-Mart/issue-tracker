@@ -3,9 +3,9 @@ name: issue-tracker-authoring
 disable-model-invocation: true
 description: >-
   Author a standalone issue-tracker plan tree as one nested YAML doc and
-  `apply` it. Use when planning a stack of git PRs, deciding Epic/Story/Task
-  grain, splitting captures into multiple roots, or turning a plan into
-  tracked issues.
+  `apply` it (or `issue story append` when appending Tasks to an existing
+  Story). Use when planning a stack of git PRs, deciding Epic/Story/Task grain,
+  splitting captures into multiple roots, or turning a plan into tracked issues.
 ---
 
 # Issue Tracker — Author a Plan Tree
@@ -82,7 +82,10 @@ Doc format and field seam: [SPEC.md § `apply` doc format](../../SPEC.md#apply-d
 
 ## Epic grain: project-level Story vs Epic
 
-Choose the top-level work root by shape, not habit:
+Choose the top-level work root by shape, not habit — **unless the Idea's
+`appendTo` names an existing Story**, in which case the plan is a Task series
+on that Story only (no new Epic or root Story; see
+[Source idea (sourceIdea)](#source-idea-sourceidea) for the append path).
 
 - **Project-level Story** (`partOf` the Project, no Epic) — the plan is a
   **single Story plus its Tasks**. Author with Project `children:`
@@ -256,15 +259,22 @@ override. Rules:
 
 ## Source idea (sourceIdea)
 
-When a plan root was planned from an Idea, record that edge **after**
-`apply` (imperative only — not in the YAML doc):
+When an Idea's plan lands as a new root, record that edge **after** `apply`
+(imperative only — not in the YAML doc):
 
 - Epic: `issue epic set <id> sourceIdea <ideaId>`
 - Project-level root Story: `issue story set <id> sourceIdea <ideaId>`
 
-`apply` preserves `sourceIdea` and never reads it from description prose.
-Only Idea-sourced migrations set this — replans from an Epic or Story record
-nothing. Rules: [SPEC.md § Relationships](../../SPEC.md#relationships).
+When an Idea's `appendTo` names a Story, land Tasks with
+`issue story append` instead of `apply`, then record provenance on each
+created Task (imperative only — not in the YAML doc):
+
+- `issue task set <taskId> sourceIdea <ideaId>` for each created Task id
+
+`apply` and `issue story append` preserve `sourceIdea` and never read it from
+description prose or YAML. Only Idea-sourced migrations set this — replans
+from an Epic or Story record nothing. Rules:
+[SPEC.md § Relationships](../../SPEC.md#relationships).
 
 ## Verification-only Tasks (noDiff)
 
@@ -353,9 +363,9 @@ Before done:
 - Non-trunk bases use imperative `mergeBase` on the root Story or Epic after
   `apply` (see [Merge-base override](#merge-base-override)) — never invent a
   base in YAML or Task prose for the git agent.
-- Idea-sourced plan roots use imperative `sourceIdea` after `apply` (see
-  [Source idea (sourceIdea)](#source-idea-sourceidea)) — never put the field
-  in the YAML doc or a `Source idea:` description line.
+- Idea-sourced migrations record `sourceIdea` imperatively after `apply` or
+  `issue story append` (see [Source idea (sourceIdea)](#source-idea-sourceidea))
+  — never put the field in the YAML doc or a `Source idea:` description line.
 - Verification-only Tasks use imperative `noDiff` after `apply` (see
   [Verification-only Tasks (noDiff)](#verification-only-tasks-nodiff)) — never
   put the flag in the YAML doc.

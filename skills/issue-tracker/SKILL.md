@@ -126,15 +126,15 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
 ## Agent skills (pick by task)
 
 - **`issue-tracker-authoring`** — author a standalone issue-tracker plan tree as
-  one nested YAML doc and `apply` it; use when planning git PR stacks,
-  Epic/Story/Task grain, multi-root splits, or turning a plan into tracked
-  issues.
+  one nested YAML doc and `apply` it (or `issue story append` to an existing
+  Story); use when planning git PR stacks, Epic/Story/Task grain, multi-root
+  splits, or turning a plan into tracked issues.
 - **`issue-tracker-work`** — coordinate implementation of an Epic or
   project-level Story by spawning plugin subagents — do not implement yourself;
   use when implementing or working a tracker Epic/Story.
-- **`issue-tracker-plan`** — grill an Idea into a plan tree via apply, then
-  auto-chain polish and retro; use when planning an Idea, fleshing out a tracker
-  plan, or running issue-tracker-plan.
+- **`issue-tracker-plan`** — grill an Idea into a plan tree via apply or story
+  append (when `appendTo` is set), then auto-chain polish and retro; use when
+  planning an Idea, fleshing out a tracker plan, or running issue-tracker-plan.
 - **`issue-tracker-auto-plan`** — autonomously plan a single Idea as a
   hands-off stakeholder on opus 5; use when the user runs auto-plan or auto
   plan or wants hands-off planning of an Idea id.
