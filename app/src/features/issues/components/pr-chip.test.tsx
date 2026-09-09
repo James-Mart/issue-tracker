@@ -179,6 +179,37 @@ describe("resolvePrChip / PrChip", () => {
     expect(model).toEqual({ kind: "hidden" });
     expect(mountChip(model).querySelector('[data-testid="pr-chip"]')).toBeNull();
   });
+
+  it("leads with Merged when the Story is tracker-merged", () => {
+    const facts = prFacts();
+    const model = resolvePrChip({
+      prUrl: facts.url,
+      entry: facts,
+      queryFailed: false,
+      hasData: true,
+      storyMerged: true,
+    });
+    expect(model).toEqual({
+      kind: "chip",
+      label: "Merged · Success · Approved · 0 comments",
+      variant: "done",
+    });
+    expect(mountChip(model).textContent).toBe(
+      prFactsChipLabel(facts, true),
+    );
+  });
+
+  it("leaves still-open chip labels unchanged", () => {
+    const facts = prFacts({ isDraft: true });
+    const model = resolvePrChip({
+      prUrl: facts.url,
+      entry: facts,
+      queryFailed: false,
+      hasData: true,
+      storyMerged: false,
+    });
+    expect(model.label).toBe(prFactsChipLabel(facts));
+  });
 });
 
 describe("storyPrChipModel", () => {
@@ -206,6 +237,18 @@ describe("storyPrChipModel", () => {
     expect(
       storyPrChipModel(epic, { data: { prs: {} }, error: null }),
     ).toEqual({ kind: "hidden" });
+  });
+
+  it("passes tracker merged into the chip label", () => {
+    const facts = prFacts();
+    const model = storyPrChipModel(
+      story({ id: "s1", prUrl: facts.url, merged: true }),
+      { data: { prs: { s1: facts } }, error: null },
+    );
+    expect(model.kind).toBe("chip");
+    if (model.kind === "chip") {
+      expect(model.label).toBe(prFactsChipLabel(facts, true));
+    }
   });
 });
 
@@ -237,5 +280,24 @@ describe("tree row touch menu PR chip text", () => {
       kind: "hidden",
     });
     expect(labels).toEqual([]);
+  });
+
+  it("mirrors a merged Story chip label in the touch menu", () => {
+    const facts = prFacts();
+    const prChip = resolvePrChip({
+      prUrl: facts.url,
+      entry: facts,
+      queryFailed: false,
+      hasData: true,
+      storyMerged: true,
+    });
+    const labels = treeRowTouchChipLabels(
+      story({ prUrl: facts.url, merged: true }),
+      { storyStatus: "merged", blocked: false },
+      [],
+      prChip,
+    );
+    expect(labels).toContain(prFactsChipLabel(facts, true));
+    expect(labels).toContain("merged");
   });
 });
