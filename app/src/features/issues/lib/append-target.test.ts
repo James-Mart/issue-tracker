@@ -5,6 +5,7 @@ import {
   APPEND_TARGET_MERGED,
   APPEND_TARGET_NOT_FOUND,
   appendTargetCommitError,
+  appendTargetFieldIsReadOnly,
   appendTargetWrongKindReason,
   savedAppendTargetState,
 } from "./append-target";
@@ -124,6 +125,44 @@ describe("appendTargetCommitError", () => {
     expect(appendTargetCommitError("merged-story", "platform", byId)).toBe(
       APPEND_TARGET_MERGED,
     );
+  });
+});
+
+describe("appendTargetFieldIsReadOnly", () => {
+  it("is false when unplanned with no plan roots", () => {
+    expect(
+      appendTargetFieldIsReadOnly("open-story", { blocked: false }, false),
+    ).toBe(false);
+  });
+
+  it("is true when ideaStatus is planned", () => {
+    expect(
+      appendTargetFieldIsReadOnly(
+        "open-story",
+        { blocked: false, ideaStatus: "planned" },
+        false,
+      ),
+    ).toBe(true);
+  });
+
+  it("is true when appendTo is set and planRoots is non-empty", () => {
+    expect(
+      appendTargetFieldIsReadOnly(
+        "open-story",
+        { blocked: false, planRoots: ["open-story"] },
+        false,
+      ),
+    ).toBe(true);
+  });
+
+  it("is false when the saved target is merged", () => {
+    expect(
+      appendTargetFieldIsReadOnly(
+        "merged-story",
+        { blocked: false, ideaStatus: "planned" },
+        true,
+      ),
+    ).toBe(false);
   });
 });
 

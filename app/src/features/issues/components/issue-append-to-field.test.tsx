@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { IssueDetail, IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
 import {
   APPEND_TARGET_EMPTY_LABEL,
   APPEND_TARGET_MERGED,
@@ -93,10 +93,19 @@ vi.mock("../api/mutations", () => ({
   useUpdateIssue: () => ({ mutateAsync }),
 }));
 
+const queryState: {
+  issues: IssueRecord[];
+  derived: Record<string, DerivedState>;
+} = {
+  issues: [project, epic, openStory, mergedStory],
+  derived: {},
+};
+
 vi.mock("../api/queries", () => ({
   useIssuesQuery: () => ({
     data: {
-      issues: [project, epic, openStory, mergedStory],
+      issues: queryState.issues,
+      derived: queryState.derived,
     },
   }),
 }));
@@ -176,6 +185,7 @@ afterEach(() => {
   go.mockReset();
   mutateAsync.mockReset();
   resetAppendTargetDraftStore();
+  queryState.derived = {};
 });
 
 describe("IssueAppendToField", () => {
@@ -276,6 +286,60 @@ describe("IssueAppendToField", () => {
     expect(container.querySelector("input")).toBeNull();
     expect(container.textContent).not.toContain(APPEND_TARGET_NOT_FOUND);
     expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("is read-only for a planned append Idea with link and navigate only", () => {
+    queryState.derived = {
+      capture: { blocked: false, ideaStatus: "planned" },
+    };
+
+    const { container } = mount(
+      <IssueAppendToField issue={idea("open-story")} />,
+    );
+
+    expect(container.querySelector("a")?.textContent).toBe(
+      "OAuth callback hardening",
+    );
+    expect(container.querySelector('[title="Open open-story"]')).toBeTruthy();
+    expect(editButton(container)).toBeNull();
+    expect(clearButton(container)).toBeNull();
+  });
+
+  it("is read-only when planRoots exist without ideaStatus planned", () => {
+    queryState.derived = {
+      capture: { blocked: false, planRoots: ["open-story"] },
+    };
+
+    const { container } = mount(
+      <IssueAppendToField issue={idea("open-story")} />,
+    );
+
+    expect(container.querySelector("a")).toBeTruthy();
+    expect(editButton(container)).toBeNull();
+    expect(clearButton(container)).toBeNull();
+  });
+
+  it("keeps edit and clear for an unplanned valid target", () => {
+    const { container } = mount(
+      <IssueAppendToField issue={idea("open-story")} />,
+    );
+
+    expect(container.querySelector("a")).toBeTruthy();
+    expect(editButton(container)).toBeTruthy();
+    expect(clearButton(container)).toBeTruthy();
+  });
+
+  it("keeps edit and clear for an invalid merged target even when planned", () => {
+    queryState.derived = {
+      capture: { blocked: false, ideaStatus: "planned" },
+    };
+
+    const { container } = mount(
+      <IssueAppendToField issue={idea("merged-story")} />,
+    );
+
+    expect(editButton(container)).toBeTruthy();
+    expect(clearButton(container)).toBeTruthy();
   });
 
   it("saves a valid Story id and clears a set target", async () => {

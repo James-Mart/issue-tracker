@@ -1,5 +1,5 @@
 import { articleForKind, KIND_LABEL } from "@server/kind";
-import type { IssueKind, IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueKind, IssueRecord } from "@server/schemas";
 import { projectIdOf } from "./build-tree";
 
 export const APPEND_TARGET_EMPTY_LABEL = "None — new Story";
@@ -48,6 +48,18 @@ export function appendTargetWrongKindReason(kind: IssueKind): string {
 }
 
 /** Per-field commit reason, or null when the draft may be saved. */
+/** True when the append target is historical and must not be edited. */
+export function appendTargetFieldIsReadOnly(
+  appendTo: string | null | undefined,
+  derived: Pick<DerivedState, "ideaStatus" | "planRoots"> | undefined,
+  targetMerged: boolean,
+): boolean {
+  if (targetMerged) return false;
+  if (derived?.ideaStatus === "planned") return true;
+  if (appendTo && (derived?.planRoots?.length ?? 0) > 0) return true;
+  return false;
+}
+
 export function appendTargetCommitError(
   draft: string,
   ideaProjectId: string,

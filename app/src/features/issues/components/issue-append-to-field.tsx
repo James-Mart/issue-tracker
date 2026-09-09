@@ -11,6 +11,7 @@ import {
   APPEND_TARGET_EMPTY_LABEL,
   APPEND_TARGET_MERGED,
   appendTargetCommitError,
+  appendTargetFieldIsReadOnly,
 } from "../lib/append-target";
 import { issuesById } from "../lib/build-tree";
 import { useAppendTargetDraftStore } from "../store/use-append-target-draft-store";
@@ -28,9 +29,16 @@ export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
   const byId = useMemo(() => issuesById(issues), [issues]);
   const inputRef = useRef<HTMLInputElement>(null);
   const setRejected = useAppendTargetDraftStore((s) => s.setRejected);
+  const derived = data?.derived?.[issue.id];
   const saved = issue.appendTo ?? "";
   const target = issue.appendTo ? byId.get(issue.appendTo) : undefined;
   const title = target?.title ?? issue.appendTo;
+  const targetMerged = Boolean(issue.appendTo && target?.merged);
+  const readOnly = appendTargetFieldIsReadOnly(
+    issue.appendTo,
+    derived,
+    targetMerged,
+  );
 
   const {
     editing,
@@ -86,7 +94,7 @@ export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
   };
 
   const savedMergedReason =
-    !editing && issue.appendTo && target?.merged ? APPEND_TARGET_MERGED : null;
+    !editing && targetMerged ? APPEND_TARGET_MERGED : null;
 
   if (!editing) {
     return (
@@ -99,6 +107,10 @@ export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
             >
               {title}
             </IssueLink>
+          ) : readOnly ? (
+            <span className="text-muted-foreground">
+              {APPEND_TARGET_EMPTY_LABEL}
+            </span>
           ) : (
             <button
               type="button"
@@ -114,28 +126,32 @@ export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
             </Badge>
           ) : null}
           {issue.appendTo ? <IssueNavigateButton id={issue.appendTo} /> : null}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0 text-muted-foreground"
-            aria-label="Edit append target"
-            onClick={beginEdit}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          {issue.appendTo ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="shrink-0 text-muted-foreground"
-              aria-label="Clear append target"
-              onClick={onClear}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          ) : null}
+          {readOnly ? null : (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0 text-muted-foreground"
+                aria-label="Edit append target"
+                onClick={beginEdit}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              {issue.appendTo ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 text-muted-foreground"
+                  aria-label="Clear append target"
+                  onClick={onClear}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </>
+          )}
         </MetaFieldActions>
         {savedMergedReason ? (
           <p
