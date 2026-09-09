@@ -104,6 +104,9 @@ export function useVoiceRecording({
   const convertedSamplesRef = useRef<Float32Array | null>(null);
   const elapsedIntervalRef = useRef<number | null>(null);
   const stopCapturePromiseRef = useRef<Promise<Blob> | null>(null);
+  const captureStartingRef = useRef(false);
+  const confirmInFlightRef = useRef(false);
+  const transcriptionInFlightRef = useRef(false);
 
   const clearElapsedInterval = useCallback(() => {
     if (elapsedIntervalRef.current !== null) {
@@ -207,10 +210,20 @@ export function useVoiceRecording({
     }
   }, [resetRecordingSession, startElapsedTimer]);
 
+  const startCapture = useCallback(async () => {
+    if (captureStartingRef.current) return;
+    captureStartingRef.current = true;
+    try {
+      await beginCapture();
+    } finally {
+      captureStartingRef.current = false;
+    }
+  }, [beginCapture]);
+
   const start = useCallback(() => {
-    if (state !== "idle") return;
-    void beginCapture();
-  }, [beginCapture, state]);
+    if (state !== "idle" || captureStartingRef.current) return;
+    void startCapture();
+  }, [startCapture, state]);
 
   const cancel = useCallback(() => {
     if (
@@ -227,6 +240,8 @@ export function useVoiceRecording({
   }, [clearElapsedInterval, resetRecordingSession, state, stopCapture]);
 
   const runTranscription = useCallback(async (samples: Float32Array) => {
+    if (transcriptionInFlightRef.current) return;
+    transcriptionInFlightRef.current = true;
     convertedSamplesRef.current = samples;
     setState("transcribing");
     setErrorKind(null);
@@ -240,23 +255,21 @@ export function useVoiceRecording({
       setErrorKind("transcription");
       setErrorReason(errorMessage(error));
       setState("error");
+    } finally {
+      transcriptionInFlightRef.current = false;
     }
   }, [resetRecordingSession]);
 
-  const confirm = useCallback(() => {
-    if (state !== "recording" && state !== "review") return;
-    clearElapsedInterval();
-    void (async () => {
-      const blob =
-        state === "review"
-          ? (recordedBlobRef.current ?? (await stopCapture()))
-          : await stopCapture();
+  const convertAndTranscribeBlob = useCallback(
+    async (blob: Blob) => {
       if (blob.size === 0) {
+        recordedBlobRef.current = blob;
         setErrorKind("transcription");
         setErrorReason("No audio was captured");
         setState("error");
         return;
       }
+      recordedBlobRef.current = blob;
       try {
         const samples = await convertRecordingBlobTo16kHzMono(blob);
         await runTranscription(samples);
@@ -265,21 +278,53 @@ export function useVoiceRecording({
         setErrorReason(errorMessage(error));
         setState("error");
       }
+    },
+    [runTranscription],
+  );
+
+  const confirm = useCallback(() => {
+    if (state !== "recording" && state !== "review") return;
+    if (confirmInFlightRef.current) return;
+    confirmInFlightRef.current = true;
+    clearElapsedInterval();
+    void (async () => {
+      try {
+        const blob =
+          state === "review"
+            ? (recordedBlobRef.current ?? (await stopCapture()))
+            : await stopCapture();
+        await convertAndTranscribeBlob(blob);
+      } finally {
+        confirmInFlightRef.current = false;
+      }
     })();
-  }, [clearElapsedInterval, runTranscription, state, stopCapture]);
+  }, [clearElapsedInterval, convertAndTranscribeBlob, state, stopCapture]);
 
   const retry = useCallback(() => {
     if (state !== "error") return;
     if (errorKind === "permission") {
-      void beginCapture();
+      if (captureStartingRef.current) return;
+      void startCapture();
       return;
     }
     if (errorKind === "transcription") {
       const samples = convertedSamplesRef.current;
-      if (!samples) return;
-      void runTranscription(samples);
+      if (samples) {
+        void runTranscription(samples);
+        return;
+      }
+      const blob = recordedBlobRef.current;
+      if (!blob || blob.size === 0 || confirmInFlightRef.current) return;
+      confirmInFlightRef.current = true;
+      void (async () => {
+        try {
+          await convertAndTranscribeBlob(blob);
+        } finally {
+          confirmInFlightRef.current = false;
+        }
+      })();
     }
-  }, [beginCapture, errorKind, runTranscription, state]);
+  }, [convertAndTranscribeBlob, errorKind, runTranscription, startCapture, state]);
 
   useEffect(() => {
     return () => {

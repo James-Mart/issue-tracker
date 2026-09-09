@@ -311,6 +311,103 @@ describe("useVoiceRecording", () => {
     expect(harness.transcribe).not.toHaveBeenCalled();
   });
 
+  it("ignores duplicate start calls while microphone access is in flight", async () => {
+    let resolveGetUserMedia: (stream: MediaStream) => void = () => {};
+    getUserMedia.mockImplementationOnce(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          resolveGetUserMedia = resolve;
+        }),
+    );
+    const harness = mountHook();
+
+    act(() => {
+      harness.getView().start();
+      harness.getView().start();
+    });
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      resolveGetUserMedia(stream as unknown as MediaStream);
+    });
+    await flushPromises();
+
+    expect(harness.getView().state).toBe("recording");
+  });
+
+  it("ignores duplicate confirm calls while conversion is in flight", async () => {
+    let resolveDecode: (buffer: AudioBuffer) => void = () => {};
+    decodeAudioData.mockImplementationOnce(
+      () =>
+        new Promise<AudioBuffer>((resolve) => {
+          resolveDecode = resolve;
+        }),
+    );
+    const harness = mountHook();
+
+    act(() => {
+      harness.getView().start();
+    });
+    await flushPromises();
+    act(() => {
+      harness.getView().confirm();
+      harness.getView().confirm();
+    });
+    await flushPromises();
+
+    act(() => {
+      resolveDecode({
+        sampleRate: 48_000,
+        length: 3,
+        numberOfChannels: 1,
+        duration: 1,
+        getChannelData: () => new Float32Array([0.1, 0.2, 0.3]),
+      } as AudioBuffer);
+    });
+    await flushPromises();
+    await flushPromises();
+
+    expect(decodeAudioData).toHaveBeenCalledTimes(1);
+    expect(harness.transcribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries conversion failures from the held blob without re-recording", async () => {
+    decodeAudioData
+      .mockRejectedValueOnce(new Error("decode failed"))
+      .mockResolvedValueOnce({
+        sampleRate: 48_000,
+        length: 3,
+        numberOfChannels: 1,
+        duration: 1,
+        getChannelData: () => new Float32Array([0.1, 0.2, 0.3]),
+      } as AudioBuffer);
+    const harness = mountHook();
+
+    act(() => {
+      harness.getView().start();
+    });
+    await flushPromises();
+    act(() => {
+      harness.getView().confirm();
+    });
+    await flushPromises();
+
+    expect(harness.getView().state).toBe("error");
+    expect(harness.getView().errorKind).toBe("transcription");
+    expect(harness.transcribe).not.toHaveBeenCalled();
+
+    act(() => {
+      harness.getView().retry();
+    });
+    await flushPromises();
+
+    expect(decodeAudioData).toHaveBeenCalledTimes(2);
+    expect(harness.transcribe).toHaveBeenCalledTimes(1);
+    expect(harness.onTranscript).toHaveBeenCalledWith("hello world");
+    expect(harness.getView().state).toBe("idle");
+  });
+
   it("retries failed transcription with the same samples without re-converting", async () => {
     const transcribe = vi
       .fn<(samples: Float32Array) => Promise<string>>()
