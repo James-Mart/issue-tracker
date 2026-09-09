@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 
 /** Mainline section eyebrow used on detail primary-column modules. */
@@ -30,18 +30,20 @@ export function SettingsCard({
   action,
   className,
   children,
+  ...props
 }: {
   title: string;
   action?: ReactNode;
   className?: string;
   children: ReactNode;
-}) {
+} & HTMLAttributes<HTMLElement>) {
   return (
     <section
       className={cn(
         "flex min-w-0 flex-col rounded-lg border border-border bg-card px-4 py-3.5",
         className,
       )}
+      {...props}
     >
       <div className="mb-2.5 flex min-h-8 items-center justify-between gap-2">
         <DetailEyebrow>{title}</DetailEyebrow>
