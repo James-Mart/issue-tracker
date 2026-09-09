@@ -30,6 +30,10 @@ beforeEach(async () => {
 
   const router = createTranscriptionsRouter({
     isTranscriptionAvailable: async () => isAvailable,
+    transcriptionCapability: async () =>
+      isAvailable
+        ? { available: true }
+        : { available: false, reason: "ASR model is not provisioned" },
     transcribe: (samples, sampleRate) => transcribeImpl(samples, sampleRate),
     cleanTranscript: (text) => cleanImpl(text),
   });

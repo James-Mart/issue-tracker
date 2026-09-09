@@ -6,7 +6,15 @@
 // to opt out of the download. Override the destination with ISSUE_TRACKER_ASR_MODEL_DIR.
 
 import { spawnSync } from "child_process";
-import { createWriteStream, existsSync, mkdirSync, readdirSync, rmSync } from "fs";
+import {
+  closeSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  rmSync,
+} from "fs";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
 import { dirname, join, resolve } from "path";
@@ -60,6 +68,18 @@ async function downloadArchive(dest: string): Promise<void> {
   await pipeline(Readable.fromWeb(response.body), createWriteStream(dest));
 }
 
+async function waitForPopulatedModelDir(base: string): Promise<string | null> {
+  const lockPath = join(base, `${ARCHIVE_NAME}.lock`);
+  const deadline = Date.now() + 10 * 60 * 1000;
+  while (Date.now() < deadline) {
+    const populated = findPopulatedModelDir(base);
+    if (populated) return populated;
+    if (!existsSync(lockPath)) return findPopulatedModelDir(base);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return findPopulatedModelDir(base);
+}
+
 function extractArchive(archivePath: string, destDir: string): void {
   mkdirSync(destDir, { recursive: true });
   const result = spawnSync("tar", ["-xjf", archivePath, "-C", destDir], {
@@ -80,8 +100,30 @@ export function asrModelFilesPresent(dir: string): boolean {
   return hasRequiredFiles(dir);
 }
 
+let inFlight: Promise<string> | null = null;
+let provisionPending = false;
+
+/** True while a download/extract is running and the weights are not on disk yet. */
+export function isAsrModelProvisionInFlight(): boolean {
+  return provisionPending && resolveAsrModelDirIfPresent() === null;
+}
+
 /** Resolve, download when needed, and return the absolute model directory path. */
 export async function ensureAsrModel(): Promise<string> {
+  if (inFlight) return inFlight;
+  provisionPending = true;
+  inFlight = provisionAsrModel()
+    .finally(() => {
+      provisionPending = false;
+    })
+    .catch((err) => {
+      inFlight = null;
+      throw err;
+    });
+  return inFlight;
+}
+
+async function provisionAsrModel(): Promise<string> {
   const base = modelBaseDir();
 
   const existing = findPopulatedModelDir(base);
@@ -93,12 +135,22 @@ export async function ensureAsrModel(): Promise<string> {
   }
 
   mkdirSync(base, { recursive: true });
+  const lockPath = join(base, `${ARCHIVE_NAME}.lock`);
+  try {
+    const fd = openSync(lockPath, "wx");
+    closeSync(fd);
+  } catch {
+    const sibling = await waitForPopulatedModelDir(base);
+    if (sibling) return sibling;
+  }
+
   const archivePath = join(base, ARCHIVE_NAME);
   try {
     await downloadArchive(archivePath);
     extractArchive(archivePath, base);
   } finally {
     if (existsSync(archivePath)) rmSync(archivePath);
+    if (existsSync(lockPath)) rmSync(lockPath);
   }
 
   const populated = findPopulatedModelDir(base);

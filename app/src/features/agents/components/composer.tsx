@@ -309,7 +309,10 @@ export function Composer({
   runActive: boolean;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
-  const { data: transcriptionCapability } = useTranscriptionCapabilityQuery();
+  const {
+    data: transcriptionCapability,
+    isError: transcriptionCapabilityError,
+  } = useTranscriptionCapabilityQuery();
   const sendMessage = useSendConversationMessage();
   const interruptRun = useInterruptConversationRun();
   const cancelRun = useCancelConversationRun();
@@ -365,8 +368,12 @@ export function Composer({
     onTranscript,
   });
 
-  const transcriptionUnavailable = transcriptionCapability?.available === false;
-  const micUnavailableReason = transcriptionCapability?.reason;
+  const transcriptionUnavailable =
+    transcriptionCapability?.available === false ||
+    transcriptionCapabilityError;
+  const micUnavailableReason = transcriptionCapabilityError
+    ? "Speech model unavailable"
+    : transcriptionCapability?.reason;
   const voiceState = voice.state;
   const showRecordingBar =
     voiceState === "recording" || voiceState === "review";

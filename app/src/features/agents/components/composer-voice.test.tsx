@@ -23,6 +23,7 @@ const transcriptionCapability = vi.hoisted(() => ({
   available: true,
   reason: undefined as string | undefined,
 }));
+const transcriptionCapabilityError = vi.hoisted(() => ({ value: false }));
 
 let capturedOnTranscript: ((text: string) => void) | undefined;
 
@@ -83,6 +84,7 @@ vi.mock("../api/queries", () => ({
   useTranscriptionCapabilityQuery: () => ({
     data: transcriptionCapability,
     isLoading: false,
+    isError: transcriptionCapabilityError.value,
   }),
 }));
 
@@ -101,6 +103,7 @@ function resetVoiceMocks() {
   voiceRecording.retry.mockClear();
   transcriptionCapability.available = true;
   transcriptionCapability.reason = undefined;
+  transcriptionCapabilityError.value = false;
   capturedOnTranscript = undefined;
 }
 
@@ -331,5 +334,14 @@ describe("Composer voice dictation", () => {
     const mic = micButton(container!);
     expect(mic.disabled).toBe(true);
     expect(mic.title).toBe("Speech model not installed");
+  });
+
+  it("renders the mic disabled when the capability query fails", () => {
+    transcriptionCapabilityError.value = true;
+    ({ container, root, rerender } = mountComposer());
+
+    const mic = micButton(container!);
+    expect(mic.disabled).toBe(true);
+    expect(mic.title).toBe("Speech model unavailable");
   });
 });

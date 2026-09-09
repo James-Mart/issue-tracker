@@ -63,6 +63,9 @@ export function useConversationAttachmentsQuery(
   });
 }
 
+/** Poll while the speech model is missing so the mic enables after first-run download. */
+export const TRANSCRIPTION_CAPABILITY_REFETCH_INTERVAL_MS = 3_000;
+
 export function useTranscriptionCapabilityQuery(): UseQueryResult<
   TranscriptionCapability,
   Error
@@ -70,6 +73,9 @@ export function useTranscriptionCapabilityQuery(): UseQueryResult<
   return useQuery({
     queryKey: agentsKeys.transcriptionCapability(),
     queryFn: fetchTranscriptionCapability,
-    staleTime: 60_000,
+    refetchInterval: (query) =>
+      query.state.data?.available
+        ? false
+        : TRANSCRIPTION_CAPABILITY_REFETCH_INTERVAL_MS,
   });
 }

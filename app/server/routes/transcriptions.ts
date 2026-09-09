@@ -4,6 +4,7 @@ import { cleanTranscript } from "../services/transcript-cleanup.js";
 import {
   isTranscriptionAvailable,
   transcribe,
+  transcriptionCapability,
 } from "../services/transcription.js";
 
 const UNAVAILABLE_REASON = "ASR model is not provisioned";
@@ -15,6 +16,10 @@ const asyncRoute =
 
 export type TranscriptionRouteDeps = {
   isTranscriptionAvailable: () => Promise<boolean>;
+  transcriptionCapability: () => Promise<{
+    available: boolean;
+    reason?: string;
+  }>;
   transcribe: (samples: Float32Array, sampleRate: number) => Promise<string>;
   cleanTranscript: (text: string) => Promise<string>;
 };
@@ -32,6 +37,7 @@ function float32SamplesFromBuffer(buf: Buffer): Float32Array | { error: string }
 export function createTranscriptionsRouter(
   deps: TranscriptionRouteDeps = {
     isTranscriptionAvailable,
+    transcriptionCapability,
     transcribe,
     cleanTranscript,
   },
@@ -41,12 +47,7 @@ export function createTranscriptionsRouter(
   router.get(
     "/capability",
     asyncRoute(async (_req, res) => {
-      const available = await deps.isTranscriptionAvailable();
-      if (available) {
-        res.json({ available: true });
-        return;
-      }
-      res.json({ available: false, reason: UNAVAILABLE_REASON });
+      res.json(await deps.transcriptionCapability());
     }),
   );
 

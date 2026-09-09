@@ -3,6 +3,7 @@ import sherpaOnnx from "sherpa-onnx-node";
 import {
   asrModelFilesPresent,
   ensureAsrModel,
+  isAsrModelProvisionInFlight,
   resolveAsrModelDirIfPresent,
 } from "../../scripts/ensure-asr-model.js";
 
@@ -59,9 +60,36 @@ async function getRecognizer(): Promise<OfflineRecognizerInstance> {
   return recognizerInit;
 }
 
-/** Whether local ASR weights are present without triggering a download. */
+const UNAVAILABLE_REASON = "ASR model is not provisioned";
+const DOWNLOADING_REASON = "Downloading speech model…";
+
+function startAsrModelProvision(): void {
+  void ensureAsrModel().catch((err) => {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error(`ASR model provision failed: ${detail}`);
+  });
+}
+
+/** Whether local ASR weights are present. Starts a download when they are not. */
 export async function isTranscriptionAvailable(): Promise<boolean> {
+  if (resolveAsrModelDirIfPresent()) return true;
+  startAsrModelProvision();
   return resolveAsrModelDirIfPresent() !== null;
+}
+
+/** Capability payload for the composer mic — kicks off provision when missing. */
+export async function transcriptionCapability(): Promise<{
+  available: boolean;
+  reason?: string;
+}> {
+  const available = await isTranscriptionAvailable();
+  if (available) return { available: true };
+  return {
+    available: false,
+    reason: isAsrModelProvisionInFlight()
+      ? DOWNLOADING_REASON
+      : UNAVAILABLE_REASON,
+  };
 }
 
 /** Transcribe mono float32 samples in [-1, 1] at the given sample rate. */

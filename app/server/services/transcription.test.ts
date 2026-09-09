@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockCreateAsync = vi.hoisted(() => vi.fn());
 const mockEnsureAsrModel = vi.hoisted(() => vi.fn());
 const mockResolveAsrModelDirIfPresent = vi.hoisted(() => vi.fn());
+const mockIsAsrModelProvisionInFlight = vi.hoisted(() => vi.fn());
 
 const mockStream = vi.hoisted(() => ({
   acceptWaveform: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("../../scripts/ensure-asr-model.js", async (importOriginal) => {
     ...actual,
     ensureAsrModel: mockEnsureAsrModel,
     resolveAsrModelDirIfPresent: mockResolveAsrModelDirIfPresent,
+    isAsrModelProvisionInFlight: mockIsAsrModelProvisionInFlight,
   };
 });
 
@@ -52,6 +54,8 @@ beforeEach(async () => {
   mockEnsureAsrModel.mockReset();
   mockEnsureAsrModel.mockResolvedValue(modelDir);
   mockResolveAsrModelDirIfPresent.mockReset();
+  mockIsAsrModelProvisionInFlight.mockReset();
+  mockIsAsrModelProvisionInFlight.mockReturnValue(false);
   mockRecognizer.createStream.mockClear();
   mockRecognizer.decode.mockClear();
   mockRecognizer.getResult.mockReset();
@@ -149,10 +153,22 @@ describe("transcription", () => {
     mockResolveAsrModelDirIfPresent.mockReturnValueOnce(modelDir);
     const { isTranscriptionAvailable } = await loadTranscription();
     await expect(isTranscriptionAvailable()).resolves.toBe(true);
+    expect(mockEnsureAsrModel).not.toHaveBeenCalled();
 
     vi.resetModules();
-    mockResolveAsrModelDirIfPresent.mockReturnValueOnce(null);
+    mockResolveAsrModelDirIfPresent.mockReturnValue(null);
     const again = await loadTranscription();
     await expect(again.isTranscriptionAvailable()).resolves.toBe(false);
+    expect(mockEnsureAsrModel).toHaveBeenCalled();
+  });
+
+  it("capability reports downloading while provision is in flight", async () => {
+    mockResolveAsrModelDirIfPresent.mockReturnValue(null);
+    mockIsAsrModelProvisionInFlight.mockReturnValue(true);
+    const { transcriptionCapability } = await loadTranscription();
+    await expect(transcriptionCapability()).resolves.toEqual({
+      available: false,
+      reason: "Downloading speech model…",
+    });
   });
 });
