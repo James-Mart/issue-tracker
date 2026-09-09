@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "./composer";
 import type { VoiceRecordingState } from "../hooks/use-voice-recording";
 import { VOICE_RECORDING_CAP_SECONDS } from "../hooks/use-voice-recording";
+import {
+  release,
+  resetVoiceSessionLockForTests,
+  tryAcquire,
+} from "../lib/voice-session-lock";
 
 const sendMutate = vi.fn();
 
@@ -105,6 +110,7 @@ function resetVoiceMocks() {
   transcriptionCapability.reason = undefined;
   transcriptionCapabilityError.value = false;
   capturedOnTranscript = undefined;
+  resetVoiceSessionLockForTests();
 }
 
 function mountComposer(): {
@@ -343,5 +349,49 @@ describe("Composer voice dictation", () => {
     const mic = micButton(container!);
     expect(mic.disabled).toBe(true);
     expect(mic.title).toBe("Speech model unavailable");
+  });
+
+  it.each([
+    "recording",
+    "review",
+    "transcribing",
+    "error",
+  ] as const)(
+    "renders the mic disabled while the description field holds the voice lock (%s)",
+    () => {
+      tryAcquire("description");
+      ({ container, root, rerender } = mountComposer());
+
+      const mic = micButton(container!);
+      expect(mic.disabled).toBe(true);
+
+      act(() => {
+        mic.click();
+      });
+      expect(voiceRecording.start).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not start when the description field holds the voice lock", () => {
+    tryAcquire("description");
+    ({ container, root, rerender } = mountComposer());
+
+    act(() => {
+      micButton(container!).click();
+    });
+    expect(voiceRecording.start).not.toHaveBeenCalled();
+  });
+
+  it("allows recording after the description field releases the lock", () => {
+    tryAcquire("description");
+    ({ container, root, rerender } = mountComposer());
+
+    release("description");
+    rerender!();
+
+    act(() => {
+      micButton(container!).click();
+    });
+    expect(voiceRecording.start).toHaveBeenCalledTimes(1);
   });
 });

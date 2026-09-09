@@ -329,8 +329,15 @@ export function useVoiceRecording({
   useEffect(() => {
     return () => {
       clearElapsedInterval();
+      void stopCapture();
+      releaseMicrophoneTrack();
+      mediaRecorderRef.current = null;
+      chunksRef.current = [];
+      recordedBlobRef.current = null;
+      convertedSamplesRef.current = null;
+      stopCapturePromiseRef.current = null;
     };
-  }, [clearElapsedInterval]);
+  }, [clearElapsedInterval, releaseMicrophoneTrack, stopCapture]);
 
   return {
     state,
