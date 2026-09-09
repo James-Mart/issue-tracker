@@ -37,8 +37,9 @@ After all six return:
    retained YAML: write it to a temp file (or stdin) and run the matching
    CLI so tracker writes stay **single-threaded** through this coordinator.
    Do **not** ask yes/no to apply.
-   - **Append-target Story** — when `issue list task --in <rootId>` includes
-     a Task with `appended` true: `issue story append <rootId> <file>`.
+   - **Append-target Story** — when `<rootKind>` = `story` and
+     `issue list task --in <rootId>` includes a Task with `appended` true:
+     `issue story append <rootId> <file>`.
    - **Otherwise** (Epic or non-append Story): `issue apply <file>`.
    Write path is the retained apply doc per issue-tracker-authoring
    (declarative apply) — epic-form or story-form per Bootstrap `<rootKind>`.
