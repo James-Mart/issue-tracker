@@ -156,6 +156,6 @@ Idea unarchived.
 
 - Check agents never write the tracker; only this coordinator writes, and only
   when auto-apply is safe (or after the user resolves an escalate).
-- Do not ask the user to approve before `issue apply` when fixes are clear.
+- Do not ask the user to approve before auto-apply when fixes are clear.
 - Do not auto-chain into `issue-tracker-work` or other skills.
 - Do not edit workspace source files as part of polish (tracker plan only).
