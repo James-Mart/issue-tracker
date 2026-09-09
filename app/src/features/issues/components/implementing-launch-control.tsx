@@ -329,9 +329,9 @@ export function ImplementingOverviewLaunch({
         onError: (err) => {
           const refusal = parseImplementingLockRefusal(err);
           failLaunch(issue.id, "work", {
-            lockRefusal: Boolean(refusal),
+            lockRefusal: false,
             lockHolderTitle: refusal?.holderIssueTitle,
-            status: err instanceof ApiError ? err.status : undefined,
+            status: refusal ? 409 : err instanceof ApiError ? err.status : undefined,
             errorMessage: err instanceof Error ? err.message : undefined,
           });
           if (refusal) onLockRefusal(refusal);
