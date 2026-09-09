@@ -4,6 +4,7 @@ import { issuesById } from "./build-tree";
 import {
   APPEND_TARGET_MERGED,
   APPEND_TARGET_NOT_FOUND,
+  appendPlanningCalloutVisible,
   appendTargetCommitError,
   appendTargetFieldIsReadOnly,
   appendTargetWrongKindReason,
@@ -125,6 +126,32 @@ describe("appendTargetCommitError", () => {
     expect(appendTargetCommitError("merged-story", "platform", byId)).toBe(
       APPEND_TARGET_MERGED,
     );
+  });
+});
+
+describe("appendPlanningCalloutVisible", () => {
+  it("is true when unplanned with no plan roots", () => {
+    expect(
+      appendPlanningCalloutVisible("open-story", { blocked: false }),
+    ).toBe(true);
+  });
+
+  it("is false when ideaStatus is planned", () => {
+    expect(
+      appendPlanningCalloutVisible("open-story", {
+        blocked: false,
+        ideaStatus: "planned",
+      }),
+    ).toBe(false);
+  });
+
+  it("is false when appendTo is set and planRoots is non-empty", () => {
+    expect(
+      appendPlanningCalloutVisible("open-story", {
+        blocked: false,
+        planRoots: ["open-story"],
+      }),
+    ).toBe(false);
   });
 });
 

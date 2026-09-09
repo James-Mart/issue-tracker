@@ -22,6 +22,7 @@ import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
 import {
   APPEND_TARGET_MERGED_PLANNING_BLOCKED,
   APPEND_TARGET_UNSAVED_PLANNING,
+  appendPlanningCalloutVisible,
   savedAppendTargetState,
 } from "../lib/append-target";
 import { issuesById } from "../lib/build-tree";
@@ -378,12 +379,16 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
   );
   const { data } = useIssuesQuery();
   const byId = useMemo(() => issuesById(data?.issues ?? []), [data?.issues]);
+  const derived = data?.derived?.[issue.id];
   const appendTarget = savedAppendTargetState(issue.appendTo, issue.partOf, byId);
   const planningBlocked = appendTarget.kind === "merged";
+  const showAppendCallout =
+    appendTarget.kind === "valid" &&
+    appendPlanningCalloutVisible(issue.appendTo, derived);
 
   return (
     <div className="flex flex-col gap-2">
-      {appendTarget.kind === "valid" ? (
+      {showAppendCallout ? (
         <AppendPlanningCallout storyTitle={appendTarget.storyTitle} />
       ) : null}
       <div className="flex flex-wrap items-center gap-2">

@@ -47,6 +47,16 @@ export function appendTargetWrongKindReason(kind: IssueKind): string {
   return `Append targets must be Stories — this id names ${articleForKind(kind)} ${KIND_LABEL[kind]}.`;
 }
 
+/** True when append-planning callout should show (caller checks valid target). */
+export function appendPlanningCalloutVisible(
+  appendTo: string | null | undefined,
+  derived: Pick<DerivedState, "ideaStatus" | "planRoots"> | undefined,
+): boolean {
+  if (derived?.ideaStatus === "planned") return false;
+  if (appendTo && (derived?.planRoots?.length ?? 0) > 0) return false;
+  return true;
+}
+
 /** Per-field commit reason, or null when the draft may be saved. */
 /** True when the append target is historical and must not be edited. */
 export function appendTargetFieldIsReadOnly(

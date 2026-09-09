@@ -8,7 +8,7 @@ import {
   APPEND_TARGET_MERGED_PLANNING_BLOCKED,
   APPEND_TARGET_UNSAVED_PLANNING,
 } from "../lib/append-target";
-import type { IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueRecord } from "@server/schemas";
 import {
   resetAppendTargetDraftStore,
   useAppendTargetDraftStore,
@@ -38,6 +38,7 @@ const patchActionState = vi.hoisted(() => ({
 }));
 const issuesState = vi.hoisted(() => ({
   issues: [] as IssueRecord[],
+  derived: {} as Record<string, DerivedState>,
 }));
 
 vi.mock("@/features/agents/api/queries", () => ({
@@ -59,7 +60,7 @@ vi.mock("../api/mutations", () => ({
 
 vi.mock("../api/queries", () => ({
   useIssuesQuery: () => ({
-    data: { issues: issuesState.issues },
+    data: { issues: issuesState.issues, derived: issuesState.derived },
   }),
 }));
 
@@ -261,6 +262,7 @@ afterEach(() => {
   mutateAsync.mockReset();
   issueState.stakeholder = undefined;
   issuesState.issues = [];
+  issuesState.derived = {};
   modelsState.isLoading = false;
   patchActionState.error = null;
   liveRunConfirm.midRun = false;
@@ -615,7 +617,7 @@ describe("PlanningOverviewLaunch approve plan chip", () => {
     expect(container.textContent).not.toContain(APPEND_TARGET_UNSAVED_PLANNING);
   });
 
-  it("shows the append planning callout only when a valid target is set", () => {
+  it("shows the append planning callout only for an unplanned valid target", () => {
     issuesState.issues = [project, epic, openStory, mergedStory];
 
     const { container: noTarget } = mount(
@@ -636,6 +638,27 @@ describe("PlanningOverviewLaunch approve plan chip", () => {
       "instead of creating a new root Story",
     );
 
+    issuesState.derived = {
+      capture: { blocked: false, ideaStatus: "planned" },
+    };
+    const { container: plannedTarget } = mount(
+      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "open-story" }} />,
+    );
+    expect(
+      plannedTarget.querySelector('[data-testid="append-planning-callout"]'),
+    ).toBeNull();
+
+    issuesState.derived = {
+      capture: { blocked: false, planRoots: ["open-story"] },
+    };
+    const { container: planRootsTarget } = mount(
+      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "open-story" }} />,
+    );
+    expect(
+      planRootsTarget.querySelector('[data-testid="append-planning-callout"]'),
+    ).toBeNull();
+
+    issuesState.derived = {};
     const { container: mergedTarget } = mount(
       <PlanningOverviewLaunch issue={{ ...idea, appendTo: "merged-story" }} />,
     );
