@@ -85,6 +85,7 @@ export const IDEA_RUNTIME_OPTIONAL_KEYS = [
   "stakeholder",
   "approvePlan",
   "approvalPending",
+  "appendTo",
 ] as const;
 
 // Task mergeable keys that are not imperative-only. Imperative-only keys
@@ -125,6 +126,7 @@ export const CLEARABLE_KEYS = [
   "mergeBaseOverride",
   "mergePolicy",
   "sourceIdea",
+  "appendTo",
 ] as const;
 
 export type ClearableKey = (typeof CLEARABLE_KEYS)[number];
@@ -183,6 +185,7 @@ export const FIELD_LABELS = {
   stakeholder: "Stakeholder",
   approvePlan: "Approve plan",
   approvalPending: "Approval pending",
+  appendTo: "Append to",
   sourceIdea: "Source idea",
   generatedIssues: "Generated issues",
 } as const;

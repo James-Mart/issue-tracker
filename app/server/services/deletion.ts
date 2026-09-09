@@ -17,6 +17,10 @@ export interface DropSourceIdea {
   id: string;
 }
 
+export interface DropAppendTo {
+  id: string;
+}
+
 export interface DeletionPlan {
   // The target plus everything transitively `partOf` it (the containment closure).
   deleteIds: string[];
@@ -27,6 +31,8 @@ export interface DeletionPlan {
   unblock: Unblock[];
   // Surviving Epics, root Stories, and Tasks whose `sourceIdea` pointed into the delete set.
   dropSourceIdea: DropSourceIdea[];
+  // Surviving Ideas whose `appendTo` pointed at a deleted Story.
+  dropAppendTo: DropAppendTo[];
 }
 
 // The outcome `remove()` returns once the plan has been applied.
@@ -35,6 +41,7 @@ export interface DeletionResult {
   repointed: Repoint[];
   unblocked: Unblock[];
   droppedSourceIdea: DropSourceIdea[];
+  droppedAppendTo: DropAppendTo[];
 }
 
 // Pure, filesystem-free planner for deleting an issue. It computes the full set
@@ -47,6 +54,7 @@ export interface DeletionResult {
 //     dropped, no inheritance.
 //   - Epic / root Story / Task `sourceIdea`: the field is cleared when the Idea is
 //     deleted, no inheritance.
+//   - Idea `appendTo`: the field is cleared when the target Story is deleted.
 // `partOf` never needs repair: anything that points into the delete set via
 // `partOf` is itself contained and therefore also deleted.
 export function planDeletion(issues: Issue[], id: string): DeletionPlan {
@@ -88,6 +96,7 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
   const repoint: Repoint[] = [];
   const unblock: Unblock[] = [];
   const dropSourceIdea: DropSourceIdea[] = [];
+  const dropAppendTo: DropAppendTo[] = [];
   for (const issue of issues) {
     if (deleteSet.has(issue.id)) continue;
     // Branch `stackedOn` splices within its Epic.
@@ -110,7 +119,14 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
     ) {
       dropSourceIdea.push({ id: issue.id });
     }
+    if (
+      issue.kind === "idea" &&
+      issue.appendTo &&
+      deleteSet.has(issue.appendTo)
+    ) {
+      dropAppendTo.push({ id: issue.id });
+    }
   }
 
-  return { deleteIds: [...deleteSet], repoint, unblock, dropSourceIdea };
+  return { deleteIds: [...deleteSet], repoint, unblock, dropSourceIdea, dropAppendTo };
 }

@@ -198,8 +198,9 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     if (detail.review) lines.push(`review: ${detail.review}`);
     if (detail.needsRebase) lines.push(`needsRebase: ${detail.needsRebase}`);
   }
-  if (detail.kind === "idea" && detail.stakeholder) {
-    lines.push(`stakeholder: ${detail.stakeholder}`);
+  if (detail.kind === "idea") {
+    if (detail.stakeholder) lines.push(`stakeholder: ${detail.stakeholder}`);
+    if (detail.appendTo) lines.push(`appendTo: ${detail.appendTo}`);
   }
   if (detail.kind === "task") {
     lines.push(`status: ${detail.status}`);
@@ -252,6 +253,9 @@ async function printDeleteResult(id: string): Promise<void> {
   }
   for (const { id: bid } of result.droppedSourceIdea) {
     console.log(`  cleared ${bid}.sourceIdea`);
+  }
+  for (const { id: bid } of result.droppedAppendTo) {
+    console.log(`  cleared ${bid}.appendTo`);
   }
 }
 

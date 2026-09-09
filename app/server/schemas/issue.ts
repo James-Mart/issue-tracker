@@ -259,6 +259,7 @@ export const ideaSchema = z.object({
   archived: z.boolean().default(false),
   approvePlan: z.boolean().optional(),
   approvalPending: z.boolean().optional(),
+  appendTo: z.string().optional(),
   stakeholder: stakeholderField,
   labels: assignmentLabelsSchema,
   ...orderField,

@@ -63,7 +63,11 @@ const commit = (id: string, partOf: string, extra: Partial<Extract<Issue, { kind
   ...extra,
 });
 
-const idea = (id: string, partOf = "p"): Issue => ({
+const idea = (
+  id: string,
+  partOf = "p",
+  extra: Partial<Extract<Issue, { kind: "idea" }>> = {},
+): Issue => ({
   id,
   kind: "idea",
   title: id,
@@ -71,6 +75,7 @@ const idea = (id: string, partOf = "p"): Issue => ({
   order: 0,
   createdAt: AT,
   updatedAt: AT,
+  ...extra,
 });
 
 describe("planDeletion - containment cascade", () => {
@@ -157,6 +162,7 @@ describe("planDeletion - containment cascade", () => {
       repoint: [],
       unblock: [],
       dropSourceIdea: [],
+      dropAppendTo: [],
     });
   });
 });
@@ -227,6 +233,33 @@ describe("planDeletion - blockedBy drop", () => {
   });
 });
 
+describe("planDeletion - appendTo drop", () => {
+  it("clears appendTo on surviving Ideas when the target Story is deleted", () => {
+    const plan = planDeletion(
+      [
+        project("p"),
+        idea("i1", "p", { appendTo: "s1" }),
+        idea("i2", "p", { appendTo: "s2" }),
+        branch("s1", "p"),
+        branch("s2", "p"),
+      ],
+      "s1",
+    );
+    expect(plan.deleteIds).toEqual(["s1"]);
+    expect(plan.dropAppendTo).toEqual([{ id: "i1" }]);
+  });
+
+  it("needs no appendTo repair when deleting the containing project", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p", { appendTo: "s1" }),
+      branch("s1", "p"),
+    ];
+    const plan = planDeletion(issues, "p");
+    expect([...plan.deleteIds].sort()).toEqual(["i", "p", "s1"]);
+    expect(plan.dropAppendTo).toEqual([]);
+  });
+});
 describe("planDeletion - sourceIdea drop", () => {
   it("clears sourceIdea on surviving epics, root stories, and tasks when the idea is deleted", () => {
     const plan = planDeletion(

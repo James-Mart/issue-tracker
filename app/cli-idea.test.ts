@@ -112,6 +112,62 @@ describe("idea add / get / set", () => {
     expect((await runIssueCli(["idea", "get", "mine-later", "description"], { env: env() })).stdout).toBe("updated\n");
   });
 
+  it("sets, gets, and clears appendTo on an idea", async () => {
+    writeIssue("target-story", {
+      kind: "story",
+      title: "Target",
+      partOf: "p",
+      order: 1,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Append me"], { env: env() })).status).toBe(0);
+
+    expect((await runIssueCli(["idea", "get", "append-me", "appendTo"], { env: env() })).stdout).toBe("");
+    expect(
+      (await runIssueCli(["idea", "set", "append-me", "appendTo", "target-story"], { env: env() })).status,
+    ).toBe(0);
+    expect((await runIssueCli(["idea", "get", "append-me", "appendTo"], { env: env() })).stdout).toBe(
+      "target-story\n",
+    );
+
+    const view = await runIssueCli(["idea", "view", "append-me"], { env: env() });
+    expect(view.status).toBe(0);
+    expect(view.stdout).toMatch(/^appendTo: target-story$/m);
+
+    expect(
+      (await runIssueCli(["idea", "set", "append-me", "appendTo", "--clear"], { env: env() })).status,
+    ).toBe(0);
+    expect((await runIssueCli(["idea", "get", "append-me", "appendTo"], { env: env() })).stdout).toBe("");
+  });
+
+  it("refuses appendTo with distinct validation messages", async () => {
+    writeIssue("merged-target", {
+      kind: "story",
+      title: "Merged",
+      partOf: "p",
+      order: 1,
+      merged: true,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Bad targets"], { env: env() })).status).toBe(0);
+
+    const missing = await runIssueCli(["idea", "set", "bad-targets", "appendTo", "ghost"], { env: env() });
+    expect(missing.status).toBe(1);
+    expect(missing.stderr).toMatch(/names nothing in this Project/);
+
+    const wrongKind = await runIssueCli(["idea", "set", "bad-targets", "appendTo", "e"], { env: env() });
+    expect(wrongKind.status).toBe(1);
+    expect(wrongKind.stderr).toMatch(/append targets are Stories/);
+
+    const merged = await runIssueCli(["idea", "set", "bad-targets", "appendTo", "merged-target"], {
+      env: env(),
+    });
+    expect(merged.status).toBe(1);
+    expect(merged.stderr).toMatch(/cannot target merged Story/);
+  });
+
   it("gets and sets approvePlan", async () => {
     expect((await runIssueCli(["idea", "add", "--part-of", "p", "Gate me"], { env: env() })).status).toBe(0);
     expect((await runIssueCli(["idea", "get", "gate-me", "approvePlan"], { env: env() })).stdout).toBe("");
