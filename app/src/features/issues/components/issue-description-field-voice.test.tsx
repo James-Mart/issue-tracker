@@ -4,6 +4,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IssueDetail } from "@server/schemas";
 import type { VoiceRecordingState } from "@/features/agents/hooks/use-voice-recording";
+import {
+  release,
+  resetVoiceSessionLockForTests,
+  tryAcquire,
+} from "@/features/agents/lib/voice-session-lock";
 import { IssueDescriptionField } from "./issue-description-field";
 
 const mutateAsync = vi.fn();
@@ -112,6 +117,7 @@ function resetVoiceMocks() {
   capturedOnTranscript = undefined;
   capturedTranscribe = undefined;
   transcribeAudio.mockReset();
+  resetVoiceSessionLockForTests();
 }
 
 function mountDescriptionField(issue: IssueDetail): {
@@ -382,5 +388,58 @@ describe("IssueDescriptionField voice dictation", () => {
       container!.querySelector('[data-testid="voice-mic-button"]'),
     ).toBeNull();
     expect(container!.querySelector("textarea")).toBeNull();
+  });
+
+  it.each([
+    "recording",
+    "review",
+    "transcribing",
+    "error",
+  ] as const)(
+    "disables the microphone while the composer holds the voice lock (%s)",
+    () => {
+      tryAcquire("composer");
+      ({ container, root, rerender } = mountDescriptionField(
+        task({ id: "task-a" }),
+      ));
+
+      const mic = micButton(container!);
+      expect(mic.disabled).toBe(true);
+
+      act(() => {
+        mic.click();
+      });
+      expect(voiceRecording.start).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not start when the composer holds the voice lock", () => {
+    tryAcquire("composer");
+    ({ container, root, rerender } = mountDescriptionField(
+      task({ id: "task-a" }),
+    ));
+
+    act(() => {
+      micButton(container!).click();
+    });
+    expect(voiceRecording.start).not.toHaveBeenCalled();
+  });
+
+  it("allows recording after the composer releases the voice lock", async () => {
+    tryAcquire("composer");
+    ({ container, root, rerender } = mountDescriptionField(
+      task({ id: "task-a" }),
+    ));
+
+    release("composer");
+    rerender!();
+
+    act(() => {
+      micButton(container!).click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(voiceRecording.start).toHaveBeenCalledTimes(1);
   });
 });

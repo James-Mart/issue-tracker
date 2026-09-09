@@ -19,6 +19,11 @@ import {
   VoiceTranscribingField,
 } from "@/features/agents/components/voice-chrome";
 import { useVoiceRecording } from "@/features/agents/hooks/use-voice-recording";
+import {
+  release,
+  tryAcquire,
+  useVoiceSessionActiveOwner,
+} from "@/features/agents/lib/voice-session-lock";
 import { useUpdateIssue } from "../api/mutations";
 import { useDescriptionEditorUpload } from "../hooks/use-description-editor-upload";
 import type { UploadAttachmentMutation } from "../hooks/use-issue-detail-file-upload";
@@ -94,6 +99,10 @@ export function IssueDescriptionField({
     onTranscript,
   });
 
+  const remoteVoiceOwner = useVoiceSessionActiveOwner();
+  const peerHoldsVoiceSession =
+    remoteVoiceOwner !== null && remoteVoiceOwner !== "description";
+
   const voiceState = voice.state;
   const showRecordingBar =
     voiceState === "recording" || voiceState === "review";
@@ -107,9 +116,10 @@ export function IssueDescriptionField({
     ? "Speech model unavailable"
     : transcriptionCapability?.reason;
   const micDisabled =
-    transcriptionUnavailable || voiceSessionActive;
+    transcriptionUnavailable || voiceSessionActive || peerHoldsVoiceSession;
 
   const saveCaretAndStart = useCallback(() => {
+    if (!tryAcquire("description")) return;
     const el = textareaRef.current;
     caretPositionRef.current =
       el && typeof el.selectionStart === "number"
@@ -139,9 +149,25 @@ export function IssueDescriptionField({
         el.focus();
         el.setSelectionRange(end, end);
       }
+      if (!tryAcquire("description")) return;
       voice.start();
     });
   }, [editing, textareaRef, voice]);
+
+  const prevVoiceStateRef = useRef(voiceState);
+  useEffect(() => {
+    const prev = prevVoiceStateRef.current;
+    prevVoiceStateRef.current = voiceState;
+    if (prev !== "idle" && voiceState === "idle") {
+      release("description");
+    }
+  }, [voiceState]);
+
+  useEffect(() => {
+    return () => {
+      release("description");
+    };
+  }, []);
 
   const resolveEditDraft = useCallback(
     (saved: string) => {

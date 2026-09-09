@@ -31,6 +31,11 @@ import { transcribeAudio } from "../api/client";
 import { useAgentModelsQuery, useTranscriptionCapabilityQuery } from "../api/queries";
 import { useVoiceRecording } from "../hooks/use-voice-recording";
 import {
+  release,
+  tryAcquire,
+  useVoiceSessionActiveOwner,
+} from "../lib/voice-session-lock";
+import {
   dataTransferHasFiles,
   ensureAttachmentFileName,
   filesFromDataTransfer,
@@ -254,6 +259,10 @@ export function Composer({
     onTranscript,
   });
 
+  const remoteVoiceOwner = useVoiceSessionActiveOwner();
+  const peerHoldsVoiceSession =
+    remoteVoiceOwner !== null && remoteVoiceOwner !== "composer";
+
   const transcriptionUnavailable =
     transcriptionCapability?.available === false ||
     transcriptionCapabilityError;
@@ -266,8 +275,18 @@ export function Composer({
   const showVoiceError = voiceState === "error";
   const voiceLocked = voiceState === "transcribing";
   const voiceSessionActive = voiceState !== "idle";
+  const composerBusy = sendMessage.isPending || interruptRun.isPending;
+  const attachDisabled = composerBusy || voiceLocked;
+  const micDisabled =
+    composerBusy ||
+    voiceLocked ||
+    voiceSessionActive ||
+    peerHoldsVoiceSession ||
+    transcriptionUnavailable;
 
   const handleVoiceStart = () => {
+    if (micDisabled) return;
+    if (!tryAcquire("composer")) return;
     const el = textareaRef.current;
     caretPositionRef.current =
       el && typeof el.selectionStart === "number"
@@ -275,6 +294,21 @@ export function Composer({
         : draft.length;
     voice.start();
   };
+
+  const prevVoiceStateRef = useRef(voiceState);
+  useEffect(() => {
+    const prev = prevVoiceStateRef.current;
+    prevVoiceStateRef.current = voiceState;
+    if (prev !== "idle" && voiceState === "idle") {
+      release("composer");
+    }
+  }, [voiceState]);
+
+  useEffect(() => {
+    return () => {
+      release("composer");
+    };
+  }, []);
 
   useEffect(() => {
     skipDraftPersistRef.current = true;
@@ -295,14 +329,6 @@ export function Composer({
     }, DRAFT_PERSIST_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
   }, [conversationId, draft]);
-
-  const composerBusy = sendMessage.isPending || interruptRun.isPending;
-  const attachDisabled = composerBusy || voiceLocked;
-  const micDisabled =
-    composerBusy ||
-    voiceLocked ||
-    voiceSessionActive ||
-    transcriptionUnavailable;
 
   useEffect(() => {
     if (!refocusAfterSendRef.current || composerBusy) return;
