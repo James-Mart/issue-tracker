@@ -9,6 +9,7 @@ import {
 } from "./issue-attention-fields";
 import { IssueAssigneeField } from "./issue-assignee-field";
 import { IssueAssignmentLabelsField } from "./issue-assignment-labels-field";
+import { IssueAppendToField } from "./issue-append-to-field";
 import { IssuePartOfField } from "./issue-part-of-field";
 import { IssueGeneratedIssuesField } from "./issue-generated-issues-field";
 import { IssueSourceIdeaField } from "./issue-source-idea-field";
@@ -74,6 +75,13 @@ export function IssueMetaPanel({
   }
 
   if (issue.kind === "idea") {
+    rows.push(
+      <MetaRow
+        key="appendTo"
+        label={FIELD_LABELS.appendTo}
+        value={<IssueAppendToField issue={issue} />}
+      />,
+    );
     rows.push(
       <MetaRow
         key="stakeholder"

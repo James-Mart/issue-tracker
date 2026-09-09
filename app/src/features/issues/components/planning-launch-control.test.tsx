@@ -4,6 +4,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { skillPath } from "@/lib/plugin-paths";
 import { MANUAL_STAKEHOLDER_LABEL } from "@server/fields";
+import { APPEND_TARGET_UNSAVED_PLANNING } from "../lib/append-target";
+import {
+  resetAppendTargetDraftStore,
+  useAppendTargetDraftStore,
+} from "../store/use-append-target-draft-store";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   PlanningChannelEmptyState,
@@ -198,6 +203,7 @@ afterEach(() => {
   liveRunConfirm.pending = null;
   liveRunConfirm.confirming = false;
   resetCockpitLaunchStore();
+  resetAppendTargetDraftStore();
 });
 
 describe("PlanningChannelEmptyState", () => {
@@ -524,6 +530,25 @@ describe("PlanningOverviewLaunch approve plan chip", () => {
       id: "overview-toggle",
       patch: { approvePlan: true },
     });
+  });
+
+  it("says planning still creates a new root Story while a paste is rejected", () => {
+    useAppendTargetDraftStore.getState().setRejected(idea.id, true);
+    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
+
+    expect(
+      container.querySelector('[data-testid="planning-append-target-unsaved"]')
+        ?.textContent,
+    ).toBe(APPEND_TARGET_UNSAVED_PLANNING);
+  });
+
+  it("does not mention an unsaved paste when none is rejected", () => {
+    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
+
+    expect(
+      container.querySelector('[data-testid="planning-append-target-unsaved"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain(APPEND_TARGET_UNSAVED_PLANNING);
   });
 });
 

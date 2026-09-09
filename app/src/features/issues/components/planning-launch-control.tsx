@@ -19,6 +19,7 @@ import {
 } from "../api/mutations";
 import { useConfirmChannelLiveRun } from "../hooks/use-confirm-channel-live-run";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
+import { APPEND_TARGET_UNSAVED_PLANNING } from "../lib/append-target";
 import {
   defaultConversationModel,
   planningLaunchCopy,
@@ -26,6 +27,7 @@ import {
   planningSessionModel,
   planningSessionTitle,
 } from "../lib/planning-launch";
+import { useAppendTargetDraftStore } from "../store/use-append-target-draft-store";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { StakeholderSelect } from "./stakeholder-select";
 
@@ -364,21 +366,34 @@ export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
 /** Overview-tab launch: same optimistic start as the empty state. */
 export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
   const stakeholder = issue.stakeholder;
+  const rejectedUnsaved = useAppendTargetDraftStore(
+    (s) => s.rejectedById[issue.id] === true,
+  );
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {stakeholder ? (
-        <ApprovePlanChip issue={issue} testId="detail-approve-plan" />
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {stakeholder ? (
+          <ApprovePlanChip issue={issue} testId="detail-approve-plan" />
+        ) : null}
+        <PlanningLaunchButton
+          issue={issue}
+          channel="planning"
+          stakeholder={stakeholder}
+          variant="primary"
+          optimistic
+          testId="planning-overview-start-session"
+          onStarted={() => {}}
+        />
+      </div>
+      {rejectedUnsaved ? (
+        <p
+          data-testid="planning-append-target-unsaved"
+          className="text-sm text-muted-foreground"
+        >
+          {APPEND_TARGET_UNSAVED_PLANNING}
+        </p>
       ) : null}
-      <PlanningLaunchButton
-        issue={issue}
-        channel="planning"
-        stakeholder={stakeholder}
-        variant="primary"
-        optimistic
-        testId="planning-overview-start-session"
-        onStarted={() => {}}
-      />
     </div>
   );
 }

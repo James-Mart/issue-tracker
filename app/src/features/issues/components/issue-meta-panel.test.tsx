@@ -18,6 +18,9 @@ vi.mock("./issue-assignee-field", () => ({
 vi.mock("./issue-assignment-labels-field", () => ({
   IssueAssignmentLabelsField: () => null,
 }));
+vi.mock("./issue-append-to-field", () => ({
+  IssueAppendToField: () => <span data-testid="append-to-field" />,
+}));
 vi.mock("./issue-stakeholder-field", () => ({
   IssueStakeholderField: () => null,
 }));
@@ -70,6 +73,21 @@ function storyIssue(): Extract<IssueDetail, { kind: "story" }> {
     merged: false,
     reviewedTasks: [],
     attentionReason: null,
+  };
+}
+
+function ideaIssue(): Extract<IssueDetail, { kind: "idea" }> {
+  return {
+    kind: "idea",
+    id: "capture",
+    title: "Capture",
+    partOf: "platform",
+    order: 0,
+    archived: false,
+    createdAt: t0,
+    updatedAt: t0,
+    description: "",
+    version: "v1",
   };
 }
 
@@ -128,5 +146,17 @@ describe("IssueMetaPanel parent row", () => {
 
     expect(parentRowLabel(container)).toBe("Parent issue");
     expect(container.textContent).not.toContain("Part of");
+  });
+});
+
+describe("IssueMetaPanel Idea append row", () => {
+  it("labels the Idea append target field Append to", () => {
+    const { container } = mount(<IssueMetaPanel issue={ideaIssue()} />);
+    const field = container.querySelector("[data-testid=append-to-field]");
+    const row = field?.closest("div.grid");
+    const label = row?.querySelector("span")?.textContent;
+
+    expect(label).toBe(FIELD_LABELS.appendTo);
+    expect(field).toBeTruthy();
   });
 });
