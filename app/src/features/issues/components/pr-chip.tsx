@@ -19,7 +19,8 @@ function isPrUnavailable(
   return "reason" in value;
 }
 
-function draftPart(isDraft: boolean): string {
+function readinessPart(isDraft: boolean, storyMerged: boolean): string {
+  if (storyMerged) return "Merged";
   return isDraft ? "Draft" : "Ready";
 }
 
@@ -42,9 +43,12 @@ function commentsPart(count: number): string {
 }
 
 /** Compact single-line label for a live PR facts row. */
-export function prFactsChipLabel(facts: PrFacts): string {
+export function prFactsChipLabel(
+  facts: PrFacts,
+  storyMerged = false,
+): string {
   return [
-    draftPart(facts.isDraft),
+    readinessPart(facts.isDraft, storyMerged),
     checksPart(facts.checks),
     reviewPart(facts.reviewDecision),
     commentsPart(facts.commentCount),
@@ -81,6 +85,7 @@ export function resolvePrChip(args: {
   entry: PrFacts | PrUnavailable | undefined;
   queryFailed: boolean;
   hasData: boolean;
+  storyMerged?: boolean;
 }): PrChipModel {
   if (!args.prUrl) return { kind: "hidden" };
   if (args.queryFailed) {
@@ -100,7 +105,7 @@ export function resolvePrChip(args: {
   }
   return {
     kind: "chip",
-    label: prFactsChipLabel(args.entry),
+    label: prFactsChipLabel(args.entry, args.storyMerged ?? false),
     variant: prFactsChipVariant(args.entry),
   };
 }
@@ -121,6 +126,7 @@ export function storyPrChipModel(
     entry: prQuery.data?.prs[issue.id],
     queryFailed: prQuery.error != null,
     hasData: prQuery.data != null,
+    storyMerged: issue.merged,
   });
 }
 
