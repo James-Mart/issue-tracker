@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   attachmentMarkdownInsert,
   attachmentMarkdownLink,
-  insertTextAtCaret,
 } from "./description-editor-insert";
 
 describe("attachmentMarkdownLink", () => {
@@ -14,32 +13,6 @@ describe("attachmentMarkdownLink", () => {
   it("uses a normal link for non-images", () => {
     expect(attachmentMarkdownLink("notes.txt")).toBe("[notes.txt](notes.txt)");
     expect(attachmentMarkdownLink("data.bin")).toBe("[data.bin](data.bin)");
-  });
-});
-
-describe("insertTextAtCaret", () => {
-  it("inserts at the caret and advances selection", () => {
-    expect(insertTextAtCaret("ab", "X", 1, 1)).toEqual({
-      value: "aXb",
-      selectionStart: 2,
-      selectionEnd: 2,
-    });
-  });
-
-  it("replaces a selection range", () => {
-    expect(insertTextAtCaret("abcd", "X", 1, 3)).toEqual({
-      value: "aXd",
-      selectionStart: 2,
-      selectionEnd: 2,
-    });
-  });
-
-  it("appends when caret is nullish", () => {
-    expect(insertTextAtCaret("hi", "!", null, null)).toEqual({
-      value: "hi!",
-      selectionStart: 3,
-      selectionEnd: 3,
-    });
   });
 });
 

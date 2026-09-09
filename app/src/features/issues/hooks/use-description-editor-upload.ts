@@ -5,10 +5,8 @@ import {
   ensureAttachmentFileName,
   filesFromDataTransfer,
 } from "../lib/attachment-files";
-import {
-  attachmentMarkdownInsert,
-  insertTextAtCaret,
-} from "../lib/description-editor-insert";
+import { insertTextAtCaret } from "@/lib/insert-text-at-caret";
+import { attachmentMarkdownInsert } from "../lib/description-editor-insert";
 import {
   isAttachmentUploadBusy,
   setEditorUploadBatchBusy,
