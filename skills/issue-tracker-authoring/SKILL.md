@@ -239,9 +239,13 @@ effective `mergePolicy` ([SPEC.md § Project merge policy](../../SPEC.md#project
 read with `issue story get <storyId> mergePolicy`):
 
 - **`pull-request`** — PR phrasing is correct ("in the PR", "open a PR", etc.).
-- **`merge`** or **`manual`** — no pull request exists at Story finish. Do not
-  write "in the PR" or other pull-request-assuming language; phrase in terms of
-  merging or delivery instead (e.g. "merge to trunk", "land the Story").
+- **`manual`** — finish by pushing the Story branch and stopping; a human opens
+  and merges the PR later. Do not say the work merges to trunk.
+- **`merge`** — no pull request exists at Story finish. Do not write "in the
+  PR" or other pull-request-assuming language; phrase in terms of merging or
+  delivery (e.g. "merge to trunk", "land the Story").
+- **`fast-forward`** — integrate with ff-only onto the derived mergeBase. Do
+  not write pull-request-assuming language. Do not describe a merge commit.
 
 ## Merge-base override
 
