@@ -32,9 +32,10 @@ Load issue specs via `issue view <id>` (and `get` for scalars).
 2. **Work-root kind gates** (single source of truth for polish roots —
    coordinator and check agents both apply this block):
    - **Epic** — set `<rootKind>` = `epic`; proceed.
-   - **Story** — confirm it is **project-level** (`issue story get <rootId>
-     partOf` equals `<projectId>`; refuse Epic-child Stories — they are not
-     polish roots). Set `<rootKind>` = `story`.
+   - **Story** — set `<rootKind>` = `story` and proceed when
+     `issue story get <rootId> partOf` equals `<projectId>`, or when
+     `issue list task --in <rootId>` includes a Task with `appended`
+     true.
    - Any other kind → refuse.
    On refuse: check agents return `[]` and stop; the coordinator stops and
    hands back to the user (does not delegate checks).
@@ -47,7 +48,8 @@ Load issue specs via `issue view <id>` (and `get` for scalars).
 
 ## Inputs (from invoking prompt)
 
-- **Work root** id (+ title) — Epic or project-level Story
+- **Work root** id (+ title) — Epic, project-level Story, or
+  append-target Story
 - Return findings **only** in this delegation result to the parent (never
   `issue comment` or other writes).
 

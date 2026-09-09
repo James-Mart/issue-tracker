@@ -23,16 +23,25 @@ After all six return:
    YAML internal — do not paste it into chat.
    - **Epic** (`<rootKind>` = `epic`) — epic-form: `project: <projectId>`
      string + `epic:` object.
-   - **project-level Story** (`<rootKind>` = `story`) — story-form:
-     `project: <projectId>` string + `story:` object (**no** `epic:` key).
+   - **Story** (`<rootKind>` = `story`) — story-form:
+     `project: <projectId>` string + `story:` object. When
+     `issue story get <rootId> partOf` is an Epic id, include
+     `epic: <epicId>` as that existing-epic reference. When `partOf` is
+     `<projectId>`, omit the `epic:` key. When the work root is an
+     append-target Story, the changes in that YAML are the Tasks whose
+     `appended` flag is set.
    - Or, when there are **zero** `error` findings and you are not adopting
      warning fixes, retain nothing (no apply). Warnings that remain must
      still appear in the step-6 summary.
 4. **Auto-apply when safe.** When step 2 did not escalate and there is a
-   retained YAML: write it to a temp file (or stdin) and run
-   `issue apply <file>` (or equivalent) so tracker writes stay
-   **single-threaded** through this coordinator. Do **not** ask yes/no to
-   apply. Write path is the retained apply doc per issue-tracker-authoring
+   retained YAML: write it to a temp file (or stdin) and run the matching
+   CLI so tracker writes stay **single-threaded** through this coordinator.
+   Do **not** ask yes/no to apply.
+   - **Append-target Story** — when `<rootKind>` = `story` and
+     `issue list task --in <rootId>` includes a Task with `appended` true:
+     `issue story append <rootId> <file>`.
+   - **Otherwise** (Epic or non-append Story): `issue apply <file>`.
+   Write path is the retained apply doc per issue-tracker-authoring
    (declarative apply) — epic-form or story-form per Bootstrap `<rootKind>`.
 5. **Re-check.** Enter this step only when the preceding step 4
    successfully applied a retained YAML. Then:
@@ -72,8 +81,8 @@ After all six return:
    veto from “nothing left to apply” / warnings-retained exits. State
    explicitly that **no changes are needed** only when there are
    **zero findings** (truly clean). Do **not** dump the apply YAML into
-   chat. Show `apply` stdout (created/updated/deleted + subtree outline)
-   when apply ran.
+   chat. Show stdout from the step-4 command (created/updated + subtree
+   outline; `issue apply` may also report deleted) when auto-apply ran.
 7. **Archive source Idea.** When this run completes successfully (no
    unresolved escalate from step 2), follow **## Archive source Idea** in
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`.
