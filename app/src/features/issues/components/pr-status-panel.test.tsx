@@ -90,7 +90,9 @@ function prFacts(overrides: Partial<PrFacts> = {}): PrFacts {
   };
 }
 
-function mountPanel(): {
+function mountPanel(
+  storyOverrides: Partial<typeof story> = {},
+): {
   container: HTMLDivElement;
   root: Root;
   client: QueryClient;
@@ -109,7 +111,10 @@ function mountPanel(): {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <PrStatusPanel story={story} projectId="platform" />
+          <PrStatusPanel
+            story={{ ...story, ...storyOverrides }}
+            projectId="platform"
+          />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -165,6 +170,43 @@ describe("PrStatusPanel", () => {
     expect(mounted.container.textContent).toContain("Draft");
     expect(mounted.container.textContent).toContain("Mergeable");
     expect(mounted.container.textContent).toContain("#12");
+    unmount(mounted);
+  });
+
+  it("retires readiness and merge actions when the Story is tracker-merged", () => {
+    queryState.data = {
+      prs: {
+        "ship-pr": prFacts({
+          commentCount: 1,
+          comments: [
+            prComment({
+              url: "https://github.com/acme/widgets/pull/12#issuecomment-1",
+              author: "ada",
+              body: "Shipped.",
+            }),
+          ],
+        }),
+      },
+    };
+    const mounted = mountPanel({ merged: true });
+    expect(mounted.container.textContent).toContain("Merged");
+    expect(mounted.container.textContent).not.toContain("Ready for review");
+    expect(mounted.container.textContent).not.toContain("Draft");
+    expect(mounted.container.textContent).not.toContain("Mergeable");
+    expect(
+      mounted.container.querySelector('[data-testid="pr-merge-open"]'),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-auto-merge-open"]'),
+    ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="pr-number-link"]')
+        ?.textContent,
+    ).toBe("#12");
+    expect(mounted.container.textContent).toContain("Success · 3");
+    expect(mounted.container.textContent).toContain("Approved");
+    expect(mounted.container.textContent).toContain("ada");
+    expect(mounted.container.textContent).toContain("Shipped.");
     unmount(mounted);
   });
 

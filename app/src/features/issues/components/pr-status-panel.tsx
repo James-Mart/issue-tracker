@@ -101,6 +101,11 @@ function draftLabel(isDraft: boolean): string {
   return isDraft ? "Draft" : "Ready for review";
 }
 
+function readinessLabel(isDraft: boolean, storyMerged: boolean): string {
+  if (storyMerged) return "Merged";
+  return draftLabel(isDraft);
+}
+
 function mergeableLabel(mergeable: PrFacts["mergeable"]): string {
   if (mergeable === "mergeable") return "Mergeable";
   if (mergeable === "conflicting") return "Conflicting";
@@ -338,10 +343,12 @@ function PrFactsRows({
   facts,
   storyId,
   projectId,
+  storyMerged,
 }: {
   facts: PrFacts;
   storyId: string;
   projectId: string;
+  storyMerged: boolean;
 }) {
   return (
     <>
@@ -349,28 +356,30 @@ function PrFactsRows({
         label="Readiness"
         value={
           <Badge variant={draftBadgeVariant(facts.isDraft)}>
-            {draftLabel(facts.isDraft)}
+            {readinessLabel(facts.isDraft, storyMerged)}
           </Badge>
         }
       />
-      <CompactMetaItem
-        label="Mergeability"
-        value={
-          <MetaFieldActions>
-            <span>{mergeableLabel(facts.mergeable)}</span>
-            {facts.mergeStateStatus ? (
-              <span className="font-mono text-[12px] text-muted-foreground">
-                {facts.mergeStateStatus}
-              </span>
-            ) : null}
-            <MergeControl
-              storyId={storyId}
-              projectId={projectId}
-              facts={facts}
-            />
-          </MetaFieldActions>
-        }
-      />
+      {storyMerged ? null : (
+        <CompactMetaItem
+          label="Mergeability"
+          value={
+            <MetaFieldActions>
+              <span>{mergeableLabel(facts.mergeable)}</span>
+              {facts.mergeStateStatus ? (
+                <span className="font-mono text-[12px] text-muted-foreground">
+                  {facts.mergeStateStatus}
+                </span>
+              ) : null}
+              <MergeControl
+                storyId={storyId}
+                projectId={projectId}
+                facts={facts}
+              />
+            </MetaFieldActions>
+          }
+        />
+      )}
       <CompactMetaItem label="Checks" value={checksLabel(facts.checks)} />
       <CompactMetaItem
         label="Review"
@@ -497,6 +506,7 @@ export function PrStatusPanel({
         facts={entry}
         storyId={story.id}
         projectId={projectId}
+        storyMerged={story.merged}
       />
     </div>
   );
