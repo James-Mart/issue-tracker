@@ -31,3 +31,10 @@ export function storyTasksForRail(
     )
     .sort(bySequence);
 }
+
+/** Earliest appended Task by sequence order, or null when none are appended. */
+export function firstAppendedTaskId(
+  tasks: readonly TaskRecord[],
+): string | null {
+  return tasks.find((task) => task.appended === true)?.id ?? null;
+}

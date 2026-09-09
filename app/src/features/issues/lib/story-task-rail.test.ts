@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { IssueRecord } from "@server/schemas";
-import { storyTasksForRail, taskRailNodeState } from "./story-task-rail";
+import {
+  firstAppendedTaskId,
+  storyTasksForRail,
+  taskRailNodeState,
+} from "./story-task-rail";
 
 const t0 = "2026-07-01T00:00:00.000Z";
 
@@ -85,5 +89,25 @@ describe("storyTasksForRail", () => {
     expect(storyTasksForRail("story-a", issues).map((t) => t.id)).toEqual([
       "only",
     ]);
+  });
+});
+
+describe("firstAppendedTaskId", () => {
+  it("returns the earliest appended task by order", () => {
+    const tasks = [
+      task("a", "s", "done", { order: 0 }),
+      task("b", "s", "done", { order: 1 }),
+      task("c", "s", "todo", { order: 2, appended: true }),
+      task("d", "s", "todo", { order: 3, appended: true }),
+    ];
+    expect(firstAppendedTaskId(tasks)).toBe("c");
+  });
+
+  it("returns null when no tasks are appended", () => {
+    const tasks = [
+      task("a", "s", "done", { order: 0 }),
+      task("b", "s", "todo", { order: 1 }),
+    ];
+    expect(firstAppendedTaskId(tasks)).toBeNull();
   });
 });
