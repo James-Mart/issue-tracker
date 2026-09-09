@@ -40,6 +40,11 @@ export function implementingSessionMessage(issueId: string): string {
   );
 }
 
+/** Resume prompt for an existing coordinator session from Overview. */
+export function implementingResumePrompt(): string {
+  return "Resume coordination to complete any unfinished tasks.";
+}
+
 export type ImplementingLaunchCopy = {
   title: string;
   detail: string;

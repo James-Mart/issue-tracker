@@ -1,27 +1,38 @@
 import { Loader2, Play } from "lucide-react";
-import type { ConversationChannel } from "@server/schemas";
+import type { ConversationChannel, IssueKind } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { useAgentModelsQuery } from "@/features/agents/api/queries";
+import { useSendConversationMessage } from "@/features/agents/api/mutations";
 import { Link, useLocation } from "react-router-dom";
+import { useMemo } from "react";
+import { ApiError } from "@/lib/api/errors";
 import { useCreateChannelSession } from "../api/mutations";
+import { useChannelSessionsQuery, useIssuesQuery } from "../api/queries";
+import { currentChannelSession } from "../api/channel-sessions";
 import { useConfirmChannelLiveRun } from "../hooks/use-confirm-channel-live-run";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   type IssueBackLocationState,
   issueBackNavigateState,
 } from "../lib/issue-back";
+import { issuesById } from "../lib/build-tree";
+import { leafTasksOf } from "../lib/derived";
 import {
   implementingLaunchCopy,
   implementingLockRefusalCopy,
+  implementingResumePrompt,
   implementingSessionMessage,
   implementingSessionModel,
   implementingSessionTitle,
+  isImplementingWorkRoot,
   parseImplementingLockRefusal,
   type ImplementingLockRefusal,
   type ImplementingWorkRoot,
 } from "../lib/implementing-launch";
+import { overviewWorkLoopAction } from "../lib/overview-work-loop-action";
 import { issueChannelPath } from "../lib/links";
+import { WorkLoopOverviewControl } from "./work-loop-overview-control";
 
 export type ImplementingSessionStarted = {
   id: string;
@@ -234,23 +245,154 @@ export function ImplementingFlowRowLaunch({
   );
 }
 
-/** Overview-tab launch: same optimistic start as the empty state. */
+/** Post-rail Overview control: start or resume the work loop from Overview. */
 export function ImplementingOverviewLaunch({
   issue,
+  parentKind,
   onLockRefusal,
 }: {
   issue: ImplementingWorkRoot;
+  parentKind?: IssueKind;
   onLockRefusal: (refusal: ImplementingLockRefusal) => void;
 }) {
+  const { data: list } = useIssuesQuery();
+  const { data: sessions, isLoading: sessionsLoading } = useChannelSessionsQuery(
+    issue.id,
+    "implementing",
+  );
+  const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
+  const models = modelsData?.models ?? [];
+  const createSession = useCreateChannelSession(issue.id, "implementing", {
+    suppressToast: (err) => parseImplementingLockRefusal(err) !== undefined,
+  });
+  const sendMessage = useSendConversationMessage();
+  const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
+  const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
+  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
+  const pending = useCockpitLaunchStore((s) => s.pending);
+  const launching = pending?.issueId === issue.id;
+
+  const workLoopAction = useMemo(() => {
+    if (!isImplementingWorkRoot("implementing", issue, parentKind)) {
+      return { action: "hidden" as const };
+    }
+    const issues = list?.issues ?? [];
+    const byId = issuesById(issues);
+    const record = byId.get(issue.id);
+    if (!record) return { action: "hidden" as const };
+    const liveRun = list?.derived?.[issue.id]?.liveRun ?? false;
+    const currentSession = currentChannelSession(sessions ?? []);
+    return overviewWorkLoopAction({
+      liveRun,
+      leafTasks: leafTasksOf(record, issues),
+      currentSession,
+    });
+  }, [issue, parentKind, list?.issues, list?.derived, sessions]);
+
+  if (
+    sessionsLoading ||
+    workLoopAction.action === "hidden"
+  ) {
+    return null;
+  }
+
+  const coordinatorModel = implementingSessionModel(models);
+  const startPending =
+    workLoopAction.action === "start" &&
+    (createSession.isPending || launching);
+  const resumePending =
+    workLoopAction.action === "resume" &&
+    (sendMessage.isPending || launching);
+
+  const startWorkLoop = () => {
+    if (
+      !coordinatorModel ||
+      modelsLoading ||
+      createSession.isPending ||
+      launching
+    ) {
+      return;
+    }
+    const title = implementingSessionTitle(issue.title);
+    const model = coordinatorModel;
+    beginLaunch(issue.id, "work");
+    createSession.mutate(
+      {
+        title,
+        model,
+        message: implementingSessionMessage(issue.id),
+      },
+      {
+        onSuccess: ({ id }) => {
+          ackLaunch(issue.id, "work", { id, title, model });
+        },
+        onError: (err) => {
+          const refusal = parseImplementingLockRefusal(err);
+          failLaunch(issue.id, "work", {
+            lockRefusal: Boolean(refusal),
+            lockHolderTitle: refusal?.holderIssueTitle,
+            status: err instanceof ApiError ? err.status : undefined,
+            errorMessage: err instanceof Error ? err.message : undefined,
+          });
+          if (refusal) onLockRefusal(refusal);
+        },
+      },
+    );
+  };
+
+  const resumeWorkLoop = () => {
+    if (
+      workLoopAction.action !== "resume" ||
+      sendMessage.isPending ||
+      launching
+    ) {
+      return;
+    }
+    const { resumeSession } = workLoopAction;
+    beginLaunch(issue.id, "work");
+    sendMessage.mutate(
+      {
+        id: resumeSession.id,
+        body: { prompt: implementingResumePrompt() },
+      },
+      {
+        onSuccess: () => {
+          ackLaunch(issue.id, "work", {
+            id: resumeSession.id,
+            title: resumeSession.title,
+            model: resumeSession.model,
+          });
+        },
+        onError: (err) => {
+          failLaunch(issue.id, "work", {
+            status: err instanceof ApiError ? err.status : undefined,
+            errorMessage: err instanceof Error ? err.message : undefined,
+          });
+        },
+      },
+    );
+  };
+
+  if (workLoopAction.action === "start") {
+    return (
+      <WorkLoopOverviewControl
+        mode="start"
+        actionTestId="implementing-overview-start-session"
+        disabled={!coordinatorModel || modelsLoading || startPending}
+        pending={startPending}
+        onAction={startWorkLoop}
+      />
+    );
+  }
+
   return (
-    <ImplementingLaunchButton
-      issue={issue}
-      channel="implementing"
-      variant="primary"
-      optimistic
-      testId="implementing-overview-start-session"
-      onStarted={() => {}}
-      onLockRefusal={onLockRefusal}
+    <WorkLoopOverviewControl
+      mode="resume"
+      session={workLoopAction.resumeSession}
+      actionTestId="implementing-overview-resume-session"
+      disabled={resumePending}
+      pending={resumePending}
+      onAction={resumeWorkLoop}
     />
   );
 }
