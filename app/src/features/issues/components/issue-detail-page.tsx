@@ -42,6 +42,7 @@ import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
 import { IssueDetailTabs } from "./issue-detail-tabs";
+import { StoryAppendActionsCard } from "./story-append-actions-card";
 import { StoryTaskRail } from "./story-task-rail";
 import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
@@ -131,6 +132,9 @@ function IssueOverviewPanel({
       <IssueOverviewLaunch issue={issue} parentKind={parentKind} />
       {awaitingDirection ? (
         <DeletePartialPlanDetailAction issue={issue} />
+      ) : null}
+      {issue.kind === "story" ? (
+        <StoryAppendActionsCard issue={issue} />
       ) : null}
       <OwnFlowSlot issue={issue} />
       <IssueAttachmentsSection issue={issue} upload={upload} />

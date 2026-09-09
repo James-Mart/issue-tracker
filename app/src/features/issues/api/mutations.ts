@@ -48,6 +48,22 @@ export function useRestartProcess() {
   });
 }
 
+export function useUpdateFromMergeBase(storyId: string) {
+  const qc = useQueryClient();
+  return useMutation<IssueRecord, Error, void>({
+    mutationFn: () =>
+      request<IssueRecord>(
+        `/api/issues/${encodeURIComponent(storyId)}/update-from-merge-base`,
+        { method: "POST" },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(storyId) });
+    },
+  });
+}
+
 export function useCreateIssue() {
   const qc = useQueryClient();
   return useMutation<IssueRecord, Error, CreateInput>({
