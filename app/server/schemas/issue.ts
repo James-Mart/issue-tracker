@@ -297,6 +297,7 @@ export const taskSchema = z.object({
   commits: z.array(z.string()).default([]),
   noDiff: z.boolean().optional(),
   sourceIdea: z.string().optional(),
+  appended: z.boolean().optional(),
   ...taskMutable,
   ...orderField,
   ...timestamps,

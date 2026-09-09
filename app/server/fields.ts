@@ -99,6 +99,7 @@ export const TASK_RUNTIME_OPTIONAL_KEYS = [
   "noDiff",
   "qa",
   "sourceIdea",
+  "appended",
 ] as const;
 
 export const TASK_FIELD_KEYS = [

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runIssueCli } from "./cli-program.js";
@@ -401,5 +401,64 @@ epic:
     const onDisk = JSON.parse(readFileSync(join(dir, "a", "issue.json"), "utf8"));
     expect(onDisk.retro).toBe("in-progress");
     expect(onDisk.title).toBe("Branch A renamed");
+  });
+});
+
+describe("story append", () => {
+  beforeEach(() => {
+    writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
+    writeIssue("e", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      blockedBy: [],
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("a", {
+      kind: "story",
+      title: "Story A",
+      partOf: "e",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("keep", {
+      kind: "task",
+      title: "Keep",
+      partOf: "a",
+      status: "todo",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+  });
+
+  it("appends tasks from a story-form doc without pruning", async () => {
+    const path = join(dir, "append.yaml");
+    writeFileSync(
+      path,
+      `project: p
+epic: e
+story:
+  id: a
+  title: Story A
+  children:
+    - kind: task
+      id: added
+      title: Added
+`,
+    );
+    const result = await runIssueCli(["story", "append", "a", path], { env: env() });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/created: 1 \(added\)/);
+    expect(JSON.parse(readFileSync(join(dir, "added", "issue.json"), "utf8")).appended).toBe(
+      true,
+    );
+    expect(existsSync(join(dir, "keep"))).toBe(true);
+    expect((await runIssueCli(["task", "get", "added", "appended"], { env: env() })).stdout).toBe(
+      "true\n",
+    );
+    expect((await runIssueCli(["task", "get", "keep", "appended"], { env: env() })).stdout).toBe("");
   });
 });

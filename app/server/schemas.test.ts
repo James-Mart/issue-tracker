@@ -480,6 +480,24 @@ describe("parseIssue - valid per kind", () => {
     expect(parseIssue({ ...commit, noDiff: "yes" }).ok).toBe(false);
   });
 
+  it("parses a task with an optional appended flag; absent by default", () => {
+    const withFlag = parseIssue({ ...commit, appended: true });
+    expect(withFlag.ok).toBe(true);
+    if (withFlag.ok && withFlag.issue.kind === "task") {
+      expect(withFlag.issue.appended).toBe(true);
+    }
+
+    const absent = parseIssue(commit);
+    expect(absent.ok).toBe(true);
+    if (absent.ok && absent.issue.kind === "task") {
+      expect(absent.issue.appended).toBeUndefined();
+    }
+  });
+
+  it("rejects a non-boolean appended value", () => {
+    expect(parseIssue({ ...commit, appended: "yes" }).ok).toBe(false);
+  });
+
   it("defaults needsAttention/attentionReason", () => {
     const result = parseIssue(epic);
     if (result.ok && result.issue.kind === "epic") {

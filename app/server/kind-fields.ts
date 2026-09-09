@@ -248,6 +248,7 @@ export const TASK_GET_FIELDS = {
   commits: STORED,
   noDiff: STORED,
   sourceIdea: STORED,
+  appended: STORED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,

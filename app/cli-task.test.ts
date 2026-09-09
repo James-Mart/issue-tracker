@@ -125,6 +125,7 @@ describe("task get/set", () => {
     expect((await runIssueCli(["task", "get", "c1", "description"], { env: env() })).stdout).toBe("# Commit\n\nbody\n");
     expect((await runIssueCli(["task", "get", "c1", "status"], { env: env() })).stdout).toBe("todo\n");
     expect((await runIssueCli(["task", "get", "c1", "noDiff"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["task", "get", "c1", "appended"], { env: env() })).stdout).toBe("");
 
     expect((await runIssueCli(["task", "set", "c1", "title", "Renamed"], { env: env() })).status).toBe(0);
     expect((await runIssueCli(["task", "get", "c1", "title"], { env: env() })).stdout).toBe("Renamed\n");
@@ -210,6 +211,12 @@ describe("task get/set", () => {
     expect(unknownSet.status).toBe(1);
     expect(unknownSet.stderr).toContain(
       'unknown or unsettable field "branchName" for task',
+    );
+
+    const appendedSet = await runIssueCli(["task", "set", "c1", "appended", "true"], { env: env() });
+    expect(appendedSet.status).toBe(1);
+    expect(appendedSet.stderr).toContain(
+      'unknown or unsettable field "appended" for task',
     );
 
     const badSha = await runIssueCli(
