@@ -223,13 +223,13 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
-function mountPanel(): HTMLDivElement {
+function mountPanel(initialEntry = "/"): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
     root.render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <IssueChangePanel issueId="task-threads" projectId="issue-tracker" />
       </MemoryRouter>,
     );
@@ -301,5 +301,32 @@ describe("IssueChangePanel inline threads", () => {
     expect(unlocated?.textContent).toContain(
       "This line is no longer in the patch.",
     );
+  });
+
+  it("scrolls the focused thread into view from the thread search param", () => {
+    changeQueryState.data = {
+      state: "loaded",
+      patch: PATCH,
+      commits: [{ sha: SHA, subject: "Fetch diff" }],
+      stats: { filesChanged: 1, insertions: 1, deletions: 1 },
+    };
+    threadsState.threads = [currentThread, outdatedThread];
+
+    const scrolled: string[] = [];
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = function scrollIntoView() {
+      scrolled.push(this.getAttribute("data-thread-root") ?? "");
+    };
+
+    try {
+      const container = mountPanel("/?tab=diff&thread=current-root");
+      expect(
+        container.querySelector('[data-thread-root="current-root"]'),
+      ).not.toBeNull();
+      expect(scrolled).toContain("current-root");
+      expect(scrolled).not.toContain("outdated-root");
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
   });
 });

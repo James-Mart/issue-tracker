@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CommentMessage } from "@server/schemas";
 import {
-  formatCommentAnchor,
+  formatAnchorLineLabel,
   groupCommentThreads,
   selectAnchoredThreads,
 } from "./comment-threads";
@@ -109,24 +109,12 @@ describe("selectAnchoredThreads", () => {
   });
 });
 
-describe("formatCommentAnchor", () => {
-  it("formats a single line and a range in the CLI vocabulary", () => {
-    expect(
-      formatCommentAnchor({
-        path: "app/foo.ts",
-        side: "new",
-        line: 94,
-        commitSha: SHA,
-      }),
-    ).toBe("app/foo.ts:94 new a4f91c2");
-    expect(
-      formatCommentAnchor({
-        path: "app/foo.ts",
-        side: "old",
-        line: 90,
-        startLine: 88,
-        commitSha: SHA,
-      }),
-    ).toBe("app/foo.ts:88-90 old a4f91c2");
+describe("formatAnchorLineLabel", () => {
+  it("labels a single line and a range", () => {
+    expect(formatAnchorLineLabel({ line: 94 })).toBe("line 94");
+    expect(formatAnchorLineLabel({ line: 90, startLine: 88 })).toBe(
+      "lines 88-90",
+    );
+    expect(formatAnchorLineLabel({ line: 90, startLine: 90 })).toBe("line 90");
   });
 });

@@ -29,6 +29,7 @@ import { ApiError } from "@/lib/api/errors";
 import type { ChangeCommit, ChangeStats, IssueChange } from "@server/schemas";
 import { useCommentThreads, useIssueChangeQuery } from "../api/queries";
 import { loadFileDiffContents } from "../lib/issue-change-file-contents";
+import { useFocusDiffThread } from "../lib/issue-change-focus-thread";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
 import {
   mergeComposerAnnotation,
@@ -525,14 +526,26 @@ function IssueChangeLoadedPanel({
   }, []);
   const [filter, setFilter] = useState("");
   const [selectedName, setSelectedName] = useState<string | undefined>();
+  const panelRef = useRef<HTMLDivElement>(null);
   const matched = useMemo(() => filterFilesByPath(files, filter), [files, filter]);
   const selectedFile =
     matched.find((file) => file.name === selectedName) ?? matched[0];
   const rollupFiles = files.length > 1 ? matched : files;
+  useFocusDiffThread({
+    files,
+    threads,
+    selectedName,
+    setSelectedName,
+    panelRef,
+  });
 
   return (
     <DiffComposerProvider issueId={issueId} commitSha={sha}>
-      <div className="flex min-w-0 flex-col gap-3" data-testid="issue-change-panel">
+      <div
+        ref={panelRef}
+        className="flex min-w-0 flex-col gap-3"
+        data-testid="issue-change-panel"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p
             className="font-mono text-[11px] tabular-nums text-muted-foreground"

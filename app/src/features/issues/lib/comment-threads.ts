@@ -43,14 +43,15 @@ export function selectAnchoredThreads(
   return byLine;
 }
 
-export function formatCommentAnchor(
-  anchor: NonNullable<CommentMessage["anchor"]>,
+export function formatAnchorLineLabel(
+  anchor: Pick<NonNullable<CommentMessage["anchor"]>, "line" | "startLine">,
 ): string {
-  const linePart =
-    anchor.startLine !== undefined
-      ? `${anchor.startLine}-${anchor.line}`
-      : String(anchor.line);
-  return `${anchor.path}:${linePart} ${anchor.side} ${anchor.commitSha.slice(0, 7)}`;
+  if (anchor.startLine === undefined || anchor.startLine === anchor.line) {
+    return `line ${anchor.line}`;
+  }
+  const start = Math.min(anchor.startLine, anchor.line);
+  const end = Math.max(anchor.startLine, anchor.line);
+  return `lines ${start}-${end}`;
 }
 
 export type CommentThreadsResult = {

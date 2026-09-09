@@ -1,16 +1,23 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Send } from "lucide-react";
-import type { Comment, IssueDetail } from "@server/schemas";
+import { useSearchParams } from "react-router-dom";
+import type { CommentMessage, IssueDetail } from "@server/schemas";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useCommentsQuery, useIssuesQuery } from "../../api/queries";
 import { usePostComment } from "../../api/mutations";
 import { supportsAttachments } from "../../lib/attachments";
+import {
+  groupCommentThreads,
+  type CommentThread as CommentThreadData,
+} from "../../lib/comment-threads";
 import { supportsComments } from "../../lib/comments";
 import { isInFlight } from "../../lib/derived";
+import { writeDiffThreadSearchParam } from "../../lib/issue-detail-tabs";
 import { SettingsCard } from "../detail-section";
 import { Markdown } from "../markdown";
+import { CommentThread } from "./comment-thread";
 import { Marker } from "./marker";
 import { Message } from "./message";
 import { Shimmer } from "./shimmer";
@@ -37,31 +44,127 @@ function dayLabel(at: string): string {
   });
 }
 
-function CommentList({
-  messages,
+function isStandaloneUnanchored(thread: CommentThreadData): boolean {
+  return thread.root.anchor === undefined && thread.replies.length === 0;
+}
+
+function StandaloneComment({
+  message,
   attachmentsIssueId,
 }: {
-  messages: Comment[];
+  message: CommentMessage;
   attachmentsIssueId?: string;
+}) {
+  const author = message.name ?? message.role;
+  return (
+    <Message author={author} role={message.role} at={message.at}>
+      <Markdown issueId={attachmentsIssueId}>{message.body}</Markdown>
+    </Message>
+  );
+}
+
+function ThreadReplyComposer({
+  threadId,
+  draft,
+  onDraftChange,
+  onSend,
+  pending,
+}: {
+  threadId: string;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onSend: () => void;
+  pending: boolean;
+}) {
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      onSend();
+    }
+  };
+
+  return (
+    <div
+      data-testid="comment-log-reply-composer"
+      data-thread-id={threadId}
+      className="flex min-w-0 items-end gap-2"
+    >
+      <Textarea
+        value={draft}
+        onChange={(event) => onDraftChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Reply"
+        title="Enter to send, Shift+Enter for a newline"
+        aria-label="Reply"
+        className="min-h-[40px] min-w-0 flex-1 resize-none touch:min-h-[44px]"
+      />
+      <Button
+        size="icon"
+        variant="primary"
+        className="h-11 w-11 shrink-0"
+        onClick={onSend}
+        disabled={pending || !draft.trim()}
+        title="Send"
+        aria-label="Send"
+      >
+        <Send className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+function CommentList({
+  threads,
+  issueId,
+  attachmentsIssueId,
+  replySlotFor,
+  onReply,
+  onSeeInDiff,
+}: {
+  threads: CommentThreadData[];
+  issueId: string;
+  attachmentsIssueId?: string;
+  replySlotFor: (threadId: string) => ReactNode;
+  onReply: (threadId: string) => void;
+  onSeeInDiff: (threadId: string) => void;
 }) {
   let lastDay = "";
   return (
-    <>
-      {messages.map((message, index) => {
-        const key = dayKey(message.at);
+    <div className="flex flex-col gap-3">
+      {threads.map((thread) => {
+        const key = dayKey(thread.root.at);
         const showMarker = key !== lastDay;
         lastDay = key;
-        const author = message.name ?? message.role;
         return (
-          <div key={`${message.at}-${index}`} className="flex flex-col">
-            {showMarker ? <Marker>{dayLabel(message.at)}</Marker> : null}
-            <Message author={author} role={message.role} at={message.at}>
-              <Markdown issueId={attachmentsIssueId}>{message.body}</Markdown>
-            </Message>
+          <div
+            key={thread.root.id}
+            data-log-root={thread.root.id}
+            className="flex flex-col"
+          >
+            {showMarker ? <Marker>{dayLabel(thread.root.at)}</Marker> : null}
+            {isStandaloneUnanchored(thread) ? (
+              <StandaloneComment
+                message={thread.root}
+                attachmentsIssueId={attachmentsIssueId}
+              />
+            ) : (
+              <CommentThread
+                thread={thread}
+                issueId={issueId}
+                showAnchorContext
+                onSeeInDiff={
+                  thread.root.anchor
+                    ? () => onSeeInDiff(thread.root.id)
+                    : undefined
+                }
+                onReply={() => onReply(thread.root.id)}
+                replySlot={replySlotFor(thread.root.id)}
+              />
+            )}
           </div>
         );
       })}
-    </>
+    </div>
   );
 }
 
@@ -90,10 +193,14 @@ function CommentsPanel({
   const { data, isLoading, error } = useCommentsQuery(id);
   const { data: list } = useIssuesQuery();
   const post = usePostComment(id);
+  const [, setSearchParams] = useSearchParams();
   const [draft, setDraft] = useState("");
+  const [openReplyId, setOpenReplyId] = useState<string | null>(null);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
 
   const messages = data?.messages ?? [];
   const problems = data?.problems ?? [];
+  const threads = useMemo(() => groupCommentThreads(messages), [messages]);
 
   const agentLive = useMemo(() => {
     const issue = list?.issues.find((item) => item.id === id);
@@ -105,6 +212,39 @@ function CommentsPanel({
     const body = draft.trim();
     if (!body || post.isPending) return;
     post.mutate({ role: COMPOSER_ROLE, body }, { onSuccess: () => setDraft("") });
+  };
+
+  const sendReply = (threadId: string) => {
+    const body = (replyDrafts[threadId] ?? "").trim();
+    if (!body || post.isPending) return;
+    post.mutate(
+      { role: COMPOSER_ROLE, body, replyTo: threadId },
+      {
+        onSuccess: () => {
+          setReplyDrafts((prev) => {
+            const next = { ...prev };
+            delete next[threadId];
+            return next;
+          });
+          setOpenReplyId(null);
+        },
+      },
+    );
+  };
+
+  const replySlotFor = (threadId: string) => {
+    if (openReplyId !== threadId) return undefined;
+    return (
+      <ThreadReplyComposer
+        threadId={threadId}
+        draft={replyDrafts[threadId] ?? ""}
+        onDraftChange={(value) =>
+          setReplyDrafts((prev) => ({ ...prev, [threadId]: value }))
+        }
+        onSend={() => sendReply(threadId)}
+        pending={post.isPending}
+      />
+    );
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -155,8 +295,16 @@ function CommentsPanel({
           />
         ) : (
           <CommentList
-            messages={messages}
+            threads={threads}
+            issueId={id}
             attachmentsIssueId={attachmentsIssueId}
+            replySlotFor={replySlotFor}
+            onReply={setOpenReplyId}
+            onSeeInDiff={(threadId) =>
+              setSearchParams((prev) => writeDiffThreadSearchParam(prev, threadId), {
+                replace: true,
+              })
+            }
           />
         )}
 

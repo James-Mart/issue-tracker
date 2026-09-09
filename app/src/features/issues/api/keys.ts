@@ -16,6 +16,8 @@ export const issuesKeys = {
   projectPullRequests: (projectId: string) =>
     [...issuesKeys.all, "projectPullRequests", projectId] as const,
   change: (issueId: string) => [...issuesKeys.all, "change", issueId] as const,
+  changeFile: (issueId: string, sha: string, path: string) =>
+    [...issuesKeys.change(issueId), "file", sha, path] as const,
 };
 
 export const healthKeys = {

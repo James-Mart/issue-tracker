@@ -123,6 +123,25 @@ export function writeIssueDetailTabParam(
   return next;
 }
 
+export const DIFF_THREAD_SEARCH_PARAM = "thread";
+
+/** Switch to Diff and name the thread the panel should scroll to. */
+export function writeDiffThreadSearchParam(
+  params: URLSearchParams,
+  threadId: string,
+): URLSearchParams {
+  const next = writeIssueDetailTabParam(params, DIFF_DETAIL_TAB);
+  next.set(DIFF_THREAD_SEARCH_PARAM, threadId);
+  return next;
+}
+
+export function readDiffThreadSearchParam(
+  params: URLSearchParams,
+): string | null {
+  const value = params.get(DIFF_THREAD_SEARCH_PARAM);
+  return value ? value : null;
+}
+
 /**
  * Channel tabs need the Agents-style bounded page shell so the transcript
  * scrolls internally and the composer stays pinned. Overview (and other

@@ -195,3 +195,19 @@ export async function fetchIssueChangeFile(
   );
   return contents;
 }
+
+export function useIssueChangeFileQuery(
+  issueId: string | undefined,
+  sha: string | undefined,
+  path: string | undefined,
+): UseQueryResult<string, Error> {
+  return useQuery({
+    queryKey: issuesKeys.changeFile(issueId ?? "", sha ?? "", path ?? ""),
+    queryFn: () => fetchIssueChangeFile(issueId!, sha!, path!),
+    enabled: Boolean(issueId && sha && path),
+    retry: (count, error) =>
+      !(error instanceof ApiError && error.status >= 400 && error.status < 500) &&
+      count < 2,
+    staleTime: 60_000,
+  });
+}
