@@ -4,6 +4,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { skillPath } from "@/lib/plugin-paths";
 import { MANUAL_STAKEHOLDER_LABEL } from "@server/fields";
+import {
+  APPEND_TARGET_MERGED_PLANNING_BLOCKED,
+  APPEND_TARGET_UNSAVED_PLANNING,
+} from "../lib/append-target";
+import type { DerivedState, IssueRecord } from "@server/schemas";
+import {
+  resetAppendTargetDraftStore,
+  useAppendTargetDraftStore,
+} from "../store/use-append-target-draft-store";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   PlanningChannelEmptyState,
@@ -27,6 +36,10 @@ const issueState = vi.hoisted(() => ({
 const patchActionState = vi.hoisted(() => ({
   error: null as string | null,
 }));
+const issuesState = vi.hoisted(() => ({
+  issues: [] as IssueRecord[],
+  derived: {} as Record<string, DerivedState>,
+}));
 
 vi.mock("@/features/agents/api/queries", () => ({
   useAgentModelsQuery: () => ({
@@ -42,6 +55,12 @@ vi.mock("../api/mutations", () => ({
   }),
   useUpdateIssue: () => ({
     mutateAsync,
+  }),
+}));
+
+vi.mock("../api/queries", () => ({
+  useIssuesQuery: () => ({
+    data: { issues: issuesState.issues, derived: issuesState.derived },
   }),
 }));
 
@@ -163,6 +182,56 @@ vi.mock("@/components/ui/select", () => ({
   }) => <option value={value}>{children}</option>,
 }));
 
+const t0 = "2026-08-10T12:00:00.000Z";
+
+const project: IssueRecord = {
+  kind: "project",
+  id: "platform",
+  title: "Platform",
+  mergePolicy: "manual",
+  order: 0,
+  createdAt: t0,
+  updatedAt: t0,
+};
+
+const epic: IssueRecord = {
+  kind: "epic",
+  id: "auth-epic",
+  title: "Auth",
+  partOf: "platform",
+  order: 0,
+  archived: false,
+  needsAttention: false,
+  createdAt: t0,
+  updatedAt: t0,
+};
+
+const openStory: IssueRecord = {
+  kind: "story",
+  id: "open-story",
+  title: "OAuth callback hardening",
+  partOf: "auth-epic",
+  order: 0,
+  archived: false,
+  needsAttention: false,
+  createdAt: t0,
+  updatedAt: t0,
+  merged: false,
+};
+
+const mergedStory: IssueRecord = {
+  kind: "story",
+  id: "merged-story",
+  title: "Session cookie rotation",
+  partOf: "auth-epic",
+  order: 1,
+  archived: false,
+  needsAttention: false,
+  createdAt: t0,
+  updatedAt: t0,
+  merged: true,
+};
+
 const idea = {
   kind: "idea" as const,
   id: "capture",
@@ -170,8 +239,8 @@ const idea = {
   partOf: "platform",
   order: 0,
   archived: false,
-  createdAt: "2026-08-10T12:00:00.000Z",
-  updatedAt: "2026-08-10T12:00:00.000Z",
+  createdAt: t0,
+  updatedAt: t0,
   stakeholder: issueState.stakeholder,
 };
 
@@ -192,12 +261,15 @@ afterEach(() => {
   mutate.mockReset();
   mutateAsync.mockReset();
   issueState.stakeholder = undefined;
+  issuesState.issues = [];
+  issuesState.derived = {};
   modelsState.isLoading = false;
   patchActionState.error = null;
   liveRunConfirm.midRun = false;
   liveRunConfirm.pending = null;
   liveRunConfirm.confirming = false;
   resetCockpitLaunchStore();
+  resetAppendTargetDraftStore();
 });
 
 describe("PlanningChannelEmptyState", () => {
@@ -524,6 +596,92 @@ describe("PlanningOverviewLaunch approve plan chip", () => {
       id: "overview-toggle",
       patch: { approvePlan: true },
     });
+  });
+
+  it("says planning still creates a new root Story while a paste is rejected", () => {
+    useAppendTargetDraftStore.getState().setRejected(idea.id, true);
+    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
+
+    expect(
+      container.querySelector('[data-testid="planning-append-target-unsaved"]')
+        ?.textContent,
+    ).toBe(APPEND_TARGET_UNSAVED_PLANNING);
+  });
+
+  it("does not mention an unsaved paste when none is rejected", () => {
+    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
+
+    expect(
+      container.querySelector('[data-testid="planning-append-target-unsaved"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain(APPEND_TARGET_UNSAVED_PLANNING);
+  });
+
+  it("shows the append planning callout only for an unplanned valid target", () => {
+    issuesState.issues = [project, epic, openStory, mergedStory];
+
+    const { container: noTarget } = mount(
+      <PlanningOverviewLaunch issue={idea} />,
+    );
+    expect(
+      noTarget.querySelector('[data-testid="append-planning-callout"]'),
+    ).toBeNull();
+
+    const { container: validTarget } = mount(
+      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "open-story" }} />,
+    );
+    expect(
+      validTarget.querySelector('[data-testid="append-planning-callout"]'),
+    ).toBeTruthy();
+    expect(validTarget.textContent).toContain("OAuth callback hardening");
+    expect(validTarget.textContent).toContain(
+      "instead of creating a new root Story",
+    );
+
+    issuesState.derived = {
+      capture: { blocked: false, ideaStatus: "planned" },
+    };
+    const { container: plannedTarget } = mount(
+      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "open-story" }} />,
+    );
+    expect(
+      plannedTarget.querySelector('[data-testid="append-planning-callout"]'),
+    ).toBeNull();
+
+    issuesState.derived = {
+      capture: { blocked: false, planRoots: ["open-story"] },
+    };
+    const { container: planRootsTarget } = mount(
+      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "open-story" }} />,
+    );
+    expect(
+      planRootsTarget.querySelector('[data-testid="append-planning-callout"]'),
+    ).toBeNull();
+
+    issuesState.derived = {};
+    const { container: mergedTarget } = mount(
+      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "merged-story" }} />,
+    );
+    expect(
+      mergedTarget.querySelector('[data-testid="append-planning-callout"]'),
+    ).toBeNull();
+  });
+
+  it("disables planning and states why when the saved target merged", () => {
+    issuesState.issues = [project, epic, openStory, mergedStory];
+    const { container } = mount(
+      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "merged-story" }} />,
+    );
+    const start = container.querySelector(
+      '[data-testid="planning-overview-start-session"]',
+    ) as HTMLButtonElement;
+
+    expect(start.disabled).toBe(true);
+    expect(
+      container.querySelector(
+        '[data-testid="planning-append-target-merged-blocked"]',
+      )?.textContent,
+    ).toBe(APPEND_TARGET_MERGED_PLANNING_BLOCKED);
   });
 });
 

@@ -38,3 +38,16 @@ export function firstAppendedTaskId(
 ): string | null {
   return tasks.find((task) => task.appended === true)?.id ?? null;
 }
+
+/** Ordered Tasks an append Idea produced — the generated-issues rail nodes. */
+export function ideaAppendedTasksForRail(
+  ideaId: string,
+  issues: readonly IssueRecord[],
+): TaskRecord[] {
+  return issues
+    .filter(
+      (issue): issue is TaskRecord =>
+        issue.kind === "task" && issue.sourceIdea === ideaId,
+    )
+    .sort(bySequence);
+}
