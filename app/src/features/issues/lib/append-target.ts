@@ -13,6 +13,36 @@ export const APPEND_TARGET_MERGED =
 export const APPEND_TARGET_UNSAVED_PLANNING =
   "Nothing saved yet — planning will create a new root Story.";
 
+export const APPEND_TARGET_MERGED_PLANNING_BLOCKED =
+  "Planning is blocked until you clear the append target or choose an open Story. Post-landing follow-up belongs in a new root Story.";
+
+export type SavedAppendTargetState =
+  | { kind: "none" }
+  | { kind: "valid"; storyTitle: string }
+  | { kind: "merged"; storyTitle: string }
+  | { kind: "invalid" };
+
+export function savedAppendTargetState(
+  appendTo: string | null | undefined,
+  ideaProjectId: string,
+  byId: Map<string, IssueRecord>,
+): SavedAppendTargetState {
+  const id = appendTo?.trim();
+  if (!id) return { kind: "none" };
+
+  const target = byId.get(id);
+  if (!target || projectIdOf(id, byId) !== ideaProjectId) {
+    return { kind: "invalid" };
+  }
+  if (target.kind !== "story") {
+    return { kind: "invalid" };
+  }
+  if (target.merged) {
+    return { kind: "merged", storyTitle: target.title };
+  }
+  return { kind: "valid", storyTitle: target.title };
+}
+
 export function appendTargetWrongKindReason(kind: IssueKind): string {
   return `Append targets must be Stories — this id names ${articleForKind(kind)} ${KIND_LABEL[kind]}.`;
 }

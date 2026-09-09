@@ -6,6 +6,7 @@ import {
   APPEND_TARGET_NOT_FOUND,
   appendTargetCommitError,
   appendTargetWrongKindReason,
+  savedAppendTargetState,
 } from "./append-target";
 
 const t0 = "2026-08-10T12:00:00.000Z";
@@ -123,5 +124,39 @@ describe("appendTargetCommitError", () => {
     expect(appendTargetCommitError("merged-story", "platform", byId)).toBe(
       APPEND_TARGET_MERGED,
     );
+  });
+});
+
+describe("savedAppendTargetState", () => {
+  it("returns none when appendTo is unset", () => {
+    expect(savedAppendTargetState(undefined, "platform", byId)).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("returns valid with the Story title for an open target", () => {
+    expect(savedAppendTargetState("open-story", "platform", byId)).toEqual({
+      kind: "valid",
+      storyTitle: "Open story",
+    });
+  });
+
+  it("returns merged with the Story title for a landed target", () => {
+    expect(savedAppendTargetState("merged-story", "platform", byId)).toEqual({
+      kind: "merged",
+      storyTitle: "Merged story",
+    });
+  });
+
+  it("returns invalid for ids outside this Project or wrong kind", () => {
+    expect(savedAppendTargetState("ghost", "platform", byId)).toEqual({
+      kind: "invalid",
+    });
+    expect(savedAppendTargetState("foreign-story", "platform", byId)).toEqual({
+      kind: "invalid",
+    });
+    expect(savedAppendTargetState("auth-epic", "platform", byId)).toEqual({
+      kind: "invalid",
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Play } from "lucide-react";
 import type { ConversationChannel, IssueDetail } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
@@ -19,7 +19,14 @@ import {
 } from "../api/mutations";
 import { useConfirmChannelLiveRun } from "../hooks/use-confirm-channel-live-run";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
-import { APPEND_TARGET_UNSAVED_PLANNING } from "../lib/append-target";
+import {
+  APPEND_TARGET_MERGED_PLANNING_BLOCKED,
+  APPEND_TARGET_UNSAVED_PLANNING,
+  savedAppendTargetState,
+} from "../lib/append-target";
+import { issuesById } from "../lib/build-tree";
+import { useIssuesQuery } from "../api/queries";
+import { AppendPlanningCallout } from "./append-planning-callout";
 import {
   defaultConversationModel,
   planningLaunchCopy,
@@ -369,9 +376,16 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
   const rejectedUnsaved = useAppendTargetDraftStore(
     (s) => s.rejectedById[issue.id] === true,
   );
+  const { data } = useIssuesQuery();
+  const byId = useMemo(() => issuesById(data?.issues ?? []), [data?.issues]);
+  const appendTarget = savedAppendTargetState(issue.appendTo, issue.partOf, byId);
+  const planningBlocked = appendTarget.kind === "merged";
 
   return (
     <div className="flex flex-col gap-2">
+      {appendTarget.kind === "valid" ? (
+        <AppendPlanningCallout storyTitle={appendTarget.storyTitle} />
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         {stakeholder ? (
           <ApprovePlanChip issue={issue} testId="detail-approve-plan" />
@@ -382,6 +396,7 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
           stakeholder={stakeholder}
           variant="primary"
           optimistic
+          disabled={planningBlocked}
           testId="planning-overview-start-session"
           onStarted={() => {}}
         />
@@ -392,6 +407,14 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
           className="text-sm text-muted-foreground"
         >
           {APPEND_TARGET_UNSAVED_PLANNING}
+        </p>
+      ) : null}
+      {planningBlocked ? (
+        <p
+          data-testid="planning-append-target-merged-blocked"
+          className="text-sm text-muted-foreground"
+        >
+          {APPEND_TARGET_MERGED_PLANNING_BLOCKED}
         </p>
       ) : null}
     </div>

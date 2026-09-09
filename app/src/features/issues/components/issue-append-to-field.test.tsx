@@ -208,6 +208,22 @@ describe("IssueAppendToField", () => {
     },
   );
 
+  it("shows a merged badge and field reason when the saved target landed", () => {
+    const { container } = mount(
+      <IssueAppendToField issue={idea("merged-story")} />,
+    );
+
+    expect(
+      container.querySelector('[data-testid="append-target-merged-badge"]')
+        ?.textContent,
+    ).toBe("merged");
+    expect(
+      container.querySelector('[data-testid="append-target-field-reason"]')
+        ?.textContent,
+    ).toBe(APPEND_TARGET_MERGED);
+    expect(container.textContent).toContain("Session cookie rotation");
+  });
+
   it("shows the Story title as a navigating link with a navigate arrow", async () => {
     const { container } = mount(
       <IssueAppendToField issue={idea("open-story")} />,

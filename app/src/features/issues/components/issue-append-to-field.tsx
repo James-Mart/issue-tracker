@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { useUpdateIssue } from "../api/mutations";
 import { useIssuesQuery } from "../api/queries";
 import { useInlineEditSession } from "../hooks/use-inline-edit-session";
+import { Badge } from "@/components/ui/badge";
 import {
   APPEND_TARGET_EMPTY_LABEL,
+  APPEND_TARGET_MERGED,
   appendTargetCommitError,
 } from "../lib/append-target";
 import { issuesById } from "../lib/build-tree";
@@ -83,49 +85,67 @@ export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
     });
   };
 
+  const savedMergedReason =
+    !editing && issue.appendTo && target?.merged ? APPEND_TARGET_MERGED : null;
+
   if (!editing) {
     return (
-      <MetaFieldActions>
-        {issue.appendTo ? (
-          <IssueLink
-            id={issue.appendTo}
-            className="text-primary hover:underline"
-          >
-            {title}
-          </IssueLink>
-        ) : (
-          <button
-            type="button"
-            className="text-left text-muted-foreground"
-            onClick={beginEdit}
-          >
-            {APPEND_TARGET_EMPTY_LABEL}
-          </button>
-        )}
-        {issue.appendTo ? <IssueNavigateButton id={issue.appendTo} /> : null}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 text-muted-foreground"
-          aria-label="Edit append target"
-          onClick={beginEdit}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        {issue.appendTo ? (
+      <div className="flex min-w-0 flex-col gap-1">
+        <MetaFieldActions>
+          {issue.appendTo ? (
+            <IssueLink
+              id={issue.appendTo}
+              className="text-primary hover:underline"
+            >
+              {title}
+            </IssueLink>
+          ) : (
+            <button
+              type="button"
+              className="text-left text-muted-foreground"
+              onClick={beginEdit}
+            >
+              {APPEND_TARGET_EMPTY_LABEL}
+            </button>
+          )}
+          {target?.merged ? (
+            <Badge variant="done" data-testid="append-target-merged-badge">
+              merged
+            </Badge>
+          ) : null}
+          {issue.appendTo ? <IssueNavigateButton id={issue.appendTo} /> : null}
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
             className="shrink-0 text-muted-foreground"
-            aria-label="Clear append target"
-            onClick={onClear}
+            aria-label="Edit append target"
+            onClick={beginEdit}
           >
-            <X className="h-3.5 w-3.5" />
+            <Pencil className="h-3.5 w-3.5" />
           </Button>
+          {issue.appendTo ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 text-muted-foreground"
+              aria-label="Clear append target"
+              onClick={onClear}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          ) : null}
+        </MetaFieldActions>
+        {savedMergedReason ? (
+          <p
+            data-testid="append-target-field-reason"
+            className="text-sm text-destructive"
+          >
+            {savedMergedReason}
+          </p>
         ) : null}
-      </MetaFieldActions>
+      </div>
     );
   }
 
