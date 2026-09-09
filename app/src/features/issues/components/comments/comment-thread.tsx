@@ -1,4 +1,5 @@
 import { Bot } from "lucide-react";
+import type { ReactNode } from "react";
 import type { CommentMessage } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,10 +16,12 @@ export function CommentThread({
   thread,
   onReply,
   issueId,
+  replySlot,
 }: {
   thread: CommentThreadData;
   onReply: () => void;
   issueId?: string;
+  replySlot?: ReactNode;
 }) {
   const outdated = thread.root.outdated === true;
   const comments = [thread.root, ...thread.replies];
@@ -54,9 +57,11 @@ export function CommentThread({
       ))}
 
       <div className="pt-1">
-        <Button type="button" variant="ghost" size="sm" onClick={onReply}>
-          Reply
-        </Button>
+        {replySlot ?? (
+          <Button type="button" variant="ghost" size="sm" onClick={onReply}>
+            Reply
+          </Button>
+        )}
       </div>
     </article>
   );

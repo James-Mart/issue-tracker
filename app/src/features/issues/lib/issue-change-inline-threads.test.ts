@@ -3,7 +3,10 @@ import type { FileDiffMetadata } from "@pierre/diffs/react";
 import type { CommentMessage } from "@server/schemas";
 import { groupCommentThreads } from "./comment-threads";
 import { fileDiffsFromPatch } from "./issue-change-file-diffs";
-import { placeThreadsInFile } from "./issue-change-inline-threads";
+import {
+  mergeComposerAnnotation,
+  placeThreadsInFile,
+} from "./issue-change-inline-threads";
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
 
@@ -103,6 +106,34 @@ describe("placeThreadsInFile", () => {
     ]);
     expect(placed.unlocated.map((thread) => thread.root.id)).toEqual([
       "missing-root",
+    ]);
+  });
+
+  it("adds a composer-only annotation when that line has no threads", () => {
+    const current = comment({
+      id: "current-root",
+      at: "2026-08-30T14:22:00.000Z",
+      body: "current",
+      anchor: {
+        path: "app/server/services/diff-fetch.ts",
+        side: "new",
+        line: 94,
+        commitSha: SHA,
+      },
+    });
+    const { located } = placeThreadsInFile(
+      groupCommentThreads([current]),
+      file(),
+    );
+
+    expect(mergeComposerAnnotation(located, { side: "new", line: 94 })).toBe(
+      located,
+    );
+    expect(
+      mergeComposerAnnotation(located, { side: "new", line: 92 }),
+    ).toEqual([
+      ...located,
+      { side: "additions", lineNumber: 92, metadata: [] },
     ]);
   });
 });

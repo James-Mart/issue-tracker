@@ -108,6 +108,10 @@ vi.mock("@pierre/diffs/react", () => ({
   },
 }));
 
+vi.mock("../api/mutations", () => ({
+  usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("../api/queries", () => ({
   useIssueChangeQuery: () => ({
     data: changeQueryState.data,

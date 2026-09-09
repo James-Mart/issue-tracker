@@ -14,6 +14,7 @@ import {
   type DiffLineAnnotation,
   type FileDiffContentsLoader,
   type FileDiffMetadata,
+  type SelectedLineRange,
 } from "@pierre/diffs/react";
 import { Link } from "react-router-dom";
 import {
@@ -29,9 +30,21 @@ import type { ChangeCommit, ChangeStats, IssueChange } from "@server/schemas";
 import { useCommentThreads, useIssueChangeQuery } from "../api/queries";
 import { loadFileDiffContents } from "../lib/issue-change-file-contents";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
-import { placeThreadsInFile } from "../lib/issue-change-inline-threads";
+import {
+  mergeComposerAnnotation,
+  placeThreadsInFile,
+} from "../lib/issue-change-inline-threads";
 import type { CommentThread as CommentThreadData } from "../lib/comment-threads";
+import {
+  pathForAnchorSide,
+  selectedRangeToAnchor,
+} from "../lib/diff-thread-anchor";
 import { CommentThread } from "./comments/comment-thread";
+import {
+  DiffComposerProvider,
+  DiffThreadComposer,
+  useDiffComposer,
+} from "./comments/diff-thread-composer";
 import {
   effectiveDiffLayout,
   readStoredDiffLayout,
@@ -303,19 +316,37 @@ export function IssueChangePanel({
   return <IssueChangeLoadedPanel change={data} issueId={issueId} />;
 }
 
-function noopReply(): void {}
+function fileComposerPaths(
+  file: Pick<FileDiffMetadata, "name" | "prevName">,
+): string[] {
+  if (file.prevName && file.prevName !== file.name) {
+    return [file.name, file.prevName];
+  }
+  return [file.name];
+}
 
 function FileLineThreads({
   threads,
   issueId,
   lineNumber,
   side,
+  paths,
 }: {
   threads: CommentThreadData[];
   issueId: string;
   lineNumber?: number;
   side?: "old" | "new";
+  paths: string[];
 }) {
+  const composer = useDiffComposer();
+  const showNew =
+    lineNumber != null &&
+    side != null &&
+    composer.open?.kind === "new" &&
+    composer.open.line === lineNumber &&
+    composer.open.side === side &&
+    paths.includes(composer.open.path);
+
   return (
     <div
       data-testid={
@@ -327,14 +358,29 @@ function FileLineThreads({
       data-side={side}
       className="flex flex-col gap-2 px-3 py-2"
     >
-      {threads.map((thread) => (
-        <CommentThread
-          key={thread.root.id}
-          thread={thread}
-          issueId={issueId}
-          onReply={noopReply}
-        />
-      ))}
+      {threads.map((thread) => {
+        const replying =
+          composer.open?.kind === "reply" &&
+          composer.open.threadId === thread.root.id;
+        return (
+          <CommentThread
+            key={thread.root.id}
+            thread={thread}
+            issueId={issueId}
+            onReply={() => composer.openReply(thread.root.id)}
+            replySlot={
+              replying ? (
+                <DiffThreadComposer
+                  target={{ kind: "reply", threadId: thread.root.id }}
+                />
+              ) : undefined
+            }
+          />
+        );
+      })}
+      {showNew && composer.open?.kind === "new" ? (
+        <DiffThreadComposer target={composer.open} />
+      ) : null}
     </div>
   );
 }
@@ -373,10 +419,17 @@ function IssueChangeFileDiff({
     },
     [contentsCache, issueId, sha],
   );
+  const composer = useDiffComposer();
   const { located, unlocated } = useMemo(
     () => placeThreadsInFile(threads, fileDiff),
     [fileDiff, threads],
   );
+  const paths = useMemo(() => fileComposerPaths(fileDiff), [fileDiff]);
+  const annotations = useMemo(() => {
+    const open = composer.open;
+    if (open?.kind !== "new" || !paths.includes(open.path)) return located;
+    return mergeComposerAnnotation(located, open);
+  }, [composer.open, located, paths]);
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<CommentThreadData[]>) => (
       <FileLineThreads
@@ -384,9 +437,34 @@ function IssueChangeFileDiff({
         issueId={issueId}
         lineNumber={annotation.lineNumber}
         side={annotation.side === "deletions" ? "old" : "new"}
+        paths={paths}
       />
     ),
-    [issueId],
+    [issueId, paths],
+  );
+  const openFromRange = useCallback(
+    (range: SelectedLineRange) => {
+      const side = selectedRangeToAnchor(range, fileDiff.name, sha).side;
+      const path = pathForAnchorSide(fileDiff, side);
+      const anchor = selectedRangeToAnchor(range, path, sha);
+      composer.openNew({
+        kind: "new",
+        path: anchor.path,
+        side: anchor.side,
+        line: anchor.line,
+        ...(anchor.startLine !== undefined
+          ? { startLine: anchor.startLine }
+          : {}),
+      });
+    },
+    [composer.openNew, fileDiff, sha],
+  );
+  const onLineSelected = useCallback(
+    (range: SelectedLineRange | null) => {
+      if (range == null || range.start === range.end) return;
+      openFromRange(range);
+    },
+    [openFromRange],
   );
 
   return (
@@ -409,12 +487,19 @@ function IssueChangeFileDiff({
       <FileDiff
         fileDiff={fileDiff}
         disableWorkerPool
-        options={{ loadDiffFiles, diffStyle: diffLayout }}
-        lineAnnotations={located}
+        options={{
+          loadDiffFiles,
+          diffStyle: diffLayout,
+          enableGutterUtility: true,
+          enableLineSelection: true,
+          onGutterUtilityClick: openFromRange,
+          onLineSelected,
+        }}
+        lineAnnotations={annotations}
         renderAnnotation={renderAnnotation}
       />
       {unlocated.length > 0 ? (
-        <FileLineThreads threads={unlocated} issueId={issueId} />
+        <FileLineThreads threads={unlocated} issueId={issueId} paths={paths} />
       ) : null}
     </div>
   );
@@ -446,48 +531,50 @@ function IssueChangeLoadedPanel({
   const rollupFiles = files.length > 1 ? matched : files;
 
   return (
-    <div className="flex min-w-0 flex-col gap-3" data-testid="issue-change-panel">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p
-          className="font-mono text-[11px] tabular-nums text-muted-foreground"
-          data-testid="issue-change-scope-header"
+    <DiffComposerProvider issueId={issueId} commitSha={sha}>
+      <div className="flex min-w-0 flex-col gap-3" data-testid="issue-change-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p
+            className="font-mono text-[11px] tabular-nums text-muted-foreground"
+            data-testid="issue-change-scope-header"
+          >
+            {scopeHeaderStats(change)}
+          </p>
+          {!isMobile ? (
+            <DiffLayoutToggle layout={layout} onLayoutChange={setLayout} />
+          ) : null}
+        </div>
+        <div
+          className={
+            files.length > 1
+              ? "flex min-w-0 flex-col gap-3 shell:flex-row shell:items-start"
+              : "flex min-w-0 flex-col gap-3"
+          }
         >
-          {scopeHeaderStats(change)}
-        </p>
-        {!isMobile ? (
-          <DiffLayoutToggle layout={layout} onLayoutChange={setLayout} />
-        ) : null}
+          {files.length > 1 ? (
+            <IssueChangeFileNavigator
+              files={files}
+              matched={matched}
+              filter={filter}
+              onFilterChange={setFilter}
+              selectedName={selectedFile?.name ?? ""}
+              onSelect={setSelectedName}
+            />
+          ) : null}
+          {rollupFiles.length > 0 ? (
+            <IssueChangeVirtualizedRollup
+              files={rollupFiles}
+              selectedName={selectedFile?.name}
+              issueId={issueId}
+              sha={sha}
+              contentsCache={contentsCache}
+              diffLayout={diffLayout}
+              threads={threads}
+            />
+          ) : null}
+        </div>
       </div>
-      <div
-        className={
-          files.length > 1
-            ? "flex min-w-0 flex-col gap-3 shell:flex-row shell:items-start"
-            : "flex min-w-0 flex-col gap-3"
-        }
-      >
-        {files.length > 1 ? (
-          <IssueChangeFileNavigator
-            files={files}
-            matched={matched}
-            filter={filter}
-            onFilterChange={setFilter}
-            selectedName={selectedFile?.name ?? ""}
-            onSelect={setSelectedName}
-          />
-        ) : null}
-        {rollupFiles.length > 0 ? (
-          <IssueChangeVirtualizedRollup
-            files={rollupFiles}
-            selectedName={selectedFile?.name}
-            issueId={issueId}
-            sha={sha}
-            contentsCache={contentsCache}
-            diffLayout={diffLayout}
-            threads={threads}
-          />
-        ) : null}
-      </div>
-    </div>
+    </DiffComposerProvider>
   );
 }
 

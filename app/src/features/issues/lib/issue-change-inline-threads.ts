@@ -69,3 +69,24 @@ export function placeThreadsInFile(
 
   return { located: [...locatedByKey.values()], unlocated };
 }
+
+/** Add a composer-only annotation when that line does not already host threads. */
+export function mergeComposerAnnotation(
+  located: DiffLineAnnotation<CommentThread[]>[],
+  composer: { side: "old" | "new"; line: number } | null,
+): DiffLineAnnotation<CommentThread[]>[] {
+  if (!composer) return located;
+  const side = composer.side === "old" ? "deletions" : "additions";
+  if (
+    located.some(
+      (annotation) =>
+        annotation.side === side && annotation.lineNumber === composer.line,
+    )
+  ) {
+    return located;
+  }
+  return [
+    ...located,
+    { side, lineNumber: composer.line, metadata: [] },
+  ];
+}
