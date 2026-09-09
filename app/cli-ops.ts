@@ -179,7 +179,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     lines.push(`blockedBy: ${detail.blockedBy.join(", ")}`);
   }
   if (
-    (detail.kind === "epic" || detail.kind === "story") &&
+    (detail.kind === "epic" || detail.kind === "story" || detail.kind === "task") &&
     detail.sourceIdea
   ) {
     lines.push(`sourceIdea: ${detail.sourceIdea}`);

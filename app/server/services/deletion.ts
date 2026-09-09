@@ -25,7 +25,7 @@ export interface DeletionPlan {
   repoint: Repoint[];
   // Surviving Epics whose `blockedBy` had entries in the delete set removed.
   unblock: Unblock[];
-  // Surviving Epics and root Stories whose `sourceIdea` pointed into the delete set.
+  // Surviving Epics, root Stories, and Tasks whose `sourceIdea` pointed into the delete set.
   dropSourceIdea: DropSourceIdea[];
 }
 
@@ -45,7 +45,7 @@ export interface DeletionResult {
 //     `undefined` = Project trunk).
 //   - Epic `blockedBy` (the only cross-container edge): the deleted ids are
 //     dropped, no inheritance.
-//   - Epic / root Story `sourceIdea`: the field is cleared when the Idea is
+//   - Epic / root Story / Task `sourceIdea`: the field is cleared when the Idea is
 //     deleted, no inheritance.
 // `partOf` never needs repair: anything that points into the delete set via
 // `partOf` is itself contained and therefore also deleted.
@@ -104,7 +104,7 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
       });
     }
     if (
-      (issue.kind === "epic" || issue.kind === "story") &&
+      (issue.kind === "epic" || issue.kind === "story" || issue.kind === "task") &&
       issue.sourceIdea &&
       deleteSet.has(issue.sourceIdea)
     ) {

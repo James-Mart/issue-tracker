@@ -123,6 +123,7 @@ export const TASK_SET_FIELDS = {
   qa: { type: "enum", values: QA_STATUSES },
   commits: { type: "commits" },
   noDiff: { type: "boolean" },
+  sourceIdea: { type: "string" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
 
@@ -244,6 +245,7 @@ export const TASK_GET_FIELDS = {
   qa: STORED,
   commits: STORED,
   noDiff: STORED,
+  sourceIdea: STORED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,

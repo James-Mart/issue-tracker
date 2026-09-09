@@ -305,7 +305,7 @@ describe("parseIssue - valid per kind", () => {
     }
   });
 
-  it("parses optional sourceIdea on story and epic; absent by default", () => {
+  it("parses optional sourceIdea on story, epic, and task; absent by default", () => {
     const storyWith = parseIssue({
       ...branch,
       sourceIdea: "capture-flow",
@@ -324,6 +324,15 @@ describe("parseIssue - valid per kind", () => {
       expect(epicWith.issue.sourceIdea).toBe("capture-flow");
     }
 
+    const taskWith = parseIssue({
+      ...commit,
+      sourceIdea: "capture-flow",
+    });
+    expect(taskWith.ok).toBe(true);
+    if (taskWith.ok && taskWith.issue.kind === "task") {
+      expect(taskWith.issue.sourceIdea).toBe("capture-flow");
+    }
+
     const storyAbsent = parseIssue(branch);
     expect(storyAbsent.ok).toBe(true);
     if (storyAbsent.ok && storyAbsent.issue.kind === "story") {
@@ -334,6 +343,12 @@ describe("parseIssue - valid per kind", () => {
     expect(epicAbsent.ok).toBe(true);
     if (epicAbsent.ok && epicAbsent.issue.kind === "epic") {
       expect(epicAbsent.issue.sourceIdea).toBeUndefined();
+    }
+
+    const taskAbsent = parseIssue(commit);
+    expect(taskAbsent.ok).toBe(true);
+    if (taskAbsent.ok && taskAbsent.issue.kind === "task") {
+      expect(taskAbsent.issue.sourceIdea).toBeUndefined();
     }
   });
 

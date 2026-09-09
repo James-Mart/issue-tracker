@@ -295,6 +295,7 @@ export const taskSchema = z.object({
   qa: z.enum(QA_STATUSES).optional(),
   commits: z.array(z.string()).default([]),
   noDiff: z.boolean().optional(),
+  sourceIdea: z.string().optional(),
   ...taskMutable,
   ...orderField,
   ...timestamps,

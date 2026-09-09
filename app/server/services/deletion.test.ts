@@ -49,7 +49,7 @@ const branch = (
   ...extra,
 });
 
-const commit = (id: string, partOf: string): Issue => ({
+const commit = (id: string, partOf: string, extra: Partial<Extract<Issue, { kind: "task" }>> = {}): Issue => ({
   id,
   kind: "task",
   title: id,
@@ -60,6 +60,7 @@ const commit = (id: string, partOf: string): Issue => ({
   attentionReason: null,
   createdAt: AT,
   updatedAt: AT,
+  ...extra,
 });
 
 const idea = (id: string, partOf = "p"): Issue => ({
@@ -227,18 +228,19 @@ describe("planDeletion - blockedBy drop", () => {
 });
 
 describe("planDeletion - sourceIdea drop", () => {
-  it("clears sourceIdea on surviving epics and root stories when the idea is deleted", () => {
+  it("clears sourceIdea on surviving epics, root stories, and tasks when the idea is deleted", () => {
     const plan = planDeletion(
       [
         project("p"),
         idea("i", "p"),
         epic("e1", "p", { sourceIdea: "i" }),
         branch("s1", "p", { sourceIdea: "i" }),
+        commit("t1", "s1", { sourceIdea: "i" }),
       ],
       "i",
     );
     expect(plan.deleteIds).toEqual(["i"]);
-    expect(plan.dropSourceIdea).toEqual([{ id: "e1" }, { id: "s1" }]);
+    expect(plan.dropSourceIdea).toEqual([{ id: "e1" }, { id: "s1" }, { id: "t1" }]);
   });
 
   it("needs no sourceIdea repair when deleting the containing project", () => {

@@ -727,7 +727,7 @@ describe("cascade delete + reference repair on remove", () => {
     expect(keeper && "blockedBy" in keeper ? keeper.blockedBy : ["unexpected"]).toEqual([]);
   });
 
-  it("clears sourceIdea on surviving roots when an idea is deleted", async () => {
+  it("clears sourceIdea on surviving roots and tasks when an idea is deleted", async () => {
     writeIssue("idea", {
       kind: "idea",
       title: "Capture",
@@ -754,25 +754,44 @@ describe("cascade delete + reference repair on remove", () => {
       createdAt: AT,
       updatedAt: AT,
     });
+    writeIssue("task", {
+      kind: "task",
+      title: "Task",
+      partOf: "root-story",
+      order: 0,
+      status: "todo",
+      sourceIdea: "idea",
+      createdAt: AT,
+      updatedAt: AT,
+    });
     const { remove, list } = await loadService();
     const result = await remove("idea");
     expect(result.deleted).toEqual(["idea"]);
-    expect(result.droppedSourceIdea).toEqual([{ id: "e" }, { id: "root-story" }]);
+    expect(result.droppedSourceIdea).toEqual([
+      { id: "e" },
+      { id: "root-story" },
+      { id: "task" },
+    ]);
 
     const after = list();
     expect(after.problems).toEqual([]);
     const epic = after.issues.find((i) => i.id === "e");
     const rootStory = after.issues.find((i) => i.id === "root-story");
+    const task = after.issues.find((i) => i.id === "task");
     expect(epic && epic.kind === "epic" ? epic.sourceIdea : "unexpected").toBeUndefined();
     expect(
       rootStory && rootStory.kind === "story" ? rootStory.sourceIdea : "unexpected",
     ).toBeUndefined();
+    expect(task && task.kind === "task" ? task.sourceIdea : "unexpected").toBeUndefined();
     expect(
       "sourceIdea" in JSON.parse(readFileSync(join(dir, "e", "issue.json"), "utf8")),
     ).toBe(false);
     expect(
       "sourceIdea" in
         JSON.parse(readFileSync(join(dir, "root-story", "issue.json"), "utf8")),
+    ).toBe(false);
+    expect(
+      "sourceIdea" in JSON.parse(readFileSync(join(dir, "task", "issue.json"), "utf8")),
     ).toBe(false);
   });
 

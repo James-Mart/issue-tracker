@@ -211,6 +211,19 @@ export function checkIntegrity(issues: Issue[]): Problem[] {
         problems,
       );
     }
+    if (issue.kind === "task" && issue.sourceIdea) {
+      checkReferent(issue, issue.sourceIdea, ["idea"], "sourceIdea", byId, problems);
+      const referent = byId.get(issue.sourceIdea);
+      const taskProject = projectContaining(issue, byId);
+      const ideaProject =
+        referent?.kind === "idea" ? referent.partOf : undefined;
+      if (referent?.kind === "idea" && taskProject !== ideaProject) {
+        problems.push({
+          id: issue.id,
+          message: `sourceIdea "${issue.sourceIdea}" must be in the same Project`,
+        });
+      }
+    }
   }
 
   for (const id of dependencyCycles(issues, byId)) {

@@ -65,17 +65,22 @@ const branch = (
   ...extra,
 });
 
-const commit = (id: string, partOf: string, order = 0): Issue => ({
+const commit = (
+  id: string,
+  partOf: string,
+  extra: Partial<Extract<Issue, { kind: "task" }>> = {},
+): Issue => ({
   id,
   kind: "task",
   title: id,
   partOf,
-  order,
+  order: 0,
   status: "todo",
   needsAttention: false,
   attentionReason: null,
   createdAt: AT,
   updatedAt: AT,
+  ...extra,
 });
 
 describe("checkIntegrity", () => {
@@ -302,12 +307,13 @@ describe("checkIntegrity", () => {
     expect(problems[0].message).toContain("same Project");
   });
 
-  it("does not flag a same-project sourceIdea on an epic or root story", () => {
+  it("does not flag a same-project sourceIdea on an epic, root story, or task", () => {
     const problems = checkIntegrity([
       project("root"),
       idea("i1"),
       epic("e1", "root", { sourceIdea: "i1" }),
       branch("b1", "root", { order: 1, sourceIdea: "i1" }),
+      commit("t1", "b1", { sourceIdea: "i1" }),
     ]);
     expect(problems.some((p) => p.message.includes("sourceIdea"))).toBe(false);
   });

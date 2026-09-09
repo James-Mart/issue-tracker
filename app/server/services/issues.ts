@@ -771,7 +771,7 @@ export function appendComment(
 // descendant `partOf` it) and repairs every surviving foreign reference into it:
 // a branch stacked on a deleted branch is spliced to the deleted branch's own
 // fork point, deleted ids are dropped from any Epic's `blockedBy`, and
-// `sourceIdea` is cleared on surviving Epics and root Stories. The
+// `sourceIdea` is cleared on surviving Epics, root Stories, and Tasks. The
 // prospective surviving set is validated before anything is written, so a
 // deletion that could not leave the graph valid is refused without side effects.
 export function remove(id: string): Promise<DeletionResult> {

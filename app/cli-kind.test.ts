@@ -172,6 +172,14 @@ describe("coerceSetPatch", () => {
       patch: { sourceIdea: "capture-flow" },
     },
     {
+      name: "task sourceIdea",
+      kind: "task" as const,
+      field: "sourceIdea",
+      value: "capture-flow",
+      opts: {},
+      patch: { sourceIdea: "capture-flow" },
+    },
+    {
       name: "sourceIdea --clear",
       kind: "epic" as const,
       field: "sourceIdea",
@@ -704,6 +712,15 @@ describe("sourceIdea get/set", () => {
       createdAt: nextAt(),
       updatedAt: nextAt(),
     });
+    writeIssue("t", {
+      kind: "task",
+      title: "Task",
+      partOf: "s",
+      order: 0,
+      status: "todo",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
   });
 
   it("sets, gets, and clears sourceIdea on an epic", async () => {
@@ -734,10 +751,47 @@ describe("sourceIdea get/set", () => {
     expect((await runIssueCli(["story", "get", "s", "sourceIdea"], { env: env() })).stdout).toBe("");
   });
 
-  it("refuses an unknown sourceIdea id", async () => {
-    const unknown = await runIssueCli(["epic", "set", "e", "sourceIdea", "ghost"], { env: env() });
+  it("sets, gets, and clears sourceIdea on a task", async () => {
+    expect((await runIssueCli(["task", "set", "t", "sourceIdea", "idea-a"], { env: env() })).status).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, "t", "issue.json"), "utf8")).sourceIdea).toBe(
+      "idea-a",
+    );
+    expect((await runIssueCli(["task", "get", "t", "sourceIdea"], { env: env() })).stdout.trim()).toBe("idea-a");
+
+    expect((await runIssueCli(["task", "set", "t", "sourceIdea", "--clear"], { env: env() })).status).toBe(0);
+    expect("sourceIdea" in JSON.parse(readFileSync(join(dir, "t", "issue.json"), "utf8"))).toBe(
+      false,
+    );
+    expect((await runIssueCli(["task", "get", "t", "sourceIdea"], { env: env() })).stdout).toBe("");
+  });
+
+  it("refuses an unknown sourceIdea id on a task", async () => {
+    const unknown = await runIssueCli(["task", "set", "t", "sourceIdea", "ghost"], { env: env() });
     expect(unknown.status).toBe(1);
     expect(unknown.stderr).toContain("sourceIdea");
+  });
+
+  it("refuses a sourceIdea referent that is not an idea", async () => {
+    const notIdea = await runIssueCli(["task", "set", "t", "sourceIdea", "e"], { env: env() });
+    expect(notIdea.status).toBe(1);
+    expect(notIdea.stderr).toContain("sourceIdea");
+    expect(notIdea.stderr).toContain("must be a idea");
+  });
+
+  it("refuses a sourceIdea in a different project", async () => {
+    writeIssue("p2", { kind: "project", title: "Other", createdAt: nextAt(), updatedAt: nextAt() });
+    writeIssue("idea-b", {
+      kind: "idea",
+      title: "Other idea",
+      partOf: "p2",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    const crossProject = await runIssueCli(["task", "set", "t", "sourceIdea", "idea-b"], { env: env() });
+    expect(crossProject.status).toBe(1);
+    expect(crossProject.stderr).toContain("sourceIdea");
+    expect(crossProject.stderr).toContain("same Project");
   });
 });
 
