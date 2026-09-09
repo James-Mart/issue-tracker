@@ -8,6 +8,15 @@ import { CommentThread } from "./comment-thread";
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
 
+const FILE_CONTENTS = Array.from(
+  { length: 100 },
+  (_, index) => `line ${index + 1}`,
+).join("\n");
+
+vi.mock("../../api/queries", () => ({
+  useIssueChangeFileQuery: () => ({ data: FILE_CONTENTS }),
+}));
+
 function comment(
   overrides: Partial<CommentMessage> &
     Pick<CommentMessage, "id" | "at" | "body" | "role">,
@@ -58,7 +67,10 @@ const outdatedThread: CommentThreadData = {
   replies: [],
 };
 
-function mount(threads: CommentThreadData[]): HTMLDivElement {
+function mount(
+  threads: CommentThreadData[],
+  onSeeInDiff?: (threadId: string) => void,
+): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -69,6 +81,13 @@ function mount(threads: CommentThreadData[]): HTMLDivElement {
           <CommentThread
             key={thread.root.id}
             thread={thread}
+            issueId="task-threads"
+            showAnchorContext
+            onSeeInDiff={
+              onSeeInDiff
+                ? () => onSeeInDiff(thread.root.id)
+                : undefined
+            }
             onReply={vi.fn()}
           />
         ))}
@@ -118,8 +137,56 @@ describe("CommentThread", () => {
     expect(outdated?.textContent).toContain(
       "Run assertCommitReachable before git show.",
     );
-    expect(outdated?.textContent).toContain(
-      "app/server/services/diff-fetch.ts:88-90 old a4f91c2",
+
+    const currentMeta = current?.querySelector(
+      '[data-testid="comment-anchor-meta"]',
     );
+    expect(currentMeta?.textContent).toContain(
+      "app/server/services/diff-fetch.ts",
+    );
+    expect(currentMeta?.textContent).toContain("line 94");
+    expect(currentMeta?.textContent).not.toMatch(/a4f91c2/);
+    expect(
+      current?.querySelector('[data-testid="see-in-diff"]'),
+    ).toBeNull();
+
+    const currentSnippet = current?.querySelector(
+      '[data-testid="comment-anchor-snippet"]',
+    );
+    expect(
+      currentSnippet
+        ?.querySelector("[data-anchored]")
+        ?.getAttribute("data-snippet-line"),
+    ).toBe("94");
+    expect(currentSnippet?.textContent).toContain("line 94");
+
+    const outdatedMeta = outdated?.querySelector(
+      '[data-testid="comment-anchor-meta"]',
+    );
+    expect(outdatedMeta?.textContent).toContain("lines 88-90");
+    expect(outdatedMeta?.textContent).toMatch(/outdated/i);
+    const outdatedMarked = [
+      ...(outdated?.querySelectorAll(
+        '[data-testid="comment-anchor-snippet"] [data-anchored]',
+      ) ?? []),
+    ].map((node) => node.getAttribute("data-snippet-line"));
+    expect(outdatedMarked).toEqual(["88", "89", "90"]);
+  });
+
+  it("invokes see-in-diff from the icon-only affordance", () => {
+    const onSeeInDiff = vi.fn();
+    const container = mount([currentThread], onSeeInDiff);
+    const button = container.querySelector(
+      '[data-testid="see-in-diff"]',
+    );
+    expect(button?.textContent).toBe("");
+    expect(button?.getAttribute("aria-label")).toBe(
+      "See this comment in the diff",
+    );
+
+    act(() => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onSeeInDiff).toHaveBeenCalledWith("current-root");
   });
 });

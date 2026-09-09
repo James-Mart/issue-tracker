@@ -10,6 +10,7 @@ import {
   resolveChannelTabIndicator,
   resolveIssueDetailTab,
   tabsForIssueDetail,
+  writeDiffThreadSearchParam,
   writeIssueDetailTabParam,
 } from "./issue-detail-tabs";
 
@@ -186,6 +187,15 @@ describe("writeIssueDetailTabParam", () => {
     const params = new URLSearchParams("x=1");
     expect(writeIssueDetailTabParam(params, "planning").toString()).toBe(
       "x=1&tab=planning",
+    );
+  });
+});
+
+describe("writeDiffThreadSearchParam", () => {
+  it("opens Diff and names the thread", () => {
+    const params = new URLSearchParams("x=1");
+    expect(writeDiffThreadSearchParam(params, "current-root").toString()).toBe(
+      "x=1&tab=diff&thread=current-root",
     );
   });
 });

@@ -1,15 +1,15 @@
 import { Bot } from "lucide-react";
 import type { ReactNode } from "react";
 import type { CommentMessage } from "@server/schemas";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
 import { cn } from "@/lib/utils/cn";
-import {
-  formatCommentAnchor,
-  type CommentThread as CommentThreadData,
-} from "../../lib/comment-threads";
+import { type CommentThread as CommentThreadData } from "../../lib/comment-threads";
 import { Markdown } from "../markdown";
+import {
+  CommentAnchorMeta,
+  CommentAnchorSnippet,
+} from "./comment-anchor-context";
 import { isHumanRole } from "./message";
 
 export function CommentThread({
@@ -17,14 +17,19 @@ export function CommentThread({
   onReply,
   issueId,
   replySlot,
+  showAnchorContext = false,
+  onSeeInDiff,
 }: {
   thread: CommentThreadData;
   onReply: () => void;
   issueId?: string;
   replySlot?: ReactNode;
+  showAnchorContext?: boolean;
+  onSeeInDiff?: () => void;
 }) {
   const outdated = thread.root.outdated === true;
   const comments = [thread.root, ...thread.replies];
+  const anchor = thread.root.anchor;
 
   return (
     <article
@@ -35,17 +40,15 @@ export function CommentThread({
         outdated && "opacity-70",
       )}
     >
-      {thread.root.anchor ? (
-        <div className="flex flex-wrap items-center gap-2 pb-1.5">
-          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-            {formatCommentAnchor(thread.root.anchor)}
-          </span>
-          {outdated ? (
-            <Badge variant="warn" className="uppercase tracking-[0.08em]">
-              outdated
-            </Badge>
-          ) : null}
-        </div>
+      {anchor ? (
+        <CommentAnchorMeta
+          anchor={anchor}
+          outdated={outdated}
+          onSeeInDiff={onSeeInDiff}
+        />
+      ) : null}
+      {showAnchorContext && issueId && anchor ? (
+        <CommentAnchorSnippet issueId={issueId} anchor={anchor} />
       ) : null}
 
       {comments.map((comment) => (

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter, useSearchParams } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommentMessage, IssueDetail } from "@server/schemas";
 import { IssueCommentsSection } from "./comments-section";
@@ -29,6 +30,11 @@ const useCommentsQuery = vi.hoisted(() =>
 vi.mock("../../api/queries", () => ({
   useCommentsQuery,
   useIssuesQuery: () => ({ data: undefined }),
+  useIssueChangeFileQuery: () => ({
+    data: Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join(
+      "\n",
+    ),
+  }),
 }));
 
 vi.mock("../../api/mutations", () => ({
@@ -112,12 +118,31 @@ function task(): IssueDetail {
   };
 }
 
-function mount(): HTMLDivElement {
+function SearchProbe({
+  onSearch,
+}: {
+  onSearch: (search: string) => void;
+}) {
+  const [params] = useSearchParams();
+  useEffect(() => {
+    onSearch(params.toString());
+  }, [onSearch, params]);
+  return null;
+}
+
+function mount(
+  onSearch?: (search: string) => void,
+): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(<IssueCommentsSection issue={task()} />);
+    root.render(
+      <MemoryRouter>
+        {onSearch ? <SearchProbe onSearch={onSearch} /> : null}
+        <IssueCommentsSection issue={task()} />
+      </MemoryRouter>,
+    );
   });
   return container;
 }
@@ -198,10 +223,39 @@ describe("IssueCommentsSection", () => {
         node.getAttribute("data-comment-id"),
       ),
     ).toEqual(["anchored-root"]);
-    expect(anchored?.textContent).toContain(
-      "app/server/services/diff-fetch.ts:94 new a4f91c2",
-    );
-    expect(anchored?.querySelector("button")?.textContent).toContain("Reply");
+    const meta = anchored?.querySelector('[data-testid="comment-anchor-meta"]');
+    expect(meta?.textContent).toContain("app/server/services/diff-fetch.ts");
+    expect(meta?.textContent).toContain("line 94");
+    expect(meta?.textContent).not.toMatch(/a4f91c2/);
+    expect(
+      anchored
+        ?.querySelector("[data-anchored]")
+        ?.getAttribute("data-snippet-line"),
+    ).toBe("94");
+    expect(
+      anchored?.querySelector('[data-testid="see-in-diff"]'),
+    ).not.toBeNull();
+    expect(
+      [...(anchored?.querySelectorAll("button") ?? [])].some((button) =>
+        button.textContent?.includes("Reply"),
+      ),
+    ).toBe(true);
+  });
+
+  it("writes the Diff tab and thread into the search from the see-in-diff icon", () => {
+    commentsState.messages = mixedLog;
+    let search = "";
+    const container = mount((next) => {
+      search = next;
+    });
+
+    act(() => {
+      container
+        .querySelector('[data-testid="see-in-diff"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(search).toBe("tab=diff&thread=anchored-root");
   });
 
   it("opens a per-thread reply composer and posts replyTo without an anchor", () => {

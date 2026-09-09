@@ -1,5 +1,6 @@
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Send } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import type { CommentMessage, IssueDetail } from "@server/schemas";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import {
 } from "../../lib/comment-threads";
 import { supportsComments } from "../../lib/comments";
 import { isInFlight } from "../../lib/derived";
+import { writeDiffThreadSearchParam } from "../../lib/issue-detail-tabs";
 import { SettingsCard } from "../detail-section";
 import { Markdown } from "../markdown";
 import { CommentThread } from "./comment-thread";
@@ -113,14 +115,18 @@ function ThreadReplyComposer({
 
 function CommentList({
   threads,
+  issueId,
   attachmentsIssueId,
   replySlotFor,
   onReply,
+  onSeeInDiff,
 }: {
   threads: CommentThreadData[];
+  issueId: string;
   attachmentsIssueId?: string;
   replySlotFor: (threadId: string) => ReactNode;
   onReply: (threadId: string) => void;
+  onSeeInDiff: (threadId: string) => void;
 }) {
   let lastDay = "";
   return (
@@ -144,7 +150,13 @@ function CommentList({
             ) : (
               <CommentThread
                 thread={thread}
-                issueId={attachmentsIssueId}
+                issueId={issueId}
+                showAnchorContext
+                onSeeInDiff={
+                  thread.root.anchor
+                    ? () => onSeeInDiff(thread.root.id)
+                    : undefined
+                }
                 onReply={() => onReply(thread.root.id)}
                 replySlot={replySlotFor(thread.root.id)}
               />
@@ -181,6 +193,7 @@ function CommentsPanel({
   const { data, isLoading, error } = useCommentsQuery(id);
   const { data: list } = useIssuesQuery();
   const post = usePostComment(id);
+  const [, setSearchParams] = useSearchParams();
   const [draft, setDraft] = useState("");
   const [openReplyId, setOpenReplyId] = useState<string | null>(null);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
@@ -283,9 +296,15 @@ function CommentsPanel({
         ) : (
           <CommentList
             threads={threads}
+            issueId={id}
             attachmentsIssueId={attachmentsIssueId}
             replySlotFor={replySlotFor}
             onReply={setOpenReplyId}
+            onSeeInDiff={(threadId) =>
+              setSearchParams((prev) => writeDiffThreadSearchParam(prev, threadId), {
+                replace: true,
+              })
+            }
           />
         )}
 
