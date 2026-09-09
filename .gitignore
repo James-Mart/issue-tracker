@@ -9,6 +9,9 @@ plans/
 # Durable SDK model catalog (peer of issues/ / conversations/)
 /model-slug-catalog.json
 
+# Vitest/Vite local cache (not source)
+.vite/
+
 # Logs
 *.log
 
