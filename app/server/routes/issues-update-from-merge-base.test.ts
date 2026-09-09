@@ -8,6 +8,7 @@ import {
 } from "../services/patch.js";
 import {
   UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR,
+  UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR,
 } from "../services/merge-base-task.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
@@ -145,6 +146,36 @@ describe("POST /api/issues/:id/update-from-merge-base", () => {
     expect(status).toBe(409);
     expect(json).toEqual({
       error: UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR("a"),
+    });
+    expect(existsSync(join(dir, "update-from-merge-base"))).toBe(false);
+  });
+
+  it("returns 409 with the no mergeBase refusal reason", async () => {
+    writeIssue("b", {
+      kind: "story",
+      title: "Stacked",
+      partOf: "e",
+      stackedOn: "a",
+      branchName: "feat/b",
+      merged: false,
+      order: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("a", {
+      kind: "story",
+      title: "Story A",
+      partOf: "e",
+      merged: false,
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const { status, json } = await postUpdateFromMergeBase("b");
+    expect(status).toBe(409);
+    expect(json).toEqual({
+      error: UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR("b"),
     });
     expect(existsSync(join(dir, "update-from-merge-base"))).toBe(false);
   });
