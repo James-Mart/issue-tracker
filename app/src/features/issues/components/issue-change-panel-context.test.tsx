@@ -103,6 +103,10 @@ vi.mock("@pierre/diffs/react", () => ({
   },
 }));
 
+vi.mock("../api/mutations", () => ({
+  usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("../api/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/queries")>();
   return {
@@ -114,6 +118,7 @@ vi.mock("../api/queries", async (importOriginal) => {
       isFetching: changeQueryState.isFetching,
       refetch: changeQueryState.refetch,
     }),
+    useCommentThreads: () => ({ threads: [], problems: [] }),
   };
 });
 

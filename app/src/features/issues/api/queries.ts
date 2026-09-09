@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { request } from "@/lib/api/client";
 import type {
@@ -13,9 +14,18 @@ import type { Attachment } from "@server/services/attachments";
 import type { ProjectPrsResponse } from "@server/services/delivery";
 import { ApiError } from "@/lib/api/errors";
 import { attachmentsApiPath } from "../lib/attachments";
+import {
+  groupCommentThreads,
+  type CommentThreadsResult,
+} from "../lib/comment-threads";
 import { fetchIssueAgentRunEvents, fetchIssueAgentRuns } from "./agent-runs";
 import { listChannelSessions } from "./channel-sessions";
 import { healthKeys, issuesKeys } from "./keys";
+
+export {
+  selectAnchoredThreads,
+  type CommentThread,
+} from "../lib/comment-threads";
 
 export interface HealthResponse {
   bootId: string;
@@ -57,6 +67,18 @@ export function useCommentsQuery(id: string): UseQueryResult<CommentsResponse, E
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 2,
   });
+}
+
+export function useCommentThreads(issueId: string): CommentThreadsResult {
+  const { data } = useCommentsQuery(issueId);
+  const threads = useMemo(
+    () => groupCommentThreads(data?.messages ?? []),
+    [data?.messages],
+  );
+  return {
+    threads,
+    problems: data?.problems ?? [],
+  };
 }
 
 export function useIssueAgentRunsQuery(

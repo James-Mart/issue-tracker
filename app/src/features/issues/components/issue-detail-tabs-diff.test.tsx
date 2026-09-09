@@ -55,6 +55,7 @@ vi.mock("../api/queries", async (importOriginal) => {
       isLoading: changeQueryState.isLoading,
       error: changeQueryState.error,
     }),
+    useCommentThreads: () => ({ threads: [], problems: [] }),
   };
 });
 

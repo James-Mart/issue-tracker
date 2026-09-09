@@ -29,6 +29,10 @@ vi.mock("@pierre/diffs/react", () => ({
   useVirtualizer: () => undefined,
 }));
 
+vi.mock("../api/mutations", () => ({
+  usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("../api/queries", () => ({
   useIssueChangeQuery: () => ({
     data: changeQueryState.data,
@@ -37,6 +41,7 @@ vi.mock("../api/queries", () => ({
     isFetching: changeQueryState.isFetching,
     refetch: changeQueryState.refetch,
   }),
+  useCommentThreads: () => ({ threads: [], problems: [] }),
 }));
 
 const MULTI_FILE_PATCH = [
