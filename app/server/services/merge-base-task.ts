@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
+import type { Issue } from "../schemas.js";
 import type { StoryApplyDoc } from "./apply-schema.js";
 import { appendTasks, type AppendSummary } from "./append.js";
 import { IssueError } from "./errors.js";
@@ -57,21 +58,16 @@ export const MERGE_BASE_TASK_TITLE = "Update from merge base";
 export const UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR = (storyId: string) =>
   `update-from-merge-base requires branchName on Story "${storyId}"`;
 
+export const UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR = (storyId: string) =>
+  `update-from-merge-base requires mergeBase on Story "${storyId}"`;
+
 function mergeBaseAppendDoc(
-  storyId: string,
+  story: Extract<Issue, { kind: "story" }>,
+  issues: Issue[],
   description: string,
 ): StoryApplyDoc {
-  const { issues } = list();
-  const chain = ancestorChain(storyId, issues);
-  const story = chain.find((issue) => issue.id === storyId);
-  if (!story || story.kind !== "story") {
-    throw new IssueError("not_found", `story "${storyId}" does not exist`);
-  }
-
+  const chain = ancestorChain(story.id, issues);
   const project = chain[0];
-  if (project.kind !== "project") {
-    throw new IssueError("validation", `issue "${storyId}" is not under a project`);
-  }
 
   const epic =
     story.partOf !== project.id
@@ -100,7 +96,8 @@ function mergeBaseAppendDoc(
 }
 
 export function appendUpdateFromMergeBase(storyId: string): Promise<AppendSummary> {
-  const detail = list().issues.find((issue) => issue.id === storyId);
+  const { issues, derived } = list();
+  const detail = issues.find((issue) => issue.id === storyId);
   if (!detail || detail.kind !== "story") {
     throw new IssueError("not_found", `story "${storyId}" does not exist`);
   }
@@ -111,11 +108,18 @@ export function appendUpdateFromMergeBase(storyId: string): Promise<AppendSummar
     );
   }
 
-  const mergeBase = list().derived[storyId]?.mergeBase;
+  const mergeBase = derived[storyId]?.mergeBase;
+  if (!mergeBase) {
+    throw new IssueError(
+      "validation",
+      UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR(storyId),
+    );
+  }
+
   const description = renderMergeBaseTaskDescription({
     branchName: detail.branchName,
-    mergeBase: mergeBase ?? "",
+    mergeBase,
   });
-  const doc = mergeBaseAppendDoc(storyId, description);
+  const doc = mergeBaseAppendDoc(detail, issues, description);
   return appendTasks({ storyId, doc });
 }

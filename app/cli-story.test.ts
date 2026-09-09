@@ -555,6 +555,36 @@ describe("story update-from-merge-base", () => {
     expect(existsSync(join(dir, "update-from-merge-base"))).toBe(false);
   });
 
+  it("refuses a Story with branchName but no derived mergeBase", async () => {
+    writeIssue("b", {
+      kind: "story",
+      title: "Stacked",
+      partOf: "e",
+      stackedOn: "a",
+      branchName: "feat/b",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("a", {
+      kind: "story",
+      title: "Story A",
+      partOf: "e",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const result = await runIssueCli(["story", "update-from-merge-base", "b"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(
+      /update-from-merge-base requires mergeBase on Story "b"/,
+    );
+    expect(existsSync(join(dir, "update-from-merge-base"))).toBe(false);
+  });
+
   it("creates a Task with no sourceIdea", async () => {
     const result = await runIssueCli(["story", "update-from-merge-base", "a"], {
       env: env(),
