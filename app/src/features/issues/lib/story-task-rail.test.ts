@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { IssueRecord } from "@server/schemas";
 import {
   firstAppendedTaskId,
+  ideaAppendedTasksForRail,
   storyTasksForRail,
   taskRailNodeState,
 } from "./story-task-rail";
@@ -109,5 +110,25 @@ describe("firstAppendedTaskId", () => {
       task("b", "s", "todo", { order: 1 }),
     ];
     expect(firstAppendedTaskId(tasks)).toBeNull();
+  });
+});
+
+describe("ideaAppendedTasksForRail", () => {
+  it("returns only this Idea's Tasks in sequence order", () => {
+    const issues: IssueRecord[] = [
+      task("c", "story-a", "todo", { order: 2, sourceIdea: "idea-pr" }),
+      task("a", "story-a", "done", { order: 0, sourceIdea: "idea-pr" }),
+      task("b", "story-a", "todo", { order: 1, sourceIdea: "idea-pr" }),
+      task("other-idea", "story-a", "todo", {
+        order: 3,
+        sourceIdea: "other",
+      }),
+      task("no-idea", "story-a", "todo", { order: 4 }),
+    ];
+    expect(ideaAppendedTasksForRail("idea-pr", issues).map((t) => t.id)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
   });
 });

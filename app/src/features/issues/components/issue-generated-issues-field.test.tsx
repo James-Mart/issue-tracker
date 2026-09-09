@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FIELD_LABELS } from "@server/fields";
-import type { DerivedState } from "@server/schemas";
+import type { DerivedState, IssueRecord } from "@server/schemas";
 import { IssueGeneratedIssuesField } from "./issue-generated-issues-field";
 
 const go = vi.fn();
@@ -34,8 +34,8 @@ vi.mock("./issue-link", () => ({
 
 const t0 = "2026-08-10T12:00:00.000Z";
 
-const idea = {
-  kind: "idea" as const,
+const idea: Extract<IssueRecord, { kind: "idea" }> = {
+  kind: "idea",
   id: "capture",
   title: "Better capture flow",
   partOf: "platform",
@@ -45,19 +45,28 @@ const idea = {
   updatedAt: t0,
 };
 
-const issues = [
-  {
-    kind: "project" as const,
+const appendIdea: Extract<IssueRecord, { kind: "idea" }> = {
+  ...idea,
+  id: "idea-pr",
+  title: "PR feedback — redirect allowlist",
+  appendTo: "oauth-hardening",
+};
+
+function project(): IssueRecord {
+  return {
+    kind: "project",
     id: "platform",
     title: "Platform",
-    mergePolicy: "manual" as const,
+    mergePolicy: "manual",
     order: 0,
     createdAt: t0,
     updatedAt: t0,
-  },
-  idea,
-  {
-    kind: "epic" as const,
+  };
+}
+
+function epic(): IssueRecord {
+  return {
+    kind: "epic",
     id: "provenance-epic",
     title: "Issue provenance",
     partOf: "platform",
@@ -67,24 +76,80 @@ const issues = [
     createdAt: t0,
     updatedAt: t0,
     sourceIdea: "capture",
-  },
-  {
-    kind: "story" as const,
-    id: "detail-rows",
-    title: "Surface detail rows",
+  };
+}
+
+function story(
+  id: string,
+  title: string,
+  extras: Partial<Extract<IssueRecord, { kind: "story" }>> = {},
+): IssueRecord {
+  return {
+    kind: "story",
+    id,
+    title,
     partOf: "platform",
-    order: 1,
+    order: extras.order ?? 1,
     archived: false,
     needsAttention: false,
     createdAt: t0,
     updatedAt: t0,
-    sourceIdea: "capture",
-  },
+    sourceIdea: extras.sourceIdea,
+    merged: false,
+    ...extras,
+  };
+}
+
+function task(
+  id: string,
+  title: string,
+  extras: Partial<Extract<IssueRecord, { kind: "task" }>> = {},
+): Extract<IssueRecord, { kind: "task" }> {
+  return {
+    kind: "task",
+    id,
+    title,
+    partOf: extras.partOf ?? "oauth-hardening",
+    order: extras.order ?? 0,
+    createdAt: t0,
+    updatedAt: t0,
+    status: extras.status ?? "todo",
+    commits: extras.commits ?? [],
+    ...extras,
+  };
+}
+
+const nonAppendIssues: IssueRecord[] = [
+  project(),
+  idea,
+  epic(),
+  story("detail-rows", "Surface detail rows", { sourceIdea: "capture" }),
+];
+
+const appendIssues: IssueRecord[] = [
+  project(),
+  appendIdea,
+  story("oauth-hardening", "OAuth callback hardening", { order: 0 }),
+  task("tighten-allowlist", "Tighten redirect allowlist per review", {
+    order: 2,
+    status: "done",
+    sourceIdea: "idea-pr",
+    appended: true,
+    commits: ["e7f8a9b000000000000000000000000000000000"],
+  }),
+  task("validate-state", "Validate state parameter on callback", {
+    order: 3,
+    sourceIdea: "idea-pr",
+    appended: true,
+  }),
+  task("existing-task", "Wire the callback", { order: 0, status: "done" }),
 ];
 
 const queryState: {
+  issues: IssueRecord[];
   derived: Record<string, DerivedState>;
 } = {
+  issues: nonAppendIssues,
   derived: {
     capture: { blocked: false, planRoots: ["provenance-epic", "detail-rows"] },
   },
@@ -93,7 +158,7 @@ const queryState: {
 vi.mock("../api/queries", () => ({
   useIssuesQuery: () => ({
     data: {
-      issues,
+      issues: queryState.issues,
       derived: queryState.derived,
     },
   }),
@@ -114,6 +179,7 @@ function mount(
 afterEach(() => {
   document.body.innerHTML = "";
   go.mockReset();
+  queryState.issues = nonAppendIssues;
   queryState.derived = {
     capture: { blocked: false, planRoots: ["provenance-epic", "detail-rows"] },
   };
@@ -127,6 +193,7 @@ describe("IssueGeneratedIssuesField", () => {
     expect(container.textContent).toContain("Issue provenance");
     expect(container.textContent).toContain("Surface detail rows");
     expect(container.querySelectorAll("a")).toHaveLength(2);
+    expect(container.querySelector('[data-testid="generated-issues-rail"]')).toBeNull();
   });
 
   it("navigates to a plan root when its link is clicked", async () => {
@@ -146,5 +213,49 @@ describe("IssueGeneratedIssuesField", () => {
     const { container } = mount(<IssueGeneratedIssuesField issue={idea} />);
 
     expect(container.textContent).toBe("");
+  });
+
+  it("renders an append Idea's Tasks on the Story Task rail, not the target Story", () => {
+    queryState.issues = appendIssues;
+    queryState.derived = {
+      "idea-pr": { blocked: false, planRoots: ["oauth-hardening"] },
+    };
+
+    const { container } = mount(
+      <IssueGeneratedIssuesField issue={appendIdea} />,
+    );
+
+    expect(container.textContent).toContain(FIELD_LABELS.generatedIssues);
+    expect(container.textContent).toContain(
+      "Tighten redirect allowlist per review",
+    );
+    expect(container.textContent).toContain(
+      "Validate state parameter on callback",
+    );
+    expect(container.textContent).toContain("e7f8a9b");
+    expect(container.textContent).not.toContain("OAuth callback hardening");
+    expect(container.textContent).not.toContain("Wire the callback");
+
+    const rail = container.querySelector('[data-testid="generated-issues-rail"]');
+    expect(rail).not.toBeNull();
+    expect(rail?.getAttribute("role")).toBe("list");
+    const nodes = rail?.querySelectorAll('[role="listitem"]');
+    expect(nodes).toHaveLength(2);
+  });
+
+  it("is read-only for a planned append Idea", () => {
+    queryState.issues = appendIssues;
+    queryState.derived = {
+      "idea-pr": { blocked: false, planRoots: ["oauth-hardening"] },
+    };
+
+    const { container } = mount(
+      <IssueGeneratedIssuesField issue={appendIdea} />,
+    );
+
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelector("input")).toBeNull();
+    expect(container.querySelector('[aria-label*="Edit" i]')).toBeNull();
+    expect(container.querySelector('[aria-label*="Clear" i]')).toBeNull();
   });
 });
