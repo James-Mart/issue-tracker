@@ -440,7 +440,7 @@ export interface DerivedState {
   mergeBase?: string;
   /** Effective merge policy (stored override else inherited from parent). */
   mergePolicy?: MergePolicy;
-  /** Epic and root project-level Story ids whose stored sourceIdea points here. */
+  /** Epic, root project-level Story, and Story-with-task provenance ids for this Idea. */
   planRoots?: string[];
   /** True when sourceIdea names an Idea present in the set and not archived. */
   planNotFinal?: boolean;

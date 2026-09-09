@@ -194,14 +194,17 @@ export function derive(issues: Issue[]): DeriveResult {
   for (const issue of issues) {
     if (issue.kind !== "idea") continue;
     const projectId = issue.partOf;
-    const roots: { id: string; order: number }[] = [];
+    const rootsById = new Map<string, number>();
+    const addRoot = (id: string, order: number) => {
+      rootsById.set(id, order);
+    };
     for (const candidate of issues) {
       if (candidate.kind === "epic") {
         if (
           candidate.sourceIdea === issue.id &&
           candidate.partOf === projectId
         ) {
-          roots.push({ id: candidate.id, order: candidate.order });
+          addRoot(candidate.id, candidate.order);
         }
       } else if (candidate.kind === "story") {
         if (
@@ -209,11 +212,20 @@ export function derive(issues: Issue[]): DeriveResult {
           !candidate.stackedOn &&
           candidate.partOf === projectId
         ) {
-          roots.push({ id: candidate.id, order: candidate.order });
+          addRoot(candidate.id, candidate.order);
         }
       }
     }
-    roots.sort(bySequence);
+    for (const task of issues) {
+      if (task.kind !== "task" || task.sourceIdea !== issue.id) continue;
+      const story = byId.get(task.partOf);
+      if (story?.kind !== "story") continue;
+      if (projectContaining(story, byId) !== projectId) continue;
+      addRoot(story.id, story.order);
+    }
+    const roots = [...rootsById.entries()]
+      .map(([id, order]) => ({ id, order }))
+      .sort(bySequence);
     state[issue.id] = { blocked: false, planRoots: roots.map((r) => r.id) };
   }
 
