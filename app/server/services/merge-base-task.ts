@@ -1,7 +1,12 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
+import type { StoryApplyDoc } from "./apply-schema.js";
+import { appendTasks, type AppendSummary } from "./append.js";
 import { IssueError } from "./errors.js";
+import { list } from "./issues.js";
+import { uniqueSlug } from "./slug.js";
+import { ancestorChain } from "./subtree.js";
 
 const servicesDir = fileURLToPath(new URL(".", import.meta.url));
 const templatePath = join(
@@ -45,4 +50,72 @@ export function renderMergeBaseTaskDescription({
   }
 
   return rendered;
+}
+
+export const MERGE_BASE_TASK_TITLE = "Update from merge base";
+
+export const UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR = (storyId: string) =>
+  `update-from-merge-base requires branchName on Story "${storyId}"`;
+
+function mergeBaseAppendDoc(
+  storyId: string,
+  description: string,
+): StoryApplyDoc {
+  const { issues } = list();
+  const chain = ancestorChain(storyId, issues);
+  const story = chain.find((issue) => issue.id === storyId);
+  if (!story || story.kind !== "story") {
+    throw new IssueError("not_found", `story "${storyId}" does not exist`);
+  }
+
+  const project = chain[0];
+  if (project.kind !== "project") {
+    throw new IssueError("validation", `issue "${storyId}" is not under a project`);
+  }
+
+  const epic =
+    story.partOf !== project.id
+      ? chain.find((issue) => issue.id === story.partOf && issue.kind === "epic")
+      : undefined;
+
+  return {
+    project: project.id,
+    ...(epic ? { epic: epic.id } : {}),
+    story: {
+      id: story.id,
+      title: story.title,
+      children: [
+        {
+          kind: "task",
+          id: uniqueSlug(
+            MERGE_BASE_TASK_TITLE,
+            issues.map((issue) => issue.id),
+          ),
+          title: MERGE_BASE_TASK_TITLE,
+          description,
+        },
+      ],
+    },
+  };
+}
+
+export function appendUpdateFromMergeBase(storyId: string): Promise<AppendSummary> {
+  const detail = list().issues.find((issue) => issue.id === storyId);
+  if (!detail || detail.kind !== "story") {
+    throw new IssueError("not_found", `story "${storyId}" does not exist`);
+  }
+  if (!detail.branchName) {
+    throw new IssueError(
+      "validation",
+      UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR(storyId),
+    );
+  }
+
+  const mergeBase = list().derived[storyId]?.mergeBase;
+  const description = renderMergeBaseTaskDescription({
+    branchName: detail.branchName,
+    mergeBase: mergeBase ?? "",
+  });
+  const doc = mergeBaseAppendDoc(storyId, description);
+  return appendTasks({ storyId, doc });
 }

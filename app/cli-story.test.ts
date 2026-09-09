@@ -462,3 +462,108 @@ story:
     expect((await runIssueCli(["task", "get", "keep", "appended"], { env: env() })).stdout).toBe("");
   });
 });
+
+describe("story update-from-merge-base", () => {
+  beforeEach(() => {
+    writeIssue("p", { kind: "project", title: "Proj", createdAt: nextAt(), updatedAt: nextAt() });
+    writeIssue("e", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      blockedBy: [],
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("a", {
+      kind: "story",
+      title: "Story A",
+      partOf: "e",
+      merged: false,
+      branchName: "feat/a",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("keep", {
+      kind: "task",
+      title: "Keep",
+      partOf: "a",
+      status: "done",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+  });
+
+  it("appends one Task at the tail with both refs in its description", async () => {
+    const result = await runIssueCli(["story", "update-from-merge-base", "a"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/created: 1 \(update-from-merge-base\)/);
+    expect(result.stdout).toMatch(/updated: 0/);
+
+    const task = JSON.parse(
+      readFileSync(join(dir, "update-from-merge-base", "issue.json"), "utf8"),
+    );
+    expect(task.partOf).toBe("a");
+    expect(task.order).toBe(1);
+    expect(task.appended).toBe(true);
+    expect(existsSync(join(dir, "keep"))).toBe(true);
+
+    const description = readFileSync(
+      join(dir, "update-from-merge-base", "description.md"),
+      "utf8",
+    );
+    expect(description).toContain("feat/a");
+    expect(description).toContain("main");
+  });
+
+  it("refuses a merged Story with the append-target reason", async () => {
+    writeIssue("a", {
+      kind: "story",
+      title: "Story A",
+      partOf: "e",
+      merged: true,
+      branchName: "feat/a",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const result = await runIssueCli(["story", "update-from-merge-base", "a"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/appendTo cannot target merged Story "a"/);
+    expect(existsSync(join(dir, "update-from-merge-base"))).toBe(false);
+  });
+
+  it("refuses a Story with no branch", async () => {
+    writeIssue("a", {
+      kind: "story",
+      title: "Story A",
+      partOf: "e",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const result = await runIssueCli(["story", "update-from-merge-base", "a"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/update-from-merge-base requires branchName on Story "a"/);
+    expect(existsSync(join(dir, "update-from-merge-base"))).toBe(false);
+  });
+
+  it("creates a Task with no sourceIdea", async () => {
+    const result = await runIssueCli(["story", "update-from-merge-base", "a"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+
+    const task = JSON.parse(
+      readFileSync(join(dir, "update-from-merge-base", "issue.json"), "utf8"),
+    );
+    expect(task.sourceIdea).toBeUndefined();
+  });
+});
