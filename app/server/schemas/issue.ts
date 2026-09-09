@@ -259,6 +259,7 @@ export const ideaSchema = z.object({
   archived: z.boolean().default(false),
   approvePlan: z.boolean().optional(),
   approvalPending: z.boolean().optional(),
+  appendTo: z.string().optional(),
   stakeholder: stakeholderField,
   labels: assignmentLabelsSchema,
   ...orderField,
@@ -295,6 +296,8 @@ export const taskSchema = z.object({
   qa: z.enum(QA_STATUSES).optional(),
   commits: z.array(z.string()).default([]),
   noDiff: z.boolean().optional(),
+  sourceIdea: z.string().optional(),
+  appended: z.boolean().optional(),
   ...taskMutable,
   ...orderField,
   ...timestamps,
@@ -437,7 +440,7 @@ export interface DerivedState {
   mergeBase?: string;
   /** Effective merge policy (stored override else inherited from parent). */
   mergePolicy?: MergePolicy;
-  /** Epic and root project-level Story ids whose stored sourceIdea points here. */
+  /** Epic, root project-level Story, and Story-with-task provenance ids for this Idea. */
   planRoots?: string[];
   /** True when sourceIdea names an Idea present in the set and not archived. */
   planNotFinal?: boolean;

@@ -9,6 +9,7 @@ import {
   type IssueRecord,
 } from "./server/schemas.js";
 import { visibleIssues } from "./server/services/archived-visibility.js";
+import { appendTasks } from "./server/services/append.js";
 import { apply } from "./server/services/apply.js";
 import {
   parseApplyDoc,
@@ -333,6 +334,38 @@ function createIssueProgram(run: Run): Command {
           run(async () => {
             const detail = assertKind("task", taskId);
             await update(taskId, { commits: appendTaskCommit(detail, sha) });
+          }),
+        );
+    }
+    if (kind === "story") {
+      kindCmd
+        .command("append")
+        .argument("<storyId>", "story id")
+        .argument("<file>", "path to the story-form apply doc")
+        .description(
+          "append tasks from a story-form apply doc without pruning; new tasks land at the tail; restated tasks upsert in place",
+        )
+        .action((storyId: string, file: string) =>
+          run(async () => {
+            const raw = parseYaml(readFileSync(file, "utf8"));
+            const parsed = parseApplyDoc(raw);
+            if (!parsed.ok) throw new Error(parsed.message);
+            const summary = await appendTasks({ storyId, doc: parsed.doc });
+            const line = (label: string, ids: string[]): string =>
+              `${label}: ${ids.length}${ids.length ? ` (${ids.join(", ")})` : ""}`;
+            console.log(line("created", summary.created));
+            console.log(line("updated", summary.updated));
+
+            const { issues, derived } = list();
+            const treeLines = renderApplyRoot(
+              parsed.doc,
+              issues,
+              buildTreeContext(issues, derived),
+            );
+            if (treeLines.length > 0) {
+              console.log();
+              console.log(treeLines.join("\n"));
+            }
           }),
         );
     }

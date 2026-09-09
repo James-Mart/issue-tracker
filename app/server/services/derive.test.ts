@@ -537,6 +537,37 @@ describe("derive - planRoots", () => {
     expect(derive(issues).byId.i1.planRoots).toEqual(["e1"]);
     expect(derive(issues).byId.i2.planRoots).toEqual([]);
   });
+
+  it("resolves through task provenance alone", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p"),
+      branch("s", "p", {}, 0),
+      commit("t", "s", { sourceIdea: "i" }),
+    ];
+    expect(derive(issues).byId.i.planRoots).toEqual(["s"]);
+  });
+
+  it("deduplicates when both story and task edges point at the same story", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p"),
+      branch("s", "p", { sourceIdea: "i" }, 0),
+      commit("t", "s", { sourceIdea: "i" }),
+    ];
+    expect(derive(issues).byId.i.planRoots).toEqual(["s"]);
+  });
+
+  it("derives an empty array for an unrelated idea", () => {
+    const issues = [
+      project("p"),
+      idea("i", "p"),
+      idea("other", "p", 1),
+      branch("s", "p", {}, 0),
+      commit("t", "s", { sourceIdea: "other" }),
+    ];
+    expect(derive(issues).byId.i.planRoots).toEqual([]);
+  });
 });
 
 describe("derive - planNotFinal", () => {

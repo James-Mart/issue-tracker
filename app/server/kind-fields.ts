@@ -87,6 +87,7 @@ export const IDEA_SET_FIELDS = {
   archived: { type: "boolean" },
   approvePlan: { type: "boolean" },
   approvalPending: { type: "boolean" },
+  appendTo: { type: "string" },
   partOf: { type: "string" },
   stakeholder: { type: "agentModelSlug" },
   labels: { type: "array" },
@@ -123,6 +124,7 @@ export const TASK_SET_FIELDS = {
   qa: { type: "enum", values: QA_STATUSES },
   commits: { type: "commits" },
   noDiff: { type: "boolean" },
+  sourceIdea: { type: "string" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
 
@@ -191,6 +193,7 @@ export const IDEA_GET_FIELDS = {
   archived: STORED,
   approvePlan: STORED,
   approvalPending: STORED,
+  appendTo: STORED,
   stakeholder: STORED,
   labels: STORED,
   order: STORED,
@@ -244,6 +247,8 @@ export const TASK_GET_FIELDS = {
   qa: STORED,
   commits: STORED,
   noDiff: STORED,
+  sourceIdea: STORED,
+  appended: STORED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,

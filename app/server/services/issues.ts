@@ -54,7 +54,7 @@ import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import { uniqueSlug } from "./slug.js";
-import { validateNonClearablePatch, validateSourceIdeaPatch } from "./patch.js";
+import { validateAppendToPatch, validateNonClearablePatch, validateSourceIdeaPatch } from "./patch.js";
 import { validateCommitsPatch, validateFullCommitSha } from "./commit-sha.js";
 import { validateMergePolicyPatch } from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
@@ -562,6 +562,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     validateNonClearablePatch(existing, jsonPatch);
     validateMergePolicyPatch(existing, jsonPatch, issues);
     validateSourceIdeaPatch(existing, jsonPatch, issues);
+    validateAppendToPatch(existing, jsonPatch, issues);
     if (
       existing.kind === "idea" &&
       "stakeholder" in jsonPatch &&
@@ -771,9 +772,10 @@ export function appendComment(
 // descendant `partOf` it) and repairs every surviving foreign reference into it:
 // a branch stacked on a deleted branch is spliced to the deleted branch's own
 // fork point, deleted ids are dropped from any Epic's `blockedBy`, and
-// `sourceIdea` is cleared on surviving Epics and root Stories. The
+// `sourceIdea` is cleared on surviving Epics, root Stories, and Tasks. The
 // prospective surviving set is validated before anything is written, so a
 // deletion that could not leave the graph valid is refused without side effects.
+// `appendTo` is cleared on surviving Ideas when the target Story is deleted.
 export function remove(id: string): Promise<DeletionResult> {
   return serialize(() => {
     if (!existsSync(dirOf(id))) {
@@ -798,6 +800,11 @@ export function remove(id: string): Promise<DeletionResult> {
     for (const { id: bid } of plan.dropSourceIdea) {
       const patch = patchOf.get(bid) ?? {};
       patch.sourceIdea = null;
+      patchOf.set(bid, patch);
+    }
+    for (const { id: bid } of plan.dropAppendTo) {
+      const patch = patchOf.get(bid) ?? {};
+      patch.appendTo = null;
       patchOf.set(bid, patch);
     }
 
@@ -833,6 +840,7 @@ export function remove(id: string): Promise<DeletionResult> {
       repointed: plan.repoint,
       unblocked: plan.unblock,
       droppedSourceIdea: plan.dropSourceIdea,
+      droppedAppendTo: plan.dropAppendTo,
     };
   });
 }

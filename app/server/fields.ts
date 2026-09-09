@@ -85,15 +85,22 @@ export const IDEA_RUNTIME_OPTIONAL_KEYS = [
   "stakeholder",
   "approvePlan",
   "approvalPending",
+  "appendTo",
 ] as const;
 
 // Task mergeable keys that are not imperative-only. Imperative-only keys
 // (e.g. noDiff) live in TASK_IMPERATIVE_ONLY_KEYS and are excluded.
 export const TASK_FORM_FIELD_KEYS = ["status", "commits"] as const;
 
-export const TASK_IMPERATIVE_ONLY_KEYS = ["noDiff", "qa"] as const;
+export const TASK_IMPERATIVE_ONLY_KEYS = ["noDiff", "qa", "sourceIdea"] as const;
 
-export const TASK_RUNTIME_OPTIONAL_KEYS = ["commits", "noDiff", "qa"] as const;
+export const TASK_RUNTIME_OPTIONAL_KEYS = [
+  "commits",
+  "noDiff",
+  "qa",
+  "sourceIdea",
+  "appended",
+] as const;
 
 export const TASK_FIELD_KEYS = [
   ...TASK_FORM_FIELD_KEYS,
@@ -120,6 +127,7 @@ export const CLEARABLE_KEYS = [
   "mergeBaseOverride",
   "mergePolicy",
   "sourceIdea",
+  "appendTo",
 ] as const;
 
 export type ClearableKey = (typeof CLEARABLE_KEYS)[number];
@@ -178,6 +186,7 @@ export const FIELD_LABELS = {
   stakeholder: "Stakeholder",
   approvePlan: "Approve plan",
   approvalPending: "Approval pending",
+  appendTo: "Append to",
   sourceIdea: "Source idea",
   generatedIssues: "Generated issues",
 } as const;
