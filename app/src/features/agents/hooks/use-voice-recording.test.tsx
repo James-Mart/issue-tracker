@@ -442,6 +442,25 @@ describe("useVoiceRecording", () => {
     expect(harness.getView().state).toBe("idle");
   });
 
+  it("releases the microphone track on unmount", async () => {
+    const harness = mountHook();
+
+    act(() => {
+      harness.getView().start();
+    });
+    await flushPromises();
+
+    expect(harness.getView().state).toBe("recording");
+    track.stop.mockClear();
+
+    act(() => {
+      harness.root.unmount();
+    });
+    await flushPromises();
+
+    expect(track.stop).toHaveBeenCalled();
+  });
+
   it.each([
     ["recording", "recording"] as const,
     ["review", "review"] as const,

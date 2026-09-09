@@ -14,6 +14,34 @@ vi.mock("../api/mutations", () => ({
   }),
 }));
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
+vi.mock("@/features/agents/hooks/use-voice-recording", async (importOriginal) => {
+  const original =
+    await importOriginal<
+      typeof import("@/features/agents/hooks/use-voice-recording")
+    >();
+  return {
+    ...original,
+    useVoiceRecording: () => ({
+      state: "idle" as const,
+      elapsedSeconds: 0,
+      errorKind: null,
+      errorReason: null,
+      start: vi.fn(),
+      cancel: vi.fn(),
+      confirm: vi.fn(),
+      retry: vi.fn(),
+    }),
+  };
+});
+
 const t0 = "2026-08-01T00:00:00.000Z";
 
 function task(

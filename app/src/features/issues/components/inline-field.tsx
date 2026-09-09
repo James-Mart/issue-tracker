@@ -67,6 +67,12 @@ export interface InlineFieldProps {
   textareaAttrs?: Record<string, string | undefined>;
   /** When true, skip the blur-triggered commit (e.g. while an upload disables the field). */
   shouldDeferBlurCommit?: () => boolean;
+  /** When true, consume the key event and skip default edit-session handling. */
+  beforeKeyDown?: (
+    e: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => boolean;
+  /** Parent can enter edit mode programmatically (e.g. voice dictation from view). */
+  beginEditRef?: MutableRefObject<(() => void) | null>;
   /** Mirror draft to a parent that needs it (e.g. attachment insert). */
   onDraftChange?: (draft: string) => void;
   /** Let a parent push draft updates into the session (e.g. attachment insert). */
@@ -98,6 +104,8 @@ export function InlineField({
   textareaProps,
   textareaAttrs,
   shouldDeferBlurCommit,
+  beforeKeyDown,
+  beginEditRef,
   onDraftChange,
   setDraftRef,
   resolveEditDraft,
@@ -145,6 +153,14 @@ export function InlineField({
       setDraftRef.current = null;
     };
   }, [setDraft, setDraftRef]);
+
+  useEffect(() => {
+    if (!beginEditRef) return;
+    beginEditRef.current = beginEdit;
+    return () => {
+      beginEditRef.current = null;
+    };
+  }, [beginEdit, beginEditRef]);
 
   useEffect(() => {
     if (!editing || renderEdit) return;
@@ -260,7 +276,10 @@ export function InlineField({
           ref={textareaRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
+          onKeyDown={(e) => {
+            if (beforeKeyDown?.(e)) return;
+            onKeyDown(e);
+          }}
           className={cn("min-h-[120px] font-mono", inputClassName)}
           {...textareaAttrs}
           {...textareaProps}
