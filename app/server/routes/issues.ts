@@ -46,7 +46,12 @@ import {
   readConversation,
   startConversationPrompt,
 } from "../services/conversations.js";
+import {
+  appendUpdateFromMergeBase,
+  UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR,
+} from "../services/merge-base-task.js";
 import { moveStory } from "../services/move-story.js";
+import { APPEND_TO_MERGED_ERROR } from "../services/patch.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
 import { findPlanningWorkRoot } from "../services/planning-work-root.js";
 import { readIssueChange, readIssueChangeFile } from "../services/change.js";
@@ -329,6 +334,36 @@ export function createIssuesRouter(
         req.body as CommentInput,
       );
       res.status(201).json(message);
+    }),
+  );
+
+  router.post(
+    "/:id/update-from-merge-base",
+    asyncRoute(async (req, res) => {
+      const storyId = req.params.id;
+      try {
+        const summary = await appendUpdateFromMergeBase(storyId);
+        const taskId = summary.created[0];
+        if (!taskId) {
+          throw new IssueError(
+            "conflict",
+            "update-from-merge-base created no task",
+          );
+        }
+        res.status(201).json(read(taskId));
+      } catch (err) {
+        if (err instanceof IssueError && err.code === "validation") {
+          const msg = err.message;
+          if (
+            msg === APPEND_TO_MERGED_ERROR(storyId) ||
+            msg === UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR(storyId)
+          ) {
+            res.status(409).json({ error: msg });
+            return;
+          }
+        }
+        throw err;
+      }
     }),
   );
 
