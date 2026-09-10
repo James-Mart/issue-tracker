@@ -1,4 +1,5 @@
 import { execFileSync } from "child_process";
+import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -15,6 +16,10 @@ import {
 } from "./cli.test-helpers.js";
 import { refreshStorePathsFromEnv } from "./server/config.js";
 import { applyMergeConsequences } from "./server/services/merge-consequences.js";
+import {
+  setGitWriteSpawnerForTests,
+  type GitWriteSpawner,
+} from "./server/services/git-write.js";
 import { WORKTREE_ROOT } from "./server/worktree-constants.js";
 import { setupLogPathFor, worktreePathFor } from "./server/services/worktree.js";
 
@@ -136,7 +141,25 @@ function seedProject(workspace?: string, setupCommand?: string): void {
   });
 }
 
+function failGitWorktreeRemove(): void {
+  const spawner: GitWriteSpawner = () => {
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    setImmediate(() => {
+      child.stderr.emit("data", "fatal: fake worktree remove failure\n");
+      child.emit("close", 1);
+    });
+    return child as ReturnType<GitWriteSpawner>;
+  };
+  setGitWriteSpawnerForTests(spawner);
+}
+
 afterEach(() => {
+  setGitWriteSpawnerForTests(null);
   removeTrackedWorktrees();
   rmSync(conversationsRoot(), { recursive: true, force: true });
 });
@@ -857,6 +880,45 @@ describe("lifecycle worktree removal", () => {
     expect(
       (await runIssueCli(["story", "view", "a"], { env: env() })).status,
     ).not.toBe(0);
+  });
+
+  it("fails merge when worktree remove hits git-failed", async () => {
+    const path = await createCleanWorktree();
+    failGitWorktreeRemove();
+    await expect(
+      withIssuesDir(() => applyMergeConsequences("a")),
+    ).rejects.toMatchObject({ code: "git-failed" });
+    expect(issueJsonField("a", "merged")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
+  });
+
+  it("fails archive when worktree remove hits git-failed", async () => {
+    const path = await createCleanWorktree();
+    failGitWorktreeRemove();
+    const result = await runIssueCli(["story", "set", "a", "archived", "true"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/fake worktree remove failure/);
+    expect(issueJsonField("a", "archived")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
+  });
+
+  it("fails delete when worktree remove hits git-failed and does not report retained", async () => {
+    const path = await createCleanWorktree();
+    failGitWorktreeRemove();
+    const result = await runIssueCli(["story", "delete", "a"], { env: env() });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/fake worktree remove failure/);
+    expect(result.stdout).not.toMatch(/deleted a/);
+    expect(result.stdout).not.toMatch(/retained worktree/);
+    expect(existsSync(path)).toBe(true);
+    expect(
+      (await runIssueCli(["story", "view", "a"], { env: env() })).status,
+    ).toBe(0);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
   });
 });
 

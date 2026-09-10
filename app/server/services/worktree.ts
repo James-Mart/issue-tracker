@@ -246,9 +246,9 @@ export async function attemptStoryWorktreeRemoval(
     await removeStoryWorktree(storyId);
     return { outcome: "removed", path };
   } catch (err) {
-    // Automatic callers never pass --discard; a refusal leaves the checkout
-    // and must not fail merge, archive, or delete.
-    if (!(err instanceof IssueError)) throw err;
+    // Automatic callers never pass --discard. Absorb only an explicit
+    // removal refusal (unsafe checkout or active implementing).
+    if (!(err instanceof IssueError) || err.code !== "conflict") throw err;
     if (path && existsSync(path)) return { outcome: "retained", path };
     return { outcome: "absent" };
   }
