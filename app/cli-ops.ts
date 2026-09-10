@@ -260,6 +260,9 @@ async function printDeleteResult(id: string): Promise<void> {
   for (const { id: bid } of result.droppedAppendTo) {
     console.log(`  cleared ${bid}.appendTo`);
   }
+  for (const { id: wid, path } of result.retainedWorktrees) {
+    console.log(`  retained worktree for ${wid} at ${path}`);
+  }
 }
 
 async function printAttach(id: string, file: string): Promise<void> {

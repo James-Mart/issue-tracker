@@ -9,6 +9,7 @@ import {
   serialize,
 } from "./issues.js";
 import { ancestorChain, subtreeIds } from "./subtree.js";
+import { attemptStoryWorktreeRemoval } from "./worktree.js";
 
 /** Derived mergeBase of `finisherId` before the merged write. */
 export function landedBaseForMerge(
@@ -52,8 +53,8 @@ export function staleSiblingIds(
 }
 
 /** After a successful `gh pr merge`, set `merged` and flag stale siblings. */
-export function applyMergeConsequences(finisherId: string): Promise<void> {
-  return serialize(() => {
+export async function applyMergeConsequences(finisherId: string): Promise<void> {
+  await serialize(() => {
     const detail = readIssueOrThrow(finisherId);
     if (detail.kind !== "story") {
       throw new IssueError(
@@ -107,4 +108,5 @@ export function applyMergeConsequences(finisherId: string): Promise<void> {
 
     commitIssueBatch(writes, []);
   });
+  await attemptStoryWorktreeRemoval(finisherId);
 }

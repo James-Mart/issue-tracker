@@ -11,7 +11,7 @@ import { IssueError } from "./errors.js";
 import { branchExists, currentBranch } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
 import { hasActiveImplementingRun } from "./implementing-status.js";
-import { list, update } from "./issues.js";
+import { list, readAll, update } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { projectContaining } from "./subtree.js";
 
@@ -227,6 +227,51 @@ export async function attachStoryWorktree(storyId: string): Promise<string> {
     worktreeBlockedReason: null,
   });
   return path;
+}
+
+export type AttemptedWorktreeRemoval =
+  | { outcome: "removed"; path: string }
+  | { outcome: "absent" }
+  | { outcome: "retained"; path: string };
+
+export async function attemptStoryWorktreeRemoval(
+  storyId: string,
+): Promise<AttemptedWorktreeRemoval> {
+  let path: string | undefined;
+  try {
+    const story = readAll().issues.find((issue) => issue.id === storyId);
+    if (!story || story.kind !== "story") return { outcome: "absent" };
+    path = story.worktreePath;
+    if (!path || !existsSync(path)) return { outcome: "absent" };
+    await removeStoryWorktree(storyId);
+    return { outcome: "removed", path };
+  } catch {
+    // Automatic callers never pass --discard; refusal leaves the checkout.
+    if (path && existsSync(path)) return { outcome: "retained", path };
+    return { outcome: "absent" };
+  }
+}
+
+export function storyIdsForLifecycleRemoval(
+  existing: Issue,
+  next: Issue,
+  archivedCascadePatches: readonly { id: string; archived: boolean }[],
+  issues: Issue[],
+): string[] {
+  const ids: string[] = [];
+  const add = (id: string) => {
+    if (!ids.includes(id)) ids.push(id);
+  };
+  if (existing.kind === "story" && next.kind === "story") {
+    if (!existing.merged && next.merged) add(existing.id);
+    if (!existing.archived && next.archived) add(existing.id);
+  }
+  const byId = new Map(issues.map((issue) => [issue.id, issue]));
+  for (const patch of archivedCascadePatches) {
+    if (!patch.archived) continue;
+    if (byId.get(patch.id)?.kind === "story") add(patch.id);
+  }
+  return ids;
 }
 
 export async function removeStoryWorktree(

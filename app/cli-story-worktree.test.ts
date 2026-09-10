@@ -13,6 +13,8 @@ import {
   useCliTestFixtures,
   writeIssue,
 } from "./cli.test-helpers.js";
+import { refreshStorePathsFromEnv } from "./server/config.js";
+import { applyMergeConsequences } from "./server/services/merge-consequences.js";
 import { WORKTREE_ROOT } from "./server/worktree-constants.js";
 import { setupLogPathFor, worktreePathFor } from "./server/services/worktree.js";
 
@@ -753,6 +755,108 @@ describe("story worktree remove", () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/requires an existing worktree/);
+  });
+});
+
+async function withIssuesDir<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = process.env.ISSUES_DIR;
+  process.env.ISSUES_DIR = dir;
+  refreshStorePathsFromEnv();
+  try {
+    return await fn();
+  } finally {
+    if (saved === undefined) delete process.env.ISSUES_DIR;
+    else process.env.ISSUES_DIR = saved;
+    refreshStorePathsFromEnv();
+  }
+}
+
+async function createCleanWorktree(): Promise<string> {
+  const workspace = initRepo();
+  seedProject(workspace);
+  writeStory("a");
+  const path = trackWorktree(workspace, "p", "a");
+  expect(
+    (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+  ).toBe(0);
+  return path;
+}
+
+describe("lifecycle worktree removal", () => {
+  it("removes a clean worktree when the Story is merged", async () => {
+    const path = await createCleanWorktree();
+    await withIssuesDir(() => applyMergeConsequences("a"));
+    expect(existsSync(path)).toBe(false);
+    expect(issueJsonField("a", "worktreePath")).toBeUndefined();
+    expect(issueJsonField("a", "merged")).toBe(true);
+  });
+
+  it("removes a clean worktree when the Story is archived", async () => {
+    const path = await createCleanWorktree();
+    const result = await runIssueCli(["story", "set", "a", "archived", "true"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(path)).toBe(false);
+    expect(issueJsonField("a", "worktreePath")).toBeUndefined();
+    expect(issueJsonField("a", "archived")).toBe(true);
+  });
+
+  it("removes a clean worktree when the Story is deleted", async () => {
+    const path = await createCleanWorktree();
+    const result = await runIssueCli(["story", "delete", "a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("deleted a");
+    expect(result.stdout).not.toMatch(/retained worktree/);
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it("keeps a dirty worktree when merge refuses removal", async () => {
+    const path = await createCleanWorktree();
+    writeFileSync(join(path, "README"), "dirty\n");
+    await withIssuesDir(() => applyMergeConsequences("a"));
+    expect(issueJsonField("a", "merged")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
+    const worktree = await runIssueCli(["story", "get", "a", "worktree"], {
+      env: env(),
+    });
+    expect(JSON.parse(worktree.stdout)).toMatchObject({
+      exists: true,
+      retained: true,
+    });
+  });
+
+  it("keeps a dirty worktree when archive refuses removal", async () => {
+    const path = await createCleanWorktree();
+    writeFileSync(join(path, "README"), "dirty\n");
+    const result = await runIssueCli(["story", "set", "a", "archived", "true"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(issueJsonField("a", "archived")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
+    const worktree = await runIssueCli(["story", "get", "a", "worktree"], {
+      env: env(),
+    });
+    expect(JSON.parse(worktree.stdout)).toMatchObject({
+      exists: true,
+      retained: true,
+    });
+  });
+
+  it("deletes the Story and names the path when removal is refused", async () => {
+    const path = await createCleanWorktree();
+    writeFileSync(join(path, "README"), "dirty\n");
+    const result = await runIssueCli(["story", "delete", "a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("deleted a");
+    expect(result.stdout).toContain(`retained worktree for a at ${path}`);
+    expect(existsSync(path)).toBe(true);
+    expect(
+      (await runIssueCli(["story", "view", "a"], { env: env() })).status,
+    ).not.toBe(0);
   });
 });
 

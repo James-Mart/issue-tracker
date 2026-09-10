@@ -54,6 +54,10 @@ import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
+import {
+  attemptStoryWorktreeRemoval,
+  storyIdsForLifecycleRemoval,
+} from "./worktree.js";
 import { uniqueSlug } from "./slug.js";
 import { validateAppendToPatch, validateNonClearablePatch, validateSourceIdeaPatch } from "./patch.js";
 import { validateCommitsPatch, validateFullCommitSha } from "./commit-sha.js";
@@ -551,6 +555,7 @@ export function renameProjectLabel(
 }
 
 export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
+  let attemptIds: string[] = [];
   return serialize(() => {
     const existing = readIssueOrThrow(id);
     const { issues } = readAll();
@@ -678,10 +683,22 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     }
 
     commitIssueBatch(writes, []);
+    attemptIds = storyIdsForLifecycleRemoval(
+      existing,
+      parsed.issue,
+      archivedCascadePatches,
+      issues,
+    );
     const jsonText = serializeIssue(parsed.issue);
     const finalDescription =
       description !== undefined ? description : readDescription(id);
     return toDetail(parsed.issue, jsonText, finalDescription);
+  }).then(async (detail) => {
+    if (attemptIds.length === 0) return detail;
+    for (const storyId of attemptIds) {
+      await attemptStoryWorktreeRemoval(storyId);
+    }
+    return read(id);
   });
 }
 
@@ -778,7 +795,20 @@ export function appendComment(
 // prospective surviving set is validated before anything is written, so a
 // deletion that could not leave the graph valid is refused without side effects.
 // `appendTo` is cleared on surviving Ideas when the target Story is deleted.
-export function remove(id: string): Promise<DeletionResult> {
+export async function remove(id: string): Promise<DeletionResult> {
+  if (!existsSync(dirOf(id))) {
+    throw new IssueError("not_found", `unknown issue "${id}"`);
+  }
+
+  const preview = planDeletion(readAll().issues, id);
+  const retainedWorktrees: DeletionResult["retainedWorktrees"] = [];
+  for (const delId of preview.deleteIds) {
+    const result = await attemptStoryWorktreeRemoval(delId);
+    if (result.outcome === "retained") {
+      retainedWorktrees.push({ id: delId, path: result.path });
+    }
+  }
+
   return serialize(() => {
     if (!existsSync(dirOf(id))) {
       throw new IssueError("not_found", `unknown issue "${id}"`);
@@ -843,6 +873,7 @@ export function remove(id: string): Promise<DeletionResult> {
       unblocked: plan.unblock,
       droppedSourceIdea: plan.dropSourceIdea,
       droppedAppendTo: plan.dropAppendTo,
+      retainedWorktrees,
     };
   });
 }
