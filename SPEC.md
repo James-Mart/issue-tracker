@@ -376,7 +376,9 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   stored `prUrl` and cwd = the Project `workspace`; refuses other kinds and
   Stories with no `prUrl`; `--auto` maps to `gh pr merge --auto`;
   `--match-head-commit` maps to the flag of the same name; surfaces `gh`
-  stderr on failure.
+  stderr on failure. After the PR lands, the tracker sets `merged` and
+  attempts safe worktree removal (no `--discard`); a refusal leaves the
+  checkout and does not fail the merge.
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
@@ -1221,6 +1223,11 @@ Deleting an issue removes its whole directory (`rmSync` recursive), so any
 `attachments/` under that directory go with it — both imperative `remove` and
 `apply` prune. There is no separate attachment-cascade step.
 
+When the delete set includes a Story that still has a worktree, `remove()`
+attempts the same safe removal as `issue story worktree remove` (never
+`--discard`). A refusal leaves the checkout on disk and does not fail the
+deletion; the CLI names each retained path so a human can clear it by hand.
+
 **Invariant.** After `remove()`, `list().problems` gains no new
 dangling-reference, wrong-kind, or cycle problem — guaranteed by construction in
 `planDeletion()` and re-validated against the surviving set before any write.
@@ -1571,7 +1578,10 @@ so cannot drift:
   Project `trunk` nor the branch's upstream when one exists), `retained`
   (`exists` while the Story is merged or archived), `setupFailed` /
   `setupLogPath` / `setupOutput` (last setup attempt; output is the log text),
-  and `blockedReason` (`worktreeBlockedReason`). Counts are read through
+  and `blockedReason` (`worktreeBlockedReason`). Merge, archive, and delete
+  each attempt safe worktree removal automatically (no `--discard`); a
+  refused removal is not an error, and `retained` is how a leftover checkout
+  is reported while the Story record still exists. Counts are read through
   `app/server/services/git-read.ts` with the worktree as cwd. A Story with no
   `worktreePath`, or whose recorded directory is gone, derives as absent
   (`exists: false`, counts 0) rather than erroring. Computed by

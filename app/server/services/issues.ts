@@ -555,7 +555,6 @@ export function renameProjectLabel(
 }
 
 export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
-  let attemptIds: string[] = [];
   return serialize(() => {
     const existing = readIssueOrThrow(id);
     const { issues } = readAll();
@@ -641,7 +640,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
       labelCascadePatches.length === 0 &&
       description === undefined
     ) {
-      return read(id);
+      return { detail: read(id), attemptIds: [] as string[] };
     }
 
     const now = new Date().toISOString();
@@ -683,17 +682,19 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     }
 
     commitIssueBatch(writes, []);
-    attemptIds = storyIdsForLifecycleRemoval(
-      existing,
-      parsed.issue,
-      archivedCascadePatches,
-      issues,
-    );
     const jsonText = serializeIssue(parsed.issue);
     const finalDescription =
       description !== undefined ? description : readDescription(id);
-    return toDetail(parsed.issue, jsonText, finalDescription);
-  }).then(async (detail) => {
+    return {
+      detail: toDetail(parsed.issue, jsonText, finalDescription),
+      attemptIds: storyIdsForLifecycleRemoval(
+        existing,
+        parsed.issue,
+        archivedCascadePatches,
+        issues,
+      ),
+    };
+  }).then(async ({ detail, attemptIds }) => {
     if (attemptIds.length === 0) return detail;
     for (const storyId of attemptIds) {
       await attemptStoryWorktreeRemoval(storyId);

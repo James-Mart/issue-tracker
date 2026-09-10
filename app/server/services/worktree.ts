@@ -245,8 +245,10 @@ export async function attemptStoryWorktreeRemoval(
     if (!path || !existsSync(path)) return { outcome: "absent" };
     await removeStoryWorktree(storyId);
     return { outcome: "removed", path };
-  } catch {
-    // Automatic callers never pass --discard; refusal leaves the checkout.
+  } catch (err) {
+    // Automatic callers never pass --discard; a refusal leaves the checkout
+    // and must not fail merge, archive, or delete.
+    if (!(err instanceof IssueError)) throw err;
     if (path && existsSync(path)) return { outcome: "retained", path };
     return { outcome: "absent" };
   }
