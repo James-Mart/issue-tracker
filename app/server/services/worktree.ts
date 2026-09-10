@@ -1,25 +1,24 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { dirname } from "path";
 import type { Issue, IssuePatch } from "../schemas.js";
-import { WORKTREE_ROOT } from "../worktree-constants.js";
+import {
+  setupLogPathFor,
+  worktreePathFor,
+} from "../worktree-constants.js";
+import { deriveStoryWorktree } from "./derive-worktree.js";
 import { IssueError } from "./errors.js";
 import { branchExists, currentBranch } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
-import { list, update } from "./issues.js";
+import { hasActiveImplementingRun } from "./implementing-status.js";
+import { list, readAll, update } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { projectContaining } from "./subtree.js";
 
+export { setupLogPathFor, worktreePathFor } from "../worktree-constants.js";
+
 type Story = Extract<Issue, { kind: "story" }>;
 type Project = Extract<Issue, { kind: "project" }>;
-
-export function worktreePathFor(projectId: string, storyId: string): string {
-  return join(WORKTREE_ROOT, projectId, storyId);
-}
-
-export function setupLogPathFor(projectId: string, storyId: string): string {
-  return join(WORKTREE_ROOT, projectId, ".setup-logs", `${storyId}.log`);
-}
 
 function requireStory(storyId: string): Story {
   const { issues } = list();
@@ -75,6 +74,19 @@ export const SETUP_NO_WORKTREE_ERROR = (storyId: string) =>
 
 export const SETUP_FAILED_ERROR = (storyId: string, code: number, logPath: string) =>
   `setup command failed for Story "${storyId}" (exit ${code}); see ${logPath}`;
+
+export const REMOVE_NO_WORKTREE_ERROR = (storyId: string) =>
+  `worktree remove requires an existing worktree for Story "${storyId}"`;
+
+export const REMOVE_ACTIVE_IMPLEMENTING_ERROR = (storyId: string) =>
+  `worktree remove refuses Story "${storyId}" while an implementing session is active`;
+
+export const REMOVE_UNSAFE_ERROR = (
+  storyId: string,
+  uncommittedCount: number,
+  atRiskCommitCount: number,
+) =>
+  `worktree remove refuses Story "${storyId}": ${uncommittedCount} uncommitted change(s), ${atRiskCommitCount} at-risk commit(s)`;
 
 async function addWorktree(
   workspace: string,
@@ -214,6 +226,97 @@ export async function attachStoryWorktree(storyId: string): Promise<string> {
     worktreePath: path,
     worktreeBlockedReason: null,
   });
+  return path;
+}
+
+export type AttemptedWorktreeRemoval =
+  | { outcome: "removed"; path: string }
+  | { outcome: "absent" }
+  | { outcome: "retained"; path: string };
+
+export async function attemptStoryWorktreeRemoval(
+  storyId: string,
+): Promise<AttemptedWorktreeRemoval> {
+  let path: string | undefined;
+  try {
+    const story = readAll().issues.find((issue) => issue.id === storyId);
+    if (!story || story.kind !== "story") return { outcome: "absent" };
+    path = story.worktreePath;
+    if (!path || !existsSync(path)) return { outcome: "absent" };
+    await removeStoryWorktree(storyId);
+    return { outcome: "removed", path };
+  } catch (err) {
+    // Automatic callers never pass --discard. Absorb only an explicit
+    // removal refusal (unsafe checkout or active implementing).
+    if (!(err instanceof IssueError) || err.code !== "conflict") throw err;
+    if (path && existsSync(path)) return { outcome: "retained", path };
+    return { outcome: "absent" };
+  }
+}
+
+export function storyIdsForLifecycleRemoval(
+  existing: Issue,
+  next: Issue,
+  archivedCascadePatches: readonly { id: string; archived: boolean }[],
+  issues: Issue[],
+): string[] {
+  const ids: string[] = [];
+  const add = (id: string) => {
+    if (!ids.includes(id)) ids.push(id);
+  };
+  if (existing.kind === "story" && next.kind === "story") {
+    if (!existing.merged && next.merged) add(existing.id);
+    if (!existing.archived && next.archived) add(existing.id);
+  }
+  const byId = new Map(issues.map((issue) => [issue.id, issue]));
+  for (const patch of archivedCascadePatches) {
+    if (!patch.archived) continue;
+    if (byId.get(patch.id)?.kind === "story") add(patch.id);
+  }
+  return ids;
+}
+
+export async function removeStoryWorktree(
+  storyId: string,
+  options: { discard?: boolean } = {},
+): Promise<string> {
+  const { issues, derived } = list();
+  const story = requireStory(storyId);
+  const projectId = projectIdFor(story, issues);
+  const workspace = requireProjectWorkspace(projectId);
+  const path = story.worktreePath;
+
+  if (!path || !existsSync(path)) {
+    throw new IssueError("validation", REMOVE_NO_WORKTREE_ERROR(storyId));
+  }
+
+  if (hasActiveImplementingRun(storyId)) {
+    throw new IssueError("conflict", REMOVE_ACTIVE_IMPLEMENTING_ERROR(storyId));
+  }
+
+  const worktree =
+    derived[storyId]?.worktree ?? deriveStoryWorktree(story, issues);
+  const uncommittedCount = worktree.uncommittedCount;
+  const atRiskCommitCount = worktree.atRiskCommitCount;
+
+  if (
+    !options.discard &&
+    (uncommittedCount > 0 || atRiskCommitCount > 0)
+  ) {
+    throw new IssueError(
+      "conflict",
+      REMOVE_UNSAFE_ERROR(storyId, uncommittedCount, atRiskCommitCount),
+    );
+  }
+
+  const args = [
+    "worktree",
+    "remove",
+    ...(options.discard ? ["--force"] : []),
+    path,
+  ];
+  await runGitWrite(args, workspace);
+  await update(storyId, { worktreePath: null });
   return path;
 }
 

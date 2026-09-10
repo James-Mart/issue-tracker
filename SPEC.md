@@ -257,6 +257,14 @@ These are computed by `derive()` and never written to disk (see
   Task `partOf` the Story is `done`, and every such Task id is in
   `reviewedTasks`; otherwise `false`. When `review` is set and `reviewCurrent`
   is `false`, tree/detail chips show the verdict plus a **stale** marker.
+- **worktree** — derived Story object on `list()` / `issue list` /
+  `issue story get … worktree`: recorded `path`, whether that directory
+  `exists`, porcelain `uncommittedCount` (ignored paths omitted),
+  `atRiskCommitCount` (Story-branch commits reachable from neither trunk nor
+  upstream), `retained` (`exists` while merged or archived), last-setup
+  `setupFailed` / `setupLogPath` / `setupOutput`, and `blockedReason`. A
+  missing `worktreePath` or vanished directory is absent (`exists: false`,
+  counts 0) rather than an error. See [Derived state](#derived-state).
 - **noDiff** — a Task-only signal that the implementor intentionally landed no
   source-controlled file changes (`true`; absent until set via kind
   [`set`](#kind-scoped-get--set)). Edits that only touch non-source-controlled
@@ -368,7 +376,10 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   stored `prUrl` and cwd = the Project `workspace`; refuses other kinds and
   Stories with no `prUrl`; `--auto` maps to `gh pr merge --auto`;
   `--match-head-commit` maps to the flag of the same name; surfaces `gh`
-  stderr on failure.
+  stderr on failure. After the PR lands, the tracker sets `merged` and
+  attempts safe worktree removal (no `--discard`); an unsafe or
+  active-implementing refusal leaves the checkout and does not fail the
+  merge. Other removal failures still fail the caller.
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
@@ -460,7 +471,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `worktree`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -1213,6 +1224,13 @@ Deleting an issue removes its whole directory (`rmSync` recursive), so any
 `attachments/` under that directory go with it — both imperative `remove` and
 `apply` prune. There is no separate attachment-cascade step.
 
+When the delete set includes a Story that still has a worktree, `remove()`
+attempts the same safe removal as `issue story worktree remove` (never
+`--discard`). An unsafe or active-implementing refusal leaves the
+checkout on disk and does not fail the deletion; the CLI names each
+retained path so a human can clear it by hand. Other removal failures
+still fail the caller.
+
 **Invariant.** After `remove()`, `list().problems` gains no new
 dangling-reference, wrong-kind, or cycle problem — guaranteed by construction in
 `planDeletion()` and re-validated against the surviving set before any write.
@@ -1556,6 +1574,23 @@ so cannot drift:
   Epic `blocked` does **not** cascade onto descendant Stories'/Tasks' own
   `blocked` flags — `tree`/`list` still show per-node stacking/sibling blocking
   under a blocked Epic.
+- **Story `worktree`** — checkout state for a Story: `path` (stored
+  `worktreePath`, omitted when unset), `exists`, `uncommittedCount` (lines from
+  `git status --porcelain` in the worktree, without `--ignored`),
+  `atRiskCommitCount` (commits on `branchName` reachable from neither the
+  Project `trunk` nor the branch's upstream when one exists), `retained`
+  (`exists` while the Story is merged or archived), `setupFailed` /
+  `setupLogPath` / `setupOutput` (last setup attempt; output is the log text),
+  and `blockedReason` (`worktreeBlockedReason`). Merge, archive, and delete
+  each attempt safe worktree removal automatically (no `--discard`); an
+  unsafe or active-implementing refusal is not an error, and `retained` is
+  how a leftover checkout is reported while the Story record still exists.
+  Other removal failures still fail the caller. Counts are read through
+  `app/server/services/git-read.ts` with the worktree as cwd. A Story with no
+  `worktreePath`, or whose recorded directory is gone, derives as absent
+  (`exists: false`, counts 0) rather than erroring. Computed by
+  `attachWorktreeDerived()` (filesystem + git I/O) and merged into `derived` by
+  `list()` — not by the pure `derive()` pass.
 - **Idea status** — ranked highest first: `planning` when a planning-session
   run is live; `planned` when an Epic or root project-level Story in the same
   Project stores `sourceIdea` pointing at the Idea; `awaiting-approval` when

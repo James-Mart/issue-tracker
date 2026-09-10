@@ -35,6 +35,11 @@ export interface DeletionPlan {
   dropAppendTo: DropAppendTo[];
 }
 
+export interface RetainedWorktree {
+  id: string;
+  path: string;
+}
+
 // The outcome `remove()` returns once the plan has been applied.
 export interface DeletionResult {
   deleted: string[];
@@ -42,6 +47,8 @@ export interface DeletionResult {
   unblocked: Unblock[];
   droppedSourceIdea: DropSourceIdea[];
   droppedAppendTo: DropAppendTo[];
+  // Worktrees that refused automatic removal (no `--discard`) and remain on disk.
+  retainedWorktrees: RetainedWorktree[];
 }
 
 // Pure, filesystem-free planner for deleting an issue. It computes the full set

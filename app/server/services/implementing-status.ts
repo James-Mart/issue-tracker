@@ -29,6 +29,11 @@ function hasLiveRun(conversationIds: string[] | undefined): boolean {
   return conversationIds?.some((id) => isRunLive(id)) ?? false;
 }
 
+/** True when a non-archived implementing session on the issue has a live run. */
+export function hasActiveImplementingRun(issueId: string): boolean {
+  return hasLiveRun(sessionsByIssueChannel("implementing").get(issueId));
+}
+
 /** True when any issue-anchored conversation on the issue is live (any channel). */
 export function liveRunByIssueId(): Record<string, boolean> {
   const byId: Record<string, boolean> = {};

@@ -1,10 +1,12 @@
 import { execFileSync } from "child_process";
+import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runIssueCli } from "./cli-program.js";
 import {
+  conversationsRoot,
   dir,
   env,
   issueJsonField,
@@ -12,6 +14,12 @@ import {
   useCliTestFixtures,
   writeIssue,
 } from "./cli.test-helpers.js";
+import { refreshStorePathsFromEnv } from "./server/config.js";
+import { applyMergeConsequences } from "./server/services/merge-consequences.js";
+import {
+  setGitWriteSpawnerForTests,
+  type GitWriteSpawner,
+} from "./server/services/git-write.js";
 import { WORKTREE_ROOT } from "./server/worktree-constants.js";
 import { setupLogPathFor, worktreePathFor } from "./server/services/worktree.js";
 
@@ -33,13 +41,60 @@ function git(repo: string, args: string[]): string {
   }).trim();
 }
 
-function initRepo(): string {
+function initRepo(opts?: { gitignore?: string }): string {
   const repo = mkdtempSync(join(tmpdir(), "issue-wt-repo-"));
   git(repo, ["init", "-b", "main"]);
   writeFileSync(join(repo, "README"), "seed\n");
-  git(repo, ["add", "README"]);
+  if (opts?.gitignore) {
+    writeFileSync(join(repo, ".gitignore"), opts.gitignore);
+    git(repo, ["add", "README", ".gitignore"]);
+  } else {
+    git(repo, ["add", "README"]);
+  }
   git(repo, ["commit", "-m", "initial"]);
   return repo;
+}
+
+function seedImplementingSession(
+  convId: string,
+  storyId: string,
+  projectId: string,
+  opts?: { live?: boolean },
+): void {
+  const convDir = join(conversationsRoot(), convId);
+  mkdirSync(convDir, { recursive: true });
+  const now = nextAt();
+  writeFileSync(
+    join(convDir, "meta.json"),
+    JSON.stringify({
+      id: convId,
+      title: "Implement",
+      projectId,
+      model: "auto",
+      issueId: storyId,
+      channel: "implementing",
+      createdAt: now,
+      updatedAt: now,
+    }),
+  );
+  if (opts?.live) {
+    writeFileSync(
+      join(convDir, "run-live.json"),
+      `${JSON.stringify({ pid: process.pid })}\n`,
+    );
+  }
+}
+
+function writeStory(id: string, extra: Record<string, unknown> = {}): void {
+  writeIssue(id, {
+    kind: "story",
+    title: id,
+    partOf: "e",
+    merged: false,
+    createdAt: nextAt(),
+    updatedAt: nextAt(),
+    ...extra,
+  });
 }
 
 const trackedWorktrees: { workspace: string; path: string }[] = [];
@@ -86,8 +141,27 @@ function seedProject(workspace?: string, setupCommand?: string): void {
   });
 }
 
+function failGitWorktreeRemove(): void {
+  const spawner: GitWriteSpawner = () => {
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    setImmediate(() => {
+      child.stderr.emit("data", "fatal: fake worktree remove failure\n");
+      child.emit("close", 1);
+    });
+    return child as ReturnType<GitWriteSpawner>;
+  };
+  setGitWriteSpawnerForTests(spawner);
+}
+
 afterEach(() => {
+  setGitWriteSpawnerForTests(null);
   removeTrackedWorktrees();
+  rmSync(conversationsRoot(), { recursive: true, force: true });
 });
 
 describe("story worktree create", () => {
@@ -540,6 +614,311 @@ describe("story worktree setup", () => {
     const result = await runIssueCli(["story", "worktree", "setup", "a"], { env: env() });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/requires setupCommand/);
+  });
+});
+
+describe("story worktree remove", () => {
+  it("removes a clean worktree and clears worktreePath", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    expect(existsSync(expectedPath)).toBe(true);
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(expectedPath);
+    expect(existsSync(expectedPath)).toBe(false);
+    expect(issueJsonField("a", "worktreePath")).toBeUndefined();
+  });
+
+  it("removes a worktree when only gitignored files are present", async () => {
+    const workspace = initRepo({ gitignore: "*.ignored\n" });
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    writeFileSync(join(expectedPath, "scratch.ignored"), "ignored\n");
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(expectedPath)).toBe(false);
+    expect(issueJsonField("a", "worktreePath")).toBeUndefined();
+  });
+
+  it("refuses removal when uncommitted changes exist and leaves the checkout", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    writeFileSync(join(expectedPath, "README"), "dirty\n");
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/1 uncommitted change\(s\), 0 at-risk commit\(s\)/);
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
+  });
+
+  it("refuses removal when at-risk commits exist and leaves the checkout", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    expect(
+      (await runIssueCli(["story", "set", "a", "branchName", "a"], { env: env() })).status,
+    ).toBe(0);
+    writeFileSync(join(expectedPath, "wip.txt"), "wip\n");
+    git(expectedPath, ["add", "wip.txt"]);
+    git(expectedPath, ["commit", "-m", "wip"]);
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/0 uncommitted change\(s\), 1 at-risk commit\(s\)/);
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
+  });
+
+  it("refuses removal while an implementing session is active", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    seedImplementingSession("conv-live", "a", "p", { live: true });
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/implementing session is active/);
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
+  });
+
+  it("removes a dirty checkout with --discard", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    expect(
+      (await runIssueCli(["story", "set", "a", "branchName", "a"], { env: env() })).status,
+    ).toBe(0);
+    writeFileSync(join(expectedPath, "README"), "dirty\n");
+    writeFileSync(join(expectedPath, "wip.txt"), "wip\n");
+    git(expectedPath, ["add", "wip.txt"]);
+    git(expectedPath, ["commit", "-m", "wip"]);
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a", "--discard"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(expectedPath)).toBe(false);
+    expect(issueJsonField("a", "worktreePath")).toBeUndefined();
+  });
+
+  it("refuses --discard while an implementing session is active", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    writeFileSync(join(expectedPath, "README"), "dirty\n");
+    seedImplementingSession("conv-live", "a", "p", { live: true });
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a", "--discard"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/implementing session is active/);
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
+  });
+
+  it("refuses when the Story has no worktree", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("a");
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/requires an existing worktree/);
+  });
+});
+
+async function withIssuesDir<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = process.env.ISSUES_DIR;
+  process.env.ISSUES_DIR = dir;
+  refreshStorePathsFromEnv();
+  try {
+    return await fn();
+  } finally {
+    if (saved === undefined) delete process.env.ISSUES_DIR;
+    else process.env.ISSUES_DIR = saved;
+    refreshStorePathsFromEnv();
+  }
+}
+
+async function createCleanWorktree(): Promise<string> {
+  const workspace = initRepo();
+  seedProject(workspace);
+  writeStory("a");
+  const path = trackWorktree(workspace, "p", "a");
+  expect(
+    (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+  ).toBe(0);
+  return path;
+}
+
+describe("lifecycle worktree removal", () => {
+  it("removes a clean worktree when the Story is merged", async () => {
+    const path = await createCleanWorktree();
+    await withIssuesDir(() => applyMergeConsequences("a"));
+    expect(existsSync(path)).toBe(false);
+    expect(issueJsonField("a", "worktreePath")).toBeUndefined();
+    expect(issueJsonField("a", "merged")).toBe(true);
+  });
+
+  it("removes a clean worktree when the Story is archived", async () => {
+    const path = await createCleanWorktree();
+    const result = await runIssueCli(["story", "set", "a", "archived", "true"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(path)).toBe(false);
+    expect(issueJsonField("a", "worktreePath")).toBeUndefined();
+    expect(issueJsonField("a", "archived")).toBe(true);
+  });
+
+  it("removes a clean worktree when the Story is deleted", async () => {
+    const path = await createCleanWorktree();
+    const result = await runIssueCli(["story", "delete", "a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("deleted a");
+    expect(result.stdout).not.toMatch(/retained worktree/);
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it("keeps a dirty worktree when merge refuses removal", async () => {
+    const path = await createCleanWorktree();
+    writeFileSync(join(path, "README"), "dirty\n");
+    await withIssuesDir(() => applyMergeConsequences("a"));
+    expect(issueJsonField("a", "merged")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
+    const worktree = await runIssueCli(["story", "get", "a", "worktree"], {
+      env: env(),
+    });
+    expect(JSON.parse(worktree.stdout)).toMatchObject({
+      exists: true,
+      retained: true,
+    });
+  });
+
+  it("keeps a dirty worktree when archive refuses removal", async () => {
+    const path = await createCleanWorktree();
+    writeFileSync(join(path, "README"), "dirty\n");
+    const result = await runIssueCli(["story", "set", "a", "archived", "true"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(issueJsonField("a", "archived")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
+    const worktree = await runIssueCli(["story", "get", "a", "worktree"], {
+      env: env(),
+    });
+    expect(JSON.parse(worktree.stdout)).toMatchObject({
+      exists: true,
+      retained: true,
+    });
+  });
+
+  it("deletes the Story and names the path when removal is refused", async () => {
+    const path = await createCleanWorktree();
+    writeFileSync(join(path, "README"), "dirty\n");
+    const result = await runIssueCli(["story", "delete", "a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("deleted a");
+    expect(result.stdout).toContain(`retained worktree for a at ${path}`);
+    expect(existsSync(path)).toBe(true);
+    expect(
+      (await runIssueCli(["story", "view", "a"], { env: env() })).status,
+    ).not.toBe(0);
+  });
+
+  it("fails merge when worktree remove hits git-failed", async () => {
+    const path = await createCleanWorktree();
+    failGitWorktreeRemove();
+    await expect(
+      withIssuesDir(() => applyMergeConsequences("a")),
+    ).rejects.toMatchObject({ code: "git-failed" });
+    expect(issueJsonField("a", "merged")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
+  });
+
+  it("fails archive when worktree remove hits git-failed", async () => {
+    const path = await createCleanWorktree();
+    failGitWorktreeRemove();
+    const result = await runIssueCli(["story", "set", "a", "archived", "true"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/fake worktree remove failure/);
+    expect(issueJsonField("a", "archived")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
+  });
+
+  it("fails delete when worktree remove hits git-failed and does not report retained", async () => {
+    const path = await createCleanWorktree();
+    failGitWorktreeRemove();
+    const result = await runIssueCli(["story", "delete", "a"], { env: env() });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/fake worktree remove failure/);
+    expect(result.stdout).not.toMatch(/deleted a/);
+    expect(result.stdout).not.toMatch(/retained worktree/);
+    expect(existsSync(path)).toBe(true);
+    expect(
+      (await runIssueCli(["story", "view", "a"], { env: env() })).status,
+    ).toBe(0);
+    expect(issueJsonField("a", "worktreePath")).toBe(path);
   });
 });
 

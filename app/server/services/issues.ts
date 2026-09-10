@@ -35,6 +35,7 @@ import {
 import { IssueError } from "./errors.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
+import { attachWorktreeDerived } from "./derive-worktree.js";
 import { mergeImplementingOverlay } from "./implementing-status.js";
 import { planningStatusById } from "./planning-status.js";
 import { checkIntegrity, problemsFor } from "./integrity.js";
@@ -53,6 +54,10 @@ import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
+import {
+  attemptStoryWorktreeRemoval,
+  storyIdsForLifecycleRemoval,
+} from "./worktree.js";
 import { uniqueSlug } from "./slug.js";
 import { validateAppendToPatch, validateNonClearablePatch, validateSourceIdeaPatch } from "./patch.js";
 import { validateCommitsPatch, validateFullCommitSha } from "./commit-sha.js";
@@ -202,6 +207,7 @@ export function list(): IssuesResponse {
     else derived.byId[id] = { blocked: false, ideaStatus };
   }
   mergeImplementingOverlay(issues, derived.byId);
+  attachWorktreeDerived(issues, derived.byId);
   // Parse each comments.jsonl so out-of-band corruption surfaces in the tree/CLI,
   // not just the comments panel. Comments are small local files, so the extra reads
   // are cheap; list() is not invalidated on every comment append (see events).
@@ -634,7 +640,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
       labelCascadePatches.length === 0 &&
       description === undefined
     ) {
-      return read(id);
+      return { detail: read(id), attemptIds: [] as string[] };
     }
 
     const now = new Date().toISOString();
@@ -679,7 +685,21 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     const jsonText = serializeIssue(parsed.issue);
     const finalDescription =
       description !== undefined ? description : readDescription(id);
-    return toDetail(parsed.issue, jsonText, finalDescription);
+    return {
+      detail: toDetail(parsed.issue, jsonText, finalDescription),
+      attemptIds: storyIdsForLifecycleRemoval(
+        existing,
+        parsed.issue,
+        archivedCascadePatches,
+        issues,
+      ),
+    };
+  }).then(async ({ detail, attemptIds }) => {
+    if (attemptIds.length === 0) return detail;
+    for (const storyId of attemptIds) {
+      await attemptStoryWorktreeRemoval(storyId);
+    }
+    return read(id);
   });
 }
 
@@ -776,7 +796,20 @@ export function appendComment(
 // prospective surviving set is validated before anything is written, so a
 // deletion that could not leave the graph valid is refused without side effects.
 // `appendTo` is cleared on surviving Ideas when the target Story is deleted.
-export function remove(id: string): Promise<DeletionResult> {
+export async function remove(id: string): Promise<DeletionResult> {
+  if (!existsSync(dirOf(id))) {
+    throw new IssueError("not_found", `unknown issue "${id}"`);
+  }
+
+  const preview = planDeletion(readAll().issues, id);
+  const retainedWorktrees: DeletionResult["retainedWorktrees"] = [];
+  for (const delId of preview.deleteIds) {
+    const result = await attemptStoryWorktreeRemoval(delId);
+    if (result.outcome === "retained") {
+      retainedWorktrees.push({ id: delId, path: result.path });
+    }
+  }
+
   return serialize(() => {
     if (!existsSync(dirOf(id))) {
       throw new IssueError("not_found", `unknown issue "${id}"`);
@@ -841,6 +874,7 @@ export function remove(id: string): Promise<DeletionResult> {
       unblocked: plan.unblock,
       droppedSourceIdea: plan.dropSourceIdea,
       droppedAppendTo: plan.dropAppendTo,
+      retainedWorktrees,
     };
   });
 }
