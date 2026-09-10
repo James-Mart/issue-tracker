@@ -272,6 +272,7 @@ export const storySchema = z.object({
   kind: z.literal("story"),
   partOf: nonEmpty,
   branchName: z.string().optional(),
+  worktreePath: z.string().optional(),
   stackedOn: z.string().optional(),
   // Imperative override for root (project-level) Stories' derived mergeBase.
   mergeBaseOverride: z.string().optional(),

@@ -55,6 +55,7 @@ export const STORY_FORM_FIELD_KEYS = [
 ] as const;
 
 export const STORY_IMPERATIVE_ONLY_KEYS = [
+  "worktreePath",
   "mergeBaseOverride",
   "mergePolicy",
   "review",
@@ -73,6 +74,7 @@ export const STORY_FIELD_KEYS = [
 // Optional story runtime state preserved by apply when already set on disk.
 export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "branchName",
+  "worktreePath",
   "mergeBaseOverride",
   "mergePolicy",
   "prUrl",
@@ -123,6 +125,7 @@ export const CLEARABLE_KEYS = [
   "assignee",
   "stakeholder",
   "branchName",
+  "worktreePath",
   "stackedOn",
   "prUrl",
   "needsRebase",
