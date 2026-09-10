@@ -57,6 +57,7 @@ export const STORY_FORM_FIELD_KEYS = [
 export const STORY_IMPERATIVE_ONLY_KEYS = [
   "worktreePath",
   "worktreeBlockedReason",
+  "worktreeSetupFailed",
   "mergeBaseOverride",
   "mergePolicy",
   "review",
@@ -77,6 +78,7 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "branchName",
   "worktreePath",
   "worktreeBlockedReason",
+  "worktreeSetupFailed",
   "mergeBaseOverride",
   "mergePolicy",
   "prUrl",
@@ -156,6 +158,7 @@ export const FALSE_CLEARS_KEYS = [
   "noDiff",
   "approvePlan",
   "approvalPending",
+  "worktreeSetupFailed",
 ] as const satisfies readonly (keyof IssuePatch)[];
 
 export type FalseClearsKey = (typeof FALSE_CLEARS_KEYS)[number];

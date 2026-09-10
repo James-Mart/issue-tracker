@@ -76,6 +76,14 @@ describe("coerceSetPatch", () => {
       patch: { merged: true },
     },
     {
+      name: "boolean worktreeSetupFailed",
+      kind: "story" as const,
+      field: "worktreeSetupFailed",
+      value: "true",
+      opts: {},
+      patch: { worktreeSetupFailed: true },
+    },
+    {
       name: "story mergeBase stores mergeBaseOverride",
       kind: "story" as const,
       field: "mergeBase",

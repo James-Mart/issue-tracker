@@ -165,6 +165,12 @@ describe("story get/set", () => {
     expect((await runIssueCli(["story", "set", "a", "worktreePath", "--clear"], { env: env() })).status).toBe(0);
     expect((await runIssueCli(["story", "get", "a", "worktreePath"], { env: env() })).stdout).toBe("");
 
+    expect((await runIssueCli(["story", "get", "a", "worktreeSetupFailed"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["story", "set", "a", "worktreeSetupFailed", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "worktreeSetupFailed"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["story", "set", "a", "worktreeSetupFailed", "false"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "worktreeSetupFailed"], { env: env() })).stdout).toBe("");
+
     expect((await runIssueCli(["story", "set", "b", "stackedOn", "--clear"], { env: env() })).status).toBe(0);
     expect((await runIssueCli(["story", "get", "b", "stackedOn"], { env: env() })).stdout).toBe("");
     expect((await runIssueCli(["story", "set", "b", "stackedOn", "a"], { env: env() })).status).toBe(0);

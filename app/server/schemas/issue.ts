@@ -274,6 +274,7 @@ export const storySchema = z.object({
   branchName: z.string().optional(),
   worktreePath: z.string().optional(),
   worktreeBlockedReason: z.enum(["parent-branch"]).optional(),
+  worktreeSetupFailed: z.boolean().optional(),
   stackedOn: z.string().optional(),
   // Imperative override for root (project-level) Stories' derived mergeBase.
   mergeBaseOverride: z.string().optional(),

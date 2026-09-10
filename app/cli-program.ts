@@ -14,6 +14,7 @@ import { appendUpdateFromMergeBase } from "./server/services/merge-base-task.js"
 import {
   attachStoryWorktree,
   createStoryWorktree,
+  setupStoryWorktree,
 } from "./server/services/worktree.js";
 import { apply } from "./server/services/apply.js";
 import {
@@ -390,7 +391,7 @@ function createIssueProgram(run: Run): Command {
         );
       const worktreeCmd = kindCmd
         .command("worktree")
-        .description("create or attach a git worktree for a Story branch");
+        .description("create, attach, or re-run setup for a Story worktree");
       worktreeCmd
         .command("create")
         .argument("<storyId>", "story id")
@@ -412,6 +413,18 @@ function createIssueProgram(run: Run): Command {
         .action((storyId: string) =>
           run(async () => {
             const path = await attachStoryWorktree(storyId);
+            console.log(path);
+          }),
+        );
+      worktreeCmd
+        .command("setup")
+        .argument("<storyId>", "story id")
+        .description(
+          "re-run the Project setup command in the Story's existing worktree",
+        )
+        .action((storyId: string) =>
+          run(async () => {
+            const path = await setupStoryWorktree(storyId);
             console.log(path);
           }),
         );

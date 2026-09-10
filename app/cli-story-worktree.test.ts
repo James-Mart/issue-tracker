@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ import {
   writeIssue,
 } from "./cli.test-helpers.js";
 import { WORKTREE_ROOT } from "./server/worktree-constants.js";
-import { worktreePathFor } from "./server/services/worktree.js";
+import { setupLogPathFor, worktreePathFor } from "./server/services/worktree.js";
 
 useCliTestFixtures();
 
@@ -64,13 +64,15 @@ function removeTrackedWorktrees(): void {
       }
     }
   }
+  rmSync(join(WORKTREE_ROOT, "p", ".setup-logs"), { recursive: true, force: true });
 }
 
-function seedProject(workspace?: string): void {
+function seedProject(workspace?: string, setupCommand?: string): void {
   writeIssue("p", {
     kind: "project",
     title: "Proj",
     ...(workspace ? { workspace } : {}),
+    ...(setupCommand ? { setupCommand } : {}),
     createdAt: nextAt(),
     updatedAt: nextAt(),
   });
@@ -110,7 +112,57 @@ describe("story worktree create", () => {
     expect(existsSync(expectedPath)).toBe(true);
     expect(issueJsonField("root-story", "worktreePath")).toBe(expectedPath);
     expect(issueJsonField("root-story", "worktreeBlockedReason")).toBeUndefined();
+    expect(issueJsonField("root-story", "worktreeSetupFailed")).toBeUndefined();
+    expect(existsSync(setupLogPathFor("p", "root-story"))).toBe(false);
     expect(git(expectedPath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("root-story");
+  });
+
+  it("runs the Project setupCommand in the new worktree", async () => {
+    const workspace = initRepo();
+    seedProject(workspace, "touch SETUP_OK");
+    writeIssue("root-story", {
+      kind: "story",
+      title: "Root",
+      partOf: "e",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const expectedPath = trackWorktree(workspace, "p", "root-story");
+    const result = await runIssueCli(["story", "worktree", "create", "root-story"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(join(expectedPath, "SETUP_OK"))).toBe(true);
+    expect(issueJsonField("root-story", "worktreeSetupFailed")).toBeUndefined();
+    expect(existsSync(setupLogPathFor("p", "root-story"))).toBe(false);
+  });
+
+  it("records worktreeSetupFailed and a setup log when the command exits non-zero", async () => {
+    const workspace = initRepo();
+    seedProject(workspace, "echo setup-failed; exit 3");
+    writeIssue("root-story", {
+      kind: "story",
+      title: "Root",
+      partOf: "e",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const expectedPath = trackWorktree(workspace, "p", "root-story");
+    const logPath = setupLogPathFor("p", "root-story");
+    const result = await runIssueCli(["story", "worktree", "create", "root-story"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/setup command failed/);
+    expect(result.stderr).toContain(logPath);
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("root-story", "worktreePath")).toBe(expectedPath);
+    expect(issueJsonField("root-story", "worktreeSetupFailed")).toBe(true);
+    expect(readFileSync(logPath, "utf8")).toContain("setup-failed");
   });
 
   it("creates a worktree off the parent branch for a stacked Story", async () => {
@@ -273,6 +325,29 @@ describe("story worktree attach", () => {
     expect(result.stdout.trim()).toBe(expectedPath);
     expect(git(workspace, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("main");
     expect(git(expectedPath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("feat/a");
+    expect(issueJsonField("a", "worktreeSetupFailed")).toBeUndefined();
+  });
+
+  it("runs the Project setupCommand in the attached worktree", async () => {
+    const workspace = initRepo();
+    seedProject(workspace, "touch SETUP_OK");
+    git(workspace, ["branch", "feat/a"]);
+    writeIssue("a", {
+      kind: "story",
+      title: "A",
+      partOf: "e",
+      branchName: "feat/a",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    const result = await runIssueCli(["story", "worktree", "attach", "a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(existsSync(join(expectedPath, "SETUP_OK"))).toBe(true);
+    expect(issueJsonField("a", "worktreeSetupFailed")).toBeUndefined();
+    expect(existsSync(setupLogPathFor("p", "a"))).toBe(false);
   });
 
   it("clears worktreeBlockedReason on attach", async () => {
@@ -393,10 +468,88 @@ describe("story worktree attach", () => {
   });
 });
 
+describe("story worktree setup", () => {
+  it("re-runs setup and clears worktreeSetupFailed on success", async () => {
+    const workspace = initRepo();
+    seedProject(workspace, "echo setup-failed; exit 3");
+    writeIssue("root-story", {
+      kind: "story",
+      title: "Root",
+      partOf: "e",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const expectedPath = trackWorktree(workspace, "p", "root-story");
+    const failed = await runIssueCli(["story", "worktree", "create", "root-story"], {
+      env: env(),
+    });
+    expect(failed.status).not.toBe(0);
+    expect(issueJsonField("root-story", "worktreeSetupFailed")).toBe(true);
+
+    expect(
+      (await runIssueCli(["project", "set", "p", "setupCommand", "touch SETUP_RETRY"], {
+        env: env(),
+      })).status,
+    ).toBe(0);
+    const retried = await runIssueCli(["story", "worktree", "setup", "root-story"], {
+      env: env(),
+    });
+    expect(retried.status).toBe(0);
+    expect(retried.stdout.trim()).toBe(expectedPath);
+    expect(existsSync(join(expectedPath, "SETUP_RETRY"))).toBe(true);
+    expect(issueJsonField("root-story", "worktreeSetupFailed")).toBeUndefined();
+  });
+
+  it("refuses when the Story has no worktree", async () => {
+    const workspace = initRepo();
+    seedProject(workspace, "true");
+    writeIssue("a", {
+      kind: "story",
+      title: "A",
+      partOf: "e",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const result = await runIssueCli(["story", "worktree", "setup", "a"], { env: env() });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/requires an existing worktree/);
+  });
+
+  it("refuses when the Project has no setupCommand", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeIssue("a", {
+      kind: "story",
+      title: "A",
+      partOf: "e",
+      merged: false,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    expect(existsSync(expectedPath)).toBe(true);
+
+    const result = await runIssueCli(["story", "worktree", "setup", "a"], { env: env() });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/requires setupCommand/);
+  });
+});
+
 describe("story worktree path namespace", () => {
   it("uses the fixed tracker root", () => {
     expect(worktreePathFor("my-proj", "my-story")).toBe(
       join(WORKTREE_ROOT, "my-proj", "my-story"),
+    );
+    expect(setupLogPathFor("my-proj", "my-story")).toBe(
+      join(WORKTREE_ROOT, "my-proj", ".setup-logs", "my-story.log"),
     );
   });
 });
