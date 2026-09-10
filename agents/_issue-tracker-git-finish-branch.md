@@ -12,7 +12,13 @@ using the stored `branchName`. Apply the Story's effective merge policy
 (`issue story get <storyId> mergePolicy`), per **SPEC § Project merge policy**
 (the authoritative contract — semantics,
 idempotency, and recovery live there). This section is only the concrete
-`git`/`gh` steps; all run in the workspace cwd.
+`git`/`gh` steps.
+
+Push, `git log`, and `gh pr create` run with the `Workspace:` path from
+`issue summary <storyId>` as cwd. After start-branch that path is the
+Story worktree. Merge and fast-forward run in the Project workspace
+(`issue project get <projectId> workspace`), the checkout that stays on
+trunk.
 
 1. **Idempotent end state:** if the policy's end state already holds:
    - **pull-request** — `issue story get <storyId> prUrl` stdout is
@@ -37,16 +43,22 @@ idempotency, and recovery live there). This section is only the concrete
        and the subjects do not help, one sentence from the title is
        enough.
        Record it: `issue story set <storyId> prUrl <url>`.
-     - **merge** — `git checkout <mergeBase>`, `git merge --no-ff <branchName>`,
-       `git push origin <mergeBase>`, `issue story set <storyId> merged true`.
-       Then run step 3 with `Bp` = that `<mergeBase>`.
-     - **fast-forward** — `git checkout <mergeBase>`, `git merge --ff-only
-       <branchName>`. On failure (base advanced; fast-forward not possible),
-       leave the base untouched and
+     - **merge** — in the Project workspace: `git merge --no-ff
+       <branchName>`, `git push origin <mergeBase>`. Then
+       `issue story worktree remove <storyId>`. Then
+       `issue story set <storyId> merged true` whether remove succeeded
+       or refused. A remove refusal is then blocked. Then run step 3
+       with `Bp` = that `<mergeBase>`.
+     - **fast-forward** — in the Project workspace: `git merge --ff-only
+       <branchName>`. On failure (base advanced; fast-forward not
+       possible), leave the base untouched and
        `issue story set <storyId> needsAttention true --reason "base
        <mergeBase> advanced; fast-forward not possible, rebase needed"`, then
-       stop. On success, `git push origin <mergeBase>`, `issue story set
-       <storyId> merged true`. Then run step 3 with `Bp` = that `<mergeBase>`.
+       stop. On success, `git push origin <mergeBase>`. Then
+       `issue story worktree remove <storyId>`. Then
+       `issue story set <storyId> merged true` whether remove succeeded
+       or refused. A remove refusal is then blocked. Then run step 3
+       with `Bp` = that `<mergeBase>`.
 3. **Flag stale children** (`merge` / `fast-forward`, and the same scan
    performed by `issue merge` after a successful GitHub PR merge):
    1. Take `<projectId>` from the `Project: <projectId> — <title>` line of

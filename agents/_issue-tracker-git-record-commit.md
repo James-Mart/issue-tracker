@@ -12,6 +12,10 @@ Stage the working tree, commit, and record the new sha. Writes
 A clean tree with nothing to commit is a normal outcome: report it and
 stop. No merge or conflict handling.
 
+Run every `git` command with the `Workspace:` path from
+`issue summary <taskId>` as cwd. After start-branch that path is the
+Story worktree.
+
 1. `git status`. If the tree is clean (empty): report that there is
    nothing to commit, then finish and stop.
 2. Stage all changes (`git add -A`). Do not pick paths — the implementor

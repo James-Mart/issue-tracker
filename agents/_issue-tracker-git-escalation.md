@@ -11,7 +11,7 @@ Raise attention and stop — do not guess:
 
 | Scenario | Command |
 |----------|---------|
-| start-branch / finish-branch blocked (checkout failure, missing required Story facts, push rejection, PR-create failure, merge conflict, CLI refusal) | `issue story set <storyId> needsAttention true --reason "..."` |
+| start-branch / finish-branch blocked (worktree create/remove refusal, checkout failure, missing required Story facts, push rejection, PR-create failure, merge conflict, CLI refusal) | `issue story set <storyId> needsAttention true --reason "..."` |
 | record-commit blocked | `issue task set <taskId> needsAttention true --reason "..."` |
 
 For finish-branch recovery follow SPEC § Project merge policy: abort a `merge`

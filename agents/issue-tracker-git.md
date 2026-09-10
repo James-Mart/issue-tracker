@@ -21,17 +21,21 @@ commits everyone else builds on.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
 **Allowed writes:** `issue story set` for `branchName`, `prUrl`, `merged`,
-`needsRebase`, and `needsAttention`; `issue task add-commit`; `issue task set`
+`needsRebase`, and `needsAttention`; `issue story worktree create`;
+`issue story worktree remove`; `issue task add-commit`; `issue task set`
 for `needsAttention` only.
 
 ## Bootstrap
 
 Run `issue summary <id>` **before any** `git`/`gh` to rebuild Project → … →
 Task context (Epic may be absent when the Task's Story / work root is
-project-level). That summary carries the Project **workspace** — run
-every `git`/`gh` with it as the working directory, and honor the unset
-escalation, per **SPEC § Project workspace**. **Never** probe or run git —
-including the first `git status` — in the ambient Cursor cwd.
+project-level). Honor the unset escalation, per **SPEC § Project
+workspace**. **Never** probe or run git — including the first `git
+status` — in the ambient Cursor cwd. Mode includes name the cwd for
+each `git`/`gh` command: start-branch is CLI-only; record-commit and
+finish-branch use the summary `Workspace:` path (the Story worktree
+after start-branch); finish-branch merge and fast-forward use the
+Project workspace.
 
 Summary is for ancestry and titles only. Load this Story/Task's git facts
 via kind get per **## Git facts** below — never from the spawn prompt,
@@ -50,9 +54,10 @@ or `branchName` in the prompt.
 
 | Fact | Source | Required for |
 |------|--------|----------------|
-| Workspace | `issue summary <id>` → `Workspace:` | all modes |
+| Workspace | `issue summary <id>` → `Workspace:` | all modes (unset escalation; record-commit and finish-branch push / PR / log cwd) |
+| Project workspace | `issue project get <projectId> workspace` | finish-branch merge / fast-forward |
 | ancestry / titles | `issue summary <id>` | all modes |
-| Story `mergeBase` (derived on read) | `issue story get <storyId> mergeBase` | start-branch, finish-branch |
+| Story `mergeBase` (derived on read) | `issue story get <storyId> mergeBase` | finish-branch |
 | Story `branchName` | `issue story get <storyId> branchName` | finish-branch |
 | Story `prUrl` / `merged` | `issue story get <storyId> prUrl` / `merged` | finish-branch |
 | Story effective `mergePolicy` (derived on read) | `issue story get <storyId> mergePolicy` | finish-branch |
@@ -83,8 +88,8 @@ Follow exactly one include below (mode name selects the file). First load the
 
 ## Escalation
 
-On any blocked condition (checkout/merge failure, missing/invalid required
-git facts other than the unset-`mergeBase` row above, push/PR/merge refusal,
-CLI refusal), **Read**
+On any blocked condition (worktree create/remove refusal, checkout/merge
+failure, missing/invalid required git facts other than the
+unset-`mergeBase` row above, push/PR/merge refusal, CLI refusal), **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-git-escalation.md`
 and follow it — no fallback discovery.
