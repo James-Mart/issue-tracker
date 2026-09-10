@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import type { Issue, IssueKind, InspirationApps, Personas, SupportingDocs } from "../schemas.js";
 import { KIND_LABEL, kindHas } from "../kind.js";
 import { attachmentPath, listAttachments } from "./attachments.js";
@@ -10,6 +11,30 @@ import {
   formatSupportingDocsLine,
   readMissionParagraph,
 } from "./supporting-docs.js";
+
+type StoryIssue = Extract<Issue, { kind: "story" }>;
+
+/** Story whose worktree (if any) supplies summary workspace for Story/Task targets. */
+function storyForWorkspace(chain: Issue[]): StoryIssue | undefined {
+  const target = chain[chain.length - 1];
+  if (target.kind === "story") return target;
+  if (target.kind === "task") {
+    const parent = chain[chain.length - 2];
+    return parent?.kind === "story" ? parent : undefined;
+  }
+  return undefined;
+}
+
+/** Worktree when recorded and on disk; otherwise the Project workspace. */
+export function resolveSummaryWorkspace(
+  chain: Issue[],
+  projectWorkspace: string | undefined,
+): string | undefined {
+  const story = storyForWorkspace(chain);
+  const worktreePath = story?.worktreePath;
+  if (worktreePath && existsSync(worktreePath)) return worktreePath;
+  return projectWorkspace;
+}
 
 /** Name + size as rendered by show/summary; not full Attachment metadata. */
 export interface SummaryAttachment {
@@ -77,14 +102,15 @@ export function buildSummary(
 ): IssueSummary {
   const chain = ancestorChain(id, issues);
   const root = chain[0];
+  const projectWorkspace =
+    root?.kind === "project" ? root.workspace : undefined;
+  const workspace = resolveSummaryWorkspace(chain, projectWorkspace);
   const mission =
     root?.kind === "project" && root.supportingDocs
-      ? missionOf(root.id, root.workspace, root.supportingDocs)
+      ? missionOf(root.id, projectWorkspace, root.supportingDocs)
       : undefined;
   return {
-    ...(root?.kind === "project" && root.workspace
-      ? { workspace: root.workspace }
-      : {}),
+    ...(workspace ? { workspace } : {}),
     ...(mission ? { mission } : {}),
     ...(root?.kind === "project" && root.supportingDocs
       ? { supportingDocs: root.supportingDocs }

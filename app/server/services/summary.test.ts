@@ -6,6 +6,7 @@ import type { Issue } from "../schemas.js";
 import {
   buildSummary,
   formatSummary,
+  resolveSummaryWorkspace,
   type SummaryAttachment,
 } from "./summary.js";
 
@@ -70,6 +71,77 @@ const nestedIssues: Issue[] = [
     updatedAt: AT,
   },
 ];
+
+const projectWorkspace = "/tmp/project-ws";
+
+function withProjectWorkspace(issues: Issue[]): Issue[] {
+  return issues.map((issue) =>
+    issue.id === "p" ? { ...issue, workspace: projectWorkspace } : issue,
+  );
+}
+
+describe("resolveSummaryWorkspace", () => {
+  it("uses a Story worktree when the directory exists", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "story-wt-"));
+    try {
+      const issues = withProjectWorkspace(
+        nestedIssues.map((issue) =>
+          issue.id === "stacked"
+            ? { ...issue, worktreePath: worktree }
+            : issue,
+        ),
+      );
+      const chain = issues.filter((i) =>
+        ["p", "e", "stacked"].includes(i.id),
+      );
+      expect(resolveSummaryWorkspace(chain, projectWorkspace)).toBe(worktree);
+    } finally {
+      rmSync(worktree, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the Project workspace when the Story has no worktreePath", () => {
+    const chain = withProjectWorkspace(nestedIssues).filter((i) =>
+      ["p", "e", "stacked"].includes(i.id),
+    );
+    expect(resolveSummaryWorkspace(chain, projectWorkspace)).toBe(
+      projectWorkspace,
+    );
+  });
+
+  it("falls back when the recorded worktree directory no longer exists", () => {
+    const issues = withProjectWorkspace(
+      nestedIssues.map((issue) =>
+        issue.id === "stacked"
+          ? { ...issue, worktreePath: "/tmp/vanished-worktree-path" }
+          : issue,
+      ),
+    );
+    const chain = issues.filter((i) => ["p", "e", "stacked"].includes(i.id));
+    expect(resolveSummaryWorkspace(chain, projectWorkspace)).toBe(
+      projectWorkspace,
+    );
+  });
+
+  it("resolves a Task through its containing Story", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "task-wt-"));
+    try {
+      const issues = withProjectWorkspace(
+        nestedIssues.map((issue) =>
+          issue.id === "stacked"
+            ? { ...issue, worktreePath: worktree }
+            : issue,
+        ),
+      );
+      const chain = issues.filter((i) =>
+        ["p", "e", "stacked", "c1"].includes(i.id),
+      );
+      expect(resolveSummaryWorkspace(chain, projectWorkspace)).toBe(worktree);
+    } finally {
+      rmSync(worktree, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("buildSummary", () => {
   it("walks partOf for a commit on a nested stacked branch", () => {
@@ -192,6 +264,34 @@ describe("formatSummary", () => {
     expect(text).toContain("Project: p — Proj");
     expect(text).toContain("  Workspace: /tmp/repo");
     expect(text).not.toContain("mergePolicy");
+  });
+
+  it("prints a live Story worktree as Workspace instead of the Project path", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "summary-wt-"));
+    try {
+      const issues = nestedIssues.map((issue) => {
+        if (issue.id === "p") return { ...issue, workspace: "/tmp/repo" };
+        if (issue.id === "stacked")
+          return { ...issue, worktreePath: worktree };
+        return issue;
+      });
+      const summary = buildSummary("stacked", issues);
+      expect(summary.workspace).toBe(worktree);
+      expect(formatSummary(summary)).toContain(`  Workspace: ${worktree}`);
+    } finally {
+      rmSync(worktree, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to Project workspace when the Story worktree path is missing on disk", () => {
+    const issues = nestedIssues.map((issue) => {
+      if (issue.id === "p") return { ...issue, workspace: "/tmp/repo" };
+      if (issue.id === "stacked")
+        return { ...issue, worktreePath: "/tmp/gone-worktree" };
+      return issue;
+    });
+    const summary = buildSummary("c1", issues);
+    expect(summary.workspace).toBe("/tmp/repo");
   });
 
   it("prints Mission in the Project section when missionOf returns a paragraph", () => {
