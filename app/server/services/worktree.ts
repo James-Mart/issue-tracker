@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { dirname } from "path";
 import type { Issue, IssuePatch } from "../schemas.js";
-import { WORKTREE_ROOT } from "../worktree-constants.js";
+import {
+  setupLogPathFor,
+  worktreePathFor,
+} from "../worktree-constants.js";
 import { IssueError } from "./errors.js";
 import { branchExists, currentBranch } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
@@ -10,16 +13,10 @@ import { list, update } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { projectContaining } from "./subtree.js";
 
+export { setupLogPathFor, worktreePathFor } from "../worktree-constants.js";
+
 type Story = Extract<Issue, { kind: "story" }>;
 type Project = Extract<Issue, { kind: "project" }>;
-
-export function worktreePathFor(projectId: string, storyId: string): string {
-  return join(WORKTREE_ROOT, projectId, storyId);
-}
-
-export function setupLogPathFor(projectId: string, storyId: string): string {
-  return join(WORKTREE_ROOT, projectId, ".setup-logs", `${storyId}.log`);
-}
 
 function requireStory(storyId: string): Story {
   const { issues } = list();

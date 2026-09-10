@@ -491,7 +491,7 @@ function createIssueProgram(run: Run): Command {
       `
 Output shape:
   issues    array of stored issue records (each carries kind)
-  derived   object keyed by issue id (not an array); values hold blocked, storyStatus, epicStatus, ideaStatus, reviewCurrent, mergeBase, mergePolicy
+  derived   object keyed by issue id (not an array); values hold blocked, storyStatus, epicStatus, ideaStatus, reviewCurrent, mergeBase, mergePolicy, worktree
   problems  array of { id, message }
 `,
     )

@@ -257,6 +257,14 @@ These are computed by `derive()` and never written to disk (see
   Task `partOf` the Story is `done`, and every such Task id is in
   `reviewedTasks`; otherwise `false`. When `review` is set and `reviewCurrent`
   is `false`, tree/detail chips show the verdict plus a **stale** marker.
+- **worktree** — derived Story object on `list()` / `issue list` /
+  `issue story get … worktree`: recorded `path`, whether that directory
+  `exists`, porcelain `uncommittedCount` (ignored paths omitted),
+  `atRiskCommitCount` (Story-branch commits reachable from neither trunk nor
+  upstream), `retained` (`exists` while merged or archived), last-setup
+  `setupFailed` / `setupLogPath` / `setupOutput`, and `blockedReason`. A
+  missing `worktreePath` or vanished directory is absent (`exists: false`,
+  counts 0) rather than an error. See [Derived state](#derived-state).
 - **noDiff** — a Task-only signal that the implementor intentionally landed no
   source-controlled file changes (`true`; absent until set via kind
   [`set`](#kind-scoped-get--set)). Edits that only touch non-source-controlled
@@ -460,7 +468,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `worktree`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -1556,6 +1564,19 @@ so cannot drift:
   Epic `blocked` does **not** cascade onto descendant Stories'/Tasks' own
   `blocked` flags — `tree`/`list` still show per-node stacking/sibling blocking
   under a blocked Epic.
+- **Story `worktree`** — checkout state for a Story: `path` (stored
+  `worktreePath`, omitted when unset), `exists`, `uncommittedCount` (lines from
+  `git status --porcelain` in the worktree, without `--ignored`),
+  `atRiskCommitCount` (commits on `branchName` reachable from neither the
+  Project `trunk` nor the branch's upstream when one exists), `retained`
+  (`exists` while the Story is merged or archived), `setupFailed` /
+  `setupLogPath` / `setupOutput` (last setup attempt; output is the log text),
+  and `blockedReason` (`worktreeBlockedReason`). Counts are read through
+  `app/server/services/git-read.ts` with the worktree as cwd. A Story with no
+  `worktreePath`, or whose recorded directory is gone, derives as absent
+  (`exists: false`, counts 0) rather than erroring. Computed by
+  `attachWorktreeDerived()` (filesystem + git I/O) and merged into `derived` by
+  `list()` — not by the pure `derive()` pass.
 - **Idea status** — ranked highest first: `planning` when a planning-session
   run is live; `planned` when an Epic or root project-level Story in the same
   Project stores `sourceIdea` pointing at the Idea; `awaiting-approval` when

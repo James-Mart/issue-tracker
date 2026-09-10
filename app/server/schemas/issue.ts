@@ -431,6 +431,18 @@ export type StoryStatus = (typeof STORY_STATUSES)[number];
 export type EpicStatus = (typeof EPIC_STATUSES)[number];
 export type IdeaStatus = (typeof IDEA_STATUSES)[number];
 
+export interface DerivedWorktree {
+  path?: string;
+  exists: boolean;
+  uncommittedCount: number;
+  atRiskCommitCount: number;
+  retained: boolean;
+  setupFailed?: boolean;
+  setupLogPath?: string;
+  setupOutput?: string;
+  blockedReason?: "parent-branch";
+}
+
 export interface DerivedState {
   blocked: boolean;
   storyStatus?: StoryStatus;
@@ -448,6 +460,8 @@ export interface DerivedState {
   planRoots?: string[];
   /** True when sourceIdea names an Idea present in the set and not archived. */
   planNotFinal?: boolean;
+  /** Per-Story worktree checkout; attached by list() (git + filesystem). */
+  worktree?: DerivedWorktree;
 }
 
 export interface IssuesResponse {

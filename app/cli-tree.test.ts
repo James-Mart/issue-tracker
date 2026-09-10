@@ -702,6 +702,7 @@ describe("tree", () => {
     expect(help.stdout).toContain("mergeBase");
     expect(help.stdout).toContain("mergePolicy");
     expect(help.stdout).toContain("reviewCurrent");
+    expect(help.stdout).toContain("worktree");
   });
 
   it("shows review and retro chips on the correct lines only when set", async () => {

@@ -63,6 +63,19 @@ describe("runGit", () => {
     expect(seenCwd).toBe("/repo/root");
   });
 
+  it("permits status for porcelain reads", async () => {
+    let seenArgs: string[] = [];
+    stubGitSpawner((args) => {
+      seenArgs = args;
+      return mockGitChild({ stdout: " M README\n" });
+    });
+
+    await expect(
+      runGit(["status", "--porcelain"], "/repo/worktree"),
+    ).resolves.toBe(" M README\n");
+    expect(seenArgs).toEqual(["status", "--porcelain"]);
+  });
+
   it("refuses mutating subcommands before spawning", async () => {
     let spawned = false;
     stubGitSpawner(() => {
