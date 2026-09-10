@@ -306,6 +306,7 @@ export async function removeStoryWorktree(
     throw new IssueError(
       "conflict",
       REMOVE_UNSAFE_ERROR(storyId, uncommittedCount, atRiskCommitCount),
+      { uncommittedCount, atRiskCommitCount },
     );
   }
 
