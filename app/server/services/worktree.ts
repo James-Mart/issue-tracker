@@ -6,6 +6,7 @@ import { IssueError } from "./errors.js";
 import { branchExists, currentBranch } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
 import { list, update } from "./issues.js";
+import { requireProjectWorkspace } from "./project-workspace.js";
 import { projectContaining } from "./subtree.js";
 
 type Story = Extract<Issue, { kind: "story" }>;
@@ -21,19 +22,6 @@ function requireStory(storyId: string): Story {
     throw new IssueError("not_found", `story "${storyId}" does not exist`);
   }
   return story;
-}
-
-function requireProjectWorkspace(story: Story, issues: Issue[]): string {
-  const byId = new Map(issues.map((issue) => [issue.id, issue]));
-  const projectId = projectContaining(story, byId);
-  const project = byId.get(projectId);
-  if (!project || project.kind !== "project" || !project.workspace) {
-    throw new IssueError(
-      "validation",
-      `Project workspace is not set`,
-    );
-  }
-  return project.workspace;
 }
 
 function projectIdFor(story: Story, issues: Issue[]): string {
@@ -75,8 +63,8 @@ async function addWorktree(
 export async function createStoryWorktree(storyId: string): Promise<string> {
   const { issues, derived } = list();
   const story = requireStory(storyId);
-  const workspace = requireProjectWorkspace(story, issues);
   const projectId = projectIdFor(story, issues);
+  const workspace = requireProjectWorkspace(projectId);
   const path = worktreePathFor(projectId, storyId);
 
   if (story.branchName) {
@@ -109,8 +97,8 @@ export async function createStoryWorktree(storyId: string): Promise<string> {
 export async function attachStoryWorktree(storyId: string): Promise<string> {
   const { issues } = list();
   const story = requireStory(storyId);
-  const workspace = requireProjectWorkspace(story, issues);
   const projectId = projectIdFor(story, issues);
+  const workspace = requireProjectWorkspace(projectId);
   const path = worktreePathFor(projectId, storyId);
 
   if (!story.branchName) {

@@ -79,7 +79,6 @@ function createConfig(): StorybookConfig {
           ),
         },
         server: {
-          allowedHosts: ["127.0.0.1", "localhost"],
           fs: {
             allow: [
               ...(viteConfig.server?.fs?.allow ?? []),
