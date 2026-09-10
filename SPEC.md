@@ -481,7 +481,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 
 | kind | settable fields |
 | --- | --- |
-| project | `title`, `workspace`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
+| project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
 | idea | `title`, `archived`, `approvePlan`, `approvalPending`, `appendTo`, `partOf`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
@@ -511,7 +511,7 @@ and refuses a sha already present on that Task. Whole-series replace uses
 - `--clear` (mutually exclusive with a positional value / `--add` / `--remove` /
   `--rename`):
   - **Clearable scalars** (`assignee`, `branchName`, `stackedOn`,
-    `prUrl`, `workspace`, `qa`, `retro`, `sourceIdea`, `appendTo`): blanks the field (absent / `null`).
+    `prUrl`, `workspace`, `setupCommand`, `qa`, `retro`, `sourceIdea`, `appendTo`): blanks the field (absent / `null`).
   - **`blockedBy`** / **`reviewedTasks`** / assignment **`labels`**: sets `[]` (empty array, not null).
   - **Project `labels`**: sets `[]` (empty catalog).
   - **Project `supportingDocs`**: blanks the field (absent / `null`); with
@@ -590,6 +590,7 @@ Project — the common-to-every-kind fields plus:
 | field | type | notes |
 | --- | --- | --- |
 | `workspace` | string? | absolute path to the local git checkout this Project covers; the cwd repo-touching agents run in (see [Project workspace](#project-workspace)) |
+| `setupCommand` | string? | optional shell command line run inside a new worktree after creation |
 | `trunk` | string | default git ref for derived `mergeBase` when no `mergeBaseOverride` applies; defaults `main` (see [Project trunk](#project-trunk)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"` | Project default for derived policy; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
@@ -1494,6 +1495,7 @@ preserves everything else from the existing same-kind issue.
 | `retro` (Epic) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `workspace` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `setupCommand` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `mergePolicy` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `mergePolicy` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; effective value derived on get |
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |

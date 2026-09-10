@@ -255,6 +255,20 @@ describe("view", () => {
     expect(stdout).toContain("mergePolicy: manual");
     expect(stdout).not.toContain("workspace:");
   });
+
+  it("prints setupCommand when set on a project", async () => {
+    const cmd = "npm ci";
+    expect((await runIssueCli(["project", "set", "p", "setupCommand", cmd], { env: env() })).status).toBe(0);
+    const { stdout, status } = await runIssueCli(["project", "view", "p"], { env: env() });
+    expect(status).toBe(0);
+    expect(stdout).toContain(`setupCommand: ${cmd}`);
+  });
+
+  it("omits setupCommand when unset on a project", async () => {
+    const { stdout, status } = await runIssueCli(["project", "view", "p"], { env: env() });
+    expect(status).toBe(0);
+    expect(stdout).not.toContain("setupCommand:");
+  });
 });
 
 describe("tree / list / summary include Ideas", () => {

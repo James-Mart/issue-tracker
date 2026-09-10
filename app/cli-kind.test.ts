@@ -44,6 +44,22 @@ describe("coerceSetPatch", () => {
       patch: { workspace: null },
     },
     {
+      name: "string setupCommand",
+      kind: "project" as const,
+      field: "setupCommand",
+      value: "npm ci",
+      opts: {},
+      patch: { setupCommand: "npm ci" },
+    },
+    {
+      name: "clearable setupCommand via --clear",
+      kind: "project" as const,
+      field: "setupCommand",
+      value: undefined,
+      opts: { clear: true },
+      patch: { setupCommand: null },
+    },
+    {
       name: "description positional",
       kind: "project" as const,
       field: "description",

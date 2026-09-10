@@ -161,6 +161,9 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     if (detail.workspace) {
       lines.push(`workspace: ${detail.workspace}`);
     }
+    if (detail.setupCommand) {
+      lines.push(`setupCommand: ${detail.setupCommand}`);
+    }
     if (detail.supportingDocs) {
       const line = formatSupportingDocsLine(detail.supportingDocs);
       if (line) lines.push(`supportingDocs: ${line}`);
