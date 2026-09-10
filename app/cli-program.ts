@@ -14,6 +14,7 @@ import { appendUpdateFromMergeBase } from "./server/services/merge-base-task.js"
 import {
   attachStoryWorktree,
   createStoryWorktree,
+  removeStoryWorktree,
   setupStoryWorktree,
 } from "./server/services/worktree.js";
 import { apply } from "./server/services/apply.js";
@@ -391,7 +392,7 @@ function createIssueProgram(run: Run): Command {
         );
       const worktreeCmd = kindCmd
         .command("worktree")
-        .description("create, attach, or re-run setup for a Story worktree");
+        .description("create, attach, remove, or re-run setup for a Story worktree");
       worktreeCmd
         .command("create")
         .argument("<storyId>", "story id")
@@ -425,6 +426,22 @@ function createIssueProgram(run: Run): Command {
         .action((storyId: string) =>
           run(async () => {
             const path = await setupStoryWorktree(storyId);
+            console.log(path);
+          }),
+        );
+      worktreeCmd
+        .command("remove")
+        .argument("<storyId>", "story id")
+        .description("remove the Story's worktree checkout and clear worktreePath")
+        .option(
+          "--discard",
+          "force removal even when uncommitted changes or at-risk commits exist",
+        )
+        .action((storyId: string, opts: { discard?: boolean }) =>
+          run(async () => {
+            const path = await removeStoryWorktree(storyId, {
+              discard: opts.discard === true,
+            });
             console.log(path);
           }),
         );

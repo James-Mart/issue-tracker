@@ -6,9 +6,11 @@ import {
   setupLogPathFor,
   worktreePathFor,
 } from "../worktree-constants.js";
+import { deriveStoryWorktree } from "./derive-worktree.js";
 import { IssueError } from "./errors.js";
 import { branchExists, currentBranch } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
+import { hasActiveImplementingRun } from "./implementing-status.js";
 import { list, update } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { projectContaining } from "./subtree.js";
@@ -72,6 +74,19 @@ export const SETUP_NO_WORKTREE_ERROR = (storyId: string) =>
 
 export const SETUP_FAILED_ERROR = (storyId: string, code: number, logPath: string) =>
   `setup command failed for Story "${storyId}" (exit ${code}); see ${logPath}`;
+
+export const REMOVE_NO_WORKTREE_ERROR = (storyId: string) =>
+  `worktree remove requires an existing worktree for Story "${storyId}"`;
+
+export const REMOVE_ACTIVE_IMPLEMENTING_ERROR = (storyId: string) =>
+  `worktree remove refuses Story "${storyId}" while an implementing session is active`;
+
+export const REMOVE_UNSAFE_ERROR = (
+  storyId: string,
+  uncommittedCount: number,
+  atRiskCommitCount: number,
+) =>
+  `worktree remove refuses Story "${storyId}": ${uncommittedCount} uncommitted change(s), ${atRiskCommitCount} at-risk commit(s)`;
 
 async function addWorktree(
   workspace: string,
@@ -211,6 +226,50 @@ export async function attachStoryWorktree(storyId: string): Promise<string> {
     worktreePath: path,
     worktreeBlockedReason: null,
   });
+  return path;
+}
+
+export async function removeStoryWorktree(
+  storyId: string,
+  options: { discard?: boolean } = {},
+): Promise<string> {
+  const { issues, derived } = list();
+  const story = requireStory(storyId);
+  const projectId = projectIdFor(story, issues);
+  const workspace = requireProjectWorkspace(projectId);
+  const path = story.worktreePath;
+
+  if (!path || !existsSync(path)) {
+    throw new IssueError("validation", REMOVE_NO_WORKTREE_ERROR(storyId));
+  }
+
+  if (hasActiveImplementingRun(storyId)) {
+    throw new IssueError("conflict", REMOVE_ACTIVE_IMPLEMENTING_ERROR(storyId));
+  }
+
+  const worktree =
+    derived[storyId]?.worktree ?? deriveStoryWorktree(story, issues);
+  const uncommittedCount = worktree.uncommittedCount;
+  const atRiskCommitCount = worktree.atRiskCommitCount;
+
+  if (
+    !options.discard &&
+    (uncommittedCount > 0 || atRiskCommitCount > 0)
+  ) {
+    throw new IssueError(
+      "conflict",
+      REMOVE_UNSAFE_ERROR(storyId, uncommittedCount, atRiskCommitCount),
+    );
+  }
+
+  const args = [
+    "worktree",
+    "remove",
+    ...(options.discard ? ["--force"] : []),
+    path,
+  ];
+  await runGitWrite(args, workspace);
+  await update(storyId, { worktreePath: null });
   return path;
 }
 
