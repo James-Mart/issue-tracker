@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runIssueCli } from "../../cli-program.js";
 import { setupLogPathFor, WORKTREE_ROOT } from "../worktree-constants.js";
 import type { DerivedWorktree } from "../schemas.js";
 
@@ -33,7 +34,7 @@ function git(repo: string, args: string[]): string {
 }
 
 function initRepo(): string {
-  const repo = mkdtempSync(join(tmpdir(), "issue-derive-wt-repo-"));
+  const repo = mkdtempSync(join(dir, "repo-"));
   git(repo, ["init", "-b", "main"]);
   writeFileSync(join(repo, "README"), "seed\n");
   writeFileSync(join(repo, ".gitignore"), "*.ignored\n");
@@ -43,8 +44,7 @@ function initRepo(): string {
 }
 
 function addWorktree(workspace: string, branch: string): string {
-  const path = mkdtempSync(join(tmpdir(), "issue-derive-wt-"));
-  rmSync(path, { recursive: true, force: true });
+  const path = join(dir, `wt-${branch}`);
   git(workspace, ["worktree", "add", "-b", branch, path]);
   trackedWorktrees.push({ workspace, path });
   return path;
@@ -57,13 +57,14 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
 
 const PROJECT_ID = "derive-wt-p";
 
-function seedProject(): void {
+function seedProject(extra: Record<string, unknown> = {}): void {
   writeIssue(PROJECT_ID, {
     kind: "project",
     title: "P",
     order: 0,
     createdAt: AT,
     updatedAt: AT,
+    ...extra,
   });
   writeIssue("e", {
     kind: "epic",
@@ -235,7 +236,7 @@ describe("derived worktree on list()", () => {
   });
 
   it("does not error when the recorded path exists but is not a git checkout", async () => {
-    const path = mkdtempSync(join(tmpdir(), "issue-derive-wt-nongit-"));
+    const path = mkdtempSync(join(dir, "nongit-"));
     seedProject();
     writeStory("s", { branchName: "nongit", worktreePath: path });
 
@@ -252,15 +253,16 @@ describe("derived worktree on list()", () => {
 
   it("derives a vanished worktree directory as absent rather than erroring", async () => {
     seedProject();
+    const missing = join(dir, "missing");
     writeStory("s", {
       branchName: "ghost",
-      worktreePath: join(tmpdir(), "issue-derive-wt-missing"),
+      worktreePath: missing,
     });
 
     const list = await loadList();
     const worktree = worktreeOf(list().derived, "s");
     expect(worktree.exists).toBe(false);
-    expect(worktree.path).toBe(join(tmpdir(), "issue-derive-wt-missing"));
+    expect(worktree.path).toBe(missing);
     expect(worktree.uncommittedCount).toBe(0);
     expect(worktree.atRiskCommitCount).toBe(0);
     expect(worktree.retained).toBe(false);
@@ -295,7 +297,7 @@ describe("derived worktree on list()", () => {
     writeFileSync(join(path, "wip.txt"), "wip\n");
     git(path, ["add", "wip.txt"]);
     git(path, ["commit", "-m", "wip"]);
-    const remote = mkdtempSync(join(tmpdir(), "issue-derive-wt-remote-"));
+    const remote = mkdtempSync(join(dir, "remote-"));
     git(remote, ["init", "--bare"]);
     git(workspace, ["remote", "add", "origin", remote]);
     git(workspace, ["push", "-u", "origin", "feat-upstream"]);
@@ -305,5 +307,68 @@ describe("derived worktree on list()", () => {
     const list = await loadList();
     expect(worktreeOf(list().derived, "s").atRiskCommitCount).toBe(0);
     rmSync(remote, { recursive: true, force: true });
+  });
+
+  it("marks an archived Story whose checkout still exists as retained", async () => {
+    const workspace = initRepo();
+    const path = addWorktree(workspace, "feat-archived");
+    seedProject();
+    writeStory("s", {
+      branchName: "feat-archived",
+      worktreePath: path,
+      archived: true,
+    });
+
+    const list = await loadList();
+    const worktree = worktreeOf(list().derived, "s");
+    expect(worktree.exists).toBe(true);
+    expect(worktree.retained).toBe(true);
+  });
+
+  it("uses the Project trunk for at-risk reachability", async () => {
+    const workspace = initRepo();
+    git(workspace, ["branch", "develop"]);
+    const path = addWorktree(workspace, "feat-trunk");
+    writeFileSync(join(path, "wip.txt"), "wip\n");
+    git(path, ["add", "wip.txt"]);
+    git(path, ["commit", "-m", "wip"]);
+    git(workspace, ["merge", "feat-trunk"]);
+    seedProject({ trunk: "develop" });
+    writeStory("s", { branchName: "feat-trunk", worktreePath: path });
+
+    const list = await loadList();
+    expect(worktreeOf(list().derived, "s").atRiskCommitCount).toBe(1);
+  });
+
+  it("does not surface a leftover setup log after a successful setup", async () => {
+    const logPath = setupLogPathFor(PROJECT_ID, "s");
+    mkdirSync(dirname(logPath), { recursive: true });
+    writeFileSync(logPath, "old failure\n");
+    seedProject();
+    writeStory("s");
+
+    const list = await loadList();
+    expect(worktreeOf(list().derived, "s")).toEqual({
+      exists: false,
+      uncommittedCount: 0,
+      atRiskCommitCount: 0,
+      retained: false,
+    });
+  });
+
+  it("exposes derived worktree on story get", async () => {
+    seedProject();
+    writeStory("s");
+
+    const result = await runIssueCli(["story", "get", "s", "worktree"], {
+      env: { ISSUES_DIR: dir, ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1" },
+    });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      exists: false,
+      uncommittedCount: 0,
+      atRiskCommitCount: 0,
+      retained: false,
+    });
   });
 });

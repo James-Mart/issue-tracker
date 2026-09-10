@@ -18,13 +18,11 @@ function setupRecord(
   story: Story,
   projectId: string | undefined,
 ): Pick<DerivedWorktree, "setupFailed" | "setupLogPath" | "setupOutput"> {
+  if (story.worktreeSetupFailed !== true) return {};
   const recorded: Pick<
     DerivedWorktree,
     "setupFailed" | "setupLogPath" | "setupOutput"
-  > = {};
-  if (story.worktreeSetupFailed !== undefined) {
-    recorded.setupFailed = story.worktreeSetupFailed;
-  }
+  > = { setupFailed: true };
   if (!projectId) return recorded;
   const logPath = setupLogPathFor(projectId, story.id);
   if (!existsSync(logPath)) return recorded;
