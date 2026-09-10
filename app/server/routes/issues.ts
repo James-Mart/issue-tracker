@@ -58,6 +58,10 @@ import { findPlanningWorkRoot } from "../services/planning-work-root.js";
 import { readIssueChange, readIssueChangeFile } from "../services/change.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
 import { ancestorChain } from "../services/subtree.js";
+import {
+  removeStoryWorktree,
+  setupStoryWorktree,
+} from "../services/worktree.js";
 
 const DEFAULT_TITLE = "New conversation";
 
@@ -379,6 +383,34 @@ export function createIssuesRouter(
       }
       const result = await moveStory(req.params.id, target);
       res.json(result);
+    }),
+  );
+
+  router.post(
+    "/:id/worktree/remove",
+    asyncRoute(async (req, res) => {
+      const storyId = req.params.id;
+      const issue = readIssueOrThrow(storyId);
+      if (issue.kind !== "story") {
+        throw new IssueError("validation", `issue "${storyId}" is not a Story`);
+      }
+      const body = req.body as { discard?: unknown };
+      const discard = body.discard === true;
+      await removeStoryWorktree(storyId, { discard });
+      res.status(204).end();
+    }),
+  );
+
+  router.post(
+    "/:id/worktree/setup",
+    asyncRoute(async (req, res) => {
+      const storyId = req.params.id;
+      const issue = readIssueOrThrow(storyId);
+      if (issue.kind !== "story") {
+        throw new IssueError("validation", `issue "${storyId}" is not a Story`);
+      }
+      await setupStoryWorktree(storyId);
+      res.status(204).end();
     }),
   );
 
