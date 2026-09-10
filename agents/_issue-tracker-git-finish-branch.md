@@ -45,20 +45,18 @@ trunk.
        Record it: `issue story set <storyId> prUrl <url>`.
      - **merge** — in the Project workspace: `git merge --no-ff
        <branchName>`, `git push origin <mergeBase>`. Then
-       `issue story worktree remove <storyId>`. Then
-       `issue story set <storyId> merged true` whether remove succeeded
-       or refused. A remove refusal is then blocked. Then run step 3
-       with `Bp` = that `<mergeBase>`.
+       `issue story worktree remove <storyId>`. Report that command's
+       output. Then `issue story set <storyId> merged true`. Then run
+       step 3 with `Bp` = that `<mergeBase>`.
      - **fast-forward** — in the Project workspace: `git merge --ff-only
        <branchName>`. On failure (base advanced; fast-forward not
        possible), leave the base untouched and
        `issue story set <storyId> needsAttention true --reason "base
        <mergeBase> advanced; fast-forward not possible, rebase needed"`, then
        stop. On success, `git push origin <mergeBase>`. Then
-       `issue story worktree remove <storyId>`. Then
-       `issue story set <storyId> merged true` whether remove succeeded
-       or refused. A remove refusal is then blocked. Then run step 3
-       with `Bp` = that `<mergeBase>`.
+       `issue story worktree remove <storyId>`. Report that command's
+       output. Then `issue story set <storyId> merged true`. Then run
+       step 3 with `Bp` = that `<mergeBase>`.
 3. **Flag stale children** (`merge` / `fast-forward`, and the same scan
    performed by `issue merge` after a successful GitHub PR merge):
    1. Take `<projectId>` from the `Project: <projectId> — <title>` line of

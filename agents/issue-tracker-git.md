@@ -88,7 +88,7 @@ Follow exactly one include below (mode name selects the file). First load the
 
 ## Escalation
 
-On any blocked condition (worktree create/remove refusal, checkout/merge
+On any blocked condition (worktree create refusal, checkout/merge
 failure, missing/invalid required git facts other than the
 unset-`mergeBase` row above, push/PR/merge refusal, CLI refusal), **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-git-escalation.md`
