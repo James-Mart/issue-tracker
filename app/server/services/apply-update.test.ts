@@ -21,6 +21,8 @@ describe("apply — update preserves imperative progress state", () => {
     await update("epic-a", { retro: "in-progress" });
     await update("b2", {
       branchName: "feat/b2",
+      worktreePath: "/root/issue-tracker-worktrees/proj/b2",
+      worktreeSetupFailed: true,
       prUrl: "https://example.test/pr/2",
       merged: true,
       review: "failed",
@@ -55,6 +57,8 @@ describe("apply — update preserves imperative progress state", () => {
     const b2 = readIssue("b2");
     expect(b2.title).toBe("Branch two renamed");
     expect(b2.branchName).toBe("feat/b2");
+    expect(b2.worktreePath).toBe("/root/issue-tracker-worktrees/proj/b2");
+    expect(b2.kind === "story" && b2.worktreeSetupFailed).toBe(true);
     expect(b2.mergeBase).toBeUndefined();
     expect(b2.prUrl).toBe("https://example.test/pr/2");
     expect(b2.merged).toBe(true);

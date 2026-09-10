@@ -11,6 +11,7 @@ const WRITE_GIT_SUBCOMMANDS = new Set([
   "ls-remote",
   "fetch",
   "show",
+  "worktree",
 ]);
 
 /** @internal Test seam for stubbing git spawn. */

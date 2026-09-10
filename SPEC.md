@@ -955,6 +955,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Epic id **or** Project id (required) |
 | `branchName` | string? | set once the git branch is created; rename refused while stacked children exist |
+| `worktreeSetupFailed` | boolean? | absent until set; true when the Project `setupCommand` last exited non-zero against this Story's worktree |
 | `stackedOn` | string? | single fork-point Story id (must be in the same Epic, or same Project for project-level Stories); absent => root |
 | `mergeBaseOverride` | string? | optional; meaningful on project-level root Stories only; set via imperative `mergeBase` (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `sourceIdea` | string? | optional; meaningful on project-level root Stories only; names one Idea in the same Project this Story was planned from (see [Relationships](#relationships)) |
@@ -1510,7 +1511,7 @@ preserves everything else from the existing same-kind issue.
 | `id`, `createdAt` | set on create; `apply` preserves them, never rewrites |
 | `status`, `qa`, `commits`, `noDiff`, `sourceIdea` (Task) | imperative only (kind [`set`](#kind-scoped-get--set) / `issue task add-commit`); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
 | `appended` (Task) | append path only (`issue story append`, `issue story update-from-merge-base`); readable via kind [`get`](#kind-scoped-get--set); not settable; `apply` preserves |
-| `branchName`, `prUrl`, `merged`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `branchName`, `worktreePath`, `worktreeBlockedReason`, `worktreeSetupFailed`, `prUrl`, `merged`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `mergeBaseOverride` (Epic / Story) | imperative only via kind [`set`](#kind-scoped-get--set) field `mergeBase` (stores as `mergeBaseOverride`); `apply` preserves |
 | `sourceIdea` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
 | `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |

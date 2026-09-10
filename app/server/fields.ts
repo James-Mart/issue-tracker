@@ -55,6 +55,9 @@ export const STORY_FORM_FIELD_KEYS = [
 ] as const;
 
 export const STORY_IMPERATIVE_ONLY_KEYS = [
+  "worktreePath",
+  "worktreeBlockedReason",
+  "worktreeSetupFailed",
   "mergeBaseOverride",
   "mergePolicy",
   "review",
@@ -73,6 +76,9 @@ export const STORY_FIELD_KEYS = [
 // Optional story runtime state preserved by apply when already set on disk.
 export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "branchName",
+  "worktreePath",
+  "worktreeBlockedReason",
+  "worktreeSetupFailed",
   "mergeBaseOverride",
   "mergePolicy",
   "prUrl",
@@ -123,6 +129,8 @@ export const CLEARABLE_KEYS = [
   "assignee",
   "stakeholder",
   "branchName",
+  "worktreePath",
+  "worktreeBlockedReason",
   "stackedOn",
   "prUrl",
   "needsRebase",
@@ -150,6 +158,7 @@ export const FALSE_CLEARS_KEYS = [
   "noDiff",
   "approvePlan",
   "approvalPending",
+  "worktreeSetupFailed",
 ] as const satisfies readonly (keyof IssuePatch)[];
 
 export type FalseClearsKey = (typeof FALSE_CLEARS_KEYS)[number];

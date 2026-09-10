@@ -159,6 +159,18 @@ describe("story get/set", () => {
     expect((await runIssueCli(["story", "set", "a", "branchName", "feat/a"], { env: env() })).status).toBe(0);
     expect((await runIssueCli(["story", "get", "a", "branchName"], { env: env() })).stdout).toBe("feat/a\n");
 
+    const worktreePath = "/root/issue-tracker-worktrees/proj/a";
+    expect((await runIssueCli(["story", "set", "a", "worktreePath", worktreePath], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "worktreePath"], { env: env() })).stdout).toBe(`${worktreePath}\n`);
+    expect((await runIssueCli(["story", "set", "a", "worktreePath", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "worktreePath"], { env: env() })).stdout).toBe("");
+
+    expect((await runIssueCli(["story", "get", "a", "worktreeSetupFailed"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["story", "set", "a", "worktreeSetupFailed", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "worktreeSetupFailed"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["story", "set", "a", "worktreeSetupFailed", "false"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "get", "a", "worktreeSetupFailed"], { env: env() })).stdout).toBe("");
+
     expect((await runIssueCli(["story", "set", "b", "stackedOn", "--clear"], { env: env() })).status).toBe(0);
     expect((await runIssueCli(["story", "get", "b", "stackedOn"], { env: env() })).stdout).toBe("");
     expect((await runIssueCli(["story", "set", "b", "stackedOn", "a"], { env: env() })).status).toBe(0);
