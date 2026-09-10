@@ -168,7 +168,7 @@ afterEach(() => {
 });
 
 describe("CockpitPage start work", () => {
-  it("renders a page-level blocked panel when implementing lock is refused", () => {
+  it("keeps flow buckets visible when implementing lock is refused", () => {
     mutate.mockImplementation((_issueId, _channel, _body, options) => {
       options?.onError?.(
         new ApiError("conflict", 409, {
@@ -193,12 +193,12 @@ describe("CockpitPage start work", () => {
       ).click();
     });
 
-    expect(container.textContent).toContain("Another implementing run is active");
-    expect(container.textContent).toContain("Other epic is holding the lock");
     expect(
-      container.querySelector('[data-testid="implementing-lock-holder-link"]'),
+      container.querySelector('section[aria-labelledby="cockpit-ready"]'),
     ).toBeTruthy();
-    expect(container.querySelector('section[aria-labelledby="cockpit-ready"]')).toBeNull();
+    expect(container.textContent).toContain(
+      "Work loop didn't start. Start work again.",
+    );
   });
 
   it("lights the top bar and shows a row spinner before the session POST resolves", () => {

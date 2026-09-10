@@ -3,7 +3,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/errors";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import type { FlowItem } from "../lib/flow";
 import { skillPath } from "@/lib/plugin-paths";
@@ -129,13 +128,7 @@ function flowItem(
   return { issue, state };
 }
 
-function mountActions(
-  item: FlowItem,
-  onImplementingLockRefusal?: (refusal: {
-    holderIssueId: string;
-    holderIssueTitle: string;
-  }) => void,
-): {
+function mountActions(item: FlowItem): {
   container: HTMLDivElement;
   root: Root;
 } {
@@ -145,10 +138,7 @@ function mountActions(
   act(() => {
     root.render(
       <MemoryRouter initialEntries={["/"]}>
-        <FlowRowActions
-          item={item}
-          onImplementingLockRefusal={onImplementingLockRefusal}
-        />
+        <FlowRowActions item={item} />
       </MemoryRouter>,
     );
   });
@@ -236,7 +226,6 @@ describe("FlowRowActions start work", () => {
   it("shows start work only on ready Epic and not-started Story rows", () => {
     const readyEpic = mountActions(
       flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" }),
-      vi.fn(),
     );
     const startEpic = readyEpic.container.querySelector(
       '[data-testid="flow-row-start-work"]',
@@ -250,7 +239,6 @@ describe("FlowRowActions start work", () => {
         blocked: false,
         storyStatus: "not-started",
       }),
-      vi.fn(),
     );
     expect(
       readyStory.container.querySelector('[data-testid="flow-row-start-work"]'),
@@ -258,7 +246,6 @@ describe("FlowRowActions start work", () => {
 
     const inFlight = mountActions(
       flowItem(epic("flight"), { blocked: false, epicStatus: "in-progress" }),
-      vi.fn(),
     );
     expect(
       inFlight.container.querySelector('[data-testid="flow-row-start-work"]'),
@@ -269,7 +256,6 @@ describe("FlowRowActions start work", () => {
         blocked: false,
         epicStatus: "todo",
       }),
-      vi.fn(),
     );
     expect(
       attention.container.querySelector('[data-testid="flow-row-start-work"]'),
@@ -279,7 +265,6 @@ describe("FlowRowActions start work", () => {
   it("posts to the implementing channel sessions endpoint for that work root", () => {
     const { container } = mountActions(
       flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" }),
-      vi.fn(),
     );
 
     act(() => {
@@ -308,10 +293,10 @@ describe("FlowRowActions start work", () => {
     const item = flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" });
     const renderActions = () => (
       <MemoryRouter initialEntries={["/"]}>
-        <FlowRowActions item={item} onImplementingLockRefusal={vi.fn()} />
+        <FlowRowActions item={item} />
       </MemoryRouter>
     );
-    const { container, root } = mountActions(item, vi.fn());
+    const { container, root } = mountActions(item);
     act(() => {
       root.render(renderActions());
     });
@@ -333,41 +318,10 @@ describe("FlowRowActions start work", () => {
     ).toBeTruthy();
   });
 
-  it("surfaces a project lock refusal via onImplementingLockRefusal", () => {
-    mutate.mockImplementation((_issueId, _channel, _body, options) => {
-      options?.onError?.(
-        new ApiError("conflict", 409, {
-          error: "locked",
-          holderIssueId: "other-epic",
-          holderIssueTitle: "Other epic",
-        }),
-      );
-    });
-    const onLockRefusal = vi.fn();
-    const { container } = mountActions(
-      flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" }),
-      onLockRefusal,
-    );
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="flow-row-start-work"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(onLockRefusal).toHaveBeenCalledWith({
-      holderIssueId: "other-epic",
-      holderIssueTitle: "Other epic",
-    });
-  });
-
   it("renders nothing while coordinator models are loading", () => {
     modelsState.isLoading = true;
     const { container } = mountActions(
       flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" }),
-      vi.fn(),
     );
     expect(buttonCount(container)).toBe(0);
   });

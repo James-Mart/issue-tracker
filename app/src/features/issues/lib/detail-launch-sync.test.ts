@@ -67,7 +67,7 @@ describe("detailLaunchFaultCopy", () => {
     ).toEqual({
       message:
         "Session create rejected — implementing lock held by Push notifications (409).",
-      hint: "Retire the active run on that epic, then return here.",
+      hint: "Start the work loop again.",
     });
   });
 

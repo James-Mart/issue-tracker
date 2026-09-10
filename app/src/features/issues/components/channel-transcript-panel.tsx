@@ -24,17 +24,13 @@ import {
   detailLaunchPendingCopy,
   launchOverlaysChannel,
 } from "../lib/detail-launch-sync";
-import {
-  isImplementingWorkRoot,
-  type ImplementingLockRefusal,
-} from "../lib/implementing-launch";
+import { isImplementingWorkRoot } from "../lib/implementing-launch";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelSessionOverflowMenu } from "./channel-session-overflow-menu";
 import { ChannelSessionSwitcher } from "./channel-session-switcher";
 import { ChannelRetroControl } from "./channel-retro-control";
 import {
   ImplementingChannelEmptyState,
-  ImplementingLockRefusalState,
   ImplementingNewRunControl,
 } from "./implementing-launch-control";
 import {
@@ -119,9 +115,6 @@ export function ChannelTranscriptPanel({
   const { data, isLoading, error } = useChannelSessionsQuery(issueId, channel);
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [pendingStart, setPendingStart] = useState<StartedSession | undefined>();
-  const [implementingLockRefusal, setImplementingLockRefusal] = useState<
-    ImplementingLockRefusal | undefined
-  >();
   const pending = useCockpitLaunchStore((s) => s.pending);
   const ack = useCockpitLaunchStore((s) => s.ack);
   const fault = useCockpitLaunchStore((s) => s.fault);
@@ -211,30 +204,6 @@ export function ChannelTranscriptPanel({
     return fault;
   }
 
-  if (implementingLockRefusal && projectId && !thisFault) {
-    const refusal = (
-      <ImplementingLockRefusalState
-        projectId={projectId}
-        refusal={implementingLockRefusal}
-      />
-    );
-    if (mobileFullViewport && mobileBack) {
-      return (
-        <ChannelPanelFrame mobileFullViewport>
-          <OpenThreadChrome
-            title={label}
-            onBack={mobileBack.onBack}
-            backAriaLabel={mobileBack.backAriaLabel}
-            runActive={false}
-            events={[]}
-          />
-          {refusal}
-        </ChannelPanelFrame>
-      );
-    }
-    return refusal;
-  }
-
   const sessions = data ?? [];
   const defaultSession = defaultChannelSession(sessions);
   const selectedFromList = selectedId
@@ -254,11 +223,6 @@ export function ChannelTranscriptPanel({
   const onSessionStarted = (session: StartedSession) => {
     setSelectedId(session.id);
     setPendingStart(session);
-    setImplementingLockRefusal(undefined);
-  };
-
-  const onImplementingLockRefusal = (refusal: ImplementingLockRefusal) => {
-    setImplementingLockRefusal(refusal);
   };
 
   if (pendingLaunch) {
@@ -302,7 +266,6 @@ export function ChannelTranscriptPanel({
         issue={implementingWorkRoot}
         channel={channel}
         onStarted={onSessionStarted}
-        onLockRefusal={onImplementingLockRefusal}
       />
     ) : (
       <ShellState
@@ -357,7 +320,6 @@ export function ChannelTranscriptPanel({
         issue={implementingWorkRoot}
         channel={channel}
         onStarted={onSessionStarted}
-        onLockRefusal={onImplementingLockRefusal}
       />
     ) : null;
   const channelNewRun = planningNewRun ?? implementingNewRun;

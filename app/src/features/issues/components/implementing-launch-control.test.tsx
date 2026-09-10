@@ -3,12 +3,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/errors";
 import { skillPath } from "@/lib/plugin-paths";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   ImplementingChannelEmptyState,
-  ImplementingLockRefusalState,
   ImplementingNewRunControl,
 } from "./implementing-launch-control";
 
@@ -125,7 +123,6 @@ describe("ImplementingChannelEmptyState", () => {
         issue={epic}
         channel="implementing"
         onStarted={onStarted}
-        onLockRefusal={vi.fn()}
       />,
     );
     expect(container.textContent).toContain("Start work loop");
@@ -150,60 +147,6 @@ describe("ImplementingChannelEmptyState", () => {
     );
   });
 
-  it("surfaces a project lock refusal via onLockRefusal", () => {
-    mutate.mockImplementation((_body, options) => {
-      options?.onError?.(
-        new ApiError("conflict", 409, {
-          error: "locked",
-          holderIssueId: "other-epic",
-          holderIssueTitle: "Other epic",
-        }),
-      );
-    });
-    const onLockRefusal = vi.fn();
-    const { container } = mount(
-      <ImplementingChannelEmptyState
-        issue={epic}
-        channel="implementing"
-        onStarted={vi.fn()}
-        onLockRefusal={onLockRefusal}
-      />,
-    );
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="implementing-start-session"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(onLockRefusal).toHaveBeenCalledWith({
-      holderIssueId: "other-epic",
-      holderIssueTitle: "Other epic",
-    });
-  });
-});
-
-describe("ImplementingLockRefusalState", () => {
-  it("links to the holder issue implementing channel", () => {
-    const { container } = mount(
-      <ImplementingLockRefusalState
-        projectId="platform"
-        refusal={{
-          holderIssueId: "ship-it",
-          holderIssueTitle: "Ship it",
-        }}
-      />,
-    );
-    expect(container.textContent).toContain("Ship it is holding the lock");
-    const link = container.querySelector(
-      '[data-testid="implementing-lock-holder-link"]',
-    ) as HTMLAnchorElement;
-    expect(link.getAttribute("href")).toBe(
-      "/projects/platform/issues/ship-it?tab=implementing",
-    );
-  });
 });
 
 describe("ImplementingNewRunControl", () => {
@@ -213,7 +156,6 @@ describe("ImplementingNewRunControl", () => {
         issue={epic}
         channel="implementing"
         onStarted={vi.fn()}
-        onLockRefusal={vi.fn()}
       />,
     );
     const button = container.querySelector(
@@ -229,7 +171,6 @@ describe("ImplementingNewRunControl", () => {
         issue={epic}
         channel="implementing"
         onStarted={vi.fn()}
-        onLockRefusal={vi.fn()}
       />
     );
     const { container, root } = mount(renderControl());

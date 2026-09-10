@@ -1,5 +1,4 @@
 import type { AgentModel } from "@/features/agents/api/client";
-import { ApiError } from "@/lib/api/errors";
 import { skillPath } from "@/lib/plugin-paths";
 import type { ConversationChannel, IssueDetail } from "@server/schemas";
 import { defaultConversationModel } from "./planning-launch";
@@ -11,11 +10,6 @@ export type ImplementingWorkRoot = Extract<
   IssueDetail,
   { kind: "epic" | "story" }
 >;
-
-export type ImplementingLockRefusal = {
-  holderIssueId: string;
-  holderIssueTitle: string;
-};
 
 /** Session title for an implementing run on an Epic or project-level Story. */
 export function implementingSessionTitle(issueTitle: string): string {
@@ -61,16 +55,6 @@ export function implementingLaunchCopy(): ImplementingLaunchCopy {
   };
 }
 
-export function implementingLockRefusalCopy(holderIssueTitle: string): {
-  title: string;
-  detailPrefix: string;
-} {
-  return {
-    title: "Another implementing run is active.",
-    detailPrefix: `Only one work loop can run at a time. ${holderIssueTitle} is holding the lock — open its`,
-  };
-}
-
 /** True when this issue offers the implementing channel as a work root. */
 export function isImplementingWorkRoot(
   channel: ConversationChannel,
@@ -80,23 +64,4 @@ export function isImplementingWorkRoot(
   if (channel !== "implementing" || issue == null) return false;
   if (issue.kind === "epic") return true;
   return issue.kind === "story" && parentKind === "project";
-}
-
-/** Parse a Project implementing-lock 409 into holder fields. */
-export function parseImplementingLockRefusal(
-  err: unknown,
-): ImplementingLockRefusal | undefined {
-  if (!(err instanceof ApiError) || err.status !== 409) return undefined;
-  const body = err.body;
-  if (!body || typeof body !== "object") return undefined;
-  const record = body as Record<string, unknown>;
-  const holderIssueId = record.holderIssueId;
-  const holderIssueTitle = record.holderIssueTitle;
-  if (
-    typeof holderIssueId !== "string" ||
-    typeof holderIssueTitle !== "string"
-  ) {
-    return undefined;
-  }
-  return { holderIssueId, holderIssueTitle };
 }
