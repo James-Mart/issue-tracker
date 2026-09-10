@@ -101,6 +101,22 @@ describe("apply — update preserves imperative progress state", () => {
     }
   });
 
+  it("preserves project setupCommand when the doc updates a project", async () => {
+    const { apply, update } = await loadService();
+    await apply(baseDoc());
+
+    await update("proj", { setupCommand: "npm ci && npm test" });
+
+    const doc = baseDoc();
+    doc.project.title = "Project with setup preserved";
+    const summary = await apply(doc);
+    expect(summary.updated).toContain("proj");
+
+    const proj = readIssue("proj");
+    expect(proj.title).toBe("Project with setup preserved");
+    expect(proj.kind === "project" && proj.setupCommand).toBe("npm ci && npm test");
+  });
+
   it("preserves project mergePolicy when the doc updates a project", async () => {
     const { apply, update } = await loadService();
     await apply(baseDoc());

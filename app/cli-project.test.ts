@@ -65,6 +65,30 @@ describe("project get/set", () => {
     expect(stdout).toBe("");
   });
 
+  it("sets, gets, clears, and surfaces setupCommand", async () => {
+    const cmd = "npm ci && npm run build";
+    expect((await runIssueCli(["project", "set", "p", "setupCommand", cmd], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["project", "get", "p", "setupCommand"], { env: env() })).stdout).toBe(`${cmd}\n`);
+
+    const view = await runIssueCli(["project", "view", "p"], { env: env() });
+    expect(view.status).toBe(0);
+    expect(view.stdout).toContain(`setupCommand: ${cmd}`);
+
+    expect((await runIssueCli(["project", "set", "p", "setupCommand", "--clear"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["project", "get", "p", "setupCommand"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["project", "view", "p"], { env: env() })).stdout).not.toContain("setupCommand:");
+  });
+
+  it("does not expose worktreeRoot as a project field", async () => {
+    const unknownGet = await runIssueCli(["project", "get", "p", "worktreeRoot"], { env: env() });
+    expect(unknownGet.status).toBe(1);
+    expect(unknownGet.stderr).toContain('unknown field "worktreeRoot" for project');
+
+    const unknownSet = await runIssueCli(["project", "set", "p", "worktreeRoot", "/tmp/wt"], { env: env() });
+    expect(unknownSet.status).toBe(1);
+    expect(unknownSet.stderr).toContain('unknown or unsettable field "worktreeRoot" for project');
+  });
+
   it("refuses kind mismatch and unknown fields", async () => {
     const mismatch = await runIssueCli(["project", "get", "e", "title"], { env: env() });
     expect(mismatch.status).toBe(1);

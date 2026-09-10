@@ -9,6 +9,7 @@ import { IssueInspirationAppsField } from "./issue-inspiration-apps-field";
 import { IssuePersonasField } from "./issue-personas-field";
 import { IssueMergePolicyField } from "./issue-merge-policy-field";
 import { IssueProjectLabelsField } from "./issue-project-labels-field";
+import { IssueSetupCommandField } from "./issue-setup-command-field";
 import { IssueSupportingDocsField } from "./issue-supporting-docs-field";
 import { IssueWorkspaceField } from "./issue-workspace-field";
 import { MetaRow } from "./meta-row";
@@ -40,6 +41,11 @@ export function ProjectSettingsOverview({
                 className={SETTINGS_ROW_CLASS}
                 label={FIELD_LABELS.workspace}
                 value={<IssueWorkspaceField issue={issue} />}
+              />
+              <MetaRow
+                className={SETTINGS_ROW_CLASS}
+                label={FIELD_LABELS.setupCommand}
+                value={<IssueSetupCommandField issue={issue} />}
               />
               <MetaRow
                 className={cn(SETTINGS_ROW_CLASS, "items-center")}

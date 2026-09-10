@@ -59,6 +59,7 @@ export function setFieldStoreKey(field: string, spec: SetFieldSpec): string {
 export const PROJECT_SET_FIELDS = {
   title: { type: "string" },
   workspace: { type: "string" },
+  setupCommand: { type: "string" },
   trunk: { type: "string" },
   mergePolicy: { type: "enum", values: MERGE_POLICIES },
   labels: { type: "labelCatalog" },
@@ -151,6 +152,7 @@ export const PROJECT_GET_FIELDS = {
   kind: STORED,
   title: STORED,
   workspace: STORED,
+  setupCommand: STORED,
   trunk: STORED,
   mergePolicy: STORED,
   labels: STORED,

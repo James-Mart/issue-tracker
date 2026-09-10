@@ -782,7 +782,7 @@ export function registerKindGetSet(
   const cmd = program.command(kind);
   if (kind === "project") {
     cmd.description(
-      `Project container — set workspace, trunk (default main), mergePolicy (${MERGE_POLICIES.join("|")}), supportingDocs, labels`,
+      `Project container — set workspace, setupCommand, trunk (default main), mergePolicy (${MERGE_POLICIES.join("|")}), supportingDocs, labels`,
     );
   }
 
