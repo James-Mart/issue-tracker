@@ -11,6 +11,10 @@ import {
 import { visibleIssues } from "./server/services/archived-visibility.js";
 import { appendTasks } from "./server/services/append.js";
 import { appendUpdateFromMergeBase } from "./server/services/merge-base-task.js";
+import {
+  attachStoryWorktree,
+  createStoryWorktree,
+} from "./server/services/worktree.js";
 import { apply } from "./server/services/apply.js";
 import {
   parseApplyDoc,
@@ -382,6 +386,33 @@ function createIssueProgram(run: Run): Command {
               `${label}: ${ids.length}${ids.length ? ` (${ids.join(", ")})` : ""}`;
             console.log(line("created", summary.created));
             console.log(line("updated", summary.updated));
+          }),
+        );
+      const worktreeCmd = kindCmd
+        .command("worktree")
+        .description("create or attach a git worktree for a Story branch");
+      worktreeCmd
+        .command("create")
+        .argument("<storyId>", "story id")
+        .description(
+          "create a new branch and worktree from the Story's derived mergeBase",
+        )
+        .action((storyId: string) =>
+          run(async () => {
+            const path = await createStoryWorktree(storyId);
+            console.log(path);
+          }),
+        );
+      worktreeCmd
+        .command("attach")
+        .argument("<storyId>", "story id")
+        .description(
+          "attach a worktree to the Story's existing branchName",
+        )
+        .action((storyId: string) =>
+          run(async () => {
+            const path = await attachStoryWorktree(storyId);
+            console.log(path);
           }),
         );
     }

@@ -87,6 +87,29 @@ export async function runGit(
   });
 }
 
+/** Return the checked-out branch name in `workspace`, or null when detached. */
+export async function currentBranch(workspace: string): Promise<string | null> {
+  try {
+    const name = (await runGit(["rev-parse", "--abbrev-ref", "HEAD"], workspace)).trim();
+    return name === "HEAD" ? null : name;
+  } catch {
+    return null;
+  }
+}
+
+/** True when `refs/heads/<branchName>` exists in the repository rooted at `workspace`. */
+export async function branchExists(
+  workspace: string,
+  branchName: string,
+): Promise<boolean> {
+  try {
+    await runGit(["rev-parse", "--verify", `refs/heads/${branchName}`], workspace);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Return the workspace's `origin` URL, or null when it has no origin. */
 export async function getOriginRemoteUrl(
   workspace: string,

@@ -56,6 +56,7 @@ export const STORY_FORM_FIELD_KEYS = [
 
 export const STORY_IMPERATIVE_ONLY_KEYS = [
   "worktreePath",
+  "worktreeBlockedReason",
   "mergeBaseOverride",
   "mergePolicy",
   "review",
@@ -75,6 +76,7 @@ export const STORY_FIELD_KEYS = [
 export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "branchName",
   "worktreePath",
+  "worktreeBlockedReason",
   "mergeBaseOverride",
   "mergePolicy",
   "prUrl",
@@ -126,6 +128,7 @@ export const CLEARABLE_KEYS = [
   "stakeholder",
   "branchName",
   "worktreePath",
+  "worktreeBlockedReason",
   "stackedOn",
   "prUrl",
   "needsRebase",
