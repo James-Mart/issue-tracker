@@ -63,16 +63,11 @@ vi.mock("./planning-launch-control", () => ({
 vi.mock("./implementing-launch-control", () => ({
   ImplementingChannelEmptyState: ({
     onStarted,
-    onLockRefusal,
   }: {
     onStarted: (session: {
       id: string;
       title: string;
       model: string;
-    }) => void;
-    onLockRefusal: (refusal: {
-      holderIssueId: string;
-      holderIssueTitle: string;
     }) => void;
   }) => (
     <div data-testid="implementing-channel-empty-state">
@@ -89,27 +84,6 @@ vi.mock("./implementing-launch-control", () => ({
       >
         Start work loop
       </button>
-      <button
-        type="button"
-        data-testid="implementing-trigger-lock"
-        onClick={() =>
-          onLockRefusal({
-            holderIssueId: "ship-it",
-            holderIssueTitle: "Ship it",
-          })
-        }
-      >
-        Trigger lock
-      </button>
-    </div>
-  ),
-  ImplementingLockRefusalState: ({
-    refusal,
-  }: {
-    refusal: { holderIssueId: string; holderIssueTitle: string };
-  }) => (
-    <div data-testid="implementing-lock-refusal">
-      {refusal.holderIssueTitle}
     </div>
   ),
   ImplementingNewRunControl: () => (
@@ -518,25 +492,6 @@ describe("ChannelTranscriptPanel", () => {
     expect(
       container.querySelector('[data-testid="implementing-channel-empty-state"]'),
     ).toBeTruthy();
-  });
-
-  it("surfaces a project lock refusal in place for implementing", () => {
-    queryState.data = [];
-    const { container } = mountPanel("Implementing", epic, {
-      channel: "implementing",
-      projectId: "platform",
-    });
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="implementing-trigger-lock"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-    expect(
-      container.querySelector('[data-testid="implementing-lock-refusal"]'),
-    ).toBeTruthy();
-    expect(container.textContent).toContain("Ship it");
   });
 
   it("names the Implementing channel in the generic empty state without a work root", () => {

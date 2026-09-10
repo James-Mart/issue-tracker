@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { ApiError } from "@/lib/api/errors";
 import { skillPath } from "@/lib/plugin-paths";
 import {
   implementingLaunchCopy,
@@ -7,7 +6,6 @@ import {
   implementingSessionModel,
   implementingSessionTitle,
   isImplementingWorkRoot,
-  parseImplementingLockRefusal,
   WORK_LOOP_COORDINATOR_MODEL,
 } from "./implementing-launch";
 
@@ -92,29 +90,5 @@ describe("isImplementingWorkRoot", () => {
       isImplementingWorkRoot("implementing", projectStory, "epic"),
     ).toBe(false);
     expect(isImplementingWorkRoot("planning", epic)).toBe(false);
-  });
-});
-
-describe("parseImplementingLockRefusal", () => {
-  it("reads holder fields from a 409 ApiError body", () => {
-    expect(
-      parseImplementingLockRefusal(
-        new ApiError("conflict", 409, {
-          error: "locked",
-          holderIssueId: "ship-it",
-          holderIssueTitle: "Ship it",
-        }),
-      ),
-    ).toEqual({
-      holderIssueId: "ship-it",
-      holderIssueTitle: "Ship it",
-    });
-  });
-
-  it("returns undefined for other errors", () => {
-    expect(parseImplementingLockRefusal(new Error("nope"))).toBeUndefined();
-    expect(
-      parseImplementingLockRefusal(new ApiError("bad", 500, {})),
-    ).toBeUndefined();
   });
 });

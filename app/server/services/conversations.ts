@@ -78,7 +78,7 @@ function scanIds(): string[] {
   );
 }
 
-/** Conversation store ids on disk — same enumeration as implementing-project lock scans. */
+/** Conversation store ids on disk — same enumeration as implementing-work-root lock scans. */
 export function listConversationIds(): string[] {
   return scanIds();
 }
@@ -253,7 +253,7 @@ export type CreateIssueChannelSessionResult = {
 };
 
 /**
- * Active-run lookup used by the Project implementing lock. Narrower than
+ * Active-run lookup used by the work-root implementing lock. Narrower than
  * `AgentSessions` so unit tests can stub just this probe.
  */
 export type ActiveRunLookup = {
@@ -262,14 +262,13 @@ export type ActiveRunLookup = {
 
 /**
  * Refuse creating an `implementing` session when another non-archived
- * implementing session in the same Project already has an active run.
+ * implementing session on the same work root already has an active run.
  *
- * Rationale: every coordinator shares one git working tree today, so two
- * implementing loops would collide on branches and commits. The horizon is a
- * worktree per coordinator, at which point this lock can be lifted.
+ * Each branch has its own git worktree, so loops on different work roots no
+ * longer collide; what must not be shared is one work root's checkout.
  */
-function refuseIfImplementingProjectLocked(
-  projectId: string,
+function refuseIfImplementingWorkRootLocked(
+  issueId: string,
   channel: ConversationChannel,
   sessions: ActiveRunLookup,
 ): void {
@@ -283,10 +282,9 @@ function refuseIfImplementingProjectLocked(
       continue;
     }
     if (
-      existing.projectId !== projectId ||
       existing.channel !== "implementing" ||
       existing.archived ||
-      !existing.issueId ||
+      existing.issueId !== issueId ||
       sessions.getActiveRun(id) === undefined
     ) {
       continue;
@@ -294,7 +292,7 @@ function refuseIfImplementingProjectLocked(
     const holder = readIssueOrThrow(existing.issueId);
     throw new IssueError(
       "conflict",
-      `project already has an active implementing session on issue "${existing.issueId}"`,
+      `work root "${issueId}" already has an active implementing session`,
       {
         holderIssueId: existing.issueId,
         holderIssueTitle: holder.title,
@@ -326,7 +324,7 @@ export function createIssueChannelSession(
 
     // Refuse before any mutation.
     validateAnchor(issueId, input.channel);
-    refuseIfImplementingProjectLocked(projectId, input.channel, sessions);
+    refuseIfImplementingWorkRootLocked(issueId, input.channel, sessions);
 
     const now = new Date().toISOString();
     for (const id of scanIds()) {

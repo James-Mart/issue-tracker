@@ -24,7 +24,6 @@ type CockpitLaunchState = {
     issueId: string,
     kind: CockpitLaunchKind,
     options?: {
-      lockRefusal?: boolean;
       lockHolderTitle?: string;
       status?: number;
       errorMessage?: string;
@@ -59,21 +58,17 @@ export const useCockpitLaunchStore = create<CockpitLaunchState>((set, get) => ({
     });
   },
   failLaunch: (issueId, kind, options) => {
-    const { pending, ack, fault } = get();
+    const { pending, ack } = get();
     set({
       pending: pending?.issueId === issueId ? null : pending,
       ack: ack?.issueId === issueId ? null : ack,
-      fault: options?.lockRefusal
-        ? fault?.issueId === issueId
-          ? null
-          : fault
-        : {
-            issueId,
-            kind,
-            lockHolderTitle: options?.lockHolderTitle,
-            status: options?.status,
-            errorMessage: options?.errorMessage,
-          },
+      fault: {
+        issueId,
+        kind,
+        lockHolderTitle: options?.lockHolderTitle,
+        status: options?.status,
+        errorMessage: options?.errorMessage,
+      },
     });
   },
   reconcileDerived: (derived) => {

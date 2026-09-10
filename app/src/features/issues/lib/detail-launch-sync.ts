@@ -48,7 +48,7 @@ export function detailLaunchFaultCopy(fault: CockpitLaunchFault): {
   if (fault.lockHolderTitle != null && fault.status === 409) {
     return {
       message: `Session create rejected — implementing lock held by ${fault.lockHolderTitle} (409).`,
-      hint: "Retire the active run on that epic, then return here.",
+      hint: "Start the work loop again.",
     };
   }
   const why = fault.errorMessage?.trim() || "the session was not created";

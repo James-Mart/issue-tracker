@@ -48,8 +48,6 @@ import {
   FlowPreviewedItems,
   type FlowBucketKey,
 } from "./flow-buckets-sections";
-import type { ImplementingLockRefusal } from "../lib/implementing-launch";
-import { ImplementingLockRefusalState } from "./implementing-launch-control";
 import { FlowRow } from "./flow-row";
 import { FlowRowActions } from "./flow-row-actions";
 
@@ -175,11 +173,6 @@ function CockpitProjectSubheader({
   );
 }
 
-type CockpitImplementingLockRefusal = {
-  projectId: string;
-  refusal: ImplementingLockRefusal;
-};
-
 export function CockpitPage() {
   const { data, isLoading, error, refetch, isFetching } = useIssuesQuery();
   const openProjectDialog = useIssueUiStore((s) => s.openProjectDialog);
@@ -187,10 +180,6 @@ export function CockpitPage() {
   const [collapsedSectionKeys, setCollapsedSectionKeys] = useState(
     () => readCockpitCollapsedSectionKeys(),
   );
-  const [implementingLockRefusal, setImplementingLockRefusal] = useState<
-    CockpitImplementingLockRefusal | undefined
-  >();
-
   const setHiddenIdsAndCookie = useCallback((ids: string[]) => {
     writeCockpitHiddenProjectIds(ids);
     setHiddenIds(ids);
@@ -264,17 +253,7 @@ export function CockpitPage() {
                     drillInState={{
                       issueBackStack: [{ kind: "cockpit" }],
                     }}
-                    actions={
-                      <FlowRowActions
-                        item={item}
-                        onImplementingLockRefusal={(refusal) =>
-                          setImplementingLockRefusal({
-                            projectId: group.projectId,
-                            refusal,
-                          })
-                        }
-                      />
-                    }
+                    actions={<FlowRowActions item={item} />}
                   />
                 )}
               />
@@ -331,11 +310,6 @@ export function CockpitPage() {
                 Show all projects
               </Button>
             }
-          />
-        ) : implementingLockRefusal ? (
-          <ImplementingLockRefusalState
-            projectId={implementingLockRefusal.projectId}
-            refusal={implementingLockRefusal.refusal}
           />
         ) : (
           <FlowBucketsSections

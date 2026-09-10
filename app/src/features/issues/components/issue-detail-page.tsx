@@ -134,7 +134,6 @@ function IssueOverviewPanel({
         <ImplementingOverviewLaunch
           issue={issue as ImplementingWorkRoot}
           parentKind={parentKind}
-          onLockRefusal={() => {}}
         />
       ) : null}
       <IssueAttachmentsSection issue={issue} upload={upload} />
