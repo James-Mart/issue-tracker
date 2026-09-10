@@ -484,7 +484,7 @@ describe("channel sessions HTTP API", () => {
     });
   });
 
-  it("refuses a second implementing session while another Project run is active", async () => {
+  it("allows implementing sessions on different work roots in one Project", async () => {
     writeIssue("other-epic", {
       kind: "epic",
       title: "Other epic",
@@ -504,6 +504,56 @@ describe("channel sessions HTTP API", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           model: "composer-2.5",
+          title: "Ship it loop",
+          message: "start implementing",
+        }),
+      },
+    );
+    expect(first.status).toBe(201);
+    const { id: shipItId } = await first.json();
+    expect(sessions!.getActiveRun(shipItId)).toBeTruthy();
+
+    const second = await fetch(
+      `${baseUrl}/api/issues/other-epic/channels/implementing/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "composer-2.5",
+          title: "Other epic loop",
+          message: "start implementing",
+        }),
+      },
+    );
+    expect(second.status).toBe(201);
+    const { id: otherEpicId } = await second.json();
+    expect(sessions!.getActiveRun(otherEpicId)).toBeTruthy();
+
+    const shipItListed = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
+    ).then((r) => r.json());
+    expect(shipItListed).toEqual([
+      expect.objectContaining({ id: shipItId, archived: false, activeRun: true }),
+    ]);
+
+    const otherListed = await fetch(
+      `${baseUrl}/api/issues/other-epic/channels/implementing/sessions`,
+    ).then((r) => r.json());
+    expect(otherListed).toEqual([
+      expect.objectContaining({ id: otherEpicId, archived: false, activeRun: true }),
+    ]);
+  });
+
+  it("refuses a second implementing session on the same work root while a run is active", async () => {
+    await startApp({ hold: true });
+
+    const first = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "composer-2.5",
           title: "Holder",
           message: "start implementing",
         }),
@@ -514,7 +564,7 @@ describe("channel sessions HTTP API", () => {
     expect(sessions!.getActiveRun(holderId)).toBeTruthy();
 
     const refused = await fetch(
-      `${baseUrl}/api/issues/other-epic/channels/implementing/sessions`,
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -529,10 +579,12 @@ describe("channel sessions HTTP API", () => {
       holderIssueTitle: "Ship it",
     });
 
-    const otherListed = await fetch(
-      `${baseUrl}/api/issues/other-epic/channels/implementing/sessions`,
+    const listed = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
     ).then((r) => r.json());
-    expect(otherListed).toEqual([]);
+    expect(listed).toEqual([
+      expect.objectContaining({ id: holderId, archived: false, activeRun: true }),
+    ]);
   });
 
   it("allows a new implementing session once the holder run ends", async () => {
