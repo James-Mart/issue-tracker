@@ -51,6 +51,8 @@ IDE Cursor Task) is defined in **## Delegation**.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`.
+
 ## Argument
 
 An **Epic** id or a **project-level Story** id (`partOf` the Project). If none

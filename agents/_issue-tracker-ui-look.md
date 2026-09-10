@@ -8,6 +8,8 @@ Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`.
+
 1. Call `agent_stack_start` or export `AGENT_STACK_BASE_URL` from an existing
    stack.
 2. Run `cd app && npm run screenshots -- <path-or-dialog>` for the Task's

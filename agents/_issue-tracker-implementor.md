@@ -13,6 +13,8 @@ fits the codebase it lands in.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`.
+
 ## Bootstrap
 
 1. Set Task `status` from Mode (before any other step):
