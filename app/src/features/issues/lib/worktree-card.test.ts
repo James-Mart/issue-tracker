@@ -3,6 +3,7 @@ import type { DerivedWorktree } from "@server/schemas";
 import {
   worktreeCardModel,
   worktreeNounCount,
+  worktreeRemoveRetainedConfirm,
   worktreeRetainedCopy,
 } from "./worktree-card";
 
@@ -124,6 +125,17 @@ describe("worktree retained copy", () => {
     );
     expect(worktreeRetainedCopy(0, 0)).toBe(
       "This checkout outlived its Story — 0 uncommitted changes, 0 at-risk commits.",
+    );
+  });
+});
+
+describe("worktree remove retained confirm", () => {
+  it("names the uncommitted and at-risk counts about to be destroyed", () => {
+    expect(worktreeRemoveRetainedConfirm(2, 1)).toBe(
+      "This checkout still has 2 uncommitted changes and 1 at-risk commit. Removing it permanently deletes the directory and that local work.",
+    );
+    expect(worktreeRemoveRetainedConfirm(1, 0)).toBe(
+      "This checkout still has 1 uncommitted change and 0 at-risk commits. Removing it permanently deletes the directory and that local work.",
     );
   });
 });

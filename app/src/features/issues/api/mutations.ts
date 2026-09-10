@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { request } from "@/lib/api/client";
 import { deleteConversation } from "@/features/agents/api/client";
 import { agentsKeys } from "@/features/agents/api/keys";
+import { request } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
 import {
   createChannelSession,
   type CreateChannelSessionBody,
@@ -292,6 +293,51 @@ export function useDeleteChannelSession(
         queryKey: issuesKeys.channelSessions(issueId, channel),
       });
       qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
+    },
+  });
+}
+
+function isConflict(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409;
+}
+
+export function useRemoveStoryWorktree(storyId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, { discard?: boolean } | void>({
+    mutationFn: (input) =>
+      request<void>(
+        `/api/issues/${encodeURIComponent(storyId)}/worktree/remove`,
+        {
+          method: "POST",
+          body: input?.discard === true ? { discard: true } : {},
+        },
+      ),
+    onError: (err) => {
+      if (isConflict(err)) return;
+      toast.error(messageOf(err));
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(storyId) });
+    },
+  });
+}
+
+export function useSetupStoryWorktree(storyId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, void>({
+    mutationFn: () =>
+      request<void>(
+        `/api/issues/${encodeURIComponent(storyId)}/worktree/setup`,
+        { method: "POST" },
+      ),
+    onError: (err) => {
+      if (isConflict(err)) return;
+      toast.error(messageOf(err));
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(storyId) });
     },
   });
 }

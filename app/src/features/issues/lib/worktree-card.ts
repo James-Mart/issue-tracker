@@ -72,3 +72,16 @@ export function worktreeRetainedCopy(
 ): string {
   return `This checkout outlived its Story — ${worktreeNounCount(uncommittedCount, "uncommitted change", "uncommitted changes")}, ${worktreeNounCount(atRiskCommitCount, "at-risk commit", "at-risk commits")}.`;
 }
+
+export const WORKTREE_REMOVE_DISABLED_REASON =
+  "An implementing session is running on this Story. Stop the work loop before removing the checkout.";
+
+export const WORKTREE_REMOVE_ACTIVE_CONFIRM =
+  "This permanently deletes the isolated checkout. The main project tree is unaffected.";
+
+export function worktreeRemoveRetainedConfirm(
+  uncommittedCount: number,
+  atRiskCommitCount: number,
+): string {
+  return `This checkout still has ${worktreeNounCount(uncommittedCount, "uncommitted change", "uncommitted changes")} and ${worktreeNounCount(atRiskCommitCount, "at-risk commit", "at-risk commits")}. Removing it permanently deletes the directory and that local work.`;
+}

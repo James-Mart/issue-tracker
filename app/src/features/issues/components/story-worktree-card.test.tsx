@@ -4,9 +4,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, DerivedWorktree, IssueDetail, IssueRecord } from "@server/schemas";
+import { ApiError } from "@/lib/api/errors";
 import {
   WORKTREE_PARENT_BRANCH_SUFFIX,
+  WORKTREE_REMOVE_ACTIVE_CONFIRM,
+  WORKTREE_REMOVE_DISABLED_REASON,
   WORKTREE_SETUP_FAILED_COPY,
+  worktreeRemoveRetainedConfirm,
   worktreeRetainedCopy,
 } from "../lib/worktree-card";
 import { StoryWorktreeCard } from "./story-worktree-card";
@@ -16,9 +20,23 @@ const queryState = vi.hoisted(() => ({
   derived: {} as Record<string, DerivedState>,
 }));
 
+const removeMutate = vi.fn();
+const setupMutate = vi.fn();
+
 vi.mock("../api/queries", () => ({
   useIssuesQuery: () => ({
     data: { issues: queryState.issues, derived: queryState.derived },
+  }),
+}));
+
+vi.mock("../api/mutations", () => ({
+  useRemoveStoryWorktree: () => ({
+    mutate: removeMutate,
+    isPending: false,
+  }),
+  useSetupStoryWorktree: () => ({
+    mutate: setupMutate,
+    isPending: false,
   }),
 }));
 
@@ -74,14 +92,23 @@ function seed(
   issue: Extract<IssueDetail, { kind: "story" }>,
   wt: DerivedWorktree | undefined,
   extras: IssueRecord[] = [],
+  liveRun = false,
 ): void {
   queryState.issues = [issue, ...extras];
   queryState.derived = {
     [issue.id]: {
       blocked: false,
+      liveRun,
       ...(wt ? { worktree: wt } : {}),
     },
   };
+}
+
+function actionButton(
+  root: ParentNode,
+  testId: string,
+): HTMLButtonElement {
+  return root.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement;
 }
 
 function mountCard(issue: Extract<IssueDetail, { kind: "story" }>): {
@@ -112,6 +139,8 @@ afterEach(() => {
   document.body.innerHTML = "";
   queryState.issues = [];
   queryState.derived = {};
+  removeMutate.mockReset();
+  setupMutate.mockReset();
   vi.unstubAllGlobals();
 });
 
@@ -155,6 +184,12 @@ describe("StoryWorktreeCard", () => {
     ).toBe(`CLI auth bootstrap ${WORKTREE_PARENT_BRANCH_SUFFIX}`);
     expect(container.textContent).not.toContain("story/device-login");
     expect(container.textContent).not.toMatch(/merge base/i);
+    expect(
+      container.querySelector('[data-testid="story-worktree-remove"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="story-worktree-retry"]'),
+    ).toBeNull();
   });
 
   it("renders setup-failed with output and log path", () => {
@@ -188,6 +223,12 @@ describe("StoryWorktreeCard", () => {
     ).toBe(
       "/root/issue-tracker-worktrees/issue-tracker/story-oauth-hardening.setup.log",
     );
+    expect(
+      container.querySelector('[data-testid="story-worktree-retry"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="story-worktree-remove"]'),
+    ).toBeNull();
   });
 
   it("renders retained with uncommitted and at-risk counts", () => {
@@ -242,5 +283,212 @@ describe("StoryWorktreeCard", () => {
       ).click();
     });
     expect(writeText).toHaveBeenCalledWith(PATH);
+  });
+
+  it("confirms active remove without discard", () => {
+    const issue = story();
+    seed(issue, worktree({ exists: true, path: PATH }));
+    const { container } = mountCard(issue);
+
+    act(() => {
+      actionButton(container, "story-worktree-remove").click();
+    });
+    const dialog = document.body.querySelector(
+      '[data-testid="remove-worktree-confirm-dialog"]',
+    );
+    expect(dialog?.textContent).toContain(WORKTREE_REMOVE_ACTIVE_CONFIRM);
+    expect(
+      document.body.querySelector('[data-testid="remove-worktree-confirm-path"]')
+        ?.textContent,
+    ).toBe(PATH);
+    expect(removeMutate).not.toHaveBeenCalled();
+
+    act(() => {
+      actionButton(document.body, "remove-worktree-confirm").click();
+    });
+    expect(removeMutate).toHaveBeenCalledWith({}, expect.any(Object));
+  });
+
+  it("confirms retained remove with discard and the named counts", () => {
+    const issue = story({ merged: true });
+    seed(
+      issue,
+      worktree({
+        exists: true,
+        path: PATH,
+        retained: true,
+        uncommittedCount: 2,
+        atRiskCommitCount: 1,
+      }),
+    );
+    const { container } = mountCard(issue);
+
+    act(() => {
+      actionButton(container, "story-worktree-remove").click();
+    });
+    const dialog = document.body.querySelector(
+      '[data-testid="remove-worktree-confirm-dialog"]',
+    );
+    expect(dialog?.textContent).toContain(worktreeRemoveRetainedConfirm(2, 1));
+    expect(removeMutate).not.toHaveBeenCalled();
+
+    act(() => {
+      actionButton(document.body, "remove-worktree-confirm").click();
+    });
+    expect(removeMutate).toHaveBeenCalledWith(
+      { discard: true },
+      expect.any(Object),
+    );
+  });
+
+  it("does not post remove when the confirmation is cancelled", () => {
+    const issue = story();
+    seed(issue, worktree({ exists: true, path: PATH }));
+    const { container } = mountCard(issue);
+
+    act(() => {
+      actionButton(container, "story-worktree-remove").click();
+    });
+    act(() => {
+      const cancel = [...document.body.querySelectorAll("button")].find(
+        (button) => button.textContent === "Cancel",
+      );
+      cancel?.click();
+    });
+    expect(removeMutate).not.toHaveBeenCalled();
+  });
+
+  it("disables remove beside a readable reason while a live run holds the Story", () => {
+    const issue = story();
+    seed(issue, worktree({ exists: true, path: PATH }), [], true);
+    const { container } = mountCard(issue);
+
+    const remove = actionButton(container, "story-worktree-remove");
+    expect(remove.disabled).toBe(true);
+    expect(remove.getAttribute("aria-describedby")).toBe(
+      "story-worktree-remove-reason",
+    );
+    expect(
+      container.querySelector('[data-testid="story-worktree-remove-reason"]')
+        ?.textContent,
+    ).toBe(WORKTREE_REMOVE_DISABLED_REASON);
+
+    act(() => {
+      remove.click();
+    });
+    expect(
+      document.body.querySelector(
+        '[data-testid="remove-worktree-confirm-dialog"]',
+      ),
+    ).toBeNull();
+    expect(removeMutate).not.toHaveBeenCalled();
+  });
+
+  it("retries setup and the card becomes active when setup succeeds", () => {
+    const issue = story();
+    seed(
+      issue,
+      worktree({
+        exists: true,
+        path: PATH,
+        setupFailed: true,
+        setupOutput: "npm ERR! Missing script: \"prepare-workspace\"",
+      }),
+    );
+    const { container, root } = mountCard(issue);
+    expect(
+      container.querySelector('[data-testid="story-worktree-card"]')
+        ?.getAttribute("data-state"),
+    ).toBe("setup-failed");
+
+    act(() => {
+      actionButton(container, "story-worktree-retry").click();
+    });
+    expect(setupMutate).toHaveBeenCalledOnce();
+
+    seed(issue, worktree({ exists: true, path: PATH }));
+    act(() => {
+      root.render(
+        <MemoryRouter
+          initialEntries={[`/projects/issue-tracker/issues/${issue.id}`]}
+        >
+          <Routes>
+            <Route
+              path="/projects/:projectId/issues/:id"
+              element={<StoryWorktreeCard issue={issue} />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+    expect(
+      container.querySelector('[data-testid="story-worktree-card"]')
+        ?.getAttribute("data-state"),
+    ).toBe("active");
+    expect(
+      container.querySelector('[data-testid="story-worktree-retry"]'),
+    ).toBeNull();
+  });
+
+  it("renders a 409 from remove on the card", () => {
+    const issue = story();
+    seed(issue, worktree({ exists: true, path: PATH }));
+    const { container } = mountCard(issue);
+    const message =
+      'worktree remove refuses Story "story-oauth-hardening": 1 uncommitted change(s), 0 at-risk commit(s)';
+    removeMutate.mockImplementation(
+      (_input, opts: { onError?: (err: Error) => void }) => {
+        opts.onError?.(new ApiError(message, 409, { error: message }));
+      },
+    );
+
+    act(() => {
+      actionButton(container, "story-worktree-remove").click();
+    });
+    act(() => {
+      actionButton(document.body, "remove-worktree-confirm").click();
+    });
+
+    expect(
+      container.querySelector('[data-testid="story-worktree-conflict"]')
+        ?.textContent,
+    ).toBe(message);
+    expect(
+      container.querySelector('[data-testid="story-worktree-card"]'),
+    ).not.toBeNull();
+  });
+
+  it("renders a 409 from retry on the card", () => {
+    const issue = story();
+    seed(
+      issue,
+      worktree({
+        exists: true,
+        path: PATH,
+        setupFailed: true,
+        setupOutput: "npm ERR! Missing script: \"prepare-workspace\"",
+      }),
+    );
+    const { container } = mountCard(issue);
+    const message =
+      'setup command failed for Story "story-oauth-hardening" (exit 1); see /tmp/setup.log';
+    setupMutate.mockImplementation(
+      (_input, opts: { onError?: (err: Error) => void }) => {
+        opts.onError?.(new ApiError(message, 409, { error: message }));
+      },
+    );
+
+    act(() => {
+      actionButton(container, "story-worktree-retry").click();
+    });
+
+    expect(
+      container.querySelector('[data-testid="story-worktree-conflict"]')
+        ?.textContent,
+    ).toBe(message);
+    expect(
+      container.querySelector('[data-testid="story-worktree-card"]')
+        ?.getAttribute("data-state"),
+    ).toBe("setup-failed");
   });
 });
