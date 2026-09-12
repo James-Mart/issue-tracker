@@ -243,7 +243,7 @@ export async function attemptStoryWorktreeRemoval(
     if (!story || story.kind !== "story") return { outcome: "absent" };
     path = story.worktreePath;
     if (!path || !existsSync(path)) return { outcome: "absent" };
-    await removeStoryWorktree(storyId);
+    await removeStoryWorktree(storyId, { allowActiveRun: true });
     return { outcome: "removed", path };
   } catch (err) {
     // Automatic callers never pass --discard. Absorb only an explicit
@@ -278,7 +278,7 @@ export function storyIdsForLifecycleRemoval(
 
 export async function removeStoryWorktree(
   storyId: string,
-  options: { discard?: boolean } = {},
+  options: { discard?: boolean; allowActiveRun?: boolean } = {},
 ): Promise<string> {
   const { issues, derived } = list();
   const story = requireStory(storyId);
@@ -290,7 +290,7 @@ export async function removeStoryWorktree(
     throw new IssueError("validation", REMOVE_NO_WORKTREE_ERROR(storyId));
   }
 
-  if (hasActiveImplementingRun(storyId)) {
+  if (!options.allowActiveRun && hasActiveImplementingRun(storyId)) {
     throw new IssueError("conflict", REMOVE_ACTIVE_IMPLEMENTING_ERROR(storyId));
   }
 
