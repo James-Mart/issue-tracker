@@ -63,9 +63,10 @@ or `branchName` in the prompt.
 | Story `prUrl` / `merged` | `issue story get <storyId> prUrl` / `merged` | finish-branch |
 | Story effective `mergePolicy` (derived on read) | `issue story get <storyId> mergePolicy` | finish-branch |
 
-Start-branch idempotent end state: `issue story get <storyId> worktree`
-reports `exists: true` with a recorded `branchName` (set to the Story id
-when unset).
+Start-branch idempotent end state: worktree exists with `branchName`
+recorded (set to the Story id when unset) — reached via the pre-check
+(`worktree` `exists: true`) or the existing-worktree create refusal
+(`Story "<id>" already has a worktree at <path>`).
 
 Finish-branch idempotent end states: `merged` for `merge` and `fast-forward`;
 non-empty `prUrl` for `pull-request`; none for `manual`.
