@@ -58,9 +58,14 @@ or `branchName` in the prompt.
 | Project workspace | `issue project get <projectId> workspace` | finish-branch merge / fast-forward |
 | ancestry / titles | `issue summary <id>` | all modes |
 | Story `mergeBase` (derived on read) | `issue story get <storyId> mergeBase` | finish-branch |
-| Story `branchName` | `issue story get <storyId> branchName` | finish-branch |
+| Story `worktree` (derived on read) | `issue story get <storyId> worktree` | start-branch |
+| Story `branchName` | `issue story get <storyId> branchName` | start-branch, finish-branch |
 | Story `prUrl` / `merged` | `issue story get <storyId> prUrl` / `merged` | finish-branch |
 | Story effective `mergePolicy` (derived on read) | `issue story get <storyId> mergePolicy` | finish-branch |
+
+Start-branch idempotent end state: `issue story get <storyId> worktree`
+reports `exists: true` with a recorded `branchName` (set to the Story id
+when unset).
 
 Finish-branch idempotent end states: `merged` for `merge` and `fast-forward`;
 non-empty `prUrl` for `pull-request`; none for `manual`.
