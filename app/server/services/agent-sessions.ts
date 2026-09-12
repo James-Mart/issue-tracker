@@ -165,11 +165,13 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const cursorConversationIdRef: { current: string | undefined } = {
       current: meta.agentId,
     };
+    const readOnly = meta.readOnly === true;
     const customTools = createDelegateCustomTools({
       sdk,
       cwd,
       storeDir,
       conversationId,
+      readOnly,
       getCursorConversationId: () => cursorConversationIdRef.current,
       onAuthFailure: ({ delegationId, agentId, message, parentCallId }) => {
         console.error(
@@ -206,6 +208,11 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           cwd,
           model,
           customTools,
+          ...(readOnly
+            ? {
+                disallowedTools: ["task", "edit", "delete", "shell"],
+              }
+            : {}),
         });
       } catch (err) {
         handle = await sdk.createAgent({

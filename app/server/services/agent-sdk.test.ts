@@ -349,6 +349,29 @@ describe("resumeAgent", () => {
       SAMPLE_CUSTOM_TOOLS,
     );
   });
+
+  it("forwards tools and disallowedTools to Agent.resume", async () => {
+    const resumeSdkAgent = vi.fn(
+      async (_id: string, _options?: Partial<AgentOptions>) =>
+        makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-xyz" });
+
+    await sdk.resumeAgent("agent-1", STORE_DIR, {
+      cwd: "/repo",
+      model: MODEL,
+      tools: ["read"],
+      disallowedTools: ["task", "edit", "delete", "shell"],
+    });
+
+    expect(resumeSdkAgent).toHaveBeenCalledWith(
+      "agent-1",
+      expect.objectContaining({
+        tools: ["read"],
+        disallowedTools: ["task", "edit", "delete", "shell"],
+      }),
+    );
+  });
 });
 
 describe("listModels", () => {

@@ -67,6 +67,23 @@ describe("createDelegateCustomTools", () => {
     ]);
   });
 
+  it("omits mutating custom tools when readOnly is set", () => {
+    const customTools = createDelegateCustomTools({
+      sdk: createFakeAgentSdk({ stream: ASSISTANT_STREAM }),
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: "app-conv",
+      getCursorConversationId: () => "cursor-1",
+      readOnly: true,
+    });
+
+    expect(Object.keys(customTools).sort()).toEqual([
+      "delegations",
+      "file_cursor_sdk_bug",
+    ]);
+  });
+
   it("creates a nested agent on the role's mapped pin with the role body prepended", async () => {
     const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
     const customTools = createDelegateCustomTools({

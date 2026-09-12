@@ -73,6 +73,9 @@ export interface ResumeAgentOptions {
   model: ModelSelection;
   agents?: Record<string, AgentDefinition>;
   customTools?: Record<string, SDKCustomTool>;
+  /** Restrict built-in tools; `[]` is text-only. Omitted keeps the default set. */
+  tools?: NonNullable<AgentOptions["tools"]>;
+  disallowedTools?: NonNullable<AgentOptions["disallowedTools"]>;
 }
 
 export interface AgentSendOptions {
@@ -213,12 +216,17 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       return wrapAgent(sdkAgent);
     },
 
-    async resumeAgent(agentId, storeDir, { cwd, model, agents, customTools }) {
+    async resumeAgent(
+      agentId,
+      storeDir,
+      { cwd, model, agents, customTools, tools, disallowedTools },
+    ) {
       const sdkAgent = await deps.resumeSdkAgent(agentId, {
         apiKey: deps.apiKey,
         model,
         agents,
-        disallowedTools: DISALLOWED_BUILTIN_TOOLS,
+        ...(tools !== undefined ? { tools } : {}),
+        disallowedTools: disallowedTools ?? DISALLOWED_BUILTIN_TOOLS,
         local: localRuntime(cwd, storeDir, customTools),
       });
       return wrapAgent(sdkAgent);
