@@ -135,4 +135,50 @@ describe("issueRailNodeState", () => {
       }),
     ).toBe("needs-attention");
   });
+
+  it("maps Ready-to-land Stories after attention and blocked", () => {
+    const pr = story({ id: "pr" });
+    const manual = story({ id: "manual", mergePolicy: "manual" });
+    const done: IssueRecord = {
+      id: "t",
+      kind: "task",
+      title: "t",
+      partOf: "manual",
+      status: "done",
+      ...timestamps,
+    };
+    const issues = [pr, manual, done];
+
+    expect(
+      issueRailNodeState(pr, { blocked: false, storyStatus: "pr-open" }, issues),
+    ).toBe("ready-to-land");
+    expect(
+      issueRailNodeState(
+        manual,
+        { blocked: false, storyStatus: "in-progress", mergePolicy: "manual" },
+        issues,
+      ),
+    ).toBe("ready-to-land");
+    expect(
+      issueRailNodeState(
+        story({ needsAttention: true }),
+        { blocked: false, storyStatus: "pr-open" },
+        issues,
+      ),
+    ).toBe("needs-attention");
+    expect(
+      issueRailNodeState(
+        pr,
+        { blocked: true, storyStatus: "pr-open" },
+        issues,
+      ),
+    ).toBe("blocked");
+    expect(
+      issueRailNodeState(
+        story({ id: "active" }),
+        { blocked: false, storyStatus: "in-progress" },
+        [story({ id: "active" })],
+      ),
+    ).toBe("in-flight");
+  });
 });

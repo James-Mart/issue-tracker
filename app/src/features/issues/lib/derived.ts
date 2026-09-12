@@ -166,6 +166,36 @@ export function leafTasksOf(
   return [];
 }
 
+/**
+ * True when a Story is implementation-complete and waiting on merge:
+ * `pr-open`, or manual policy with no `prUrl` and every leaf task done.
+ */
+export function isReadyToLandStory(
+  issue: IssueRecord,
+  state: DerivedState | undefined,
+  issues: IssueRecord[],
+): boolean {
+  if (issue.kind !== "story") return false;
+  if (issue.merged || state?.storyStatus === "merged") return false;
+  if (state?.storyStatus === "pr-open") return true;
+  const mergePolicy = state?.mergePolicy ?? issue.mergePolicy;
+  if (mergePolicy !== "manual" || issue.prUrl) return false;
+  const tasks = leafTasksOf(issue, issues);
+  return tasks.length > 0 && tasks.every((task) => task.status === "done");
+}
+
+/** True when a Story is in progress and not Ready to land. */
+export function storyIsActivelyImplementing(
+  issue: IssueRecord,
+  state: DerivedState | undefined,
+  issues: IssueRecord[],
+): boolean {
+  return (
+    state?.storyStatus === "in-progress" &&
+    !isReadyToLandStory(issue, state, issues)
+  );
+}
+
 /** Tabular leaf-task progress (`done/total`) for row count slots; undefined when none. */
 export function leafTaskProgressCount(
   issue: IssueRecord,

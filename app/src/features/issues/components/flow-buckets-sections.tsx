@@ -1,6 +1,7 @@
 import { cloneElement, isValidElement, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import type { IssueRecord } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import { Rail } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
@@ -83,6 +84,11 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     hideWhenEmpty: true,
   },
   {
+    key: "readyToLand",
+    label: "Ready to land",
+    hideWhenEmpty: true,
+  },
+  {
     key: "inFlight",
     label: "In flight",
     empty: "Nothing in flight. Pick up Ready work or start a Story.",
@@ -138,6 +144,7 @@ export function partitionCockpitBuckets(buckets: FlowBuckets): {
     needsAttention,
     buckets: {
       awaitingPlanning: take(buckets.awaitingPlanning),
+      readyToLand: take(buckets.readyToLand),
       ready: take(buckets.ready),
       inFlight: take(buckets.inFlight),
       blocked: take(buckets.blocked),
@@ -253,15 +260,25 @@ function BucketList({
 /** List that shows `previewLimit` rows, then a Show all control for the rest. */
 export function FlowPreviewedItems({
   items,
+  issues = [],
   previewLimit,
   listClassName,
   renderItem,
+  beforeItem,
   asRail,
 }: {
   items: FlowItem[];
+  /** Needed so manual-complete Ready-to-land Stories do not count as live. */
+  issues?: IssueRecord[];
   previewLimit?: number;
   listClassName?: string;
   renderItem: (item: FlowItem) => ReactNode;
+  /** Optional caption or chrome immediately before this visible row. */
+  beforeItem?: (
+    item: FlowItem,
+    index: number,
+    visible: FlowItem[],
+  ) => ReactNode;
   /** Cockpit lists: one spine, state disc on each row. */
   asRail?: boolean;
 }) {
@@ -270,16 +287,25 @@ export function FlowPreviewedItems({
     previewLimit != null && !showAll && items.length > previewLimit;
   const visible = capped ? items.slice(0, previewLimit) : items;
   const live = visible.some(
-    (item) => issueRailNodeState(item.issue, item.state) === "in-flight",
+    (item) =>
+      issueRailNodeState(item.issue, item.state, issues) === "in-flight",
   );
 
-  const rows = visible.map((item) => {
+  const rows = visible.flatMap((item, index) => {
     const row = renderItem(item);
-    if (row == null) return null;
-    if (asRail && isValidElement(row)) {
-      return cloneElement(row, { key: item.issue.id });
-    }
-    return <li key={item.issue.id}>{row}</li>;
+    if (row == null) return [];
+    const keyedRow =
+      asRail && isValidElement(row)
+        ? cloneElement(row, { key: item.issue.id })
+        : (
+            <li key={item.issue.id}>{row}</li>
+          );
+    const before = beforeItem?.(item, index, visible);
+    if (before == null || before === false) return [keyedRow];
+    const keyedBefore = isValidElement(before)
+      ? cloneElement(before, { key: `before-${item.issue.id}` })
+      : before;
+    return [keyedBefore, keyedRow];
   });
 
   return (
@@ -288,6 +314,7 @@ export function FlowPreviewedItems({
         <Rail
           live={live}
           data-testid="flow-bucket-rail"
+          data-live={live ? "true" : "false"}
           className={cn("flex flex-col", listClassName)}
         >
           {rows}

@@ -16,11 +16,13 @@ export type RailEdge = "solid" | "dashed";
 
 /**
  * Single state→appearance map for RailPort and StateIcon.
- * ready = hollow ink; in-flight = filled current + glow/pulse; merged = filled
- * merged (dim); blocked = blocked outline; needs-attention = warn outline.
+ * ready = hollow ink; ready-to-land = filled muted (ink outline); in-flight =
+ * filled current + glow/pulse; merged = filled merged (dim); blocked = blocked
+ * outline; needs-attention = warn outline.
  */
 const portStateClasses: Record<RailNodeState, string> = {
   ready: "border-[hsl(var(--ink))] bg-[hsl(var(--void))]",
+  "ready-to-land": "border-[hsl(var(--ink))] bg-[hsl(var(--mut))]",
   "in-flight": "border-[hsl(var(--current))] bg-[hsl(var(--current))]",
   blocked: "border-[hsl(var(--blocked))] bg-[hsl(var(--void))]",
   merged:
@@ -31,6 +33,7 @@ const portStateClasses: Record<RailNodeState, string> = {
 /** Label ink per state — in-flight lifts to current, blocked/attention recede to mut. */
 const labelStateClasses: Record<RailNodeState, string> = {
   ready: "text-foreground",
+  "ready-to-land": "text-foreground",
   "in-flight": "text-[hsl(var(--current))]",
   blocked: "text-muted-foreground",
   merged: "text-foreground",
@@ -40,6 +43,7 @@ const labelStateClasses: Record<RailNodeState, string> = {
 /** Accessible name for the label-free StateIcon (color+shape carry the state visually). */
 const stateIconLabel: Record<RailNodeState, string> = {
   ready: "ready",
+  "ready-to-land": "ready to land",
   "in-flight": "in flight",
   blocked: "blocked",
   merged: "done",

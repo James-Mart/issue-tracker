@@ -92,6 +92,23 @@ function epic(id: string, partOf: string): IssueRecord {
   };
 }
 
+function story(id: string, partOf: string): IssueRecord {
+  return {
+    id,
+    kind: "story",
+    title: id,
+    partOf,
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+    branchName: id,
+    merged: false,
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
+  };
+}
+
 function mountCockpit(): { container: HTMLDivElement; root: Root } {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -125,10 +142,12 @@ beforeEach(() => {
     project("p-alpha", "Alpha", 0),
     epic("ready-alpha", "p-alpha"),
     epic("flight-alpha", "p-alpha"),
+    story("flight-child", "flight-alpha"),
   ];
   mockState.derived = {
     "ready-alpha": { blocked: false, epicStatus: "todo" },
     "flight-alpha": { blocked: false, epicStatus: "in-progress" },
+    "flight-child": { blocked: false, storyStatus: "in-progress" },
   };
 });
 

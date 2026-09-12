@@ -15,6 +15,7 @@ import {
   partitionCockpitBuckets,
   readyEmptyCopy,
 } from "./flow-buckets-sections";
+import { FlowRow } from "./flow-row";
 
 const t0 = "2026-07-01T00:00:00.000Z";
 
@@ -73,6 +74,7 @@ function emptyBuckets(
 ): FlowBuckets {
   return {
     awaitingPlanning: [],
+    readyToLand: [],
     ready: [],
     inFlight: [],
     blocked: [],
@@ -83,6 +85,7 @@ function emptyBuckets(
 
 const FLOW_BUCKET_HEADING_ORDER = [
   "Needs attention",
+  "Ready to land",
   "In flight",
   "Ready",
   "Awaiting planning",
@@ -205,6 +208,30 @@ describe("partitionCockpitBuckets", () => {
     ]);
   });
 
+  it("lifts a flagged Ready-to-land Story out of readyToLand", () => {
+    const flagged = row(
+      { ...story("flagged-pr"), needsAttention: true, attentionReason: "check" },
+      { blocked: false, storyStatus: "pr-open" },
+    );
+    const parked = row(story("parked-pr"), {
+      blocked: false,
+      storyStatus: "pr-open",
+    });
+
+    const partitioned = partitionCockpitBuckets(
+      emptyBuckets({
+        readyToLand: [flagged, parked],
+      }),
+    );
+
+    expect(partitioned.needsAttention.map((item) => item.issue.id)).toEqual([
+      "flagged-pr",
+    ]);
+    expect(partitioned.buckets.readyToLand.map((item) => item.issue.id)).toEqual(
+      ["parked-pr"],
+    );
+  });
+
   it("lifts awaiting-direction Ideas and leaves an implementing Story in place", () => {
     const awaiting = row(idea("awaiting"), {
       blocked: false,
@@ -289,6 +316,27 @@ describe("FlowBucketsSections", () => {
 
     expect(section(container, "inFlight")).toBeNull();
     expect(section(container, "needsAttention")).toBeNull();
+    expect(section(container, "readyToLand")).toBeNull();
+  });
+
+  it("hides Ready to land when empty and shows it with rows", () => {
+    const empty = emptyBuckets({
+      inFlight: [
+        row(epic("flight"), { blocked: false, epicStatus: "in-progress" }),
+      ],
+    });
+    const { container: emptyContainer } = mountSections(empty);
+    expect(section(emptyContainer, "readyToLand")).toBeNull();
+
+    const populated = emptyBuckets({
+      readyToLand: [
+        row(story("parked-pr"), { blocked: false, storyStatus: "pr-open" }),
+      ],
+    });
+    const { container } = mountSections(populated);
+    expect(section(container, "readyToLand")?.textContent).toContain(
+      "parked-pr",
+    );
   });
 
   it("partitions awaiting-direction Ideas into attention", () => {
@@ -433,8 +481,11 @@ describe("FlowBucketsSections", () => {
     expect(sectionEl?.textContent).not.toContain("Show all");
   });
 
-  it("renders needs-attention before in-flight", () => {
+  it("renders Needs attention before Ready to land before In flight", () => {
     const buckets = emptyBuckets({
+      readyToLand: [
+        row(story("parked-pr"), { blocked: false, storyStatus: "pr-open" }),
+      ],
       ready: [
         row(epic("attention", true), { blocked: false, epicStatus: "todo" }),
       ],
@@ -448,7 +499,11 @@ describe("FlowBucketsSections", () => {
       headingLabels(container).indexOf(label),
     );
     expect(headings[0]).toBeLessThan(headings[1]);
+    expect(headings[1]).toBeLessThan(headings[2]);
     expect(section(container, "needsAttention")?.textContent).toContain("1");
+    expect(section(container, "readyToLand")?.textContent).toContain(
+      "parked-pr",
+    );
     expect(section(container, "inFlight")?.querySelector("a")).toBeTruthy();
   });
 
@@ -456,6 +511,9 @@ describe("FlowBucketsSections", () => {
     const buckets = emptyBuckets({
       awaitingPlanning: [
         row(idea("captured"), { blocked: false, ideaStatus: "captured" }),
+      ],
+      readyToLand: [
+        row(story("parked-pr"), { blocked: false, storyStatus: "pr-open" }),
       ],
       ready: [
         row(epic("ready"), { blocked: false, epicStatus: "todo" }),
@@ -473,6 +531,7 @@ describe("FlowBucketsSections", () => {
     expect(headings[0]).toBeLessThan(headings[1]);
     expect(headings[1]).toBeLessThan(headings[2]);
     expect(headings[2]).toBeLessThan(headings[3]);
+    expect(headings[3]).toBeLessThan(headings[4]);
 
     const awaiting = section(container, "awaitingPlanning");
     expect(awaiting).toBeTruthy();
@@ -686,6 +745,54 @@ describe("FlowPreviewedItems", () => {
     expect(container.querySelector('[data-testid="flow-bucket-rail"]')).toBeTruthy();
     expect(container.querySelector("ul")).toBeNull();
     expect(container.querySelectorAll('[role="listitem"]')).toHaveLength(2);
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("does not mark a manual-complete Ready-to-land Story as live work", () => {
+    const manual = { ...story("manual"), mergePolicy: "manual" as const };
+    const done: IssueRecord = {
+      id: "t",
+      kind: "task",
+      title: "t",
+      partOf: "manual",
+      order: 0,
+      createdAt: t0,
+      updatedAt: t0,
+      status: "done",
+    };
+    const issues = [manual, done];
+    const items = [
+      row(manual, {
+        blocked: false,
+        storyStatus: "in-progress",
+        mergePolicy: "manual",
+      }),
+    ];
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <FlowPreviewedItems
+            items={items}
+            issues={issues}
+            asRail
+            renderItem={(item) => <FlowRow item={item} issues={issues} />}
+          />
+        </MemoryRouter>,
+      );
+    });
+    const rail = container.querySelector('[data-testid="flow-bucket-rail"]');
+    expect(rail?.getAttribute("data-live")).toBe("false");
+    expect(
+      container.querySelector('[data-state="ready-to-land"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="rail-work-cursor"]'),
+    ).toBeNull();
     act(() => {
       root.unmount();
     });

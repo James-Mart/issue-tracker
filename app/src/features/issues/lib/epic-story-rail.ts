@@ -23,9 +23,14 @@ export function storyRailNodeState(
   derived: DerivedState | undefined,
   issues?: readonly IssueRecord[],
 ): RailNodeState {
-  const base = issueRailNodeState(story, derived);
+  const base = issueRailNodeState(
+    story,
+    derived,
+    issues ? [...issues] : [],
+  );
   if (
     base === "merged" ||
+    base === "ready-to-land" ||
     base === "blocked" ||
     base === "needs-attention"
   ) {

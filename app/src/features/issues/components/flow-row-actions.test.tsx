@@ -349,6 +349,28 @@ describe("FlowRowActions open PR", () => {
     );
     expect(withoutPr.container.querySelector('a[href^="http"]')).toBeNull();
   });
+
+  it("keeps Open PR on Ready-to-land and flagged Ready-to-land Stories", () => {
+    const url = "https://github.com/org/repo/pull/9";
+    const ready = mountActions(
+      flowItem(story("land", url), {
+        blocked: false,
+        storyStatus: "pr-open",
+      }),
+    );
+    expect(ready.container.querySelector(`a[aria-label="Open PR"]`)).toBeTruthy();
+    expect(ready.container.textContent).not.toMatch(/merge|create pr/i);
+
+    const flagged = mountActions(
+      flowItem(
+        { ...story("flagged", url), needsAttention: true, attentionReason: "check" },
+        { blocked: false, storyStatus: "pr-open" },
+      ),
+    );
+    expect(
+      flagged.container.querySelector(`a[aria-label="Open PR"]`),
+    ).toBeTruthy();
+  });
 });
 
 describe("FlowRowActions quiet buckets", () => {

@@ -5,6 +5,7 @@ export const COCKPIT_COLLAPSED_SECTIONS_STORAGE_KEY =
 
 const FLOW_BUCKET_KEYS = new Set<FlowBucketKey>([
   "needsAttention",
+  "readyToLand",
   "inFlight",
   "ready",
   "awaitingPlanning",

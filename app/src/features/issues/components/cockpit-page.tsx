@@ -32,6 +32,7 @@ import {
   projectIdOf,
   type ProjectRecord,
 } from "../lib/build-tree";
+import { isReadyToLandStory } from "../lib/derived";
 import { flowBuckets, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
 import {
@@ -122,6 +123,52 @@ type ProjectFlowGroup = {
   projectTitle: string;
   items: FlowItem[];
 };
+
+/**
+ * Parent-Epic caption for a Ready-to-land Story at `index` when it starts a
+ * run of adjacent epic-child siblings. Project-level Stories return null.
+ */
+export function readyToLandEpicCaption(
+  items: readonly FlowItem[],
+  index: number,
+  byId: Map<string, IssueRecord>,
+  issues: IssueRecord[],
+): { id: string; title: string } | null {
+  const item = items[index];
+  if (!item || item.issue.kind !== "story") return null;
+  if (!isReadyToLandStory(item.issue, item.state, issues)) return null;
+  const parent = byId.get(item.issue.partOf);
+  if (parent?.kind !== "epic") return null;
+  const prev = items[index - 1];
+  if (
+    prev?.issue.kind === "story" &&
+    prev.issue.partOf === parent.id &&
+    isReadyToLandStory(prev.issue, prev.state, issues)
+  ) {
+    return null;
+  }
+  return { id: parent.id, title: parent.title };
+}
+
+function CockpitEpicCaption({
+  title,
+  first,
+}: {
+  title: string;
+  first: boolean;
+}) {
+  return (
+    <p
+      data-testid="ready-to-land-epic-caption"
+      className={cn(
+        "truncate text-[13px] font-medium text-muted-foreground",
+        !first && "mt-2",
+      )}
+    >
+      {title}
+    </p>
+  );
+}
 
 /** Group bucket rows by project; project order follows the global project list. */
 export function groupFlowItemsByProject(
@@ -234,9 +281,25 @@ export function CockpitPage() {
               />
               <FlowPreviewedItems
                 items={group.items}
+                issues={issues}
                 previewLimit={previewLimit}
                 asRail
                 listClassName={compact ? "mt-1 gap-1" : "mt-1.5 gap-1"}
+                beforeItem={(item, index, visible) => {
+                  const caption = readyToLandEpicCaption(
+                    visible,
+                    index,
+                    byId,
+                    issues,
+                  );
+                  if (!caption) return null;
+                  return (
+                    <CockpitEpicCaption
+                      title={caption.title}
+                      first={index === 0}
+                    />
+                  );
+                }}
                 renderItem={(item) => (
                   <FlowRow
                     item={item}
@@ -253,7 +316,13 @@ export function CockpitPage() {
                     drillInState={{
                       issueBackStack: [{ kind: "cockpit" }],
                     }}
-                    actions={<FlowRowActions item={item} />}
+                    actions={
+                      <FlowRowActions
+                        item={item}
+                        issues={issues}
+                        derived={derivedForBuckets}
+                      />
+                    }
                   />
                 )}
               />
@@ -262,7 +331,7 @@ export function CockpitPage() {
         </div>
       );
     },
-    [byId, fault, issues, projectOrder],
+    [byId, derivedForBuckets, fault, issues, projectOrder],
   );
 
   return (
