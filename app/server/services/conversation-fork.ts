@@ -1,5 +1,10 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import {
   JSONL_LOCAL_AGENT_STORE_FILES,
   type LocalAgentRunDocument,
@@ -17,6 +22,13 @@ export type ResolvedForkPoint = {
   runId: string;
   rootBlobId: string;
   turnNumber: number;
+};
+
+export type CopyAgentStateInput = {
+  sourceDir: string;
+  targetDir: string;
+  newAgentId: string;
+  keepRunId: string;
 };
 
 const TERMINAL_RUN_STATUSES = new Set<LocalAgentRunStatus>([
@@ -157,4 +169,116 @@ export function resolveForkPoint(
     rootBlobId,
     turnNumber: run.turnNumber,
   };
+}
+
+function readNdjsonRecords(filePath: string): Record<string, unknown>[] {
+  if (!existsSync(filePath)) return [];
+
+  const content = readFileSync(filePath, "utf8");
+  if (!content) return [];
+
+  const lines = content.split("\n");
+  const records: Record<string, unknown>[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.trim()) continue;
+    try {
+      records.push(JSON.parse(line) as Record<string, unknown>);
+    } catch {
+      if (i === lines.length - 1) continue;
+      throw new Error(`Invalid NDJSON in ${filePath} at line ${i + 1}`);
+    }
+  }
+
+  return records;
+}
+
+function writeNdjsonRecords(
+  filePath: string,
+  records: readonly Record<string, unknown>[],
+): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const body =
+    records.length === 0
+      ? ""
+      : `${records.map((row) => JSON.stringify(row)).join("\n")}\n`;
+  writeFileSync(filePath, body, "utf8");
+}
+
+function compareRunsForTrim(
+  a: Pick<LocalAgentRunDocument, "turnNumber" | "runId">,
+  b: Pick<LocalAgentRunDocument, "turnNumber" | "runId">,
+): number {
+  if (a.turnNumber !== b.turnNumber) return a.turnNumber - b.turnNumber;
+  return a.runId.localeCompare(b.runId);
+}
+
+function rewriteAgentId(
+  row: Record<string, unknown>,
+  newAgentId: string,
+): Record<string, unknown> {
+  return { ...row, agentId: newAgentId };
+}
+
+/** Copy agent-state NDJSON into a new directory under a fresh agent id. */
+export function copyAgentState(input: CopyAgentStateInput): void {
+  const { sourceDir, targetDir, newAgentId, keepRunId } = input;
+  mkdirSync(targetDir, { recursive: true });
+
+  const runsPath = join(sourceDir, JSONL_LOCAL_AGENT_STORE_FILES.runs);
+  const runRecords = readNdjsonRecords(runsPath) as LocalAgentRunDocument[];
+
+  const keptRun = runRecords.find((run) => run.runId === keepRunId);
+  if (!keptRun) {
+    throw new Error(
+      `copyAgentState: no run with id "${keepRunId}" in ${runsPath}`,
+    );
+  }
+
+  const keptRuns = runRecords.filter(
+    (run) => compareRunsForTrim(run, keptRun) <= 0,
+  );
+  const keptRunIds = new Set(keptRuns.map((run) => run.runId));
+
+  const copiedRuns = keptRuns.map((run) =>
+    rewriteAgentId(run as unknown as Record<string, unknown>, newAgentId),
+  );
+
+  const copiedAgents = readNdjsonRecords(
+    join(sourceDir, JSONL_LOCAL_AGENT_STORE_FILES.agents),
+  ).map((row) => ({
+    ...rewriteAgentId(row, newAgentId),
+    latestCheckpoint: keptRun.latestCheckpointRef ?? null,
+    activeRunId: null,
+    status: "idle",
+  }));
+
+  const copiedCheckpoints = readNdjsonRecords(
+    join(sourceDir, JSONL_LOCAL_AGENT_STORE_FILES.checkpoints),
+  ).map((row) => rewriteAgentId(row, newAgentId));
+
+  const copiedEvents = readNdjsonRecords(
+    join(sourceDir, JSONL_LOCAL_AGENT_STORE_FILES.runEvents),
+  ).filter((row) => {
+    const runId = row.runId;
+    return typeof runId === "string" && keptRunIds.has(runId);
+  });
+
+  writeNdjsonRecords(
+    join(targetDir, JSONL_LOCAL_AGENT_STORE_FILES.agents),
+    copiedAgents,
+  );
+  writeNdjsonRecords(
+    join(targetDir, JSONL_LOCAL_AGENT_STORE_FILES.runs),
+    copiedRuns,
+  );
+  writeNdjsonRecords(
+    join(targetDir, JSONL_LOCAL_AGENT_STORE_FILES.checkpoints),
+    copiedCheckpoints,
+  );
+  writeNdjsonRecords(
+    join(targetDir, JSONL_LOCAL_AGENT_STORE_FILES.runEvents),
+    copiedEvents,
+  );
 }
