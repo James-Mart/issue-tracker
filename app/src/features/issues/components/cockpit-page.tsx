@@ -281,6 +281,7 @@ export function CockpitPage() {
               />
               <FlowPreviewedItems
                 items={group.items}
+                issues={issues}
                 previewLimit={previewLimit}
                 asRail
                 listClassName={compact ? "mt-1 gap-1" : "mt-1.5 gap-1"}

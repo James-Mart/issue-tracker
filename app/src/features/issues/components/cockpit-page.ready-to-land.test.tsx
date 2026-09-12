@@ -204,6 +204,11 @@ describe("CockpitPage Ready-to-land rows", () => {
     expect(
       readyToLand?.querySelectorAll('[data-state="ready-to-land"]'),
     ).toHaveLength(4);
+    expect(
+      readyToLand
+        ?.querySelector('[data-testid="flow-bucket-rail"]')
+        ?.getAttribute("data-live"),
+    ).toBe("false");
   });
 
   it("keeps Open PR and an Epic caption on a flagged Ready-to-land Story in Needs attention", () => {

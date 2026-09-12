@@ -1,6 +1,7 @@
 import { cloneElement, isValidElement, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import type { IssueRecord } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import { Rail } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
@@ -259,6 +260,7 @@ function BucketList({
 /** List that shows `previewLimit` rows, then a Show all control for the rest. */
 export function FlowPreviewedItems({
   items,
+  issues = [],
   previewLimit,
   listClassName,
   renderItem,
@@ -266,6 +268,8 @@ export function FlowPreviewedItems({
   asRail,
 }: {
   items: FlowItem[];
+  /** Needed so manual-complete Ready-to-land Stories do not count as live. */
+  issues?: IssueRecord[];
   previewLimit?: number;
   listClassName?: string;
   renderItem: (item: FlowItem) => ReactNode;
@@ -283,7 +287,8 @@ export function FlowPreviewedItems({
     previewLimit != null && !showAll && items.length > previewLimit;
   const visible = capped ? items.slice(0, previewLimit) : items;
   const live = visible.some(
-    (item) => issueRailNodeState(item.issue, item.state) === "in-flight",
+    (item) =>
+      issueRailNodeState(item.issue, item.state, issues) === "in-flight",
   );
 
   const rows = visible.flatMap((item, index) => {
@@ -309,6 +314,7 @@ export function FlowPreviewedItems({
         <Rail
           live={live}
           data-testid="flow-bucket-rail"
+          data-live={live ? "true" : "false"}
           className={cn("flex flex-col", listClassName)}
         >
           {rows}

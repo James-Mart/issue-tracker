@@ -15,6 +15,7 @@ import {
   partitionCockpitBuckets,
   readyEmptyCopy,
 } from "./flow-buckets-sections";
+import { FlowRow } from "./flow-row";
 
 const t0 = "2026-07-01T00:00:00.000Z";
 
@@ -744,6 +745,54 @@ describe("FlowPreviewedItems", () => {
     expect(container.querySelector('[data-testid="flow-bucket-rail"]')).toBeTruthy();
     expect(container.querySelector("ul")).toBeNull();
     expect(container.querySelectorAll('[role="listitem"]')).toHaveLength(2);
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("does not mark a manual-complete Ready-to-land Story as live work", () => {
+    const manual = { ...story("manual"), mergePolicy: "manual" as const };
+    const done: IssueRecord = {
+      id: "t",
+      kind: "task",
+      title: "t",
+      partOf: "manual",
+      order: 0,
+      createdAt: t0,
+      updatedAt: t0,
+      status: "done",
+    };
+    const issues = [manual, done];
+    const items = [
+      row(manual, {
+        blocked: false,
+        storyStatus: "in-progress",
+        mergePolicy: "manual",
+      }),
+    ];
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <FlowPreviewedItems
+            items={items}
+            issues={issues}
+            asRail
+            renderItem={(item) => <FlowRow item={item} issues={issues} />}
+          />
+        </MemoryRouter>,
+      );
+    });
+    const rail = container.querySelector('[data-testid="flow-bucket-rail"]');
+    expect(rail?.getAttribute("data-live")).toBe("false");
+    expect(
+      container.querySelector('[data-state="ready-to-land"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="rail-work-cursor"]'),
+    ).toBeNull();
     act(() => {
       root.unmount();
     });
