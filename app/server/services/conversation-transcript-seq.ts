@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
 
+export { parseTranscriptEvent } from "../schemas/conversation.js";
+
 export function transcriptPathOf(conversationId: string): string {
   return join(conversationsDir, conversationId, "transcript.jsonl");
 }
