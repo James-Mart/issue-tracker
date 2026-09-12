@@ -44,20 +44,36 @@ export const conversationMetaSchema = z
       })
       .optional(),
     archived: z.boolean().default(false),
+    forkedFrom: nonEmpty.optional(),
+    forkedAtSeq: z.number().int().nonnegative().optional(),
+    readOnly: z.boolean().optional(),
     createdAt: nonEmpty,
     updatedAt: nonEmpty,
   })
   .superRefine((meta, ctx) => {
     const hasIssueId = meta.issueId !== undefined;
     const hasChannel = meta.channel !== undefined;
-    if (hasIssueId === hasChannel) return;
-    ctx.addIssue({
-      code: "custom",
-      message: hasIssueId
-        ? "channel is required when issueId is set"
-        : "issueId is required when channel is set",
-      path: hasIssueId ? ["channel"] : ["issueId"],
-    });
+    if (hasIssueId !== hasChannel) {
+      ctx.addIssue({
+        code: "custom",
+        message: hasIssueId
+          ? "channel is required when issueId is set"
+          : "issueId is required when channel is set",
+        path: hasIssueId ? ["channel"] : ["issueId"],
+      });
+    }
+
+    const hasForkedFrom = meta.forkedFrom !== undefined;
+    const hasForkedAtSeq = meta.forkedAtSeq !== undefined;
+    if (hasForkedFrom !== hasForkedAtSeq) {
+      ctx.addIssue({
+        code: "custom",
+        message: hasForkedFrom
+          ? "forkedAtSeq is required when forkedFrom is set"
+          : "forkedFrom is required when forkedAtSeq is set",
+        path: hasForkedFrom ? ["forkedAtSeq"] : ["forkedFrom"],
+      });
+    }
   });
 
 export type ConversationMeta = z.infer<typeof conversationMetaSchema>;
