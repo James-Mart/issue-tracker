@@ -467,7 +467,7 @@ function TreeRow({
   const assignee = assigneeOf(issue);
   const attention = hasAttention(issue) && issue.needsAttention;
   const count = leafTaskProgressCount(issue, issues);
-  const railState = issueRailNodeState(issue, state);
+  const railState = issueRailNodeState(issue, state, issues);
   const live = isInFlight(issue, state);
   const prChip = storyPrChipModel(issue, prQuery);
 

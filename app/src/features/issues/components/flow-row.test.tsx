@@ -209,4 +209,49 @@ describe("FlowRow", () => {
     });
     expect(ready.textContent).not.toContain("planning");
   });
+
+  it("shows awaiting PR on a Ready-to-land Story with no prUrl", () => {
+    const manual: IssueRecord = {
+      ...story("manual"),
+      mergePolicy: "manual",
+    };
+    const done: IssueRecord = {
+      id: "t",
+      kind: "task",
+      title: "t",
+      partOf: "manual",
+      order: 0,
+      createdAt: t0,
+      updatedAt: t0,
+      status: "done",
+    };
+    const container = mountRow(
+      manual,
+      { blocked: false, storyStatus: "in-progress", mergePolicy: "manual" },
+      undefined,
+      undefined,
+      undefined,
+      [project(projectId), manual, done],
+    );
+    expect(container.textContent).toContain("awaiting PR");
+    expect(
+      container.querySelector('[data-state="ready-to-land"]'),
+    ).toBeTruthy();
+  });
+
+  it("does not show awaiting PR when a Ready-to-land Story has a prUrl", () => {
+    const parked: IssueRecord = { ...story("parked"), prUrl: "https://pr/1" };
+    const container = mountRow(
+      parked,
+      { blocked: false, storyStatus: "pr-open" },
+      undefined,
+      undefined,
+      undefined,
+      [project(projectId), parked],
+    );
+    expect(container.textContent).not.toContain("awaiting PR");
+    expect(
+      container.querySelector('[data-state="ready-to-land"]'),
+    ).toBeTruthy();
+  });
 });

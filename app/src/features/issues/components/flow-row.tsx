@@ -3,14 +3,26 @@ import { OverviewRow } from "@/components/ui/overview-row";
 import { RailNode } from "@/components/ui/rail";
 import type { IssueRecord } from "@server/schemas";
 import { AxisChips } from "./axis-chips";
-import { leafTaskProgressCount } from "../lib/derived";
+import { isReadyToLandStory, leafTaskProgressCount } from "../lib/derived";
 import { issuesById, projectIdOf } from "../lib/build-tree";
 import type { FlowItem } from "../lib/flow";
 import { flowItemNeedsAttention } from "../lib/flow";
 import { issueChannelPath } from "../lib/links";
 import { issueRailNodeState } from "../lib/rail-state";
 
-function flowRowPlanningBadge(item: FlowItem): ReactNode | undefined {
+function flowRowPlanningBadge(
+  item: FlowItem,
+  issues: IssueRecord[],
+): ReactNode | undefined {
+  if (item.issue.kind === "story") {
+    if (
+      !item.issue.prUrl &&
+      isReadyToLandStory(item.issue, item.state, issues)
+    ) {
+      return <AxisChips chips={[{ variant: "todo", label: "awaiting PR" }]} />;
+    }
+    return undefined;
+  }
   if (item.issue.kind !== "idea") return undefined;
   const status = item.state?.ideaStatus;
   if (status === "awaiting-approval") {
@@ -79,7 +91,7 @@ export function FlowRow({
   to,
   drillInState,
 }: FlowRowProps) {
-  const railState = issueRailNodeState(item.issue, item.state);
+  const railState = issueRailNodeState(item.issue, item.state, issues);
   const live = railState === "in-flight";
   const count = leafTaskProgressCount(item.issue, issues);
   const drillInTo = flowRowDrillInTo(item, issues, to);
@@ -95,7 +107,7 @@ export function FlowRow({
         <OverviewRow
           className="min-w-0"
           avatar={avatar}
-          chips={flowRowPlanningBadge(item)}
+          chips={flowRowPlanningBadge(item, issues)}
           blocked={Boolean(item.state?.blocked)}
           attention={flowRowShowsAttentionTriangle(item)}
           count={count}

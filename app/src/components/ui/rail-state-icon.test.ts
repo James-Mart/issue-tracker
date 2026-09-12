@@ -6,6 +6,7 @@ import { RailPort, StateIcon } from "./rail";
 
 const STATES: RailNodeState[] = [
   "ready",
+  "ready-to-land",
   "in-flight",
   "blocked",
   "merged",
@@ -37,6 +38,13 @@ describe("StateIcon", () => {
 
     expect(byState.ready).toContain("border-[hsl(var(--ink))]");
     expect(byState.ready).toContain("bg-[hsl(var(--void))]");
+
+    expect(byState["ready-to-land"]).toContain("border-[hsl(var(--ink))]");
+    expect(byState["ready-to-land"]).toContain("bg-[hsl(var(--mut))]");
+    expect(byState["ready-to-land"]).not.toContain("bg-[hsl(var(--void))]");
+    expect(byState["ready-to-land"]).not.toContain("bg-[hsl(var(--current))]");
+    expect(byState["ready-to-land"]).not.toContain("hsl(var(--merged))");
+    expect(byState["ready-to-land"]).not.toContain("border-[hsl(var(--warn))]");
 
     expect(byState["in-flight"]).toContain("border-[hsl(var(--current))]");
     expect(byState["in-flight"]).toContain("bg-[hsl(var(--current))]");

@@ -262,12 +262,19 @@ export function FlowPreviewedItems({
   previewLimit,
   listClassName,
   renderItem,
+  beforeItem,
   asRail,
 }: {
   items: FlowItem[];
   previewLimit?: number;
   listClassName?: string;
   renderItem: (item: FlowItem) => ReactNode;
+  /** Optional caption or chrome immediately before this visible row. */
+  beforeItem?: (
+    item: FlowItem,
+    index: number,
+    visible: FlowItem[],
+  ) => ReactNode;
   /** Cockpit lists: one spine, state disc on each row. */
   asRail?: boolean;
 }) {
@@ -279,13 +286,21 @@ export function FlowPreviewedItems({
     (item) => issueRailNodeState(item.issue, item.state) === "in-flight",
   );
 
-  const rows = visible.map((item) => {
+  const rows = visible.flatMap((item, index) => {
     const row = renderItem(item);
-    if (row == null) return null;
-    if (asRail && isValidElement(row)) {
-      return cloneElement(row, { key: item.issue.id });
-    }
-    return <li key={item.issue.id}>{row}</li>;
+    if (row == null) return [];
+    const keyedRow =
+      asRail && isValidElement(row)
+        ? cloneElement(row, { key: item.issue.id })
+        : (
+            <li key={item.issue.id}>{row}</li>
+          );
+    const before = beforeItem?.(item, index, visible);
+    if (before == null || before === false) return [keyedRow];
+    const keyedBefore = isValidElement(before)
+      ? cloneElement(before, { key: `before-${item.issue.id}` })
+      : before;
+    return [keyedBefore, keyedRow];
   });
 
   return (
