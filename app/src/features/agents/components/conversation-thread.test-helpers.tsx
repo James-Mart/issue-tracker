@@ -5,17 +5,29 @@ import type { TranscriptEvent } from "@server/schemas";
 import { ConversationThread } from "./conversation-thread";
 
 export const initialEvents: TranscriptEvent[] = [
-  { type: "prompt", text: "First turn", at: "2026-07-24T00:00:00.000Z" },
+  {
+    type: "prompt",
+    text: "First turn",
+    at: "2026-07-24T00:00:00.000Z",
+    seq: 1,
+  },
   {
     type: "assistant",
     text: "First reply with enough body to exceed one viewport.",
     at: "2026-07-24T00:00:01.000Z",
+    seq: 2,
   },
-  { type: "prompt", text: "Second turn", at: "2026-07-24T00:00:02.000Z" },
+  {
+    type: "prompt",
+    text: "Second turn",
+    at: "2026-07-24T00:00:02.000Z",
+    seq: 3,
+  },
   {
     type: "assistant",
     text: "Latest reply — opening the thread should land here.",
     at: "2026-07-24T00:00:03.000Z",
+    seq: 4,
   },
 ];
 
@@ -38,6 +50,8 @@ const mocks = vi.hoisted(() => ({
   updatePendingMutate: vi.fn(),
   clearPendingMutate: vi.fn(),
   sendMutate: vi.fn(),
+  forkMutate: vi.fn(),
+  setSelectedConversationId: vi.fn(),
 }));
 
 export const transcriptState = mocks.transcriptState;
@@ -47,6 +61,14 @@ export const refetchHistory = mocks.refetchHistory;
 export const updatePendingMutate = mocks.updatePendingMutate;
 export const clearPendingMutate = mocks.clearPendingMutate;
 export const sendMutate = mocks.sendMutate;
+export const forkMutate = mocks.forkMutate;
+export const setSelectedConversationId = mocks.setSelectedConversationId;
+
+function eventsWithSeq(events: TranscriptEvent[]): TranscriptEvent[] {
+  return events.map((event, index) =>
+    event.seq !== undefined ? event : { ...event, seq: index + 1 },
+  );
+}
 
 mocks.transcriptState.events = [...initialEvents];
 
@@ -81,11 +103,23 @@ vi.mock("../api/mutations", () => ({
     mutate: sendMutate,
     isPending: false,
   }),
+  useForkConversation: () => ({
+    mutate: forkMutate,
+    isPending: false,
+  }),
+}));
+
+vi.mock("../store/use-agents-ui-store", () => ({
+  useAgentsUiStore: (
+    select: (state: {
+      setSelectedConversationId: typeof setSelectedConversationId;
+    }) => unknown,
+  ) => select({ setSelectedConversationId }),
 }));
 
 vi.mock("../hooks/use-conversation-events", () => ({
   useConversationEvents: () => ({
-    events: transcriptState.events,
+    events: eventsWithSeq(transcriptState.events),
     ready: threadUi.ready,
     streamRunActive: threadUi.runActive,
     runResyncKey: 0,
@@ -173,5 +207,7 @@ export function resetThreadMocks() {
   updatePendingMutate.mockClear();
   clearPendingMutate.mockClear();
   sendMutate.mockClear();
+  forkMutate.mockClear();
+  setSelectedConversationId.mockClear();
   refetchHistory.mockClear();
 }

@@ -25,17 +25,20 @@ import {
 } from "../api/client";
 import {
   useClearConversationPending,
+  useForkConversation,
   useSendConversationMessage,
   useUpdateConversationPending,
 } from "../api/mutations";
 import { useConversationEvents } from "../hooks/use-conversation-events";
 import { useConversationRunActive } from "../hooks/use-conversation-run-active";
+import { useAgentsUiStore } from "../store/use-agents-ui-store";
 import {
   deriveSubAgents,
   isSubAgentToolCall,
   type SubAgent,
 } from "../lib/subagent";
 import {
+  deriveTurns,
   groupOrdinaryToolCalls,
   transcriptInfoLine,
 } from "../lib/transcript-rows";
@@ -46,6 +49,7 @@ import {
 } from "../lib/thread-status";
 import { MessageScroller } from "@/components/ui/message-scroller";
 import { transcriptScrollerBottomKey } from "../lib/transcript-scroller";
+import { AssistantMetaRow } from "./assistant-meta-row";
 import { Composer } from "./composer";
 import { SubagentCard } from "./subagent-card";
 import {
@@ -601,6 +605,19 @@ function ThreadBody({
     () => new Map((storeAttachments ?? []).map((item) => [item.name, item])),
     [storeAttachments],
   );
+  const forkConversation = useForkConversation();
+  const setSelectedConversationId = useAgentsUiStore(
+    (s) => s.setSelectedConversationId,
+  );
+  const forkCuts = useMemo(() => {
+    const cuts = new Map<number, number>();
+    for (const turn of deriveTurns(events)) {
+      if (turn.lastAssistantSeq === undefined) continue;
+      if (turn.isLastTurn && runActive) continue;
+      cuts.set(turn.lastAssistantSeq, turn.lastEventSeq);
+    }
+    return cuts;
+  }, [events, runActive]);
 
   if (historyFailed) {
     return (
@@ -666,19 +683,39 @@ function ThreadBody({
           );
         }
         const index = events.indexOf(segment.event);
+        const forkSeq =
+          segment.event.type === "assistant" &&
+          segment.event.seq !== undefined
+            ? forkCuts.get(segment.event.seq)
+            : undefined;
         return (
-          <TranscriptEventRow
-            key={eventKey(segment.event, index)}
-            event={segment.event}
-            subAgentsByCallId={subAgentsByCallId}
-            thinkingOpen={
-              segment.event.type === "thinking" &&
-              isLiveThinking(events, index)
-            }
-            conversationId={conversationId}
-            attachmentByName={attachmentByName}
-            attachmentsLoading={attachmentsLoading}
-          />
+          <div key={eventKey(segment.event, index)} className="min-w-0">
+            <TranscriptEventRow
+              event={segment.event}
+              subAgentsByCallId={subAgentsByCallId}
+              thinkingOpen={
+                segment.event.type === "thinking" &&
+                isLiveThinking(events, index)
+              }
+              conversationId={conversationId}
+              attachmentByName={attachmentByName}
+              attachmentsLoading={attachmentsLoading}
+            />
+            {forkSeq !== undefined ? (
+              <AssistantMetaRow
+                at={segment.event.at}
+                onFork={() =>
+                  forkConversation.mutate(
+                    { id: conversationId, seq: forkSeq },
+                    {
+                      onSuccess: (created) =>
+                        setSelectedConversationId(created.id),
+                    },
+                  )
+                }
+              />
+            ) : null}
+          </div>
         );
       })}
       {pendingMessageText ? (
