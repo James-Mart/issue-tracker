@@ -377,9 +377,9 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   Stories with no `prUrl`; `--auto` maps to `gh pr merge --auto`;
   `--match-head-commit` maps to the flag of the same name; surfaces `gh`
   stderr on failure. After the PR lands, the tracker sets `merged` and
-  attempts safe worktree removal (no `--discard`); an unsafe or
-  active-implementing refusal leaves the checkout and does not fail the
-  merge. Other removal failures still fail the caller.
+  attempts safe worktree removal (no `--discard`); an unsafe refusal leaves
+  the checkout and does not fail the merge. Other removal failures still fail
+  the caller.
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
@@ -1225,8 +1225,8 @@ Deleting an issue removes its whole directory (`rmSync` recursive), so any
 
 When the delete set includes a Story that still has a worktree, `remove()`
 attempts the same safe removal as `issue story worktree remove` (never
-`--discard`). An unsafe or active-implementing refusal leaves the
-checkout on disk and does not fail the deletion; the CLI names each
+`--discard`). An unsafe refusal leaves the checkout on disk and does not
+fail the deletion; the CLI names each
 retained path so a human can clear it by hand. Other removal failures
 still fail the caller.
 
@@ -1582,8 +1582,8 @@ so cannot drift:
   `setupLogPath` / `setupOutput` (last setup attempt; output is the log text),
   and `blockedReason` (`worktreeBlockedReason`). Merge, archive, and delete
   each attempt safe worktree removal automatically (no `--discard`); an
-  unsafe or active-implementing refusal is not an error, and `retained` is
-  how a leftover checkout is reported while the Story record still exists.
+  unsafe refusal is not an error, and `retained` is how a leftover checkout
+  is reported while the Story record still exists.
   Other removal failures still fail the caller. Counts are read through
   `app/server/services/git-read.ts` with the worktree as cwd. A Story with no
   `worktreePath`, or whose recorded directory is gone, derives as absent

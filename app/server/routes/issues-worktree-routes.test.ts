@@ -2,7 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WORKTREE_ROOT } from "../worktree-constants.js";
 import { setupLogPathFor, worktreePathFor } from "../services/worktree.js";
@@ -108,6 +108,39 @@ function writeStory(id: string, extra: Record<string, unknown> = {}): void {
   });
 }
 
+function conversationsRoot(): string {
+  return join(dirname(dir), "conversations");
+}
+
+function seedImplementingSession(
+  convId: string,
+  storyId: string,
+  projectId: string,
+  opts?: { live?: boolean },
+): void {
+  const convDir = join(conversationsRoot(), convId);
+  mkdirSync(convDir, { recursive: true });
+  writeFileSync(
+    join(convDir, "meta.json"),
+    JSON.stringify({
+      id: convId,
+      title: "Implement",
+      projectId,
+      model: "auto",
+      issueId: storyId,
+      channel: "implementing",
+      createdAt: AT,
+      updatedAt: AT,
+    }),
+  );
+  if (opts?.live) {
+    writeFileSync(
+      join(convDir, "run-live.json"),
+      `${JSON.stringify({ pid: process.pid })}\n`,
+    );
+  }
+}
+
 async function createWorktree(storyId: string): Promise<string> {
   const path = trackWorktree(workspace, "p", storyId);
   git(workspace, ["worktree", "add", "-b", storyId, path, "main"]);
@@ -179,6 +212,7 @@ beforeEach(async () => {
 afterEach(async () => {
   setGitWriteSpawnerForTests(null);
   removeTrackedWorktrees();
+  rmSync(conversationsRoot(), { recursive: true, force: true });
   vi.unstubAllEnvs();
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));
@@ -236,6 +270,21 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     expect(status).toBe(204);
     expect(gitRemoveCalls).toHaveLength(1);
     expect(gitRemoveCalls[0]).toContain("--force");
+  });
+
+  it("ignores allowActiveRun in the body and refuses while a session is live", async () => {
+    writeStory("a");
+    const path = await createWorktree("a");
+    seedImplementingSession("conv-live", "a", "p", { live: true });
+
+    const { status, json } = await postRemove("a", { allowActiveRun: true });
+    expect(status).toBe(409);
+    expect(json).toEqual({
+      error: expect.stringMatching(/implementing session is active/),
+      code: "conflict",
+    });
+    expect(existsSync(path)).toBe(true);
+    expect(readStoryJson("a").worktreePath).toBe(path);
   });
 
   it("returns 400 when the id is not a Story", async () => {

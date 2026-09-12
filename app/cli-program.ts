@@ -437,10 +437,15 @@ function createIssueProgram(run: Run): Command {
           "--discard",
           "force removal even when uncommitted changes or at-risk commits exist",
         )
-        .action((storyId: string, opts: { discard?: boolean }) =>
+        .option(
+          "--allow-active-run",
+          "skip the live-implementing-run check",
+        )
+        .action((storyId: string, opts: { discard?: boolean; allowActiveRun?: boolean }) =>
           run(async () => {
             const path = await removeStoryWorktree(storyId, {
               discard: opts.discard === true,
+              allowActiveRun: opts.allowActiveRun === true,
             });
             console.log(path);
           }),
