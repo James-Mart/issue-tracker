@@ -59,6 +59,16 @@ export function deleteConversation(id: string): Promise<void> {
   return request<void>(`/api/conversations/${id}`, { method: "DELETE" });
 }
 
+export function forkConversation(
+  id: string,
+  body: { seq: number },
+): Promise<{ id: string }> {
+  return request<{ id: string }>(`/api/conversations/${id}/fork`, {
+    method: "POST",
+    body,
+  });
+}
+
 export function getConversationRun(id: string): Promise<ConversationActiveRun> {
   return request<ConversationActiveRun>(`/api/conversations/${id}/run`);
 }

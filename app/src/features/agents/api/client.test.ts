@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TRANSCRIPT_FETCH_TIMEOUT_MS,
   conversationAttachmentApiPath,
+  forkConversation,
   getConversationRun,
   getConversationTranscript,
   listConversations,
@@ -174,6 +175,26 @@ describe("transcribeAudio", () => {
     const backing = Float32Array.from([0, 0.5, -0.25, 0]);
     const view = backing.subarray(1, 3);
     await expect(transcribeAudio(view)).resolves.toBe("slice");
+  });
+});
+
+describe("forkConversation", () => {
+  it("posts to the fork path with the seq body and returns the new id", async () => {
+    const fetchMock = vi.fn((_input: string, init?: RequestInit) => {
+      expect(init?.body).toBe(JSON.stringify({ seq: 3 }));
+      return Promise.resolve(jsonResponse({ id: "conv-fork-1" }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(forkConversation("conv-source", { seq: 3 })).resolves.toEqual({
+      id: "conv-fork-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/conversations/conv-source/fork",
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
   });
 });
 
