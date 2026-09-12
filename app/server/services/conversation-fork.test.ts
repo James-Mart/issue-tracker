@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -53,6 +54,11 @@ async function loadResolveForkPoint() {
 async function loadCopyAgentState() {
   const mod = await import("./conversation-fork.js");
   return mod.copyAgentState;
+}
+
+async function loadCopyInheritedHistory() {
+  const mod = await import("./conversation-fork.js");
+  return mod.copyInheritedHistory;
 }
 
 const SOURCE_AGENT = "agent-source";
@@ -142,6 +148,36 @@ async function seedForkableStore(sourceDir: string): Promise<void> {
 function conversationDir(id: string): string {
   return join(root, "conversations", id);
 }
+
+function conversationFingerprint(id: string): Map<string, Buffer> {
+  const dir = conversationDir(id);
+  const fingerprint = new Map<string, Buffer>();
+
+  function walk(relDir: string): void {
+    const abs = join(dir, relDir);
+    if (!existsSync(abs)) return;
+    for (const ent of readdirSync(abs, { withFileTypes: true })) {
+      const rel = relDir ? join(relDir, ent.name) : ent.name;
+      const path = join(dir, rel);
+      if (ent.isDirectory()) {
+        walk(rel);
+      } else if (ent.isFile()) {
+        fingerprint.set(rel, readFileSync(path));
+      }
+    }
+  }
+
+  walk("");
+  return fingerprint;
+}
+
+const SAMPLE_USAGE = {
+  inputTokens: 10,
+  outputTokens: 5,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  totalTokens: 15,
+};
 
 function writeConversation(
   id: string,
@@ -396,5 +432,223 @@ describe("copyAgentState", () => {
 
     const runs = readNdjsonLines(targetDir, JSONL_LOCAL_AGENT_STORE_FILES.runs);
     expect(runs.map((row) => row.runId)).toEqual(["run-1"]);
+  });
+});
+
+describe("copyInheritedHistory", () => {
+  function writeInheritedSource(
+    id: string,
+    opts: {
+      transcript: (TranscriptEvent | Record<string, unknown>)[];
+      delegations?: Record<string, unknown>[];
+      attachments?: Record<string, string>;
+      nested?: Record<string, Record<string, string>>;
+    },
+  ): void {
+    const dir = conversationDir(id);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "meta.json"),
+      `${JSON.stringify(
+        {
+          id,
+          title: "Inherited copy test",
+          projectId: "platform",
+          model: "composer-2.5",
+          createdAt: AT_T1,
+          updatedAt: AT_T1,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    writeFileSync(
+      join(dir, "transcript.jsonl"),
+      opts.transcript.map((event) => JSON.stringify(event)).join("\n") + "\n",
+    );
+    writeFileSync(
+      join(dir, "delegations.jsonl"),
+      (opts.delegations ?? [])
+        .map((record) => JSON.stringify(record))
+        .join("\n") + (opts.delegations?.length ? "\n" : ""),
+    );
+
+    if (opts.attachments) {
+      const attachmentsDir = join(dir, "attachments");
+      mkdirSync(attachmentsDir, { recursive: true });
+      for (const [name, body] of Object.entries(opts.attachments)) {
+        writeFileSync(join(attachmentsDir, name), body);
+      }
+    }
+
+    if (opts.nested) {
+      for (const [agentId, files] of Object.entries(opts.nested)) {
+        const nestedDir = join(dir, "agent-state", "nested", agentId);
+        mkdirSync(nestedDir, { recursive: true });
+        for (const [name, body] of Object.entries(files)) {
+          writeFileSync(join(nestedDir, name), body);
+        }
+      }
+    }
+  }
+
+  function readTranscript(id: string): TranscriptEvent[] {
+    const path = join(conversationDir(id), "transcript.jsonl");
+    return readFileSync(path, "utf8")
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line) as TranscriptEvent);
+  }
+
+  it("copies transcript through the fork position including trailing usage", async () => {
+    const copyInheritedHistory = await loadCopyInheritedHistory();
+    writeInheritedSource("conv-source", {
+      transcript: [
+        { type: "prompt", text: "go", at: AT_T1, seq: 1 },
+        { type: "assistant", text: "done", at: AT_T1_END, seq: 2 },
+        { type: "usage", usage: SAMPLE_USAGE, at: AT_T1_TRAILING, seq: 3 },
+        { type: "prompt", text: "later", at: AT_T2, seq: 4 },
+      ],
+    });
+    mkdirSync(conversationDir("conv-fork"), { recursive: true });
+    const before = conversationFingerprint("conv-source");
+
+    copyInheritedHistory({
+      sourceId: "conv-source",
+      targetId: "conv-fork",
+      forkedAtSeq: 3,
+    });
+
+    expect(conversationFingerprint("conv-source")).toEqual(before);
+    const copied = readTranscript("conv-fork");
+    expect(copied.map((event) => event.seq)).toEqual([1, 2, 3]);
+    expect(copied.at(-1)).toMatchObject({
+      type: "usage",
+      at: AT_T1_TRAILING,
+    });
+  });
+
+  it("keeps legacy transcript lines by line order when seq is absent", async () => {
+    const copyInheritedHistory = await loadCopyInheritedHistory();
+    writeInheritedSource("conv-legacy", {
+      transcript: [
+        { type: "prompt", text: "go", at: AT_T1, seq: 1 },
+        { type: "assistant", text: "legacy", at: AT_T1_END },
+        { type: "usage", usage: SAMPLE_USAGE, at: AT_T1_TRAILING, seq: 3 },
+        { type: "prompt", text: "drop", at: AT_T2, seq: 4 },
+      ],
+    });
+    mkdirSync(conversationDir("conv-legacy-fork"), { recursive: true });
+
+    copyInheritedHistory({
+      sourceId: "conv-legacy",
+      targetId: "conv-legacy-fork",
+      forkedAtSeq: 3,
+    });
+
+    const copied = readTranscript("conv-legacy-fork");
+    expect(copied).toHaveLength(3);
+    expect(copied[1]).toMatchObject({
+      type: "assistant",
+      text: "legacy",
+      at: AT_T1_END,
+    });
+  });
+
+  it("copies kept delegations, their nested stores, and prompt attachments only", async () => {
+    const copyInheritedHistory = await loadCopyInheritedHistory();
+    writeInheritedSource("conv-inherit", {
+      transcript: [
+        {
+          type: "prompt",
+          text: "with file",
+          at: AT_T1,
+          seq: 1,
+          attachments: ["keep.png"],
+        },
+        { type: "assistant", text: "ok", at: AT_T1_END, seq: 2 },
+        { type: "usage", usage: SAMPLE_USAGE, at: AT_T1_TRAILING, seq: 3 },
+        {
+          type: "prompt",
+          text: "later file",
+          at: AT_T2,
+          seq: 4,
+          attachments: ["drop.png"],
+        },
+      ],
+      delegations: [
+        {
+          delegationId: "del-keep",
+          agentId: "nested-keep",
+          role: "worker",
+          model: "composer-2.5",
+          lifecycle: "tracked",
+          at: AT_T1,
+        },
+        {
+          delegationId: "del-drop",
+          agentId: "nested-drop",
+          role: "worker",
+          model: "composer-2.5",
+          lifecycle: "tracked",
+          at: AT_T2,
+        },
+      ],
+      attachments: {
+        "keep.png": "kept-bytes",
+        "drop.png": "dropped-bytes",
+      },
+      nested: {
+        "nested-keep": { "agents.ndjson": '{"agentId":"nested-keep"}\n' },
+        "nested-drop": { "agents.ndjson": '{"agentId":"nested-drop"}\n' },
+      },
+    });
+    mkdirSync(conversationDir("conv-inherit-fork"), { recursive: true });
+    const before = conversationFingerprint("conv-inherit");
+
+    copyInheritedHistory({
+      sourceId: "conv-inherit",
+      targetId: "conv-inherit-fork",
+      forkedAtSeq: 3,
+    });
+
+    expect(conversationFingerprint("conv-inherit")).toEqual(before);
+
+    const delegations = readFileSync(
+      join(conversationDir("conv-inherit-fork"), "delegations.jsonl"),
+      "utf8",
+    );
+    expect(delegations).toContain("nested-keep");
+    expect(delegations).not.toContain("nested-drop");
+
+    const keptNested = join(
+      conversationDir("conv-inherit-fork"),
+      "agent-state",
+      "nested",
+      "nested-keep",
+      "agents.ndjson",
+    );
+    expect(readFileSync(keptNested, "utf8")).toContain("nested-keep");
+    expect(
+      existsSync(
+        join(
+          conversationDir("conv-inherit-fork"),
+          "agent-state",
+          "nested",
+          "nested-drop",
+        ),
+      ),
+    ).toBe(false);
+
+    expect(
+      readFileSync(
+        join(conversationDir("conv-inherit-fork"), "attachments", "keep.png"),
+      ).toString(),
+    ).toBe("kept-bytes");
+    expect(
+      existsSync(
+        join(conversationDir("conv-inherit-fork"), "attachments", "drop.png"),
+      ),
+    ).toBe(false);
   });
 });

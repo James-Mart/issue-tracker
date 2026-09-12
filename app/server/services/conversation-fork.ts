@@ -1,4 +1,5 @@
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -10,7 +11,11 @@ import {
   type LocalAgentRunDocument,
   type LocalAgentRunStatus,
 } from "@cursor/sdk";
-import type { TranscriptEvent } from "../schemas/conversation.js";
+import {
+  parseDelegationEndRecord,
+  parseDelegationRecord,
+  type TranscriptEvent,
+} from "../schemas/conversation.js";
 import { conversationsDir } from "../config.js";
 import {
   effectiveTranscriptSeq,
@@ -31,6 +36,12 @@ export type CopyAgentStateInput = {
   keepRunId: string;
 };
 
+export type CopyInheritedHistoryInput = {
+  sourceId: string;
+  targetId: string;
+  forkedAtSeq: number;
+};
+
 const TERMINAL_RUN_STATUSES = new Set<LocalAgentRunStatus>([
   "finished",
   "error",
@@ -44,6 +55,45 @@ function agentStateDir(conversationId: string): string {
 
 function runsPath(conversationId: string): string {
   return join(agentStateDir(conversationId), JSONL_LOCAL_AGENT_STORE_FILES.runs);
+}
+
+function conversationDir(conversationId: string): string {
+  return join(conversationsDir, conversationId);
+}
+
+function delegationsPathOf(conversationId: string): string {
+  return join(conversationDir(conversationId), "delegations.jsonl");
+}
+
+function attachmentsDirOf(conversationId: string): string {
+  return join(conversationDir(conversationId), "attachments");
+}
+
+function nestedAgentStateDir(
+  conversationId: string,
+  agentId: string,
+): string {
+  return join(agentStateDir(conversationId), "nested", agentId);
+}
+
+function timestampMs(at: string, context: string): number {
+  const ms = Date.parse(at);
+  if (Number.isNaN(ms)) {
+    throw new Error(`${context}: invalid timestamp "${at}"`);
+  }
+  return ms;
+}
+
+function delegationLineTimestamp(raw: Record<string, unknown>): number | null {
+  const endParsed = parseDelegationEndRecord(raw);
+  if (endParsed.ok) {
+    return timestampMs(endParsed.record.endedAt, "delegation end record");
+  }
+  const startParsed = parseDelegationRecord(raw);
+  if (startParsed.ok) {
+    return timestampMs(startParsed.record.at, "delegation record");
+  }
+  return null;
 }
 
 function readTranscriptEventAt(
@@ -281,4 +331,162 @@ export function copyAgentState(input: CopyAgentStateInput): void {
     join(targetDir, JSONL_LOCAL_AGENT_STORE_FILES.runEvents),
     copiedEvents,
   );
+}
+
+function writeJsonlLines(filePath: string, lines: readonly string[]): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(
+    filePath,
+    lines.length === 0 ? "" : `${lines.join("\n")}\n`,
+    "utf8",
+  );
+}
+
+function copyTranscriptThroughFork(
+  sourceId: string,
+  targetId: string,
+  forkedAtSeq: number,
+): Set<string> {
+  const sourcePath = transcriptPathOf(sourceId);
+  if (!existsSync(sourcePath)) {
+    throw new Error(
+      `copyInheritedHistory: conversation "${sourceId}" has no transcript`,
+    );
+  }
+
+  const keptLines: string[] = [];
+  const attachmentNames = new Set<string>();
+  let lineSeq = 0;
+
+  for (const line of readFileSync(sourcePath, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    lineSeq += 1;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const effectiveSeq =
+      typeof raw === "object" &&
+      raw !== null &&
+      typeof (raw as { seq?: unknown }).seq === "number"
+        ? (raw as { seq: number }).seq
+        : effectiveTranscriptSeq(raw, lineSeq);
+    if (effectiveSeq > forkedAtSeq) continue;
+
+    keptLines.push(line);
+    const parsed = parseTranscriptEvent(raw);
+    if (
+      parsed.ok &&
+      parsed.event.type === "prompt" &&
+      parsed.event.attachments
+    ) {
+      for (const name of parsed.event.attachments) {
+        attachmentNames.add(name);
+      }
+    }
+  }
+
+  writeJsonlLines(transcriptPathOf(targetId), keptLines);
+  return attachmentNames;
+}
+
+function copyDelegationsThroughFork(
+  sourceId: string,
+  targetId: string,
+  forkAtMs: number,
+): Set<string> {
+  const sourcePath = delegationsPathOf(sourceId);
+  if (!existsSync(sourcePath)) {
+    writeJsonlLines(delegationsPathOf(targetId), []);
+    return new Set();
+  }
+
+  const keptLines: string[] = [];
+  const keptAgentIds = new Set<string>();
+
+  for (const line of readFileSync(sourcePath, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    let raw: Record<string, unknown>;
+    try {
+      raw = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const atMs = delegationLineTimestamp(raw);
+    if (atMs === null || atMs > forkAtMs) continue;
+
+    keptLines.push(line);
+    const startParsed = parseDelegationRecord(raw);
+    if (startParsed.ok) {
+      keptAgentIds.add(startParsed.record.agentId);
+    }
+  }
+
+  writeJsonlLines(delegationsPathOf(targetId), keptLines);
+  return keptAgentIds;
+}
+
+function copyNestedDelegationStores(
+  sourceId: string,
+  targetId: string,
+  agentIds: ReadonlySet<string>,
+): void {
+  for (const agentId of agentIds) {
+    const sourceDir = nestedAgentStateDir(sourceId, agentId);
+    if (!existsSync(sourceDir)) {
+      throw new Error(
+        `copyInheritedHistory: missing nested store for delegation "${agentId}" on "${sourceId}"`,
+      );
+    }
+    const targetDir = nestedAgentStateDir(targetId, agentId);
+    mkdirSync(dirname(targetDir), { recursive: true });
+    cpSync(sourceDir, targetDir, { recursive: true });
+  }
+}
+
+function copyPromptAttachments(
+  sourceId: string,
+  targetId: string,
+  names: ReadonlySet<string>,
+): void {
+  if (names.size === 0) return;
+
+  const sourceAttachmentsDir = attachmentsDirOf(sourceId);
+  const targetAttachmentsDir = attachmentsDirOf(targetId);
+  mkdirSync(targetAttachmentsDir, { recursive: true });
+
+  for (const name of names) {
+    const sourcePath = join(sourceAttachmentsDir, name);
+    if (!existsSync(sourcePath)) {
+      throw new Error(
+        `copyInheritedHistory: attachment "${name}" missing on "${sourceId}"`,
+      );
+    }
+    cpSync(sourcePath, join(targetAttachmentsDir, name));
+  }
+}
+
+/** Copy transcript, delegations, nested stores, and prompt attachments through a fork point. */
+export function copyInheritedHistory(input: CopyInheritedHistoryInput): void {
+  const { sourceId, targetId, forkedAtSeq } = input;
+  const forkEvent = readTranscriptEventAt(sourceId, forkedAtSeq);
+  const forkAtMs = timestampMs(
+    forkEvent.at,
+    `fork point seq ${forkedAtSeq}`,
+  );
+
+  const attachmentNames = copyTranscriptThroughFork(
+    sourceId,
+    targetId,
+    forkedAtSeq,
+  );
+  const keptAgentIds = copyDelegationsThroughFork(
+    sourceId,
+    targetId,
+    forkAtMs,
+  );
+  copyNestedDelegationStores(sourceId, targetId, keptAgentIds);
+  copyPromptAttachments(sourceId, targetId, attachmentNames);
 }
