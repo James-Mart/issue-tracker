@@ -238,7 +238,7 @@ picks them up. Never act from a cached outline.
 If the Story tree chip shows `branch=(unset)`, spawn `issue-tracker-git` with
 the start-branch stub before its first Task. When `branch=(unset)`, do **not**
 invent or substitute a branch name — pass only the stub fields; the git agent
-creates and records the git branch.
+creates or resumes the Story branch (worktree + `branchName`).
 
 ### Per-Task cycle (for each Task, in sequence)
 
