@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, Paperclip, Send, X } from "lucide-react";
+import { ArrowLeft, Download, Link2, Paperclip, Send, X } from "lucide-react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,8 @@ import { MessageScroller } from "@/components/ui/message-scroller";
 import { transcriptScrollerBottomKey } from "../lib/transcript-scroller";
 import { AssistantMetaRow } from "./assistant-meta-row";
 import { Composer } from "./composer";
+import { ForkedThreadComposerNotice } from "./forked-thread-composer-notice";
+import { ForkedThreadReadOnlyBadge } from "./forked-thread-read-only-badge";
 import { SubagentCard } from "./subagent-card";
 import {
   indexedStreamKey,
@@ -733,9 +735,11 @@ function ThreadBody({
 function ThreadStatusStrip({
   runActive,
   events,
+  readOnly,
 }: {
   runActive: boolean;
   events: readonly TranscriptEvent[];
+  readOnly?: boolean;
 }) {
   const label = threadRunLabel(runActive);
   const totals = sumUsageTotals(events);
@@ -765,10 +769,31 @@ function ThreadStatusStrip({
         />
         {label}
       </span>
+      {readOnly ? <ForkedThreadReadOnlyBadge /> : null}
       <span className="min-w-0 font-mono text-[11px] tabular-nums text-muted-foreground">
         {usageText}
       </span>
     </div>
+  );
+}
+
+function ForkedThreadSourceLink({
+  sourceConversationId,
+  onSelect,
+}: {
+  sourceConversationId: string;
+  onSelect: (conversationId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex min-w-0 items-center gap-1 font-mono text-[11px] text-[hsl(var(--current))] hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-testid="forked-thread-source-link"
+      onClick={() => onSelect(sourceConversationId)}
+    >
+      <Link2 className="h-3 w-3 shrink-0" aria-hidden />
+      <span className="truncate">Source conversation</span>
+    </button>
   );
 }
 
@@ -780,6 +805,9 @@ export function OpenThreadChrome({
   runActive,
   events,
   actions,
+  readOnly,
+  forkedFrom,
+  onSourceConversation,
 }: {
   title: string;
   onBack?: () => void;
@@ -787,6 +815,9 @@ export function OpenThreadChrome({
   runActive: boolean;
   events: readonly TranscriptEvent[];
   actions?: ReactNode;
+  readOnly?: boolean;
+  forkedFrom?: string;
+  onSourceConversation?: (conversationId: string) => void;
 }) {
   return (
     <div
@@ -811,8 +842,20 @@ export function OpenThreadChrome({
         </h2>
         {actions}
       </div>
+      {forkedFrom && onSourceConversation ? (
+        <div className="mt-1.5 min-w-0">
+          <ForkedThreadSourceLink
+            sourceConversationId={forkedFrom}
+            onSelect={onSourceConversation}
+          />
+        </div>
+      ) : null}
       <div className="mt-2">
-        <ThreadStatusStrip runActive={runActive} events={events} />
+        <ThreadStatusStrip
+          runActive={runActive}
+          events={events}
+          readOnly={readOnly}
+        />
       </div>
     </div>
   );
@@ -861,9 +904,14 @@ export function ConversationThread({
     runResyncKey,
   );
   const { data: conversations } = useConversationsQuery(true);
+  const setSelectedConversationId = useAgentsUiStore(
+    (s) => s.setSelectedConversationId,
+  );
   const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
   const meta = listMeta ?? metaProp;
+  const readOnly = listMeta?.readOnly === true;
+  const forkedFrom = listMeta?.forkedFrom;
   const title = meta?.title?.trim() || "Thread";
   const pendingMessageText =
     pendingText !== undefined
@@ -886,6 +934,9 @@ export function ConversationThread({
         runActive={runActive}
         events={events}
         actions={headerActions}
+        readOnly={readOnly}
+        forkedFrom={forkedFrom}
+        onSourceConversation={forkedFrom ? setSelectedConversationId : undefined}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ThreadBody
@@ -903,11 +954,14 @@ export function ConversationThread({
         />
       </div>
       {meta && !hideComposer ? (
-        <Composer
-          conversationId={conversationId}
-          model={meta.model}
-          runActive={runActive}
-        />
+        <>
+          {readOnly ? <ForkedThreadComposerNotice /> : null}
+          <Composer
+            conversationId={conversationId}
+            model={meta.model}
+            runActive={runActive}
+          />
+        </>
       ) : null}
     </div>
   );

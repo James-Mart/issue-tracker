@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({
     pendingText: undefined as string | null | undefined,
     runActive: false,
     metaPending: undefined as { text: string; at: string } | undefined,
+    readOnly: false,
+    forkedFrom: undefined as string | undefined,
     ready: true,
     historyFailed: false,
     historyErrorMessage: undefined as string | undefined,
@@ -80,8 +82,12 @@ vi.mock("../api/queries", () => ({
         title: "Test thread",
         model: "composer-2.5-fast",
         pendingMessage: threadUi.metaPending,
+        readOnly: threadUi.readOnly || undefined,
+        forkedFrom: threadUi.forkedFrom,
+        forkedAtSeq: threadUi.forkedFrom ? 2 : undefined,
       },
       { id: "conv-2", title: "Other thread", model: "composer-2.5-fast" },
+      { id: "conv-source", title: "Source thread", model: "composer-2.5-fast" },
     ],
   }),
   useConversationAttachmentsQuery: () => ({
@@ -198,6 +204,8 @@ export function resetThreadMocks() {
   threadUi.pendingText = undefined;
   threadUi.runActive = false;
   threadUi.metaPending = undefined;
+  threadUi.readOnly = false;
+  threadUi.forkedFrom = undefined;
   threadUi.ready = true;
   threadUi.historyFailed = false;
   threadUi.historyErrorMessage = undefined;
