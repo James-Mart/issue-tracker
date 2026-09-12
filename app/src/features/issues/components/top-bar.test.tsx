@@ -219,6 +219,19 @@ afterEach(() => {
   });
 });
 
+describe("TopBar layout", () => {
+  it("pins the header below shell with an opaque background", () => {
+    mounted = mountTopBar();
+    const header = mounted.container.querySelector("header");
+    expect(header).toBeInstanceOf(HTMLElement);
+    expect(header?.className).toMatch(/\bsticky\b/);
+    expect(header?.className).toMatch(/\btop-0\b/);
+    expect(header?.className).toMatch(/\bz-20\b/);
+    expect(header?.className).toMatch(/\bbg-background\b/);
+    expect(header?.className).toMatch(/\bshell:static\b/);
+  });
+});
+
 describe("TopBar backup chip", () => {
   it("maps healthy to the ordinary chip treatment", async () => {
     stubBackup(backupResponse({ state: "healthy" }));

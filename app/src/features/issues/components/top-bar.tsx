@@ -34,7 +34,7 @@ export function TopBar() {
   }, [ack, data?.derived, data?.issues, pending, projectId]);
 
   return (
-    <header className="flex min-h-12 shrink-0 flex-nowrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-3 shell:flex-wrap shell:px-4">
+    <header className="sticky top-0 z-20 flex min-h-12 shrink-0 flex-nowrap items-center justify-between gap-x-4 gap-y-1 border-b border-border bg-background px-3 shell:static shell:flex-wrap shell:px-4">
       <div className="flex min-w-0 items-center gap-2">
         <SidebarTrigger />
         <span
