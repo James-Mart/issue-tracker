@@ -1,3 +1,4 @@
+import { writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { describe, expect, it } from "vitest";
 import {
@@ -112,6 +113,126 @@ describe("agent sessions manager", () => {
         // Already gone.
       }
     }
+  });
+
+  it("resumes read-only conversations with a restricted tool profile", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Read-only fork",
+      projectId: "platform",
+      model: "auto",
+      agentId: "agent-readonly",
+    });
+    writeFileSync(
+      join(dirname(issuesRoot), "conversations", meta.id, "meta.json"),
+      JSON.stringify({ ...meta, readOnly: true }),
+    );
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "explain" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    expect(fake.created).toHaveLength(0);
+    expect(fake.resumed).toEqual([
+      {
+        agentId: "agent-readonly",
+        storeDir: join(
+          dirname(issuesRoot),
+          "conversations",
+          meta.id,
+          "agent-state",
+        ),
+        options: {
+          cwd: workspaceDir,
+          model: { id: "auto" },
+          disallowedTools: ["task", "edit", "delete", "shell"],
+          customTools: expect.objectContaining({
+            delegations: expect.any(Object),
+            file_cursor_sdk_bug: expect.any(Object),
+          }),
+        },
+      },
+    ]);
+    expect(fake.resumed[0]?.options.customTools?.delegate).toBeUndefined();
+    expect(
+      fake.resumed[0]?.options.customTools?.agent_stack_start,
+    ).toBeUndefined();
+    expect(
+      fake.resumed[0]?.options.customTools?.agent_stack_stop,
+    ).toBeUndefined();
+  });
+
+  it("creates read-only conversations with a restricted tool profile when resume fails", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const fake = createFakeAgentSdk({
+      resumeError: new Error("agent not found in store"),
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Read-only stale",
+      projectId: "platform",
+      model: "composer-2.5",
+      agentId: "agent-readonly-stale",
+    });
+    writeFileSync(
+      join(dirname(issuesRoot), "conversations", meta.id, "meta.json"),
+      JSON.stringify({ ...meta, readOnly: true }),
+    );
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "continue" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    expect(fake.created).toHaveLength(1);
+    expect(fake.created[0]).toMatchObject({
+      cwd: workspaceDir,
+      model: { id: "composer-2.5" },
+      disallowedTools: ["task", "edit", "delete", "shell"],
+    });
+    expect(fake.created[0]?.customTools?.delegate).toBeUndefined();
+    expect(fake.created[0]?.customTools?.agent_stack_start).toBeUndefined();
+    expect(fake.created[0]?.customTools?.agent_stack_stop).toBeUndefined();
+  });
+
+  it("creates read-only conversations with a restricted tool profile when agentId is absent", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const fake = createFakeAgentSdk({
+      stream: buildScriptedStreamWithAgentIdHint(),
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Read-only first turn",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    writeFileSync(
+      join(dirname(issuesRoot), "conversations", meta.id, "meta.json"),
+      JSON.stringify({ ...meta, readOnly: true }),
+    );
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await result.run.wait();
+
+    expect(fake.resumed).toHaveLength(0);
+    expect(fake.created).toHaveLength(1);
+    expect(fake.created[0]).toMatchObject({
+      cwd: workspaceDir,
+      model: { id: "composer-2.5" },
+      disallowedTools: ["task", "edit", "delete", "shell"],
+    });
+    expect(fake.created[0]?.customTools?.delegate).toBeUndefined();
+    expect(fake.created[0]?.customTools?.agent_stack_start).toBeUndefined();
+    expect(fake.created[0]?.customTools?.agent_stack_stop).toBeUndefined();
   });
 
   it("resumes when meta.agentId is set", async () => {

@@ -13,6 +13,7 @@ import {
   removeConversationAttachment,
 } from "../services/conversation-attachments.js";
 import { IssueError } from "../services/errors.js";
+import { forkConversation } from "../services/conversation-fork.js";
 import {
   createConversation,
   deleteConversation,
@@ -35,6 +36,13 @@ import {
 
 const DEFAULT_TITLE = "New conversation";
 const DEFAULT_MODEL = "auto";
+
+function parseForkSeqBody(raw: unknown): number | { error: string } {
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
+    return { error: "seq must be a non-negative integer" };
+  }
+  return raw;
+}
 
 function parseSinceSeqQuery(raw: unknown): number | { error: string } {
   if (raw === undefined) return 0;
@@ -440,6 +448,21 @@ export function createConversationsRouter(
         sessions,
         res,
       );
+    }),
+  );
+
+  router.post(
+    "/:id/fork",
+    asyncRoute(async (req, res) => {
+      const body = req.body as { seq?: unknown };
+      const seq = parseForkSeqBody(body.seq);
+      if (typeof seq === "object") {
+        res.status(400).json({ error: seq.error });
+        return;
+      }
+
+      const id = await forkConversation(req.params.id, { seq });
+      res.status(201).json({ id });
     }),
   );
 

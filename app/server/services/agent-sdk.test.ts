@@ -221,6 +221,26 @@ describe("createAgent", () => {
 
     expect(createSdkAgent.mock.calls[0]![0].tools).toEqual([]);
   });
+
+  it("forwards disallowedTools to Agent.create", async () => {
+    const createSdkAgent = vi.fn(
+      async (_options: AgentOptions) => makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key-abc" });
+
+    await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+      disallowedTools: ["task", "edit", "delete", "shell"],
+    });
+
+    expect(createSdkAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        disallowedTools: ["task", "edit", "delete", "shell"],
+      }),
+    );
+  });
 });
 
 describe("resumeAgent", () => {
@@ -347,6 +367,29 @@ describe("resumeAgent", () => {
     expect(resumeSdkAgent).toHaveBeenCalledTimes(1);
     expect(resumeSdkAgent.mock.calls[0]![1]?.local?.customTools).toBe(
       SAMPLE_CUSTOM_TOOLS,
+    );
+  });
+
+  it("forwards tools and disallowedTools to Agent.resume", async () => {
+    const resumeSdkAgent = vi.fn(
+      async (_id: string, _options?: Partial<AgentOptions>) =>
+        makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-xyz" });
+
+    await sdk.resumeAgent("agent-1", STORE_DIR, {
+      cwd: "/repo",
+      model: MODEL,
+      tools: ["read"],
+      disallowedTools: ["task", "edit", "delete", "shell"],
+    });
+
+    expect(resumeSdkAgent).toHaveBeenCalledWith(
+      "agent-1",
+      expect.objectContaining({
+        tools: ["read"],
+        disallowedTools: ["task", "edit", "delete", "shell"],
+      }),
     );
   });
 });
