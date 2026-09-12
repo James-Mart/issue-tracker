@@ -202,6 +202,53 @@ function persistNewConversation(
   return meta;
 }
 
+export type CreateForkedConversationInput = {
+  title: string;
+  projectId: string;
+  model: string;
+  agentId: string;
+  forkedFrom: string;
+  forkedAtSeq: number;
+};
+
+/** Write fork meta + empty transcript/delegations. Caller must hold `serialize()`. */
+export function persistForkedConversation(
+  input: CreateForkedConversationInput,
+): ConversationMeta {
+  const title = input.title.trim();
+  if (!title) throw new IssueError("validation", "title is required");
+  const projectId = input.projectId.trim();
+  if (!projectId) throw new IssueError("validation", "projectId is required");
+  const model = input.model.trim();
+  if (!model) throw new IssueError("validation", "model is required");
+  const agentId = input.agentId.trim();
+  if (!agentId) throw new IssueError("validation", "agentId is required");
+  const forkedFrom = input.forkedFrom.trim();
+  if (!forkedFrom) throw new IssueError("validation", "forkedFrom is required");
+  if (!Number.isInteger(input.forkedAtSeq) || input.forkedAtSeq < 0) {
+    throw new IssueError(
+      "validation",
+      "forkedAtSeq must be a non-negative integer",
+    );
+  }
+
+  return persistNewConversation({
+    title,
+    projectId,
+    model,
+    agentId,
+    forkedFrom,
+    forkedAtSeq: input.forkedAtSeq,
+    readOnly: true,
+  });
+}
+
+export function createForkedConversation(
+  input: CreateForkedConversationInput,
+): Promise<ConversationMeta> {
+  return serialize(() => persistForkedConversation(input));
+}
+
 export function createConversation(
   input: CreateConversationInput,
 ): Promise<ConversationMeta> {

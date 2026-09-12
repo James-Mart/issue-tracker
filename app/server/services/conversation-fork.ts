@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   cpSync,
   existsSync,
@@ -17,6 +18,12 @@ import {
   type TranscriptEvent,
 } from "../schemas/conversation.js";
 import { conversationsDir } from "../config.js";
+import {
+  persistForkedConversation,
+  readConversationMeta,
+  serialize,
+} from "./conversations.js";
+import { IssueError } from "./errors.js";
 import {
   effectiveTranscriptSeq,
   parseTranscriptEvent,
@@ -466,6 +473,52 @@ function copyPromptAttachments(
     }
     cpSync(sourcePath, join(targetAttachmentsDir, name));
   }
+}
+
+function forkValidationError(err: unknown): IssueError {
+  const message = err instanceof Error ? err.message : String(err);
+  return new IssueError("validation", message);
+}
+
+/** Assemble a read-only fork of a source conversation at a transcript position. */
+export function forkConversation(
+  sourceId: string,
+  input: { seq: number },
+): Promise<string> {
+  return serialize(() => {
+    const sourceMeta = readConversationMeta(sourceId);
+    let forkPoint: ResolvedForkPoint;
+    try {
+      forkPoint = resolveForkPoint(sourceId, input.seq);
+    } catch (err) {
+      throw forkValidationError(err);
+    }
+
+    const agentId = randomUUID();
+    const title = `Fork @ turn ${forkPoint.turnNumber} — ${sourceMeta.title}`;
+    const meta = persistForkedConversation({
+      title,
+      projectId: sourceMeta.projectId,
+      model: sourceMeta.model,
+      agentId,
+      forkedFrom: sourceId,
+      forkedAtSeq: input.seq,
+    });
+
+    copyAgentState({
+      sourceDir: agentStateDir(sourceId),
+      targetDir: agentStateDir(meta.id),
+      newAgentId: agentId,
+      keepRunId: forkPoint.runId,
+    });
+    copyInheritedHistory({
+      sourceId,
+      targetId: meta.id,
+      forkedAtSeq: input.seq,
+    });
+
+    return meta.id;
+  });
 }
 
 /** Copy transcript, delegations, nested stores, and prompt attachments through a fork point. */
