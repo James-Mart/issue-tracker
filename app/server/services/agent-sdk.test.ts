@@ -221,6 +221,26 @@ describe("createAgent", () => {
 
     expect(createSdkAgent.mock.calls[0]![0].tools).toEqual([]);
   });
+
+  it("forwards disallowedTools to Agent.create", async () => {
+    const createSdkAgent = vi.fn(
+      async (_options: AgentOptions) => makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key-abc" });
+
+    await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+      disallowedTools: ["task", "edit", "delete", "shell"],
+    });
+
+    expect(createSdkAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        disallowedTools: ["task", "edit", "delete", "shell"],
+      }),
+    );
+  });
 });
 
 describe("resumeAgent", () => {
