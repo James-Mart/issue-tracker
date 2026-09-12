@@ -3,7 +3,12 @@ import { bySequence, epicsBlockedBy, isProjectBoardChild } from "@server/order";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { type BoardKindFilter } from "./board-kind-filter";
 import { issuesById, projectIdOf } from "./build-tree";
-import { isInFlight, isIssueComplete } from "./derived";
+import {
+  isInFlight,
+  isIssueComplete,
+  isReadyToLandStory,
+  storyIsActivelyImplementing,
+} from "./derived";
 import { issueRailNodeState, type RailNodeState } from "./rail-state";
 
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
@@ -32,6 +37,8 @@ export function isAwaitingDirectionIdeaFlowItem(
 /** Ready-bucket Epic or project-level Story eligible for cockpit start-work. */
 export function isReadyWorkFlowItem(
   item: FlowItem,
+  issues: IssueRecord[] = [],
+  derived: Record<string, DerivedState> = {},
 ): item is FlowItem & {
   issue: Extract<IssueRecord, { kind: "epic" | "story" }>;
 } {
@@ -43,7 +50,10 @@ export function isReadyWorkFlowItem(
     return false;
   }
   if (item.issue.kind === "epic") {
-    return item.state?.epicStatus === "todo";
+    return (
+      item.state?.epicStatus === "todo" ||
+      epicPlacedInReady(item.issue.id, issues, derived)
+    );
   }
   if (item.issue.kind === "story") {
     return item.state?.storyStatus === "not-started";
@@ -70,6 +80,7 @@ export type DepGraphModel = {
 
 export type FlowBuckets = {
   awaitingPlanning: FlowItem[];
+  readyToLand: FlowItem[];
   ready: FlowItem[];
   inFlight: FlowItem[];
   blocked: FlowItem[];
@@ -157,17 +168,81 @@ export function inFlightTaskOf(
   return tasks[0];
 }
 
+function epicChildStories(
+  epicId: string,
+  issues: IssueRecord[],
+): Array<IssueRecord & { kind: "story" }> {
+  return issues.filter(
+    (candidate): candidate is IssueRecord & { kind: "story" } =>
+      candidate.kind === "story" && candidate.partOf === epicId,
+  );
+}
+
+function epicHasActivelyImplementingChild(
+  epicId: string,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): boolean {
+  return epicChildStories(epicId, issues).some((child) =>
+    storyIsActivelyImplementing(child, derived[child.id], issues),
+  );
+}
+
+function epicEveryUnmergedChildReadyToLand(
+  epicId: string,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): boolean {
+  const unmerged = epicChildStories(epicId, issues).filter(
+    (child) => derived[child.id]?.storyStatus !== "merged" && !child.merged,
+  );
+  return (
+    unmerged.length > 0 &&
+    unmerged.every((child) =>
+      isReadyToLandStory(child, derived[child.id], issues),
+    )
+  );
+}
+
+function epicPlacedInReady(
+  epicId: string,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): boolean {
+  if (derived[epicId]?.liveRun) return false;
+  return (
+    !epicHasActivelyImplementingChild(epicId, issues, derived) &&
+    epicChildStories(epicId, issues).some(
+      (child) => derived[child.id]?.storyStatus === "not-started",
+    )
+  );
+}
+
+function shouldOmitEpic(
+  epicId: string,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): boolean {
+  return (
+    !epicHasActivelyImplementingChild(epicId, issues, derived) &&
+    epicEveryUnmergedChildReadyToLand(epicId, issues, derived)
+  );
+}
+
 function isInFlightBucket(
   issue: IssueRecord & { kind: "story" | "epic" | "idea" },
   state: DerivedState | undefined,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
 ): boolean {
   if (issue.kind === "idea") return state?.ideaStatus === "planning";
   if (issue.kind === "story") {
-    return (
-      state?.storyStatus === "in-progress" || state?.storyStatus === "pr-open"
-    );
+    return storyIsActivelyImplementing(issue, state, issues);
   }
-  return state?.epicStatus === "in-progress";
+  return (
+    state?.liveRun === true ||
+    epicHasActivelyImplementingChild(issue.id, issues, derived)
+  );
 }
 
 function isRecentlyMerged(
@@ -178,10 +253,13 @@ function isRecentlyMerged(
 }
 
 /**
- * Bucket Stories, Epics, and Ideas into awaitingPlanning / ready / inFlight /
- * blocked / recentlyMerged. Pure view-model — no I/O. `inFlight` is broader
- * than the `isInFlight` liveness helper: it includes `pr-open` Stories and
- * Ideas whose status is `planning`. Captured Ideas go to `awaitingPlanning`.
+ * Bucket Stories, Epics, and Ideas into awaitingPlanning / readyToLand /
+ * ready / inFlight / blocked / recentlyMerged. Pure view-model — no I/O.
+ * `inFlight` is glowing active work: Ideas whose status is `planning`,
+ * Stories that `storyIsActivelyImplementing`, and Epics with an actively
+ * implementing child or a live implementing run. Ready-to-land Stories
+ * (including epic-children) go to `readyToLand`. Captured Ideas go to
+ * `awaitingPlanning`.
  */
 export function flowBuckets(
   issues: IssueRecord[],
@@ -189,15 +267,22 @@ export function flowBuckets(
   scope: FlowScope = {},
 ): FlowBuckets {
   const byId = issuesById(issues);
+  const inScope = (issue: IssueRecord) =>
+    scope.projectId === undefined ||
+    projectIdOf(issue.id, byId) === scope.projectId;
   const candidates = issues.filter(
     (issue): issue is IssueRecord & { kind: "story" | "epic" | "idea" } => {
-      if (!isFlowTopLevelRow(issue, byId, derived)) return false;
-      if (scope.projectId === undefined) return true;
-      return projectIdOf(issue.id, byId) === scope.projectId;
+      if (!inScope(issue)) return false;
+      if (isFlowTopLevelRow(issue, byId, derived)) return true;
+      return (
+        issue.kind === "story" &&
+        isReadyToLandStory(issue, derived[issue.id], issues)
+      );
     },
   );
 
   const awaitingPlanning: FlowItem[] = [];
+  const readyToLand: FlowItem[] = [];
   const ready: FlowItem[] = [];
   const inFlight: FlowItem[] = [];
   const blocked: FlowItem[] = [];
@@ -210,8 +295,12 @@ export function flowBuckets(
       awaitingPlanning.push(item);
     } else if (state?.blocked || state?.planNotFinal) {
       blocked.push(item);
-    } else if (isInFlightBucket(issue, state)) {
+    } else if (isReadyToLandStory(issue, state, issues)) {
+      readyToLand.push(item);
+    } else if (isInFlightBucket(issue, state, issues, derived)) {
       inFlight.push(item);
+    } else if (issue.kind === "epic" && shouldOmitEpic(issue.id, issues, derived)) {
+      continue;
     } else if (isRecentlyMerged(issue, state)) {
       recentlyMerged.push(item);
     } else {
@@ -223,7 +312,14 @@ export function flowBuckets(
     b.issue.updatedAt.localeCompare(a.issue.updatedAt),
   );
 
-  return { awaitingPlanning, ready, inFlight, blocked, recentlyMerged };
+  return {
+    awaitingPlanning,
+    readyToLand,
+    ready,
+    inFlight,
+    blocked,
+    recentlyMerged,
+  };
 }
 
 /**

@@ -83,6 +83,11 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     hideWhenEmpty: true,
   },
   {
+    key: "readyToLand",
+    label: "Ready to land",
+    hideWhenEmpty: true,
+  },
+  {
     key: "inFlight",
     label: "In flight",
     empty: "Nothing in flight. Pick up Ready work or start a Story.",
@@ -138,6 +143,7 @@ export function partitionCockpitBuckets(buckets: FlowBuckets): {
     needsAttention,
     buckets: {
       awaitingPlanning: take(buckets.awaitingPlanning),
+      readyToLand: take(buckets.readyToLand),
       ready: take(buckets.ready),
       inFlight: take(buckets.inFlight),
       blocked: take(buckets.blocked),

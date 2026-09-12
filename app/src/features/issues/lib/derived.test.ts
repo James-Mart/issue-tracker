@@ -17,8 +17,10 @@ import {
   hasInFlightWork,
   isInFlight,
   isIssueComplete,
+  isReadyToLandStory,
   leafTaskProgressCount,
   leafTasksOf,
+  storyIsActivelyImplementing,
 } from "./derived";
 
 const timestamps = {
@@ -227,6 +229,70 @@ describe("isIssueComplete", () => {
       isIssueComplete(
         { id: "i", kind: "idea", title: "i", partOf: "p", ...timestamps },
         undefined,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("isReadyToLandStory", () => {
+  it("accepts pr-open and manual-complete Stories, not merged or in-progress", () => {
+    const pr = story("pr");
+    const manual = { ...story("manual"), mergePolicy: "manual" as const };
+    const done = { ...task("t", "done"), partOf: "manual" };
+    const issues = [pr, manual, done];
+
+    expect(
+      isReadyToLandStory(pr, { blocked: false, storyStatus: "pr-open" }, issues),
+    ).toBe(true);
+    expect(
+      isReadyToLandStory(
+        manual,
+        { blocked: false, storyStatus: "in-progress", mergePolicy: "manual" },
+        issues,
+      ),
+    ).toBe(true);
+    expect(
+      isReadyToLandStory(
+        story("active"),
+        { blocked: false, storyStatus: "in-progress" },
+        [story("active")],
+      ),
+    ).toBe(false);
+    expect(
+      isReadyToLandStory(
+        { ...pr, merged: true },
+        { blocked: false, storyStatus: "merged" },
+        issues,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("storyIsActivelyImplementing", () => {
+  it("is true only for in-progress Stories that are not Ready to land", () => {
+    const s = story("s");
+    const manual = { ...story("manual"), mergePolicy: "manual" as const };
+    const done = { ...task("t", "done"), partOf: "manual" };
+
+    expect(
+      storyIsActivelyImplementing(
+        s,
+        { blocked: false, storyStatus: "in-progress" },
+        [s],
+      ),
+    ).toBe(true);
+    expect(
+      storyIsActivelyImplementing(
+        manual,
+        { blocked: false, storyStatus: "in-progress", mergePolicy: "manual" },
+        [manual, done],
+      ),
+    ).toBe(false);
+    expect(
+      storyIsActivelyImplementing(
+        s,
+        { blocked: false, storyStatus: "pr-open" },
+        [s],
       ),
     ).toBe(false);
   });

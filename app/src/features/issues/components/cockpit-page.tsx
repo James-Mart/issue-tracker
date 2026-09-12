@@ -253,7 +253,13 @@ export function CockpitPage() {
                     drillInState={{
                       issueBackStack: [{ kind: "cockpit" }],
                     }}
-                    actions={<FlowRowActions item={item} />}
+                    actions={
+                      <FlowRowActions
+                        item={item}
+                        issues={issues}
+                        derived={derivedForBuckets}
+                      />
+                    }
                   />
                 )}
               />
@@ -262,7 +268,7 @@ export function CockpitPage() {
         </div>
       );
     },
-    [byId, fault, issues, projectOrder],
+    [byId, derivedForBuckets, fault, issues, projectOrder],
   );
 
   return (

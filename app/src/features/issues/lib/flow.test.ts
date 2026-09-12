@@ -125,6 +125,7 @@ function ids(items: { issue: IssueRecord }[]): string[] {
 function bucketIds(buckets: FlowBuckets): Record<keyof FlowBuckets, string[]> {
   return {
     awaitingPlanning: ids(buckets.awaitingPlanning),
+    readyToLand: ids(buckets.readyToLand),
     ready: ids(buckets.ready),
     inFlight: ids(buckets.inFlight),
     blocked: ids(buckets.blocked),
@@ -160,10 +161,13 @@ describe("flowBuckets", () => {
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
 
-    expect(ids(buckets.blocked).sort()).toEqual(["blocked-epic"].sort());
+    expect(ids(buckets.blocked).sort()).toEqual(
+      ["blocked-epic", "blocked-story"].sort(),
+    );
     expect(ids(buckets.inFlight).sort()).toEqual(["flight-epic"].sort());
     expect(ids(buckets.recentlyMerged).sort()).toEqual(["done-epic"].sort());
     expect(ids(buckets.ready).sort()).toEqual(["ready-epic"].sort());
+    expect(ids(buckets.readyToLand)).toEqual(["pr-story"]);
   });
 
   it("puts blocked ahead of inFlight and recentlyMerged", () => {
@@ -294,13 +298,15 @@ describe("flowBuckets", () => {
     const scoped = flowBuckets(issues, derived, { projectId: "p1" });
     expect(ids(scoped.ready).sort()).toEqual(["e1"].sort());
     expect(scoped.inFlight).toEqual([]);
+    expect(scoped.readyToLand).toEqual([]);
 
     const all = flowBuckets(issues, derived, {});
     expect(ids(all.ready).sort()).toEqual(["e1"].sort());
-    expect(ids(all.inFlight).sort()).toEqual(["e2"].sort());
+    expect(ids(all.inFlight)).toEqual([]);
+    expect(ids(all.readyToLand)).toEqual(["s2"]);
   });
 
-  it("rolls child Story pr-open into the parent Epic inFlight bucket", () => {
+  it("omits an Epic when every unmerged child is Ready to land", () => {
     const issues = [project("p"), epic("e", "p"), story("s", "e")];
     const derived: Record<string, DerivedState> = {
       e: { blocked: false, epicStatus: "in-progress" },
@@ -308,7 +314,8 @@ describe("flowBuckets", () => {
     };
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
-    expect(ids(buckets.inFlight)).toEqual(["e"]);
+    expect(ids(buckets.readyToLand)).toEqual(["s"]);
+    expect(ids(buckets.inFlight)).toEqual([]);
     expect(ids(buckets.ready)).toEqual([]);
   });
 
@@ -371,6 +378,7 @@ describe("flowBuckets", () => {
     const allCockpitIds = [
       ...ids(needsAttention),
       ...ids(buckets.awaitingPlanning),
+      ...ids(buckets.readyToLand),
       ...ids(buckets.ready),
       ...ids(buckets.inFlight),
       ...ids(buckets.blocked),
@@ -480,12 +488,14 @@ describe("flowBuckets", () => {
       project("p"),
       epic("blocked-epic", "p"),
       epic("flight-epic", "p"),
+      story("flight-story", "flight-epic"),
       epic("done-epic", "p", t1),
       epic("ready-epic", "p"),
     ];
     const derived: Record<string, DerivedState> = {
       "blocked-epic": { blocked: true, epicStatus: "todo" },
       "flight-epic": { blocked: false, epicStatus: "in-progress" },
+      "flight-story": { blocked: false, storyStatus: "in-progress" },
       "done-epic": { blocked: false, epicStatus: "done" },
       "ready-epic": { blocked: false, epicStatus: "todo" },
     };
@@ -494,6 +504,7 @@ describe("flowBuckets", () => {
 
     expect(bucketIds(buckets)).toEqual({
       awaitingPlanning: [],
+      readyToLand: [],
       ready: ["ready-epic"],
       inFlight: ["flight-epic"],
       blocked: ["blocked-epic"],
@@ -507,11 +518,13 @@ describe("flowBuckets", () => {
       epic("parent", "p"),
       epic("nested", "parent"),
       story("s", "nested"),
+      story("active", "parent"),
     ];
     const derived: Record<string, DerivedState> = {
       parent: { blocked: false, epicStatus: "in-progress" },
       nested: { blocked: false, epicStatus: "todo" },
       s: { blocked: false, storyStatus: "not-started" },
+      active: { blocked: false, storyStatus: "in-progress" },
     };
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
@@ -519,6 +532,129 @@ describe("flowBuckets", () => {
     expect(ids(buckets.ready)).toEqual([]);
     expect(ids(buckets.blocked)).toEqual([]);
     expect(ids(buckets.recentlyMerged)).toEqual([]);
+    expect(ids(buckets.readyToLand)).toEqual([]);
+  });
+
+  it("places pr-open and manual-complete Stories in readyToLand", () => {
+    const issues = [
+      project("p"),
+      story("root-pr", "p"),
+      { ...story("root-manual", "p"), mergePolicy: "manual" as const },
+      { ...task("root-manual-t", "root-manual"), status: "done" as const },
+      epic("e", "p"),
+      story("child-pr", "e"),
+      { ...story("child-manual", "e"), mergePolicy: "manual" as const },
+      { ...task("child-manual-t", "child-manual"), status: "done" as const },
+    ];
+    const derived: Record<string, DerivedState> = {
+      "root-pr": { blocked: false, storyStatus: "pr-open" },
+      "root-manual": {
+        blocked: false,
+        storyStatus: "in-progress",
+        mergePolicy: "manual",
+      },
+      e: { blocked: false, epicStatus: "in-progress" },
+      "child-pr": { blocked: false, storyStatus: "pr-open" },
+      "child-manual": {
+        blocked: false,
+        storyStatus: "in-progress",
+        mergePolicy: "manual",
+      },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+    expect(ids(buckets.readyToLand).sort()).toEqual(
+      ["child-manual", "child-pr", "root-manual", "root-pr"].sort(),
+    );
+    expect(ids(buckets.inFlight)).toEqual([]);
+    expect(ids(buckets.ready)).toEqual([]);
+  });
+
+  it("holds only actively implementing work in inFlight", () => {
+    const issues = [
+      project("p"),
+      idea("planning-idea", "p"),
+      story("root-active", "p"),
+      story("root-pr", "p"),
+      epic("active-epic", "p"),
+      story("active-child", "active-epic"),
+      story("parked-child", "active-epic"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      "planning-idea": { blocked: false, ideaStatus: "planning" },
+      "root-active": { blocked: false, storyStatus: "in-progress" },
+      "root-pr": { blocked: false, storyStatus: "pr-open" },
+      "active-epic": { blocked: false, epicStatus: "in-progress" },
+      "active-child": { blocked: false, storyStatus: "in-progress" },
+      "parked-child": { blocked: false, storyStatus: "pr-open" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+    expect(ids(buckets.inFlight).sort()).toEqual(
+      ["active-epic", "planning-idea", "root-active"].sort(),
+    );
+    expect(ids(buckets.readyToLand).sort()).toEqual(
+      ["parked-child", "root-pr"].sort(),
+    );
+    expect(ids(buckets.ready)).toEqual([]);
+  });
+
+  it("treats a liveRun Epic as inFlight before child statuses catch up", () => {
+    const issues = [project("p"), epic("e", "p"), story("queued", "e")];
+    const derived: Record<string, DerivedState> = {
+      e: { blocked: false, epicStatus: "in-progress", liveRun: true },
+      queued: { blocked: false, storyStatus: "not-started" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+    expect(ids(buckets.inFlight)).toEqual(["e"]);
+    expect(ids(buckets.ready)).toEqual([]);
+  });
+
+  it("places an Epic in ready when a not-started child remains", () => {
+    const issues = [
+      project("p"),
+      epic("e", "p"),
+      story("landed", "e"),
+      story("queued", "e"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      e: { blocked: false, epicStatus: "in-progress" },
+      landed: { blocked: false, storyStatus: "pr-open" },
+      queued: { blocked: false, storyStatus: "not-started" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+    expect(ids(buckets.ready)).toEqual(["e"]);
+    expect(ids(buckets.readyToLand)).toEqual(["landed"]);
+    expect(ids(buckets.inFlight)).toEqual([]);
+    expect(
+      isReadyWorkFlowItem(
+        { issue: epic("e", "p"), state: derived.e },
+        issues,
+        derived,
+      ),
+    ).toBe(true);
+  });
+
+  it("lets the needs-attention overlay take a flagged Ready-to-land Story", () => {
+    const issues = [
+      project("p"),
+      {
+        ...story("flagged-pr", "p"),
+        needsAttention: true,
+        attentionReason: "check",
+      },
+    ];
+    const derived: Record<string, DerivedState> = {
+      "flagged-pr": { blocked: false, storyStatus: "pr-open" },
+    };
+
+    const { needsAttention, buckets } = partitionCockpitBuckets(
+      flowBuckets(issues, derived, { projectId: "p" }),
+    );
+    expect(ids(needsAttention)).toEqual(["flagged-pr"]);
+    expect(ids(buckets.readyToLand)).toEqual([]);
   });
 });
 
@@ -604,6 +740,15 @@ describe("isReadyWorkFlowItem", () => {
       isReadyWorkFlowItem({
         issue: epic("flight", "p"),
         state: { blocked: false, epicStatus: "in-progress" },
+      }),
+    ).toBe(false);
+    expect(
+      isReadyWorkFlowItem({
+        issue: epic("flight", "p"),
+        state: { blocked: false, epicStatus: "in-progress" },
+      }, [epic("flight", "p"), story("active", "flight")], {
+        flight: { blocked: false, epicStatus: "in-progress" },
+        active: { blocked: false, storyStatus: "in-progress" },
       }),
     ).toBe(false);
   });
