@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils/cn";
 
 /** Shared page chrome for route-level shells (detail, overview, cockpit). */
 export const PAGE_SHELL_CLASS =
-  "flex min-h-svh w-full min-w-0 flex-col gap-4 px-4 py-8 shell:px-6";
+  "flex min-h-[calc(100svh-3rem)] w-full min-w-0 flex-col gap-4 px-4 py-8 shell:min-h-svh shell:px-6";
 
 /**
  * Comfortable reading measure for long prose and form bodies only

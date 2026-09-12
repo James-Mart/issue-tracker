@@ -156,6 +156,19 @@ afterEach(() => {
 });
 
 describe("RestartControl", () => {
+  it("hides the status line on phone and keeps it at shell", async () => {
+    health = healthBody({ restartSupported: false });
+    const mounted = mountControl();
+    await flush();
+
+    const line = status(mounted.container);
+    expect(line).not.toBeNull();
+    expect(line?.className).toMatch(/\bhidden\b/);
+    expect(line?.className).toMatch(/\bshell:block\b/);
+
+    unmount(mounted);
+  });
+
   it("is disabled with its tooltip when restart is not supported", async () => {
     health = healthBody({ restartSupported: false });
     const mounted = mountControl();

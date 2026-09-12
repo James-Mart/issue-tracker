@@ -127,7 +127,7 @@ export function RestartControl() {
               variant="outline"
               size="icon-sm"
               disabled={disabled}
-              aria-label={RESTART_IDLE_LABEL}
+              aria-label={tooltip}
               aria-busy={pending}
               aria-describedby={status ? "restart-control-status" : undefined}
               data-testid="restart-control"
@@ -151,7 +151,7 @@ export function RestartControl() {
           role={failed ? "alert" : "status"}
           aria-live={failed ? "assertive" : "polite"}
           className={cn(
-            "max-w-[min(100%,20rem)] text-right font-mono text-[11px] leading-snug",
+            "hidden max-w-[min(100%,20rem)] text-right font-mono text-[11px] leading-snug shell:block",
             pending && "text-[hsl(var(--current))]",
             failed && "text-[hsl(var(--warning))]",
             !supported && "text-muted-foreground",
