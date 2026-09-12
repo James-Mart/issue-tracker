@@ -155,15 +155,33 @@ function unconfiguredBackup(): BackupResponse {
   };
 }
 
-function setupNudge(container: HTMLElement): HTMLElement {
-  const nudge = container.querySelector('[data-testid="backup-setup-nudge"]');
-  if (!(nudge instanceof HTMLElement)) {
-    throw new Error("Missing backup setup nudge");
+function mobileSetupNudge(container: HTMLElement): HTMLAnchorElement {
+  const nudges = container.querySelectorAll('[data-testid="backup-setup-nudge"]');
+  for (const nudge of nudges) {
+    if (
+      nudge instanceof HTMLAnchorElement &&
+      nudge.className.includes("shell:hidden")
+    ) {
+      return nudge;
+    }
   }
-  return nudge;
+  throw new Error("Missing phone backup setup nudge");
 }
 
-function dismissNudge(container: HTMLElement): void {
+function desktopSetupNudge(container: HTMLElement): HTMLElement {
+  const nudges = container.querySelectorAll('[data-testid="backup-setup-nudge"]');
+  for (const nudge of nudges) {
+    if (
+      nudge instanceof HTMLElement &&
+      nudge.className.includes("shell:inline-flex")
+    ) {
+      return nudge;
+    }
+  }
+  throw new Error("Missing desktop backup setup nudge");
+}
+
+function dismissDesktopNudge(container: HTMLElement): void {
   const button = container.querySelector(
     '[data-testid="backup-setup-nudge-dismiss"]',
   );
@@ -297,12 +315,43 @@ describe("TopBar backup chip", () => {
     expect(backupChip(mounted.container).getAttribute("href")).toBe("/settings");
   });
 
-  it("renders the setup nudge when backup is unconfigured", async () => {
+  it("renders a compact CloudOff control on phone when backup is unconfigured", async () => {
     stubBackup(unconfiguredBackup());
     mounted = mountTopBar();
     await flush();
 
-    const nudge = setupNudge(mounted.container);
+    const nudge = mobileSetupNudge(mounted.container);
+    expect(mounted.container.querySelector('[data-testid="backup-chip"]')).toBeNull();
+    expect(nudge.getAttribute("href")).toBe("/settings");
+    expect(nudge.getAttribute("aria-label")).toBe("Set up store backup");
+    expect(nudge.textContent).not.toContain("Set up");
+    expect(
+      nudge.querySelector('[data-testid="backup-setup-nudge-dismiss"]'),
+    ).toBeNull();
+  });
+
+  it("keeps the phone setup control visible when dismissal is stored", async () => {
+    window.localStorage.setItem(BACKUP_SETUP_NUDGE_STORAGE_KEY, "1");
+    stubBackup(unconfiguredBackup());
+    mounted = mountTopBar();
+    await flush();
+
+    expect(mobileSetupNudge(mounted.container).getAttribute("href")).toBe(
+      "/settings",
+    );
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="backup-setup-nudge-dismiss"]',
+      ),
+    ).toBeNull();
+  });
+
+  it("renders the desktop setup nudge when backup is unconfigured", async () => {
+    stubBackup(unconfiguredBackup());
+    mounted = mountTopBar();
+    await flush();
+
+    const nudge = desktopSetupNudge(mounted.container);
     const link = nudge.querySelector("a");
     const dismiss = nudge.querySelector(
       '[data-testid="backup-setup-nudge-dismiss"]',
@@ -315,35 +364,41 @@ describe("TopBar backup chip", () => {
     expect(dismiss).not.toBe(link);
   });
 
-  it("hides the setup nudge after dismiss", async () => {
+  it("hides the desktop setup nudge after dismiss while keeping the phone control", async () => {
     stubBackup(unconfiguredBackup());
     mounted = mountTopBar();
     await flush();
 
-    dismissNudge(mounted.container);
+    dismissDesktopNudge(mounted.container);
 
-    expect(
-      mounted.container.querySelector('[data-testid="backup-setup-nudge"]'),
-    ).toBeNull();
+    expect(() => desktopSetupNudge(mounted.container)).toThrow(
+      "Missing desktop backup setup nudge",
+    );
+    expect(mobileSetupNudge(mounted.container).getAttribute("href")).toBe(
+      "/settings",
+    );
     expect(
       mounted.container.querySelector('[data-testid="backup-chip"]'),
     ).toBeNull();
   });
 
-  it("keeps the setup nudge dismissed across remount from persisted state", async () => {
+  it("keeps the desktop setup nudge dismissed across remount while the phone control stays", async () => {
     stubBackup(unconfiguredBackup());
     mounted = mountTopBar();
     await flush();
-    dismissNudge(mounted.container);
+    dismissDesktopNudge(mounted.container);
     unmount(mounted);
     mounted = null;
 
     mounted = mountTopBar();
     await flush();
 
-    expect(
-      mounted.container.querySelector('[data-testid="backup-setup-nudge"]'),
-    ).toBeNull();
+    expect(() => desktopSetupNudge(mounted.container)).toThrow(
+      "Missing desktop backup setup nudge",
+    );
+    expect(mobileSetupNudge(mounted.container).getAttribute("href")).toBe(
+      "/settings",
+    );
     expect(
       mounted.container.querySelector('[data-testid="backup-chip"]'),
     ).toBeNull();

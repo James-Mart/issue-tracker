@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Cloud, CloudOff, X } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { liveChip } from "@/components/ui/overlay-surfaces";
 import {
   backupChipAccessibleLabel,
@@ -28,14 +29,18 @@ export function BackupChip() {
   const state = data?.status.state;
   if (!state) return null;
   if (state === "unconfigured") {
-    if (nudgeDismissed) return null;
     return (
-      <BackupSetupNudge
-        onDismiss={() => {
-          writeBackupSetupNudgeDismissed(true, browserStorage);
-          setNudgeDismissed(true);
-        }}
-      />
+      <>
+        <BackupSetupNudgeMobile />
+        {!nudgeDismissed ? (
+          <BackupSetupNudgeDesktop
+            onDismiss={() => {
+              writeBackupSetupNudgeDismissed(true, browserStorage);
+              setNudgeDismissed(true);
+            }}
+          />
+        ) : null}
+      </>
     );
   }
 
@@ -65,11 +70,31 @@ export function BackupChip() {
   );
 }
 
-function BackupSetupNudge({ onDismiss }: { onDismiss: () => void }) {
+function BackupSetupNudgeMobile() {
+  return (
+    <Button
+      variant="outline"
+      size="icon-sm"
+      asChild
+      className="shrink-0 shell:hidden"
+    >
+      <Link
+        to="/settings"
+        data-testid="backup-setup-nudge"
+        aria-label={BACKUP_SETUP_NUDGE_LABEL}
+        title={BACKUP_SETUP_NUDGE_LABEL}
+      >
+        <CloudOff aria-hidden strokeWidth={2} />
+      </Link>
+    </Button>
+  );
+}
+
+function BackupSetupNudgeDesktop({ onDismiss }: { onDismiss: () => void }) {
   return (
     <span
       data-testid="backup-setup-nudge"
-      className={cn(liveChip, "min-w-0 shrink-0")}
+      className={cn(liveChip, "hidden min-w-0 shrink-0 shell:inline-flex")}
     >
       <Link
         to="/settings"
