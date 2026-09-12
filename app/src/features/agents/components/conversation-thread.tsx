@@ -49,6 +49,7 @@ import { ForkedThreadComposerNotice } from "./forked-thread-composer-notice";
 import {
   ForkPointInlineMarker,
   forkPointMarkerDueAfterSegment,
+  forkPointMarkerDueAfterTranscript,
   forkPointMarkerDueBeforeSegment,
   segmentEventIndices,
 } from "./fork-point-inline-marker";
@@ -616,6 +617,12 @@ function ThreadBody({
       transcriptRows.push(<ForkPointInlineMarker key="fork-point-marker" />);
       forkMarkerInserted = true;
     }
+  }
+
+  if (
+    forkPointMarkerDueAfterTranscript(forkAtEventIndex, forkMarkerInserted)
+  ) {
+    transcriptRows.push(<ForkPointInlineMarker key="fork-point-marker" />);
   }
 
   return (

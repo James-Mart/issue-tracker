@@ -122,4 +122,47 @@ describe("ConversationThread fork-point inline marker", () => {
     );
     expect(landmarks[markerIndex + 1]?.textContent).toContain("Forked turn");
   });
+
+  it("renders the marker at transcript tail when forkedAtSeq is trailing usage and no later turn exists yet", () => {
+    threadUi.forkedFrom = "conv-source";
+    threadUi.forkedAtSeq = 3;
+    transcriptState.events = [
+      {
+        type: "prompt",
+        text: "Inherited turn",
+        at: "2026-07-24T00:00:00.000Z",
+        seq: 1,
+      },
+      {
+        type: "assistant",
+        text: "Inherited reply",
+        at: "2026-07-24T00:00:01.000Z",
+        seq: 2,
+      },
+      {
+        type: "usage",
+        at: "2026-07-24T00:00:02.000Z",
+        seq: 3,
+        usage: {
+          totalTokens: 4,
+          inputTokens: 3,
+          outputTokens: 1,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        },
+      },
+    ];
+    ({ container, root } = mountThread("conv-1"));
+
+    expect(forkPointMarkers(container!)).toHaveLength(1);
+
+    const landmarks = transcriptLandmarks(container!);
+    const markerIndex = landmarks.findIndex((node) =>
+      node.matches('[data-testid="fork-point-inline-marker"]'),
+    );
+    expect(markerIndex).toBe(landmarks.length - 1);
+    expect(landmarks[markerIndex - 1]?.getAttribute("data-event")).toBe(
+      "assistant",
+    );
+  });
 });

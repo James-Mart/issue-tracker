@@ -38,6 +38,14 @@ export function forkPointMarkerDueAfterSegment(
   );
 }
 
+/** When the fork cut is a trailing omitted event and no later turn exists yet. */
+export function forkPointMarkerDueAfterTranscript(
+  forkAtEventIndex: number,
+  forkMarkerInserted: boolean,
+): boolean {
+  return forkAtEventIndex >= 0 && !forkMarkerInserted;
+}
+
 export function ForkPointInlineMarker() {
   return (
     <div
