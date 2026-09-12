@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NestedStep, TranscriptEvent } from "@server/schemas";
 import {
+  deriveTurns,
   groupOrdinaryNestedToolCalls,
   groupOrdinaryToolCalls,
   transcriptInfoLine,
@@ -338,6 +339,120 @@ describe("groupOrdinaryNestedToolCalls", () => {
         noCollapsed,
       ),
     ).toEqual([{ kind: "tool_use_group", steps: [a, b] }]);
+  });
+});
+
+function usageAt(seq: number): TranscriptEvent {
+  return {
+    type: "usage",
+    at,
+    seq,
+    usage: {
+      totalTokens: 1,
+      inputTokens: 1,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
+  };
+}
+
+describe("deriveTurns", () => {
+  it("yields one entry per prompt in a multi-turn transcript", () => {
+    expect(
+      deriveTurns([
+        { type: "prompt", at, seq: 1, text: "first" },
+        { type: "assistant", at, seq: 2, text: "one" },
+        usageAt(3),
+        { type: "prompt", at, seq: 4, text: "second" },
+        { type: "assistant", at, seq: 5, text: "two" },
+        usageAt(6),
+      ]),
+    ).toEqual([
+      { lastAssistantSeq: 2, lastEventSeq: 3, isLastTurn: false },
+      { lastAssistantSeq: 5, lastEventSeq: 6, isLastTurn: true },
+    ]);
+  });
+
+  it("puts lastEventSeq after lastAssistantSeq when usage trails the assistant", () => {
+    expect(
+      deriveTurns([
+        { type: "prompt", at, seq: 1, text: "go" },
+        { type: "assistant", at, seq: 2, text: "done" },
+        usageAt(3),
+        { type: "request", at, seq: 4, requestId: "req-1" },
+        {
+          type: "delegation_recovery",
+          at,
+          seq: 5,
+          failureClass: "auth",
+          madeProgress: false,
+          cancelledDelegations: 0,
+          message: "recovered",
+        },
+      ]),
+    ).toEqual([
+      { lastAssistantSeq: 2, lastEventSeq: 5, isLastTurn: true },
+    ]);
+  });
+
+  it("reports the final assistant after thinking and tool calls in the turn", () => {
+    expect(
+      deriveTurns([
+        { type: "prompt", at, seq: 1, text: "read it" },
+        { type: "thinking", at, seq: 2, text: "hmm" },
+        {
+          type: "tool_call",
+          at,
+          seq: 3,
+          callId: "c1",
+          name: "Read",
+          status: "completed",
+        },
+        { type: "assistant", at, seq: 4, text: "draft" },
+        { type: "thinking", at, seq: 5, text: "more" },
+        {
+          type: "tool_call",
+          at,
+          seq: 6,
+          callId: "c2",
+          name: "Grep",
+          status: "completed",
+        },
+        { type: "assistant", at, seq: 7, text: "final" },
+      ]),
+    ).toEqual([
+      { lastAssistantSeq: 7, lastEventSeq: 7, isLastTurn: true },
+    ]);
+  });
+
+  it("leaves lastAssistantSeq off a trailing turn that has no assistant yet", () => {
+    expect(
+      deriveTurns([
+        { type: "prompt", at, seq: 1, text: "first" },
+        { type: "assistant", at, seq: 2, text: "one" },
+        usageAt(3),
+        { type: "prompt", at, seq: 4, text: "second" },
+      ]),
+    ).toEqual([
+      { lastAssistantSeq: 2, lastEventSeq: 3, isLastTurn: false },
+      { lastEventSeq: 4, isLastTurn: true },
+    ]);
+  });
+
+  it("groups by stored seq first even when the array is out of order", () => {
+    expect(
+      deriveTurns([
+        usageAt(3),
+        { type: "assistant", at, seq: 2, text: "one" },
+        { type: "prompt", at, seq: 4, text: "second" },
+        { type: "prompt", at, seq: 1, text: "first" },
+        { type: "assistant", at, seq: 5, text: "two" },
+      ]),
+    ).toEqual([
+      { lastAssistantSeq: 2, lastEventSeq: 3, isLastTurn: false },
+      { lastAssistantSeq: 5, lastEventSeq: 5, isLastTurn: true },
+    ]);
   });
 });
 

@@ -143,6 +143,69 @@ export function groupOrdinaryNestedToolCalls(
   return segments;
 }
 
+/**
+ * Same order as `enclosingHumanTurn` in `run-sequence.ts`: stored `seq` first,
+ * then `at`. A turn owns every event from its `prompt` up to the next one.
+ */
+function compareTranscriptOrder(
+  a: { seq?: number; at: string },
+  b: { seq?: number; at: string },
+): number {
+  if (a.seq !== undefined && b.seq !== undefined && a.seq !== b.seq) {
+    return a.seq - b.seq;
+  }
+  return a.at.localeCompare(b.at);
+}
+
+/** One prompt-delimited turn. No ordinal — SDK run rows own turn numbering. */
+export type TranscriptTurn = {
+  /** Seq of the last `assistant` event; absent while the turn has none yet. */
+  lastAssistantSeq?: number;
+  /** Seq of the last event of any type — the fork cut. */
+  lastEventSeq: number;
+  /** True for the trailing turn, the only one that can be in flight. */
+  isLastTurn: boolean;
+};
+
+/**
+ * Derive one entry per `prompt`. `lastAssistantSeq` is where a fork icon
+ * renders; `lastEventSeq` is later whenever trailing `usage`, `request`, or
+ * `delegation_recovery` events follow the final assistant message.
+ */
+export function deriveTurns(
+  events: readonly TranscriptEvent[],
+): TranscriptTurn[] {
+  const ordered = events.slice().sort(compareTranscriptOrder);
+  const groups: TranscriptEvent[][] = [];
+
+  for (const event of ordered) {
+    if (event.type === "prompt") {
+      groups.push([event]);
+      continue;
+    }
+    const current = groups[groups.length - 1];
+    if (current) current.push(event);
+  }
+
+  return groups.map((group, index) => {
+    const last = group[group.length - 1];
+    if (last?.seq === undefined) {
+      throw new Error("deriveTurns: turn is missing a last event seq");
+    }
+    let lastAssistantSeq: number | undefined;
+    for (const event of group) {
+      if (event.type === "assistant" && event.seq !== undefined) {
+        lastAssistantSeq = event.seq;
+      }
+    }
+    return {
+      ...(lastAssistantSeq !== undefined ? { lastAssistantSeq } : {}),
+      lastEventSeq: last.seq,
+      isLastTurn: index === groups.length - 1,
+    };
+  });
+}
+
 /** Map bookkeeping events to labeled thread rows; null means omit from the body. */
 export function transcriptInfoLine(
   event: TranscriptEvent,

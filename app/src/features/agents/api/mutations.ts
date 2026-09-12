@@ -7,6 +7,7 @@ import {
   createConversation,
   deleteConversation,
   deleteConversationAttachment,
+  forkConversation,
   interruptConversationRun,
   sendConversationMessage,
   updateConversation,
@@ -59,6 +60,20 @@ export function useDeleteConversation() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
     },
+  });
+}
+
+export function useForkConversation() {
+  const qc = useQueryClient();
+  return useMutation<
+    { id: string },
+    Error,
+    { id: string; seq: number }
+  >({
+    mutationFn: ({ id, seq }) => forkConversation(id, { seq }),
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () =>
+      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() }),
   });
 }
 

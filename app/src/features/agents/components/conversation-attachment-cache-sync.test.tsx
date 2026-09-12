@@ -178,6 +178,7 @@ describe("Conversation attachment cache sync", () => {
         text: "See this",
         attachments: ["shot.png"],
         at: "2026-07-24T00:00:00.000Z",
+        seq: 1,
       },
     ];
 
@@ -240,6 +241,7 @@ describe("Conversation attachment cache sync", () => {
         text: "Review this log",
         attachments: ["notes.txt"],
         at: "2026-07-24T00:00:00.000Z",
+        seq: 1,
       },
     ];
 

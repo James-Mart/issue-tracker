@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, Paperclip, Send, X } from "lucide-react";
+import { ArrowLeft, Download, Link2, Paperclip } from "lucide-react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,6 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
@@ -23,19 +22,17 @@ import {
   conversationAttachmentApiPath,
   type ConversationAttachment,
 } from "../api/client";
-import {
-  useClearConversationPending,
-  useSendConversationMessage,
-  useUpdateConversationPending,
-} from "../api/mutations";
+import { useForkConversation } from "../api/mutations";
 import { useConversationEvents } from "../hooks/use-conversation-events";
 import { useConversationRunActive } from "../hooks/use-conversation-run-active";
+import { useAgentsUiStore } from "../store/use-agents-ui-store";
 import {
   deriveSubAgents,
   isSubAgentToolCall,
   type SubAgent,
 } from "../lib/subagent";
 import {
+  deriveTurns,
   groupOrdinaryToolCalls,
   transcriptInfoLine,
 } from "../lib/transcript-rows";
@@ -46,7 +43,18 @@ import {
 } from "../lib/thread-status";
 import { MessageScroller } from "@/components/ui/message-scroller";
 import { transcriptScrollerBottomKey } from "../lib/transcript-scroller";
+import { AssistantMetaRow } from "./assistant-meta-row";
 import { Composer } from "./composer";
+import { ForkedThreadComposerNotice } from "./forked-thread-composer-notice";
+import {
+  ForkPointInlineMarker,
+  forkPointMarkerDueAfterSegment,
+  forkPointMarkerDueAfterTranscript,
+  forkPointMarkerDueBeforeSegment,
+  segmentEventIndices,
+} from "./fork-point-inline-marker";
+import { ForkedThreadReadOnlyBadge } from "./forked-thread-read-only-badge";
+import { PendingMessageRow } from "./pending-message-row";
 import { SubagentCard } from "./subagent-card";
 import {
   indexedStreamKey,
@@ -405,134 +413,6 @@ function TranscriptEventRow({
   }
 }
 
-function PendingMessageRow({
-  conversationId,
-  text,
-  runActive,
-  model,
-}: {
-  conversationId: string;
-  text: string;
-  runActive: boolean;
-  model: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(text);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const updatePending = useUpdateConversationPending();
-  const clearPending = useClearConversationPending();
-  const sendMessage = useSendConversationMessage();
-
-  useEffect(() => {
-    if (!editing) setDraft(text);
-  }, [text, editing]);
-
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
-
-  const commitEdit = () => {
-    const trimmed = draft.trim();
-    if (!trimmed || trimmed === text) {
-      setEditing(false);
-      return;
-    }
-    updatePending.mutate(
-      { id: conversationId, text: trimmed },
-      { onSettled: () => setEditing(false) },
-    );
-  };
-
-  const sendNow = () => {
-    if (sendMessage.isPending) return;
-    sendMessage.mutate({
-      id: conversationId,
-      body: {
-        prompt: text,
-        ...(model.trim() ? { model: model.trim() } : {}),
-      },
-    });
-  };
-
-  return (
-    <div
-      className="mt-3 flex min-w-0 flex-col gap-2 rounded-lg border border-dashed border-border/70 bg-muted/30 px-3.5 py-2.5 opacity-70"
-      data-testid="pending-message-row"
-      data-run-active={runActive ? "true" : "false"}
-    >
-      <div className="flex min-w-0 items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-            {runActive ? "Queued" : "Not sent"}
-          </p>
-          {editing ? (
-            <form
-              className="min-w-0"
-              onSubmit={(event) => {
-                event.preventDefault();
-                commitEdit();
-              }}
-            >
-              <Input
-                ref={inputRef}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onBlur={commitEdit}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") setEditing(false);
-                }}
-                className="h-8 text-sm"
-                disabled={updatePending.isPending}
-                aria-label="Edit queued message"
-              />
-            </form>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="block w-full min-w-0 rounded-md text-left text-sm text-foreground hover:bg-accent/40"
-            >
-              <span className="whitespace-pre-wrap break-words">{text}</span>
-            </button>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 text-muted-foreground"
-          onClick={() => clearPending.mutate(conversationId)}
-          disabled={clearPending.isPending}
-          title="Remove queued message"
-          aria-label="Remove queued message"
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-      {!runActive ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <p className="min-w-0 text-xs text-muted-foreground">
-            The run ended before this message could send.
-          </p>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="h-7 gap-1 px-2"
-            onClick={sendNow}
-            disabled={sendMessage.isPending}
-            data-testid="pending-send-now"
-          >
-            <Send className="h-3.5 w-3.5" />
-            Send now
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function TranscriptHistoryFailed({
   errorMessage,
   isRetrying,
@@ -582,6 +462,7 @@ function ThreadBody({
   conversationId,
   model,
   keyboardInset,
+  forkedAtSeq,
 }: {
   events: TranscriptEvent[];
   ready: boolean;
@@ -594,6 +475,7 @@ function ThreadBody({
   conversationId: string;
   model: string;
   keyboardInset: number;
+  forkedAtSeq?: number;
 }) {
   const { data: storeAttachments, isLoading: attachmentsLoading } =
     useConversationAttachmentsQuery(conversationId);
@@ -601,6 +483,19 @@ function ThreadBody({
     () => new Map((storeAttachments ?? []).map((item) => [item.name, item])),
     [storeAttachments],
   );
+  const forkConversation = useForkConversation();
+  const setSelectedConversationId = useAgentsUiStore(
+    (s) => s.setSelectedConversationId,
+  );
+  const forkCuts = useMemo(() => {
+    const cuts = new Map<number, number>();
+    for (const turn of deriveTurns(events)) {
+      if (turn.lastAssistantSeq === undefined) continue;
+      if (turn.isLastTurn && runActive) continue;
+      cuts.set(turn.lastAssistantSeq, turn.lastEventSeq);
+    }
+    return cuts;
+  }, [events, runActive]);
 
   if (historyFailed) {
     return (
@@ -642,6 +537,93 @@ function ThreadBody({
     deriveSubAgents(events).map((agent) => [agent.callId, agent]),
   );
   const segments = groupOrdinaryToolCalls(events);
+  const forkAtEventIndex =
+    forkedAtSeq !== undefined
+      ? events.findIndex((event) => event.seq === forkedAtSeq)
+      : -1;
+  let forkMarkerInserted = false;
+  let maxRenderedEventIndex = -1;
+  const transcriptRows: ReactNode[] = [];
+
+  for (const segment of segments) {
+    const segmentIndices = segmentEventIndices(events, segment);
+    const segmentMinIndex = Math.min(...segmentIndices);
+    const segmentMaxIndex = Math.max(...segmentIndices);
+
+    if (
+      forkPointMarkerDueBeforeSegment(
+        forkAtEventIndex,
+        segmentMinIndex,
+        forkMarkerInserted,
+      )
+    ) {
+      transcriptRows.push(<ForkPointInlineMarker key="fork-point-marker" />);
+      forkMarkerInserted = true;
+    }
+
+    if (segment.kind === "tool_use_group") {
+      transcriptRows.push(
+        <ToolUseGroup
+          key={`tool_use_group-${segment.events[0]!.callId}`}
+          tools={segment.events}
+        />,
+      );
+    } else {
+      const index = events.indexOf(segment.event);
+      const forkSeq =
+        segment.event.type === "assistant" &&
+        segment.event.seq !== undefined
+          ? forkCuts.get(segment.event.seq)
+          : undefined;
+      transcriptRows.push(
+        <div key={eventKey(segment.event, index)} className="min-w-0">
+          <TranscriptEventRow
+            event={segment.event}
+            subAgentsByCallId={subAgentsByCallId}
+            thinkingOpen={
+              segment.event.type === "thinking" &&
+              isLiveThinking(events, index)
+            }
+            conversationId={conversationId}
+            attachmentByName={attachmentByName}
+            attachmentsLoading={attachmentsLoading}
+          />
+          {forkSeq !== undefined ? (
+            <AssistantMetaRow
+              at={segment.event.at}
+              onFork={() =>
+                forkConversation.mutate(
+                  { id: conversationId, seq: forkSeq },
+                  {
+                    onSuccess: (created) =>
+                      setSelectedConversationId(created.id),
+                  },
+                )
+              }
+            />
+          ) : null}
+        </div>,
+      );
+    }
+
+    maxRenderedEventIndex = Math.max(maxRenderedEventIndex, segmentMaxIndex);
+    if (
+      forkPointMarkerDueAfterSegment(
+        forkAtEventIndex,
+        maxRenderedEventIndex,
+        forkMarkerInserted,
+      )
+    ) {
+      transcriptRows.push(<ForkPointInlineMarker key="fork-point-marker" />);
+      forkMarkerInserted = true;
+    }
+  }
+
+  if (
+    forkPointMarkerDueAfterTranscript(forkAtEventIndex, forkMarkerInserted)
+  ) {
+    transcriptRows.push(<ForkPointInlineMarker key="fork-point-marker" />);
+  }
 
   return (
     <MessageScroller
@@ -656,31 +638,7 @@ function ThreadBody({
       aria-live="polite"
       aria-relevant="additions text"
     >
-      {segments.map((segment) => {
-        if (segment.kind === "tool_use_group") {
-          return (
-            <ToolUseGroup
-              key={`tool_use_group-${segment.events[0]!.callId}`}
-              tools={segment.events}
-            />
-          );
-        }
-        const index = events.indexOf(segment.event);
-        return (
-          <TranscriptEventRow
-            key={eventKey(segment.event, index)}
-            event={segment.event}
-            subAgentsByCallId={subAgentsByCallId}
-            thinkingOpen={
-              segment.event.type === "thinking" &&
-              isLiveThinking(events, index)
-            }
-            conversationId={conversationId}
-            attachmentByName={attachmentByName}
-            attachmentsLoading={attachmentsLoading}
-          />
-        );
-      })}
+      {transcriptRows}
       {pendingMessageText ? (
         <PendingMessageRow
           conversationId={conversationId}
@@ -696,9 +654,11 @@ function ThreadBody({
 function ThreadStatusStrip({
   runActive,
   events,
+  readOnly,
 }: {
   runActive: boolean;
   events: readonly TranscriptEvent[];
+  readOnly?: boolean;
 }) {
   const label = threadRunLabel(runActive);
   const totals = sumUsageTotals(events);
@@ -728,10 +688,31 @@ function ThreadStatusStrip({
         />
         {label}
       </span>
+      {readOnly ? <ForkedThreadReadOnlyBadge /> : null}
       <span className="min-w-0 font-mono text-[11px] tabular-nums text-muted-foreground">
         {usageText}
       </span>
     </div>
+  );
+}
+
+function ForkedThreadSourceLink({
+  sourceConversationId,
+  onSelect,
+}: {
+  sourceConversationId: string;
+  onSelect: (conversationId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex min-w-0 items-center gap-1 font-mono text-[11px] text-[hsl(var(--current))] hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-testid="forked-thread-source-link"
+      onClick={() => onSelect(sourceConversationId)}
+    >
+      <Link2 className="h-3 w-3 shrink-0" aria-hidden />
+      <span className="truncate">Source conversation</span>
+    </button>
   );
 }
 
@@ -743,6 +724,9 @@ export function OpenThreadChrome({
   runActive,
   events,
   actions,
+  readOnly,
+  forkedFrom,
+  onSourceConversation,
 }: {
   title: string;
   onBack?: () => void;
@@ -750,6 +734,9 @@ export function OpenThreadChrome({
   runActive: boolean;
   events: readonly TranscriptEvent[];
   actions?: ReactNode;
+  readOnly?: boolean;
+  forkedFrom?: string;
+  onSourceConversation?: (conversationId: string) => void;
 }) {
   return (
     <div
@@ -774,8 +761,20 @@ export function OpenThreadChrome({
         </h2>
         {actions}
       </div>
+      {forkedFrom && onSourceConversation ? (
+        <div className="mt-1.5 min-w-0">
+          <ForkedThreadSourceLink
+            sourceConversationId={forkedFrom}
+            onSelect={onSourceConversation}
+          />
+        </div>
+      ) : null}
       <div className="mt-2">
-        <ThreadStatusStrip runActive={runActive} events={events} />
+        <ThreadStatusStrip
+          runActive={runActive}
+          events={events}
+          readOnly={readOnly}
+        />
       </div>
     </div>
   );
@@ -824,9 +823,15 @@ export function ConversationThread({
     runResyncKey,
   );
   const { data: conversations } = useConversationsQuery(true);
+  const setSelectedConversationId = useAgentsUiStore(
+    (s) => s.setSelectedConversationId,
+  );
   const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
   const meta = listMeta ?? metaProp;
+  const readOnly = listMeta?.readOnly === true;
+  const forkedFrom = listMeta?.forkedFrom;
+  const forkedAtSeq = listMeta?.forkedAtSeq;
   const title = meta?.title?.trim() || "Thread";
   const pendingMessageText =
     pendingText !== undefined
@@ -849,6 +854,9 @@ export function ConversationThread({
         runActive={runActive}
         events={events}
         actions={headerActions}
+        readOnly={readOnly}
+        forkedFrom={forkedFrom}
+        onSourceConversation={forkedFrom ? setSelectedConversationId : undefined}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ThreadBody
@@ -863,14 +871,18 @@ export function ConversationThread({
           conversationId={conversationId}
           model={meta?.model ?? ""}
           keyboardInset={keyboardInset}
+          forkedAtSeq={forkedAtSeq}
         />
       </div>
       {meta && !hideComposer ? (
-        <Composer
-          conversationId={conversationId}
-          model={meta.model}
-          runActive={runActive}
-        />
+        <>
+          {readOnly ? <ForkedThreadComposerNotice /> : null}
+          <Composer
+            conversationId={conversationId}
+            model={meta.model}
+            runActive={runActive}
+          />
+        </>
       ) : null}
     </div>
   );
