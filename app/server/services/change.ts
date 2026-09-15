@@ -1,5 +1,6 @@
 import { bySequence } from "../order.js";
 import type { ChangeCommit, ChangeStats, Issue, IssueChange } from "../schemas.js";
+import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
@@ -147,7 +148,7 @@ async function assertCommitsContiguous(
     const to = shas[i + 1]!;
     const count = (
       await runGitOrCommitUnreachable(
-        ["rev-list", "--count", `${from}..${to}`],
+        ["rev-list", "--count", "--first-parent", `${from}..${to}`],
         workspace,
       )
     ).trim();
@@ -160,10 +161,15 @@ async function assertCommitsContiguous(
   }
 }
 
-async function readRollupChange(
+async function readStoryChange(
   issueId: string,
   workspace: string,
 ): Promise<IssueChange> {
+  const mergeBase = derive(readAll().issues).byId[issueId]?.mergeBase;
+  if (!mergeBase) {
+    return { state: "empty", reason: "no-merge-base" };
+  }
+
   const commits = collectDescendantCommits(issueId);
   if (commits.length === 0) {
     return { state: "empty", reason: "no-descendant-commits" };
@@ -172,12 +178,8 @@ async function readRollupChange(
   const shas = commits.map((commit) => commit.sha);
   await assertCommitsContiguous(shas, workspace);
 
-  const first = shas[0]!;
   const last = shas[shas.length - 1]!;
-  const base = (
-    await runGitOrCommitUnreachable(["rev-parse", `${first}^`], workspace)
-  ).trim();
-  const range = `${base}..${last}`;
+  const range = `${mergeBase}...${last}`;
   const statOut = await runGitOrCommitUnreachable(
     ["diff", "--shortstat", range],
     workspace,
@@ -342,7 +344,7 @@ export async function readIssueChange(issueId: string): Promise<IssueChange> {
     return readTaskChange(issue, workspace);
   }
   if (issue.kind === "story") {
-    return readRollupChange(issueId, workspace);
+    return readStoryChange(issueId, workspace);
   }
 
   throw new IssueError(

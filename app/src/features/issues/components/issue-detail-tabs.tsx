@@ -252,7 +252,15 @@ export function IssueDetailTabs({
             )}
             {...tabPanelVisibility(selected)}
           >
-            <IssueChangePanel issueId={issue.id} projectId={projectId} />
+            <IssueChangePanel
+              issueId={issue.id}
+              projectId={projectId}
+              mergeBase={
+                issue.kind === "story"
+                  ? derived?.[issue.id]?.mergeBase
+                  : undefined
+              }
+            />
           </div>
         );
       })}
