@@ -69,14 +69,18 @@ const MULTI_FILE_PATCH = [
   "+new",
 ].join("\n");
 
-function mountPanel(): HTMLDivElement {
+function mountPanel(mergeBase?: string): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
     root.render(
       <MemoryRouter>
-        <IssueChangePanel issueId="task-1" projectId="platform" />
+        <IssueChangePanel
+          issueId="task-1"
+          projectId="platform"
+          mergeBase={mergeBase}
+        />
       </MemoryRouter>,
     );
   });
@@ -206,6 +210,9 @@ describe("IssueChangePanel", () => {
       Array.from(container.querySelectorAll('[data-testid="file-diff"]')).map((el) => el.textContent),
     ).toEqual(["app/foo.ts", "app/bar.ts", "lib/baz.ts"]);
     expect(container.querySelector('[data-testid="issue-change-virtualizer"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="issue-change-recorded-commits"]')).toBeNull();
+    expect(container.querySelector('[data-testid="issue-change-merge-base"]')).toBeNull();
+    expect(container.textContent).not.toContain("Changes since");
     expect(
       container
         .querySelector('[data-testid="issue-change-file"][data-file-name="app/foo.ts"]')
@@ -326,6 +333,24 @@ describe("IssueChangePanel", () => {
     expect(container.querySelector('[data-testid="issue-change-fault-state"]')).toBeNull();
   });
 
+  it("renders no-merge-base as a waiting empty state, not a fault", () => {
+    changeQueryState.data = { state: "empty", reason: "no-merge-base" };
+
+    const container = mountPanel();
+    const empty = container.querySelector('[data-testid="issue-change-empty-state"]');
+
+    expect(empty?.getAttribute("data-empty-reason")).toBe("no-merge-base");
+    expect(container.textContent).toContain(
+      "Story diff waits until a merge base exists",
+    );
+    expect(container.textContent).toContain(
+      "Stacked stories inherit merge base from a parent branch.",
+    );
+    expect(container.querySelector('[data-testid="issue-change-fault-state"]')).toBeNull();
+    expect(empty?.querySelector("[data-fault]")).toBeNull();
+    expect(container.querySelector("[data-fault]")).toBeNull();
+  });
+
   it("renders workspace-unset as a fault with project settings action", () => {
     changeQueryState.error = new ApiError("Project workspace is not set", 400, {
       code: "validation",
@@ -384,14 +409,22 @@ describe("IssueChangePanel", () => {
 
     expect(fault?.getAttribute("data-fault")).toBe("commits-not-contiguous");
     expect(container.textContent).toContain("Diff unavailable");
-    expect(container.textContent).toContain("Commits are not contiguous in history");
+    expect(container.textContent).toContain("Unrecorded commits on the story line");
     expect(container.textContent).toContain(
-      "Child tasks recorded commits that are not adjacent in git history, so no combined diff can be shown for this issue.",
+      "Record the missing Task commit or remove the foreign commit from the story branch.",
     );
     expect(container.textContent).toContain(
       "commits are not contiguous in history between abc and def",
     );
+    expect(container.textContent).not.toContain("git rev-list");
     expect(container.querySelector('[data-testid="issue-change-empty-state"]')).toBeNull();
+
+    const reloadButton = container.querySelector("button");
+    expect(reloadButton?.textContent).toBe("Reload diff");
+    act(() => {
+      reloadButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(changeQueryState.refetch).toHaveBeenCalledTimes(1);
   });
 
   it("does not render empty-state chrome for faults", () => {
@@ -441,5 +474,58 @@ describe("IssueChangePanel", () => {
     expect(container.textContent).toContain("50 files +20000 -500 2 commits");
     expect(container.textContent).toContain("git diff");
     expect(container.textContent).toContain("git diff <first-sha>^..<last-sha>");
+  });
+
+  it("renders a loaded Story rail, Changes since, and the bare merge-base ref", () => {
+    changeQueryState.data = {
+      state: "loaded",
+      patch: MULTI_FILE_PATCH,
+      commits: [
+        { sha: "d67adba0123456789abcdef0123456789abcdef0", subject: "Add optional getOwner" },
+        {
+          sha: "7412a380123456789abcdef0123456789abcdef1",
+          subject: "Merge main @ c4d91e2 into story/auth-delegate",
+        },
+        { sha: "e7b03d10123456789abcdef0123456789abcdef2", subject: "Read story rollup" },
+      ],
+      stats: { filesChanged: 3, insertions: 3, deletions: 1 },
+    };
+
+    const container = mountPanel("main");
+    const rail = container.querySelector('[data-testid="issue-change-recorded-commits"]');
+    const rows = Array.from(
+      container.querySelectorAll('[data-testid="issue-change-recorded-commit"]'),
+    ).map((el) => el.textContent);
+
+    expect(rail).not.toBeNull();
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toContain("d67adba");
+    expect(rows[0]).toContain("Add optional getOwner");
+    expect(rows[1]).toContain("7412a38");
+    expect(rows[1]).toContain("Merge main @ c4d91e2 into story/auth-delegate");
+    expect(rows[2]).toContain("e7b03d1");
+    expect(rows[2]).toContain("Read story rollup");
+    expect(container.textContent).not.toContain("merge commit");
+
+    const mergeBase = container.querySelector('[data-testid="issue-change-merge-base"]');
+    expect(mergeBase?.textContent).toContain("Changes since");
+    expect(mergeBase?.textContent).toContain("main");
+    expect(mergeBase?.textContent).not.toMatch(/main @ /);
+    expect(container.querySelector('[data-testid="issue-change-scope-header"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="issue-change-file"]')).not.toBeNull();
+  });
+
+  it("uses three-dot merge-base git guidance when a Story change exceeds the ceiling", () => {
+    changeQueryState.error = new ApiError("patch exceeds render ceiling", 413, {
+      code: "change-too-large",
+      stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
+      commitCount: 2,
+    });
+
+    const container = mountPanel("main");
+
+    expect(container.querySelector('[data-testid="issue-change-too-large-state"]')).not.toBeNull();
+    expect(container.textContent).toContain("git diff main...<last>");
+    expect(container.textContent).not.toContain("git diff <first-sha>^..<last-sha>");
   });
 });

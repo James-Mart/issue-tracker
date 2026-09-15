@@ -56,6 +56,14 @@ vi.mock("../api/queries", async (importOriginal) => {
       error: changeQueryState.error,
     }),
     useCommentThreads: () => ({ threads: [], problems: [] }),
+    useIssuesQuery: () => ({
+      data: {
+        issues: [],
+        derived: {
+          "story-1": { blocked: false, mergeBase: "main" },
+        },
+      },
+    }),
   };
 });
 
@@ -205,5 +213,36 @@ describe("IssueDetailTabs diff tab", () => {
     const fileDiffs = container.querySelectorAll('[data-testid="file-diff"]');
     expect(fileDiffs).toHaveLength(1);
     expect(fileDiffs[0]?.textContent).toBe("foo.ts");
+    expect(container.querySelector('[data-testid="issue-change-recorded-commits"]')).toBeNull();
+    expect(container.querySelector('[data-testid="issue-change-merge-base"]')).toBeNull();
+  });
+
+  it("passes derived mergeBase into Story Diff so the rail and label render", () => {
+    changeQueryState.data = {
+      state: "loaded",
+      patch: [
+        "diff --git a/foo.ts b/foo.ts",
+        "index 1111111..2222222 100644",
+        "--- a/foo.ts",
+        "+++ b/foo.ts",
+        "@@ -1 +1,2 @@",
+        " line",
+        "+added line",
+      ].join("\n"),
+      commits: [
+        { sha: "0123456789abcdef0123456789abcdef01234567", subject: "Add foo" },
+      ],
+      stats: { filesChanged: 2, insertions: 34, deletions: 12 },
+    };
+
+    const { container } = mountTabs(story(), "/?tab=diff");
+
+    expect(container.querySelector('[data-testid="issue-change-recorded-commits"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="issue-change-merge-base"]')?.textContent).toContain(
+      "Changes since",
+    );
+    expect(container.querySelector('[data-testid="issue-change-merge-base"]')?.textContent).toContain(
+      "main",
+    );
   });
 });

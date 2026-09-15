@@ -23,10 +23,12 @@ import {
   ShellLoadingState,
   ShellState,
 } from "@/app/shell-state";
+import { Rail, RailNode } from "@/components/ui/rail";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError } from "@/lib/api/errors";
 import type { ChangeCommit, ChangeStats, IssueChange } from "@server/schemas";
+import { DetailEyebrow, SETTINGS_HEADING_CLASS } from "./detail-section";
 import { useCommentThreads, useIssueChangeQuery } from "../api/queries";
 import { loadFileDiffContents } from "../lib/issue-change-file-contents";
 import { useFocusDiffThread } from "../lib/issue-change-focus-thread";
@@ -156,20 +158,31 @@ function emptyStateCopy(reason: Extract<IssueChange, { state: "empty" }>["reason
         title: "No descendant tasks have recorded commits yet.",
         detail: "Rollup diffs appear when child tasks finish with commits.",
       };
+    case "no-merge-base":
+      return {
+        title: "Story diff waits until a merge base exists",
+        detail:
+          "Stacked stories inherit merge base from a parent branch. Name the parent branch or wait for it to merge before the diff can load.",
+      };
   }
 }
 
-function tooLargeStateCopy(details: ChangeTooLargeDetails): {
+function tooLargeStateCopy(
+  details: ChangeTooLargeDetails,
+  mergeBase?: string,
+): {
   title: string;
   detail: ReactNode;
 } {
   const { stats, commitCount } = details;
-  const gitCommand =
-    commitCount === 1
+  const gitCommand = mergeBase
+    ? `git diff ${mergeBase}...<last>`
+    : commitCount === 1
       ? "git show <commit-sha>"
       : "git diff <first-sha>^..<last-sha>";
-  const gitHint =
-    commitCount === 1
+  const gitHint = mergeBase
+    ? "Read it in the project workspace with git diff from the merge base through the last recorded descendant commit."
+    : commitCount === 1
       ? "Read it in the project workspace with git show on the commit sha recorded on this task."
       : "Read it in the project workspace with git diff from the parent of the first descendant commit through the last.";
 
@@ -212,12 +225,15 @@ function faultStateCopy(
       };
     case "commits-not-contiguous":
       return {
-        title: "Commits are not contiguous in history",
+        title: "Unrecorded commits on the story line",
         detail: (
-          <ShellFaultDetail
-            message={message}
-            hint="Child tasks recorded commits that are not adjacent in git history, so no combined diff can be shown for this issue."
-          />
+          <>
+            <span className="block">
+              Record the missing Task commit or remove the foreign commit from
+              the story branch.
+            </span>
+            <span className="mt-2 block font-mono text-xs">{message}</span>
+          </>
         ),
       };
   }
@@ -226,9 +242,11 @@ function faultStateCopy(
 export function IssueChangePanel({
   issueId,
   projectId,
+  mergeBase,
 }: {
   issueId: string;
   projectId: string;
+  mergeBase?: string;
 }) {
   const { data, isLoading, error, refetch, isFetching } = useIssueChangeQuery(issueId);
 
@@ -239,7 +257,7 @@ export function IssueChangePanel({
   if (error) {
     const tooLarge = parseChangeTooLarge(error);
     if (tooLarge) {
-      const copy = tooLargeStateCopy(tooLarge);
+      const copy = tooLargeStateCopy(tooLarge, mergeBase);
       return (
         <div data-testid="issue-change-too-large-state">
           <ShellState
@@ -314,7 +332,13 @@ export function IssueChangePanel({
     );
   }
 
-  return <IssueChangeLoadedPanel change={data} issueId={issueId} />;
+  return (
+    <IssueChangeLoadedPanel
+      change={data}
+      issueId={issueId}
+      mergeBase={mergeBase}
+    />
+  );
 }
 
 function fileComposerPaths(
@@ -506,12 +530,42 @@ function IssueChangeFileDiff({
   );
 }
 
+function RecordedCommitsRail({ commits }: { commits: ChangeCommit[] }) {
+  return (
+    <div data-testid="issue-change-recorded-commits">
+      <p className={SETTINGS_HEADING_CLASS}>Recorded commits</p>
+      <Rail>
+        {commits.map((commit, index) => (
+          <RailNode
+            key={commit.sha}
+            state={index === commits.length - 1 ? "in-flight" : "merged"}
+            edge="solid"
+            glow={false}
+            data-testid="issue-change-recorded-commit"
+            data-sha={commit.sha}
+            label={
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                <span className="font-mono text-[12px] tabular-nums text-muted-foreground">
+                  {shortSha(commit.sha)}
+                </span>
+                <span className="text-sm">{commit.subject}</span>
+              </span>
+            }
+          />
+        ))}
+      </Rail>
+    </div>
+  );
+}
+
 function IssueChangeLoadedPanel({
   change,
   issueId,
+  mergeBase,
 }: {
   change: Extract<IssueChange, { state: "loaded" }>;
   issueId: string;
+  mergeBase?: string;
 }) {
   const files = useMemo(() => fileDiffsFromPatch(change.patch), [change.patch]);
   const { threads } = useCommentThreads(issueId);
@@ -546,6 +600,18 @@ function IssueChangeLoadedPanel({
         className="flex min-w-0 flex-col gap-3"
         data-testid="issue-change-panel"
       >
+        {mergeBase ? (
+          <>
+            <RecordedCommitsRail commits={change.commits} />
+            <div
+              className="flex flex-wrap items-baseline gap-x-2"
+              data-testid="issue-change-merge-base"
+            >
+              <DetailEyebrow>Changes since</DetailEyebrow>
+              <span className="font-mono text-sm">{mergeBase}</span>
+            </div>
+          </>
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p
             className="font-mono text-[11px] tabular-nums text-muted-foreground"
