@@ -1291,15 +1291,27 @@ code change from recorded Task `commits`, never from a branch tip.
 returns an empty change. The response lists every commit in the series with
 its subject.
 
-**Story.** A Story's change is one combined net diff across its descendant
-Tasks in implementation order — each Task contributes its full series,
-oldest-first within the Task and Tasks in sibling order (stacked Stories
-depth-first). The range spans from the first commit of the first
-contributing Task to the last commit of the last one (`git diff <first>^..<last>`).
-Before computing the patch, every consecutive pair in that flattened list
-must be adjacent in history (`git rev-list --count A..B === 1`); otherwise
-the change is refused as non-contiguous. Tasks with no commits and `noDiff`
-Tasks contribute nothing.
+**Story.** A Story's change is the three-dot patch of what that Story
+lands on its derived `mergeBase` (the same value as
+`issue story get <id> mergeBase`): `git diff <mergeBase>...<last>`,
+with `--shortstat` on the same range. `last` is the last recorded
+own-Task commit in implementation order — each own Task contributes
+its full series, oldest-first within the Task and Tasks in sibling
+order. Stacked Stories are not included. The loaded response lists
+that recorded Task timeline, not the range endpoints.
+
+When derived `mergeBase` is unset, the change is empty with reason
+`no-merge-base` and no range is computed. When mergeBase is set but
+no own-Task commits contribute, the change is empty with reason
+`no-descendant-commits`. Tasks with no commits and `noDiff` Tasks
+contribute nothing.
+
+Before computing the patch, every consecutive pair in that flattened
+list must be adjacent on the first-parent history
+(`git rev-list --count --first-parent A..B === 1`); otherwise the
+change is refused as non-contiguous. A merge commit whose first
+parent is the previous waypoint passes; an unrecorded first-parent
+commit between waypoints fails.
 
 **Epic.** Epic change is not supported; open a Story or Task instead.
 

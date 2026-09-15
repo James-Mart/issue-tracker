@@ -129,9 +129,14 @@ function stubTaskRangeGit(opts: {
   patch: string;
   shortstat: string;
   subjects: Record<string, string>;
+  calls?: string[][];
 }): Promise<void> {
   const first = opts.commits[0]!;
+  const last = opts.commits[opts.commits.length - 1]!;
+  const twoDot = `${parentSha(first)}..${last}`;
+  const threeDot = `${parentSha(first)}...${last}`;
   return stubGitSpawner((args) => {
+    opts.calls?.push([...args]);
     if (args[0] === "rev-parse" && args[1] === `${first}^`) {
       return mockGitChild({ stdout: `${parentSha(first)}\n` });
     }
@@ -139,6 +144,65 @@ function stubTaskRangeGit(opts: {
       return mockGitChild({ stdout: opts.shortstat });
     }
     if (args[0] === "diff") {
+      if (args.includes(threeDot)) {
+        return mockGitChild({
+          code: 1,
+          stderr: `unexpected three-dot Task range: ${args.join(" ")}`,
+        });
+      }
+      if (!args.includes(twoDot)) {
+        return mockGitChild({
+          code: 1,
+          stderr: `unexpected Task range: ${args.join(" ")}`,
+        });
+      }
+      return mockGitChild({ stdout: opts.patch });
+    }
+    if (args[0] === "show" && args.includes("--format=%s")) {
+      const shaArg = args[args.length - 1]!;
+      return mockGitChild({ stdout: `${opts.subjects[shaArg] ?? "?"}\n` });
+    }
+    return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+  });
+}
+
+function stubStorySymdiffGit(opts: {
+  last: string;
+  mergeBase?: string;
+  patch: string;
+  shortstat: string;
+  subjects: Record<string, string>;
+  firstParentCount?: (range: string) => string;
+  calls?: string[][];
+}): Promise<void> {
+  const mergeBase = opts.mergeBase ?? "main";
+  const range = `${mergeBase}...${opts.last}`;
+  return stubGitSpawner((args) => {
+    opts.calls?.push([...args]);
+    if (args[0] === "rev-list" && args.includes("--count")) {
+      if (!args.includes("--first-parent")) {
+        return mockGitChild({ stdout: "5\n" });
+      }
+      const pair = args[args.length - 1]!;
+      const count = opts.firstParentCount?.(pair) ?? "1";
+      return mockGitChild({ stdout: `${count}\n` });
+    }
+    if (args[0] === "diff" && args.includes("--shortstat")) {
+      if (!args.includes(range)) {
+        return mockGitChild({
+          code: 1,
+          stderr: `unexpected shortstat: ${args.join(" ")}`,
+        });
+      }
+      return mockGitChild({ stdout: opts.shortstat });
+    }
+    if (args[0] === "diff") {
+      if (!args.includes(range)) {
+        return mockGitChild({
+          code: 1,
+          stderr: `unexpected diff: ${args.join(" ")}`,
+        });
+      }
       return mockGitChild({ stdout: opts.patch });
     }
     if (args[0] === "show" && args.includes("--format=%s")) {
@@ -192,40 +256,17 @@ describe("readIssueChange rollup", () => {
     const c1 = sha(1);
     const c2 = sha(2);
     const c3 = sha(3);
-    const base = sha(0);
     writeRollupFixture([
       { id: "t1", partOf: "rollup", sha: c1, order: 0 },
       { id: "t2", partOf: "rollup", sha: c2, order: 1 },
       { id: "t3", partOf: "rollup", sha: c3, order: 2 },
     ]);
 
-    await stubGitSpawner((args) => {
-      if (args[0] === "rev-list" && args.includes("--count")) {
-        return mockGitChild({ stdout: "1\n" });
-      }
-      if (args[0] === "rev-parse" && args[1] === `${c1}^`) {
-        return mockGitChild({ stdout: `${base}\n` });
-      }
-      if (args[0] === "diff" && args.includes("--shortstat")) {
-        return mockGitChild({
-          stdout: " 3 files changed, 10 insertions(+), 2 deletions(-)\n",
-        });
-      }
-      if (args[0] === "diff") {
-        return mockGitChild({
-          stdout: "diff --git a/net.ts b/net.ts\n+rollup\n",
-        });
-      }
-      if (args[0] === "show" && args.includes("--format=%s")) {
-        const shaArg = args[args.length - 1]!;
-        const subjects: Record<string, string> = {
-          [c1]: "First",
-          [c2]: "Second",
-          [c3]: "Third",
-        };
-        return mockGitChild({ stdout: `${subjects[shaArg] ?? "?"}\n` });
-      }
-      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    await stubStorySymdiffGit({
+      last: c3,
+      patch: "diff --git a/net.ts b/net.ts\n+rollup\n",
+      shortstat: " 3 files changed, 10 insertions(+), 2 deletions(-)\n",
+      subjects: { [c1]: "First", [c2]: "Second", [c3]: "Third" },
     });
 
     const { readIssueChange } = await loadChange();
@@ -244,37 +285,17 @@ describe("readIssueChange rollup", () => {
   it("raises change-too-large with stats when a rollup patch exceeds the ceiling", async () => {
     const c1 = sha(1);
     const c2 = sha(2);
-    const base = sha(0);
     const hugePatch = "x".repeat(2 * 1024 * 1024 + 1);
     writeRollupFixture([
       { id: "t1", partOf: "rollup", sha: c1, order: 0 },
       { id: "t2", partOf: "rollup", sha: c2, order: 1 },
     ]);
 
-    await stubGitSpawner((args) => {
-      if (args[0] === "rev-list" && args.includes("--count")) {
-        return mockGitChild({ stdout: "1\n" });
-      }
-      if (args[0] === "rev-parse" && args[1] === `${c1}^`) {
-        return mockGitChild({ stdout: `${base}\n` });
-      }
-      if (args[0] === "diff" && args.includes("--shortstat")) {
-        return mockGitChild({
-          stdout: " 50 files changed, 20000 insertions(+), 500 deletions(-)\n",
-        });
-      }
-      if (args[0] === "diff") {
-        return mockGitChild({ stdout: hugePatch });
-      }
-      if (args[0] === "show" && args.includes("--format=%s")) {
-        const shaArg = args[args.length - 1]!;
-        const subjects: Record<string, string> = {
-          [c1]: "First",
-          [c2]: "Second",
-        };
-        return mockGitChild({ stdout: `${subjects[shaArg] ?? "?"}\n` });
-      }
-      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    await stubStorySymdiffGit({
+      last: c2,
+      patch: hugePatch,
+      shortstat: " 50 files changed, 20000 insertions(+), 500 deletions(-)\n",
+      subjects: { [c1]: "First", [c2]: "Second" },
     });
 
     const { readIssueChange } = await loadChange();
@@ -291,7 +312,6 @@ describe("readIssueChange rollup", () => {
     const c1 = sha(1);
     const c2 = sha(2);
     const stacked = sha(9);
-    const base = sha(0);
     writeRollupFixture([
       { id: "t1", partOf: "rollup", sha: c1, order: 0 },
       { id: "t2", partOf: "rollup", sha: c2, order: 1 },
@@ -307,36 +327,12 @@ describe("readIssueChange rollup", () => {
       commits: [stacked],
     });
 
-    await stubGitSpawner((args) => {
-      if (args[0] === "rev-list" && args.includes("--count")) {
-        const range = args[args.length - 1]!;
-        if (range === `${c1}..${c2}`) {
-          return mockGitChild({ stdout: "1\n" });
-        }
-        return mockGitChild({ stdout: "3\n" });
-      }
-      if (args[0] === "rev-parse" && args[1] === `${c1}^`) {
-        return mockGitChild({ stdout: `${base}\n` });
-      }
-      if (args[0] === "diff" && args.includes("--shortstat")) {
-        return mockGitChild({
-          stdout: " 2 files changed, 4 insertions(+), 1 deletion(-)\n",
-        });
-      }
-      if (args[0] === "diff") {
-        return mockGitChild({
-          stdout: "diff --git a/own.ts b/own.ts\n+own\n",
-        });
-      }
-      if (args[0] === "show" && args.includes("--format=%s")) {
-        const shaArg = args[args.length - 1]!;
-        const subjects: Record<string, string> = {
-          [c1]: "First",
-          [c2]: "Second",
-        };
-        return mockGitChild({ stdout: `${subjects[shaArg] ?? "?"}\n` });
-      }
-      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    await stubStorySymdiffGit({
+      last: c2,
+      patch: "diff --git a/own.ts b/own.ts\n+own\n",
+      shortstat: " 2 files changed, 4 insertions(+), 1 deletion(-)\n",
+      subjects: { [c1]: "First", [c2]: "Second" },
+      firstParentCount: (range) => (range === `${c1}..${c2}` ? "1" : "3"),
     });
 
     const { readIssueChange } = await loadChange();
@@ -359,17 +355,114 @@ describe("readIssueChange rollup", () => {
       { id: "t2", partOf: "rollup", sha: c2, order: 1 },
     ]);
 
-    await stubGitSpawner((args) => {
-      if (args[0] === "rev-list" && args.includes("--count")) {
-        return mockGitChild({ stdout: "3\n" });
-      }
-      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    await stubStorySymdiffGit({
+      last: c2,
+      patch: "unused",
+      shortstat: "unused",
+      subjects: {},
+      firstParentCount: () => "3",
     });
 
     const { readIssueChange } = await loadChange();
     await expect(readIssueChange("rollup")).rejects.toMatchObject({
       code: "commits-not-contiguous",
       message: expect.stringContaining(c1),
+    });
+  });
+
+  it("loads a Story whose last commit is a merge of trunk via three-dot mergeBase", async () => {
+    const waypoint = sha(1);
+    const mergeOfTrunk = sha(2);
+    const calls: string[][] = [];
+    writeRollupFixture([
+      { id: "t1", partOf: "rollup", sha: waypoint, order: 0 },
+      { id: "t-merge", partOf: "rollup", sha: mergeOfTrunk, order: 1 },
+    ]);
+
+    await stubStorySymdiffGit({
+      last: mergeOfTrunk,
+      calls,
+      patch: "diff --git a/merged.ts b/merged.ts\n+landed\n",
+      shortstat: " 1 file changed, 1 insertion(+)\n",
+      subjects: { [waypoint]: "Feature", [mergeOfTrunk]: "Merge main" },
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("rollup")).resolves.toEqual({
+      state: "loaded",
+      commits: [
+        { sha: waypoint, subject: "Feature" },
+        { sha: mergeOfTrunk, subject: "Merge main" },
+      ],
+      patch: "diff --git a/merged.ts b/merged.ts\n+landed\n",
+      stats: { filesChanged: 1, insertions: 1, deletions: 0 },
+    });
+    expect(calls).toContainEqual([
+      "rev-list",
+      "--count",
+      "--first-parent",
+      `${waypoint}..${mergeOfTrunk}`,
+    ]);
+    expect(calls).toContainEqual([
+      "diff",
+      "--shortstat",
+      `main...${mergeOfTrunk}`,
+    ]);
+    expect(calls).toContainEqual(["diff", `main...${mergeOfTrunk}`]);
+    expect(calls.some((args) => args[0] === "rev-parse")).toBe(false);
+  });
+
+  it("raises commits-not-contiguous for an unrecorded first-parent commit between waypoints", async () => {
+    const c1 = sha(1);
+    const c2 = sha(2);
+    writeRollupFixture([
+      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
+      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
+    ]);
+
+    await stubStorySymdiffGit({
+      last: c2,
+      patch: "unused",
+      shortstat: "unused",
+      subjects: {},
+      firstParentCount: (range) => (range === `${c1}..${c2}` ? "2" : "1"),
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("rollup")).rejects.toMatchObject({
+      code: "commits-not-contiguous",
+      message: expect.stringContaining(c1),
+    });
+  });
+
+  it("returns empty no-merge-base when derived mergeBase is unset", async () => {
+    writeStory("s-waiting", { stackedOn: "b" });
+    writeTask("t-waiting", {
+      partOf: "s-waiting",
+      commits: [sha(1)],
+    });
+
+    const calls: string[][] = [];
+    await stubGitSpawner((args) => {
+      calls.push([...args]);
+      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("s-waiting")).resolves.toEqual({
+      state: "empty",
+      reason: "no-merge-base",
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("returns empty no-merge-base before no-descendant-commits when mergeBase is unset", async () => {
+    writeStory("s-waiting-empty", { stackedOn: "b" });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("s-waiting-empty")).resolves.toEqual({
+      state: "empty",
+      reason: "no-merge-base",
     });
   });
 
@@ -418,6 +511,41 @@ describe("readIssueChange", () => {
       patch: "diff --git a/foo.ts b/foo.ts\n+line\n",
       stats: { filesChanged: 2, insertions: 5, deletions: 1 },
     });
+  });
+
+  it("uses first^..last for a Task whose last commit is a merge", async () => {
+    const first = sha(4);
+    const mergeCommit = sha(5);
+    const calls: string[][] = [];
+    writeTask("t-merge", { commits: [first, mergeCommit] });
+    await stubTaskRangeGit({
+      commits: [first, mergeCommit],
+      calls,
+      patch: "diff --git a/task.ts b/task.ts\n+merge-task\n",
+      shortstat: " 1 file changed, 1 insertion(+)\n",
+      subjects: { [first]: "Work", [mergeCommit]: "Merge main" },
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("t-merge")).resolves.toEqual({
+      state: "loaded",
+      commits: [
+        { sha: first, subject: "Work" },
+        { sha: mergeCommit, subject: "Merge main" },
+      ],
+      patch: "diff --git a/task.ts b/task.ts\n+merge-task\n",
+      stats: { filesChanged: 1, insertions: 1, deletions: 0 },
+    });
+    expect(calls).toContainEqual(["rev-parse", `${first}^`]);
+    expect(calls).toContainEqual([
+      "diff",
+      "--shortstat",
+      `${parentSha(first)}..${mergeCommit}`,
+    ]);
+    expect(calls).toContainEqual(["diff", `${parentSha(first)}..${mergeCommit}`]);
+    expect(
+      calls.some((args) => args.some((arg) => arg.includes("..."))),
+    ).toBe(false);
   });
 
   it("returns a loaded range diff when the Task has three commits", async () => {

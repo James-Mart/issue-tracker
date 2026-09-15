@@ -392,7 +392,12 @@ export const issueChangeSchema = z.discriminatedUnion("state", [
   }),
   z.object({
     state: z.literal("empty"),
-    reason: z.enum(["no-commit", "no-diff", "no-descendant-commits"]),
+    reason: z.enum([
+      "no-commit",
+      "no-diff",
+      "no-descendant-commits",
+      "no-merge-base",
+    ]),
   }),
 ]);
 
