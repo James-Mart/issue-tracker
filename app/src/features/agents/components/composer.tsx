@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Mic, Paperclip, Send, Square, Upload, X, Zap } from "lucide-react";
+import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { currentGlow } from "@/components/ui/overlay-surfaces";
 import { ForkedThreadComposerNotice } from "./forked-thread-composer-notice";
@@ -484,16 +485,17 @@ export function Composer({
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div
-        className={cn(
-          "relative flex flex-col gap-2 rounded-md",
-          dragActive &&
-            cn(
-              "border-2 border-dashed border-[hsl(var(--current))]",
-              currentGlow,
-            ),
-        )}
-      >
+      <div className={cn("mx-auto w-full min-w-0", READING_MEASURE_CLASS)}>
+        <div
+          className={cn(
+            "relative flex flex-col gap-2 rounded-md",
+            dragActive &&
+              cn(
+                "border-2 border-dashed border-[hsl(var(--current))]",
+                currentGlow,
+              ),
+          )}
+        >
         {dragActive ? <DragActiveOverlay /> : null}
 
         {readOnly ? <ForkedThreadComposerNotice /> : null}
@@ -694,6 +696,7 @@ export function Composer({
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );
