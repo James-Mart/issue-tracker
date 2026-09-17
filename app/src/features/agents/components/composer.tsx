@@ -519,62 +519,79 @@ export function Composer({
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-2 shell:flex-row shell:items-end">
-          <div className="flex w-full min-w-0 items-center gap-2 shell:w-auto shell:shrink-0">
-            <Select
-              value={model}
-              onValueChange={onModelChange}
-              disabled={modelsLoading || models.length === 0 || runActive}
-            >
-              <SelectTrigger
-                aria-label="Model"
-                className="h-11 w-full min-w-0 font-mono text-xs shell:h-8 shell:w-auto shell:min-w-[10rem] shell:max-w-[16rem]"
-              >
-                <SelectValue
-                  placeholder={
-                    modelsLoading ? "Loading models…" : "Select a model"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((entry) => (
-                  <SelectItem key={entry.id} value={entry.id}>
-                    {entry.displayName}
-                  </SelectItem>
-                ))}
-                {model && !models.some((entry) => entry.id === model) ? (
-                  <SelectItem value={model}>{model}</SelectItem>
-                ) : null}
-              </SelectContent>
-            </Select>
-            <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-              Agent
-            </p>
-          </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="sr-only"
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={(e) => void onFileInputChange(e)}
+        />
 
-          <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="sr-only"
-              aria-hidden="true"
-              tabIndex={-1}
-              onChange={(e) => void onFileInputChange(e)}
-            />
-            {showRecordingBar ? (
-              <VoiceRecordingBar
-                elapsedSeconds={voice.elapsedSeconds}
-                live={voiceState === "recording"}
-                onDiscard={voice.cancel}
-                onConfirm={voice.confirm}
-              />
-            ) : showVoiceError ? (
-              <VoiceErrorBar
-                reason={voice.errorReason ?? "Something went wrong"}
-                onRetry={voice.retry}
-              />
-            ) : (
-              <>
+        {showRecordingBar ? (
+          <VoiceRecordingBar
+            elapsedSeconds={voice.elapsedSeconds}
+            live={voiceState === "recording"}
+            onDiscard={voice.cancel}
+            onConfirm={voice.confirm}
+          />
+        ) : showVoiceError ? (
+          <VoiceErrorBar
+            reason={voice.errorReason ?? "Something went wrong"}
+            onRetry={voice.retry}
+          />
+        ) : (
+          <>
+            <div className="w-full">
+              {voiceLocked ? (
+                <VoiceTranscribingField />
+              ) : (
+                <Textarea
+                  ref={textareaRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  placeholder="Message the agent"
+                  title={
+                    isCoarsePointer
+                      ? "Enter for a new line"
+                      : "Enter to send, Shift+Enter for a newline"
+                  }
+                  aria-label="Message the agent"
+                  disabled={composerBusy}
+                  className="min-h-[44px] max-h-40 w-full resize-none"
+                />
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <Select
+                  value={model}
+                  onValueChange={onModelChange}
+                  disabled={modelsLoading || models.length === 0 || runActive}
+                >
+                  <SelectTrigger
+                    aria-label="Model"
+                    className="h-11 w-auto min-w-0 font-mono text-xs shell:h-9"
+                  >
+                    <SelectValue
+                      placeholder={
+                        modelsLoading ? "Loading models…" : "Select a model"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {models.map((entry) => (
+                      <SelectItem key={entry.id} value={entry.id}>
+                        {entry.displayName}
+                      </SelectItem>
+                    ))}
+                    {model && !models.some((entry) => entry.id === model) ? (
+                      <SelectItem value={model}>{model}</SelectItem>
+                    ) : null}
+                  </SelectContent>
+                </Select>
                 <Button
                   type="button"
                   variant="outline"
@@ -610,31 +627,15 @@ export function Composer({
                 >
                   <Mic className="h-4 w-4" />
                 </Button>
-                {voiceLocked ? (
-                  <VoiceTranscribingField />
-                ) : (
-                  <Textarea
-                    ref={textareaRef}
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={onKeyDown}
-                    placeholder="Message the agent"
-                    title={
-                      isCoarsePointer
-                        ? "Enter for a new line"
-                        : "Enter to send, Shift+Enter for a newline"
-                    }
-                    aria-label="Message the agent"
-                    disabled={composerBusy}
-                    className="min-h-[44px] min-w-0 max-h-40 w-full flex-1 basis-[12rem] resize-none shell:w-auto"
-                  />
-                )}
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
                 {runActive ? (
                   <>
                     <Button
                       size="icon"
                       variant="primary"
-                      className="h-11 w-11 shrink-0"
+                      className="h-11 w-11 shrink-0 shell:h-9 shell:w-9"
                       onClick={send}
                       disabled={sendDisabled}
                       title={sendTitle}
@@ -646,7 +647,7 @@ export function Composer({
                       <Button
                         size="icon"
                         variant="secondary"
-                        className="h-11 w-11 shrink-0"
+                        className="h-11 w-11 shrink-0 shell:h-9 shell:w-9"
                         onClick={sendNow}
                         disabled={sendDisabled}
                         title="Send now — interrupt the current run and send immediately"
@@ -658,7 +659,7 @@ export function Composer({
                     <Button
                       size="icon"
                       variant="destructive"
-                      className="h-11 w-11 shrink-0"
+                      className="h-11 w-11 shrink-0 shell:h-9 shell:w-9"
                       onClick={stop}
                       disabled={cancelRun.isPending}
                       title="Stop"
@@ -671,7 +672,7 @@ export function Composer({
                   <Button
                     size="icon"
                     variant="primary"
-                    className="h-11 w-11 shrink-0"
+                    className="h-11 w-11 shrink-0 shell:h-9 shell:w-9"
                     onClick={send}
                     disabled={sendDisabled}
                     title={sendTitle}
@@ -680,10 +681,10 @@ export function Composer({
                     <Send className="h-4 w-4" />
                   </Button>
                 )}
-              </>
-            )}
-          </div>
-        </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -240,6 +240,8 @@ describe("Composer send affordance", () => {
     const button = sendButton(container!)
     expect(button.className).toMatch(/\bh-11\b/)
     expect(button.className).toMatch(/\bw-11\b/)
+    expect(button.className).toMatch(/\bshell:h-9\b/)
+    expect(button.className).toMatch(/\bshell:w-9\b/)
   })
 
   it("enables Send with a draft even when the model picker is empty", () => {
@@ -347,8 +349,14 @@ describe("Composer during active run", () => {
     expect(sendNow).toBeTruthy()
     expect(stop).toBeTruthy()
     expect(queue.className).toMatch(/\bh-11\b/)
+    expect(queue.className).toMatch(/\bshell:h-9\b/)
+    expect(queue.className).toMatch(/\bshell:w-9\b/)
     expect(sendNow.className).toMatch(/\bh-11\b/)
+    expect(sendNow.className).toMatch(/\bshell:h-9\b/)
+    expect(sendNow.className).toMatch(/\bshell:w-9\b/)
     expect(stop.className).toMatch(/\bh-11\b/)
+    expect(stop.className).toMatch(/\bshell:h-9\b/)
+    expect(stop.className).toMatch(/\bshell:w-9\b/)
 
     act(() => {
       sendNow.click()
