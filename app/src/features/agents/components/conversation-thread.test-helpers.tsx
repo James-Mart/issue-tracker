@@ -145,8 +145,20 @@ vi.mock("../hooks/use-conversation-run-active", () => ({
 }));
 
 vi.mock("./composer", () => ({
-  Composer: ({ model }: { model: string }) => (
-    <div data-testid="conversation-composer" data-model={model} />
+  Composer: ({
+    model,
+    readOnly,
+  }: {
+    model: string;
+    readOnly?: boolean;
+  }) => (
+    <div data-testid="conversation-composer" data-model={model}>
+      {readOnly ? (
+        <p data-testid="forked-thread-composer-notice">
+          Read-only fork — explores and answers
+        </p>
+      ) : null}
+    </div>
   ),
 }));
 

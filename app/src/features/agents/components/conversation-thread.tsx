@@ -45,7 +45,6 @@ import { MessageScroller } from "@/components/ui/message-scroller";
 import { transcriptScrollerBottomKey } from "../lib/transcript-scroller";
 import { AssistantMetaRow } from "./assistant-meta-row";
 import { Composer } from "./composer";
-import { ForkedThreadComposerNotice } from "./forked-thread-composer-notice";
 import {
   ForkPointInlineMarker,
   forkPointMarkerDueAfterSegment,
@@ -875,14 +874,12 @@ export function ConversationThread({
         />
       </div>
       {meta && !hideComposer ? (
-        <>
-          {readOnly ? <ForkedThreadComposerNotice /> : null}
-          <Composer
-            conversationId={conversationId}
-            model={meta.model}
-            runActive={runActive}
-          />
-        </>
+        <Composer
+          conversationId={conversationId}
+          model={meta.model}
+          runActive={runActive}
+          readOnly={readOnly}
+        />
       ) : null}
     </div>
   );

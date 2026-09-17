@@ -11,6 +11,7 @@ import {
 import { Mic, Paperclip, Send, Square, Upload, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { currentGlow } from "@/components/ui/overlay-surfaces";
+import { ForkedThreadComposerNotice } from "./forked-thread-composer-notice";
 import {
   VoiceErrorBar,
   VoiceRecordingBar,
@@ -85,7 +86,7 @@ function ImageStagedChip({
       data-staged-kind="image"
       data-testid={`staged-attachment-${item.name}`}
     >
-      <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-border">
+      <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-md border border-border shell:h-9 shell:w-9">
         <img
           src={conversationAttachmentApiPath(conversationId, item.name)}
           alt=""
@@ -114,11 +115,11 @@ function FileStagedChip({
 }) {
   return (
     <div
-      className="flex max-w-full shrink-0 items-start gap-2 rounded-md border border-border bg-[hsl(var(--panel-2))] py-1.5 pl-2 pr-1.5"
+      className="flex min-h-11 max-w-full shrink-0 items-center gap-2 rounded-md border border-border bg-[hsl(var(--panel-2))] py-1.5 pl-2 pr-1.5 shell:min-h-9"
       data-staged-kind="file"
       data-testid={`staged-attachment-${item.name}`}
     >
-      <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <p
           className="truncate font-mono text-[11px] leading-tight text-foreground sm:text-xs"
@@ -132,7 +133,7 @@ function FileStagedChip({
       </div>
       <button
         type="button"
-        className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         title={`Remove ${item.name}`}
         aria-label={`Remove ${item.name}`}
         onClick={onRemove}
@@ -174,7 +175,7 @@ function UploadErrorBanner({ error }: { error: UploadError }) {
       <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-destructive">
         File too large
       </p>
-      <p className="mt-1 min-w-0 truncate font-mono text-xs text-foreground">
+      <p className="mt-1 min-w-0 break-words font-mono text-xs text-foreground">
         {error.name}
         <span className="text-muted-foreground">
           {" "}
@@ -192,12 +193,15 @@ export function Composer({
   conversationId,
   model: initialModel,
   runActive,
+  readOnly = false,
 }: {
   conversationId: string;
   /** Conversation meta model — remembered default for the picker. */
   model: string;
   /** Server-truth run-active flag from the open thread. */
   runActive: boolean;
+  /** Read-only fork — composer stays usable; notice is a standing constraint. */
+  readOnly?: boolean;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const {
@@ -492,6 +496,8 @@ export function Composer({
       >
         {dragActive ? <DragActiveOverlay /> : null}
 
+        {readOnly ? <ForkedThreadComposerNotice /> : null}
+
         {uploadError ? <UploadErrorBanner error={uploadError} /> : null}
 
         {stagedAttachments.length > 0 ? (
@@ -564,8 +570,11 @@ export function Composer({
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
+            <div
+              className="flex flex-wrap items-center gap-2"
+              data-testid="composer-control-row"
+            >
+              <div className="flex items-center gap-2">
                 <Select
                   value={model}
                   onValueChange={onModelChange}
@@ -573,7 +582,7 @@ export function Composer({
                 >
                   <SelectTrigger
                     aria-label="Model"
-                    className="h-11 w-auto min-w-0 font-mono text-xs shell:h-9"
+                    className="h-11 w-auto min-w-[8rem] font-mono text-xs shell:h-9"
                   >
                     <SelectValue
                       placeholder={
@@ -629,7 +638,7 @@ export function Composer({
                 </Button>
               </div>
 
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="ml-auto flex shrink-0 items-center gap-2">
                 {runActive ? (
                   <>
                     <Button
