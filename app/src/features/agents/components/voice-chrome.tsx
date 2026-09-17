@@ -25,7 +25,7 @@ export function VoiceRecordingBar({
 }) {
   return (
     <div
-      className="flex min-w-0 flex-1 items-center gap-3 rounded-md border border-border bg-[hsl(var(--panel-2))] px-3 py-2 shell:min-h-9"
+      className="flex min-h-11 min-w-0 w-full items-center gap-3 rounded-md border border-border bg-[hsl(var(--panel-2))] px-3 py-2 shell:min-h-9"
       data-testid="voice-recording-bar"
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -37,7 +37,7 @@ export function VoiceRecordingBar({
           )}
         />
         <span
-          className="font-mono text-xs tabular-nums text-foreground"
+          className="whitespace-nowrap font-mono text-xs tabular-nums text-foreground"
           data-testid="voice-recording-timer"
         >
           {formatVoiceElapsed(elapsedSeconds)} / {VOICE_RECORDING_CAP_LABEL}
@@ -80,7 +80,7 @@ export function VoiceErrorBar({
 }) {
   return (
     <div
-      className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2"
+      className="flex min-h-11 min-w-0 w-full flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 shell:min-h-9"
       data-testid="voice-error-bar"
       role="alert"
     >
@@ -88,7 +88,7 @@ export function VoiceErrorBar({
       <Button
         type="button"
         variant="outline"
-        size="sm"
+        className="h-11 shrink-0 px-3 shell:h-9"
         onClick={onRetry}
         data-testid="voice-error-retry"
       >
@@ -101,7 +101,7 @@ export function VoiceErrorBar({
 export function VoiceTranscribingField() {
   return (
     <div
-      className="flex min-h-[44px] min-w-0 max-h-40 w-full flex-1 basis-[12rem] items-center gap-2 rounded-md border border-border bg-[hsl(var(--panel))] px-3 py-2 text-[hsl(var(--current))] shell:w-auto"
+      className="flex min-h-[44px] min-w-0 max-h-40 w-full items-center gap-2 rounded-md border border-border bg-[hsl(var(--panel))] px-3 py-2 text-[hsl(var(--current))]"
       data-testid="voice-transcribing-field"
       aria-live="polite"
     >

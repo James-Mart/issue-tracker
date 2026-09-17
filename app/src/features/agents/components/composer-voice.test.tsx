@@ -208,10 +208,28 @@ describe("Composer voice dictation", () => {
     expect(
       container!.querySelector('[data-testid="voice-mic-button"]'),
     ).toBeNull();
-    expect(
-      container!.querySelector('[data-testid="voice-recording-timer"]')
-        ?.textContent,
-    ).toBe("1:24 / 10:00");
+    const timer = container!.querySelector(
+      '[data-testid="voice-recording-timer"]',
+    ) as HTMLElement;
+    expect(timer?.textContent).toBe("1:24 / 10:00");
+    expect(timer.className).toMatch(/\bwhitespace-nowrap\b/);
+
+    const bar = container!.querySelector(
+      '[data-testid="voice-recording-bar"]',
+    ) as HTMLElement;
+    expect(bar.className).toMatch(/\bmin-h-11\b/);
+    expect(bar.className).toMatch(/\bshell:min-h-9\b/);
+
+    const discard = container!.querySelector(
+      'button[aria-label="Discard recording"]',
+    ) as HTMLButtonElement;
+    const confirm = container!.querySelector(
+      'button[aria-label="Confirm recording"]',
+    ) as HTMLButtonElement;
+    expect(discard.className).toMatch(/\bh-11\b/);
+    expect(discard.className).toMatch(/\bshell:h-9\b/);
+    expect(confirm.className).toMatch(/\bh-11\b/);
+    expect(confirm.className).toMatch(/\bshell:h-9\b/);
   });
 
   it("shows the review bar with the timer stilled at the cap and confirm active", () => {
@@ -235,9 +253,12 @@ describe("Composer voice dictation", () => {
     voiceRecording.state = "transcribing";
     ({ container, root, rerender } = mountComposer());
 
-    expect(
-      container!.querySelector('[data-testid="voice-transcribing-field"]'),
-    ).toBeTruthy();
+    const field = container!.querySelector(
+      '[data-testid="voice-transcribing-field"]',
+    ) as HTMLElement;
+    expect(field).toBeTruthy();
+    expect(field.className).toMatch(/min-h-\[44px\]/);
+    expect(field.className).not.toMatch(/basis-\[12rem\]/);
     expect(micButton(container!).disabled).toBe(true);
     expect(
       container!.querySelector('button[aria-label="Attach files"]')!.className,
@@ -296,9 +317,17 @@ describe("Composer voice dictation", () => {
     voiceRecording.errorReason = "Microphone permission denied";
     ({ container, root, rerender } = mountComposer());
 
-    expect(
-      container!.querySelector('[data-testid="voice-error-bar"]')?.textContent,
-    ).toContain("Microphone permission denied");
+    const errorBar = container!.querySelector(
+      '[data-testid="voice-error-bar"]',
+    ) as HTMLElement;
+    expect(errorBar?.textContent).toContain("Microphone permission denied");
+    expect(errorBar.className).toMatch(/\bmin-h-11\b/);
+    expect(errorBar.className).toMatch(/\bshell:min-h-9\b/);
+    const retry = container!.querySelector(
+      '[data-testid="voice-error-retry"]',
+    ) as HTMLButtonElement;
+    expect(retry.className).toMatch(/\bh-11\b/);
+    expect(retry.className).toMatch(/\bshell:h-9\b/);
 
     act(() => {
       (

@@ -78,6 +78,7 @@ function mountComposer(
     conversationId?: string
     model?: string
     runActive?: boolean
+    readOnly?: boolean
   } = {},
 ): {
   container: HTMLDivElement
@@ -92,6 +93,7 @@ function mountComposer(
         conversationId={overrides.conversationId ?? "conv-1"}
         model={overrides.model ?? "composer-2.5-fast"}
         runActive={overrides.runActive ?? false}
+        readOnly={overrides.readOnly}
       />,
     )
   })
@@ -240,6 +242,8 @@ describe("Composer send affordance", () => {
     const button = sendButton(container!)
     expect(button.className).toMatch(/\bh-11\b/)
     expect(button.className).toMatch(/\bw-11\b/)
+    expect(button.className).toMatch(/\bshell:h-9\b/)
+    expect(button.className).toMatch(/\bshell:w-9\b/)
   })
 
   it("enables Send with a draft even when the model picker is empty", () => {
@@ -347,8 +351,14 @@ describe("Composer during active run", () => {
     expect(sendNow).toBeTruthy()
     expect(stop).toBeTruthy()
     expect(queue.className).toMatch(/\bh-11\b/)
+    expect(queue.className).toMatch(/\bshell:h-9\b/)
+    expect(queue.className).toMatch(/\bshell:w-9\b/)
     expect(sendNow.className).toMatch(/\bh-11\b/)
+    expect(sendNow.className).toMatch(/\bshell:h-9\b/)
+    expect(sendNow.className).toMatch(/\bshell:w-9\b/)
     expect(stop.className).toMatch(/\bh-11\b/)
+    expect(stop.className).toMatch(/\bshell:h-9\b/)
+    expect(stop.className).toMatch(/\bshell:w-9\b/)
 
     act(() => {
       sendNow.click()
@@ -362,6 +372,23 @@ describe("Composer during active run", () => {
       },
       expect.any(Object),
     )
+  })
+
+  it("wraps the control row and keeps the model picker from collapsing", () => {
+    ;({ container, root } = mountComposer({ runActive: true }))
+
+    setDraft(textarea(container!), "steer now")
+
+    const row = container!.querySelector(
+      '[data-testid="composer-control-row"]',
+    )
+    expect(row?.className).toMatch(/\bflex-wrap\b/)
+
+    const picker = container!.querySelector(
+      'button[aria-label="Model"]',
+    ) as HTMLButtonElement
+    expect(picker.className).toMatch(/min-w-\[8rem\]/)
+    expect(picker.className).not.toMatch(/\bmin-w-0\b/)
   })
 })
 
@@ -602,9 +629,38 @@ describe("Composer attachments", () => {
     expect(
       container!.querySelector('[data-testid="staged-attachment-notes.txt"]'),
     ).toBeTruthy()
-    expect(
-      container!.querySelector('[data-staged-kind="file"]'),
-    ).toBeTruthy()
+    const fileChip = container!.querySelector(
+      '[data-staged-kind="file"]',
+    ) as HTMLElement
+    expect(fileChip).toBeTruthy()
+    expect(fileChip.className).toMatch(/\bmin-h-11\b/)
+    expect(fileChip.className).toMatch(/\bshell:min-h-9\b/)
+  })
+
+  it("aligns image chips to the control height scale", async () => {
+    uploadMutateAsync.mockResolvedValue({
+      name: "palette.png",
+      size: 100,
+      mimeType: "image/png",
+    })
+    ;({ container, root } = mountComposer())
+
+    pickFile(
+      fileInput(container!),
+      new File(["pixels"], "palette.png", { type: "image/png" }),
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const thumb = container!
+      .querySelector('[data-staged-kind="image"]')
+      ?.querySelector(".relative") as HTMLElement
+    expect(thumb).toBeTruthy()
+    expect(thumb.className).toMatch(/\bh-11\b/)
+    expect(thumb.className).toMatch(/\bw-11\b/)
+    expect(thumb.className).toMatch(/\bshell:h-9\b/)
+    expect(thumb.className).toMatch(/\bshell:w-9\b/)
   })
 
   it("removes a staged chip and deletes the attachment", async () => {
@@ -666,7 +722,14 @@ describe("Composer attachments", () => {
       await Promise.resolve()
     })
 
-    expect(container!.querySelector('[data-testid="upload-error"]')).toBeTruthy()
+    const banner = container!.querySelector(
+      '[data-testid="upload-error"]',
+    ) as HTMLElement
+    expect(banner).toBeTruthy()
+    expect(banner.textContent).toContain(
+      "Attachments must be 25 MB or smaller.",
+    )
+    expect(banner.innerHTML).not.toMatch(/\btruncate\b/)
     expect(textarea(container!).value).toBe("Keep this draft")
     expect(
       container!.querySelector('[data-testid="staged-attachment-palette.png"]'),
@@ -851,5 +914,34 @@ describe("Composer paste and drop", () => {
     expect(
       container!.querySelector('[data-testid="composer-drag-active"]'),
     ).toBeNull()
+  })
+})
+
+describe("Composer read-only fork notice", () => {
+  let container: HTMLDivElement | undefined
+  let root: Root | undefined
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount())
+    container?.remove()
+    container = undefined
+    root = undefined
+  })
+
+  it("renders the fork notice in muted type without a current accent", () => {
+    ;({ container, root } = mountComposer({ readOnly: true }))
+
+    const notice = container!.querySelector(
+      '[data-testid="forked-thread-composer-notice"]',
+    ) as HTMLElement
+    expect(notice).toBeTruthy()
+    expect(notice.textContent).toContain("Read-only fork")
+    expect(notice.className).toMatch(/\btext-muted-foreground\b/)
+    expect(notice.className).not.toMatch(/current/)
+    expect(
+      container!
+        .querySelector('[data-testid="conversation-composer"]')
+        ?.contains(notice),
+    ).toBe(true)
   })
 })

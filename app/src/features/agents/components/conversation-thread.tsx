@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Download, Link2, Paperclip } from "lucide-react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
+import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,7 +46,6 @@ import { MessageScroller } from "@/components/ui/message-scroller";
 import { transcriptScrollerBottomKey } from "../lib/transcript-scroller";
 import { AssistantMetaRow } from "./assistant-meta-row";
 import { Composer } from "./composer";
-import { ForkedThreadComposerNotice } from "./forked-thread-composer-notice";
 import {
   ForkPointInlineMarker,
   forkPointMarkerDueAfterSegment,
@@ -510,7 +510,7 @@ function ThreadBody({
   if (!ready) {
     return (
       <div
-        className="space-y-3 p-4"
+        className={cn("mx-auto w-full min-w-0 space-y-3 p-4", READING_MEASURE_CLASS)}
         aria-busy="true"
         aria-label="Loading transcript"
       >
@@ -524,12 +524,14 @@ function ThreadBody({
 
   if (events.length === 0 && !pendingMessageText) {
     return (
-      <ShellState
-        className="m-4 border-0 bg-transparent px-4 py-8 shadow-none"
-        eyebrow="Empty"
-        title="No transcript yet."
-        detail="Type below to start a turn — responses stream here live."
-      />
+      <div className={cn("mx-auto w-full min-w-0 p-4", READING_MEASURE_CLASS)}>
+        <ShellState
+          className="border-0 bg-transparent px-0 py-8 shadow-none"
+          eyebrow="Empty"
+          title="No transcript yet."
+          detail="Type below to start a turn — responses stream here live."
+        />
+      </div>
     );
   }
 
@@ -638,15 +640,17 @@ function ThreadBody({
       aria-live="polite"
       aria-relevant="additions text"
     >
-      {transcriptRows}
-      {pendingMessageText ? (
-        <PendingMessageRow
-          conversationId={conversationId}
-          text={pendingMessageText}
-          runActive={runActive}
-          model={model}
-        />
-      ) : null}
+      <div className={cn("mx-auto w-full min-w-0", READING_MEASURE_CLASS)}>
+        {transcriptRows}
+        {pendingMessageText ? (
+          <PendingMessageRow
+            conversationId={conversationId}
+            text={pendingMessageText}
+            runActive={runActive}
+            model={model}
+          />
+        ) : null}
+      </div>
     </MessageScroller>
   );
 }
@@ -875,14 +879,12 @@ export function ConversationThread({
         />
       </div>
       {meta && !hideComposer ? (
-        <>
-          {readOnly ? <ForkedThreadComposerNotice /> : null}
-          <Composer
-            conversationId={conversationId}
-            model={meta.model}
-            runActive={runActive}
-          />
-        </>
+        <Composer
+          conversationId={conversationId}
+          model={meta.model}
+          runActive={runActive}
+          readOnly={readOnly}
+        />
       ) : null}
     </div>
   );
