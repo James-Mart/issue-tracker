@@ -1000,15 +1000,25 @@ Project catalog (see [Project labels](#project-labels)), inline
 
 When the git subagent runs in `record-commit` mode, it records one commit for
 one Task — or none, when the working tree is clean. It writes no Task `status`
-and no other Task field. The mode commits the working tree on the Story branch
-and has no merge or conflict handling (that stays with `finish-branch`).
+and no other Task field. The mode commits the working tree on the Story branch.
 
-1. If `git status` is clean (empty): report that there is nothing to commit,
-   and stop. A clean tree is a normal outcome, not an error.
-2. Otherwise `git add -A`, read the staged diff and compose a single-line
-   subject (lowercase imperative, fewer than 80 chars; Task title is context
-   only), then `git commit -m "<subject>"`.
-3. `issue task add-commit <taskId> $(git rev-parse HEAD)`.
+1. Detect an in-progress merge with `git rev-parse -q --verify MERGE_HEAD`.
+   `MERGE_HEAD` is the only merge gate — a leftover `MERGE_MSG` without it
+   follows the non-merge path below.
+2. **When it succeeds:**
+   - If unmerged paths remain (`git diff --name-only --diff-filter=U` is
+     non-empty): `issue task set <taskId> needsAttention true --reason "…"`
+     naming those paths, and stop — no `git add`, no commit, no `add-commit`.
+   - Otherwise: `git add -A`, then `git commit --no-edit` with no `-m` (Git
+     uses `MERGE_MSG`). Then `issue task add-commit <taskId>
+     $(git rev-parse HEAD)` only — do not persist subject or body on the Task.
+3. **When it fails** (no merge in progress):
+   - If `git status` is clean (empty): report that there is nothing to commit,
+     and stop. A clean tree is a normal outcome, not an error.
+   - Otherwise `git add -A`, read the staged diff and compose a single-line
+     subject (lowercase imperative, fewer than 80 chars; Task title is context
+     only), then `git commit -m "<subject>"`.
+   - `issue task add-commit <taskId> $(git rev-parse HEAD)`.
 
 ### Tree nesting and order
 
