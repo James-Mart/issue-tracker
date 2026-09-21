@@ -6,7 +6,7 @@
  */
 
 import { mkdirSync, writeFileSync } from "fs";
-import { resolve } from "path";
+import { isAbsolute, resolve } from "path";
 import { pathToFileURL } from "url";
 import { chromium, type Page } from "@playwright/test";
 
@@ -45,7 +45,12 @@ type Options = {
   viewport: Viewport;
   all: boolean;
   list: boolean;
+  driver: string | null;
   targets: string[];
+};
+
+export type ScreenshotDriverModule = {
+  reach: (page: Page) => Promise<void>;
 };
 
 const THEME_STORAGE_KEY = "ui-theme";
@@ -82,6 +87,7 @@ Options:
   --project <id>     Project for --all / dialog context (default: issue-tracker if present, else first project)
   --theme <mode>     light | dark | both (default dark)
   --viewport <WxH>   Browser viewport (default ${DEFAULT_VIEWPORT.width}x${DEFAULT_VIEWPORT.height})
+  --driver <path>    Absolute path to a module exporting async reach(page) (exclusive with targets and --all)
   --all              Capture common paths for --project plus all dialogs
   --list             Print dialog names and exit
 `;
@@ -115,6 +121,7 @@ export function parseArgs(argv: string[]): Options {
     viewport: DEFAULT_VIEWPORT,
     all: false,
     list: false,
+    driver: null,
     targets: [],
   };
 
@@ -144,6 +151,13 @@ export function parseArgs(argv: string[]): Options {
       opts.viewport = parseViewport(value);
     } else if (arg === "--all") {
       opts.all = true;
+    } else if (arg === "--driver" || arg.startsWith("--driver=")) {
+      const value = arg.startsWith("--driver=") ? arg.slice("--driver=".length) : argv[++i];
+      if (!value) throw new Error("--driver requires an absolute path");
+      if (!isAbsolute(value)) {
+        throw new Error(`--driver path must be absolute, got: ${JSON.stringify(value)}`);
+      }
+      opts.driver = value;
     } else if (arg === "--list") {
       opts.list = true;
     } else if (arg === "--help" || arg === "-h") {
@@ -156,7 +170,36 @@ export function parseArgs(argv: string[]): Options {
     }
   }
 
+  validateScreenshotOptions(opts);
   return opts;
+}
+
+export function validateScreenshotOptions(opts: Options): void {
+  if (!opts.driver) return;
+  if (opts.all) {
+    throw new Error("--driver cannot be combined with --all");
+  }
+  if (opts.targets.length > 0) {
+    throw new Error("--driver cannot be combined with path or dialog targets");
+  }
+}
+
+export async function loadDriverModule(
+  driverPath: string,
+): Promise<ScreenshotDriverModule["reach"]> {
+  let loaded: unknown;
+  try {
+    loaded = await import(pathToFileURL(resolve(driverPath)).href);
+  } catch (err) {
+    throw new Error(
+      `failed to load driver module ${driverPath}: ${err instanceof Error ? err.message : err}`,
+    );
+  }
+  const reach = (loaded as ScreenshotDriverModule).reach;
+  if (typeof reach !== "function") {
+    throw new Error(`driver module must export async function reach(page), got: ${typeof reach}`);
+  }
+  return reach;
 }
 
 function pathFilename(path: string): string {
@@ -621,6 +664,39 @@ async function captureTarget(
   return count;
 }
 
+async function captureWithDriver(
+  page: Page,
+  opts: {
+    baseUrl: string;
+    outDir: string;
+    theme: ThemeMode;
+    reach: ScreenshotDriverModule["reach"];
+  },
+): Promise<number> {
+  const { baseUrl, outDir, theme, reach } = opts;
+  const themes: Theme[] = theme === "both" ? ["dark", "light"] : [theme];
+  const themeSuffix = theme === "both";
+  const pending: { filename: string; buffer: Buffer }[] = [];
+
+  await gotoPath(page, baseUrl, "/");
+  for (const nextTheme of themes) {
+    await applyTheme(page, nextTheme);
+    await reach(page);
+    await settle(page);
+    const filename = withThemeSuffix("driver.png", themeSuffix ? nextTheme : null);
+    const buffer = await page.screenshot({ type: "png", fullPage: false });
+    pending.push({ filename, buffer });
+  }
+
+  for (const shot of pending) {
+    const outPath = resolve(outDir, shot.filename);
+    writeFileSync(outPath, shot.buffer);
+    console.log(outPath);
+  }
+
+  return pending.length;
+}
+
 async function main(): Promise<void> {
   let opts: Options;
   try {
@@ -636,10 +712,42 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (!opts.all && opts.targets.length === 0) {
-    console.error("Error: provide at least one path/dialog target, or --all / --list.");
+  if (!opts.all && opts.targets.length === 0 && !opts.driver) {
+    console.error(
+      "Error: provide at least one path/dialog target, --driver, or --all / --list.",
+    );
     console.error(usage());
     process.exit(1);
+  }
+
+  if (opts.driver) {
+    let reach: ScreenshotDriverModule["reach"];
+    try {
+      reach = await loadDriverModule(opts.driver);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
+
+    await probeServer(opts.baseUrl);
+    mkdirSync(opts.out, { recursive: true });
+
+    const browser = await launchBrowser();
+    const page = await browser.newPage({ viewport: opts.viewport });
+    try {
+      await captureWithDriver(page, {
+        baseUrl: opts.baseUrl,
+        outDir: opts.out,
+        theme: opts.theme,
+        reach,
+      });
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    } finally {
+      await browser.close();
+    }
+    return;
   }
 
   for (const target of opts.targets) {

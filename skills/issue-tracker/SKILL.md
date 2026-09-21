@@ -74,12 +74,17 @@ overridable with `--base-url`).
 
 ```bash
 cd app && npm run screenshots -- [options] <path-or-dialog>...
+cd app && npm run screenshots -- --driver /tmp/reach.mjs
 ```
 
 - **Pages** — path targets starting with `/` (e.g. `/`,
   `/projects/issue-tracker?lens=structure`).
 - **Dialogs** — named ids (e.g. `new-project`, `delete-issue`); run
   `npm run screenshots -- --list` to print names.
+- **Driver** — `--driver <absolute path>` loads a module outside the checkout
+  that exports `async function reach(page)`; the harness opens the base URL,
+  awaits `reach(page)`, then writes `driver-<theme>.png`. Write driver scripts
+  under `/tmp`. `--driver` stands alone — no positional target.
 - **Output** — defaults to `/tmp/issue-tracker-screenshots`; copy PNGs out of
   `/tmp` when attaching to issues.
 - **Discovery** — `npm run screenshots -- --help` for flags; `--all` captures
