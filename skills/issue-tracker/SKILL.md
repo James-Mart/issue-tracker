@@ -83,8 +83,9 @@ cd app && npm run screenshots -- --driver /tmp/reach.mjs
   `npm run screenshots -- --list` to print names.
 - **Driver** — `--driver <absolute path>` loads a module outside the checkout
   that exports `async function reach(page)`; the harness opens the base URL,
-  awaits `reach(page)`, then writes `driver-<theme>.png`. Write driver scripts
-  under `/tmp`. `--driver` stands alone — no positional target.
+  awaits `reach(page)`, then writes `driver.png` (or `driver-dark.png` and
+  `driver-light.png` with `--theme both`). Write driver scripts under `/tmp`.
+  `--driver` stands alone — no positional target.
 - **Output** — defaults to `/tmp/issue-tracker-screenshots`; copy PNGs out of
   `/tmp` when attaching to issues.
 - **Discovery** — `npm run screenshots -- --help` for flags; `--all` captures

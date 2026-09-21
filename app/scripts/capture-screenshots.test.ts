@@ -151,7 +151,9 @@ function startMockApp(): Promise<{ baseUrl: string; close: () => Promise<void> }
         return;
       }
       res.writeHead(200, { "Content-Type": "text/html" });
-      res.end("<!doctype html><html data-theme=\"dark\"><body>mock ui</body></html>");
+      res.end(`<!doctype html><html><head><script>
+document.documentElement.setAttribute("data-theme", localStorage.getItem("ui-theme") || "dark");
+</script></head><body>mock ui</body></html>`);
     });
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
@@ -250,6 +252,29 @@ export async function reach(page) {
     expect(result.status).toBe(0);
     expect(readFileSync(markerPath, "utf8")).toBe("true");
     expect(existsSync(join(outDir, "driver.png"))).toBe(true);
+  });
+
+  it("writes one PNG per theme when --theme both is set", async () => {
+    const driverPath = join(tempDir, "reach-both.mjs");
+    writeFileSync(
+      driverPath,
+      'export async function reach(page) { await page.evaluate(() => { document.body.textContent = "settled"; }); }\n',
+    );
+
+    const result = await runCaptureScript([
+      "--base-url",
+      mockApp.baseUrl,
+      "--driver",
+      driverPath,
+      "--theme",
+      "both",
+      "--out",
+      outDir,
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(existsSync(join(outDir, "driver-dark.png"))).toBe(true);
+    expect(existsSync(join(outDir, "driver-light.png"))).toBe(true);
   });
 
   it("exits non-zero and writes no PNG when reach throws", async () => {
