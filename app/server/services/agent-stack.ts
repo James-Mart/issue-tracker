@@ -6,12 +6,13 @@ import {
   openSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { createServer, type AddressInfo, type Server } from "node:net";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
-import { appDir, conversationsDir } from "../config.js";
+import { appDir, conversationsDir, issuesDir } from "../config.js";
 import { isSlugSafe } from "../slug.js";
 
 /**
@@ -40,6 +41,8 @@ const agentStackProcessSchema = z.object({
 
 const agentStackStateSchema = z.object({
   conversationId: z.string().min(1),
+  /** Absolute Project workspace checkout this stack serves. */
+  workspace: z.string().min(1),
   apiPort: z.number().int().positive(),
   vitePort: z.number().int().positive(),
   baseUrl: z.string().min(1),
@@ -57,6 +60,8 @@ export type AgentStackProcess = z.infer<typeof agentStackProcessSchema>;
 export type AgentStackState = z.infer<typeof agentStackStateSchema>;
 
 export interface AgentStackStartOptions {
+  /** Absolute Project workspace checkout to boot `<workspace>/app` from. */
+  workspace: string;
   /**
    * Cursor `conversation_id` for the calling session — the same value
    * `preToolUse` hooks receive on stdin. Required for the kill-guard index.
@@ -253,12 +258,77 @@ async function pickFreePortPair(): Promise<[number, number]> {
   return ports;
 }
 
-function binPath(name: string): string {
-  const bin = join(appDir, "node_modules", ".bin", name);
+function resolveWorkspacePath(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error("agent stack workspace is required");
+  }
+  if (!isAbsolute(trimmed)) {
+    throw new Error(
+      `agent stack workspace must be an absolute path, got ${JSON.stringify(raw)}`,
+    );
+  }
+  const resolved = resolve(trimmed);
+  if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
+    throw new Error(`agent stack workspace is not a directory: ${resolved}`);
+  }
+  return resolved;
+}
+
+function workspaceAppDir(workspace: string): string {
+  return join(workspace, "app");
+}
+
+function hostAsrModelDir(): string {
+  return process.env.ISSUE_TRACKER_ASR_MODEL_DIR ?? join(appDir, ".asr-models");
+}
+
+function binPath(name: string, cwdAppDir: string): string {
+  const bin = join(cwdAppDir, "node_modules", ".bin", name);
   if (!existsSync(bin)) {
-    throw new Error(`missing ${bin} — run \`npm install\` from \`app/\``);
+    throw new Error(`missing ${bin} — run \`npm install\` from \`${cwdAppDir}\``);
   }
   return bin;
+}
+
+async function runNpmInstall(cwdAppDir: string, asrModelDir: string): Promise<void> {
+  await new Promise<void>((resolvePromise, reject) => {
+    const child = spawn("npm", ["install"], {
+      cwd: cwdAppDir,
+      env: {
+        ...process.env,
+        ISSUE_TRACKER_SKIP_BROWSER_SETUP: "1",
+        ISSUE_TRACKER_SKIP_ASR_MODEL_SETUP: "1",
+        ISSUE_TRACKER_ASR_MODEL_DIR: asrModelDir,
+      },
+      stdio: "inherit",
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolvePromise();
+      else {
+        reject(
+          new Error(
+            `npm install in ${cwdAppDir} exited with code ${code ?? "unknown"}`,
+          ),
+        );
+      }
+    });
+  });
+}
+
+async function ensureWorkspaceAppReady(
+  workspace: string,
+  asrModelDir: string,
+): Promise<string> {
+  const cwdAppDir = workspaceAppDir(workspace);
+  if (!existsSync(cwdAppDir) || !statSync(cwdAppDir).isDirectory()) {
+    throw new Error(`agent stack workspace has no app/ directory: ${cwdAppDir}`);
+  }
+  if (!existsSync(join(cwdAppDir, "node_modules"))) {
+    await runNpmInstall(cwdAppDir, asrModelDir);
+  }
+  return cwdAppDir;
 }
 
 function tailLog(path: string, maxLines = 20): string {
@@ -277,12 +347,13 @@ function spawnChild(
   args: string[],
   env: NodeJS.ProcessEnv,
   conversationId: string,
+  cwdAppDir: string,
 ): { child: ChildProcess; record: AgentStackProcess } {
   const fd = openSync(logPath(conversationId, role), "w");
   let child: ChildProcess;
   try {
     child = spawn(command, args, {
-      cwd: appDir,
+      cwd: cwdAppDir,
       env,
       detached: true,
       stdio: ["ignore", fd, fd],
@@ -352,9 +423,10 @@ async function waitForReady(
  */
 export async function startAgentStack(
   conversationId: string,
-  options: AgentStackStartOptions = {},
+  options: AgentStackStartOptions,
 ): Promise<AgentStackHandle> {
   assertConversationId(conversationId);
+  const workspace = resolveWorkspacePath(options.workspace);
   const { cursorConversationId } = options;
   if (cursorConversationId !== undefined) {
     assertCursorConversationId(cursorConversationId);
@@ -363,23 +435,32 @@ export async function startAgentStack(
   const existing = readAgentStackState(conversationId);
   if (existing) {
     if (isStackLive(existing)) {
-      const state =
-        cursorConversationId === undefined
-          ? existing
-          : rememberCursorConversationId(existing, cursorConversationId);
-      return { state, env: agentStackEnv(state), reused: true };
+      if (existing.workspace === workspace) {
+        const state =
+          cursorConversationId === undefined
+            ? existing
+            : rememberCursorConversationId(existing, cursorConversationId);
+        return { state, env: agentStackEnv(state), reused: true };
+      }
+      await stopAgentStack(conversationId);
+    } else {
+      await stopAgentStack(conversationId);
     }
-    await stopAgentStack(conversationId);
   }
 
-  const vite = binPath("vite");
-  const tsx = binPath("tsx");
+  const asrModelDir = hostAsrModelDir();
+  const cwdAppDir = await ensureWorkspaceAppReady(workspace, asrModelDir);
+  const vite = binPath("vite", cwdAppDir);
+  const tsx = binPath("tsx", cwdAppDir);
   mkdirSync(agentStackDir(conversationId), { recursive: true });
 
   const [apiPort, vitePort] = await pickFreePortPair();
   const baseUrl = `http://127.0.0.1:${vitePort}`;
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    ISSUES_DIR: issuesDir,
+    ISSUE_TRACKER_STORE_READ_ONLY: "1",
+    ISSUE_TRACKER_ASR_MODEL_DIR: asrModelDir,
     PORT: String(apiPort),
     VITE_DEV_PORT: String(vitePort),
     VITE_API_PROXY_TARGET: `http://127.0.0.1:${apiPort}`,
@@ -388,9 +469,18 @@ export async function startAgentStack(
   const spawned: ReturnType<typeof spawnChild>[] = [];
   try {
     spawned.push(
-      spawnChild("api", tsx, ["watch", "server/index.ts"], env, conversationId),
+      spawnChild(
+        "api",
+        tsx,
+        ["watch", "server/index.ts"],
+        env,
+        conversationId,
+        cwdAppDir,
+      ),
     );
-    spawned.push(spawnChild("vite", vite, [], env, conversationId));
+    spawned.push(
+      spawnChild("vite", vite, [], env, conversationId, cwdAppDir),
+    );
   } catch (err) {
     // No state file yet, so nothing else can reclaim these ports for us.
     for (const { record } of spawned) signalGroup(record.pid, "SIGTERM");
@@ -399,6 +489,7 @@ export async function startAgentStack(
 
   let state: AgentStackState = {
     conversationId,
+    workspace,
     apiPort,
     vitePort,
     baseUrl,

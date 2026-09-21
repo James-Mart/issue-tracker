@@ -10,7 +10,7 @@ import {
 } from "fs";
 import { createHash, randomUUID } from "crypto";
 import { join } from "path";
-import { issuesDir } from "../config.js";
+import { issuesDir, storeReadOnly } from "../config.js";
 import {
   kindCapabilityRefusal,
   kindHas,
@@ -73,6 +73,7 @@ import {
   type LabelCascadePatch,
 } from "./labels.js";
 import { assertAllowedAgentModelSlug } from "../agent-model-slugs.js";
+import { assertStoreWritable } from "./store-read-only.js";
 
 let writeChain: Promise<unknown> = Promise.resolve();
 
@@ -189,6 +190,7 @@ export function ensureSourceIdeaMigration(): void {
 
 /** Run every one-shot on-disk migration. Prefer this over calling each ensure* alone. */
 export function ensureMigrations(): void {
+  if (storeReadOnly) return;
   // Kind rename must run before parseIssue-based migrations (old kinds won't parse).
   ensureKindRenamed();
   ensureMergeBasesMigrated();
@@ -310,6 +312,7 @@ function serializeIssue(issue: Issue): string {
 }
 
 function persist(issue: Issue, jsonText: string): void {
+  assertStoreWritable();
   const dir = dirOf(issue.id);
   mkdirSync(dir, { recursive: true });
   writeFileSync(jsonPathOf(issue.id), jsonText);
@@ -331,6 +334,7 @@ export interface IssueWrite {
 // inside `serialize`, and only after the whole prospective set has passed
 // `checkIntegrity` — this function performs no validation of its own.
 export function commitIssueBatch(writes: IssueWrite[], deletes: string[]): void {
+  assertStoreWritable();
   for (const { issue, description } of writes) {
     persist(issue, serializeIssue(issue));
     if (description !== undefined) {
@@ -774,6 +778,7 @@ export function appendComment(
   input: CommentInput,
 ): Promise<Comment> {
   return serialize(() => {
+    assertStoreWritable();
     requireKindCapability(id, "comments");
     const parsed = parseCommentInput(input);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);

@@ -10,6 +10,7 @@ export const pluginDir = join(appDir, "..");
 const defaultIssuesDir = join(pluginDir, "issues");
 
 export let issuesDir = process.env.ISSUES_DIR ?? defaultIssuesDir;
+export let storeReadOnly = process.env.ISSUE_TRACKER_STORE_READ_ONLY === "1";
 /** Peer of `issuesDir` — never nested under or written through the issues store. */
 export let conversationsDir = join(dirname(issuesDir), "conversations");
 /** Peer of `issuesDir` / `conversationsDir` — durable SDK model catalog. */
@@ -26,6 +27,7 @@ export let backupStatusPath = join(dirname(issuesDir), "backup-status.json");
 
 export function refreshStorePathsFromEnv(): void {
   issuesDir = process.env.ISSUES_DIR ?? defaultIssuesDir;
+  storeReadOnly = process.env.ISSUE_TRACKER_STORE_READ_ONLY === "1";
   conversationsDir = join(dirname(issuesDir), "conversations");
   modelSlugCatalogPath = join(
     dirname(issuesDir),

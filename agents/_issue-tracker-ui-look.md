@@ -10,10 +10,13 @@ Absolute path for this file (Read this exact path):
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`.
 
-1. Call `agent_stack_start`. Export the returned `AGENT_STACK_BASE_URL` into
-   the shell.
-2. Run `cd app && npm run screenshots -- <path-or-dialog>` for the Task's
-   visible surface. Read PNGs under `/tmp/issue-tracker-screenshots`.
+1. Call `agent_stack_start` with `workspace` set to the absolute `Workspace:`
+   path from `issue summary` of the issue being verified. Export the returned
+   `AGENT_STACK_BASE_URL` into the shell.
+2. Run `npm run screenshots -- <path-or-dialog>` from the plugin `app/` beside
+   `agents/_issue-tracker-ui-look.md` (workspace-relative `app/`), passing the
+   Task's path or dialog. The summary Workspace checkout is the server, and this
+   `app/` is the capture script. Read PNGs under `/tmp/issue-tracker-screenshots`.
 3. Use Cursor browser MCP tools only for interaction needed to reach a state,
    not for screenshot capture.
 4. If the look is loading, empty, failed, or unavailable, re-run the same

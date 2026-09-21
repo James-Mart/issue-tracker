@@ -6,12 +6,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let root: string;
 let issuesDir: string;
+let workspace: string;
 const strays: ChildProcess[] = [];
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-agent-stack-tools-"));
   issuesDir = join(root, "issues");
+  workspace = join(root, "workspace");
   mkdirSync(issuesDir, { recursive: true });
+  mkdirSync(join(workspace, "app", "node_modules", ".bin"), { recursive: true });
+  for (const name of ["tsx", "vite"]) {
+    writeFileSync(join(workspace, "app", "node_modules", ".bin", name), "#!/bin/sh\n");
+  }
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", issuesDir);
 });
@@ -59,7 +65,14 @@ describe("createAgentStackTools", () => {
     ]);
     expect(tools.agent_stack_start!.inputSchema).toEqual({
       type: "object",
-      properties: {},
+      properties: {
+        workspace: {
+          type: "string",
+          description:
+            "Absolute path to the Project workspace checkout (the Workspace: path from issue summary).",
+        },
+      },
+      required: ["workspace"],
     });
     expect(tools.agent_stack_stop!.inputSchema).toEqual({
       type: "object",
@@ -81,11 +94,13 @@ describe("createAgentStackTools", () => {
       agentStackStatePath("app-conv"),
       JSON.stringify({
         conversationId: "app-conv",
+        workspace,
         apiPort: 42001,
         vitePort: 42002,
         baseUrl: "http://127.0.0.1:42002",
         startedAt: "2026-01-01T00:00:00.000Z",
         processes: [{ role: "api", pid, startTime: procStartTime(pid) }],
+        cursorConversationIds: [],
       }),
     );
 
@@ -94,7 +109,10 @@ describe("createAgentStackTools", () => {
       getCursorConversationId: () => "cursor-session",
     });
 
-    const started = (await tools.agent_stack_start!.execute({}, {})) as {
+    const started = (await tools.agent_stack_start!.execute(
+      { workspace },
+      {},
+    )) as {
       reused: boolean;
       env: Record<string, string>;
       state: { apiPort: number; vitePort: number };
@@ -126,8 +144,20 @@ describe("createAgentStackTools", () => {
       getCursorConversationId: () => undefined,
     });
 
+    await expect(
+      tools.agent_stack_start!.execute({ workspace }, {}),
+    ).rejects.toThrow(/Cursor conversation_id is not available/);
+  });
+
+  it("requires workspace in tool input", async () => {
+    const { createAgentStackTools } = await import("./agent-stack-tools.js");
+    const tools = createAgentStackTools({
+      conversationId: "app-conv",
+      getCursorConversationId: () => "cursor-1",
+    });
+
     await expect(tools.agent_stack_start!.execute({}, {})).rejects.toThrow(
-      /Cursor conversation_id is not available/,
+      /workspace is required/,
     );
   });
 });

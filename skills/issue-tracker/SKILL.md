@@ -46,25 +46,31 @@ http://localhost:8060).
 When verifying server or UI changes from an in-app agents-chat session, call
 the custom tools `agent_stack_start` and `agent_stack_stop` (no conversation-id
 argument — they are scoped to the current conversation). `agent_stack_start`
-brings up an API+Vite watch pair on free ports and returns the env contract
-`AGENT_STACK_API_PORT`, `AGENT_STACK_VITE_PORT`, and `AGENT_STACK_BASE_URL`.
-Export those into the shell before screenshots, Playwright e2e, or other probes.
-Do not stop or restart the human's stack on 8060/8061 to test a lifecycle path.
-Call `agent_stack_stop` when finished.
+requires `{ workspace }`: the absolute `Workspace:` path from `issue summary`.
+It boots that checkout's `app/` on free ports, reads the live tracker store,
+refuses writes to it, and returns the env contract `AGENT_STACK_API_PORT`,
+`AGENT_STACK_VITE_PORT`, and `AGENT_STACK_BASE_URL`. Reuse the live stack only
+when its recorded workspace matches the path you pass. Export those env vars
+into the shell before screenshots, Playwright e2e, or other probes. Do not stop
+or restart the human's stack on 8060/8061 to test a lifecycle path. Call
+`agent_stack_stop` when finished.
 
 Outside agents-chat, the same lifecycle is available as:
 
 ```bash
-cd app && npm run agent-stack -- start <conversationId>
+cd app && npm run agent-stack -- start <conversationId> <workspace>
 cd app && npm run agent-stack -- stop <conversationId>
 ```
 
 ## UI screenshots
 
 For agents validating or attaching UI state, use the Playwright capture script
-(not Cursor IDE browser screenshot tools). Call `agent_stack_start` when
-needed and export `AGENT_STACK_BASE_URL` into the shell; the script uses that
-env as its default base URL (still overridable with `--base-url`).
+(not Cursor IDE browser screenshot tools). Call `agent_stack_start` with the
+summary `Workspace:` path when needed and export `AGENT_STACK_BASE_URL` into the
+shell. Run `npm run screenshots` from the harness plugin `app/` (the `app/`
+directory beside this plugin's `agents/` folder), not from the summary Workspace
+checkout; the script uses `AGENT_STACK_BASE_URL` as its default base URL (still
+overridable with `--base-url`).
 
 ```bash
 cd app && npm run screenshots -- [options] <path-or-dialog>...

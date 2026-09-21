@@ -2,6 +2,7 @@ export type IssueErrorCode =
   | "not_found"
   | "validation"
   | "conflict"
+  | "read_only"
   | "gh-missing"
   | "gh-unauthenticated"
   | "gh-failed"
@@ -17,6 +18,7 @@ const STATUS: Record<IssueErrorCode, number> = {
   not_found: 404,
   validation: 400,
   conflict: 409,
+  read_only: 403,
   "gh-missing": 503,
   "gh-unauthenticated": 401,
   "gh-failed": 502,

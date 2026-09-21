@@ -85,16 +85,18 @@ describe("agent sessions manager", () => {
       agentStackStatePath(meta.id),
       JSON.stringify({
         conversationId: meta.id,
+        workspace: workspaceDir,
         apiPort: 43001,
         vitePort: 43002,
         baseUrl: "http://127.0.0.1:43002",
         startedAt: "2026-01-01T00:00:00.000Z",
         processes: [{ role: "api", pid, startTime: startTok }],
+        cursorConversationIds: [],
       }),
     );
     try {
       const started = (await fake.created[0]!.customTools!.agent_stack_start!.execute(
-        {},
+        { workspace: workspaceDir },
         {},
       )) as { reused: boolean };
       expect(started.reused).toBe(true);

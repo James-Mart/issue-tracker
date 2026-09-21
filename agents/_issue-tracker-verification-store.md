@@ -8,6 +8,10 @@ Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`
 
-The verifying agent seeds the fixture data the change needs. The live store is
-the tracker the human is using; a work-in-progress server writing there is
-the interference worktrees exist to end.
+When the verification server is started by `agent_stack_start`, it reads the
+live tracker store and refuses writes. The look role does not seed that store.
+If the state to capture is not already there, the look fails.
+
+When the verification server is not `agent_stack_start`, it uses its checkout's
+store. The verifying agent seeds the fixture data the change needs, and that
+server does not write the live store.

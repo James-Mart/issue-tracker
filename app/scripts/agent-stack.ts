@@ -2,7 +2,7 @@
 /**
  * Start or stop a conversation's agent verification stack.
  *
- * Usage: npm run agent-stack -- start|stop <conversationId>
+ * Usage: npm run agent-stack -- start|stop <conversationId> [<workspace>]
  */
 
 import {
@@ -12,16 +12,17 @@ import {
 } from "../server/services/agent-stack.js";
 
 function usage(): string {
-  return `Usage: npm run agent-stack -- start|stop <conversationId>
+  return `Usage: npm run agent-stack -- start|stop <conversationId> [<workspace>]
 
-start  Start (or adopt) the conversation's API + Vite stack on free ports and
-       print its env contract on stdout.
+start  Start (or adopt) the conversation's API + Vite stack on free ports for
+       <workspace> (absolute Project checkout path) and print its env contract
+       on stdout. Reuses the live stack only when its recorded workspace matches.
 stop   Stop the conversation's stack and clear its durable state.
 `;
 }
 
 async function main(): Promise<void> {
-  const [command, conversationId, ...rest] = process.argv.slice(2);
+  const [command, conversationId, workspace, ...rest] = process.argv.slice(2);
 
   if (!command || !conversationId || rest.length > 0) {
     process.stderr.write(usage());
@@ -29,7 +30,13 @@ async function main(): Promise<void> {
   }
 
   if (command === "start") {
-    const { state, env, reused } = await startAgentStack(conversationId);
+    if (!workspace) {
+      process.stderr.write(usage());
+      process.exit(1);
+    }
+    const { state, env, reused } = await startAgentStack(conversationId, {
+      workspace,
+    });
     for (const [key, value] of Object.entries(env)) {
       process.stdout.write(`${key}=${value}\n`);
     }
