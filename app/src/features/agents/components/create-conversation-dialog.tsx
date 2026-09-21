@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +22,7 @@ import { useCreateConversation } from "../api/mutations";
 import { useAgentModelsQuery } from "../api/queries";
 import { useIssuesQuery } from "@/features/issues/api/queries";
 import { listProjects } from "@/features/issues/lib/build-tree";
+import { agentsConversationPath } from "../lib/links";
 import {
   visionSessionMessage,
   visionSessionTitle,
@@ -56,9 +58,7 @@ export function buildCreateConversationBody(
 export function CreateConversationDialog() {
   const open = useAgentsUiStore((s) => s.createDialogOpen);
   const close = useAgentsUiStore((s) => s.closeCreateDialog);
-  const setSelectedConversationId = useAgentsUiStore(
-    (s) => s.setSelectedConversationId,
-  );
+  const navigate = useNavigate();
   const { data: issuesData } = useIssuesQuery();
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const createConversation = useCreateConversation();
@@ -110,7 +110,7 @@ export function CreateConversationDialog() {
       }),
       {
         onSuccess: (meta) => {
-          setSelectedConversationId(meta.id);
+          navigate(agentsConversationPath(meta.id));
           close();
         },
       },

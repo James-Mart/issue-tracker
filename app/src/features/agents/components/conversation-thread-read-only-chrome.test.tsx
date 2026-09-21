@@ -2,7 +2,7 @@
 import {
   mountThread,
   resetThreadMocks,
-  setSelectedConversationId,
+  navigate,
   threadUi,
 } from "./conversation-thread.test-helpers";
 import { act } from "react";
@@ -101,7 +101,7 @@ describe("ConversationThread read-only fork chrome", () => {
       sourceLink.click();
     });
 
-    expect(setSelectedConversationId).toHaveBeenCalledWith("conv-source");
+    expect(navigate).toHaveBeenCalledWith("/agents/conv-source");
   });
 
   it("places the read-only badge on the status strip row", () => {

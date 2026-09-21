@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { Archive, ArchiveRestore, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { ConversationListItem as ConversationRow } from "@server/schemas";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { currentGlow } from "@/components/ui/overlay-surfaces";
 import { useIsCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { cn } from "@/lib/utils/cn";
 import { useUpdateConversation } from "../api/mutations";
+import { AGENTS_PATH } from "../lib/links";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 
 /** Pulsing current-hue dot for a roster row with an in-flight run. */
@@ -50,12 +52,9 @@ export function ConversationListItem({
   const startRename = useAgentsUiStore((s) => s.startRename);
   const clearRename = useAgentsUiStore((s) => s.clearRename);
   const requestDelete = useAgentsUiStore((s) => s.requestDelete);
-  const selectedConversationId = useAgentsUiStore(
-    (s) => s.selectedConversationId,
-  );
-  const setSelectedConversationId = useAgentsUiStore(
-    (s) => s.setSelectedConversationId,
-  );
+  const { conversationId } = useParams<{ conversationId?: string }>();
+  const navigate = useNavigate();
+  const selectedConversationId = conversationId ?? null;
   const updateConversation = useUpdateConversation();
   const isCoarsePointer = useIsCoarsePointer();
 
@@ -77,7 +76,7 @@ export function ConversationListItem({
       {
         onSuccess: () => {
           if (selectedConversationId === conversation.id) {
-            setSelectedConversationId(null);
+            navigate(AGENTS_PATH);
           }
         },
       },

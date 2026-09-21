@@ -4,7 +4,7 @@ import {
   mountThread,
   renderThread,
   resetThreadMocks,
-  setSelectedConversationId,
+  navigate,
   threadUi,
   transcriptState,
 } from "./conversation-thread.test-helpers";
@@ -95,7 +95,7 @@ describe("ConversationThread assistant meta fork affordance", () => {
       expect.objectContaining({ seq: 2 }),
       expect.anything(),
     );
-    expect(setSelectedConversationId).toHaveBeenCalledWith("conv-forked");
+    expect(navigate).toHaveBeenCalledWith("/agents/conv-forked");
   });
 
   it("never shows the control on an in-flight turn that still has an assistant", () => {

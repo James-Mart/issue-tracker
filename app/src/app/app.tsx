@@ -69,6 +69,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<CockpitPage />} />
             <Route path="/agents" element={<AgentsPage />} />
+            <Route path="/agents/:conversationId" element={<AgentsPage />} />
             <Route path="/pipelines" element={<PipelinePage />} />
             <Route path="/runs" element={<PipelinePage />} />
             <Route

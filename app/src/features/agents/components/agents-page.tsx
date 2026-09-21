@@ -1,7 +1,12 @@
+import { useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { PageShell } from "@/components/page-shell";
 import { ShellState } from "@/app/shell-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
+import { useConversationsQuery } from "../api/queries";
+import { resolveAgentsConversationParam } from "../lib/agents-conversation-param";
+import { AGENTS_PATH } from "../lib/links";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 import { ConversationListSidebar } from "./conversation-list-sidebar";
 import { ConversationThread } from "./conversation-thread";
@@ -56,13 +61,28 @@ function AgentsPane({
 
 /** Glass-style two-pane agents surface: conversation list + thread. */
 export function AgentsPage() {
-  const selectedConversationId = useAgentsUiStore(
-    (s) => s.selectedConversationId,
-  );
-  const setSelectedConversationId = useAgentsUiStore(
-    (s) => s.setSelectedConversationId,
-  );
+  const { conversationId } = useParams<{ conversationId?: string }>();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const setShowArchived = useAgentsUiStore((s) => s.setShowArchived);
+  // Include archived so a hidden-but-real URL id can be revealed instead of
+  // treated as missing.
+  const { data: conversations } = useConversationsQuery(true);
+  const resolved = resolveAgentsConversationParam(conversationId, conversations);
+  const selectedConversationId =
+    conversations === undefined ? (conversationId ?? null) : resolved.selectedId;
+
+  useEffect(() => {
+    if (resolved.replaceWithRoster) {
+      navigate(AGENTS_PATH, { replace: true });
+    }
+  }, [navigate, resolved.replaceWithRoster]);
+
+  useEffect(() => {
+    if (resolved.revealArchived) {
+      setShowArchived(true);
+    }
+  }, [resolved.revealArchived, setShowArchived]);
 
   const conversationsPane = (
     <AgentsPane
@@ -85,9 +105,7 @@ export function AgentsPage() {
         <ConversationThread
           key={selectedConversationId}
           conversationId={selectedConversationId}
-          onBack={
-            isMobile ? () => setSelectedConversationId(null) : undefined
-          }
+          onBack={isMobile ? () => navigate(AGENTS_PATH) : undefined}
         />
       ) : (
         <ShellState

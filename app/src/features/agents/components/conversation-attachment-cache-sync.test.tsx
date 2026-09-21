@@ -83,6 +83,14 @@ vi.mock("./composer", () => ({
   Composer: () => <div data-testid="conversation-composer" />,
 }));
 
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+  };
+});
+
 function testQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {

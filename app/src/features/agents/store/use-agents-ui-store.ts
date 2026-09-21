@@ -1,8 +1,6 @@
 import { create } from "zustand";
 
 interface AgentsUiState {
-  selectedConversationId: string | null;
-  setSelectedConversationId: (id: string | null) => void;
   createDialogOpen: boolean;
   openCreateDialog: () => void;
   closeCreateDialog: () => void;
@@ -17,8 +15,6 @@ interface AgentsUiState {
 }
 
 export const useAgentsUiStore = create<AgentsUiState>((set) => ({
-  selectedConversationId: null,
-  setSelectedConversationId: (id) => set({ selectedConversationId: id }),
   createDialogOpen: false,
   openCreateDialog: () => set({ createDialogOpen: true }),
   closeCreateDialog: () => set({ createDialogOpen: false }),
