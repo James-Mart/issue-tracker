@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -63,6 +64,10 @@ import {
   readComposerDraft,
   writeComposerDraft,
 } from "../lib/composer-draft-storage";
+import {
+  applyComposerAutoGrow,
+  useThreadPaneHeight,
+} from "../lib/composer-height";
 
 const DRAFT_PERSIST_DEBOUNCE_MS = 300;
 const MAX_ATTACHMENT_MB = 25;
@@ -232,7 +237,9 @@ export function Composer({
   }, [conversationId, initialModel]);
 
   const skipDraftPersistRef = useRef(true);
+  const composerRootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const paneHeight = useThreadPaneHeight(composerRootRef);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const refocusAfterSendRef = useRef(false);
   const dragDepthRef = useRef(0);
@@ -340,6 +347,10 @@ export function Composer({
     refocusAfterSendRef.current = false;
     textareaRef.current?.focus();
   }, [composerBusy, draft]);
+
+  useLayoutEffect(() => {
+    applyComposerAutoGrow(textareaRef.current, paneHeight);
+  }, [draft, paneHeight]);
 
   const onSuccessfulSend = () => {
     clearComposerDraft(conversationId);
@@ -477,6 +488,7 @@ export function Composer({
 
   return (
     <div
+      ref={composerRootRef}
       className="shrink-0 border-t border-border bg-card px-3 py-3"
       data-testid="conversation-composer"
       onPaste={onPaste}
@@ -567,7 +579,7 @@ export function Composer({
                   }
                   aria-label="Message the agent"
                   disabled={composerBusy}
-                  className="min-h-[44px] max-h-40 w-full resize-none"
+                  className="min-h-[44px] w-full resize-none overflow-y-auto"
                 />
               )}
             </div>

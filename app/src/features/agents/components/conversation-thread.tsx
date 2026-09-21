@@ -850,6 +850,7 @@ export function ConversationThread({
       className="flex min-h-0 flex-1 flex-col"
       style={{ paddingBottom: keyboardInset }}
       data-testid="conversation-thread"
+      data-thread-pane=""
     >
       <OpenThreadChrome
         title={title}
