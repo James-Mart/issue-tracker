@@ -30,7 +30,7 @@
     "install-hooks": "tsx scripts/install-cursor-hooks.ts",
     "migrate-comment-ids": "tsx scripts/migrate-comment-ids.ts",
     "migrate-task-commits": "tsx scripts/migrate-task-commits.ts",
-    "test": "npm run lint:boundary && npm run lint:spawns && npm run lint:cli-forms && npm run lint:skill-paths && npm run lint:pipeline-shape && npm run lint:transport && npm run lint:file-length && vitest run",
+    "test": "tsx scripts/run-with-deadline.ts",
     "test:live": "CURSOR_SDK_LIVE=1 vitest run live.test",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",

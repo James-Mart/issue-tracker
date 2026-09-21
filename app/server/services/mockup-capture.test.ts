@@ -8,11 +8,21 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { appDir } from "../config.js";
 
 let root: string;
 let issuesDir: string;
+let stackBaseUrl: string;
 
 async function loadCapture() {
   return import("./mockup-capture.js");
@@ -90,24 +100,24 @@ export const Hover = {
   writeFileSync(path, JSON.stringify(config), "utf8");
 }
 
-beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "issue-tracker-mockup-capture-entry-"));
-  issuesDir = join(root, "issues");
-  mkdirSync(issuesDir, { recursive: true });
-  vi.resetModules();
-  vi.stubEnv("ISSUES_DIR", issuesDir);
-});
+function usePerTestIssuesDir(): void {
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "issue-tracker-mockup-capture-entry-"));
+    issuesDir = join(root, "issues");
+    mkdirSync(issuesDir, { recursive: true });
+    vi.resetModules();
+    vi.stubEnv("ISSUES_DIR", issuesDir);
+  });
 
-afterEach(async () => {
-  const { stopMockupStack } = await loadStack().catch(() => ({
-    stopMockupStack: async () => ({ stopped: false, state: null }),
-  }));
-  await stopMockupStack("capture-test").catch(() => undefined);
-  vi.unstubAllEnvs();
-  rmSync(root, { recursive: true, force: true });
-});
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(root, { recursive: true, force: true });
+  });
+}
 
 describe("parseViewports", () => {
+  usePerTestIssuesDir();
+
   it("accepts phone and phone,desktop", async () => {
     const { parseViewports } = await loadCapture();
     expect(parseViewports("phone")).toEqual(["phone"]);
@@ -122,6 +132,8 @@ describe("parseViewports", () => {
 });
 
 describe("resolveMockupCaptureBaseUrl", () => {
+  usePerTestIssuesDir();
+
   it("throws naming the conversation when no stack is running", async () => {
     const { resolveMockupCaptureBaseUrl } = await loadCapture();
     const { conversationsDir } = await loadConfig();
@@ -137,31 +149,46 @@ describe("resolveMockupCaptureBaseUrl", () => {
       resolveMockupCaptureBaseUrl("missing-conversation", "http://127.0.0.1:9999/"),
     ).toBe("http://127.0.0.1:9999");
   });
-
-  it("reads the live stack base URL when no override is given", async () => {
-    await writeHarnessWithStories("capture-test");
-    const { startMockupStack, stopMockupStack } = await loadStack();
-    const { resolveMockupCaptureBaseUrl } = await loadCapture();
-
-    const handle = await startMockupStack("capture-test");
-    try {
-      expect(resolveMockupCaptureBaseUrl("capture-test")).toBe(handle.state.baseUrl);
-    } finally {
-      await stopMockupStack("capture-test");
-    }
-  });
 });
 
-describe("captureMockupStories", () => {
-  it(
-    "writes captures into the direction scratch and returns absolute paths",
-    async () => {
-      await writeHarnessWithStories("capture-test");
-      const { startMockupStack, stopMockupStack } = await loadStack();
-      const { captureMockupStories, mockupCaptureOutDir } = await loadCapture();
+describe("capture-test stack", () => {
+  beforeAll(async () => {
+    root = mkdtempSync(join(tmpdir(), "issue-tracker-mockup-capture-entry-"));
+    issuesDir = join(root, "issues");
+    mkdirSync(issuesDir, { recursive: true });
+    vi.resetModules();
+    vi.stubEnv("ISSUES_DIR", issuesDir);
+    await writeHarnessWithStories("capture-test");
+    const { startMockupStack } = await loadStack();
+    const handle = await startMockupStack("capture-test");
+    stackBaseUrl = handle.state.baseUrl;
+  }, 120_000);
 
-      const handle = await startMockupStack("capture-test");
-      try {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterAll(async () => {
+    try {
+      const { stopMockupStack } = await loadStack();
+      await stopMockupStack("capture-test");
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("reads the live stack base URL when no override is given", async () => {
+    const { resolveMockupCaptureBaseUrl } = await loadCapture();
+    expect(resolveMockupCaptureBaseUrl("capture-test")).toBe(stackBaseUrl);
+  });
+
+  describe("captureMockupStories", () => {
+    it(
+      "writes captures into the direction scratch and returns absolute paths",
+      async () => {
+        const { captureMockupStories, mockupCaptureOutDir } = await loadCapture();
+
         const paths = await captureMockupStories({
           conversationId: "capture-test",
           directionId: "direction-a",
@@ -175,22 +202,15 @@ describe("captureMockupStories", () => {
           expect(existsSync(path)).toBe(true);
           expect(readFileSync(path).length).toBeGreaterThan(0);
         }
-      } finally {
-        await stopMockupStack("capture-test");
-      }
-    },
-    120_000,
-  );
+      },
+      120_000,
+    );
 
-  it(
-    "captures two PNGs per state when both viewports are requested",
-    async () => {
-      await writeHarnessWithStories("capture-test");
-      const { startMockupStack, stopMockupStack } = await loadStack();
-      const { captureMockupStories } = await loadCapture();
+    it(
+      "captures two PNGs per state when both viewports are requested",
+      async () => {
+        const { captureMockupStories } = await loadCapture();
 
-      const handle = await startMockupStack("capture-test");
-      try {
         const paths = await captureMockupStories({
           conversationId: "capture-test",
           directionId: "direction-a",
@@ -200,10 +220,8 @@ describe("captureMockupStories", () => {
         expect(paths).toHaveLength(4);
         expect(paths.filter((path) => path.endsWith("-phone.png"))).toHaveLength(2);
         expect(paths.filter((path) => path.endsWith("-desktop.png"))).toHaveLength(2);
-      } finally {
-        await stopMockupStack("capture-test");
-      }
-    },
-    120_000,
-  );
+      },
+      120_000,
+    );
+  });
 });
