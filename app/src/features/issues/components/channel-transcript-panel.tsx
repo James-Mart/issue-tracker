@@ -16,7 +16,10 @@ import {
   OpenThreadChrome,
 } from "@/features/agents/components/conversation-thread";
 import { cn } from "@/lib/utils/cn";
-import { defaultChannelSession } from "../api/channel-sessions";
+import {
+  currentChannelSession,
+  defaultChannelSession,
+} from "../api/channel-sessions";
 import { useChannelSessionsQuery } from "../api/queries";
 import { cockpitLaunchOverlayForIssue } from "../lib/cockpit-launch-sync";
 import {

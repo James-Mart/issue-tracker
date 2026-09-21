@@ -93,6 +93,14 @@ vi.mock("./implementing-launch-control", () => ({
   ),
 }));
 
+vi.mock("./export-transcript-chrome", () => ({
+  useExportTranscriptChrome: () => ({
+    composerDisabled: true,
+    composerDisabledPlaceholder: "Message disabled while rewrite runs...",
+    retry: null,
+  }),
+}));
+
 vi.mock("./channel-retro-control", () => ({
   ChannelRetroControl: () => (
     <button type="button" data-testid="channel-retro">
@@ -187,12 +195,14 @@ vi.mock("@/features/agents/components/conversation-thread", () => ({
     conversationId,
     meta,
     hideComposer,
+    composerDisabled,
     onBack,
     headerActions,
   }: {
     conversationId: string;
     meta?: { title: string; model: string };
     hideComposer?: boolean;
+    composerDisabled?: boolean;
     onBack?: () => void;
     headerActions?: ReactNode;
   }) => {
@@ -205,6 +215,7 @@ vi.mock("@/features/agents/components/conversation-thread", () => ({
         data-conversation-id={conversationId}
         data-model={meta?.model ?? ""}
         data-hide-composer={hideComposer ? "true" : "false"}
+        data-composer-disabled={composerDisabled ? "true" : "false"}
       >
         {onBack ? (
           <button type="button" aria-label="Back to overview" onClick={onBack}>
@@ -232,7 +243,7 @@ function mountPanel(
     status?: "open";
   },
   options?: {
-    channel?: "planning" | "implementing";
+    channel?: "planning" | "implementing" | "export";
     projectId?: string;
     parentKind?: "project" | "epic";
     mobileFullViewport?: boolean;
@@ -661,6 +672,26 @@ describe("ChannelTranscriptPanel", () => {
     expect(
       container.querySelector('[data-testid="conversation-thread"]'),
     ).toBeNull();
+  });
+
+  it("renders the export transcript instead of crashing on the current session", () => {
+    queryState.data = [
+      {
+        id: "exp-1",
+        title: "Export Ship it",
+        model: "composer-2.5",
+        createdAt: "2026-08-01T00:00:00.000Z",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+        archived: false,
+        activeRun: true,
+        awaitingHuman: false,
+      },
+    ];
+    const { container } = mountPanel("Export", epic, { channel: "export" });
+    const thread = container.querySelector('[data-testid="conversation-thread"]');
+    expect(thread?.getAttribute("data-conversation-id")).toBe("exp-1");
+    expect(thread?.getAttribute("data-composer-disabled")).toBe("true");
+    expect(container.textContent).not.toContain("This view crashed");
   });
 
   it("exposes delete for a single session from the mobile overflow menu", () => {
