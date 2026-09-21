@@ -8,6 +8,7 @@ import {
   type ClipboardEvent,
   type DragEvent,
   type KeyboardEvent,
+  type PointerEvent,
 } from "react";
 import { Mic, Paperclip, Send, Square, Upload, X, Zap } from "lucide-react";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useIsCoarsePointer } from "@/hooks/use-coarse-pointer";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { insertTextAtCaret } from "@/lib/insert-text-at-caret";
 import { transcribeAudio } from "../api/client";
@@ -66,8 +68,18 @@ import {
 } from "../lib/composer-draft-storage";
 import {
   applyComposerAutoGrow,
+  applyComposerExplicitHeight,
+  clampDragHeight,
+  COMPOSER_HEIGHT_ARROW_STEP_PX,
+  COMPOSER_MIN_HEIGHT_PX,
   useThreadPaneHeight,
 } from "../lib/composer-height";
+
+function appliedFieldHeight(el: HTMLTextAreaElement): number {
+  const fromStyle = Number.parseFloat(el.style.height);
+  if (Number.isFinite(fromStyle) && fromStyle > 0) return fromStyle;
+  return COMPOSER_MIN_HEIGHT_PX;
+}
 
 const DRAFT_PERSIST_DEBOUNCE_MS = 300;
 const MAX_ATTACHMENT_MB = 25;
@@ -228,7 +240,9 @@ export function Composer({
   >([]);
   const [uploadError, setUploadError] = useState<UploadError | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [explicitHeight, setExplicitHeight] = useState<number | null>(null);
   const isCoarsePointer = useIsCoarsePointer();
+  const isMobile = useIsMobile();
 
   const models = modelsData?.models ?? [];
 
@@ -244,6 +258,11 @@ export function Composer({
   const refocusAfterSendRef = useRef(false);
   const dragDepthRef = useRef(0);
   const caretPositionRef = useRef<number | null>(null);
+  const resizeDragRef = useRef<{
+    pointerId: number;
+    startY: number;
+    startHeight: number;
+  } | null>(null);
 
   const onTranscript = useCallback((text: string) => {
     setDraft((prev) => {
@@ -349,8 +368,61 @@ export function Composer({
   }, [composerBusy, draft]);
 
   useLayoutEffect(() => {
+    if (!isMobile && explicitHeight != null) {
+      applyComposerExplicitHeight(
+        textareaRef.current,
+        explicitHeight,
+        paneHeight,
+      );
+      return;
+    }
     applyComposerAutoGrow(textareaRef.current, paneHeight);
-  }, [draft, paneHeight]);
+  }, [draft, paneHeight, explicitHeight, isMobile]);
+
+  const commitExplicitHeight = (height: number) => {
+    setExplicitHeight(clampDragHeight(height, paneHeight));
+  };
+
+  const onGripPointerDown = (e: PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    const el = textareaRef.current;
+    if (!el || paneHeight <= 0) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const startHeight = explicitHeight ?? appliedFieldHeight(el);
+    resizeDragRef.current = {
+      pointerId: e.pointerId,
+      startY: e.clientY,
+      startHeight,
+    };
+    commitExplicitHeight(startHeight);
+  };
+
+  const onGripPointerMove = (e: PointerEvent<HTMLButtonElement>) => {
+    const drag = resizeDragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    commitExplicitHeight(drag.startHeight - (e.clientY - drag.startY));
+  };
+
+  const onGripPointerUp = (e: PointerEvent<HTMLButtonElement>) => {
+    const drag = resizeDragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    resizeDragRef.current = null;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  const onGripKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    const el = textareaRef.current;
+    if (!el || paneHeight <= 0) return;
+    e.preventDefault();
+    const current = explicitHeight ?? appliedFieldHeight(el);
+    const delta =
+      e.key === "ArrowUp"
+        ? COMPOSER_HEIGHT_ARROW_STEP_PX
+        : -COMPOSER_HEIGHT_ARROW_STEP_PX;
+    commitExplicitHeight(current + delta);
+  };
 
   const onSuccessfulSend = () => {
     clearComposerDraft(conversationId);
@@ -489,7 +561,7 @@ export function Composer({
   return (
     <div
       ref={composerRootRef}
-      className="shrink-0 border-t border-border bg-card px-3 py-3"
+      className="relative shrink-0 border-t border-border bg-card px-3 py-3"
       data-testid="conversation-composer"
       onPaste={onPaste}
       onDragEnter={onDragEnter}
@@ -497,6 +569,23 @@ export function Composer({
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
+      {!isMobile ? (
+        <button
+          type="button"
+          aria-label="Resize composer"
+          data-testid="composer-resize-grip"
+          className="absolute left-1/2 top-0 z-20 flex h-3 w-12 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize items-center justify-center touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onPointerDown={onGripPointerDown}
+          onPointerMove={onGripPointerMove}
+          onPointerUp={onGripPointerUp}
+          onKeyDown={onGripKeyDown}
+        >
+          <span
+            aria-hidden
+            className="h-1 w-8 rounded-full bg-[hsl(var(--rail-lit))]"
+          />
+        </button>
+      ) : null}
       <div className={cn("mx-auto w-full min-w-0", READING_MEASURE_CLASS)}>
         <div
           className={cn(

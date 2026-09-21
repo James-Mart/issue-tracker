@@ -3,6 +3,8 @@ import {
   COMPOSER_MIN_HEIGHT_PX,
   autoGrowCeilingPx,
   clampAutoGrowHeight,
+  clampDragHeight,
+  dragMaxPx,
 } from "./composer-height";
 
 describe("composer auto-grow height", () => {
@@ -15,5 +17,18 @@ describe("composer auto-grow height", () => {
 
   it("keeps the collapsed minimum when the pane ceiling is smaller", () => {
     expect(clampAutoGrowHeight(80, 80)).toBe(COMPOSER_MIN_HEIGHT_PX);
+  });
+});
+
+describe("composer drag height", () => {
+  it("clamps between the collapsed minimum and 80% of the pane", () => {
+    expect(dragMaxPx(500)).toBe(400);
+    expect(clampDragHeight(80, 500)).toBe(80);
+    expect(clampDragHeight(20, 500)).toBe(COMPOSER_MIN_HEIGHT_PX);
+    expect(clampDragHeight(480, 500)).toBe(400);
+  });
+
+  it("keeps the collapsed minimum when the drag max is smaller", () => {
+    expect(clampDragHeight(80, 40)).toBe(COMPOSER_MIN_HEIGHT_PX);
   });
 });
