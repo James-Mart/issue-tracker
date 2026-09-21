@@ -67,11 +67,12 @@ export function diffTabForIssue(issue: Issue): boolean {
 
 /**
  * Page-level tab set for issue detail: Overview always; optional channel;
- * Project keeps supporting-doc preview tabs.
+ * Export when a start has happened; Project keeps supporting-doc preview tabs.
  */
 export function tabsForIssueDetail(
   issue: Issue,
   parentKind?: IssueKind,
+  options?: { includeExport?: boolean },
 ): IssueDetailTab[] {
   const tabs: IssueDetailTab[] = [
     { key: DEFAULT_ISSUE_DETAIL_TAB, label: "Overview" },
@@ -82,6 +83,13 @@ export function tabsForIssueDetail(
       key: channel,
       label: CHANNEL_TAB_LABELS[channel],
       channel,
+    });
+  }
+  if (options?.includeExport) {
+    tabs.push({
+      key: "export",
+      label: CHANNEL_TAB_LABELS.export,
+      channel: "export",
     });
   }
   if (agentsTabForIssue(issue, parentKind)) {

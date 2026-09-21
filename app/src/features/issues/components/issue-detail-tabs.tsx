@@ -11,6 +11,7 @@ import {
   overlayCockpitLaunchAck,
 } from "../lib/cockpit-launch-sync";
 import { channelForLaunchKind } from "../lib/detail-launch-sync";
+import { exportTabIncluded } from "../lib/export-tab";
 import {
   AGENTS_DETAIL_TAB,
   DIFF_DETAIL_TAB,
@@ -62,15 +63,20 @@ export function IssueDetailTabs({
   projectId,
   parentKind,
   overview,
+  exportTab = false,
 }: {
   issue: IssueDetail;
   projectId: string;
   parentKind?: IssueKind;
   overview: ReactNode;
+  /** `loading` keeps an existing `?tab=export` from being stripped. */
+  exportTab?: boolean | "loading";
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const includeExport = exportTabIncluded(exportTab, searchParams.get("tab"));
   const tabs = useMemo(
-    () => tabsForIssueDetail(issue, parentKind),
-    [issue, parentKind],
+    () => tabsForIssueDetail(issue, parentKind, { includeExport }),
+    [includeExport, issue, parentKind],
   );
   const { data: list } = useIssuesQuery();
   const pending = useCockpitLaunchStore((s) => s.pending);
@@ -85,7 +91,6 @@ export function IssueDetailTabs({
     : list?.derived;
   const ideaStatus =
     issue.kind === "idea" ? derived?.[issue.id]?.ideaStatus : undefined;
-  const [searchParams, setSearchParams] = useSearchParams();
   const active = resolveIssueDetailTab(searchParams.get("tab"), tabs);
   const isMobile = useIsMobile();
   const mobileChannelChrome =
@@ -93,12 +98,12 @@ export function IssueDetailTabs({
 
   useEffect(() => {
     const raw = searchParams.get("tab");
-    if (raw != null && !tabs.some((tab) => tab.key === raw)) {
-      setSearchParams((prev) => writeIssueDetailTabParam(prev, active), {
-        replace: true,
-      });
-    }
-  }, [active, searchParams, setSearchParams, tabs]);
+    if (raw == null || tabs.some((tab) => tab.key === raw)) return;
+    if (exportTab === "loading" && raw === "export") return;
+    setSearchParams((prev) => writeIssueDetailTabParam(prev, active), {
+      replace: true,
+    });
+  }, [active, exportTab, searchParams, setSearchParams, tabs]);
 
   useEffect(() => {
     return useCockpitLaunchStore.subscribe((state, prev) => {

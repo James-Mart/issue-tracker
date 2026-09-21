@@ -78,6 +78,8 @@ function mountComposer(
     model?: string
     runActive?: boolean
     readOnly?: boolean
+    disabled?: boolean
+    disabledPlaceholder?: string
   } = {},
 ): {
   container: HTMLDivElement
@@ -93,6 +95,8 @@ function mountComposer(
         model={overrides.model ?? "composer-2.5-fast"}
         runActive={overrides.runActive ?? false}
         readOnly={overrides.readOnly}
+        disabled={overrides.disabled}
+        disabledPlaceholder={overrides.disabledPlaceholder}
       />,
     )
   })
@@ -765,6 +769,33 @@ describe("Composer height persistence", () => {
     const input = textarea(container!)
     setDraft(input, "taller draft")
     expect(input.style.height).toBe("120px")
+  })
+})
+
+describe("Composer disabled rewrite", () => {
+  let container: HTMLDivElement | undefined
+  let root: Root | undefined
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount())
+    container?.remove()
+    container = undefined
+    root = undefined
+  })
+
+  it("keeps the field visible and refuses input during a rewrite", () => {
+    ;({ container, root } = mountComposer({
+      disabled: true,
+      disabledPlaceholder: "Message disabled while rewrite runs...",
+      runActive: true,
+    }))
+    const input = textarea(container!)
+    expect(input.disabled).toBe(true)
+    expect(input.placeholder).toBe("Message disabled while rewrite runs...")
+    expect(
+      container!.querySelector('[data-composer-disabled="true"]'),
+    ).toBeTruthy()
+    expect(container!.querySelector('[aria-label="Stop"]')).toBeNull()
   })
 })
 

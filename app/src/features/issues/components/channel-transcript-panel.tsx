@@ -29,6 +29,7 @@ import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelSessionOverflowMenu } from "./channel-session-overflow-menu";
 import { ChannelSessionSwitcher } from "./channel-session-switcher";
 import { ChannelRetroControl } from "./channel-retro-control";
+import { useExportTranscriptChrome } from "./export-transcript-chrome";
 import {
   ImplementingChannelEmptyState,
   ImplementingNewRunControl,
@@ -92,7 +93,7 @@ function ChannelPanelFrame({
  * Full-width channel panel: Agents transcript for the channel's current
  * session, or an empty state naming what the channel is for.
  */
-export function ChannelTranscriptPanel({
+function ChannelTranscriptBody({
   issueId,
   issue,
   channel,
@@ -101,6 +102,10 @@ export function ChannelTranscriptPanel({
   parentKind,
   mobileFullViewport = false,
   onBackToOverview,
+  composerDisabled = false,
+  composerDisabledPlaceholder,
+  extraHeaderActions,
+  preferredSessionId,
 }: {
   issueId: string;
   issue?: IssueDetail;
@@ -111,6 +116,10 @@ export function ChannelTranscriptPanel({
   /** Phone-width issue channel: compact chrome under TopBar. */
   mobileFullViewport?: boolean;
   onBackToOverview?: () => void;
+  composerDisabled?: boolean;
+  composerDisabledPlaceholder?: string;
+  extraHeaderActions?: ReactNode;
+  preferredSessionId?: string;
 }) {
   const { data, isLoading, error } = useChannelSessionsQuery(issueId, channel);
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -132,6 +141,11 @@ export function ChannelTranscriptPanel({
     : undefined;
 
   const sawLaunchOverlay = useRef(false);
+  useEffect(() => {
+    if (!preferredSessionId) return;
+    setSelectedId(preferredSessionId);
+  }, [preferredSessionId]);
+
   useEffect(() => {
     if (pending?.issueId === issueId || ack?.issueId === issueId) {
       sawLaunchOverlay.current = true;
@@ -333,10 +347,11 @@ export function ChannelTranscriptPanel({
       />
     ) : null;
   const channelHeaderActions =
-    retroControl || channelNewRun ? (
+    retroControl || channelNewRun || extraHeaderActions ? (
       <>
         {retroControl}
         {channelNewRun}
+        {extraHeaderActions}
       </>
     ) : null;
 
@@ -389,10 +404,57 @@ export function ChannelTranscriptPanel({
         conversationId={selectedSession.id}
         meta={{ title: selectedSession.title, model: selectedSession.model }}
         hideComposer={selectedSession.archived}
+        composerDisabled={composerDisabled}
+        composerDisabledPlaceholder={composerDisabledPlaceholder}
         onBack={mobileBack?.onBack}
         backAriaLabel={mobileBack?.backAriaLabel}
         headerActions={mobileFullViewport ? overflowActions : undefined}
       />
     </ChannelPanelFrame>
   );
+}
+
+/** Export tab: composer lock and Retry follow the current export session. */
+function ExportChannelTranscript(props: {
+  issueId: string;
+  issue?: IssueDetail;
+  channel: ConversationChannel;
+  label: string;
+  projectId?: string;
+  parentKind?: IssueKind;
+  mobileFullViewport?: boolean;
+  onBackToOverview?: () => void;
+}) {
+  const [retriedId, setRetriedId] = useState<string | undefined>();
+  const { data } = useChannelSessionsQuery(props.issueId, "export");
+  const current = currentChannelSession(data ?? []);
+  const chrome = useExportTranscriptChrome(
+    { id: props.issueId, title: props.issue?.title ?? "" },
+    current,
+    ({ id }) => setRetriedId(id),
+  );
+  return (
+    <ChannelTranscriptBody
+      {...props}
+      composerDisabled={chrome.composerDisabled}
+      composerDisabledPlaceholder={chrome.composerDisabledPlaceholder}
+      extraHeaderActions={chrome.retry}
+      preferredSessionId={retriedId}
+    />
+  );
+}
+
+/** Full-width channel panel. Export adds rewrite chrome around the transcript. */
+export function ChannelTranscriptPanel(props: {
+  issueId: string;
+  issue?: IssueDetail;
+  channel: ConversationChannel;
+  label: string;
+  projectId?: string;
+  parentKind?: IssueKind;
+  mobileFullViewport?: boolean;
+  onBackToOverview?: () => void;
+}) {
+  if (props.channel === "export") return <ExportChannelTranscript {...props} />;
+  return <ChannelTranscriptBody {...props} />;
 }
