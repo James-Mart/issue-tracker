@@ -42,7 +42,7 @@ function mimeOf(name: string): string {
   return mime.lookup(name) || "application/octet-stream";
 }
 
-function assertSafeBasename(name: string): void {
+export function assertSafeAttachmentName(name: string): void {
   if (
     !name ||
     name.includes("\0") ||
@@ -99,7 +99,7 @@ function withAttachmentOp<T>(
 ): Promise<T> {
   return serialize(() => {
     requireAttachable(id);
-    assertSafeBasename(name);
+    assertSafeAttachmentName(name);
     return fn(attachmentsDir(id));
   });
 }
