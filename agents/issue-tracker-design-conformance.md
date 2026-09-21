@@ -1,6 +1,6 @@
 ---
 name: issue-tracker-design-conformance
-model: claude-opus-5-thinking-high
+model: cursor-grok-4.7-high-fast
 description: >-
   Owns a mockup round: spawns the author, reviews captures for
   conformance, and iterates. Used by issue-tracker-mockup.
