@@ -1,4 +1,6 @@
+import { mkdtempSync } from "fs";
 import { join } from "path";
+import { tmpdir } from "os";
 import { describe, expect, it } from "vitest";
 import { loadPluginAgentDefinitions } from "./agent-definitions.js";
 import { agentSdk } from "./agent-sdk.js";
@@ -35,7 +37,9 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)(
       it(
         `runs to completion with ${pin}`,
         async () => {
-          const storeDir = join(process.cwd(), `.agent-state-test-${pin}`);
+          const storeDir = mkdtempSync(
+            join(tmpdir(), `model-selection-run-${pin}-`),
+          );
           await using agent = await agentSdk.createAgent({
             cwd: process.cwd(),
             model: resolveModelSelection(pin),
