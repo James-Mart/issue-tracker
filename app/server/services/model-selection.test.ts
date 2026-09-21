@@ -18,7 +18,7 @@ describe("resolveModelSelection", () => {
       params: [
         { id: "reasoning_effort", value: "high" },
         { id: "fast", value: "true" },
-        { id: "context", value: "500k" },
+        { id: "context", value: "256k" },
       ],
     });
   });

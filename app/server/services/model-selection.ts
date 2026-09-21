@@ -22,7 +22,9 @@ export function resolveModelSelection(pin: string): ModelSelection {
         params: [
           { id: "reasoning_effort", value: "high" },
           { id: "fast", value: "true" },
-          { id: "context", value: "500k" },
+          // The catalog also advertises 500k and marks it default, but the
+          // registry rejects that value. 256k is the context that runs.
+          { id: "context", value: "256k" },
         ],
       };
     case "cursor-grok-4.5-high-fast":
