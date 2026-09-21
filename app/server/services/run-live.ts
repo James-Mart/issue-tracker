@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { z } from "zod";
 import { bootId } from "../boot-info.js";
@@ -47,6 +47,10 @@ export function writeRunLiveMarker(conversationId: string): void {
 
 export function clearRunLiveMarker(conversationId: string): void {
   rmSync(runLiveMarkerPath(conversationId), { force: true });
+}
+
+export function runLiveMarkerExists(conversationId: string): boolean {
+  return existsSync(runLiveMarkerPath(conversationId));
 }
 
 function isPidLive(pid: number): boolean {

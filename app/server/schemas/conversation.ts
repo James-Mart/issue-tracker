@@ -236,6 +236,10 @@ const delegationRecoveryEventInput = z.object({
   cancelledDelegations: z.number().int().nonnegative(),
   message: z.string(),
 });
+const hostCrashRecoveryEventInput = z.object({
+  type: z.literal("host_crash_recovery"),
+  message: z.string(),
+});
 
 /** Write-time input: stored shape minus the server-stamped `at`. */
 export const transcriptEventInputSchema = z.discriminatedUnion("type", [
@@ -250,6 +254,7 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
   subagentUpdateEventInput,
   errorEventInput,
   delegationRecoveryEventInput,
+  hostCrashRecoveryEventInput,
 ]);
 
 export type TranscriptEventInput = z.infer<typeof transcriptEventInputSchema>;
@@ -341,6 +346,7 @@ export const transcriptEventSchema = z.discriminatedUnion("type", [
   withStoredTranscriptMeta(subagentUpdateEventInput),
   withStoredTranscriptMeta(errorEventInput),
   withStoredTranscriptMeta(delegationRecoveryEventInput),
+  withStoredTranscriptMeta(hostCrashRecoveryEventInput),
 ]);
 
 export type TranscriptEvent = z.infer<typeof transcriptEventSchema>;
@@ -359,6 +365,7 @@ export const conversationStreamEventSchema = z.union([
     withStreamFrameMeta(subagentUpdateEventInput),
     withStreamFrameMeta(errorEventInput),
     withStreamFrameMeta(delegationRecoveryEventInput),
+    withStreamFrameMeta(hostCrashRecoveryEventInput),
   ]),
   withStreamFrameMeta(runFrameInput),
   withStreamFrameMeta(pendingFrameInput),

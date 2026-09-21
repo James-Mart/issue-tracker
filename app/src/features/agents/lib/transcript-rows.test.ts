@@ -65,6 +65,19 @@ describe("transcriptInfoLine", () => {
     ).toEqual({ label: "Request", text: "req-1" });
   });
 
+  it("renders a host_crash_recovery event as a Recovery info line", () => {
+    expect(
+      transcriptInfoLine({
+        type: "host_crash_recovery",
+        at,
+        message: "The previous turn was cut off because the host process died.",
+      }),
+    ).toEqual({
+      label: "Recovery",
+      text: "The previous turn was cut off because the host process died.",
+    });
+  });
+
   it("renders a delegation_recovery event as a Recovery info line", () => {
     expect(
       transcriptInfoLine({
