@@ -26,14 +26,34 @@ function storyForWorkspace(chain: Issue[]): StoryIssue | undefined {
 }
 
 /** Worktree when recorded and on disk; otherwise the Project workspace. */
-export function resolveSummaryWorkspace(
-  chain: Issue[],
+function workspaceFromStory(
+  story: StoryIssue | undefined,
   projectWorkspace: string | undefined,
 ): string | undefined {
-  const story = storyForWorkspace(chain);
   const worktreePath = story?.worktreePath;
   if (worktreePath && existsSync(worktreePath)) return worktreePath;
   return projectWorkspace;
+}
+
+/** Worktree when recorded and on disk; otherwise the Project workspace. */
+export function resolveSummaryWorkspace(
+  chain: Issue[],
+  projectWorkspace: string | undefined,
+  issuesById?: Map<string, Issue>,
+): string | undefined {
+  const target = chain[chain.length - 1];
+  if (target.kind === "idea") {
+    if (!target.appendTo) return projectWorkspace;
+    const appendStory = issuesById?.get(target.appendTo);
+    if (!appendStory) {
+      throw new IssueError("not_found", `unknown issue "${target.appendTo}"`);
+    }
+    return workspaceFromStory(
+      appendStory.kind === "story" ? appendStory : undefined,
+      projectWorkspace,
+    );
+  }
+  return workspaceFromStory(storyForWorkspace(chain), projectWorkspace);
 }
 
 /** Name + size as rendered by show/summary; not full Attachment metadata. */
@@ -104,7 +124,8 @@ export function buildSummary(
   const root = chain[0];
   const projectWorkspace =
     root?.kind === "project" ? root.workspace : undefined;
-  const workspace = resolveSummaryWorkspace(chain, projectWorkspace);
+  const issuesById = new Map(issues.map((issue) => [issue.id, issue]));
+  const workspace = resolveSummaryWorkspace(chain, projectWorkspace, issuesById);
   const mission =
     root?.kind === "project" && root.supportingDocs
       ? missionOf(root.id, projectWorkspace, root.supportingDocs)

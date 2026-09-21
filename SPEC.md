@@ -730,6 +730,15 @@ coordinator must not pass one, but if one leaks in, ignore it). From that output
 - the project id is the id on the `Project: <id> — <title>` line (used to build
   workspace-related attention messages).
 
+**Summary `Workspace:` line.** `issue summary` prints at most one `Workspace:`
+line under the Project. For a Story or Task target, a live Story worktree
+(`worktreePath` set and the directory exists) is printed; otherwise the Project
+`workspace` when set; otherwise the line is omitted. For an Idea with
+`appendTo`, the line follows the same rules for that append-target Story (a
+missing append-target fails with `unknown issue "<id>"`, exit 1 — no fallback to
+the Project workspace). For an Idea with no `appendTo`, the line is the Project
+`workspace` when set, and omitted when unset.
+
 **Use as cwd.** Run **every** repo command — git, builds, tests, and any
 file-edit / diff-inspection — with the workspace path as the shell working
 directory (pass it as the tool's `working_directory`, or `cd` into it first);
