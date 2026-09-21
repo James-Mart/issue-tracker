@@ -816,6 +816,7 @@ export async function remove(id: string): Promise<DeletionResult> {
   }
 
   return serialize(() => {
+    assertStoreWritable();
     if (!existsSync(dirOf(id))) {
       throw new IssueError("not_found", `unknown issue "${id}"`);
     }

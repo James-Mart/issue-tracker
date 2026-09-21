@@ -27,23 +27,25 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-function seedProject(id: string): void {
+function seedIssue(
+  id: string,
+  body: Record<string, unknown>,
+): void {
   mkdirSync(join(issuesDir, id), { recursive: true });
   writeFileSync(
     join(issuesDir, id, "issue.json"),
-    `${JSON.stringify(
-      {
-        id,
-        kind: "project",
-        title: "Demo",
-        order: 0,
-        createdAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify({ id, ...body }, null, 2)}\n`,
   );
+}
+
+function seedProject(id: string): void {
+  seedIssue(id, {
+    kind: "project",
+    title: "Demo",
+    order: 0,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
 }
 
 describe("ISSUE_TRACKER_STORE_READ_ONLY", () => {
@@ -65,5 +67,28 @@ describe("ISSUE_TRACKER_STORE_READ_ONLY", () => {
 
     expect(readdirSync(issuesDir).sort()).toEqual(before);
     expect(existsSync(join(issuesDir, "new"))).toBe(false);
+  });
+
+  it("refuses remove without deleting directories when no survivor patches are needed", async () => {
+    seedProject("demo");
+    seedIssue("leaf-idea", {
+      kind: "idea",
+      title: "Leaf",
+      partOf: "demo",
+      order: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const before = readdirSync(issuesDir).sort();
+
+    const { remove } = await import("./issues.js");
+
+    await expect(remove("leaf-idea")).rejects.toMatchObject({
+      code: "read_only",
+      status: 403,
+    });
+
+    expect(readdirSync(issuesDir).sort()).toEqual(before);
+    expect(existsSync(join(issuesDir, "leaf-idea"))).toBe(true);
   });
 });
