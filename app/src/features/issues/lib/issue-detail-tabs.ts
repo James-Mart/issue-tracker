@@ -32,6 +32,7 @@ export type IssueDetailTab =
 const CHANNEL_TAB_LABELS: Record<ConversationChannel, string> = {
   planning: "Planning",
   implementing: "Implementing",
+  export: "Export",
 };
 
 /** Channel tab for an issue, when the kind offers one. */

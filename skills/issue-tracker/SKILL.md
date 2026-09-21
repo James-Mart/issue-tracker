@@ -165,3 +165,6 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
 - **`issue-tracker-project-docs`** — author or revise coding standards or
   design system and record in `supportingDocs`; use when writing or updating
   project coding standards or design system.
+- **`issue-tracker-github-export`** — rewrite a root-level Epic or
+  project-level Story into GitHub-shaped export drafts on that root; use
+  when an export session runs a GitHub-export rewrite.

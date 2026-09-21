@@ -22,6 +22,7 @@ import {
   parseTranscriptEventInput,
   type ConversationChannel,
   type ConversationDetail,
+  type Issue,
   type ConversationMeta,
   type ConversationMetaPatch,
   type CreateConversationInput,
@@ -34,7 +35,7 @@ import {
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
-import { channelForIssue } from "../kind.js";
+import { channelForIssue, offersExportChannel } from "../kind.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
 import { effectiveTranscriptSeq } from "./conversation-transcript-seq.js";
@@ -99,23 +100,33 @@ function validateAnchor(
     );
   }
   const issue = readIssueOrThrow(issueId!);
-  const offered =
-    issue.kind === "story"
-      ? channelForIssue(issue, readIssueOrThrow(issue.partOf).kind)
-      : channelForIssue(issue);
-  if (offered === undefined) {
+  const offered = channelsOfferedBy(issue);
+  if (offered.length === 0) {
     throw new IssueError(
       "validation",
       `issue "${issueId}" does not offer a channel`,
     );
   }
-  if (channel !== offered) {
+  if (!offered.includes(channel!)) {
     throw new IssueError(
       "validation",
       `channel "${channel}" is not offered by issue "${issueId}"`,
     );
   }
   return { issueId: issueId!, channel: channel! };
+}
+
+function channelsOfferedBy(issue: Issue): ConversationChannel[] {
+  const parentKind =
+    issue.kind === "story" ? readIssueOrThrow(issue.partOf).kind : undefined;
+  const primary =
+    issue.kind === "story"
+      ? channelForIssue(issue, parentKind!)
+      : channelForIssue(issue);
+  const channels: ConversationChannel[] = [];
+  if (primary) channels.push(primary);
+  if (offersExportChannel(issue, parentKind)) channels.push("export");
+  return channels;
 }
 
 function readMetaRaw(id: string): ConversationMeta {

@@ -102,6 +102,21 @@ export function channelForIssue(
   }
 }
 
+/**
+ * Export channel beside the workflow channel. Unarchived Epic or
+ * project-level Story only.
+ */
+export function offersExportChannel(
+  issue: Issue,
+  parentKind?: IssueKind,
+): boolean {
+  if (issue.kind === "epic") return issue.archived !== true;
+  if (issue.kind === "story" && parentKind === "project") {
+    return issue.archived !== true;
+  }
+  return false;
+}
+
 export type AttentionIssue = Extract<
   Issue,
   { kind: "epic" | "story" | "task" }

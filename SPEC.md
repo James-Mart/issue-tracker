@@ -1311,6 +1311,17 @@ basename. Any other name is refused; those stay create-only on `POST`.
 | `DELETE` | `/api/issues/:id/attachments/:name` | remove one file |
 | `PUT` | `/api/issues/:id/export-drafts` | JSON `{ files: { name, content }[] }` replaces the reserved set; `200` `Attachment[]` |
 
+**Export channel.** `export` sits beside `planning` and `implementing` on
+`GET` and `POST /api/issues/:id/channels/:channel/sessions`. POST body stays
+`{ model, title?, message? }` and still archives prior non-archived sessions
+on the same issue and channel before creating the new one. `export` is
+offered on an unarchived Epic or project-level Story, in addition to that
+issue's `implementing` channel. The session message tells the coordinator to
+read [issue-tracker-github-export](skills/issue-tracker-github-export/SKILL.md)
+and follow it for that root. The skill's first run reads the root with the
+existing issue view APIs, then calls `PUT /api/issues/:id/export-drafts` once
+with the full set.
+
 **Description links.** Issue-local relative Markdown only. A link like
 `[foo](foo.tsx)` means that issue's `attachments/foo.tsx`. Arbitrary external
 workspace paths remain forbidden. Convention + docs/skills only — there is no
@@ -1703,7 +1714,8 @@ absolute-path **Read**. Among them, `_issue-tracker-ikigai.md` carries the
 universal framing for pipeline agents. Every spawnable role and every
 coordinator skill (`issue-tracker-work`, `issue-tracker-plan`,
 `issue-tracker-auto-plan`, `issue-tracker-plan-polish`, `issue-tracker-retro`,
-`issue-tracker-mockup`, `issue-tracker-project-docs`) **Read**s it. The coding standard that
+`issue-tracker-mockup`, `issue-tracker-project-docs`,
+`issue-tracker-github-export`) **Read**s it. The coding standard that
 sanctions this prose lives in a Project attachment outside version control;
 this SPEC entry is where the invariant is durable.
 

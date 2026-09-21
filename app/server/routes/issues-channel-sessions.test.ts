@@ -741,6 +741,170 @@ describe("channel sessions HTTP API", () => {
   });
 });
 
+describe("export channel sessions", () => {
+  it("creates an export session on an Epic and lists it only on that channel", async () => {
+    await startApp();
+
+    const created = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/export/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Export ship" }),
+      },
+    );
+    expect(created.status).toBe(201);
+    const body = await created.json();
+    expect(body).toEqual({ id: expect.any(String) });
+
+    const listed = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/export/sessions`,
+    ).then((r) => r.json());
+    expect(listed).toEqual([
+      expect.objectContaining({
+        id: body.id,
+        title: "Export ship",
+        model: "composer-2.5",
+        archived: false,
+        activeRun: false,
+      }),
+    ]);
+
+    const implementing = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
+    ).then((r) => r.json());
+    expect(implementing).toEqual([]);
+  });
+
+  it("archives the prior export session and leaves implementing in place", async () => {
+    await startApp();
+
+    const implementing = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Work" }),
+      },
+    ).then((r) => r.json());
+
+    const first = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/export/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Export 1" }),
+      },
+    ).then((r) => r.json());
+
+    const second = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/export/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Export 2" }),
+      },
+    );
+    expect(second.status).toBe(201);
+
+    const exportSessions = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/export/sessions`,
+    ).then((r) => r.json());
+    expect(exportSessions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: first.id, archived: true }),
+        expect.objectContaining({ id: (await second.json()).id, archived: false }),
+      ]),
+    );
+
+    const implementingSessions = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
+    ).then((r) => r.json());
+    expect(implementingSessions).toEqual([
+      expect.objectContaining({ id: implementing.id, archived: false }),
+    ]);
+  });
+
+  it("creates an export session on a project-level Story", async () => {
+    writeIssue("solo", {
+      kind: "story",
+      title: "Solo",
+      partOf: "platform",
+      order: 1,
+      archived: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    await startApp();
+
+    const created = await fetch(
+      `${baseUrl}/api/issues/solo/channels/export/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Export solo" }),
+      },
+    );
+    expect(created.status).toBe(201);
+    expect(await created.json()).toEqual({ id: expect.any(String) });
+  });
+
+  it("refuses export on issues that do not offer it", async () => {
+    writeIssue("closed", {
+      kind: "epic",
+      title: "Closed",
+      partOf: "platform",
+      order: 2,
+      archived: true,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    await startApp();
+
+    const idea = await fetch(
+      `${baseUrl}/api/issues/capture/channels/export/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5" }),
+      },
+    );
+    expect(idea.status).toBe(400);
+    expect(await idea.json()).toEqual({
+      error: 'channel "export" is not offered by issue "capture"',
+      code: "validation",
+    });
+
+    const child = await fetch(
+      `${baseUrl}/api/issues/child-story/channels/export/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5" }),
+      },
+    );
+    expect(child.status).toBe(400);
+    expect(await child.json()).toEqual({
+      error: 'issue "child-story" does not offer a channel',
+      code: "validation",
+    });
+
+    const archived = await fetch(
+      `${baseUrl}/api/issues/closed/channels/export/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5" }),
+      },
+    );
+    expect(archived.status).toBe(400);
+    expect(await archived.json()).toEqual({
+      error: 'channel "export" is not offered by issue "closed"',
+      code: "validation",
+    });
+  });
+});
+
 describe("planning work root HTTP API", () => {
   it("returns null when the Idea has no landed root yet", async () => {
     await startApp();

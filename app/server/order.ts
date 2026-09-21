@@ -180,7 +180,15 @@ export function epicsBlockedBy<T extends Issue>(
 // nests here; `blockedBy` is a cross-Epic dependency, not a fork point, so it
 // does not affect this order. Generic over the branch shape so the CLI (with
 // its `IssueRecord` branches) and a future SDK script can share one traversal.
-export function stackedStoryOrder<T extends StoryLike>(stories: T[]): T[] {
+type StackOrderedStory = {
+  id: string;
+  order: number;
+  stackedOn?: string;
+};
+
+export function stackedStoryOrder<T extends StackOrderedStory>(
+  stories: T[],
+): T[] {
   const inSet = new Set(stories.map((s) => s.id));
   const roots: T[] = [];
   const childrenOf = new Map<string, T[]>();
