@@ -67,6 +67,11 @@ import {
   writeComposerDraft,
 } from "../lib/composer-draft-storage";
 import {
+  clearComposerHeight,
+  readComposerHeight,
+  writeComposerHeight,
+} from "../lib/composer-height-storage";
+import {
   applyComposerAutoGrow,
   applyComposerExplicitHeight,
   clampDragHeight,
@@ -240,7 +245,9 @@ export function Composer({
   >([]);
   const [uploadError, setUploadError] = useState<UploadError | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [explicitHeight, setExplicitHeight] = useState<number | null>(null);
+  const [explicitHeight, setExplicitHeight] = useState<number | null>(() =>
+    readComposerHeight(),
+  );
   const isCoarsePointer = useIsCoarsePointer();
   const isMobile = useIsMobile();
 
@@ -409,6 +416,13 @@ export function Composer({
     if (!drag || drag.pointerId !== e.pointerId) return;
     resizeDragRef.current = null;
     e.currentTarget.releasePointerCapture(e.pointerId);
+    const el = textareaRef.current;
+    if (el) writeComposerHeight(appliedFieldHeight(el));
+  };
+
+  const onGripDoubleClick = () => {
+    clearComposerHeight();
+    setExplicitHeight(null);
   };
 
   const onGripKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
@@ -578,6 +592,7 @@ export function Composer({
           onPointerDown={onGripPointerDown}
           onPointerMove={onGripPointerMove}
           onPointerUp={onGripPointerUp}
+          onDoubleClick={onGripDoubleClick}
           onKeyDown={onGripKeyDown}
         >
           <span
