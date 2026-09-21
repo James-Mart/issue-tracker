@@ -1,22 +1,47 @@
 import { readFileSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { z } from "zod";
+import { bootId } from "../boot-info.js";
 import { conversationsDir } from "../config.js";
 
 const RUN_LIVE_MARKER = "run-live.json";
 
 const runLiveMarkerSchema = z.object({
   pid: z.number().int().positive(),
+  bootId: z.string().optional(),
+  processStartedAt: z.number().int().nonnegative().optional(),
 });
 
 function runLiveMarkerPath(conversationId: string): string {
   return join(conversationsDir, conversationId, RUN_LIVE_MARKER);
 }
 
+/** Kernel start time from `/proc/<pid>/stat`, or null when the pid is gone. */
+function readProcStartTime(pid: number): number | null {
+  let stat: string;
+  try {
+    stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+  } catch {
+    return null;
+  }
+  // The comm field is parenthesized and may itself contain spaces and parens,
+  // so the numbered fields start after its closing paren.
+  const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  const startTime = fields[19];
+  if (!startTime) {
+    throw new Error(`unparseable /proc/${pid}/stat`);
+  }
+  return Number(startTime);
+}
+
 export function writeRunLiveMarker(conversationId: string): void {
+  const processStartedAt = readProcStartTime(process.pid);
+  if (processStartedAt === null) {
+    throw new Error(`unreadable process start time for pid ${process.pid}`);
+  }
   writeFileSync(
     runLiveMarkerPath(conversationId),
-    `${JSON.stringify({ pid: process.pid })}\n`,
+    `${JSON.stringify({ pid: process.pid, bootId, processStartedAt })}\n`,
   );
 }
 
@@ -35,9 +60,11 @@ function isPidLive(pid: number): boolean {
 }
 
 /**
- * True when this conversation has a run-live marker whose pid is still
- * running. Any process that can see the conversations directory can ask —
- * not only the process that owns the in-memory session map.
+ * True when this conversation has a run-live marker whose recorded
+ * process identity is still live. Legacy markers that only store `{ pid }`
+ * stay live while that pid is running. New markers also pin the process
+ * kernel start time so a reused pid after restart is not treated as live.
+ * Does not delete the marker when returning false.
  */
 export function isRunLive(conversationId: string): boolean {
   const path = runLiveMarkerPath(conversationId);
@@ -64,5 +91,11 @@ export function isRunLive(conversationId: string): boolean {
       `unparseable run-live marker at ${path}: ${result.error.message}`,
     );
   }
-  return isPidLive(result.data.pid);
+  const { pid, bootId: markerBootId, processStartedAt } = result.data;
+  if (!isPidLive(pid)) return false;
+  if (markerBootId === undefined) return true;
+  if (processStartedAt === undefined) return false;
+  const currentStartTime = readProcStartTime(pid);
+  if (currentStartTime === null) return false;
+  return currentStartTime === processStartedAt;
 }

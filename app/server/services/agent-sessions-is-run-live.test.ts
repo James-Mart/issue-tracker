@@ -10,7 +10,25 @@ import {
 
 useAgentSessionsTestFixtures();
 
+function readCurrentProcStartTime(pid: number = process.pid): number {
+  const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+  const startTime = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+  if (!startTime) throw new Error(`unparseable /proc/${pid}/stat`);
+  return Number(startTime);
+}
+
 describe("isRunLive", () => {
+  it("reports not live when the marker is missing", async () => {
+    const { createConversation, isRunLive } = await load();
+    const meta = await createConversation({
+      title: "No marker",
+      projectId: "platform",
+      model: "auto",
+    });
+
+    expect(isRunLive(meta.id)).toBe(false);
+  });
+
   it("reports live for a started run and not live after it finishes", async () => {
     const { createConversation, createAgentSessions, isRunLive } = await load();
     let release!: () => void;
@@ -29,9 +47,15 @@ describe("isRunLive", () => {
     if (!result.ok) return;
 
     expect(isRunLive(meta.id)).toBe(true);
-    expect(JSON.parse(readFileSync(runLiveMarkerPath(meta.id), "utf8"))).toEqual(
-      { pid: process.pid },
+    const marker = JSON.parse(
+      readFileSync(runLiveMarkerPath(meta.id), "utf8"),
     );
+    expect(marker).toEqual({
+      pid: process.pid,
+      bootId: expect.any(String),
+      processStartedAt: readCurrentProcStartTime(),
+    });
+    expect(marker.bootId.length).toBeGreaterThan(0);
 
     release();
     await result.run.wait();
@@ -58,10 +82,10 @@ describe("isRunLive", () => {
     expect(isRunLive(meta.id)).toBe(false);
   });
 
-  it("reads liveness from the marker without the in-process session map", async () => {
+  it("reports live for a legacy marker whose pid is still running", async () => {
     const { createConversation, isRunLive } = await load();
     const meta = await createConversation({
-      title: "File only",
+      title: "Legacy marker",
       projectId: "platform",
       model: "auto",
     });
@@ -69,6 +93,44 @@ describe("isRunLive", () => {
     writeFileSync(
       runLiveMarkerPath(meta.id),
       `${JSON.stringify({ pid: process.pid })}\n`,
+    );
+    expect(isRunLive(meta.id)).toBe(true);
+  });
+
+  it("reports not live when a new marker's start time does not match the live pid", async () => {
+    const { createConversation, isRunLive } = await load();
+    const meta = await createConversation({
+      title: "Start time mismatch",
+      projectId: "platform",
+      model: "auto",
+    });
+
+    writeFileSync(
+      runLiveMarkerPath(meta.id),
+      `${JSON.stringify({
+        pid: process.pid,
+        bootId: "current-boot-id",
+        processStartedAt: readCurrentProcStartTime() - 1,
+      })}\n`,
+    );
+    expect(isRunLive(meta.id)).toBe(false);
+  });
+
+  it("reports live when the start time matches even if bootId differs", async () => {
+    const { createConversation, isRunLive } = await load();
+    const meta = await createConversation({
+      title: "Different boot id",
+      projectId: "platform",
+      model: "auto",
+    });
+
+    writeFileSync(
+      runLiveMarkerPath(meta.id),
+      `${JSON.stringify({
+        pid: process.pid,
+        bootId: "previous-boot-id",
+        processStartedAt: readCurrentProcStartTime(),
+      })}\n`,
     );
     expect(isRunLive(meta.id)).toBe(true);
   });
