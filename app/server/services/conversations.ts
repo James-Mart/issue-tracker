@@ -717,6 +717,9 @@ export async function startConversationPrompt(
     ...(assembled.images ? { images: assembled.images } : {}),
   });
   if (!result.ok) {
+    if (result.cause === "scrub_refused") {
+      return { ok: false, message: result.message };
+    }
     const message = result.error.message;
     const event = { type: "error" as const, message };
     publishFrame(conversationId, { event, persist: true });

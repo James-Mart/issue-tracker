@@ -38,6 +38,7 @@ import {
 import { stopAgentStack } from "./agent-stack.js";
 import { resolveConversationModel } from "./model-selection.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
+import { reconcileOrphanedConversation } from "./orphan-run-scrub.js";
 import { turnMadeProgress } from "./run-progress.js";
 
 export type { NormalizedStep };
@@ -50,7 +51,8 @@ export interface ActiveRun {
 
 export type SendPromptResult =
   | { ok: true; run: ActiveRun }
-  | { ok: false; cause: "never_started"; error: CursorAgentError };
+  | { ok: false; cause: "never_started"; error: CursorAgentError }
+  | { ok: false; cause: "scrub_refused"; message: string };
 
 export interface SendPromptOptions {
   prompt: string;
@@ -110,6 +112,9 @@ type SessionEntry = {
 
 /** Breathing room before re-entering, in case the rejection was a server-side blip. */
 const AUTH_RETRY_DELAY_MS = 1000;
+
+const SCRUB_REFUSED_MESSAGE =
+  "Couldn't clear the previous run. Send was refused.";
 
 const READ_ONLY_DISALLOWED_TOOLS = [
   "task",
@@ -485,6 +490,25 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
   ): Promise<SendPromptResult> {
     const { prompt, model, images } = options;
 
+    // A missing conversation is not a scrub failure; surface that error as-is.
+    readConversation(conversationId);
+    try {
+      await reconcileOrphanedConversation(conversationId);
+    } catch (err) {
+      console.error(
+        `orphaned run scrub failed for conversation ${conversationId}:`,
+        err,
+      );
+      const event = { type: "error" as const, message: SCRUB_REFUSED_MESSAGE };
+      publishFrame(conversationId, { event, persist: true });
+      await appendEvent(conversationId, event);
+      return {
+        ok: false,
+        cause: "scrub_refused",
+        message: SCRUB_REFUSED_MESSAGE,
+      };
+    }
+
     let handle: AgentHandle;
     let entry: SessionEntry;
     try {
@@ -607,10 +631,12 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
               pending.text,
               pending.attachments,
             );
-            const message = fired.error.message;
-            const event = { type: "error" as const, message };
-            publishFrame(conversationId, { event, persist: true });
-            await appendEvent(conversationId, event);
+            if (fired.cause !== "scrub_refused") {
+              const message = fired.error.message;
+              const event = { type: "error" as const, message };
+              publishFrame(conversationId, { event, persist: true });
+              await appendEvent(conversationId, event);
+            }
           }
         }
       }
