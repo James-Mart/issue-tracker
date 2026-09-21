@@ -73,23 +73,29 @@ directory).
 
 Agents verify server/UI changes on their own stack rather than restarting the
 one you are using. In agents-chat, call the custom tools `agent_stack_start`
-and `agent_stack_stop` (session-scoped; no conversation-id argument). From a
-shell:
+(with required `{ workspace }`: the absolute Project checkout path from issue
+summary) and `agent_stack_stop` (session-scoped; no conversation-id argument).
+From a shell:
 
 ```bash
-cd app && npm run agent-stack -- start <conversationId>
+cd app && npm run agent-stack -- start <conversationId> <workspace>
 cd app && npm run agent-stack -- stop <conversationId>
 ```
 
-`start` picks two free ports, brings up the API and Vite in watch mode against
-them, records the ports and pids at
+`start` boots `<workspace>/app` on two free ports, points the child at the live
+tracker store with writes refused (`ISSUE_TRACKER_STORE_READ_ONLY=1`), records
+the workspace, ports, and pids at
 `conversations/<conversationId>/agent-stack/state.json`, indexes the Cursor
 session under `conversations/agent-stack-cursor-index/` for the kill-guard, and
 prints the env contract callers use — `AGENT_STACK_API_PORT`,
-`AGENT_STACK_VITE_PORT`, and `AGENT_STACK_BASE_URL`. Starting again while that
-conversation's stack is live returns the running one. `stop` frees the ports
-and clears state plus the cursor index; child output stays in `api.log` /
-`vite.log` next to the state file.
+`AGENT_STACK_VITE_PORT`, and `AGENT_STACK_BASE_URL`. Starting again reuses the
+live stack only when the recorded workspace matches the path you pass.
+`stop` frees the ports and clears state plus the cursor index; child output
+stays in `api.log` / `vite.log` next to the state file.
+
+UI screenshot capture runs from this harness plugin's `app/` with
+`AGENT_STACK_BASE_URL` exported — the summary Workspace checkout is the server,
+not the capture script's cwd.
 
 ### Cursor commit attribution hook
 

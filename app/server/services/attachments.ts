@@ -12,6 +12,7 @@ import mime from "mime";
 import { issuesDir } from "../config.js";
 import { IssueError } from "./errors.js";
 import { requireKindCapability, serialize } from "./issues.js";
+import { assertStoreWritable } from "./store-read-only.js";
 import { firstFreeSuffixedName } from "./slug.js";
 
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
@@ -137,6 +138,7 @@ export function putAttachment(
   bytes: Uint8Array,
 ): Promise<Attachment> {
   return withAttachmentOp(id, name, (dir) => {
+    assertStoreWritable();
     if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
       throw new IssueError(
         "validation",
@@ -153,6 +155,7 @@ export function putAttachment(
 /** Delete one attachment file. */
 export function removeAttachment(id: string, name: string): Promise<void> {
   return withAttachmentOp(id, name, (dir) => {
+    assertStoreWritable();
     const path = join(dir, name);
     if (!existsSync(path) || !statSync(path).isFile()) {
       throw new IssueError(

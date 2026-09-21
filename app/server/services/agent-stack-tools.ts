@@ -42,16 +42,30 @@ export function createAgentStackTools(
   return {
     agent_stack_start: {
       description:
-        "Start (or reuse) this conversation's API+Vite verification stack on free ports. Returns the AGENT_STACK_* env contract. Use before verifying server/UI changes; do not restart the human's stack on 8060/8061.",
+        "Start (or reuse) this conversation's API+Vite verification stack on free ports for the summary Workspace checkout. Returns the AGENT_STACK_* env contract. The stack reads the live tracker store and refuses writes. Use before verifying server/UI changes; do not restart the human's stack on 8060/8061.",
       inputSchema: {
         type: "object",
-        properties: {},
+        properties: {
+          workspace: {
+            type: "string",
+            description:
+              "Absolute path to the Project workspace checkout (the Workspace: path from issue summary).",
+          },
+        },
+        required: ["workspace"],
       },
-      execute: async (): Promise<AgentStackHandle> => {
+      execute: async (input): Promise<AgentStackHandle> => {
+        const workspace = (input as { workspace?: unknown }).workspace;
+        if (typeof workspace !== "string" || !workspace.trim()) {
+          throw new Error("agent_stack_start: workspace is required");
+        }
         const cursorConversationId = requireCursorConversationId(
           options.getCursorConversationId,
         );
-        return startAgentStack(options.conversationId, { cursorConversationId });
+        return startAgentStack(options.conversationId, {
+          workspace,
+          cursorConversationId,
+        });
       },
     },
     agent_stack_stop: {

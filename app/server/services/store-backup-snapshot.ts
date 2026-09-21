@@ -14,6 +14,7 @@ import {
   backupMirrorDir,
   backupStatusPath,
   issuesDir,
+  storeReadOnly,
 } from "../config.js";
 import type { AppConfig, BackupConfig } from "../schemas.js";
 import {
@@ -284,6 +285,7 @@ let activeDriver: ReturnType<typeof createStoreBackupSnapshotDriver> | null =
 
 /** Start observing the store for debounced mirror snapshots at server boot. */
 export function startStoreBackupSnapshotDriver(): void {
+  if (storeReadOnly) return;
   if (activeDriver) return;
   activeDriver = createStoreBackupSnapshotDriver(defaultDeps());
   activeDriver.start();
