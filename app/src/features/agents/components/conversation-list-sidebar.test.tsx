@@ -48,11 +48,20 @@ vi.mock("@/hooks/use-coarse-pointer", () => ({
   useIsCoarsePointer: () => false,
 }));
 
+const navigate = vi.hoisted(() => vi.fn());
+
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+    useParams: () => ({}),
+  };
+});
+
 vi.mock("../store/use-agents-ui-store", () => ({
   useAgentsUiStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
-      selectedConversationId: null,
-      setSelectedConversationId: vi.fn(),
       openCreateDialog: vi.fn(),
       showArchived: sidebarUi.showArchived,
       setShowArchived: sidebarUi.setShowArchived,

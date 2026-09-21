@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, Link2, Paperclip } from "lucide-react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
@@ -26,7 +27,7 @@ import {
 import { useForkConversation } from "../api/mutations";
 import { useConversationEvents } from "../hooks/use-conversation-events";
 import { useConversationRunActive } from "../hooks/use-conversation-run-active";
-import { useAgentsUiStore } from "../store/use-agents-ui-store";
+import { agentsConversationPath } from "../lib/links";
 import {
   deriveSubAgents,
   isSubAgentToolCall,
@@ -484,9 +485,7 @@ function ThreadBody({
     [storeAttachments],
   );
   const forkConversation = useForkConversation();
-  const setSelectedConversationId = useAgentsUiStore(
-    (s) => s.setSelectedConversationId,
-  );
+  const navigate = useNavigate();
   const forkCuts = useMemo(() => {
     const cuts = new Map<number, number>();
     for (const turn of deriveTurns(events)) {
@@ -598,7 +597,7 @@ function ThreadBody({
                   { id: conversationId, seq: forkSeq },
                   {
                     onSuccess: (created) =>
-                      setSelectedConversationId(created.id),
+                      navigate(agentsConversationPath(created.id)),
                   },
                 )
               }
@@ -827,9 +826,7 @@ export function ConversationThread({
     runResyncKey,
   );
   const { data: conversations } = useConversationsQuery(true);
-  const setSelectedConversationId = useAgentsUiStore(
-    (s) => s.setSelectedConversationId,
-  );
+  const navigate = useNavigate();
   const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
   const meta = listMeta ?? metaProp;
@@ -861,7 +858,11 @@ export function ConversationThread({
         actions={headerActions}
         readOnly={readOnly}
         forkedFrom={forkedFrom}
-        onSourceConversation={forkedFrom ? setSelectedConversationId : undefined}
+        onSourceConversation={
+          forkedFrom
+            ? (sourceId) => navigate(agentsConversationPath(sourceId))
+            : undefined
+        }
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ThreadBody

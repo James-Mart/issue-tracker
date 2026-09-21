@@ -1,3 +1,4 @@
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,17 +10,15 @@ import {
 } from "@/components/ui/dialog";
 import { useDeleteConversation } from "../api/mutations";
 import { useConversationsQuery } from "../api/queries";
+import { AGENTS_PATH } from "../lib/links";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 
 export function DeleteConversationDialog() {
   const targetId = useAgentsUiStore((s) => s.deleteTargetId);
   const clearDelete = useAgentsUiStore((s) => s.clearDelete);
-  const selectedConversationId = useAgentsUiStore(
-    (s) => s.selectedConversationId,
-  );
-  const setSelectedConversationId = useAgentsUiStore(
-    (s) => s.setSelectedConversationId,
-  );
+  const { conversationId } = useParams<{ conversationId?: string }>();
+  const navigate = useNavigate();
+  const selectedConversationId = conversationId ?? null;
   const deleteConversation = useDeleteConversation();
   const { data } = useConversationsQuery(true);
 
@@ -32,7 +31,7 @@ export function DeleteConversationDialog() {
     deleteConversation.mutate(targetId, {
       onSuccess: () => {
         if (selectedConversationId === targetId) {
-          setSelectedConversationId(null);
+          navigate(AGENTS_PATH);
         }
         clearDelete();
       },

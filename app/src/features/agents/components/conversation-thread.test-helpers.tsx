@@ -54,7 +54,7 @@ const mocks = vi.hoisted(() => ({
   clearPendingMutate: vi.fn(),
   sendMutate: vi.fn(),
   forkMutate: vi.fn(),
-  setSelectedConversationId: vi.fn(),
+  navigate: vi.fn(),
 }));
 
 export const transcriptState = mocks.transcriptState;
@@ -65,7 +65,7 @@ export const updatePendingMutate = mocks.updatePendingMutate;
 export const clearPendingMutate = mocks.clearPendingMutate;
 export const sendMutate = mocks.sendMutate;
 export const forkMutate = mocks.forkMutate;
-export const setSelectedConversationId = mocks.setSelectedConversationId;
+export const navigate = mocks.navigate;
 
 function eventsWithSeq(events: TranscriptEvent[]): TranscriptEvent[] {
   return events.map((event, index) =>
@@ -116,13 +116,13 @@ vi.mock("../api/mutations", () => ({
   }),
 }));
 
-vi.mock("../store/use-agents-ui-store", () => ({
-  useAgentsUiStore: (
-    select: (state: {
-      setSelectedConversationId: typeof setSelectedConversationId;
-    }) => unknown,
-  ) => select({ setSelectedConversationId }),
-}));
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+  };
+});
 
 vi.mock("../hooks/use-conversation-events", () => ({
   useConversationEvents: () => ({
@@ -230,6 +230,6 @@ export function resetThreadMocks() {
   clearPendingMutate.mockClear();
   sendMutate.mockClear();
   forkMutate.mockClear();
-  setSelectedConversationId.mockClear();
+  navigate.mockClear();
   refetchHistory.mockClear();
 }

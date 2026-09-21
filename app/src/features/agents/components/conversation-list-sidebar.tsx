@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { Archive, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShellInlineFault, ShellState } from "@/app/shell-state";
@@ -6,16 +7,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIssuesQuery } from "@/features/issues/api/queries";
 import { issuesById } from "@/features/issues/lib/build-tree";
 import { useConversationsQuery } from "../api/queries";
+import { agentsConversationPath } from "../lib/links";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 import { ConversationListItem } from "./conversation-list-item";
 
 export function ConversationListSidebar() {
-  const selectedConversationId = useAgentsUiStore(
-    (s) => s.selectedConversationId,
-  );
-  const setSelectedConversationId = useAgentsUiStore(
-    (s) => s.setSelectedConversationId,
-  );
+  const { conversationId } = useParams<{ conversationId?: string }>();
+  const navigate = useNavigate();
+  const selectedConversationId = conversationId ?? null;
   const openCreateDialog = useAgentsUiStore((s) => s.openCreateDialog);
   const showArchived = useAgentsUiStore((s) => s.showArchived);
   const setShowArchived = useAgentsUiStore((s) => s.setShowArchived);
@@ -107,7 +106,9 @@ export function ConversationListSidebar() {
                   conversation.projectId
                 }
                 isSelected={selectedConversationId === conversation.id}
-                onSelect={() => setSelectedConversationId(conversation.id)}
+                onSelect={() =>
+                  navigate(agentsConversationPath(conversation.id))
+                }
               />
             ))}
           </div>

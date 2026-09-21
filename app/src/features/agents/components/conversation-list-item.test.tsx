@@ -11,7 +11,7 @@ import {
 
 const coarsePointer = vi.hoisted(() => ({ value: false }));
 const updateMutate = vi.hoisted(() => vi.fn());
-const setSelectedConversationId = vi.hoisted(() => vi.fn());
+const navigate = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/use-coarse-pointer", () => ({
   useIsCoarsePointer: () => coarsePointer.value,
@@ -24,6 +24,15 @@ vi.mock("../api/mutations", () => ({
   }),
 }));
 
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+    useParams: () => ({}),
+  };
+});
+
 vi.mock("../store/use-agents-ui-store", () => ({
   useAgentsUiStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
@@ -31,8 +40,6 @@ vi.mock("../store/use-agents-ui-store", () => ({
       startRename: vi.fn(),
       clearRename: vi.fn(),
       requestDelete: vi.fn(),
-      selectedConversationId: null,
-      setSelectedConversationId,
     }),
 }));
 
@@ -109,7 +116,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   coarsePointer.value = false;
   updateMutate.mockClear();
-  setSelectedConversationId.mockClear();
+  navigate.mockClear();
 });
 
 describe("RosterActiveRunIndicator", () => {
