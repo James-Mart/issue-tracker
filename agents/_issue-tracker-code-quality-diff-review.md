@@ -8,7 +8,7 @@ Absolute path for this file (Read this exact path):
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-code-quality-diff-review.md`
 
 1. Re-read the Task's recorded commit range on every entry (including
-   resumes). In the Project workspace, run `issue task get <taskId> commits`
+   resumes). In the summary `Workspace:` path, run `issue task get <taskId> commits`
    (JSON array, oldest first). Set `<first>` to the oldest element and
    `<last>` to the newest, then inspect the patch with
    `git diff <first>^..<last>` and read changed files directly from that

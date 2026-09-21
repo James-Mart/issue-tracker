@@ -38,9 +38,8 @@ absent when the work root is a project-level Story). Use
 `issue task view <id> --comments` on the Story's Tasks for their full specs
 and recorded rationale, and `issue story view <storyId> --comments` for
 scope, purpose, and documented deviations.
-That summary also carries the Project **workspace** — inspect the Story's
-diffs and files with it as the cwd, and honor the unset escalation,
-per **SPEC § Project workspace**.
+Use the summary `Workspace:` line as cwd to inspect the Story's diffs and
+files, per **SPEC § Project workspace**.
 
 ## Inputs (from invoking prompt)
 

@@ -46,13 +46,12 @@ absent when the Task's Story / work root is project-level). Use
 `issue task view <taskId>` for the Task spec you score against. When parent
 Story or Epic prose is needed for scoring context, take those ids from the
 summary ancestry chain and run `issue story view <storyId>` /
-`issue epic view <epicId>` as applicable. That summary also carries the
-Project **workspace** — you may **read-only peek** it solely to gather scoring
-evidence for the two axes (**judgment**, **verification difficulty**): whether
-required patterns/APIs already exist, how testable the surface is, etc. Peeks
-are **file reads and greps only** — no edit tools, no running tests or
-commands, no writing files. Use the `Workspace:` line as cwd for those peeks
-and honor the unset escalation, per **SPEC § Project workspace**.
+`issue epic view <epicId>` as applicable. Use the summary `Workspace:` line
+as cwd for a **read-only peek** solely to gather scoring evidence for the two
+axes (**judgment**, **verification difficulty**): whether required
+patterns/APIs already exist, how testable the surface is, etc. Peeks are
+**file reads and greps only** — no edit tools, no running tests or commands,
+no writing files, per **SPEC § Project workspace**.
 
 ## Inputs (from invoking prompt)
 

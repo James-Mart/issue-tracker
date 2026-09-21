@@ -40,9 +40,8 @@ judged UI-look PNGs. Do not run any other mutating `issue` command.
    - `codingStandards`
    - `designSystem` when this Task appears UI-related (judgment from Task prose
      plus paths in the recorded commit range; no Task flag)
-4. The summary carries the Project **workspace** — read the Task's recorded
-   commit range with read-only git there and honor the unset escalation, per
-   **SPEC § Project workspace**.
+4. Use the summary `Workspace:` line as cwd for read-only git on the Task's
+   recorded commit range, per **SPEC § Project workspace**.
 
 Do **not** clear `qa` as part of a normal pass; the implementor never clears
 `qa` either. Use `qa --clear` only if you must recover from a stuck/invalid

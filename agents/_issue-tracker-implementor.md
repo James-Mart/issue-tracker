@@ -37,9 +37,8 @@ fits the codebase it lands in.
    - `codingStandards`
    - `designSystem` when this Task appears UI-related (judgment from Task prose
      plus expected or changed paths; no Task flag)
-4. The summary carries the Project **workspace** — run all implementation work
-   (file edits, builds, tests, browser checks) with it as the cwd, and honor the
-   unset escalation, per **SPEC § Project workspace**.
+4. Use the summary `Workspace:` line as cwd for all implementation work
+   (file edits, builds, tests, browser checks), per **SPEC § Project workspace**.
 
 ## Inputs (from invoking prompt)
 

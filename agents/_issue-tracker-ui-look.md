@@ -10,8 +10,8 @@ Absolute path for this file (Read this exact path):
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`.
 
-1. Call `agent_stack_start` or export `AGENT_STACK_BASE_URL` from an existing
-   stack.
+1. Call `agent_stack_start`. Export the returned `AGENT_STACK_BASE_URL` into
+   the shell.
 2. Run `cd app && npm run screenshots -- <path-or-dialog>` for the Task's
    visible surface. Read PNGs under `/tmp/issue-tracker-screenshots`.
 3. Use Cursor browser MCP tools only for interaction needed to reach a state,
