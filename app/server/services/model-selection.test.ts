@@ -12,14 +12,21 @@ describe("resolveModelSelection", () => {
     });
   });
 
-  it("maps cursor-grok-4.6-high-fast to grok-4.6 with effort and fast", () => {
-    expect(resolveModelSelection("cursor-grok-4.6-high-fast")).toEqual({
-      id: "grok-4.6",
+  it("maps cursor-grok-4.7-high-fast to grok-4.7 with reasoning_effort, fast, and context", () => {
+    expect(resolveModelSelection("cursor-grok-4.7-high-fast")).toEqual({
+      id: "grok-4.7",
       params: [
-        { id: "effort", value: "high" },
+        { id: "reasoning_effort", value: "high" },
         { id: "fast", value: "true" },
+        { id: "context", value: "500k" },
       ],
     });
+  });
+
+  it("throws for the retired cursor-grok-4.6-high-fast pin", () => {
+    expect(() => resolveModelSelection("cursor-grok-4.6-high-fast")).toThrow(
+      "Unknown model pin: cursor-grok-4.6-high-fast",
+    );
   });
 
   it("maps cursor-grok-4.5-high-fast to grok-4.5 with effort and fast", () => {
@@ -48,7 +55,7 @@ describe("resolveModelSelection", () => {
   it("carries parameters in params rather than as top-level keys", () => {
     for (const pin of [
       "composer-2.5",
-      "cursor-grok-4.6-high-fast",
+      "cursor-grok-4.7-high-fast",
       "cursor-grok-4.5-high-fast",
       "claude-opus-5-thinking-high",
     ]) {
@@ -75,8 +82,8 @@ describe("resolveConversationModel", () => {
       resolveConversationModel("cursor-grok-4.5-high-fast"),
     ).toEqual(resolveModelSelection("cursor-grok-4.5-high-fast"));
     expect(
-      resolveConversationModel("cursor-grok-4.6-high-fast"),
-    ).toEqual(resolveModelSelection("cursor-grok-4.6-high-fast"));
+      resolveConversationModel("cursor-grok-4.7-high-fast"),
+    ).toEqual(resolveModelSelection("cursor-grok-4.7-high-fast"));
   });
 
   it("passes plain catalog ids through as id-only selections", () => {
