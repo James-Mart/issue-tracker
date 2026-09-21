@@ -80,6 +80,56 @@ function withProjectWorkspace(issues: Issue[]): Issue[] {
   );
 }
 
+/** Project → Epic → Story → Idea (append target is the Story). */
+const ideaIssues: Issue[] = [
+  { id: "p", kind: "project", title: "Proj", order: 0, createdAt: AT, updatedAt: AT },
+  {
+    id: "e",
+    kind: "epic",
+    title: "Epic",
+    partOf: "p",
+    blockedBy: [],
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
+    order: 0,
+    createdAt: AT,
+    updatedAt: AT,
+  },
+  {
+    id: "target-story",
+    kind: "story",
+    title: "Append target",
+    partOf: "e",
+    branchName: "feat/target",
+    merged: false,
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
+    order: 0,
+    createdAt: AT,
+    updatedAt: AT,
+  },
+  {
+    id: "idea-1",
+    kind: "idea",
+    title: "Capture",
+    partOf: "p",
+    archived: false,
+    order: 0,
+    createdAt: AT,
+    updatedAt: AT,
+  },
+];
+
+function ideaChain(issues: Issue[]): Issue[] {
+  return issues.filter((i) => ["p", "e", "idea-1"].includes(i.id));
+}
+
+function issuesById(issues: Issue[]): Map<string, Issue> {
+  return new Map(issues.map((issue) => [issue.id, issue]));
+}
+
 describe("resolveSummaryWorkspace", () => {
   it("uses a Story worktree when the directory exists", () => {
     const worktree = mkdtempSync(join(tmpdir(), "story-wt-"));
@@ -140,6 +190,89 @@ describe("resolveSummaryWorkspace", () => {
     } finally {
       rmSync(worktree, { recursive: true, force: true });
     }
+  });
+
+  it("uses the append-target Story worktree for an Idea with appendTo", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "idea-wt-"));
+    try {
+      const issues = withProjectWorkspace(
+        ideaIssues.map((issue) => {
+          if (issue.id === "idea-1") return { ...issue, appendTo: "target-story" };
+          if (issue.id === "target-story") return { ...issue, worktreePath: worktree };
+          return issue;
+        }),
+      );
+      const chain = ideaChain(issues);
+      expect(
+        resolveSummaryWorkspace(chain, projectWorkspace, issuesById(issues)),
+      ).toBe(worktree);
+    } finally {
+      rmSync(worktree, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the Project workspace when the append-target has no live worktree", () => {
+    const issues = withProjectWorkspace(
+      ideaIssues.map((issue) =>
+        issue.id === "idea-1" ? { ...issue, appendTo: "target-story" } : issue,
+      ),
+    );
+    const chain = ideaChain(issues);
+    expect(
+      resolveSummaryWorkspace(chain, projectWorkspace, issuesById(issues)),
+    ).toBe(projectWorkspace);
+  });
+
+  it("falls back when the append-target worktree directory is missing", () => {
+    const issues = withProjectWorkspace(
+      ideaIssues.map((issue) => {
+        if (issue.id === "idea-1") return { ...issue, appendTo: "target-story" };
+        if (issue.id === "target-story")
+          return { ...issue, worktreePath: "/tmp/vanished-idea-worktree" };
+        return issue;
+      }),
+    );
+    const chain = ideaChain(issues);
+    expect(
+      resolveSummaryWorkspace(chain, projectWorkspace, issuesById(issues)),
+    ).toBe(projectWorkspace);
+  });
+
+  it("omits workspace for an Idea with appendTo when no worktree and Project workspace unset", () => {
+    const issues = ideaIssues.map((issue) =>
+      issue.id === "idea-1" ? { ...issue, appendTo: "target-story" } : issue,
+    );
+    const chain = ideaChain(issues);
+    expect(
+      resolveSummaryWorkspace(chain, undefined, issuesById(issues)),
+    ).toBeUndefined();
+  });
+
+  it("prints the Project workspace for an Idea with no appendTo", () => {
+    const issues = withProjectWorkspace(ideaIssues);
+    const chain = ideaChain(issues);
+    expect(
+      resolveSummaryWorkspace(chain, projectWorkspace, issuesById(issues)),
+    ).toBe(projectWorkspace);
+  });
+
+  it("omits workspace for an Idea with no appendTo when Project workspace unset", () => {
+    const chain = ideaChain(ideaIssues);
+    expect(
+      resolveSummaryWorkspace(chain, undefined, issuesById(ideaIssues)),
+    ).toBeUndefined();
+  });
+
+  it("throws for a missing append-target Story", () => {
+    const issues = withProjectWorkspace(
+      ideaIssues.map((issue) =>
+        issue.id === "idea-1" ? { ...issue, appendTo: "ghost-story" } : issue,
+      ),
+    );
+    const chain = ideaChain(issues);
+    expect(() =>
+      resolveSummaryWorkspace(chain, projectWorkspace, issuesById(issues)),
+    ).toThrow(/unknown issue "ghost-story"/);
   });
 });
 
@@ -292,6 +425,68 @@ describe("formatSummary", () => {
     });
     const summary = buildSummary("c1", issues);
     expect(summary.workspace).toBe("/tmp/repo");
+  });
+
+  it("prints the append-target worktree as Workspace for an Idea with appendTo", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "idea-summary-wt-"));
+    try {
+      const issues = withProjectWorkspace(
+        ideaIssues.map((issue) => {
+          if (issue.id === "idea-1") return { ...issue, appendTo: "target-story" };
+          if (issue.id === "target-story") return { ...issue, worktreePath: worktree };
+          return issue;
+        }),
+      );
+      const summary = buildSummary("idea-1", issues);
+      expect(summary.workspace).toBe(worktree);
+      expect(formatSummary(summary)).toContain(`  Workspace: ${worktree}`);
+    } finally {
+      rmSync(worktree, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to Project workspace for an Idea with appendTo and no live worktree", () => {
+    const issues = withProjectWorkspace(
+      ideaIssues.map((issue) =>
+        issue.id === "idea-1" ? { ...issue, appendTo: "target-story" } : issue,
+      ),
+    );
+    const summary = buildSummary("idea-1", issues);
+    expect(summary.workspace).toBe(projectWorkspace);
+    expect(formatSummary(summary)).toContain(`  Workspace: ${projectWorkspace}`);
+  });
+
+  it("omits Workspace for an Idea with appendTo when no worktree and Project workspace unset", () => {
+    const issues = ideaIssues.map((issue) =>
+      issue.id === "idea-1" ? { ...issue, appendTo: "target-story" } : issue,
+    );
+    const summary = buildSummary("idea-1", issues);
+    expect(summary.workspace).toBeUndefined();
+    expect(formatSummary(summary)).not.toContain("Workspace:");
+  });
+
+  it("prints Project workspace for an Idea with no appendTo", () => {
+    const issues = withProjectWorkspace(ideaIssues);
+    const summary = buildSummary("idea-1", issues);
+    expect(summary.workspace).toBe(projectWorkspace);
+    expect(formatSummary(summary)).toContain(`  Workspace: ${projectWorkspace}`);
+  });
+
+  it("omits Workspace for an Idea with no appendTo when Project workspace unset", () => {
+    const summary = buildSummary("idea-1", ideaIssues);
+    expect(summary.workspace).toBeUndefined();
+    expect(formatSummary(summary)).not.toContain("Workspace:");
+  });
+
+  it("throws for an Idea whose appendTo names a missing Story", () => {
+    const issues = withProjectWorkspace(
+      ideaIssues.map((issue) =>
+        issue.id === "idea-1" ? { ...issue, appendTo: "ghost-story" } : issue,
+      ),
+    );
+    expect(() => buildSummary("idea-1", issues)).toThrow(
+      /unknown issue "ghost-story"/,
+    );
   });
 
   it("prints Mission in the Project section when missionOf returns a paragraph", () => {
