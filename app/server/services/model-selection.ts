@@ -16,6 +16,15 @@ export function resolveModelSelection(pin: string): ModelSelection {
   switch (pin) {
     case "composer-2.5":
       return { id: "composer-2.5" };
+    case "cursor-grok-4.7-high-fast":
+      return {
+        id: "grok-4.7",
+        params: [
+          { id: "reasoning_effort", value: "high" },
+          { id: "fast", value: "true" },
+          { id: "context", value: "500k" },
+        ],
+      };
     case "cursor-grok-4.6-high-fast":
       return {
         id: "grok-4.6",
