@@ -23,14 +23,10 @@ describe("resolveModelSelection", () => {
     });
   });
 
-  it("maps cursor-grok-4.6-high-fast to grok-4.6 with effort and fast", () => {
-    expect(resolveModelSelection("cursor-grok-4.6-high-fast")).toEqual({
-      id: "grok-4.6",
-      params: [
-        { id: "effort", value: "high" },
-        { id: "fast", value: "true" },
-      ],
-    });
+  it("throws for the retired cursor-grok-4.6-high-fast pin", () => {
+    expect(() => resolveModelSelection("cursor-grok-4.6-high-fast")).toThrow(
+      "Unknown model pin: cursor-grok-4.6-high-fast",
+    );
   });
 
   it("maps cursor-grok-4.5-high-fast to grok-4.5 with effort and fast", () => {
@@ -60,7 +56,6 @@ describe("resolveModelSelection", () => {
     for (const pin of [
       "composer-2.5",
       "cursor-grok-4.7-high-fast",
-      "cursor-grok-4.6-high-fast",
       "cursor-grok-4.5-high-fast",
       "claude-opus-5-thinking-high",
     ]) {
@@ -86,9 +81,6 @@ describe("resolveConversationModel", () => {
     expect(
       resolveConversationModel("cursor-grok-4.5-high-fast"),
     ).toEqual(resolveModelSelection("cursor-grok-4.5-high-fast"));
-    expect(
-      resolveConversationModel("cursor-grok-4.6-high-fast"),
-    ).toEqual(resolveModelSelection("cursor-grok-4.6-high-fast"));
     expect(
       resolveConversationModel("cursor-grok-4.7-high-fast"),
     ).toEqual(resolveModelSelection("cursor-grok-4.7-high-fast"));
