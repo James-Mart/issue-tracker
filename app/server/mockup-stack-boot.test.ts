@@ -57,7 +57,6 @@ describe("captureMockupStackReapAtBoot", () => {
 
     expect(getMockupStackReapReport()).toEqual({
       staleStateRemoved: ["stale-conversation"],
-      orphanedStacksStopped: [],
     });
     expect(
       existsSync(

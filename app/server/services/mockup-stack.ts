@@ -4,11 +4,13 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
 } from "node:fs";
 import { createServer, type AddressInfo, type Server } from "node:net";
 import { appDir } from "../config.js";
+import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
 import {
   conversationMetaExists,
   harnessConfigPath,
@@ -19,7 +21,6 @@ import {
   mockupStackStatePathDirect,
   readMockupStackState,
   readMockupStackStateDirect,
-  removeMockupScratch,
   writeMockupStackState,
   type MockupStackState,
 } from "./mockup-scratch.js";
@@ -53,17 +54,17 @@ export type MockupStackStopAllEntry = {
 };
 
 export type MockupStackReapReport = {
-  /** State files removed for dead or pid-recycled stacks. */
+  /** State removed for dead, recycled, or unowned groups. Unowned groups are not signaled. */
   staleStateRemoved: string[];
-  /** Live stacks stopped and scratch removed because the conversation is gone. */
-  orphanedStacksStopped: MockupStackStopAllEntry[];
 };
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function readProcInfo(pid: number): { state: string; startTime: string } | null {
+function readProcInfo(
+  pid: number,
+): { state: string; startTime: string; ppid: number; pgrp: number } | null {
   let stat: string;
   try {
     stat = readFileSync(`/proc/${pid}/stat`, "utf8");
@@ -75,16 +76,31 @@ function readProcInfo(pid: number): { state: string; startTime: string } | null 
   const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
   const state = fields[0];
   const startTime = fields[19];
-  if (!state || !startTime) {
+  const ppid = Number(fields[1]);
+  const pgrp = Number(fields[2]);
+  if (!state || !startTime || !Number.isInteger(ppid) || !Number.isInteger(pgrp)) {
     throw new Error(`unparseable /proc/${pid}/stat`);
   }
-  return { state, startTime };
+  return { state, startTime, ppid, pgrp };
 }
 
-/** True when the recorded pid is still the process we spawned, and not a zombie. */
+/**
+ * Signal check: the recorded pid is still that process, and not state Z.
+ * State Z is not collection. Collection is `waitpid` on a child this process owns.
+ */
 export function isMockupStackLive(state: MockupStackState): boolean {
   const info = readProcInfo(state.pid);
   return info !== null && info.state !== "Z" && info.startTime === state.startTime;
+}
+
+/** The recorded process is a child of this process (running or zombie). */
+function isOurRecordedProcess(state: MockupStackState): boolean {
+  const info = readProcInfo(state.pid);
+  return (
+    info !== null &&
+    info.ppid === process.pid &&
+    info.startTime === state.startTime
+  );
 }
 
 async function listenOnFreePort(): Promise<Server> {
@@ -207,6 +223,7 @@ function assertHarnessConfig(conversationId: string): string {
 export async function startMockupStack(
   conversationId: string,
 ): Promise<MockupStackHandle> {
+  ensureChildReaper();
   const existing = readMockupStackState(conversationId);
   if (existing) {
     if (isMockupStackLive(existing)) {
@@ -254,32 +271,72 @@ function signalGroup(pid: number, signal: NodeJS.Signals): void {
   }
 }
 
-async function waitForExit(
-  state: MockupStackState,
+/** True when any child of this process still belongs to one of these groups. */
+function groupsHaveOurChildren(groups: ReadonlySet<number>): boolean {
+  if (groups.size === 0) return false;
+  let entries: string[];
+  try {
+    entries = readdirSync("/proc");
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (!/^[1-9]\d*$/.test(entry)) continue;
+    const info = readProcInfo(Number(entry));
+    if (!info) continue;
+    if (info.ppid === process.pid && groups.has(info.pgrp)) return true;
+  }
+  return false;
+}
+
+/**
+ * Collection is `waitpid`, not state Z. `timeoutMs` is how long to wait before
+ * reporting that the group is still uncollected. `Infinity` waits until
+ * `waitpid` collects it.
+ */
+async function waitUntilGroupsCollected(
+  groups: ReadonlySet<number>,
   timeoutMs: number,
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (!isMockupStackLive(state)) return true;
+  for (;;) {
+    reapExitedChildren();
+    if (!groupsHaveOurChildren(groups)) return true;
+    if (Date.now() >= deadline) return false;
     await delay(EXIT_POLL_MS);
   }
-  return !isMockupStackLive(state);
 }
 
-async function stopLiveProcess(state: MockupStackState): Promise<void> {
-  if (!isMockupStackLive(state)) return;
+/**
+ * Story stop sequence for one recorded group. A pid that is not this process's
+ * child is left unsignaled. `isMockupStackLive` is the signal check: an owned
+ * live group gets SIGTERM, then SIGKILL after `TERM_GRACE_MS`. The promise
+ * settles only after `waitpid` collects the group. Past `KILL_GRACE_MS` it
+ * keeps waiting, then rejects.
+ */
+async function stopRecordedGroup(state: MockupStackState): Promise<void> {
+  if (!isOurRecordedProcess(state)) return;
+  const info = readProcInfo(state.pid);
+  if (!info) return;
 
-  signalGroup(state.pid, "SIGTERM");
-  const exited = await waitForExit(state, TERM_GRACE_MS);
-  if (!exited) {
-    signalGroup(state.pid, "SIGKILL");
-    const killed = await waitForExit(state, KILL_GRACE_MS);
-    if (!killed) {
-      throw new Error(
-        `mockup stack survived SIGKILL (pid ${state.pid}, port ${state.port})`,
-      );
+  const groups = new Set<number>([info.pgrp]);
+  if (isMockupStackLive(state)) {
+    signalGroup(state.pid, "SIGTERM");
+    const collectedOnTerm = await waitUntilGroupsCollected(groups, TERM_GRACE_MS);
+    if (!collectedOnTerm) {
+      signalGroup(info.pgrp, "SIGKILL");
+      const collectedOnKill = await waitUntilGroupsCollected(groups, KILL_GRACE_MS);
+      if (!collectedOnKill) {
+        await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
+        throw new Error(
+          `mockup stack survived SIGKILL (pid ${state.pid}, port ${state.port})`,
+        );
+      }
     }
+    return;
   }
+
+  await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
 }
 
 function removeMockupStackState(conversationId: string): void {
@@ -289,68 +346,78 @@ function removeMockupStackState(conversationId: string): void {
 /**
  * Stop this conversation's Storybook stack and release its port. A
  * conversation with no recorded stack is not an error.
+ *
+ * A recorded pid that is not this process's child is removed with no signal.
+ * An owned live group gets SIGTERM, then SIGKILL after `TERM_GRACE_MS`. The
+ * promise settles only after `waitpid` collects the group. Past
+ * `KILL_GRACE_MS` it keeps waiting, then rejects.
  */
 export async function stopMockupStack(
   conversationId: string,
 ): Promise<MockupStackStopResult> {
+  ensureChildReaper();
   const state = readMockupStackState(conversationId);
   if (!state) return { stopped: false, state: null };
 
-  await stopLiveProcess(state);
-  rmSync(mockupStackStatePath(conversationId), { force: true });
+  try {
+    await stopRecordedGroup(state);
+  } finally {
+    rmSync(mockupStackStatePath(conversationId), { force: true });
+  }
   return { stopped: true, state };
 }
 
 /**
- * Stop every recorded mockup stack. Returns each live stack's freed port.
+ * Stop every recorded mockup stack. Returns each owned live stack's freed
+ * port. Shutdown awaits this before exiting; collection finishes before the
+ * promise settles. A group still uncollected past `KILL_GRACE_MS` rejects
+ * only after `waitpid` collects it.
  */
 export async function stopAllMockupStacks(): Promise<MockupStackStopAllEntry[]> {
+  ensureChildReaper();
   const freed: MockupStackStopAllEntry[] = [];
+  let failure: Error | undefined;
   for (const conversationId of listRecordedMockupStackIds()) {
     const state = readMockupStackStateDirect(conversationId);
     if (!state) continue;
-    const wasLive = isMockupStackLive(state);
-    await stopLiveProcess(state);
-    removeMockupStackState(conversationId);
-    if (wasLive) {
+    const ownedLive = isOurRecordedProcess(state) && isMockupStackLive(state);
+    try {
+      await stopRecordedGroup(state);
+    } catch (err) {
+      failure = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      removeMockupStackState(conversationId);
+    }
+    if (ownedLive) {
       freed.push({ conversationId, port: state.port });
     }
   }
+  if (failure) throw failure;
   return freed;
 }
 
 /**
- * Sweep recorded mockup stacks at API boot. Stale state is dropped without
- * signaling; live stacks whose conversation no longer exists are stopped and
- * their scratch removed. Scratch for conversations that still exist is never
- * removed here.
+ * Drop recorded mockup stacks at API boot. Dead, recycled, and unowned groups
+ * lose their state record and are not signaled. A live pid whose conversation
+ * meta is gone is included in `staleStateRemoved`. Scratch is left in place.
  */
 export async function reapOrphanedMockupStacksAtBoot(): Promise<MockupStackReapReport> {
   const report: MockupStackReapReport = {
     staleStateRemoved: [],
-    orphanedStacksStopped: [],
   };
 
   for (const conversationId of listRecordedMockupStackIds()) {
     const state = readMockupStackStateDirect(conversationId);
     if (!state) continue;
 
-    if (!isMockupStackLive(state)) {
-      removeMockupStackState(conversationId);
-      report.staleStateRemoved.push(conversationId);
-      continue;
-    }
+    const keep =
+      isOurRecordedProcess(state) &&
+      isMockupStackLive(state) &&
+      conversationMetaExists(conversationId);
+    if (keep) continue;
 
-    if (conversationMetaExists(conversationId)) {
-      continue;
-    }
-
-    await stopLiveProcess(state);
-    removeMockupScratch(conversationId);
-    report.orphanedStacksStopped.push({
-      conversationId,
-      port: state.port,
-    });
+    removeMockupStackState(conversationId);
+    report.staleStateRemoved.push(conversationId);
   }
 
   return report;
