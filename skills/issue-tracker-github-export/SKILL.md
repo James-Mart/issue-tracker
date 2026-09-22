@@ -72,13 +72,17 @@ A failed PUT is a failure: report the response and stop. Do not call
 ## Publishing prose
 
 The prose uses the names that reader already uses for the areas in the change
-and for the operations those areas perform. It leads with the situation, then
-the behavior. The YAML `title` is a short name of the outcome.
+and for the operations those areas perform. The YAML `title` is a short name
+of the outcome.
 
-A Story body is a few paragraphs, separated by a blank line, covering the
-problem, the outcome, the area of the code, and the object shapes. That
-Story's tasks are folded into those paragraphs. The paragraphs state an
-outcome and object shapes an implementor would still reach.
+A Story body is Background, then Implementation broken into the areas the
+tracker names. Area headings are the names the reader already uses for those
+areas, as the tracker names them, not procedural task titles. A table appears
+only when behavior is a matrix.
+
+The body keeps outcomes, object shapes, and behavior rules an implementor
+still needs. File paths, symbol names, and task-by-task procedure stay in
+the tracker unless the outcome is unclear without them.
 
 When a Story has to land after another, its prose names the piece it follows
 in ordinary language. A Story whose `stackedOn` is set lands after that
@@ -88,9 +92,10 @@ this export's file set, the name is the published title being written for it.
 When that piece is outside the file set, the name is that issue's tracker
 title.
 
-An Epic body is those paragraphs, then a checklist of the rewritten Story
-titles in landing order (`- [ ] <published title>`). Each Story stays its own
-file. Landing order is the script's file order.
+An Epic body is that Epic's own situation in the same voice, then a checklist
+of the rewritten Story titles in landing order (`- [ ] <published title>`).
+Landing order is the script's file order. Each Story stays its own file. The
+Epic body does not repeat the Stories' implementation.
 
 ## Later updates
 
