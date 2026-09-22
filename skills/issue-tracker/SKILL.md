@@ -166,5 +166,5 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
   design system and record in `supportingDocs`; use when writing or updating
   project coding standards or design system.
 - **`issue-tracker-github-export`** — rewrite a root-level Epic or
-  project-level Story into GitHub-shaped export drafts on that root; use
-  when an export session runs a GitHub-export rewrite.
+  project-level Story into publishing-prose GitHub export drafts on that
+  root; use when an export session runs a GitHub-export rewrite.
