@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -9,6 +16,7 @@ import {
 import {
   UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR,
   UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR,
+  UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR,
 } from "../services/merge-base-task.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
@@ -178,5 +186,53 @@ describe("POST /api/issues/:id/update-from-merge-base", () => {
       error: UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR("b"),
     });
     expect(existsSync(join(dir, "update-from-merge-base"))).toBe(false);
+  });
+
+  it("returns 409 and leaves the tree unchanged while an update task is not done", async () => {
+    writeIssue("open-update", {
+      kind: "task",
+      title: "Update from merge base",
+      partOf: "a",
+      status: "in-progress",
+      order: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const { status, json } = await postUpdateFromMergeBase("a");
+    expect(status).toBe(409);
+    expect(json).toEqual({
+      error: UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR("a"),
+    });
+    expect(existsSync(join(dir, "update-from-merge-base"))).toBe(false);
+    expect(
+      JSON.parse(readFileSync(join(dir, "open-update", "issue.json"), "utf8"))
+        .status,
+    ).toBe("in-progress");
+  });
+
+  it("appends a new task after the update task is done", async () => {
+    writeIssue("open-update", {
+      kind: "task",
+      title: "Update from merge base",
+      partOf: "a",
+      status: "done",
+      order: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const { status, json } = await postUpdateFromMergeBase("a");
+    expect(status).toBe(201);
+    const task = json as Record<string, unknown>;
+    expect(task.id).toBe("update-from-merge-base");
+    expect(task.partOf).toBe("a");
+    expect(existsSync(join(dir, "update-from-merge-base", "issue.json"))).toBe(
+      true,
+    );
+    expect(
+      JSON.parse(readFileSync(join(dir, "open-update", "issue.json"), "utf8"))
+        .status,
+    ).toBe("done");
   });
 });

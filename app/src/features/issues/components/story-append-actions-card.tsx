@@ -17,6 +17,7 @@ import { issuePath } from "../lib/links";
 import {
   ADD_IDEA_HELPER,
   appendIdeaTitle,
+  hasOpenUpdateFromMergeBaseTask,
   mergeBaseHelper,
   storyAppendAvailability,
 } from "../lib/story-append-actions";
@@ -51,7 +52,14 @@ export function StoryAppendActionsCard({ issue }: { issue: StoryDetail }) {
   const createIssue = useCreateIssue();
   const updateIssue = useUpdateIssue();
   const updateFromMergeBase = useUpdateFromMergeBase(issue.id);
-  const availability = storyAppendAvailability(issue);
+  const availability = storyAppendAvailability({
+    merged: issue.merged,
+    branchName: issue.branchName,
+    hasOpenMergeBaseTask: hasOpenUpdateFromMergeBaseTask(
+      data?.issues ?? [],
+      issue.id,
+    ),
+  });
   const mergeBase = data?.derived[issue.id]?.mergeBase;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const pending =

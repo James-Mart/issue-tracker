@@ -28,6 +28,9 @@ export const PARENT_KINDS: Record<IssueKind, readonly IssueKind[]> = {
   task: ["story"],
 };
 
+/** Predefined Task title appended by `update-from-merge-base`. */
+export const UPDATE_FROM_MERGE_BASE_TITLE = "Update from merge base";
+
 export const CHILD_KIND: Record<IssueKind, IssueKind | null> = {
   project: "epic",
   epic: "story",

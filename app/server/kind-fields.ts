@@ -239,6 +239,7 @@ export const STORY_GET_FIELDS = {
   blocked: DERIVED,
   planNotFinal: DERIVED,
   worktree: DERIVED,
+  behindMergeBase: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const TASK_GET_FIELDS = {

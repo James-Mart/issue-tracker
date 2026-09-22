@@ -11,6 +11,7 @@ import {
   type SetFieldSpec,
 } from "./server/kind-fields.js";
 import { list, read, renameProjectLabel, update } from "./server/services/issues.js";
+import { storyBehindMergeBase } from "./server/services/merge-base-task.js";
 import { validateFullCommitSha } from "./server/services/commit-sha.js";
 import { MERGE_POLICIES } from "./server/issue-constants.js";
 import {
@@ -668,6 +669,9 @@ export function kindGetValue(
   }
 
   if (spec.source === "derived") {
+    if (kind === "story" && field === "behindMergeBase") {
+      return formatGetValue(storyBehindMergeBase(id));
+    }
     const { derived } = list();
     const state = derived[id];
     if (!state) return null;
