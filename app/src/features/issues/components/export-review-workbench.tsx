@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeft, ChevronDown, ChevronUp, Save } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ChannelSessionListItem, Issue, IssueDetail } from "@server/schemas";
@@ -393,10 +393,12 @@ export function ExportReviewWorkbench({
   issue,
   session,
   transcript,
+  onExportDraftReaderOpenChange,
 }: {
   issue: IssueDetail;
   session: ChannelSessionListItem | undefined;
   transcript: ReactNode;
+  onExportDraftReaderOpenChange?: (open: boolean) => void;
 }) {
   const isMobile = useIsMobile();
   const attachments = useAttachmentsQuery(issue.id);
@@ -442,6 +444,13 @@ export function ExportReviewWorkbench({
       setPhoneOpen(true);
     }
   };
+
+  useEffect(() => {
+    onExportDraftReaderOpenChange?.(isMobile && phoneOpen);
+    return () => {
+      onExportDraftReaderOpenChange?.(false);
+    };
+  }, [isMobile, onExportDraftReaderOpenChange, phoneOpen]);
 
   const onSave = () => {
     if (!selected || !selectedResult?.isSuccess) return;
@@ -507,7 +516,7 @@ export function ExportReviewWorkbench({
       )}
       data-testid="export-review-workbench"
     >
-      {isMobile ? (
+      {isMobile && !phoneOpen ? (
         <div
           role="tablist"
           aria-label="Export"
@@ -544,7 +553,7 @@ export function ExportReviewWorkbench({
             );
           })}
         </div>
-      ) : (
+      ) : isMobile ? null : (
         <RunStrip session={session} draftCount={ordered.length} />
       )}
 

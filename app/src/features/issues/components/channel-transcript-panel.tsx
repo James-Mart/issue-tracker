@@ -429,6 +429,7 @@ function ExportChannelTranscript(props: {
   parentKind?: IssueKind;
   mobileFullViewport?: boolean;
   onBackToOverview?: () => void;
+  onExportDraftReaderOpenChange?: (open: boolean) => void;
 }) {
   const [retriedId, setRetriedId] = useState<string | undefined>();
   const { data } = useChannelSessionsQuery(props.issueId, "export");
@@ -460,6 +461,7 @@ function ExportChannelTranscript(props: {
         issue={props.issue}
         session={current}
         transcript={transcript}
+        onExportDraftReaderOpenChange={props.onExportDraftReaderOpenChange}
       />
     );
   }
@@ -476,6 +478,7 @@ export function ChannelTranscriptPanel(props: {
   parentKind?: IssueKind;
   mobileFullViewport?: boolean;
   onBackToOverview?: () => void;
+  onExportDraftReaderOpenChange?: (open: boolean) => void;
 }) {
   if (props.channel === "export") return <ExportChannelTranscript {...props} />;
   return <ChannelTranscriptBody {...props} />;

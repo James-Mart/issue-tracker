@@ -64,6 +64,8 @@ export function IssueDetailTabs({
   parentKind,
   overview,
   exportTab = false,
+  exportDraftReaderOpen = false,
+  onExportDraftReaderOpenChange,
 }: {
   issue: IssueDetail;
   projectId: string;
@@ -71,6 +73,8 @@ export function IssueDetailTabs({
   overview: ReactNode;
   /** `loading` keeps an existing `?tab=export` from being stripped. */
   exportTab?: boolean | "loading";
+  exportDraftReaderOpen?: boolean;
+  onExportDraftReaderOpenChange?: (open: boolean) => void;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const includeExport = exportTabIncluded(exportTab, searchParams.get("tab"));
@@ -98,6 +102,9 @@ export function IssueDetailTabs({
     active,
     tabs,
   );
+  const compactChrome =
+    mobileChannelChrome ||
+    (isMobile && active === "export" && exportDraftReaderOpen);
 
   useEffect(() => {
     const raw = searchParams.get("tab");
@@ -152,10 +159,10 @@ export function IssueDetailTabs({
     <div
       className={cn(
         "flex min-h-0 flex-1 flex-col",
-        mobileChannelChrome ? "gap-0" : "gap-4",
+        compactChrome ? "gap-0" : "gap-4",
       )}
     >
-      {mobileChannelChrome ? null : (
+      {compactChrome ? null : (
         <div
           role="tablist"
           aria-label="Issue detail"
@@ -225,6 +232,11 @@ export function IssueDetailTabs({
               mobileFullViewport={mobileChannelChrome}
               onBackToOverview={
                 mobileChannelChrome ? onBackToOverview : undefined
+              }
+              onExportDraftReaderOpenChange={
+                tab.channel === "export"
+                  ? onExportDraftReaderOpenChange
+                  : undefined
               }
             />
           </div>

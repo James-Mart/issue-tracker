@@ -165,8 +165,9 @@ export function issueDetailTabNeedsBoundedShell(
 
 /**
  * Phone channel tabs take the viewport and hide the issue tab bar.
- * Export keeps Overview / Implementing / Export visible; Transcript and
- * Drafts live inside that tab.
+ * Export keeps Overview / Implementing / Export visible while the draft list
+ * is closed; an open mobile draft reader clears the tab bar separately via
+ * `exportDraftReaderOpen`.
  */
 export function mobileChannelChromeForTab(
   isMobile: boolean,

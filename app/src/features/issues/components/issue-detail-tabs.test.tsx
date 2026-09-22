@@ -124,6 +124,7 @@ function mountTabs(
   initialEntry = "/",
   issue: IssueDetail = idea(),
   exportTab: boolean | "loading" = false,
+  exportDraftReaderOpen = false,
 ): {
   container: HTMLDivElement;
   root: Root;
@@ -140,6 +141,7 @@ function mountTabs(
           projectId="issue-tracker"
           overview={<div>Overview body</div>}
           exportTab={exportTab}
+          exportDraftReaderOpen={exportDraftReaderOpen}
         />
       </MemoryRouter>,
     );
@@ -370,6 +372,13 @@ describe("IssueDetailTabs mobile channel chrome", () => {
     expect(tabNamed(container, "Export").getAttribute("aria-selected")).toBe(
       "true",
     );
+    expect(panelProps.mobileFullViewport).toBe(false);
+  });
+
+  it("hides the tab bar when a mobile export draft reader is open", () => {
+    mobileState.value = true;
+    const { container } = mountTabs(null, "/?tab=export", epic(), true, true);
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
     expect(panelProps.mobileFullViewport).toBe(false);
   });
 
