@@ -94,10 +94,10 @@ file. Landing order is the script's file order.
 
 ## Later updates
 
-When a later message changes one or more drafts, PUT
+When a follow-up message changes the substance of one or more drafts, list
+names with `issue attachments <rootId>`. Read each reserved file with
+`GET http://127.0.0.1:${PORT:-8061}/api/issues/<rootId>/attachments/<name>`.
+Rewrite the changed drafts in the publishing voice above. PUT
 `/api/issues/<rootId>/export-drafts` again with the full current set: every
 `github-export-*.md`, including files this message did not change. Omitting
-a reserved name deletes it. List names with `issue attachments <rootId>`.
-Read each reserved file with
-`GET http://127.0.0.1:${PORT:-8061}/api/issues/<rootId>/attachments/<name>`.
-Do not call `PUT .../attachments/:name`.
+a reserved name deletes it. Do not call `PUT .../attachments/:name`.
