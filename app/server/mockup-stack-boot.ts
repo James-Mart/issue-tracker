@@ -11,10 +11,7 @@ let capturedReapReport: MockupStackReapReport | undefined;
 export async function captureMockupStackReapAtBoot(): Promise<void> {
   const report = await reapOrphanedMockupStacksAtBoot();
   capturedReapReport = report;
-  if (
-    report.staleStateRemoved.length > 0 ||
-    report.orphanedStacksStopped.length > 0
-  ) {
+  if (report.staleStateRemoved.length > 0) {
     console.log(
       "reaped orphaned mockup stacks at boot:",
       JSON.stringify(report),
