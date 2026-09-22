@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IssueDetail } from "@server/schemas";
@@ -12,6 +13,10 @@ const mobileState = vi.hoisted(() => ({
 
 const derivedState = vi.hoisted(() => ({
   ideaStatus: undefined as string | undefined,
+}));
+
+const readerState = vi.hoisted(() => ({
+  simulateOpen: false,
 }));
 
 const t0 = "2026-08-01T00:00:00.000Z";
@@ -42,19 +47,34 @@ const idea: IssueDetail = {
   labels: [],
 };
 
+const epic: IssueDetail = {
+  id: "auth",
+  kind: "epic",
+  title: "Auth",
+  partOf: "issue-tracker",
+  order: 0,
+  createdAt: t0,
+  updatedAt: t0,
+  archived: false,
+  description: "",
+  labels: [],
+  needsAttention: false,
+  attentionReason: null,
+};
+
 vi.mock("@/hooks/use-mobile", () => ({
   useIsMobile: () => mobileState.value,
 }));
 
 vi.mock("../api/queries", () => ({
   useIssueDetailQuery: () => ({
-    data: idea,
+    data: readerState.simulateOpen ? epic : idea,
     isLoading: false,
     error: null,
   }),
   useIssuesQuery: () => ({
     data: {
-      issues: [project, idea],
+      issues: [project, idea, epic],
       derived: {
         capture: { blocked: false, ideaStatus: derivedState.ideaStatus },
       },
@@ -89,13 +109,32 @@ vi.mock("./issue-detail-header", () => ({
 }));
 
 vi.mock("./issue-detail-tabs", () => ({
-  IssueDetailTabs: ({ overview }: { overview: React.ReactNode }) => (
-    <div data-testid="issue-detail-tabs">{overview}</div>
-  ),
+  IssueDetailTabs: ({
+    overview,
+    onExportDraftReaderOpenChange,
+  }: {
+    overview: React.ReactNode;
+    onExportDraftReaderOpenChange?: (open: boolean) => void;
+  }) => {
+    useEffect(() => {
+      if (readerState.simulateOpen) {
+        onExportDraftReaderOpenChange?.(true);
+      }
+    }, [onExportDraftReaderOpenChange]);
+    return <div data-testid="issue-detail-tabs">{overview}</div>;
+  },
 }));
 
 vi.mock("./issue-meta-panel", () => ({
   IssueMetaPanel: () => null,
+}));
+
+vi.mock("./implementing-launch-control", () => ({
+  ImplementingOverviewLaunch: () => null,
+}));
+
+vi.mock("./export-overview-launch", () => ({
+  ExportOverviewLaunch: () => null,
 }));
 
 vi.mock("./attachments-panel", () => ({
@@ -116,16 +155,21 @@ function mountPage(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={[entry]}>
-        <Routes>
-          <Route
-            path="/projects/:projectId/issues/:id"
-            element={<IssueDetailPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[entry]}>
+          <Routes>
+            <Route
+              path="/projects/:projectId/issues/:id"
+              element={<IssueDetailPage />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
   });
   return { container, root };
@@ -139,6 +183,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   mobileState.value = false;
   derivedState.ideaStatus = undefined;
+  readerState.simulateOpen = false;
 });
 
 describe("IssueDetailPage back navigation", () => {
@@ -211,6 +256,23 @@ describe("IssueDetailPage mobile channel chrome", () => {
     ).toBeTruthy();
     expect(
       container.querySelector('[data-testid="issue-detail-header"]'),
+    ).toBeTruthy();
+  });
+
+  it("hides issue chrome when a mobile export draft reader is open", () => {
+    mobileState.value = true;
+    readerState.simulateOpen = true;
+    const { container } = mountPage(
+      "/projects/issue-tracker/issues/auth?tab=export",
+    );
+    expect(
+      container.querySelector('[data-testid="issue-detail-back"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="issue-detail-header"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="issue-detail-tabs"]'),
     ).toBeTruthy();
   });
 });

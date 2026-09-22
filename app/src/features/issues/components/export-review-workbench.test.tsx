@@ -143,7 +143,10 @@ function setControlValue(control: HTMLInputElement | HTMLTextAreaElement, value:
 
 const roots: Root[] = [];
 
-function mount(transcript: ReactNode = <div data-testid="export-transcript-page" />) {
+function mount(
+  transcript: ReactNode = <div data-testid="export-transcript-page" />,
+  onExportDraftReaderOpenChange?: (open: boolean) => void,
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -160,6 +163,7 @@ function mount(transcript: ReactNode = <div data-testid="export-transcript-page"
             issue={issue}
             session={session}
             transcript={transcript}
+            onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
           />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -246,20 +250,80 @@ describe("ExportReviewWorkbench", () => {
       "export",
     );
 
+    const mfaRow = container.querySelector(
+      "[data-draft-name='github-export-mfa.md']",
+    ) as HTMLButtonElement;
+    expect(mfaRow.textContent).toContain("Story");
+    expect(mfaRow.textContent).toContain("github-export-mfa.md");
+
     act(() => {
-      (container.querySelector("[data-draft-name='github-export-mfa.md']") as HTMLButtonElement).click();
+      mfaRow.click();
     });
-    expect(container.querySelector("[data-testid='export-draft-back']")).toBeTruthy();
+    const reader = container.querySelector("[data-testid='export-draft-reader']");
+    expect(reader).toBeTruthy();
+    const back = container.querySelector(
+      "[data-testid='export-draft-back']",
+    ) as HTMLButtonElement;
+    expect(back).toBeTruthy();
+    expect(back.getAttribute("aria-label")).toBe("Back");
+    expect(back.textContent).not.toContain("Drafts");
+    expect(container.querySelector("[data-testid='export-phone-modes']")).toBeNull();
+    expect(reader?.textContent).toContain("MFA enrollment flow");
+    expect(reader?.textContent).not.toContain("Story");
+    expect(reader?.textContent).not.toContain("github-export-mfa.md");
+    expect(container.querySelector("[data-testid='export-draft-preview']")).toBeTruthy();
+    expect(container.querySelector("[data-testid='export-draft-edit']")).toBeTruthy();
     expect(container.querySelector("[data-testid='export-draft-preview-body']")?.textContent).toContain(
       "Users enroll.",
     );
+
     act(() => {
-      (container.querySelector("[data-testid='export-draft-back']") as HTMLButtonElement).click();
+      (container.querySelector("[data-testid='export-draft-edit']") as HTMLButtonElement).click();
+    });
+    const editor = container.querySelector(
+      "[data-testid='export-draft-editor']",
+    ) as HTMLTextAreaElement;
+    expect(editor).toBeTruthy();
+    expect(container.querySelector("[data-testid='export-draft-save']")).toBeTruthy();
+    const edited = editor.value.replace("Users enroll.", "Users enrolled.");
+    act(() => {
+      setControlValue(editor, edited);
+    });
+    act(() => {
+      (container.querySelector("[data-testid='export-draft-preview']") as HTMLButtonElement).click();
+    });
+    act(() => {
+      (container.querySelector("[data-testid='export-draft-edit']") as HTMLButtonElement).click();
+    });
+    expect(
+      (container.querySelector("[data-testid='export-draft-editor']") as HTMLTextAreaElement).value,
+    ).toBe(edited);
+
+    act(() => {
+      back.click();
     });
     expect(container.querySelector("[data-testid='export-draft-list']")).toBeTruthy();
+    expect(container.querySelector("[data-testid='export-phone-modes']")).toBeTruthy();
     expect(container.querySelector("[data-testid='tab-param']")?.textContent).toBe(
       "export",
     );
+  });
+
+  it("reports mobile reader open state", () => {
+    mobile.value = true;
+    const onChange = vi.fn();
+    const container = mount(undefined, onChange);
+    expect(onChange).toHaveBeenLastCalledWith(false);
+
+    act(() => {
+      (container.querySelector("[data-draft-name='github-export-mfa.md']") as HTMLButtonElement).click();
+    });
+    expect(onChange).toHaveBeenLastCalledWith(true);
+
+    act(() => {
+      (container.querySelector("[data-testid='export-draft-back']") as HTMLButtonElement).click();
+    });
+    expect(onChange).toHaveBeenLastCalledWith(false);
   });
 
   it("expands the run strip and posts { prompt } to the export session", async () => {

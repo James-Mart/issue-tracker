@@ -177,6 +177,8 @@ function IssueDetailBody({
   exportTab,
   showExportLaunch,
   onExportTabVisible,
+  exportDraftReaderOpen,
+  onExportDraftReaderOpenChange,
 }: {
   issue: IssueDetail;
   upload?: UploadAttachmentMutation;
@@ -187,6 +189,8 @@ function IssueDetailBody({
   exportTab: boolean | "loading";
   showExportLaunch: boolean;
   onExportTabVisible: (visible: boolean) => void;
+  exportDraftReaderOpen: boolean;
+  onExportDraftReaderOpenChange: (open: boolean) => void;
 }) {
   return (
     <div
@@ -206,6 +210,8 @@ function IssueDetailBody({
         projectId={projectId}
         parentKind={parentKind}
         exportTab={exportTab}
+        exportDraftReaderOpen={exportDraftReaderOpen}
+        onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
         overview={
           <IssueOverviewPanel
             issue={issue}
@@ -233,6 +239,8 @@ function IssueDetailAttachable({
   exportTab,
   showExportLaunch,
   onExportTabVisible,
+  exportDraftReaderOpen,
+  onExportDraftReaderOpenChange,
 }: {
   issue: IssueDetail;
   projectId: string;
@@ -244,6 +252,8 @@ function IssueDetailAttachable({
   exportTab: boolean | "loading";
   showExportLaunch: boolean;
   onExportTabVisible: (visible: boolean) => void;
+  exportDraftReaderOpen: boolean;
+  onExportDraftReaderOpenChange: (open: boolean) => void;
 }) {
   const upload = useUploadAttachment(issue.id);
   const { rootProps } = useIssueDetailFileUpload(upload);
@@ -272,6 +282,8 @@ function IssueDetailAttachable({
         exportTab={exportTab}
         showExportLaunch={showExportLaunch}
         onExportTabVisible={onExportTabVisible}
+        exportDraftReaderOpen={exportDraftReaderOpen}
+        onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
       />
     </PageShell>
   );
@@ -281,6 +293,7 @@ function useIssueDetailShellFlags(
   issue: IssueDetail | undefined,
   parentKind: IssueKind | undefined,
   exportTab: boolean | "loading",
+  exportDraftReaderOpen: boolean,
 ): { boundShell: boolean; compactChannelChrome: boolean } {
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
@@ -297,11 +310,14 @@ function useIssueDetailShellFlags(
     });
     const active = resolveIssueDetailTab(tabParam, tabs);
     const boundShell = issueDetailTabNeedsBoundedShell(active, tabs);
+    const channelChrome = mobileChannelChromeForTab(isMobile, active, tabs);
     return {
       boundShell,
-      compactChannelChrome: mobileChannelChromeForTab(isMobile, active, tabs),
+      compactChannelChrome:
+        channelChrome ||
+        (isMobile && active === "export" && exportDraftReaderOpen),
     };
-  }, [exportTab, issue, parentKind, tabParam, isMobile]);
+  }, [exportDraftReaderOpen, exportTab, issue, parentKind, tabParam, isMobile]);
 }
 
 export function IssueDetailPage() {
@@ -336,11 +352,15 @@ export function IssueDetailPage() {
     id: string;
     visible: boolean;
   } | null>(null);
+  const [exportDraftReaderOpen, setExportDraftReaderOpen] = useState(false);
   const onExportTabVisible = useCallback((visible: boolean) => {
     setExportReport((prev) =>
       prev?.id === id && prev.visible === visible ? prev : { id, visible },
     );
   }, [id]);
+  const onExportDraftReaderOpenChange = useCallback((open: boolean) => {
+    setExportDraftReaderOpen((prev) => (prev === open ? prev : open));
+  }, []);
   const exportTab: boolean | "loading" = !kindEligible
     ? false
     : !workspaceKnown || (showExportLaunch && exportReport?.id !== id)
@@ -353,6 +373,7 @@ export function IssueDetailPage() {
     issue,
     parentKind,
     exportTab,
+    exportDraftReaderOpen,
   );
 
   const missing = error instanceof ApiError && error.status === 404;
@@ -392,6 +413,8 @@ export function IssueDetailPage() {
         exportTab={exportTab}
         showExportLaunch={showExportLaunch}
         onExportTabVisible={onExportTabVisible}
+        exportDraftReaderOpen={exportDraftReaderOpen}
+        onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
       />
     );
   }
@@ -449,6 +472,8 @@ export function IssueDetailPage() {
           exportTab={exportTab}
           showExportLaunch={showExportLaunch}
           onExportTabVisible={onExportTabVisible}
+          exportDraftReaderOpen={exportDraftReaderOpen}
+          onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
         />
       ) : null}
     </PageShell>
