@@ -15,7 +15,7 @@ import { exportTabIncluded } from "../lib/export-tab";
 import {
   AGENTS_DETAIL_TAB,
   DIFF_DETAIL_TAB,
-  issueDetailTabNeedsBoundedShell,
+  mobileChannelChromeForTab,
   resolveChannelTabIndicator,
   resolveIssueDetailTab,
   tabsForIssueDetail,
@@ -93,8 +93,11 @@ export function IssueDetailTabs({
     issue.kind === "idea" ? derived?.[issue.id]?.ideaStatus : undefined;
   const active = resolveIssueDetailTab(searchParams.get("tab"), tabs);
   const isMobile = useIsMobile();
-  const mobileChannelChrome =
-    isMobile && issueDetailTabNeedsBoundedShell(active, tabs);
+  const mobileChannelChrome = mobileChannelChromeForTab(
+    isMobile,
+    active,
+    tabs,
+  );
 
   useEffect(() => {
     const raw = searchParams.get("tab");

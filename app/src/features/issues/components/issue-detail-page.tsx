@@ -31,6 +31,7 @@ import { issueBelongsToProject, issuesById } from "../lib/build-tree";
 import {
   channelTabForIssue,
   issueDetailTabNeedsBoundedShell,
+  mobileChannelChromeForTab,
   resolveIssueDetailTab,
   tabsForIssueDetail,
 } from "../lib/issue-detail-tabs";
@@ -298,7 +299,7 @@ function useIssueDetailShellFlags(
     const boundShell = issueDetailTabNeedsBoundedShell(active, tabs);
     return {
       boundShell,
-      compactChannelChrome: isMobile && boundShell,
+      compactChannelChrome: mobileChannelChromeForTab(isMobile, active, tabs),
     };
   }, [exportTab, issue, parentKind, tabParam, isMobile]);
 }

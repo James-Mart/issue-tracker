@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { deleteConversation } from "@/features/agents/api/client";
 import { agentsKeys } from "@/features/agents/api/keys";
-import { request } from "@/lib/api/client";
+import { request, requestText } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import {
   createChannelSession,
@@ -174,6 +174,23 @@ export function useUploadAttachment(id: string) {
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () =>
       qc.invalidateQueries({ queryKey: issuesKeys.attachments(id) }),
+  });
+}
+
+/** Last-pass edit: overwrite one reserved `github-export-*` basename. */
+export function useOverwriteExportDraft(issueId: string) {
+  const qc = useQueryClient();
+  return useMutation<string, Error, { name: string; content: string }>({
+    mutationFn: ({ name, content }) =>
+      requestText(attachmentsApiPath(issueId, name), {
+        method: "PUT",
+        headers: { "Content-Type": "text/markdown" },
+        body: content,
+      }),
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: issuesKeys.attachments(issueId) });
+    },
   });
 }
 

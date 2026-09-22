@@ -361,6 +361,18 @@ describe("IssueDetailTabs mobile channel chrome", () => {
     expect(panelProps.mobileFullViewport).toBe(false);
   });
 
+  it("keeps Overview, Implementing, and Export on a mobile Export tab", () => {
+    mobileState.value = true;
+    const { container } = mountTabs(null, "/?tab=export", epic(), true);
+    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(tabNamed(container, "Overview")).toBeTruthy();
+    expect(tabNamed(container, "Implementing")).toBeTruthy();
+    expect(tabNamed(container, "Export").getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(panelProps.mobileFullViewport).toBe(false);
+  });
+
   it("keeps the tab bar on mobile Overview", () => {
     mobileState.value = true;
     const { container } = mountTabs(null, "/");

@@ -12,6 +12,11 @@ const queryState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
+const attachmentState = vi.hoisted(() => ({
+  data: [] as { name: string }[],
+  isLoading: false,
+}));
+
 const threadProps = vi.hoisted(() => ({
   hideComposer: false,
   onBack: undefined as (() => void) | undefined,
@@ -26,6 +31,16 @@ vi.mock("../api/queries", () => ({
     isLoading: queryState.isLoading,
     error: queryState.error,
   }),
+  useAttachmentsQuery: () => ({
+    data: attachmentState.data,
+    isLoading: attachmentState.isLoading,
+    isError: false,
+    error: null,
+  }),
+}));
+
+vi.mock("./export-review-workbench", () => ({
+  ExportReviewWorkbench: () => <div data-testid="export-review-workbench" />,
 }));
 
 vi.mock("./planning-launch-control", () => ({
@@ -302,6 +317,8 @@ afterEach(() => {
   queryState.data = undefined;
   queryState.isLoading = false;
   queryState.error = null;
+  attachmentState.data = [];
+  attachmentState.isLoading = false;
   threadProps.hideComposer = false;
   threadProps.onBack = undefined;
   threadProps.headerActions = false;
@@ -692,6 +709,32 @@ describe("ChannelTranscriptPanel", () => {
     expect(thread?.getAttribute("data-conversation-id")).toBe("exp-1");
     expect(thread?.getAttribute("data-composer-disabled")).toBe("true");
     expect(container.textContent).not.toContain("This view crashed");
+    expect(
+      container.querySelector('[data-testid="export-review-workbench"]'),
+    ).toBeNull();
+  });
+
+  it("switches the export tab from the transcript page to the workbench when drafts exist", () => {
+    attachmentState.data = [{ name: "github-export-ship-it.md" }];
+    queryState.data = [
+      {
+        id: "exp-1",
+        title: "Export Ship it",
+        model: "composer-2.5",
+        createdAt: "2026-08-01T00:00:00.000Z",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+        archived: false,
+        activeRun: false,
+        awaitingHuman: false,
+      },
+    ];
+    const { container } = mountPanel("Export", epic, { channel: "export" });
+    expect(
+      container.querySelector('[data-testid="export-review-workbench"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="conversation-thread"]'),
+    ).toBeNull();
   });
 
   it("exposes delete for a single session from the mobile overflow menu", () => {

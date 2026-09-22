@@ -20,19 +20,21 @@ import {
   currentChannelSession,
   defaultChannelSession,
 } from "../api/channel-sessions";
-import { useChannelSessionsQuery } from "../api/queries";
+import { useAttachmentsQuery, useChannelSessionsQuery } from "../api/queries";
 import { cockpitLaunchOverlayForIssue } from "../lib/cockpit-launch-sync";
 import {
   detailLaunchFaultCopy,
   detailLaunchPendingCopy,
   launchOverlaysChannel,
 } from "../lib/detail-launch-sync";
+import { exportDraftCount } from "../lib/export-tab";
 import { isImplementingWorkRoot } from "../lib/implementing-launch";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelSessionOverflowMenu } from "./channel-session-overflow-menu";
 import { ChannelSessionSwitcher } from "./channel-session-switcher";
 import { ChannelRetroControl } from "./channel-retro-control";
 import { useExportTranscriptChrome } from "./export-transcript-chrome";
+import { ExportReviewWorkbench } from "./export-review-workbench";
 import {
   ImplementingChannelEmptyState,
   ImplementingNewRunControl,
@@ -430,13 +432,14 @@ function ExportChannelTranscript(props: {
 }) {
   const [retriedId, setRetriedId] = useState<string | undefined>();
   const { data } = useChannelSessionsQuery(props.issueId, "export");
+  const attachments = useAttachmentsQuery(props.issueId);
   const current = currentChannelSession(data ?? []);
   const chrome = useExportTranscriptChrome(
     { id: props.issueId, title: props.issue?.title ?? "" },
     current,
     ({ id }) => setRetriedId(id),
   );
-  return (
+  const transcript = (
     <ChannelTranscriptBody
       {...props}
       composerDisabled={chrome.composerDisabled}
@@ -445,6 +448,22 @@ function ExportChannelTranscript(props: {
       preferredSessionId={retriedId}
     />
   );
+  const draftCount = exportDraftCount(
+    (attachments.data ?? []).map((item) => item.name),
+  );
+  if (attachments.isLoading && attachments.data === undefined) {
+    return <ShellLoadingState label="Loading export…" />;
+  }
+  if (draftCount > 0 && props.issue) {
+    return (
+      <ExportReviewWorkbench
+        issue={props.issue}
+        session={current}
+        transcript={transcript}
+      />
+    );
+  }
+  return transcript;
 }
 
 /** Full-width channel panel. Export adds rewrite chrome around the transcript. */

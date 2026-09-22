@@ -163,6 +163,23 @@ export function issueDetailTabNeedsBoundedShell(
   return tabs.some((tab) => tab.key === active && "channel" in tab);
 }
 
+/**
+ * Phone channel tabs take the viewport and hide the issue tab bar.
+ * Export keeps Overview / Implementing / Export visible; Transcript and
+ * Drafts live inside that tab.
+ */
+export function mobileChannelChromeForTab(
+  isMobile: boolean,
+  active: IssueDetailTabKey,
+  tabs: readonly IssueDetailTab[],
+): boolean {
+  return (
+    isMobile &&
+    active !== "export" &&
+    issueDetailTabNeedsBoundedShell(active, tabs)
+  );
+}
+
 /** Planning tab shows awaiting-human when the Idea awaits approval. */
 export function channelTabIndicatorFromIdeaStatus(
   issue: Issue,
