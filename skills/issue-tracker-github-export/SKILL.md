@@ -75,10 +75,16 @@ The prose uses the names that reader already uses for the areas in the change
 and for the operations those areas perform. The YAML `title` is a short name
 of the outcome.
 
-A Story body is Background, then Implementation broken into the areas the
-tracker names. Area headings are the names the reader already uses for those
-areas, as the tracker names them, not procedural task titles. A table appears
-only when behavior is a matrix.
+A Story body opens with `# Background`, then `# Implementation`. Do not add
+a top-level heading that repeats the YAML `title`. `# Background` restates
+the Story's situation and any named invariants from the tracker description.
+Leave data model, actions, queries, and UI work to `# Implementation`.
+
+Under `# Implementation`, break the work into `##` area headings. Each
+heading is the name the reader already uses for that area, as the tracker
+names it, not a procedural task title. Prefer the tracker's own section and
+task area names over invented labels. A table appears only when behavior is
+a matrix.
 
 The body keeps outcomes, object shapes, and behavior rules an implementor
 still needs. File paths, symbol names, and task-by-task procedure stay in
