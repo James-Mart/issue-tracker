@@ -11,6 +11,7 @@ import {
   type IssuePatch,
   mergeStoryBodySchema,
 } from "../schemas.js";
+import { exportDraftMarkdown } from "../middleware/export-draft-markdown.js";
 import { uploadAttachment } from "../middleware/upload-attachment.js";
 import {
   agentSessions,
@@ -22,6 +23,10 @@ import {
   putAttachment,
   removeAttachment,
 } from "../services/attachments.js";
+import {
+  overwriteExportDraft,
+  replaceExportDrafts,
+} from "../services/export-drafts.js";
 import { IssueError } from "../services/errors.js";
 import {
   findAgentRunsWorkRoot,
@@ -282,6 +287,24 @@ export function createIssuesRouter(
     }),
   );
 
+  router.put(
+    "/:id/export-drafts",
+    asyncRoute(async (req, res) => {
+      if (
+        !req.body ||
+        typeof req.body !== "object" ||
+        Array.isArray(req.body)
+      ) {
+        throw new IssueError("validation", "files must be an array");
+      }
+      const metas = await replaceExportDrafts(
+        req.params.id,
+        (req.body as { files?: unknown }).files,
+      );
+      res.status(200).json(metas);
+    }),
+  );
+
   router.get(
     "/:id/attachments",
     asyncRoute((req, res) => {
@@ -312,6 +335,25 @@ export function createIssuesRouter(
       );
       res.type(meta.mime);
       res.send(bytes);
+    }),
+  );
+
+  router.put(
+    "/:id/attachments/:name",
+    exportDraftMarkdown,
+    asyncRoute(async (req, res) => {
+      if (typeof req.body !== "string") {
+        throw new IssueError(
+          "validation",
+          "Content-Type must be text/markdown or text/plain",
+        );
+      }
+      const meta = await overwriteExportDraft(
+        req.params.id,
+        req.params.name,
+        req.body,
+      );
+      res.status(200).json(meta);
     }),
   );
 

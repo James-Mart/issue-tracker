@@ -172,6 +172,138 @@ describe("attachments HTTP API", () => {
     );
   });
 
+  it("replaces the github-export draft set", async () => {
+    const notes = await upload("c", "notes.md", "stay");
+    expect(notes.status).toBe(201);
+    const first = await fetch(`${baseUrl}/api/issues/c/export-drafts`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [
+          {
+            name: "github-export-keep.md",
+            content: "---\ntitle: Keep\n---\nold\n",
+          },
+          {
+            name: "github-export-drop.md",
+            content: "---\ntitle: Drop\n---\ngone\n",
+          },
+        ],
+      }),
+    });
+    expect(first.status).toBe(200);
+
+    const replaced = await fetch(`${baseUrl}/api/issues/c/export-drafts`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [
+          {
+            name: "github-export-keep.md",
+            content: "---\ntitle: Keep\n---\nnew\n",
+          },
+        ],
+      }),
+    });
+    expect(replaced.status).toBe(200);
+    expect(await replaced.json()).toEqual([
+      expect.objectContaining({ name: "github-export-keep.md" }),
+    ]);
+
+    const listed = await fetch(`${baseUrl}/api/issues/c/attachments`);
+    expect(await listed.json()).toEqual([
+      expect.objectContaining({ name: "github-export-keep.md" }),
+      expect.objectContaining({ name: "notes.md" }),
+    ]);
+    expect(
+      await (
+        await fetch(`${baseUrl}/api/issues/c/attachments/github-export-keep.md`)
+      ).text(),
+    ).toBe("---\ntitle: Keep\n---\nnew\n");
+  });
+
+  it("rejects a bad export-draft name or a missing title", async () => {
+    const badName = await fetch(`${baseUrl}/api/issues/c/export-drafts`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [{ name: "notes.md", content: "---\ntitle: N\n---\nbody\n" }],
+      }),
+    });
+    expect(badName.status).toBe(400);
+    expect(await badName.json()).toEqual(
+      expect.objectContaining({ code: "validation" }),
+    );
+
+    const missingTitle = await fetch(`${baseUrl}/api/issues/c/export-drafts`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [{ name: "github-export-keep.md", content: "# bare\n" }],
+      }),
+    });
+    expect(missingTitle.status).toBe(400);
+    expect(await missingTitle.json()).toEqual({
+      error: 'github-export draft "github-export-keep.md" is missing title',
+      code: "validation",
+    });
+    expect(await (await fetch(`${baseUrl}/api/issues/c/attachments`)).json()).toEqual(
+      [],
+    );
+  });
+
+  it("overwrites a reserved draft and refuses a non-reserved name", async () => {
+    const created = await fetch(
+      `${baseUrl}/api/issues/c/attachments/github-export-keep.md`,
+      {
+        method: "PUT",
+        headers: { "content-type": "text/markdown; charset=utf-8" },
+        body: "---\ntitle: Keep\n---\nv1\n",
+      },
+    );
+    expect(created.status).toBe(200);
+    expect(await created.json()).toEqual(
+      expect.objectContaining({ name: "github-export-keep.md" }),
+    );
+
+    const updated = await fetch(
+      `${baseUrl}/api/issues/c/attachments/github-export-keep.md`,
+      {
+        method: "PUT",
+        headers: { "content-type": "text/plain" },
+        body: "---\ntitle: Keep\n---\nv2\n",
+      },
+    );
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toEqual(
+      expect.objectContaining({
+        name: "github-export-keep.md",
+        size: "---\ntitle: Keep\n---\nv2\n".length,
+      }),
+    );
+    expect(
+      await (
+        await fetch(`${baseUrl}/api/issues/c/attachments/github-export-keep.md`)
+      ).text(),
+    ).toBe("---\ntitle: Keep\n---\nv2\n");
+
+    const uploaded = await upload("c", "notes.md", "v1");
+    expect(uploaded.status).toBe(201);
+    const refused = await fetch(`${baseUrl}/api/issues/c/attachments/notes.md`, {
+      method: "PUT",
+      headers: { "content-type": "text/markdown" },
+      body: "---\ntitle: Notes\n---\nv2\n",
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: 'attachment name "notes.md" is not a github-export draft',
+      code: "validation",
+    });
+    expect(
+      await (await fetch(`${baseUrl}/api/issues/c/attachments/notes.md`)).text(),
+    ).toBe("v1");
+  });
+
   it("rejects oversize uploads with 4xx", async () => {
     const oversize = new Uint8Array(MAX_ATTACHMENT_BYTES + 1);
     const res = await upload("c", "big.bin", oversize);

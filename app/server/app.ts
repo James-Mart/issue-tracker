@@ -8,6 +8,7 @@ import express, {
 import { join } from "path";
 import { distDir, hasBuiltClient, isProdEnv } from "./config.js";
 import { errorHandler } from "./errors.js";
+import { MAX_ATTACHMENT_BYTES } from "./services/attachments.js";
 import { agentModelsRouter } from "./routes/agent-models.js";
 import { createBackupRouter } from "./routes/backup.js";
 import { createConversationsRouter } from "./routes/conversations.js";
@@ -73,6 +74,12 @@ export function createApp(
   initiateRestart: InitiateRestart = defaultInitiateRestart(sessions),
 ): Express {
   const app = express();
+  // Draft sets are many markdown files; the default 100kb JSON cap would
+  // refuse a normal replace. Per-file size is still MAX_ATTACHMENT_BYTES.
+  app.put(
+    "/api/issues/:id/export-drafts",
+    express.json({ limit: MAX_ATTACHMENT_BYTES }),
+  );
   app.use(express.json());
   app.use(compression());
   app.use(requestLogger);

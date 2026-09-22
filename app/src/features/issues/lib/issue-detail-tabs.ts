@@ -32,6 +32,7 @@ export type IssueDetailTab =
 const CHANNEL_TAB_LABELS: Record<ConversationChannel, string> = {
   planning: "Planning",
   implementing: "Implementing",
+  export: "Export",
 };
 
 /** Channel tab for an issue, when the kind offers one. */
@@ -66,11 +67,12 @@ export function diffTabForIssue(issue: Issue): boolean {
 
 /**
  * Page-level tab set for issue detail: Overview always; optional channel;
- * Project keeps supporting-doc preview tabs.
+ * Export when a start has happened; Project keeps supporting-doc preview tabs.
  */
 export function tabsForIssueDetail(
   issue: Issue,
   parentKind?: IssueKind,
+  options?: { includeExport?: boolean },
 ): IssueDetailTab[] {
   const tabs: IssueDetailTab[] = [
     { key: DEFAULT_ISSUE_DETAIL_TAB, label: "Overview" },
@@ -81,6 +83,13 @@ export function tabsForIssueDetail(
       key: channel,
       label: CHANNEL_TAB_LABELS[channel],
       channel,
+    });
+  }
+  if (options?.includeExport) {
+    tabs.push({
+      key: "export",
+      label: CHANNEL_TAB_LABELS.export,
+      channel: "export",
     });
   }
   if (agentsTabForIssue(issue, parentKind)) {
@@ -152,6 +161,23 @@ export function issueDetailTabNeedsBoundedShell(
   tabs: readonly IssueDetailTab[],
 ): boolean {
   return tabs.some((tab) => tab.key === active && "channel" in tab);
+}
+
+/**
+ * Phone channel tabs take the viewport and hide the issue tab bar.
+ * Export keeps Overview / Implementing / Export visible; Transcript and
+ * Drafts live inside that tab.
+ */
+export function mobileChannelChromeForTab(
+  isMobile: boolean,
+  active: IssueDetailTabKey,
+  tabs: readonly IssueDetailTab[],
+): boolean {
+  return (
+    isMobile &&
+    active !== "export" &&
+    issueDetailTabNeedsBoundedShell(active, tabs)
+  );
 }
 
 /** Planning tab shows awaiting-human when the Idea awaits approval. */

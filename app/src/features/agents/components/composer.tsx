@@ -217,6 +217,8 @@ export function Composer({
   model: initialModel,
   runActive,
   readOnly = false,
+  disabled = false,
+  disabledPlaceholder,
 }: {
   conversationId: string;
   /** Conversation meta model — remembered default for the picker. */
@@ -225,6 +227,9 @@ export function Composer({
   runActive: boolean;
   /** Read-only fork — composer stays usable; notice is a standing constraint. */
   readOnly?: boolean;
+  /** Visible but inert — the export rewrite owns the turn. */
+  disabled?: boolean;
+  disabledPlaceholder?: string;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const {
@@ -464,12 +469,14 @@ export function Composer({
   };
 
   const canSubmit =
-    (draft.trim().length > 0 || stagedAttachments.length > 0) && !composerBusy;
+    !disabled &&
+    (draft.trim().length > 0 || stagedAttachments.length > 0) &&
+    !composerBusy;
   const sendDisabled =
-    !canSubmit || voiceLocked || showRecordingBar || showVoiceError;
+    disabled || !canSubmit || voiceLocked || showRecordingBar || showVoiceError;
 
   const send = () => {
-    if (!canSubmit) return;
+    if (disabled || !canSubmit) return;
     sendMessage.mutate(
       { id: conversationId, body: messageBody() },
       { onSuccess: onSuccessfulSend },
@@ -477,7 +484,7 @@ export function Composer({
   };
 
   const sendNow = () => {
-    if (!canSubmit) return;
+    if (disabled || !canSubmit) return;
     interruptRun.mutate(
       { id: conversationId, body: messageBody() },
       { onSuccess: onSuccessfulSend },
@@ -506,7 +513,7 @@ export function Composer({
   };
 
   const stageFiles = async (files: File[]) => {
-    if (composerBusy || files.length === 0) return;
+    if (disabled || composerBusy || files.length === 0) return;
 
     for (const raw of files) {
       const file = ensureAttachmentFileName(raw);
@@ -528,6 +535,7 @@ export function Composer({
   };
 
   const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
     const files = filesFromDataTransfer(e.clipboardData);
     if (files.length === 0) return;
     e.preventDefault();
@@ -535,7 +543,7 @@ export function Composer({
   };
 
   const onDragEnter = (e: DragEvent<HTMLDivElement>) => {
-    if (composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
+    if (disabled || composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
     e.preventDefault();
     dragDepthRef.current += 1;
     setDragActive(true);
@@ -548,14 +556,14 @@ export function Composer({
   };
 
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
-    if (composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
+    if (disabled || composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
   };
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     clearDrag();
-    if (composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
+    if (disabled || composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
     const files = filesFromDataTransfer(e.dataTransfer);
     if (files.length === 0) return;
     e.preventDefault();
@@ -577,6 +585,7 @@ export function Composer({
       ref={composerRootRef}
       className="relative shrink-0 border-t border-border bg-card px-3 py-3"
       data-testid="conversation-composer"
+      data-composer-disabled={disabled ? "true" : undefined}
       onPaste={onPaste}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
@@ -675,14 +684,18 @@ export function Composer({
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={onKeyDown}
-                  placeholder="Message the agent"
+                  placeholder={
+                    disabled
+                      ? (disabledPlaceholder ?? "Message the agent")
+                      : "Message the agent"
+                  }
                   title={
                     isCoarsePointer
                       ? "Enter for a new line"
                       : "Enter to send, Shift+Enter for a newline"
                   }
                   aria-label="Message the agent"
-                  disabled={composerBusy}
+                  disabled={disabled || composerBusy}
                   className="min-h-[44px] w-full resize-none overflow-y-auto"
                 />
               )}
@@ -696,7 +709,9 @@ export function Composer({
                 <Select
                   value={model}
                   onValueChange={onModelChange}
-                  disabled={modelsLoading || models.length === 0 || runActive}
+                  disabled={
+                    disabled || modelsLoading || models.length === 0 || runActive
+                  }
                 >
                   <SelectTrigger
                     aria-label="Model"
@@ -729,7 +744,7 @@ export function Composer({
                   )}
                   title="Attach files"
                   aria-label="Attach files"
-                  disabled={attachDisabled}
+                  disabled={disabled || attachDisabled}
                   onClick={onAttachClick}
                 >
                   <Paperclip className="h-4 w-4" />
@@ -748,7 +763,7 @@ export function Composer({
                       : "Dictate message"
                   }
                   aria-label="Dictate message"
-                  disabled={micDisabled}
+                  disabled={disabled || micDisabled}
                   data-testid="voice-mic-button"
                   onClick={handleVoiceStart}
                 >
@@ -757,7 +772,7 @@ export function Composer({
               </div>
 
               <div className="ml-auto flex shrink-0 items-center gap-2">
-                {runActive ? (
+                {runActive && !disabled ? (
                   <>
                     <Button
                       size="icon"

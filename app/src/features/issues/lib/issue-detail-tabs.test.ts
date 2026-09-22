@@ -124,6 +124,19 @@ describe("tabsForIssueDetail", () => {
     ]);
   });
 
+  it("inserts Export after the workflow channel once a start has happened", () => {
+    expect(
+      tabsForIssueDetail(epic, undefined, { includeExport: true }).map(
+        (t) => t.key,
+      ),
+    ).toEqual(["overview", "implementing", "export"]);
+    expect(
+      tabsForIssueDetail(projectStory, "project", { includeExport: true }).map(
+        (t) => t.key,
+      ),
+    ).toEqual(["overview", "implementing", "export", "diff"]);
+  });
+
   it("Story: channel when parent is Project, plus Diff", () => {
     expect(
       tabsForIssueDetail(projectStory, "project").map((t) => t.key),

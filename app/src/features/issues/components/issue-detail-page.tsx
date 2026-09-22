@@ -1,6 +1,7 @@
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { offersExportChannel } from "@server/kind";
 import type { IssueDetail, IssueKind, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
 import {
@@ -22,6 +23,7 @@ import {
   useIssueDetailFileUpload,
   type UploadAttachmentMutation,
 } from "../hooks/use-issue-detail-file-upload";
+import { exportTabIncluded, projectWorkspaceSet } from "../lib/export-tab";
 import { isImplementingWorkRoot } from "../lib/implementing-launch";
 import type { ImplementingWorkRoot } from "../lib/implementing-launch";
 import { kindHasOwnFlow } from "../lib/own-flow";
@@ -29,6 +31,7 @@ import { issueBelongsToProject, issuesById } from "../lib/build-tree";
 import {
   channelTabForIssue,
   issueDetailTabNeedsBoundedShell,
+  mobileChannelChromeForTab,
   resolveIssueDetailTab,
   tabsForIssueDetail,
 } from "../lib/issue-detail-tabs";
@@ -52,6 +55,7 @@ import { IssueDescriptionField } from "./issue-description-field";
 import { IssueCommentsSection } from "./comments/comments-section";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { DeletePartialPlanDetailAction } from "./delete-partial-plan-control";
+import { ExportOverviewLaunch } from "./export-overview-launch";
 import { ImplementingOverviewLaunch } from "./implementing-launch-control";
 import { PlanningOverviewLaunch } from "./planning-launch-control";
 import { supportsAttachments } from "../lib/attachments";
@@ -103,11 +107,15 @@ function IssueOverviewPanel({
   upload,
   catalog,
   parentKind,
+  showExportLaunch,
+  onExportTabVisible,
 }: {
   issue: IssueDetail;
   upload?: UploadAttachmentMutation;
   catalog: ProjectLabel[];
   parentKind?: IssueKind;
+  showExportLaunch?: boolean;
+  onExportTabVisible?: (visible: boolean) => void;
 }) {
   const { data: list } = useIssuesQuery();
   const awaitingDirection =
@@ -136,6 +144,12 @@ function IssueOverviewPanel({
           parentKind={parentKind}
         />
       ) : null}
+      {showExportLaunch && onExportTabVisible ? (
+        <ExportOverviewLaunch
+          issue={issue}
+          onTabVisible={onExportTabVisible}
+        />
+      ) : null}
       <IssueAttachmentsSection issue={issue} upload={upload} />
       <IssueDescriptionField issue={issue} upload={upload} />
       <IssueCommentsSection issue={issue} />
@@ -160,6 +174,9 @@ function IssueDetailBody({
   projectId,
   parentKind,
   compactChannelChrome,
+  exportTab,
+  showExportLaunch,
+  onExportTabVisible,
 }: {
   issue: IssueDetail;
   upload?: UploadAttachmentMutation;
@@ -167,6 +184,9 @@ function IssueDetailBody({
   projectId: string;
   parentKind?: IssueKind;
   compactChannelChrome: boolean;
+  exportTab: boolean | "loading";
+  showExportLaunch: boolean;
+  onExportTabVisible: (visible: boolean) => void;
 }) {
   return (
     <div
@@ -185,12 +205,15 @@ function IssueDetailBody({
         issue={issue}
         projectId={projectId}
         parentKind={parentKind}
+        exportTab={exportTab}
         overview={
           <IssueOverviewPanel
             issue={issue}
             upload={upload}
             catalog={catalog}
             parentKind={parentKind}
+            showExportLaunch={showExportLaunch}
+            onExportTabVisible={onExportTabVisible}
           />
         }
       />
@@ -207,6 +230,9 @@ function IssueDetailAttachable({
   parentKind,
   boundShell,
   compactChannelChrome,
+  exportTab,
+  showExportLaunch,
+  onExportTabVisible,
 }: {
   issue: IssueDetail;
   projectId: string;
@@ -215,6 +241,9 @@ function IssueDetailAttachable({
   parentKind?: IssueKind;
   boundShell: boolean;
   compactChannelChrome: boolean;
+  exportTab: boolean | "loading";
+  showExportLaunch: boolean;
+  onExportTabVisible: (visible: boolean) => void;
 }) {
   const upload = useUploadAttachment(issue.id);
   const { rootProps } = useIssueDetailFileUpload(upload);
@@ -240,6 +269,9 @@ function IssueDetailAttachable({
         projectId={projectId}
         parentKind={parentKind}
         compactChannelChrome={compactChannelChrome}
+        exportTab={exportTab}
+        showExportLaunch={showExportLaunch}
+        onExportTabVisible={onExportTabVisible}
       />
     </PageShell>
   );
@@ -247,7 +279,8 @@ function IssueDetailAttachable({
 
 function useIssueDetailShellFlags(
   issue: IssueDetail | undefined,
-  parentKind?: IssueKind,
+  parentKind: IssueKind | undefined,
+  exportTab: boolean | "loading",
 ): { boundShell: boolean; compactChannelChrome: boolean } {
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
@@ -259,14 +292,16 @@ function useIssueDetailShellFlags(
     if (issue.kind === "project") {
       return { boundShell: true, compactChannelChrome: false };
     }
-    const tabs = tabsForIssueDetail(issue, parentKind);
+    const tabs = tabsForIssueDetail(issue, parentKind, {
+      includeExport: exportTabIncluded(exportTab, tabParam),
+    });
     const active = resolveIssueDetailTab(tabParam, tabs);
     const boundShell = issueDetailTabNeedsBoundedShell(active, tabs);
     return {
       boundShell,
-      compactChannelChrome: isMobile && boundShell,
+      compactChannelChrome: mobileChannelChromeForTab(isMobile, active, tabs),
     };
-  }, [issue, parentKind, tabParam, isMobile]);
+  }, [exportTab, issue, parentKind, tabParam, isMobile]);
 }
 
 export function IssueDetailPage() {
@@ -291,9 +326,33 @@ export function IssueDetailPage() {
     [issue, projectId, byId],
   );
 
+  const kindEligible = Boolean(issue && offersExportChannel(issue, parentKind));
+  const workspaceKnown = list !== undefined;
+  const showExportLaunch =
+    kindEligible &&
+    list !== undefined &&
+    projectWorkspaceSet(list.issues, projectId);
+  const [exportReport, setExportReport] = useState<{
+    id: string;
+    visible: boolean;
+  } | null>(null);
+  const onExportTabVisible = useCallback((visible: boolean) => {
+    setExportReport((prev) =>
+      prev?.id === id && prev.visible === visible ? prev : { id, visible },
+    );
+  }, [id]);
+  const exportTab: boolean | "loading" = !kindEligible
+    ? false
+    : !workspaceKnown || (showExportLaunch && exportReport?.id !== id)
+      ? "loading"
+      : showExportLaunch && exportReport
+        ? exportReport.visible
+        : false;
+
   const { boundShell, compactChannelChrome } = useIssueDetailShellFlags(
     issue,
     parentKind,
+    exportTab,
   );
 
   const missing = error instanceof ApiError && error.status === 404;
@@ -330,6 +389,9 @@ export function IssueDetailPage() {
         parentKind={parentKind}
         boundShell={boundShell}
         compactChannelChrome={compactChannelChrome}
+        exportTab={exportTab}
+        showExportLaunch={showExportLaunch}
+        onExportTabVisible={onExportTabVisible}
       />
     );
   }
@@ -384,6 +446,9 @@ export function IssueDetailPage() {
           projectId={projectId}
           parentKind={parentKind}
           compactChannelChrome={compactChannelChrome}
+          exportTab={exportTab}
+          showExportLaunch={showExportLaunch}
+          onExportTabVisible={onExportTabVisible}
         />
       ) : null}
     </PageShell>

@@ -294,7 +294,7 @@ export async function reach(page) {
     expect(result.stderr).toContain("boom");
     expect(existsSync(join(outDir, "driver.png"))).toBe(false);
   });
-});
+}, 20_000);
 
 describe("capture-screenshots path integration", { timeout: 20_000 }, () => {
   let mockApp: Awaited<ReturnType<typeof startMockApp>>;
@@ -322,7 +322,7 @@ describe("capture-screenshots path integration", { timeout: 20_000 }, () => {
     expect(result.status).toBe(0);
     expect(existsSync(join(outDir, "root.png"))).toBe(true);
   });
-});
+}, 20_000);
 
 describe("pipelineRunsPageReady", () => {
   const listIdle = {

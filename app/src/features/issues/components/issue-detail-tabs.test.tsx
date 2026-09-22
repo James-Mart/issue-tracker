@@ -123,6 +123,7 @@ function mountTabs(
   indicator: ChannelTabIndicator | null = null,
   initialEntry = "/",
   issue: IssueDetail = idea(),
+  exportTab: boolean | "loading" = false,
 ): {
   container: HTMLDivElement;
   root: Root;
@@ -138,6 +139,7 @@ function mountTabs(
           issue={issue}
           projectId="issue-tracker"
           overview={<div>Overview body</div>}
+          exportTab={exportTab}
         />
       </MemoryRouter>,
     );
@@ -166,6 +168,25 @@ afterEach(() => {
   panelProps.onBackToOverview = undefined;
   panelProps.mounted = false;
   resetCockpitLaunchStore();
+});
+
+describe("IssueDetailTabs export tab", () => {
+  it("keeps Export while presence is still loading", () => {
+    const { container } = mountTabs(null, "/?tab=export", epic(), "loading");
+    expect(tabNamed(container, "Export").getAttribute("aria-selected")).toBe(
+      "true",
+    );
+  });
+
+  it("drops Export when the root is idle", () => {
+    const { container } = mountTabs(null, "/?tab=export", epic(), false);
+    expect(
+      Array.from(container.querySelectorAll('[role="tab"]')).some((tab) =>
+        tab.textContent?.includes("Export"),
+      ),
+    ).toBe(false);
+    expect(selectedTab(container)).toBe("Overview");
+  });
 });
 
 describe("IssueDetailTabs channel panel mount", () => {
@@ -337,6 +358,18 @@ describe("IssueDetailTabs mobile channel chrome", () => {
     });
     expect(container.querySelector('[role="tablist"]')).toBeTruthy();
     expect(container.textContent).toContain("Overview body");
+    expect(panelProps.mobileFullViewport).toBe(false);
+  });
+
+  it("keeps Overview, Implementing, and Export on a mobile Export tab", () => {
+    mobileState.value = true;
+    const { container } = mountTabs(null, "/?tab=export", epic(), true);
+    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(tabNamed(container, "Overview")).toBeTruthy();
+    expect(tabNamed(container, "Implementing")).toBeTruthy();
+    expect(tabNamed(container, "Export").getAttribute("aria-selected")).toBe(
+      "true",
+    );
     expect(panelProps.mobileFullViewport).toBe(false);
   });
 

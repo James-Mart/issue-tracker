@@ -791,6 +791,8 @@ export function ConversationThread({
   headerActions,
   meta: metaProp,
   hideComposer,
+  composerDisabled = false,
+  composerDisabledPlaceholder,
 }: {
   conversationId: string;
   onBack?: () => void;
@@ -808,6 +810,9 @@ export function ConversationThread({
   };
   /** Read-only history (e.g. archived channel session) — transcript only. */
   hideComposer?: boolean;
+  /** First export rewrite — the composer stays visible and does not send. */
+  composerDisabled?: boolean;
+  composerDisabledPlaceholder?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const {
@@ -887,6 +892,8 @@ export function ConversationThread({
           model={meta.model}
           runActive={runActive}
           readOnly={readOnly}
+          disabled={composerDisabled}
+          disabledPlaceholder={composerDisabledPlaceholder}
         />
       ) : null}
     </div>

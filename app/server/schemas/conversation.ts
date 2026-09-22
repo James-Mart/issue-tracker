@@ -14,7 +14,11 @@ export type PipelineRunsEvent = z.infer<typeof pipelineRunsEventSchema>;
 
 // --- Conversations (durable agent transcript store; peer of issues/) ---
 
-export const CONVERSATION_CHANNELS = ["planning", "implementing"] as const;
+export const CONVERSATION_CHANNELS = [
+  "planning",
+  "implementing",
+  "export",
+] as const;
 export type ConversationChannel = (typeof CONVERSATION_CHANNELS)[number];
 
 export const conversationMetaSchema = z

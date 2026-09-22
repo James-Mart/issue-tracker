@@ -1,6 +1,10 @@
 import { useMemo } from "react";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { request } from "@/lib/api/client";
+import {
+  useQueries,
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import { request, requestText } from "@/lib/api/client";
 import type {
   ChannelSessionListItem,
   CommentsResponse,
@@ -116,6 +120,20 @@ export function useAttachmentsQuery(
     enabled: Boolean(id),
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 2,
+  });
+}
+
+/** Raw markdown for each reserved draft, in the same order as `names`. */
+export function useExportDraftTexts(
+  issueId: string,
+  names: readonly string[],
+): UseQueryResult<string, Error>[] {
+  return useQueries({
+    queries: names.map((name) => ({
+      queryKey: [...issuesKeys.attachments(issueId), "draft", name] as const,
+      queryFn: () => requestText(attachmentsApiPath(issueId, name)),
+      enabled: Boolean(issueId),
+    })),
   });
 }
 
