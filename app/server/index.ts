@@ -4,6 +4,9 @@ import { assertSupportedNodeRuntime } from "./node-runtime.js";
 // `@cursor/sdk` (via agent-sessions) and can native-crash on Node < 22.13.
 assertSupportedNodeRuntime();
 
+const { ensureChildReaper } = await import("./services/child-reaper.js");
+ensureChildReaper();
+
 const { captureRestartSupervision, RESTART_SUPERVISED_ENV_VAR } = await import(
   "./restart-contract.js"
 );
@@ -46,6 +49,13 @@ const { scrubOrphanedRunsAtBoot } = await import(
 );
 await scrubOrphanedRunsAtBoot();
 
+const { dropUnownedAgentStackRecords } = await import(
+  "./services/agent-stack.js"
+);
+dropUnownedAgentStackRecords();
+
+const { stopAllMockupStacks } = await import("./services/mockup-stack.js");
+
 const server = app.listen(listenPort, () => {
   console.log(
     `issue-tracker server listening on http://localhost:${listenPort}`,
@@ -59,15 +69,18 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`received ${signal}; disposing agent sessions…`);
+  let failed: unknown;
   try {
     await agentSessions.disposeAll();
+    await stopAllMockupStacks();
   } catch (err) {
-    console.error("disposeAll failed", err);
+    failed = err;
+    console.error("shutdown failed", err);
   }
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
   });
-  process.exit(0);
+  process.exit(failed === undefined ? 0 : 1);
 }
 
 process.on("SIGINT", () => {

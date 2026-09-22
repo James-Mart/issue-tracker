@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -14,6 +15,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { appDir, conversationsDir, issuesDir } from "../config.js";
 import { isSlugSafe } from "../slug.js";
+import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
 
 /**
  * A conversation's own API + Vite pair, on ports picked free at start time.
@@ -195,8 +197,10 @@ function writeAgentStackState(state: AgentStackState): void {
   );
 }
 
-/** `/proc/<pid>/stat` state char and start time, or null when the pid is gone. */
-function readProcInfo(pid: number): { state: string; startTime: string } | null {
+/** `/proc/<pid>/stat` fields, or null when the pid is gone. */
+function readProcInfo(
+  pid: number,
+): { state: string; startTime: string; ppid: number; pgrp: number } | null {
   let stat: string;
   try {
     stat = readFileSync(`/proc/${pid}/stat`, "utf8");
@@ -208,16 +212,31 @@ function readProcInfo(pid: number): { state: string; startTime: string } | null 
   const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
   const state = fields[0];
   const startTime = fields[19];
-  if (!state || !startTime) {
+  const ppid = Number(fields[1]);
+  const pgrp = Number(fields[2]);
+  if (!state || !startTime || !Number.isInteger(ppid) || !Number.isInteger(pgrp)) {
     throw new Error(`unparseable /proc/${pid}/stat`);
   }
-  return { state, startTime };
+  return { state, startTime, ppid, pgrp };
 }
 
-/** True when the recorded pid is still the process we spawned, and not a zombie. */
+/**
+ * Signal check: the recorded pid is still that process, and not state Z.
+ * State Z is not collection. Collection is `waitpid` on a child this process owns.
+ */
 export function isProcessLive(proc: AgentStackProcess): boolean {
   const info = readProcInfo(proc.pid);
   return info !== null && info.state !== "Z" && info.startTime === proc.startTime;
+}
+
+/** The recorded process is a child of this process (running or zombie). */
+function isOurRecordedProcess(proc: AgentStackProcess): boolean {
+  const info = readProcInfo(proc.pid);
+  return (
+    info !== null &&
+    info.ppid === process.pid &&
+    info.startTime === proc.startTime
+  );
 }
 
 /** True when every recorded process of the stack is still live. */
@@ -425,6 +444,7 @@ export async function startAgentStack(
   conversationId: string,
   options: AgentStackStartOptions,
 ): Promise<AgentStackHandle> {
+  ensureChildReaper();
   assertConversationId(conversationId);
   const workspace = resolveWorkspacePath(options.workspace);
   const { cursorConversationId } = options;
@@ -521,45 +541,114 @@ function signalGroup(pid: number, signal: NodeJS.Signals): void {
   }
 }
 
-async function waitForExit(
-  procs: AgentStackProcess[],
-  timeoutMs: number,
-): Promise<AgentStackProcess[]> {
-  const deadline = Date.now() + timeoutMs;
-  let remaining = procs.filter(isProcessLive);
-  while (remaining.length > 0 && Date.now() < deadline) {
-    await delay(EXIT_POLL_MS);
-    remaining = remaining.filter(isProcessLive);
+/** True when any child of this process still belongs to one of these groups. */
+function groupsHaveOurChildren(groups: ReadonlySet<number>): boolean {
+  if (groups.size === 0) return false;
+  let entries: string[];
+  try {
+    entries = readdirSync("/proc");
+  } catch {
+    return false;
   }
-  return remaining;
+  for (const entry of entries) {
+    if (!/^[1-9]\d*$/.test(entry)) continue;
+    const info = readProcInfo(Number(entry));
+    if (!info) continue;
+    if (info.ppid === process.pid && groups.has(info.pgrp)) return true;
+  }
+  return false;
+}
+
+/**
+ * Collection is `waitpid`, not state Z. `timeoutMs` is how long to wait before
+ * reporting that the group is still uncollected. `Infinity` waits until
+ * `waitpid` collects it.
+ */
+async function waitUntilGroupsCollected(
+  groups: ReadonlySet<number>,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    reapExitedChildren();
+    if (!groupsHaveOurChildren(groups)) return true;
+    if (Date.now() >= deadline) return false;
+    await delay(EXIT_POLL_MS);
+  }
+}
+
+function releaseAgentStackRecord(state: AgentStackState): void {
+  clearCursorIndexes(state);
+  rmSync(agentStackStatePath(state.conversationId), { force: true });
+}
+
+/**
+ * Drop recorded stacks this process does not own. Does not signal them.
+ * Returns the conversation ids removed.
+ */
+export function dropUnownedAgentStackRecords(): string[] {
+  if (!existsSync(conversationsDir)) return [];
+  const dropped: string[] = [];
+  for (const entry of readdirSync(conversationsDir)) {
+    if (!isSlugSafe(entry)) continue;
+    const dir = join(conversationsDir, entry);
+    if (!statSync(dir).isDirectory()) continue;
+    const state = readAgentStackState(entry);
+    if (!state) continue;
+    if (state.processes.some(isOurRecordedProcess)) continue;
+    releaseAgentStackRecord(state);
+    dropped.push(entry);
+  }
+  return dropped;
 }
 
 /**
  * Stop this conversation's stack and release its ports and ownership. A
  * conversation with no recorded stack is not an error — teardown paths call
  * this unconditionally.
+ *
+ * A recorded pid that is not this process's child is removed with no signal.
+ * Owned live groups get SIGTERM, then SIGKILL after `TERM_GRACE_MS`. The
+ * promise settles only after `waitpid` collects the group. Past
+ * `KILL_GRACE_MS` it keeps waiting, then rejects.
  */
 export async function stopAgentStack(
   conversationId: string,
 ): Promise<AgentStackStopResult> {
+  ensureChildReaper();
   const state = readAgentStackState(conversationId);
   if (!state) return { stopped: false, state: null };
 
-  const live = state.processes.filter(isProcessLive);
-  for (const proc of live) signalGroup(proc.pid, "SIGTERM");
-  const stubborn = await waitForExit(live, TERM_GRACE_MS);
-  for (const proc of stubborn) signalGroup(proc.pid, "SIGKILL");
-  const survivors = await waitForExit(stubborn, KILL_GRACE_MS);
-  if (survivors.length > 0) {
-    // Keep the state file: it is the only record of who still holds the ports.
-    throw new Error(
-      `agent stack for ${conversationId} survived SIGKILL: ${survivors
-        .map((proc) => `${proc.role}(${proc.pid})`)
-        .join(", ")}`,
-    );
+  const owned = state.processes.filter(isOurRecordedProcess);
+  const live = owned.filter(isProcessLive);
+  const groups = new Set<number>();
+  for (const proc of owned) {
+    const info = readProcInfo(proc.pid);
+    if (info) groups.add(info.pgrp);
   }
 
-  clearCursorIndexes(state);
-  rmSync(agentStackStatePath(conversationId), { force: true });
+  if (live.length > 0) {
+    for (const proc of live) signalGroup(proc.pid, "SIGTERM");
+    const collectedOnTerm = await waitUntilGroupsCollected(groups, TERM_GRACE_MS);
+    if (!collectedOnTerm) {
+      for (const pgrp of groups) signalGroup(pgrp, "SIGKILL");
+      const collectedOnKill = await waitUntilGroupsCollected(groups, KILL_GRACE_MS);
+      if (!collectedOnKill) {
+        const survivors = owned.filter(isOurRecordedProcess);
+        await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
+        releaseAgentStackRecord(state);
+        throw new Error(
+          `agent stack for ${conversationId} survived SIGKILL: ${
+            survivors.map((proc) => `${proc.role}(${proc.pid})`).join(", ") ||
+            "group still uncollected"
+          }`,
+        );
+      }
+    }
+  } else if (groups.size > 0) {
+    await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
+  }
+
+  releaseAgentStackRecord(state);
   return { stopped: true, state };
 }

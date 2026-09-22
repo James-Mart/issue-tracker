@@ -143,18 +143,23 @@ async function waitForFile(path: string): Promise<string> {
   throw new Error(`timed out waiting for ${path}`);
 }
 
-/** A zombie no longer runs — and no longer holds a port — so it does not count. */
-function isAlive(pid: number): boolean {
-  if (!existsSync(`/proc/${pid}/stat`)) return false;
-  const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-  return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0] !== "Z";
+/** Collection removes the /proc entry. State Z is still unreaped. */
+function isCollected(pid: number): boolean {
+  return !existsSync(`/proc/${pid}`);
 }
 
-async function waitForDeath(pid: number): Promise<boolean> {
-  for (let i = 0; i < 100 && isAlive(pid); i++) {
+function procInfo(pid: number): { state: string; ppid: number } | null {
+  if (!existsSync(`/proc/${pid}/stat`)) return null;
+  const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+  const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  return { state: fields[0]!, ppid: Number(fields[1]) };
+}
+
+async function waitForCollection(pid: number): Promise<boolean> {
+  for (let i = 0; i < 100 && !isCollected(pid); i++) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  return !isAlive(pid);
+  return isCollected(pid);
 }
 
 function stackState(
@@ -384,8 +389,8 @@ describe("stopAgentStack", () => {
     const result = await stopAgentStack("my-conversation");
 
     expect(result.stopped).toBe(true);
-    expect(isAlive(leaderPid)).toBe(false);
-    expect(await waitForDeath(forkedPid)).toBe(true);
+    expect(isCollected(leaderPid)).toBe(true);
+    expect(await waitForCollection(forkedPid)).toBe(true);
     expect(existsSync(agentStackStatePath("my-conversation"))).toBe(false);
   });
 
@@ -400,9 +405,109 @@ describe("stopAgentStack", () => {
     expect(result.stopped).toBe(true);
     expect(existsSync(agentStackStatePath("my-conversation"))).toBe(false);
   });
+
+  it("drops a recorded pid owned by another process without signaling it", async () => {
+    const { agentStackStatePath, stopAgentStack } = await loadService();
+    const pidFile = join(root, "held.pid");
+    const holder = spawn(
+      "sh",
+      ["-c", `sleep 300 & echo $! > ${pidFile}; wait`],
+      { detached: true, stdio: "ignore" },
+    );
+    strays.push(holder);
+    const childPid = Number(await waitForFile(pidFile));
+    await recordStack("my-conversation", childPid);
+    const before = procInfo(childPid);
+    const kill = vi.spyOn(process, "kill");
+    try {
+      const result = await stopAgentStack("my-conversation");
+      expect(result.stopped).toBe(true);
+      expect(existsSync(agentStackStatePath("my-conversation"))).toBe(false);
+      expect(
+        kill.mock.calls.some((call) => Math.abs(Number(call[0])) === childPid),
+      ).toBe(false);
+    } finally {
+      kill.mockRestore();
+    }
+    const after = procInfo(childPid);
+    expect(after?.ppid).toBe(before?.ppid);
+    expect(after?.ppid).not.toBe(process.pid);
+    expect(after?.state).not.toBe("Z");
+  });
+
+  it(
+    "rejects only after waitpid collects a group still uncollected past KILL_GRACE",
+    async () => {
+      const { stopAgentStack } = await loadService();
+      const child = spawn("sh", ["-c", "trap '' TERM; sleep 300"], {
+        detached: true,
+        stdio: "ignore",
+      });
+      strays.push(child);
+      const pid = child.pid!;
+      await recordStack("my-conversation", pid);
+      const realKill = process.kill.bind(process);
+      let deliver = false;
+      const spy = vi.spyOn(process, "kill").mockImplementation(((
+        target: number,
+        signal?: NodeJS.Signals | number,
+      ) => {
+        if (!deliver && (signal === "SIGTERM" || signal === "SIGKILL")) {
+          return true;
+        }
+        return realKill(target, signal as NodeJS.Signals);
+      }) as typeof process.kill);
+      try {
+        let settled = false;
+        const outcome = stopAgentStack("my-conversation").then(
+          () => {
+            settled = true;
+            return "resolved" as const;
+          },
+          (err: Error) => {
+            settled = true;
+            return err;
+          },
+        );
+        await new Promise((resolve) => setTimeout(resolve, 12_000));
+        expect(settled).toBe(false);
+        expect(existsSync(`/proc/${pid}`)).toBe(true);
+        deliver = true;
+        realKill(-pid, "SIGKILL");
+        const result = await outcome;
+        expect(result).toBeInstanceOf(Error);
+        expect((result as Error).message).toMatch(/survived SIGKILL/);
+        expect(isCollected(pid)).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
+    },
+    20_000,
+  );
 });
 
 describe("startAgentStack", () => {
+  it("installs the child reaper before spawn", async () => {
+    const reaperCalls: string[] = [];
+    vi.doMock("./child-reaper.js", () => ({
+      ensureChildReaper: () => {
+        reaperCalls.push("ensure");
+      },
+      reapExitedChildren: () => {},
+    }));
+    vi.resetModules();
+    try {
+      const { startAgentStack } = await import("./agent-stack.js");
+      await expect(
+        startAgentStack("my-conversation", { workspace: "   " }),
+      ).rejects.toThrow(/workspace is required/);
+      expect(reaperCalls).toEqual(["ensure"]);
+    } finally {
+      vi.doUnmock("./child-reaper.js");
+      vi.resetModules();
+    }
+  });
+
   it("refuses a missing workspace before spawn", async () => {
     const { startAgentStack } = await loadService();
 
@@ -461,7 +566,7 @@ describe("startAgentStack", () => {
       workspace: workspaceB,
     });
 
-    expect(isAlive(pid)).toBe(false);
+    expect(isCollected(pid)).toBe(true);
     expect(handle.reused).toBe(false);
     expect(handle.state.workspace).toBe(resolve(workspaceB));
     expect(readFileSync(agentStackStatePath("my-conversation"), "utf8")).toContain(
@@ -549,5 +654,114 @@ describe("startAgentStack", () => {
     expect(npmEnv?.ISSUE_TRACKER_ASR_MODEL_DIR).toBeTruthy();
 
     await stopAgentStack("my-conversation");
+  });
+});
+
+describe("child reaper", () => {
+  it("collects a detached child when it exits without adopting it to pid 1", async () => {
+    const { ensureChildReaper } = await import("./child-reaper.js");
+    ensureChildReaper();
+    const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+    strays.push(child);
+    child.unref();
+    const info = procInfo(child.pid!);
+    expect(info?.ppid).toBe(process.pid);
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolve) => {
+        child.on("exit", (code, signal) => resolve({ code, signal }));
+      },
+    );
+    process.kill(child.pid!, "SIGTERM");
+    expect(await exited).toEqual({ code: null, signal: "SIGTERM" });
+    expect(await waitForCollection(child.pid!)).toBe(true);
+  });
+
+  it("collects a grandchild whose parent has exited", async () => {
+    const { ensureChildReaper } = await import("./child-reaper.js");
+    ensureChildReaper();
+    const pidFile = join(root, "grandchild.pid");
+    const parent = spawn(
+      "python3",
+      [
+        "-c",
+        `import os, time
+pid = os.fork()
+if pid == 0:
+    open(${JSON.stringify(pidFile)}, "w").write(str(os.getpid()))
+    time.sleep(0.3)
+    os._exit(0)
+else:
+    os._exit(0)
+`,
+      ],
+      { detached: true, stdio: "ignore" },
+    );
+    strays.push(parent);
+    parent.unref();
+    const grandchild = Number(await waitForFile(pidFile));
+    const info = procInfo(grandchild);
+    expect(info?.ppid).toBe(process.pid);
+    expect(info?.state).not.toBe("Z");
+    expect(await waitForCollection(grandchild)).toBe(true);
+  });
+});
+
+describe("dropUnownedAgentStackRecords", () => {
+  it("removes an unowned record and its cursor index without signaling", async () => {
+    const {
+      agentStackCursorIndexPath,
+      agentStackDir,
+      agentStackStatePath,
+      dropUnownedAgentStackRecords,
+    } = await loadService();
+    const pidFile = join(root, "held.pid");
+    const holder = spawn(
+      "sh",
+      ["-c", `sleep 300 & echo $! > ${pidFile}; wait`],
+      { detached: true, stdio: "ignore" },
+    );
+    strays.push(holder);
+    const childPid = Number(await waitForFile(pidFile));
+    mkdirSync(agentStackDir("my-conversation"), { recursive: true });
+    const state = {
+      ...stackState("my-conversation", childPid, workspace),
+      cursorConversationIds: ["cursor-session-1"],
+    };
+    writeFileSync(agentStackStatePath("my-conversation"), JSON.stringify(state));
+    mkdirSync(dirname(agentStackCursorIndexPath("cursor-session-1")), {
+      recursive: true,
+    });
+    writeFileSync(
+      agentStackCursorIndexPath("cursor-session-1"),
+      `${JSON.stringify({ appConversationId: "my-conversation" })}\n`,
+    );
+    const kill = vi.spyOn(process, "kill");
+    try {
+      expect(dropUnownedAgentStackRecords()).toEqual(["my-conversation"]);
+      expect(
+        kill.mock.calls.some((call) => Math.abs(Number(call[0])) === childPid),
+      ).toBe(false);
+    } finally {
+      kill.mockRestore();
+    }
+    expect(existsSync(agentStackStatePath("my-conversation"))).toBe(false);
+    expect(existsSync(agentStackCursorIndexPath("cursor-session-1"))).toBe(false);
+    expect(procInfo(childPid)?.ppid).not.toBe(process.pid);
+    expect(procInfo(childPid)?.state).not.toBe("Z");
+  });
+
+  it("keeps a record whose pid is this process's child", async () => {
+    const { agentStackDir, agentStackStatePath, dropUnownedAgentStackRecords } =
+      await loadService();
+    const child = spawn("sleep", ["300"], { detached: true, stdio: "ignore" });
+    strays.push(child);
+    mkdirSync(agentStackDir("my-conversation"), { recursive: true });
+    writeFileSync(
+      agentStackStatePath("my-conversation"),
+      JSON.stringify(stackState("my-conversation", child.pid!, workspace)),
+    );
+
+    expect(dropUnownedAgentStackRecords()).toEqual([]);
+    expect(existsSync(agentStackStatePath("my-conversation"))).toBe(true);
   });
 });
