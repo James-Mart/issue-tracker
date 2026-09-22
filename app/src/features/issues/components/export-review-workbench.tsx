@@ -306,7 +306,7 @@ function DraftReader({
   onEditText,
   pending,
   onSave,
-  back,
+  onBack,
 }: {
   issueId: string;
   name: string;
@@ -318,7 +318,7 @@ function DraftReader({
   onEditText: (text: string) => void;
   pending: boolean;
   onSave: () => void;
-  back?: ReactNode;
+  onBack?: () => void;
 }) {
   const id = exportDraftIssueId(name);
   const match = id ? issues.find((issue) => issue.id === id) : undefined;
@@ -337,29 +337,59 @@ function DraftReader({
         {pending ? "Saving…" : "Save"}
       </Button>
     ) : null;
+  const compact = Boolean(onBack);
 
   return (
     <section
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+        !compact && "rounded-lg border border-border bg-card",
+      )}
       data-testid="export-draft-reader"
       data-mode={mode}
     >
-      <header className="flex shrink-0 flex-col gap-2 border-b border-border px-3 py-2">
-        <div className={cn("flex gap-3", back ? "flex-col" : "items-start justify-between")}>
-          <div className="min-w-0">
-            {back ? <div className="mb-2">{back}</div> : null}
-            <div className="flex items-center gap-2">
-              <h2 className="truncate text-sm font-medium">{title}</h2>
-              {kind ? (
-                <Badge variant={kind === "Epic" ? "current" : "todo"}>{kind}</Badge>
-              ) : null}
+      <header
+        className={cn(
+          "flex shrink-0 border-b border-border",
+          compact ? "items-center gap-2 px-2 py-1.5" : "flex-col gap-2 px-3 py-2",
+        )}
+      >
+        {compact ? (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Back"
+              data-testid="export-draft-back"
+              onClick={onBack}
+            >
+              <ArrowLeft />
+            </Button>
+            <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{title}</h2>
+            <ViewToggle mode={mode} onMode={onMode} save={saveButton} />
+          </>
+        ) : (
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="truncate text-sm font-medium">{title}</h2>
+                {kind ? (
+                  <Badge variant={kind === "Epic" ? "current" : "todo"}>{kind}</Badge>
+                ) : null}
+              </div>
+              <p className="truncate font-mono text-xs text-muted-foreground">{name}</p>
             </div>
-            <p className="truncate font-mono text-xs text-muted-foreground">{name}</p>
+            <ViewToggle mode={mode} onMode={onMode} save={saveButton} />
           </div>
-          <ViewToggle mode={mode} onMode={onMode} save={saveButton} wide={Boolean(back)} />
-        </div>
+        )}
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div
+        className={cn(
+          "min-h-0 flex-1",
+          compact ? "flex flex-col overflow-hidden" : "overflow-y-auto p-3",
+        )}
+      >
         {result?.isError ? (
           <ShellInlineFault
             message={result.error?.message ?? "Could not load this draft."}
@@ -368,14 +398,20 @@ function DraftReader({
         ) : !result?.isSuccess ? (
           <ShellLoadingState label="Loading draft…" />
         ) : mode === "preview" ? (
-          <div data-testid="export-draft-preview-body">
+          <div
+            className={cn(compact && "min-h-0 flex-1 overflow-y-auto")}
+            data-testid="export-draft-preview-body"
+          >
             <Markdown issueId={issueId}>{exportDraftBody(result.data)}</Markdown>
           </div>
         ) : (
           <Textarea
             value={editText}
             onChange={(event) => onEditText(event.target.value)}
-            className="min-h-64 font-mono text-sm"
+            className={cn(
+              "font-mono text-sm",
+              compact ? "min-h-0 flex-1 resize-none rounded-none border-0" : "min-h-64",
+            )}
             data-testid="export-draft-editor"
             aria-label={`Edit ${name}`}
           />
@@ -482,19 +518,7 @@ export function ExportReviewWorkbench({
       onEditText={(text) => setEditBuffer({ name: selected, text })}
       pending={save.isPending}
       onSave={onSave}
-      back={
-        isMobile ? (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-            data-testid="export-draft-back"
-            onClick={() => setPhoneOpen(false)}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Drafts
-          </button>
-        ) : undefined
-      }
+      onBack={isMobile ? () => setPhoneOpen(false) : undefined}
     />
   );
 
@@ -511,8 +535,9 @@ export function ExportReviewWorkbench({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-3",
-        isMobile ? "overflow-y-auto" : "overflow-hidden",
+        "flex min-h-0 flex-1 flex-col",
+        isMobile && phoneOpen ? "gap-0 overflow-hidden" : "gap-3",
+        isMobile && !phoneOpen ? "overflow-y-auto" : !isMobile ? "overflow-hidden" : null,
       )}
       data-testid="export-review-workbench"
     >
