@@ -1,7 +1,8 @@
 #!/usr/bin/env -S npx tsx
 // Register issue-tracker Shell preToolUse hooks in ~/.cursor/hooks.json.
 //
-// Run once per machine: `npm run install-hooks` from `app/`.
+// Run once per machine from the primary checkout: `npm run install-hooks` from
+// `app/`. Feature worktrees do not need a separate install.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";

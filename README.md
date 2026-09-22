@@ -101,23 +101,27 @@ not the capture script's cwd.
 
 ### Cursor commit attribution hook
 
-Run once per machine from `app/`:
+Run once per machine from the **primary** checkout's `app/` (not a feature
+worktree):
 
 ```bash
 cd app && npm run install-hooks
 ```
 
 This writes (or updates) `~/.cursor/hooks.json` with `hooks.preToolUse` entries
-for `app/hooks/strip-cursor-attribution.mjs` and `app/hooks/port-kill-guard.mjs`
-before every Shell tool call. The attribution hook strips Cursor's
+pointing at that checkout's `app/hooks/strip-cursor-attribution.mjs` and
+`app/hooks/port-kill-guard.mjs`. Cursor runs those commands before every Shell
+tool call on this machine (any workspace). The attribution hook strips Cursor's
 `Co-authored-by: Cursor <cursoragent@cursor.com>` trailer from `git commit`
 commands and the trailing `Made with [Cursor](https://cursor.com)` footer from
 agent `gh pr create` `--body` / HEREDOC bodies so agent-driven commits and PRs
 stay clean. The kill-guard refuses kill-shaped commands aimed at ports this
 conversation does not currently own and redirects the agent to
-`agent_stack_start`. The server refuses to start until both hooks are registered
-for the current checkout. Re-run after moving the checkout; the command is
-idempotent and preserves unrelated hooks.
+`agent_stack_start`. The server refuses to start until both hook basenames are
+registered and the registered script files exist (path need not match the
+checkout that is booting). Re-run from the primary checkout after moving it; the
+command is idempotent and preserves unrelated hooks. Feature worktrees do not
+need a separate install.
 
 ## How the pieces fit
 
