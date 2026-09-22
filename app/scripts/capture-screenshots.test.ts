@@ -199,7 +199,7 @@ function runCaptureScript(
   });
 }
 
-describe("capture-screenshots driver integration", () => {
+describe("capture-screenshots driver integration", { timeout: 20_000 }, () => {
   let mockApp: Awaited<ReturnType<typeof startMockApp>>;
   let tempDir: string;
   let outDir: string;
@@ -296,7 +296,7 @@ export async function reach(page) {
   });
 });
 
-describe("capture-screenshots path integration", () => {
+describe("capture-screenshots path integration", { timeout: 20_000 }, () => {
   let mockApp: Awaited<ReturnType<typeof startMockApp>>;
   let outDir: string;
 

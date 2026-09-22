@@ -15,8 +15,9 @@ import { resolveModelSelection } from "./model-selection.js";
  * against its own literals, because the SDK validates nothing inside `params`:
  * an id or value the backend has dropped is accepted in silence and the role
  * runs at the model's defaults. `run.model` cannot expose that either — it
- * echoes the selection that was requested. Drift in the catalog is therefore
- * invisible everywhere except a test that asks the catalog.
+ * echoes the selection that was requested. This file checks that the catalog
+ * still advertises each pin's resolved selection; `model-selection-run.live.test.ts`
+ * checks that a run with that selection finishes.
  */
 
 /** Every pin the plugin's spawnable roles actually carry. */
