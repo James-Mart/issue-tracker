@@ -3,7 +3,26 @@ up to date.
 
 ### Do
 
-1. Merge the latest `{{mergeBase}}` into `{{branchName}}`.
-2. Resolve any conflicts the merge surfaces.
-3. Follow the Project's normal merge and update behavior, and leave the
-   Story branch in a valid, updated state.
+Merge the latest `{{mergeBase}}` into `{{branchName}}` with
+`git merge --no-commit`, so the merge does not auto-commit.
+
+A conflicted path is discernable only when it is source text and the
+combination is unambiguous: both sides can be kept, or one side is strictly
+obsolete. A product choice, competing behavior, or uncertain intent is not
+discernable. A generated or tool-owned file, such as a lockfile, or a binary,
+is not discernable.
+
+Resolve every discernable path and `git add` it. Leave every path that is not
+discernable unmerged.
+
+When any path is still unmerged, stop before record-commit. Raise
+`issue task set <id> needsAttention true --reason "..."` and name each
+still-conflicted path in the reason. Do not abort the merge.
+
+When the task is resumed after attention is cleared: if any path is still
+unmerged, raise attention again naming those paths, and do not take another
+autonomous pass on them. When nothing is unmerged, do not re-judge the
+resolutions. Leave `MERGE_HEAD` set and continue the ordinary cycle, which
+commits the merge.
+
+When every conflicted path was discernable, do not raise attention.

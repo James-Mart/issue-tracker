@@ -42,6 +42,29 @@ describe("renderMergeBaseTaskDescription", () => {
     expect(body).not.toMatch(/\{\{/);
   });
 
+  it("states the discernable bar, partial resolution, attention stop, and resume rule", () => {
+    const body = renderMergeBaseTaskDescription({
+      branchName: "feat/story-branch",
+      mergeBase: "main",
+    });
+    const normalized = body.replace(/\s+/g, " ");
+
+    expect(normalized).toContain("git merge --no-commit");
+    expect(normalized).toMatch(/discernable only when it is source text/i);
+    expect(normalized).toMatch(/not discernable/i);
+    expect(normalized).toMatch(/Resolve every discernable path and `git add` it/i);
+    expect(normalized).toMatch(/Leave every path that is not discernable unmerged/i);
+    expect(normalized).toMatch(/stop before record-commit/i);
+    expect(normalized).toMatch(/needsAttention true/);
+    expect(normalized).toMatch(/Do not abort the merge/i);
+    expect(normalized).toMatch(/resumed after attention is cleared/i);
+    expect(normalized).toMatch(/do not take another autonomous pass on them/i);
+    expect(normalized).toMatch(/do not re-judge the resolutions/i);
+    expect(normalized).toMatch(
+      /When every conflicted path was discernable, do not raise attention/i,
+    );
+  });
+
   it("reads the template relative to the module, not process.cwd()", () => {
     previousCwd = process.cwd();
     const otherDir = mkdtempSync(join(tmpdir(), "issue-tracker-merge-base-cwd-"));
