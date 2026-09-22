@@ -3,6 +3,7 @@ import {
   ADD_IDEA_HELPER,
   MERGED_APPEND_REASON,
   NO_BRANCH_MERGE_BASE_REASON,
+  OPEN_MERGE_BASE_TASK_REASON,
   appendIdeaTitle,
   mergeBaseHelper,
   storyAppendAvailability,
@@ -20,6 +21,20 @@ describe("storyAppendAvailability", () => {
       ideaEnabled: true,
       mergeBaseEnabled: false,
       mergeBaseReason: NO_BRANCH_MERGE_BASE_REASON,
+    });
+  });
+
+  it("disables merge-base while an update task is still open", () => {
+    expect(
+      storyAppendAvailability({
+        merged: false,
+        branchName: "story/oauth",
+        hasOpenMergeBaseTask: true,
+      }),
+    ).toEqual({
+      ideaEnabled: true,
+      mergeBaseEnabled: false,
+      mergeBaseReason: OPEN_MERGE_BASE_TASK_REASON,
     });
   });
 

@@ -24,7 +24,9 @@ each Task; the implementor writes code; the code-quality validator owns Task
 `qa` (writes the gate, resumes across rounds, three-strike escalate) and Task
 `status done` at the terminal gate; the story-review agent records the Story
 gate (`review`, `reviewedTasks`, optional remediation Tasks) without editing
-workspace source; the git subagent owns branch create and Story finish.
+workspace source, and when the branch is behind appends the
+update-from-merge-base Task without changing stored `review`; the git
+subagent owns branch create and Story finish.
 
 **You do not write code, run the app, or verify the work yourself.** You read the
 plan with `issue tree` and spawn subagents. Do **essentially no reasoning**:
@@ -194,7 +196,7 @@ not from a spawn-time argument.
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
 | Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via **resume** | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7-high-fast`; `opus`→`claude-opus-5-thinking-high` | writes (see Field ownership) |
 | Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `status` / `needsAttention`; `issue task comment`) |
-| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue task add`; `issue story comment`) |
+| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue task add`; `issue story comment`) |
 
 ### Field ownership
 
@@ -209,14 +211,15 @@ Coordinator never sets Task `status`, Task `qa`, or Task `commits`.
 | Task `commits` | Git | spawned by the implementor |
 | Story `review` | Story review | on each review round `passed` / `failed` |
 | Story `reviewedTasks` | Story review | all `done` Tasks inspected in that round |
-| Story `needsAttention` (review three-strike) | Coordinator | on the 3rd story-review reopen in one session — see **Close a Story** |
+| Story `needsAttention` (review three-strike) | Coordinator | on the 3rd counted story-review resume in one session — see **Close a Story** |
 
 Implement and revise are the **same** implementor agent. Code-quality is a
 **writer** of Task `qa` (spawn/resume and three-strike escalate: see **Per-Task
 cycle** — you do **not** count rounds). Story review is the Story gate
 recorder: it sets `review` and `reviewedTasks` and may append remediation
-Tasks (tracker writes only; never workspace source); you spawn/resume it and
-enforce the reopen cap (see **Close a Story**). Both keep findings out of
+Tasks or the update-from-merge-base Task (tracker writes only; never
+workspace source); you spawn/resume it and enforce the reopen cap (see
+**Close a Story**). Both keep findings out of
 your context via comments / machine-readable fields.
 
 ## The loop
@@ -332,16 +335,34 @@ Repeat until finish-branch:
 3. **Review gate.** Read `review` with
    `issue story get <storyId> review` and `reviewCurrent` with
    `issue story get <storyId> reviewCurrent` — never by parsing chat,
-   `view`, or `tree`. Branch (count only the reopen cap — not general review
-   rounds):
-   - `reviewCurrent` is `true` → step 5 (Finish).
+   `view`, or `tree`. For this Story in this coordinator session, keep how
+   many resumes have counted and whether the previous story-review result
+   set `review` to `failed`. Before any story-review return in this session,
+   a stored `review` of `failed` is that previous result. Branch:
+   - `reviewCurrent` is `true` → read
+     `issue story get <storyId> needsAttention`. When it is `true`, stop
+     (Escalation). When it is `false`, **Delegate**
+     `issue-tracker-story-review` with the story-review spawn stub and wait
+     until that run finishes. Then re-read `needsAttention`,
+     `behindMergeBase` (`issue story get <storyId> behindMergeBase`),
+     `reviewCurrent`, and
+     `issue list task --in <storyId> --show-archived`. Record that this
+     return did not set `review` to `failed`. Finish (step 5) when
+     `behindMergeBase` is `false`, `reviewCurrent` is `true`,
+     `needsAttention` is `false`, and that list's `issues` include no Task
+     titled `Update from merge base` whose `status` is not `done`.
+     Otherwise continue from step 1.
    - `review` unset → **Delegate** `issue-tracker-story-review` with the
      story-review spawn stub; keep the returned nested agent id as
      `resumeId`. Then step 4.
-   - `review` set and `reviewCurrent` is `false` → count how many times you
-     have already **resumed** `issue-tracker-story-review` for `<storyId>`
-     in **this** coordinator session (including the resume you are about to
-     run). On the **3rd** resume, run
+   - `review` set and `reviewCurrent` is `false` → this resume counts toward
+     the session cap of three only when the previous story-review result set
+     `review` to `failed`. A return that appended a Task titled
+     `Update from merge base`, or stopped because one was already not
+     `done`, did not set `review` to `failed`, so the later resume after
+     that Task is `done` does not count, even when stored `review` is still
+     `failed`. On the **3rd** counted resume, counting this one when it
+     counts, run
      `issue story set <storyId> needsAttention true --reason "story-review: 3rd reopen in this session — <short summary>"`
      and stop (Escalation) — do **not** resume again. Otherwise **re-enter**
      that same story-review agent with the story-review resume stub and its
@@ -350,10 +371,14 @@ Repeat until finish-branch:
      returned `delegations` array whose `role` is
      `issue-tracker-story-review` — rather than starting a second
      story-review agent. Then step 4.
-   Wait until a spawn/resume finishes (or raises needsAttention) before
-   step 4.
+   Wait until a spawn or resume from the `review` unset branch or the stale
+   `reviewCurrent` branch finishes (or raises needsAttention) before step 4.
 
-4. **Gate after story-review.** Read
+4. **Gate after story-review.** Record whether this return set `review` to
+   `failed`: it did only when `issue story get <storyId> review` is `failed`
+   and `issue story get <storyId> behindMergeBase` is `false`. A failed
+   `behindMergeBase` get did not set `review`. The next result that sets
+   `review` to `failed` counts as usual. Then read
    `issue story get <storyId> needsAttention`. If `true`, stop (Escalation).
    When story-review returned from a **resume** round (`review` was already
    set before step 3 delegated) and `issue story get <storyId> retro` is

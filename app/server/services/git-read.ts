@@ -149,6 +149,37 @@ function runGitSync(args: string[], workspace: string): string {
   throw new IssueError("git-failed", errText);
 }
 
+/**
+ * True when `ancestor` is an ancestor of `descendant`, including when they
+ * are the same commit. Exit 1 is "not an ancestor"; any other failure throws.
+ */
+export function refIsAncestor(
+  workspace: string,
+  ancestor: string,
+  descendant: string,
+): boolean {
+  const args = ["merge-base", "--is-ancestor", ancestor, descendant];
+  assertReadOnlyGitSubcommand(args);
+  const result = spawnSync("git", args, {
+    cwd: workspace,
+    encoding: "utf8",
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.error) {
+    const err = result.error as NodeJS.ErrnoException;
+    if (err.code === "ENOENT") {
+      throw new IssueError("git-missing", "git binary not found");
+    }
+    throw new IssueError("git-failed", err.message);
+  }
+  if (result.status === 0) return true;
+  if (result.status === 1) return false;
+  const errText =
+    result.stderr.trim() || `git exited with code ${result.status}`;
+  throw new IssueError("git-failed", errText);
+}
+
 /** Lines from `git status --porcelain` (ignored paths are omitted). */
 export function porcelainStatusCount(workspace: string): number {
   const output = runGitSync(["status", "--porcelain"], workspace);

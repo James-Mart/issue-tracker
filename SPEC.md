@@ -257,6 +257,9 @@ These are computed by `derive()` and never written to disk (see
   Task `partOf` the Story is `done`, and every such Task id is in
   `reviewedTasks`; otherwise `false`. When `review` is set and `reviewCurrent`
   is `false`, tree/detail chips show the verdict plus a **stale** marker.
+- **behindMergeBase** — derived Story flag, not stored. Read with
+  `issue story get <storyId> behindMergeBase`. Ancestor rule, and the
+  story-review append and reopen-cap contract: [Derived state](#derived-state).
 - **worktree** — derived Story object on `list()` / `issue list` /
   `issue story get … worktree`: recorded `path`, whether that directory
   `exists`, porcelain `uncommittedCount` (ignored paths omitted),
@@ -421,8 +424,9 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `issue story update-from-merge-base <storyId>`; appends one predefined
   maintenance Task (no Idea, no planning round) that merges the Story branch
   from its derived `mergeBase`. Refuses when the Story lacks `branchName` or
-  a derived `mergeBase`, or when the Story is merged. Prints created/updated
-  ids.
+  a derived `mergeBase`, when the Story is merged, or when a not-done Task
+  titled `Update from merge base` is already on the Story. Prints
+  created/updated ids.
 
 ### Global ops
 
@@ -471,7 +475,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `worktree`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `behindMergeBase`, `worktree`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -1623,6 +1627,37 @@ so cannot drift:
   `false` (including when `review` is unset). A covered Task moved back off
   `done`, a Task injected after the review, or any uncovered done Task makes
   the verdict stale until `reviewedTasks` is updated.
+- **Story `behindMergeBase`** — derived on read from the Story worktree, never
+  stored, not computed by `derive()`. `true` when the derived `mergeBase` ref
+  is not an ancestor of `branchName` (`git merge-base --is-ancestor
+  <mergeBase> <branchName>` in that worktree exits 1), including when the two
+  histories have diverged. `false` when `branchName` already contains the
+  `mergeBase` tip (the ancestor check exits 0). The get exits nonzero with
+  empty stdout when `branchName` is missing, derived `mergeBase` is missing,
+  or the worktree cannot be read; it does not print `false`.
+  Story review reads `behindMergeBase` before it judges. A failed get raises
+  Story `needsAttention` and stops; it does not judge and it does not finish.
+  When `behindMergeBase` is `true` and the Story has a not-done Task titled
+  `Update from merge base`, story review stops without judging and without
+  appending, and leaves stored `review` unchanged. When `behindMergeBase` is
+  `true` and every such Task is `done` (including when none exist), story
+  review runs `issue story update-from-merge-base` and stops without judging,
+  and leaves stored `review` unchanged. When `behindMergeBase` is `false` and
+  `reviewCurrent` is `true`, story review stops without writing `review`.
+  When `behindMergeBase` is `false` and `reviewCurrent` is `false`, story
+  review judges the diff.
+  Close a Story does not finish on `reviewCurrent` `true` until that behind
+  check has run. When the check appends an update Task, stops because one is
+  already open, or raises attention, the coordinator re-syncs instead of
+  finishing. When the check returns with the branch not behind and
+  `reviewCurrent` still `true`, finish runs as specified under
+  [Project merge policy](#project-merge-policy).
+  A resume of story review counts toward the session cap of three only when
+  the previous story-review result set `review` to `failed`. A return that
+  appended an update Task, or stopped because one was already open, did not
+  set `review` to `failed`, so the later resume after that Task is `done`
+  does not count, even when a stored `failed` from before that return is
+  still there. The next result that sets `review` to `failed` counts as usual.
 - **Story `blocked`** (to start) — a `not-started` Story is `blocked` when it
   has a `stackedOn` parent whose tip cannot be forked yet: the parent must have
   a `branchName` **and** all the parent's Tasks must be `done` (it forks the

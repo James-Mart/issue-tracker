@@ -55,6 +55,7 @@ import {
   appendUpdateFromMergeBase,
   UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR,
   UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR,
+  UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR,
 } from "../services/merge-base-task.js";
 import { moveStory } from "../services/move-story.js";
 import { APPEND_TO_MERGED_ERROR } from "../services/patch.js";
@@ -404,7 +405,8 @@ export function createIssuesRouter(
           if (
             msg === APPEND_TO_MERGED_ERROR(storyId) ||
             msg === UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR(storyId) ||
-            msg === UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR(storyId)
+            msg === UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR(storyId) ||
+            msg === UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR(storyId)
           ) {
             res.status(409).json({ error: msg });
             return;

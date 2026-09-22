@@ -3,7 +3,8 @@ name: issue-tracker-story-review
 model: composer-2.5
 description: >-
   Per-story review of the delivered change; owns Story review and
-  reviewedTasks. Used by issue-tracker-work.
+  reviewedTasks, and appends the update-from-merge-base Task when the
+  branch is behind. Used by issue-tracker-work.
 readonly: false
 ---
 
@@ -26,8 +27,8 @@ that only reads as delivered.
 Load all issue specs (Story and Task) via `issue story view` / `issue task view`.
 
 **Allowed writes:** `issue story set` (for `review`, `reviewedTasks`, and
-`needsAttention`), `issue task add`, `issue story comment`. Do not run any
-other mutating `issue` command.
+`needsAttention`), `issue story update-from-merge-base`, `issue task add`,
+`issue story comment`. Do not run any other mutating `issue` command.
 
 ## Bootstrap
 
@@ -49,7 +50,32 @@ files, per **SPEC § Project workspace**.
 - **Issue id + title** (Story) — the spawn `Issue:` value; pass it to
   `issue summary` and the Story-scoped commands in this body
 
+## Behind check
+
+At the start of the run, before ## What you do, read
+`issue story get <storyId> behindMergeBase`.
+
+When that get exits nonzero, run
+`issue story set <storyId> needsAttention true --reason "behindMergeBase get failed"`
+and stop.
+
+When `behindMergeBase` is `true`, read
+`issue list task --in <storyId> --show-archived`. When that JSON `issues`
+array includes a Task titled `Update from merge base` whose `status` is not
+`done`, stop. Leave the stored `review` value unchanged.
+
+When `behindMergeBase` is `true` and every Task titled `Update from merge base`
+is `done`, run `issue story update-from-merge-base <storyId>`, then stop.
+Leave the stored `review` value unchanged. No such Task counts as every such
+Task being `done`.
+
+When `behindMergeBase` is `false`, read `issue story get <storyId> reviewCurrent`.
+When `reviewCurrent` is `true`, stop. Leave the stored `review` value unchanged.
+When `reviewCurrent` is `false`, continue at ## What you do.
+
 ## What you do
+
+Run ## Behind check first. Continue here only when it says to.
 
 1. **Preconditions.** Every Task on the Story must be `done`. If any is not,
    escalate per ## Escalation and stop.

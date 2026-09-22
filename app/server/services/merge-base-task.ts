@@ -1,10 +1,12 @@
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
+import { UPDATE_FROM_MERGE_BASE_TITLE } from "../issue-constants.js";
 import type { Issue } from "../schemas.js";
 import type { StoryApplyDoc } from "./apply-schema.js";
 import { appendTasks, type AppendSummary } from "./append.js";
 import { IssueError } from "./errors.js";
+import { refIsAncestor } from "./git-read.js";
 import { list } from "./issues.js";
 import { uniqueSlug } from "./slug.js";
 import { ancestorChain } from "./subtree.js";
@@ -53,13 +55,62 @@ export function renderMergeBaseTaskDescription({
   return rendered;
 }
 
-export const MERGE_BASE_TASK_TITLE = "Update from merge base";
+export const MERGE_BASE_TASK_TITLE = UPDATE_FROM_MERGE_BASE_TITLE;
 
 export const UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR = (storyId: string) =>
   `update-from-merge-base requires branchName on Story "${storyId}"`;
 
 export const UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR = (storyId: string) =>
   `update-from-merge-base requires mergeBase on Story "${storyId}"`;
+
+export const UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR = (storyId: string) =>
+  `update-from-merge-base already has an open task on Story "${storyId}"`;
+
+export const BEHIND_MERGE_BASE_NO_BRANCH_ERROR = (storyId: string) =>
+  `behindMergeBase requires branchName on Story "${storyId}"`;
+
+export const BEHIND_MERGE_BASE_NO_MERGE_BASE_ERROR = (storyId: string) =>
+  `behindMergeBase requires mergeBase on Story "${storyId}"`;
+
+export const BEHIND_MERGE_BASE_NO_WORKTREE_ERROR = (storyId: string) =>
+  `behindMergeBase requires a readable worktree on Story "${storyId}"`;
+
+function hasOpenMergeBaseTask(storyId: string, issues: Issue[]): boolean {
+  return issues.some(
+    (issue) =>
+      issue.kind === "task" &&
+      issue.partOf === storyId &&
+      issue.title === MERGE_BASE_TASK_TITLE &&
+      issue.status !== "done",
+  );
+}
+
+/** Derived on read from the Story worktree. Not stored. */
+export function storyBehindMergeBase(storyId: string): boolean {
+  const { issues, derived } = list();
+  const detail = issues.find((issue) => issue.id === storyId);
+  if (!detail || detail.kind !== "story") {
+    throw new IssueError("not_found", `story "${storyId}" does not exist`);
+  }
+  if (!detail.branchName) {
+    throw new IssueError("validation", BEHIND_MERGE_BASE_NO_BRANCH_ERROR(storyId));
+  }
+  const mergeBase = derived[storyId]?.mergeBase;
+  if (!mergeBase) {
+    throw new IssueError(
+      "validation",
+      BEHIND_MERGE_BASE_NO_MERGE_BASE_ERROR(storyId),
+    );
+  }
+  const worktree = detail.worktreePath;
+  if (!worktree || !existsSync(worktree)) {
+    throw new IssueError(
+      "validation",
+      BEHIND_MERGE_BASE_NO_WORKTREE_ERROR(storyId),
+    );
+  }
+  return !refIsAncestor(worktree, mergeBase, detail.branchName);
+}
 
 function mergeBaseAppendDoc(
   story: Extract<Issue, { kind: "story" }>,
@@ -113,6 +164,12 @@ export function appendUpdateFromMergeBase(storyId: string): Promise<AppendSummar
     throw new IssueError(
       "validation",
       UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR(storyId),
+    );
+  }
+  if (hasOpenMergeBaseTask(storyId, issues)) {
+    throw new IssueError(
+      "validation",
+      UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR(storyId),
     );
   }
 

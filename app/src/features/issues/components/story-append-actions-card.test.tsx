@@ -3,11 +3,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DerivedState, IssueDetail } from "@server/schemas";
+import type { DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
 import {
   ADD_IDEA_HELPER,
   MERGED_APPEND_REASON,
   NO_BRANCH_MERGE_BASE_REASON,
+  OPEN_MERGE_BASE_TASK_REASON,
 } from "../lib/story-append-actions";
 import { StoryAppendActionsCard } from "./story-append-actions-card";
 
@@ -18,6 +19,10 @@ const navigate = vi.fn();
 
 const derivedState = vi.hoisted(() => ({
   value: {} as Record<string, DerivedState>,
+}));
+
+const issuesState = vi.hoisted(() => ({
+  value: [] as IssueRecord[],
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -47,7 +52,7 @@ vi.mock("../api/mutations", () => ({
 
 vi.mock("../api/queries", () => ({
   useIssuesQuery: () => ({
-    data: { issues: [], derived: derivedState.value },
+    data: { issues: issuesState.value, derived: derivedState.value },
   }),
 }));
 
@@ -111,6 +116,7 @@ afterEach(() => {
   updateFromMergeBaseMutate.mockReset();
   navigate.mockReset();
   derivedState.value = {};
+  issuesState.value = [];
 });
 
 describe("StoryAppendActionsCard enablement", () => {
@@ -200,6 +206,50 @@ describe("StoryAppendActionsCard enablement", () => {
     expect(
       container.querySelector('[data-testid="story-append-merge-base-helper"]'),
     ).toBeNull();
+  });
+
+  it("disables Update from merge base while an update task is not done", () => {
+    derivedState.value = {
+      "story-oauth-hardening": {
+        blocked: false,
+        storyStatus: "in-progress",
+        mergeBase: "main @ c4d91e2",
+      },
+    };
+    issuesState.value = [
+      {
+        id: "update-from-merge-base",
+        kind: "task",
+        title: "Update from merge base",
+        partOf: "story-oauth-hardening",
+        order: 1,
+        createdAt: t0,
+        updatedAt: t0,
+        status: "in-progress",
+        commits: [],
+      },
+    ];
+    const { container } = mountCard(
+      story({ branchName: "story/oauth-hardening" }),
+    );
+
+    const mergeBase = actionButton(container, "story-append-update-merge-base");
+    expect(mergeBase.disabled).toBe(true);
+    expect(actionButton(container, "story-append-add-idea").disabled).toBe(
+      false,
+    );
+    expect(
+      container.querySelector('[data-testid="story-append-merge-base-reason"]')
+        ?.textContent,
+    ).toBe(OPEN_MERGE_BASE_TASK_REASON);
+    expect(
+      container.querySelector('[data-testid="story-append-merge-base-helper"]'),
+    ).toBeNull();
+
+    act(() => {
+      mergeBase.click();
+    });
+    expect(updateFromMergeBaseMutate).not.toHaveBeenCalled();
   });
 
   it("disables both actions on a merged Story and puts the reason on the card", () => {
