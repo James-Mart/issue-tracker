@@ -64,11 +64,7 @@ export function IssueMetaPanel({
         key="labels"
         label={FIELD_LABELS.labels}
         value={
-          <IssueAssignmentLabelsField
-            issue={issue}
-            catalog={catalog}
-            embedded
-          />
+          <IssueAssignmentLabelsField issue={issue} catalog={catalog} />
         }
       />,
     );
