@@ -10,6 +10,7 @@ import { deriveStoryWorktree } from "./derive-worktree.js";
 import { IssueError } from "./errors.js";
 import { branchExists, currentBranch } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
+import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { hasActiveImplementingRun } from "./implementing-status.js";
 import { list, readAll, update } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
@@ -185,7 +186,8 @@ export async function createStoryWorktree(storyId: string): Promise<string> {
     );
   }
 
-  await addWorktree(workspace, ["-b", storyId, path, mergeBase]);
+  const startRef = await resolveMergeBaseRef(workspace, mergeBase);
+  await addWorktree(workspace, ["-b", storyId, path, startRef]);
   await applySetupCommand(storyId, projectId, path, projectOf(projectId, issues).setupCommand, {
     worktreePath: path,
     worktreeBlockedReason: null,

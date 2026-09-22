@@ -240,6 +240,7 @@ export const STORY_GET_FIELDS = {
   planNotFinal: DERIVED,
   worktree: DERIVED,
   behindMergeBase: DERIVED,
+  mergeBaseRef: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const TASK_GET_FIELDS = {

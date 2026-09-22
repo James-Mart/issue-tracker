@@ -528,9 +528,9 @@ export function registerBareIdOps(program: Command, run: Run): void {
     .argument("<id>", "issue id")
     .argument("<field>", "field name (camelCase)")
     .action((id: string, field: string) =>
-      run(() => {
+      run(async () => {
         const kind = resolveIssueKind(id);
-        const value = kindGetValue(kind, id, field);
+        const value = await kindGetValue(kind, id, field);
         if (value === null) return;
         process.stdout.write(value.endsWith("\n") ? value : `${value}\n`);
       }),

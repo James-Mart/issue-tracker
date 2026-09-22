@@ -14,6 +14,7 @@ import {
   writeIssue,
 } from "./cli.test-helpers.js";
 import { refreshStorePathsFromEnv } from "./server/config.js";
+import { setGitSpawnerForTests } from "./server/services/git-read.js";
 import {
   setGitWriteSpawnerForTests,
   type GitWriteSpawner,
@@ -185,6 +186,7 @@ export async function createCleanWorktree(): Promise<string> {
 export function useStoryWorktreeCliFixtures(): void {
   useCliTestFixtures();
   afterEach(() => {
+    setGitSpawnerForTests(null);
     setGitWriteSpawnerForTests(null);
     removeTrackedWorktrees();
     rmSync(conversationsRoot(), { recursive: true, force: true });

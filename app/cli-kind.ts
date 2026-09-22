@@ -12,6 +12,7 @@ import {
 } from "./server/kind-fields.js";
 import { list, read, renameProjectLabel, update } from "./server/services/issues.js";
 import { storyBehindMergeBase } from "./server/services/merge-base-task.js";
+import { storyMergeBaseRef } from "./server/services/resolve-merge-base-ref.js";
 import { validateFullCommitSha } from "./server/services/commit-sha.js";
 import { MERGE_POLICIES } from "./server/issue-constants.js";
 import {
@@ -648,11 +649,11 @@ function storedFieldValue(detail: IssueDetail, field: string): unknown {
   return (detail as Record<string, unknown>)[field];
 }
 
-export function kindGetValue(
+export async function kindGetValue(
   kind: IssueKind,
   id: string,
   field: string,
-): string | null {
+): Promise<string | null> {
   const tables = KIND_GET_FIELDS[kind] as Record<
     string,
     { source: "stored" | "description" | "derived" }
@@ -671,6 +672,9 @@ export function kindGetValue(
   if (spec.source === "derived") {
     if (kind === "story" && field === "behindMergeBase") {
       return formatGetValue(storyBehindMergeBase(id));
+    }
+    if (kind === "story" && field === "mergeBaseRef") {
+      return formatGetValue(await storyMergeBaseRef(id));
     }
     const { derived } = list();
     const state = derived[id];
@@ -795,8 +799,8 @@ export function registerKindGetSet(
     .argument("<id>", `${kind} id`)
     .argument("<field>", "field name (camelCase)")
     .action((id: string, field: string) =>
-      run(() => {
-        const value = kindGetValue(kind, id, field);
+      run(async () => {
+        const value = await kindGetValue(kind, id, field);
         if (value === null) return;
         process.stdout.write(value.endsWith("\n") ? value : `${value}\n`);
       }),

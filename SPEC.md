@@ -260,6 +260,8 @@ These are computed by `derive()` and never written to disk (see
 - **behindMergeBase** — derived Story flag, not stored. Read with
   `issue story get <storyId> behindMergeBase`. Ancestor rule, and the
   story-review append and reopen-cap contract: [Derived state](#derived-state).
+- **mergeBaseRef** — derived Story ref, not stored. Read with
+  `issue story get <storyId> mergeBaseRef`. Resolution contract: [Derived state](#derived-state).
 - **worktree** — derived Story object on `list()` / `issue list` /
   `issue story get … worktree`: recorded `path`, whether that directory
   `exists`, porcelain `uncommittedCount` (ignored paths omitted),
@@ -475,7 +477,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `behindMergeBase`, `worktree`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `worktree`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -1627,6 +1629,20 @@ so cannot drift:
   `false` (including when `review` is unset). A covered Task moved back off
   `done`, a Task injected after the review, or any uncovered done Task makes
   the verdict stale until `reviewedTasks` is updated.
+- **Story `mergeBaseRef`** — derived on read, never stored, not computed by
+  `derive()`. Resolves the git ref a Story worktree branch is cut from,
+  compared against, and merged from. Remote name is `origin`. When
+  `git remote get-url origin` fails in the Project workspace, the get prints
+  the derived `mergeBase` branch name and does not fetch. Otherwise
+  `git fetch origin <mergeBase>` runs through the write git path; the local
+  branch is left unchanged. When fetch stderr reports `couldn't find remote
+  ref`, the get prints the local `mergeBase` name. When fetch fails for any
+  other reason, the get exits nonzero with empty stdout (`git-failed`). When
+  fetch succeeds, the get prints `origin/<mergeBase>`. The get exits nonzero
+  with empty stdout when `branchName` is missing, derived `mergeBase` is
+  missing, or the worktree cannot be read; it does not print a fallback ref.
+  An unreachable `origin` (fetch failure other than missing remote ref) exits
+  nonzero the same way.
 - **Story `behindMergeBase`** — derived on read from the Story worktree, never
   stored, not computed by `derive()`. `true` when the derived `mergeBase` ref
   is not an ancestor of `branchName` (`git merge-base --is-ancestor
