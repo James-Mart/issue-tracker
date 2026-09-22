@@ -1322,9 +1322,9 @@ on the same issue and channel before creating the new one. `export` is
 offered on an unarchived Epic or project-level Story, in addition to that
 issue's `implementing` channel. The session message tells the coordinator to
 read [issue-tracker-github-export](skills/issue-tracker-github-export/SKILL.md)
-and follow it for that root. The skill's first run reads the root with the
-existing issue view APIs, then calls `PUT /api/issues/:id/export-drafts` once
-with the full set.
+and follow it for that root. The skill's first run takes file names and order
+from the draft script, authors publishing prose, and calls
+`PUT /api/issues/:id/export-drafts` once with that full set.
 
 **Description links.** Issue-local relative Markdown only. A link like
 `[foo](foo.tsx)` means that issue's `attachments/foo.tsx`. Arbitrary external
