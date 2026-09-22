@@ -41,6 +41,11 @@ startStoreBackupSnapshotDriver();
 
 const app = createApp();
 
+const { scrubOrphanedRunsAtBoot } = await import(
+  "./services/orphan-run-scrub.js"
+);
+await scrubOrphanedRunsAtBoot();
+
 const server = app.listen(listenPort, () => {
   console.log(
     `issue-tracker server listening on http://localhost:${listenPort}`,

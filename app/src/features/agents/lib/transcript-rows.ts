@@ -170,7 +170,8 @@ export type TranscriptTurn = {
 /**
  * Derive one entry per `prompt`. `lastAssistantSeq` is where a fork icon
  * renders; `lastEventSeq` is later whenever trailing `usage`, `request`, or
- * `delegation_recovery` events follow the final assistant message.
+ * `delegation_recovery` and `host_crash_recovery` events follow the final
+ * assistant message.
  */
 export function deriveTurns(
   events: readonly TranscriptEvent[],
@@ -226,6 +227,7 @@ export function transcriptInfoLine(
     case "request":
       return { label: "Request", text: event.requestId };
     case "delegation_recovery":
+    case "host_crash_recovery":
       return { label: "Recovery", text: event.message };
     default:
       return null;

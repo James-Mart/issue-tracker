@@ -14,6 +14,7 @@ import {
   AT,
   issuesRoot,
   load,
+  workspaceDir,
   useAgentSessionsTestFixtures,
   writeIssue,
 } from "./agent-sessions.test-harness.js";
@@ -766,7 +767,7 @@ describe("agent sessions streaming", () => {
       agentStackStatePath(meta.id),
       JSON.stringify({
         conversationId: meta.id,
-        workspace: "/tmp/issue-tracker-workspace",
+        workspace: workspaceDir,
         apiPort: 44001,
         vitePort: 44002,
         baseUrl: "http://127.0.0.1:44002",
@@ -813,7 +814,7 @@ describe("agent sessions streaming", () => {
       agentStackStatePath(meta.id),
       JSON.stringify({
         conversationId: meta.id,
-        workspace: "/tmp/issue-tracker-workspace",
+        workspace: workspaceDir,
         apiPort: 44001,
         vitePort: 44002,
         baseUrl: "http://127.0.0.1:44002",
@@ -873,7 +874,7 @@ describe("agent sessions streaming", () => {
         agentStackStatePath(conversationId),
         JSON.stringify({
           conversationId,
-          workspace: "/tmp/issue-tracker-workspace",
+          workspace: workspaceDir,
           apiPort: portBase,
           vitePort: portBase + 1,
           baseUrl: `http://127.0.0.1:${portBase + 1}`,
