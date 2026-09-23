@@ -859,8 +859,7 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
   `mergeBase` keys — children re-derive on the next read (see
   [stacked-PR merge model](#the-stacked-pr-merge-model)). When a parent lands,
   **GitHub retargets** open child PRs; the tracker only updates metadata —
-  finish-branch never runs `gh pr edit --base` (or any PR retarget CLI). Then
-  **flag stale children** (below).
+  finish-branch never runs `gh pr edit --base` (or any PR retarget CLI).
 - **`fast-forward`** — after the push, fast-forward the derived `mergeBase` to
   the Story's tip (`git merge --ff-only <branchName>`), push that ref, and set
   `merged` via `issue story set <storyId> merged true` (same end state as
@@ -868,7 +867,7 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
   with no merge commit. If the base has advanced so a fast-forward is
   impossible, escalate (`needsAttention`) rather than force-merging — see
   **Failure and recovery**. Ranks highest on the merge-policy danger order (Epic
-  **work-on-existing-branches**). Then **flag stale children** (below).
+  **work-on-existing-branches**).
 
 **Flag stale children.** A successful `merge`, `fast-forward`, or **`issue
 merge`** advances the finishing Story's base branch `Bp` (`Bp` is the
@@ -876,17 +875,11 @@ finisher's derived `mergeBase` at land time). The stale-sibling cascade rides
 the finisher's `merged` write and is all-or-nothing: a Story recorded merged
 has had its stale siblings flagged in the same write, or nothing was written.
 The write is refused only when the landed base cannot be resolved and a
-started, unmerged sibling with a branch exists in the Project. After that
-push / `gh` merge and `merged` write, the scan runs once over the Project:
-finish-branch takes `<projectId>` from the `Project: <projectId> — <title>`
-line of `issue summary <storyId>` and runs `issue list story --in
-<projectId>`; `issue merge` performs the same scan in-process. For each entry
-in `issues[]`, read `merged` and `branchName` from the entry and `storyStatus`
-and `mergeBase` from `derived[<id>]` (computed after the finisher's
-`merged` write). Flag every not-yet-merged Story other than the finisher
-whose derived `storyStatus` is not `not-started` (skip when `branchName` is
-empty) and whose derived `mergeBase` is `Bp`, via `issue story set <childId>
-needsRebase <Bp>`. It never rebases those Stories. `manual` and
+started, unmerged sibling with a branch exists in the Project. Flag every
+not-yet-merged Story other than the finisher whose derived `storyStatus` is
+not `not-started` (skip when `branchName` is empty) and whose derived
+`mergeBase` is `Bp`, with `needsRebase <Bp>` in the same batch as the
+`merged` write. It never rebases those Stories. `manual` and
 `pull-request` (without `issue merge`) do not advance a base and never flag.
 
 **Resumable / idempotent.** The work loop is resumable, so finish-branch may run
