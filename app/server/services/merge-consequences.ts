@@ -20,13 +20,13 @@ export function landedBaseForMerge(
 }
 
 /**
- * Stories that need `needsRebase` after `finisherId` lands on `landedBase`.
- * Matches finish-branch step 3 / SPEC § Project merge policy "Flag stale children".
+ * Started, branched, unmerged sibling Stories in the finisher's Project that
+ * could need `needsRebase` after the finisher lands — every filter
+ * `staleSiblingIds` applies except the landed-base match.
  */
-export function staleSiblingIds(
+export function staleSiblingCandidates(
   issues: Issue[],
   finisherId: string,
-  landedBase: string,
 ): string[] {
   const prospective = issues.map((issue) =>
     issue.id === finisherId && issue.kind === "story"
@@ -37,7 +37,7 @@ export function staleSiblingIds(
   const projectId = ancestorChain(finisherId, issues)[0]!.id;
   const inProject = subtreeIds(prospective, projectId);
 
-  const stale: string[] = [];
+  const candidates: string[] = [];
   for (const issue of prospective) {
     if (issue.kind !== "story") continue;
     if (issue.id === finisherId) continue;
@@ -46,10 +46,54 @@ export function staleSiblingIds(
     if (!issue.branchName) continue;
     const state = byId[issue.id];
     if (!state?.storyStatus || state.storyStatus === "not-started") continue;
-    if (state.mergeBase !== landedBase) continue;
-    stale.push(issue.id);
+    candidates.push(issue.id);
   }
-  return stale;
+  return candidates;
+}
+
+/**
+ * Stories that need `needsRebase` after `finisherId` lands on `landedBase`.
+ * Matches finish-branch step 3 / SPEC § Project merge policy "Flag stale children".
+ */
+export function staleSiblingIds(
+  issues: Issue[],
+  finisherId: string,
+  landedBase: string,
+): string[] {
+  const candidates = staleSiblingCandidates(issues, finisherId);
+  if (candidates.length === 0) return [];
+
+  const prospective = issues.map((issue) =>
+    issue.id === finisherId && issue.kind === "story"
+      ? { ...issue, merged: true }
+      : issue,
+  );
+  const { byId } = derive(prospective);
+  return candidates.filter((id) => byId[id]?.mergeBase === landedBase);
+}
+
+/** Resolve landed base and stale siblings for a Story merge write. */
+export function mergeCascade(
+  issues: Issue[],
+  finisherId: string,
+): { landedBase?: string; staleIds: string[] } {
+  const candidates = staleSiblingCandidates(issues, finisherId);
+  if (candidates.length === 0) {
+    return { staleIds: [] };
+  }
+
+  const landedBase = landedBaseForMerge(finisherId, issues);
+  if (landedBase === undefined) {
+    throw new IssueError(
+      "validation",
+      `cannot record merge for "${finisherId}": landed base unresolved with stale sibling candidate(s): ${candidates.join(", ")}`,
+    );
+  }
+
+  return {
+    landedBase,
+    staleIds: staleSiblingIds(issues, finisherId, landedBase),
+  };
 }
 
 /** After a successful `gh pr merge`, set `merged` and flag stale siblings. */
@@ -69,10 +113,7 @@ export async function applyMergeConsequences(finisherId: string): Promise<void> 
       throw new IssueError("not_found", `unknown issue "${finisherId}"`);
     }
 
-    const landedBase = landedBaseForMerge(finisherId, issues);
-    const stale = landedBase
-      ? staleSiblingIds(issues, finisherId, landedBase)
-      : [];
+    const { landedBase, staleIds: stale } = mergeCascade(issues, finisherId);
 
     const now = new Date().toISOString();
     const finisherWrite: Story = {

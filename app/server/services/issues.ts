@@ -73,6 +73,7 @@ import {
   type LabelCascadePatch,
 } from "./labels.js";
 import { assertAllowedAgentModelSlug } from "../agent-model-slugs.js";
+import { mergeCascade } from "./merge-consequences.js";
 import { assertStoreWritable } from "./store-read-only.js";
 
 let writeChain: Promise<unknown> = Promise.resolve();
@@ -655,6 +656,25 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
       now,
     );
 
+    const mergeSiblingWrites: Issue[] = [];
+    if (
+      existing.kind === "story" &&
+      parsed.issue.kind === "story" &&
+      !existing.merged &&
+      parsed.issue.merged
+    ) {
+      const { landedBase, staleIds } = mergeCascade(issues, id);
+      for (const siblingId of staleIds) {
+        const sibling = issues.find((issue) => issue.id === siblingId);
+        if (!sibling || sibling.kind !== "story") continue;
+        mergeSiblingWrites.push({
+          ...sibling,
+          needsRebase: landedBase!,
+          updatedAt: now,
+        });
+      }
+    }
+
     const writes: IssueWrite[] = [];
     if (!jsonUnchanged || description !== undefined) {
       parsed.issue.updatedAt = now;
@@ -663,8 +683,11 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     for (const child of cascaded) {
       writes.push({ issue: child });
     }
+    for (const sibling of mergeSiblingWrites) {
+      writes.push({ issue: sibling });
+    }
 
-    if (cascaded.length === 0) {
+    if (cascaded.length === 0 && mergeSiblingWrites.length === 0) {
       // Single-node write: keep the historical scoped check so unrelated
       // pre-existing integrity problems do not block this update.
       assertWritable(parsed.issue, issues);

@@ -870,12 +870,16 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
 
 **Flag stale children.** A successful `merge`, `fast-forward`, or **`issue
 merge`** advances the finishing Story's base branch `Bp` (`Bp` is the
-finisher's derived `mergeBase` at land time). After that push / `gh` merge and
-`merged` write, the scan runs once over the Project: finish-branch takes
-`<projectId>` from the `Project: <projectId> — <title>` line of
-`issue summary <storyId>` and runs `issue list story --in <projectId>`;
-`issue merge` performs the same scan in-process. For each entry in
-`issues[]`, read `merged` and `branchName` from the entry and `storyStatus`
+finisher's derived `mergeBase` at land time). The stale-sibling cascade rides
+the finisher's `merged` write and is all-or-nothing: a Story recorded merged
+has had its stale siblings flagged in the same write, or nothing was written.
+The write is refused only when the landed base cannot be resolved and a
+started, unmerged sibling with a branch exists in the Project. After that
+push / `gh` merge and `merged` write, the scan runs once over the Project:
+finish-branch takes `<projectId>` from the `Project: <projectId> — <title>`
+line of `issue summary <storyId>` and runs `issue list story --in
+<projectId>`; `issue merge` performs the same scan in-process. For each entry
+in `issues[]`, read `merged` and `branchName` from the entry and `storyStatus`
 and `mergeBase` from `derived[<id>]` (computed after the finisher's
 `merged` write). Flag every not-yet-merged Story other than the finisher
 whose derived `storyStatus` is not `not-started` (skip when `branchName` is
@@ -987,7 +991,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get — this is what `finish-branch` reads (see [Project merge policy](#project-merge-policy)) |
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
-| `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by finish-branch or `issue merge` on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base after `merge` / `fast-forward` / a successful `issue merge` (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
+| `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by the finisher Story's `merged` write (via finish-branch, `issue merge`, or any path that flips `merged` false→true) on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
 | `review` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
 | `reviewedTasks` | string[] | Task ids the stored review covered; defaults `[]`; same array patch surface as Epic `blockedBy`; never rendered as a tree chip |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
