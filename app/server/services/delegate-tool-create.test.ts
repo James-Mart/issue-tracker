@@ -67,25 +67,6 @@ describe("createDelegateCustomTools", () => {
     ]);
   });
 
-  it("exposes the full custom tool set regardless of stored readOnly meta", () => {
-    const customTools = createDelegateCustomTools({
-      sdk: createFakeAgentSdk({ stream: ASSISTANT_STREAM }),
-      cwd,
-      storeDir,
-      agentsDir,
-      conversationId: "app-conv",
-      getCursorConversationId: () => "cursor-1",
-    });
-
-    expect(Object.keys(customTools).sort()).toEqual([
-      "agent_stack_start",
-      "agent_stack_stop",
-      "delegate",
-      "delegations",
-      "file_cursor_sdk_bug",
-    ]);
-  });
-
   it("creates a nested agent on the role's mapped pin with the role body prepended", async () => {
     const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
     const customTools = createDelegateCustomTools({
