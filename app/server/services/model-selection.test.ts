@@ -39,14 +39,10 @@ describe("resolveModelSelection", () => {
     });
   });
 
-  it("maps claude-opus-5-thinking-high to claude-opus-5 with thinking and effort", () => {
-    expect(resolveModelSelection("claude-opus-5-thinking-high")).toEqual({
-      id: "claude-opus-5",
-      params: [
-        { id: "thinking", value: "true" },
-        { id: "effort", value: "high" },
-      ],
-    });
+  it("throws for the retired claude-opus-5-thinking-high pin", () => {
+    expect(() => resolveModelSelection("claude-opus-5-thinking-high")).toThrow(
+      "Unknown model pin: claude-opus-5-thinking-high",
+    );
   });
 
   it("maps claude-opus-5-5-thinking-high to claude-opus-5-5 with thinking and effort", () => {
@@ -67,7 +63,6 @@ describe("resolveModelSelection", () => {
       "composer-2.5",
       "cursor-grok-4.7-high-fast",
       "cursor-grok-4.5-high-fast",
-      "claude-opus-5-thinking-high",
       "claude-opus-5-5-thinking-high",
     ]) {
       const selection = resolveModelSelection(pin);

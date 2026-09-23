@@ -35,14 +35,6 @@ export function resolveModelSelection(pin: string): ModelSelection {
           { id: "fast", value: "true" },
         ],
       };
-    case "claude-opus-5-thinking-high":
-      return {
-        id: "claude-opus-5",
-        params: [
-          { id: "thinking", value: "true" },
-          { id: "effort", value: "high" },
-        ],
-      };
     case "claude-opus-5-5-thinking-high":
       return {
         id: "claude-opus-5-5",
