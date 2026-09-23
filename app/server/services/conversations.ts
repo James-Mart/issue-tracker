@@ -250,7 +250,6 @@ export function persistForkedConversation(
     agentId,
     forkedFrom,
     forkedAtSeq: input.forkedAtSeq,
-    readOnly: true,
   });
 }
 
