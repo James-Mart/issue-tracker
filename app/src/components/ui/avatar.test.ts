@@ -17,6 +17,7 @@ describe("initialsFromName", () => {
 
   it("maps opus family names to O", () => {
     expect(initialsFromName("opus")).toBe("O");
+    expect(initialsFromName("claude-opus-5-5-thinking-high")).toBe("O");
     expect(initialsFromName("claude-opus-5-thinking-high")).toBe("O");
   });
 
