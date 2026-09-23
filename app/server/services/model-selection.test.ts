@@ -49,6 +49,16 @@ describe("resolveModelSelection", () => {
     });
   });
 
+  it("maps claude-opus-5-5-thinking-high to claude-opus-5-5 with thinking and effort", () => {
+    expect(resolveModelSelection("claude-opus-5-5-thinking-high")).toEqual({
+      id: "claude-opus-5-5",
+      params: [
+        { id: "thinking", value: "true" },
+        { id: "effort", value: "high" },
+      ],
+    });
+  });
+
   // The SDK reads `id` and `params` and nothing else, so a parameter promoted
   // to a top-level key is dropped in silence and the pin runs at the backend's
   // defaults. Every pin previously did exactly that.
@@ -58,6 +68,7 @@ describe("resolveModelSelection", () => {
       "cursor-grok-4.7-high-fast",
       "cursor-grok-4.5-high-fast",
       "claude-opus-5-thinking-high",
+      "claude-opus-5-5-thinking-high",
     ]) {
       const selection = resolveModelSelection(pin);
       expect(Object.keys(selection).sort()).toEqual(

@@ -43,6 +43,14 @@ export function resolveModelSelection(pin: string): ModelSelection {
           { id: "effort", value: "high" },
         ],
       };
+    case "claude-opus-5-5-thinking-high":
+      return {
+        id: "claude-opus-5-5",
+        params: [
+          { id: "thinking", value: "true" },
+          { id: "effort", value: "high" },
+        ],
+      };
     default:
       throw new Error(`Unknown model pin: ${pin}`);
   }

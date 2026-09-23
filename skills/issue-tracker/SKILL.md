@@ -148,7 +148,7 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
   append (when `appendTo` is set), then auto-chain polish and retro; use when
   planning an Idea, fleshing out a tracker plan, or running issue-tracker-plan.
 - **`issue-tracker-auto-plan`** — autonomously plan a single Idea as a
-  hands-off stakeholder on opus 5; use when the user runs auto-plan or auto
+  hands-off stakeholder on opus 5.5; use when the user runs auto-plan or auto
   plan or wants hands-off planning of an Idea id.
 - **`issue-tracker-plan-polish`** — polish an existing Epic, project-level
   Story, or append-target Story plan with parallel check agents, then

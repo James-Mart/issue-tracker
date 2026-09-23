@@ -2,7 +2,8 @@
 name: issue-tracker-auto-plan
 disable-model-invocation: true
 description: >-
-  Autonomously plan a single Idea as a hands-off stakeholder on opus 5. Use
+  Autonomously plan a single Idea as a hands-off stakeholder on opus 5.5
+  (`claude-opus-5-5-thinking-high`). Use
   when the user runs auto-plan or auto plan or wants hands-off planning of an
   Idea id.
 ---
@@ -21,8 +22,8 @@ migrate step — not from finalize.
 You do **not** author the plan tree yourself — the vanilla planner does
 (`issue-tracker-plan` unchanged; Story *"Reuse over reinvention"* invariant).
 
-This skill is meant to be invoked **manually on opus 5
-(`claude-opus-5-thinking-high`)**. All judgment happens in this agent plus
+This skill is meant to be invoked **manually on opus 5.5
+(`claude-opus-5-5-thinking-high`)**. All judgment happens in this agent plus
 the spawned discriminator / planner.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
@@ -345,7 +346,8 @@ When finalize is done, report per **## Finalize**. Then stop.
 
 ## Rules
 
-- You are the stakeholder on opus 5: bootstrap, grill answers,
+- You are the stakeholder on opus 5.5 (`claude-opus-5-5-thinking-high`):
+  bootstrap, grill answers,
   discriminator + planner spawns, retro request, finalize. Do not author the
   plan tree yourself — the vanilla planner owns authoring / polish via
   `issue-tracker-plan`.
