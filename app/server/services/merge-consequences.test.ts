@@ -291,10 +291,8 @@ describe("update merged flip cascade", () => {
     expect(readStoryJson("finisher")).toEqual(beforeFinisher);
     expect(readStoryJson("sibling")).toEqual(beforeSibling);
   });
-});
 
-describe("applyMergeConsequences", () => {
-  it("sets merged and flags stale siblings without writing child mergeBase", async () => {
+  it("flags stale siblings without writing child mergeBase", async () => {
     writeIssue("finisher", {
       kind: "story",
       title: "Finisher",
@@ -337,8 +335,8 @@ describe("applyMergeConsequences", () => {
       updatedAt: AT,
     });
 
-    const { applyMergeConsequences, list } = await loadModules();
-    await applyMergeConsequences("finisher");
+    const { update, list } = await loadModules();
+    await update("finisher", { merged: true });
 
     expect(readStoryJson("finisher").merged).toBe(true);
     expect(readStoryJson("sibling").needsRebase).toBe("main");

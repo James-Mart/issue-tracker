@@ -10,14 +10,14 @@ import {
   withIssuesDir,
 } from "./cli-story-worktree.test-fixtures.js";
 import { env, issueJsonField } from "./cli.test-helpers.js";
-import { applyMergeConsequences } from "./server/services/merge-consequences.js";
+import { update } from "./server/services/issues.js";
 
 useStoryWorktreeCliFixtures();
 
 describe("lifecycle worktree removal", () => {
   it("removes a clean worktree when the Story is merged", async () => {
     const path = await createCleanWorktree();
-    await withIssuesDir(() => applyMergeConsequences("a"));
+    await withIssuesDir(() => update("a", { merged: true }));
     expect(existsSync(path)).toBe(false);
     expect(issueJsonField("a", "worktreePath")).toBeUndefined();
     expect(issueJsonField("a", "merged")).toBe(true);
@@ -46,7 +46,7 @@ describe("lifecycle worktree removal", () => {
   it("removes a clean worktree when the Story is merged while a session is live", async () => {
     const path = await createCleanWorktree();
     seedImplementingSession("conv-live", "a", "p", { live: true });
-    await withIssuesDir(() => applyMergeConsequences("a"));
+    await withIssuesDir(() => update("a", { merged: true }));
     expect(existsSync(path)).toBe(false);
     expect(issueJsonField("a", "worktreePath")).toBeUndefined();
     expect(issueJsonField("a", "merged")).toBe(true);
@@ -78,7 +78,7 @@ describe("lifecycle worktree removal", () => {
     const path = await createCleanWorktree();
     writeFileSync(join(path, "README"), "dirty\n");
     seedImplementingSession("conv-live", "a", "p", { live: true });
-    await withIssuesDir(() => applyMergeConsequences("a"));
+    await withIssuesDir(() => update("a", { merged: true }));
     expect(issueJsonField("a", "merged")).toBe(true);
     expect(existsSync(path)).toBe(true);
     expect(issueJsonField("a", "worktreePath")).toBe(path);
@@ -129,7 +129,7 @@ describe("lifecycle worktree removal", () => {
     const path = await createCleanWorktree();
     failGitWorktreeRemove();
     await expect(
-      withIssuesDir(() => applyMergeConsequences("a")),
+      withIssuesDir(() => update("a", { merged: true })),
     ).rejects.toMatchObject({ code: "git-failed" });
     expect(issueJsonField("a", "merged")).toBe(true);
     expect(existsSync(path)).toBe(true);

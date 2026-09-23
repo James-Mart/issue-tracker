@@ -381,10 +381,11 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   stored `prUrl` and cwd = the Project `workspace`; refuses other kinds and
   Stories with no `prUrl`; `--auto` maps to `gh pr merge --auto`;
   `--match-head-commit` maps to the flag of the same name; surfaces `gh`
-  stderr on failure. After the PR lands, the tracker sets `merged` and
-  attempts safe worktree removal (no `--discard`); an unsafe refusal leaves
-  the checkout and does not fail the merge. Other removal failures still fail
-  the caller.
+  stderr on failure. After the PR lands, the tracker sets `merged` via the
+  validated service layer (same path as `issue story set <storyId> merged
+  true`); that write carries the stale-sibling cascade and attempts safe
+  worktree removal (no `--discard`). An unsafe refusal leaves the checkout
+  and does not fail the merge. Other removal failures still fail the caller.
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
@@ -846,8 +847,9 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
   It does **not** wait for merge or set `merged`, so the Story derives to
   `pr-open`. Landing that PR through the tracker is
   **`issue merge <storyId>`** (or `issue story merge`): after `gh` reports a
-  successful merge it sets `merged` and runs **flag stale children** (below).
-  A failed `gh` merge writes nothing. Setting `merged` does not write child
+  successful merge it sets `merged` via the validated service layer; that
+  `merged` write carries **flag stale children** (below). A failed `gh` merge
+  writes nothing. Setting `merged` does not write child
   `mergeBase` keys — children re-derive on the next read; GitHub retargets
   open child PRs and the tracker runs no PR-base command.
 - **`merge`** — after the push, merge the Story's git branch into its derived
@@ -893,11 +895,14 @@ twice for the same Story. Before acting, the git subagent reads the Story's
 `issue story get <storyId> merged`). When the policy's integration end state
 already holds — `merged` set for `merge` or `fast-forward`, `prUrl` set for
 `pull-request` — it does not open a duplicate PR or re-merge / re-push the
-base. For `merge` / `fast-forward` with `merged` already set, it still runs
-**flag stale children** with `Bp` = the Story's derived `mergeBase` (so a crash
-between the `merged` write and flagging is recovered on resume); re-setting
-`needsRebase` is harmless. **`manual`** has no metadata end state; a re-run
-just re-pushes the Story branch (harmless).
+base. For `merge` / `fast-forward` with `merged` already set, the finisher's
+`merged` write is a no-op (unchanged JSON), so stale siblings are not
+re-flagged. **`pull-request`** with `merged` already set: re-running
+`issue merge` fails because `gh pr merge` refuses an already-merged PR and
+the tracker write never runs — fix the missing base, then record the merge
+with `issue story set <storyId> merged true`, which retries the cascade through
+the same flip. **`manual`** has no metadata end state; a re-run just re-pushes
+the Story branch (harmless).
 
 **Failure and recovery.** On failure the git subagent raises attention on the
 Story (`issue story set <storyId> needsAttention true --reason "…"`) and

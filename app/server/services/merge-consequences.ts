@@ -1,15 +1,7 @@
-import type { Issue, Story } from "../schemas.js";
+import type { Issue } from "../schemas.js";
 import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
-import { checkIntegrity } from "./integrity.js";
-import {
-  commitIssueBatch,
-  readAll,
-  readIssueOrThrow,
-  serialize,
-} from "./issues.js";
 import { ancestorChain, subtreeIds } from "./subtree.js";
-import { attemptStoryWorktreeRemoval } from "./worktree.js";
 
 /** Derived mergeBase of `finisherId` before the merged write. */
 export function landedBaseForMerge(
@@ -94,60 +86,4 @@ export function mergeCascade(
     landedBase,
     staleIds: staleSiblingIds(issues, finisherId, landedBase),
   };
-}
-
-/** After a successful `gh pr merge`, set `merged` and flag stale siblings. */
-export async function applyMergeConsequences(finisherId: string): Promise<void> {
-  await serialize(() => {
-    const detail = readIssueOrThrow(finisherId);
-    if (detail.kind !== "story") {
-      throw new IssueError(
-        "validation",
-        `"${finisherId}" is not a Story`,
-      );
-    }
-
-    const { issues } = readAll();
-    const finisher = issues.find((issue) => issue.id === finisherId);
-    if (!finisher || finisher.kind !== "story") {
-      throw new IssueError("not_found", `unknown issue "${finisherId}"`);
-    }
-
-    const { landedBase, staleIds: stale } = mergeCascade(issues, finisherId);
-
-    const now = new Date().toISOString();
-    const finisherWrite: Story = {
-      ...finisher,
-      merged: true,
-      updatedAt: now,
-    };
-
-    const writes = [{ issue: finisherWrite as Issue }];
-    for (const id of stale) {
-      const sibling = issues.find((issue) => issue.id === id);
-      if (!sibling || sibling.kind !== "story") continue;
-      writes.push({
-        issue: {
-          ...sibling,
-          needsRebase: landedBase,
-          updatedAt: now,
-        },
-      });
-    }
-
-    const prospective = new Map(issues.map((issue) => [issue.id, issue]));
-    for (const write of writes) {
-      prospective.set(write.issue.id, write.issue);
-    }
-    const problems = checkIntegrity([...prospective.values()]);
-    if (problems.length > 0) {
-      throw new IssueError(
-        "validation",
-        problems.map((p) => p.message).join("; "),
-      );
-    }
-
-    commitIssueBatch(writes, []);
-  });
-  await attemptStoryWorktreeRemoval(finisherId);
 }
