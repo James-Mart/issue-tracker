@@ -67,7 +67,7 @@ describe("createDelegateCustomTools", () => {
     ]);
   });
 
-  it("omits mutating custom tools when readOnly is set", () => {
+  it("exposes the full custom tool set regardless of stored readOnly meta", () => {
     const customTools = createDelegateCustomTools({
       sdk: createFakeAgentSdk({ stream: ASSISTANT_STREAM }),
       cwd,
@@ -75,10 +75,12 @@ describe("createDelegateCustomTools", () => {
       agentsDir,
       conversationId: "app-conv",
       getCursorConversationId: () => "cursor-1",
-      readOnly: true,
     });
 
     expect(Object.keys(customTools).sort()).toEqual([
+      "agent_stack_start",
+      "agent_stack_stop",
+      "delegate",
       "delegations",
       "file_cursor_sdk_bug",
     ]);

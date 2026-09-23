@@ -14,7 +14,6 @@ import { Mic, Paperclip, Send, Square, Upload, X, Zap } from "lucide-react";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { currentGlow } from "@/components/ui/overlay-surfaces";
-import { ForkedThreadComposerNotice } from "./forked-thread-composer-notice";
 import {
   VoiceErrorBar,
   VoiceRecordingBar,
@@ -216,7 +215,6 @@ export function Composer({
   conversationId,
   model: initialModel,
   runActive,
-  readOnly = false,
   disabled = false,
   disabledPlaceholder,
 }: {
@@ -225,8 +223,6 @@ export function Composer({
   model: string;
   /** Server-truth run-active flag from the open thread. */
   runActive: boolean;
-  /** Read-only fork — composer stays usable; notice is a standing constraint. */
-  readOnly?: boolean;
   /** Visible but inert — the export rewrite owns the turn. */
   disabled?: boolean;
   disabledPlaceholder?: string;
@@ -622,8 +618,6 @@ export function Composer({
           )}
         >
         {dragActive ? <DragActiveOverlay /> : null}
-
-        {readOnly ? <ForkedThreadComposerNotice /> : null}
 
         {uploadError ? <UploadErrorBanner error={uploadError} /> : null}
 

@@ -85,8 +85,6 @@ export interface DelegateToolOptions {
   cwd: string;
   /** Conversation agent-state directory; nested stores are created under it. */
   storeDir: string;
-  /** Omit mutating custom tools (`delegate`, agent stack start/stop). */
-  readOnly?: boolean;
   /**
    * Conversation that receives nested-run `subagent_update` frames. When
    * omitted, the handler still runs the nested agent but does not publish.
@@ -355,11 +353,7 @@ export function createDelegateCustomTools(
 
     // Verification stack tools are session-scoped to the app conversation;
     // the Cursor conversation_id comes from this agent session's runtime id.
-    if (
-      !options.readOnly &&
-      options.conversationId &&
-      getCursorConversationId
-    ) {
+    if (options.conversationId && getCursorConversationId) {
       Object.assign(
         customTools,
         createAgentStackTools({
@@ -404,7 +398,7 @@ export function createDelegateCustomTools(
       },
     };
 
-    if (!options.readOnly) customTools.delegate = {
+    customTools.delegate = {
       description:
         "Delegate work to a named role. The app selects the role's pinned model. Returns ok: true with agentId and reply on success; ok: false with failureClass (auth | agent-failed | cancelled | stalled-before-first-token | transport-exhausted), isRetryable, message, and agentId on a runtime failure. Caller errors throw.",
       inputSchema: {

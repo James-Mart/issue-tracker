@@ -116,13 +116,6 @@ const AUTH_RETRY_DELAY_MS = 1000;
 const SCRUB_REFUSED_MESSAGE =
   "Couldn't clear the previous run. Send was refused.";
 
-const READ_ONLY_DISALLOWED_TOOLS = [
-  "task",
-  "edit",
-  "delete",
-  "shell",
-] as const;
-
 /**
  * Re-entry prompt for a turn that got somewhere before the token expired.
  * Recovery is mechanical: this says the turn was cut short and nothing else —
@@ -177,16 +170,11 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const cursorConversationIdRef: { current: string | undefined } = {
       current: meta.agentId,
     };
-    const readOnly = meta.readOnly === true;
-    const readOnlyToolOptions = readOnly
-      ? { disallowedTools: [...READ_ONLY_DISALLOWED_TOOLS] }
-      : {};
     const customTools = createDelegateCustomTools({
       sdk,
       cwd,
       storeDir,
       conversationId,
-      readOnly,
       getCursorConversationId: () => cursorConversationIdRef.current,
       onAuthFailure: ({ delegationId, agentId, message, parentCallId }) => {
         console.error(
@@ -223,7 +211,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           cwd,
           model,
           customTools,
-          ...readOnlyToolOptions,
         });
       } catch (err) {
         handle = await sdk.createAgent({
@@ -231,7 +218,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           model,
           storeDir,
           customTools,
-          ...readOnlyToolOptions,
         });
         cursorConversationIdRef.current = handle.agentId;
         await updateMeta(conversationId, { agentId: handle.agentId });
@@ -251,7 +237,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         model,
         storeDir,
         customTools,
-        ...readOnlyToolOptions,
       });
       cursorConversationIdRef.current = handle.agentId;
       await updateMeta(conversationId, { agentId: handle.agentId });
