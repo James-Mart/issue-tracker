@@ -3,8 +3,12 @@ up to date.
 
 ### Do
 
-Merge the latest `{{mergeBase}}` into `{{branchName}}` with
-`git merge --no-commit`, so the merge does not auto-commit.
+Immediately before the merge, run `issue story get {{storyId}} mergeBaseRef`.
+When that get exits nonzero, run
+`issue story set {{storyId}} needsAttention true --reason "mergeBaseRef get failed"`
+and stop. Do not merge. When it prints a ref, merge that ref into
+`{{branchName}}` with `git merge --no-commit`, so the merge does not
+auto-commit.
 
 A conflicted path is discernable only when it is source text and the
 combination is unambiguous: both sides can be kept, or one side is strictly

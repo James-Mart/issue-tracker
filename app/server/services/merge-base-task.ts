@@ -31,19 +31,22 @@ function requireRef(name: string, value: string): void {
 }
 
 export function renderMergeBaseTaskDescription({
+  storyId,
   branchName,
   mergeBase,
 }: {
+  storyId: string;
   branchName: string;
   mergeBase: string;
 }): string {
+  requireRef("storyId", storyId);
   requireRef("branchName", branchName);
   requireRef("mergeBase", mergeBase);
 
   const template = readFileSync(templatePath, "utf8");
   const rendered = template
-    .replaceAll("{{branchName}}", branchName)
-    .replaceAll("{{mergeBase}}", mergeBase);
+    .replaceAll("{{storyId}}", storyId)
+    .replaceAll("{{branchName}}", branchName);
 
   const leftover = rendered.match(PLACEHOLDER_PATTERN);
   if (leftover) {
@@ -176,6 +179,7 @@ export function appendUpdateFromMergeBase(storyId: string): Promise<AppendSummar
   }
 
   const description = renderMergeBaseTaskDescription({
+    storyId,
     branchName: detail.branchName,
     mergeBase,
   });

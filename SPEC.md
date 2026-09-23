@@ -424,11 +424,11 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   ids and echoes the resulting subtree.
 - **`update-from-merge-base`** (story only) —
   `issue story update-from-merge-base <storyId>`; appends one predefined
-  maintenance Task (no Idea, no planning round) that merges the Story branch
-  from its derived `mergeBase`. Refuses when the Story lacks `branchName` or
-  a derived `mergeBase`, when the Story is merged, or when a not-done Task
-  titled `Update from merge base` is already on the Story. Prints
-  created/updated ids.
+  maintenance Task (no Idea, no planning round) that merges the ref
+  `mergeBaseRef` prints at execution time into the Story branch. Refuses when
+  the Story lacks `branchName` or a derived `mergeBase`, when the Story is
+  merged, or when a not-done Task titled `Update from merge base` is already
+  on the Story. Prints created/updated ids.
 
 ### Global ops
 
