@@ -1,4 +1,5 @@
-import { execFileSync } from "child_process";
+import { EventEmitter } from "node:events";
+import { execFileSync, spawn } from "child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -18,6 +19,7 @@ import {
   writeIssue,
 } from "../../cli.test-helpers.js";
 import { IssueError } from "./errors.js";
+import { setGitWriteSpawnerForTests } from "./git-write.js";
 import {
   BEHIND_MERGE_BASE_NO_WORKTREE_ERROR,
   UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR,
@@ -220,6 +222,65 @@ describe("behindMergeBase", () => {
     expect(result.stderr.length).toBeGreaterThan(0);
     expect(result.stdout).not.toContain("false");
   });
+
+  it("is false when the branch contains origin/main but not local main", async () => {
+    const repo = initRepo();
+    const bare = mkdtempSync(join(dir, "bare-"));
+    git(bare, ["init", "--bare", "-b", "main"]);
+    git(repo, ["remote", "add", "origin", bare]);
+    git(repo, ["push", "origin", "main"]);
+    git(repo, ["checkout", "-b", "feat/story"]);
+    commitFile(repo, "story-work", "story commit");
+    git(repo, ["checkout", "main"]);
+    commitFile(repo, "local-main", "local main moved");
+    seedStory(repo, "feat/story");
+
+    const result = await getBehind();
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("false\n");
+
+    rmSync(bare, { recursive: true, force: true });
+  });
+
+  it("fails loudly when origin fetch is unreachable", async () => {
+    const repo = initRepo();
+    git(repo, ["remote", "add", "origin", "git@example.com:org/repo.git"]);
+    seedStory(repo, "feat/story");
+
+    setGitWriteSpawnerForTests((command, args, options) => {
+      if (args[0] === "fetch") {
+        const child = new EventEmitter() as EventEmitter & {
+          stdout: EventEmitter;
+          stderr: EventEmitter;
+        };
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        setImmediate(() => {
+          child.stderr.emit(
+            "data",
+            "fatal: Could not read from remote repository.",
+          );
+          child.emit("close", 128);
+        });
+        return child;
+      }
+      return spawn(command, args, {
+        ...options,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    });
+
+    const result = await getBehind();
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr.length).toBeGreaterThan(0);
+
+    setGitWriteSpawnerForTests(null);
+  });
+});
+
+afterEach(() => {
+  setGitWriteSpawnerForTests(null);
 });
 
 describe("update-from-merge-base open task", () => {

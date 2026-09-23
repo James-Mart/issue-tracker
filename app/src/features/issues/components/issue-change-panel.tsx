@@ -78,6 +78,7 @@ function scopeHeaderStats(change: Extract<IssueChange, { state: "loaded" }>): st
 export type ChangeTooLargeDetails = {
   stats: ChangeStats;
   commitCount: number;
+  mergeBaseRef?: string;
 };
 
 function isChangeStats(value: unknown): value is ChangeStats {
@@ -96,12 +97,18 @@ export function parseChangeTooLarge(error: unknown): ChangeTooLargeDetails | und
   }
   const body = error.body;
   if (!body || typeof body !== "object") return undefined;
-  const { stats, commitCount } = body as Record<string, unknown>;
+  const { stats, commitCount, mergeBaseRef } = body as Record<string, unknown>;
   if (!isChangeStats(stats)) return undefined;
   if (typeof commitCount !== "number" || !Number.isInteger(commitCount) || commitCount < 1) {
     return undefined;
   }
-  return { stats, commitCount };
+  return {
+    stats,
+    commitCount,
+    ...(typeof mergeBaseRef === "string" && mergeBaseRef !== ""
+      ? { mergeBaseRef }
+      : {}),
+  };
 }
 
 function apiErrorCode(error: unknown): string | undefined {
@@ -174,13 +181,14 @@ function tooLargeStateCopy(
   title: string;
   detail: ReactNode;
 } {
-  const { stats, commitCount } = details;
-  const gitCommand = mergeBase
-    ? `git diff ${mergeBase}...<last>`
+  const { stats, commitCount, mergeBaseRef } = details;
+  const storyRangeRef = mergeBaseRef ?? mergeBase;
+  const gitCommand = storyRangeRef
+    ? `git diff ${storyRangeRef}...<last>`
     : commitCount === 1
       ? "git show <commit-sha>"
       : "git diff <first-sha>^..<last-sha>";
-  const gitHint = mergeBase
+  const gitHint = storyRangeRef
     ? "Read it in the project workspace with git diff from the merge base through the last recorded descendant commit."
     : commitCount === 1
       ? "Read it in the project workspace with git show on the commit sha recorded on this task."

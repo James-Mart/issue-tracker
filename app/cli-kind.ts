@@ -671,7 +671,7 @@ export async function kindGetValue(
 
   if (spec.source === "derived") {
     if (kind === "story" && field === "behindMergeBase") {
-      return formatGetValue(storyBehindMergeBase(id));
+      return formatGetValue(await storyBehindMergeBase(id));
     }
     if (kind === "story" && field === "mergeBaseRef") {
       return formatGetValue(await storyMergeBaseRef(id));

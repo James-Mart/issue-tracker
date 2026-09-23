@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { GitSpawner } from "./git-read.js";
+import type { GitWriteSpawner } from "./git-write.js";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -80,7 +81,9 @@ beforeEach(() => {
 
 afterEach(async () => {
   const { setGitSpawnerForTests } = await import("./git-read.js");
+  const { setGitWriteSpawnerForTests } = await import("./git-write.js");
   setGitSpawnerForTests(null);
+  setGitWriteSpawnerForTests(null);
   vi.unstubAllEnvs();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -169,6 +172,9 @@ function stubTaskRangeGit(opts: {
 function stubStorySymdiffGit(opts: {
   last: string;
   mergeBase?: string;
+  mergeBaseRef?: string;
+  originConfigured?: boolean;
+  fetchUnreachable?: boolean;
   patch: string;
   shortstat: string;
   subjects: Record<string, string>;
@@ -176,9 +182,16 @@ function stubStorySymdiffGit(opts: {
   calls?: string[][];
 }): Promise<void> {
   const mergeBase = opts.mergeBase ?? "main";
-  const range = `${mergeBase}...${opts.last}`;
-  return stubGitSpawner((args) => {
+  const mergeBaseRef = opts.mergeBaseRef ?? mergeBase;
+  const range = `${mergeBaseRef}...${opts.last}`;
+  const readStub = stubGitSpawner((args) => {
     opts.calls?.push([...args]);
+    if (args[0] === "remote" && args[1] === "get-url" && args[2] === "origin") {
+      if (opts.originConfigured) {
+        return mockGitChild({ stdout: "git@example.com:org/repo.git\n" });
+      }
+      return mockGitChild({ code: 2, stderr: "No such remote 'origin'\n" });
+    }
     if (args[0] === "rev-list" && args.includes("--count")) {
       if (!args.includes("--first-parent")) {
         return mockGitChild({ stdout: "5\n" });
@@ -211,6 +224,28 @@ function stubStorySymdiffGit(opts: {
     }
     return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
   });
+
+  if (!opts.originConfigured) {
+    return readStub;
+  }
+
+  const writeStub = import("./git-write.js").then(({ setGitWriteSpawnerForTests }) => {
+    const spawner: GitWriteSpawner = (_command, args) => {
+      if (args[0] === "fetch") {
+        if (opts.fetchUnreachable) {
+          return mockGitChild({
+            code: 128,
+            stderr: "fatal: Could not read from remote repository.",
+          });
+        }
+        return mockGitChild({});
+      }
+      return mockGitChild({});
+    };
+    setGitWriteSpawnerForTests(spawner);
+  });
+
+  return Promise.all([readStub, writeStub]).then(() => undefined);
 }
 
 describe("readIssueChange rollup", () => {
@@ -304,6 +339,7 @@ describe("readIssueChange rollup", () => {
       details: {
         stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
         commitCount: 2,
+        mergeBaseRef: "main",
       },
     });
   });
@@ -463,6 +499,53 @@ describe("readIssueChange rollup", () => {
     await expect(readIssueChange("s-waiting-empty")).resolves.toEqual({
       state: "empty",
       reason: "no-merge-base",
+    });
+  });
+
+  it("uses origin/<mergeBase> for the story diff range when fetch succeeds", async () => {
+    const c1 = sha(1);
+    const c2 = sha(2);
+    const calls: string[][] = [];
+    writeRollupFixture([
+      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
+      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
+    ]);
+
+    await stubStorySymdiffGit({
+      last: c2,
+      mergeBaseRef: "origin/main",
+      originConfigured: true,
+      calls,
+      patch: "diff --git a/origin.ts b/origin.ts\n+from-origin\n",
+      shortstat: " 1 file changed, 1 insertion(+)\n",
+      subjects: { [c1]: "First", [c2]: "Second" },
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("rollup")).resolves.toMatchObject({
+      state: "loaded",
+      patch: "diff --git a/origin.ts b/origin.ts\n+from-origin\n",
+    });
+    expect(calls).toContainEqual(["diff", "--shortstat", `origin/main...${c2}`]);
+    expect(calls).toContainEqual(["diff", `origin/main...${c2}`]);
+  });
+
+  it("raises git-failed when origin fetch is unreachable", async () => {
+    const c1 = sha(1);
+    writeRollupFixture([{ id: "t1", partOf: "rollup", sha: c1, order: 0 }]);
+
+    await stubStorySymdiffGit({
+      last: c1,
+      originConfigured: true,
+      fetchUnreachable: true,
+      patch: "unused",
+      shortstat: "unused",
+      subjects: { [c1]: "First" },
+    });
+
+    const { readIssueChange } = await loadChange();
+    await expect(readIssueChange("rollup")).rejects.toMatchObject({
+      code: "git-failed",
     });
   });
 

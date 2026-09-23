@@ -3,6 +3,7 @@ import type { ChangeCommit, ChangeStats, Issue, IssueChange } from "../schemas.j
 import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
+import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { ancestorChain } from "./subtree.js";
@@ -131,11 +132,13 @@ function assertPatchWithinCeiling(
   patch: string,
   stats: ChangeStats,
   commitCount: number,
+  mergeBaseRef?: string,
 ): void {
   if (Buffer.byteLength(patch, "utf8") <= maxPatchBytes()) return;
   throw new IssueError("change-too-large", "patch exceeds render ceiling", {
     stats,
     commitCount,
+    ...(mergeBaseRef ? { mergeBaseRef } : {}),
   });
 }
 
@@ -179,7 +182,8 @@ async function readStoryChange(
   await assertCommitsContiguous(shas, workspace);
 
   const last = shas[shas.length - 1]!;
-  const range = `${mergeBase}...${last}`;
+  const mergeBaseRef = await resolveMergeBaseRef(workspace, mergeBase);
+  const range = `${mergeBaseRef}...${last}`;
   const statOut = await runGitOrCommitUnreachable(
     ["diff", "--shortstat", range],
     workspace,
@@ -199,7 +203,7 @@ async function readStoryChange(
     })),
   );
 
-  assertPatchWithinCeiling(patch, stats, withSubjects.length);
+  assertPatchWithinCeiling(patch, stats, withSubjects.length, mergeBaseRef);
 
   return {
     state: "loaded",

@@ -86,11 +86,15 @@ Run ## Behind check first. Continue here only when it says to.
 3. **Verify.** Read `issue story get <storyId> review` (empty stdout means
    unset).
 
-   **Fresh** (`review` unset). Diff the Story's branch against its derived
-   merge base — `git diff <mergeBase>...<branchName>` in the workspace,
-   with `mergeBase` from `issue story get <storyId> mergeBase` and
-   `branchName` from `issue story get <storyId> branchName`. If either is
-   empty, escalate and stop. That aggregate diff is the review surface.
+   **Fresh** (`review` unset). Diff the Story's branch against its resolved
+   merge-base ref — `git diff <mergeBaseRef>...<branchName>` in the
+   workspace, with `mergeBaseRef` from
+   `issue story get <storyId> mergeBaseRef` and `branchName` from
+   `issue story get <storyId> branchName`. When the `mergeBaseRef` get exits
+   nonzero, run
+   `issue story set <storyId> needsAttention true --reason "mergeBaseRef get failed"`
+   and stop. If `branchName` is empty, escalate and stop. That aggregate
+   diff is the review surface.
 
    **Resume** (`review` set). Inspect only the `done` Tasks whose ids are
    absent from `reviewedTasks`, each at the head of its `commits` series

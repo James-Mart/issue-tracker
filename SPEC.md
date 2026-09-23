@@ -1644,13 +1644,14 @@ so cannot drift:
   An unreachable `origin` (fetch failure other than missing remote ref) exits
   nonzero the same way.
 - **Story `behindMergeBase`** — derived on read from the Story worktree, never
-  stored, not computed by `derive()`. `true` when the derived `mergeBase` ref
+  stored, not computed by `derive()`. `true` when the resolved `mergeBaseRef`
   is not an ancestor of `branchName` (`git merge-base --is-ancestor
-  <mergeBase> <branchName>` in that worktree exits 1), including when the two
-  histories have diverged. `false` when `branchName` already contains the
-  `mergeBase` tip (the ancestor check exits 0). The get exits nonzero with
+  <mergeBaseRef> <branchName>` in that worktree exits 1), including when the
+  two histories have diverged. `false` when `branchName` already contains the
+  `mergeBaseRef` tip (the ancestor check exits 0). The get exits nonzero with
   empty stdout when `branchName` is missing, derived `mergeBase` is missing,
-  or the worktree cannot be read; it does not print `false`.
+  the worktree cannot be read, or ref resolution throws; it does not print
+  `false`.
   Story review reads `behindMergeBase` before it judges. A failed get raises
   Story `needsAttention` and stops; it does not judge and it does not finish.
   When `behindMergeBase` is `true` and the Story has a not-done Task titled
