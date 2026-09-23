@@ -527,7 +527,8 @@ describe("story update-from-merge-base", () => {
       "utf8",
     );
     expect(description).toContain("feat/a");
-    expect(description).toContain("main");
+    expect(description).toContain("issue story get a mergeBaseRef");
+    expect(description).toContain("git merge --no-commit");
   });
 
   it("refuses a merged Story with the append-target reason", async () => {

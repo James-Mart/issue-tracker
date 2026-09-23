@@ -1,4 +1,5 @@
-import { execFileSync } from "child_process";
+import { EventEmitter } from "node:events";
+import { execFileSync, spawn } from "child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -18,6 +19,8 @@ import {
   writeIssue,
 } from "../../cli.test-helpers.js";
 import { IssueError } from "./errors.js";
+import { setGitWriteSpawnerForTests } from "./git-write.js";
+import { mergeBaseHelper } from "../../src/features/issues/lib/story-append-actions.js";
 import {
   BEHIND_MERGE_BASE_NO_WORKTREE_ERROR,
   UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR,
@@ -31,19 +34,44 @@ describe("renderMergeBaseTaskDescription", () => {
     if (previousCwd) process.chdir(previousCwd);
   });
 
-  it("renders both branchName and mergeBase into the body", () => {
+  it("renders storyId and branchName into the body", () => {
     const body = renderMergeBaseTaskDescription({
+      storyId: "my-story",
       branchName: "feat/story-branch",
       mergeBase: "develop",
     });
 
     expect(body).toContain("feat/story-branch");
-    expect(body).toContain("develop");
+    expect(body).toContain("issue story get my-story mergeBaseRef");
     expect(body).not.toMatch(/\{\{/);
+  });
+
+  it("names mergeBaseRef get, merges the printed ref, and stops on a failed get", () => {
+    const body = renderMergeBaseTaskDescription({
+      storyId: "catch-up-story",
+      branchName: "feat/story-branch",
+      mergeBase: "main",
+    });
+    const normalized = body.replace(/\s+/g, " ");
+
+    expect(normalized).toContain("issue story get catch-up-story mergeBaseRef");
+    expect(normalized).toMatch(/When it prints a ref, merge that ref into/i);
+    expect(normalized).toContain("git merge --no-commit");
+    expect(normalized).toMatch(
+      /issue story set catch-up-story needsAttention true --reason "mergeBaseRef get failed"/,
+    );
+    expect(normalized).toMatch(/and stop\. Do not merge\./i);
+  });
+
+  it("keeps dialog and helper copy on the derived merge-base name", () => {
+    expect(mergeBaseHelper("main @ c4d91e2", "story/stack-rebase-helper")).toBe(
+      "Appends one predefined task to merge main @ c4d91e2 into story/stack-rebase-helper and reconcile conflicts.",
+    );
   });
 
   it("states the discernable bar, partial resolution, attention stop, and resume rule", () => {
     const body = renderMergeBaseTaskDescription({
+      storyId: "s",
       branchName: "feat/story-branch",
       mergeBase: "main",
     });
@@ -71,34 +99,62 @@ describe("renderMergeBaseTaskDescription", () => {
     process.chdir(otherDir);
 
     const body = renderMergeBaseTaskDescription({
+      storyId: "merge-base-update-action",
       branchName: "merge-base-update-action",
       mergeBase: "main",
     });
 
     expect(body).toContain("merge-base-update-action");
-    expect(body).toContain("main");
+    expect(body).toContain("issue story get merge-base-update-action mergeBaseRef");
 
     rmSync(otherDir, { recursive: true, force: true });
   });
 
-  it("fails when branchName is missing instead of emitting a placeholder", () => {
+  it("fails when storyId is missing instead of emitting a placeholder", () => {
     expect(() =>
-      renderMergeBaseTaskDescription({ branchName: "", mergeBase: "main" }),
+      renderMergeBaseTaskDescription({
+        storyId: "",
+        branchName: "feat/story",
+        mergeBase: "main",
+      }),
     ).toThrow(IssueError);
     expect(() =>
-      renderMergeBaseTaskDescription({ branchName: "", mergeBase: "main" }),
+      renderMergeBaseTaskDescription({
+        storyId: "",
+        branchName: "feat/story",
+        mergeBase: "main",
+      }),
+    ).toThrow(/storyId/);
+  });
+
+  it("fails when branchName is missing instead of emitting a placeholder", () => {
+    expect(() =>
+      renderMergeBaseTaskDescription({
+        storyId: "s",
+        branchName: "",
+        mergeBase: "main",
+      }),
+    ).toThrow(IssueError);
+    expect(() =>
+      renderMergeBaseTaskDescription({
+        storyId: "s",
+        branchName: "",
+        mergeBase: "main",
+      }),
     ).toThrow(/branchName/);
   });
 
   it("fails when mergeBase is missing instead of emitting a placeholder", () => {
     expect(() =>
       renderMergeBaseTaskDescription({
+        storyId: "s",
         branchName: "feat/story",
         mergeBase: "",
       }),
     ).toThrow(IssueError);
     expect(() =>
       renderMergeBaseTaskDescription({
+        storyId: "s",
         branchName: "feat/story",
         mergeBase: "",
       }),
@@ -220,6 +276,65 @@ describe("behindMergeBase", () => {
     expect(result.stderr.length).toBeGreaterThan(0);
     expect(result.stdout).not.toContain("false");
   });
+
+  it("is false when the branch contains origin/main but not local main", async () => {
+    const repo = initRepo();
+    const bare = mkdtempSync(join(dir, "bare-"));
+    git(bare, ["init", "--bare", "-b", "main"]);
+    git(repo, ["remote", "add", "origin", bare]);
+    git(repo, ["push", "origin", "main"]);
+    git(repo, ["checkout", "-b", "feat/story"]);
+    commitFile(repo, "story-work", "story commit");
+    git(repo, ["checkout", "main"]);
+    commitFile(repo, "local-main", "local main moved");
+    seedStory(repo, "feat/story");
+
+    const result = await getBehind();
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("false\n");
+
+    rmSync(bare, { recursive: true, force: true });
+  });
+
+  it("fails loudly when origin fetch is unreachable", async () => {
+    const repo = initRepo();
+    git(repo, ["remote", "add", "origin", "git@example.com:org/repo.git"]);
+    seedStory(repo, "feat/story");
+
+    setGitWriteSpawnerForTests((command, args, options) => {
+      if (args[0] === "fetch") {
+        const child = new EventEmitter() as EventEmitter & {
+          stdout: EventEmitter;
+          stderr: EventEmitter;
+        };
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        setImmediate(() => {
+          child.stderr.emit(
+            "data",
+            "fatal: Could not read from remote repository.",
+          );
+          child.emit("close", 128);
+        });
+        return child;
+      }
+      return spawn(command, args, {
+        ...options,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    });
+
+    const result = await getBehind();
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr.length).toBeGreaterThan(0);
+
+    setGitWriteSpawnerForTests(null);
+  });
+});
+
+afterEach(() => {
+  setGitWriteSpawnerForTests(null);
 });
 
 describe("update-from-merge-base open task", () => {

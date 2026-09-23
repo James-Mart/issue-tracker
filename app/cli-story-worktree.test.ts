@@ -1,4 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { EventEmitter } from "node:events";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { runIssueCli } from "./cli-program.js";
@@ -13,6 +16,10 @@ import {
 } from "./cli-story-worktree.test-fixtures.js";
 import { env, issueJsonField, nextAt, writeIssue } from "./cli.test-helpers.js";
 import { WORKTREE_ROOT } from "./server/worktree-constants.js";
+import {
+  setGitWriteSpawnerForTests,
+  type GitWriteSpawner,
+} from "./server/services/git-write.js";
 import { setupLogPathFor, worktreePathFor } from "./server/services/worktree.js";
 
 useStoryWorktreeCliFixtures();
@@ -673,6 +680,116 @@ describe("story worktree remove", () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/requires an existing worktree/);
+  });
+});
+
+function mockGitChild(opts: {
+  code?: number | null;
+  stdout?: string;
+  stderr?: string;
+}) {
+  const child = new EventEmitter() as EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+  };
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  setImmediate(() => {
+    if (opts.stdout) child.stdout.emit("data", opts.stdout);
+    if (opts.stderr) child.stderr.emit("data", opts.stderr);
+    child.emit("close", opts.code ?? 0);
+  });
+  return child;
+}
+
+describe("story worktree create merge-base ref", () => {
+  it("creates from the local branch when origin is missing", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    const result = await runIssueCli(["story", "worktree", "create", "a"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(git(expectedPath, ["merge-base", "HEAD", "main"])).toBe(
+      git(workspace, ["rev-parse", "main"]),
+    );
+  });
+
+  it("creates from origin/<mergeBase> when fetch succeeds", async () => {
+    const workspace = initRepo();
+    const bare = mkdtempSync(join(tmpdir(), "issue-wt-origin-bare-"));
+    git(bare, ["init", "--bare", "-b", "main"]);
+    git(workspace, ["remote", "add", "origin", bare]);
+    git(workspace, ["push", "origin", "main"]);
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    const result = await runIssueCli(["story", "worktree", "create", "a"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(git(expectedPath, ["merge-base", "HEAD", "origin/main"])).toBe(
+      git(workspace, ["rev-parse", "origin/main"]),
+    );
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(result.stdout.trim()).toBe(expectedPath);
+  });
+
+  it("creates from the local branch when origin lacks the merge-base ref", async () => {
+    const workspace = initRepo();
+    const bare = mkdtempSync(join(tmpdir(), "issue-wt-origin-bare-"));
+    git(bare, ["init", "--bare", "-b", "develop"]);
+    git(workspace, ["remote", "add", "origin", bare]);
+    git(workspace, ["push", "origin", "HEAD:develop"]);
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    const result = await runIssueCli(["story", "worktree", "create", "a"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(git(expectedPath, ["merge-base", "HEAD", "main"])).toBe(
+      git(workspace, ["rev-parse", "main"]),
+    );
+  });
+
+  it("throws before worktree add when origin fetch is unreachable", async () => {
+    const workspace = initRepo();
+    git(workspace, ["remote", "add", "origin", "git@example.com:org/repo.git"]);
+    seedProject(workspace);
+    writeStory("a");
+
+    let worktreeAddCalled = false;
+    const passthrough: GitWriteSpawner = (command, args, options) => {
+      if (args[0] === "worktree" && args[1] === "add") {
+        worktreeAddCalled = true;
+      }
+      return spawn(command, args, {
+        ...options,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    };
+    setGitWriteSpawnerForTests((command, args, options) => {
+      if (args[0] === "fetch") {
+        return mockGitChild({
+          code: 128,
+          stderr: "fatal: Could not read from remote repository.",
+        });
+      }
+      return passthrough(command, args, options);
+    });
+
+    const result = await runIssueCli(["story", "worktree", "create", "a"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(worktreeAddCalled).toBe(false);
+    expect(existsSync(worktreePathFor("p", "a"))).toBe(false);
   });
 });
 

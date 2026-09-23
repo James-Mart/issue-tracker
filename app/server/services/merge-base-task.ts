@@ -8,6 +8,7 @@ import { appendTasks, type AppendSummary } from "./append.js";
 import { IssueError } from "./errors.js";
 import { refIsAncestor } from "./git-read.js";
 import { list } from "./issues.js";
+import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { uniqueSlug } from "./slug.js";
 import { ancestorChain } from "./subtree.js";
 
@@ -30,19 +31,22 @@ function requireRef(name: string, value: string): void {
 }
 
 export function renderMergeBaseTaskDescription({
+  storyId,
   branchName,
   mergeBase,
 }: {
+  storyId: string;
   branchName: string;
   mergeBase: string;
 }): string {
+  requireRef("storyId", storyId);
   requireRef("branchName", branchName);
   requireRef("mergeBase", mergeBase);
 
   const template = readFileSync(templatePath, "utf8");
   const rendered = template
-    .replaceAll("{{branchName}}", branchName)
-    .replaceAll("{{mergeBase}}", mergeBase);
+    .replaceAll("{{storyId}}", storyId)
+    .replaceAll("{{branchName}}", branchName);
 
   const leftover = rendered.match(PLACEHOLDER_PATTERN);
   if (leftover) {
@@ -86,7 +90,7 @@ function hasOpenMergeBaseTask(storyId: string, issues: Issue[]): boolean {
 }
 
 /** Derived on read from the Story worktree. Not stored. */
-export function storyBehindMergeBase(storyId: string): boolean {
+export async function storyBehindMergeBase(storyId: string): Promise<boolean> {
   const { issues, derived } = list();
   const detail = issues.find((issue) => issue.id === storyId);
   if (!detail || detail.kind !== "story") {
@@ -109,7 +113,8 @@ export function storyBehindMergeBase(storyId: string): boolean {
       BEHIND_MERGE_BASE_NO_WORKTREE_ERROR(storyId),
     );
   }
-  return !refIsAncestor(worktree, mergeBase, detail.branchName);
+  const mergeBaseRef = await resolveMergeBaseRef(worktree, mergeBase);
+  return !refIsAncestor(worktree, mergeBaseRef, detail.branchName);
 }
 
 function mergeBaseAppendDoc(
@@ -174,6 +179,7 @@ export function appendUpdateFromMergeBase(storyId: string): Promise<AppendSummar
   }
 
   const description = renderMergeBaseTaskDescription({
+    storyId,
     branchName: detail.branchName,
     mergeBase,
   });

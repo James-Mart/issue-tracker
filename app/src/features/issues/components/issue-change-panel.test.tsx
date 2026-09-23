@@ -137,18 +137,20 @@ describe("classifyIssueChangePanelFault", () => {
 });
 
 describe("parseChangeTooLarge", () => {
-  it("reads stats and commit count from change-too-large API failures", () => {
+  it("reads stats, commit count, and mergeBaseRef from change-too-large API failures", () => {
     expect(
       parseChangeTooLarge(
         new ApiError("patch exceeds render ceiling", 413, {
           code: "change-too-large",
           stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
           commitCount: 2,
+          mergeBaseRef: "origin/main",
         }),
       ),
     ).toEqual({
       stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
       commitCount: 2,
+      mergeBaseRef: "origin/main",
     });
   });
 
@@ -515,17 +517,19 @@ describe("IssueChangePanel", () => {
     expect(container.querySelector('[data-testid="issue-change-file"]')).not.toBeNull();
   });
 
-  it("uses three-dot merge-base git guidance when a Story change exceeds the ceiling", () => {
+  it("uses three-dot mergeBaseRef git guidance when a Story change exceeds the ceiling", () => {
     changeQueryState.error = new ApiError("patch exceeds render ceiling", 413, {
       code: "change-too-large",
       stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
       commitCount: 2,
+      mergeBaseRef: "origin/main",
     });
 
     const container = mountPanel("main");
 
     expect(container.querySelector('[data-testid="issue-change-too-large-state"]')).not.toBeNull();
-    expect(container.textContent).toContain("git diff main...<last>");
+    expect(container.textContent).toContain("git diff origin/main...<last>");
+    expect(container.textContent).not.toContain("git diff main...<last>");
     expect(container.textContent).not.toContain("git diff <first-sha>^..<last-sha>");
   });
 });
