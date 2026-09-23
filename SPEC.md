@@ -381,10 +381,11 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   stored `prUrl` and cwd = the Project `workspace`; refuses other kinds and
   Stories with no `prUrl`; `--auto` maps to `gh pr merge --auto`;
   `--match-head-commit` maps to the flag of the same name; surfaces `gh`
-  stderr on failure. After the PR lands, the tracker sets `merged` and
-  attempts safe worktree removal (no `--discard`); an unsafe refusal leaves
-  the checkout and does not fail the merge. Other removal failures still fail
-  the caller.
+  stderr on failure. After the PR lands, the tracker sets `merged` via the
+  validated service layer (same path as `issue story set <storyId> merged
+  true`); that write carries the stale-sibling cascade and attempts safe
+  worktree removal (no `--discard`). An unsafe refusal leaves the checkout
+  and does not fail the merge. Other removal failures still fail the caller.
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
@@ -846,8 +847,9 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
   It does **not** wait for merge or set `merged`, so the Story derives to
   `pr-open`. Landing that PR through the tracker is
   **`issue merge <storyId>`** (or `issue story merge`): after `gh` reports a
-  successful merge it sets `merged` and runs **flag stale children** (below).
-  A failed `gh` merge writes nothing. Setting `merged` does not write child
+  successful merge it sets `merged` via the validated service layer; that
+  `merged` write carries **flag stale children** (below). A failed `gh` merge
+  writes nothing. Setting `merged` does not write child
   `mergeBase` keys — children re-derive on the next read; GitHub retargets
   open child PRs and the tracker runs no PR-base command.
 - **`merge`** — after the push, merge the Story's git branch into its derived
@@ -857,8 +859,7 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
   `mergeBase` keys — children re-derive on the next read (see
   [stacked-PR merge model](#the-stacked-pr-merge-model)). When a parent lands,
   **GitHub retargets** open child PRs; the tracker only updates metadata —
-  finish-branch never runs `gh pr edit --base` (or any PR retarget CLI). Then
-  **flag stale children** (below).
+  finish-branch never runs `gh pr edit --base` (or any PR retarget CLI).
 - **`fast-forward`** — after the push, fast-forward the derived `mergeBase` to
   the Story's tip (`git merge --ff-only <branchName>`), push that ref, and set
   `merged` via `issue story set <storyId> merged true` (same end state as
@@ -866,21 +867,19 @@ branch first**; `mergePolicy` selects only what happens beyond that push:
   with no merge commit. If the base has advanced so a fast-forward is
   impossible, escalate (`needsAttention`) rather than force-merging — see
   **Failure and recovery**. Ranks highest on the merge-policy danger order (Epic
-  **work-on-existing-branches**). Then **flag stale children** (below).
+  **work-on-existing-branches**).
 
 **Flag stale children.** A successful `merge`, `fast-forward`, or **`issue
 merge`** advances the finishing Story's base branch `Bp` (`Bp` is the
-finisher's derived `mergeBase` at land time). After that push / `gh` merge and
-`merged` write, the scan runs once over the Project: finish-branch takes
-`<projectId>` from the `Project: <projectId> — <title>` line of
-`issue summary <storyId>` and runs `issue list story --in <projectId>`;
-`issue merge` performs the same scan in-process. For each entry in
-`issues[]`, read `merged` and `branchName` from the entry and `storyStatus`
-and `mergeBase` from `derived[<id>]` (computed after the finisher's
-`merged` write). Flag every not-yet-merged Story other than the finisher
-whose derived `storyStatus` is not `not-started` (skip when `branchName` is
-empty) and whose derived `mergeBase` is `Bp`, via `issue story set <childId>
-needsRebase <Bp>`. It never rebases those Stories. `manual` and
+finisher's derived `mergeBase` at land time). The stale-sibling cascade rides
+the finisher's `merged` write and is all-or-nothing: a Story recorded merged
+has had its stale siblings flagged in the same write, or nothing was written.
+The write is refused only when the landed base cannot be resolved and a
+started, unmerged sibling with a branch exists in the Project. Flag every
+not-yet-merged Story other than the finisher whose derived `storyStatus` is
+not `not-started` (skip when `branchName` is empty) and whose derived
+`mergeBase` is `Bp`, with `needsRebase <Bp>` in the same batch as the
+`merged` write. It never rebases those Stories. `manual` and
 `pull-request` (without `issue merge`) do not advance a base and never flag.
 
 **Resumable / idempotent.** The work loop is resumable, so finish-branch may run
@@ -889,11 +888,14 @@ twice for the same Story. Before acting, the git subagent reads the Story's
 `issue story get <storyId> merged`). When the policy's integration end state
 already holds — `merged` set for `merge` or `fast-forward`, `prUrl` set for
 `pull-request` — it does not open a duplicate PR or re-merge / re-push the
-base. For `merge` / `fast-forward` with `merged` already set, it still runs
-**flag stale children** with `Bp` = the Story's derived `mergeBase` (so a crash
-between the `merged` write and flagging is recovered on resume); re-setting
-`needsRebase` is harmless. **`manual`** has no metadata end state; a re-run
-just re-pushes the Story branch (harmless).
+base. For `merge` / `fast-forward` with `merged` already set, the finisher's
+`merged` write is a no-op (unchanged JSON), so stale siblings are not
+re-flagged. **`pull-request`** with `merged` already set: re-running
+`issue merge` fails because `gh pr merge` refuses an already-merged PR and
+the tracker write never runs — fix the missing base, then record the merge
+with `issue story set <storyId> merged true`, which retries the cascade through
+the same flip. **`manual`** has no metadata end state; a re-run just re-pushes
+the Story branch (harmless).
 
 **Failure and recovery.** On failure the git subagent raises attention on the
 Story (`issue story set <storyId> needsAttention true --reason "…"`) and
@@ -987,7 +989,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get — this is what `finish-branch` reads (see [Project merge policy](#project-merge-policy)) |
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
-| `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by finish-branch or `issue merge` on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base after `merge` / `fast-forward` / a successful `issue merge` (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
+| `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by the finisher Story's `merged` write (via finish-branch, `issue merge`, or any path that flips `merged` false→true) on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
 | `review` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
 | `reviewedTasks` | string[] | Task ids the stored review covered; defaults `[]`; same array patch surface as Epic `blockedBy`; never rendered as a tree chip |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |

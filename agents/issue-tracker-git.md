@@ -21,7 +21,7 @@ commits everyone else builds on.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
 **Allowed writes:** `issue story set` for `branchName`, `prUrl`, `merged`,
-`needsRebase`, and `needsAttention`; `issue story worktree create`;
+and `needsAttention`; `issue story worktree create`;
 `issue story worktree remove`; `issue task add-commit`; `issue task set`
 for `needsAttention` only.
 

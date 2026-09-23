@@ -22,7 +22,9 @@ import {
   appendComment,
   list,
   read,
+  readAll,
   remove,
+  update,
 } from "./server/services/issues.js";
 import {
   attachmentPath,
@@ -37,8 +39,6 @@ import { formatSupportingDocsLine } from "./server/services/supporting-docs.js";
 import { coerceEnum, coercePositiveInt } from "./cli-coerce.js";
 import { assertKind, kindGetValue, resolveIssueKind } from "./cli-kind.js";
 import { parsePrUrl, runGh } from "./server/services/delivery.js";
-import { applyMergeConsequences } from "./server/services/merge-consequences.js";
-import { readAll } from "./server/services/issues.js";
 import { requireProjectWorkspace } from "./server/services/project-workspace.js";
 import { ancestorChain } from "./server/services/subtree.js";
 import { taskHeadCommit } from "./server/services/commit-sha.js";
@@ -86,7 +86,7 @@ export async function mergeStory(
   }
 
   await runGh(args, workspace);
-  await applyMergeConsequences(id);
+  await update(id, { merged: true });
 }
 
 type ViewOptions = {

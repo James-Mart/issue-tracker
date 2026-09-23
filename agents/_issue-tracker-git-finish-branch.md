@@ -24,8 +24,7 @@ trunk.
    - **pull-request** — `issue story get <storyId> prUrl` stdout is
      non-empty: stop (success).
    - **merge** / **fast-forward** — `issue story get <storyId> merged`
-     stdout is exactly `true`: run step 3 with `Bp` = `issue story get
-     <storyId> mergeBase`, then stop (success). Do not re-merge or re-push
+     stdout is exactly `true`: stop (success). Do not re-merge or re-push
      the base.
 2. Otherwise push the Story branch first, then apply the policy:
    - `git push -u origin <branchName>`. On failure, **Read**
@@ -45,27 +44,12 @@ trunk.
        Record it: `issue story set <storyId> prUrl <url>`.
      - **merge** — in the Project workspace: `git merge --no-ff
        <branchName>`, `git push origin <mergeBase>`. Then
-       `issue story worktree remove <storyId> --allow-active-run`. Report
-       that command's output. Then `issue story set <storyId> merged true`.
-       Then run step 3 with `Bp` = that `<mergeBase>`.
+       `issue story set <storyId> merged true`.
      - **fast-forward** — in the Project workspace: `git merge --ff-only
        <branchName>`. On failure (base advanced; fast-forward not
        possible), leave the base untouched and
        `issue story set <storyId> needsAttention true --reason "base
        <mergeBase> advanced; fast-forward not possible, rebase needed"`, then
        stop. On success, `git push origin <mergeBase>`. Then
-       `issue story worktree remove <storyId> --allow-active-run`. Report
-       that command's output. Then `issue story set <storyId> merged true`.
-       Then run step 3 with `Bp` = that `<mergeBase>`.
-3. **Flag stale children** (`merge` / `fast-forward`, and the same scan
-   performed by `issue merge` after a successful GitHub PR merge):
-   1. Take `<projectId>` from the `Project: <projectId> — <title>` line of
-      `issue summary <storyId>`.
-   2. Run `issue list story --in <projectId>` once. For each entry in
-      `issues[]`, read `merged` and `branchName` from the entry and
-      `storyStatus` and `mergeBase` from `derived[<id>]`.
-   Find every not-yet-merged Story other than `<storyId>` whose derived
-   `storyStatus` is not `not-started` (skip when `branchName` is empty) and
-   whose derived `mergeBase` is `Bp`, and run `issue story set <childId>
-   needsRebase <Bp>` for each. Do not rebase any of them.
-4. Finish and stop. Do not start Tasks, finish other Stories, or spawn agents.
+       `issue story set <storyId> merged true`.
+3. Finish and stop. Do not start Tasks, finish other Stories, or spawn agents.
