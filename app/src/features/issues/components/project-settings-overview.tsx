@@ -7,6 +7,7 @@ import { SettingsCard } from "./detail-section";
 import { IssueDescriptionField } from "./issue-description-field";
 import { IssueInspirationAppsField } from "./issue-inspiration-apps-field";
 import { IssuePersonasField } from "./issue-personas-field";
+import { IssueAutonomousField } from "./issue-autonomous-field";
 import { IssueMaxImplementingRunsField } from "./issue-max-implementing-runs-field";
 import { IssueMergePolicyField } from "./issue-merge-policy-field";
 import { IssueProjectLabelsField } from "./issue-project-labels-field";
@@ -61,6 +62,11 @@ export function ProjectSettingsOverview({
                 className={cn(SETTINGS_ROW_CLASS, "items-center")}
                 label={FIELD_LABELS.maxImplementingRuns}
                 value={<IssueMaxImplementingRunsField issue={issue} />}
+              />
+              <MetaRow
+                className={cn(SETTINGS_ROW_CLASS, "items-center")}
+                label={FIELD_LABELS.autonomous}
+                value={<IssueAutonomousField issue={issue} />}
               />
             </div>
           </SettingsCard>

@@ -499,9 +499,9 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 
 | kind | settable fields |
 | --- | --- |
-| project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `maxImplementingRuns`, `labels`, `supportingDocs`, `description` |
+| project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `maxImplementingRuns`, `autonomous`, `labels`, `supportingDocs`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `workQueuedAt`, `description` |
-| idea | `title`, `archived`, `outlineGate`, `executionGate`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `labels`, `description` |
+| idea | `title`, `archived`, `outlineGate`, `executionGate`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `workQueuedAt`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commits`, `noDiff`, `sourceIdea`, `description` |
 
@@ -612,6 +612,7 @@ Project — the common-to-every-kind fields plus:
 | `trunk` | string | default git ref for derived `mergeBase` when no `mergeBaseOverride` applies; defaults `main` (see [Project trunk](#project-trunk)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"` | Project default for derived policy; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
 | `maxImplementingRuns` | int | how many implementing runs this Project may have in flight at once for automatic starts; integer ≥ 1; defaults `1` (see [Work queue](#work-queue)) |
+| `autonomous` | boolean? | absent until set; when true, creating an Idea with a `stakeholder` queues auto-plan at creation (see [Auto-plan queue](#auto-plan-queue)); `autonomous` governs only auto-plan at creation — auto-start of implementation applies in every Project |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
 | `supportingDocs` | `{ vision?, codingStandards?, designSystem?, gateRubric? }`? | optional pointers to vision / coding standards / design system / gate rubric docs (see [Project supporting docs](#project-supporting-docs)) |
 
@@ -786,6 +787,16 @@ Each branch has its own git worktree, so implementing loops on different work
 roots in the same Project no longer collide on checkouts, branches, or commits.
 What must not be shared is a single work root — the branch and checkout bound to
 it. Idle (no active run) or archived sessions do not hold the lock.
+
+### Auto-plan queue
+
+`autonomous` (boolean, optional) on a Project opts that Project into auto-plan at Idea creation. Absent means false. Set and read it with `issue project get|set <id> autonomous true|false`. The Project settings overview shows it as a toggle labelled **Autonomous**. Only creation triggers auto-plan: creating an Idea with a `stakeholder` in an `autonomous` Project queues planning; setting `stakeholder` on an existing Idea never does.
+
+`planQueuedAt` (ISO string, optional) on an Idea records that the Idea is waiting for the launcher to start auto-plan. It is a system writer: `apply` preserves it, and the only manual write is `issue idea set <id> planQueuedAt --clear`, which dequeues the Idea. `issue idea get <id> planQueuedAt` reads it.
+
+**Enqueue.** In the same write as Idea `create()`: when the new Idea carries a `stakeholder` and its Project's `autonomous` is true, stamp `planQueuedAt` with the current time.
+
+**Launcher.** At the start of each launcher pass (before the per-Project work-root drain from [Work queue](#work-queue)), the server drains Ideas carrying `planQueuedAt` across all Projects, oldest first, with no cap. It starts each through `createIssueChannelSession` with channel `planning`, model = the Idea's `stakeholder`, and the title and first prompt that `app/src/features/issues/lib/planning-launch.ts` builds for a stakeholder. It then clears `planQueuedAt`. On failure it clears the field and posts `issue idea comment <id> --role launcher --body "Auto-plan failed to start: <message>"` through the service layer. The Idea stays `captured`, so the human can start it from the button.
 
 ### Work queue
 
@@ -999,6 +1010,7 @@ Idea — the common-to-every-kind fields plus:
 | `approvalPending` | boolean? | absent until set; when true, a post-outline gate is posted and waiting on the human; written by the stakeholder agent; `apply` preserves it alongside `outlineGate` |
 | `codeApprovalRequired` | boolean? | absent until set; when true, the stakeholder's verdict is that resulting code needs human approval before merge; written by the stakeholder agent; `apply` preserves |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
+| `planQueuedAt` | ISO string? | set when an autonomous Project's Idea create queues auto-plan; system writer; clear dequeues (see [Auto-plan queue](#auto-plan-queue)) |
 | `appendTo` | string? | optional; names one open Story in the same Project whose tail receives this Idea's plan via `issue story append` instead of minting a new root (see [Relationships](#relationships)) |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
@@ -1619,7 +1631,9 @@ preserves everything else from the existing same-kind issue.
 | `setupCommand` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `mergePolicy` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `maxImplementingRuns` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; defaults `1` |
+| `autonomous` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
 | `workQueuedAt` (Epic / Story) | system writer; kind [`set`](#kind-scoped-get--set) accepts `--clear` only; `apply` preserves |
+| `planQueuedAt` (Idea) | system writer; kind [`set`](#kind-scoped-get--set) accepts `--clear` only; `apply` preserves |
 | `mergePolicy` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; effective value derived on get |
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Project catalog) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |

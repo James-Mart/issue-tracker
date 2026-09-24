@@ -221,6 +221,7 @@ export const projectSchema = z.object({
   trunk: nonEmpty.default("main"),
   mergePolicy: z.enum(MERGE_POLICIES).default("manual"),
   maxImplementingRuns: z.number().int().min(1).default(1),
+  autonomous: z.boolean().optional(),
   // Closed catalog of attachable labels (imperative; apply preserves).
   labels: projectLabelsSchema,
   // Imperative pointers to vision / coding standards / design system / gate rubric docs.
@@ -267,6 +268,7 @@ export const ideaSchema = z.object({
   codeApprovalRequired: z.boolean().optional(),
   appendTo: z.string().optional(),
   stakeholder: stakeholderField,
+  planQueuedAt: z.string().optional(),
   labels: assignmentLabelsSchema,
   ...orderField,
   ...timestamps,

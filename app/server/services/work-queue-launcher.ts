@@ -17,6 +17,7 @@ import {
 } from "./implementing-launch.js";
 import { ISSUES_TOPIC, startIssueEventsWatcher } from "./issue-events.js";
 import { list, update } from "./issues.js";
+import { drainPlanQueue } from "./plan-queue-launcher.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { projectContaining } from "./subtree.js";
 
@@ -127,6 +128,7 @@ async function drainProject(
 
 /** One launcher pass: drain queued work roots up to each Project's cap. */
 export async function runLauncherPass(sessions: AgentSessions): Promise<void> {
+  await drainPlanQueue(sessions);
   const projects = list().issues.filter(
     (issue): issue is Extract<Issue, { kind: "project" }> =>
       issue.kind === "project",

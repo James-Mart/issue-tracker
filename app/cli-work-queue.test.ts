@@ -33,6 +33,29 @@ describe("work queue CLI", () => {
     });
   });
 
+  it("reads and sets autonomous", async () => {
+    expect(
+      (await runIssueCli(["project", "get", "p", "autonomous"], { env: env() }))
+        .stdout,
+    ).toBe("");
+    expect(
+      (await runIssueCli(["project", "set", "p", "autonomous", "true"], { env: env() }))
+        .status,
+    ).toBe(0);
+    expect(
+      (await runIssueCli(["project", "get", "p", "autonomous"], { env: env() }))
+        .stdout,
+    ).toBe("true\n");
+    expect(
+      (await runIssueCli(["project", "set", "p", "autonomous", "false"], { env: env() }))
+        .status,
+    ).toBe(0);
+    expect(
+      (await runIssueCli(["project", "get", "p", "autonomous"], { env: env() }))
+        .stdout,
+    ).toBe("");
+  });
+
   it("reads and sets maxImplementingRuns, refusing values below 1", async () => {
     expect(
       (await runIssueCli(["project", "get", "p", "maxImplementingRuns"], { env: env() }))

@@ -433,6 +433,14 @@ export function create(input: CreateInput): Promise<IssueRecord> {
       if (draft.executionGate === true && !draft.stakeholder) {
         throw new IssueError("conflict", EXECUTION_GATE_STAKEHOLDER_ERROR);
       }
+      if (input.stakeholder) {
+        const project = issues.find(
+          (issue) => issue.id === input.partOf && issue.kind === "project",
+        );
+        if (project?.kind === "project" && project.autonomous === true) {
+          draft.planQueuedAt = now;
+        }
+      }
     }
     if (input.kind === "story") {
       draft.merged = false;
@@ -613,6 +621,15 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
       throw new IssueError(
         "validation",
         "workQueuedAt is system-written; clear it to dequeue",
+      );
+    }
+    if (
+      jsonPatch.planQueuedAt !== undefined &&
+      jsonPatch.planQueuedAt !== null
+    ) {
+      throw new IssueError(
+        "validation",
+        "planQueuedAt is system-written; clear it to dequeue",
       );
     }
 

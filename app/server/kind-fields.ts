@@ -70,6 +70,7 @@ export const PROJECT_SET_FIELDS = {
   personas: { type: "personas" },
   description: { type: "description" },
   maxImplementingRuns: { type: "intMin", min: 1 },
+  autonomous: { type: "boolean" },
 } as const satisfies Record<string, SetFieldSpec>;
 
 export const EPIC_SET_FIELDS = {
@@ -97,6 +98,7 @@ export const IDEA_SET_FIELDS = {
   appendTo: { type: "string" },
   partOf: { type: "string" },
   stakeholder: { type: "agentModelSlug" },
+  planQueuedAt: { type: "clearOnly" },
   labels: { type: "array" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
@@ -169,6 +171,7 @@ export const PROJECT_GET_FIELDS = {
   inspirationApps: STORED,
   personas: STORED,
   maxImplementingRuns: STORED,
+  autonomous: STORED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,
@@ -210,6 +213,7 @@ export const IDEA_GET_FIELDS = {
   codeApprovalRequired: STORED,
   appendTo: STORED,
   stakeholder: STORED,
+  planQueuedAt: STORED,
   labels: STORED,
   order: STORED,
   createdAt: STORED,

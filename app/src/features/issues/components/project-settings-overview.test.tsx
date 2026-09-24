@@ -120,6 +120,17 @@ describe("ProjectSettingsOverview Delivery card", () => {
     expect(commandButton?.className).toContain("font-mono");
   });
 
+  it("shows the autonomous toggle", () => {
+    const { container } = mount(
+      <ProjectSettingsOverview issue={project({ autonomous: true })} />,
+    );
+
+    expect(container.textContent).toContain(FIELD_LABELS.autonomous);
+    const toggle = container.querySelector('[role="switch"]');
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute("aria-checked")).toBe("true");
+  });
+
   it("shows the max implementing runs number field", () => {
     const { container } = mount(
       <ProjectSettingsOverview issue={project({ maxImplementingRuns: 2 })} />,

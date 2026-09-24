@@ -24,6 +24,7 @@ export const PROJECT_FORM_FIELD_KEYS = [
   "trunk",
   "mergePolicy",
   "maxImplementingRuns",
+  "autonomous",
 ] as const;
 
 export const PROJECT_FIELD_KEYS = [
@@ -103,6 +104,7 @@ export const IDEA_RUNTIME_OPTIONAL_KEYS = [
   "approvalPending",
   "codeApprovalRequired",
   "appendTo",
+  "planQueuedAt",
 ] as const;
 
 // Task mergeable keys that are not imperative-only. Imperative-only keys
@@ -149,6 +151,7 @@ export const CLEARABLE_KEYS = [
   "sourceIdea",
   "appendTo",
   "workQueuedAt",
+  "planQueuedAt",
 ] as const;
 
 export type ClearableKey = (typeof CLEARABLE_KEYS)[number];
@@ -168,6 +171,7 @@ export const FALSE_CLEARS_KEYS = [
   "approvalPending",
   "codeApprovalRequired",
   "worktreeSetupFailed",
+  "autonomous",
 ] as const satisfies readonly (keyof IssuePatch)[];
 
 export type FalseClearsKey = (typeof FALSE_CLEARS_KEYS)[number];
@@ -217,7 +221,9 @@ export const FIELD_LABELS = {
   sourceIdea: "Source idea",
   generatedIssues: "Generated issues",
   maxImplementingRuns: "Max implementing runs",
+  autonomous: "Autonomous",
   workQueuedAt: "Work queued",
+  planQueuedAt: "Plan queued",
 } as const;
 
 /** Select value for manual planning — unset on disk. */
