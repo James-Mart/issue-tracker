@@ -77,7 +77,6 @@ function mountComposer(
     conversationId?: string
     model?: string
     runActive?: boolean
-    readOnly?: boolean
     disabled?: boolean
     disabledPlaceholder?: string
   } = {},
@@ -94,7 +93,6 @@ function mountComposer(
         conversationId={overrides.conversationId ?? "conv-1"}
         model={overrides.model ?? "composer-2.5-fast"}
         runActive={overrides.runActive ?? false}
-        readOnly={overrides.readOnly}
         disabled={overrides.disabled}
         disabledPlaceholder={overrides.disabledPlaceholder}
       />,
@@ -796,34 +794,5 @@ describe("Composer disabled rewrite", () => {
       container!.querySelector('[data-composer-disabled="true"]'),
     ).toBeTruthy()
     expect(container!.querySelector('[aria-label="Stop"]')).toBeNull()
-  })
-})
-
-describe("Composer read-only fork notice", () => {
-  let container: HTMLDivElement | undefined
-  let root: Root | undefined
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount())
-    container?.remove()
-    container = undefined
-    root = undefined
-  })
-
-  it("renders the fork notice in muted type without a current accent", () => {
-    ;({ container, root } = mountComposer({ readOnly: true }))
-
-    const notice = container!.querySelector(
-      '[data-testid="forked-thread-composer-notice"]',
-    ) as HTMLElement
-    expect(notice).toBeTruthy()
-    expect(notice.textContent).toContain("Read-only fork")
-    expect(notice.className).toMatch(/\btext-muted-foreground\b/)
-    expect(notice.className).not.toMatch(/current/)
-    expect(
-      container!
-        .querySelector('[data-testid="conversation-composer"]')
-        ?.contains(notice),
-    ).toBe(true)
   })
 })
