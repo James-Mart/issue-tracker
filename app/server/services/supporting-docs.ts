@@ -18,6 +18,7 @@ export const WELL_KNOWN_SUPPORTING_DOC_BASENAMES: Record<
   vision: "vision.md",
   codingStandards: "coding-standards.md",
   designSystem: "design-system.md",
+  gateRubric: "gate-rubric.md",
 };
 
 export function isSupportingDocKey(value: string): value is SupportingDocKey {

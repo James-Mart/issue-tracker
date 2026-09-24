@@ -282,7 +282,7 @@ export function resolveSupportingDocsSet(
     }
     if (!isSupportingDocKey(doc)) {
       throw new Error(
-        `unknown supportingDocs key "${doc}" (expected vision|codingStandards|designSystem)`,
+        `unknown supportingDocs key "${doc}" (expected vision|codingStandards|designSystem|gateRubric)`,
       );
     }
     const next: SupportingDocs = { ...(current ?? {}) };
@@ -294,12 +294,12 @@ export function resolveSupportingDocsSet(
 
   if (doc === undefined) {
     throw new Error(
-      "provide --doc <vision|codingStandards|designSystem> (or --clear)",
+      "provide --doc <vision|codingStandards|designSystem|gateRubric> (or --clear)",
     );
   }
   if (!isSupportingDocKey(doc)) {
     throw new Error(
-      `unknown supportingDocs key "${doc}" (expected vision|codingStandards|designSystem)`,
+      `unknown supportingDocs key "${doc}" (expected vision|codingStandards|designSystem|gateRubric)`,
     );
   }
   if (hasAttachment === hasWorkspace) {
@@ -825,7 +825,7 @@ export function registerKindGetSet(
     )
     .option(
       "--doc <key>",
-      "supportingDocs key: vision|codingStandards|designSystem",
+      "supportingDocs key: vision|codingStandards|designSystem|gateRubric",
     )
     .option(
       "--attachment <name>",

@@ -13,6 +13,7 @@ export const SUPPORTING_DOC_KEYS = [
   "vision",
   "codingStandards",
   "designSystem",
+  "gateRubric",
 ] as const;
 export type SupportingDocKey = (typeof SUPPORTING_DOC_KEYS)[number];
 

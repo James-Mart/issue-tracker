@@ -10,6 +10,7 @@ export const SUPPORTING_DOC_KEY_LABELS: Record<SupportingDocKey, string> = {
   vision: "Vision",
   codingStandards: "Coding standards",
   designSystem: "Design system",
+  gateRubric: "Gate rubric",
 };
 
 export type SupportingDocPreviewFormat = "md" | "html";

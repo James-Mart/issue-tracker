@@ -192,6 +192,53 @@ describe("project get/set", () => {
     }
   });
 
+  it("sets and clears gateRubric supportingDocs", async () => {
+    const rubricSrc = join(dir, "gate-rubric.md");
+    writeFileSync(
+      rubricSrc,
+      "## Outline does not need approval when\n\n- Deletion-only edits under docs/\n",
+    );
+    try {
+      expect((await runIssueCli(["project", "attach", "p", rubricSrc], { env: env() })).status).toBe(0);
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "supportingDocs",
+          "--doc",
+          "gateRubric",
+          "--attachment",
+          "gate-rubric.md",
+        ], { env: env() })).status,
+      ).toBe(0);
+
+      const got = await runIssueCli(["project", "get", "p", "supportingDocs"], { env: env() });
+      expect(got.status).toBe(0);
+      expect(JSON.parse(got.stdout)).toEqual({
+        gateRubric: { type: "attachment", name: "gate-rubric.md" },
+      });
+
+      const view = await runIssueCli(["project", "view", "p"], { env: env() });
+      expect(view.stdout).toContain("supportingDocs: gateRubric=attachment:gate-rubric.md");
+
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "supportingDocs",
+          "--clear",
+          "--doc",
+          "gateRubric",
+        ], { env: env() })).status,
+      ).toBe(0);
+      expect((await runIssueCli(["project", "get", "p", "supportingDocs"], { env: env() })).stdout).toBe("");
+    } finally {
+      rmSync(rubricSrc, { force: true });
+    }
+  });
+
   it("prints Mission from the vision doc on summary", async () => {
     const visionSrc = join(dir, "vision-with-mission.md");
     writeFileSync(

@@ -148,6 +148,7 @@ export const supportingDocsSchema = z
     vision: supportingDocRefSchema.optional(),
     codingStandards: supportingDocRefSchema.optional(),
     designSystem: supportingDocRefSchema.optional(),
+    gateRubric: supportingDocRefSchema.optional(),
   })
   .strict();
 
@@ -221,7 +222,7 @@ export const projectSchema = z.object({
   mergePolicy: z.enum(MERGE_POLICIES).default("manual"),
   // Closed catalog of attachable labels (imperative; apply preserves).
   labels: projectLabelsSchema,
-  // Imperative pointers to vision / coding standards / design system docs.
+  // Imperative pointers to vision / coding standards / design system / gate rubric docs.
   supportingDocs: supportingDocsSchema.optional(),
   // Imperative ordered list of reference apps (name, url, description).
   inspirationApps: inspirationAppsSchema.optional(),
