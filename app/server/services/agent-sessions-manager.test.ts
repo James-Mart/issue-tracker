@@ -117,13 +117,13 @@ describe("agent sessions manager", () => {
     }
   });
 
-  it("resumes read-only conversations with a restricted tool profile", async () => {
+  it("resumes stored readOnly conversations with the writable tool profile", async () => {
     const { createConversation, createAgentSessions } = await load();
     const fake = createFakeAgentSdk();
     const sessions = createAgentSessions(fake);
 
     const meta = await createConversation({
-      title: "Read-only fork",
+      title: "Legacy read-only fork",
       projectId: "platform",
       model: "auto",
       agentId: "agent-readonly",
@@ -151,24 +151,20 @@ describe("agent sessions manager", () => {
         options: {
           cwd: workspaceDir,
           model: { id: "auto" },
-          disallowedTools: ["task", "edit", "delete", "shell"],
           customTools: expect.objectContaining({
+            delegate: expect.any(Object),
             delegations: expect.any(Object),
+            agent_stack_start: expect.any(Object),
+            agent_stack_stop: expect.any(Object),
             file_cursor_sdk_bug: expect.any(Object),
           }),
         },
       },
     ]);
-    expect(fake.resumed[0]?.options.customTools?.delegate).toBeUndefined();
-    expect(
-      fake.resumed[0]?.options.customTools?.agent_stack_start,
-    ).toBeUndefined();
-    expect(
-      fake.resumed[0]?.options.customTools?.agent_stack_stop,
-    ).toBeUndefined();
+    expect(fake.resumed[0]?.options.disallowedTools).toBeUndefined();
   });
 
-  it("creates read-only conversations with a restricted tool profile when resume fails", async () => {
+  it("creates stored readOnly conversations with the writable tool profile when resume fails", async () => {
     const { createConversation, createAgentSessions } = await load();
     const fake = createFakeAgentSdk({
       resumeError: new Error("agent not found in store"),
@@ -177,7 +173,7 @@ describe("agent sessions manager", () => {
     const sessions = createAgentSessions(fake);
 
     const meta = await createConversation({
-      title: "Read-only stale",
+      title: "Legacy read-only stale",
       projectId: "platform",
       model: "composer-2.5",
       agentId: "agent-readonly-stale",
@@ -196,14 +192,14 @@ describe("agent sessions manager", () => {
     expect(fake.created[0]).toMatchObject({
       cwd: workspaceDir,
       model: { id: "composer-2.5" },
-      disallowedTools: ["task", "edit", "delete", "shell"],
     });
-    expect(fake.created[0]?.customTools?.delegate).toBeUndefined();
-    expect(fake.created[0]?.customTools?.agent_stack_start).toBeUndefined();
-    expect(fake.created[0]?.customTools?.agent_stack_stop).toBeUndefined();
+    expect(fake.created[0]?.disallowedTools).toBeUndefined();
+    expect(fake.created[0]?.customTools?.delegate).toBeDefined();
+    expect(fake.created[0]?.customTools?.agent_stack_start).toBeDefined();
+    expect(fake.created[0]?.customTools?.agent_stack_stop).toBeDefined();
   });
 
-  it("creates read-only conversations with a restricted tool profile when agentId is absent", async () => {
+  it("creates stored readOnly conversations with the writable tool profile when agentId is absent", async () => {
     const { createConversation, createAgentSessions } = await load();
     const fake = createFakeAgentSdk({
       stream: buildScriptedStreamWithAgentIdHint(),
@@ -211,7 +207,7 @@ describe("agent sessions manager", () => {
     const sessions = createAgentSessions(fake);
 
     const meta = await createConversation({
-      title: "Read-only first turn",
+      title: "Legacy read-only first turn",
       projectId: "platform",
       model: "composer-2.5",
     });
@@ -230,11 +226,11 @@ describe("agent sessions manager", () => {
     expect(fake.created[0]).toMatchObject({
       cwd: workspaceDir,
       model: { id: "composer-2.5" },
-      disallowedTools: ["task", "edit", "delete", "shell"],
     });
-    expect(fake.created[0]?.customTools?.delegate).toBeUndefined();
-    expect(fake.created[0]?.customTools?.agent_stack_start).toBeUndefined();
-    expect(fake.created[0]?.customTools?.agent_stack_stop).toBeUndefined();
+    expect(fake.created[0]?.disallowedTools).toBeUndefined();
+    expect(fake.created[0]?.customTools?.delegate).toBeDefined();
+    expect(fake.created[0]?.customTools?.agent_stack_start).toBeDefined();
+    expect(fake.created[0]?.customTools?.agent_stack_stop).toBeDefined();
   });
 
   it("resumes when meta.agentId is set", async () => {

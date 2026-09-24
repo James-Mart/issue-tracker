@@ -54,7 +54,6 @@ import {
   forkPointMarkerDueBeforeSegment,
   segmentEventIndices,
 } from "./fork-point-inline-marker";
-import { ForkedThreadReadOnlyBadge } from "./forked-thread-read-only-badge";
 import { PendingMessageRow } from "./pending-message-row";
 import { SubagentCard } from "./subagent-card";
 import {
@@ -658,11 +657,9 @@ function ThreadBody({
 function ThreadStatusStrip({
   runActive,
   events,
-  readOnly,
 }: {
   runActive: boolean;
   events: readonly TranscriptEvent[];
-  readOnly?: boolean;
 }) {
   const label = threadRunLabel(runActive);
   const totals = sumUsageTotals(events);
@@ -692,7 +689,6 @@ function ThreadStatusStrip({
         />
         {label}
       </span>
-      {readOnly ? <ForkedThreadReadOnlyBadge /> : null}
       <span className="min-w-0 font-mono text-[11px] tabular-nums text-muted-foreground">
         {usageText}
       </span>
@@ -728,7 +724,6 @@ export function OpenThreadChrome({
   runActive,
   events,
   actions,
-  readOnly,
   forkedFrom,
   onSourceConversation,
 }: {
@@ -738,7 +733,6 @@ export function OpenThreadChrome({
   runActive: boolean;
   events: readonly TranscriptEvent[];
   actions?: ReactNode;
-  readOnly?: boolean;
   forkedFrom?: string;
   onSourceConversation?: (conversationId: string) => void;
 }) {
@@ -774,11 +768,7 @@ export function OpenThreadChrome({
         </div>
       ) : null}
       <div className="mt-2">
-        <ThreadStatusStrip
-          runActive={runActive}
-          events={events}
-          readOnly={readOnly}
-        />
+        <ThreadStatusStrip runActive={runActive} events={events} />
       </div>
     </div>
   );
@@ -836,7 +826,6 @@ export function ConversationThread({
   const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
   const meta = listMeta ?? metaProp;
-  const readOnly = listMeta?.readOnly === true;
   const forkedFrom = listMeta?.forkedFrom;
   const forkedAtSeq = listMeta?.forkedAtSeq;
   const title = meta?.title?.trim() || "Thread";
@@ -862,7 +851,6 @@ export function ConversationThread({
         runActive={runActive}
         events={events}
         actions={headerActions}
-        readOnly={readOnly}
         forkedFrom={forkedFrom}
         onSourceConversation={
           forkedFrom
@@ -891,7 +879,6 @@ export function ConversationThread({
           conversationId={conversationId}
           model={meta.model}
           runActive={runActive}
-          readOnly={readOnly}
           disabled={composerDisabled}
           disabledPlaceholder={composerDisabledPlaceholder}
         />

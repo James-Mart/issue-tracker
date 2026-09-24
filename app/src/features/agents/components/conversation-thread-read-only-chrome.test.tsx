@@ -9,7 +9,7 @@ import { act } from "react";
 import { type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
-describe("ConversationThread read-only fork chrome", () => {
+describe("ConversationThread stored readOnly fork chrome", () => {
   let container: HTMLDivElement | undefined;
   let root: Root | undefined;
 
@@ -21,28 +21,33 @@ describe("ConversationThread read-only fork chrome", () => {
     resetThreadMocks();
   });
 
-  it("renders read-only badge, source link, and composer notice when meta fields are set", () => {
+  it("omits read-only badge and composer notice when stored readOnly is set", () => {
     threadUi.readOnly = true;
     threadUi.forkedFrom = "conv-source";
     ({ container, root } = mountThread("conv-1"));
 
     expect(
       container!.querySelector('[data-testid="forked-thread-read-only-badge"]'),
-    ).not.toBeNull();
-    expect(container!.textContent).toContain("Read only");
+    ).toBeNull();
+    expect(
+      container!.querySelector('[data-testid="forked-thread-composer-notice"]'),
+    ).toBeNull();
+    expect(container!.textContent).not.toContain("Read only");
+    expect(container!.textContent).not.toContain(
+      "Read-only fork — explores and answers",
+    );
+  });
+
+  it("still renders the source link when forkedFrom is set", () => {
+    threadUi.readOnly = true;
+    threadUi.forkedFrom = "conv-source";
+    ({ container, root } = mountThread("conv-1"));
 
     const sourceLink = container!.querySelector(
       '[data-testid="forked-thread-source-link"]',
     );
     expect(sourceLink).not.toBeNull();
     expect(sourceLink!.textContent).toContain("Source conversation");
-
-    expect(
-      container!.querySelector('[data-testid="forked-thread-composer-notice"]'),
-    ).not.toBeNull();
-    expect(container!.textContent).toContain(
-      "Read-only fork — explores and answers",
-    );
   });
 
   it("omits fork chrome when meta lacks readOnly and forkedFrom", () => {
@@ -74,21 +79,6 @@ describe("ConversationThread read-only fork chrome", () => {
     ).toBeNull();
   });
 
-  it("shows read-only chrome only when readOnly is set", () => {
-    threadUi.readOnly = true;
-    ({ container, root } = mountThread("conv-1"));
-
-    expect(
-      container!.querySelector('[data-testid="forked-thread-read-only-badge"]'),
-    ).not.toBeNull();
-    expect(
-      container!.querySelector('[data-testid="forked-thread-composer-notice"]'),
-    ).not.toBeNull();
-    expect(
-      container!.querySelector('[data-testid="forked-thread-source-link"]'),
-    ).toBeNull();
-  });
-
   it("navigates to the recorded source conversation when the link is activated", () => {
     threadUi.forkedFrom = "conv-source";
     ({ container, root } = mountThread("conv-1"));
@@ -102,15 +92,5 @@ describe("ConversationThread read-only fork chrome", () => {
     });
 
     expect(navigate).toHaveBeenCalledWith("/agents/conv-source");
-  });
-
-  it("places the read-only badge on the status strip row", () => {
-    threadUi.readOnly = true;
-    ({ container, root } = mountThread("conv-1", { width: "390px" }));
-
-    const strip = container!.querySelector('[data-testid="thread-status-strip"]');
-    expect(strip?.contains(
-      container!.querySelector('[data-testid="forked-thread-read-only-badge"]'),
-    )).toBe(true);
   });
 });
