@@ -15,13 +15,13 @@ Create exactly one Idea for remaining gaps:
 issue idea add "<headline>" --part-of issue-tracker --description "<body>"
 ```
 
-   `<body>` = concise plain-language confusion summary **plus** a concise
-   suggested fix (honor Invariants / Fix upstream, prefer deletion). Capture
-   the printed Idea id as `<ideaId>`.
+   `<body>` = concise plain-language statement of the problem and its observed
+   impact on the run. Capture the printed Idea id as `<ideaId>`.
 
-2. Write a temp file basename `evidence.md` (transcript paths, agent ids,
-   CoT/behavioral citations, Source run `[<title>](issue:<sourceRootId>)` +
-   conversation id `<parentId>`), then:
+2. Write a temp file basename `evidence.md` (upstream-cause diagnosis — what
+   the agent read, what it did, and where it went wrong — plus transcript
+   paths, agent ids, CoT/behavioral citations, Source run
+   `[<title>](issue:<sourceRootId>)` + conversation id `<parentId>`), then:
 
 ```bash
 issue idea attach <ideaId> <path-to-evidence.md>

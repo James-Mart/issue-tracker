@@ -59,20 +59,10 @@ and follow it.
 - **One Idea under `issue-tracker`:** each gaps run lands exactly one Idea with
   `--part-of issue-tracker` (even when the source Product project differs) —
   never a residual Epic, project-level Story, or multiple Ideas.
-- **Evidence in the attachment:** CoT/behavioral citations live only in
-  `evidence.md` (not the Idea description). If thinking is `[REDACTED]`, cite
-  behavioral evidence with transcript path + agent id.
-- **Agnostic suggested fix:** description fix text stays durable and
-  project-agnostic — not coupled to a particular tracked product issue;
-  transcript is evidence only, not the fix text. Prefer deletion / simplify
-  misleading agent prose (**## Fix upstream, prefer deletion**).
-
-## Fix upstream, prefer deletion
-
-Diagnose the **upstream cause**, not the symptom. When the fix touches an agent
-template, **prefer deleting the line that confused the agent** over adding
-another "do not do X" restriction. Only add prose when no deletion or
-simplification can eliminate the confusion.
+- **Evidence in the attachment:** upstream-cause diagnosis and CoT/behavioral
+  citations live only in `evidence.md` (not the Idea description). If
+  thinking is `[REDACTED]`, cite behavioral evidence with transcript path +
+  agent id.
 
 ## Flow
 
