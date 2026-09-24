@@ -28,7 +28,7 @@ import {
   launchOverlaysChannel,
 } from "../lib/detail-launch-sync";
 import { exportDraftCount } from "../lib/export-tab";
-import { isImplementingWorkRoot } from "../lib/implementing-launch";
+import { isImplementingWorkRoot } from "@server/services/implementing-launch";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelSessionOverflowMenu } from "./channel-session-overflow-menu";
 import { ChannelSessionSwitcher } from "./channel-session-switcher";

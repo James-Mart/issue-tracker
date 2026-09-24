@@ -49,6 +49,11 @@ const { scrubOrphanedRunsAtBoot } = await import(
 );
 await scrubOrphanedRunsAtBoot();
 
+const { startWorkQueueLauncher } = await import(
+  "./services/work-queue-launcher.js"
+);
+startWorkQueueLauncher(agentSessions);
+
 const { dropUnownedAgentStackRecords } = await import(
   "./services/agent-stack.js"
 );

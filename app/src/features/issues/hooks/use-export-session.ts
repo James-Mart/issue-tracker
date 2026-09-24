@@ -4,7 +4,7 @@ import {
   exportSessionMessage,
   exportSessionTitle,
 } from "../lib/export-launch";
-import { implementingSessionModel } from "../lib/implementing-launch";
+import { implementingSessionModel } from "@server/services/implementing-launch";
 
 /** POST an export session with the rewrite bootstrap. Archives the prior one. */
 export function useStartExportSession(issue: { id: string; title: string }) {

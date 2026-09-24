@@ -220,6 +220,7 @@ export const projectSchema = z.object({
   setupCommand: z.string().optional(),
   trunk: nonEmpty.default("main"),
   mergePolicy: z.enum(MERGE_POLICIES).default("manual"),
+  maxImplementingRuns: z.number().int().min(1).default(1),
   // Closed catalog of attachable labels (imperative; apply preserves).
   labels: projectLabelsSchema,
   // Imperative pointers to vision / coding standards / design system / gate rubric docs.
@@ -244,6 +245,7 @@ export const epicSchema = z.object({
   retro: z.enum(RETRO_STATUSES).optional(),
   // Catalog id assignments (imperative; apply preserves).
   labels: assignmentLabelsSchema,
+  workQueuedAt: z.string().optional(),
   ...mutableCommon,
   ...orderField,
   ...timestamps,
@@ -290,6 +292,7 @@ export const storySchema = z.object({
   needsRebase: z.string().optional(),
   retro: z.enum(RETRO_STATUSES).optional(),
   labels: assignmentLabelsSchema,
+  workQueuedAt: z.string().optional(),
   ...mutableCommon,
   ...orderField,
   ...timestamps,

@@ -2,7 +2,7 @@ import type { ChannelSessionListItem } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import { formatRelativeUpdatedAt } from "../lib/format-relative-updated-at";
-import { implementingLaunchCopy } from "../lib/implementing-launch";
+import { implementingLaunchCopy } from "@server/services/implementing-launch";
 
 export type WorkLoopOverviewMode = "start" | "resume";
 

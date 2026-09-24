@@ -64,6 +64,7 @@ function project(
     workspace: "/tmp/repo",
     trunk: "main",
     mergePolicy: "pull-request",
+    maxImplementingRuns: 1,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
@@ -117,6 +118,20 @@ describe("ProjectSettingsOverview Delivery card", () => {
       (button) => button.textContent?.includes("npm install"),
     );
     expect(commandButton?.className).toContain("font-mono");
+  });
+
+  it("shows the max implementing runs number field", () => {
+    const { container } = mount(
+      <ProjectSettingsOverview issue={project({ maxImplementingRuns: 2 })} />,
+    );
+
+    expect(container.textContent).toContain(FIELD_LABELS.maxImplementingRuns);
+    const input = container.querySelector(
+      '[data-testid="max-implementing-runs"]',
+    );
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect((input as HTMLInputElement).value).toBe("2");
+    expect((input as HTMLInputElement).type).toBe("number");
   });
 
   it("does not render a worktree-root control in the Delivery card", () => {

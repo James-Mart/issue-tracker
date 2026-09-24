@@ -7,6 +7,7 @@ import { SettingsCard } from "./detail-section";
 import { IssueDescriptionField } from "./issue-description-field";
 import { IssueInspirationAppsField } from "./issue-inspiration-apps-field";
 import { IssuePersonasField } from "./issue-personas-field";
+import { IssueMaxImplementingRunsField } from "./issue-max-implementing-runs-field";
 import { IssueMergePolicyField } from "./issue-merge-policy-field";
 import { IssueProjectLabelsField } from "./issue-project-labels-field";
 import { IssueSetupCommandField } from "./issue-setup-command-field";
@@ -55,6 +56,11 @@ export function ProjectSettingsOverview({
                     <IssueMergePolicyField issue={issue} />
                   </div>
                 }
+              />
+              <MetaRow
+                className={cn(SETTINGS_ROW_CLASS, "items-center")}
+                label={FIELD_LABELS.maxImplementingRuns}
+                value={<IssueMaxImplementingRunsField issue={issue} />}
               />
             </div>
           </SettingsCard>

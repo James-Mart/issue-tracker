@@ -68,6 +68,7 @@ import {
 } from "./patch.js";
 import { validateCommitsPatch, validateFullCommitSha } from "./commit-sha.js";
 import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
+import { planWorkQueueStamps } from "./work-queue.js";
 import {
   assertMergePolicyLattice,
   validateMergePolicyPatch,
@@ -605,6 +606,15 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);
+    if (
+      jsonPatch.workQueuedAt !== undefined &&
+      jsonPatch.workQueuedAt !== null
+    ) {
+      throw new IssueError(
+        "validation",
+        "workQueuedAt is system-written; clear it to dequeue",
+      );
+    }
 
     const merged = mergeIssue(existing, jsonPatch);
 
@@ -711,14 +721,33 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
       jsonPatch,
       issues,
     ).map((issue) => ({ ...issue, updatedAt: now }));
+    const issuesForQueue = issues.map((issue) => {
+      const lowered = codeGateMergePolicyWrites.find(
+        (root) => root.id === issue.id,
+      );
+      return lowered ?? issue;
+    });
+    const workQueueWrites = planWorkQueueStamps(
+      existing,
+      jsonPatch,
+      issuesForQueue,
+      now,
+    );
+    const companionWrites = new Map<string, Issue>();
     for (const root of codeGateMergePolicyWrites) {
+      companionWrites.set(root.id, root);
+    }
+    for (const root of workQueueWrites) {
+      companionWrites.set(root.id, root);
+    }
+    for (const root of companionWrites.values()) {
       writes.push({ issue: root });
     }
 
     if (
       cascaded.length === 0 &&
       mergeSiblingWrites.length === 0 &&
-      codeGateMergePolicyWrites.length === 0
+      companionWrites.size === 0
     ) {
       // Single-node write: keep the historical scoped check so unrelated
       // pre-existing integrity problems do not block this update.

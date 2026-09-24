@@ -23,6 +23,7 @@ export const PROJECT_FORM_FIELD_KEYS = [
   "setupCommand",
   "trunk",
   "mergePolicy",
+  "maxImplementingRuns",
 ] as const;
 
 export const PROJECT_FIELD_KEYS = [
@@ -41,6 +42,7 @@ export const EPIC_IMPERATIVE_ONLY_KEYS = [
   "retro",
   "labels",
   "sourceIdea",
+  "workQueuedAt",
 ] as const;
 
 export const EPIC_RUNTIME_OPTIONAL_KEYS = EPIC_IMPERATIVE_ONLY_KEYS;
@@ -66,6 +68,7 @@ export const STORY_IMPERATIVE_ONLY_KEYS = [
   "retro",
   "labels",
   "sourceIdea",
+  "workQueuedAt",
 ] as const;
 
 export const STORY_FIELD_KEYS = [
@@ -88,6 +91,7 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "retro",
   "labels",
   "sourceIdea",
+  "workQueuedAt",
 ] as const;
 
 // Idea has no mergeable runtime keys besides imperative label assignments.
@@ -144,6 +148,7 @@ export const CLEARABLE_KEYS = [
   "mergePolicy",
   "sourceIdea",
   "appendTo",
+  "workQueuedAt",
 ] as const;
 
 export type ClearableKey = (typeof CLEARABLE_KEYS)[number];
@@ -211,6 +216,8 @@ export const FIELD_LABELS = {
   appendTo: "Append to",
   sourceIdea: "Source idea",
   generatedIssues: "Generated issues",
+  maxImplementingRuns: "Max implementing runs",
+  workQueuedAt: "Work queued",
 } as const;
 
 /** Select value for manual planning — unset on disk. */
