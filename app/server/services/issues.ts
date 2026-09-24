@@ -67,6 +67,7 @@ import {
   validateSourceIdeaPatch,
 } from "./patch.js";
 import { validateCommitsPatch, validateFullCommitSha } from "./commit-sha.js";
+import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
 import { validateMergePolicyPatch } from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
 import { validateSupportingDocsPatch } from "./supporting-docs.js";
@@ -702,8 +703,20 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     for (const sibling of mergeSiblingWrites) {
       writes.push({ issue: sibling });
     }
+    const codeGateMergePolicyWrites = planCodeGateMergePolicyLowering(
+      existing,
+      jsonPatch,
+      issues,
+    ).map((issue) => ({ ...issue, updatedAt: now }));
+    for (const root of codeGateMergePolicyWrites) {
+      writes.push({ issue: root });
+    }
 
-    if (cascaded.length === 0 && mergeSiblingWrites.length === 0) {
+    if (
+      cascaded.length === 0 &&
+      mergeSiblingWrites.length === 0 &&
+      codeGateMergePolicyWrites.length === 0
+    ) {
       // Single-node write: keep the historical scoped check so unrelated
       // pre-existing integrity problems do not block this update.
       assertWritable(parsed.issue, issues);
