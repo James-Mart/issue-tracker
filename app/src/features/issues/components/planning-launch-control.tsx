@@ -73,65 +73,65 @@ function usePlanningStakeholder(issue: IdeaDetail) {
   return { stakeholder, onChange, saving, error };
 }
 
-function useApprovePlan(issue: IdeaDetail) {
-  const [approvePlan, setApprovePlan] = useState(issue.approvePlan === true);
+function useOutlineGate(issue: IdeaDetail) {
+  const [outlineGate, setOutlineGate] = useState(issue.outlineGate === true);
   const update = useUpdateIssue();
   const { saving, run } = useIssuePatchAction();
 
   useEffect(() => {
-    setApprovePlan(issue.approvePlan === true);
-  }, [issue.approvePlan]);
+    setOutlineGate(issue.outlineGate === true);
+  }, [issue.outlineGate]);
 
   const onToggle = () => {
-    const next = !approvePlan;
-    const previous = approvePlan;
-    setApprovePlan(next);
+    const next = !outlineGate;
+    const previous = outlineGate;
+    setOutlineGate(next);
     void run(async () => {
       try {
         await update.mutateAsync({
           id: issue.id,
-          patch: { approvePlan: next },
+          patch: { outlineGate: next },
         });
       } catch (err) {
-        setApprovePlan(previous);
+        setOutlineGate(previous);
         throw err;
       }
     });
   };
 
-  return { approvePlan, onToggle, saving };
+  return { outlineGate, onToggle, saving };
 }
 
-function ApprovePlanChipButton({
+function OutlineGateChipButton({
   issue,
-  approvePlan,
+  outlineGate,
   onToggle,
   saving,
-  testId = "flow-row-approve-plan",
+  testId = "flow-row-outline-gate",
 }: {
   issue: IdeaDetail;
-  approvePlan: boolean;
+  outlineGate: boolean;
   onToggle: () => void;
   saving: boolean;
   testId?: string;
 }) {
-  const stateLabel = approvePlan ? "on" : "off";
+  const stateLabel = outlineGate ? "on" : "off";
 
   return (
     <Button
       type="button"
       variant="default"
-      id={`approve-plan-${issue.id}`}
-      aria-pressed={approvePlan}
+      id={`outline-gate-${issue.id}`}
+      aria-pressed={outlineGate}
       data-testid={testId}
       disabled={saving}
       className="h-7 px-2 font-mono text-[10px] tracking-[0.08em]"
       onClick={onToggle}
     >
-      <span className="text-muted-foreground">Approve plan ·</span>{" "}
+      <span className="text-muted-foreground">Outline gate ·</span>{" "}
       <span
         className={cn(
-          approvePlan
+          outlineGate
             ? "text-[hsl(var(--current))]"
             : "text-muted-foreground",
         )}
@@ -142,16 +142,16 @@ function ApprovePlanChipButton({
   );
 }
 
-function ApprovePlanChip({
+function OutlineGateChip({
   issue,
-  testId = "flow-row-approve-plan",
+  testId = "flow-row-outline-gate",
 }: {
   issue: IdeaDetail;
   testId?: string;
 }) {
-  const control = useApprovePlan(issue);
+  const control = useOutlineGate(issue);
   return (
-    <ApprovePlanChipButton issue={issue} testId={testId} {...control} />
+    <OutlineGateChipButton issue={issue} testId={testId} {...control} />
   );
 }
 
@@ -358,7 +358,7 @@ export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
 
   return (
     <div className="flex items-center gap-1">
-      {stakeholder ? <ApprovePlanChip issue={issue} /> : null}
+      {stakeholder ? <OutlineGateChip issue={issue} /> : null}
       <PlanningLaunchButton
         issue={issue}
         channel="planning"
@@ -393,7 +393,7 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
         {stakeholder ? (
-          <ApprovePlanChip issue={issue} testId="detail-approve-plan" />
+          <OutlineGateChip issue={issue} testId="detail-outline-gate" />
         ) : null}
         <PlanningLaunchButton
           issue={issue}
@@ -440,12 +440,12 @@ export function PlanningChannelEmptyState({
   const models = modelsData?.models ?? [];
   const defaultModel = defaultConversationModel(models);
   const { stakeholder, onChange, saving, error } = usePlanningStakeholder(issue);
-  const approvePlanControl = useApprovePlan(issue);
+  const outlineGateControl = useOutlineGate(issue);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
   const copy = planningLaunchCopy(
     stakeholder,
     models,
-    approvePlanControl.approvePlan,
+    outlineGateControl.outlineGate,
   );
 
   useEffect(() => {
@@ -487,10 +487,10 @@ export function PlanningChannelEmptyState({
             />
           ) : null}
           {stakeholder ? (
-            <ApprovePlanChipButton
+            <OutlineGateChipButton
               issue={issue}
-              testId="detail-approve-plan"
-              {...approvePlanControl}
+              testId="detail-outline-gate"
+              {...outlineGateControl}
             />
           ) : null}
           <PlanningLaunchButton

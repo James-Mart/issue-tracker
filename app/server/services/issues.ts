@@ -407,8 +407,8 @@ export function create(input: CreateInput): Promise<IssueRecord> {
         assertAllowedAgentModelSlug(input.stakeholder);
         draft.stakeholder = input.stakeholder;
       }
-      if (input.approvePlan === true) {
-        draft.approvePlan = true;
+      if (input.outlineGate === true) {
+        draft.outlineGate = true;
       }
       if (input.approvalPending === true) {
         draft.approvalPending = true;

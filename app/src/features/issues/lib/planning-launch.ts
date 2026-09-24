@@ -52,11 +52,11 @@ function stakeholderDisplayName(
 export function planningLaunchCopy(
   stakeholder: string | undefined,
   models: readonly AgentModel[] = [],
-  approvePlan = false,
+  outlineGate = false,
 ): PlanningLaunchCopy {
   if (stakeholder) {
     const name = stakeholderDisplayName(stakeholder, models);
-    const detail = approvePlan
+    const detail = outlineGate
       ? `Start auto-plan with ${name} as stakeholder. The run pauses for your approval of the proposed tree before anything is built.`
       : `Start auto-plan with ${name} as stakeholder. You can watch and interject, but the grill runs without your answers.`;
     return {

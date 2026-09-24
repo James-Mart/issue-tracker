@@ -187,14 +187,14 @@ describe("channel sessions HTTP API", () => {
     expect(listed[0].updatedAt).toEqual(expect.any(String));
   });
 
-  it("refuses planning when approvePlan is set without a stakeholder", async () => {
+  it("refuses planning when outlineGate is set without a stakeholder", async () => {
     writeIssue("gate-me", {
       kind: "idea",
       title: "Gate me",
       partOf: "platform",
       order: 1,
       archived: false,
-      approvePlan: true,
+      outlineGate: true,
       createdAt: AT,
       updatedAt: AT,
     });
@@ -211,7 +211,7 @@ describe("channel sessions HTTP API", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error:
-        "approvePlan is set but this Idea has no stakeholder; approvePlan governs auto-plan only",
+        "outlineGate is set but this Idea has no stakeholder; outlineGate governs auto-plan only",
       code: "conflict",
     });
 
@@ -221,14 +221,14 @@ describe("channel sessions HTTP API", () => {
     expect(listed).toEqual([]);
   });
 
-  it("creates a planning session when approvePlan is set with a stakeholder", async () => {
+  it("creates a planning session when outlineGate is set with a stakeholder", async () => {
     writeIssue("gated-auto", {
       kind: "idea",
       title: "Gated auto",
       partOf: "platform",
       order: 1,
       archived: false,
-      approvePlan: true,
+      outlineGate: true,
       stakeholder: "composer-2.5",
       createdAt: AT,
       updatedAt: AT,
@@ -247,7 +247,7 @@ describe("channel sessions HTTP API", () => {
     expect(await res.json()).toEqual({ id: expect.any(String) });
   });
 
-  it("creates a planning session when approvePlan is unset without a stakeholder", async () => {
+  it("creates a planning session when outlineGate is unset without a stakeholder", async () => {
     await startApp();
 
     const res = await fetch(

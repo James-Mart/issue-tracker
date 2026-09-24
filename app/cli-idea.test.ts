@@ -168,11 +168,11 @@ describe("idea add / get / set", () => {
     expect(merged.stderr).toMatch(/cannot target merged Story/);
   });
 
-  it("gets and sets approvePlan", async () => {
+  it("gets and sets outlineGate", async () => {
     expect((await runIssueCli(["idea", "add", "--part-of", "p", "Gate me"], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["idea", "get", "gate-me", "approvePlan"], { env: env() })).stdout).toBe("");
-    expect((await runIssueCli(["idea", "set", "gate-me", "approvePlan", "true"], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["idea", "get", "gate-me", "approvePlan"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["idea", "get", "gate-me", "outlineGate"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["idea", "set", "gate-me", "outlineGate", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "gate-me", "outlineGate"], { env: env() })).stdout).toBe("true\n");
   });
 
   it("gets and sets approvalPending", async () => {

@@ -86,7 +86,7 @@ export const EPIC_SET_FIELDS = {
 export const IDEA_SET_FIELDS = {
   title: { type: "string" },
   archived: { type: "boolean" },
-  approvePlan: { type: "boolean" },
+  outlineGate: { type: "boolean" },
   approvalPending: { type: "boolean" },
   appendTo: { type: "string" },
   partOf: { type: "string" },
@@ -195,7 +195,7 @@ export const IDEA_GET_FIELDS = {
   title: STORED,
   partOf: STORED,
   archived: STORED,
-  approvePlan: STORED,
+  outlineGate: STORED,
   approvalPending: STORED,
   appendTo: STORED,
   stakeholder: STORED,

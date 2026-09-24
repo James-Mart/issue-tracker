@@ -431,7 +431,7 @@ describe("PlanningChannelEmptyState", () => {
       />,
     );
     expect(
-      container.querySelector('[data-testid="detail-approve-plan"]'),
+      container.querySelector('[data-testid="detail-outline-gate"]'),
     ).toBeNull();
   });
 
@@ -448,7 +448,7 @@ describe("PlanningChannelEmptyState", () => {
       />,
     );
     const offChip = offContainer.querySelector(
-      '[data-testid="detail-approve-plan"]',
+      '[data-testid="detail-outline-gate"]',
     ) as HTMLButtonElement;
     expect(offChip).toBeTruthy();
     expect(offChip.textContent).toContain("off");
@@ -457,7 +457,7 @@ describe("PlanningChannelEmptyState", () => {
     const ideaOn = {
       ...idea,
       stakeholder: "claude-opus-5",
-      approvePlan: true as const,
+      outlineGate: true as const,
     };
     const { container: onContainer } = mount(
       <PlanningChannelEmptyState
@@ -467,7 +467,7 @@ describe("PlanningChannelEmptyState", () => {
       />,
     );
     const onChip = onContainer.querySelector(
-      '[data-testid="detail-approve-plan"]',
+      '[data-testid="detail-outline-gate"]',
     ) as HTMLButtonElement;
     expect(onChip.textContent).toContain("on");
     expect(onChip.getAttribute("aria-pressed")).toBe("true");
@@ -493,7 +493,7 @@ describe("PlanningChannelEmptyState", () => {
     const ideaOn = {
       ...idea,
       stakeholder: "claude-opus-5",
-      approvePlan: true as const,
+      outlineGate: true as const,
     };
     const { container: onContainer } = mount(
       <PlanningChannelEmptyState
@@ -524,7 +524,7 @@ describe("PlanningChannelEmptyState", () => {
     await act(async () => {
       (
         container.querySelector(
-          '[data-testid="detail-approve-plan"]',
+          '[data-testid="detail-outline-gate"]',
         ) as HTMLButtonElement
       ).click();
     });
@@ -538,7 +538,7 @@ describe("PlanningOverviewLaunch approve plan chip", () => {
   it("hides the chip when no stakeholder is set", () => {
     const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
     expect(
-      container.querySelector('[data-testid="detail-approve-plan"]'),
+      container.querySelector('[data-testid="detail-outline-gate"]'),
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="planning-overview-start-session"]'),
@@ -554,7 +554,7 @@ describe("PlanningOverviewLaunch approve plan chip", () => {
       <PlanningOverviewLaunch issue={ideaOff} />,
     );
     const offChip = offContainer.querySelector(
-      '[data-testid="detail-approve-plan"]',
+      '[data-testid="detail-outline-gate"]',
     ) as HTMLButtonElement;
     expect(offChip).toBeTruthy();
     expect(offChip.textContent).toContain("off");
@@ -562,18 +562,18 @@ describe("PlanningOverviewLaunch approve plan chip", () => {
     const ideaOn = {
       ...idea,
       stakeholder: "claude-opus-5",
-      approvePlan: true as const,
+      outlineGate: true as const,
     };
     const { container: onContainer } = mount(
       <PlanningOverviewLaunch issue={ideaOn} />,
     );
     const onChip = onContainer.querySelector(
-      '[data-testid="detail-approve-plan"]',
+      '[data-testid="detail-outline-gate"]',
     ) as HTMLButtonElement;
     expect(onChip.textContent).toContain("on");
   });
 
-  it("toggles approvePlan through the Idea update endpoint", async () => {
+  it("toggles outlineGate through the Idea update endpoint", async () => {
     mutateAsync.mockResolvedValueOnce({});
     const ideaWithStakeholder = {
       ...idea,
@@ -587,14 +587,14 @@ describe("PlanningOverviewLaunch approve plan chip", () => {
     await act(async () => {
       (
         container.querySelector(
-          '[data-testid="detail-approve-plan"]',
+          '[data-testid="detail-outline-gate"]',
         ) as HTMLButtonElement
       ).click();
     });
 
     expect(mutateAsync).toHaveBeenCalledWith({
       id: "overview-toggle",
-      patch: { approvePlan: true },
+      patch: { outlineGate: true },
     });
   });
 
@@ -691,7 +691,7 @@ describe("PlanningFlowRowLaunch approve plan chip", () => {
       <PlanningFlowRowLaunch issue={idea} />,
     );
     expect(
-      container.querySelector('[data-testid="flow-row-approve-plan"]'),
+      container.querySelector('[data-testid="flow-row-outline-gate"]'),
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="flow-row-start-planning"]'),
@@ -708,33 +708,33 @@ describe("PlanningFlowRowLaunch approve plan chip", () => {
       <PlanningFlowRowLaunch issue={ideaWithStakeholder} />,
     );
     const chip = container.querySelector(
-      '[data-testid="flow-row-approve-plan"]',
+      '[data-testid="flow-row-outline-gate"]',
     ) as HTMLButtonElement;
     expect(chip).toBeTruthy();
-    expect(chip.textContent).toContain("Approve plan ·");
+    expect(chip.textContent).toContain("Outline gate ·");
     expect(chip.textContent).toContain("off");
     expect(chip.getAttribute("aria-pressed")).toBe("false");
-    expect(chip.id).toBe("approve-plan-offline-sync");
+    expect(chip.id).toBe("outline-gate-offline-sync");
   });
 
-  it("shows the chip in the on state when approvePlan is set", () => {
+  it("shows the chip in the on state when outlineGate is set", () => {
     const ideaWithApprovePlan = {
       ...idea,
       id: "gate-me",
       stakeholder: "claude-opus-5",
-      approvePlan: true as const,
+      outlineGate: true as const,
     };
     const { container } = mount(
       <PlanningFlowRowLaunch issue={ideaWithApprovePlan} />,
     );
     const chip = container.querySelector(
-      '[data-testid="flow-row-approve-plan"]',
+      '[data-testid="flow-row-outline-gate"]',
     ) as HTMLButtonElement;
     expect(chip.textContent).toContain("on");
     expect(chip.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("toggles approvePlan through the Idea update endpoint", async () => {
+  it("toggles outlineGate through the Idea update endpoint", async () => {
     mutateAsync.mockResolvedValueOnce({});
     const ideaWithStakeholder = {
       ...idea,
@@ -748,14 +748,14 @@ describe("PlanningFlowRowLaunch approve plan chip", () => {
     await act(async () => {
       (
         container.querySelector(
-          '[data-testid="flow-row-approve-plan"]',
+          '[data-testid="flow-row-outline-gate"]',
         ) as HTMLButtonElement
       ).click();
     });
 
     expect(mutateAsync).toHaveBeenCalledWith({
       id: "toggle-me",
-      patch: { approvePlan: true },
+      patch: { outlineGate: true },
     });
   });
 
@@ -783,11 +783,11 @@ describe("PlanningFlowRowLaunch approve plan chip", () => {
     });
 
     const chips = container.querySelectorAll(
-      '[data-testid="flow-row-approve-plan"]',
+      '[data-testid="flow-row-outline-gate"]',
     );
     expect(chips).toHaveLength(2);
-    expect(chips[0]?.id).toBe("approve-plan-idea-a");
-    expect(chips[1]?.id).toBe("approve-plan-idea-b");
+    expect(chips[0]?.id).toBe("outline-gate-idea-a");
+    expect(chips[1]?.id).toBe("outline-gate-idea-b");
   });
 });
 
