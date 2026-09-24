@@ -14,6 +14,9 @@ export const APPEND_TO_WRONG_KIND_ERROR = (targetId: string, kind: string) =>
 export const APPEND_TO_MERGED_ERROR = (targetId: string) =>
   `appendTo cannot target merged Story "${targetId}"`;
 
+export const EXECUTION_GATE_STAKEHOLDER_ERROR =
+  "executionGate is set but this Idea has no stakeholder; executionGate governs auto-started implementation of auto-planned Ideas only";
+
 export function validateNonClearablePatch(
   existing: Issue,
   patch: IssuePatch,
@@ -43,6 +46,18 @@ export function validateSourceIdeaPatch(
       "validation",
       error instanceof Error ? error.message : String(error),
     );
+  }
+}
+
+export function validateExecutionGatePatch(
+  existing: Issue,
+  patch: IssuePatch,
+): void {
+  if (existing.kind !== "idea") return;
+  const next = mergeIssue(existing, patch);
+  if (next.kind !== "idea") return;
+  if (next.executionGate === true && !next.stakeholder) {
+    throw new IssueError("conflict", EXECUTION_GATE_STAKEHOLDER_ERROR);
   }
 }
 

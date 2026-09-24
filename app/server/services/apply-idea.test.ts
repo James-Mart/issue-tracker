@@ -31,6 +31,42 @@ describe("apply — Idea outlineGate", () => {
   });
 });
 
+describe("apply — Idea executionGate and codeApprovalRequired", () => {
+  it("preserves executionGate and codeApprovalRequired when re-applying the Idea doc", async () => {
+    const { apply, update } = await loadService();
+    await apply({
+      project: {
+        id: "p1",
+        title: "P1",
+        children: [{ kind: "idea", id: "i1", title: "Capture" }],
+      },
+    });
+    await update("i1", {
+      executionGate: true,
+      codeApprovalRequired: true,
+      stakeholder: "composer-2.5",
+    });
+    expect(readIssue("i1")).toMatchObject({
+      executionGate: true,
+      codeApprovalRequired: true,
+    });
+
+    const summary = await apply({
+      project: {
+        id: "p1",
+        title: "P1",
+        children: [{ kind: "idea", id: "i1", title: "Capture renamed" }],
+      },
+    });
+    expect(summary.updated).toContain("i1");
+    expect(readIssue("i1")).toMatchObject({
+      title: "Capture renamed",
+      executionGate: true,
+      codeApprovalRequired: true,
+    });
+  });
+});
+
 describe("apply — Idea appendTo", () => {
   it("preserves appendTo when re-applying the Idea doc", async () => {
     const { apply, update } = await loadService();

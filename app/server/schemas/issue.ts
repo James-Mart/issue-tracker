@@ -260,7 +260,9 @@ export const ideaSchema = z.object({
   title: nonEmpty,
   archived: z.boolean().default(false),
   outlineGate: z.boolean().optional(),
+  executionGate: z.boolean().optional(),
   approvalPending: z.boolean().optional(),
+  codeApprovalRequired: z.boolean().optional(),
   appendTo: z.string().optional(),
   stakeholder: stakeholderField,
   labels: assignmentLabelsSchema,
@@ -359,7 +361,9 @@ export type CreateInput = Pick<IssueFields, "title"> &
       | "mergePolicy"
       | "stakeholder"
       | "outlineGate"
+      | "executionGate"
       | "approvalPending"
+      | "codeApprovalRequired"
     >
   > & {
     kind: IssueKind;

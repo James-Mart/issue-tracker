@@ -175,6 +175,30 @@ describe("idea add / get / set", () => {
     expect((await runIssueCli(["idea", "get", "gate-me", "outlineGate"], { env: env() })).stdout).toBe("true\n");
   });
 
+  it("gets and sets executionGate", async () => {
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Exec gate"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "set", "exec-gate", "stakeholder", "composer-2.5"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "exec-gate", "executionGate"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["idea", "set", "exec-gate", "executionGate", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "exec-gate", "executionGate"], { env: env() })).stdout).toBe("true\n");
+  });
+
+  it("refuses executionGate without a stakeholder", async () => {
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "No stakeholder gate"], { env: env() })).status).toBe(0);
+    const set = await runIssueCli(["idea", "set", "no-stakeholder-gate", "executionGate", "true"], { env: env() });
+    expect(set.status).toBe(1);
+    expect(set.stderr).toMatch(/executionGate is set but this Idea has no stakeholder/);
+  });
+
+  it("gets and sets codeApprovalRequired", async () => {
+    expect((await runIssueCli(["idea", "add", "--part-of", "p", "Code verdict"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "code-verdict", "codeApprovalRequired"], { env: env() })).stdout).toBe("");
+    expect((await runIssueCli(["idea", "set", "code-verdict", "codeApprovalRequired", "true"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "code-verdict", "codeApprovalRequired"], { env: env() })).stdout).toBe("true\n");
+    expect((await runIssueCli(["idea", "set", "code-verdict", "codeApprovalRequired", "false"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["idea", "get", "code-verdict", "codeApprovalRequired"], { env: env() })).stdout).toBe("");
+  });
+
   it("gets and sets approvalPending", async () => {
     expect((await runIssueCli(["idea", "add", "--part-of", "p", "Gate pending"], { env: env() })).status).toBe(0);
     expect((await runIssueCli(["idea", "get", "gate-pending", "approvalPending"], { env: env() })).stdout).toBe("");

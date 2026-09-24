@@ -73,65 +73,77 @@ function usePlanningStakeholder(issue: IdeaDetail) {
   return { stakeholder, onChange, saving, error };
 }
 
-function useOutlineGate(issue: IdeaDetail) {
-  const [outlineGate, setOutlineGate] = useState(issue.outlineGate === true);
+function useIdeaGateToggle(
+  issue: IdeaDetail,
+  field: "outlineGate" | "executionGate",
+) {
+  const stored = issue[field] === true;
+  const [enabled, setEnabled] = useState(stored);
   const update = useUpdateIssue();
   const { saving, run } = useIssuePatchAction();
 
   useEffect(() => {
-    setOutlineGate(issue.outlineGate === true);
-  }, [issue.outlineGate]);
+    setEnabled(issue[field] === true);
+  }, [issue, field]);
 
   const onToggle = () => {
-    const next = !outlineGate;
-    const previous = outlineGate;
-    setOutlineGate(next);
+    const next = !enabled;
+    const previous = enabled;
+    setEnabled(next);
     void run(async () => {
       try {
         await update.mutateAsync({
           id: issue.id,
-          patch: { outlineGate: next },
+          patch: { [field]: next },
         });
       } catch (err) {
-        setOutlineGate(previous);
+        setEnabled(previous);
         throw err;
       }
     });
   };
 
-  return { outlineGate, onToggle, saving };
+  return { enabled, onToggle, saving };
 }
 
-function OutlineGateChipButton({
+function IdeaGateChipButton({
   issue,
-  outlineGate,
+  field,
+  label,
+  enabled,
   onToggle,
   saving,
-  testId = "flow-row-outline-gate",
+  testId,
 }: {
   issue: IdeaDetail;
-  outlineGate: boolean;
+  field: "outlineGate" | "executionGate";
+  label: string;
+  enabled: boolean;
   onToggle: () => void;
   saving: boolean;
-  testId?: string;
+  testId: string;
 }) {
-  const stateLabel = outlineGate ? "on" : "off";
+  const stateLabel = enabled ? "on" : "off";
+  const controlId =
+    field === "outlineGate"
+      ? `outline-gate-${issue.id}`
+      : `execution-gate-${issue.id}`;
 
   return (
     <Button
       type="button"
       variant="default"
-      id={`outline-gate-${issue.id}`}
-      aria-pressed={outlineGate}
+      id={controlId}
+      aria-pressed={enabled}
       data-testid={testId}
       disabled={saving}
       className="h-7 px-2 font-mono text-[10px] tracking-[0.08em]"
       onClick={onToggle}
     >
-      <span className="text-muted-foreground">Outline gate ·</span>{" "}
+      <span className="text-muted-foreground">{label} ·</span>{" "}
       <span
         className={cn(
-          outlineGate
+          enabled
             ? "text-[hsl(var(--current))]"
             : "text-muted-foreground",
         )}
@@ -149,9 +161,56 @@ function OutlineGateChip({
   issue: IdeaDetail;
   testId?: string;
 }) {
-  const control = useOutlineGate(issue);
+  const control = useIdeaGateToggle(issue, "outlineGate");
   return (
-    <OutlineGateChipButton issue={issue} testId={testId} {...control} />
+    <IdeaGateChipButton
+      issue={issue}
+      field="outlineGate"
+      label="Outline gate"
+      testId={testId}
+      enabled={control.enabled}
+      onToggle={control.onToggle}
+      saving={control.saving}
+    />
+  );
+}
+
+function ExecutionGateChip({
+  issue,
+  testId = "flow-row-execution-gate",
+}: {
+  issue: IdeaDetail;
+  testId?: string;
+}) {
+  const control = useIdeaGateToggle(issue, "executionGate");
+  return (
+    <IdeaGateChipButton
+      issue={issue}
+      field="executionGate"
+      label="Execution gate"
+      testId={testId}
+      enabled={control.enabled}
+      onToggle={control.onToggle}
+      saving={control.saving}
+    />
+  );
+}
+
+function IdeaGateChips({
+  issue,
+  testIdPrefix,
+}: {
+  issue: IdeaDetail;
+  testIdPrefix: "flow-row" | "detail";
+}) {
+  return (
+    <>
+      <OutlineGateChip issue={issue} testId={`${testIdPrefix}-outline-gate`} />
+      <ExecutionGateChip
+        issue={issue}
+        testId={`${testIdPrefix}-execution-gate`}
+      />
+    </>
   );
 }
 
@@ -358,7 +417,7 @@ export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
 
   return (
     <div className="flex items-center gap-1">
-      {stakeholder ? <OutlineGateChip issue={issue} /> : null}
+      {stakeholder ? <IdeaGateChips issue={issue} testIdPrefix="flow-row" /> : null}
       <PlanningLaunchButton
         issue={issue}
         channel="planning"
@@ -393,7 +452,7 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
         {stakeholder ? (
-          <OutlineGateChip issue={issue} testId="detail-outline-gate" />
+          <IdeaGateChips issue={issue} testIdPrefix="detail" />
         ) : null}
         <PlanningLaunchButton
           issue={issue}
@@ -440,12 +499,12 @@ export function PlanningChannelEmptyState({
   const models = modelsData?.models ?? [];
   const defaultModel = defaultConversationModel(models);
   const { stakeholder, onChange, saving, error } = usePlanningStakeholder(issue);
-  const outlineGateControl = useOutlineGate(issue);
+  const outlineGateControl = useIdeaGateToggle(issue, "outlineGate");
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
   const copy = planningLaunchCopy(
     stakeholder,
     models,
-    outlineGateControl.outlineGate,
+    outlineGateControl.enabled,
   );
 
   useEffect(() => {
@@ -487,11 +546,21 @@ export function PlanningChannelEmptyState({
             />
           ) : null}
           {stakeholder ? (
-            <OutlineGateChipButton
-              issue={issue}
-              testId="detail-outline-gate"
-              {...outlineGateControl}
-            />
+            <>
+              <IdeaGateChipButton
+                issue={issue}
+                field="outlineGate"
+                label="Outline gate"
+                testId="detail-outline-gate"
+                enabled={outlineGateControl.enabled}
+                onToggle={outlineGateControl.onToggle}
+                saving={outlineGateControl.saving}
+              />
+              <ExecutionGateChip
+                issue={issue}
+                testId="detail-execution-gate"
+              />
+            </>
           ) : null}
           <PlanningLaunchButton
             issue={issue}

@@ -88,6 +88,15 @@ export function IssueMetaPanel({
     rows.push(
       <IssueGeneratedIssuesField key="generatedIssues" issue={issue} />,
     );
+    if (issue.codeApprovalRequired === true) {
+      rows.push(
+        <MetaRow
+          key="codeApprovalRequired"
+          label={FIELD_LABELS.codeApprovalRequired}
+          value="Yes"
+        />,
+      );
+    }
   }
 
   if (hasAttention(issue)) {

@@ -95,7 +95,9 @@ export const IDEA_RUNTIME_OPTIONAL_KEYS = [
   "labels",
   "stakeholder",
   "outlineGate",
+  "executionGate",
   "approvalPending",
+  "codeApprovalRequired",
   "appendTo",
 ] as const;
 
@@ -157,7 +159,9 @@ export type NullClearableObjectKey = (typeof NULL_CLEARABLE_OBJECT_KEYS)[number]
 export const FALSE_CLEARS_KEYS = [
   "noDiff",
   "outlineGate",
+  "executionGate",
   "approvalPending",
+  "codeApprovalRequired",
   "worktreeSetupFailed",
 ] as const satisfies readonly (keyof IssuePatch)[];
 
@@ -201,7 +205,9 @@ export const FIELD_LABELS = {
   personas: "Personas",
   stakeholder: "Stakeholder",
   outlineGate: "Outline gate",
+  executionGate: "Execution gate",
   approvalPending: "Approval pending",
+  codeApprovalRequired: "Code approval required",
   appendTo: "Append to",
   sourceIdea: "Source idea",
   generatedIssues: "Generated issues",
