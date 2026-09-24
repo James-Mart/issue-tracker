@@ -57,6 +57,26 @@ describe("work queue CLI", () => {
     ).toBe("3\n");
   });
 
+  it("includes workQueuedAt on epic and story rows in list JSON", async () => {
+    const { stdout, status } = await runIssueCli(["list", "epic"], { env: env() });
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout) as {
+      issues: Array<{ id: string; workQueuedAt?: string }>;
+    };
+    expect(parsed.issues.find((issue) => issue.id === "e")?.workQueuedAt).toBe(
+      "2026-01-01T00:00:00.000Z",
+    );
+
+    const stories = await runIssueCli(["list", "story"], { env: env() });
+    expect(stories.status).toBe(0);
+    const storyRows = JSON.parse(stories.stdout) as {
+      issues: Array<{ id: string; workQueuedAt?: string }>;
+    };
+    expect(
+      storyRows.issues.find((issue) => issue.id === "s")?.workQueuedAt,
+    ).toBe("2026-01-02T00:00:00.000Z");
+  });
+
   it("reads workQueuedAt and clears it", async () => {
     expect(
       (await runIssueCli(["epic", "get", "e", "workQueuedAt"], { env: env() })).stdout,

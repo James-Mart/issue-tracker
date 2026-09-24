@@ -34,6 +34,14 @@ export function isAwaitingDirectionIdeaFlowItem(
   return item.issue.kind === "idea" && item.state?.ideaStatus === "awaiting-direction";
 }
 
+/** Epic or project-level Story waiting in the server launch queue. */
+export function isWorkQueuedRoot(issue: IssueRecord): boolean {
+  return (
+    (issue.kind === "epic" || issue.kind === "story") &&
+    Boolean(issue.workQueuedAt)
+  );
+}
+
 /** Ready-bucket Epic or project-level Story eligible for cockpit start-work. */
 export function isReadyWorkFlowItem(
   item: FlowItem,
@@ -45,7 +53,8 @@ export function isReadyWorkFlowItem(
   if (
     flowItemNeedsAttention(item) ||
     item.state?.blocked ||
-    item.state?.planNotFinal
+    item.state?.planNotFinal ||
+    isWorkQueuedRoot(item.issue)
   ) {
     return false;
   }
@@ -303,6 +312,8 @@ export function flowBuckets(
       continue;
     } else if (isRecentlyMerged(issue, state)) {
       recentlyMerged.push(item);
+    } else if (isWorkQueuedRoot(issue)) {
+      inFlight.push(item);
     } else {
       ready.push(item);
     }

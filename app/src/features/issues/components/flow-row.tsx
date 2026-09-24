@@ -6,36 +6,39 @@ import { AxisChips } from "./axis-chips";
 import { isReadyToLandStory, leafTaskProgressCount } from "../lib/derived";
 import { issuesById, projectIdOf } from "../lib/build-tree";
 import type { FlowItem } from "../lib/flow";
-import { flowItemNeedsAttention } from "../lib/flow";
+import { flowItemNeedsAttention, isWorkQueuedRoot } from "../lib/flow";
 import { issueChannelPath } from "../lib/links";
 import { issueRailNodeState } from "../lib/rail-state";
 
-function flowRowPlanningBadge(
+function flowRowStatusChips(
   item: FlowItem,
   issues: IssueRecord[],
 ): ReactNode | undefined {
+  const chips: Array<{ variant: "todo" | "warn" | "inProgress"; label: string }> =
+    [];
+
   if (item.issue.kind === "story") {
     if (
       !item.issue.prUrl &&
       isReadyToLandStory(item.issue, item.state, issues)
     ) {
-      return <AxisChips chips={[{ variant: "todo", label: "awaiting PR" }]} />;
+      chips.push({ variant: "todo", label: "awaiting PR" });
     }
-    return undefined;
+  } else if (item.issue.kind === "idea") {
+    const status = item.state?.ideaStatus;
+    if (status === "awaiting-approval") {
+      chips.push({ variant: "warn", label: "awaiting approval" });
+    } else if (status === "planning" || status === "awaiting-direction") {
+      chips.push({ variant: "inProgress", label: "planning" });
+    }
   }
-  if (item.issue.kind !== "idea") return undefined;
-  const status = item.state?.ideaStatus;
-  if (status === "awaiting-approval") {
-    return (
-      <AxisChips chips={[{ variant: "warn", label: "awaiting approval" }]} />
-    );
+
+  if (isWorkQueuedRoot(item.issue)) {
+    chips.push({ variant: "todo", label: "Queued" });
   }
-  if (status !== "planning" && status !== "awaiting-direction") {
-    return undefined;
-  }
-  return (
-    <AxisChips chips={[{ variant: "inProgress", label: "planning" }]} />
-  );
+
+  if (chips.length === 0) return undefined;
+  return <AxisChips chips={chips} />;
 }
 
 function flowRowDrillInTo(
@@ -92,7 +95,7 @@ export function FlowRow({
   drillInState,
 }: FlowRowProps) {
   const railState = issueRailNodeState(item.issue, item.state, issues);
-  const live = railState === "in-flight";
+  const live = railState === "in-flight" && !isWorkQueuedRoot(item.issue);
   const count = leafTaskProgressCount(item.issue, issues);
   const drillInTo = flowRowDrillInTo(item, issues, to);
 
@@ -107,7 +110,7 @@ export function FlowRow({
         <OverviewRow
           className="min-w-0"
           avatar={avatar}
-          chips={flowRowPlanningBadge(item, issues)}
+          chips={flowRowStatusChips(item, issues)}
           blocked={Boolean(item.state?.blocked)}
           attention={flowRowShowsAttentionTriangle(item)}
           count={count}
