@@ -501,7 +501,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | --- | --- |
 | project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `labels`, `supportingDocs`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
-| idea | `title`, `archived`, `approvePlan`, `approvalPending`, `appendTo`, `partOf`, `labels`, `description` |
+| idea | `title`, `archived`, `outlineGate`, `executionGate`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commits`, `noDiff`, `sourceIdea`, `description` |
 
@@ -522,7 +522,7 @@ and refuses a sha already present on that Task. Whole-series replace uses
   `--remove <ids...>`; `--rename <oldId> <newId>`; `--clear` → `[]`. Modes are
   mutually exclusive. See [Project labels](#project-labels).
 - **Project `supportingDocs`:** no positional value. Set one key with
-  `--doc vision|codingStandards|designSystem` plus exactly one of
+  `--doc vision|codingStandards|designSystem|gateRubric` plus exactly one of
   `--attachment <name>` or `--workspace <path>`. `--clear` blanks the whole
   field; `--clear --doc <key>` removes one key. See
   [Project supporting docs](#project-supporting-docs).
@@ -612,15 +612,15 @@ Project — the common-to-every-kind fields plus:
 | `trunk` | string | default git ref for derived `mergeBase` when no `mergeBaseOverride` applies; defaults `main` (see [Project trunk](#project-trunk)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"` | Project default for derived policy; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
-| `supportingDocs` | `{ vision?, codingStandards?, designSystem? }`? | optional pointers to vision / coding standards / design system docs (see [Project supporting docs](#project-supporting-docs)) |
+| `supportingDocs` | `{ vision?, codingStandards?, designSystem?, gateRubric? }`? | optional pointers to vision / coding standards / design system / gate rubric docs (see [Project supporting docs](#project-supporting-docs)) |
 
 No `partOf`, no status, no assignee/needs-attention. Its `description.md` is a
 short overview of the Project.
 
 ### Project supporting docs
 
-A Project may point at up to three optional supporting documents — **vision**,
-**coding standards**, and **design system** — via the imperative
+A Project may point at up to four optional supporting documents — **vision**,
+**coding standards**, **design system**, and **gate rubric** — via the imperative
 `supportingDocs` field. Each present key is a `SupportingDocRef`:
 
 - `{ type: "attachment", name: string }` — basename already attached on the
@@ -635,12 +635,13 @@ target → skip; never fail the workflow for a missing doc. Authoring guidance:
 [issue-tracker-project-docs](skills/issue-tracker-project-docs/SKILL.md).
 
 **Well-known attachment basenames** (skill default when choosing attachment
-storage): `vision.md`, `coding-standards.md`, `design-system.md`.
+storage): `vision.md`, `coding-standards.md`, `design-system.md`,
+`gate-rubric.md`.
 
 **CLI.**
 
 ```
-issue project set <id> supportingDocs --doc vision|codingStandards|designSystem \
+issue project set <id> supportingDocs --doc vision|codingStandards|designSystem|gateRubric \
   --attachment <name>|--workspace <path>
 issue project set <id> supportingDocs --clear
 issue project set <id> supportingDocs --clear --doc <key>
@@ -664,6 +665,11 @@ the YAML doc.
   Adherence is enforced during implementation (implementor / code-quality
   validator when the Task is UI-related), not by plan-polish
   internal-consistency.
+- `gateRubric` — exemption rubric for the gated autonomous flow. Lists only
+  when the human does **not** need to be asked — **silence means ask**: a
+  decision the rubric does not clearly exempt goes to the human; no rubric →
+  both gates always apply. Use the section headings `## Outline does not need
+  approval when` and `## Code does not need approval when`.
 
 **Consultation map.**
 
@@ -672,6 +678,7 @@ the YAML doc.
 | `vision` | plan-polish check agents (shared bootstrap + internal-consistency cohesion), implementor bootstrap |
 | `codingStandards` | implementor, code-quality validator; plan-polish internal-consistency when tree prose makes claims the doc governs |
 | `designSystem` | implementor + code-quality validator when the Task appears UI-related (judgment from prose + paths; no Task flag) |
+| `gateRubric` | auto-plan stakeholder |
 
 `issue-tracker-plan` is absent from `vision` because the vision is read from
 the seat that answers, not the seat that asks ([Roles](#roles)).
@@ -681,7 +688,7 @@ prompts.
 
 **Subsystem vision docs (convention only).** Per-subsystem vision docs are
 ordinary Project **attachments**, not additional `supportingDocs` keys. The
-`supportingDocs` schema stays `{ vision?, codingStandards?, designSystem? }`
+`supportingDocs` schema stays `{ vision?, codingStandards?, designSystem?, gateRubric? }`
 — no schema or CLI change. Index them from the main vision doc (the
 `supportingDocs.vision` target) under a `## Subsystem reference` section.
 Each entry is a markdown list item:
@@ -966,8 +973,10 @@ Idea — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Project id (required) |
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
-| `approvePlan` | boolean? | absent until set; when true, the human must answer the post-outline auto-plan gate (see [Roles](#roles)); written by the human |
-| `approvalPending` | boolean? | absent until set; when true, a post-outline gate is posted and waiting on the human; written by the stakeholder agent; `apply` preserves it alongside `approvePlan` |
+| `outlineGate` | boolean? | absent until set; when true, the human must answer the post-outline auto-plan gate (see [Roles](#roles)); written by the human; legacy stores may still hold `approvePlan` until `migrate:outline-gate` rewrites them |
+| `executionGate` | boolean? | absent until set; when true, work roots planned from this Idea are not started automatically; written by the human; requires a `stakeholder` |
+| `approvalPending` | boolean? | absent until set; when true, a post-outline gate is posted and waiting on the human; written by the stakeholder agent; `apply` preserves it alongside `outlineGate` |
+| `codeApprovalRequired` | boolean? | absent until set; when true, the stakeholder's verdict is that resulting code needs human approval before merge; written by the stakeholder agent; `apply` preserves |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
 | `appendTo` | string? | optional; names one open Story in the same Project whose tail receives this Idea's plan via `issue story append` instead of minting a new root (see [Relationships](#relationships)) |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
@@ -1591,8 +1600,10 @@ preserves everything else from the existing same-kind issue.
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Project catalog) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Epic / Idea / Story assignments) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
-| `approvePlan` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
+| `outlineGate` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
+| `executionGate` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
 | `approvalPending` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); stakeholder-agent writer; `apply` preserves |
+| `codeApprovalRequired` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); stakeholder-agent writer; `apply` preserves |
 | `stakeholder` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `appendTo` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `kind` | explicit on every `children:` entry (allow-lists above); omitted on root nodes (form key implies kind) |

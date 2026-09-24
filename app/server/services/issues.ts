@@ -59,7 +59,13 @@ import {
   storyIdsForLifecycleRemoval,
 } from "./worktree.js";
 import { uniqueSlug } from "./slug.js";
-import { validateAppendToPatch, validateNonClearablePatch, validateSourceIdeaPatch } from "./patch.js";
+import {
+  EXECUTION_GATE_STAKEHOLDER_ERROR,
+  validateAppendToPatch,
+  validateExecutionGatePatch,
+  validateNonClearablePatch,
+  validateSourceIdeaPatch,
+} from "./patch.js";
 import { validateCommitsPatch, validateFullCommitSha } from "./commit-sha.js";
 import { validateMergePolicyPatch } from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
@@ -407,11 +413,20 @@ export function create(input: CreateInput): Promise<IssueRecord> {
         assertAllowedAgentModelSlug(input.stakeholder);
         draft.stakeholder = input.stakeholder;
       }
-      if (input.approvePlan === true) {
-        draft.approvePlan = true;
+      if (input.outlineGate === true) {
+        draft.outlineGate = true;
+      }
+      if (input.executionGate === true) {
+        draft.executionGate = true;
       }
       if (input.approvalPending === true) {
         draft.approvalPending = true;
+      }
+      if (input.codeApprovalRequired === true) {
+        draft.codeApprovalRequired = true;
+      }
+      if (draft.executionGate === true && !draft.stakeholder) {
+        throw new IssueError("conflict", EXECUTION_GATE_STAKEHOLDER_ERROR);
       }
     }
     if (input.kind === "story") {
@@ -574,6 +589,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     validateMergePolicyPatch(existing, jsonPatch, issues);
     validateSourceIdeaPatch(existing, jsonPatch, issues);
     validateAppendToPatch(existing, jsonPatch, issues);
+    validateExecutionGatePatch(existing, jsonPatch);
     if (
       existing.kind === "idea" &&
       "stakeholder" in jsonPatch &&

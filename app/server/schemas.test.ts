@@ -99,6 +99,7 @@ describe("parseIssue - valid per kind", () => {
       supportingDocs: {
         vision: { type: "attachment", name: "vision.md" },
         codingStandards: { type: "workspace", path: "docs/cs.md" },
+        gateRubric: { type: "attachment", name: "gate-rubric.md" },
       },
     });
     expect(result.ok).toBe(true);
@@ -106,6 +107,7 @@ describe("parseIssue - valid per kind", () => {
       expect(result.issue.supportingDocs).toEqual({
         vision: { type: "attachment", name: "vision.md" },
         codingStandards: { type: "workspace", path: "docs/cs.md" },
+        gateRubric: { type: "attachment", name: "gate-rubric.md" },
       });
     }
   });

@@ -2,10 +2,10 @@
 name: issue-tracker-project-docs
 disable-model-invocation: true
 description: >-
-  Author or revise one Project supporting doc (vision, coding standards, or
-  design system) and record it in supportingDocs. Use when the user asks to
-  write or update project vision, coding standards, design system, or
-  supporting docs.
+  Author or revise one Project supporting doc (vision, coding standards,
+  design system, or gate rubric) and record it in supportingDocs. Use when
+  the user asks to write or update project vision, coding standards, design
+  system, gate rubric, or supporting docs.
 ---
 
 # Issue Tracker — Project supporting docs
@@ -22,7 +22,7 @@ this skill only creates or revises them. Glossary and field shape:
 ## Argument
 
 Optional: a **Project** id and/or a doc key
-(`vision` | `codingStandards` | `designSystem`).
+(`vision` | `codingStandards` | `designSystem` | `gateRubric`).
 
 ## Flow
 
@@ -49,6 +49,7 @@ If the user did not name a key, **prompt** for exactly one of:
 | `vision` | Vision |
 | `codingStandards` | Coding standards |
 | `designSystem` | Design system |
+| `gateRubric` | Gate rubric |
 
 Do not invent other keys. One key per run.
 
@@ -76,6 +77,7 @@ Defaults:
   | `vision` | `vision.md` |
   | `codingStandards` | `coding-standards.md` |
   | `designSystem` | `design-system.md` |
+  | `gateRubric` | `gate-rubric.md` |
 
 For a new workspace path, ask for a workspace-relative path (no absolute
 paths, no `..`).
@@ -95,7 +97,8 @@ When the selected key is `vision`:
    settled in step 3; vision-docs returns an approved draft and stops.
 2. Continue at **## Flow → 7. Write** with that draft (skip steps 5–6).
 
-When the key is `codingStandards` or `designSystem`, continue with steps 5–6.
+When the key is `codingStandards`, `designSystem`, or `gateRubric`, continue
+with steps 5–6.
 
 ### 5. Load current content (revise only)
 
@@ -111,11 +114,23 @@ When **revising**, load from the existing ref in the step-1 JSON:
 If the target is missing or unreadable, tell the user and continue as a
 fresh draft for that key (still write + set at the end).
 
-### 6. Grill and draft (`codingStandards` / `designSystem`)
+### 6. Grill and draft (`codingStandards` / `designSystem` / `gateRubric`)
 
 Invoke **`/grill-me`** for **this doc only**: goals and content the user wants
-captured. Goal-only freeform — **no fixed outline** and no obligatory section
-checklist. Stay on the chosen doc; do not grill the other two keys.
+captured. Stay on the chosen doc; do not grill the other keys.
+
+For `codingStandards` and `designSystem`, goal-only freeform — **no fixed
+outline** and no obligatory section checklist.
+
+For `gateRubric`, use exactly two sections:
+
+- `## Outline does not need approval when`
+- `## Code does not need approval when`
+
+Each section lists exemption criteria only — phrased in checkable terms
+(concrete paths, UI surfaces, deletion-only edits, no CLI or schema change).
+**Silence means ask**: anything not clearly listed in a section requires
+human approval for that gate.
 
 Draft the full document in chat (Markdown unless the user asked for HTML).
 Get an **explicit user approve** of the draft before writing. On rejection,

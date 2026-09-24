@@ -14,7 +14,7 @@ Turn a seed issue into a polished plan tree, leaving an audit trail the human
 reviews afterward. You are the **stakeholder**: you answer the
 vanilla planner's grill from product intent (never from what code already
 does), hold the grill open until every implied seam is opened, then route the
-post-outline gate per the Idea's `approvePlan` flag (**## Flow** step 3),
+post-outline gate per the Idea's outline-gate flag (**## Flow** step 3),
 resolve polish escalations, and finalize with an audit report on the archived
 source Idea.
 Provenance (`sourceIdea`) lands on each resulting root from the planner's
@@ -76,7 +76,7 @@ there is nothing to resume.
    step 3 (Idea → proceed; any other kind → refuse). Treat a refuse here as a
    **preflight-gate refusal**.
 5. `issue view <issueId>` — the full source `description.md`.
-6. **Approval-gate flag** — `issue idea get <issueId> approvePlan`. `true` → the
+6. **Outline-gate flag** — `issue idea get <issueId> outlineGate`. `true` → the
    human answers the post-outline gate; empty output → you answer it. Carry the
    value through the run; do not re-read it.
 7. The Project **vision** doc via the shared consult mechanism: **Read**
@@ -250,7 +250,7 @@ specifics and stop; otherwise proceed to Flow.
 
    **Post-outline gate.** The planner puts this gate to you after each
    outline. Run the **Coverage check** first; a push goes back to the planner
-   and leaves the routing below unrun. With the approval-gate flag empty
+   and leaves the routing below unrun. With the outline-gate flag empty
    (**## Bootstrap** step 6), answer the gate yourself from the stakeholder
    decision heuristics. With the flag `true` it is the human's: run
    `issue idea set <issueId> approvalPending true`, then end your turn

@@ -73,65 +73,77 @@ function usePlanningStakeholder(issue: IdeaDetail) {
   return { stakeholder, onChange, saving, error };
 }
 
-function useApprovePlan(issue: IdeaDetail) {
-  const [approvePlan, setApprovePlan] = useState(issue.approvePlan === true);
+function useIdeaGateToggle(
+  issue: IdeaDetail,
+  field: "outlineGate" | "executionGate",
+) {
+  const stored = issue[field] === true;
+  const [enabled, setEnabled] = useState(stored);
   const update = useUpdateIssue();
   const { saving, run } = useIssuePatchAction();
 
   useEffect(() => {
-    setApprovePlan(issue.approvePlan === true);
-  }, [issue.approvePlan]);
+    setEnabled(issue[field] === true);
+  }, [issue, field]);
 
   const onToggle = () => {
-    const next = !approvePlan;
-    const previous = approvePlan;
-    setApprovePlan(next);
+    const next = !enabled;
+    const previous = enabled;
+    setEnabled(next);
     void run(async () => {
       try {
         await update.mutateAsync({
           id: issue.id,
-          patch: { approvePlan: next },
+          patch: { [field]: next },
         });
       } catch (err) {
-        setApprovePlan(previous);
+        setEnabled(previous);
         throw err;
       }
     });
   };
 
-  return { approvePlan, onToggle, saving };
+  return { enabled, onToggle, saving };
 }
 
-function ApprovePlanChipButton({
+function IdeaGateChipButton({
   issue,
-  approvePlan,
+  field,
+  label,
+  enabled,
   onToggle,
   saving,
-  testId = "flow-row-approve-plan",
+  testId,
 }: {
   issue: IdeaDetail;
-  approvePlan: boolean;
+  field: "outlineGate" | "executionGate";
+  label: string;
+  enabled: boolean;
   onToggle: () => void;
   saving: boolean;
-  testId?: string;
+  testId: string;
 }) {
-  const stateLabel = approvePlan ? "on" : "off";
+  const stateLabel = enabled ? "on" : "off";
+  const controlId =
+    field === "outlineGate"
+      ? `outline-gate-${issue.id}`
+      : `execution-gate-${issue.id}`;
 
   return (
     <Button
       type="button"
       variant="default"
-      id={`approve-plan-${issue.id}`}
-      aria-pressed={approvePlan}
+      id={controlId}
+      aria-pressed={enabled}
       data-testid={testId}
       disabled={saving}
       className="h-7 px-2 font-mono text-[10px] tracking-[0.08em]"
       onClick={onToggle}
     >
-      <span className="text-muted-foreground">Approve plan ·</span>{" "}
+      <span className="text-muted-foreground">{label} ·</span>{" "}
       <span
         className={cn(
-          approvePlan
+          enabled
             ? "text-[hsl(var(--current))]"
             : "text-muted-foreground",
         )}
@@ -142,16 +154,63 @@ function ApprovePlanChipButton({
   );
 }
 
-function ApprovePlanChip({
+function OutlineGateChip({
   issue,
-  testId = "flow-row-approve-plan",
+  testId = "flow-row-outline-gate",
 }: {
   issue: IdeaDetail;
   testId?: string;
 }) {
-  const control = useApprovePlan(issue);
+  const control = useIdeaGateToggle(issue, "outlineGate");
   return (
-    <ApprovePlanChipButton issue={issue} testId={testId} {...control} />
+    <IdeaGateChipButton
+      issue={issue}
+      field="outlineGate"
+      label="Outline gate"
+      testId={testId}
+      enabled={control.enabled}
+      onToggle={control.onToggle}
+      saving={control.saving}
+    />
+  );
+}
+
+function ExecutionGateChip({
+  issue,
+  testId = "flow-row-execution-gate",
+}: {
+  issue: IdeaDetail;
+  testId?: string;
+}) {
+  const control = useIdeaGateToggle(issue, "executionGate");
+  return (
+    <IdeaGateChipButton
+      issue={issue}
+      field="executionGate"
+      label="Execution gate"
+      testId={testId}
+      enabled={control.enabled}
+      onToggle={control.onToggle}
+      saving={control.saving}
+    />
+  );
+}
+
+function IdeaGateChips({
+  issue,
+  testIdPrefix,
+}: {
+  issue: IdeaDetail;
+  testIdPrefix: "flow-row" | "detail";
+}) {
+  return (
+    <>
+      <OutlineGateChip issue={issue} testId={`${testIdPrefix}-outline-gate`} />
+      <ExecutionGateChip
+        issue={issue}
+        testId={`${testIdPrefix}-execution-gate`}
+      />
+    </>
   );
 }
 
@@ -358,7 +417,7 @@ export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
 
   return (
     <div className="flex items-center gap-1">
-      {stakeholder ? <ApprovePlanChip issue={issue} /> : null}
+      {stakeholder ? <IdeaGateChips issue={issue} testIdPrefix="flow-row" /> : null}
       <PlanningLaunchButton
         issue={issue}
         channel="planning"
@@ -393,7 +452,7 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
         {stakeholder ? (
-          <ApprovePlanChip issue={issue} testId="detail-approve-plan" />
+          <IdeaGateChips issue={issue} testIdPrefix="detail" />
         ) : null}
         <PlanningLaunchButton
           issue={issue}
@@ -440,12 +499,12 @@ export function PlanningChannelEmptyState({
   const models = modelsData?.models ?? [];
   const defaultModel = defaultConversationModel(models);
   const { stakeholder, onChange, saving, error } = usePlanningStakeholder(issue);
-  const approvePlanControl = useApprovePlan(issue);
+  const outlineGateControl = useIdeaGateToggle(issue, "outlineGate");
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
   const copy = planningLaunchCopy(
     stakeholder,
     models,
-    approvePlanControl.approvePlan,
+    outlineGateControl.enabled,
   );
 
   useEffect(() => {
@@ -487,11 +546,21 @@ export function PlanningChannelEmptyState({
             />
           ) : null}
           {stakeholder ? (
-            <ApprovePlanChipButton
-              issue={issue}
-              testId="detail-approve-plan"
-              {...approvePlanControl}
-            />
+            <>
+              <IdeaGateChipButton
+                issue={issue}
+                field="outlineGate"
+                label="Outline gate"
+                testId="detail-outline-gate"
+                enabled={outlineGateControl.enabled}
+                onToggle={outlineGateControl.onToggle}
+                saving={outlineGateControl.saving}
+              />
+              <ExecutionGateChip
+                issue={issue}
+                testId="detail-execution-gate"
+              />
+            </>
           ) : null}
           <PlanningLaunchButton
             issue={issue}

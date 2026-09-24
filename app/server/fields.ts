@@ -94,8 +94,10 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
 export const IDEA_RUNTIME_OPTIONAL_KEYS = [
   "labels",
   "stakeholder",
-  "approvePlan",
+  "outlineGate",
+  "executionGate",
   "approvalPending",
+  "codeApprovalRequired",
   "appendTo",
 ] as const;
 
@@ -156,8 +158,10 @@ export type NullClearableObjectKey = (typeof NULL_CLEARABLE_OBJECT_KEYS)[number]
 // Mergeable patch keys cleared when patched with `false` (absent-until-true booleans).
 export const FALSE_CLEARS_KEYS = [
   "noDiff",
-  "approvePlan",
+  "outlineGate",
+  "executionGate",
   "approvalPending",
+  "codeApprovalRequired",
   "worktreeSetupFailed",
 ] as const satisfies readonly (keyof IssuePatch)[];
 
@@ -200,8 +204,10 @@ export const FIELD_LABELS = {
   inspirationApps: "Inspiration apps",
   personas: "Personas",
   stakeholder: "Stakeholder",
-  approvePlan: "Approve plan",
+  outlineGate: "Outline gate",
+  executionGate: "Execution gate",
   approvalPending: "Approval pending",
+  codeApprovalRequired: "Code approval required",
   appendTo: "Append to",
   sourceIdea: "Source idea",
   generatedIssues: "Generated issues",

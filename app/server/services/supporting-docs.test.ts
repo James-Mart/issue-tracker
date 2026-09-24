@@ -150,6 +150,7 @@ describe("supportingDocs helpers", () => {
       vision: "vision.md",
       codingStandards: "coding-standards.md",
       designSystem: "design-system.md",
+      gateRubric: "gate-rubric.md",
     });
   });
 

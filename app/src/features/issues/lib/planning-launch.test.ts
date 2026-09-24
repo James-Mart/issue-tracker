@@ -58,7 +58,7 @@ describe("planningLaunchCopy", () => {
     expect(copy.detail).toContain("without your answers");
   });
 
-  it("describes the approval gate when approvePlan is on", () => {
+  it("describes the approval gate when outlineGate is on", () => {
     const copy = planningLaunchCopy("claude-opus-5", models, true);
     expect(copy.actionLabel).toBe("Start auto-plan on Opus 5");
     expect(copy.detail).toContain("pauses for your approval");

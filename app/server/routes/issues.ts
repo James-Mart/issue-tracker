@@ -227,12 +227,12 @@ export function createIssuesRouter(
       if (
         channel === "planning" &&
         issue.kind === "idea" &&
-        issue.approvePlan === true &&
+        issue.outlineGate === true &&
         !issue.stakeholder
       ) {
         throw new IssueError(
           "conflict",
-          'approvePlan is set but this Idea has no stakeholder; approvePlan governs auto-plan only',
+          'outlineGate is set but this Idea has no stakeholder; outlineGate governs auto-plan only',
         );
       }
       const body = req.body as {

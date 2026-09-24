@@ -160,3 +160,22 @@ describe("IssueMetaPanel Idea append row", () => {
     expect(field).toBeTruthy();
   });
 });
+
+describe("IssueMetaPanel Idea codeApprovalRequired", () => {
+  it("shows code approval required read-only when set", () => {
+    const { container } = mount(
+      <IssueMetaPanel
+        issue={{ ...ideaIssue(), codeApprovalRequired: true }}
+      />,
+    );
+    expect(container.textContent).toContain(FIELD_LABELS.codeApprovalRequired);
+    expect(container.textContent).toContain("Yes");
+  });
+
+  it("hides code approval required when unset", () => {
+    const { container } = mount(<IssueMetaPanel issue={ideaIssue()} />);
+    expect(container.textContent).not.toContain(
+      FIELD_LABELS.codeApprovalRequired,
+    );
+  });
+});
