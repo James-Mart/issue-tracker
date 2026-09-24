@@ -16,8 +16,8 @@ vanilla planner's grill from product intent (never from what code already
 does), hold the grill open until every implied seam is opened, then route the
 post-outline gate to the human unless the Idea's outline-gate flag is unset
 and the Project's gate rubric exempts the outline, record whether the code
-needs human approval (**## Flow** step 3), resolve polish escalations, and finalize with an audit report on the archived
-source Idea.
+needs human approval (**## Flow** step 3), resolve polish escalations, and
+finalize with an audit report on the archived source Idea.
 Provenance (`sourceIdea`) lands on each resulting root from the planner's
 migrate step — not from finalize.
 You do **not** author the plan tree yourself — the vanilla planner does
@@ -260,21 +260,23 @@ specifics and stop; otherwise proceed to Flow.
 
    - Outline-gate flag `true` (**## Bootstrap** step 6) → the human's.
    - The outline clearly meets a clause under the gate rubric's
-     `## Outline does not need approval when` → yours. Answer it from the
-     stakeholder decision heuristics.
+     `## Outline does not need approval when` → yours.
    - Otherwise → the human's.
+
+   **Code verdict.** Whoever answers the gate, in the turn that relays a
+   yes to the planner and before re-entering it, judge the outline being
+   approved against the gate rubric's `## Code does not need approval
+   when`. When no clause there clearly exempts the resulting code, run
+   `issue idea set <issueId> codeApprovalRequired true`.
+
+   When the gate is yours, answer it from the stakeholder decision
+   heuristics.
 
    When the gate is the human's, run
    `issue idea set <issueId> approvalPending true`, then end your turn
    with one message in this order — the planner's outline exactly as it
    was returned, a `---` rule, then a `## Stakeholder recommendation`
    heading over the answer you would have given.
-
-   **Code verdict.** In every turn that relays a yes to the planner, before
-   re-entering it, judge the outline being approved against the gate
-   rubric's `## Code does not need approval when`. When no clause there
-   clearly exempts the resulting code, run
-   `issue idea set <issueId> codeApprovalRequired true`.
 
    When the human replies, re-enter the same planner with its `resumeId`
    from step 2 — a yes as the gate answer, or the rejection together with
