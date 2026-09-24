@@ -116,7 +116,9 @@ function NestedStepRow({
   }
   switch (step.kind) {
     case "text":
-      return <TranscriptMarkdownText text={step.text} data-nested="text" />;
+      return (
+        <TranscriptMarkdownText text={step.text} renderMermaid data-nested="text" />
+      );
     case "thinking":
       return (
         <TranscriptThinking

@@ -154,14 +154,16 @@ export function CollapsiblePayload({
 export function TranscriptMarkdownText({
   text,
   className,
+  renderMermaid = false,
   ...attrs
 }: {
   text: string;
   className?: string;
+  renderMermaid?: boolean;
 } & ComponentPropsWithoutRef<"div">) {
   return (
     <div className={cn("min-w-0 break-words", className)} {...attrs}>
-      <Markdown>{text}</Markdown>
+      <Markdown renderMermaid={renderMermaid}>{text}</Markdown>
     </div>
   );
 }

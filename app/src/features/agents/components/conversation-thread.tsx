@@ -318,7 +318,7 @@ function AssistantEvent({ text }: { text: string }) {
       <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--current))]">
         Assistant
       </p>
-      <TranscriptMarkdownText text={text} />
+      <TranscriptMarkdownText text={text} renderMermaid />
     </div>
   );
 }

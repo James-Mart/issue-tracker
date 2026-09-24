@@ -21,6 +21,7 @@ import {
 } from "../lib/attachments";
 import { ISSUE_LINK_PREFIX, parseIssueLink } from "../lib/links";
 import { remarkImageGallery } from "../lib/remark-image-gallery";
+import { MermaidDiagram } from "@/features/agents/components/mermaid-diagram";
 import { IssueLink } from "./issue-link";
 
 function IssueAwareLink({
@@ -71,12 +72,49 @@ function MarkdownCode({
   );
 }
 
+function nodeText(children: ReactNode): string {
+  if (typeof children === "string" || typeof children === "number") {
+    return String(children);
+  }
+  if (Array.isArray(children)) return children.map(nodeText).join("");
+  if (isValidElement<{ children?: ReactNode }>(children)) {
+    return nodeText(children.props.children);
+  }
+  return "";
+}
+
+/** Fence body for a `language-mermaid` block, including one remark left unclosed. */
+function mermaidSourceFromPre(children: ReactNode): string | null {
+  for (const node of Children.toArray(children)) {
+    if (!isValidElement<{ className?: unknown; children?: ReactNode }>(node)) {
+      continue;
+    }
+    const className = node.props.className;
+    if (
+      typeof className !== "string" ||
+      !className.split(/\s+/).includes("language-mermaid")
+    ) {
+      continue;
+    }
+    return nodeText(node.props.children).replace(/\n$/, "");
+  }
+  return null;
+}
+
 function MarkdownPre({
   className,
   children,
   node: _node,
+  renderMermaid = false,
   ...props
-}: ComponentPropsWithoutRef<"pre"> & { node?: unknown }) {
+}: ComponentPropsWithoutRef<"pre"> & {
+  node?: unknown;
+  renderMermaid?: boolean;
+}) {
+  if (renderMermaid) {
+    const source = mermaidSourceFromPre(children);
+    if (source !== null) return <MermaidDiagram source={source} />;
+  }
   return (
     <pre className={cn("issue-md-pre", className)} {...props}>
       {children}
@@ -149,21 +187,28 @@ function MarkdownParagraph({
   return <p {...props}>{children}</p>;
 }
 
-const markdownComponents = {
-  a: IssueAwareLink,
-  code: MarkdownCode,
-  pre: MarkdownPre,
-  img: MarkdownImage,
-  p: MarkdownParagraph,
-};
+function markdownComponents(renderMermaid: boolean) {
+  return {
+    a: IssueAwareLink,
+    code: MarkdownCode,
+    pre: (props: ComponentPropsWithoutRef<"pre"> & { node?: unknown }) => (
+      <MarkdownPre {...props} renderMermaid={renderMermaid} />
+    ),
+    img: MarkdownImage,
+    p: MarkdownParagraph,
+  };
+}
 
 export function Markdown({
   children,
   issueId,
+  renderMermaid = false,
 }: {
   children: string;
   /** When set, relative Markdown links resolve to this issue's attachments. */
   issueId?: string;
+  /** Render `language-mermaid` fences as diagrams. Default leaves them as code. */
+  renderMermaid?: boolean;
 }) {
   const urlTransform = useMemo(() => {
     return (url: string): string => {
@@ -175,13 +220,17 @@ export function Markdown({
       return defaultUrlTransform(url);
     };
   }, [issueId]);
+  const components = useMemo(
+    () => markdownComponents(renderMermaid),
+    [renderMermaid],
+  );
 
   return (
     <div className={cn("prose-issue min-w-0", READING_MEASURE_CLASS)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkImageGallery]}
         urlTransform={urlTransform}
-        components={markdownComponents}
+        components={components}
       >
         {children}
       </ReactMarkdown>
