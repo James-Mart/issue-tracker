@@ -2,6 +2,7 @@ import {
   Children,
   isValidElement,
   useMemo,
+  useRef,
   useState,
   type ComponentPropsWithoutRef,
   type ReactNode,
@@ -21,6 +22,7 @@ import {
 } from "../lib/attachments";
 import { ISSUE_LINK_PREFIX, parseIssueLink } from "../lib/links";
 import { remarkImageGallery } from "../lib/remark-image-gallery";
+import { MermaidDiagram } from "@/features/agents/components/mermaid-diagram";
 import { IssueLink } from "./issue-link";
 
 function IssueAwareLink({
@@ -71,12 +73,88 @@ function MarkdownCode({
   );
 }
 
+function nodeText(children: ReactNode): string {
+  if (typeof children === "string" || typeof children === "number") {
+    return String(children);
+  }
+  if (Array.isArray(children)) return children.map(nodeText).join("");
+  if (isValidElement<{ children?: ReactNode }>(children)) {
+    return nodeText(children.props.children);
+  }
+  return "";
+}
+
+function fenceOffsets(
+  node: unknown,
+): { start: number; end: number } | null {
+  if (!node || typeof node !== "object" || !("position" in node)) return null;
+  const position = (
+    node as {
+      position?: { start?: { offset?: unknown }; end?: { offset?: unknown } };
+    }
+  ).position;
+  const start = position?.start?.offset;
+  const end = position?.end?.offset;
+  if (typeof start !== "number" || typeof end !== "number") return null;
+  return { start, end };
+}
+
+/** True when this fence's closing delimiter is not in the source span. */
+function mermaidFenceStillOpen(markdown: string, node: unknown): boolean {
+  const offsets = fenceOffsets(node);
+  if (!offsets) return false;
+  const slice = markdown.slice(offsets.start, offsets.end);
+  const firstBreak = slice.indexOf("\n");
+  const opener = firstBreak === -1 ? slice : slice.slice(0, firstBreak);
+  const marker = /^(?: {0,3})([`~]{3,})/.exec(opener)?.[1];
+  if (!marker) return false;
+  const lastBreak = slice.lastIndexOf("\n");
+  const lastLine = lastBreak === -1 ? slice : slice.slice(lastBreak + 1);
+  const tick = marker[0] === "`" ? "`" : "~";
+  const closer = new RegExp(`^ {0,3}${tick}{${marker.length},}[ \\t]*$`);
+  return !closer.test(lastLine);
+}
+
+/** Fence body for a `language-mermaid` block, including one remark left unclosed. */
+function mermaidSourceFromPre(children: ReactNode): string | null {
+  for (const node of Children.toArray(children)) {
+    if (!isValidElement<{ className?: unknown; children?: ReactNode }>(node)) {
+      continue;
+    }
+    const className = node.props.className;
+    if (
+      typeof className !== "string" ||
+      !className.split(/\s+/).includes("language-mermaid")
+    ) {
+      continue;
+    }
+    return nodeText(node.props.children).replace(/\n$/, "");
+  }
+  return null;
+}
+
 function MarkdownPre({
   className,
   children,
-  node: _node,
+  node,
+  renderMermaid = false,
+  mermaidStreaming = false,
+  markdown = "",
   ...props
-}: ComponentPropsWithoutRef<"pre"> & { node?: unknown }) {
+}: ComponentPropsWithoutRef<"pre"> & {
+  node?: unknown;
+  renderMermaid?: boolean;
+  mermaidStreaming?: boolean;
+  markdown?: string;
+}) {
+  if (renderMermaid) {
+    const source = mermaidSourceFromPre(children);
+    const holdOpen =
+      mermaidStreaming &&
+      source !== null &&
+      mermaidFenceStillOpen(markdown, node);
+    if (source !== null && !holdOpen) return <MermaidDiagram source={source} />;
+  }
   return (
     <pre className={cn("issue-md-pre", className)} {...props}>
       {children}
@@ -149,22 +227,48 @@ function MarkdownParagraph({
   return <p {...props}>{children}</p>;
 }
 
-const markdownComponents = {
-  a: IssueAwareLink,
-  code: MarkdownCode,
-  pre: MarkdownPre,
-  img: MarkdownImage,
-  p: MarkdownParagraph,
-};
+function markdownComponents(
+  renderMermaid: boolean,
+  mermaidStreamingRef: { current: boolean },
+  markdownRef: { current: string },
+) {
+  return {
+    a: IssueAwareLink,
+    code: MarkdownCode,
+    pre: (props: ComponentPropsWithoutRef<"pre"> & { node?: unknown }) => (
+      <MarkdownPre
+        {...props}
+        renderMermaid={renderMermaid}
+        mermaidStreaming={mermaidStreamingRef.current}
+        markdown={markdownRef.current}
+      />
+    ),
+    img: MarkdownImage,
+    p: MarkdownParagraph,
+  };
+}
 
 export function Markdown({
   children,
   issueId,
+  renderMermaid = false,
+  mermaidStreaming = false,
 }: {
   children: string;
   /** When set, relative Markdown links resolve to this issue's attachments. */
   issueId?: string;
+  /** Render `language-mermaid` fences as diagrams. Default leaves them as code. */
+  renderMermaid?: boolean;
+  /**
+   * While streaming, an unclosed `language-mermaid` fence stays source.
+   * Closed fences in the same message still render.
+   */
+  mermaidStreaming?: boolean;
 }) {
+  const markdownRef = useRef(children);
+  const mermaidStreamingRef = useRef(mermaidStreaming);
+  markdownRef.current = children;
+  mermaidStreamingRef.current = mermaidStreaming;
   const urlTransform = useMemo(() => {
     return (url: string): string => {
       if (url.startsWith(ISSUE_LINK_PREFIX)) return url;
@@ -175,13 +279,17 @@ export function Markdown({
       return defaultUrlTransform(url);
     };
   }, [issueId]);
+  const components = useMemo(
+    () => markdownComponents(renderMermaid, mermaidStreamingRef, markdownRef),
+    [renderMermaid],
+  );
 
   return (
     <div className={cn("prose-issue min-w-0", READING_MEASURE_CLASS)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkImageGallery]}
         urlTransform={urlTransform}
-        components={markdownComponents}
+        components={components}
       >
         {children}
       </ReactMarkdown>

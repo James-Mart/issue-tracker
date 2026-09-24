@@ -106,17 +106,26 @@ function NestedStepRow({
   step,
   thinkingOpen,
   collapsed,
+  mermaidStreaming,
 }: {
   step: NestedStep;
   thinkingOpen?: boolean;
   collapsed?: CollapsedDelegation;
+  mermaidStreaming?: boolean;
 }) {
   if (step.kind === "tool_call" && collapsed) {
     return <CollapsedDelegationRow row={collapsed} />;
   }
   switch (step.kind) {
     case "text":
-      return <TranscriptMarkdownText text={step.text} data-nested="text" />;
+      return (
+        <TranscriptMarkdownText
+          text={step.text}
+          renderMermaid
+          {...(mermaidStreaming ? { mermaidStreaming: true } : {})}
+          data-nested="text"
+        />
+      );
     case "thinking":
       return (
         <TranscriptThinking
@@ -235,6 +244,11 @@ export function SubagentThread({ agent }: { agent: SubAgent }) {
                   thinkingOpen={
                     running &&
                     step.kind === "thinking" &&
+                    isLiveNestedThinking(agent.steps, index)
+                  }
+                  mermaidStreaming={
+                    running &&
+                    step.kind === "text" &&
                     isLiveNestedThinking(agent.steps, index)
                   }
                 />

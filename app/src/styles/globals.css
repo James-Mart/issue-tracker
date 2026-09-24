@@ -424,4 +424,21 @@
     line-height: 1.3;
     color: hsl(var(--muted-foreground));
   }
+  /* Diagram scales to the message and scrolls with the thread, not in a pane. */
+  .prose-issue .mermaid-diagram,
+  .prose-issue .mermaid-diagram-error {
+    min-width: 0;
+    max-width: 100%;
+    overflow: visible;
+  }
+  .prose-issue .mermaid-diagram [data-mermaid-host] svg {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    pointer-events: none;
+  }
+  .prose-issue .mermaid-diagram [data-mermaid-host] svg * {
+    pointer-events: none;
+  }
 }

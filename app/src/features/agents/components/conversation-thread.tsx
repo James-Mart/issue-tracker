@@ -311,13 +311,23 @@ function PromptEvent({
   );
 }
 
-function AssistantEvent({ text }: { text: string }) {
+function AssistantEvent({
+  text,
+  mermaidStreaming,
+}: {
+  text: string;
+  mermaidStreaming?: boolean;
+}) {
   return (
     <div className="min-w-0" data-event="assistant">
       <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[hsl(var(--current))]">
         Assistant
       </p>
-      <TranscriptMarkdownText text={text} />
+      <TranscriptMarkdownText
+        text={text}
+        renderMermaid
+        {...(mermaidStreaming ? { mermaidStreaming: true } : {})}
+      />
     </div>
   );
 }
@@ -360,6 +370,7 @@ function TranscriptEventRow({
   event,
   subAgentsByCallId,
   thinkingOpen,
+  mermaidStreaming,
   conversationId,
   attachmentByName,
   attachmentsLoading,
@@ -367,6 +378,7 @@ function TranscriptEventRow({
   event: TranscriptEvent;
   subAgentsByCallId: Map<string, SubAgent>;
   thinkingOpen?: boolean;
+  mermaidStreaming?: boolean;
   conversationId: string;
   attachmentByName: Map<string, ConversationAttachment>;
   attachmentsLoading: boolean;
@@ -383,7 +395,9 @@ function TranscriptEventRow({
         />
       );
     case "assistant":
-      return <AssistantEvent text={event.text} />;
+      return (
+        <AssistantEvent text={event.text} mermaidStreaming={mermaidStreaming} />
+      );
     case "thinking":
       return <ThinkingEvent text={event.text} open={thinkingOpen} />;
     case "tool_call": {
@@ -583,6 +597,11 @@ function ThreadBody({
             subAgentsByCallId={subAgentsByCallId}
             thinkingOpen={
               segment.event.type === "thinking" &&
+              isLiveThinking(events, index)
+            }
+            mermaidStreaming={
+              segment.event.type === "assistant" &&
+              runActive &&
               isLiveThinking(events, index)
             }
             conversationId={conversationId}
