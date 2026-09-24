@@ -7,7 +7,7 @@ import {
   implementingSessionTitle,
   isImplementingWorkRoot,
   WORK_LOOP_COORDINATOR_MODEL,
-} from "./implementing-launch";
+} from "@server/services/implementing-launch";
 
 describe("implementingSessionTitle", () => {
   it("templates the title from the issue title", () => {

@@ -239,6 +239,21 @@ describe("FlowRow", () => {
     ).toBeTruthy();
   });
 
+  it("shows a Queued chip without live glow on queued work roots", () => {
+    const queued: IssueRecord = {
+      ...story("queued"),
+      workQueuedAt: "2026-07-01T00:00:00.000Z",
+    };
+    const container = mountRow(
+      queued,
+      { blocked: false, storyStatus: "not-started" },
+    );
+    expect(container.textContent).toContain("Queued");
+    expect(container.querySelector('[data-state="in-flight"]')).toBeNull();
+    const port = container.querySelector('[data-testid="rail-port"]');
+    expect(port?.className).not.toMatch(/animate-live-dot/);
+  });
+
   it("does not show awaiting PR when a Ready-to-land Story has a prUrl", () => {
     const parked: IssueRecord = { ...story("parked"), prUrl: "https://pr/1" };
     const container = mountRow(

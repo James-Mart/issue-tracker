@@ -358,17 +358,26 @@ function refuseIfImplementingWorkRootLocked(
   }
 }
 
+async function clearWorkQueuedAt(issueId: string): Promise<void> {
+  const issue = readIssueOrThrow(issueId);
+  if (issue.kind !== "epic" && issue.kind !== "story") return;
+  if (!issue.workQueuedAt) return;
+  const { update } = await import("./issues.js");
+  await update(issueId, { workQueuedAt: null });
+}
+
 /**
  * Atomically validate eligibility, archive any active predecessor on the same
  * issue+channel, create the anchored session, and optionally persist the first
  * prompt event — one `serialize()` turn so concurrent POSTs cannot leave two
- * active sessions, and refused requests write nothing.
+ * active sessions, and refused requests write nothing. An implementing session
+ * also clears the work root's `workQueuedAt`.
  */
-export function createIssueChannelSession(
+export async function createIssueChannelSession(
   input: CreateIssueChannelSessionInput,
   sessions: ActiveRunLookup,
 ): Promise<CreateIssueChannelSessionResult> {
-  return serialize(() => {
+  const created = await serialize(() => {
     const issueId = input.issueId.trim();
     if (!issueId) throw new IssueError("validation", "issueId is required");
     const projectId = input.projectId.trim();
@@ -406,6 +415,10 @@ export function createIssueChannelSession(
     );
     return { meta, ...(initialPrompt ? { initialPrompt } : {}) };
   });
+  if (input.channel === "implementing") {
+    await clearWorkQueuedAt(input.issueId.trim());
+  }
+  return created;
 }
 
 /** True when the conversation transcript has at least one persisted line. */

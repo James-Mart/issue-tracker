@@ -517,6 +517,18 @@ export function resolveLabelCatalogSet(
   return { action: "patch", patch: { labels: next } };
 }
 
+function coerceIntMin(raw: string, field: string, min: number): number {
+  const trimmed = raw.trim();
+  if (!/^-?\d+$/.test(trimmed)) {
+    throw new Error(`invalid ${field}: expected an integer >= ${min}`);
+  }
+  const value = Number(trimmed);
+  if (!Number.isInteger(value) || value < min) {
+    throw new Error(`invalid ${field}: expected an integer >= ${min}`);
+  }
+  return value;
+}
+
 export function coerceSetPatch(
   kind: IssueKind,
   field: string,
@@ -577,6 +589,9 @@ export function coerceSetPatch(
     if (spec.type === "needsAttention") {
       return { needsAttention: false, attentionReason: null };
     }
+    if (spec.type === "clearOnly") {
+      return { [storeKey]: null } as IssuePatch;
+    }
     if (!isClearableSetField(storeKey)) {
       throw new Error(`field "${field}" cannot be cleared`);
     }
@@ -606,9 +621,17 @@ export function coerceSetPatch(
     return { description: raw };
   }
 
+  if (spec.type === "clearOnly") {
+    throw new Error(`field "${field}" can only be cleared`);
+  }
+
   const raw = resolveFileOrValue(value, opts.file);
   if (raw === undefined) {
     throw new Error(`provide a value for ${field}`);
+  }
+
+  if (spec.type === "intMin") {
+    return { [storeKey]: coerceIntMin(raw, field, spec.min) } as IssuePatch;
   }
 
   switch (spec.type) {

@@ -1,6 +1,6 @@
 import type { ConversationChannel, IssueDetail, IssueKind } from "@server/schemas";
 import { skillPath } from "@/lib/plugin-paths";
-import { isImplementingWorkRoot, type ImplementingWorkRoot } from "./implementing-launch";
+import { isImplementingWorkRoot, type ImplementingWorkRoot } from "@server/services/implementing-launch";
 
 export type RetroWorkRoot = {
   id: string;

@@ -766,6 +766,49 @@ describe("tree", () => {
     expect(rework.stdout).toMatch(/^ {4}story a\b.*\breview=passed\b.*\bstale\b/m);
   });
 
+  it("shows queued chip on epic and project-level story lines when workQueuedAt is set", async () => {
+    writeIssue("root-story", {
+      kind: "story",
+      title: "Root story",
+      partOf: "p",
+      order: 4,
+      merged: false,
+      workQueuedAt: "2026-01-02T00:00:00.000Z",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("e", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      order: 1,
+      blockedBy: [],
+      workQueuedAt: "2026-01-01T00:00:00.000Z",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const set = await runIssueCli(["tree", "p"], { env: env() });
+    expect(set.status).toBe(0);
+    expect(set.stdout).toMatch(/^ {2}epic e\b.*\bqueued\b/m);
+    expect(set.stdout).toMatch(/^ {2}story root-story\b.*\bqueued\b/m);
+
+    expect(
+      (await runIssueCli(["epic", "set", "e", "workQueuedAt", "--clear"], { env: env() }))
+        .status,
+    ).toBe(0);
+    expect(
+      (await runIssueCli(["story", "set", "root-story", "workQueuedAt", "--clear"], {
+        env: env(),
+      })).status,
+    ).toBe(0);
+
+    const cleared = await runIssueCli(["tree", "p"], { env: env() });
+    expect(cleared.status).toBe(0);
+    expect(cleared.stdout).not.toMatch(/^ {2}epic e\b.*\bqueued\b/m);
+    expect(cleared.stdout).not.toMatch(/^ {2}story root-story\b.*\bqueued\b/m);
+  });
+
   it("shows needsRebase chip on story lines only when set", async () => {
     const unset = await runIssueCli(["tree", "p"], { env: env() });
     expect(unset.status).toBe(0);

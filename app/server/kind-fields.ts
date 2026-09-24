@@ -47,7 +47,9 @@ export type FieldCoerce =
   | { type: "description" }
   | { type: "needsAttention" }
   | { type: "commits" }
-  | { type: "agentModelSlug" };
+  | { type: "agentModelSlug" }
+  | { type: "clearOnly" }
+  | { type: "intMin"; min: number };
 
 export type SetFieldSpec = FieldCoerce;
 
@@ -67,6 +69,8 @@ export const PROJECT_SET_FIELDS = {
   inspirationApps: { type: "inspirationApps" },
   personas: { type: "personas" },
   description: { type: "description" },
+  maxImplementingRuns: { type: "intMin", min: 1 },
+  autonomous: { type: "boolean" },
 } as const satisfies Record<string, SetFieldSpec>;
 
 export const EPIC_SET_FIELDS = {
@@ -81,6 +85,7 @@ export const EPIC_SET_FIELDS = {
   labels: { type: "array" },
   retro: { type: "enum", values: RETRO_STATUSES },
   description: { type: "description" },
+  workQueuedAt: { type: "clearOnly" },
 } as const satisfies Record<string, SetFieldSpec>;
 
 export const IDEA_SET_FIELDS = {
@@ -93,6 +98,7 @@ export const IDEA_SET_FIELDS = {
   appendTo: { type: "string" },
   partOf: { type: "string" },
   stakeholder: { type: "agentModelSlug" },
+  planQueuedAt: { type: "clearOnly" },
   labels: { type: "array" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
@@ -117,6 +123,7 @@ export const STORY_SET_FIELDS = {
   retro: { type: "enum", values: RETRO_STATUSES },
   labels: { type: "array" },
   description: { type: "description" },
+  workQueuedAt: { type: "clearOnly" },
 } as const satisfies Record<string, SetFieldSpec>;
 
 export const TASK_SET_FIELDS = {
@@ -163,6 +170,8 @@ export const PROJECT_GET_FIELDS = {
   supportingDocs: STORED,
   inspirationApps: STORED,
   personas: STORED,
+  maxImplementingRuns: STORED,
+  autonomous: STORED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,
@@ -189,6 +198,7 @@ export const EPIC_GET_FIELDS = {
   mergePolicy: DERIVED,
   blocked: DERIVED,
   planNotFinal: DERIVED,
+  workQueuedAt: STORED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const IDEA_GET_FIELDS = {
@@ -203,6 +213,7 @@ export const IDEA_GET_FIELDS = {
   codeApprovalRequired: STORED,
   appendTo: STORED,
   stakeholder: STORED,
+  planQueuedAt: STORED,
   labels: STORED,
   order: STORED,
   createdAt: STORED,
@@ -245,6 +256,7 @@ export const STORY_GET_FIELDS = {
   worktree: DERIVED,
   behindMergeBase: DERIVED,
   mergeBaseRef: DERIVED,
+  workQueuedAt: STORED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const TASK_GET_FIELDS = {

@@ -24,8 +24,8 @@ import {
   type UploadAttachmentMutation,
 } from "../hooks/use-issue-detail-file-upload";
 import { exportTabIncluded, projectWorkspaceSet } from "../lib/export-tab";
-import { isImplementingWorkRoot } from "../lib/implementing-launch";
-import type { ImplementingWorkRoot } from "../lib/implementing-launch";
+import { isImplementingWorkRoot } from "@server/services/implementing-launch";
+import type { ImplementingWorkRoot } from "@server/services/implementing-launch";
 import { kindHasOwnFlow } from "../lib/own-flow";
 import { issueBelongsToProject, issuesById } from "../lib/build-tree";
 import {

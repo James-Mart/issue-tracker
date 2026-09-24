@@ -164,6 +164,8 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     if (detail.setupCommand) {
       lines.push(`setupCommand: ${detail.setupCommand}`);
     }
+    lines.push(`maxImplementingRuns: ${detail.maxImplementingRuns}`);
+    if (detail.autonomous) lines.push(`autonomous: true`);
     if (detail.supportingDocs) {
       const line = formatSupportingDocsLine(detail.supportingDocs);
       if (line) lines.push(`supportingDocs: ${line}`);
@@ -180,6 +182,12 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   if (hasPartOf(detail)) lines.push(`partOf: ${detail.partOf}`);
   if (detail.kind === "epic" && detail.blockedBy.length > 0) {
     lines.push(`blockedBy: ${detail.blockedBy.join(", ")}`);
+  }
+  if (
+    (detail.kind === "epic" || detail.kind === "story") &&
+    detail.workQueuedAt
+  ) {
+    lines.push(`workQueuedAt: ${detail.workQueuedAt}`);
   }
   if (
     (detail.kind === "epic" || detail.kind === "story" || detail.kind === "task") &&
@@ -204,6 +212,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   if (detail.kind === "idea") {
     if (detail.stakeholder) lines.push(`stakeholder: ${detail.stakeholder}`);
     if (detail.appendTo) lines.push(`appendTo: ${detail.appendTo}`);
+    if (detail.planQueuedAt) lines.push(`planQueuedAt: ${detail.planQueuedAt}`);
   }
   if (detail.kind === "task") {
     lines.push(`status: ${detail.status}`);

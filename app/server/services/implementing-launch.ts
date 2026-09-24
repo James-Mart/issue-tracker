@@ -1,7 +1,7 @@
 import type { AgentModel } from "@/features/agents/api/client";
 import { skillPath } from "@/lib/plugin-paths";
-import type { ConversationChannel, IssueDetail } from "@server/schemas";
-import { defaultConversationModel } from "./planning-launch";
+import type { ConversationChannel, IssueDetail } from "../schemas.js";
+import { defaultConversationModel } from "../../src/features/issues/lib/planning-launch.js";
 
 /** Root-agent model for the work-loop coordinator. */
 export const WORK_LOOP_COORDINATOR_MODEL = "composer-2.5";

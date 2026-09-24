@@ -19,7 +19,7 @@ import {
   implementingSessionTitle,
   isImplementingWorkRoot,
   type ImplementingWorkRoot,
-} from "../lib/implementing-launch";
+} from "@server/services/implementing-launch";
 import { overviewWorkLoopAction } from "../lib/overview-work-loop-action";
 import { issuesById } from "../lib/build-tree";
 import { leafTasksOf } from "../lib/derived";
