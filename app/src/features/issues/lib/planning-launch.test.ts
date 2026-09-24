@@ -55,14 +55,16 @@ describe("planningLaunchCopy", () => {
   it("describes auto-plan on the named model when a slug is set", () => {
     const copy = planningLaunchCopy("claude-opus-5", models);
     expect(copy.actionLabel).toBe("Start auto-plan on Opus 5");
-    expect(copy.detail).toContain("without your answers");
+    expect(copy.detail).toContain(
+      "routes the outline to you when the Project's gate rubric does not exempt it",
+    );
   });
 
   it("describes the approval gate when outlineGate is on", () => {
     const copy = planningLaunchCopy("claude-opus-5", models, true);
     expect(copy.actionLabel).toBe("Start auto-plan on Opus 5");
     expect(copy.detail).toContain("pauses for your approval");
-    expect(copy.detail).not.toContain("without your answers");
+    expect(copy.detail).not.toContain("gate rubric");
   });
 });
 

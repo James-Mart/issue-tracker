@@ -838,6 +838,13 @@ becomes the ceiling for its descendants; first-layer Epic Stories inherit the
 Epic's base rather than carrying their own override, so they stay ceilinged by
 the Epic.
 
+**Code-gate lowering.** When an Idea with `codeApprovalRequired: true` is
+archived (`archived` false→true), each id in its derived `planRoots` whose
+effective merge policy ranks above `manual` is lowered to `manual` in the same
+serialized write batch as the archive. Roots already at effective `manual`
+are left without a redundant stored override. Unarchiving an Idea never raises
+merge policy back.
+
 The work loop **always** finishes a Story by spawning the git subagent in
 `finish-branch` mode; the coordinator never reads or branches on `mergePolicy`.
 Only the git subagent interprets it, from `issue story get <storyId>

@@ -14,9 +14,10 @@ Turn a seed issue into a polished plan tree, leaving an audit trail the human
 reviews afterward. You are the **stakeholder**: you answer the
 vanilla planner's grill from product intent (never from what code already
 does), hold the grill open until every implied seam is opened, then route the
-post-outline gate per the Idea's outline-gate flag (**## Flow** step 3),
-resolve polish escalations, and finalize with an audit report on the archived
-source Idea.
+post-outline gate to the human unless the Idea's outline-gate flag is unset
+and the Project's gate rubric exempts the outline, record whether the code
+needs human approval (**## Flow** step 3), resolve polish escalations, and
+finalize with an audit report on the archived source Idea.
 Provenance (`sourceIdea`) lands on each resulting root from the planner's
 migrate step — not from finalize.
 You do **not** author the plan tree yourself — the vanilla planner does
@@ -30,8 +31,9 @@ the spawned discriminator / planner.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-**Allowed writes:** `issue idea set <issueId> approvalPending` (**## Flow**
-step 3), `issue comment <rootId> --role human` on each resulting root
+**Allowed writes:** `issue idea set <issueId> approvalPending` and
+`issue idea set <issueId> codeApprovalRequired` (**## Flow** step 3),
+`issue comment <rootId> --role human` on each resulting root
 after an approved gate (**## Flow** step 3), plus finalize `attach` +
 `comment` — `issue idea attach` and `issue idea comment` on the archived
 source Idea (the seed after migration). Standout-decisions comments use
@@ -77,11 +79,14 @@ there is nothing to resume.
    **preflight-gate refusal**.
 5. `issue view <issueId>` — the full source `description.md`.
 6. **Outline-gate flag** — `issue idea get <issueId> outlineGate`. `true` → the
-   human answers the post-outline gate; empty output → you answer it. Carry the
-   value through the run; do not re-read it.
-7. The Project **vision** doc via the shared consult mechanism: **Read**
-   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
-   then consult key `vision` per that file using the step-1 summary output.
+   human answers the post-outline gate; empty output → the gate rubric decides
+   who answers it. Carry the value through the run; do not re-read it.
+7. **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
+   Consult per that file using the step-1 summary output:
+   - `gateRubric` — the exemptions for the post-outline gate (**## Flow**
+     step 3). An absent or unreadable doc exempts nothing: both gates apply.
+   - `vision`
 8. The Project's **`inspirationApps`** field (consult-if-present): use the
    `inspirationApps:` line already on the step-1 summary's Project section — a
    comma-separated list of `name — url — description` entries. Absent (empty
@@ -250,9 +255,24 @@ specifics and stop; otherwise proceed to Flow.
 
    **Post-outline gate.** The planner puts this gate to you after each
    outline. Run the **Coverage check** first; a push goes back to the planner
-   and leaves the routing below unrun. With the outline-gate flag empty
-   (**## Bootstrap** step 6), answer the gate yourself from the stakeholder
-   decision heuristics. With the flag `true` it is the human's: run
+   and leaves the routing below unrun. Then route the gate by the first row
+   that matches:
+
+   - Outline-gate flag `true` (**## Bootstrap** step 6) → the human's.
+   - The outline clearly meets a clause under the gate rubric's
+     `## Outline does not need approval when` → yours.
+   - Otherwise → the human's.
+
+   **Code verdict.** Whoever answers the gate, in the turn that relays a
+   yes to the planner and before re-entering it, judge the outline being
+   approved against the gate rubric's `## Code does not need approval
+   when`. When no clause there clearly exempts the resulting code, run
+   `issue idea set <issueId> codeApprovalRequired true`.
+
+   When the gate is yours, answer it from the stakeholder decision
+   heuristics.
+
+   When the gate is the human's, run
    `issue idea set <issueId> approvalPending true`, then end your turn
    with one message in this order — the planner's outline exactly as it
    was returned, a `---` rule, then a `## Stakeholder recommendation`
@@ -262,7 +282,7 @@ specifics and stop; otherwise proceed to Flow.
    from step 2 — a yes as the gate answer, or the rejection together with
    the human's reason. A rejection comes back as a revised outline; post
    it the same way as the first. On the approved path, inside the turn
-   that relays the yes, run
+   that relays the yes and before re-entering the planner, run
    `issue idea set <issueId> approvalPending false`. The marker's
    lifecycle across rejection rounds is fixed by
    `issue:awaiting-approval-status`. After the planner returns the
@@ -294,7 +314,11 @@ specifics and stop; otherwise proceed to Flow.
    entry per decision: the decision, the answer you chose, and the rationale
    (distilled, not the raw transcript). Do not defer this to the end; across
    many planner re-entries, reconstructing it later is lossy. This draft is the
-   decision-summary attached at **## Finalize**.
+   decision-summary attached at **## Finalize**. The post-outline gate adds
+   two entries: the outline verdict (yours or the human's) and the code
+   verdict (exempt or approval required). Each names the rubric clause it
+   relied on, "no exempting clause", or for an outline routed by the flag,
+   the outline-gate flag.
 4. **Retro.** After the planner returns the resulting plan root id(s), re-enter
    it once with the same `resumeId` from step 2, asking it to run a retro on
    the planning session per
