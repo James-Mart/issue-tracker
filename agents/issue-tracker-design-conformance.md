@@ -96,7 +96,7 @@ In order:
 1. `npm run mockup-stack -- start <conversationId>`
 2. `npm run mockup-promote -- --conversation <conversationId> --direction <chosenDirectionId> --issue <issueId> --mode chosen`
 3. `npm run mockup-prune -- --conversation <conversationId> --keep <chosenDirectionId>`
-4. `npm run mockup-stack -- stop <conversationId>`
+4. `npm run mockup-stack -- stop <conversationId> --ended`
 5. Return per **## Return** from that promote's printed output, then stop.
 
 ## Return

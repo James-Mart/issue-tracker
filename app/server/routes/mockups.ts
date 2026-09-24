@@ -7,7 +7,8 @@ import {
 import { connect, type Socket } from "node:net";
 import type { NextFunction, Request, Response } from "express";
 import { isMockupStackLive } from "../services/mockup-stack.js";
-import { readMockupStackState } from "../services/mockup-scratch.js";
+import { readMockupStackState, readSessionOutcome } from "../services/mockup-scratch.js";
+import { mockupFallbackHtml } from "./mockup-fallback-page.js";
 
 const PREFIX = "/mockups/";
 
@@ -61,6 +62,15 @@ function emptyStatus(res: ServerResponse, status: number): void {
   res.statusCode = status;
   res.setHeader("Content-Length", "0");
   res.end();
+}
+
+function sendFallback(res: ServerResponse, conversationId: string): void {
+  const outcome = readSessionOutcome(conversationId);
+  const kind = outcome === "ended" ? "session-ended" : "stack-down";
+  const html = mockupFallbackHtml(kind, conversationId);
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.end(html);
 }
 
 function rejectUpgrade(socket: Socket): void {
@@ -156,7 +166,8 @@ function proxyUpgrade(
 /**
  * Reverse-proxy one conversation's loopback Storybook. HTTP and the websocket
  * upgrade on `/mockups/:conversationId/` share this handler. A conversation
- * with no live stack gets an empty 404 and is never sent to another port.
+ * with no live stack is never sent to another port: HTTP gets the session-ended
+ * page when the outcome is ended, and the loud-failure page otherwise.
  */
 export function mockupStackProxy(
   req: IncomingMessage,
@@ -176,7 +187,7 @@ export function mockupStackProxy(
   const baseUrl = liveBaseUrl(conversationId);
   if (!baseUrl) {
     if (upgrade) rejectUpgrade(resOrSocket);
-    else emptyStatus(resOrSocket, 404);
+    else sendFallback(resOrSocket, conversationId);
     return;
   }
 

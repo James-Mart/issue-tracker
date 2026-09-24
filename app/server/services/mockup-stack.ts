@@ -22,6 +22,7 @@ import {
   readMockupStackState,
   readMockupStackStateDirect,
   writeMockupStackState,
+  writeSessionOutcome,
   type MockupStackState,
 } from "./mockup-scratch.js";
 
@@ -248,12 +249,14 @@ export async function startMockupStack(
   const existing = readMockupStackState(conversationId);
   if (existing) {
     if (isMockupStackLive(existing)) {
+      writeSessionOutcome(conversationId, "open");
       return { state: existing, reused: true };
     }
     await stopMockupStack(conversationId);
   }
 
   const harnessPath = assertHarnessConfig(conversationId);
+  writeSessionOutcome(conversationId, "open");
   mkdirSync(mockupStackDir(conversationId), { recursive: true });
 
   const port = await pickFreePort();
@@ -366,7 +369,8 @@ function removeMockupStackState(conversationId: string): void {
 
 /**
  * Stop this conversation's Storybook stack and release its port. A
- * conversation with no recorded stack is not an error.
+ * conversation with no recorded stack is not an error. The session
+ * outcome file is left in place. `ended` writes `"ended"` first.
  *
  * A recorded pid that is not this process's child is removed with no signal.
  * An owned live group gets SIGTERM, then SIGKILL after `TERM_GRACE_MS`. The
@@ -375,8 +379,12 @@ function removeMockupStackState(conversationId: string): void {
  */
 export async function stopMockupStack(
   conversationId: string,
+  options?: { ended?: boolean },
 ): Promise<MockupStackStopResult> {
   ensureChildReaper();
+  if (options?.ended) {
+    writeSessionOutcome(conversationId, "ended");
+  }
   const state = readMockupStackState(conversationId);
   if (!state) return { stopped: false, state: null };
 

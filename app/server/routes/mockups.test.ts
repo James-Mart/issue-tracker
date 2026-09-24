@@ -166,13 +166,16 @@ describe("GET /mockups/:conversationId/", () => {
     expect(alpha.seen).not.toContain("/");
 
     const missing = await fetch(`${baseUrl}/mockups/conv-missing/`);
-    expect(missing.status).toBe(404);
-    expect(await missing.text()).toBe("");
+    expect(missing.status).toBe(200);
+    const missingHtml = await missing.text();
+    expect(missingHtml).toContain("Mockup preview is unavailable.");
+    expect(missingHtml).toContain('href="/agents/conv-missing"');
+    expect(missingHtml).not.toContain("restart");
     expect(alpha.seen).not.toContain("/");
     expect(beta.seen).toEqual(["/"]);
   });
 
-  it("returns an empty 404 when the recorded stack is not live", async () => {
+  it("serves the loud-failure page when the recorded stack is not live", async () => {
     const alpha = await listenUpstream("alpha-storybook");
     const { conversationsDir } = await import("../config.js");
     const { writeMockupStackState } = await import("../services/mockup-scratch.js");
@@ -187,9 +190,42 @@ describe("GET /mockups/:conversationId/", () => {
 
     const baseUrl = await startApp();
     const res = await fetch(`${baseUrl}/mockups/conv-a/`);
-    expect(res.status).toBe(404);
-    expect(await res.text()).toBe("");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Mockup preview is unavailable.");
+    expect(html).toContain("captures already posted there");
+    expect(html).toContain('href="/agents/conv-a"');
+    expect(html).not.toContain("restart");
     expect(alpha.seen).toEqual([]);
+  });
+
+  it("serves the session-ended page when the outcome is ended and the stack is down", async () => {
+    const { conversationsDir } = await import("../config.js");
+    const { writeSessionOutcome } = await import("../services/mockup-scratch.js");
+    writeConversationMeta(conversationsDir, "conv-a");
+    writeSessionOutcome("conv-a", "ended");
+
+    const baseUrl = await startApp();
+    const res = await fetch(`${baseUrl}/mockups/conv-a/`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("This mockup session has ended.");
+    expect(html).toContain('href="/agents/conv-a"');
+    expect(html).not.toContain("Mockup preview is unavailable.");
+  });
+
+  it("serves the loud-failure page when the outcome is still open", async () => {
+    const { conversationsDir } = await import("../config.js");
+    const { writeSessionOutcome } = await import("../services/mockup-scratch.js");
+    writeConversationMeta(conversationsDir, "conv-a");
+    writeSessionOutcome("conv-a", "open");
+
+    const baseUrl = await startApp();
+    const res = await fetch(`${baseUrl}/mockups/conv-a/`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Mockup preview is unavailable.");
+    expect(html).not.toContain("restart");
   });
 
   it("upgrades a websocket on the conversation prefix and not on another id", async () => {
@@ -229,7 +265,8 @@ describe("GET /mockups/:conversationId/", () => {
     expect(beta.seen).toEqual([]);
 
     const missing = await fetch(`${wsUrl.replace("ws://", "http://")}/mockups/conv-gone/`);
-    expect(missing.status).toBe(404);
+    expect(missing.status).toBe(200);
+    expect(await missing.text()).toContain("Mockup preview is unavailable.");
     expect(beta.seen).toEqual([]);
   });
 });
