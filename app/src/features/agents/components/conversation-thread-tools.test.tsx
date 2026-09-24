@@ -3,11 +3,23 @@ import {
   mountThread,
   renderThread,
   resetThreadMocks,
+  threadUi,
   transcriptState,
 } from "./conversation-thread.test-helpers";
 import { act } from "react";
 import { type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async () => ({
+      svg: "<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+      bindFunctions: vi.fn(),
+      diagramType: "flowchart-v2",
+    })),
+  },
+}));
 
 describe("ConversationThread Tool use groups", () => {
   let container: HTMLDivElement | undefined;
@@ -212,5 +224,45 @@ describe("ConversationThread Tool use groups", () => {
     expect(group.querySelector("[data-call-id='c3'] summary")!.textContent).not.toContain(
       "no matches",
     );
+  });
+
+  it("holds an open mermaid fence only on the live assistant while the run is active", () => {
+    const open = "```mermaid\nflowchart TD\n  A-->B";
+    threadUi.runActive = true;
+    transcriptState.events = [
+      { type: "prompt", text: "Draw", at: "2026-07-24T00:00:00.000Z" },
+      { type: "assistant", text: open, at: "2026-07-24T00:00:01.000Z" },
+    ];
+    ({ container, root } = mountThread("conv-1"));
+    const live = container!.querySelector('[data-event="assistant"] pre code');
+    expect(live?.className).toContain("language-mermaid");
+    expect(live?.textContent).toContain("A-->B");
+    expect(container!.querySelector("[data-mermaid-error]")).toBeNull();
+
+    act(() => root!.unmount());
+    container?.remove();
+    threadUi.runActive = false;
+    ({ container, root } = mountThread("conv-1"));
+    expect(
+      container!.querySelector('[data-event="assistant"] pre code.language-mermaid'),
+    ).toBeNull();
+
+    act(() => root!.unmount());
+    container?.remove();
+    threadUi.runActive = true;
+    transcriptState.events = [
+      { type: "assistant", text: open, at: "2026-07-24T00:00:01.000Z" },
+      {
+        type: "tool_call",
+        callId: "c1",
+        name: "Read",
+        status: "running",
+        at: "2026-07-24T00:00:02.000Z",
+      },
+    ];
+    ({ container, root } = mountThread("conv-1"));
+    expect(
+      container!.querySelector('[data-event="assistant"] pre code.language-mermaid'),
+    ).toBeNull();
   });
 });

@@ -1,7 +1,18 @@
 // @vitest-environment happy-dom
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async () => ({
+      svg: "<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+      bindFunctions: vi.fn(),
+      diagramType: "flowchart-v2",
+    })),
+  },
+}));
 import type { NestedStep } from "@server/schemas";
 import type { SubAgent } from "../lib/subagent";
 import { SubagentThread } from "./subagent-thread";
@@ -121,5 +132,45 @@ describe("SubagentThread Tool use groups", () => {
       "[data-call-id='c3']",
     ) as HTMLDetailsElement;
     expect(sibling.open).toBe(false);
+  });
+
+  it("holds an open mermaid fence only on the live text step of a running sub-agent", () => {
+    const open = "```mermaid\nflowchart TD\n  A-->B";
+    const { container } = mountThread({
+      agent: agent({
+        status: "running",
+        steps: [{ kind: "text", text: open }],
+      }),
+    });
+    const live = container.querySelector('[data-nested="text"] pre code');
+    expect(live?.className).toContain("language-mermaid");
+    expect(live?.textContent).toContain("A-->B");
+
+    const finished = mountThread({
+      agent: agent({
+        status: "completed",
+        steps: [{ kind: "text", text: open }],
+      }),
+    });
+    expect(
+      finished.container.querySelector(
+        '[data-nested="text"] pre code.language-mermaid',
+      ),
+    ).toBeNull();
+
+    const superseded = mountThread({
+      agent: agent({
+        status: "running",
+        steps: [
+          { kind: "text", text: open },
+          nestedTool("c1", "running", "Read", { path: "/tmp/a.ts" }),
+        ],
+      }),
+    });
+    expect(
+      superseded.container.querySelector(
+        '[data-nested="text"] pre code.language-mermaid',
+      ),
+    ).toBeNull();
   });
 });

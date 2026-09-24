@@ -155,15 +155,22 @@ export function TranscriptMarkdownText({
   text,
   className,
   renderMermaid = false,
+  mermaidStreaming = false,
   ...attrs
 }: {
   text: string;
   className?: string;
   renderMermaid?: boolean;
+  /** Hold an unclosed mermaid fence as source. Passed only with `renderMermaid`. */
+  mermaidStreaming?: boolean;
 } & ComponentPropsWithoutRef<"div">) {
   return (
     <div className={cn("min-w-0 break-words", className)} {...attrs}>
-      <Markdown renderMermaid={renderMermaid}>{text}</Markdown>
+      <Markdown
+        {...(renderMermaid ? { renderMermaid: true, mermaidStreaming } : {})}
+      >
+        {text}
+      </Markdown>
     </div>
   );
 }

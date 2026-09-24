@@ -2,6 +2,7 @@ import {
   Children,
   isValidElement,
   useMemo,
+  useRef,
   useState,
   type ComponentPropsWithoutRef,
   type ReactNode,
@@ -83,6 +84,37 @@ function nodeText(children: ReactNode): string {
   return "";
 }
 
+function fenceOffsets(
+  node: unknown,
+): { start: number; end: number } | null {
+  if (!node || typeof node !== "object" || !("position" in node)) return null;
+  const position = (
+    node as {
+      position?: { start?: { offset?: unknown }; end?: { offset?: unknown } };
+    }
+  ).position;
+  const start = position?.start?.offset;
+  const end = position?.end?.offset;
+  if (typeof start !== "number" || typeof end !== "number") return null;
+  return { start, end };
+}
+
+/** True when this fence's closing delimiter is not in the source span. */
+function mermaidFenceStillOpen(markdown: string, node: unknown): boolean {
+  const offsets = fenceOffsets(node);
+  if (!offsets) return false;
+  const slice = markdown.slice(offsets.start, offsets.end);
+  const firstBreak = slice.indexOf("\n");
+  const opener = firstBreak === -1 ? slice : slice.slice(0, firstBreak);
+  const marker = /^(?: {0,3})([`~]{3,})/.exec(opener)?.[1];
+  if (!marker) return false;
+  const lastBreak = slice.lastIndexOf("\n");
+  const lastLine = lastBreak === -1 ? slice : slice.slice(lastBreak + 1);
+  const tick = marker[0] === "`" ? "`" : "~";
+  const closer = new RegExp(`^ {0,3}${tick}{${marker.length},}[ \\t]*$`);
+  return !closer.test(lastLine);
+}
+
 /** Fence body for a `language-mermaid` block, including one remark left unclosed. */
 function mermaidSourceFromPre(children: ReactNode): string | null {
   for (const node of Children.toArray(children)) {
@@ -104,16 +136,24 @@ function mermaidSourceFromPre(children: ReactNode): string | null {
 function MarkdownPre({
   className,
   children,
-  node: _node,
+  node,
   renderMermaid = false,
+  mermaidStreaming = false,
+  markdown = "",
   ...props
 }: ComponentPropsWithoutRef<"pre"> & {
   node?: unknown;
   renderMermaid?: boolean;
+  mermaidStreaming?: boolean;
+  markdown?: string;
 }) {
   if (renderMermaid) {
     const source = mermaidSourceFromPre(children);
-    if (source !== null) return <MermaidDiagram source={source} />;
+    const holdOpen =
+      mermaidStreaming &&
+      source !== null &&
+      mermaidFenceStillOpen(markdown, node);
+    if (source !== null && !holdOpen) return <MermaidDiagram source={source} />;
   }
   return (
     <pre className={cn("issue-md-pre", className)} {...props}>
@@ -187,12 +227,21 @@ function MarkdownParagraph({
   return <p {...props}>{children}</p>;
 }
 
-function markdownComponents(renderMermaid: boolean) {
+function markdownComponents(
+  renderMermaid: boolean,
+  mermaidStreamingRef: { current: boolean },
+  markdownRef: { current: string },
+) {
   return {
     a: IssueAwareLink,
     code: MarkdownCode,
     pre: (props: ComponentPropsWithoutRef<"pre"> & { node?: unknown }) => (
-      <MarkdownPre {...props} renderMermaid={renderMermaid} />
+      <MarkdownPre
+        {...props}
+        renderMermaid={renderMermaid}
+        mermaidStreaming={mermaidStreamingRef.current}
+        markdown={markdownRef.current}
+      />
     ),
     img: MarkdownImage,
     p: MarkdownParagraph,
@@ -203,13 +252,23 @@ export function Markdown({
   children,
   issueId,
   renderMermaid = false,
+  mermaidStreaming = false,
 }: {
   children: string;
   /** When set, relative Markdown links resolve to this issue's attachments. */
   issueId?: string;
   /** Render `language-mermaid` fences as diagrams. Default leaves them as code. */
   renderMermaid?: boolean;
+  /**
+   * While streaming, an unclosed `language-mermaid` fence stays source.
+   * Closed fences in the same message still render.
+   */
+  mermaidStreaming?: boolean;
 }) {
+  const markdownRef = useRef(children);
+  const mermaidStreamingRef = useRef(mermaidStreaming);
+  markdownRef.current = children;
+  mermaidStreamingRef.current = mermaidStreaming;
   const urlTransform = useMemo(() => {
     return (url: string): string => {
       if (url.startsWith(ISSUE_LINK_PREFIX)) return url;
@@ -221,7 +280,7 @@ export function Markdown({
     };
   }, [issueId]);
   const components = useMemo(
-    () => markdownComponents(renderMermaid),
+    () => markdownComponents(renderMermaid, mermaidStreamingRef, markdownRef),
     [renderMermaid],
   );
 

@@ -161,6 +161,103 @@ describe("mermaid diagram view", () => {
     expect(mermaid.render).toHaveBeenCalledWith(expect.any(String), FLOW);
   });
 
+  it("holds an open mermaid fence as source while streaming", () => {
+    const open = "```mermaid\n" + FLOW;
+    const { container } = mount(
+      <TranscriptMarkdownText text={open} renderMermaid mermaidStreaming />,
+    );
+    expect(mermaid.render).not.toHaveBeenCalled();
+    expect(container.querySelector("svg")).toBeNull();
+    expect(container.querySelector("[data-mermaid-error]")).toBeNull();
+    expect(container.querySelector("[data-mermaid-diagram]")).toBeNull();
+    const code = container.querySelector("pre code");
+    expect(code?.className).toContain("language-mermaid");
+    expect(code?.textContent).toContain("A-->B");
+  });
+
+  it("renders a closed fence in a message that is still streaming", async () => {
+    const text = ["```mermaid", FLOW, "```", "", "Still arriving"].join("\n");
+    const { container } = mount(
+      <Markdown renderMermaid mermaidStreaming>
+        {text}
+      </Markdown>,
+    );
+    await settle(() => {
+      expect(diagramSvg(container)).toBeTruthy();
+    });
+    expect(mermaid.render).toHaveBeenCalledWith(expect.any(String), FLOW);
+  });
+
+  it("renders a closed fence and holds a later open fence while streaming", async () => {
+    const text = [
+      "```mermaid",
+      FLOW,
+      "```",
+      "",
+      "```mermaid",
+      "flowchart TD\n  C-->D",
+    ].join("\n");
+    const { container } = mount(
+      <Markdown renderMermaid mermaidStreaming>
+        {text}
+      </Markdown>,
+    );
+    await settle(() => {
+      expect(diagramSvg(container)).toBeTruthy();
+    });
+    expect(mermaid.render).toHaveBeenCalledTimes(1);
+    expect(mermaid.render).toHaveBeenCalledWith(expect.any(String), FLOW);
+    const code = container.querySelector("pre code");
+    expect(code?.className).toContain("language-mermaid");
+    expect(code?.textContent).toContain("C-->D");
+    expect(code?.textContent).not.toContain("A-->B");
+  });
+
+  it("attempts an unclosed fence when mermaidStreaming is false or omitted", async () => {
+    const open = "```mermaid\n" + FLOW;
+    const invalid = "```mermaid\nnot a diagram";
+    const render = vi.mocked(mermaid.render);
+
+    const valid = mount(<Markdown renderMermaid mermaidStreaming={false}>{open}</Markdown>);
+    await settle(() => {
+      expect(diagramSvg(valid.container)).toBeTruthy();
+    });
+    expect(render).toHaveBeenCalledWith(expect.any(String), FLOW);
+
+    render.mockClear();
+    const omitted = mount(<TranscriptMarkdownText text={open} renderMermaid />);
+    await settle(() => {
+      expect(diagramSvg(omitted.container)).toBeTruthy();
+    });
+    expect(render).toHaveBeenCalledWith(expect.any(String), FLOW);
+
+    render.mockRejectedValue(new Error("Parse error on line 1"));
+    const invalidFalse = mount(
+      <Markdown renderMermaid mermaidStreaming={false}>{invalid}</Markdown>,
+    );
+    await settle(() => {
+      expect(invalidFalse.container.querySelector("[data-mermaid-error]")).toBeTruthy();
+    });
+    expect(invalidFalse.container.querySelector("[data-mermaid-error]")?.textContent).toContain(
+      "Parse error on line 1",
+    );
+    expect(invalidFalse.container.querySelector("[data-mermaid-source]")?.textContent).toContain(
+      "not a diagram",
+    );
+    expect(invalidFalse.container.querySelector("svg")).toBeNull();
+
+    const invalidOmitted = mount(
+      <TranscriptMarkdownText text={invalid} renderMermaid />,
+    );
+    await settle(() => {
+      expect(invalidOmitted.container.querySelector("[data-mermaid-error]")).toBeTruthy();
+    });
+    expect(invalidOmitted.container.querySelector("[data-mermaid-source]")?.textContent).toContain(
+      "not a diagram",
+    );
+    expect(invalidOmitted.container.querySelector("svg")).toBeNull();
+  });
+
   it("leaves a mermaid fence as a code block when renderMermaid is omitted", () => {
     const { container } = mount(<TranscriptMarkdownText text={CLOSED} />);
     expect(container.querySelector("svg")).toBeNull();
