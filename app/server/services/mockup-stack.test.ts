@@ -136,6 +136,26 @@ async function waitForCollection(pid: number): Promise<boolean> {
   return isCollected(pid);
 }
 
+describe("storybook dev command", () => {
+  it("binds loopback and records the public mockup prefix", async () => {
+    const { mockupStorybookBase, storybookDevArgs } = await loadService();
+    expect(storybookDevArgs(41005)).toEqual([
+      "dev",
+      "-c",
+      ".storybook",
+      "--no-open",
+      "--ci",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "41005",
+    ]);
+    expect(mockupStorybookBase("my-conversation")).toBe(
+      "/mockups/my-conversation/",
+    );
+  });
+});
+
 describe("mockup stack liveness", () => {
   it("pins a recorded pid to the process that was started", async () => {
     const { isMockupStackLive } = await loadService();

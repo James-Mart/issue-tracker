@@ -20,6 +20,7 @@ import {
   createRestartRouter,
   type InitiateRestart,
 } from "./routes/restart.js";
+import { mockupStackMiddleware } from "./routes/mockups.js";
 import { transcriptionsRouter } from "./routes/transcriptions.js";
 import { RESTART_SENTINEL_EXIT_CODE } from "./restart-contract.js";
 import {
@@ -98,6 +99,7 @@ export function createApp(
   app.use("/api/restart", createRestartRouter(sessions, initiateRestart));
   app.use("/api/backup", createBackupRouter());
   app.use("/api/transcriptions", transcriptionsRouter);
+  app.use("/mockups/:conversationId", mockupStackMiddleware);
   app.get("/api/diagnostics/connections", (_req, res) => {
     res.json(getConnectionDiagnostics());
   });

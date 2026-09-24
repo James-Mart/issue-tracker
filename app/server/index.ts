@@ -16,6 +16,7 @@ const { captureMockupStackReapAtBoot } = await import("./mockup-stack-boot.js");
 await captureMockupStackReapAtBoot();
 
 const { attachMultiplexedWebSocket, createApp } = await import("./app.js");
+const { attachMockupStackProxy } = await import("./routes/mockups.js");
 const { refreshAgentModelSlugCatalog } = await import(
   "./agent-model-slugs-sync.js"
 );
@@ -67,6 +68,7 @@ const server = app.listen(listenPort, () => {
   );
 });
 attachMultiplexedWebSocket(server);
+attachMockupStackProxy(server);
 
 let shuttingDown = false;
 

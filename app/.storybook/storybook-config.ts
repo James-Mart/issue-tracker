@@ -4,6 +4,30 @@ import type { HarnessConfig } from "./harness-config.js";
 /** Committed harness smoke story — always included when a target config is loaded. */
 export const SMOKE_STORY_GLOB = "./*.stories.@(ts|tsx)";
 
+type StorybookHmr = { port?: number; path?: string };
+
+/**
+ * Point Vite's HMR client at the public `/mockups/<conversationId>/` prefix.
+ * Storybook still serves HTTP at `/` on loopback; the tracker proxy strips that
+ * prefix. Dropping `hmr.port` keeps the browser on the tracker origin instead
+ * of the loopback Storybook port.
+ */
+export function applyMockupStorybookBase(
+  viteConfig: { server?: { hmr?: boolean | StorybookHmr } },
+  base: string | undefined,
+): void {
+  if (!base) return;
+  const server = (viteConfig.server ??= {});
+  const hmr = server.hmr;
+  if (hmr === false) return;
+  if (hmr && typeof hmr === "object") {
+    delete hmr.port;
+    hmr.path = base;
+    return;
+  }
+  server.hmr = { path: base };
+}
+
 /** Directory prefix of a glob pattern (path segment before the first wildcard). */
 export function storiesGlobRoot(glob: string): string {
   const wildcardIndex = glob.search(/[*?[{]/);

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadHarnessConfig } from "./harness-config.js";
 import {
   SMOKE_STORY_GLOB,
+  applyMockupStorybookBase,
   buildHarnessStorybookOptions,
   buildReactAliases,
   collectFsAllowPaths,
@@ -87,6 +88,23 @@ describe("buildReactAliases", () => {
       "react-dom": join(reactRoot, "react-dom"),
       "react/jsx-runtime": join(reactRoot, "react/jsx-runtime"),
     });
+  });
+});
+
+describe("applyMockupStorybookBase", () => {
+  it("points HMR at the public prefix and drops the loopback port", () => {
+    const config = { server: { hmr: { port: 41005, server: { listening: true } } } };
+    applyMockupStorybookBase(config, "/mockups/my-conversation/");
+    expect(config.server.hmr).toEqual({
+      path: "/mockups/my-conversation/",
+      server: { listening: true },
+    });
+  });
+
+  it("leaves HMR alone when the process has no public base", () => {
+    const config = { server: { hmr: { port: 6006 } } };
+    applyMockupStorybookBase(config, undefined);
+    expect(config.server.hmr).toEqual({ port: 6006 });
   });
 });
 

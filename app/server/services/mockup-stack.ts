@@ -136,6 +136,26 @@ function tailLog(path: string, maxLines = 20): string {
   return readFileSync(path, "utf8").trimEnd().split("\n").slice(-maxLines).join("\n");
 }
 
+/** Public prefix the manager, preview iframe, and HMR client resolve on. */
+export function mockupStorybookBase(conversationId: string): string {
+  return `/mockups/${conversationId}/`;
+}
+
+/** Storybook stays on loopback. The tracker origin proxies this prefix. */
+export function storybookDevArgs(port: number): string[] {
+  return [
+    "dev",
+    "-c",
+    ".storybook",
+    "--no-open",
+    "--ci",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(port),
+  ];
+}
+
 function spawnStorybook(
   conversationId: string,
   port: number,
@@ -147,12 +167,13 @@ function spawnStorybook(
   try {
     child = spawn(
       binPath("storybook"),
-      ["dev", "-c", ".storybook", "--no-open", "--ci", "--port", String(port)],
+      storybookDevArgs(port),
       {
         cwd: appDir,
         env: {
           ...process.env,
           MOCKUP_HARNESS_CONFIG: harnessPath,
+          MOCKUP_STORYBOOK_BASE: mockupStorybookBase(conversationId),
         },
         detached: true,
         stdio: ["ignore", fd, fd],
