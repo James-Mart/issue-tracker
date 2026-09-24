@@ -105,6 +105,62 @@ function ceilingViolationMessage(
   );
 }
 
+/** Every epic/story/project must sit at or below its merge-policy ceiling. */
+export function assertMergePolicyLattice(issues: Issue[]): void {
+  const byId = new Map(issues.map((issue) => [issue.id, issue]));
+  const cache = new Map<string, MergePolicy>();
+  for (const issue of issues) {
+    if (
+      issue.kind !== "project" &&
+      issue.kind !== "epic" &&
+      issue.kind !== "story"
+    ) {
+      continue;
+    }
+    const effective = effectiveMergePolicy(issue.id, byId, cache);
+    const ceiling = mergePolicyCeiling(issue, byId, cache);
+    if (
+      ceiling !== undefined &&
+      MERGE_POLICY_RANK[effective] > MERGE_POLICY_RANK[ceiling]
+    ) {
+      throw new IssueError(
+        "validation",
+        ceilingViolationMessage(issue, effective, ceiling),
+      );
+    }
+  }
+}
+
+/** Merge-policy tree ids reachable from `rootId` via parent links. */
+export function mergePolicyDescendantIds(
+  rootId: string,
+  issues: Issue[],
+): string[] {
+  const childrenOf = new Map<string, string[]>();
+  for (const issue of issues) {
+    if (issue.kind !== "epic" && issue.kind !== "story") continue;
+    const parentId = mergePolicyParentId(issue);
+    if (!parentId) continue;
+    const bucket = childrenOf.get(parentId) ?? [];
+    bucket.push(issue.id);
+    childrenOf.set(parentId, bucket);
+  }
+
+  const ids: string[] = [];
+  const queue = [rootId];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    for (const child of childrenOf.get(id) ?? []) {
+      if (seen.has(child)) continue;
+      seen.add(child);
+      ids.push(child);
+      queue.push(child);
+    }
+  }
+  return ids;
+}
+
 /**
  * Hard-reject a `mergePolicy` set that would violate the ceiling lattice:
  * raising a node above its ceiling, or lowering a parent below a descendant.
@@ -127,34 +183,5 @@ export function validateMergePolicyPatch(
   const prospective = issues.map((issue) =>
     issue.id === existing.id ? next : issue,
   );
-  const byId = new Map(prospective.map((issue) => [issue.id, issue]));
-  const cache = new Map<string, MergePolicy>();
-
-  const check = (issue: Issue): void => {
-    if (
-      issue.kind !== "project" &&
-      issue.kind !== "epic" &&
-      issue.kind !== "story"
-    ) {
-      return;
-    }
-    const effective = effectiveMergePolicy(issue.id, byId, cache);
-    const ceiling = mergePolicyCeiling(issue, byId, cache);
-    if (
-      ceiling !== undefined &&
-      MERGE_POLICY_RANK[effective] > MERGE_POLICY_RANK[ceiling]
-    ) {
-      throw new IssueError(
-        "validation",
-        ceilingViolationMessage(issue, effective, ceiling),
-      );
-    }
-  };
-
-  // Prefer the updated node's own violation (raise-above-ceiling).
-  check(next);
-  for (const issue of prospective) {
-    if (issue.id === existing.id) continue;
-    check(issue);
-  }
+  assertMergePolicyLattice(prospective);
 }

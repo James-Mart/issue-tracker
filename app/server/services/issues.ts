@@ -68,7 +68,10 @@ import {
 } from "./patch.js";
 import { validateCommitsPatch, validateFullCommitSha } from "./commit-sha.js";
 import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
-import { validateMergePolicyPatch } from "./merge-policy.js";
+import {
+  assertMergePolicyLattice,
+  validateMergePolicyPatch,
+} from "./merge-policy.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
 import { validateSupportingDocsPatch } from "./supporting-docs.js";
 import { validateInspirationAppsPatch } from "./inspiration-apps.js";
@@ -734,6 +737,9 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
           "validation",
           problems.map((p) => p.message).join("; "),
         );
+      }
+      if (codeGateMergePolicyWrites.length > 0) {
+        assertMergePolicyLattice([...prospective.values()]);
       }
     }
 

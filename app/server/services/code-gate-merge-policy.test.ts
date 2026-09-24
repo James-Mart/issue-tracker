@@ -149,6 +149,36 @@ describe("code-gate merge policy lowering on Idea archive", () => {
     expect(list().derived.epic?.mergePolicy).toBe("manual");
   });
 
+  it("lowers explicit merge-policy descendants under a plan root on archive", async () => {
+    seedCodeGateArchiveFixtures();
+    writeIssue("epic", {
+      kind: "epic",
+      title: "Epic",
+      partOf: "p",
+      order: 1,
+      sourceIdea: "idea",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("story", {
+      kind: "story",
+      title: "Story",
+      partOf: "epic",
+      order: 0,
+      merged: false,
+      mergePolicy: "merge",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const { update, list } = await loadService();
+    await update("idea", { archived: true });
+
+    expect(readRaw("epic").mergePolicy).toBe("manual");
+    expect(readRaw("story").mergePolicy).toBe("manual");
+    expect(list().derived.story?.mergePolicy).toBe("manual");
+  });
+
   it("does not lower plan roots when codeApprovalRequired is unset", async () => {
     seedCodeGateArchiveFixtures();
     writeIssue("epic", {
