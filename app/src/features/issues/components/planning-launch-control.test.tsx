@@ -357,7 +357,7 @@ describe("PlanningChannelEmptyState", () => {
       />,
     );
     expect(container.textContent).toContain("Start auto-plan on Opus 5");
-    expect(container.textContent).toContain("without your answers");
+    expect(container.textContent).toContain("gate rubric");
     expect(
       container.querySelector('[data-testid="planning-session-model"]'),
     ).toBeNull();
@@ -485,7 +485,7 @@ describe("PlanningChannelEmptyState", () => {
         onStarted={vi.fn()}
       />,
     );
-    expect(offContainer.textContent).toContain("without your answers");
+    expect(offContainer.textContent).toContain("gate rubric");
     expect(offContainer.textContent).not.toContain(
       "pauses for your approval",
     );
@@ -503,7 +503,7 @@ describe("PlanningChannelEmptyState", () => {
       />,
     );
     expect(onContainer.textContent).toContain("pauses for your approval");
-    expect(onContainer.textContent).not.toContain("without your answers");
+    expect(onContainer.textContent).not.toContain("gate rubric");
   });
 
   it("updates empty-state copy optimistically when the chip is toggled", async () => {
@@ -519,7 +519,7 @@ describe("PlanningChannelEmptyState", () => {
         onStarted={vi.fn()}
       />,
     );
-    expect(container.textContent).toContain("without your answers");
+    expect(container.textContent).toContain("gate rubric");
 
     await act(async () => {
       (
@@ -530,7 +530,7 @@ describe("PlanningChannelEmptyState", () => {
     });
 
     expect(container.textContent).toContain("pauses for your approval");
-    expect(container.textContent).not.toContain("without your answers");
+    expect(container.textContent).not.toContain("gate rubric");
   });
 });
 
