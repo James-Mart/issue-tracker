@@ -37,7 +37,7 @@ every gap matched an open Idea, this section creates nothing.
 1. Short human-readable confusion headline (not `retro-…` id noise):
 
 ```bash
-issue idea add "<headline>" --part-of issue-tracker --description "<body>"
+issue idea add "<headline>" --part-of issue-tracker --stakeholder grok-4.7 --description "<body>"
 ```
 
    `<body>` = concise plain-language statement of the problem and its observed

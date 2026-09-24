@@ -27,8 +27,10 @@ actually confused the agents in it.
 **Allowed writes:** `issue comment` and `issue <kind> set` on the
 **source** id with `kind` matching the source (`epic` or `story`) — for `retro`
 (including `retro --clear` on escalation) and `needsAttention` (`--reason`
-required when true); plus `issue idea add`, `issue idea set` (labels only),
-and `issue idea attach`. Do not run any other mutating `issue` command. Use
+required when true); plus `issue idea add` (always with
+`--stakeholder grok-4.7` — retro never sets the stakeholder any other way),
+`issue idea set` (labels only), and `issue idea attach`. Do not run any other
+mutating `issue` command. Use
 `issue summary <sourceRootId>` for source context (title, linkage) as needed
 before Idea creation / comments.
 
