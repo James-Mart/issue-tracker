@@ -4,7 +4,12 @@ import os, { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { acquireWorkerSlots, computeWorkerSlotBudget } from "./worker-slot-pool.js";
+import {
+  acquireAllWorkerSlots,
+  acquireWorkerSlots,
+  computeWorkerSlotBudget,
+  fullSlotGrant,
+} from "./worker-slot-pool.js";
 
 const GIB = 1024 ** 3;
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -65,12 +70,24 @@ function startHolder(
   requested: number,
   mode: "hold" | "orphan" | "exit",
   detached: boolean,
+  acquireMode?: "all",
 ): { child: ChildProcess; granted: Promise<number>; exited: Promise<void> } {
-  const child = spawn(
-    process.execPath,
-    ["--import", "tsx", HOLDER, dir, String(requested), mode, String(PARALLELISM), String(TOTALMEM)],
-    { cwd: APP_DIR, detached, stdio: ["ignore", "pipe", "inherit"] },
-  );
+  const args = [
+    "--import",
+    "tsx",
+    HOLDER,
+    dir,
+    String(requested),
+    mode,
+    String(PARALLELISM),
+    String(TOTALMEM),
+  ];
+  if (acquireMode) args.push(acquireMode);
+  const child = spawn(process.execPath, args, {
+    cwd: APP_DIR,
+    detached,
+    stdio: ["ignore", "pipe", "inherit"],
+  });
   if (detached) groups.push(child.pid!);
   const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
   const granted = new Promise<number>((resolve, reject) => {
@@ -84,6 +101,17 @@ function startHolder(
   });
   return { child, granted, exited };
 }
+
+describe("fullSlotGrant", () => {
+  it("grants one slot when only one is free", () => {
+    expect(fullSlotGrant(1, 1)).toBe(1);
+  });
+
+  it("withholds a multi-slot request until the last free slot is not needed", () => {
+    expect(fullSlotGrant(2, 2)).toBe(0);
+    expect(fullSlotGrant(2, 3)).toBe(2);
+  });
+});
 
 describe("computeWorkerSlotBudget", () => {
   it("is one fewer than the CPUs when memory allows more", () => {
@@ -172,6 +200,41 @@ describe("acquireWorkerSlots", () => {
 
       expect(leaseFiles(dir)).toEqual([]);
       expect(await acquireWorkerSlots(2, dir)).toBe(2);
+    },
+    HOLDER_TIMEOUT_MS,
+  );
+});
+
+describe("acquireAllWorkerSlots", () => {
+  beforeEach(() => {
+    stubMachine(PARALLELISM, TOTALMEM);
+  });
+
+  it("holds the full count once grantable", async () => {
+    await acquireAllWorkerSlots(2, dir);
+    const leases = leaseFiles(dir).map(
+      (name) => JSON.parse(readFileSync(join(dir, name), "utf8")) as { pgid: number; slots: number },
+    );
+    expect(leases).toHaveLength(1);
+    expect(leases[0]!.slots).toBe(2);
+  });
+
+  it(
+    "waits for the full count rather than taking a partial elastic grant",
+    async () => {
+      const holder = startHolder(5, "hold", true);
+      expect(await holder.granted).toBe(2);
+
+      const waiting = acquireAllWorkerSlots(2, dir);
+      expect(await isPendingAfter(waiting, 1_000)).toBe(true);
+
+      process.kill(-holder.child.pid!, "SIGKILL");
+      await waiting;
+
+      const leases = leaseFiles(dir).map(
+        (name) => JSON.parse(readFileSync(join(dir, name), "utf8")) as { slots: number },
+      );
+      expect(leases.map((lease) => lease.slots).sort()).toEqual([2]);
     },
     HOLDER_TIMEOUT_MS,
   );

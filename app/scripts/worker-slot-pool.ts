@@ -169,6 +169,12 @@ function elasticGrant(requested: number, free: number): number {
   return requested === 1 ? Math.min(1, free) : Math.min(requested, free - 1);
 }
 
+/** All-or-nothing grant: the full request, or nothing. */
+export function fullSlotGrant(requested: number, free: number): number {
+  if (requested === 1) return free >= 1 ? 1 : 0;
+  return free >= requested + 1 ? requested : 0;
+}
+
 /**
  * Resolves with the slots granted to this process's process group, waiting
  * while nothing grantable is free. A multi-slot request is granted
@@ -212,6 +218,50 @@ export async function acquireWorkerSlots(
       announced = true;
       console.error(
         `worker-slot pool: waiting for ${requested} slot(s); ${attempt.held} of ${budget} held`,
+      );
+    }
+    await delay(WAIT_POLL_MS);
+  }
+}
+
+/**
+ * Resolves once the full slot count is grantable, then holds exactly that many.
+ * Unlike {@link acquireWorkerSlots}, this never accepts a partial grant.
+ */
+export async function acquireAllWorkerSlots(
+  count: number,
+  dir: string = WORKER_SLOT_DIR,
+): Promise<void> {
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error(`worker-slot all-or-wait request must be a positive integer, got ${count}`);
+  }
+  const budget = computeWorkerSlotBudget();
+  const pgid = ownProcessGroup();
+  mkdirSync(dir, { recursive: true });
+  let announced = false;
+  for (;;) {
+    const attempt = await withLock(dir, () => {
+      const live = liveProcessGroups();
+      let held = 0;
+      for (const lease of readLeases(dir)) {
+        if (live.has(lease.pgid)) held += lease.slots;
+        else rmSync(lease.path, { force: true });
+      }
+      const slots = fullSlotGrant(count, budget - held);
+      if (slots < count) return { granted: false as const, held };
+      const path = join(dir, `lease-${process.pid}-${randomUUID()}.json`);
+      writeFileSync(`${path}.tmp`, JSON.stringify({ pid: process.pid, pgid, slots: count }));
+      renameSync(`${path}.tmp`, path);
+      return { granted: true as const, path };
+    });
+    if (attempt.granted) {
+      process.on("exit", () => rmSync(attempt.path, { force: true }));
+      return;
+    }
+    if (!announced) {
+      announced = true;
+      console.error(
+        `worker-slot pool: waiting for all ${count} slot(s); ${attempt.held} of ${budget} held`,
       );
     }
     await delay(WAIT_POLL_MS);
