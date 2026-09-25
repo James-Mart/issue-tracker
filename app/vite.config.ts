@@ -1,8 +1,17 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import { independentBootstrapFaultEntryProblem } from "./scripts/bootstrap-fault-entry.js";
 import { revalidateOptimizedDeps } from "./scripts/optimized-deps-cache.js";
+
+const heapReportDir = mkdtempSync(join(tmpdir(), "vitest-heap-reports-"));
+process.env.VITEST_HEAP_REPORT_DIR = heapReportDir;
+process.on("exit", () => {
+  rmSync(heapReportDir, { recursive: true, force: true });
+});
 
 const indexHtmlPath = fileURLToPath(new URL("./index.html", import.meta.url));
 const bootstrapFaultSrcPath = fileURLToPath(
@@ -128,9 +137,17 @@ export default defineConfig({
   test: {
     exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
     setupFiles: ["./test/vitest-worker-temp.ts", "./test/vitest-worker-hardening.ts"],
+    env: {
+      VITEST_HEAP_REPORT_DIR: heapReportDir,
+    },
+    reporters: ["default", "./test/memory-limit-reporter.ts"],
     poolOptions: {
       forks: {
-        execArgv: ["--max-old-space-size=2048"],
+        execArgv: [
+          "--max-old-space-size=2048",
+          "--report-on-fatalerror",
+          `--report-directory=${heapReportDir}`,
+        ],
       },
     },
   },
