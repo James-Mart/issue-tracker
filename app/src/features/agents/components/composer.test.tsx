@@ -271,26 +271,32 @@ describe("Composer during active run", () => {
     coarsePointer.value = false
   })
 
-  function queueButton(container: ParentNode): HTMLButtonElement {
-    const el = container.querySelector('button[aria-label="Queue message"]')
+  function steerButton(container: ParentNode): HTMLButtonElement {
+    const el = container.querySelector('button[aria-label="Steer"]')
     expect(el).toBeTruthy()
     return el as HTMLButtonElement
   }
 
-  it("shows Queue message alongside Stop and posts on send", () => {
+  it("shows Steer alongside Stop and posts on send", () => {
     ;({ container, root } = mountComposer({ runActive: true }))
 
     setDraft(textarea(container!), "steer please")
 
-    const queue = queueButton(container!)
-    expect(queue.disabled).toBe(false)
-    expect(queue.title).toContain("Queue message")
+    const steer = steerButton(container!)
+    expect(steer.disabled).toBe(false)
+    expect(steer.title).toBe("Steer")
     expect(
       container!.querySelector('button[aria-label="Stop"]'),
     ).toBeTruthy()
+    expect(
+      container!.querySelector('button[aria-label="Queue message"]'),
+    ).toBeNull()
+    expect(
+      container!.querySelector('button[aria-label="Send now"]'),
+    ).toBeNull()
 
     act(() => {
-      queue.click()
+      steer.click()
     })
 
     expect(sendMutate).toHaveBeenCalledTimes(1)
@@ -321,58 +327,33 @@ describe("Composer during active run", () => {
     )
   })
 
-  it("shows Send now only with an active run and a non-empty draft", () => {
-    ;({ container, root } = mountComposer({ runActive: true }))
-
-    expect(
-      container!.querySelector('button[aria-label="Send now"]'),
-    ).toBeNull()
-
-    setDraft(textarea(container!), "redirect please")
-
-    expect(
-      container!.querySelector('button[aria-label="Send now"]'),
-    ).toBeTruthy()
-  })
-
-  it("renders Queue message, Send now, and Stop together during an active run with a draft", () => {
+  it("shows only Steer and Stop during an active run with a draft", () => {
     ;({ container, root } = mountComposer({ runActive: true }))
 
     setDraft(textarea(container!), "steer now")
 
-    const queue = queueButton(container!)
-    const sendNow = container!.querySelector(
-      'button[aria-label="Send now"]',
-    ) as HTMLButtonElement
+    const steer = steerButton(container!)
     const stop = container!.querySelector(
       'button[aria-label="Stop"]',
     ) as HTMLButtonElement
+    const labeled = [...container!.querySelectorAll("button")].map(
+      (button) => button.getAttribute("aria-label"),
+    )
 
-    expect(queue).toBeTruthy()
-    expect(sendNow).toBeTruthy()
+    expect(steer).toBeTruthy()
     expect(stop).toBeTruthy()
-    expect(queue.className).toMatch(/\bh-11\b/)
-    expect(queue.className).toMatch(/\bshell:h-9\b/)
-    expect(queue.className).toMatch(/\bshell:w-9\b/)
-    expect(sendNow.className).toMatch(/\bh-11\b/)
-    expect(sendNow.className).toMatch(/\bshell:h-9\b/)
-    expect(sendNow.className).toMatch(/\bshell:w-9\b/)
+    expect(labeled.filter((label) => label === "Steer" || label === "Stop")).toEqual([
+      "Steer",
+      "Stop",
+    ])
+    expect(labeled).not.toContain("Send now")
+    expect(labeled).not.toContain("Queue message")
+    expect(steer.className).toMatch(/\bh-11\b/)
+    expect(steer.className).toMatch(/\bshell:h-9\b/)
+    expect(steer.className).toMatch(/\bshell:w-9\b/)
     expect(stop.className).toMatch(/\bh-11\b/)
     expect(stop.className).toMatch(/\bshell:h-9\b/)
     expect(stop.className).toMatch(/\bshell:w-9\b/)
-
-    act(() => {
-      sendNow.click()
-    })
-
-    expect(interruptMutate).toHaveBeenCalledTimes(1)
-    expect(interruptMutate).toHaveBeenCalledWith(
-      {
-        id: "conv-1",
-        body: { prompt: "steer now", model: "composer-2.5-fast" },
-      },
-      expect.any(Object),
-    )
   })
 
   it("wraps the control row and keeps the model picker from collapsing", () => {

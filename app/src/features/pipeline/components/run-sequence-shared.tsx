@@ -12,7 +12,7 @@ import {
   beatStroke,
   displayedDurationMs,
   formatSequenceDuration,
-  formatSequenceTokens,
+  formatSequenceTokensAndCost,
   strokeCss,
   type RunSequence,
   type RunSequenceSection,
@@ -327,7 +327,8 @@ export function displayBeatLabel(label: string): string {
 }
 
 export const SEQUENCE_METRIC_COLS = {
-  token: "5.5ch",
+  /** Fits `cost unavailable` and a `(n of m runs)` qualifier after the tokens. */
+  token: "36ch",
   duration: "7.5ch",
   cumulative: "7.5ch",
 } as const;
@@ -340,6 +341,7 @@ export function SequenceMetricCells({
   isFailed,
   beatIndex,
   rowKind,
+  tokenWidth = "column",
 }: {
   tokenLabel?: string;
   durationLabel?: string;
@@ -348,6 +350,8 @@ export function SequenceMetricCells({
   isFailed: boolean;
   beatIndex: number;
   rowKind: string;
+  /** Desktop gutter aligns a fixed column. Phone sizes the cost text to itself. */
+  tokenWidth?: "column" | "content";
 }) {
   const color = isFailed
     ? "text-[hsl(var(--blocked))]"
@@ -360,7 +364,7 @@ export function SequenceMetricCells({
       data-beat-index={beatIndex}
       data-row={rowKind}
       className={cn(
-        "inline-flex shrink-0 items-baseline gap-1.5 font-mono text-[11px] tabular-nums leading-none",
+        "inline-flex shrink-0 items-baseline font-mono text-[11px] tabular-nums leading-none",
         color,
       )}
     >
@@ -369,10 +373,15 @@ export function SequenceMetricCells({
         data-beat-index={beatIndex}
         data-row={rowKind}
         className="shrink-0 whitespace-nowrap text-right"
-        style={{ width: SEQUENCE_METRIC_COLS.token }}
+        style={
+          tokenWidth === "column"
+            ? { width: SEQUENCE_METRIC_COLS.token }
+            : undefined
+        }
       >
         {tokenLabel ?? ""}
       </span>
+      <span className="inline-flex shrink-0 items-baseline gap-1.5 pl-3">
       <span
         data-testid="sequence-duration"
         data-beat-index={beatIndex}
@@ -390,6 +399,7 @@ export function SequenceMetricCells({
         style={{ width: SEQUENCE_METRIC_COLS.cumulative }}
       >
         {cumulativeLabel ?? ""}
+      </span>
       </span>
     </span>
   );
@@ -419,7 +429,10 @@ export function rowMetricLabels(
     return { isLive: false, isFailed: false };
   }
   return {
-    token: formatSequenceTokens(row.beat.tokenTotal),
+    token: formatSequenceTokensAndCost(
+      row.beat.tokenTotal,
+      row.beat.kind === "return" ? undefined : row.beat.cost,
+    ),
     duration: formatSequenceDuration(displayedDurationMs(row.beat, isLive)),
     cumulative: formatSequenceDuration(row.beat.cumulativeMs),
     isLive,

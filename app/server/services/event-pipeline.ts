@@ -188,7 +188,11 @@ export class EventPipeline {
       case "usage": {
         await this.flushAssistant();
         await this.emit({
-          event: { type: "usage", usage: message.usage },
+          event: {
+            type: "usage",
+            usage: message.usage,
+            runId: message.run_id,
+          },
           persist: true,
         });
         return;
@@ -201,8 +205,15 @@ export class EventPipeline {
         });
         return;
       }
+      case "user": {
+        await this.flushAssistant();
+        const text = textFromUser(message);
+        if (!text) return;
+        await this.emit({ event: { type: "prompt", text }, persist: true });
+        return;
+      }
       default:
-        // system / user — not part of the app-owned transcript.
+        // system — not part of the app-owned transcript.
         return;
     }
   }
@@ -283,6 +294,7 @@ export class EventPipeline {
             type: "usage",
             usage: message.usage,
             parentCallId,
+            runId: message.run_id,
           },
           persist: true,
         });
@@ -485,6 +497,19 @@ function textFromAssistant(
   message: Extract<
     Extract<AgentStreamEvent, { kind: "message" }>["message"],
     { type: "assistant" }
+  >,
+): string {
+  let out = "";
+  for (const block of message.message.content) {
+    if (block.type === "text") out += block.text;
+  }
+  return out;
+}
+
+function textFromUser(
+  message: Extract<
+    Extract<AgentStreamEvent, { kind: "message" }>["message"],
+    { type: "user" }
   >,
 ): string {
   let out = "";

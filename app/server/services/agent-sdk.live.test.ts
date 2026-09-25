@@ -67,4 +67,52 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("agent-sdk (live)", () => {
     },
     LIVE_TIMEOUT_MS,
   );
+
+  it(
+    "steers a live run and observes the user stream message",
+    async () => {
+      await using agent = await agentSdk.createAgent({
+        cwd: process.cwd(),
+        model: { id: "composer-2.5" },
+        storeDir: STORE_DIR,
+      });
+
+      const run = await agent.send(
+        'Reply with exactly one word: "waiting". Then stop.',
+      );
+      const pump = (async () => {
+        const events: AgentStreamEvent[] = [];
+        for await (const event of run) {
+          events.push(event);
+        }
+        return events;
+      })();
+
+      await new Promise((r) => setTimeout(r, 2000));
+
+      const outcome = await run.steer('Reply with exactly one word: "steered".');
+      expect(outcome).toBe("complete_delivered");
+
+      const events = await pump;
+      const userMessages = events.filter(
+        (e) => e.kind === "message" && e.message.type === "user",
+      );
+      expect(
+        userMessages.some(
+          (e) =>
+            e.kind === "message" &&
+            e.message.type === "user" &&
+            e.message.message.content.some(
+              (block) =>
+                block.type === "text" &&
+                block.text.includes("steered"),
+            ),
+        ),
+      ).toBe(true);
+
+      const result = await run.wait();
+      expect(["finished", "cancelled"]).toContain(result.status);
+    },
+    LIVE_TIMEOUT_MS,
+  );
 });

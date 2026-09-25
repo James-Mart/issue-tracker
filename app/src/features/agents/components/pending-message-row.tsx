@@ -13,11 +13,14 @@ export function PendingMessageRow({
   text,
   runActive,
   model,
+  steerFallback = false,
 }: {
   conversationId: string;
   text: string;
   runActive: boolean;
   model: string;
+  /** Queued because mid-run steer fell back to follow-up. */
+  steerFallback?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
@@ -101,6 +104,11 @@ export function PendingMessageRow({
               <span className="whitespace-pre-wrap break-words">{text}</span>
             </button>
           )}
+          {steerFallback && runActive ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Could not be delivered mid-run. Will send after the run.
+            </p>
+          ) : null}
         </div>
         <Button
           variant="ghost"
