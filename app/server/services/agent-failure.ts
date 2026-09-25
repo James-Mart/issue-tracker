@@ -20,16 +20,23 @@ export function isContentEvent(event: AgentStreamEvent): boolean {
   return !CONTROL_MESSAGE_TYPES.has(event.message.type);
 }
 
+// In-band status ERROR events carry text only — no SDK error code on the stream.
 const AUTH_FAILURE_TEXT =
   /authentication error|unauthenticated|invalid api key|logging out and back in/i;
+
+const AUTH_FAILURE_NAMES = new Set(["AuthenticationError"]);
 
 const AUTH_FAILURE_CODES = new Set([
   "unauthenticated",
   "AUTH_TOKEN_EXPIRED",
   "UNAUTHORIZED",
+  "AUTH_TOKEN_NOT_FOUND",
 ]);
 
+// Synthesized when the SDK exhausts transport retries — no stable code on the error.
 const TRANSPORT_EXHAUSTION_TEXT = /connection failed repeatedly/i;
+
+const TRANSPORT_FAILURE_NAMES = new Set(["NetworkError"]);
 
 const TRANSPORT_EXHAUSTION_CODES = new Set([
   "unavailable",
@@ -52,11 +59,20 @@ export function isAuthFailureEvent(event: AgentStreamEvent): boolean {
   );
 }
 
+function isAuthFailure(error: AgentRunError | undefined): boolean {
+  if (error === undefined) return false;
+  return (
+    (error.name !== undefined && AUTH_FAILURE_NAMES.has(error.name)) ||
+    (error.code !== undefined && AUTH_FAILURE_CODES.has(error.code))
+  );
+}
+
 function isTransportExhaustion(error: AgentRunError | undefined): boolean {
   if (error === undefined) return false;
   return (
-    TRANSPORT_EXHAUSTION_TEXT.test(error.message) ||
-    (error.code !== undefined && TRANSPORT_EXHAUSTION_CODES.has(error.code))
+    (error.name !== undefined && TRANSPORT_FAILURE_NAMES.has(error.name)) ||
+    (error.code !== undefined && TRANSPORT_EXHAUSTION_CODES.has(error.code)) ||
+    TRANSPORT_EXHAUSTION_TEXT.test(error.message)
   );
 }
 
@@ -72,12 +88,7 @@ export function classifyAgentFailure(
   error: AgentRunError | undefined,
 ): AgentFailureClass {
   if (status === "cancelled") return "cancelled";
-  if (
-    isAuthFailureText(error?.message ?? "") ||
-    (error?.code !== undefined && AUTH_FAILURE_CODES.has(error.code))
-  ) {
-    return "auth";
-  }
+  if (isAuthFailure(error)) return "auth";
   if (isTransportExhaustion(error)) return "transport-exhausted";
   return "agent-failed";
 }

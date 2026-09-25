@@ -55,6 +55,7 @@ function delegateFailureFromWait(
   waited: AgentRunResult,
   agentId: string,
 ): Extract<DelegateResult, { ok: false }> {
+  const failureClass = classifyAgentFailure(waited.status, waited.error);
   const message =
     waited.status === "error"
       ? waited.error?.message ??
@@ -62,8 +63,11 @@ function delegateFailureFromWait(
       : `delegate: nested run ${waited.id} was cancelled`;
   return {
     ok: false,
-    failureClass: classifyAgentFailure(waited.status, waited.error),
-    isRetryable: isRetryableAgentFailure(waited.error),
+    failureClass,
+    // Auth is retryable even when the SDK omits the flag: the parent re-issues
+    // the delegation, and the SDK re-mints its token on that next request.
+    isRetryable:
+      failureClass === "auth" ? true : isRetryableAgentFailure(waited.error),
     message,
     agentId,
   };
@@ -98,18 +102,6 @@ export interface DelegateToolOptions {
   getCursorConversationId?: () => string | undefined;
   /** Override agents directory (tests). Defaults to the plugin `agents/`. */
   agentsDir?: string;
-  /**
-   * Called with an `auth` failure once, before it is returned to the caller.
-   * The nested run cannot recover on its own — it shares the workspace executor
-   * with the handle awaiting this tool call, so nothing it retries can mint a
-   * new token — which is why the failure has to travel up.
-   */
-  onAuthFailure?: (detail: {
-    delegationId: string;
-    agentId: string;
-    message: string;
-    parentCallId?: string;
-  }) => void;
 }
 
 type SlotWaiter = {
@@ -594,14 +586,6 @@ export function createDelegateCustomTools(
             }
             const failure = delegateFailureFromWait(waited, agentId);
             endFailureClass = failure.failureClass;
-            if (failure.failureClass === "auth") {
-              options.onAuthFailure?.({
-                delegationId,
-                agentId,
-                message: failure.message,
-                ...(parentCallId !== undefined ? { parentCallId } : {}),
-              });
-            }
             return failure;
           };
 
