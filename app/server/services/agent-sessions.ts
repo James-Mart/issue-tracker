@@ -13,8 +13,12 @@ import {
   type AgentRun,
   type AgentRunResult,
   type AgentSdk,
+  type AgentSteerOutcome,
 } from "./agent-sdk.js";
-import { isAuthFailureEvent, isAuthFailureText } from "./agent-failure.js";
+import {
+  classifyAgentFailure,
+  isAuthFailureEvent,
+} from "./agent-failure.js";
 import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import {
   appendEvent,
@@ -40,13 +44,12 @@ import { resolveConversationModel } from "./model-selection.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { reconcileOrphanedConversation } from "./orphan-run-scrub.js";
 import { runCostRecorder } from "./run-cost-recorder.js";
-import { turnMadeProgress } from "./run-progress.js";
-
 export type { NormalizedStep };
 
 export interface ActiveRun {
   readonly id: string;
   readonly startedAt: string;
+  steer(text: string): Promise<AgentSteerOutcome>;
   wait(): Promise<AgentRunResult>;
 }
 
@@ -75,25 +78,18 @@ export interface AgentSessions {
 }
 
 /**
- * One turn in flight. `options` are what a recovery re-enters with, and
- * `escalated` is the once-per-turn guard: every sibling delegation running when
- * a token expires reports the same `auth` failure, and only the first is worth
- * acting on.
+ * One turn in flight. `options` are what a recovery replay re-sends.
+ * `isReplay` marks that replay, so a second auth failure surfaces as-is.
  */
 type LiveTurn = {
   run: ActiveRun;
   options: SendPromptOptions;
-  /** True when this turn is itself a recovery re-entry. */
+  /** True when this turn is itself the one auth-failure replay. */
   isReplay: boolean;
-  escalated: boolean;
-  /** Delegate tool calls that reported auth failure before escalation settled. */
-  delegateCallFailures?: Map<string, string>;
 };
 
 type SessionEntry = {
   handle: AgentHandle;
-  /** Workspace the handle was built in; the SDK keys its executor cache on it. */
-  cwd: string;
   /** The turn in flight; absent while the session is idle. */
   turn?: LiveTurn;
   /** Background streaming + persistence; settles when the run finishes. */
@@ -117,19 +113,8 @@ const AUTH_RETRY_DELAY_MS = 1000;
 const SCRUB_REFUSED_MESSAGE =
   "Couldn't clear the previous run. Send was refused.";
 
-/**
- * Re-entry prompt for a turn that got somewhere before the token expired.
- * Recovery is mechanical: this says the turn was cut short and nothing else —
- * it names no task and prescribes no checks.
- */
-const CUT_SHORT_PROMPT =
-  "The previous turn was cut short by an expired session token. Please carry on.";
-
 function isAuthFailureResult(result: AgentRunResult): boolean {
-  return (
-    result.status === "error" &&
-    isAuthFailureText(result.error?.message ?? "")
-  );
+  return classifyAgentFailure(result.status, result.error) === "auth";
 }
 
 function conversationStoreDir(conversationId: string): string {
@@ -177,32 +162,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       storeDir,
       conversationId,
       getCursorConversationId: () => cursorConversationIdRef.current,
-      onAuthFailure: ({ delegationId, agentId, message, parentCallId }) => {
-        console.error(
-          `conversation ${conversationId}: delegation ${delegationId} ` +
-            `(agent ${agentId}) failed authentication: ${message}`,
-        );
-        const live = sessions.get(conversationId);
-        const turn = live?.turn;
-        if (parentCallId && turn) {
-          if (!turn.delegateCallFailures) {
-            turn.delegateCallFailures = new Map();
-          }
-          turn.delegateCallFailures.set(parentCallId, message);
-        }
-        // A turn that is already recovering owns the repair; the failure
-        // reaches the calling model as data either way.
-        if (!live || !turn || turn.isReplay || turn.escalated) return;
-        turn.escalated = true;
-        void escalateDelegationAuthFailure(conversationId, live, turn).catch(
-          (err) => {
-            console.error(
-              `failed to escalate a delegation auth failure for conversation ${conversationId}`,
-              err,
-            );
-          },
-        );
-      },
     });
 
     let handle: AgentHandle;
@@ -243,7 +202,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       await updateMeta(conversationId, { agentId: handle.agentId });
     }
 
-    const entry: SessionEntry = { handle, cwd };
+    const entry: SessionEntry = { handle };
     sessions.set(conversationId, entry);
     return { handle, entry };
   }
@@ -331,55 +290,17 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
   }
 
   /**
-   * Recover from an expired access token, then re-enter the agent once with
-   * `options` — which the caller chooses, so it may carry the original prompt
-   * or a continuation.
+   * Replay the failed turn once, on the same handle, with the same options.
    *
-   * The SDK caches one local executor per workspace + API key + setting-source
-   * tuple, mints an access token when it builds one, and tears the executor
-   * down only after every handle sharing that tuple is disposed. This app keeps
-   * a handle per conversation for the life of the process, so the token is
-   * never re-minted and every send past its expiry fails — which is why
-   * restarting the server is otherwise the only thing that clears it.
-   * Reported upstream: https://forum.cursor.com/t/164755
-   *
-   * Dropping the handles is the part of a restart that matters, so do only
-   * that, and only for the affected workspace: sessions elsewhere key a
-   * different executor holding a different token. A sibling conversation with a
-   * run still in flight is left alone too — cancelling live work to repair
-   * another conversation is not a trade worth making. Such a sibling keeps the
-   * refcount above zero, so the re-entry fails and the original error surfaces
-   * exactly as it does today.
-   *
-   * This conversation's own nested delegations are cancelled by the teardown
-   * and never waited on: they were created against the same workspace, so
-   * waiting for one to finish would be waiting on a handle that is itself
-   * holding the refcount up.
+   * A streaming call that fails unauthenticated invalidates the SDK's cached
+   * access token, so the next request re-mints. The SDK does not retry that
+   * streaming call itself. One replay covers an expired token; a second auth
+   * failure is a revoked or invalid key and surfaces as-is (`isReplay`).
    */
   async function recoverFromAuthFailure(
     conversationId: string,
-    entry: SessionEntry,
     options: SendPromptOptions,
   ): Promise<ActiveRun | undefined> {
-    // The pump has nothing left to do here — the in-band caller runs inside it,
-    // and the escalating caller has already awaited the turn's result — so drop
-    // the reference rather than have the teardown await a promise its caller
-    // may be executing inside.
-    entry.pump = undefined;
-    entry.turn = undefined;
-    clearRunLiveMarker(conversationId);
-    publishPipelineRunEvent("finished", conversationId);
-    sessions.delete(conversationId);
-    await tearDownEntry(conversationId, entry);
-
-    const idleSiblings = [...sessions.entries()].filter(
-      ([, other]) => other.cwd === entry.cwd && !other.turn,
-    );
-    for (const [id] of idleSiblings) sessions.delete(id);
-    await Promise.all(
-      idleSiblings.map(([id, other]) => tearDownEntry(id, other)),
-    );
-
     const notice = {
       type: "status" as const,
       status: "RETRYING",
@@ -393,80 +314,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     const reentered = await sendPromptInternal(conversationId, options, true);
     return reentered.ok ? reentered.run : undefined;
-  }
-
-  /**
-   * Carry an `auth` failure a delegation reported up to the conversation whose
-   * turn is running it.
-   *
-   * The model can do nothing useful once the executor behind its session is
-   * stale — every delegation it retries dies against the same one — so the turn
-   * is cancelled and re-entered instead of left to keep trying.
-   *
-   * Escalating is only safe once that cancel has settled. If it has not, the
-   * resume inside the recovery meets an agent that still has an active run,
-   * falls back to a fresh agent, and loses the context of the long-running loop
-   * the escalation exists to rescue. So a turn that does not come back
-   * `cancelled` is left alone, and the delegation's failure surfaces to the
-   * calling model exactly as it does today.
-   */
-  async function escalateDelegationAuthFailure(
-    conversationId: string,
-    entry: SessionEntry,
-    turn: LiveTurn,
-  ): Promise<void> {
-    // Nested first, while they are still tracked: the durable recovery event
-    // names how many were cancelled, and they share the stale executor.
-    const cancelledDelegations =
-      await cancelConversationDelegations(conversationId);
-
-    try {
-      await entry.handle.cancel();
-    } catch {
-      // A cancel that throws is one that cannot be confirmed settled below.
-    }
-
-    const result = await turn.run.wait();
-    if (result.status !== "cancelled") return;
-
-    if (turn.delegateCallFailures && turn.delegateCallFailures.size > 0) {
-      const pipeline = new EventPipeline(conversationId);
-      for (const [callId, message] of turn.delegateCallFailures) {
-        await pipeline.failToolCall(callId, {
-          name: "delegate",
-          failureClass: "auth",
-          message,
-        });
-      }
-    }
-
-    const madeProgress = await turnMadeProgress(
-      conversationStoreDir(conversationId),
-      entry.handle.agentId,
-    );
-    const recovery = {
-      type: "delegation_recovery" as const,
-      failureClass: "auth" as const,
-      madeProgress,
-      cancelledDelegations,
-      message: [
-        "A nested delegation failed with auth.",
-        `Cancelled ${cancelledDelegations} nested delegation(s).`,
-        madeProgress
-          ? "The turn had made progress."
-          : "The turn had made no progress.",
-      ].join(" "),
-    };
-    publishFrame(conversationId, { event: recovery, persist: true });
-    await appendEvent(conversationId, recovery);
-
-    await recoverFromAuthFailure(
-      conversationId,
-      entry,
-      madeProgress
-        ? { ...turn.options, prompt: CUT_SHORT_PROMPT }
-        : turn.options,
-    );
   }
 
   async function sendPromptInternal(
@@ -528,13 +375,13 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const activeRun: ActiveRun = {
       id: agentRun.id,
       startedAt: new Date().toISOString(),
+      steer: (text) => agentRun.steer(text),
       wait: () => waitPromise,
     };
     const turn: LiveTurn = {
       run: activeRun,
       options,
       isReplay,
-      escalated: false,
     };
     entry.turn = turn;
     writeRunLiveMarker(conversationId);
@@ -583,17 +430,10 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         publishPipelineRunEvent("finished", conversationId);
       }
 
-      // An escalation from a delegation already owns this turn's recovery, and
-      // it cancelled this run to get there — the two must not both tear the
-      // session down and re-enter.
-      if (
-        !isReplay &&
-        !turn.escalated &&
-        (sawAuthFailure || isAuthFailureResult(result))
-      ) {
+      // One replay. A second auth failure surfaces as the replay's own result.
+      if (!isReplay && (sawAuthFailure || isAuthFailureResult(result))) {
         const replacement = await recoverFromAuthFailure(
           conversationId,
-          entry,
           options,
         );
         if (replacement) {

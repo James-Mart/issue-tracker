@@ -338,6 +338,14 @@ const pendingFrameInput = z.object({
 
 export type PendingFrameInput = z.infer<typeof pendingFrameInput>;
 
+/** Live-only mid-run steer signalling on the event stream (never persisted). */
+const steeringFrameInput = z.object({
+  type: z.literal("steering"),
+  text: z.string(),
+});
+
+export type SteeringFrameInput = z.infer<typeof steeringFrameInput>;
+
 /** Live-only issue-scoped delegation start on the event stream (never persisted). */
 const delegationFrameInput = z.object({
   type: z.literal("delegation"),
@@ -363,6 +371,7 @@ export const conversationFrameInputSchema = z.union([
   transcriptEventInputSchema,
   runFrameInput,
   pendingFrameInput,
+  steeringFrameInput,
   delegationFrameInput,
   delegationEndFrameInput,
 ]);
@@ -421,6 +430,7 @@ export const conversationStreamEventSchema = z.union([
   ]),
   withStreamFrameMeta(runFrameInput),
   withStreamFrameMeta(pendingFrameInput),
+  withStreamFrameMeta(steeringFrameInput),
   withStreamFrameMeta(delegationFrameInput),
   withStreamFrameMeta(delegationEndFrameInput),
 ]);

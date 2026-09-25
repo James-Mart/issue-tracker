@@ -35,6 +35,8 @@ const mocks = vi.hoisted(() => ({
   transcriptState: { events: [] as TranscriptEvent[] },
   threadUi: {
     pendingText: undefined as string | null | undefined,
+    steeringText: null as string | null,
+    pendingSteerFallback: false,
     runActive: false,
     metaPending: undefined as { text: string; at: string } | undefined,
     readOnly: false,
@@ -131,6 +133,8 @@ vi.mock("../hooks/use-conversation-events", () => ({
     streamRunActive: threadUi.runActive,
     runResyncKey: 0,
     pendingText: threadUi.pendingText,
+    steeringText: threadUi.steeringText,
+    pendingSteerFallback: threadUi.pendingSteerFallback,
     historyFailed: threadUi.historyFailed,
     refetchHistory,
     isRefetchingHistory: threadUi.isRefetchingHistory,
@@ -203,6 +207,8 @@ export function mockOverflow(scroller: HTMLDivElement) {
 export function resetThreadMocks() {
   transcriptState.events = [...initialEvents];
   threadUi.pendingText = undefined;
+  threadUi.steeringText = null;
+  threadUi.pendingSteerFallback = false;
   threadUi.runActive = false;
   threadUi.metaPending = undefined;
   threadUi.readOnly = false;

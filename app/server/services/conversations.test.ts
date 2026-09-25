@@ -80,6 +80,7 @@ function stubSessions() {
       run: {
         id: "run-1",
         startedAt: AT,
+        steer: async () => "complete_delivered" as const,
         wait: async () => ({ id: "run-1", status: "finished" }),
       },
     })),

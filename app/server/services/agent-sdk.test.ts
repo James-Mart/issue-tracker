@@ -94,6 +94,7 @@ function makeFakeSdkAgent(
           return { id: "run-1", status: "finished" };
         },
         cancel: vi.fn(async () => {}),
+        steer: vi.fn(async () => "complete_delivered" as const),
         onDidChangeStatus: () => () => {},
       };
       onSend?.(run);
@@ -796,5 +797,49 @@ describe("fixture builder", () => {
         agentId: NESTED_AGENT_ID,
       });
     }
+  });
+});
+
+describe("AgentRun.steer", () => {
+  it("forwards to Run.steer on the underlying SDK run", async () => {
+    const steer = vi.fn(async () => "complete_delivered" as const);
+    const createSdkAgent = vi.fn(async () =>
+      makeFakeSdkAgent([], (run) => {
+        run.steer = steer;
+      }),
+    );
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key" });
+    await using agent = await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+    });
+
+    const run = await agent.send("hello");
+    await expect(run.steer("redirect")).resolves.toBe("complete_delivered");
+    expect(steer).toHaveBeenCalledWith("redirect");
+  });
+
+  it("throws when the SDK run has no steer capability", async () => {
+    const createSdkAgent = vi.fn(async () => {
+      const agent = makeFakeSdkAgent([]);
+      const originalSend = agent.send.bind(agent);
+      agent.send = async (message, options) => {
+        const run = await originalSend(message, options);
+        return { ...run, steer: undefined as unknown as typeof run.steer };
+      };
+      return agent;
+    });
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key" });
+    await using agent = await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+    });
+
+    const run = await agent.send("hello");
+    expect(() => run.steer("redirect")).toThrow(
+      "SDK Run.steer is required for local agents",
+    );
   });
 });

@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import { Mic, Paperclip, Send, Square, Upload, X, Zap } from "lucide-react";
+import { Mic, Paperclip, Send, Square, Upload, X } from "lucide-react";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { currentGlow } from "@/components/ui/overlay-surfaces";
@@ -51,7 +51,6 @@ import {
 import {
   useCancelConversationRun,
   useDeleteConversationAttachment,
-  useInterruptConversationRun,
   useSendConversationMessage,
   useUpdateConversation,
   useUploadConversationAttachment,
@@ -233,7 +232,6 @@ export function Composer({
     isError: transcriptionCapabilityError,
   } = useTranscriptionCapabilityQuery();
   const sendMessage = useSendConversationMessage();
-  const interruptRun = useInterruptConversationRun();
   const cancelRun = useCancelConversationRun();
   const updateConversation = useUpdateConversation();
   const uploadAttachment = useUploadConversationAttachment(conversationId);
@@ -314,7 +312,7 @@ export function Composer({
   const showVoiceError = voiceState === "error";
   const voiceLocked = voiceState === "transcribing";
   const voiceSessionActive = voiceState !== "idle";
-  const composerBusy = sendMessage.isPending || interruptRun.isPending;
+  const composerBusy = sendMessage.isPending;
   const attachDisabled = composerBusy || voiceLocked;
   const micDisabled =
     composerBusy ||
@@ -479,14 +477,6 @@ export function Composer({
     );
   };
 
-  const sendNow = () => {
-    if (disabled || !canSubmit) return;
-    interruptRun.mutate(
-      { id: conversationId, body: messageBody() },
-      { onSuccess: onSuccessfulSend },
-    );
-  };
-
   const stop = () => {
     if (!runActive || cancelRun.isPending) return;
     cancelRun.mutate(conversationId);
@@ -571,10 +561,8 @@ export function Composer({
     setStagedAttachments((prev) => prev.filter((item) => item.name !== name));
   };
 
-  const sendLabel = runActive ? "Queue message" : "Send";
-  const sendTitle = runActive
-    ? "Queue message — sends after the current run finishes"
-    : "Send";
+  const sendLabel = runActive ? "Steer" : "Send";
+  const sendTitle = sendLabel;
 
   return (
     <div
@@ -779,19 +767,6 @@ export function Composer({
                     >
                       <Send className="h-4 w-4" />
                     </Button>
-                    {draft.trim().length > 0 || stagedAttachments.length > 0 ? (
-                      <Button
-                        size="icon"
-                        variant="secondary"
-                        className="h-11 w-11 shrink-0 shell:h-9 shell:w-9"
-                        onClick={sendNow}
-                        disabled={sendDisabled}
-                        title="Send now — interrupt the current run and send immediately"
-                        aria-label="Send now"
-                      >
-                        <Zap className="h-4 w-4" />
-                      </Button>
-                    ) : null}
                     <Button
                       size="icon"
                       variant="destructive"
