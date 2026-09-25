@@ -12,6 +12,7 @@ import {
   agentsDir,
   ASSISTANT_STREAM,
   cwd,
+  holdAfterStream,
   loadNestedRunPublishModules,
   nestedRunIssuesRoot,
   NESTED_RUN_PUBLISH_AT,
@@ -27,12 +28,20 @@ import {
   resolveModelSelection,
 } from "./model-selection.js";
 
+type DelegationEnd = {
+  status: "completed" | "error";
+  endedAt: string;
+  failureClass?: string;
+};
+
 type DelegationRow = {
   delegationId: string;
   agentId: string;
   role: string;
   model: string;
   at: string;
+  parentDelegationId?: string;
+  end?: DelegationEnd;
 };
 
 type DelegationsListing = {
@@ -730,7 +739,122 @@ describe("delegate publishes nested run frames", () => {
       expect(typeof row.delegationId).toBe("string");
       expect(typeof row.model).toBe("string");
       expect(typeof row.at).toBe("string");
+      expect(row.end).toMatchObject({ status: "completed" });
+      expect(typeof row.end!.endedAt).toBe("string");
     }
+  });
+
+  it("delegations exposes parentDelegationId and end lifecycle on each row", async () => {
+    const {
+      createConversation,
+      updateMeta,
+      createDelegateCustomTools: createTools,
+    } = await loadNestedRunPublishModules();
+
+    const meta = await createConversation({
+      title: "Delegations lifecycle",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    await updateMeta(meta.id, { agentId: "root-agent" });
+
+    const authFake = createFakeAgentSdk({
+      stream: [],
+      waitResult: {
+        id: "run-auth",
+        status: "error",
+        error: {
+          message:
+            "Authentication error. If you are logged in, try logging out and back in.",
+          isRetryable: true,
+        },
+      },
+    });
+    const tools = createTools({
+      sdk: authFake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+    await tools.delegate!.execute(
+      { role: "pinned-role", prompt: "fail" },
+      { toolCallId: "call-fail" },
+    );
+
+    let listed = delegationsListingOf(await tools.delegations!.execute({}, {}));
+    expect(listed.delegations).toHaveLength(1);
+    const failed = listed.delegations[0]!;
+    expect(failed).not.toHaveProperty("parentDelegationId");
+    expect(failed.end).toMatchObject({
+      status: "error",
+      failureClass: "auth",
+    });
+    expect(typeof failed.end!.endedAt).toBe("string");
+
+    const { hold, release } = holdAfterStream();
+    const holdFake = createFakeAgentSdk({ hold, stream: [] });
+    const holdTools = createTools({
+      sdk: holdFake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+    const running = holdTools.delegate!.execute(
+      { role: "pinned-role", prompt: "running" },
+      {},
+    );
+    await waitForHandleSend(holdFake, 0);
+
+    listed = delegationsListingOf(await holdTools.delegations!.execute({}, {}));
+    const inFlight = listed.delegations[0]!;
+    expect(inFlight).not.toHaveProperty("end");
+
+    release();
+    await running;
+
+    let releaseOuter!: () => void;
+    const holdOuter = new Promise<void>((resolve) => {
+      releaseOuter = resolve;
+    });
+    const nestFake = createFakeAgentSdk({
+      hold: holdOuter,
+      stream: ASSISTANT_STREAM,
+    });
+    const nestTools = createTools({
+      sdk: nestFake,
+      cwd,
+      storeDir,
+      agentsDir,
+      conversationId: meta.id,
+    });
+
+    const outerPromise = nestTools.delegate!.execute(
+      { role: "pinned-role", prompt: "outer" },
+      { toolCallId: "call-outer-nest" },
+    );
+    await waitForHandleSend(nestFake, 0);
+
+    const innerPromise = nestFake.created[0]!.customTools!.delegate!.execute(
+      { role: "pinned-role", prompt: "inner" },
+      { toolCallId: "call-inner-nest" },
+    );
+    await waitForHandleSend(nestFake, 1);
+
+    listed = delegationsListingOf(await nestTools.delegations!.execute({}, {}));
+    const innerInFlight = listed.delegations.find((row) => row.parentDelegationId);
+    expect(innerInFlight).toBeDefined();
+    expect(innerInFlight!.parentDelegationId).toEqual(expect.any(String));
+    expect(innerInFlight).not.toHaveProperty("end");
+
+    releaseOuter();
+    await Promise.all([outerPromise, innerPromise]);
+
+    listed = delegationsListingOf(await nestTools.delegations!.execute({}, {}));
+    const nestedCompleted = listed.delegations.find((row) => row.parentDelegationId);
+    expect(nestedCompleted!.end).toMatchObject({ status: "completed" });
+    expect(typeof nestedCompleted!.end!.endedAt).toBe("string");
   });
 
   it("delegations omits root and returns empty delegations when no session root is recorded", async () => {

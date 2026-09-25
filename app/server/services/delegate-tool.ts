@@ -385,13 +385,27 @@ export function createDelegateCustomTools(
         const delegations = readDelegations(options.conversationId)
           .slice()
           .reverse()
-          .map(({ delegationId, agentId, role, model, at }) => ({
-            delegationId,
-            agentId,
-            role,
-            model,
-            at,
-          }));
+          .map(
+            ({
+              delegationId,
+              agentId,
+              role,
+              model,
+              at,
+              parentDelegationId,
+              end,
+            }) => ({
+              delegationId,
+              agentId,
+              role,
+              model,
+              at,
+              ...(parentDelegationId !== undefined
+                ? { parentDelegationId }
+                : {}),
+              ...(end !== undefined ? { end } : {}),
+            }),
+          );
         return {
           root: { agentId: meta.agentId },
           delegations,

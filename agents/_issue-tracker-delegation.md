@@ -40,7 +40,11 @@ Use `CallMcpTool` against server `custom-user-tools`:
 - **`delegations`** — return `{ root: { agentId }, delegations: [...] }`
   where `root.agentId` is this conversation's session root agent and
   `delegations` lists nested delegations most-recent-first (use when
-  looking up a `resumeId`). When the conversation is unknown or has no
+  looking up a `resumeId`). Each entry carries `delegationId`, `agentId`,
+  `role`, `model`, and `at`; `parentDelegationId` when another delegation
+  spawned the run; and `end` (`status`, `endedAt`, and `failureClass` when
+  the run failed) once the run has finished — omit `end` while this process
+  is still running the delegation. When the conversation is unknown or has no
   root agent yet, `delegations` is empty and `root` is omitted.
 
 ## IDE channel
