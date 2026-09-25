@@ -1,7 +1,7 @@
 #!/usr/bin/env -S npx tsx
 // `npm test` entry.
 //
-// Full run: the lint chain, then `vitest run`.
+// Full run: the lint chain, then `typecheck`, then `vitest run`.
 // `npm test -- <path...>`: `vitest run <path...>` only.
 // Either way, one child process group, killed at three minutes (exit 124).
 // This process subreaps descendants as they exit. A deadline SIGKILLs the
@@ -24,6 +24,7 @@ const LINT_SCRIPTS = [
   "lint:pipeline-shape",
   "lint:transport",
   "lint:file-length",
+  "typecheck",
 ] as const;
 
 export const UNIT_SUITE_DEADLINE_MS = 180_000;

@@ -59,7 +59,8 @@ the same download and the mic enables when the weights land. Set
 
 Other scripts: `npm test` (static lints — client import boundary, agent spawn
 pins, CLI instruction forms and entrypoint, transport connection boundary, file
-length — then Vitest) and `npm test -- <path...>` (that Vitest file only) —
+length — then typecheck, then Vitest) and `npm test -- <path...>` (that Vitest
+file only) —
 either run is one process killed at three minutes, exiting `124`, and that
 exit raises attention — and
 `npm run build` (build the client into
