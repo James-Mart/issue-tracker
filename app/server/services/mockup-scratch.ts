@@ -26,6 +26,14 @@ const mockupStackStateSchema = z.object({
 
 export type MockupStackState = z.infer<typeof mockupStackStateSchema>;
 
+const sessionOutcomeSchema = z.object({
+  outcome: z.enum(["open", "ended"]),
+});
+
+export type MockupSessionOutcome = z.infer<
+  typeof sessionOutcomeSchema
+>["outcome"];
+
 function assertConversationId(conversationId: string): void {
   if (!isSlugSafe(conversationId)) {
     throw new Error(
@@ -234,6 +242,53 @@ export function readMockupStackState(
   conversationId: string,
 ): MockupStackState | null {
   return readMockupStackStateFile(mockupStackStatePath(conversationId));
+}
+
+/** Outcome file beside the scratch tree. Stop does not remove it. */
+export function sessionOutcomePath(conversationId: string): string {
+  const resolvedId = resolveMockupConversationId(conversationId);
+  return join(conversationsDir, resolvedId, "mockups", "session-outcome.json");
+}
+
+export function readSessionOutcome(
+  conversationId: string,
+): MockupSessionOutcome | null {
+  let path: string;
+  try {
+    path = sessionOutcomePath(conversationId);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message.startsWith("mockup scratch id ")
+    ) {
+      return null;
+    }
+    throw err;
+  }
+  if (!existsSync(path)) return null;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(path, "utf8"));
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`invalid mockup session outcome at ${path}: ${detail}`);
+  }
+  const parsed = sessionOutcomeSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(
+      `invalid mockup session outcome at ${path}: ${parsed.error.message}`,
+    );
+  }
+  return parsed.data.outcome;
+}
+
+export function writeSessionOutcome(
+  conversationId: string,
+  outcome: MockupSessionOutcome,
+): void {
+  const path = sessionOutcomePath(conversationId);
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(path, `${JSON.stringify({ outcome }, null, 2)}\n`);
 }
 
 export function writeMockupStackState(

@@ -151,8 +151,11 @@ doc.
     exactly as a conformant one does, and migrate promotes it.
   - **Redirect** — the stakeholder's redirection goes back as feedback to the
     round already open, which resumes iterating on it with a fresh cap.
-  - **Drop** — the round ends for that screen with no direction, the plan
-    proceeds without one, and migrate promotes nothing for that screen.
+  - **Drop** — from `/root/.cursor/plugins/local/issue-tracker/app`, stop
+    that conversation's stack with
+    `npm run mockup-stack -- stop <conversationId> --ended`, then the round
+    ends for that screen with no direction, the plan proceeds without one,
+    and migrate promotes nothing for that screen.
 - **Requested changes or alternatives** — when the answer to a conformant
   return asks for changes or for another direction, that request re-enters
   the round already open as feedback, the same way a redirection does. It

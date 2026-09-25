@@ -67,7 +67,8 @@ Otherwise run **## Round** from step 1's spawn branch.
 2. **Start the stack.**
    `npm run mockup-stack -- start <conversationId>`
    Start is idempotent: when the author already started the stack, this
-   reuses it. It prints the Storybook base URL.
+   reuses it. Capture still uses the loopback base URL it prints; do not
+   post that URL to the human.
 3. **Capture and review.** For each direction id, in the order the author
    returned them:
    `npm run mockup-capture -- --conversation <conversationId> --direction <directionId>`
@@ -87,7 +88,10 @@ Otherwise run **## Round** from step 1's spawn branch.
    `npm run mockup-promote -- --conversation <conversationId> --direction <directionId> --mode candidate`
    Candidate mode stores the captures on the conversation, then prints one
    absolute capture path per line, then one embed line per PNG.
-6. Return per **## Return**. Leave the stack running.
+6. **Live Storybook links.** For each direction id from step 1:
+   `npm run mockup-live-links -- --conversation <conversationId> --direction <directionId>`
+   Each run prints one `[Open live Storybook](...)` line on stdout.
+7. Return per **## Return**. Leave the stack running.
 
 ## Acceptance
 
@@ -96,7 +100,7 @@ In order:
 1. `npm run mockup-stack -- start <conversationId>`
 2. `npm run mockup-promote -- --conversation <conversationId> --direction <chosenDirectionId> --issue <issueId> --mode chosen`
 3. `npm run mockup-prune -- --conversation <conversationId> --keep <chosenDirectionId>`
-4. `npm run mockup-stack -- stop <conversationId>`
+4. `npm run mockup-stack -- stop <conversationId> --ended`
 5. Return per **## Return** from that promote's printed output, then stop.
 
 ## Return
@@ -105,8 +109,8 @@ The entire final message carries:
 
 - the direction ids and each direction's state names
 - the embed lines and absolute capture paths that promote printed
-- the live Storybook base URL that start printed, when the stack is
-  still up
+- one `[Open live Storybook](...)` markdown link per direction from step
+  6, when the stack is still up
 - any decision judged un-representable in a capture
 - when three own-judgment feedback rounds ended without conformance, an
   escalation naming each unresolved violation beside the captures it did

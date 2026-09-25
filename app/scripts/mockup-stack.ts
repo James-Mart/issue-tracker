@@ -3,6 +3,7 @@
  * Start or stop a conversation's Storybook mockup stack.
  *
  * Usage: npm run mockup-stack -- start|stop <conversationId>
+ *        npm run mockup-stack -- stop <conversationId> --ended
  *        npm run mockup-stack -- stop --all
  */
 
@@ -15,29 +16,33 @@ import {
 
 function usage(): string {
   return `Usage: npm run mockup-stack -- start|stop <conversationId>
+       npm run mockup-stack -- stop <conversationId> --ended
        npm run mockup-stack -- stop --all
 
-start  Start (or adopt) the conversation's Storybook stack on a free port and
-       print its base URL on stdout.
+start  Start (or adopt) the conversation's Storybook stack on a free port,
+       record session outcome "open", and print its base URL on stdout.
 stop   Stop the conversation's Storybook stack and clear its durable state.
+       The session outcome file is left unchanged.
+stop <conversationId> --ended
+       Record session outcome "ended", then stop as stop does.
 stop --all
        Stop every recorded mockup stack and report each port freed.
 `;
 }
 
 async function main(): Promise<void> {
-  const [command, arg, ...rest] = process.argv.slice(2);
-
-  if (!command || rest.length > 0) {
+  const [command, ...args] = process.argv.slice(2);
+  if (!command) {
     process.stderr.write(usage());
     process.exit(1);
   }
 
   if (command === "start") {
-    if (!arg) {
+    if (args.length !== 1 || !args[0]) {
       process.stderr.write(usage());
       process.exit(1);
     }
+    const arg = args[0];
     const { state, reused } = await startMockupStack(arg);
     process.stdout.write(`${state.baseUrl}\n`);
     process.stderr.write(
@@ -48,7 +53,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "stop") {
-    if (arg === "--all") {
+    if (args.length === 1 && args[0] === "--all") {
       const freed = await stopAllMockupStacks();
       if (freed.length === 0) {
         process.stderr.write("no mockup stacks recorded\n");
@@ -61,11 +66,14 @@ async function main(): Promise<void> {
       }
       return;
     }
-    if (!arg) {
+    const ended = args.includes("--ended");
+    const ids = args.filter((item) => item !== "--ended");
+    if (ids.length !== 1 || !ids[0]) {
       process.stderr.write(usage());
       process.exit(1);
     }
-    const result = await stopMockupStack(arg);
+    const arg = ids[0];
+    const result = await stopMockupStack(arg, { ended });
     process.stderr.write(
       result.stopped
         ? `stopped mockup stack for ${arg} (freed port ${result.state.port})\n`

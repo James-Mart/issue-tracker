@@ -119,6 +119,10 @@ export default defineConfig({
         target: apiProxyTarget,
         ws: true,
       },
+      "/mockups": {
+        target: apiProxyTarget,
+        ws: true,
+      },
     },
   },
   test: {

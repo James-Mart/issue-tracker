@@ -136,6 +136,26 @@ async function waitForCollection(pid: number): Promise<boolean> {
   return isCollected(pid);
 }
 
+describe("storybook dev command", () => {
+  it("binds loopback and records the public mockup prefix", async () => {
+    const { mockupStorybookBase, storybookDevArgs } = await loadService();
+    expect(storybookDevArgs(41005)).toEqual([
+      "dev",
+      "-c",
+      ".storybook",
+      "--no-open",
+      "--ci",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "41005",
+    ]);
+    expect(mockupStorybookBase("my-conversation")).toBe(
+      "/mockups/my-conversation/",
+    );
+  });
+});
+
 describe("mockup stack liveness", () => {
   it("pins a recorded pid to the process that was started", async () => {
     const { isMockupStackLive } = await loadService();
@@ -260,9 +280,43 @@ describe("mockup stack lifecycle", () => {
     expect(handle.state.pid).toBe(pid);
     expect(readMockupStackState("my-conversation")).toEqual(handle.state);
     expect(isMockupStackLive(handle.state)).toBe(true);
+    const { readSessionOutcome, sessionOutcomePath } = await loadScratch();
+    expect(readSessionOutcome("my-conversation")).toBe("open");
 
     await stopMockupStack("my-conversation");
     expect(existsSync(mockupStackStatePath("my-conversation"))).toBe(false);
+    expect(existsSync(sessionOutcomePath("my-conversation"))).toBe(true);
+    expect(readSessionOutcome("my-conversation")).toBe("open");
+  });
+
+  it("records ended before stop and leaves the outcome file in place", async () => {
+    const { stopMockupStack } = await loadService();
+    const {
+      mockupStackStatePath,
+      readSessionOutcome,
+      sessionOutcomePath,
+      writeMockupStackState,
+      writeSessionOutcome,
+    } = await loadScratch();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
+    writeSessionOutcome("my-conversation", "open");
+    const pid = spawnSleeper();
+    writeMockupStackState("my-conversation", {
+      port: 41005,
+      pid,
+      startTime: procStartTime(pid),
+      baseUrl: "http://127.0.0.1:41005",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const result = await stopMockupStack("my-conversation", { ended: true });
+
+    expect(result.stopped).toBe(true);
+    expect(existsSync(mockupStackStatePath("my-conversation"))).toBe(false);
+    expect(existsSync(sessionOutcomePath("my-conversation"))).toBe(true);
+    expect(readSessionOutcome("my-conversation")).toBe("ended");
+    expect(isCollected(pid)).toBe(true);
   });
 
   it("stop succeeds quietly when no stack is recorded", async () => {

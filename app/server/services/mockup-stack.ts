@@ -22,6 +22,7 @@ import {
   readMockupStackState,
   readMockupStackStateDirect,
   writeMockupStackState,
+  writeSessionOutcome,
   type MockupStackState,
 } from "./mockup-scratch.js";
 
@@ -136,6 +137,26 @@ function tailLog(path: string, maxLines = 20): string {
   return readFileSync(path, "utf8").trimEnd().split("\n").slice(-maxLines).join("\n");
 }
 
+/** Public prefix the manager, preview iframe, and HMR client resolve on. */
+export function mockupStorybookBase(conversationId: string): string {
+  return `/mockups/${conversationId}/`;
+}
+
+/** Storybook stays on loopback. The tracker origin proxies this prefix. */
+export function storybookDevArgs(port: number): string[] {
+  return [
+    "dev",
+    "-c",
+    ".storybook",
+    "--no-open",
+    "--ci",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(port),
+  ];
+}
+
 function spawnStorybook(
   conversationId: string,
   port: number,
@@ -147,12 +168,13 @@ function spawnStorybook(
   try {
     child = spawn(
       binPath("storybook"),
-      ["dev", "-c", ".storybook", "--no-open", "--ci", "--port", String(port)],
+      storybookDevArgs(port),
       {
         cwd: appDir,
         env: {
           ...process.env,
           MOCKUP_HARNESS_CONFIG: harnessPath,
+          MOCKUP_STORYBOOK_BASE: mockupStorybookBase(conversationId),
         },
         detached: true,
         stdio: ["ignore", fd, fd],
@@ -227,12 +249,14 @@ export async function startMockupStack(
   const existing = readMockupStackState(conversationId);
   if (existing) {
     if (isMockupStackLive(existing)) {
+      writeSessionOutcome(conversationId, "open");
       return { state: existing, reused: true };
     }
     await stopMockupStack(conversationId);
   }
 
   const harnessPath = assertHarnessConfig(conversationId);
+  writeSessionOutcome(conversationId, "open");
   mkdirSync(mockupStackDir(conversationId), { recursive: true });
 
   const port = await pickFreePort();
@@ -345,7 +369,8 @@ function removeMockupStackState(conversationId: string): void {
 
 /**
  * Stop this conversation's Storybook stack and release its port. A
- * conversation with no recorded stack is not an error.
+ * conversation with no recorded stack is not an error. The session
+ * outcome file is left in place. `ended` writes `"ended"` first.
  *
  * A recorded pid that is not this process's child is removed with no signal.
  * An owned live group gets SIGTERM, then SIGKILL after `TERM_GRACE_MS`. The
@@ -354,8 +379,12 @@ function removeMockupStackState(conversationId: string): void {
  */
 export async function stopMockupStack(
   conversationId: string,
+  options?: { ended?: boolean },
 ): Promise<MockupStackStopResult> {
   ensureChildReaper();
+  if (options?.ended) {
+    writeSessionOutcome(conversationId, "ended");
+  }
   const state = readMockupStackState(conversationId);
   if (!state) return { stopped: false, state: null };
 

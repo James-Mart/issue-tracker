@@ -4,6 +4,7 @@ import { loadHarnessConfig } from "./harness-config.js";
 import {
   HARNESS_CSS_VIRTUAL_ID,
   SMOKE_STORY_GLOB,
+  applyMockupStorybookBase,
   buildHarnessStorybookOptions,
   harnessCssModuleSource,
 } from "./storybook-config.js";
@@ -47,9 +48,11 @@ function createConfig(): StorybookConfig {
       stories: [SMOKE_STORY_GLOB],
       framework: "@storybook/react-vite",
       async viteFinal(viteConfig) {
-        return mergeConfig(viteConfig, {
+        const merged = mergeConfig(viteConfig, {
           plugins: [harnessCssEntriesPlugin([])],
         });
+        applyMockupStorybookBase(merged, process.env.MOCKUP_STORYBOOK_BASE);
+        return merged;
       },
     };
   }
@@ -70,7 +73,7 @@ function createConfig(): StorybookConfig {
         }
       : "@storybook/react-vite",
     async viteFinal(viteConfig) {
-      return mergeConfig(viteConfig, {
+      const merged = mergeConfig(viteConfig, {
         plugins: [harnessCssEntriesPlugin(options.cssEntries)],
         resolve: {
           alias: mergeAliasOptions(
@@ -87,6 +90,8 @@ function createConfig(): StorybookConfig {
           },
         },
       });
+      applyMockupStorybookBase(merged, process.env.MOCKUP_STORYBOOK_BASE);
+      return merged;
     },
   };
 }

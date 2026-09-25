@@ -22,8 +22,27 @@ function indexUrl(baseUrl: string): string {
   return new URL("index.json", normalized).href;
 }
 
-function matchesDirection(title: string, directionId: string): boolean {
+export function matchesDirection(title: string, directionId: string): boolean {
   return title === directionId || title.startsWith(`${directionId}/`);
+}
+
+/** Lexicographic byte order on title, then name. */
+export function compareStoryStates(a: StoryState, b: StoryState): number {
+  const byTitle = a.title.localeCompare(b.title);
+  if (byTitle !== 0) return byTitle;
+  return a.name.localeCompare(b.name);
+}
+
+/**
+ * Pick the story a human should open for a direction: the first Default in
+ * title/name order, otherwise the first match in that order.
+ */
+export function chooseLiveStoryForDirection(states: StoryState[]): StoryState {
+  if (states.length === 0) {
+    throw new Error("chooseLiveStoryForDirection requires at least one story");
+  }
+  const sorted = [...states].sort(compareStoryStates);
+  return sorted.find((state) => state.name === "Default") ?? sorted[0]!;
 }
 
 function parseStoryIndex(body: unknown, url: string): StoryState[] {
