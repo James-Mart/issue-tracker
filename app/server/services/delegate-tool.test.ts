@@ -766,6 +766,7 @@ describe("delegate publishes nested run frames", () => {
         error: {
           message:
             "Authentication error. If you are logged in, try logging out and back in.",
+          code: "AUTH_TOKEN_EXPIRED",
           isRetryable: true,
         },
       },
@@ -990,6 +991,7 @@ describe("delegate publishes nested run frames", () => {
         status: "error",
         error: {
           message: authMessage,
+          code: "AUTH_TOKEN_EXPIRED",
           isRetryable: true,
         },
       },

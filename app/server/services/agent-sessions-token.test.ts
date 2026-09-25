@@ -90,7 +90,7 @@ describe("expired access token recovery", () => {
     const authResult = {
       id: FAKE_RUN_ID,
       status: "error" as const,
-      error: { message: AUTH_ERROR_TEXT },
+      error: { message: "token expired", code: "AUTH_TOKEN_EXPIRED" },
     };
     const fake = createFakeAgentSdk({
       sendScript: [
@@ -113,6 +113,37 @@ describe("expired access token recovery", () => {
     expect(await result.run.wait()).toEqual(authResult);
     // Exactly one replay: a key that is genuinely bad must not loop.
     expect(fake.handles).toHaveLength(2);
+  });
+
+  it("replays after a code-only terminal auth error on the pump path", async () => {
+    const { createConversation, createAgentSessions } = await load();
+    const authResult = {
+      id: FAKE_RUN_ID,
+      status: "error" as const,
+      error: { message: "unauthenticated", code: "unauthenticated" },
+    };
+    const fake = createFakeAgentSdk({
+      sendScript: [
+        { stream: [], waitResult: authResult },
+        { stream: [], waitResult: authResult },
+      ],
+    });
+    const sessions = createAgentSessions(fake);
+
+    const meta = await createConversation({
+      title: "Code-only auth failure",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const result = await sessions.sendPrompt(meta.id, { prompt: "go" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(await result.run.wait()).toEqual(authResult);
+    expect(fake.handles).toHaveLength(2);
+    expect(fake.handles[0]?.disposed).toBe(true);
+    expect(fake.handles[1]?.sends).toEqual([{ message: "go", options: {} }]);
   });
 
   it("leaves a run in flight and other workspaces untouched", async () => {

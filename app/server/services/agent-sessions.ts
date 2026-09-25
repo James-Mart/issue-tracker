@@ -14,7 +14,10 @@ import {
   type AgentRunResult,
   type AgentSdk,
 } from "./agent-sdk.js";
-import { isAuthFailureEvent, isAuthFailureText } from "./agent-failure.js";
+import {
+  classifyAgentFailure,
+  isAuthFailureEvent,
+} from "./agent-failure.js";
 import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import {
   appendEvent,
@@ -125,10 +128,7 @@ const CUT_SHORT_PROMPT =
   "The previous turn was cut short by an expired session token. Please carry on.";
 
 function isAuthFailureResult(result: AgentRunResult): boolean {
-  return (
-    result.status === "error" &&
-    isAuthFailureText(result.error?.message ?? "")
-  );
+  return classifyAgentFailure(result.status, result.error) === "auth";
 }
 
 function conversationStoreDir(conversationId: string): string {

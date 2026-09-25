@@ -47,7 +47,7 @@ describe("delegation auth escalation", () => {
       waitResult: {
         id: "run-nested-auth",
         status: "error" as const,
-        error: { message: AUTH_ERROR_TEXT },
+        error: { message: AUTH_ERROR_TEXT, code: "AUTH_TOKEN_EXPIRED" },
       },
     };
   }
