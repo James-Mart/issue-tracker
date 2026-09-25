@@ -39,8 +39,7 @@ import {
   transcriptInfoLine,
 } from "../lib/transcript-rows";
 import {
-  formatUsageTotals,
-  sumUsageTotals,
+  formatThreadStatus,
   threadRunLabel,
 } from "../lib/thread-status";
 import { MessageScroller } from "@/components/ui/message-scroller";
@@ -411,6 +410,7 @@ function TranscriptEventRow({
     case "status":
     case "usage":
     case "run_usage":
+    case "run_cost":
     case "request":
     case "delegation_recovery":
     case "host_crash_recovery": {
@@ -682,8 +682,7 @@ function ThreadStatusStrip({
   events: readonly TranscriptEvent[];
 }) {
   const label = threadRunLabel(runActive);
-  const totals = sumUsageTotals(events);
-  const usageText = formatUsageTotals(totals);
+  const usageText = formatThreadStatus(events, runActive);
 
   return (
     <div
