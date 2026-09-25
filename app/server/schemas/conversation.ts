@@ -230,6 +230,7 @@ export const agentFailureClassSchema = z.enum([
   "auth",
   "agent-failed",
   "cancelled",
+  "host-process-died",
   "stalled-before-first-token",
   "transport-exhausted",
 ]);
