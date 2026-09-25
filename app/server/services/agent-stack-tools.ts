@@ -1,10 +1,47 @@
-import type { SDKCustomTool } from "@cursor/sdk";
+import type { SDKCustomTool, SDKJsonValue } from "@cursor/sdk";
+import { z } from "zod";
 import {
+  agentStackStateSchema,
   startAgentStack,
   stopAgentStack,
-  type AgentStackHandle,
-  type AgentStackStopResult,
 } from "./agent-stack.js";
+
+const agentStackHandleSchema = z.object({
+  state: agentStackStateSchema,
+  env: z.record(z.string(), z.string()),
+  reused: z.boolean(),
+});
+
+export type AgentStackHandleResult = z.infer<typeof agentStackHandleSchema>;
+
+const agentStackStopResultSchema = z.discriminatedUnion("stopped", [
+  z.object({ stopped: z.literal(true), state: agentStackStateSchema }),
+  z.object({ stopped: z.literal(false), state: z.null() }),
+]);
+
+export type AgentStackStopToolResult = z.infer<typeof agentStackStopResultSchema>;
+
+function toolOutputSchema<T extends z.ZodType>(
+  schema: T,
+): Record<string, SDKJsonValue> {
+  return z.toJSONSchema(schema) as Record<string, SDKJsonValue>;
+}
+
+const AGENT_STACK_START_ANNOTATIONS = {
+  title: "Start verification stack",
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const AGENT_STACK_STOP_ANNOTATIONS = {
+  title: "Stop verification stack",
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
 
 export interface AgentStackToolOptions {
   /** App conversation that owns the stack (not the Cursor session id). */
@@ -43,6 +80,8 @@ export function createAgentStackTools(
     agent_stack_start: {
       description:
         "Start (or reuse) this conversation's API+Vite verification stack on free ports for the summary Workspace checkout. Returns the AGENT_STACK_* env contract. The stack reads the live tracker store and refuses writes. Use before verifying server/UI changes; do not restart the human's stack on 8060/8061.",
+      annotations: AGENT_STACK_START_ANNOTATIONS,
+      outputSchema: toolOutputSchema(agentStackHandleSchema),
       inputSchema: {
         type: "object",
         properties: {
@@ -62,21 +101,23 @@ export function createAgentStackTools(
         const cursorConversationId = requireCursorConversationId(
           options.getCursorConversationId,
         );
-        const handle: AgentStackHandle = await startAgentStack(options.conversationId, {
+        const handle = await startAgentStack(options.conversationId, {
           workspace,
           cursorConversationId,
         });
-        return { ...handle };
+        return { ...handle } satisfies AgentStackHandleResult;
       },
     },
     agent_stack_stop: {
       description:
         "Stop this conversation's verification stack, free its ports, and clear durable ownership (state + cursor index).",
+      annotations: AGENT_STACK_STOP_ANNOTATIONS,
+      outputSchema: toolOutputSchema(agentStackStopResultSchema),
       inputSchema: {
         type: "object",
         properties: {},
       },
-      execute: async (): Promise<AgentStackStopResult> => {
+      execute: async (): Promise<AgentStackStopToolResult> => {
         return stopAgentStack(options.conversationId);
       },
     },

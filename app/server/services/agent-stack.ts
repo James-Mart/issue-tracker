@@ -41,7 +41,7 @@ const agentStackProcessSchema = z.object({
   startTime: z.string().min(1),
 });
 
-const agentStackStateSchema = z.object({
+export const agentStackStateSchema = z.object({
   conversationId: z.string().min(1),
   /** Absolute Project workspace checkout this stack serves. */
   workspace: z.string().min(1),

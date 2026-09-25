@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { join } from "path";
-import type { SDKCustomTool, SDKCustomToolResult } from "@cursor/sdk";
+import type {
+  SDKCustomTool,
+  SDKCustomToolResult,
+  SDKJsonValue,
+} from "@cursor/sdk";
+import { z } from "zod";
+import { agentFailureClassSchema } from "../schemas/conversation.js";
 import type { AgentRunResult, AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
 import {
   classifyAgentFailure,
@@ -41,15 +47,76 @@ export const NESTED_RUN_FIRST_CONTENT_TIMEOUT_MS = 300_000;
 /** Maximum nested delegation depth (conversation root is 0). */
 export const MAX_DELEGATION_DEPTH = 3;
 
-export type DelegateResult =
-  | { ok: true; agentId: string; reply: string }
-  | {
-      ok: false;
-      failureClass: AgentFailureClass;
-      isRetryable: boolean;
-      message: string;
-      agentId: string;
-    };
+const delegateSuccessSchema = z.object({
+  ok: z.literal(true),
+  agentId: z.string(),
+  reply: z.string(),
+});
+
+const delegateFailureSchema = z.object({
+  ok: z.literal(false),
+  failureClass: agentFailureClassSchema,
+  isRetryable: z.boolean(),
+  message: z.string(),
+  agentId: z.string(),
+});
+
+const delegateResultSchema = z.discriminatedUnion("ok", [
+  delegateSuccessSchema,
+  delegateFailureSchema,
+]);
+
+export type DelegateResult = z.infer<typeof delegateResultSchema>;
+
+const delegationEndSchema = z.object({
+  status: z.enum(["completed", "error"]),
+  endedAt: z.string(),
+  failureClass: agentFailureClassSchema.optional(),
+});
+
+const delegationRowSchema = z.object({
+  delegationId: z.string(),
+  agentId: z.string(),
+  role: z.string(),
+  model: z.string(),
+  at: z.string(),
+  parentDelegationId: z.string().optional(),
+  end: delegationEndSchema.optional(),
+});
+
+const delegationsListingSchema = z.union([
+  z.object({
+    root: z.object({ agentId: z.string() }),
+    delegations: z.array(delegationRowSchema),
+  }),
+  z.object({
+    delegations: z.tuple([]),
+  }),
+]);
+
+export type DelegationsListing = z.infer<typeof delegationsListingSchema>;
+
+function toolOutputSchema<T extends z.ZodType>(
+  schema: T,
+): Record<string, SDKJsonValue> {
+  return z.toJSONSchema(schema) as Record<string, SDKJsonValue>;
+}
+
+const DELEGATE_TOOL_ANNOTATIONS = {
+  title: "Delegate to role",
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} as const;
+
+const DELEGATIONS_TOOL_ANNOTATIONS = {
+  title: "List delegations",
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
 
 function delegateFailureFromWait(
   waited: AgentRunResult,
@@ -367,11 +434,13 @@ export function createDelegateCustomTools(
     customTools.delegations = {
       description:
         "List nested delegations for this conversation, most recent first.",
+      annotations: DELEGATIONS_TOOL_ANNOTATIONS,
+      outputSchema: toolOutputSchema(delegationsListingSchema),
       inputSchema: {
         type: "object",
         properties: {},
       },
-      execute: async (): Promise<SDKCustomToolResult> => {
+      execute: async (): Promise<DelegationsListing> => {
         if (
           !options.conversationId ||
           !conversationExists(options.conversationId)
@@ -416,6 +485,8 @@ export function createDelegateCustomTools(
     customTools.delegate = {
       description:
         "Delegate work to a named role. The app selects the role's pinned model. Returns ok: true with agentId and reply on success; ok: false with failureClass (auth | agent-failed | cancelled | host-process-died | stalled-before-first-token | transport-exhausted), isRetryable, message, and agentId on a runtime failure. Caller errors throw.",
+      annotations: DELEGATE_TOOL_ANNOTATIONS,
+      outputSchema: toolOutputSchema(delegateResultSchema),
       inputSchema: {
         type: "object",
         properties: {
