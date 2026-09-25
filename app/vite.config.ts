@@ -7,11 +7,17 @@ import { fileURLToPath, URL } from "node:url";
 import { independentBootstrapFaultEntryProblem } from "./scripts/bootstrap-fault-entry.js";
 import { revalidateOptimizedDeps } from "./scripts/optimized-deps-cache.js";
 
-const heapReportDir = mkdtempSync(join(tmpdir(), "vitest-heap-reports-"));
-process.env.VITEST_HEAP_REPORT_DIR = heapReportDir;
-process.on("exit", () => {
-  rmSync(heapReportDir, { recursive: true, force: true });
-});
+// Workers reload this config in a separate process; reuse the parent dir so
+// worker-<pid>.json and Node fatal-error reports stay in one directory.
+const heapReportDir =
+  process.env.VITEST_HEAP_REPORT_DIR ??
+  mkdtempSync(join(tmpdir(), "vitest-heap-reports-"));
+if (!process.env.VITEST_HEAP_REPORT_DIR) {
+  process.env.VITEST_HEAP_REPORT_DIR = heapReportDir;
+  process.on("exit", () => {
+    rmSync(heapReportDir, { recursive: true, force: true });
+  });
+}
 
 const indexHtmlPath = fileURLToPath(new URL("./index.html", import.meta.url));
 const bootstrapFaultSrcPath = fileURLToPath(
