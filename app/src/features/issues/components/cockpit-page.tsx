@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
 import { visibleIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
-import { PageShell } from "@/components/page-shell";
+import { COCKPIT_COLUMN_CLASS, PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -342,53 +342,56 @@ export function CockpitPage() {
       onReload={() => void refetch()}
       loadingLabel="Loading the line…"
       errorTitle="Couldn't load the line."
+      columnClassName={COCKPIT_COLUMN_CLASS}
     >
       <PageShell>
-        <CockpitHeader
-          projects={projects}
-          hiddenIds={hiddenIds}
-          onHiddenIdsChange={setHiddenIdsAndCookie}
-        />
-        {projects.length === 0 ? (
-          <ShellState
-            eyebrow="Empty"
-            title="No projects on the line."
-            detail="Create a project to start planning."
-            action={
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => openProjectDialog()}
-              >
-                <Plus className="h-4 w-4" />
-                New project
-              </Button>
-            }
+        <div className={COCKPIT_COLUMN_CLASS}>
+          <CockpitHeader
+            projects={projects}
+            hiddenIds={hiddenIds}
+            onHiddenIdsChange={setHiddenIdsAndCookie}
           />
-        ) : allProjectsHidden ? (
-          <ShellState
-            eyebrow="Filtered"
-            title="No projects in view."
-            detail="Every project is hidden from the Cockpit. Show them again to see work across the line."
-            action={
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => setHiddenIdsAndCookie([])}
-              >
-                Show all projects
-              </Button>
-            }
-          />
-        ) : (
-          <FlowBucketsSections
-            buckets={buckets}
-            idPrefix="cockpit"
-            renderItems={renderBucketItems}
-            collapsedSectionKeys={collapsedSectionKeys}
-            onToggleSection={onToggleSection}
-          />
-        )}
+          {projects.length === 0 ? (
+            <ShellState
+              eyebrow="Empty"
+              title="No projects on the line."
+              detail="Create a project to start planning."
+              action={
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => openProjectDialog()}
+                >
+                  <Plus className="h-4 w-4" />
+                  New project
+                </Button>
+              }
+            />
+          ) : allProjectsHidden ? (
+            <ShellState
+              eyebrow="Filtered"
+              title="No projects in view."
+              detail="Every project is hidden from the Cockpit. Show them again to see work across the line."
+              action={
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => setHiddenIdsAndCookie([])}
+                >
+                  Show all projects
+                </Button>
+              }
+            />
+          ) : (
+            <FlowBucketsSections
+              buckets={buckets}
+              idPrefix="cockpit"
+              renderItems={renderBucketItems}
+              collapsedSectionKeys={collapsedSectionKeys}
+              onToggleSection={onToggleSection}
+            />
+          )}
+        </div>
       </PageShell>
     </IssuesQueryShell>
   );

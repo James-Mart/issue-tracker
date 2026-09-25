@@ -173,19 +173,42 @@ describe("FlowRow", () => {
     expect(container.textContent).not.toContain("planning");
   });
 
-  it("keeps title and actions on one line", () => {
+  it("reserves an icon slot left of the title and keeps chips snug after it", () => {
     const container = mountRow(
       idea("with-action"),
       { blocked: false, ideaStatus: "captured" },
       <button type="button">Start planning</button>,
     );
     expect(container.textContent).toContain("Start planning");
-    const actionButton = container.querySelector('button[type="button"]');
-    const actionWrapper = actionButton?.parentElement as HTMLElement;
-    expect(actionWrapper.className).toMatch(/flex-nowrap/);
-    expect(actionWrapper.className).not.toMatch(/flex-wrap/);
-    expect(actionWrapper.parentElement?.className).not.toMatch(/flex-col/);
+    const slot = container.querySelector(
+      '[data-testid="cockpit-row-action-slot"]',
+    ) as HTMLElement;
+    expect(slot).toBeTruthy();
+    expect(slot.textContent).toContain("Start planning");
+    const title = container.querySelector(".cockpit-row-title") as HTMLElement;
+    expect(title.textContent).toBe("with-action");
+    expect(
+      slot.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const lead = slot.parentElement as HTMLElement;
+    expect(lead.className).not.toMatch(/flex-col/);
     expect(container.querySelector(".pointer-events-none")).toBeNull();
+  });
+
+  it("keeps a blank icon slot when the row has no action", () => {
+    const container = mountRow(idea("quiet"), {
+      blocked: false,
+      ideaStatus: "planning",
+    });
+    const slot = container.querySelector(
+      '[data-testid="cockpit-row-action-slot"]',
+    ) as HTMLElement;
+    expect(slot).toBeTruthy();
+    expect(slot.childNodes).toHaveLength(0);
+    expect(container.textContent).toContain("planning");
+    const cluster = container.querySelector(".cockpit-row-cluster");
+    expect(cluster?.textContent).toContain("quiet");
+    expect(cluster?.textContent).toContain("planning");
   });
 
   it("attaches a launch fault under the row", () => {
