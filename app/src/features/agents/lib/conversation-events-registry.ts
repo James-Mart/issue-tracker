@@ -34,6 +34,8 @@ const emptyState = (): ConversationEventsState => ({
   streamRunActive: null,
   runResyncKey: 0,
   pendingText: undefined,
+  steeringText: null,
+  pendingSteerFallback: false,
 });
 
 function conversationTopic(conversationId: string): string {
@@ -88,20 +90,39 @@ function openEntry(
       setState({ streamRunActive: event.status === "started" });
       return;
     }
+    if (event.type === "steering") {
+      setState({
+        steeringText: event.text,
+        pendingSteerFallback: false,
+      });
+      return;
+    }
     if (event.type === "pending") {
-      setState({ pendingText: event.text });
+      const matchesSteer =
+        event.text !== null && event.text === entry.state.steeringText;
+      const cleared = event.text === null;
+      setState({
+        pendingText: event.text,
+        steeringText: matchesSteer ? null : entry.state.steeringText,
+        pendingSteerFallback: matchesSteer
+          ? true
+          : cleared
+            ? false
+            : entry.state.pendingSteerFallback,
+      });
       return;
     }
-    if (
-      event.type === "steering" ||
-      event.type === "delegation" ||
-      event.type === "delegation_end"
-    ) {
+    if (event.type === "delegation" || event.type === "delegation_end") {
       return;
     }
+    const deliveredSteer =
+      event.type === "prompt" &&
+      entry.state.steeringText !== null &&
+      event.text === entry.state.steeringText;
     entry.state = {
       ...entry.state,
       events: applyTranscriptDelta(entry.state.events, event),
+      ...(deliveredSteer ? { steeringText: null } : {}),
     };
     notify(entry);
   };
@@ -116,6 +137,8 @@ function openEntry(
       streamRunActive: null,
       runResyncKey: entry.state.runResyncKey + 1,
       pendingText: undefined,
+      steeringText: null,
+      pendingSteerFallback: false,
     };
     notify(entry);
 
@@ -178,10 +201,17 @@ export function applyConversationHistorySeed(
 ): void {
   const entry = entries.get(conversationId);
   if (!entry) return;
+  const steeringText = entry.state.steeringText;
+  const delivered =
+    steeringText !== null &&
+    seed.events.some(
+      (event) => event.type === "prompt" && event.text === steeringText,
+    );
   entry.state = {
     ...entry.state,
     events: foldTranscriptEvents(seed.events),
     ready: true,
+    ...(delivered ? { steeringText: null } : {}),
   };
   if (seed.latestSeq > 0) {
     holdTopicSeq(conversationTopic(conversationId), seed.latestSeq);

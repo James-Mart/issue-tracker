@@ -8,6 +8,7 @@ import {
   resetThreadMocks,
   sendMutate,
   threadUi,
+  transcriptState,
   updatePendingMutate,
 } from "./conversation-thread.test-helpers";
 
@@ -102,6 +103,80 @@ describe("ConversationThread pending message", () => {
     expect(
       container!.querySelector('[data-testid="pending-send-now"]'),
     ).toBeTruthy();
+  });
+
+  it("renders a steer fallback with edit and remove", () => {
+    threadUi.pendingText = "queue instead";
+    threadUi.pendingSteerFallback = true;
+    threadUi.runActive = true;
+    ({ container, root } = mountThread("conv-1"));
+
+    const row = container!.querySelector('[data-testid="pending-message-row"]');
+    expect(row!.textContent).toContain("Queued");
+    expect(row!.textContent).toContain("queue instead");
+    expect(row!.textContent).toContain(
+      "Could not be delivered mid-run. Will send after the run.",
+    );
+    expect(
+      container!.querySelector('[data-testid="steering-delivering"]'),
+    ).toBeNull();
+
+    act(() => {
+      (
+        container!.querySelector(
+          '[data-testid="pending-message-row"] button[type="button"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(
+      container!.querySelector('input[aria-label="Edit queued message"]'),
+    ).toBeTruthy();
+
+    act(() => {
+      (
+        container!.querySelector(
+          'button[aria-label="Remove queued message"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(clearPendingMutate).toHaveBeenCalledWith("conv-1");
+  });
+
+  it("shows Delivering for a steering frame and replaces it with the prompt", () => {
+    threadUi.steeringText = "Focus on v0.9";
+    threadUi.runActive = true;
+    ({ container, root } = mountThread("conv-1"));
+
+    const delivering = container!.querySelector(
+      '[data-testid="steering-delivering"]',
+    );
+    expect(delivering!.textContent).toContain("Delivering…");
+    expect(delivering!.textContent).toContain("Focus on v0.9");
+
+    act(() => {
+      root!.unmount();
+    });
+    container!.remove();
+
+    threadUi.steeringText = null;
+    transcriptState.events = [
+      ...transcriptState.events,
+      {
+        type: "prompt",
+        text: "Focus on v0.9",
+        at: "2026-07-24T00:00:04.000Z",
+        seq: 5,
+      },
+    ];
+    ({ container, root } = mountThread("conv-1"));
+
+    expect(
+      container!.querySelector('[data-testid="steering-delivering"]'),
+    ).toBeNull();
+    const prompts = [
+      ...container!.querySelectorAll('[data-event="prompt"]'),
+    ].map((node) => node.textContent);
+    expect(prompts.some((text) => text?.includes("Focus on v0.9"))).toBe(true);
   });
 
   it("sends the pending message now and clears via the ordinary send path", () => {
