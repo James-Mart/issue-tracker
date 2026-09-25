@@ -124,7 +124,7 @@ type OrderedBeat = {
   endedAt?: string;
 };
 
-type UsageEvent = Extract<TranscriptEvent, { type: "usage" }>;
+type UsageEvent = Extract<TranscriptEvent, { type: "usage" | "run_usage" }>;
 
 type IssueAncestry = {
   issueId: string;
@@ -612,14 +612,30 @@ function enclosingHumanTurn(
   return best;
 }
 
+function settledRunIds(transcript: TranscriptEvent[]): Set<string> {
+  const settled = new Set<string>();
+  for (const event of transcript) {
+    if (event.type === "run_usage") settled.add(event.runId);
+  }
+  return settled;
+}
+
 function attributeUsage(
   rows: OrderedBeat[],
   transcript: TranscriptEvent[],
 ): number | undefined {
+  const settled = settledRunIds(transcript);
   let tokenTotal = 0;
   let sawUsage = false;
   for (const event of transcript) {
-    if (event.type !== "usage") continue;
+    if (event.type !== "usage" && event.type !== "run_usage") continue;
+    if (
+      event.type === "usage" &&
+      event.runId !== undefined &&
+      settled.has(event.runId)
+    ) {
+      continue;
+    }
     sawUsage = true;
     const tokens = event.usage.totalTokens;
     tokenTotal += tokens;

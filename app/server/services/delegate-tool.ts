@@ -9,9 +9,11 @@ import {
   isRetryableAgentFailure,
   type AgentFailureClass,
 } from "./agent-failure.js";
+import { publishFrame } from "./conversation-stream.js";
 import {
   appendDelegation,
   appendDelegationEnd,
+  appendEvent,
   conversationExists,
   readConversation,
   readDelegations,
@@ -50,6 +52,26 @@ export type DelegateResult =
       message: string;
       agentId: string;
     };
+
+async function persistSettledRunUsage(
+  conversationId: string | undefined,
+  waited: AgentRunResult,
+  agentId: string,
+  parentCallId: string | undefined,
+): Promise<void> {
+  if (!waited.usage || !conversationId || !conversationExists(conversationId)) {
+    return;
+  }
+  const event = {
+    type: "run_usage" as const,
+    runId: waited.id,
+    agentId,
+    usage: waited.usage,
+    ...(parentCallId !== undefined ? { parentCallId } : {}),
+  };
+  publishFrame(conversationId, { event, persist: true });
+  await appendEvent(conversationId, event);
+}
 
 function delegateFailureFromWait(
   waited: AgentRunResult,
@@ -669,6 +691,12 @@ export function createDelegateCustomTools(
               // Prefer wait()'s terminal status (e.g. cancelled) over an
               // iterator abort error, matching the conversation pump.
               const waitedAfterAbort = await run.wait();
+              await persistSettledRunUsage(
+                options.conversationId,
+                waitedAfterAbort,
+                agentId,
+                parentCallId,
+              );
               if (waitedAfterAbort.status === "cancelled") {
                 return reportFailure(waitedAfterAbort);
               }
@@ -679,6 +707,12 @@ export function createDelegateCustomTools(
             }
 
             const waited = await run.wait();
+            await persistSettledRunUsage(
+              options.conversationId,
+              waited,
+              agentId,
+              parentCallId,
+            );
             if (waited.status === "error") {
               return reportFailure(waited);
             }

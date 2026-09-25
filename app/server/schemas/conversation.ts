@@ -205,6 +205,16 @@ const usageEventInput = z.object({
   usage: usageMetricsSchema,
   /** Nested run this usage belongs to; unset on session-root usage. */
   parentCallId: nonEmpty.optional(),
+  /** SDK run this stream sample belongs to; absent on events recorded before run ids were stored. */
+  runId: nonEmpty.optional(),
+});
+const runUsageEventInput = z.object({
+  type: z.literal("run_usage"),
+  runId: nonEmpty,
+  agentId: nonEmpty,
+  usage: usageMetricsSchema,
+  /** `delegate` tool call this nested run belongs to; unset on the conversation's own run. */
+  parentCallId: nonEmpty.optional(),
 });
 const requestEventInput = z.object({
   type: z.literal("request"),
@@ -262,6 +272,7 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
   taskEventInput,
   statusEventInput,
   usageEventInput,
+  runUsageEventInput,
   requestEventInput,
   subagentUpdateEventInput,
   errorEventInput,
@@ -356,6 +367,7 @@ export const transcriptEventSchema = z.discriminatedUnion("type", [
   withStoredTranscriptMeta(taskEventInput),
   withStoredTranscriptMeta(statusEventInput),
   withStoredTranscriptMeta(usageEventInput),
+  withStoredTranscriptMeta(runUsageEventInput),
   withStoredTranscriptMeta(requestEventInput),
   withStoredTranscriptMeta(subagentUpdateEventInput),
   withStoredTranscriptMeta(errorEventInput),
@@ -376,6 +388,7 @@ export const conversationStreamEventSchema = z.union([
     withStreamFrameMeta(taskEventInput),
     withStreamFrameMeta(statusEventInput),
     withStreamFrameMeta(usageEventInput),
+    withStreamFrameMeta(runUsageEventInput),
     withStreamFrameMeta(requestEventInput),
     withStreamFrameMeta(subagentUpdateEventInput),
     withStreamFrameMeta(errorEventInput),

@@ -365,7 +365,7 @@ function applySubagentUpdate(
 
 function applyUsage(
   sequence: RunSequence,
-  event: Extract<ConversationStreamEvent, { type: "usage" }>,
+  event: Extract<ConversationStreamEvent, { type: "usage" | "run_usage" }>,
 ): RunSequence {
   const tokens = event.usage.totalTokens;
   const tokenTotal = (sequence.tokenTotal ?? 0) + tokens;
@@ -413,8 +413,26 @@ export function applyLiveFrame(
   if (event.type === "subagent_update") {
     return applySubagentUpdate(sequence, event);
   }
-  if (event.type === "usage") return applyUsage(sequence, event);
+  if (event.type === "usage" || event.type === "run_usage") {
+    return applyUsage(sequence, event);
+  }
   return sequence;
+}
+
+function withoutSupersededStreamUsage(
+  frames: ConversationStreamEvent[],
+): ConversationStreamEvent[] {
+  const settled = new Set<string>();
+  for (const event of frames) {
+    if (event.type === "run_usage") settled.add(event.runId);
+  }
+  if (settled.size === 0) return frames;
+  return frames.filter(
+    (event) =>
+      event.type !== "usage" ||
+      event.runId === undefined ||
+      !settled.has(event.runId),
+  );
 }
 
 /** Insert `event` by `seq`, skipping a duplicate seq. */
@@ -434,5 +452,5 @@ export function applyLiveFrames(
   sequence: RunSequence,
   frames: ConversationStreamEvent[],
 ): RunSequence {
-  return frames.reduce(applyLiveFrame, sequence);
+  return withoutSupersededStreamUsage(frames).reduce(applyLiveFrame, sequence);
 }

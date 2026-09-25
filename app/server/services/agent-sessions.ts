@@ -560,6 +560,16 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       }
 
       const result = await settleResult(agentRun);
+      if (result.usage) {
+        const usageEvent = {
+          type: "run_usage" as const,
+          runId: result.id,
+          agentId: entry.handle.agentId,
+          usage: result.usage,
+        };
+        publishFrame(conversationId, { event: usageEvent, persist: true });
+        await appendEvent(conversationId, usageEvent);
+      }
       if (entry.turn === turn) {
         entry.turn = undefined;
         clearRunLiveMarker(conversationId);

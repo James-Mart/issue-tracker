@@ -543,6 +543,53 @@ describe("send (merged stream)", () => {
     await drain(run);
   });
 
+  it("maps authoritative usage from run.wait() onto the result", async () => {
+    const usage = {
+      inputTokens: 10,
+      outputTokens: 4,
+      cacheReadTokens: 1,
+      cacheWriteTokens: 2,
+      totalTokens: 17,
+      reasoningTokens: 3,
+    };
+    const base = makeFakeSdkAgent([]);
+    const sdkAgent: SDKAgent = {
+      ...base,
+      async send() {
+        const run: FakeRun = {
+          id: "run-usage",
+          agentId: "agent-1",
+          status: "finished",
+          supports: () => true,
+          unsupportedReason: () => undefined,
+          async *stream() {},
+          async conversation() {
+            return [];
+          },
+          async wait(): Promise<RunResult> {
+            return { id: "run-usage", status: "finished", usage };
+          },
+          cancel: vi.fn(async () => {}),
+          onDidChangeStatus: () => () => {},
+        };
+        return run;
+      },
+    };
+    const sdk = createAgentSdk({ createSdkAgent: async () => sdkAgent });
+    const handle = await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+    });
+    const run = await handle.send("go");
+    await drain(run);
+    expect(await run.wait()).toEqual({
+      id: "run-usage",
+      status: "finished",
+      usage,
+    });
+  });
+
   it("surfaces a started-then-errored wait result", async () => {
     const base = makeFakeSdkAgent([]);
     const sdkAgent: SDKAgent = {

@@ -410,6 +410,7 @@ function TranscriptEventRow({
     case "task":
     case "status":
     case "usage":
+    case "run_usage":
     case "request":
     case "delegation_recovery":
     case "host_crash_recovery": {

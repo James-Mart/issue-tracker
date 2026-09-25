@@ -7,15 +7,31 @@ export type UsageTotals = {
   outputTokens: number;
 };
 
-/** Sum `usage` events so the header covers the whole conversation. */
+function settledRunIds(events: readonly TranscriptEvent[]): Set<string> {
+  const settled = new Set<string>();
+  for (const event of events) {
+    if (event.type === "run_usage") settled.add(event.runId);
+  }
+  return settled;
+}
+
+/** Sum usage so the header covers the whole conversation. A settled run counts its `run_usage` instead of that run's stream `usage` events. */
 export function sumUsageTotals(
   events: readonly TranscriptEvent[],
 ): UsageTotals {
+  const settled = settledRunIds(events);
   let totalTokens = 0;
   let inputTokens = 0;
   let outputTokens = 0;
   for (const event of events) {
-    if (event.type !== "usage") continue;
+    if (event.type !== "usage" && event.type !== "run_usage") continue;
+    if (
+      event.type === "usage" &&
+      event.runId !== undefined &&
+      settled.has(event.runId)
+    ) {
+      continue;
+    }
     totalTokens += event.usage.totalTokens;
     inputTokens += event.usage.inputTokens;
     outputTokens += event.usage.outputTokens;

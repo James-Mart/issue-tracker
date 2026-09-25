@@ -373,6 +373,77 @@ describe("applyLiveFrame", () => {
     expect(next.beats[0]).toMatchObject({ tokenTotal: 15 });
   });
 
+  it("counts a settled run from run_usage and attributes it to the spawn", () => {
+    const usage = {
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 15,
+    };
+    const next = applyLiveFrames(inFlight(), [
+      {
+        type: "usage",
+        usage: { ...usage, totalTokens: 99, inputTokens: 90, outputTokens: 9 },
+        parentCallId: "call-impl",
+        runId: "run-nested",
+        at: AT_MID,
+        seq: 8,
+      },
+      {
+        type: "run_usage",
+        runId: "run-nested",
+        agentId: "agent-nested",
+        usage,
+        parentCallId: "call-impl",
+        at: AT_END,
+        seq: 9,
+      },
+    ]);
+    expect(next.tokenTotal).toBe(15);
+    expect(next.beats[0]).toMatchObject({ tokenTotal: 15 });
+  });
+
+  it("keeps counting an in-flight run's stream events", () => {
+    const next = applyLiveFrames(inFlight(), [
+      {
+        type: "usage",
+        usage: {
+          inputTokens: 4,
+          outputTokens: 2,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 6,
+        },
+        runId: "run-live",
+        parentCallId: "call-impl",
+        at: AT_MID,
+        seq: 8,
+      },
+    ]);
+    expect(next.tokenTotal).toBe(6);
+    expect(next.beats[0]).toMatchObject({ tokenTotal: 6 });
+  });
+
+  it("sums legacy usage events that have no runId", () => {
+    const next = applyLiveFrames(inFlight(), [
+      {
+        type: "usage",
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 2,
+        },
+        parentCallId: "call-impl",
+        at: AT_MID,
+        seq: 8,
+      },
+    ]);
+    expect(next.tokenTotal).toBe(2);
+  });
+
   it("ticks the frontier elapsed time without closing the beat", () => {
     const next = applyLiveFrame(inFlight(), {
       type: "subagent_update",
