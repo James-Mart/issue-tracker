@@ -258,7 +258,41 @@ describe("EventPipeline.handleDelegation usage", () => {
         type: "usage",
         usage,
         parentCallId: "call-nested",
+        runId: "run-nested",
       }),
     ]);
+  });
+
+  it("persists session-root usage with the SDK run id", async () => {
+    const { createConversation, readConversation } = await import(
+      "./conversations.js"
+    );
+    const { EventPipeline } = await import("./event-pipeline.js");
+    const meta = await createConversation({
+      title: "Root usage",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const pipeline = new EventPipeline(meta.id);
+    await pipeline.handle({
+      kind: "message",
+      message: {
+        type: "usage",
+        agent_id: "agent-root",
+        run_id: "run-root",
+        usage,
+      },
+    });
+
+    const { transcript } = readConversation(meta.id);
+    expect(transcript).toEqual([
+      expect.objectContaining({
+        type: "usage",
+        usage,
+        runId: "run-root",
+      }),
+    ]);
+    expect(transcript[0]).not.toHaveProperty("parentCallId");
   });
 });

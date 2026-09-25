@@ -137,6 +137,14 @@ const usageMetricsSchema = z.object({
   reasoningTokens: z.number().optional(),
 });
 
+/** Billed cost in float cents from `Agent.getUsage()`. */
+export const usageCostSchema = z.object({
+  rawCostCents: z.number(),
+  chargedCents: z.number(),
+});
+
+export type UsageCost = z.infer<typeof usageCostSchema>;
+
 /**
  * One step in a sub-agent nested thread. Shared by the persisted
  * `subagent_update` event, the sub-agent view-model, and the UI. v1 stores a
@@ -205,6 +213,28 @@ const usageEventInput = z.object({
   usage: usageMetricsSchema,
   /** Nested run this usage belongs to; unset on session-root usage. */
   parentCallId: nonEmpty.optional(),
+  /** SDK run this stream sample belongs to; absent on events recorded before run ids were stored. */
+  runId: nonEmpty.optional(),
+});
+const runUsageEventInput = z.object({
+  type: z.literal("run_usage"),
+  runId: nonEmpty,
+  agentId: nonEmpty,
+  usage: usageMetricsSchema,
+  /** `delegate` tool call this nested run belongs to; unset on the conversation's own run. */
+  parentCallId: nonEmpty.optional(),
+});
+const runCostEventInput = z.object({
+  type: z.literal("run_cost"),
+  runId: nonEmpty,
+  agentId: nonEmpty,
+  /** `delegate` tool call this nested run belongs to; unset on the conversation's own run. */
+  parentCallId: nonEmpty.optional(),
+  status: z.enum(["settled", "unavailable"]),
+  /** Present when `status` is `settled`; absent when `unavailable`. */
+  cumulative: usageCostSchema.optional(),
+  /** Per-run delta from the agent's previous settled cumulative; present when `settled`. */
+  cost: usageCostSchema.optional(),
 });
 const requestEventInput = z.object({
   type: z.literal("request"),
@@ -262,6 +292,8 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
   taskEventInput,
   statusEventInput,
   usageEventInput,
+  runUsageEventInput,
+  runCostEventInput,
   requestEventInput,
   subagentUpdateEventInput,
   errorEventInput,
@@ -365,6 +397,8 @@ export const transcriptEventSchema = z.discriminatedUnion("type", [
   withStoredTranscriptMeta(taskEventInput),
   withStoredTranscriptMeta(statusEventInput),
   withStoredTranscriptMeta(usageEventInput),
+  withStoredTranscriptMeta(runUsageEventInput),
+  withStoredTranscriptMeta(runCostEventInput),
   withStoredTranscriptMeta(requestEventInput),
   withStoredTranscriptMeta(subagentUpdateEventInput),
   withStoredTranscriptMeta(errorEventInput),
@@ -385,6 +419,8 @@ export const conversationStreamEventSchema = z.union([
     withStreamFrameMeta(taskEventInput),
     withStreamFrameMeta(statusEventInput),
     withStreamFrameMeta(usageEventInput),
+    withStreamFrameMeta(runUsageEventInput),
+    withStreamFrameMeta(runCostEventInput),
     withStreamFrameMeta(requestEventInput),
     withStreamFrameMeta(subagentUpdateEventInput),
     withStreamFrameMeta(errorEventInput),

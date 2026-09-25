@@ -19,6 +19,7 @@ import {
   type SDKModel,
   type SDKUserMessage,
   type SendOptions,
+  type TokenUsage,
 } from "@cursor/sdk";
 import { cursorApiKey } from "../config.js";
 import { createAppendingRunEventsStore } from "./appending-run-events-store.js";
@@ -110,6 +111,8 @@ export interface AgentRunResult {
   id: string;
   status: AgentRunStatus;
   error?: AgentRunError;
+  /** Authoritative cumulative usage from `run.wait()`; absent when the SDK reported none. */
+  usage?: TokenUsage;
 }
 
 /**
@@ -369,6 +372,7 @@ async function startSend(
         ...(waited.error
           ? { error: toAgentRunError(waited.error, waited.requestId) }
           : {}),
+        ...(waited.usage ? { usage: waited.usage } : {}),
       };
     } catch (err) {
       result = {

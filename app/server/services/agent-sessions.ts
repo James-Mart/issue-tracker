@@ -43,6 +43,7 @@ import { stopAgentStack } from "./agent-stack.js";
 import { resolveConversationModel } from "./model-selection.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { reconcileOrphanedConversation } from "./orphan-run-scrub.js";
+import { runCostRecorder } from "./run-cost-recorder.js";
 export type { NormalizedStep };
 
 export interface ActiveRun {
@@ -407,6 +408,22 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       }
 
       const result = await settleResult(agentRun);
+      if (result.usage) {
+        const usageEvent = {
+          type: "run_usage" as const,
+          runId: result.id,
+          agentId: entry.handle.agentId,
+          usage: result.usage,
+        };
+        publishFrame(conversationId, { event: usageEvent, persist: true });
+        await appendEvent(conversationId, usageEvent);
+        runCostRecorder.onRunUsage({
+          conversationId,
+          runId: result.id,
+          agentId: entry.handle.agentId,
+          endedAt: Date.now(),
+        });
+      }
       if (entry.turn === turn) {
         entry.turn = undefined;
         clearRunLiveMarker(conversationId);

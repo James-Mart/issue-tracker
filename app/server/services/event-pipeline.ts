@@ -188,7 +188,11 @@ export class EventPipeline {
       case "usage": {
         await this.flushAssistant();
         await this.emit({
-          event: { type: "usage", usage: message.usage },
+          event: {
+            type: "usage",
+            usage: message.usage,
+            runId: message.run_id,
+          },
           persist: true,
         });
         return;
@@ -290,6 +294,7 @@ export class EventPipeline {
             type: "usage",
             usage: message.usage,
             parentCallId,
+            runId: message.run_id,
           },
           persist: true,
         });
