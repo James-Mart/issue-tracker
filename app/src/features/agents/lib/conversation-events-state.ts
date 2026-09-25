@@ -29,6 +29,16 @@ export type ConversationEventsState = {
    * first frame on this subscription — seed from conversation meta until then.
    */
   pendingText: string | null | undefined;
+  /**
+   * Live `{ type: "steering" }` text waiting on a persisted prompt or a
+   * matching pending fallback. `null` once that frame is resolved.
+   */
+  steeringText: string | null;
+  /**
+   * True after a pending frame arrives for the same text as an in-flight
+   * steer — the queued row is a mid-run delivery fallback.
+   */
+  pendingSteerFallback: boolean;
 };
 
 function applyThinkingEvent(

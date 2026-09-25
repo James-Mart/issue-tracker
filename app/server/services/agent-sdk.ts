@@ -12,6 +12,7 @@ import {
   type ModelSelection,
   type NestedTaskUpdate,
   type Run,
+  type SteerAckOutcome,
   type SDKAgent,
   type SDKCustomTool,
   type SDKMessage,
@@ -117,10 +118,13 @@ export interface AgentRunResult {
  * A thrown {@link CursorAgentError} from `send` means the run never started;
  * an `error` status from `wait()` means it started and failed.
  */
+export type AgentSteerOutcome = SteerAckOutcome;
+
 export interface AgentRun extends AsyncIterable<AgentStreamEvent> {
   readonly id: string;
   /** Model the SDK reported for this run, when available. */
   readonly model: ModelSelection | undefined;
+  steer(text: string): Promise<AgentSteerOutcome>;
   wait(): Promise<AgentRunResult>;
 }
 
@@ -381,6 +385,12 @@ async function startSend(
   return {
     id: run.id,
     model: run.model,
+    steer(text: string) {
+      if (!run.steer) {
+        throw new Error("SDK Run.steer is required for local agents");
+      }
+      return run.steer(text);
+    },
     wait: () => waitPromise,
     async *[Symbol.asyncIterator]() {
       try {

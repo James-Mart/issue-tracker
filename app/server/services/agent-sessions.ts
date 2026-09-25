@@ -13,6 +13,7 @@ import {
   type AgentRun,
   type AgentRunResult,
   type AgentSdk,
+  type AgentSteerOutcome,
 } from "./agent-sdk.js";
 import {
   classifyAgentFailure,
@@ -47,6 +48,7 @@ export type { NormalizedStep };
 export interface ActiveRun {
   readonly id: string;
   readonly startedAt: string;
+  steer(text: string): Promise<AgentSteerOutcome>;
   wait(): Promise<AgentRunResult>;
 }
 
@@ -372,6 +374,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const activeRun: ActiveRun = {
       id: agentRun.id,
       startedAt: new Date().toISOString(),
+      steer: (text) => agentRun.steer(text),
       wait: () => waitPromise,
     };
     const turn: LiveTurn = {
