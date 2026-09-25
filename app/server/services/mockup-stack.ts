@@ -8,6 +8,7 @@ import {
   readFileSync,
   rmSync,
 } from "node:fs";
+import { join } from "node:path";
 import { createServer, type AddressInfo, type Server } from "node:net";
 import { appDir } from "../config.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
@@ -30,6 +31,58 @@ import {
  * A conversation's Storybook dev server on a port picked free at start time.
  * Agents run mockup rounds here instead of on the human's stack.
  */
+
+const MOCKUP_HEAP_MB = 2048;
+const HEAP_OOM_EVENT = "Allocation failed - JavaScript heap out of memory";
+
+export function mockupStackMemoryLimitMessage(): string {
+  return `mockup stack memory limit: storybook exceeded the ${MOCKUP_HEAP_MB} MB heap limit`;
+}
+
+interface HeapReport {
+  header?: {
+    event?: string;
+    processId?: number;
+  };
+}
+
+function isHeapLimitReport(report: HeapReport): boolean {
+  return report.header?.event === HEAP_OOM_EVENT;
+}
+
+function hasHeapLimitReportForPid(reportDir: string, pid: number): boolean {
+  if (!existsSync(reportDir)) return false;
+  for (const name of readdirSync(reportDir)) {
+    if (!name.startsWith("report.") || !name.endsWith(".json")) {
+      continue;
+    }
+    if (!name.includes(`.${pid}.`)) {
+      continue;
+    }
+    try {
+      const report = JSON.parse(
+        readFileSync(join(reportDir, name), "utf8"),
+      ) as HeapReport;
+      if (isHeapLimitReport(report)) {
+        return true;
+      }
+    } catch {
+      // skip malformed report
+    }
+  }
+  return false;
+}
+
+function reportMockupStackHeapLimit(
+  conversationId: string,
+  pid: number,
+): void {
+  const reportDir = join(mockupStackDir(conversationId), "heap-reports");
+  if (!hasHeapLimitReportForPid(reportDir, pid)) {
+    return;
+  }
+  console.error(mockupStackMemoryLimitMessage());
+}
 
 const READY_TIMEOUT_MS = 90_000;
 const READY_POLL_MS = 250;
@@ -157,29 +210,68 @@ export function storybookDevArgs(port: number): string[] {
   ];
 }
 
+function appendNodeOptions(
+  existing: string | undefined,
+  ...flags: string[]
+): string {
+  const addition = flags.join(" ");
+  const trimmed = existing?.trim();
+  return trimmed ? `${trimmed} ${addition}` : addition;
+}
+
+function storybookNodeOptions(heapReportDir: string): string {
+  return appendNodeOptions(
+    process.env.NODE_OPTIONS,
+    `--max-old-space-size=${MOCKUP_HEAP_MB}`,
+    "--report-on-fatalerror",
+    `--report-directory=${heapReportDir}`,
+  );
+}
+
 function spawnStorybook(
   conversationId: string,
   port: number,
   harnessPath: string,
 ): { child: ChildProcess; pid: number; startTime: string } {
   const logPath = mockupStackLogPath(conversationId);
+  const heapReportDir = join(mockupStackDir(conversationId), "heap-reports");
+  mkdirSync(heapReportDir, { recursive: true });
+  const storybookBin = binPath("storybook");
+  const args = storybookDevArgs(port);
+  const env = {
+    ...process.env,
+    MOCKUP_HARNESS_CONFIG: harnessPath,
+    MOCKUP_STORYBOOK_BASE: mockupStorybookBase(conversationId),
+    NODE_OPTIONS: storybookNodeOptions(heapReportDir),
+  };
   const fd = openSync(logPath, "w");
   let child: ChildProcess;
   try {
-    child = spawn(
-      binPath("storybook"),
-      storybookDevArgs(port),
-      {
-        cwd: appDir,
-        env: {
-          ...process.env,
-          MOCKUP_HARNESS_CONFIG: harnessPath,
-          MOCKUP_STORYBOOK_BASE: mockupStorybookBase(conversationId),
+    if (process.platform === "linux") {
+      child = spawn(
+        "sh",
+        [
+          "-c",
+          'echo 1000 > /proc/self/oom_score_adj; exec "$@"',
+          "mockup-storybook",
+          storybookBin,
+          ...args,
+        ],
+        {
+          cwd: appDir,
+          env,
+          detached: true,
+          stdio: ["ignore", fd, fd],
         },
+      );
+    } else {
+      child = spawn(storybookBin, args, {
+        cwd: appDir,
+        env,
         detached: true,
         stdio: ["ignore", fd, fd],
-      },
-    );
+      });
+    }
   } finally {
     closeSync(fd);
   }
@@ -387,6 +479,8 @@ export async function stopMockupStack(
   }
   const state = readMockupStackState(conversationId);
   if (!state) return { stopped: false, state: null };
+
+  reportMockupStackHeapLimit(conversationId, state.pid);
 
   try {
     await stopRecordedGroup(state);
