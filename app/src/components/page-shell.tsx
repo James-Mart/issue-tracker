@@ -11,6 +11,10 @@ export const PAGE_SHELL_CLASS =
  */
 export const READING_MEASURE_CLASS = "max-w-[72ch]";
 
+/** Centered cockpit reading column — matches design-system --content-max. */
+export const COCKPIT_COLUMN_CLASS =
+  "mx-auto w-full min-w-0 max-w-[var(--content-max)]";
+
 export function PageShell({
   className,
   children,

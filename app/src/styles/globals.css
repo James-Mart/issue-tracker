@@ -10,6 +10,7 @@
     --font-body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
       Roboto, sans-serif;
     --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --content-max: 720px;
   }
 
   /* Mainline palette (HSL components) → shadcn slots via aliases.

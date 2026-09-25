@@ -125,6 +125,17 @@ export function ShellLoadingState({ label }: { label: string }) {
  * Shared loading/error gate for pages driven by `useIssuesQuery`.
  * Success content is the caller's responsibility (usually a `PageShell`).
  */
+function QueryShellBody({
+  columnClassName,
+  children,
+}: {
+  columnClassName?: string;
+  children: ReactNode;
+}) {
+  if (!columnClassName) return children;
+  return <div className={columnClassName}>{children}</div>;
+}
+
 export function IssuesQueryShell({
   isLoading,
   error,
@@ -132,6 +143,7 @@ export function IssuesQueryShell({
   onReload,
   loadingLabel,
   errorTitle,
+  columnClassName,
   children,
 }: {
   isLoading: boolean;
@@ -140,38 +152,44 @@ export function IssuesQueryShell({
   onReload: () => void;
   loadingLabel: string;
   errorTitle: string;
+  /** When set, loading/error bodies share this centered column wrapper. */
+  columnClassName?: string;
   children: ReactNode;
 }): ReactNode {
   if (isLoading) {
     return (
       <PageShell>
-        <ShellLoadingState label={loadingLabel} />
+        <QueryShellBody columnClassName={columnClassName}>
+          <ShellLoadingState label={loadingLabel} />
+        </QueryShellBody>
       </PageShell>
     );
   }
   if (error) {
     return (
       <PageShell>
-        <ShellState
-          tone="blocked"
-          eyebrow="Fault"
-          title={errorTitle}
-          detail={
-            <ShellFaultDetail
-              message={error.message}
-              hint="Check the server, then reload."
-            />
-          }
-          action={
-            <Button
-              variant="primary"
-              disabled={isFetching}
-              onClick={onReload}
-            >
-              Reload
-            </Button>
-          }
-        />
+        <QueryShellBody columnClassName={columnClassName}>
+          <ShellState
+            tone="blocked"
+            eyebrow="Fault"
+            title={errorTitle}
+            detail={
+              <ShellFaultDetail
+                message={error.message}
+                hint="Check the server, then reload."
+              />
+            }
+            action={
+              <Button
+                variant="primary"
+                disabled={isFetching}
+                onClick={onReload}
+              >
+                Reload
+              </Button>
+            }
+          />
+        </QueryShellBody>
       </PageShell>
     );
   }
