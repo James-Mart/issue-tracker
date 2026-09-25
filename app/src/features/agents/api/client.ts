@@ -211,7 +211,9 @@ export function fetchTranscriptionCapability(): Promise<TranscriptionCapability>
   return request<TranscriptionCapability>("/api/transcriptions/capability");
 }
 
-export async function transcribeAudio(samples: Float32Array): Promise<string> {
+export async function transcribeAudio(
+  samples: Float32Array<ArrayBuffer>,
+): Promise<string> {
   const form = new FormData();
   form.append(
     "audio",

@@ -22,43 +22,69 @@ const base = {
   updatedAt: "2026-07-01T00:00:00.000Z",
 } as const;
 
+const workItem = {
+  needsAttention: false,
+  attentionReason: null,
+  archived: false,
+} as const;
+
+const projectDefaults = {
+  trunk: "main",
+  mergePolicy: "manual",
+  maxImplementingRuns: 1,
+} as const;
+
 const task = {
   ...base,
+  ...workItem,
   kind: "task",
   partOf: "s1",
+  status: "todo",
+  commits: [],
 } satisfies Issue;
 
 const idea = {
   ...base,
   kind: "idea",
   partOf: "p",
+  archived: false,
 } satisfies Issue;
 
 const epic = {
   ...base,
+  ...workItem,
   kind: "epic",
   partOf: "p",
+  blockedBy: [],
 } satisfies Issue;
 
 const projectStory = {
   ...base,
+  ...workItem,
   kind: "story",
   partOf: "p",
+  merged: false,
+  reviewedTasks: [],
 } satisfies Issue;
 
 const epicStory = {
   ...base,
+  ...workItem,
   kind: "story",
   partOf: "e1",
+  merged: false,
+  reviewedTasks: [],
 } satisfies Issue;
 
 const bareProject = {
   ...base,
+  ...projectDefaults,
   kind: "project",
 } satisfies Issue;
 
 const projectWithDocs = {
   ...base,
+  ...projectDefaults,
   kind: "project",
   supportingDocs: {
     vision: { type: "attachment", name: "vision.md" },

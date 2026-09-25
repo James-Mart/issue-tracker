@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import type { ProjectLabel } from "@server/schemas";
+import type { IssueRecord, ProjectLabel } from "@server/schemas";
 import { IssueAssignmentLabelsField } from "./issue-assignment-labels-field";
 
 const mutateAsync = vi.fn();
@@ -33,16 +33,20 @@ const catalog: ProjectLabel[] = [
   { id: "meta-confusion", color: "#a855f7", description: "Confusing meta" },
 ];
 
-const story = {
-  kind: "story" as const,
+const story: Extract<IssueRecord, { kind: "story" }> = {
+  kind: "story",
   id: "edit-labels-story",
   title: "Edit labels",
   partOf: "platform",
   order: 0,
   archived: false,
+  needsAttention: false,
+  attentionReason: null,
+  merged: false,
+  reviewedTasks: [],
   createdAt: "2026-08-10T12:00:00.000Z",
   updatedAt: "2026-08-10T12:00:00.000Z",
-  labels: ["bug", "meta-confusion"] as string[],
+  labels: ["bug", "meta-confusion"],
 };
 
 function mount(
@@ -82,7 +86,7 @@ function editLabelsTrigger(container: ParentNode): HTMLButtonElement | null {
 function menuCheckbox(labelId: string): HTMLElement | null {
   return (
     Array.from(
-      document.querySelectorAll('[role="menuitemcheckbox"]'),
+      document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]'),
     ).find((el) => el.textContent?.includes(labelId)) ?? null
   );
 }

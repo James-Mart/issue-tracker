@@ -577,12 +577,17 @@ function stubDesktopViewport() {
   })
   window.matchMedia = vi.fn((query: string) => {
     const matches = query === "(max-width: 859px)" ? false : false
-    return {
+    const mql: MediaQueryList = {
       media: query,
       matches,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
       addEventListener: () => {},
       removeEventListener: () => {},
-    } as MediaQueryList
+      dispatchEvent: () => false,
+    }
+    return mql
   })
 }
 

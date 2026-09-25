@@ -294,7 +294,7 @@ function renderTreeScope(
       return renderStory(scope.story, 0, ctx);
     case "epic": {
       const epic = issues.find(
-        (issue) => issue.id === scope.epicId && issue.kind === "epic",
+        (issue): issue is EpicRecord => issue.id === scope.epicId && issue.kind === "epic",
       );
       if (!epic) throw new Error(`unknown epic "${scope.epicId}"`);
       return renderEpic(epic, 0, ctx);
@@ -314,11 +314,14 @@ function renderApplyRoot(doc: ApplyDoc, issues: IssueRecord[], ctx: TreeContext)
     return story ? renderStory(story, 0, ctx) : [];
   }
   if (isEpicDoc(doc)) {
-    const epic = issues.find((i) => i.id === doc.epic.id && i.kind === "epic");
+    const epic = issues.find((i): i is EpicRecord => i.id === doc.epic.id && i.kind === "epic");
     return epic ? renderEpic(epic, 0, ctx) : [];
   }
   const projectId = doc.project.id;
-  const project = issues.find((i) => i.id === projectId && i.kind === "project");
+  const project = issues.find(
+    (i): i is Extract<IssueRecord, { kind: "project" }> =>
+      i.id === projectId && i.kind === "project",
+  );
   if (!project) return [];
   const boardOf = buildProjectBoardOf(issues);
   return renderProjectBoard(project, boardOf.get(projectId) ?? [], ctx, 0);

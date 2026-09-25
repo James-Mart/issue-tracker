@@ -2,7 +2,7 @@ import {
   MERGE_POLICIES,
   type MergePolicy,
 } from "./issue-constants.js";
-import type { IssuePatch } from "./schemas.js";
+import type { IssueFields, IssuePatch } from "./schemas.js";
 
 /** Display token for an unset tree/detail chip (`mergeBase=(unset)`, `branch=(unset)`). */
 export const CHIP_UNSET = "(unset)";
@@ -159,7 +159,7 @@ export type ClearableKey = (typeof CLEARABLE_KEYS)[number];
 // Object-valued mergeable keys cleared with `null` (or `{}`) → field absent.
 export const NULL_CLEARABLE_OBJECT_KEYS = [
   "supportingDocs",
-] as const satisfies readonly (keyof IssuePatch)[];
+] as const satisfies readonly (keyof IssueFields)[];
 
 export type NullClearableObjectKey = (typeof NULL_CLEARABLE_OBJECT_KEYS)[number];
 

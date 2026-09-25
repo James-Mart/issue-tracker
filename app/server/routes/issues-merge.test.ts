@@ -1,4 +1,5 @@
-import { EventEmitter } from "node:events";
+import { ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { PassThrough } from "node:stream";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
@@ -14,6 +15,20 @@ let baseUrl: string;
 let ghCalls: { args: string[]; cwd: string }[] = [];
 let setGhSpawnerForTests: (next: GhSpawner | null) => void;
 
+function fakeChildProcess(): ChildProcessWithoutNullStreams {
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const stdio: ChildProcessWithoutNullStreams["stdio"] = [
+    stdin,
+    stdout,
+    stderr,
+    undefined,
+    undefined,
+  ];
+  return Object.assign(new ChildProcess(), { stdin, stdout, stderr, stdio });
+}
+
 function writeIssue(id: string, body: Record<string, unknown>): void {
   mkdirSync(join(dir, id), { recursive: true });
   writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
@@ -28,12 +43,7 @@ function mockGhChild(opts: {
   stdout?: string;
   stderr?: string;
 }) {
-  const child = new EventEmitter() as EventEmitter & {
-    stdout: EventEmitter;
-    stderr: EventEmitter;
-  };
-  child.stdout = new EventEmitter();
-  child.stderr = new EventEmitter();
+  const child = fakeChildProcess();
 
   setImmediate(() => {
     if (opts.stdout) child.stdout.emit("data", opts.stdout);

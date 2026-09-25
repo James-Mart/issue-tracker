@@ -50,7 +50,7 @@ describe("awaitingHumanFromTranscript", () => {
         event("assistant", { text: "ok" }),
         event("thinking", { text: "…" }),
         event("tool_call", {
-          id: "t1",
+          callId: "t1",
           name: "Read",
           status: "completed",
         }),

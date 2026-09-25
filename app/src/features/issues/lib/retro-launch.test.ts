@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { IssueDetail } from "@server/schemas";
 import { skillPath } from "@/lib/plugin-paths";
 import {
   implementingRetroWorkRoot,
@@ -14,16 +15,20 @@ describe("retroSessionMessage", () => {
 });
 
 describe("implementingRetroWorkRoot", () => {
-  const epic = {
-    kind: "epic" as const,
+  const epic: IssueDetail = {
+    kind: "epic",
     id: "ship-it",
     title: "Ship it",
     partOf: "platform",
-    status: "open" as const,
+    blockedBy: [],
     order: 0,
     archived: false,
+    needsAttention: false,
+    attentionReason: null,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
+    description: "",
+    version: "1",
   };
 
   it("returns the anchored Epic on an implementing channel", () => {

@@ -44,6 +44,8 @@ function project(
     kind: "project",
     title: id,
     trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     labels: [],
     order: 0,
     createdAt: AT,

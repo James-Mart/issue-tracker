@@ -1,4 +1,5 @@
-import { EventEmitter } from "node:events";
+import { ChildProcess, type ChildProcessByStdio } from "node:child_process";
+import { PassThrough, type Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { IssueError } from "./errors.js";
 import {
@@ -26,13 +27,15 @@ function mockGitChild(opts: {
   stdout?: string;
   stderr?: string;
   error?: NodeJS.ErrnoException;
-}) {
-  const child = new EventEmitter() as EventEmitter & {
-    stdout: EventEmitter;
-    stderr: EventEmitter;
-  };
-  child.stdout = new EventEmitter();
-  child.stderr = new EventEmitter();
+}): ChildProcessByStdio<null, Readable, Readable> {
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const child = Object.assign(new ChildProcess(), {
+    stdin: null,
+    stdout,
+    stderr,
+    stdio: [null, stdout, stderr, undefined, undefined] as const,
+  });
 
   setImmediate(() => {
     if (opts.error) {

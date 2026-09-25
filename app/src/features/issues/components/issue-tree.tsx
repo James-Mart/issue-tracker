@@ -318,7 +318,7 @@ export function treeRowTouchChipLabels(
 
   if (isLabelAssignableIssue(issue)) {
     for (const label of resolveAssignedLabels(issue.labels, catalog)) {
-      labels.push(label.name);
+      labels.push(label.id);
     }
   }
 

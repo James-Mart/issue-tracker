@@ -127,7 +127,7 @@ export function ExportOverviewLaunch({
     onTabVisible(surface.showTab);
   }, [onTabVisible, surface.phase, surface.showTab]);
 
-  if (surface.phase === "loading") return null;
+  if (surface.phase === "loading" || surface.phase === "hidden") return null;
 
   if (surface.phase === "fault") {
     return (

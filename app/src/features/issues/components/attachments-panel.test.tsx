@@ -43,10 +43,12 @@ function task(): IssueDetail {
     createdAt: t0,
     updatedAt: t0,
     archived: false,
+    needsAttention: false,
+    attentionReason: null,
     description: "",
-    labels: [],
     version: "v1",
     status: "todo",
+    commits: [],
   };
 }
 

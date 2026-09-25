@@ -19,6 +19,7 @@ function story(
     updatedAt: t0,
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,
@@ -40,6 +41,10 @@ function task(
     createdAt: t0,
     updatedAt: t0,
     status,
+    commits: [],
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
   };
 }
 
@@ -54,7 +59,7 @@ describe("storyRailNodeState", () => {
     expect(
       storyRailNodeState(story("s", "e"), {
         blocked: true,
-        storyStatus: "todo",
+        storyStatus: "not-started",
       }),
     ).toBe("blocked");
   });

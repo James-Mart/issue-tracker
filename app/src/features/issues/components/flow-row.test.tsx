@@ -7,6 +7,8 @@ import type { DerivedState, IssueRecord } from "@server/schemas";
 import { issueChannelPath, issuePath } from "../lib/links";
 import { FlowRow } from "./flow-row";
 
+type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
+
 const t0 = "2026-07-01T00:00:00.000Z";
 const projectId = "p";
 
@@ -15,10 +17,12 @@ function project(id: string): IssueRecord {
     id,
     kind: "project",
     title: id,
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
-    archived: false,
   };
 }
 
@@ -35,7 +39,7 @@ function idea(id: string, partOf = projectId): IssueRecord {
   };
 }
 
-function story(id: string): IssueRecord {
+function story(id: string): StoryRecord {
   return {
     id,
     kind: "story",
@@ -46,6 +50,7 @@ function story(id: string): IssueRecord {
     updatedAt: t0,
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,
@@ -224,6 +229,10 @@ describe("FlowRow", () => {
       createdAt: t0,
       updatedAt: t0,
       status: "done",
+      commits: [],
+      needsAttention: false,
+      attentionReason: null,
+      archived: false,
     };
     const container = mountRow(
       manual,

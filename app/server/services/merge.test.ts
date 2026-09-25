@@ -5,7 +5,7 @@ import type { Issue } from "../schemas";
 type CommitIssue = Extract<Issue, { kind: "task" }>;
 const asCommit = (issue: Issue): CommitIssue => issue as CommitIssue;
 
-const commit: Issue = {
+const commit: CommitIssue = {
   id: "login-route",
   kind: "task",
   title: "Add login route",
@@ -15,6 +15,7 @@ const commit: Issue = {
   commits: [],
   needsAttention: false,
   attentionReason: null,
+  archived: false,
   createdAt: "2026-07-09T14:36:00.000Z",
   updatedAt: "2026-07-09T14:36:00.000Z",
 };

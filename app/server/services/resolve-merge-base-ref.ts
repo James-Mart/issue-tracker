@@ -63,6 +63,9 @@ export async function storyMergeBaseRef(storyId: string): Promise<string> {
   }
   const byId = new Map(issues.map((issue) => [issue.id, issue]));
   const projectId = projectContaining(detail, byId);
+  if (!projectId) {
+    throw new IssueError("not_found", `no project contains story "${storyId}"`);
+  }
   const workspace = requireProjectWorkspace(projectId);
   return resolveMergeBaseRef(workspace, mergeBase);
 }

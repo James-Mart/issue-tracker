@@ -69,6 +69,7 @@ const epic: IssueDetail = {
   blockedBy: [],
   archived: false,
   description: "",
+  version: "1",
   labels: [],
   needsAttention: false,
   attentionReason: null,

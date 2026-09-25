@@ -383,11 +383,9 @@ describe("channel sessions HTTP API", () => {
     const listed = await fetch(
       `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
     ).then((r) => r.json());
-    const byId = new Map(
-      listed.map((s: { id: string; archived: boolean; title: string }) => [
-        s.id,
-        s,
-      ]),
+    type ListedSession = { id: string; archived: boolean; title: string };
+    const byId = new Map<string, ListedSession>(
+      listed.map((s: ListedSession) => [s.id, s]),
     );
     expect(byId.get(first.id)?.archived).toBe(true);
     expect(byId.get(second.id)?.archived).toBe(false);

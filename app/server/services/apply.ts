@@ -1,4 +1,4 @@
-import { kindHas } from "../kind.js";
+import { hasAssignee, hasAttention, kindHas } from "../kind.js";
 import { parseIssue, type Issue, type IssueKind, type IssuePatch } from "../schemas.js";
 import {
   EPIC_RUNTIME_OPTIONAL_KEYS,
@@ -96,14 +96,14 @@ function buildIssue(
     draft.partOf = desired.partOf;
     const prior =
       existing && existing.kind === desired.kind ? existing : undefined;
-    if (kindHas(desired.kind, "attention") && prior && kindHas(prior.kind, "attention")) {
+    if (kindHas(desired.kind, "attention") && prior && hasAttention(prior)) {
       draft.needsAttention = prior.needsAttention;
       draft.attentionReason = prior.attentionReason;
     }
     if (
       kindHas(desired.kind, "assignee") &&
       prior &&
-      kindHas(prior.kind, "assignee") &&
+      hasAssignee(prior) &&
       prior.assignee !== undefined
     ) {
       draft.assignee = prior.assignee;

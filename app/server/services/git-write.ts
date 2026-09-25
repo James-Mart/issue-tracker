@@ -1,4 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessByStdio } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
 import { IssueError } from "./errors.js";
 
 const WRITE_GIT_SUBCOMMANDS = new Set([
@@ -19,7 +20,7 @@ export type GitWriteSpawner = (
   command: string,
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv },
-) => ChildProcessWithoutNullStreams;
+) => ChildProcessByStdio<Writable | null, Readable, Readable>;
 
 const defaultGitWriteSpawner: GitWriteSpawner = (command, args, options) =>
   spawn(command, args, {

@@ -1,4 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessByStdio } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
 import { z } from "zod";
 import { IssueError } from "./errors.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
@@ -13,7 +14,7 @@ export type GhSpawner = (
   command: string,
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv },
-) => ChildProcessWithoutNullStreams;
+) => ChildProcessByStdio<Writable | null, Readable, Readable>;
 
 const defaultGhSpawner: GhSpawner = (command, args, options) =>
   spawn(command, args, {

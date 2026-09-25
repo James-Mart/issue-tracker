@@ -44,6 +44,7 @@ describe("AgentRunsPanel", () => {
           endedAt: AT_END,
         }),
       ],
+      workRoot: undefined,
     };
 
     const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
@@ -86,6 +87,7 @@ describe("AgentRunsPanel", () => {
           endedAt: AT_END,
         }),
       ],
+      workRoot: undefined,
     };
 
     const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
@@ -114,6 +116,7 @@ describe("AgentRunsPanel", () => {
           endedAt: AT_END,
         }),
       ],
+      workRoot: undefined,
     };
 
     const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
@@ -137,6 +140,7 @@ describe("AgentRunsPanel", () => {
           endedAt: AT_END,
         }),
       ],
+      workRoot: undefined,
     };
     eventsQueryState.data = {
       events: [
@@ -205,6 +209,7 @@ describe("AgentRunsPanel", () => {
           endedAt: AT_END,
         }),
       ],
+      workRoot: undefined,
     };
     eventsQueryState.data = {
       events: [
@@ -280,6 +285,7 @@ describe("AgentRunsPanel", () => {
           endedAt: AT_END,
         }),
       ],
+      workRoot: undefined,
     };
     eventsQueryState.data = {
       events: [
@@ -333,6 +339,7 @@ describe("AgentRunsPanel", () => {
           endedAt: undefined,
         }),
       ],
+      workRoot: undefined,
     };
 
     const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
@@ -355,6 +362,7 @@ describe("AgentRunsPanel", () => {
           endedAt: AT_END,
         }),
       ],
+      workRoot: undefined,
     };
     eventsQueryState.isLoading = true;
 
@@ -386,6 +394,7 @@ describe("AgentRunsPanel", () => {
           isResume: true,
         }),
       ],
+      workRoot: undefined,
     };
 
     const shell = document.createElement("div");
@@ -415,6 +424,7 @@ describe("AgentRunsPanel", () => {
           endedAt: AT_END,
         }),
       ],
+      workRoot: undefined,
     };
     eventsQueryState.data = {
       events: [
@@ -530,6 +540,7 @@ describe("AgentRunsPanel", () => {
           conversationId: "conv/b",
         }),
       ],
+      workRoot: undefined,
     };
 
     const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });
@@ -553,6 +564,7 @@ describe("AgentRunsPanel", () => {
           endedAt: AT_END,
         }),
       ],
+      workRoot: undefined,
     };
 
     const { container } = mountPanel({ issueId: "task-1", projectId: PROJECT_ID });

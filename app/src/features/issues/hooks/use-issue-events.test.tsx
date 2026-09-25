@@ -2,7 +2,15 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 import { resetTransportForTests } from "@/lib/ws/transport";
 import { FakeWebSocket } from "@/lib/ws/websocket.fake";
 import { issuesKeys } from "../api/keys";
@@ -17,7 +25,7 @@ function mountHook(): {
   root: Root;
   container: HTMLDivElement;
   client: QueryClient;
-  invalidateSpy: ReturnType<typeof vi.spyOn>;
+  invalidateSpy: MockInstance<QueryClient["invalidateQueries"]>;
 } {
   const container = document.createElement("div");
   document.body.appendChild(container);

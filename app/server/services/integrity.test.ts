@@ -4,10 +4,13 @@ import type { Issue } from "../schemas";
 
 const AT = "2026-07-09T14:00:00.000Z";
 
-const project = (id: string): Issue => ({
+const project = (id: string): Extract<Issue, { kind: "project" }> => ({
   id,
   kind: "project",
   title: id,
+  trunk: "main",
+  mergePolicy: "manual",
+  maxImplementingRuns: 1,
   order: 0,
   createdAt: AT,
   updatedAt: AT,
@@ -26,6 +29,7 @@ const epic = (
   blockedBy: [],
   needsAttention: false,
   attentionReason: null,
+  archived: false,
   createdAt: AT,
   updatedAt: AT,
   ...extra,
@@ -58,8 +62,10 @@ const branch = (
   partOf,
   order: 0,
   merged: false,
+  reviewedTasks: [],
   needsAttention: false,
   attentionReason: null,
+  archived: false,
   createdAt: AT,
   updatedAt: AT,
   ...extra,
@@ -76,8 +82,10 @@ const commit = (
   partOf,
   order: 0,
   status: "todo",
+  commits: [],
   needsAttention: false,
   attentionReason: null,
+  archived: false,
   createdAt: AT,
   updatedAt: AT,
   ...extra,

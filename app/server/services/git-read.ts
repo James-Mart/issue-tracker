@@ -1,8 +1,9 @@
 import {
   spawn,
   spawnSync,
-  type ChildProcessWithoutNullStreams,
+  type ChildProcessByStdio,
 } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
 import { IssueError } from "./errors.js";
 
 const READ_ONLY_GIT_SUBCOMMANDS = new Set([
@@ -21,7 +22,7 @@ export type GitSpawner = (
   command: string,
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv },
-) => ChildProcessWithoutNullStreams;
+) => ChildProcessByStdio<Writable | null, Readable, Readable>;
 
 const defaultGitSpawner: GitSpawner = (command, args, options) =>
   spawn(command, args, {

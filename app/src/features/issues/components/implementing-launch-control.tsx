@@ -1,5 +1,9 @@
 import { Loader2, Play } from "lucide-react";
-import type { ConversationChannel, IssueKind } from "@server/schemas";
+import type {
+  ConversationChannel,
+  IssueKind,
+  IssueRecord,
+} from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { useAgentModelsQuery } from "@/features/agents/api/queries";
@@ -24,6 +28,11 @@ import { overviewWorkLoopAction } from "../lib/overview-work-loop-action";
 import { issuesById } from "../lib/build-tree";
 import { leafTasksOf } from "../lib/derived";
 import { WorkLoopOverviewControl } from "./work-loop-overview-control";
+
+type ImplementingWorkRootRecord = Extract<
+  IssueRecord,
+  { kind: "epic" | "story" }
+>;
 
 export type ImplementingSessionStarted = {
   id: string;
@@ -51,7 +60,7 @@ function ImplementingLaunchButton({
   testId,
   onStarted,
 }: {
-  issue: ImplementingWorkRoot;
+  issue: ImplementingWorkRootRecord;
   channel: ConversationChannel;
   variant: "primary" | "secondary" | "icon";
   optimistic?: boolean;
@@ -185,7 +194,7 @@ function ImplementingLaunchButton({
 export function ImplementingFlowRowLaunch({
   issue,
 }: {
-  issue: ImplementingWorkRoot;
+  issue: ImplementingWorkRootRecord;
 }) {
   return (
     <ImplementingLaunchButton

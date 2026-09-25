@@ -675,14 +675,15 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
       existing.kind === "project" && next.kind === "project"
         ? singleCatalogIdRename(existing, next)
         : null;
-    const labelCascadePatches = catalogRename
-      ? planLabelCatalogRename(
-          existing,
-          catalogRename.oldId,
-          catalogRename.newId,
-          issues,
-        ).assignmentPatches
-      : planLabelCatalogCascade(existing, next, issues);
+    const labelCascadePatches =
+      catalogRename && existing.kind === "project"
+        ? planLabelCatalogRename(
+            existing,
+            catalogRename.oldId,
+            catalogRename.newId,
+            issues,
+          ).assignmentPatches
+        : planLabelCatalogCascade(existing, next, issues);
 
     const jsonUnchanged =
       JSON.stringify(parsed.issue) === JSON.stringify(existing);

@@ -13,11 +13,10 @@ const MCP_CALL_ID = "tool_mcp-delegate-1";
 const NESTED_AGENT_ID = "bc-nested-1";
 const AT = "2026-07-24T00:00:00.000Z";
 
-function at(
-  event: Omit<TranscriptEvent, "at">,
-  stamp = AT,
-): TranscriptEvent {
-  return { ...event, at: stamp } as TranscriptEvent;
+type Unstamped<E> = E extends unknown ? Omit<E, "at"> : never;
+
+function at(event: Unstamped<TranscriptEvent>, stamp = AT): TranscriptEvent {
+  return { ...event, at: stamp };
 }
 
 /** Persisted shape of the fixture nested sequence + completed Task tool_call. */

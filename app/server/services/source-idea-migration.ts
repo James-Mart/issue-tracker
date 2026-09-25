@@ -22,7 +22,12 @@ export function markSourceIdeaMigrated(): void {
   writeFileSync(flagPath(), "");
 }
 
-function isPlanRootCandidate(issue: Issue, issuesById: Map<string, Issue>): boolean {
+type PlanRootIssue = Extract<Issue, { kind: "epic" | "story" }>;
+
+function isPlanRootCandidate(
+  issue: Issue,
+  issuesById: Map<string, Issue>,
+): issue is PlanRootIssue {
   if (issue.kind === "epic") return true;
   if (issue.kind !== "story" || issue.stackedOn) return false;
   const parent = issuesById.get(issue.partOf);
@@ -43,7 +48,7 @@ function parseLeadingSourceIdeaLine(
 
 function validSourceIdeaReferent(
   ideaId: string,
-  root: Issue,
+  root: PlanRootIssue,
   issuesById: Map<string, Issue>,
 ): boolean {
   const idea = issuesById.get(ideaId);

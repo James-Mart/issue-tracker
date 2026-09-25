@@ -46,6 +46,8 @@ const idea = {
   archived: false,
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
+  description: "",
+  version: "1",
 };
 
 const epic = {
@@ -53,11 +55,15 @@ const epic = {
   id: "ship-it",
   title: "Ship it",
   partOf: "platform",
-  status: "open" as const,
+  blockedBy: [],
   order: 0,
   archived: false,
+  needsAttention: false,
+  attentionReason: null,
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
+  description: "",
+  version: "1",
 };
 
 function mount(

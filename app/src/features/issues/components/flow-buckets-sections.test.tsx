@@ -32,7 +32,10 @@ function idea(id: string, partOf = "p"): IssueRecord {
   };
 }
 
-function story(id: string, partOf = "p"): IssueRecord {
+function story(
+  id: string,
+  partOf = "p",
+): Extract<IssueRecord, { kind: "story" }> {
   return {
     id,
     kind: "story",
@@ -43,6 +46,7 @@ function story(id: string, partOf = "p"): IssueRecord {
     updatedAt: t0,
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,
@@ -761,6 +765,10 @@ describe("FlowPreviewedItems", () => {
       createdAt: t0,
       updatedAt: t0,
       status: "done",
+      commits: [],
+      needsAttention: false,
+      attentionReason: null,
+      archived: false,
     };
     const issues = [manual, done];
     const items = [

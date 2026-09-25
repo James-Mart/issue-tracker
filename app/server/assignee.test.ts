@@ -11,6 +11,11 @@ function commit(assignee?: string): IssueRecord {
     title: "C1",
     partOf: "a",
     status: "todo",
+    commits: [],
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
+    order: 0,
     createdAt: AT,
     updatedAt: AT,
     ...(assignee !== undefined ? { assignee } : {}),
@@ -18,13 +23,17 @@ function commit(assignee?: string): IssueRecord {
 }
 
 describe("assigneeOf", () => {
-  it.each([
+  it.each<{ name: string; issue: IssueRecord }>([
     {
       name: "project",
       issue: {
         id: "p",
-        kind: "project" as const,
+        kind: "project",
         title: "P",
+        trunk: "main",
+        mergePolicy: "manual",
+        maxImplementingRuns: 1,
+        order: 0,
         createdAt: AT,
         updatedAt: AT,
       },
@@ -33,9 +42,14 @@ describe("assigneeOf", () => {
       name: "epic",
       issue: {
         id: "e",
-        kind: "epic" as const,
+        kind: "epic",
         title: "E",
         partOf: "p",
+        blockedBy: [],
+        needsAttention: false,
+        attentionReason: null,
+        archived: false,
+        order: 0,
         createdAt: AT,
         updatedAt: AT,
       },
@@ -44,9 +58,15 @@ describe("assigneeOf", () => {
       name: "story",
       issue: {
         id: "s",
-        kind: "story" as const,
+        kind: "story",
         title: "S",
         partOf: "e",
+        merged: false,
+        reviewedTasks: [],
+        needsAttention: false,
+        attentionReason: null,
+        archived: false,
+        order: 0,
         createdAt: AT,
         updatedAt: AT,
       },
@@ -55,9 +75,11 @@ describe("assigneeOf", () => {
       name: "idea",
       issue: {
         id: "i",
-        kind: "idea" as const,
+        kind: "idea",
         title: "I",
         partOf: "p",
+        archived: false,
+        order: 0,
         createdAt: AT,
         updatedAt: AT,
       },

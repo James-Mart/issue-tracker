@@ -44,10 +44,17 @@ function isOnScreenThread(host: Element | null | undefined): boolean {
  * on the tab's multiplexed WebSocket. Prior folded state is left alone across
  * reconnects so the thread does not blank while catch-up frames arrive.
  */
+export type ConversationEventsResult = ConversationEventsState & {
+  historyFailed: boolean;
+  refetchHistory: () => Promise<unknown>;
+  isRefetchingHistory: boolean;
+  historyError: Error | null;
+};
+
 export function useConversationEvents(
   conversationId: string | null | undefined,
   hostRef?: RefObject<Element | null>,
-): ConversationEventsState & { historyFailed: boolean } {
+): ConversationEventsResult {
   const qc = useQueryClient();
   const history = useConversationTranscriptQuery(conversationId);
   const [state, setState] = useState<ConversationEventsState>(idleState);

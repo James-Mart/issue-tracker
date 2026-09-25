@@ -121,9 +121,13 @@ function stubViewport(width: number) {
     return {
       media: query,
       matches,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
       addEventListener: () => {},
       removeEventListener: () => {},
-    } as MediaQueryList
+      dispatchEvent: () => false,
+    } satisfies MediaQueryList
   })
 }
 

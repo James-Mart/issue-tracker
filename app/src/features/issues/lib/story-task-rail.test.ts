@@ -25,6 +25,9 @@ function task(
     updatedAt: t0,
     status,
     commits: [],
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
     ...extras,
   };
 }
@@ -80,6 +83,7 @@ describe("storyTasksForRail", () => {
         updatedAt: t0,
         branchName: "sibling",
         merged: false,
+        reviewedTasks: [],
         needsAttention: false,
         attentionReason: null,
         archived: false,

@@ -2,7 +2,15 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiError } from "@/lib/api/errors";
 import { toast } from "sonner";
@@ -46,7 +54,7 @@ function mountControl(): {
   container: HTMLDivElement;
   root: Root;
   client: QueryClient;
-  invalidateSpy: ReturnType<typeof vi.spyOn>;
+  invalidateSpy: MockInstance<QueryClient["invalidateQueries"]>;
 } {
   const container = document.createElement("div");
   document.body.appendChild(container);

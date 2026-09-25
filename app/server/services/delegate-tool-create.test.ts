@@ -1,9 +1,9 @@
 import { rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import type { AgentOptions } from "@cursor/sdk";
+import type { AgentOptions, SDKCustomToolResult, SDKJsonValue } from "@cursor/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentSdk } from "./agent-sdk.js";
-import { createFakeAgentSdk } from "./agent-sdk.fake.js";
+import { createFakeAgentSdk, type FakeSend } from "./agent-sdk.fake.js";
 import {
   cancelConversationDelegations,
   conversationDelegationOutstandingForTests,
@@ -23,6 +23,28 @@ import {
 } from "./delegate-tool.fixtures.js";
 import { resolveModelSelection } from "./model-selection.js";
 import { loadRoleBody } from "./role-bodies.js";
+
+function resultFields(result: SDKCustomToolResult): {
+  [key: string]: SDKJsonValue | undefined;
+} {
+  if (typeof result !== "object" || result === null || Array.isArray(result)) {
+    throw new Error("expected an object tool result");
+  }
+  if ("content" in result && Array.isArray(result.content)) {
+    throw new Error("expected a JSON object tool result");
+  }
+  return result;
+}
+
+function agentIdOf(result: SDKCustomToolResult): string {
+  const agentId = resultFields(result).agentId;
+  if (typeof agentId !== "string") throw new Error("expected a string agentId");
+  return agentId;
+}
+
+function sentText(send: FakeSend): string {
+  return typeof send.message === "string" ? send.message : send.message.text;
+}
 
 beforeEach(() => {
   setupDelegateToolTest();
@@ -87,8 +109,8 @@ describe("createDelegateCustomTools", () => {
       resolveModelSelection("cursor-grok-4.5-high-fast"),
     );
     expect(fake.handles[0]!.sends).toHaveLength(1);
-    expect(fake.handles[0]!.sends[0]!.message.startsWith(roleBody)).toBe(true);
-    expect(fake.handles[0]!.sends[0]!.message.endsWith("do the thing")).toBe(
+    expect(sentText(fake.handles[0]!.sends[0]!).startsWith(roleBody)).toBe(true);
+    expect(sentText(fake.handles[0]!.sends[0]!).endsWith("do the thing")).toBe(
       true,
     );
     expect(result).toEqual({
@@ -141,6 +163,18 @@ describe("createDelegateCustomTools", () => {
         async downloadArtifact() {
           return Buffer.from("");
         },
+        async getUsage() {
+          return {
+            usage: {
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadTokens: 0,
+              cacheWriteTokens: 0,
+              totalTokens: 0,
+            },
+            runs: [],
+          };
+        },
       };
     });
     const resumeSdkAgent = vi.fn(async (agentId: string, options?: Partial<AgentOptions>) => {
@@ -165,20 +199,20 @@ describe("createDelegateCustomTools", () => {
       agentId: expect.any(String),
       reply: "On it.",
     });
-    expect(Object.keys(first)).toEqual(["ok", "agentId", "reply"]);
+    expect(Object.keys(resultFields(first))).toEqual(["ok", "agentId", "reply"]);
     expect(createSdkAgent).toHaveBeenCalledTimes(1);
 
     const second = await customTools.delegate!.execute(
       {
         role: "pinned-role",
         prompt: "second turn",
-        resumeId: first.agentId as string,
+        resumeId: agentIdOf(first),
       },
       {},
     );
     expect(second).toEqual({
       ok: true,
-      agentId: first.agentId,
+      agentId: agentIdOf(first),
       reply: "On it.",
     });
     expect(resumeSdkAgent).toHaveBeenCalledTimes(1);
@@ -206,7 +240,7 @@ describe("createDelegateCustomTools", () => {
       {
         role: "pinned-role",
         prompt: "second turn",
-        resumeId: first.agentId as string,
+        resumeId: agentIdOf(first),
       },
       {},
     );
@@ -214,8 +248,8 @@ describe("createDelegateCustomTools", () => {
     expect(fake.created).toHaveLength(1);
     expect(fake.resumed).toEqual([
       {
-        agentId: first.agentId,
-        storeDir: join(storeDir, "nested", first.agentId as string),
+        agentId: agentIdOf(first),
+        storeDir: join(storeDir, "nested", agentIdOf(first)),
         options: {
           // Re-entry names the same workspace the spawn ran in. The SDK files
           // an agent under its workspace and looks it up the same way, so a
@@ -231,12 +265,12 @@ describe("createDelegateCustomTools", () => {
     ]);
     expect(fake.handles[1]!.sends).toHaveLength(1);
     expect(fake.handles[1]!.sends[0]!.message).toBe("second turn");
-    expect(fake.handles[1]!.sends[0]!.message.startsWith(roleBody)).toBe(
+    expect(sentText(fake.handles[1]!.sends[0]!).startsWith(roleBody)).toBe(
       false,
     );
     expect(second).toEqual({
       ok: true,
-      agentId: first.agentId,
+      agentId: agentIdOf(first),
       reply: "On it.",
     });
 
@@ -244,13 +278,13 @@ describe("createDelegateCustomTools", () => {
       {
         role: "pinned-role",
         prompt: "third turn",
-        resumeId: first.agentId as string,
+        resumeId: agentIdOf(first),
       },
       {},
     );
     expect(fake.created).toHaveLength(1);
     expect(fake.resumed).toHaveLength(2);
-    expect(third.agentId).toBe(first.agentId);
+    expect(agentIdOf(third)).toBe(agentIdOf(first));
     expect(fake.handles[2]!.sends[0]!.message).toBe("third turn");
   });
 
@@ -300,7 +334,7 @@ describe("createDelegateCustomTools", () => {
         {
           role: "pinned-role",
           prompt: "retry",
-          resumeId: first.agentId as string,
+          resumeId: agentIdOf(first),
         },
         {},
       ),
@@ -348,7 +382,7 @@ describe("createDelegateCustomTools", () => {
       agentId: fake.handles[1]!.agentId,
       reply: "On it.",
     });
-    expect(nestedResult.agentId).not.toBe(fake.handles[0]!.agentId);
+    expect(agentIdOf(nestedResult)).not.toBe(fake.handles[0]!.agentId);
   });
 
   it("allows delegation through depth 3 and refuses depth 4", async () => {

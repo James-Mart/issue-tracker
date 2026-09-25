@@ -32,7 +32,11 @@ function requireStory(storyId: string): Story {
 
 function projectIdFor(story: Story, issues: Issue[]): string {
   const byId = new Map(issues.map((issue) => [issue.id, issue]));
-  return projectContaining(story, byId);
+  const projectId = projectContaining(story, byId);
+  if (!projectId) {
+    throw new IssueError("not_found", `no project contains story "${story.id}"`);
+  }
+  return projectId;
 }
 
 function projectOf(projectId: string, issues: Issue[]): Project {

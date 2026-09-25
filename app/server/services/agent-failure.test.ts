@@ -92,9 +92,9 @@ describe("isContentEvent", () => {
       isContentEvent({
         kind: "message",
         message: {
-          type: "future-sdk-event" as "assistant",
+          type: "future-sdk-event",
           ...ids,
-        },
+        } as never,
       }),
     ).toBe(true);
   });

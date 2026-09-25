@@ -68,7 +68,7 @@ afterEach(async () => {
 async function upload(
   id: string,
   filename: string,
-  body: Uint8Array | string,
+  body: Uint8Array<ArrayBuffer> | string,
 ): Promise<Response> {
   const form = new FormData();
   const bytes =

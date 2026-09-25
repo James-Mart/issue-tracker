@@ -323,6 +323,7 @@ export const conversationFrameInputSchema = z.union([
   runFrameInput,
   pendingFrameInput,
   delegationFrameInput,
+  delegationEndFrameInput,
 ]);
 
 export type ConversationFrameInput = z.infer<

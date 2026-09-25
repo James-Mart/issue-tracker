@@ -188,7 +188,7 @@ export function IssueDescriptionField({
   }, [issue.id]);
 
   const beforeKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       if (e.key !== "Escape" || voiceState === "idle") return false;
       e.preventDefault();
       voice.cancel();

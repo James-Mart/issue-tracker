@@ -240,7 +240,8 @@ function recoveryEvents(events: readonly TranscriptEvent[]): TranscriptEvent[] {
 async function expectScrubbed(id: string, parent: string, nested: string): Promise<void> {
   const events = await transcriptOf(id);
   const toolErrors = events.filter(
-    (event) => event.type === "tool_call" && event.status === "error",
+    (event): event is Extract<TranscriptEvent, { type: "tool_call" }> =>
+      event.type === "tool_call" && event.status === "error",
   );
   expect(toolErrors.map((event) => event.callId)).toEqual([
     "call-read",

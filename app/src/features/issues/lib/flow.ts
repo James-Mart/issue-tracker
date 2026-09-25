@@ -282,11 +282,13 @@ export function flowBuckets(
   const candidates = issues.filter(
     (issue): issue is IssueRecord & { kind: "story" | "epic" | "idea" } => {
       if (!inScope(issue)) return false;
-      if (isFlowTopLevelRow(issue, byId, derived)) return true;
-      return (
+      if (
         issue.kind === "story" &&
         isReadyToLandStory(issue, derived[issue.id], issues)
-      );
+      ) {
+        return true;
+      }
+      return isFlowTopLevelRow(issue, byId, derived);
     },
   );
 

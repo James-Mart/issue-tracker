@@ -72,10 +72,14 @@ function stubRuns(runs: RecentRun[]) {
 
 type MockObserverEntry = { isIntersecting: boolean; target: Element };
 
-class MockIntersectionObserver {
+class MockIntersectionObserver implements IntersectionObserver {
   static instances: MockIntersectionObserver[] = [];
   private callback: IntersectionObserverCallback;
   target: Element | null = null;
+  readonly root = null;
+  readonly rootMargin = "";
+  readonly thresholds: readonly number[] = [];
+  takeRecords = (): IntersectionObserverEntry[] => [];
 
   constructor(callback: IntersectionObserverCallback) {
     this.callback = callback;

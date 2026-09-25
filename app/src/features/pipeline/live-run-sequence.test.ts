@@ -136,6 +136,7 @@ describe("applyLiveFrame", () => {
       parentCallId: "call-impl",
       status: "completed",
       endedAt: AT_END,
+      at: AT_END,
       seq: 12,
     });
     expect(next.condition).toBe("completed");
@@ -156,6 +157,7 @@ describe("applyLiveFrame", () => {
       parentCallId: "call-impl",
       status: "error",
       endedAt: AT_END,
+      at: AT_END,
       seq: 12,
     });
     expect(next.condition).toBe("failed");
@@ -173,6 +175,7 @@ describe("applyLiveFrame", () => {
       parentCallId: "call-impl",
       status: "error",
       endedAt: AT_MID,
+      at: AT_MID,
       seq: 5,
     });
     expect(seq.condition).toBe("failed");
@@ -190,6 +193,7 @@ describe("applyLiveFrame", () => {
       parentCallId: "call-val",
       status: "completed",
       endedAt: AT_END,
+      at: AT_END,
       seq: 7,
     });
     expect(seq.condition).toBe("completed");
@@ -224,6 +228,7 @@ describe("applyLiveFrame", () => {
       parentCallId: "call-impl",
       status: "completed",
       endedAt: AT_END,
+      at: AT_END,
       seq: 12,
     });
     expect(next.condition).toBe("completed");
@@ -394,6 +399,7 @@ describe("insertFrameBySeq / applyLiveFrames", () => {
         parentCallId: "call-qa",
         status: "completed" as const,
         endedAt: AT_END,
+        at: AT_END,
         seq: 11,
       },
       delegationFrame(),

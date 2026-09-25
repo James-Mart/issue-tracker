@@ -14,6 +14,13 @@ import {
   load,
   useAgentSessionsTestFixtures,
 } from "./agent-sessions.test-harness.js";
+import type { TranscriptEvent } from "../schemas.js";
+
+type ToolCallEvent = Extract<TranscriptEvent, { type: "tool_call" }>;
+
+function isDelegateCall(e: TranscriptEvent): e is ToolCallEvent {
+  return e.type === "tool_call" && e.name === "delegate";
+}
 
 useAgentSessionsTestFixtures();
 
@@ -136,9 +143,7 @@ describe("delegation auth escalation", () => {
       }),
     ]);
 
-    const delegateCalls = transcript.filter(
-      (e) => e.type === "tool_call" && e.name === "delegate",
-    );
+    const delegateCalls = transcript.filter(isDelegateCall);
     expect(delegateCalls.some((e) => e.status === "running")).toBe(false);
     expect(delegateCalls).toEqual([
       expect.objectContaining({
@@ -318,9 +323,7 @@ describe("delegation auth escalation", () => {
         cancelledDelegations: 2,
       }),
     ]);
-    const delegateCalls = transcript.filter(
-      (e) => e.type === "tool_call" && e.name === "delegate",
-    );
+    const delegateCalls = transcript.filter(isDelegateCall);
     expect(delegateCalls.some((e) => e.status === "running")).toBe(false);
     expect(delegateCalls).toHaveLength(2);
     for (const call of delegateCalls) {

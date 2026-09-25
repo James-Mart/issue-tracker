@@ -90,10 +90,12 @@ function project(id: string): IssueRecord {
     id,
     kind: "project",
     title: `Project ${id}`,
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
-    archived: false,
   };
 }
 

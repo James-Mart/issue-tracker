@@ -7,6 +7,12 @@ const timestamps = {
   updatedAt: "2026-07-09T14:00:00.000Z",
 };
 
+const workFields = {
+  needsAttention: false,
+  attentionReason: null,
+  archived: false,
+};
+
 function epic(id: string, title: string, labels: string[] = []): IssueRecord {
   return {
     id,
@@ -15,6 +21,8 @@ function epic(id: string, title: string, labels: string[] = []): IssueRecord {
     partOf: "p",
     order: 0,
     labels,
+    blockedBy: [],
+    ...workFields,
     ...timestamps,
   };
 }
@@ -32,6 +40,9 @@ function story(
     partOf,
     order: 0,
     labels,
+    merged: false,
+    reviewedTasks: [],
+    ...workFields,
     ...timestamps,
   };
 }

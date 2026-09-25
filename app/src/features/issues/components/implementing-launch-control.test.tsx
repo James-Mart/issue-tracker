@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ImplementingWorkRoot } from "@server/services/implementing-launch";
 import { skillPath } from "@/lib/plugin-paths";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
@@ -81,16 +82,20 @@ vi.mock("../hooks/use-confirm-channel-live-run", () => ({
   }),
 }));
 
-const epic = {
-  kind: "epic" as const,
+const epic: ImplementingWorkRoot = {
+  kind: "epic",
   id: "ship-it",
   title: "Ship it",
   partOf: "platform",
-  status: "open" as const,
+  blockedBy: [],
   order: 0,
   archived: false,
+  needsAttention: false,
+  attentionReason: null,
   createdAt: "2026-08-10T12:00:00.000Z",
   updatedAt: "2026-08-10T12:00:00.000Z",
+  description: "",
+  version: "1",
 };
 
 function mount(

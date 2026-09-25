@@ -1,5 +1,9 @@
-import { EventEmitter } from "node:events";
-import { execFileSync, spawn } from "child_process";
+import {
+  ChildProcess,
+  execFileSync,
+  spawn,
+  type ChildProcessWithoutNullStreams,
+} from "child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -9,6 +13,7 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { PassThrough } from "stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { runIssueCli } from "../../cli-program.js";
 import {
@@ -171,6 +176,20 @@ const GIT = [
   "commit.gpgsign=false",
 ];
 
+function fakeChildProcess(): ChildProcessWithoutNullStreams {
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const stdio: ChildProcessWithoutNullStreams["stdio"] = [
+    stdin,
+    stdout,
+    stderr,
+    undefined,
+    undefined,
+  ];
+  return Object.assign(new ChildProcess(), { stdin, stdout, stderr, stdio });
+}
+
 function git(repo: string, args: string[]): void {
   execFileSync("git", [...GIT, ...args], {
     cwd: repo,
@@ -303,12 +322,7 @@ describe("behindMergeBase", () => {
 
     setGitWriteSpawnerForTests((command, args, options) => {
       if (args[0] === "fetch") {
-        const child = new EventEmitter() as EventEmitter & {
-          stdout: EventEmitter;
-          stderr: EventEmitter;
-        };
-        child.stdout = new EventEmitter();
-        child.stderr = new EventEmitter();
+        const child = fakeChildProcess();
         setImmediate(() => {
           child.stderr.emit(
             "data",

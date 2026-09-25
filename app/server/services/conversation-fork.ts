@@ -228,20 +228,20 @@ export function resolveForkPoint(
   };
 }
 
-function readNdjsonRecords(filePath: string): Record<string, unknown>[] {
+function readNdjsonRecords<T = Record<string, unknown>>(filePath: string): T[] {
   if (!existsSync(filePath)) return [];
 
   const content = readFileSync(filePath, "utf8");
   if (!content) return [];
 
   const lines = content.split("\n");
-  const records: Record<string, unknown>[] = [];
+  const records: T[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     if (!line.trim()) continue;
     try {
-      records.push(JSON.parse(line) as Record<string, unknown>);
+      records.push(JSON.parse(line) as T);
     } catch {
       if (i === lines.length - 1) continue;
       throw new Error(`Invalid NDJSON in ${filePath} at line ${i + 1}`);
@@ -284,7 +284,7 @@ export function copyAgentState(input: CopyAgentStateInput): void {
   mkdirSync(targetDir, { recursive: true });
 
   const runsPath = join(sourceDir, JSONL_LOCAL_AGENT_STORE_FILES.runs);
-  const runRecords = readNdjsonRecords(runsPath) as LocalAgentRunDocument[];
+  const runRecords = readNdjsonRecords<LocalAgentRunDocument>(runsPath);
 
   const keptRun = runRecords.find((run) => run.runId === keepRunId);
   if (!keptRun) {
@@ -299,7 +299,7 @@ export function copyAgentState(input: CopyAgentStateInput): void {
   const keptRunIds = new Set(keptRuns.map((run) => run.runId));
 
   const copiedRuns = keptRuns.map((run) =>
-    rewriteAgentId(run as unknown as Record<string, unknown>, newAgentId),
+    rewriteAgentId({ ...run }, newAgentId),
   );
 
   const copiedAgents = readNdjsonRecords(

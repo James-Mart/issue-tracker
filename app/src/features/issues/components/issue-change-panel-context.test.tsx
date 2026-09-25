@@ -178,7 +178,7 @@ describe("IssueChangePanel context expansion", () => {
   it("shows collapsed context, a loading state, then the fetched lines", async () => {
     changeQueryState.data = loadedChange();
     const pending = deferred<ReturnType<typeof jsonResponse>>();
-    const fetchMock = vi.fn(() => pending.promise);
+    const fetchMock = vi.fn((_input: RequestInfo | URL) => pending.promise);
     vi.stubGlobal("fetch", fetchMock);
 
     const container = mountPanel();

@@ -10,23 +10,36 @@ const timestamps = {
   updatedAt: "2026-07-09T14:00:00.000Z",
 };
 
+type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
+type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
+type EpicRecord = Extract<IssueRecord, { kind: "epic" }>;
+
+const workFields = {
+  order: 0,
+  needsAttention: false,
+  attentionReason: null,
+  archived: false,
+};
+
 function task(
   id: string,
-  status: IssueRecord & { kind: "task" }["status"],
-  overrides: Partial<IssueRecord & { kind: "task" }> = {},
-): IssueRecord {
+  status: TaskRecord["status"],
+  overrides: Partial<TaskRecord> = {},
+): TaskRecord {
   return {
     id,
     kind: "task",
     title: id,
     partOf: "story",
     status,
+    commits: [],
+    ...workFields,
     ...timestamps,
     ...overrides,
   };
 }
 
-function story(id: string, overrides: Partial<IssueRecord & { kind: "story" }> = {}): IssueRecord {
+function story(id: string, overrides: Partial<StoryRecord> = {}): StoryRecord {
   return {
     id,
     kind: "story",
@@ -34,17 +47,21 @@ function story(id: string, overrides: Partial<IssueRecord & { kind: "story" }> =
     partOf: "project",
     branchName: id,
     merged: false,
+    reviewedTasks: [],
+    ...workFields,
     ...timestamps,
     ...overrides,
   };
 }
 
-function epic(id: string): IssueRecord {
+function epic(id: string): EpicRecord {
   return {
     id,
     kind: "epic",
     title: id,
     partOf: "project",
+    blockedBy: [],
+    ...workFields,
     ...timestamps,
   };
 }
@@ -120,8 +137,8 @@ describe("overviewWorkLoopAction", () => {
       overviewWorkLoopAction({
         liveRun: false,
         leafTasks: [
-          { ...task("t1", "done"), partOf: "s1" },
-          { ...task("t2", "done"), partOf: "s1" },
+          task("t1", "done", { partOf: "s1" }),
+          task("t2", "done", { partOf: "s1" }),
         ],
         currentSession: current,
       }),

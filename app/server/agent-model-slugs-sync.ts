@@ -77,7 +77,9 @@ export async function refreshAgentModelSlugCatalog(
 
   let refreshError: unknown;
   try {
-    const models = await sdk.listModels();
+    const models: AgentModelCatalogEntry[] = (await sdk.listModels()).map(
+      (model) => ({ ...model }),
+    );
     if (models.length > 0) {
       writeAgentModelSlugCatalog(
         catalogPath,

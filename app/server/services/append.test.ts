@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
-import type { ApplyDoc, StoryApplyDoc } from "./apply-schema.js";
+import type { StoryApplyDoc } from "./apply-schema.js";
 import {
   AT,
   dir,
@@ -195,7 +195,7 @@ describe("appendTasks", () => {
         title: "Story",
         children: [{ kind: "story", id: "stacked", title: "Stacked" }],
       },
-    } as ApplyDoc;
+    } as never;
 
     await expect(appendTasks({ storyId: "s1", doc })).rejects.toThrow(
       /stacked Story is not an append/,

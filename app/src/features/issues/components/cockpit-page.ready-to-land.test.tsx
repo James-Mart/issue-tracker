@@ -68,10 +68,12 @@ function project(id: string): IssueRecord {
     id,
     kind: "project",
     title: `Project ${id}`,
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
-    archived: false,
   };
 }
 
@@ -95,7 +97,7 @@ function story(
   id: string,
   partOf: string,
   extras: Partial<Extract<IssueRecord, { kind: "story" }>> = {},
-): IssueRecord {
+): Extract<IssueRecord, { kind: "story" }> {
   return {
     id,
     kind: "story",
@@ -106,6 +108,7 @@ function story(
     updatedAt: t0,
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,
@@ -123,6 +126,10 @@ function task(id: string, partOf: string): IssueRecord {
     createdAt: t0,
     updatedAt: t0,
     status: "done",
+    commits: [],
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
   };
 }
 

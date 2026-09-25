@@ -17,6 +17,7 @@ const idea: IssueDetail = {
   updatedAt: t0,
   archived: false,
   description: "",
+  version: "1",
   labels: [],
 };
 

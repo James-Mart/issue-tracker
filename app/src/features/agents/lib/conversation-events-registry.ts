@@ -92,6 +92,9 @@ function openEntry(
       setState({ pendingText: event.text });
       return;
     }
+    if (event.type === "delegation" || event.type === "delegation_end") {
+      return;
+    }
     entry.state = {
       ...entry.state,
       events: applyTranscriptDelta(entry.state.events, event),

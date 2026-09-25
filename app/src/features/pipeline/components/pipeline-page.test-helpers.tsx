@@ -18,6 +18,8 @@ import {
   LegacyPipelineRunsRedirect,
 } from "../pipeline-legacy-redirects";
 
+type RunSequenceBeat = RunSequence["beats"][number];
+
 const topicState = vi.hoisted(() => {
   const listeners = new Map<string, TopicListener>();
   return {
@@ -274,13 +276,13 @@ export function mockViewport(width: number, height = 700) {
 }
 
 export function tallRunSequence(beatCount: number): RunSequence {
-  const beats = Array.from({ length: beatCount }, (_, index) => ({
+  const beats = Array.from({ length: beatCount }, (_, index): RunSequenceBeat => ({
     from: index % 2 === 0 ? "coordinator" : "research",
     to: index % 2 === 0 ? "research" : "coordinator",
     label: `beat ${index + 1}`,
     startedAt: new Date(Date.UTC(2026, 7, 28, 12, index)).toISOString(),
     durationMs: 30_000,
-    kind: (index % 2 === 0 ? "spawn" : "return") as const,
+    kind: index % 2 === 0 ? "spawn" : "return",
   }));
   return {
     condition: "completed",
@@ -294,13 +296,13 @@ export function tallRunSequence(beatCount: number): RunSequence {
 }
 
 export function inFlightTallRunSequence(beatCount: number): RunSequence {
-  const closed = Array.from({ length: beatCount - 1 }, (_, index) => ({
+  const closed = Array.from({ length: beatCount - 1 }, (_, index): RunSequenceBeat => ({
     from: index % 2 === 0 ? "coordinator" : "research",
     to: index % 2 === 0 ? "research" : "coordinator",
     label: `beat ${index + 1}`,
     startedAt: new Date(Date.UTC(2026, 7, 28, 12, index)).toISOString(),
     durationMs: 30_000,
-    kind: (index % 2 === 0 ? "spawn" : "return") as const,
+    kind: index % 2 === 0 ? "spawn" : "return",
   }));
   return {
     condition: "in-flight",

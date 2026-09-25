@@ -1,9 +1,13 @@
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+import type { SDKCustomToolResult } from "@cursor/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import type { ConversationFrame } from "./conversation-stream.js";
-import { NESTED_RUN_HEARTBEAT_MS } from "./delegate-tool.js";
+import {
+  NESTED_RUN_HEARTBEAT_MS,
+  type DelegateResult,
+} from "./delegate-tool.js";
 import {
   agentsDir,
   ASSISTANT_STREAM,
@@ -22,6 +26,56 @@ import {
   formatEffectiveModel,
   resolveModelSelection,
 } from "./model-selection.js";
+
+type DelegationRow = {
+  delegationId: string;
+  agentId: string;
+  role: string;
+  model: string;
+  at: string;
+};
+
+type DelegationsListing = {
+  root: { agentId: string };
+  delegations: DelegationRow[];
+};
+
+function isDelegateResult(
+  result: SDKCustomToolResult,
+): result is DelegateResult {
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    "ok" in result &&
+    typeof result.ok === "boolean" &&
+    "agentId" in result &&
+    typeof result.agentId === "string"
+  );
+}
+
+function delegateResultOf(result: SDKCustomToolResult): DelegateResult {
+  if (!isDelegateResult(result)) throw new Error("expected a delegate result");
+  return result;
+}
+
+function isDelegationsListing(
+  result: SDKCustomToolResult,
+): result is DelegationsListing {
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    "root" in result &&
+    "delegations" in result &&
+    Array.isArray(result.delegations)
+  );
+}
+
+function delegationsListingOf(result: SDKCustomToolResult): DelegationsListing {
+  if (!isDelegationsListing(result)) {
+    throw new Error("expected a delegations listing");
+  }
+  return result;
+}
 
 beforeEach(() => {
   setupDelegateToolTest();
@@ -357,13 +411,15 @@ describe("delegate publishes nested run frames", () => {
       conversationId: meta.id,
     });
 
-    const result = await customTools.delegate!.execute(
-      {
-        role: "pinned-role",
-        prompt: "for issue",
-        issueId: "linked-task",
-      },
-      { toolCallId: "call-linked-task" },
+    const result = delegateResultOf(
+      await customTools.delegate!.execute(
+        {
+          role: "pinned-role",
+          prompt: "for issue",
+          issueId: "linked-task",
+        },
+        { toolCallId: "call-linked-task" },
+      ),
     );
 
     const records = readDelegations(meta.id);
@@ -432,9 +488,11 @@ describe("delegate publishes nested run frames", () => {
       conversationId: meta.id,
     });
 
-    const result = await customTools.delegate!.execute(
-      { role: "pinned-role", prompt: "remember me" },
-      { toolCallId: "call-persist-1" },
+    const result = delegateResultOf(
+      await customTools.delegate!.execute(
+        { role: "pinned-role", prompt: "remember me" },
+        { toolCallId: "call-persist-1" },
+      ),
     );
 
     const expectedModel = formatEffectiveModel(
@@ -477,9 +535,11 @@ describe("delegate publishes nested run frames", () => {
       agentsDir,
       conversationId: meta.id,
     });
-    const first = await firstTools.delegate!.execute(
-      { role: "pinned-role", prompt: "first turn" },
-      {},
+    const first = delegateResultOf(
+      await firstTools.delegate!.execute(
+        { role: "pinned-role", prompt: "first turn" },
+        {},
+      ),
     );
     expect(fake.created).toHaveLength(1);
     expect(fake.resumed).toHaveLength(0);
@@ -498,13 +558,15 @@ describe("delegate publishes nested run frames", () => {
       agentsDir,
       conversationId: meta.id,
     });
-    const second = await secondTools.delegate!.execute(
-      {
-        role: "pinned-role",
-        prompt: "after restart",
-        resumeId: agentId,
-      },
-      {},
+    const second = delegateResultOf(
+      await secondTools.delegate!.execute(
+        {
+          role: "pinned-role",
+          prompt: "after restart",
+          resumeId: agentId,
+        },
+        {},
+      ),
     );
 
     expect(fake.created).toHaveLength(1);
@@ -563,13 +625,17 @@ describe("delegate publishes nested run frames", () => {
       conversationId: metaB.id,
     });
 
-    const first = await toolsA.delegate!.execute(
-      { role: "pinned-role", prompt: "first" },
-      {},
+    const first = delegateResultOf(
+      await toolsA.delegate!.execute(
+        { role: "pinned-role", prompt: "first" },
+        {},
+      ),
     );
-    const second = await toolsA.delegate!.execute(
-      { role: "pinned-role", prompt: "second" },
-      {},
+    const second = delegateResultOf(
+      await toolsA.delegate!.execute(
+        { role: "pinned-role", prompt: "second" },
+        {},
+      ),
     );
     await toolsB.delegate!.execute(
       { role: "pinned-role", prompt: "other conversation" },
@@ -579,7 +645,9 @@ describe("delegate publishes nested run frames", () => {
     const expectedModel = formatEffectiveModel(
       resolveModelSelection("cursor-grok-4.5-high-fast"),
     );
-    const listedA = await toolsA.delegations!.execute({}, {});
+    const listedA = delegationsListingOf(
+      await toolsA.delegations!.execute({}, {}),
+    );
     expect(listedA.root).toEqual({ agentId: "root-agent-a" });
     const listed = listedA.delegations;
     expect(listed).toHaveLength(2);
@@ -601,7 +669,9 @@ describe("delegate publishes nested run frames", () => {
       expect(row).not.toHaveProperty("parentDelegationId");
     }
 
-    const listedB = await toolsB.delegations!.execute({}, {});
+    const listedB = delegationsListingOf(
+      await toolsB.delegations!.execute({}, {}),
+    );
     expect(listedB.root).toEqual({ agentId: "root-agent-b" });
     expect(listedB.delegations).toHaveLength(1);
   });
@@ -630,16 +700,22 @@ describe("delegate publishes nested run frames", () => {
       conversationId: meta.id,
     });
 
-    const first = await tools.delegate!.execute(
-      { role: "pinned-role", prompt: "alpha" },
-      {},
+    const first = delegateResultOf(
+      await tools.delegate!.execute(
+        { role: "pinned-role", prompt: "alpha" },
+        {},
+      ),
     );
-    const second = await tools.delegate!.execute(
-      { role: "pinned-role", prompt: "beta" },
-      {},
+    const second = delegateResultOf(
+      await tools.delegate!.execute(
+        { role: "pinned-role", prompt: "beta" },
+        {},
+      ),
     );
 
-    const result = await tools.delegations!.execute({}, {});
+    const result = delegationsListingOf(
+      await tools.delegations!.execute({}, {}),
+    );
     expect(result.root).toEqual({ agentId: rootAgentId });
     expect(result.delegations).toHaveLength(2);
     expect(result.delegations[0]).toMatchObject({
@@ -716,17 +792,21 @@ describe("delegate publishes nested run frames", () => {
     );
     expect(fake.created).toHaveLength(1);
 
-    const { delegations } = await tools.delegations!.execute({}, {});
+    const { delegations } = delegationsListingOf(
+      await tools.delegations!.execute({}, {}),
+    );
     const [record] = delegations;
     expect(record).toBeDefined();
 
-    const resumed = await tools.delegate!.execute(
-      {
-        role: "pinned-role",
-        prompt: "after lookup",
-        resumeId: record!.agentId,
-      },
-      {},
+    const resumed = delegateResultOf(
+      await tools.delegate!.execute(
+        {
+          role: "pinned-role",
+          prompt: "after lookup",
+          resumeId: record!.agentId,
+        },
+        {},
+      ),
     );
 
     expect(fake.created).toHaveLength(1);
@@ -754,9 +834,11 @@ describe("delegate publishes nested run frames", () => {
       conversationId: meta.id,
     });
 
-    const result = await customTools.delegate!.execute(
-      { role: "pinned-role", prompt: "success" },
-      { toolCallId: "call-success-end" },
+    const result = delegateResultOf(
+      await customTools.delegate!.execute(
+        { role: "pinned-role", prompt: "success" },
+        { toolCallId: "call-success-end" },
+      ),
     );
     expect(result.ok).toBe(true);
 
@@ -796,9 +878,11 @@ describe("delegate publishes nested run frames", () => {
       conversationId: meta.id,
     });
 
-    const result = await customTools.delegate!.execute(
-      { role: "pinned-role", prompt: "auth fail" },
-      { toolCallId: "call-auth-end" },
+    const result = delegateResultOf(
+      await customTools.delegate!.execute(
+        { role: "pinned-role", prompt: "auth fail" },
+        { toolCallId: "call-auth-end" },
+      ),
     );
     expect(result.ok).toBe(false);
 

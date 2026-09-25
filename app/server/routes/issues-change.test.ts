@@ -1,4 +1,5 @@
-import { EventEmitter } from "node:events";
+import { ChildProcess, type ChildProcessByStdio } from "node:child_process";
+import { PassThrough, type Readable } from "node:stream";
 import type { GitSpawner } from "../services/git-read.js";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
@@ -23,13 +24,15 @@ function mockGitChild(opts: {
   code?: number | null;
   stdout?: string;
   stderr?: string;
-}) {
-  const child = new EventEmitter() as EventEmitter & {
-    stdout: EventEmitter;
-    stderr: EventEmitter;
-  };
-  child.stdout = new EventEmitter();
-  child.stderr = new EventEmitter();
+}): ChildProcessByStdio<null, Readable, Readable> {
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const child = Object.assign(new ChildProcess(), {
+    stdin: null,
+    stdout,
+    stderr,
+    stdio: [null, stdout, stderr, undefined, undefined] as const,
+  });
 
   setImmediate(() => {
     if (opts.stdout) child.stdout.emit("data", opts.stdout);

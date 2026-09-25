@@ -254,7 +254,7 @@ export function TranscriptToolCall({
   result?: unknown;
   density?: TranscriptDensity;
   className?: string;
-} & Omit<ComponentPropsWithoutRef<"details">, "children">) {
+} & Omit<ComponentPropsWithoutRef<"details">, "children" | "name">) {
   const { label, detail } = summarizeToolCall(name, args);
   const running = status === "running";
   const pad = densityPad[density];

@@ -6,10 +6,15 @@ export type PlanningWorkRoot = {
   kind: Extract<IssueKind, "epic" | "story">;
 };
 
-function isPlanRootCandidate(issue: Issue, projectId: string): boolean {
+type PlanRootIssue = Extract<Issue, { kind: "epic" | "story" }>;
+
+function isPlanRootKind(issue: Issue): issue is PlanRootIssue {
+  return issue.kind === "epic" || issue.kind === "story";
+}
+
+function isPlanRootCandidate(issue: PlanRootIssue, projectId: string): boolean {
   if (issue.partOf !== projectId) return false;
-  if (issue.kind === "epic") return true;
-  return issue.kind === "story" && !issue.stackedOn;
+  return issue.kind === "epic" || !issue.stackedOn;
 }
 
 /**
@@ -28,6 +33,7 @@ export function findPlanningWorkRoot(
   let bestOrder = Infinity;
 
   for (const issue of issues) {
+    if (!isPlanRootKind(issue)) continue;
     if (issue.sourceIdea !== ideaId) continue;
     if (!isPlanRootCandidate(issue, projectId)) continue;
     if (issue.order >= bestOrder) continue;
@@ -35,7 +41,7 @@ export function findPlanningWorkRoot(
     best = {
       id: issue.id,
       title: issue.title,
-      kind: issue.kind as Extract<IssueKind, "epic" | "story">,
+      kind: issue.kind,
     };
   }
 
@@ -45,12 +51,13 @@ export function findPlanningWorkRoot(
 /** Idea ids with at least one Epic or root Story whose `sourceIdea` points back. */
 export function ideaIdsWithPlanRoot(issues: Issue[]): Set<string> {
   const planned = new Set<string>();
-  const ideasById = new Map<string, Issue>();
+  const ideasById = new Map<string, Extract<Issue, { kind: "idea" }>>();
   for (const issue of issues) {
     if (issue.kind === "idea") ideasById.set(issue.id, issue);
   }
 
   for (const issue of issues) {
+    if (!isPlanRootKind(issue)) continue;
     if (!issue.sourceIdea || planned.has(issue.sourceIdea)) continue;
     const idea = ideasById.get(issue.sourceIdea);
     if (!idea) continue;

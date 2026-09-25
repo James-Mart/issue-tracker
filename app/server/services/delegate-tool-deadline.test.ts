@@ -173,9 +173,9 @@ describe("nested run first-content deadline", () => {
         {
           kind: "message",
           message: {
-            type: "future-sdk-event" as "assistant",
+            type: "future-sdk-event",
             ...NESTED_RUN_IDS,
-          },
+          } as never,
         },
       ];
       const fake = createFakeAgentSdk({

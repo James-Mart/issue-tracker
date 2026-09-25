@@ -130,6 +130,18 @@ async function flushPromises() {
   });
 }
 
+function monoAudioBuffer(): AudioBuffer {
+  return {
+    sampleRate: 48_000,
+    length: 3,
+    numberOfChannels: 1,
+    duration: 1,
+    getChannelData: () => new Float32Array([0.1, 0.2, 0.3]),
+    copyFromChannel: () => {},
+    copyToChannel: () => {},
+  };
+}
+
 describe("useVoiceRecording", () => {
   let track: FakeMediaStreamTrack;
   let stream: FakeMediaStream;
@@ -357,13 +369,7 @@ describe("useVoiceRecording", () => {
     await flushPromises();
 
     act(() => {
-      resolveDecode({
-        sampleRate: 48_000,
-        length: 3,
-        numberOfChannels: 1,
-        duration: 1,
-        getChannelData: () => new Float32Array([0.1, 0.2, 0.3]),
-      } as AudioBuffer);
+      resolveDecode(monoAudioBuffer());
     });
     await flushPromises();
     await flushPromises();
@@ -375,13 +381,7 @@ describe("useVoiceRecording", () => {
   it("retries conversion failures from the held blob without re-recording", async () => {
     decodeAudioData
       .mockRejectedValueOnce(new Error("decode failed"))
-      .mockResolvedValueOnce({
-        sampleRate: 48_000,
-        length: 3,
-        numberOfChannels: 1,
-        duration: 1,
-        getChannelData: () => new Float32Array([0.1, 0.2, 0.3]),
-      } as AudioBuffer);
+      .mockResolvedValueOnce(monoAudioBuffer());
     const harness = mountHook();
 
     act(() => {
