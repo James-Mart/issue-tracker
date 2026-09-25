@@ -1,4 +1,3 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -10,6 +9,44 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ChildProcess } from "node:child_process";
+
+const spawnDelegate = vi.hoisted(() => ({
+  actual: null as typeof import("node:child_process") | null,
+  impl: null as
+    | ((
+        command: string,
+        args: readonly string[],
+        options: import("node:child_process").SpawnOptions | undefined,
+      ) => ChildProcess)
+    | null,
+}));
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  spawnDelegate.actual = actual;
+  return {
+    ...actual,
+    spawn: (
+      command: string,
+      args: readonly string[],
+      options: import("node:child_process").SpawnOptions | undefined,
+    ) =>
+      spawnDelegate.impl
+        ? spawnDelegate.impl(command, args, options)
+        : actual.spawn(command, args, options ?? {}),
+  };
+});
+
+function realSpawn(
+  command: string,
+  args: readonly string[],
+  options?: import("node:child_process").SpawnOptions,
+): ChildProcess {
+  return spawnDelegate.actual!.spawn(command, args, options ?? {});
+}
+
+import { spawn } from "node:child_process";
 
 let root: string;
 let issuesDir: string;
@@ -24,6 +61,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  spawnDelegate.impl = null;
   for (const child of strays) {
     if (child.pid !== undefined && child.exitCode === null) {
       try {
@@ -49,6 +87,36 @@ async function loadScratch() {
 
 async function loadConfig() {
   return import("../config.js");
+}
+
+function stubReadyFetch(): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, status: 200 }) as Response),
+  );
+}
+
+function spawnMockupStorybookSleeper(
+  command: string,
+  args: readonly string[],
+  options: import("node:child_process").SpawnOptions | undefined,
+): ChildProcess {
+  if (command === "sh" && args[1]?.includes("oom_score_adj")) {
+    const patched = [...args];
+    patched[3] = "sleep";
+    patched.length = 4;
+    patched.push("300");
+    const child = realSpawn(command, patched, {
+      ...(options ?? {}),
+      detached: true,
+      stdio: "ignore",
+    });
+    strays.push(child);
+    return child;
+  }
+  const child = realSpawn(command, args, options ?? {});
+  if (options?.detached) strays.push(child);
+  return child;
 }
 
 function writeConversationMeta(
@@ -135,6 +203,68 @@ async function waitForCollection(pid: number): Promise<boolean> {
   }
   return isCollected(pid);
 }
+
+describe("mockup stack memory hardening", () => {
+  it("appends heap limit NODE_OPTIONS when spawning storybook", async () => {
+    stubReadyFetch();
+    vi.stubEnv("NODE_OPTIONS", "--enable-source-maps");
+    let capturedEnv: NodeJS.ProcessEnv | undefined;
+
+    spawnDelegate.impl = (command, _args, options) => {
+      capturedEnv = { ...(options?.env as NodeJS.ProcessEnv) };
+      const child = realSpawn("sh", ["-c", "sleep 300"], {
+        ...(options ?? {}),
+        detached: true,
+        stdio: "ignore",
+      });
+      strays.push(child);
+      return child;
+    };
+
+    await writeHarnessConfig("my-conversation");
+    const { startMockupStack, stopMockupStack } = await loadService();
+    const { mockupStackDir } = await loadScratch();
+    const heapReports = join(mockupStackDir("my-conversation"), "heap-reports");
+
+    await startMockupStack("my-conversation");
+
+    expect(capturedEnv?.NODE_OPTIONS).toContain("--enable-source-maps");
+    expect(capturedEnv?.NODE_OPTIONS).toContain("--max-old-space-size=2048");
+    expect(capturedEnv?.NODE_OPTIONS).toContain("--report-on-fatalerror");
+    expect(capturedEnv?.NODE_OPTIONS).toContain(
+      `--report-directory=${heapReports}`,
+    );
+
+    await stopMockupStack("my-conversation");
+  });
+
+  it.skipIf(process.platform !== "linux")(
+    "sets oom_score_adj to 1000 on the storybook process",
+    async () => {
+      stubReadyFetch();
+      const serverOomBefore = readFileSync(
+        "/proc/self/oom_score_adj",
+        "utf8",
+      ).trim();
+
+      spawnDelegate.impl = spawnMockupStorybookSleeper;
+
+      await writeHarnessConfig("my-conversation");
+      const { startMockupStack, stopMockupStack } = await loadService();
+
+      const handle = await startMockupStack("my-conversation");
+
+      expect(
+        readFileSync(`/proc/${handle.state.pid}/oom_score_adj`, "utf8").trim(),
+      ).toBe("1000");
+      expect(readFileSync("/proc/self/oom_score_adj", "utf8").trim()).toBe(
+        serverOomBefore,
+      );
+
+      await stopMockupStack("my-conversation");
+    },
+  );
+});
 
 describe("storybook dev command", () => {
   it("binds loopback and records the public mockup prefix", async () => {

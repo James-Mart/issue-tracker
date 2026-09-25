@@ -8,6 +8,7 @@ import {
   readFileSync,
   rmSync,
 } from "node:fs";
+import { join } from "node:path";
 import { createServer, type AddressInfo, type Server } from "node:net";
 import { appDir } from "../config.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
@@ -30,6 +31,8 @@ import {
  * A conversation's Storybook dev server on a port picked free at start time.
  * Agents run mockup rounds here instead of on the human's stack.
  */
+
+const MOCKUP_HEAP_MB = 2048;
 
 const READY_TIMEOUT_MS = 90_000;
 const READY_POLL_MS = 250;
@@ -157,29 +160,68 @@ export function storybookDevArgs(port: number): string[] {
   ];
 }
 
+function appendNodeOptions(
+  existing: string | undefined,
+  ...flags: string[]
+): string {
+  const addition = flags.join(" ");
+  const trimmed = existing?.trim();
+  return trimmed ? `${trimmed} ${addition}` : addition;
+}
+
+function storybookNodeOptions(heapReportDir: string): string {
+  return appendNodeOptions(
+    process.env.NODE_OPTIONS,
+    `--max-old-space-size=${MOCKUP_HEAP_MB}`,
+    "--report-on-fatalerror",
+    `--report-directory=${heapReportDir}`,
+  );
+}
+
 function spawnStorybook(
   conversationId: string,
   port: number,
   harnessPath: string,
 ): { child: ChildProcess; pid: number; startTime: string } {
   const logPath = mockupStackLogPath(conversationId);
+  const heapReportDir = join(mockupStackDir(conversationId), "heap-reports");
+  mkdirSync(heapReportDir, { recursive: true });
+  const storybookBin = binPath("storybook");
+  const args = storybookDevArgs(port);
+  const env = {
+    ...process.env,
+    MOCKUP_HARNESS_CONFIG: harnessPath,
+    MOCKUP_STORYBOOK_BASE: mockupStorybookBase(conversationId),
+    NODE_OPTIONS: storybookNodeOptions(heapReportDir),
+  };
   const fd = openSync(logPath, "w");
   let child: ChildProcess;
   try {
-    child = spawn(
-      binPath("storybook"),
-      storybookDevArgs(port),
-      {
-        cwd: appDir,
-        env: {
-          ...process.env,
-          MOCKUP_HARNESS_CONFIG: harnessPath,
-          MOCKUP_STORYBOOK_BASE: mockupStorybookBase(conversationId),
+    if (process.platform === "linux") {
+      child = spawn(
+        "sh",
+        [
+          "-c",
+          'echo 1000 > /proc/self/oom_score_adj; exec "$@"',
+          "mockup-storybook",
+          storybookBin,
+          ...args,
+        ],
+        {
+          cwd: appDir,
+          env,
+          detached: true,
+          stdio: ["ignore", fd, fd],
         },
+      );
+    } else {
+      child = spawn(storybookBin, args, {
+        cwd: appDir,
+        env,
         detached: true,
         stdio: ["ignore", fd, fd],
-      },
-    );
+      });
+    }
   } finally {
     closeSync(fd);
   }
