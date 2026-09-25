@@ -18,6 +18,7 @@ const LINT_SCRIPTS = [
   "lint:pipeline-shape",
   "lint:transport",
   "lint:file-length",
+  "typecheck",
 ];
 
 /** True when the pid is still executing. A zombie has already been killed. */
@@ -321,9 +322,13 @@ describe("unitSuiteCommand", () => {
     expect(script).toContain("vitest");
     expect(script).toContain(" run");
     const lintAt = script.indexOf("npm run lint:boundary");
+    const typecheckAt = script.indexOf("npm run typecheck");
     const vitestAt = script.lastIndexOf("run");
     expect(lintAt).toBeGreaterThanOrEqual(0);
-    expect(vitestAt).toBeGreaterThan(lintAt);
+    expect(typecheckAt).toBeGreaterThan(
+      script.indexOf("npm run lint:file-length"),
+    );
+    expect(vitestAt).toBeGreaterThan(typecheckAt);
   });
 
   it("runs vitest on the given paths and skips the lint chain", () => {
@@ -336,5 +341,6 @@ describe("unitSuiteCommand", () => {
       "scripts/run-with-deadline.test.ts",
     ]);
     expect(filtered.args.join(" ")).not.toContain("lint:");
+    expect(filtered.args.join(" ")).not.toContain("typecheck");
   });
 });
