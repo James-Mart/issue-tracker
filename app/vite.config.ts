@@ -4,8 +4,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
+import type { Vitest } from "vitest/node";
+import type { Reporter } from "vitest/reporters";
 import { independentBootstrapFaultEntryProblem } from "./scripts/bootstrap-fault-entry.js";
 import { revalidateOptimizedDeps } from "./scripts/optimized-deps-cache.js";
+import { acquireWorkerSlots, computeWorkerSlotBudget } from "./scripts/worker-slot-pool.js";
 
 // Workers reload this config in a separate process; reuse the parent dir so
 // worker-<pid>.json and Node fatal-error reports stay in one directory.
@@ -102,6 +105,33 @@ function revalidatedOptimizedDeps(): Plugin {
   };
 }
 
+/**
+ * Vitest reports the run's test files before it creates the forks pool, which
+ * reads its worker counts from the config at creation. The run requests one
+ * slot per file up to the budget and sizes the pool to the grant.
+ */
+function workerSlotPool(): Reporter {
+  let vitest: Vitest | undefined;
+  let acquired = false;
+  return {
+    onInit(ctx) {
+      vitest = ctx;
+    },
+    async onPathsCollected(paths = []) {
+      if (acquired) return;
+      if (!vitest) throw new Error("worker-slot pool: onPathsCollected before onInit");
+      acquired = true;
+      const slots = await acquireWorkerSlots(
+        Math.min(paths.length, computeWorkerSlotBudget()),
+      );
+      const poolOptions = (vitest.config.poolOptions ??= {});
+      const forks = (poolOptions.forks ??= {});
+      forks.maxForks = slots;
+      forks.minForks = slots;
+    },
+  };
+}
+
 const devPort = Number(process.env.VITE_DEV_PORT ?? 8060);
 const apiProxyTarget =
   process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8061";
@@ -146,9 +176,13 @@ export default defineConfig({
     env: {
       VITEST_HEAP_REPORT_DIR: heapReportDir,
     },
-    reporters: ["default", "./test/memory-limit-reporter.ts"],
+    reporters: ["default", "./test/memory-limit-reporter.ts", workerSlotPool()],
     poolOptions: {
       forks: {
+        // A pool started without a grant (e.g. `--reporter` replacing the
+        // configured reporters) runs one worker.
+        maxForks: 1,
+        minForks: 1,
         execArgv: [
           "--max-old-space-size=2048",
           "--report-on-fatalerror",
