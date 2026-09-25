@@ -103,12 +103,24 @@ describe("POST /api/conversations/:id/interrupt", () => {
     expect(first.status).toBe(202);
     await Promise.resolve();
 
+    const { putConversationAttachment } = await import(
+      "../services/conversation-attachments.js"
+    );
+    await putConversationAttachment(
+      created.id,
+      "stale.txt",
+      Buffer.from("stale attachment"),
+    );
+
     const queued = await fetch(
       `${interruptBaseUrl}/api/conversations/${created.id}/messages`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt: "stale queued" }),
+        body: JSON.stringify({
+          prompt: "stale queued",
+          attachments: ["stale.txt"],
+        }),
       },
     );
     expect(queued.status).toBe(202);

@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { join } from "path";
-import type { SDKCustomTool, SDKCustomToolResult } from "@cursor/sdk";
+import type {
+  SDKCustomTool,
+  SDKCustomToolResult,
+  SDKJsonValue,
+} from "@cursor/sdk";
+import { z } from "zod";
+import { agentFailureClassSchema } from "../schemas/conversation.js";
 import type { AgentRunResult, AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
 import {
   classifyAgentFailure,
@@ -9,9 +15,11 @@ import {
   isRetryableAgentFailure,
   type AgentFailureClass,
 } from "./agent-failure.js";
+import { publishFrame } from "./conversation-stream.js";
 import {
   appendDelegation,
   appendDelegationEnd,
+  appendEvent,
   conversationExists,
   readConversation,
   readDelegations,
@@ -26,6 +34,7 @@ import {
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 import { createAgentStackTools } from "./agent-stack-tools.js";
 import { coalesceCustomTools } from "./custom-tool-coalesce.js";
+import { runCostRecorder } from "./run-cost-recorder.js";
 import { createSdkBugReportTools } from "./sdk-bug-report.js";
 
 /** Interval for live-only nested-run liveness frames. */
@@ -41,20 +50,109 @@ export const NESTED_RUN_FIRST_CONTENT_TIMEOUT_MS = 300_000;
 /** Maximum nested delegation depth (conversation root is 0). */
 export const MAX_DELEGATION_DEPTH = 3;
 
-export type DelegateResult =
-  | { ok: true; agentId: string; reply: string }
-  | {
-      ok: false;
-      failureClass: AgentFailureClass;
-      isRetryable: boolean;
-      message: string;
-      agentId: string;
-    };
+const delegateSuccessSchema = z.object({
+  ok: z.literal(true),
+  agentId: z.string(),
+  reply: z.string(),
+});
+
+const delegateFailureSchema = z.object({
+  ok: z.literal(false),
+  failureClass: agentFailureClassSchema,
+  isRetryable: z.boolean(),
+  message: z.string(),
+  agentId: z.string(),
+});
+
+const delegateResultSchema = z.discriminatedUnion("ok", [
+  delegateSuccessSchema,
+  delegateFailureSchema,
+]);
+
+export type DelegateResult = z.infer<typeof delegateResultSchema>;
+
+const delegationEndSchema = z.object({
+  status: z.enum(["completed", "error"]),
+  endedAt: z.string(),
+  failureClass: agentFailureClassSchema.optional(),
+});
+
+const delegationRowSchema = z.object({
+  delegationId: z.string(),
+  agentId: z.string(),
+  role: z.string(),
+  model: z.string(),
+  at: z.string(),
+  parentDelegationId: z.string().optional(),
+  end: delegationEndSchema.optional(),
+});
+
+const delegationsListingSchema = z.union([
+  z.object({
+    root: z.object({ agentId: z.string() }),
+    delegations: z.array(delegationRowSchema),
+  }),
+  z.object({
+    delegations: z.tuple([]),
+  }),
+]);
+
+export type DelegationsListing = z.infer<typeof delegationsListingSchema>;
+
+function toolOutputSchema<T extends z.ZodType>(
+  schema: T,
+): Record<string, SDKJsonValue> {
+  return z.toJSONSchema(schema) as Record<string, SDKJsonValue>;
+}
+
+const DELEGATE_TOOL_ANNOTATIONS = {
+  title: "Delegate to role",
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} as const;
+
+const DELEGATIONS_TOOL_ANNOTATIONS = {
+  title: "List delegations",
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+async function persistSettledRunUsage(
+  conversationId: string | undefined,
+  waited: AgentRunResult,
+  agentId: string,
+  parentCallId: string | undefined,
+): Promise<void> {
+  if (!waited.usage || !conversationId || !conversationExists(conversationId)) {
+    return;
+  }
+  const event = {
+    type: "run_usage" as const,
+    runId: waited.id,
+    agentId,
+    usage: waited.usage,
+    ...(parentCallId !== undefined ? { parentCallId } : {}),
+  };
+  publishFrame(conversationId, { event, persist: true });
+  await appendEvent(conversationId, event);
+  runCostRecorder.onRunUsage({
+    conversationId,
+    runId: waited.id,
+    agentId,
+    ...(parentCallId !== undefined ? { parentCallId } : {}),
+    endedAt: Date.now(),
+  });
+}
 
 function delegateFailureFromWait(
   waited: AgentRunResult,
   agentId: string,
 ): Extract<DelegateResult, { ok: false }> {
+  const failureClass = classifyAgentFailure(waited.status, waited.error);
   const message =
     waited.status === "error"
       ? waited.error?.message ??
@@ -62,8 +160,11 @@ function delegateFailureFromWait(
       : `delegate: nested run ${waited.id} was cancelled`;
   return {
     ok: false,
-    failureClass: classifyAgentFailure(waited.status, waited.error),
-    isRetryable: isRetryableAgentFailure(waited.error),
+    failureClass,
+    // Auth is retryable even when the SDK omits the flag: the parent re-issues
+    // the delegation, and the SDK re-mints its token on that next request.
+    isRetryable:
+      failureClass === "auth" ? true : isRetryableAgentFailure(waited.error),
     message,
     agentId,
   };
@@ -98,18 +199,6 @@ export interface DelegateToolOptions {
   getCursorConversationId?: () => string | undefined;
   /** Override agents directory (tests). Defaults to the plugin `agents/`. */
   agentsDir?: string;
-  /**
-   * Called with an `auth` failure once, before it is returned to the caller.
-   * The nested run cannot recover on its own — it shares the workspace executor
-   * with the handle awaiting this tool call, so nothing it retries can mint a
-   * new token — which is why the failure has to travel up.
-   */
-  onAuthFailure?: (detail: {
-    delegationId: string;
-    agentId: string;
-    message: string;
-    parentCallId?: string;
-  }) => void;
 }
 
 type SlotWaiter = {
@@ -367,11 +456,13 @@ export function createDelegateCustomTools(
     customTools.delegations = {
       description:
         "List nested delegations for this conversation, most recent first.",
+      annotations: DELEGATIONS_TOOL_ANNOTATIONS,
+      outputSchema: toolOutputSchema(delegationsListingSchema),
       inputSchema: {
         type: "object",
         properties: {},
       },
-      execute: async (): Promise<SDKCustomToolResult> => {
+      execute: async (): Promise<DelegationsListing> => {
         if (
           !options.conversationId ||
           !conversationExists(options.conversationId)
@@ -416,6 +507,8 @@ export function createDelegateCustomTools(
     customTools.delegate = {
       description:
         "Delegate work to a named role. The app selects the role's pinned model. Returns ok: true with agentId and reply on success; ok: false with failureClass (auth | agent-failed | cancelled | host-process-died | stalled-before-first-token | transport-exhausted), isRetryable, message, and agentId on a runtime failure. Caller errors throw.",
+      annotations: DELEGATE_TOOL_ANNOTATIONS,
+      outputSchema: toolOutputSchema(delegateResultSchema),
       inputSchema: {
         type: "object",
         properties: {
@@ -594,14 +687,6 @@ export function createDelegateCustomTools(
             }
             const failure = delegateFailureFromWait(waited, agentId);
             endFailureClass = failure.failureClass;
-            if (failure.failureClass === "auth") {
-              options.onAuthFailure?.({
-                delegationId,
-                agentId,
-                message: failure.message,
-                ...(parentCallId !== undefined ? { parentCallId } : {}),
-              });
-            }
             return failure;
           };
 
@@ -669,6 +754,12 @@ export function createDelegateCustomTools(
               // Prefer wait()'s terminal status (e.g. cancelled) over an
               // iterator abort error, matching the conversation pump.
               const waitedAfterAbort = await run.wait();
+              await persistSettledRunUsage(
+                options.conversationId,
+                waitedAfterAbort,
+                agentId,
+                parentCallId,
+              );
               if (waitedAfterAbort.status === "cancelled") {
                 return reportFailure(waitedAfterAbort);
               }
@@ -679,6 +770,12 @@ export function createDelegateCustomTools(
             }
 
             const waited = await run.wait();
+            await persistSettledRunUsage(
+              options.conversationId,
+              waited,
+              agentId,
+              parentCallId,
+            );
             if (waited.status === "error") {
               return reportFailure(waited);
             }

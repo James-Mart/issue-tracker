@@ -10,6 +10,7 @@ import type {
   AgentRunResult,
   AgentSdk,
   AgentSendOptions,
+  AgentSteerOutcome,
   AgentStreamEvent,
   CreateAgentOptions,
   ResumeAgentOptions,
@@ -192,6 +193,8 @@ export interface FakeSend {
 export interface FakeAgentHandle extends AgentHandle {
   /** Every `send(...)` recorded in order. */
   readonly sends: FakeSend[];
+  /** Every `steer(...)` on an in-flight run, in order. */
+  readonly steers: string[];
   /** Whether `cancel()` was called. */
   cancelled: boolean;
   /** Whether the handle was disposed. */
@@ -221,6 +224,13 @@ export interface FakeAgentSdkOptions {
   holdAfterStream?: Promise<void>;
   /** When set, every `resumeAgent(...)` rejects with this error. */
   resumeError?: Error;
+  /** Outcome every in-flight run's `steer(...)` resolves to. Default delivered. */
+  steerResult?: AgentSteerOutcome;
+  /**
+   * When true (default), a delivered steer pushes a `type: "user"` stream
+   * message with the steered text so the event pipeline can persist it.
+   */
+  steerEmitsUserMessage?: boolean;
   /**
    * Per-send overrides consumed in order across every handle. Each entry
    * replaces `stream` and `waitResult` for one `send(...)`; once the script runs
@@ -273,15 +283,50 @@ export function createFakeAgentSdk(
   const sendScript = [...(options.sendScript ?? [])];
   let nextAgentSeq = 0;
 
+  class FakeRunEventQueue {
+    private readonly items: AgentStreamEvent[] = [];
+    private closed = false;
+    private resolveNext: (() => void) | undefined;
+
+    push(item: AgentStreamEvent): void {
+      if (this.closed) return;
+      this.items.push(item);
+      this.wake();
+    }
+
+    close(): void {
+      this.closed = true;
+      this.wake();
+    }
+
+    private wake(): void {
+      this.resolveNext?.();
+      this.resolveNext = undefined;
+    }
+
+    async *[Symbol.asyncIterator](): AsyncGenerator<AgentStreamEvent, void> {
+      while (true) {
+        while (this.items.length > 0) {
+          yield this.items.shift() as AgentStreamEvent;
+        }
+        if (this.closed) return;
+        await new Promise<void>((resolve) => {
+          this.resolveNext = resolve;
+        });
+      }
+    }
+  }
+
   function makeHandle(agentId: string): FakeAgentHandle {
     let abortHold: ((err: Error) => void) | undefined;
     const handle: FakeAgentHandle = {
       agentId,
       sends: [],
+      steers: [],
       cancelled: false,
       disposed: false,
-      async send(message, sendOptions = {}) {
-        handle.sends.push({ message, options: sendOptions });
+      async send(outbound, sendOptions = {}) {
+        handle.sends.push({ message: outbound, options: sendOptions });
         const scripted = sendScript.shift();
         if (scripted?.sendError) throw scripted.sendError;
         if (options.sendError) throw options.sendError;
@@ -291,9 +336,58 @@ export function createFakeAgentSdk(
         const runHoldAfterStream =
           scripted?.holdAfterStream ?? options.holdAfterStream;
         const runId = runResult?.id ?? FAKE_RUN_ID;
+        const queue = new FakeRunEventQueue();
+        void (async () => {
+          if (runHold) {
+            try {
+              await Promise.race([
+                runHold,
+                new Promise<never>((_, reject) => {
+                  abortHold = reject;
+                }),
+              ]);
+            } catch {
+              queue.close();
+              return;
+            }
+          }
+          for (const event of runStream) queue.push(event);
+          if (runHoldAfterStream) {
+            try {
+              await Promise.race([
+                runHoldAfterStream,
+                new Promise<never>((_, reject) => {
+                  abortHold = reject;
+                }),
+              ]);
+            } catch {
+              queue.close();
+              return;
+            }
+          }
+          queue.close();
+        })();
+        const steerResult = options.steerResult ?? "complete_delivered";
+        const steerEmitsUserMessage = options.steerEmitsUserMessage ?? true;
         const run: AgentRun = {
           id: runId,
           model: undefined,
+          async steer(text: string) {
+            handle.steers.push(text);
+            if (steerResult === "complete_delivered" && steerEmitsUserMessage) {
+              queue.push(
+                message({
+                  type: "user",
+                  ...ids,
+                  message: {
+                    role: "user",
+                    content: [{ type: "text", text }],
+                  },
+                }),
+              );
+            }
+            return steerResult;
+          },
           wait: async () => {
             if (runResult) return runResult;
             if (handle.cancelled) {
@@ -302,23 +396,7 @@ export function createFakeAgentSdk(
             return { id: runId, status: "finished" };
           },
           async *[Symbol.asyncIterator]() {
-            if (runHold) {
-              await Promise.race([
-                runHold,
-                new Promise<never>((_, reject) => {
-                  abortHold = reject;
-                }),
-              ]);
-            }
-            for (const event of runStream) yield event;
-            if (runHoldAfterStream) {
-              await Promise.race([
-                runHoldAfterStream,
-                new Promise<never>((_, reject) => {
-                  abortHold = reject;
-                }),
-              ]);
-            }
+            yield* queue;
           },
         };
         return run;
@@ -357,6 +435,9 @@ export function createFakeAgentSdk(
       resumed.push({ agentId, storeDir, options: resumeOptions });
       if (options.resumeError) throw options.resumeError;
       return makeHandle(agentId);
+    },
+    async prewarmWorkspace() {
+      return async () => {};
     },
   };
 }

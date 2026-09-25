@@ -27,8 +27,9 @@ Use `CallMcpTool` against server `custom-user-tools`:
   role's frontmatter pin; do not pass a model. Returns `ok: true` with
   `agentId` and `reply` on success; `ok: false` with `failureClass`,
   `isRetryable`, `message`, and `agentId` on a runtime failure. Caller errors
-  still throw. On `failureClass`: `auth` — nothing; the app is already
-  recovering and the turn is about to cancel; `cancelled` — report the
+  still throw. On `failureClass`: `auth` — retryable; re-issue the
+  delegation once; a second `auth` failure is escalated per judgment;
+  `cancelled` — report the
   decision, do not retry; `host-process-died` — the host died before the run
   finished; whether the lost work still matters is the caller's decision;
   `stalled-before-first-token` — retryable; re-issue the delegation;

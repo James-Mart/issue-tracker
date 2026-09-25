@@ -15,6 +15,7 @@ export function transcriptScrollerBottomKey(
   events: TranscriptEvent[],
   pendingMessageText?: string | null,
   keyboardInsetPx = 0,
+  steeringText?: string | null,
 ): string {
   const eventKey = events
     .map((event, index) => {
@@ -29,8 +30,11 @@ export function transcriptScrollerBottomKey(
       }
     })
     .join("|");
-  const contentKey = pendingMessageText
-    ? `${eventKey}|pending:${pendingMessageText.length}:${pendingMessageText}`
-    : eventKey;
-  return `inset:${keyboardInsetPx}|${contentKey}`;
+  const pendingKey = pendingMessageText
+    ? `|pending:${pendingMessageText.length}:${pendingMessageText}`
+    : "";
+  const steeringKey = steeringText
+    ? `|steering:${steeringText.length}:${steeringText}`
+    : "";
+  return `inset:${keyboardInsetPx}|${eventKey}${pendingKey}${steeringKey}`;
 }

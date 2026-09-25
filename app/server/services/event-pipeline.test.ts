@@ -113,6 +113,76 @@ describe("extractTaskHints", () => {
   });
 });
 
+describe("EventPipeline user stream message", () => {
+  let root: string;
+  let issuesRoot: string;
+  let workspaceDir: string;
+
+  const AT = "2026-07-25T12:00:00.000Z";
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "issue-pipeline-user-"));
+    issuesRoot = join(root, "issues");
+    mkdirSync(issuesRoot, { recursive: true });
+    workspaceDir = mkdtempSync(join(tmpdir(), "issue-pipeline-ws-"));
+    mkdirSync(join(workspaceDir, ".git"));
+    vi.resetModules();
+    vi.stubEnv("ISSUES_DIR", issuesRoot);
+    mkdirSync(join(issuesRoot, "platform"), { recursive: true });
+    writeFileSync(
+      join(issuesRoot, "platform", "issue.json"),
+      JSON.stringify({
+        id: "platform",
+        kind: "project",
+        title: "Platform",
+        workspace: workspaceDir,
+        createdAt: AT,
+        updatedAt: AT,
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(root, { recursive: true, force: true });
+    rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  it("persists a delivered steer user message as a prompt event", async () => {
+    const { createConversation, readConversation } = await import(
+      "./conversations.js"
+    );
+    const { EventPipeline } = await import("./event-pipeline.js");
+    const meta = await createConversation({
+      title: "Steered user",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const pipeline = new EventPipeline(meta.id);
+    await pipeline.handle({
+      kind: "message",
+      message: {
+        type: "user",
+        agent_id: "agent-1",
+        run_id: "run-1",
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "steer mid-run" }],
+        },
+      },
+    });
+
+    const { transcript } = readConversation(meta.id);
+    expect(transcript).toEqual([
+      expect.objectContaining({
+        type: "prompt",
+        text: "steer mid-run",
+      }),
+    ]);
+  });
+});
+
 describe("EventPipeline.handleDelegation usage", () => {
   let root: string;
   let issuesRoot: string;
@@ -188,7 +258,41 @@ describe("EventPipeline.handleDelegation usage", () => {
         type: "usage",
         usage,
         parentCallId: "call-nested",
+        runId: "run-nested",
       }),
     ]);
+  });
+
+  it("persists session-root usage with the SDK run id", async () => {
+    const { createConversation, readConversation } = await import(
+      "./conversations.js"
+    );
+    const { EventPipeline } = await import("./event-pipeline.js");
+    const meta = await createConversation({
+      title: "Root usage",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+
+    const pipeline = new EventPipeline(meta.id);
+    await pipeline.handle({
+      kind: "message",
+      message: {
+        type: "usage",
+        agent_id: "agent-root",
+        run_id: "run-root",
+        usage,
+      },
+    });
+
+    const { transcript } = readConversation(meta.id);
+    expect(transcript).toEqual([
+      expect.objectContaining({
+        type: "usage",
+        usage,
+        runId: "run-root",
+      }),
+    ]);
+    expect(transcript[0]).not.toHaveProperty("parentCallId");
   });
 });

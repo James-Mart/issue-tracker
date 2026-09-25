@@ -39,8 +39,7 @@ import {
   transcriptInfoLine,
 } from "../lib/transcript-rows";
 import {
-  formatUsageTotals,
-  sumUsageTotals,
+  formatThreadStatus,
   threadRunLabel,
 } from "../lib/thread-status";
 import { MessageScroller } from "@/components/ui/message-scroller";
@@ -275,6 +274,21 @@ function PromptEventAttachments({
   return <div className="mt-2 flex min-w-0 flex-col gap-2">{segments}</div>;
 }
 
+function SteeringDelivering({ text }: { text: string }) {
+  return (
+    <div className="mt-3 flex min-w-0 justify-end" data-testid="steering-delivering">
+      <div className="min-w-0 max-w-[min(85%,100%)] rounded-lg border border-dashed border-border/70 bg-muted/30 px-3.5 py-2.5 opacity-70">
+        <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          Delivering…
+        </p>
+        <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+          {text}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function PromptEvent({
   text,
   attachments,
@@ -410,6 +424,8 @@ function TranscriptEventRow({
     case "task":
     case "status":
     case "usage":
+    case "run_usage":
+    case "run_cost":
     case "request":
     case "delegation_recovery":
     case "host_crash_recovery": {
@@ -473,6 +489,8 @@ function ThreadBody({
   isRefetchingHistory,
   onRetryHistory,
   pendingMessageText,
+  steeringText,
+  pendingSteerFallback,
   runActive,
   conversationId,
   model,
@@ -486,6 +504,8 @@ function ThreadBody({
   isRefetchingHistory: boolean;
   onRetryHistory: () => void;
   pendingMessageText: string | null;
+  steeringText: string | null;
+  pendingSteerFallback: boolean;
   runActive: boolean;
   conversationId: string;
   model: string;
@@ -535,7 +555,7 @@ function ThreadBody({
     );
   }
 
-  if (events.length === 0 && !pendingMessageText) {
+  if (events.length === 0 && !pendingMessageText && !steeringText) {
     return (
       <div className={cn("mx-auto w-full min-w-0 p-4", READING_MEASURE_CLASS)}>
         <ShellState
@@ -651,6 +671,7 @@ function ThreadBody({
         events,
         pendingMessageText,
         keyboardInset,
+        steeringText,
       )}
       className="min-w-0 overflow-x-hidden px-4 py-4"
       role="log"
@@ -660,12 +681,14 @@ function ThreadBody({
     >
       <div className={cn("mx-auto w-full min-w-0", READING_MEASURE_CLASS)}>
         {transcriptRows}
+        {steeringText ? <SteeringDelivering text={steeringText} /> : null}
         {pendingMessageText ? (
           <PendingMessageRow
             conversationId={conversationId}
             text={pendingMessageText}
             runActive={runActive}
             model={model}
+            steerFallback={pendingSteerFallback}
           />
         ) : null}
       </div>
@@ -681,8 +704,7 @@ function ThreadStatusStrip({
   events: readonly TranscriptEvent[];
 }) {
   const label = threadRunLabel(runActive);
-  const totals = sumUsageTotals(events);
-  const usageText = formatUsageTotals(totals);
+  const usageText = formatThreadStatus(events, runActive);
 
   return (
     <div
@@ -830,6 +852,8 @@ export function ConversationThread({
     streamRunActive,
     runResyncKey,
     pendingText,
+    steeringText,
+    pendingSteerFallback,
     historyFailed,
     refetchHistory,
     isRefetchingHistory,
@@ -886,6 +910,8 @@ export function ConversationThread({
           isRefetchingHistory={isRefetchingHistory}
           onRetryHistory={() => void refetchHistory()}
           pendingMessageText={pendingMessageText}
+          steeringText={steeringText}
+          pendingSteerFallback={pendingSteerFallback}
           runActive={runActive}
           conversationId={conversationId}
           model={meta?.model ?? ""}

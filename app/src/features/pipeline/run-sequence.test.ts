@@ -10,8 +10,10 @@ import {
   failedLifelineId,
   displayedDurationMs,
   formatSequenceDuration,
+  formatSequenceHeaderTotals,
   formatSequenceTokenTotal,
   formatSequenceTokens,
+  formatSequenceTokensAndCost,
   frontierBeatIndex,
   isCollapsedBeat,
   lifelineTail,
@@ -172,6 +174,28 @@ describe("formatSequenceTokens", () => {
     expect(formatSequenceTokens(1_918_558)).toBe("1.9M");
     expect(formatSequenceTokens(undefined)).toBeUndefined();
     expect(formatSequenceTokenTotal(184_420)).toBe("184k tokens");
+  });
+});
+
+describe("formatSequenceTokensAndCost", () => {
+  const settled = {
+    runs: [
+      {
+        runId: "run-1",
+        legacy: false,
+        pending: false,
+        status: "settled" as const,
+        rawCostCents: 42,
+      },
+    ],
+  };
+
+  it("places the cost clause after the tokens", () => {
+    expect(formatSequenceTokensAndCost(98_000, settled)).toBe("98k · $0.42");
+    expect(formatSequenceHeaderTotals(184_420, settled)).toBe(
+      "184k tokens · $0.42",
+    );
+    expect(formatSequenceTokensAndCost(98_000, undefined)).toBe("98k");
   });
 });
 

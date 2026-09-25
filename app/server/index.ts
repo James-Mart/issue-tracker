@@ -25,6 +25,8 @@ const { refreshAgentModelSlugCatalog } = await import(
 );
 const { listenPort } = await import("./config.js");
 const { agentSessions } = await import("./services/agent-sessions.js");
+const { disposeSessionsAndReleasePrewarm, prewarmProjectWorkspaces } =
+  await import("./services/workspace-prewarm.js");
 const { validateHookRegistration } = await import(
   "./services/hook-registration.js"
 );
@@ -47,11 +49,17 @@ const { startStoreBackupSnapshotDriver } = await import(
 startStoreBackupSnapshotDriver();
 
 const app = createApp();
+const prewarmReleases = await prewarmProjectWorkspaces();
 
 const { scrubOrphanedRunsAtBoot } = await import(
   "./services/orphan-run-scrub.js"
 );
 await scrubOrphanedRunsAtBoot();
+
+const { resumeRunCostPollingAtBoot } = await import(
+  "./services/run-cost-recorder.js"
+);
+await resumeRunCostPollingAtBoot();
 
 const { closeOpenDelegationsAtBoot } = await import(
   "./services/open-delegation-boot.js"
@@ -86,7 +94,10 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`received ${signal}; disposing agent sessions…`);
   let failed: unknown;
   try {
-    await agentSessions.disposeAll();
+    await disposeSessionsAndReleasePrewarm(
+      () => agentSessions.disposeAll(),
+      prewarmReleases,
+    );
     await stopAllMockupStacks();
   } catch (err) {
     failed = err;
