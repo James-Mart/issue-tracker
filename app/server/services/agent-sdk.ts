@@ -5,6 +5,7 @@ import {
   CursorSdkError,
   JsonlLocalAgentStore,
   composeLocalAgentStore,
+  createAgentPlatform,
   type AgentDefinition,
   type AgentOptions,
   type CursorRequestOptions,
@@ -55,6 +56,13 @@ export interface AgentSdk {
     storeDir: string,
     options: ResumeAgentOptions,
   ): Promise<AgentHandle>;
+  /**
+   * Resolve rules, skills, MCP, and ignore files for `cwd` before the first
+   * `send`. The options are the same ones {@link createAgent} builds for that
+   * cwd, so the warmed executor is the one a later agent hits. Returns a
+   * release the host holds until agents against that workspace are gone.
+   */
+  prewarmWorkspace(cwd: string): Promise<() => Promise<void>>;
 }
 
 export interface CreateAgentOptions {
@@ -172,6 +180,9 @@ export interface AgentSdkDeps {
     options?: Partial<AgentOptions>,
   ) => Promise<SDKAgent>;
   listSdkModels: (options?: CursorRequestOptions) => Promise<SDKModel[]>;
+  createPlatform: () => Promise<{
+    prewarmLocalWorkspace(options: AgentOptions): Promise<() => Promise<void>>;
+  }>;
   /** API key passed explicitly to every SDK call. */
   apiKey: string | undefined;
 }
@@ -185,53 +196,79 @@ const defaultDeps: AgentSdkDeps = {
   createSdkAgent: (options) => Agent.create(options),
   resumeSdkAgent: (agentId, options) => Agent.resume(agentId, options),
   listSdkModels: (options) => Cursor.models.list(options),
+  createPlatform: () => createAgentPlatform(),
   apiKey: cursorApiKey,
 };
 
 export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk {
   const deps: AgentSdkDeps = { ...defaultDeps, ...overrides };
 
+  function conversationAgentOptions(input: {
+    cwd: string;
+    model?: ModelSelection;
+    agentId?: string;
+    storeDir?: string;
+    agents?: Record<string, AgentDefinition>;
+    customTools?: Record<string, SDKCustomTool>;
+    tools?: NonNullable<AgentOptions["tools"]>;
+    disallowedTools?: NonNullable<AgentOptions["disallowedTools"]>;
+    /** Create and resume always pass `agents`, even when omitted. Prewarm does not. */
+    includeAgents: boolean;
+    /** Create always passes `agentId`, even when omitted. Resume and prewarm do not. */
+    includeAgentId: boolean;
+  }): AgentOptions {
+    return {
+      apiKey: deps.apiKey,
+      ...(input.model !== undefined ? { model: input.model } : {}),
+      ...(input.includeAgentId ? { agentId: input.agentId } : {}),
+      ...(input.includeAgents ? { agents: input.agents } : {}),
+      ...(input.tools !== undefined ? { tools: input.tools } : {}),
+      disallowedTools: input.disallowedTools ?? DISALLOWED_BUILTIN_TOOLS,
+      local:
+        input.storeDir !== undefined
+          ? localRuntime(input.cwd, input.storeDir, input.customTools)
+          : localWorkspace(input.cwd, input.customTools),
+    };
+  }
+
   return {
     async listModels() {
       return deps.listSdkModels({ apiKey: deps.apiKey });
     },
 
-    async createAgent({
-      cwd,
-      model,
-      agentId,
-      storeDir,
-      agents,
-      customTools,
-      tools,
-      disallowedTools,
-    }) {
-      const sdkAgent = await deps.createSdkAgent({
-        apiKey: deps.apiKey,
-        model,
-        agentId,
-        agents,
-        ...(tools !== undefined ? { tools } : {}),
-        disallowedTools: disallowedTools ?? DISALLOWED_BUILTIN_TOOLS,
-        local: localRuntime(cwd, storeDir, customTools),
-      });
+    async createAgent(input) {
+      const sdkAgent = await deps.createSdkAgent(
+        conversationAgentOptions({
+          ...input,
+          includeAgents: true,
+          includeAgentId: true,
+        }),
+      );
       return wrapAgent(sdkAgent);
     },
 
-    async resumeAgent(
-      agentId,
-      storeDir,
-      { cwd, model, agents, customTools, tools, disallowedTools },
-    ) {
-      const sdkAgent = await deps.resumeSdkAgent(agentId, {
-        apiKey: deps.apiKey,
-        model,
-        agents,
-        ...(tools !== undefined ? { tools } : {}),
-        disallowedTools: disallowedTools ?? DISALLOWED_BUILTIN_TOOLS,
-        local: localRuntime(cwd, storeDir, customTools),
-      });
+    async resumeAgent(agentId, storeDir, input) {
+      const sdkAgent = await deps.resumeSdkAgent(
+        agentId,
+        conversationAgentOptions({
+          ...input,
+          storeDir,
+          includeAgents: true,
+          includeAgentId: false,
+        }),
+      );
       return wrapAgent(sdkAgent);
+    },
+
+    async prewarmWorkspace(cwd) {
+      const platform = await deps.createPlatform();
+      return platform.prewarmLocalWorkspace(
+        conversationAgentOptions({
+          cwd,
+          includeAgents: false,
+          includeAgentId: false,
+        }),
+      );
     },
   };
 }
@@ -245,6 +282,20 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
  * no default worth inheriting — omit it and the SDK loads no config layers at
  * all, which drops the plugin-packaged skills and agents this app relies on.
  */
+const SETTING_SOURCES = ["user", "project", "plugins"] as const;
+
+/** Workspace fields that key the local executor. Create, resume, and prewarm share them. */
+function localWorkspace(
+  cwd: string,
+  customTools: Record<string, SDKCustomTool> | undefined,
+): NonNullable<AgentOptions["local"]> {
+  return {
+    cwd,
+    settingSources: [...SETTING_SOURCES],
+    ...(customTools !== undefined ? { customTools } : {}),
+  };
+}
+
 function localRuntime(
   cwd: string,
   storeDir: string,
@@ -252,8 +303,7 @@ function localRuntime(
 ): NonNullable<AgentOptions["local"]> {
   const jsonl = new JsonlLocalAgentStore(storeDir);
   return {
-    cwd,
-    settingSources: ["user", "project", "plugins"],
+    ...localWorkspace(cwd, customTools),
     store: composeLocalAgentStore({
       agents: jsonl.agents,
       runs: jsonl.runs,

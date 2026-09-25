@@ -177,6 +177,7 @@ describe("coalesceCustomTools", () => {
           throw new Error("replay must not resume");
         },
         listModels: async () => [],
+        prewarmWorkspace: async () => async () => {},
       },
       cwd: "/tmp",
       storeDir: "/tmp",

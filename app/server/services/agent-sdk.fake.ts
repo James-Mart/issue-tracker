@@ -358,5 +358,8 @@ export function createFakeAgentSdk(
       if (options.resumeError) throw options.resumeError;
       return makeHandle(agentId);
     },
+    async prewarmWorkspace() {
+      return async () => {};
+    },
   };
 }
