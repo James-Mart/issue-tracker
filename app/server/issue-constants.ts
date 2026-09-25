@@ -17,6 +17,16 @@ export const SUPPORTING_DOC_KEYS = [
 ] as const;
 export type SupportingDocKey = (typeof SUPPORTING_DOC_KEYS)[number];
 
+export const RUNTIME_PHASE_KEYS = [
+  "build",
+  "start",
+  "readiness",
+  "seed",
+  "redeploy",
+  "baseUrl",
+] as const;
+export type RuntimePhaseKey = (typeof RUNTIME_PHASE_KEYS)[number];
+
 /** Chip color for a Project catalog label (`#RRGGBB` only). */
 export const LABEL_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 

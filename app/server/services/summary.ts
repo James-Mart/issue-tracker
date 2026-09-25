@@ -1,5 +1,12 @@
 import { existsSync } from "fs";
-import type { Issue, IssueKind, InspirationApps, Personas, SupportingDocs } from "../schemas.js";
+import type {
+  Issue,
+  IssueKind,
+  InspirationApps,
+  Personas,
+  Runtime,
+  SupportingDocs,
+} from "../schemas.js";
 import { KIND_LABEL, kindHas } from "../kind.js";
 import { attachmentPath, listAttachments } from "./attachments.js";
 import { IssueError } from "./errors.js";
@@ -7,6 +14,7 @@ import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
 import { formatInspirationAppsLine } from "./inspiration-apps.js";
 import { formatPersonasLine } from "./personas.js";
+import { formatRuntimeLine } from "./runtime.js";
 import {
   formatSupportingDocsLine,
   readMissionParagraph,
@@ -79,6 +87,7 @@ export interface IssueSummary {
   /** One-line mission paragraph from the vision doc's `## Mission` section. */
   mission?: string;
   supportingDocs?: SupportingDocs;
+  runtime?: Runtime;
   inspirationApps?: InspirationApps;
   personas?: Personas;
 }
@@ -135,6 +144,9 @@ export function buildSummary(
     ...(mission ? { mission } : {}),
     ...(root?.kind === "project" && root.supportingDocs
       ? { supportingDocs: root.supportingDocs }
+      : {}),
+    ...(root?.kind === "project" && root.runtime
+      ? { runtime: root.runtime }
       : {}),
     ...(root?.kind === "project" && root.inspirationApps
       ? { inspirationApps: root.inspirationApps }
@@ -202,6 +214,10 @@ export function formatSummary(summary: IssueSummary): string {
     if (node.kind === "project" && summary.supportingDocs) {
       const line = formatSupportingDocsLine(summary.supportingDocs);
       if (line) lines.push(`  supportingDocs: ${line}`);
+    }
+    if (node.kind === "project" && summary.runtime) {
+      const line = formatRuntimeLine(summary.runtime);
+      if (line) lines.push(`  runtime: ${line}`);
     }
     if (node.kind === "project" && summary.inspirationApps) {
       const line = formatInspirationAppsLine(summary.inspirationApps);

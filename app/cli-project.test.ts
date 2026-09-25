@@ -433,6 +433,101 @@ describe("project get/set", () => {
     expect(set.stderr).toContain('unknown or unsettable field "personas" for epic');
   });
 
+  it("sets, gets, clears, and surfaces runtime", async () => {
+    const buildScript = join(dir, "build.sh");
+    writeFileSync(buildScript, "npm run build");
+    try {
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "runtime",
+          "--phase",
+          "build",
+          "--file",
+          buildScript,
+        ], { env: env() })).status,
+      ).toBe(0);
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "runtime",
+          "--phase",
+          "start",
+          "--file",
+          "-",
+        ], {
+          env: env(),
+          stdin: "npm start\n",
+        })).status,
+      ).toBe(0);
+
+      const got = await runIssueCli(["project", "get", "p", "runtime"], { env: env() });
+      expect(got.status).toBe(0);
+      expect(JSON.parse(got.stdout)).toEqual({
+        build: "npm run build",
+        start: "npm start\n",
+      });
+
+      const view = await runIssueCli(["project", "view", "p"], { env: env() });
+      expect(view.stdout).toContain("runtime: build, start");
+
+      const summary = await runIssueCli(["summary", "p"], { env: env() });
+      expect(summary.stdout).toContain("  runtime: build, start");
+
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "runtime",
+          "--clear",
+          "--phase",
+          "build",
+        ], { env: env() })).status,
+      ).toBe(0);
+      expect(JSON.parse((await runIssueCli(["project", "get", "p", "runtime"], { env: env() })).stdout)).toEqual({
+        start: "npm start\n",
+      });
+
+      expect((await runIssueCli(["project", "set", "p", "runtime", "--clear"], { env: env() })).status).toBe(0);
+      expect((await runIssueCli(["project", "get", "p", "runtime"], { env: env() })).stdout).toBe("");
+    } finally {
+      rmSync(buildScript, { force: true });
+    }
+  });
+
+  it("refuses invalid runtime sets", async () => {
+    const unknownPhase = await runIssueCli([
+      "project",
+      "set",
+      "p",
+      "runtime",
+      "--phase",
+      "deploy",
+      "--file",
+      "-",
+    ], { env: env(), stdin: "echo hi\n" });
+    expect(unknownPhase.status).toBe(1);
+    expect(unknownPhase.stderr).toContain("unknown runtime phase");
+
+    const emptyPhase = await runIssueCli([
+      "project",
+      "set",
+      "p",
+      "runtime",
+      "--phase",
+      "build",
+      "--file",
+      "-",
+    ], { env: env(), stdin: "" });
+    expect(emptyPhase.status).toBe(1);
+    expect(emptyPhase.stderr).toContain("cannot be empty");
+  });
+
   it("refuses invalid supportingDocs sets", async () => {
     const ws = makeGitWorkspace();
     try {

@@ -197,6 +197,30 @@ describe("apply — update preserves imperative progress state", () => {
     ]);
   });
 
+  it("preserves project runtime when the doc updates a project", async () => {
+    const { apply, update } = await loadService();
+    await apply(baseDoc());
+
+    await update("proj", {
+      runtime: {
+        build: "npm run build",
+        start: "npm start",
+      },
+    });
+
+    const doc = baseDoc();
+    doc.project.title = "Project with runtime preserved";
+    const summary = await apply(doc);
+    expect(summary.updated).toContain("proj");
+
+    const proj = readIssue("proj");
+    expect(proj.title).toBe("Project with runtime preserved");
+    expect(proj.runtime).toEqual({
+      build: "npm run build",
+      start: "npm start",
+    });
+  });
+
   it("preserves project personas when the doc updates a project", async () => {
     const { apply, update } = await loadService();
     await apply(baseDoc());

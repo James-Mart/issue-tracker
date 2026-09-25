@@ -31,6 +31,7 @@ export const PROJECT_FIELD_KEYS = [
   ...PROJECT_FORM_FIELD_KEYS,
   "labels",
   "supportingDocs",
+  "runtime",
   "inspirationApps",
   "personas",
 ] as const;
@@ -159,6 +160,7 @@ export type ClearableKey = (typeof CLEARABLE_KEYS)[number];
 // Object-valued mergeable keys cleared with `null` (or `{}`) → field absent.
 export const NULL_CLEARABLE_OBJECT_KEYS = [
   "supportingDocs",
+  "runtime",
 ] as const satisfies readonly (keyof IssueFields)[];
 
 export type NullClearableObjectKey = (typeof NULL_CLEARABLE_OBJECT_KEYS)[number];
@@ -210,6 +212,7 @@ export const FIELD_LABELS = {
   noDiff: "No diff",
   labels: "Labels",
   supportingDocs: "Supporting docs",
+  runtime: "Runtime",
   inspirationApps: "Inspiration apps",
   personas: "Personas",
   stakeholder: "Stakeholder",

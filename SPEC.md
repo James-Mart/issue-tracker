@@ -499,7 +499,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 
 | kind | settable fields |
 | --- | --- |
-| project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `maxImplementingRuns`, `autonomous`, `labels`, `supportingDocs`, `description` |
+| project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `maxImplementingRuns`, `autonomous`, `labels`, `supportingDocs`, `runtime`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `workQueuedAt`, `description` |
 | idea | `title`, `archived`, `outlineGate`, `executionGate`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `workQueuedAt`, `description` |
@@ -526,6 +526,10 @@ and refuses a sha already present on that Task. Whole-series replace uses
   `--attachment <name>` or `--workspace <path>`. `--clear` blanks the whole
   field; `--clear --doc <key>` removes one key. See
   [Project supporting docs](#project-supporting-docs).
+- **Project `runtime`:** no positional value. Set one phase with
+  `--phase build|start|readiness|seed|redeploy|baseUrl` plus `--file <path|->`.
+  `--clear` blanks the whole field; `--clear --phase <name>` removes one phase.
+  See [Project runtime](#project-runtime).
 - `--clear` (mutually exclusive with a positional value / `--add` / `--remove` /
   `--rename`):
   - **Clearable scalars** (`assignee`, `branchName`, `stackedOn`,
@@ -534,6 +538,8 @@ and refuses a sha already present on that Task. Whole-series replace uses
   - **Project `labels`**: sets `[]` (empty catalog).
   - **Project `supportingDocs`**: blanks the field (absent / `null`); with
     `--doc <key>`, removes only that key.
+  - **Project `runtime`**: blanks the field (absent / `null`); with
+    `--phase <name>`, removes only that phase.
   - **`needsAttention`**: sets `false` and clears `attentionReason` (same as
     `needsAttention false`).
 - `description`: omit positional value when `--file <path|->` is passed.
@@ -615,6 +621,7 @@ Project — the common-to-every-kind fields plus:
 | `autonomous` | boolean? | absent until set; when true, creating an Idea with a `stakeholder` queues auto-plan at creation (see [Auto-plan queue](#auto-plan-queue)); `autonomous` governs only auto-plan at creation — auto-start of implementation applies in every Project |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
 | `supportingDocs` | `{ vision?, codingStandards?, designSystem?, gateRubric? }`? | optional pointers to vision / coding standards / design system / gate rubric docs (see [Project supporting docs](#project-supporting-docs)) |
+| `runtime` | `{ build?, start?, readiness?, seed?, redeploy?, baseUrl? }`? | optional imperative runtime phase scripts (see [Project runtime](#project-runtime)) |
 
 No `partOf`, no status, no assignee/needs-attention. Its `description.md` is a
 short overview of the Project.
@@ -720,6 +727,34 @@ short paragraph written for an agent audience, distilled from the rest of
 the doc. `issue summary` surfaces it on the Project section as a
 `Mission:` line (after `Workspace:` and before `supportingDocs:`). An
 absent heading means the line is omitted — not an error.
+
+### Project runtime
+
+A Project may declare how its runtime is built, started, seeded, checked,
+redeployed, and reached via the imperative `runtime` field. Each present key is
+an optional non-empty string (typically a shell command or script body):
+
+- `build`, `start`, `readiness`, `seed`, `redeploy`, `baseUrl`
+
+Unknown phase names and empty strings are refused at the store boundary (clear
+the phase instead of setting an empty string).
+
+**CLI.**
+
+```
+issue project set <id> runtime --phase build|start|readiness|seed|redeploy|baseUrl --file <path|->
+issue project set <id> runtime --clear
+issue project set <id> runtime --clear --phase <name>
+issue project get <id> runtime
+```
+
+`get` prints JSON. `project view` and `summary` surface a `runtime:` line listing
+which phases are set (names only). The Project API read payload includes
+`runtime`; the existing Project update path accepts it through the same store
+operation the CLI uses.
+
+**`apply`.** Imperative-only — same class as `supportingDocs`. `apply`
+preserves `runtime` and never reads or writes it from the YAML doc.
 
 ### Project workspace
 
