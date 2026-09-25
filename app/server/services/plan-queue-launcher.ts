@@ -9,12 +9,12 @@ import {
   createIssueChannelSession,
   startConversationPrompt,
 } from "./conversations.js";
-import { appendComment, list, update } from "./issues.js";
+import { appendComment, readAll, update } from "./issues.js";
 
 type QueuedIdea = Extract<Issue, { kind: "idea" }>;
 
 function queuedIdeas(): QueuedIdea[] {
-  const eligible = list().issues.filter(
+  const eligible = readAll().issues.filter(
     (issue): issue is QueuedIdea =>
       issue.kind === "idea" &&
       Boolean(issue.planQueuedAt) &&
