@@ -50,8 +50,9 @@ named no surface, ask for it before step 1.
    Conformance stub, asking for one direction unless the caller asked for a
    different count. Keep the returned nested agent id as `resumeId`.
 2. **Post the return.** Close with one message that carries both halves of
-   what the conformance agent returned. The embed lines and the live Storybook
-   base URL are the human half; every absolute capture path is the agent half.
+   what the conformance agent returned. The embed lines and one `[Open live
+   Storybook](...)` link per direction are the human half; every absolute
+   capture path is the agent half.
    Both ship in that single message, and neither substitutes for the other.
    When the return includes an escalation, post it whole the same way.
 3. **Wait.** The round stops here until the caller decides. Do not resume the

@@ -27,6 +27,7 @@
     "mockup-promote": "tsx scripts/mockup-promote.ts",
     "mockup-prune": "tsx scripts/mockup-prune.ts",
     "mockup-resolve": "tsx scripts/mockup-resolve.ts",
+    "mockup-live-links": "tsx scripts/mockup-live-links.ts",
     "install-hooks": "tsx scripts/install-cursor-hooks.ts",
     "migrate-comment-ids": "tsx scripts/migrate-comment-ids.ts",
     "migrate-task-commits": "tsx scripts/migrate-task-commits.ts",
