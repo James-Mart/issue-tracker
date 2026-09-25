@@ -99,7 +99,10 @@ describe("agent sessions streaming", () => {
     ).toBe(true);
     const nestedLive = nested
       .filter((f) => !f.persist)
-      .map((f) => ({ kind: f.event.step.kind, status: f.event.step.status }));
+      .map(({ event: { step } }) => ({
+        kind: step.kind,
+        status: "status" in step ? step.status : undefined,
+      }));
     expect(nestedLive).toEqual([
       { kind: "text", status: undefined },
       { kind: "thinking", status: undefined },
@@ -134,14 +137,14 @@ describe("agent sessions streaming", () => {
     ]);
     expect(transcript[0]).toMatchObject({ type: "assistant", text: "On it." });
     expect(
-      transcript.filter(
-        (e) => e.type === "tool_call" && e.callId === PRIMARY_TOOL_CALL_ID,
-      ).map((e) => e.status),
+      transcript.flatMap((e) =>
+        e.type === "tool_call" && e.callId === PRIMARY_TOOL_CALL_ID ? [e.status] : [],
+      ),
     ).toEqual(["running", "completed"]);
     expect(
-      transcript.filter(
-        (e) => e.type === "tool_call" && e.callId === TASK_TOOL_CALL_ID,
-      ).map((e) => e.status),
+      transcript.flatMap((e) =>
+        e.type === "tool_call" && e.callId === TASK_TOOL_CALL_ID ? [e.status] : [],
+      ),
     ).toEqual(["running", "completed"]);
   });
 
@@ -239,7 +242,7 @@ describe("agent sessions streaming", () => {
       cause: "never_started",
       error: expect.any(CursorAgentError),
     });
-    if (failed.ok) return;
+    if (failed.ok || failed.cause !== "never_started") return;
     expect(failed.error.message).toBe("Invalid API key");
     expect(sessionsA.getActiveRun(metaA.id)).toBeUndefined();
 
@@ -486,7 +489,7 @@ describe("agent sessions streaming", () => {
     expect(runFrames[1]!.event.seq).toBeGreaterThan(1);
 
     const { transcript } = readConversation(meta.id);
-    expect(transcript.some((e) => e.type === "run")).toBe(false);
+    expect(transcript.map((e) => e.type)).not.toContain("run");
   });
 
   it("publishes planning-run frames on the issues topic when an issue-anchored run starts and finishes", async () => {

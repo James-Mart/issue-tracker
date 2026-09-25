@@ -10,12 +10,16 @@ import { type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 function forkPointMarkers(container: ParentNode): HTMLElement[] {
-  return [...container.querySelectorAll('[data-testid="fork-point-inline-marker"]')];
+  return [
+    ...container.querySelectorAll<HTMLElement>(
+      '[data-testid="fork-point-inline-marker"]',
+    ),
+  ];
 }
 
 function transcriptLandmarks(container: ParentNode): HTMLElement[] {
   return [
-    ...container.querySelectorAll(
+    ...container.querySelectorAll<HTMLElement>(
       '[data-event], [data-testid="fork-point-inline-marker"]',
     ),
   ];

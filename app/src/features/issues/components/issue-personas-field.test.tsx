@@ -2,6 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { IssueDetail } from "@server/schemas";
 import { IssuePersonasField } from "./issue-personas-field";
 
 const mutateAsync = vi.fn();
@@ -24,15 +25,19 @@ vi.mock("../hooks/use-issue-patch-action", () => ({
 
 const t0 = "2026-08-10T12:00:00.000Z";
 
-const project = {
-  kind: "project" as const,
+const project: Extract<IssueDetail, { kind: "project" }> = {
+  kind: "project",
   id: "demo",
   title: "Demo",
-  mergePolicy: "manual" as const,
+  trunk: "main",
+  mergePolicy: "manual",
+  maxImplementingRuns: 1,
   order: 0,
   createdAt: t0,
   updatedAt: t0,
   personas: [{ name: "Planner", description: "Plans work" }],
+  description: "",
+  version: "1",
 };
 
 function mount(

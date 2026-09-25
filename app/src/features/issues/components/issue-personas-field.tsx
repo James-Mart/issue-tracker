@@ -34,11 +34,12 @@ export function IssuePersonasField({
       return;
     }
     setPersonasError(null);
-    if (result.personas === null) return;
+    const { personas } = result;
+    if (personas === null) return;
     void run(async () => {
       await update.mutateAsync({
         id: issue.id,
-        patch: { personas: result.personas },
+        patch: { personas },
       });
     });
   };

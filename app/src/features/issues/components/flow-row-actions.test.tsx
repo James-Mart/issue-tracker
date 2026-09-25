@@ -87,7 +87,10 @@ function idea(id: string, stakeholder?: string): IssueRecord {
   };
 }
 
-function story(id: string, prUrl?: string): IssueRecord {
+function story(
+  id: string,
+  prUrl?: string,
+): Extract<IssueRecord, { kind: "story" }> {
   return {
     id,
     kind: "story",
@@ -98,6 +101,7 @@ function story(id: string, prUrl?: string): IssueRecord {
     updatedAt: t0,
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,
@@ -105,7 +109,7 @@ function story(id: string, prUrl?: string): IssueRecord {
   };
 }
 
-function epic(id: string): IssueRecord {
+function epic(id: string): Extract<IssueRecord, { kind: "epic" }> {
   return {
     id,
     kind: "epic",
@@ -386,7 +390,7 @@ describe("FlowRowActions quiet buckets", () => {
         storyStatus: "merged",
       }),
     ]) {
-      const { container } = mountActions(item, vi.fn());
+      const { container } = mountActions(item);
       expect(buttonCount(container)).toBe(0);
     }
   });

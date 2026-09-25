@@ -57,22 +57,31 @@ describe("isImplementingWorkRoot", () => {
     id: "ship-it",
     title: "Ship it",
     partOf: "platform",
-    status: "open" as const,
+    blockedBy: [],
     order: 0,
     archived: false,
+    needsAttention: false,
+    attentionReason: null,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
+    description: "",
+    version: "1",
   };
   const projectStory = {
     kind: "story" as const,
     id: "root-story",
     title: "Root story",
     partOf: "platform",
-    status: "todo" as const,
+    merged: false,
+    reviewedTasks: [],
     order: 0,
     archived: false,
+    needsAttention: false,
+    attentionReason: null,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
+    description: "",
+    version: "1",
   };
 
   it("accepts Epics on the implementing channel", () => {

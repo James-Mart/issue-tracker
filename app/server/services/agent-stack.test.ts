@@ -34,7 +34,7 @@ vi.mock("node:child_process", async (importOriginal) => {
     ) =>
       spawnDelegate.impl
         ? spawnDelegate.impl(command, args, options)
-        : actual.spawn(command, args, options),
+        : actual.spawn(command, args, options ?? {}),
   };
 });
 
@@ -43,7 +43,7 @@ function realSpawn(
   args: readonly string[],
   options?: import("node:child_process").SpawnOptions,
 ): ChildProcess {
-  return spawnDelegate.actual!.spawn(command, args, options);
+  return spawnDelegate.actual!.spawn(command, args, options ?? {});
 }
 
 import { spawn } from "node:child_process";

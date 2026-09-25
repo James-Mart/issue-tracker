@@ -72,10 +72,12 @@ function project(id: string, title: string, order: number): IssueRecord {
     id,
     kind: "project",
     title,
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     order,
     createdAt: t0,
     updatedAt: t0,
-    archived: false,
   };
 }
 
@@ -137,14 +139,14 @@ function projectsTrigger(container: ParentNode): HTMLButtonElement | null {
 function menuCheckbox(label: string): HTMLElement | null {
   return (
     Array.from(
-      document.querySelectorAll('[role="menuitemcheckbox"]'),
+      document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]'),
     ).find((el) => el.textContent?.trim() === label) ?? null
   );
 }
 
 function menuItem(label: string): HTMLElement | null {
   return (
-    Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+    Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
       (el) => el.textContent?.trim() === label,
     ) ?? null
   );

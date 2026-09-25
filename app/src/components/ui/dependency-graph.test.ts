@@ -117,7 +117,10 @@ describe("DependencyGraph", () => {
       React.createElement(
         "div",
         { "data-theme": theme },
-        React.createElement(DependencyGraph, epicGraphProps()),
+        React.createElement(
+          DependencyGraph<DepGraphNode, DepGraphEdge>,
+          epicGraphProps(),
+        ),
       ),
     );
   }
@@ -171,7 +174,7 @@ describe("DependencyGraph", () => {
         {
           path: "/",
           element: React.createElement(
-            DependencyGraph,
+            DependencyGraph<DepGraphNode, DepGraphEdge>,
             epicGraphProps({
               nodeHref: (node) => `/epics/${node.id}`,
             }),
@@ -211,7 +214,7 @@ describe("DependencyGraph", () => {
     expect(byId.start!.y).toBeLessThan(byId.review!.y);
 
     const html = renderToStaticMarkup(
-      React.createElement(DependencyGraph, {
+      React.createElement(DependencyGraph<StepNode, StepEdge>, {
         model,
         renderNode: (node) =>
           React.createElement("span", { "data-kind": node.kind }, node.title),

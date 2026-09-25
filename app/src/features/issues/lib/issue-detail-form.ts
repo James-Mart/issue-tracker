@@ -20,7 +20,7 @@ export type ProjectMetaValue = { text: string; mono?: boolean; muted?: boolean }
 
 export function projectMetaValue(
   issue: Extract<IssueDetail, { kind: "project" }>,
-  key: ProjectFormFieldKey,
+  key: Extract<ProjectFormFieldKey, "workspace" | "trunk" | "mergePolicy">,
 ): ProjectMetaValue {
   switch (key) {
     case "workspace":

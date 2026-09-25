@@ -48,7 +48,10 @@ function story(overrides: Partial<Extract<IssueRecord, { kind: "story" }>> = {})
     partOf: "epic",
     order: 0,
     archived: false,
+    needsAttention: false,
+    attentionReason: null,
     merged: false,
+    reviewedTasks: [],
     createdAt: t0,
     updatedAt: t0,
     ...overrides,
@@ -208,7 +211,7 @@ describe("resolvePrChip / PrChip", () => {
       hasData: true,
       storyMerged: false,
     });
-    expect(model.label).toBe(prFactsChipLabel(facts));
+    expect(model).toMatchObject({ label: prFactsChipLabel(facts) });
   });
 });
 
@@ -231,6 +234,11 @@ describe("storyPrChipModel", () => {
       id: "e1",
       title: "Epic",
       partOf: "p1",
+      blockedBy: [],
+      order: 0,
+      needsAttention: false,
+      attentionReason: null,
+      archived: false,
       createdAt: t0,
       updatedAt: t0,
     };

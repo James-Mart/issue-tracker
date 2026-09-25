@@ -9,6 +9,11 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConversationFrame } from "./conversation-stream.js";
+
+function withSeq<T extends object>(event: T): T & { seq?: number } {
+  return event;
+}
 
 const AT = "2026-07-09T14:00:00.000Z";
 let root: string;
@@ -176,14 +181,14 @@ describe("conversation-stream catch-up buffer", () => {
 
   it("drops a malformed frame while still publishing a valid one", async () => {
     const { publishFrame, subscribeFrames, getFramesSince } = await load();
-    const received: Array<{ event: { seq?: number; text?: string } }> = [];
+    const received: ConversationFrame[] = [];
     const unsubscribe = subscribeFrames("conv-a", (frame) => {
       received.push(frame);
     });
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     publishFrame("conv-a", {
-      event: { type: "assistant" as const },
+      event: { type: "assistant" } as ConversationFrame["event"],
       persist: false,
     });
     publishFrame("conv-a", {
@@ -275,15 +280,15 @@ describe("conversation-stream sequence numbers", () => {
     });
     expect(persisted.seq).toBe(2);
 
-    const runEvent = {
+    const runEvent = withSeq({
       type: "run" as const,
       status: "started" as const,
       runId: "run-1",
-    };
+    });
     publishFrame(meta.id, { event: runEvent, persist: false });
     expect(runEvent.seq).toBe(3);
 
-    const pipelineEvent = { type: "thinking" as const, text: "hmm" };
+    const pipelineEvent = withSeq({ type: "thinking" as const, text: "hmm" });
     publishFrame(meta.id, { event: pipelineEvent, persist: true });
     expect(pipelineEvent.seq).toBe(4);
     const fromPipeline = await appendEvent(meta.id, pipelineEvent);
@@ -317,7 +322,7 @@ describe("conversation-stream sequence numbers", () => {
       model: "composer-2.5",
     });
 
-    const event = { type: "error" as const, message: "send failed" };
+    const event = withSeq({ type: "error" as const, message: "send failed" });
     const streamed: Array<{ event: { seq?: number; message?: string } }> = [];
     const unsubscribe = subscribeFrames(meta.id, (frame) => {
       streamed.push(frame);
@@ -363,7 +368,7 @@ describe("conversation-stream sequence numbers", () => {
     const { publishFrame } = await loadConversationStream();
     const { appendEvent: appendAfterReload } = await loadConversations();
 
-    const liveOnly = { type: "pending" as const, text: "queued" };
+    const liveOnly = withSeq({ type: "pending" as const, text: "queued" });
     publishFrame(meta.id, { event: liveOnly, persist: false });
     expect(liveOnly.seq).toBe(3);
 

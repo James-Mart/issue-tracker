@@ -34,6 +34,9 @@ function task(
     updatedAt: t0,
     status,
     commits: [],
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
     ...extras,
   };
 }
@@ -48,7 +51,6 @@ function idea(id: string, title: string): IssueRecord {
     createdAt: t0,
     updatedAt: t0,
     archived: false,
-    description: "",
     labels: [],
   };
 }
@@ -63,7 +65,10 @@ function story(): Extract<IssueDetail, { kind: "story" }> {
     createdAt: t0,
     updatedAt: t0,
     archived: false,
+    needsAttention: false,
+    attentionReason: null,
     description: "",
+    version: "1",
     labels: [],
     merged: false,
     reviewedTasks: [],

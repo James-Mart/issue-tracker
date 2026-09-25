@@ -7,8 +7,10 @@ import {
   mergeTranscriptDeltas,
 } from "./use-conversation-events";
 
+type WithoutAt<T> = T extends unknown ? Omit<T, "at"> : never;
+
 function at(
-  event: Omit<TranscriptEvent, "at">,
+  event: WithoutAt<TranscriptEvent>,
   stamp = "2026-07-24T00:00:00.000Z",
 ): TranscriptEvent {
   return { ...event, at: stamp } as TranscriptEvent;

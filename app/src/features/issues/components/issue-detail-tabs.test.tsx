@@ -94,10 +94,10 @@ function idea(): IssueDetail {
     order: 0,
     createdAt: t0,
     updatedAt: t0,
-    blockedBy: [],
     archived: false,
     description: "",
     labels: [],
+    version: "1",
   };
 }
 
@@ -116,6 +116,7 @@ function epic(): IssueDetail {
     labels: [],
     needsAttention: false,
     attentionReason: null,
+    version: "1",
   };
 }
 

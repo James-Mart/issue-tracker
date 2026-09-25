@@ -10,6 +10,8 @@ import {
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentSessions } from "./agent-sessions.js";
+import type { ConversationFrame } from "./conversation-stream.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 let root: string;
@@ -69,6 +71,24 @@ async function loadService() {
 
 async function loadConfig() {
   return import("../config.js");
+}
+
+function stubSessions() {
+  return {
+    sendPrompt: vi.fn<AgentSessions["sendPrompt"]>(async () => ({
+      ok: true,
+      run: {
+        id: "run-1",
+        startedAt: AT,
+        wait: async () => ({ id: "run-1", status: "finished" }),
+      },
+    })),
+    getActiveRun: () => undefined,
+    listActiveRuns: () => [],
+    cancel: async () => false,
+    dispose: async () => {},
+    disposeAll: async () => {},
+  } satisfies AgentSessions;
 }
 
 describe("conversations store", () => {
@@ -741,10 +761,7 @@ describe("appendEvent prompt live frames", () => {
       projectId: "platform",
       model: "composer-2.5",
     });
-    const streamed: Array<{
-      persist: boolean;
-      event: { type?: string; seq?: number; text?: string; at?: string };
-    }> = [];
+    const streamed: ConversationFrame[] = [];
     const unsubscribe = subscribeFrames(meta.id, (frame) => {
       streamed.push(frame);
     });
@@ -795,13 +812,7 @@ describe("prompt assembly", () => {
 
   it("sends text unchanged with no images when there are no attachments", async () => {
     const { createConversation, startConversationPrompt } = await loadService();
-    const sessions = {
-      sendPrompt: vi.fn(async () => ({
-        ok: true as const,
-        run: { id: "run-1" },
-      })),
-      getActiveRun: () => undefined,
-    };
+    const sessions = stubSessions();
 
     const meta = await createConversation({
       title: "Plain send",
@@ -827,13 +838,7 @@ describe("prompt assembly", () => {
     const { createConversation, startConversationPrompt, assembleAgentPrompt } =
       await loadService();
     const { putConversationAttachment } = await loadAttachments();
-    const sessions = {
-      sendPrompt: vi.fn(async () => ({
-        ok: true as const,
-        run: { id: "run-1" },
-      })),
-      getActiveRun: () => undefined,
-    };
+    const sessions = stubSessions();
 
     const meta = await createConversation({
       title: "Attach block",

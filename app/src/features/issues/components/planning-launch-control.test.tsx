@@ -188,7 +188,9 @@ const project: IssueRecord = {
   kind: "project",
   id: "platform",
   title: "Platform",
+  trunk: "main",
   mergePolicy: "manual",
+  maxImplementingRuns: 1,
   order: 0,
   createdAt: t0,
   updatedAt: t0,
@@ -199,14 +201,16 @@ const epic: IssueRecord = {
   id: "auth-epic",
   title: "Auth",
   partOf: "platform",
+  blockedBy: [],
   order: 0,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
 };
 
-const openStory: IssueRecord = {
+const openStory: Extract<IssueRecord, { kind: "story" }> = {
   kind: "story",
   id: "open-story",
   title: "OAuth callback hardening",
@@ -214,21 +218,18 @@ const openStory: IssueRecord = {
   order: 0,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
   merged: false,
+  reviewedTasks: [],
 };
 
 const mergedStory: IssueRecord = {
-  kind: "story",
+  ...openStory,
   id: "merged-story",
   title: "Session cookie rotation",
-  partOf: "auth-epic",
   order: 1,
-  archived: false,
-  needsAttention: false,
-  createdAt: t0,
-  updatedAt: t0,
   merged: true,
 };
 
@@ -241,6 +242,8 @@ const idea = {
   archived: false,
   createdAt: t0,
   updatedAt: t0,
+  description: "",
+  version: "1",
   stakeholder: issueState.stakeholder,
 };
 

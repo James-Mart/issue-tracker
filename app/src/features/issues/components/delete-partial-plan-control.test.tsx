@@ -28,6 +28,7 @@ function idea(id: string): Extract<IssueDetail, { kind: "idea" }> {
     archived: false,
     description: "",
     labels: [],
+    version: "1",
   };
 }
 

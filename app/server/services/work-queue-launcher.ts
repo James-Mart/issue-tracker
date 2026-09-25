@@ -1,9 +1,12 @@
 import { readAgentModelSlugCatalog } from "../agent-model-slugs.js";
 import { modelSlugCatalogPath } from "../config.js";
-import type { Issue, IssuePatch } from "../schemas.js";
+import type { Issue, IssuePatch, IssuesResponse } from "../schemas.js";
 import { FAKE_MODELS } from "./agent-sdk.fake.js";
 import type { AgentSessions } from "./agent-sessions.js";
-import { subscribeFrames } from "./conversation-stream.js";
+import {
+  subscribeFrames,
+  type ConversationFrame,
+} from "./conversation-stream.js";
 import {
   createIssueChannelSession,
   listConversations,
@@ -16,7 +19,7 @@ import {
   implementingSessionTitle,
 } from "./implementing-launch.js";
 import { ISSUES_TOPIC, startIssueEventsWatcher } from "./issue-events.js";
-import { list, update } from "./issues.js";
+import { list, readAll, update } from "./issues.js";
 import { drainPlanQueue } from "./plan-queue-launcher.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { projectContaining } from "./subtree.js";
@@ -43,13 +46,33 @@ function countActiveImplementingRuns(
   return count;
 }
 
-function oldestEligibleRoot(projectId: string): WorkRoot | undefined {
-  const { issues, derived } = list();
-  const byId = new Map(issues.map((issue) => [issue.id, issue]));
+type LauncherSnapshot = {
+  issues: Issue[];
+  derived: IssuesResponse["derived"];
+  byId: Map<string, Issue>;
+  attempted: Set<string>;
+};
+
+function hasQueuedWork(issues: Issue[]): boolean {
+  return issues.some(
+    (issue) =>
+      (issue.kind === "idea" &&
+        Boolean(issue.planQueuedAt) &&
+        Boolean(issue.stakeholder)) ||
+      ((issue.kind === "epic" || issue.kind === "story") &&
+        Boolean(issue.workQueuedAt)),
+  );
+}
+
+function oldestEligibleRoot(
+  projectId: string,
+  snapshot: LauncherSnapshot,
+): WorkRoot | undefined {
+  const { issues, derived, byId, attempted } = snapshot;
   const eligible: WorkRoot[] = [];
   for (const issue of issues) {
     if (issue.kind !== "epic" && issue.kind !== "story") continue;
-    if (!issue.workQueuedAt) continue;
+    if (!issue.workQueuedAt || attempted.has(issue.id)) continue;
     if (projectContaining(issue, byId) !== projectId) continue;
     const state = derived[issue.id];
     if (!state || state.blocked || state.planNotFinal) continue;
@@ -110,12 +133,14 @@ async function startQueuedRoot(
 
 async function drainProject(
   project: Extract<Issue, { kind: "project" }>,
+  snapshot: LauncherSnapshot,
   sessions: AgentSessions,
 ): Promise<void> {
   const cap = project.maxImplementingRuns;
   while (countActiveImplementingRuns(project.id, sessions) < cap) {
-    const root = oldestEligibleRoot(project.id);
+    const root = oldestEligibleRoot(project.id, snapshot);
     if (!root) return;
+    snapshot.attempted.add(root.id);
     try {
       await startQueuedRoot(root, project.id, sessions);
     } catch (err) {
@@ -126,20 +151,48 @@ async function drainProject(
   }
 }
 
-/** One launcher pass: drain queued work roots up to each Project's cap. */
+/**
+ * One launcher pass: drain queued work roots up to each Project's cap.
+ * `list()` is synchronous and scans the whole store, so a pass bails on a raw
+ * read when nothing is queued and otherwise derives at most once.
+ */
 export async function runLauncherPass(sessions: AgentSessions): Promise<void> {
+  if (!hasQueuedWork(readAll().issues)) return;
   await drainPlanQueue(sessions);
-  const projects = list().issues.filter(
+  const { issues, derived } = list();
+  const snapshot: LauncherSnapshot = {
+    issues,
+    derived,
+    byId: new Map(issues.map((issue) => [issue.id, issue])),
+    attempted: new Set(),
+  };
+  const projects = issues.filter(
     (issue): issue is Extract<Issue, { kind: "project" }> =>
       issue.kind === "project",
   );
   for (const project of projects) {
-    await drainProject(project, sessions);
+    await drainProject(project, snapshot, sessions);
   }
 }
 
+const DRAIN_DEBOUNCE_MS = 500;
+
 let draining: Promise<void> | null = null;
 let again = false;
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function isQueueRelevantFrame(frame: ConversationFrame): boolean {
+  const scope = (frame.event as { scope?: unknown }).scope;
+  return scope !== "comments" && scope !== "attachments";
+}
+
+function scheduleDebouncedDrain(sessions: AgentSessions): void {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    scheduleDrain(sessions);
+  }, DRAIN_DEBOUNCE_MS);
+}
 
 function scheduleDrain(sessions: AgentSessions): void {
   if (draining) {
@@ -162,8 +215,8 @@ function scheduleDrain(sessions: AgentSessions): void {
 
 /** Drain once at boot, then on each issues watcher frame. */
 export function startWorkQueueLauncher(sessions: AgentSessions): void {
-  subscribeFrames(ISSUES_TOPIC, () => {
-    scheduleDrain(sessions);
+  subscribeFrames(ISSUES_TOPIC, (frame) => {
+    if (isQueueRelevantFrame(frame)) scheduleDebouncedDrain(sessions);
   });
   startIssueEventsWatcher();
   scheduleDrain(sessions);

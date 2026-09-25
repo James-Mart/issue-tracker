@@ -28,21 +28,32 @@ const timestamps = {
   updatedAt: "2026-07-09T14:00:00.000Z",
 };
 
-function task(
-  id: string,
-  status: IssueRecord & { kind: "task" }["status"],
-): IssueRecord {
+type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
+type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
+type EpicRecord = Extract<IssueRecord, { kind: "epic" }>;
+type IdeaRecord = Extract<IssueRecord, { kind: "idea" }>;
+
+const workFields = {
+  order: 0,
+  needsAttention: false,
+  attentionReason: null,
+  archived: false,
+};
+
+function task(id: string, status: TaskRecord["status"]): TaskRecord {
   return {
     id,
     kind: "task",
     title: id,
     partOf: "story",
     status,
+    commits: [],
+    ...workFields,
     ...timestamps,
   };
 }
 
-function story(id: string): IssueRecord {
+function story(id: string): StoryRecord {
   return {
     id,
     kind: "story",
@@ -50,16 +61,32 @@ function story(id: string): IssueRecord {
     partOf: "epic",
     branchName: id,
     merged: false,
+    reviewedTasks: [],
+    ...workFields,
     ...timestamps,
   };
 }
 
-function epic(id: string): IssueRecord {
+function epic(id: string, partOf = "project"): EpicRecord {
   return {
     id,
     kind: "epic",
     title: id,
-    partOf: "project",
+    partOf,
+    blockedBy: [],
+    ...workFields,
+    ...timestamps,
+  };
+}
+
+function idea(id: string, partOf: string): IdeaRecord {
+  return {
+    id,
+    kind: "idea",
+    title: id,
+    partOf,
+    order: 0,
+    archived: false,
     ...timestamps,
   };
 }
@@ -135,7 +162,7 @@ describe("liveness helpers", () => {
     );
     expect(
       isInFlight(
-        { id: "e", kind: "epic", title: "e", partOf: "p", ...timestamps },
+        epic("e", "p"),
         { blocked: false, epicStatus: "in-progress" },
       ),
     ).toBe(false);
@@ -227,7 +254,7 @@ describe("isIssueComplete", () => {
   it("returns false for kinds without completion", () => {
     expect(
       isIssueComplete(
-        { id: "i", kind: "idea", title: "i", partOf: "p", ...timestamps },
+        idea("i", "p"),
         undefined,
       ),
     ).toBe(false);

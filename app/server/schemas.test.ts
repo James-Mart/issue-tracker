@@ -923,8 +923,8 @@ describe("subagent_update delegation fields", () => {
       delegationId: "del-live",
       model: "composer-2.5",
     });
-    expect(input.ok).toBe(true);
-    if (!input.ok) return;
+    expect(input.ok && input.input.type).toBe("subagent_update");
+    if (!input.ok || input.input.type !== "subagent_update") return;
     expect(input.input.step).toEqual({ kind: "liveness", elapsedMs: 5000 });
   });
 });

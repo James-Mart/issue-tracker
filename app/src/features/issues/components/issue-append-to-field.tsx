@@ -33,7 +33,7 @@ export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
   const saved = issue.appendTo ?? "";
   const target = issue.appendTo ? byId.get(issue.appendTo) : undefined;
   const title = target?.title ?? issue.appendTo;
-  const targetMerged = Boolean(issue.appendTo && target?.merged);
+  const targetMerged = target?.kind === "story" && target.merged;
   const readOnly = appendTargetFieldIsReadOnly(
     issue.appendTo,
     derived,
@@ -120,7 +120,7 @@ export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
               {APPEND_TARGET_EMPTY_LABEL}
             </button>
           )}
-          {target?.merged ? (
+          {targetMerged ? (
             <Badge variant="done" data-testid="append-target-merged-badge">
               merged
             </Badge>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueRecord } from "@server/schemas";
 import { issuesById } from "./build-tree";
 import {
   APPEND_TARGET_MERGED,
@@ -13,11 +13,17 @@ import {
 
 const t0 = "2026-08-10T12:00:00.000Z";
 
+function derived(overrides: Partial<DerivedState> = {}): DerivedState {
+  return { blocked: false, ...overrides };
+}
+
 const project: IssueRecord = {
   kind: "project",
   id: "platform",
   title: "Platform",
+  trunk: "main",
   mergePolicy: "manual",
+  maxImplementingRuns: 1,
   order: 0,
   createdAt: t0,
   updatedAt: t0,
@@ -27,7 +33,9 @@ const otherProject: IssueRecord = {
   kind: "project",
   id: "other",
   title: "Other",
+  trunk: "main",
   mergePolicy: "manual",
+  maxImplementingRuns: 1,
   order: 1,
   createdAt: t0,
   updatedAt: t0,
@@ -38,9 +46,11 @@ const epic: IssueRecord = {
   id: "auth-epic",
   title: "Auth",
   partOf: "platform",
+  blockedBy: [],
   order: 0,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
 };
@@ -53,9 +63,11 @@ const openStory: IssueRecord = {
   order: 0,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
   merged: false,
+  reviewedTasks: [],
 };
 
 const mergedStory: IssueRecord = {
@@ -66,9 +78,11 @@ const mergedStory: IssueRecord = {
   order: 1,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
   merged: true,
+  reviewedTasks: [],
 };
 
 const foreignStory: IssueRecord = {
@@ -79,9 +93,11 @@ const foreignStory: IssueRecord = {
   order: 0,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
   merged: false,
+  reviewedTasks: [],
 };
 
 const byId = issuesById([
@@ -131,26 +147,24 @@ describe("appendTargetCommitError", () => {
 
 describe("appendPlanningCalloutVisible", () => {
   it("is true when unplanned with no plan roots", () => {
-    expect(
-      appendPlanningCalloutVisible("open-story", { blocked: false }),
-    ).toBe(true);
+    expect(appendPlanningCalloutVisible("open-story", derived())).toBe(true);
   });
 
   it("is false when ideaStatus is planned", () => {
     expect(
-      appendPlanningCalloutVisible("open-story", {
-        blocked: false,
-        ideaStatus: "planned",
-      }),
+      appendPlanningCalloutVisible(
+        "open-story",
+        derived({ ideaStatus: "planned" }),
+      ),
     ).toBe(false);
   });
 
   it("is false when appendTo is set and planRoots is non-empty", () => {
     expect(
-      appendPlanningCalloutVisible("open-story", {
-        blocked: false,
-        planRoots: ["open-story"],
-      }),
+      appendPlanningCalloutVisible(
+        "open-story",
+        derived({ planRoots: ["open-story"] }),
+      ),
     ).toBe(false);
   });
 });
@@ -158,7 +172,7 @@ describe("appendPlanningCalloutVisible", () => {
 describe("appendTargetFieldIsReadOnly", () => {
   it("is false when unplanned with no plan roots", () => {
     expect(
-      appendTargetFieldIsReadOnly("open-story", { blocked: false }, false),
+      appendTargetFieldIsReadOnly("open-story", derived(), false),
     ).toBe(false);
   });
 
@@ -166,7 +180,7 @@ describe("appendTargetFieldIsReadOnly", () => {
     expect(
       appendTargetFieldIsReadOnly(
         "open-story",
-        { blocked: false, ideaStatus: "planned" },
+        derived({ ideaStatus: "planned" }),
         false,
       ),
     ).toBe(true);
@@ -176,7 +190,7 @@ describe("appendTargetFieldIsReadOnly", () => {
     expect(
       appendTargetFieldIsReadOnly(
         "open-story",
-        { blocked: false, planRoots: ["open-story"] },
+        derived({ planRoots: ["open-story"] }),
         false,
       ),
     ).toBe(true);
@@ -186,7 +200,7 @@ describe("appendTargetFieldIsReadOnly", () => {
     expect(
       appendTargetFieldIsReadOnly(
         "merged-story",
-        { blocked: false, ideaStatus: "planned" },
+        derived({ ideaStatus: "planned" }),
         true,
       ),
     ).toBe(false);

@@ -333,7 +333,7 @@ export function requiresPartOf(kind: IssueKind): boolean {
   return PARENT_KINDS[kind].length > 0;
 }
 
-type IssueFields = Omit<z.infer<typeof projectSchema>, "kind" | "labels"> &
+export type IssueFields = Omit<z.infer<typeof projectSchema>, "kind" | "labels"> &
   Omit<z.infer<typeof epicSchema>, "kind" | "labels"> &
   Omit<z.infer<typeof ideaSchema>, "kind" | "labels"> &
   Omit<z.infer<typeof storySchema>, "kind" | "labels"> &

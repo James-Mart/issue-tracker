@@ -51,9 +51,18 @@ function articleFor(kind: IssueKind): "a" | "an" {
   return kind === "epic" || kind === "idea" ? "an" : "a";
 }
 
-export function assertKind(expected: IssueKind, id: string): IssueDetail {
+type DetailOfKind<K extends IssueKind> = Extract<IssueDetail, { kind: K }>;
+
+function isDetailOfKind<K extends IssueKind>(
+  detail: IssueDetail,
+  kind: K,
+): detail is DetailOfKind<K> {
+  return detail.kind === kind;
+}
+
+export function assertKind<K extends IssueKind>(expected: K, id: string): DetailOfKind<K> {
   const detail = read(id);
-  if (detail.kind !== expected) {
+  if (!isDetailOfKind(detail, expected)) {
     throw new Error(
       `"${id}" is ${articleFor(detail.kind)} ${detail.kind}, not ${articleFor(expected)} ${expected}`,
     );
@@ -794,7 +803,7 @@ export function kindSet(
     );
   }
 
-  if (kind === "story" && field === "mergeBase") {
+  if (detail.kind === "story" && field === "mergeBase") {
     const parent = read(detail.partOf);
     assertStoryCanSetMergeBase(detail, parent.kind);
   }

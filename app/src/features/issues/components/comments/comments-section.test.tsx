@@ -109,10 +109,11 @@ function task(): IssueDetail {
     order: 0,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
-    blockedBy: [],
+    needsAttention: false,
+    attentionReason: null,
     archived: false,
     description: "",
-    labels: [],
+    version: "1",
     status: "in-progress",
     commits: [],
   };

@@ -17,6 +17,11 @@ function task(
     title: "t",
     partOf: "story",
     status,
+    commits: [],
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
+    order: 0,
     ...timestamps,
     ...extras,
   };
@@ -32,9 +37,11 @@ function story(
     partOf: "epic",
     branchName: "s",
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,
+    order: 0,
     ...timestamps,
     ...extras,
   };
@@ -47,6 +54,7 @@ function idea(): IssueRecord {
     title: "i",
     partOf: "project",
     archived: false,
+    order: 0,
     ...timestamps,
   };
 }
@@ -63,6 +71,7 @@ function epic(
     attentionReason: null,
     archived: false,
     blockedBy: [],
+    order: 0,
     ...timestamps,
     ...extras,
   };
@@ -139,14 +148,7 @@ describe("issueRailNodeState", () => {
   it("maps Ready-to-land Stories after attention and blocked", () => {
     const pr = story({ id: "pr" });
     const manual = story({ id: "manual", mergePolicy: "manual" });
-    const done: IssueRecord = {
-      id: "t",
-      kind: "task",
-      title: "t",
-      partOf: "manual",
-      status: "done",
-      ...timestamps,
-    };
+    const done = task("done", { partOf: "manual" });
     const issues = [pr, manual, done];
 
     expect(

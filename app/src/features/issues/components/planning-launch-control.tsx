@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Play } from "lucide-react";
-import type { ConversationChannel, IssueDetail } from "@server/schemas";
+import type { ConversationChannel, IssueRecord } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
@@ -39,9 +39,9 @@ import { useAppendTargetDraftStore } from "../store/use-append-target-draft-stor
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { StakeholderSelect } from "./stakeholder-select";
 
-type IdeaDetail = Extract<IssueDetail, { kind: "idea" }>;
+type IdeaRecord = Extract<IssueRecord, { kind: "idea" }>;
 
-function usePlanningStakeholder(issue: IdeaDetail) {
+function usePlanningStakeholder(issue: IdeaRecord) {
   const [stakeholder, setStakeholder] = useState(issue.stakeholder);
   const update = useUpdateIssue();
   const { error, saving, run } = useIssuePatchAction();
@@ -74,7 +74,7 @@ function usePlanningStakeholder(issue: IdeaDetail) {
 }
 
 function useIdeaGateToggle(
-  issue: IdeaDetail,
+  issue: IdeaRecord,
   field: "outlineGate" | "executionGate",
 ) {
   const stored = issue[field] === true;
@@ -115,7 +115,7 @@ function IdeaGateChipButton({
   saving,
   testId,
 }: {
-  issue: IdeaDetail;
+  issue: IdeaRecord;
   field: "outlineGate" | "executionGate";
   label: string;
   enabled: boolean;
@@ -158,7 +158,7 @@ function OutlineGateChip({
   issue,
   testId = "flow-row-outline-gate",
 }: {
-  issue: IdeaDetail;
+  issue: IdeaRecord;
   testId?: string;
 }) {
   const control = useIdeaGateToggle(issue, "outlineGate");
@@ -179,7 +179,7 @@ function ExecutionGateChip({
   issue,
   testId = "flow-row-execution-gate",
 }: {
-  issue: IdeaDetail;
+  issue: IdeaRecord;
   testId?: string;
 }) {
   const control = useIdeaGateToggle(issue, "executionGate");
@@ -200,7 +200,7 @@ function IdeaGateChips({
   issue,
   testIdPrefix,
 }: {
-  issue: IdeaDetail;
+  issue: IdeaRecord;
   testIdPrefix: "flow-row" | "detail";
 }) {
   return (
@@ -276,7 +276,7 @@ function PlanningLaunchButton({
   testId,
   onStarted,
 }: {
-  issue: IdeaDetail;
+  issue: IdeaRecord;
   channel: ConversationChannel;
   stakeholder: string | undefined;
   fallbackCatalogId?: string;
@@ -412,7 +412,7 @@ function PlanningLaunchButton({
 }
 
 /** Icon-only planning launch for Flow row steering. */
-export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
+export function PlanningFlowRowLaunch({ issue }: { issue: IdeaRecord }) {
   const stakeholder = issue.stakeholder;
 
   return (
@@ -431,7 +431,7 @@ export function PlanningFlowRowLaunch({ issue }: { issue: IdeaDetail }) {
 }
 
 /** Overview-tab launch: same optimistic start as the empty state. */
-export function PlanningOverviewLaunch({ issue }: { issue: IdeaDetail }) {
+export function PlanningOverviewLaunch({ issue }: { issue: IdeaRecord }) {
   const stakeholder = issue.stakeholder;
   const rejectedUnsaved = useAppendTargetDraftStore(
     (s) => s.rejectedById[issue.id] === true,
@@ -491,7 +491,7 @@ export function PlanningChannelEmptyState({
   channel,
   onStarted,
 }: {
-  issue: IdeaDetail;
+  issue: IdeaRecord;
   channel: ConversationChannel;
   onStarted: (session: PlanningSessionStarted) => void;
 }) {
@@ -584,7 +584,7 @@ export function PlanningNewRunControl({
   channel,
   onStarted,
 }: {
-  issue: IdeaDetail;
+  issue: IdeaRecord;
   channel: ConversationChannel;
   onStarted: (session: PlanningSessionStarted) => void;
 }) {

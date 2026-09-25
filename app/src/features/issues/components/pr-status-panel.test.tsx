@@ -3,8 +3,17 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 import { ApiError } from "@/lib/api/errors";
+import type { IssueDetail } from "@server/schemas";
 import type { PrFacts, ProjectPrsResponse } from "@server/services/delivery";
 import { issuesKeys } from "../api/keys";
 import {
@@ -47,17 +56,22 @@ vi.mock("../api/mutations", () => ({
   }),
 }));
 
-const story = {
-  kind: "story" as const,
+const story: Extract<IssueDetail, { kind: "story" }> & { prUrl: string } = {
+  kind: "story",
   id: "ship-pr",
   title: "Ship PR",
   partOf: "epic",
   order: 0,
   archived: false,
+  needsAttention: false,
+  attentionReason: null,
   merged: false,
+  reviewedTasks: [],
   prUrl: "https://github.com/acme/widgets/pull/12",
   createdAt: "2026-08-10T12:00:00.000Z",
   updatedAt: "2026-08-10T12:00:00.000Z",
+  description: "",
+  version: "1",
 };
 
 function prComment(
@@ -96,7 +110,7 @@ function mountPanel(
   container: HTMLDivElement;
   root: Root;
   client: QueryClient;
-  invalidateSpy: ReturnType<typeof vi.spyOn>;
+  invalidateSpy: MockInstance<QueryClient["invalidateQueries"]>;
 } {
   const container = document.createElement("div");
   document.body.appendChild(container);

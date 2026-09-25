@@ -294,7 +294,7 @@ describe("IssueChangePanel inline threads", () => {
     const unlocatedSlot = file?.querySelector(
       '[data-testid="issue-change-unlocated-threads"]',
     );
-    expect(unlocatedSlot?.contains(unlocated)).toBe(true);
+    expect(unlocatedSlot?.contains(unlocated ?? null)).toBe(true);
     expect(unlocatedSlot?.previousElementSibling?.getAttribute("data-testid")).toBe(
       "file-diff",
     );

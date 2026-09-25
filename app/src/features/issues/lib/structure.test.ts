@@ -5,6 +5,7 @@ import {
   structureScopedIssues,
   structureIdeaNodes,
   structureTreeNodes,
+  type StructureFilters,
 } from "./structure";
 
 const timestamps = {
@@ -12,23 +13,44 @@ const timestamps = {
   updatedAt: "2026-07-09T14:00:00.000Z",
 };
 
-const emptyFilters = {
+const emptyFilters: StructureFilters = {
   search: "",
-  labelIds: [] as string[],
-  kind: [] as const,
+  labelIds: [],
+  kind: [],
+};
+
+const workFields = {
+  needsAttention: false,
+  attentionReason: null,
+  archived: false,
 };
 
 function project(id: string): IssueRecord {
-  return { id, kind: "project", title: id, ...timestamps };
+  return {
+    id,
+    kind: "project",
+    title: id,
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
+    order: 0,
+    ...timestamps,
+  };
 }
 
-function epic(id: string, partOf: string, order = 0): IssueRecord {
+function epic(
+  id: string,
+  partOf: string,
+  order = 0,
+): Extract<IssueRecord, { kind: "epic" }> {
   return {
     id,
     kind: "epic",
     title: id,
     partOf,
     order,
+    blockedBy: [],
+    ...workFields,
     ...timestamps,
   };
 }
@@ -40,6 +62,9 @@ function story(id: string, partOf: string, order = 0): IssueRecord {
     title: id,
     partOf,
     order,
+    merged: false,
+    reviewedTasks: [],
+    ...workFields,
     ...timestamps,
   };
 }
@@ -51,6 +76,7 @@ function idea(id: string, partOf: string, order = 0): IssueRecord {
     title: id,
     partOf,
     order,
+    archived: false,
     ...timestamps,
   };
 }

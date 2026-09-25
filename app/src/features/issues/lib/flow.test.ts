@@ -17,6 +17,9 @@ import {
 
 const noFilters: FlowFilters = { search: "", labelIds: [], kind: [] };
 
+type EpicRecord = Extract<IssueRecord, { kind: "epic" }>;
+type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
+
 const t0 = "2026-07-01T00:00:00.000Z";
 const t1 = "2026-07-02T00:00:00.000Z";
 const t2 = "2026-07-03T00:00:00.000Z";
@@ -26,6 +29,9 @@ function project(id: string): IssueRecord {
     id,
     kind: "project",
     title: id,
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
@@ -37,7 +43,7 @@ function epic(
   partOf: string,
   updatedAt = t0,
   blockedBy: string[] = [],
-): IssueRecord {
+): EpicRecord {
   return {
     id,
     kind: "epic",
@@ -57,7 +63,7 @@ function story(
   id: string,
   partOf: string,
   updatedAt = t0,
-): IssueRecord {
+): StoryRecord {
   return {
     id,
     kind: "story",
@@ -68,6 +74,7 @@ function story(
     updatedAt,
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,
@@ -84,8 +91,10 @@ function task(id: string, partOf: string): IssueRecord {
     createdAt: t0,
     updatedAt: t0,
     status: "todo",
+    commits: [],
     needsAttention: false,
     attentionReason: null,
+    archived: false,
   };
 }
 

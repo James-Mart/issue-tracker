@@ -4,6 +4,9 @@ import { assertSupportedNodeRuntime } from "./node-runtime.js";
 // `@cursor/sdk` (via agent-sessions) and can native-crash on Node < 22.13.
 assertSupportedNodeRuntime();
 
+const { installAbortErrorGuard } = await import("./abort-error-guard.js");
+installAbortErrorGuard();
+
 const { ensureChildReaper } = await import("./services/child-reaper.js");
 ensureChildReaper();
 

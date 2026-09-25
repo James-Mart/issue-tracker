@@ -7,12 +7,12 @@ function project(id = "p"): IssueRecord {
     id,
     kind: "project",
     title: id,
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     order: 0,
     createdAt: "2020-01-01T00:00:00.000Z",
     updatedAt: "2020-01-01T00:00:00.000Z",
-    needsAttention: false,
-    attentionReason: null,
-    archived: false,
   };
 }
 
@@ -61,6 +61,7 @@ function story(
     updatedAt: "2020-01-01T00:00:00.000Z",
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,

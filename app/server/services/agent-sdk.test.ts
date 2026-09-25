@@ -108,6 +108,18 @@ function makeFakeSdkAgent(
     async downloadArtifact() {
       return Buffer.from("");
     },
+    async getUsage() {
+      return {
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 0,
+        },
+        runs: [],
+      };
+    },
   };
 }
 

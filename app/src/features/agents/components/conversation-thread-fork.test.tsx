@@ -15,7 +15,11 @@ import { afterEach, describe, expect, it } from "vitest";
 const FORK_LABEL = "Fork conversation from here";
 
 function forkButtons(container: ParentNode): HTMLButtonElement[] {
-  return [...container.querySelectorAll(`button[aria-label="${FORK_LABEL}"]`)];
+  return [
+    ...container.querySelectorAll<HTMLButtonElement>(
+      `button[aria-label="${FORK_LABEL}"]`,
+    ),
+  ];
 }
 
 describe("ConversationThread assistant meta fork affordance", () => {

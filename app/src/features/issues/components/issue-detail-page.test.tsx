@@ -44,6 +44,7 @@ const idea: IssueDetail = {
   updatedAt: t0,
   archived: false,
   description: "",
+  version: "1",
   labels: [],
 };
 
@@ -52,11 +53,13 @@ const epic: IssueDetail = {
   kind: "epic",
   title: "Auth",
   partOf: "issue-tracker",
+  blockedBy: [],
   order: 0,
   createdAt: t0,
   updatedAt: t0,
   archived: false,
   description: "",
+  version: "1",
   labels: [],
   needsAttention: false,
   attentionReason: null,

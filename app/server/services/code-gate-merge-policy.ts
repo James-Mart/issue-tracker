@@ -7,9 +7,9 @@ import {
   mergePolicyDescendantIds,
 } from "./merge-policy.js";
 
-function isMergePolicyNode(
-  issue: Issue | undefined,
-): issue is Extract<Issue, { kind: "project" | "epic" | "story" }> {
+type MergePolicyNode = Extract<Issue, { kind: "project" | "epic" | "story" }>;
+
+function isMergePolicyNode(issue: Issue | undefined): issue is MergePolicyNode {
   return (
     issue?.kind === "project" ||
     issue?.kind === "epic" ||
@@ -65,7 +65,7 @@ export function planCodeGateMergePolicyLowering(
     }
   }
 
-  const patchesById = new Map<string, Issue>();
+  const patchesById = new Map<string, MergePolicyNode>();
   const prospective = (): Map<string, Issue> => {
     const map = new Map(byId);
     for (const [id, issue] of patchesById) map.set(id, issue);

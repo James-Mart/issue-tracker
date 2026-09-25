@@ -31,6 +31,7 @@ function epic(
     blockedBy: [],
     archived: false,
     description: "",
+    version: "1",
     labels: [],
     ...overrides,
   };
@@ -45,9 +46,9 @@ function idea(): IssueDetail {
     order: 0,
     createdAt: t0,
     updatedAt: t0,
-    blockedBy: [],
     archived: false,
     description: "",
+    version: "1",
     labels: [],
   };
 }
@@ -61,11 +62,14 @@ function project(): IssueDetail {
     createdAt: t0,
     updatedAt: t0,
     workspace: "/tmp",
-    mergePolicy: "rebase",
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     labels: [],
     supportingDocs: {},
     inspirationApps: [],
     description: "",
+    version: "1",
   };
 }
 

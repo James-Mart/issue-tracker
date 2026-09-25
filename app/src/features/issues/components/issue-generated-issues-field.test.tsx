@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FIELD_LABELS } from "@server/fields";
-import type { DerivedState, IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
 import { IssueGeneratedIssuesField } from "./issue-generated-issues-field";
 
 const go = vi.fn();
@@ -34,7 +34,7 @@ vi.mock("./issue-link", () => ({
 
 const t0 = "2026-08-10T12:00:00.000Z";
 
-const idea: Extract<IssueRecord, { kind: "idea" }> = {
+const idea: Extract<IssueDetail, { kind: "idea" }> = {
   kind: "idea",
   id: "capture",
   title: "Better capture flow",
@@ -43,9 +43,11 @@ const idea: Extract<IssueRecord, { kind: "idea" }> = {
   archived: false,
   createdAt: t0,
   updatedAt: t0,
+  description: "",
+  version: "1",
 };
 
-const appendIdea: Extract<IssueRecord, { kind: "idea" }> = {
+const appendIdea: Extract<IssueDetail, { kind: "idea" }> = {
   ...idea,
   id: "idea-pr",
   title: "PR feedback — redirect allowlist",
@@ -57,7 +59,9 @@ function project(): IssueRecord {
     kind: "project",
     id: "platform",
     title: "Platform",
+    trunk: "main",
     mergePolicy: "manual",
+    maxImplementingRuns: 1,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
@@ -73,6 +77,8 @@ function epic(): IssueRecord {
     order: 0,
     archived: false,
     needsAttention: false,
+    attentionReason: null,
+    blockedBy: [],
     createdAt: t0,
     updatedAt: t0,
     sourceIdea: "capture",
@@ -92,10 +98,12 @@ function story(
     order: extras.order ?? 1,
     archived: false,
     needsAttention: false,
+    attentionReason: null,
     createdAt: t0,
     updatedAt: t0,
     sourceIdea: extras.sourceIdea,
     merged: false,
+    reviewedTasks: [],
     ...extras,
   };
 }
@@ -115,6 +123,9 @@ function task(
     updatedAt: t0,
     status: extras.status ?? "todo",
     commits: extras.commits ?? [],
+    archived: false,
+    needsAttention: false,
+    attentionReason: null,
     ...extras,
   };
 }

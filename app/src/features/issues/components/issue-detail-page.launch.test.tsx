@@ -180,19 +180,23 @@ vi.mock("./channel-retro-control", () => ({
 
 const t0 = "2026-07-01T00:00:00.000Z";
 
+type RecordOf<K extends IssueRecord["kind"]> = Extract<IssueRecord, { kind: K }>;
+
 function project(id: string): IssueRecord {
   return {
     id,
     kind: "project",
     title: `Project ${id}`,
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     order: 0,
     createdAt: t0,
     updatedAt: t0,
-    archived: false,
   };
 }
 
-function epicRecord(id: string, partOf: string, title: string): IssueRecord {
+function epicRecord(id: string, partOf: string, title: string): RecordOf<"epic"> {
   return {
     id,
     kind: "epic",
@@ -208,7 +212,7 @@ function epicRecord(id: string, partOf: string, title: string): IssueRecord {
   };
 }
 
-function ideaRecord(id: string, partOf: string, title: string): IssueRecord {
+function ideaRecord(id: string, partOf: string, title: string): RecordOf<"idea"> {
   return {
     id,
     kind: "idea",
@@ -225,6 +229,7 @@ function epicDetail(id: string, partOf: string, title: string): IssueDetail {
   return {
     ...epicRecord(id, partOf, title),
     description: "",
+    version: "1",
     labels: [],
   };
 }
@@ -233,6 +238,7 @@ function ideaDetail(id: string, partOf: string, title: string): IssueDetail {
   return {
     ...ideaRecord(id, partOf, title),
     description: "",
+    version: "1",
     labels: [],
     stakeholder: "composer-2.5",
   };
@@ -301,11 +307,7 @@ function sendMessageOptions(): {
   };
 }
 
-function storyRecord(
-  id: string,
-  partOf: string,
-  title: string,
-): IssueRecord {
+function storyRecord(id: string, partOf: string, title: string): RecordOf<"story"> {
   return {
     id,
     kind: "story",
@@ -314,8 +316,11 @@ function storyRecord(
     order: 0,
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     createdAt: t0,
     updatedAt: t0,
+    needsAttention: false,
+    attentionReason: null,
     archived: false,
   };
 }
@@ -324,6 +329,7 @@ function storyDetail(id: string, partOf: string, title: string): IssueDetail {
   return {
     ...storyRecord(id, partOf, title),
     description: "",
+    version: "1",
     labels: [],
   };
 }
@@ -339,9 +345,12 @@ function taskRecord(
     title: id,
     partOf,
     status,
+    commits: [],
     order: 0,
     createdAt: t0,
     updatedAt: t0,
+    needsAttention: false,
+    attentionReason: null,
     archived: false,
   };
 }

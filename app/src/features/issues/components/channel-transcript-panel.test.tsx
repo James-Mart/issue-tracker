@@ -2,7 +2,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ChannelSessionListItem } from "@server/schemas";
+import type { ChannelSessionListItem, IssueDetail } from "@server/schemas";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 
@@ -246,17 +246,7 @@ vi.mock("@/features/agents/components/conversation-thread", () => ({
 
 function mountPanel(
   label = "Planning",
-  issue?: {
-    kind: "idea" | "epic";
-    id: string;
-    title: string;
-    partOf: string;
-    order: number;
-    archived: boolean;
-    createdAt: string;
-    updatedAt: string;
-    status?: "open";
-  },
+  issue?: IssueDetail,
   options?: {
     channel?: "planning" | "implementing" | "export";
     projectId?: string;
@@ -289,8 +279,8 @@ function mountPanel(
   return { container, root };
 }
 
-const idea = {
-  kind: "idea" as const,
+const idea: IssueDetail = {
+  kind: "idea",
   id: "capture",
   title: "Capture",
   partOf: "platform",
@@ -298,18 +288,24 @@ const idea = {
   archived: false,
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
+  description: "",
+  version: "1",
 };
 
-const epic = {
-  kind: "epic" as const,
+const epic: IssueDetail = {
+  kind: "epic",
   id: "ship-it",
   title: "Ship it",
   partOf: "platform",
-  status: "open" as const,
+  blockedBy: [],
+  needsAttention: false,
+  attentionReason: null,
   order: 0,
   archived: false,
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
+  description: "",
+  version: "1",
 };
 
 afterEach(() => {

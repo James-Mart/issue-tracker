@@ -2,7 +2,15 @@
 import { act, useRef, type MutableRefObject } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 import { toast } from "sonner";
 import { agentsKeys } from "./keys";
 import { useForkConversation } from "./mutations";
@@ -43,7 +51,7 @@ function ForkProbe({
 function mountForkHook(): {
   root: Root;
   client: QueryClient;
-  invalidateSpy: ReturnType<typeof vi.spyOn>;
+  invalidateSpy: MockInstance<QueryClient["invalidateQueries"]>;
   hookRef: MutableRefObject<ReturnType<typeof useForkConversation> | null>;
 } {
   const container = document.createElement("div");

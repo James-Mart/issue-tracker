@@ -200,7 +200,7 @@ describe("forkConversation", () => {
 
 describe("other request callers", () => {
   it("do not pass the transcript timeout on getConversationRun or listConversations", async () => {
-    const fetchMock = vi.fn((input: string) => {
+    const fetchMock = vi.fn((input: string, _init?: RequestInit) => {
       if (String(input).endsWith("/run")) {
         return Promise.resolve(
           jsonResponse({ active: false, runId: null, startedAt: null }),

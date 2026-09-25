@@ -15,6 +15,9 @@ const base = {
   id: "auth",
   title: "Auth hardening",
   order: 0,
+  archived: false,
+  needsAttention: false,
+  attentionReason: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 } as const;
@@ -23,12 +26,15 @@ const epic = {
   ...base,
   kind: "epic",
   partOf: "issue-tracker",
+  blockedBy: [],
 } satisfies Issue;
 
 const projectStory = {
   ...base,
   kind: "story",
   partOf: "issue-tracker",
+  merged: false,
+  reviewedTasks: [],
 } satisfies Issue;
 
 const epicStory = {
@@ -36,6 +42,8 @@ const epicStory = {
   id: "child",
   kind: "story",
   partOf: "auth",
+  merged: false,
+  reviewedTasks: [],
 } satisfies Issue;
 
 describe("exportLaunchEligible", () => {

@@ -1,6 +1,7 @@
 import {
   useInfiniteQuery,
   useQuery,
+  type InfiniteData,
   type UseInfiniteQueryResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
@@ -21,7 +22,7 @@ export type PipelineRunsResponse = {
 };
 
 export function usePipelineRunsQuery(): UseInfiniteQueryResult<
-  PipelineRunsResponse,
+  InfiniteData<PipelineRunsResponse, string | undefined>,
   Error
 > {
   return useInfiniteQuery({

@@ -70,7 +70,8 @@ describe("code-gate merge policy lowering on Idea archive", () => {
 
     expect(readRaw("idea").archived).toBe(true);
     expect(readRaw("epic").mergePolicy).toBe("manual");
-    expect(read("epic").kind === "epic" && read("epic").mergePolicy).toBe("manual");
+    const epic = read("epic");
+    expect(epic.kind === "epic" && epic.mergePolicy).toBe("manual");
     expect(list().derived.epic?.mergePolicy).toBe("manual");
     expect(readRaw("p").mergePolicy).toBe("merge");
   });

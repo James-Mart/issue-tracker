@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MANUAL_STAKEHOLDER_LABEL } from "@server/fields";
+import type { IssueDetail } from "@server/schemas";
 import { IssueStakeholderField } from "./issue-stakeholder-field";
 
 const mutateAsync = vi.fn();
@@ -105,8 +106,8 @@ vi.mock("./stakeholder-select", () => ({
   ),
 }));
 
-const idea = {
-  kind: "idea" as const,
+const idea: Extract<IssueDetail, { kind: "idea" }> = {
+  kind: "idea",
   id: "capture",
   title: "Capture",
   partOf: "platform",
@@ -114,7 +115,9 @@ const idea = {
   archived: false,
   createdAt: "2026-08-10T12:00:00.000Z",
   updatedAt: "2026-08-10T12:00:00.000Z",
-  stakeholder: undefined as string | undefined,
+  stakeholder: undefined,
+  description: "",
+  version: "1",
 };
 
 function mount(

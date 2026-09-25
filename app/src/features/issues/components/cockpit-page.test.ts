@@ -13,10 +13,12 @@ function project(id: string, order: number): IssueRecord {
     id,
     kind: "project",
     title: `Project ${id}`,
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
     order,
     createdAt: t0,
     updatedAt: t0,
-    archived: false,
   };
 }
 
@@ -37,7 +39,7 @@ function epic(id: string, partOf: string): IssueRecord {
 }
 
 function row(issue: IssueRecord): FlowItem {
-  return { issue };
+  return { issue, state: undefined };
 }
 
 describe("groupFlowItemsByProject", () => {
@@ -76,6 +78,7 @@ function story(
     updatedAt: t0,
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,

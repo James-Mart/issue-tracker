@@ -70,7 +70,10 @@ function story(
     createdAt: t0,
     updatedAt: t0,
     archived: false,
+    needsAttention: false,
+    attentionReason: null,
     description: "",
+    version: "1",
     labels: [],
     merged: false,
     reviewedTasks: [],
@@ -227,6 +230,9 @@ describe("StoryAppendActionsCard enablement", () => {
         updatedAt: t0,
         status: "in-progress",
         commits: [],
+        needsAttention: false,
+        attentionReason: null,
+        archived: false,
       },
     ];
     const { container } = mountCard(

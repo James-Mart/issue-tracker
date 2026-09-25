@@ -2,7 +2,7 @@ import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { afterEach, expect, vi } from "vitest";
+import { afterEach, expect, vi, type MockInstance } from "vitest";
 import type { AgentRun, TranscriptEvent } from "@server/schemas";
 import type { TopicListener, TopicMessage } from "@/lib/ws/transport";
 import { AgentRunsPanel } from "./agent-runs-panel";
@@ -126,7 +126,7 @@ export function panelTree(panel: ReactNode, client: QueryClient) {
 export function mountPanel(props: ComponentProps<typeof AgentRunsPanel>): {
   container: HTMLDivElement;
   root: Root;
-  invalidateSpy: ReturnType<typeof vi.spyOn>;
+  invalidateSpy: MockInstance<QueryClient["invalidateQueries"]>;
 } {
   const container = document.createElement("div");
   document.body.appendChild(container);

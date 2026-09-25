@@ -22,7 +22,7 @@ async function createConversation(): Promise<string> {
 async function upload(
   conversationId: string,
   filename: string,
-  body: Uint8Array | string,
+  body: Uint8Array<ArrayBuffer> | string,
 ): Promise<Response> {
   const form = new FormData();
   const bytes =

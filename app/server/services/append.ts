@@ -32,7 +32,7 @@ const STACKED_STORY_APPEND_ERROR =
 const STORY_FORM_REQUIRED_ERROR = "append requires a story-form apply doc";
 
 function buildTask(
-  desired: DesiredIssue,
+  desired: Extract<DesiredIssue, { kind: "task" }>,
   existing: Extract<Issue, { kind: "task" }> | undefined,
   now: string,
   order: number,

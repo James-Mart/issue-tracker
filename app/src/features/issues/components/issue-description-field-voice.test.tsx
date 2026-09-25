@@ -84,20 +84,22 @@ vi.mock("@/features/agents/hooks/use-voice-recording", async (importOriginal) =>
 const t0 = "2026-08-01T00:00:00.000Z";
 
 function task(
-  overrides: Partial<IssueDetail> & { id: string; description?: string },
+  overrides: Partial<Extract<IssueDetail, { kind: "task" }>> & { id: string },
 ): IssueDetail {
   return {
-    id: overrides.id,
     kind: "task",
     title: "Task",
     partOf: "some-story",
+    status: "todo",
+    commits: [],
     order: 0,
     createdAt: t0,
     updatedAt: t0,
     archived: false,
-    description: overrides.description ?? "Saved description",
-    labels: [],
-    version: overrides.version ?? "v1",
+    needsAttention: false,
+    attentionReason: null,
+    description: "Saved description",
+    version: "v1",
     ...overrides,
   };
 }

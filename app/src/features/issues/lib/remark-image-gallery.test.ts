@@ -24,7 +24,7 @@ describe("imagesFromParagraph", () => {
           { type: "text", value: "\n" },
           image("hover"),
         ],
-      })?.map((node) => node.url),
+      })?.map((node) => ("url" in node ? node.url : undefined)),
     ).toEqual(["empty.png", "hover.png"]);
   });
 

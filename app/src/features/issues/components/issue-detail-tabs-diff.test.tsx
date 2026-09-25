@@ -69,19 +69,30 @@ vi.mock("../api/queries", async (importOriginal) => {
 
 const t0 = "2026-08-01T00:00:00.000Z";
 
+const detailFields = {
+  order: 0,
+  createdAt: t0,
+  updatedAt: t0,
+  archived: false,
+  description: "",
+  version: "1",
+};
+
+const workFields = {
+  ...detailFields,
+  needsAttention: false,
+  attentionReason: null,
+};
+
 function task(): IssueDetail {
   return {
     id: "task-diff-tab",
     kind: "task",
     title: "Wire Diff tab panel",
     partOf: "story-1",
-    order: 0,
-    createdAt: t0,
-    updatedAt: t0,
-    blockedBy: [],
-    archived: false,
-    description: "",
-    labels: [],
+    status: "todo",
+    commits: [],
+    ...workFields,
   };
 }
 
@@ -91,13 +102,8 @@ function idea(): IssueDetail {
     kind: "idea",
     title: "Capture",
     partOf: "issue-tracker",
-    order: 0,
-    createdAt: t0,
-    updatedAt: t0,
-    blockedBy: [],
-    archived: false,
-    description: "",
     labels: [],
+    ...detailFields,
   };
 }
 
@@ -107,13 +113,9 @@ function epic(): IssueDetail {
     kind: "epic",
     title: "Hierarchical diff views",
     partOf: "issue-tracker",
-    order: 0,
-    createdAt: t0,
-    updatedAt: t0,
     blockedBy: [],
-    archived: false,
-    description: "",
     labels: [],
+    ...workFields,
   };
 }
 
@@ -123,13 +125,10 @@ function story(): IssueDetail {
     kind: "story",
     title: "Rollup grain",
     partOf: "epic-1",
-    order: 0,
-    createdAt: t0,
-    updatedAt: t0,
-    blockedBy: [],
-    archived: false,
-    description: "",
+    merged: false,
+    reviewedTasks: [],
     labels: [],
+    ...workFields,
   };
 }
 

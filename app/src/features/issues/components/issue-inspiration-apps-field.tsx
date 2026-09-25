@@ -34,11 +34,12 @@ export function IssueInspirationAppsField({
       return;
     }
     setAppsError(null);
-    if (result.apps === null) return;
+    const { apps } = result;
+    if (apps === null) return;
     void run(async () => {
       await update.mutateAsync({
         id: issue.id,
-        patch: { inspirationApps: result.apps },
+        patch: { inspirationApps: apps },
       });
     });
   };

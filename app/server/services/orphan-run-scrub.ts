@@ -131,6 +131,10 @@ function storeReadError(filePath: string, err: unknown): Error {
   return new Error(`unreadable SDK store at ${filePath}: ${errorMessage(err)}`);
 }
 
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function readNdjson(filePath: string): JsonRecord[] {
   if (!statExists(filePath)) return [];
   let text: string;
@@ -150,7 +154,7 @@ function readNdjson(filePath: string): JsonRecord[] {
     } catch (err) {
       throw storeReadError(filePath, err);
     }
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    if (!isJsonRecord(parsed)) {
       throw new Error(
         `unreadable SDK store at ${filePath}: line ${i + 1} is not an object`,
       );

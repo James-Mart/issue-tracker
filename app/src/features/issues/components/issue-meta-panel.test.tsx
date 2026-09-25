@@ -101,10 +101,10 @@ function taskIssue(): Extract<IssueDetail, { kind: "task" }> {
     archived: false,
     needsAttention: false,
     status: "todo",
+    commits: [],
     createdAt: t0,
     updatedAt: t0,
     description: "",
-    labels: [],
     version: "v1",
     attentionReason: null,
   };

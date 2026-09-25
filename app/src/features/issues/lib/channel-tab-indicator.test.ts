@@ -45,9 +45,8 @@ describe("channelTabIndicator", () => {
         c.activeRun,
         c.awaitingHuman,
       );
-      expect(indicator === "active-run" && indicator === "awaiting-human").toBe(
-        false,
-      );
+      const exclusive: (typeof indicator)[] = ["active-run", "awaiting-human"];
+      expect(exclusive.every((state) => state === indicator)).toBe(false);
       expect(
         new Set(
           [indicator].filter((value): value is NonNullable<typeof value> =>

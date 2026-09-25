@@ -36,6 +36,7 @@ function story(id: string): IssueRecord {
     updatedAt: t0,
     branchName: id,
     merged: false,
+    reviewedTasks: [],
     needsAttention: false,
     attentionReason: null,
     archived: false,

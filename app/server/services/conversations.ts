@@ -186,14 +186,20 @@ function readTranscriptLines(id: string): TranscriptEvent[] {
  * transcript/delegations), optionally persisting the first prompt line.
  * Caller must already hold the `serialize()` turn.
  */
+type NewConversationFields = Omit<
+  ConversationMeta,
+  "id" | "createdAt" | "updatedAt" | "archived"
+>;
+
 function persistNewConversation(
-  fields: Omit<ConversationMeta, "id" | "createdAt" | "updatedAt">,
+  fields: NewConversationFields,
   opts?: { initialPrompt?: string },
 ): ConversationMeta {
   const id = uniqueSlug(fields.title, scanIds());
   const now = new Date().toISOString();
   const meta: ConversationMeta = {
     ...fields,
+    archived: false,
     id,
     createdAt: now,
     updatedAt: now,
@@ -275,7 +281,7 @@ export function createConversation(
       input.channel,
     );
 
-    const fields: Omit<ConversationMeta, "id" | "createdAt" | "updatedAt"> = {
+    const fields: NewConversationFields = {
       title,
       projectId,
       model,
@@ -464,9 +470,7 @@ export function appendEvent(
     const parsed = parseTranscriptEventInput(event);
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
     const preassigned =
-      typeof (event as { seq?: unknown }).seq === "number"
-        ? (event as { seq: number }).seq
-        : undefined;
+      "seq" in event && typeof event.seq === "number" ? event.seq : undefined;
     const seq = nextConversationSeq(id, preassigned);
     const stamped: TranscriptEvent = {
       ...parsed.input,

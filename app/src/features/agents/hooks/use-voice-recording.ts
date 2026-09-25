@@ -13,7 +13,7 @@ export const VOICE_RECORDING_CAP_SECONDS = 600;
 export const VOICE_RECORDING_SAMPLE_RATE = 16_000;
 
 type UseVoiceRecordingOptions = {
-  transcribe: (samples: Float32Array) => Promise<string>;
+  transcribe: (samples: Float32Array<ArrayBuffer>) => Promise<string>;
   onTranscript: (text: string) => void;
 };
 
@@ -33,7 +33,7 @@ function errorMessage(error: unknown): string {
   return "Something went wrong";
 }
 
-function mixToMono(audioBuffer: AudioBuffer): Float32Array {
+function mixToMono(audioBuffer: AudioBuffer): Float32Array<ArrayBuffer> {
   const { length, numberOfChannels } = audioBuffer;
   const mono = new Float32Array(length);
   if (numberOfChannels === 1) {
@@ -53,7 +53,7 @@ function mixToMono(audioBuffer: AudioBuffer): Float32Array {
 /** Decode a recorded blob and resample to 16 kHz mono float32 for transcription. */
 export async function convertRecordingBlobTo16kHzMono(
   blob: Blob,
-): Promise<Float32Array> {
+): Promise<Float32Array<ArrayBuffer>> {
   const arrayBuffer = await blob.arrayBuffer();
   const decodeContext = new AudioContext();
   try {
@@ -101,7 +101,7 @@ export function useVoiceRecording({
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const recordedBlobRef = useRef<Blob | null>(null);
-  const convertedSamplesRef = useRef<Float32Array | null>(null);
+  const convertedSamplesRef = useRef<Float32Array<ArrayBuffer> | null>(null);
   const elapsedIntervalRef = useRef<number | null>(null);
   const stopCapturePromiseRef = useRef<Promise<Blob> | null>(null);
   const captureStartingRef = useRef(false);
@@ -239,7 +239,7 @@ export function useVoiceRecording({
     setState("idle");
   }, [clearElapsedInterval, resetRecordingSession, state, stopCapture]);
 
-  const runTranscription = useCallback(async (samples: Float32Array) => {
+  const runTranscription = useCallback(async (samples: Float32Array<ArrayBuffer>) => {
     if (transcriptionInFlightRef.current) return;
     transcriptionInFlightRef.current = true;
     convertedSamplesRef.current = samples;

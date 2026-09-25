@@ -21,7 +21,9 @@ const project: IssueRecord = {
   kind: "project",
   id: "platform",
   title: "Platform",
+  trunk: "main",
   mergePolicy: "manual",
+  maxImplementingRuns: 1,
   order: 0,
   createdAt: t0,
   updatedAt: t0,
@@ -32,9 +34,11 @@ const epic: IssueRecord = {
   id: "auth-epic",
   title: "Auth",
   partOf: "platform",
+  blockedBy: [],
   order: 0,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
 };
@@ -47,9 +51,11 @@ const openStory: IssueRecord = {
   order: 0,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
   merged: false,
+  reviewedTasks: [],
 };
 
 const mergedStory: IssueRecord = {
@@ -60,9 +66,11 @@ const mergedStory: IssueRecord = {
   order: 1,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
   merged: true,
+  reviewedTasks: [],
 };
 
 vi.mock("./issue-link", () => ({

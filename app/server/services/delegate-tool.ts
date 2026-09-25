@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { join } from "path";
-import type { SDKCustomTool } from "@cursor/sdk";
+import type { SDKCustomTool, SDKCustomToolResult } from "@cursor/sdk";
 import type { AgentRunResult, AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
 import {
   classifyAgentFailure,
@@ -370,7 +370,7 @@ export function createDelegateCustomTools(
         type: "object",
         properties: {},
       },
-      execute: async () => {
+      execute: async (): Promise<SDKCustomToolResult> => {
         if (
           !options.conversationId ||
           !conversationExists(options.conversationId)
@@ -617,9 +617,10 @@ export function createDelegateCustomTools(
           let heartbeat: ReturnType<typeof setInterval> | undefined;
           let firstContentTimeout: ReturnType<typeof setTimeout> | undefined;
           if (pipeline && parentCallId) {
+            const livePipeline = pipeline;
             const callId = parentCallId;
             heartbeat = setInterval(() => {
-              void pipeline.emitLiveness(callId, stamp, Date.now() - startedAt);
+              void livePipeline.emitLiveness(callId, stamp, Date.now() - startedAt);
             }, NESTED_RUN_HEARTBEAT_MS);
           }
           firstContentTimeout = setTimeout(() => {

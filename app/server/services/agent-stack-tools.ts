@@ -54,7 +54,7 @@ export function createAgentStackTools(
         },
         required: ["workspace"],
       },
-      execute: async (input): Promise<AgentStackHandle> => {
+      execute: async (input) => {
         const workspace = (input as { workspace?: unknown }).workspace;
         if (typeof workspace !== "string" || !workspace.trim()) {
           throw new Error("agent_stack_start: workspace is required");
@@ -62,10 +62,11 @@ export function createAgentStackTools(
         const cursorConversationId = requireCursorConversationId(
           options.getCursorConversationId,
         );
-        return startAgentStack(options.conversationId, {
+        const handle: AgentStackHandle = await startAgentStack(options.conversationId, {
           workspace,
           cursorConversationId,
         });
+        return { ...handle };
       },
     },
     agent_stack_stop: {

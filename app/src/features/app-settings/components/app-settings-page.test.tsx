@@ -105,7 +105,7 @@ function stubGet(body: BackupResponse): void {
   });
 }
 
-function putCalls(): unknown[] {
+function putCalls(): unknown[][] {
   return requestMock.mock.calls.filter(
     ([path, init]) =>
       path === "/api/backup" &&

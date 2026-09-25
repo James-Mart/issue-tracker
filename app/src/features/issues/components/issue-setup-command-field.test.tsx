@@ -23,6 +23,7 @@ const project: Extract<IssueDetail, { kind: "project" }> = {
   title: "Platform",
   trunk: "main",
   mergePolicy: "manual",
+  maxImplementingRuns: 1,
   order: 0,
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",

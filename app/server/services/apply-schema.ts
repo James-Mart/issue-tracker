@@ -49,7 +49,7 @@ const storyNestEntryNode: z.ZodType<TaskNode | StoryNode> = z.lazy(() =>
   z.discriminatedUnion("kind", [taskChildNode, storyNode]),
 );
 
-const storyNode: z.ZodType<StoryNode> = z.lazy(() =>
+const storyNode: z.ZodType<StoryNode> & z.core.$ZodTypeDiscriminable<"kind"> = z.lazy(() =>
   z
     .object({
       kind: z.literal("story"),

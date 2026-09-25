@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FIELD_LABELS } from "@server/fields";
+import type { IssueDetail } from "@server/schemas";
 import { IssueSourceIdeaField } from "./issue-source-idea-field";
 
 const go = vi.fn();
@@ -61,17 +62,21 @@ vi.mock("../api/queries", () => ({
 
 const t0 = "2026-08-10T12:00:00.000Z";
 
-const epicWithSource = {
-  kind: "epic" as const,
+const epicWithSource: Extract<IssueDetail, { kind: "epic" }> = {
+  kind: "epic",
   id: "provenance-epic",
   title: "Issue provenance",
   partOf: "platform",
+  blockedBy: [],
   order: 0,
   archived: false,
   needsAttention: false,
+  attentionReason: null,
   createdAt: t0,
   updatedAt: t0,
   sourceIdea: "capture",
+  description: "",
+  version: "1",
 };
 
 function mount(

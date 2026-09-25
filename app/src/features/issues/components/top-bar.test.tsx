@@ -379,19 +379,20 @@ describe("TopBar backup chip", () => {
 
   it("hides the desktop setup nudge after dismiss while keeping the phone control", async () => {
     stubBackup(unconfiguredBackup());
-    mounted = mountTopBar();
+    const current = mountTopBar();
+    mounted = current;
     await flush();
 
-    dismissDesktopNudge(mounted.container);
+    dismissDesktopNudge(current.container);
 
-    expect(() => desktopSetupNudge(mounted.container)).toThrow(
+    expect(() => desktopSetupNudge(current.container)).toThrow(
       "Missing desktop backup setup nudge",
     );
-    expect(mobileSetupNudge(mounted.container).getAttribute("href")).toBe(
+    expect(mobileSetupNudge(current.container).getAttribute("href")).toBe(
       "/settings",
     );
     expect(
-      mounted.container.querySelector('[data-testid="backup-chip"]'),
+      current.container.querySelector('[data-testid="backup-chip"]'),
     ).toBeNull();
   });
 
@@ -403,17 +404,18 @@ describe("TopBar backup chip", () => {
     unmount(mounted);
     mounted = null;
 
-    mounted = mountTopBar();
+    const remounted = mountTopBar();
+    mounted = remounted;
     await flush();
 
-    expect(() => desktopSetupNudge(mounted.container)).toThrow(
+    expect(() => desktopSetupNudge(remounted.container)).toThrow(
       "Missing desktop backup setup nudge",
     );
-    expect(mobileSetupNudge(mounted.container).getAttribute("href")).toBe(
+    expect(mobileSetupNudge(remounted.container).getAttribute("href")).toBe(
       "/settings",
     );
     expect(
-      mounted.container.querySelector('[data-testid="backup-chip"]'),
+      remounted.container.querySelector('[data-testid="backup-chip"]'),
     ).toBeNull();
   });
 
