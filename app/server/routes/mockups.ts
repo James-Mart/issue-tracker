@@ -216,6 +216,6 @@ export function mockupStackMiddleware(
 export function attachMockupStackProxy(server: Server): void {
   server.on("upgrade", (req, socket, head) => {
     if (!(req.url ?? "").startsWith(PREFIX)) return;
-    mockupStackProxy(req, socket, head);
+    mockupStackProxy(req, socket as Socket, head);
   });
 }

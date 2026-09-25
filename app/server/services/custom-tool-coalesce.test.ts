@@ -176,6 +176,7 @@ describe("coalesceCustomTools", () => {
         resumeAgent: async () => {
           throw new Error("replay must not resume");
         },
+        listModels: async () => [],
       },
       cwd: "/tmp",
       storeDir: "/tmp",
