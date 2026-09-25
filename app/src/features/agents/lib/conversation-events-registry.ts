@@ -92,7 +92,11 @@ function openEntry(
       setState({ pendingText: event.text });
       return;
     }
-    if (event.type === "delegation" || event.type === "delegation_end") {
+    if (
+      event.type === "steering" ||
+      event.type === "delegation" ||
+      event.type === "delegation_end"
+    ) {
       return;
     }
     entry.state = {
