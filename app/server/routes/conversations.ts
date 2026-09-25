@@ -13,6 +13,7 @@ import {
   removeConversationAttachment,
 } from "../services/conversation-attachments.js";
 import { IssueError } from "../services/errors.js";
+import { publishFrame } from "../services/conversation-stream.js";
 import { forkConversation } from "../services/conversation-fork.js";
 import {
   createConversation,
@@ -435,7 +436,22 @@ export function createConversationsRouter(
 
       const activeRun = sessions.getActiveRun(conversationId);
       if (activeRun) {
-        await setPendingMessage(conversationId, prompt, attachments);
+        if (attachments.length > 0) {
+          await setPendingMessage(conversationId, prompt, attachments);
+          res.status(202).json({ pending: true });
+          return;
+        }
+
+        publishFrame(conversationId, {
+          event: { type: "steering", text: prompt },
+          persist: false,
+        });
+        const outcome = await activeRun.steer(prompt);
+        if (outcome === "complete_delivered") {
+          res.status(202).json({ steered: true });
+          return;
+        }
+        await setPendingMessage(conversationId, prompt);
         res.status(202).json({ pending: true });
         return;
       }
