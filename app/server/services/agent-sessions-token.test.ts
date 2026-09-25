@@ -20,7 +20,7 @@ const AUTH_ERROR_TEXT =
   "Authentication error. If you are logged in, try logging out and back in.";
 
 describe("expired access token recovery", () => {
-  it("drops the stale handle and replays the prompt after an in-band auth failure", async () => {
+  it("replays the prompt once on the same handle after an in-band auth failure", async () => {
     const { createConversation, readConversation, createAgentSessions } =
       await load();
     // The failure arrives in-band while the run itself reports finished, so
@@ -45,13 +45,14 @@ describe("expired access token recovery", () => {
       status: "finished",
     });
 
-    // The first handle is gone — that release is what lets the SDK's refcounted
-    // executor cache reach zero and mint a new token — and the same prompt ran
-    // again on its replacement.
-    expect(fake.handles[0]?.disposed).toBe(true);
-    expect(fake.handles).toHaveLength(2);
-    expect(fake.handles[1]?.sends).toEqual([{ message: "go", options: {} }]);
-    expect(fake.handles[1]?.disposed).toBe(false);
+    // The SDK invalidates its own token cache, so the replay stays on the
+    // handle that just failed.
+    expect(fake.handles).toHaveLength(1);
+    expect(fake.handles[0]?.disposed).toBe(false);
+    expect(fake.handles[0]?.sends).toEqual([
+      { message: "go", options: {} },
+      { message: "go", options: {} },
+    ]);
 
     const { transcript } = readConversation(meta.id);
     expect(transcript.find((e) => e.type === "status" && e.status === "RETRYING"))
@@ -79,7 +80,9 @@ describe("expired access token recovery", () => {
     if (!result.ok) return;
     await result.run.wait();
 
-    expect(fake.handles[1]?.sends).toEqual([
+    expect(fake.handles).toHaveLength(1);
+    expect(fake.handles[0]?.sends).toEqual([
+      { message: "go", options: { model: { id: "auto" } } },
       { message: "go", options: { model: { id: "auto" } } },
     ]);
   });
@@ -112,7 +115,8 @@ describe("expired access token recovery", () => {
 
     expect(await result.run.wait()).toEqual(authResult);
     // Exactly one replay: a key that is genuinely bad must not loop.
-    expect(fake.handles).toHaveLength(2);
+    expect(fake.handles).toHaveLength(1);
+    expect(fake.handles[0]?.sends).toHaveLength(2);
   });
 
   it("replays after a code-only terminal auth error on the pump path", async () => {
@@ -141,12 +145,15 @@ describe("expired access token recovery", () => {
     if (!result.ok) return;
 
     expect(await result.run.wait()).toEqual(authResult);
-    expect(fake.handles).toHaveLength(2);
-    expect(fake.handles[0]?.disposed).toBe(true);
-    expect(fake.handles[1]?.sends).toEqual([{ message: "go", options: {} }]);
+    expect(fake.handles).toHaveLength(1);
+    expect(fake.handles[0]?.disposed).toBe(false);
+    expect(fake.handles[0]?.sends).toEqual([
+      { message: "go", options: {} },
+      { message: "go", options: {} },
+    ]);
   });
 
-  it("leaves a run in flight and other workspaces untouched", async () => {
+  it("leaves sibling sessions and other workspaces untouched", async () => {
     const { createConversation, createAgentSessions } = await load();
 
     const otherWorkspace = mkdtempSync(join(tmpdir(), "issue-session-ws2-"));
@@ -166,9 +173,10 @@ describe("expired access token recovery", () => {
 
     const fake = createFakeAgentSdk({
       sendScript: [
-        // The busy sibling starts first and stays streaming; the third send is
-        // the one whose token has expired.
+        // Busy sibling stays streaming. Idle same-cwd and other-workspace
+        // sends finish. The last scripted send is the expired token.
         { hold },
+        {},
         {},
         { stream: buildAuthFailureStream() },
       ],
@@ -177,6 +185,11 @@ describe("expired access token recovery", () => {
 
     const busy = await createConversation({
       title: "Busy sibling",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    const idle = await createConversation({
+      title: "Idle sibling",
       projectId: "platform",
       model: "composer-2.5",
     });
@@ -193,6 +206,9 @@ describe("expired access token recovery", () => {
 
     const busyRun = await sessions.sendPrompt(busy.id, { prompt: "busy" });
     expect(busyRun.ok).toBe(true);
+    const idleRun = await sessions.sendPrompt(idle.id, { prompt: "idle" });
+    expect(idleRun.ok).toBe(true);
+    if (idleRun.ok) await idleRun.run.wait();
     // Give the other workspace a live handle without leaving a run in flight.
     const elsewhereRun = await sessions.sendPrompt(elsewhere.id, {
       prompt: "elsewhere",
@@ -205,13 +221,14 @@ describe("expired access token recovery", () => {
     if (!failingRun.ok) return;
     await failingRun.run.wait();
 
-    const [busyHandle, elsewhereHandle, failedHandle] = fake.handles;
-    // Cancelling live work to repair a different conversation is not a trade
-    // worth making, and another workspace keys a different executor entirely.
+    const [busyHandle, idleHandle, elsewhereHandle, failedHandle] = fake.handles;
     expect(busyHandle?.disposed).toBe(false);
     expect(busyHandle?.cancelled).toBe(false);
+    expect(idleHandle?.disposed).toBe(false);
+    expect(idleHandle?.cancelled).toBe(false);
     expect(elsewhereHandle?.disposed).toBe(false);
-    expect(failedHandle?.disposed).toBe(true);
+    expect(failedHandle?.disposed).toBe(false);
+    expect(failedHandle?.sends).toHaveLength(2);
 
     releaseHold();
     if (busyRun.ok) await busyRun.run.wait();
