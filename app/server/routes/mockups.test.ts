@@ -56,8 +56,10 @@ function writeConversationMeta(conversationsDir: string, conversationId: string)
 async function listenUpstream(marker: string): Promise<{
   port: number;
   seen: string[];
+  upgradeOrigins: (string | undefined)[];
 }> {
   const seen: string[] = [];
+  const upgradeOrigins: (string | undefined)[] = [];
   const upstream = createServer((req, res) => {
     seen.push(req.url ?? "");
     res.setHeader("Content-Type", "text/plain");
@@ -65,6 +67,7 @@ async function listenUpstream(marker: string): Promise<{
   });
   upstream.on("upgrade", (req, socket) => {
     seen.push(req.url ?? "");
+    upgradeOrigins.push(req.headers.origin);
     socket.end(
       "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n",
     );
@@ -74,7 +77,17 @@ async function listenUpstream(marker: string): Promise<{
   });
   upstreams.push(upstream);
   const addr = upstream.address() as AddressInfo;
-  return { port: addr.port, seen };
+  return { port: addr.port, seen, upgradeOrigins };
+}
+
+async function openSocket(url: string, origin: string): Promise<void> {
+  const socket = new WebSocket(url, { origin });
+  await new Promise<void>((resolve) => {
+    socket.once("error", () => resolve());
+    socket.once("open", () => resolve());
+    socket.once("unexpected-response", () => resolve());
+  });
+  socket.close();
 }
 
 beforeEach(() => {
@@ -114,13 +127,15 @@ afterEach(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
+/** Upgrade listeners attach in the same order as `server/index.ts`. */
 async function startApp(): Promise<string> {
-  const { createApp } = await import("../app.js");
+  const { attachMultiplexedWebSocket, createApp } = await import("../app.js");
   const { attachMockupStackProxy } = await import("./mockups.js");
   const app = createApp(stubSessions());
   await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
   });
+  attachMultiplexedWebSocket(server!);
   attachMockupStackProxy(server!);
   const addr = server!.address() as AddressInfo;
   return `http://127.0.0.1:${addr.port}`;
@@ -268,5 +283,34 @@ describe("GET /mockups/:conversationId/", () => {
     expect(missing.status).toBe(200);
     expect(await missing.text()).toContain("Mockup preview is unavailable.");
     expect(beta.seen).toEqual([]);
+  });
+
+  it("strips the server channel onto the loopback root and presents a tracker page as the loopback origin", async () => {
+    const alpha = await listenUpstream("alpha-storybook");
+    const { conversationsDir } = await import("../config.js");
+    const { writeMockupStackState } = await import("../services/mockup-scratch.js");
+    writeConversationMeta(conversationsDir, "conv-a");
+    const pid = spawnSleeper();
+    writeMockupStackState("conv-a", {
+      port: alpha.port,
+      pid,
+      startTime: procStartTime(pid),
+      baseUrl: `http://127.0.0.1:${alpha.port}`,
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const baseUrl = await startApp();
+    const channel = `${baseUrl.replace("http://", "ws://")}/mockups/conv-a/storybook-server-channel?token=t`;
+    await openSocket(channel, baseUrl);
+    await openSocket(channel, "https://elsewhere.example");
+
+    expect(alpha.seen).toEqual([
+      "/storybook-server-channel?token=t",
+      "/storybook-server-channel?token=t",
+    ]);
+    expect(alpha.upgradeOrigins).toEqual([
+      `http://127.0.0.1:${alpha.port}`,
+      "https://elsewhere.example",
+    ]);
   });
 });
