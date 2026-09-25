@@ -61,6 +61,12 @@ gate state before re-entering `reviewing`.
 
 Complete all of **## Bootstrap** (steps 1–4) first.
 
+Run `npm run typecheck` with working directory `app/` under the Project
+workspace. Exit 0 adds no finding. A non-zero exit is one unanchored
+actionable finding; the comment judgement is the compiler output. Carry
+that finding into Outcome together with any review findings. `qa passed`
+is not available while it stands.
+
 **`done` implies committed.** When `noDiff` is absent/false and
 `issue task get <taskId> commits` is `[]`, you cannot pass review — treat
 empty commits as actionable (the implementor must record a commit before
