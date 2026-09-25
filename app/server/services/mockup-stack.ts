@@ -33,6 +33,56 @@ import {
  */
 
 const MOCKUP_HEAP_MB = 2048;
+const HEAP_OOM_EVENT = "Allocation failed - JavaScript heap out of memory";
+
+export function mockupStackMemoryLimitMessage(): string {
+  return `mockup stack memory limit: storybook exceeded the ${MOCKUP_HEAP_MB} MB heap limit`;
+}
+
+interface HeapReport {
+  header?: {
+    event?: string;
+    processId?: number;
+  };
+}
+
+function isHeapLimitReport(report: HeapReport): boolean {
+  return report.header?.event === HEAP_OOM_EVENT;
+}
+
+function hasHeapLimitReportForPid(reportDir: string, pid: number): boolean {
+  if (!existsSync(reportDir)) return false;
+  for (const name of readdirSync(reportDir)) {
+    if (!name.startsWith("report.") || !name.endsWith(".json")) {
+      continue;
+    }
+    if (!name.includes(`.${pid}.`)) {
+      continue;
+    }
+    try {
+      const report = JSON.parse(
+        readFileSync(join(reportDir, name), "utf8"),
+      ) as HeapReport;
+      if (isHeapLimitReport(report)) {
+        return true;
+      }
+    } catch {
+      // skip malformed report
+    }
+  }
+  return false;
+}
+
+function reportMockupStackHeapLimit(
+  conversationId: string,
+  pid: number,
+): void {
+  const reportDir = join(mockupStackDir(conversationId), "heap-reports");
+  if (!hasHeapLimitReportForPid(reportDir, pid)) {
+    return;
+  }
+  console.error(mockupStackMemoryLimitMessage());
+}
 
 const READY_TIMEOUT_MS = 90_000;
 const READY_POLL_MS = 250;
@@ -429,6 +479,8 @@ export async function stopMockupStack(
   }
   const state = readMockupStackState(conversationId);
   if (!state) return { stopped: false, state: null };
+
+  reportMockupStackHeapLimit(conversationId, state.pid);
 
   try {
     await stopRecordedGroup(state);
