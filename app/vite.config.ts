@@ -127,6 +127,11 @@ export default defineConfig({
   },
   test: {
     exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
-    setupFiles: ["./test/vitest-worker-temp.ts"],
+    setupFiles: ["./test/vitest-worker-temp.ts", "./test/vitest-worker-hardening.ts"],
+    poolOptions: {
+      forks: {
+        execArgv: ["--max-old-space-size=2048"],
+      },
+    },
   },
 });
