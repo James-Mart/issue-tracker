@@ -52,6 +52,11 @@ const { scrubOrphanedRunsAtBoot } = await import(
 );
 await scrubOrphanedRunsAtBoot();
 
+const { closeOpenDelegationsAtBoot } = await import(
+  "./services/open-delegation-boot.js"
+);
+await closeOpenDelegationsAtBoot();
+
 const { startWorkQueueLauncher } = await import(
   "./services/work-queue-launcher.js"
 );

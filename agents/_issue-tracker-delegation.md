@@ -29,8 +29,10 @@ Use `CallMcpTool` against server `custom-user-tools`:
   `isRetryable`, `message`, and `agentId` on a runtime failure. Caller errors
   still throw. On `failureClass`: `auth` — nothing; the app is already
   recovering and the turn is about to cancel; `cancelled` — report the
-  decision, do not retry; `stalled-before-first-token` — retryable; re-issue
-  the delegation; `transport-exhausted` — the upstream already exhausted ten
+  decision, do not retry; `host-process-died` — the host died before the run
+  finished; whether the lost work still matters is the caller's decision;
+  `stalled-before-first-token` — retryable; re-issue the delegation;
+  `transport-exhausted` — the upstream already exhausted ten
   streaming attempts, so an immediate re-issue is unlikely to help; whether to
   try at all is the caller's judgment rather than something the runtime
   settles; `agent-failed` — the nested agent's conclusion; retry or escalate
@@ -38,7 +40,11 @@ Use `CallMcpTool` against server `custom-user-tools`:
 - **`delegations`** — return `{ root: { agentId }, delegations: [...] }`
   where `root.agentId` is this conversation's session root agent and
   `delegations` lists nested delegations most-recent-first (use when
-  looking up a `resumeId`). When the conversation is unknown or has no
+  looking up a `resumeId`). Each entry carries `delegationId`, `agentId`,
+  `role`, `model`, and `at`; `parentDelegationId` when another delegation
+  spawned the run; and `end` (`status`, `endedAt`, and `failureClass` when
+  the run failed) once the run has finished — omit `end` while this process
+  is still running the delegation. When the conversation is unknown or has no
   root agent yet, `delegations` is empty and `root` is omitted.
 
 ## IDE channel

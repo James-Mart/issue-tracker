@@ -39,6 +39,7 @@ function isOmittedTranscriptRow(event: TranscriptEvent): boolean {
   switch (event.type) {
     case "usage":
     case "subagent_update":
+    case "absorbed_replay":
       return true;
     case "status":
       return !event.message;

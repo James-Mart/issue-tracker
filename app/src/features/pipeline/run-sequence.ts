@@ -17,6 +17,13 @@ export type SequenceBeatTurn = {
   durationMs?: number;
 };
 
+export type AbsorbedReplay = {
+  toolCallId: string;
+  tool: string;
+  outcome: "joined-in-flight" | "returned-stored-result";
+  at: string;
+};
+
 export type SequenceBeat = {
   from: string;
   to: string;
@@ -27,6 +34,8 @@ export type SequenceBeat = {
   turns?: SequenceBeatTurn[];
   /** Parent tool call that spawned this beat — used to close it from a live frame. */
   parentCallId?: string;
+  /** SDK replays coalesced onto this call. Not a second spawn. */
+  absorbedReplays?: AbsorbedReplay[];
   /** No persisted end and no terminal transcript signal — end cannot be judged. */
   indeterminate?: true;
   /** Stream seq when this beat was appended live; fetched beats omit it. */

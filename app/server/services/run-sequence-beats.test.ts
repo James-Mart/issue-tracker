@@ -493,4 +493,47 @@ describe("runSequence", () => {
     const runSequence = await loadRunSequence();
     expect(runSequence("conv-no-marker").condition).toBe("completed");
   });
+
+  it("attaches an absorbed replay to the original spawn and does not add a beat", async () => {
+    writeConversation("conv-absorbed", {
+      meta: { issueId: "capture", channel: "planning" },
+      delegations: [
+        delegation({
+          delegationId: "del-research",
+          agentId: "agent-research",
+          role: "research",
+          model: "composer-2.5",
+          at: AT,
+          parentCallId: "call-research",
+          end: { status: "completed", endedAt: AT_END },
+        }),
+      ],
+      transcript: [
+        toolCall("call-research", "running", AT, 1),
+        {
+          type: "absorbed_replay",
+          toolCallId: "call-research",
+          tool: "delegate",
+          outcome: "joined-in-flight",
+          at: AT_CHILD,
+          seq: 2,
+        },
+        toolCall("call-research", "completed", AT_END, 3),
+      ],
+    });
+
+    const runSequence = await loadRunSequence();
+    const sequence = runSequence("conv-absorbed");
+    expect(sequence.beats.map((beat) => beat.label)).toEqual([
+      "spawn Research",
+    ]);
+    expect(sequence.beats[0]?.absorbedReplays).toEqual([
+      {
+        toolCallId: "call-research",
+        tool: "delegate",
+        outcome: "joined-in-flight",
+        at: AT_CHILD,
+      },
+    ]);
+  });
 });
