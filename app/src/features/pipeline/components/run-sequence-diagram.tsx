@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Bot,
   ChevronDown,
@@ -10,6 +10,11 @@ import {
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
+import {
+  AbsorbedReplayChip,
+  AbsorbedReplayDetail,
+  absorbedReplayCount,
+} from "./absorbed-replay";
 import { RunSequenceRail } from "./run-sequence-rail";
 import {
   LIFELINE_DASH,
@@ -132,6 +137,7 @@ function BeatLabel({
   isLive,
   isFailed,
   isIndeterminate,
+  chip,
 }: {
   label: string;
   x: number;
@@ -139,6 +145,7 @@ function BeatLabel({
   isLive: boolean;
   isFailed: boolean;
   isIndeterminate: boolean;
+  chip?: ReactNode;
 }) {
   return (
     <span
@@ -161,6 +168,7 @@ function BeatLabel({
         />
       ) : null}
       {label}
+      {chip}
       {isFailed ? (
         <XCircle
           data-testid="sequence-failure-mark"
@@ -196,6 +204,9 @@ export function RunSequenceDiagram({
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     () => new Set(),
   );
+  const [absorbedOpen, setAbsorbedOpen] = useState<Set<number>>(
+    () => new Set(),
+  );
   const metrics = DESKTOP_SEQUENCE_METRICS;
   const rows = useMemo(
     () => buildSequenceRows(sequence.beats, loopExpanded),
@@ -205,19 +216,29 @@ export function RunSequenceDiagram({
     () => buildSequenceDisplay(sequence.sections, rows, collapsedSections),
     [sequence.sections, rows, collapsedSections],
   );
+  const blockHeight = (item: (typeof displayItems)[number]): number => {
+    if (item.kind === "section") return metrics.sectionHeaderHeight;
+    const count =
+      item.row.kind === "beat" ? absorbedReplayCount(item.row.beat) : 0;
+    if (count > 0 && absorbedOpen.has(item.row.beatIndex)) {
+      return metrics.rowHeight + count * 88;
+    }
+    return metrics.rowHeight;
+  };
   const placed = useMemo(() => {
     let yCursor = metrics.padTop + metrics.lifelineHeader;
     return displayItems.map((item) => {
+      const height = blockHeight(item);
       if (item.kind === "section") {
-        const y = yCursor + metrics.sectionHeaderHeight / 2;
-        yCursor += metrics.sectionHeaderHeight;
-        return { ...item, y };
+        const y = yCursor + height / 2;
+        yCursor += height;
+        return { ...item, y, blockHeight: height };
       }
       const y = yCursor + metrics.rowHeight / 2;
-      yCursor += metrics.rowHeight;
-      return { ...item, y };
+      yCursor += height;
+      return { ...item, y, blockHeight: height };
     });
-  }, [displayItems, metrics]);
+  }, [displayItems, metrics, absorbedOpen]);
   const placedRows = placed.filter(
     (item): item is Extract<(typeof placed)[number], { kind: "row" }> =>
       item.kind === "row",
@@ -250,14 +271,7 @@ export function RunSequenceDiagram({
   const contentBottom =
     metrics.padTop +
     metrics.lifelineHeader +
-    displayItems.reduce(
-      (sum, item) =>
-        sum +
-        (item.kind === "section"
-          ? metrics.sectionHeaderHeight
-          : metrics.rowHeight),
-      0,
-    );
+    displayItems.reduce((sum, item) => sum + blockHeight(item), 0);
   // Failed condition is "any error," not a terminal cut: later beats stay.
   // The stop tail contrasts completed's post-last-beat extension.
   const height =
@@ -303,6 +317,15 @@ export function RunSequenceDiagram({
             displayItems={displayItems}
             onToggle={toggle}
             onToggleSection={toggleSection}
+            absorbedOpen={absorbedOpen}
+            onToggleAbsorbed={(beatIndex) => {
+              setAbsorbedOpen((prev) => {
+                const next = new Set(prev);
+                if (next.has(beatIndex)) next.delete(beatIndex);
+                else next.add(beatIndex);
+                return next;
+              });
+            }}
           />
         ) : (
         <div className="flex min-w-0" style={{ minHeight: height }}>
@@ -529,6 +552,10 @@ export function RunSequenceDiagram({
             const label = beatCaptionLabel(
               row.kind === "turn" ? row.turn.label : row.beat.label,
             );
+            const replayCount =
+              row.kind === "beat" ? absorbedReplayCount(row.beat) : 0;
+            const replayOpen =
+              replayCount > 0 && absorbedOpen.has(row.beatIndex);
             return (
               <div
                 key={`${row.kind}-${row.beatIndex}-${rowIndex}`}
@@ -547,7 +574,42 @@ export function RunSequenceDiagram({
                   isLive={row.kind === "beat" && isLive}
                   isFailed={row.kind === "beat" && isFailed}
                   isIndeterminate={row.kind === "beat" && isIndeterminate}
+                  chip={
+                    replayCount > 0 ? (
+                      <button
+                        type="button"
+                        aria-expanded={replayOpen}
+                        aria-label={`${replayOpen ? "Collapse" : "Expand"} absorbed replay on ${label}`}
+                        className="inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => {
+                          setAbsorbedOpen((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(row.beatIndex)) next.delete(row.beatIndex);
+                            else next.add(row.beatIndex);
+                            return next;
+                          });
+                        }}
+                      >
+                        <AbsorbedReplayChip count={replayCount} />
+                      </button>
+                    ) : undefined
+                  }
                 />
+                {replayOpen && row.kind === "beat"
+                  ? row.beat.absorbedReplays?.map((replay, replayIndex) => (
+                      <div
+                        key={`${replay.toolCallId}-${replay.at}`}
+                        className="absolute z-20"
+                        style={{
+                          left: metrics.padLeft,
+                          top: y + 16 + replayIndex * 88,
+                          width: width - metrics.padLeft - metrics.padRight,
+                        }}
+                      >
+                        <AbsorbedReplayDetail beat={row.beat} replay={replay} />
+                      </div>
+                    ))
+                  : null}
               </div>
             );
           })}

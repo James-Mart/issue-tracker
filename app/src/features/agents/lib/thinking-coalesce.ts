@@ -12,6 +12,7 @@ export function isTopLevelThinkingInterrupt(event: TranscriptEvent): boolean {
     case "thinking":
     case "usage":
     case "subagent_update":
+    case "absorbed_replay":
       return false;
     case "status":
       // Bare run-state status is omitted from the thread body.

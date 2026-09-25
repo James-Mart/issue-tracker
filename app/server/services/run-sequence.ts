@@ -38,6 +38,13 @@ export type SequenceBeatTurn = {
   durationMs?: number;
 };
 
+export type AbsorbedReplay = {
+  toolCallId: string;
+  tool: string;
+  outcome: "joined-in-flight" | "returned-stored-result";
+  at: string;
+};
+
 export type SequenceBeat = {
   from: string;
   to: string;
@@ -50,6 +57,8 @@ export type SequenceBeat = {
   variant?: string;
   /** Parent tool call that spawned this beat — used to close it from a live frame. */
   parentCallId?: string;
+  /** SDK replays coalesced onto this call. Not a second spawn. */
+  absorbedReplays?: AbsorbedReplay[];
   /** No persisted end and no terminal transcript signal — end cannot be judged. */
   indeterminate?: true;
   /** Sum of attributed `usage.totalTokens` for this beat. */
@@ -347,6 +356,7 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
       ...(indeterminate ? { indeterminate: true } : {}),
       ...(hasTokens ? { tokenTotal } : {}),
       ...(cumulativeMs !== undefined ? { cumulativeMs } : {}),
+      ...mergedAbsorbedReplays(group),
     },
     seq: first.seq,
     at: first.at,
@@ -628,6 +638,40 @@ function attributeUsage(
   return sawUsage ? tokenTotal : undefined;
 }
 
+function mergedAbsorbedReplays(
+  group: OrderedBeat[],
+): { absorbedReplays: AbsorbedReplay[] } | Record<string, never> {
+  const absorbedReplays = group.flatMap(
+    (row) => row.beat.absorbedReplays ?? [],
+  );
+  return absorbedReplays.length > 0 ? { absorbedReplays } : {};
+}
+
+function attachAbsorbedReplays(
+  rows: OrderedBeat[],
+  transcript: TranscriptEvent[],
+): void {
+  const byCall = new Map<string, AbsorbedReplay[]>();
+  for (const event of transcript) {
+    if (event.type !== "absorbed_replay") continue;
+    const list = byCall.get(event.toolCallId) ?? [];
+    list.push({
+      toolCallId: event.toolCallId,
+      tool: event.tool,
+      outcome: event.outcome,
+      at: event.at,
+    });
+    byCall.set(event.toolCallId, list);
+  }
+  for (const row of rows) {
+    const id = row.beat.parentCallId;
+    if (id === undefined) continue;
+    const replays = byCall.get(id);
+    if (replays === undefined || replays.length === 0) continue;
+    row.beat.absorbedReplays = replays;
+  }
+}
+
 function stampCumulativeMs(rows: OrderedBeat[], runStartMs: number): void {
   for (const row of rows) {
     if (row.endedAt === undefined) continue;
@@ -641,6 +685,7 @@ export function runSequence(conversationId: string): RunSequence {
   const delegations = readDelegations(conversationId);
   const prompts = transcript.filter((e) => e.type === "prompt");
   const ordered = orderedBeats(conversationId, transcript, delegations);
+  attachAbsorbedReplays(ordered, transcript);
   const usageTotal = attributeUsage(ordered, transcript);
   stampCumulativeMs(ordered, Date.parse(meta.createdAt));
   const collapsed = collapseConsecutiveBeats(ordered);

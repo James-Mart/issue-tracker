@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight, Loader2, XCircle } from "lucide-react";
+import type { ReactNode } from "react";
 import { Rail, RailNode, type RailNodeState } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -8,6 +9,11 @@ import {
   type RunSequence,
   type SequenceBeatKind,
 } from "../run-sequence";
+import {
+  AbsorbedReplayChip,
+  AbsorbedReplayDetail,
+  absorbedReplayCount,
+} from "./absorbed-replay";
 import {
   DirectedArrow,
   IterationCountChip,
@@ -106,11 +112,13 @@ function BeatTitle({
   isLive,
   isFailed,
   isIndeterminate,
+  chip,
 }: {
   label: string;
   isLive: boolean;
   isFailed: boolean;
   isIndeterminate: boolean;
+  chip?: ReactNode;
 }) {
   return (
     <p
@@ -124,6 +132,7 @@ function BeatTitle({
       )}
     >
       <span data-testid="sequence-beat-label">{label}</span>
+      {chip}
       {isLive && !isIndeterminate ? (
         <Loader2
           className="h-3 w-3 shrink-0 motion-safe:animate-spin text-[hsl(var(--current))]"
@@ -151,11 +160,15 @@ export function RunSequenceRail({
   displayItems,
   onToggle,
   onToggleSection,
+  absorbedOpen,
+  onToggleAbsorbed,
 }: {
   sequence: RunSequence;
   displayItems: SequenceDisplayItem[];
   onToggle: (beatIndex: number) => void;
   onToggleSection: (key: string) => void;
+  absorbedOpen: ReadonlySet<number>;
+  onToggleAbsorbed: (beatIndex: number) => void;
 }) {
   const tail = lifelineTail(sequence.condition);
   const hasExpandedTurns = displayItems.some(
@@ -342,7 +355,27 @@ export function RunSequenceRail({
                   isLive={row.kind === "beat" && isLive}
                   isFailed={row.kind === "beat" && isFailed}
                   isIndeterminate={row.kind === "beat" && isIndeterminate}
+                  chip={
+                    row.kind === "beat" && absorbedReplayCount(row.beat) > 0 ? (
+                      <button
+                        type="button"
+                        aria-expanded={absorbedOpen.has(row.beatIndex)}
+                        aria-label={`${absorbedOpen.has(row.beatIndex) ? "Collapse" : "Expand"} absorbed replay on ${label}`}
+                        className="inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => onToggleAbsorbed(row.beatIndex)}
+                      >
+                        <AbsorbedReplayChip count={absorbedReplayCount(row.beat)} />
+                      </button>
+                    ) : undefined
+                  }
                 />
+                {row.kind === "beat" && absorbedOpen.has(row.beatIndex)
+                  ? row.beat.absorbedReplays?.map((replay) => (
+                      <div key={`${replay.toolCallId}-${replay.at}`} className="mt-2">
+                        <AbsorbedReplayDetail beat={row.beat} replay={replay} />
+                      </div>
+                    ))
+                  : null}
                 <div className="flex min-w-0 items-center gap-1.5">
                   <FromTo
                     sequence={sequence}

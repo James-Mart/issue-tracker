@@ -244,6 +244,13 @@ const hostCrashRecoveryEventInput = z.object({
   type: z.literal("host_crash_recovery"),
   message: z.string(),
 });
+/** SDK re-invoked a custom tool for a call this process already ran. */
+const absorbedReplayEventInput = z.object({
+  type: z.literal("absorbed_replay"),
+  toolCallId: nonEmpty,
+  tool: nonEmpty,
+  outcome: z.enum(["joined-in-flight", "returned-stored-result"]),
+});
 
 /** Write-time input: stored shape minus the server-stamped `at`. */
 export const transcriptEventInputSchema = z.discriminatedUnion("type", [
@@ -259,6 +266,7 @@ export const transcriptEventInputSchema = z.discriminatedUnion("type", [
   errorEventInput,
   delegationRecoveryEventInput,
   hostCrashRecoveryEventInput,
+  absorbedReplayEventInput,
 ]);
 
 export type TranscriptEventInput = z.infer<typeof transcriptEventInputSchema>;
@@ -352,6 +360,7 @@ export const transcriptEventSchema = z.discriminatedUnion("type", [
   withStoredTranscriptMeta(errorEventInput),
   withStoredTranscriptMeta(delegationRecoveryEventInput),
   withStoredTranscriptMeta(hostCrashRecoveryEventInput),
+  withStoredTranscriptMeta(absorbedReplayEventInput),
 ]);
 
 export type TranscriptEvent = z.infer<typeof transcriptEventSchema>;
@@ -371,6 +380,7 @@ export const conversationStreamEventSchema = z.union([
     withStreamFrameMeta(errorEventInput),
     withStreamFrameMeta(delegationRecoveryEventInput),
     withStreamFrameMeta(hostCrashRecoveryEventInput),
+    withStreamFrameMeta(absorbedReplayEventInput),
   ]),
   withStreamFrameMeta(runFrameInput),
   withStreamFrameMeta(pendingFrameInput),

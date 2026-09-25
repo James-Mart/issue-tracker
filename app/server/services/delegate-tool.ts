@@ -25,6 +25,7 @@ import {
 } from "./model-selection.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 import { createAgentStackTools } from "./agent-stack-tools.js";
+import { coalesceCustomTools } from "./custom-tool-coalesce.js";
 import { createSdkBugReportTools } from "./sdk-bug-report.js";
 
 /** Interval for live-only nested-run liveness frames. */
@@ -722,7 +723,7 @@ export function createDelegateCustomTools(
       },
     };
 
-    return customTools;
+    return coalesceCustomTools(customTools, options.conversationId);
   }
 
   return buildCustomTools(null, options.getCursorConversationId);
