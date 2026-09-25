@@ -2,6 +2,10 @@ import type {
   AgentRun,
   ConversationStreamEvent,
 } from "@server/schemas";
+import {
+  applyAttributedCost,
+  mergeSequenceCost,
+} from "@server/services/run-sequence-cost";
 import { roleFamilyCaption, roleFamilyTitle } from "./role-family";
 import {
   frontierBeatIndex,
@@ -363,6 +367,49 @@ function applySubagentUpdate(
   return { ...sequence, beats };
 }
 
+function beatIndexForCost(
+  beats: SequenceBeat[],
+  event: { at: string; parentCallId?: string },
+): number {
+  if (event.parentCallId !== undefined) {
+    return beats.findIndex(
+      (beat) =>
+        beat.kind === "spawn" && beat.parentCallId === event.parentCallId,
+    );
+  }
+  let best = -1;
+  for (let i = 0; i < beats.length; i += 1) {
+    const beat = beats[i]!;
+    if (beat.kind !== "human-turn") continue;
+    if (beat.startedAt.localeCompare(event.at) > 0) continue;
+    if (best < 0 || beats[best]!.startedAt.localeCompare(beat.startedAt) <= 0) {
+      best = i;
+    }
+  }
+  return best;
+}
+
+function withBeatCost(
+  sequence: RunSequence,
+  beats: SequenceBeat[],
+  index: number,
+  event: Parameters<typeof applyAttributedCost>[1],
+): RunSequence {
+  if (index >= 0) {
+    const beat = beats[index]!;
+    beats[index] = {
+      ...beat,
+      cost: applyAttributedCost(beat.cost, event),
+    };
+  }
+  const cost = mergeSequenceCost(beats.map((beat) => beat.cost));
+  return {
+    ...sequence,
+    beats,
+    ...(cost !== undefined ? { cost } : {}),
+  };
+}
+
 function applyUsage(
   sequence: RunSequence,
   event: Extract<ConversationStreamEvent, { type: "usage" | "run_usage" }>,
@@ -370,35 +417,30 @@ function applyUsage(
   const tokens = event.usage.totalTokens;
   const tokenTotal = (sequence.tokenTotal ?? 0) + tokens;
   const beats = sequence.beats.slice();
-  if (event.parentCallId !== undefined) {
-    const index = beats.findIndex(
-      (beat) =>
-        beat.kind === "spawn" && beat.parentCallId === event.parentCallId,
-    );
-    if (index >= 0) {
-      beats[index] = {
-        ...beats[index]!,
-        tokenTotal: (beats[index]!.tokenTotal ?? 0) + tokens,
-      };
-    }
-  } else {
-    let best = -1;
-    for (let i = 0; i < beats.length; i += 1) {
-      const beat = beats[i]!;
-      if (beat.kind !== "human-turn") continue;
-      if (beat.startedAt.localeCompare(event.at) > 0) continue;
-      if (best < 0 || beats[best]!.startedAt.localeCompare(beat.startedAt) <= 0) {
-        best = i;
-      }
-    }
-    if (best >= 0) {
-      beats[best] = {
-        ...beats[best]!,
-        tokenTotal: (beats[best]!.tokenTotal ?? 0) + tokens,
-      };
-    }
+  const index = beatIndexForCost(beats, event);
+  if (index >= 0) {
+    const beat = beats[index]!;
+    beats[index] = {
+      ...beat,
+      tokenTotal: (beat.tokenTotal ?? 0) + tokens,
+      cost: applyAttributedCost(beat.cost, event),
+    };
   }
-  return { ...sequence, beats, tokenTotal };
+  const cost = mergeSequenceCost(beats.map((beat) => beat.cost));
+  return {
+    ...sequence,
+    beats,
+    tokenTotal,
+    ...(cost !== undefined ? { cost } : {}),
+  };
+}
+
+function applyRunCost(
+  sequence: RunSequence,
+  event: Extract<ConversationStreamEvent, { type: "run_cost" }>,
+): RunSequence {
+  const beats = sequence.beats.slice();
+  return withBeatCost(sequence, beats, beatIndexForCost(beats, event), event);
 }
 
 /** Fold one conversation frame onto a fetched (or already-overlaid) sequence. */
@@ -416,6 +458,7 @@ export function applyLiveFrame(
   if (event.type === "usage" || event.type === "run_usage") {
     return applyUsage(sequence, event);
   }
+  if (event.type === "run_cost") return applyRunCost(sequence, event);
   return sequence;
 }
 

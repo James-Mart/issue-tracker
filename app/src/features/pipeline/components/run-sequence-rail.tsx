@@ -42,7 +42,7 @@ function metricsSpacer() {
     <span
       className="inline-flex shrink-0 gap-1.5"
       style={{
-        width: `calc(${SEQUENCE_METRIC_COLS.token} + ${SEQUENCE_METRIC_COLS.duration} + ${SEQUENCE_METRIC_COLS.cumulative} + 0.75rem)`,
+        width: `calc(${SEQUENCE_METRIC_COLS.duration} + ${SEQUENCE_METRIC_COLS.cumulative} + 1.125rem)`,
       }}
       aria-hidden
     />
@@ -92,14 +92,14 @@ function FromTo({
     <div className="mt-1 flex min-w-0 flex-1 items-center gap-1.5">
       <span
         data-testid="sequence-from"
-        className="min-w-0 max-w-[40%] text-right font-mono text-[10px] leading-snug text-muted-foreground"
+        className="min-w-0 max-w-[40%] truncate text-right font-mono text-[10px] leading-snug text-muted-foreground"
       >
         {displayLifelineLabel(lifelineOf(sequence, from))}
       </span>
       <BeatKindArrow kind={kind} accent={accent} />
       <span
         data-testid="sequence-to"
-        className="min-w-0 max-w-[40%] font-mono text-[10px] leading-snug text-muted-foreground"
+        className="min-w-0 max-w-[40%] truncate font-mono text-[10px] leading-snug text-muted-foreground"
       >
         {displayLifelineLabel(lifelineOf(sequence, to))}
       </span>
@@ -323,6 +323,7 @@ export function RunSequenceRail({
                       isFailed={metricsRow.isFailed}
                       beatIndex={row.beatIndex}
                       rowKind="collapsed"
+                      tokenWidth="content"
                     />
                   </div>
                 </div>
@@ -392,6 +393,7 @@ export function RunSequenceRail({
                     isFailed={metricsRow.isFailed}
                     beatIndex={row.beatIndex}
                     rowKind={row.kind}
+                    tokenWidth="content"
                   />
                 </div>
               </div>

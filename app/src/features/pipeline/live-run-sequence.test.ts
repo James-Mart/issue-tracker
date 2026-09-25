@@ -6,6 +6,7 @@ import {
   insertFrameBySeq,
 } from "./live-run-sequence";
 import type { RunSequence, RunSequenceSection, SequenceBeat } from "./run-sequence";
+import { formatSequenceCostClause } from "@server/services/run-sequence-cost";
 
 const AT = "2026-08-28T12:00:00.000Z";
 const AT_MID = "2026-08-28T12:00:08.000Z";
@@ -423,6 +424,57 @@ describe("applyLiveFrame", () => {
     ]);
     expect(next.tokenTotal).toBe(6);
     expect(next.beats[0]).toMatchObject({ tokenTotal: 6 });
+  });
+
+  it("attributes a live run_cost onto the spawn and the header", () => {
+    const next = applyLiveFrames(inFlight(), [
+      {
+        type: "run_usage",
+        runId: "run-nested",
+        agentId: "agent-nested",
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 15,
+        },
+        parentCallId: "call-impl",
+        at: AT_MID,
+        seq: 8,
+      },
+      {
+        type: "run_cost",
+        runId: "run-nested",
+        agentId: "agent-nested",
+        parentCallId: "call-impl",
+        status: "settled",
+        cumulative: { rawCostCents: 18, chargedCents: 0 },
+        cost: { rawCostCents: 18, chargedCents: 0 },
+        at: AT_END,
+        seq: 9,
+      },
+    ]);
+    expect(formatSequenceCostClause(next.beats[0]?.cost)).toBe("$0.18");
+    expect(formatSequenceCostClause(next.cost)).toBe("$0.18");
+  });
+
+  it("keeps live cost pending until run_cost arrives", () => {
+    const next = applyLiveFrame(inFlight(), {
+      type: "usage",
+      usage: {
+        inputTokens: 4,
+        outputTokens: 2,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 6,
+      },
+      runId: "run-live",
+      parentCallId: "call-impl",
+      at: AT_MID,
+      seq: 8,
+    });
+    expect(formatSequenceCostClause(next.cost)).toBe("cost pending");
   });
 
   it("sums legacy usage events that have no runId", () => {
