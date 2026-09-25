@@ -45,6 +45,30 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("agent-sdk (live)", () => {
   );
 
   it(
+    "prewarms a workspace, then completes a send with the shared options",
+    async () => {
+      const cwd = process.cwd();
+      const release = await agentSdk.prewarmWorkspace(cwd);
+      try {
+        await using agent = await agentSdk.createAgent({
+          cwd,
+          model: { id: "composer-2.5" },
+          storeDir: STORE_DIR,
+        });
+        const run = await agent.send('Reply with the single word "pong".');
+        for await (const _event of run) {
+          // Drain the merged stream so wait() sees a finished run.
+        }
+        const result = await run.wait();
+        expect(result.status).toBe("finished");
+      } finally {
+        await release();
+      }
+    },
+    LIVE_TIMEOUT_MS,
+  );
+
+  it(
     "steers a live run and observes the user stream message",
     async () => {
       await using agent = await agentSdk.createAgent({

@@ -104,6 +104,9 @@ describe("GET /api/agent-models", () => {
       async resumeAgent() {
         throw new Error("not used");
       },
+      async prewarmWorkspace() {
+        throw new Error("not used");
+      },
     };
     const app = express();
     app.use(

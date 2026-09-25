@@ -246,6 +246,7 @@ function recordRunModels(inner: AgentSdk): {
       createAgent: async (options) => record(await inner.createAgent(options)),
       resumeAgent: async (agentId, storeDir, options) =>
         record(await inner.resumeAgent(agentId, storeDir, options)),
+      prewarmWorkspace: (cwd) => inner.prewarmWorkspace(cwd),
     },
   };
 }

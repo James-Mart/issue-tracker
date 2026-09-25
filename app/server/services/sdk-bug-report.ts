@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import type { SDKCustomTool } from "@cursor/sdk";
+import type { SDKCustomTool, SDKJsonValue } from "@cursor/sdk";
+import { z } from "zod";
 import { forumCredDir } from "../config.js";
 
 /**
@@ -57,19 +58,47 @@ export interface SdkBugReportInput {
   unrelatedToExisting?: boolean;
 }
 
-// A type alias, not an interface: only aliases get the implicit index
-// signature that makes this assignable to the SDK's `SDKJsonValue` result.
-export type ForumTopicMatch = {
-  id: number;
-  title: string;
-  createdAt: string;
-  url: string;
-};
+const forumTopicMatchSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  createdAt: z.string(),
+  url: z.string(),
+});
 
-export type FileSdkBugResult =
-  | { status: "duplicates_found"; candidates: ForumTopicMatch[] }
-  | { status: "replied"; url: string; topicId: number }
-  | { status: "created"; url: string; topicId: number };
+export type ForumTopicMatch = z.infer<typeof forumTopicMatchSchema>;
+
+const fileSdkBugResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("duplicates_found"),
+    candidates: z.array(forumTopicMatchSchema),
+  }),
+  z.object({
+    status: z.literal("replied"),
+    url: z.string(),
+    topicId: z.number(),
+  }),
+  z.object({
+    status: z.literal("created"),
+    url: z.string(),
+    topicId: z.number(),
+  }),
+]);
+
+export type FileSdkBugResult = z.infer<typeof fileSdkBugResultSchema>;
+
+function toolOutputSchema<T extends z.ZodType>(
+  schema: T,
+): Record<string, SDKJsonValue> {
+  return z.toJSONSchema(schema) as Record<string, SDKJsonValue>;
+}
+
+const FILE_SDK_BUG_ANNOTATIONS = {
+  title: "File SDK bug report",
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+} as const;
 
 export interface ForumDeps {
   fetchImpl: typeof fetch;
@@ -335,6 +364,8 @@ export function createSdkBugReportTools(
     file_cursor_sdk_bug: {
       description:
         "File a bug in @cursor/sdk (the agent SDK this app embeds) on forum.cursor.com under Jared's account. SDK bugs only — not the Cursor IDE, CLI, or cloud agents, and never feature requests or questions. Searches for existing reports first and refuses to open a duplicate. Fields are word-budgeted and must be first person singular.",
+      annotations: FILE_SDK_BUG_ANNOTATIONS,
+      outputSchema: toolOutputSchema(fileSdkBugResultSchema),
       inputSchema: {
         type: "object",
         properties: {
@@ -371,7 +402,7 @@ export function createSdkBugReportTools(
         },
         required: ["title", "description", "reproduction", "expected"],
       },
-      execute: async (args) =>
+      execute: async (args): Promise<FileSdkBugResult> =>
         fileSdkBugReport(args as unknown as SdkBugReportInput, deps),
     },
   };
