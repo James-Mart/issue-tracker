@@ -39,6 +39,7 @@ import { stopAgentStack } from "./agent-stack.js";
 import { resolveConversationModel } from "./model-selection.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { reconcileOrphanedConversation } from "./orphan-run-scrub.js";
+import { runCostRecorder } from "./run-cost-recorder.js";
 import { turnMadeProgress } from "./run-progress.js";
 
 export type { NormalizedStep };
@@ -569,6 +570,12 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         };
         publishFrame(conversationId, { event: usageEvent, persist: true });
         await appendEvent(conversationId, usageEvent);
+        runCostRecorder.onRunUsage({
+          conversationId,
+          runId: result.id,
+          agentId: entry.handle.agentId,
+          endedAt: Date.now(),
+        });
       }
       if (entry.turn === turn) {
         entry.turn = undefined;

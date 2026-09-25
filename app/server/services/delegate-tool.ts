@@ -28,6 +28,7 @@ import {
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 import { createAgentStackTools } from "./agent-stack-tools.js";
 import { coalesceCustomTools } from "./custom-tool-coalesce.js";
+import { runCostRecorder } from "./run-cost-recorder.js";
 import { createSdkBugReportTools } from "./sdk-bug-report.js";
 
 /** Interval for live-only nested-run liveness frames. */
@@ -71,6 +72,13 @@ async function persistSettledRunUsage(
   };
   publishFrame(conversationId, { event, persist: true });
   await appendEvent(conversationId, event);
+  runCostRecorder.onRunUsage({
+    conversationId,
+    runId: waited.id,
+    agentId,
+    ...(parentCallId !== undefined ? { parentCallId } : {}),
+    endedAt: Date.now(),
+  });
 }
 
 function delegateFailureFromWait(
