@@ -151,7 +151,9 @@ beforeEach(() => {
   logError = vi.fn();
   clock = {
     now: () => Date.now(),
-    sleep: (ms) => vi.advanceTimersByTimeAsync(ms),
+    sleep: async (ms) => {
+      await vi.advanceTimersByTimeAsync(ms);
+    },
   };
 });
 
