@@ -25,7 +25,9 @@ export function FlowRowActions({
 
   return (
     <>
-      {capturedIdea ? <PlanningFlowRowLaunch issue={capturedIdea} /> : null}
+      {capturedIdea ? (
+        <PlanningFlowRowLaunch issue={capturedIdea} gates={false} />
+      ) : null}
       {readyWork ? <ImplementingFlowRowLaunch issue={readyWork} /> : null}
       {prUrl ? (
         <Button asChild variant="default" size="icon-sm">

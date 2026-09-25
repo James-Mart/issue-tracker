@@ -443,3 +443,57 @@
     pointer-events: none;
   }
 }
+
+@layer components {
+  /* Blank icon slot — same box as icon-sm, including the touch target. */
+  .cockpit-row-action-slot {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+  @media (pointer: coarse), (max-width: 859.98px) {
+    .cockpit-row-action-slot {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+  }
+  .cockpit-row-pack {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  /*
+   * Basis is 5ch so a long title shrinks beside its chips. Chips wrap only
+   * once that floor no longer fits. fit-content keeps a short title snug.
+   */
+  .cockpit-row-cluster {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0.375rem;
+    row-gap: 0.125rem;
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .cockpit-row-title {
+    flex: 1 1 5ch;
+    min-width: 5ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cockpit-row-meta {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .cockpit-row-spacer {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}

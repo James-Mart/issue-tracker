@@ -411,13 +411,26 @@ function PlanningLaunchButton({
   );
 }
 
+/** Gate toggles for a captured Idea row. Empty without a stakeholder. */
+export function PlanningFlowRowGates({ issue }: { issue: IdeaRecord }) {
+  if (!issue.stakeholder) return null;
+  return <IdeaGateChips issue={issue} testIdPrefix="flow-row" />;
+}
+
 /** Icon-only planning launch for Flow row steering. */
-export function PlanningFlowRowLaunch({ issue }: { issue: IdeaRecord }) {
+export function PlanningFlowRowLaunch({
+  issue,
+  gates = true,
+}: {
+  issue: IdeaRecord;
+  /** Row layout places gates outside the icon slot. */
+  gates?: boolean;
+}) {
   const stakeholder = issue.stakeholder;
 
   return (
     <div className="flex items-center gap-1">
-      {stakeholder ? <IdeaGateChips issue={issue} testIdPrefix="flow-row" /> : null}
+      {gates ? <PlanningFlowRowGates issue={issue} /> : null}
       <PlanningLaunchButton
         issue={issue}
         channel="planning"
