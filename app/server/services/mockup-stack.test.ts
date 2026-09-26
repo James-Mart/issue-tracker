@@ -512,10 +512,10 @@ describe("mockup stack lifecycle", () => {
   });
 
   it(
-    "rejects only after waitpid collects a group still uncollected past KILL_GRACE",
+    "rejects and keeps state when the group is still alive after SIGKILL",
     async () => {
       const { stopMockupStack } = await loadService();
-      const { writeMockupStackState } = await loadScratch();
+      const { mockupStackStatePath, writeMockupStackState } = await loadScratch();
       const { conversationsDir } = await loadConfig();
       writeConversationMeta(conversationsDir, "my-conversation");
       const child = spawn("sh", ["-c", "trap '' TERM; sleep 300"], {
@@ -532,37 +532,19 @@ describe("mockup stack lifecycle", () => {
         startedAt: "2026-01-01T00:00:00.000Z",
       });
       const realKill = process.kill.bind(process);
-      let deliver = false;
       const spy = vi.spyOn(process, "kill").mockImplementation(((
         target: number,
         signal?: NodeJS.Signals | number,
       ) => {
-        if (!deliver && (signal === "SIGTERM" || signal === "SIGKILL")) {
-          return true;
-        }
+        if (signal === "SIGTERM" || signal === "SIGKILL") return true;
         return realKill(target, signal as NodeJS.Signals);
       }) as typeof process.kill);
       try {
-        let settled = false;
-        const outcome = stopMockupStack("my-conversation").then(
-          () => {
-            settled = true;
-            return "resolved" as const;
-          },
-          (err: Error) => {
-            settled = true;
-            return err;
-          },
+        await expect(stopMockupStack("my-conversation")).rejects.toThrow(
+          /survived SIGKILL/,
         );
-        await new Promise((resolve) => setTimeout(resolve, 12_000));
-        expect(settled).toBe(false);
+        expect(existsSync(mockupStackStatePath("my-conversation"))).toBe(true);
         expect(existsSync(`/proc/${pid}`)).toBe(true);
-        deliver = true;
-        realKill(-pid, "SIGKILL");
-        const result = await outcome;
-        expect(result).toBeInstanceOf(Error);
-        expect((result as Error).message).toMatch(/survived SIGKILL/);
-        expect(isCollected(pid)).toBe(true);
       } finally {
         spy.mockRestore();
       }

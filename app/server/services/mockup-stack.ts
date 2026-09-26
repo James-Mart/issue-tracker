@@ -335,6 +335,25 @@ function groupsStillPresent(groups: ReadonlySet<number>): boolean {
   return false;
 }
 
+/** True when any TCP socket is in LISTEN on `port` (`/proc/net/tcp` state `0A`). */
+function portIsListening(port: number): boolean {
+  for (const table of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    let content: string;
+    try {
+      content = readFileSync(table, "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of content.split("\n").slice(1)) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 4 || parts[3] !== "0A") continue;
+      const portHex = parts[1]?.split(":")[1];
+      if (portHex && parseInt(portHex, 16) === port) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Collection is `waitpid`, not state Z. `timeoutMs` is how long to wait before
  * reporting that the group is still uncollected. `Infinity` waits until
@@ -354,12 +373,30 @@ async function waitUntilGroupsCollected(
 }
 
 /**
+ * Group gone and `port` not in TCP LISTEN. `timeoutMs` is how long to wait
+ * before reporting that the stack is still up.
+ */
+async function waitUntilReleased(
+  groups: ReadonlySet<number>,
+  port: number,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    reapExitedChildren();
+    if (!groupsStillPresent(groups) && !portIsListening(port)) return true;
+    if (Date.now() >= deadline) return false;
+    await delay(EXIT_POLL_MS);
+  }
+}
+
+/**
  * Stop sequence for one recorded group. A pid whose start time differs, or
  * that does not lead the detached process group, is left unsignaled.
- * `isMockupStackLive` is the signal check: a live group gets SIGTERM, then
- * SIGKILL after `TERM_GRACE_MS`, even when this process is not its parent.
- * The promise settles only after the group is gone. Past `KILL_GRACE_MS` it
- * keeps waiting, then rejects.
+ * A live group gets SIGTERM, then SIGKILL after `TERM_GRACE_MS`, even when
+ * this process is not its parent. The promise resolves only after the group
+ * is gone and `state.port` is not listening. Past `KILL_GRACE_MS` it rejects;
+ * the caller keeps the state.
  */
 async function stopRecordedGroup(state: MockupStackState): Promise<void> {
   if (!isRecordedStackGroup(state)) return;
@@ -369,12 +406,19 @@ async function stopRecordedGroup(state: MockupStackState): Promise<void> {
   const groups = new Set<number>([info.pgrp]);
   if (isMockupStackLive(state)) {
     signalGroup(state.pid, "SIGTERM");
-    const collectedOnTerm = await waitUntilGroupsCollected(groups, TERM_GRACE_MS);
-    if (!collectedOnTerm) {
+    const releasedOnTerm = await waitUntilReleased(
+      groups,
+      state.port,
+      TERM_GRACE_MS,
+    );
+    if (!releasedOnTerm) {
       signalGroup(info.pgrp, "SIGKILL");
-      const collectedOnKill = await waitUntilGroupsCollected(groups, KILL_GRACE_MS);
-      if (!collectedOnKill) {
-        await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
+      const releasedOnKill = await waitUntilReleased(
+        groups,
+        state.port,
+        KILL_GRACE_MS,
+      );
+      if (!releasedOnKill) {
         throw new Error(
           `mockup stack survived SIGKILL (pid ${state.pid}, port ${state.port})`,
         );
@@ -398,8 +442,10 @@ function removeMockupStackState(conversationId: string): void {
  * A live group leader is signaled even when this process is not its parent.
  * A pid whose start time differs, or that does not lead the detached process
  * group, is removed with no signal. A live group gets SIGTERM, then SIGKILL
- * after `TERM_GRACE_MS`. The promise settles only after the group is gone.
- * Past `KILL_GRACE_MS` it keeps waiting, then rejects.
+ * after `TERM_GRACE_MS`. The promise resolves only after the group is gone
+ * and the recorded port is not listening. When the stack is still up past
+ * `KILL_GRACE_MS`, the promise rejects and the state file stays so a retry
+ * can find it.
  */
 export async function stopMockupStack(
   conversationId: string,
@@ -412,11 +458,8 @@ export async function stopMockupStack(
   const state = readMockupStackState(conversationId);
   if (!state) return { stopped: false, state: null };
 
-  try {
-    await stopRecordedGroup(state);
-  } finally {
-    rmSync(mockupStackStatePath(conversationId), { force: true });
-  }
+  await stopRecordedGroup(state);
+  rmSync(mockupStackStatePath(conversationId), { force: true });
   return { stopped: true, state };
 }
 
@@ -435,9 +478,9 @@ async function stopRecordedMockupStacks(
       await stopRecordedGroup(state);
     } catch (err) {
       failure = err instanceof Error ? err : new Error(String(err));
-    } finally {
-      removeMockupStackState(conversationId);
+      continue;
     }
+    removeMockupStackState(conversationId);
     if (ownedLive) {
       freed.push({ conversationId, port: state.port });
     }
@@ -448,8 +491,8 @@ async function stopRecordedMockupStacks(
 
 /**
  * Stop every recorded mockup stack, including one the CLI started. Returns
- * each live group's freed port. A group still present past `KILL_GRACE_MS`
- * rejects only after the group is gone.
+ * each live group's freed port, and only after that port is not listening.
+ * A stack still up past `KILL_GRACE_MS` keeps its state and rejects.
  */
 export async function stopAllMockupStacks(): Promise<MockupStackStopAllEntry[]> {
   return stopRecordedMockupStacks(false);
