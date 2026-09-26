@@ -162,6 +162,7 @@ describe("agent sessions manager", () => {
         options: {
           cwd: workspaceDir,
           model: { id: "auto" },
+          conversationId: meta.id,
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
             delegations: expect.any(Object),
@@ -283,6 +284,7 @@ describe("agent sessions manager", () => {
           // resuming under anything else reports it as missing.
           cwd: workspaceDir,
           model: { id: "auto" },
+          conversationId: meta.id,
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
           }),
@@ -377,6 +379,7 @@ describe("agent sessions manager", () => {
               { id: "fast", value: "true" },
             ],
           },
+          conversationId: meta.id,
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
           }),
@@ -428,6 +431,7 @@ describe("agent sessions manager", () => {
         options: {
           cwd: workspaceDir,
           model: { id: "composer-2.5" },
+          conversationId: meta.id,
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
           }),

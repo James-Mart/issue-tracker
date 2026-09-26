@@ -528,6 +528,7 @@ describe("delegate publishes nested run frames", () => {
         options: {
           cwd,
           model: resolveModelSelection("cursor-grok-4.5-high-fast"),
+          conversationId: meta.id,
           customTools: expect.any(Object),
         },
       },

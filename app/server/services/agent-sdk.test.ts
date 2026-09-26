@@ -13,6 +13,7 @@ import type {
 import { JsonlLocalAgentStore } from "@cursor/sdk";
 import { CursorSdkError } from "@cursor/sdk";
 import { describe, expect, it, vi } from "vitest";
+import { browserOriginMcpEnv } from "./browser-origin-allowlist.js";
 import {
   createAgentSdk,
   PLAYWRIGHT_MCP_SERVERS,
@@ -169,6 +170,47 @@ describe("createAgent", () => {
     expect(options.agentId).toBe("resume-me");
     expect(options.disallowedTools).toEqual(["task"]);
     expectPlaywrightMcpServers(options);
+  });
+
+  it("points playwright at the conversation's live stack state", async () => {
+    const createSdkAgent = vi.fn(
+      async (_options: AgentOptions) => makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key-abc" });
+
+    await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+      conversationId: "conv-1",
+    });
+
+    const playwright = createSdkAgent.mock.calls[0]![0].mcpServers?.playwright;
+    expect(playwright && "env" in playwright ? playwright.env : undefined).toEqual(
+      browserOriginMcpEnv("conv-1"),
+    );
+    const resumeSdkAgent = vi.fn(
+      async (_id: string, _options?: Partial<AgentOptions>) => makeFakeSdkAgent([]),
+    );
+    const resumeSdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-abc" });
+    await resumeSdk.resumeAgent("agent-1", STORE_DIR, {
+      cwd: "/repo",
+      model: MODEL,
+      conversationId: "conv-1",
+    });
+    const resumed = resumeSdkAgent.mock.calls[0]![1]?.mcpServers?.playwright;
+    expect(resumed && "env" in resumed ? resumed.env : undefined).toEqual(
+      browserOriginMcpEnv("conv-1"),
+    );
+    expect(playwright && "args" in playwright ? playwright.args : undefined).toEqual(
+      expect.arrayContaining([
+        "--headless",
+        "--isolated",
+        "--browser",
+        "chromium",
+        "--init-page",
+      ]),
+    );
   });
 
   it("wires a composed store with a cached checkpoints substore", async () => {
