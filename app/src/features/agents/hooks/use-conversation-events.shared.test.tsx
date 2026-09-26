@@ -745,4 +745,83 @@ describe("transcript refetch on tab return", () => {
 
     unmountConsumer(consumer);
   });
+
+  it("shows a steering frame until the prompt arrives, or drops it for the same pending text", () => {
+    const consumer = mountConsumer("conv-steer");
+    const ws = openAndSubscribe();
+
+    act(() => {
+      ws.emitMessage({
+        type: "event",
+        topic: "conversation:conv-steer",
+        seq: 1,
+        event: {
+          type: "steering",
+          text: "Focus on v0.9",
+          at: "2026-08-10T00:00:00.000Z",
+          seq: 1,
+        },
+      });
+    });
+
+    expect(consumer.getState().steeringText).toBe("Focus on v0.9");
+    expect(consumer.getState().events).toEqual([]);
+
+    act(() => {
+      ws.emitMessage({
+        type: "event",
+        topic: "conversation:conv-steer",
+        seq: 2,
+        event: {
+          type: "prompt",
+          text: "Focus on v0.9",
+          at: "2026-08-10T00:00:01.000Z",
+          seq: 2,
+        },
+      });
+    });
+
+    expect(consumer.getState().steeringText).toBeNull();
+    expect(consumer.getState().events).toEqual([
+      {
+        type: "prompt",
+        text: "Focus on v0.9",
+        at: "2026-08-10T00:00:01.000Z",
+        seq: 2,
+      },
+    ]);
+
+    act(() => {
+      ws.emitMessage({
+        type: "event",
+        topic: "conversation:conv-steer",
+        seq: 3,
+        event: {
+          type: "steering",
+          text: "queue instead",
+          at: "2026-08-10T00:00:02.000Z",
+          seq: 3,
+        },
+      });
+    });
+    act(() => {
+      ws.emitMessage({
+        type: "event",
+        topic: "conversation:conv-steer",
+        seq: 4,
+        event: {
+          type: "pending",
+          text: "queue instead",
+          at: "2026-08-10T00:00:03.000Z",
+          seq: 4,
+        },
+      });
+    });
+
+    expect(consumer.getState().steeringText).toBeNull();
+    expect(consumer.getState().pendingText).toBe("queue instead");
+    expect(consumer.getState().pendingSteerFallback).toBe(true);
+
+    unmountConsumer(consumer);
+  });
 });

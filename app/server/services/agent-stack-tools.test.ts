@@ -3,6 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  expectResultMatchesOutputSchema,
+  expectToolAnnotations,
+} from "./custom-tool-metadata.test-helpers.js";
 
 let root: string;
 let issuesDir: string;
@@ -78,6 +82,61 @@ function spawnGroupLeader(childPidFile: string): number {
 }
 
 describe("createAgentStackTools", () => {
+  it("advertises annotations and output schemas", async () => {
+    const { createAgentStackTools } = await import("./agent-stack-tools.js");
+    const { agentStackStateSchema } = await import("./agent-stack.js");
+    const tools = createAgentStackTools({
+      conversationId: "app-conv",
+      getCursorConversationId: () => "cursor-1",
+    });
+
+    expectToolAnnotations(tools.agent_stack_start!, {
+      title: "Start verification stack",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expectToolAnnotations(tools.agent_stack_stop!, {
+      title: "Stop verification stack",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+
+    const sampleState = agentStackStateSchema.parse({
+      conversationId: "app-conv",
+      issueId: "story-a",
+      worktree: workspace,
+      port: 42002,
+      auxPort: 42001,
+      dataDir: join(root, "data"),
+      baseUrl: "http://127.0.0.1:42002",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      processes: [{ role: "api", pid: 1, startTime: "1" }],
+      cursorConversationIds: [],
+    });
+    expectResultMatchesOutputSchema(tools.agent_stack_start!, {
+      state: sampleState,
+      env: {
+        AGENT_STACK_PORT: "42002",
+        AGENT_STACK_AUX_PORT: "42001",
+        AGENT_STACK_DATA_DIR: join(root, "data"),
+        AGENT_STACK_BASE_URL: "http://127.0.0.1:42002",
+      },
+      reused: true,
+    });
+    expectResultMatchesOutputSchema(tools.agent_stack_stop!, {
+      stopped: true,
+      state: sampleState,
+    });
+    expectResultMatchesOutputSchema(tools.agent_stack_stop!, {
+      stopped: false,
+      state: null,
+    });
+  });
+
   it("exposes session-scoped start/stop with no conversation-id arguments", async () => {
     const { createAgentStackTools } = await import("./agent-stack-tools.js");
     const tools = createAgentStackTools({

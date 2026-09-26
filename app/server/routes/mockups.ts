@@ -24,8 +24,11 @@ function conversationIdFromPath(pathname: string): string | null {
 }
 
 /**
- * HTTP is stripped onto Storybook's loopback root. The HMR upgrade stays on
- * the public prefix, which is the path Storybook's client is started with.
+ * Storybook runs with Vite `base` set to the public prefix, but its own routes
+ * (`/`, `/iframe.html`, `/index.json`, the server channel) stay at the loopback
+ * root, so HTTP and non-HMR upgrades are stripped onto that root; Vite serves
+ * its modules at either path. The HMR upgrade stays on the prefix, which is
+ * the path Vite derives from `base` and listens on.
  */
 export function forwardedMockupPath(
   pathname: string,
@@ -134,6 +137,28 @@ function proxyHttp(
   req.pipe(upstream);
 }
 
+/**
+ * Storybook's server channel rejects an Origin whose hostname it does not
+ * know, and the tracker can be reached under any hostname. A page served from
+ * the tracker origin itself is presented as the loopback origin; any other
+ * Origin is forwarded untouched so Storybook's check still decides.
+ */
+function upstreamOrigin(
+  origin: string | undefined,
+  requestHost: string | undefined,
+  target: URL,
+): string | undefined {
+  if (!origin || !requestHost) return origin;
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    // Browsers send `null` for opaque origins; that is not the tracker origin.
+    return origin;
+  }
+  return originHost === requestHost ? target.origin : origin;
+}
+
 function proxyUpgrade(
   req: IncomingMessage,
   socket: Socket,
@@ -149,7 +174,11 @@ function proxyUpgrade(
   upstream.on("error", fail);
   socket.on("error", fail);
   upstream.on("connect", () => {
-    const headers = { ...req.headers, host: target.host };
+    const headers = {
+      ...req.headers,
+      host: target.host,
+      origin: upstreamOrigin(req.headers.origin, req.headers.host, target),
+    };
     const lines = [`${req.method ?? "GET"} ${path} HTTP/1.1`];
     for (const [key, value] of Object.entries(headers)) {
       if (value === undefined) continue;

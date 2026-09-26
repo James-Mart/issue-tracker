@@ -18,6 +18,11 @@ import {
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
+import {
+  attributeUsageAndCost,
+  mergeSequenceCost,
+  type SequenceCost,
+} from "./run-sequence-cost.js";
 import { isRunLive } from "./run-live.js";
 
 export type RunCondition = "completed" | "in-flight" | "failed";
@@ -63,6 +68,8 @@ export type SequenceBeat = {
   indeterminate?: true;
   /** Sum of attributed `usage.totalTokens` for this beat. */
   tokenTotal?: number;
+  /** Attributed runs' cost, same states as the thread strip. */
+  cost?: SequenceCost;
   /** Wall-clock ms from run start to this closed beat's end. */
   cumulativeMs?: number;
 };
@@ -92,6 +99,8 @@ export type RunSequence = {
   rootIssue?: RunSequenceRootIssue;
   /** Sum of every persisted `usage.totalTokens` on the conversation. */
   tokenTotal?: number;
+  /** Cost rolled up from the beats this sequence shows. */
+  cost?: SequenceCost;
 };
 
 export type RecentRun = {
@@ -123,8 +132,6 @@ type OrderedBeat = {
   issueId?: string;
   endedAt?: string;
 };
-
-type UsageEvent = Extract<TranscriptEvent, { type: "usage" }>;
 
 type IssueAncestry = {
   issueId: string;
@@ -326,6 +333,7 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
     tokenTotal += row.beat.tokenTotal;
     hasTokens = true;
   }
+  const cost = mergeSequenceCost(group.map((row) => row.beat.cost));
   let endedAt: string | undefined;
   let cumulativeMs: number | undefined;
   if (!anyOpen && !indeterminate) {
@@ -355,6 +363,7 @@ function collapseGroup(group: OrderedBeat[]): OrderedBeat {
       ...(parentCallId !== undefined ? { parentCallId } : {}),
       ...(indeterminate ? { indeterminate: true } : {}),
       ...(hasTokens ? { tokenTotal } : {}),
+      ...(cost !== undefined ? { cost } : {}),
       ...(cumulativeMs !== undefined ? { cumulativeMs } : {}),
       ...mergedAbsorbedReplays(group),
     },
@@ -595,49 +604,6 @@ function orderedBeats(
   return ordered;
 }
 
-function addTokenTotal(row: OrderedBeat, tokens: number): void {
-  row.beat.tokenTotal = (row.beat.tokenTotal ?? 0) + tokens;
-}
-
-function enclosingHumanTurn(
-  rows: OrderedBeat[],
-  event: UsageEvent,
-): OrderedBeat | undefined {
-  let best: OrderedBeat | undefined;
-  for (const row of rows) {
-    if (row.beat.kind !== "human-turn") continue;
-    if (compareOrder(row, event) > 0) continue;
-    if (!best || compareOrder(row, best) > 0) best = row;
-  }
-  return best;
-}
-
-function attributeUsage(
-  rows: OrderedBeat[],
-  transcript: TranscriptEvent[],
-): number | undefined {
-  let tokenTotal = 0;
-  let sawUsage = false;
-  for (const event of transcript) {
-    if (event.type !== "usage") continue;
-    sawUsage = true;
-    const tokens = event.usage.totalTokens;
-    tokenTotal += tokens;
-    if (event.parentCallId !== undefined) {
-      const spawn = rows.find(
-        (row) =>
-          row.beat.kind === "spawn" &&
-          row.beat.parentCallId === event.parentCallId,
-      );
-      if (spawn) addTokenTotal(spawn, tokens);
-      continue;
-    }
-    const human = enclosingHumanTurn(rows, event);
-    if (human) addTokenTotal(human, tokens);
-  }
-  return sawUsage ? tokenTotal : undefined;
-}
-
 function mergedAbsorbedReplays(
   group: OrderedBeat[],
 ): { absorbedReplays: AbsorbedReplay[] } | Record<string, never> {
@@ -686,9 +652,10 @@ export function runSequence(conversationId: string): RunSequence {
   const prompts = transcript.filter((e) => e.type === "prompt");
   const ordered = orderedBeats(conversationId, transcript, delegations);
   attachAbsorbedReplays(ordered, transcript);
-  const usageTotal = attributeUsage(ordered, transcript);
+  const usageTotal = attributeUsageAndCost(ordered, transcript);
   stampCumulativeMs(ordered, Date.parse(meta.createdAt));
   const collapsed = collapseConsecutiveBeats(ordered);
+  const cost = mergeSequenceCost(collapsed.map((row) => row.beat.cost));
   const sessionIssueId =
     meta.channel === "planning" && meta.issueId !== undefined
       ? meta.issueId
@@ -729,6 +696,7 @@ export function runSequence(conversationId: string): RunSequence {
     ...(recoveredErrors > 0 ? { recoveredErrors } : {}),
     ...(rootIssue !== undefined ? { rootIssue } : {}),
     ...(usageTotal !== undefined ? { tokenTotal: usageTotal } : {}),
+    ...(cost !== undefined ? { cost } : {}),
   };
 }
 

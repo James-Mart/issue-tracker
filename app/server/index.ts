@@ -25,6 +25,8 @@ const { refreshAgentModelSlugCatalog } = await import(
 );
 const { listenPort } = await import("./config.js");
 const { agentSessions } = await import("./services/agent-sessions.js");
+const { disposeSessionsAndReleasePrewarm, prewarmProjectWorkspaces } =
+  await import("./services/workspace-prewarm.js");
 const { validateHookRegistration } = await import(
   "./services/hook-registration.js"
 );
@@ -53,6 +55,11 @@ const { scrubOrphanedRunsAtBoot } = await import(
 );
 await scrubOrphanedRunsAtBoot();
 
+const { resumeRunCostPollingAtBoot } = await import(
+  "./services/run-cost-recorder.js"
+);
+await resumeRunCostPollingAtBoot();
+
 const { closeOpenDelegationsAtBoot } = await import(
   "./services/open-delegation-boot.js"
 );
@@ -73,7 +80,9 @@ if (process.env.ISSUE_TRACKER_STORE_READ_ONLY !== "1") {
   dropUnownedAgentStackRecords();
 }
 
-const { stopAllMockupStacks } = await import("./services/mockup-stack.js");
+const { stopSpawnedMockupStacksOnShutdown } = await import(
+  "./services/mockup-stack.js"
+);
 
 const server = app.listen(listenPort, () => {
   console.log(
@@ -83,6 +92,13 @@ const server = app.listen(listenPort, () => {
 attachMultiplexedWebSocket(server);
 attachMockupStackProxy(server);
 
+// Optional warm-up: the first `send()` against a cold workspace does the work
+// itself, so this must not delay `listen()`.
+const prewarmReleases = prewarmProjectWorkspaces().catch((err: unknown) => {
+  console.error("workspace prewarm failed", err);
+  return [];
+});
+
 let shuttingDown = false;
 
 async function shutdown(signal: string): Promise<void> {
@@ -91,8 +107,11 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`received ${signal}; disposing agent sessions…`);
   let failed: unknown;
   try {
-    await agentSessions.disposeAll();
-    await stopAllMockupStacks();
+    await disposeSessionsAndReleasePrewarm(
+      () => agentSessions.disposeAll(),
+      prewarmReleases,
+    );
+    await stopSpawnedMockupStacksOnShutdown();
   } catch (err) {
     failed = err;
     console.error("shutdown failed", err);

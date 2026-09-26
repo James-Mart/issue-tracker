@@ -20,7 +20,7 @@
     "lint:pipeline-shape": "tsx scripts/check-pipeline-shape.ts",
     "lint:transport": "tsx scripts/check-transport-boundary.ts",
     "lint:file-length": "tsx scripts/check-file-length.ts",
-    "typecheck": "tsc --noEmit -p .",
+    "typecheck": "tsx scripts/run-typecheck.ts",
     "screenshots": "tsx scripts/capture-screenshots.ts",
     "agent-stack": "tsx scripts/agent-stack.ts",
     "mockup-stack": "tsx scripts/mockup-stack.ts",

@@ -152,12 +152,20 @@ function disposeConnection(conn: ConnectionState): void {
   }
 }
 
+const WS_PATH = "/api/ws";
+
 /**
  * Attach the multiplexed `/api/ws` WebSocket endpoint to an HTTP server that
- * already serves the Express app.
+ * already serves the Express app. Upgrades on other paths are left to the
+ * server's other upgrade listeners (the `/mockups/` proxy); a `ws` server bound
+ * with `{ server, path }` would answer them 400 first.
  */
 export function attachMultiplexedWebSocket(server: Server): WebSocketServer {
-  const wss = new WebSocketServer({ server, path: "/api/ws" });
+  const wss = new WebSocketServer({ noServer: true });
+  server.on("upgrade", (req, socket, head) => {
+    if (new URL(req.url ?? "/", "http://localhost").pathname !== WS_PATH) return;
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+  });
 
   wss.on("connection", (socket) => {
     const conn: ConnectionState = {

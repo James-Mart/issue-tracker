@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  expectResultMatchesOutputSchema,
+  expectToolAnnotations,
+} from "./custom-tool-metadata.test-helpers.js";
+import {
   composeReplyBody,
   composeTopicBody,
+  createSdkBugReportTools,
   distinctiveTerms,
   fileSdkBugReport,
   FORUM_BASE,
@@ -65,6 +70,43 @@ function fakeForum({
   const writeCalls = () => calls.filter((call) => call.method !== "GET");
   return { deps, calls, searchCalls, writeCalls, keyReads: () => keyReads };
 }
+
+describe("createSdkBugReportTools", () => {
+  it("advertises annotations and output schemas", () => {
+    const tools = createSdkBugReportTools();
+    const tool = tools.file_cursor_sdk_bug!;
+
+    expectToolAnnotations(tool, {
+      title: "File SDK bug report",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    });
+
+    expectResultMatchesOutputSchema(tool, {
+      status: "duplicates_found",
+      candidates: [
+        {
+          id: 1,
+          title: "Same bug",
+          createdAt: "2026-01-02",
+          url: `${FORUM_BASE}/t/1`,
+        },
+      ],
+    });
+    expectResultMatchesOutputSchema(tool, {
+      status: "replied",
+      topicId: 7,
+      url: `${FORUM_BASE}/t/existing/7/3`,
+    });
+    expectResultMatchesOutputSchema(tool, {
+      status: "created",
+      topicId: 42,
+      url: `${FORUM_BASE}/t/agent-stream-stalls/42`,
+    });
+  });
+});
 
 describe("validateSdkBugReport", () => {
   it("accepts a terse, first-person report", () => {

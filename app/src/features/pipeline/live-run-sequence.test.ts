@@ -6,6 +6,7 @@ import {
   insertFrameBySeq,
 } from "./live-run-sequence";
 import type { RunSequence, RunSequenceSection, SequenceBeat } from "./run-sequence";
+import { formatSequenceCostClause } from "@server/services/run-sequence-cost";
 
 const AT = "2026-08-28T12:00:00.000Z";
 const AT_MID = "2026-08-28T12:00:08.000Z";
@@ -371,6 +372,128 @@ describe("applyLiveFrame", () => {
     });
     expect(next.tokenTotal).toBe(15);
     expect(next.beats[0]).toMatchObject({ tokenTotal: 15 });
+  });
+
+  it("counts a settled run from run_usage and attributes it to the spawn", () => {
+    const usage = {
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 15,
+    };
+    const next = applyLiveFrames(inFlight(), [
+      {
+        type: "usage",
+        usage: { ...usage, totalTokens: 99, inputTokens: 90, outputTokens: 9 },
+        parentCallId: "call-impl",
+        runId: "run-nested",
+        at: AT_MID,
+        seq: 8,
+      },
+      {
+        type: "run_usage",
+        runId: "run-nested",
+        agentId: "agent-nested",
+        usage,
+        parentCallId: "call-impl",
+        at: AT_END,
+        seq: 9,
+      },
+    ]);
+    expect(next.tokenTotal).toBe(15);
+    expect(next.beats[0]).toMatchObject({ tokenTotal: 15 });
+  });
+
+  it("keeps counting an in-flight run's stream events", () => {
+    const next = applyLiveFrames(inFlight(), [
+      {
+        type: "usage",
+        usage: {
+          inputTokens: 4,
+          outputTokens: 2,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 6,
+        },
+        runId: "run-live",
+        parentCallId: "call-impl",
+        at: AT_MID,
+        seq: 8,
+      },
+    ]);
+    expect(next.tokenTotal).toBe(6);
+    expect(next.beats[0]).toMatchObject({ tokenTotal: 6 });
+  });
+
+  it("attributes a live run_cost onto the spawn and the header", () => {
+    const next = applyLiveFrames(inFlight(), [
+      {
+        type: "run_usage",
+        runId: "run-nested",
+        agentId: "agent-nested",
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 15,
+        },
+        parentCallId: "call-impl",
+        at: AT_MID,
+        seq: 8,
+      },
+      {
+        type: "run_cost",
+        runId: "run-nested",
+        agentId: "agent-nested",
+        parentCallId: "call-impl",
+        status: "settled",
+        cumulative: { rawCostCents: 18, chargedCents: 0 },
+        cost: { rawCostCents: 18, chargedCents: 0 },
+        at: AT_END,
+        seq: 9,
+      },
+    ]);
+    expect(formatSequenceCostClause(next.beats[0]?.cost)).toBe("$0.18");
+    expect(formatSequenceCostClause(next.cost)).toBe("$0.18");
+  });
+
+  it("keeps live cost pending until run_cost arrives", () => {
+    const next = applyLiveFrame(inFlight(), {
+      type: "usage",
+      usage: {
+        inputTokens: 4,
+        outputTokens: 2,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 6,
+      },
+      runId: "run-live",
+      parentCallId: "call-impl",
+      at: AT_MID,
+      seq: 8,
+    });
+    expect(formatSequenceCostClause(next.cost)).toBe("cost pending");
+  });
+
+  it("sums legacy usage events that have no runId", () => {
+    const next = applyLiveFrames(inFlight(), [
+      {
+        type: "usage",
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 2,
+        },
+        parentCallId: "call-impl",
+        at: AT_MID,
+        seq: 8,
+      },
+    ]);
+    expect(next.tokenTotal).toBe(2);
   });
 
   it("ticks the frontier elapsed time without closing the beat", () => {

@@ -42,7 +42,7 @@ function metricsSpacer() {
     <span
       className="inline-flex shrink-0 gap-1.5"
       style={{
-        width: `calc(${SEQUENCE_METRIC_COLS.token} + ${SEQUENCE_METRIC_COLS.duration} + ${SEQUENCE_METRIC_COLS.cumulative} + 0.75rem)`,
+        width: `calc(${SEQUENCE_METRIC_COLS.duration} + ${SEQUENCE_METRIC_COLS.cumulative} + 1.125rem)`,
       }}
       aria-hidden
     />
@@ -89,7 +89,7 @@ function FromTo({
   accent?: BeatAccent;
 }) {
   return (
-    <div className="mt-1 flex min-w-0 flex-1 items-center gap-1.5">
+    <div className="flex min-w-0 items-center gap-1.5">
       <span
         data-testid="sequence-from"
         className="min-w-0 max-w-[40%] text-right font-mono text-[10px] leading-snug text-muted-foreground"
@@ -307,7 +307,7 @@ export function RunSequenceRail({
                       ) : null}
                     </p>
                   </button>
-                  <div className="flex min-w-0 items-center gap-1.5">
+                  <div className="mt-1 flex min-w-0 flex-col gap-1">
                     <FromTo
                       sequence={sequence}
                       from={row.beat.from}
@@ -315,15 +315,18 @@ export function RunSequenceRail({
                       kind={row.beat.kind}
                       accent={accent}
                     />
-                    <SequenceMetricCells
-                      tokenLabel={metricsRow.token}
-                      durationLabel={metricsRow.duration}
-                      cumulativeLabel={metricsRow.cumulative}
-                      isLive={metricsRow.isLive}
-                      isFailed={metricsRow.isFailed}
-                      beatIndex={row.beatIndex}
-                      rowKind="collapsed"
-                    />
+                    <div className="flex justify-end">
+                      <SequenceMetricCells
+                        tokenLabel={metricsRow.token}
+                        durationLabel={metricsRow.duration}
+                        cumulativeLabel={metricsRow.cumulative}
+                        isLive={metricsRow.isLive}
+                        isFailed={metricsRow.isFailed}
+                        beatIndex={row.beatIndex}
+                        rowKind="collapsed"
+                        tokenWidth="content"
+                      />
+                    </div>
                   </div>
                 </div>
               </RailNode>
@@ -376,7 +379,7 @@ export function RunSequenceRail({
                       </div>
                     ))
                   : null}
-                <div className="flex min-w-0 items-center gap-1.5">
+                <div className="mt-1 flex min-w-0 flex-col gap-1">
                   <FromTo
                     sequence={sequence}
                     from={row.beat.from}
@@ -384,15 +387,18 @@ export function RunSequenceRail({
                     kind={row.beat.kind}
                     accent={row.kind === "beat" ? accent : undefined}
                   />
-                  <SequenceMetricCells
-                    tokenLabel={metricsRow.token}
-                    durationLabel={metricsRow.duration}
-                    cumulativeLabel={metricsRow.cumulative}
-                    isLive={metricsRow.isLive}
-                    isFailed={metricsRow.isFailed}
-                    beatIndex={row.beatIndex}
-                    rowKind={row.kind}
-                  />
+                  <div className="flex justify-end">
+                    <SequenceMetricCells
+                      tokenLabel={metricsRow.token}
+                      durationLabel={metricsRow.duration}
+                      cumulativeLabel={metricsRow.cumulative}
+                      isLive={metricsRow.isLive}
+                      isFailed={metricsRow.isFailed}
+                      beatIndex={row.beatIndex}
+                      rowKind={row.kind}
+                      tokenWidth="content"
+                    />
+                  </div>
                 </div>
               </div>
             </RailNode>

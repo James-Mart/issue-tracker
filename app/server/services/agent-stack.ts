@@ -43,7 +43,7 @@ const agentStackProcessSchema = z.object({
   startTime: z.string().min(1),
 });
 
-const agentStackStateSchema = z.object({
+export const agentStackStateSchema = z.object({
   conversationId: z.string().min(1),
   /** Issue whose Story worktree this stack booted. */
   issueId: z.string().min(1),

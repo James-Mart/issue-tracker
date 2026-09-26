@@ -153,8 +153,9 @@ describe("open delegation boot reconciliation", () => {
       model: "auto",
     });
 
-    const badId = "conv-missing-meta";
+    const badId = "conv-malformed-meta";
     mkdirSync(join(conversationsDir, badId), { recursive: true });
+    writeFileSync(join(conversationsDir, badId, "meta.json"), "{not json");
     writeFileSync(
       join(conversationsDir, badId, "delegations.jsonl"),
       `${JSON.stringify({

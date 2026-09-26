@@ -8,6 +8,7 @@ import {
   readFileSync,
   rmSync,
 } from "node:fs";
+import { join } from "node:path";
 import { createServer, type AddressInfo, type Server } from "node:net";
 import { appDir } from "../config.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
@@ -30,6 +31,58 @@ import {
  * A conversation's Storybook dev server on a port picked free at start time.
  * Agents run mockup rounds here instead of on the human's stack.
  */
+
+const MOCKUP_HEAP_MB = 2048;
+const HEAP_OOM_EVENT = "Allocation failed - JavaScript heap out of memory";
+
+export function mockupStackMemoryLimitMessage(): string {
+  return `mockup stack memory limit: storybook exceeded the ${MOCKUP_HEAP_MB} MB heap limit`;
+}
+
+interface HeapReport {
+  header?: {
+    event?: string;
+    processId?: number;
+  };
+}
+
+function isHeapLimitReport(report: HeapReport): boolean {
+  return report.header?.event === HEAP_OOM_EVENT;
+}
+
+function hasHeapLimitReportForPid(reportDir: string, pid: number): boolean {
+  if (!existsSync(reportDir)) return false;
+  for (const name of readdirSync(reportDir)) {
+    if (!name.startsWith("report.") || !name.endsWith(".json")) {
+      continue;
+    }
+    if (!name.includes(`.${pid}.`)) {
+      continue;
+    }
+    try {
+      const report = JSON.parse(
+        readFileSync(join(reportDir, name), "utf8"),
+      ) as HeapReport;
+      if (isHeapLimitReport(report)) {
+        return true;
+      }
+    } catch {
+      // skip malformed report
+    }
+  }
+  return false;
+}
+
+function reportMockupStackHeapLimit(
+  conversationId: string,
+  pid: number,
+): void {
+  const reportDir = join(mockupStackDir(conversationId), "heap-reports");
+  if (!hasHeapLimitReportForPid(reportDir, pid)) {
+    return;
+  }
+  console.error(mockupStackMemoryLimitMessage());
+}
 
 const READY_TIMEOUT_MS = 90_000;
 const READY_POLL_MS = 250;
@@ -55,7 +108,7 @@ export type MockupStackStopAllEntry = {
 };
 
 export type MockupStackReapReport = {
-  /** State removed for dead, recycled, or unowned groups. Unowned groups are not signaled. */
+  /** State removed for a dead pid, a recycled pid, or a live stack whose conversation is gone. Nothing is signaled. */
   staleStateRemoved: string[];
 };
 
@@ -94,13 +147,31 @@ export function isMockupStackLive(state: MockupStackState): boolean {
   return info !== null && info.state !== "Z" && info.startTime === state.startTime;
 }
 
-/** The recorded process is a child of this process (running or zombie). */
-function isOurRecordedProcess(state: MockupStackState): boolean {
+/**
+ * The recorded pid still leads the process group created by the detached
+ * spawn, pinned by its `/proc` start time. Parentage is not ownership: the
+ * CLI exits and the group is reparented.
+ */
+function isRecordedStackGroup(state: MockupStackState): boolean {
   const info = readProcInfo(state.pid);
   return (
     info !== null &&
-    info.ppid === process.pid &&
-    info.startTime === state.startTime
+    info.startTime === state.startTime &&
+    info.pgrp === state.pid
+  );
+}
+
+/**
+ * A live stack the CLI started. This process is not its parent, so API
+ * shutdown leaves it running and leaves its state in place.
+ */
+function isCliStartedLiveStack(state: MockupStackState): boolean {
+  const info = readProcInfo(state.pid);
+  return (
+    info !== null &&
+    info.state !== "Z" &&
+    info.startTime === state.startTime &&
+    info.ppid !== process.pid
   );
 }
 
@@ -157,29 +228,68 @@ export function storybookDevArgs(port: number): string[] {
   ];
 }
 
+function appendNodeOptions(
+  existing: string | undefined,
+  ...flags: string[]
+): string {
+  const addition = flags.join(" ");
+  const trimmed = existing?.trim();
+  return trimmed ? `${trimmed} ${addition}` : addition;
+}
+
+function storybookNodeOptions(heapReportDir: string): string {
+  return appendNodeOptions(
+    process.env.NODE_OPTIONS,
+    `--max-old-space-size=${MOCKUP_HEAP_MB}`,
+    "--report-on-fatalerror",
+    `--report-directory=${heapReportDir}`,
+  );
+}
+
 function spawnStorybook(
   conversationId: string,
   port: number,
   harnessPath: string,
 ): { child: ChildProcess; pid: number; startTime: string } {
   const logPath = mockupStackLogPath(conversationId);
+  const heapReportDir = join(mockupStackDir(conversationId), "heap-reports");
+  mkdirSync(heapReportDir, { recursive: true });
+  const storybookBin = binPath("storybook");
+  const args = storybookDevArgs(port);
+  const env = {
+    ...process.env,
+    MOCKUP_HARNESS_CONFIG: harnessPath,
+    MOCKUP_STORYBOOK_BASE: mockupStorybookBase(conversationId),
+    NODE_OPTIONS: storybookNodeOptions(heapReportDir),
+  };
   const fd = openSync(logPath, "w");
   let child: ChildProcess;
   try {
-    child = spawn(
-      binPath("storybook"),
-      storybookDevArgs(port),
-      {
-        cwd: appDir,
-        env: {
-          ...process.env,
-          MOCKUP_HARNESS_CONFIG: harnessPath,
-          MOCKUP_STORYBOOK_BASE: mockupStorybookBase(conversationId),
+    if (process.platform === "linux") {
+      child = spawn(
+        "sh",
+        [
+          "-c",
+          'echo 1000 > /proc/self/oom_score_adj; exec "$@"',
+          "mockup-storybook",
+          storybookBin,
+          ...args,
+        ],
+        {
+          cwd: appDir,
+          env,
+          detached: true,
+          stdio: ["ignore", fd, fd],
         },
+      );
+    } else {
+      child = spawn(storybookBin, args, {
+        cwd: appDir,
+        env,
         detached: true,
         stdio: ["ignore", fd, fd],
-      },
-    );
+      });
+    }
   } finally {
     closeSync(fd);
   }
@@ -295,8 +405,12 @@ function signalGroup(pid: number, signal: NodeJS.Signals): void {
   }
 }
 
-/** True when any child of this process still belongs to one of these groups. */
-function groupsHaveOurChildren(groups: ReadonlySet<number>): boolean {
+/**
+ * True while any process still belongs to one of these groups, including a
+ * group reparented away from this process. Zombies count until they are
+ * reaped.
+ */
+function groupsStillPresent(groups: ReadonlySet<number>): boolean {
   if (groups.size === 0) return false;
   let entries: string[];
   try {
@@ -308,7 +422,26 @@ function groupsHaveOurChildren(groups: ReadonlySet<number>): boolean {
     if (!/^[1-9]\d*$/.test(entry)) continue;
     const info = readProcInfo(Number(entry));
     if (!info) continue;
-    if (info.ppid === process.pid && groups.has(info.pgrp)) return true;
+    if (groups.has(info.pgrp)) return true;
+  }
+  return false;
+}
+
+/** True when any TCP socket is in LISTEN on `port` (`/proc/net/tcp` state `0A`). */
+function portIsListening(port: number): boolean {
+  for (const table of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    let content: string;
+    try {
+      content = readFileSync(table, "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of content.split("\n").slice(1)) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 4 || parts[3] !== "0A") continue;
+      const portHex = parts[1]?.split(":")[1];
+      if (portHex && parseInt(portHex, 16) === port) return true;
+    }
   }
   return false;
 }
@@ -325,33 +458,59 @@ async function waitUntilGroupsCollected(
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     reapExitedChildren();
-    if (!groupsHaveOurChildren(groups)) return true;
+    if (!groupsStillPresent(groups)) return true;
     if (Date.now() >= deadline) return false;
     await delay(EXIT_POLL_MS);
   }
 }
 
 /**
- * Story stop sequence for one recorded group. A pid that is not this process's
- * child is left unsignaled. `isMockupStackLive` is the signal check: an owned
- * live group gets SIGTERM, then SIGKILL after `TERM_GRACE_MS`. The promise
- * settles only after `waitpid` collects the group. Past `KILL_GRACE_MS` it
- * keeps waiting, then rejects.
+ * Group gone and `port` not in TCP LISTEN. `timeoutMs` is how long to wait
+ * before reporting that the stack is still up.
+ */
+async function waitUntilReleased(
+  groups: ReadonlySet<number>,
+  port: number,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    reapExitedChildren();
+    if (!groupsStillPresent(groups) && !portIsListening(port)) return true;
+    if (Date.now() >= deadline) return false;
+    await delay(EXIT_POLL_MS);
+  }
+}
+
+/**
+ * Stop sequence for one recorded group. A pid whose start time differs, or
+ * that does not lead the detached process group, is left unsignaled.
+ * A live group gets SIGTERM, then SIGKILL after `TERM_GRACE_MS`, even when
+ * this process is not its parent. The promise resolves only after the group
+ * is gone and `state.port` is not listening. Past `KILL_GRACE_MS` it rejects;
+ * the caller keeps the state.
  */
 async function stopRecordedGroup(state: MockupStackState): Promise<void> {
-  if (!isOurRecordedProcess(state)) return;
+  if (!isRecordedStackGroup(state)) return;
   const info = readProcInfo(state.pid);
   if (!info) return;
 
   const groups = new Set<number>([info.pgrp]);
   if (isMockupStackLive(state)) {
     signalGroup(state.pid, "SIGTERM");
-    const collectedOnTerm = await waitUntilGroupsCollected(groups, TERM_GRACE_MS);
-    if (!collectedOnTerm) {
+    const releasedOnTerm = await waitUntilReleased(
+      groups,
+      state.port,
+      TERM_GRACE_MS,
+    );
+    if (!releasedOnTerm) {
       signalGroup(info.pgrp, "SIGKILL");
-      const collectedOnKill = await waitUntilGroupsCollected(groups, KILL_GRACE_MS);
-      if (!collectedOnKill) {
-        await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
+      const releasedOnKill = await waitUntilReleased(
+        groups,
+        state.port,
+        KILL_GRACE_MS,
+      );
+      if (!releasedOnKill) {
         throw new Error(
           `mockup stack survived SIGKILL (pid ${state.pid}, port ${state.port})`,
         );
@@ -372,10 +531,13 @@ function removeMockupStackState(conversationId: string): void {
  * conversation with no recorded stack is not an error. The session
  * outcome file is left in place. `ended` writes `"ended"` first.
  *
- * A recorded pid that is not this process's child is removed with no signal.
- * An owned live group gets SIGTERM, then SIGKILL after `TERM_GRACE_MS`. The
- * promise settles only after `waitpid` collects the group. Past
- * `KILL_GRACE_MS` it keeps waiting, then rejects.
+ * A live group leader is signaled even when this process is not its parent.
+ * A pid whose start time differs, or that does not lead the detached process
+ * group, is removed with no signal. A live group gets SIGTERM, then SIGKILL
+ * after `TERM_GRACE_MS`. The promise resolves only after the group is gone
+ * and the recorded port is not listening. When the stack is still up past
+ * `KILL_GRACE_MS`, the promise rejects and the state file stays so a retry
+ * can find it.
  */
 export async function stopMockupStack(
   conversationId: string,
@@ -388,35 +550,31 @@ export async function stopMockupStack(
   const state = readMockupStackState(conversationId);
   if (!state) return { stopped: false, state: null };
 
-  try {
-    await stopRecordedGroup(state);
-  } finally {
-    rmSync(mockupStackStatePath(conversationId), { force: true });
-  }
+  reportMockupStackHeapLimit(conversationId, state.pid);
+
+  await stopRecordedGroup(state);
+  rmSync(mockupStackStatePath(conversationId), { force: true });
   return { stopped: true, state };
 }
 
-/**
- * Stop every recorded mockup stack. Returns each owned live stack's freed
- * port. Shutdown awaits this before exiting; collection finishes before the
- * promise settles. A group still uncollected past `KILL_GRACE_MS` rejects
- * only after `waitpid` collects it.
- */
-export async function stopAllMockupStacks(): Promise<MockupStackStopAllEntry[]> {
+async function stopRecordedMockupStacks(
+  keepCliStarted: boolean,
+): Promise<MockupStackStopAllEntry[]> {
   ensureChildReaper();
   const freed: MockupStackStopAllEntry[] = [];
   let failure: Error | undefined;
   for (const conversationId of listRecordedMockupStackIds()) {
     const state = readMockupStackStateDirect(conversationId);
     if (!state) continue;
-    const ownedLive = isOurRecordedProcess(state) && isMockupStackLive(state);
+    if (keepCliStarted && isCliStartedLiveStack(state)) continue;
+    const ownedLive = isRecordedStackGroup(state) && isMockupStackLive(state);
     try {
       await stopRecordedGroup(state);
     } catch (err) {
       failure = err instanceof Error ? err : new Error(String(err));
-    } finally {
-      removeMockupStackState(conversationId);
+      continue;
     }
+    removeMockupStackState(conversationId);
     if (ownedLive) {
       freed.push({ conversationId, port: state.port });
     }
@@ -426,9 +584,31 @@ export async function stopAllMockupStacks(): Promise<MockupStackStopAllEntry[]> 
 }
 
 /**
- * Drop recorded mockup stacks at API boot. Dead, recycled, and unowned groups
- * lose their state record and are not signaled. A live pid whose conversation
- * meta is gone is included in `staleStateRemoved`. Scratch is left in place.
+ * Stop every recorded mockup stack, including one the CLI started. Returns
+ * each live group's freed port, and only after that port is not listening.
+ * A stack still up past `KILL_GRACE_MS` keeps its state and rejects.
+ */
+export async function stopAllMockupStacks(): Promise<MockupStackStopAllEntry[]> {
+  return stopRecordedMockupStacks(false);
+}
+
+/**
+ * API shutdown. Stops stacks this process spawned. A live stack whose parent
+ * is not this process keeps running and keeps its state, so a restart does
+ * not take down a round the human is looking at.
+ */
+export async function stopSpawnedMockupStacksOnShutdown(): Promise<
+  MockupStackStopAllEntry[]
+> {
+  return stopRecordedMockupStacks(true);
+}
+
+/**
+ * Drop recorded mockup stacks at API boot. A live stack whose conversation
+ * still exists keeps its state, including one whose parent is not this
+ * process. Dead and recycled pids lose their state and are not signaled. A
+ * live pid whose conversation is gone is included in `staleStateRemoved` and
+ * is not signaled. Scratch is left in place.
  */
 export async function reapOrphanedMockupStacksAtBoot(): Promise<MockupStackReapReport> {
   const report: MockupStackReapReport = {
@@ -440,9 +620,7 @@ export async function reapOrphanedMockupStacksAtBoot(): Promise<MockupStackReapR
     if (!state) continue;
 
     const keep =
-      isOurRecordedProcess(state) &&
-      isMockupStackLive(state) &&
-      conversationMetaExists(conversationId);
+      isMockupStackLive(state) && conversationMetaExists(conversationId);
     if (keep) continue;
 
     removeMockupStackState(conversationId);

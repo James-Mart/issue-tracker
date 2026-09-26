@@ -4,10 +4,37 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, expect as pwExpect, type Browser } from "@playwright/test";
-import { build, preview, type PreviewServer } from "vite";
+import { build, preview, type Plugin, type PreviewServer } from "vite";
 import { independentBootstrapFaultEntryProblem } from "./bootstrap-fault-entry.js";
 
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
+
+const APP_ONLY_IMPORT =
+  /^(mermaid$|@shikijs\/langs\/|@shikijs\/themes\/|lucide-react$)/;
+const APP_ONLY_PREFIX = "\0app-only-stub:";
+
+/**
+ * bootstrap-fault is vanilla DOM plus CSS, so Mermaid, Shiki grammars and
+ * themes, and lucide-react only reach app chunks this test aborts. Bundling
+ * them grows the worker past 2 GB; the build swaps each for an empty module
+ * whose named imports resolve off one placeholder object.
+ */
+function stubAppOnlyModules(): Plugin {
+  return {
+    name: "stub-app-only-modules",
+    enforce: "pre",
+    resolveId(source) {
+      return APP_ONLY_IMPORT.test(source) ? APP_ONLY_PREFIX + source : null;
+    },
+    load(id) {
+      if (!id.startsWith(APP_ONLY_PREFIX)) return null;
+      return {
+        code: "export const stub = {};\nexport default stub;",
+        syntheticNamedExports: "stub",
+      };
+    },
+  };
+}
 
 describe("production bootstrap-fault entry", () => {
   let outDir = "";
@@ -20,7 +47,13 @@ describe("production bootstrap-fault entry", () => {
     await build({
       configFile: join(appRoot, "vite.config.ts"),
       mode: "production",
-      build: { outDir, emptyOutDir: true },
+      plugins: [stubAppOnlyModules()],
+      build: {
+        outDir,
+        emptyOutDir: true,
+        minify: false,
+        reportCompressedSize: false,
+      },
     });
     const html = await readFile(join(outDir, "index.html"), "utf8");
     expect(independentBootstrapFaultEntryProblem(html)).toBeUndefined();

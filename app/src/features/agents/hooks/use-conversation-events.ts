@@ -25,6 +25,8 @@ const idleState = (): ConversationEventsState => ({
   streamRunActive: null,
   runResyncKey: 0,
   pendingText: undefined,
+  steeringText: null,
+  pendingSteerFallback: false,
 });
 
 function isOnScreenThread(host: Element | null | undefined): boolean {
