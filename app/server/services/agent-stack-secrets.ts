@@ -48,29 +48,30 @@ export function createPhaseOutputMasker(secrets: Record<string, string>): {
   const decoder = new TextDecoder();
   let pending = "";
 
+  function isProperPrefix(text: string): boolean {
+    return values.some((value) => value.startsWith(text) && text.length < value.length);
+  }
+
   function drain(flushing: boolean): string {
     let emitted = "";
     for (;;) {
+      // Stream close: a held prefix never completed into a secret. Mask it
+      // instead of writing the recoverable prefix.
+      if (flushing && pending.length > 0 && isProperPrefix(pending)) {
+        emitted += PHASE_SECRET_MASK;
+        pending = "";
+        break;
+      }
       const match = values.find((value) => pending.startsWith(value));
       if (match !== undefined) {
-        const longerMightContinue =
-          !flushing &&
-          values.some(
-            (value) =>
-              value.length > match.length &&
-              value.startsWith(pending) &&
-              pending.length < value.length,
-          );
+        const longerMightContinue = !flushing && isProperPrefix(pending);
         if (longerMightContinue) break;
         emitted += PHASE_SECRET_MASK;
         pending = pending.slice(match.length);
         continue;
       }
       if (pending.length === 0) break;
-      const holding =
-        !flushing &&
-        values.some((value) => value.startsWith(pending) && pending.length < value.length);
-      if (holding) break;
+      if (!flushing && isProperPrefix(pending)) break;
       const char = String.fromCodePoint(pending.codePointAt(0)!);
       emitted += char;
       pending = pending.slice(char.length);

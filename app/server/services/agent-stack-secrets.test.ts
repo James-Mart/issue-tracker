@@ -26,10 +26,10 @@ describe("phase secret masking", () => {
     );
   });
 
-  it("flushes a partial value that never became a secret", () => {
+  it("masks a secret prefix when the stream closes before the value completes", () => {
     const masker = createPhaseOutputMasker({ STRIPE_SANDBOX_KEY: "sk_test_echo" });
     expect(masker.push("sk_test_")).toBe("");
-    expect(masker.flush()).toBe("sk_test_");
+    expect(masker.flush()).toBe(PHASE_SECRET_MASK);
   });
 
   it("refuses a secret key that collides with an AGENT_STACK_* variable", () => {
