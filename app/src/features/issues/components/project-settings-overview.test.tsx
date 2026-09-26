@@ -16,6 +16,14 @@ vi.mock("../api/mutations", () => ({
   useUpdateIssue: () => ({
     mutateAsync,
   }),
+  useSetProjectSecret: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useDeleteProjectSecret: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 vi.mock("../api/queries", () => ({
@@ -157,8 +165,11 @@ describe("ProjectSettingsOverview Delivery card", () => {
     );
     const delivery = titles.indexOf("Delivery");
     const runtime = titles.indexOf("Runtime");
+    const secrets = titles.indexOf("Secrets");
     expect(delivery).toBeGreaterThanOrEqual(0);
     expect(runtime).toBeGreaterThan(delivery);
+    expect(secrets).toBeGreaterThan(runtime);
+    expect(container.textContent).toContain("Add secret");
     expect(container.textContent).toContain("Compile before start.");
     expect(container.textContent).toContain("AGENT_STACK_PORT");
   });
