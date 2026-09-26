@@ -1,5 +1,10 @@
 import type { StorybookConfig } from "@storybook/react-vite";
-import { mergeConfig, type AliasOptions, type Plugin } from "vite";
+import {
+  mergeConfig,
+  searchForWorkspaceRoot,
+  type AliasOptions,
+  type Plugin,
+} from "vite";
 import { loadHarnessConfig } from "./harness-config.js";
 import {
   HARNESS_CSS_VIRTUAL_ID,
@@ -7,9 +12,20 @@ import {
   applyMockupStorybookBase,
   buildHarnessStorybookOptions,
   harnessCssModuleSource,
+  mockupServerChannelShim,
 } from "./storybook-config.js";
 
 const harnessConfigPath = process.env.MOCKUP_HARNESS_CONFIG;
+const mockupBase = process.env.MOCKUP_STORYBOOK_BASE;
+
+function mockupHeads(): Pick<StorybookConfig, "managerHead" | "previewHead"> {
+  if (!mockupBase) return {};
+  const shim = mockupServerChannelShim(mockupBase);
+  return {
+    managerHead: (head) => `${head}${shim}`,
+    previewHead: (head) => `${head}${shim}`,
+  };
+}
 
 function mergeAliasOptions(
   existing: AliasOptions | undefined,
@@ -47,11 +63,12 @@ function createConfig(): StorybookConfig {
     return {
       stories: [SMOKE_STORY_GLOB],
       framework: "@storybook/react-vite",
+      ...mockupHeads(),
       async viteFinal(viteConfig) {
         const merged = mergeConfig(viteConfig, {
           plugins: [harnessCssEntriesPlugin([])],
         });
-        applyMockupStorybookBase(merged, process.env.MOCKUP_STORYBOOK_BASE);
+        applyMockupStorybookBase(merged, mockupBase);
         return merged;
       },
     };
@@ -72,6 +89,7 @@ function createConfig(): StorybookConfig {
           },
         }
       : "@storybook/react-vite",
+    ...mockupHeads(),
     async viteFinal(viteConfig) {
       const merged = mergeConfig(viteConfig, {
         plugins: [harnessCssEntriesPlugin(options.cssEntries)],
@@ -83,14 +101,17 @@ function createConfig(): StorybookConfig {
         },
         server: {
           fs: {
+            // An explicit allow list replaces Vite's default workspace root,
+            // which is where Storybook's own preview and mocker modules live.
             allow: [
+              searchForWorkspaceRoot(process.cwd()),
               ...(viteConfig.server?.fs?.allow ?? []),
               ...options.fsAllow,
             ],
           },
         },
       });
-      applyMockupStorybookBase(merged, process.env.MOCKUP_STORYBOOK_BASE);
+      applyMockupStorybookBase(merged, mockupBase);
       return merged;
     },
   };

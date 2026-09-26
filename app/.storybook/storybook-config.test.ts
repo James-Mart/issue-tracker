@@ -15,6 +15,8 @@ import {
   buildReactAliases,
   collectFsAllowPaths,
   harnessCssModuleSource,
+  mockupServerChannelShim,
+  prefixRootScriptSources,
 } from "./storybook-config.js";
 
 let rootDir: string;
@@ -92,19 +94,93 @@ describe("buildReactAliases", () => {
 });
 
 describe("applyMockupStorybookBase", () => {
-  it("points HMR at the public prefix and drops the loopback port", () => {
-    const config = { server: { hmr: { port: 41005, server: { listening: true } } } };
+  it("sets the public prefix as Vite's base and drops the loopback HMR port", () => {
+    const config: {
+      base?: string;
+      plugins?: unknown[];
+      server: { hmr: { port?: number; server: { listening: boolean } } };
+    } = { server: { hmr: { port: 41005, server: { listening: true } } } };
     applyMockupStorybookBase(config, "/mockups/my-conversation/");
-    expect(config.server.hmr).toEqual({
-      path: "/mockups/my-conversation/",
-      server: { listening: true },
-    });
+    expect(config.base).toBe("/mockups/my-conversation/");
+    expect(config.server.hmr).toEqual({ server: { listening: true } });
+    expect(config.plugins).toEqual([
+      expect.objectContaining({ name: "mockup-root-scripts" }),
+    ]);
   });
 
-  it("leaves HMR alone when the process has no public base", () => {
+  it("leaves the config alone when the process has no public base", () => {
     const config = { server: { hmr: { port: 6006 } } };
     applyMockupStorybookBase(config, undefined);
-    expect(config.server.hmr).toEqual({ port: 6006 });
+    expect(config).toEqual({ server: { hmr: { port: 6006 } } });
+  });
+});
+
+describe("prefixRootScriptSources", () => {
+  const base = "/mockups/my-conversation/";
+
+  it("re-roots a root-absolute script src under the base", () => {
+    expect(
+      prefixRootScriptSources(
+        '<head><script type="module" src="/vite-inject-mocker-entry.js"></script>',
+        base,
+      ),
+    ).toBe(
+      '<head><script type="module" src="/mockups/my-conversation/vite-inject-mocker-entry.js"></script>',
+    );
+  });
+
+  it("keeps sources already under the base, relative, or protocol-relative", () => {
+    const html = [
+      '<script type="module" src="/mockups/my-conversation/@vite/client"></script>',
+      '<script src="./sb-preview/runtime.js"></script>',
+      '<script src="//cdn.example/x.js"></script>',
+      "<script>const src = \"/inline\";</script>",
+    ].join("\n");
+    expect(prefixRootScriptSources(html, base)).toBe(html);
+  });
+});
+
+describe("mockupServerChannelShim", () => {
+  function runShim(pathname: string, socketUrl: string): string {
+    const opened: string[] = [];
+    class FakeWebSocket {
+      constructor(url: URL | string) {
+        opened.push(String(url));
+      }
+    }
+    const window = {
+      location: { pathname, href: `http://tracker.test:8060${pathname}` },
+      WebSocket: FakeWebSocket as unknown,
+    };
+    const source = mockupServerChannelShim("/mockups/my-conversation/")
+      .replace(/^<script>/, "")
+      .replace(/<\/script>$/, "");
+    new Function("window", "URL", source)(window, URL);
+    new (window.WebSocket as new (url: string) => unknown)(socketUrl);
+    return opened[0]!;
+  }
+
+  it("moves the server channel under the base on a proxied page", () => {
+    expect(
+      runShim(
+        "/mockups/my-conversation/iframe.html",
+        "ws://tracker.test:8060/storybook-server-channel?token=t",
+      ),
+    ).toBe(
+      "ws://tracker.test:8060/mockups/my-conversation/storybook-server-channel?token=t",
+    );
+  });
+
+  it("leaves other sockets and loopback pages alone", () => {
+    expect(
+      runShim(
+        "/mockups/my-conversation/iframe.html",
+        "ws://tracker.test:8060/mockups/my-conversation/?token=hmr",
+      ),
+    ).toBe("ws://tracker.test:8060/mockups/my-conversation/?token=hmr");
+    expect(
+      runShim("/iframe.html", "ws://127.0.0.1:41005/storybook-server-channel?token=t"),
+    ).toBe("ws://127.0.0.1:41005/storybook-server-channel?token=t");
   });
 });
 

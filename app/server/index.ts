@@ -75,7 +75,9 @@ const { dropUnownedAgentStackRecords } = await import(
 );
 dropUnownedAgentStackRecords();
 
-const { stopAllMockupStacks } = await import("./services/mockup-stack.js");
+const { stopSpawnedMockupStacksOnShutdown } = await import(
+  "./services/mockup-stack.js"
+);
 
 const server = app.listen(listenPort, () => {
   console.log(
@@ -104,7 +106,7 @@ async function shutdown(signal: string): Promise<void> {
       () => agentSessions.disposeAll(),
       prewarmReleases,
     );
-    await stopAllMockupStacks();
+    await stopSpawnedMockupStacksOnShutdown();
   } catch (err) {
     failed = err;
     console.error("shutdown failed", err);

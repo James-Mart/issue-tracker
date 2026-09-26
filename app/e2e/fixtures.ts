@@ -120,6 +120,7 @@ export async function bootSeededApp(
   const { attachMultiplexedWebSocket, createApp } = await import(
     "../server/app.js"
   );
+  const { attachMockupStackProxy } = await import("../server/routes/mockups.js");
 
   const server: Server = await new Promise((resolve) => {
     const s = createApp(options.sessions).listen(0, "127.0.0.1", () =>
@@ -127,6 +128,7 @@ export async function bootSeededApp(
     );
   });
   attachMultiplexedWebSocket(server);
+  attachMockupStackProxy(server);
   const { port } = server.address() as AddressInfo;
 
   return {

@@ -51,6 +51,8 @@ import { spawn } from "node:child_process";
 let root: string;
 let issuesDir: string;
 const strays: ChildProcess[] = [];
+/** Detached group leaders whose parent is not this process. */
+const foreignLeaders: number[] = [];
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-mockup-stack-"));
@@ -72,6 +74,14 @@ afterEach(() => {
     }
   }
   strays.length = 0;
+  for (const pid of foreignLeaders) {
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      // Already reaped by the test.
+    }
+  }
+  foreignLeaders.length = 0;
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   rmSync(root, { recursive: true, force: true });
@@ -190,11 +200,46 @@ function isCollected(pid: number): boolean {
   return !existsSync(`/proc/${pid}`);
 }
 
-function procInfo(pid: number): { state: string; ppid: number } | null {
+function procInfo(
+  pid: number,
+): { state: string; ppid: number; pgrp: number } | null {
   if (!existsSync(`/proc/${pid}/stat`)) return null;
   const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
   const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-  return { state: fields[0]!, ppid: Number(fields[1]) };
+  return {
+    state: fields[0]!,
+    ppid: Number(fields[1]),
+    pgrp: Number(fields[2]),
+  };
+}
+
+/**
+ * A detached process-group leader whose parent is another process. The parent
+ * reaps it, so a stop that signals the group can observe it leave `/proc`.
+ */
+async function spawnForeignGroupLeader(pidFile: string): Promise<number> {
+  const holder = spawn(
+    "python3",
+    [
+      "-c",
+      `import os, time
+pid = os.fork()
+if pid == 0:
+    os.setsid()
+    open(${JSON.stringify(pidFile)}, "w").write(str(os.getpid()))
+    time.sleep(300)
+    os._exit(0)
+else:
+    os.wait()
+    time.sleep(1)
+`,
+    ],
+    { detached: true, stdio: "ignore" },
+  );
+  strays.push(holder);
+  const leader = Number(await waitForFile(pidFile));
+  foreignLeaders.push(leader);
+  return leader;
 }
 
 async function waitForCollection(pid: number): Promise<boolean> {
@@ -636,11 +681,61 @@ describe("mockup stack lifecycle", () => {
     expect(after?.state).not.toBe("Z");
   });
 
+  it("signals a live group leader whose parent is not this process", async () => {
+    const { stopMockupStack } = await loadService();
+    const { mockupStackStatePath, writeMockupStackState } = await loadScratch();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
+    const leader = await spawnForeignGroupLeader(join(root, "stop-foreign.pid"));
+    expect(procInfo(leader)?.ppid).not.toBe(process.pid);
+    expect(procInfo(leader)?.pgrp).toBe(leader);
+    writeMockupStackState("my-conversation", {
+      port: 41005,
+      pid: leader,
+      startTime: procStartTime(leader),
+      baseUrl: "http://127.0.0.1:41005",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const result = await stopMockupStack("my-conversation");
+
+    expect(result.stopped).toBe(true);
+    expect(isCollected(leader)).toBe(true);
+    expect(existsSync(mockupStackStatePath("my-conversation"))).toBe(false);
+  });
+
+  it("does not signal a recycled pid whose start time differs", async () => {
+    const { stopMockupStack } = await loadService();
+    const { mockupStackStatePath, writeMockupStackState } = await loadScratch();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
+    const pid = spawnSleeper();
+    writeMockupStackState("my-conversation", {
+      port: 41005,
+      pid,
+      startTime: "1",
+      baseUrl: "http://127.0.0.1:41005",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const kill = vi.spyOn(process, "kill");
+    try {
+      const result = await stopMockupStack("my-conversation");
+      expect(result.stopped).toBe(true);
+      expect(existsSync(mockupStackStatePath("my-conversation"))).toBe(false);
+      expect(
+        kill.mock.calls.some((call) => Math.abs(Number(call[0])) === pid),
+      ).toBe(false);
+    } finally {
+      kill.mockRestore();
+    }
+    expect(isAlive(pid)).toBe(true);
+  });
+
   it(
-    "rejects only after waitpid collects a group still uncollected past KILL_GRACE",
+    "rejects and keeps state when the group is still alive after SIGKILL",
     async () => {
       const { stopMockupStack } = await loadService();
-      const { writeMockupStackState } = await loadScratch();
+      const { mockupStackStatePath, writeMockupStackState } = await loadScratch();
       const { conversationsDir } = await loadConfig();
       writeConversationMeta(conversationsDir, "my-conversation");
       const child = spawn("sh", ["-c", "trap '' TERM; sleep 300"], {
@@ -657,37 +752,19 @@ describe("mockup stack lifecycle", () => {
         startedAt: "2026-01-01T00:00:00.000Z",
       });
       const realKill = process.kill.bind(process);
-      let deliver = false;
       const spy = vi.spyOn(process, "kill").mockImplementation(((
         target: number,
         signal?: NodeJS.Signals | number,
       ) => {
-        if (!deliver && (signal === "SIGTERM" || signal === "SIGKILL")) {
-          return true;
-        }
+        if (signal === "SIGTERM" || signal === "SIGKILL") return true;
         return realKill(target, signal as NodeJS.Signals);
       }) as typeof process.kill);
       try {
-        let settled = false;
-        const outcome = stopMockupStack("my-conversation").then(
-          () => {
-            settled = true;
-            return "resolved" as const;
-          },
-          (err: Error) => {
-            settled = true;
-            return err;
-          },
+        await expect(stopMockupStack("my-conversation")).rejects.toThrow(
+          /survived SIGKILL/,
         );
-        await new Promise((resolve) => setTimeout(resolve, 12_000));
-        expect(settled).toBe(false);
+        expect(existsSync(mockupStackStatePath("my-conversation"))).toBe(true);
         expect(existsSync(`/proc/${pid}`)).toBe(true);
-        deliver = true;
-        realKill(-pid, "SIGKILL");
-        const result = await outcome;
-        expect(result).toBeInstanceOf(Error);
-        expect((result as Error).message).toMatch(/survived SIGKILL/);
-        expect(isCollected(pid)).toBe(true);
       } finally {
         spy.mockRestore();
       }
