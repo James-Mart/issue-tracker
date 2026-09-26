@@ -99,6 +99,7 @@ describe("ProjectSecretsCard", () => {
   it("lists key names and an empty state without values", () => {
     secretKeys = ["STRIPE_SANDBOX_KEY"];
     const { root } = mount(<ProjectSecretsCard issue={project()} />);
+    expect(document.getElementById("secrets")).toBeTruthy();
     expect(document.body.textContent).toContain("STRIPE_SANDBOX_KEY");
     expect(document.body.textContent).toContain("Add secret");
     expect(document.body.textContent).not.toContain(VALUE);

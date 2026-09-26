@@ -24,7 +24,8 @@ each Task; the implementor writes code; the code-quality validator owns Task
 `qa` (writes the gate, resumes across rounds, three-strike escalate) and Task
 `status done` at the terminal gate; the story-review agent records the Story
 gate (`review`, `reviewedTasks`, optional remediation Tasks) without editing
-workspace source, and when the branch is behind appends the
+workspace source, pauses the Story at `review` `awaiting-human` when a runtime
+check needs a human, and when the branch is behind appends the
 update-from-merge-base Task without changing stored `review`; the git
 subagent owns branch create and Story finish.
 
@@ -196,7 +197,7 @@ not from a spawn-time argument.
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
 | Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via **resume** | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7-high-fast`; `opus`→`claude-opus-5-5-thinking-high` | writes (see Field ownership) |
 | Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `status` / `needsAttention`; `issue task comment`) |
-| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue task add`; `issue story comment`) |
+| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue story request-human`; `issue task add`; `issue story comment`) |
 | Runtime validator | `issue-tracker-runtime-validator` | Spawned by Story review, not by you | `composer-2.5` | writes (`issue attach` on the Story) |
 
 ### Field ownership
@@ -210,7 +211,8 @@ Coordinator never sets Task `status`, Task `qa`, or Task `commits`.
 | Task `status` `done` | Code-quality | at the terminal gate |
 | Task `qa` | Code-quality | on each entry `reviewing`, then terminal `passed` / `changes-requested` (three-strike → `needsAttention`); never the coordinator |
 | Task `commits` | Git | spawned by the implementor |
-| Story `review` | Story review | on each review round `passed` / `failed` |
+| Story `review` | Story review | on each review round `passed` / `failed`; `awaiting-human` when it pauses for a human |
+| Story `review` cleared from `awaiting-human` | Human | Done on the Story's request (`issue story human-done`) |
 | Story `reviewedTasks` | Story review | all `done` Tasks inspected in that round |
 | Story `needsAttention` (review three-strike) | Coordinator | on the 3rd counted story-review resume in one session — see **Close a Story** |
 
@@ -218,8 +220,9 @@ Implement and revise are the **same** implementor agent. Code-quality is a
 **writer** of Task `qa` (spawn/resume and three-strike escalate: see **Per-Task
 cycle** — you do **not** count rounds). Story review is the Story gate
 recorder: it sets `review` and `reviewedTasks` and may append remediation
-Tasks or the update-from-merge-base Task (tracker writes only; never
-workspace source), and it spawns the runtime validator itself; you
+Tasks or the update-from-merge-base Task, or pause for a human (tracker
+writes only; never workspace source), and it spawns the runtime validator
+itself; you
 spawn/resume it and enforce the reopen cap (see **Close a Story**). Both keep findings out of
 your context via comments / machine-readable fields.
 
@@ -228,7 +231,8 @@ your context via comments / machine-readable fields.
 Walk the Stories in the order `issue tree` printed them (top-to-bottom). For
 each Story: start it if needed, work its not-`done` Tasks in the sequence
 `issue tree` lists them, then **Close a Story** (review gate +
-finish-branch) before moving to Stories nested under it.
+finish-branch) before moving to Stories nested under it. A Story waiting on
+a human is parked instead (see **Park a Story**).
 
 **Re-read `issue tree <id>` every time control returns to you** — after
 every subagent finishes and before you choose the next action — and re-sync your
@@ -326,7 +330,7 @@ are owned by subagents — see **Field ownership**. Do not set Task `status`,
 
 ### Close a Story
 
-Repeat until finish-branch:
+Repeat until finish-branch or park:
 
 1. **Re-sync.** Re-read `issue tree <id>` and re-sync your todo list.
 2. **Not-done Tasks.** If any Task on the Story is not `done` (including a
@@ -339,7 +343,10 @@ Repeat until finish-branch:
    `view`, or `tree`. For this Story in this coordinator session, keep how
    many resumes have counted and whether the previous story-review result
    set `review` to `failed`. Before any story-review return in this session,
-   a stored `review` of `failed` is that previous result. Branch:
+   a stored `review` of `failed` is that previous result. Branch (first
+   match wins):
+   - `review` is `awaiting-human` → park the Story per **Park a Story** and
+     leave Close a Story.
    - `reviewCurrent` is `true` → read
      `issue story get <storyId> needsAttention`. When it is `true`, stop
      (Escalation). When it is `false`, **Delegate**
@@ -390,6 +397,21 @@ Repeat until finish-branch:
    `true` — do **not** run story-review again. Spawn `issue-tracker-git`
    with the finish-branch stub. Git applies the Story's effective merge
    policy — see SPEC § Project merge policy. Advance to the next Story.
+
+### Park a Story
+
+Close a Story parks a Story whose `review` is `awaiting-human`: Story review
+has asked a human for something, and the human's Done clears `review`.
+
+1. Add the Story to this session's parked list. Continue the walk at the
+   next Story in `issue tree` order, skipping every Story nested under a
+   parked Story.
+2. Each time a Story finishes or parks, before starting the next Story,
+   read `issue story get <storyId> review` for each parked Story. Remove
+   each one whose `review` is no longer `awaiting-human` from the list and
+   run Close a Story for it from step 1 before the next Story.
+3. When every Story left to work is parked or nested under a parked Story,
+   go to **## Completion**.
 
 ### Escalation
 

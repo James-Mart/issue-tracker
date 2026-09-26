@@ -12,7 +12,8 @@ import { SLUG_RE } from "../slug.js";
 export const TASK_STATUSES = ["todo", "in-progress", "fixing", "done"] as const;
 export const QA_STATUSES = ["reviewing", "changes-requested", "passed"] as const;
 export const RETRO_STATUSES = ["in-progress", "done"] as const;
-export const REVIEW_STATUSES = ["passed", "failed"] as const;
+export const REVIEW_STATUSES = ["passed", "failed", "awaiting-human"] as const;
+export const COMMENT_TYPES = ["human-request", "human-response"] as const;
 
 const nonEmpty = z.string().min(1);
 
@@ -76,18 +77,38 @@ export const commentAnchorSchema = z.object({
   commitSha: nonEmpty,
 });
 
-export const commentSchema = z.object({
+const commentFields = {
   id: nonEmpty,
   role: nonEmpty,
   name: z.string().optional(),
-  body: nonEmpty,
+  body: z.string(),
   at: nonEmpty,
   replyTo: nonEmpty.optional(),
   anchor: commentAnchorSchema.optional(),
-});
+  type: z.enum(COMMENT_TYPES).optional(),
+};
+
+function refineCommentBody(
+  value: { body: string; type?: (typeof COMMENT_TYPES)[number] },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.body.length > 0 || value.type === "human-response") return;
+  ctx.addIssue({
+    code: "custom",
+    message: "String must contain at least 1 character(s)",
+    path: ["body"],
+  });
+}
+
+const commentObject = z.object(commentFields);
+
+export const commentSchema = commentObject.superRefine(refineCommentBody);
 
 // The write-time input is the stored shape minus server-stamped `id` and `at`.
-export const commentInputSchema = commentSchema.omit({ at: true, id: true });
+// Omit runs on the unrefined object; Zod refuses omit on a schema that already has a refinement.
+export const commentInputSchema = commentObject
+  .omit({ at: true, id: true })
+  .superRefine(refineCommentBody);
 
 export type Comment = z.infer<typeof commentSchema>;
 export type CommentInput = z.infer<typeof commentInputSchema>;
@@ -346,6 +367,7 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type QaStatus = (typeof QA_STATUSES)[number];
 export type RetroStatus = (typeof RETRO_STATUSES)[number];
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+export type CommentType = (typeof COMMENT_TYPES)[number];
 
 export function requiresPartOf(kind: IssueKind): boolean {
   return PARENT_KINDS[kind].length > 0;

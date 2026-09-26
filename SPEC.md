@@ -244,9 +244,11 @@ These are computed by `derive()` and never written to disk (see
 - **assignee** — Task-only. Who currently owns the Task (e.g. `human` or an
   agent id); in the work loop, overloaded as the implementor model family key
   (`composer`, `grok`, or `opus`).
-- **review** — a Story-only machine-readable spec-review gate (`passed` /
-  `failed`; absent until set via kind [`set`](#kind-scoped-get--set)). Surfaced
-  in the detail panel when set; omitted from the tree outline. Pair with
+- **review** — a Story-only machine-readable gate (`passed` / `failed` /
+  `awaiting-human`). `passed` and `failed` are spec-review verdicts, absent
+  until set via kind [`set`](#kind-scoped-get--set). `awaiting-human` is set
+  by `issue story request-human` and cleared by `issue story human-done`.
+  Surfaced in the detail panel when set; omitted from the tree outline. Pair with
   `reviewedTasks` (the Task ids covered) and derived **`reviewCurrent`** (see
   [Derived state](#derived-state)).
 - **reviewedTasks** — a Story-only list of Task ids the stored `review` verdict
@@ -361,7 +363,8 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   `{id} [{at}] {author}: {body}` or, when anchored,
   `{id} [{at}] {author} @ {path}:{line} {side} {sha7}: {body}` (a range uses
   `{startLine}-{line}`; append ` (outdated)` after the location when the anchor
-  is outdated). `{author}` is `name` when set, else `role`. See
+  is outdated). `{author}` is `name` when set, else `role`, followed by
+  ` ({type})` when the comment has a `type`. See
   [`comments.jsonl` message shape](#commentsjsonl-message-shape). Prefer
   `issue get <id> <field>` for a single field. Label lines: see
   [Project labels](#project-labels).
@@ -430,6 +433,23 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   the Story lacks `branchName` or a derived `mergeBase`, when the Story is
   merged, or when a not-done Task titled `Update from merge base` is already
   on the Story. Prints created/updated ids.
+- **`request-human`** (story only) —
+  `issue story request-human <storyId> --file <path|->` posts a thread-root
+  comment (`role` `story-review`, `type` `human-request`) whose body is the
+  request, and sets `review` to `awaiting-human`. The body is a Markdown
+  bullet list (`-`, `*`, or `+`). Each item starts with exactly one of
+  ``Secret `KEY`:``, `Input:`, or `Observation:`. `KEY` matches
+  `^[A-Z_][A-Z0-9_]*$`, and the rest of the line is non-empty. Refuses a body
+  that does not follow that format, naming the first bad item, and refuses
+  when `review` is already `awaiting-human`. Prints the new comment id.
+- **`human-done`** (story only) —
+  `issue story human-done <storyId> [--note <text>]` posts a comment (`role`
+  `human`, `type` `human-response`) with `replyTo` set to the latest
+  `human-request` thread root, and clears `review`. The note is the comment
+  body; omitted or blank stores an empty body. Refuses when `review` is not
+  `awaiting-human`. Prints the new comment id.
+  `POST /api/stories/:id/human-done` with body `{ note?: string }` calls the
+  same store operation and returns the comment.
 
 ### Global ops
 
@@ -536,7 +556,7 @@ and refuses a sha already present on that Task. Whole-series replace uses
 - `--clear` (mutually exclusive with a positional value / `--add` / `--remove` /
   `--rename`):
   - **Clearable scalars** (`assignee`, `branchName`, `stackedOn`,
-    `prUrl`, `workspace`, `setupCommand`, `qa`, `retro`, `sourceIdea`, `appendTo`): blanks the field (absent / `null`).
+    `prUrl`, `workspace`, `setupCommand`, `qa`, `review`, `retro`, `sourceIdea`, `appendTo`): blanks the field (absent / `null`).
   - **`blockedBy`** / **`reviewedTasks`** / assignment **`labels`**: sets `[]` (empty array, not null).
   - **Project `labels`**: sets `[]` (empty catalog).
   - **Project `supportingDocs`**: blanks the field (absent / `null`); with
@@ -1101,7 +1121,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
 | `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by the finisher Story's `merged` write (via finish-branch, `issue merge`, or any path that flips `merged` false→true) on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
-| `review` | `"passed"` \| `"failed"`? | absent until set; machine-readable spec-review gate |
+| `review` | `"passed"` \| `"failed"` \| `"awaiting-human"`? | absent until set; `passed` / `failed` are the spec-review verdict; `awaiting-human` pauses for a human (`request-human` sets it, `human-done` clears it) |
 | `reviewedTasks` | string[] | Task ids the stored review covered; defaults `[]`; same array patch surface as Epic `blockedBy`; never rendered as a tree chip |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
 | `labels` | string[]? | assignment ids from the containing Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
@@ -1212,9 +1232,10 @@ Each line of `comments.jsonl` is one JSON message object
 | `id` | string | non-empty; server-stamped UUID on append (absent from caller input) |
 | `role` | string | non-empty; the author role (e.g. `agent`, `human`) |
 | `name` | string? | optional author display name |
-| `body` | string | non-empty; Markdown, may contain `issue:` links |
+| `body` | string | Markdown, may contain `issue:` links; non-empty, except a `human-response` with no note stores `""` |
 | `at` | ISO string | server-stamped on append (not supplied by the caller) |
 | `replyTo` | string? | when set, the `id` of the thread **root** this message replies to |
+| `type` | `"human-request"` \| `"human-response"`? | absent on ordinary comments; `request-human` writes `human-request` on a thread root, `human-done` writes `human-response` on the reply |
 | `anchor` | object? | optional line anchor on a root comment only (see below) |
 
 **Threading (`replyTo`).** A thread is one root plus an ordered list of
@@ -1287,8 +1308,11 @@ no consumer can persist a broken file.
 - `appendComment(id, CommentInput)` — appends one JSONL line to
   `comments.jsonl` with server-stamped `id` and `at` (`issue epic|idea|story|task comment`
   and `POST /api/issues/:id/comments` share this path). `CommentInput` is the
-  stored shape minus `id` and `at` — `{role, name?, body}` plus optional
+  stored shape minus `id` and `at` — `{role, name?, body, type?}` plus optional
   `replyTo` and/or `anchor`; see [`comments.jsonl` message shape](#commentsjsonl-message-shape).
+  `requestHuman` / `humanDone` (`app/server/services/human-handoff.ts`) are the
+  store operations behind `issue story request-human` and `issue story human-done`.
+  `POST /api/stories/:id/human-done` calls `humanDone`.
   Append-time validation refuses invalid `replyTo`, `anchor`, and `commitSha`
   values.
 - `readComments(id)` — reads/parses `comments.jsonl`, skipping malformed lines into
@@ -1774,7 +1798,9 @@ so cannot drift:
   empty stdout when `branchName` is missing, derived `mergeBase` is missing,
   the worktree cannot be read, or ref resolution throws; it does not print
   `false`.
-  Story review reads `behindMergeBase` before it judges. A failed get raises
+  Story review first reads `review`; when it is `awaiting-human`, story
+  review stops and leaves it unchanged. Otherwise it reads
+  `behindMergeBase` before it judges. A failed get raises
   Story `needsAttention` and stops; it does not judge and it does not finish.
   When `behindMergeBase` is `true` and the Story has a not-done Task titled
   `Update from merge base`, story review stops without judging and without
@@ -1787,9 +1813,16 @@ so cannot drift:
   review judges the diff. When that finds no gaps and the Story has
   runtime-visible behavior (as `agents/issue-tracker-story-review.md`
   defines it), story review spawns `issue-tracker-runtime-validator`,
-  which boots the Story's stack and returns `clean` or `findings`;
-  findings become remediation Tasks through the same gap path. Diff gaps
-  take that path without spawning it.
+  which boots the Story's stack and returns `clean`, `findings`, or
+  `needs-human`; findings become remediation Tasks through the same gap
+  path. Diff gaps take that path without spawning it. On `needs-human`,
+  story review posts the validator's request with `issue story
+  request-human` and stops without a verdict, leaving `reviewedTasks`
+  unchanged. The coordinator parks a Story at `review` `awaiting-human` and
+  continues with Stories not nested under it; once the human's
+  `issue story human-done` clears `review`, Close a Story runs story review
+  again, whose runtime validator reads the reply to the latest
+  `human-request`. The verdict is always story review's.
   Close a Story does not finish on `reviewCurrent` `true` until that behind
   check has run. When the check appends an update Task, stops because one is
   already open, or raises attention, the coordinator re-syncs instead of

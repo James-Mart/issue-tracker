@@ -3,9 +3,9 @@ name: issue-tracker-story-review
 model: composer-2.5
 description: >-
   Per-story review of the delivered change, including a runtime check by the
-  runtime validator; owns Story review and reviewedTasks, and appends the
-  update-from-merge-base Task when the branch is behind. Used by
-  issue-tracker-work.
+  runtime validator; owns Story review and reviewedTasks, pauses for a human
+  when the runtime validator needs one, and appends the update-from-merge-base
+  Task when the branch is behind. Used by issue-tracker-work.
 readonly: false
 ---
 
@@ -30,8 +30,9 @@ that only reads as delivered.
 Load all issue specs (Story and Task) via `issue story view` / `issue task view`.
 
 **Allowed writes:** `issue story set` (for `review`, `reviewedTasks`, and
-`needsAttention`), `issue story update-from-merge-base`, `issue task add`,
-`issue story comment`. Do not run any other mutating `issue` command.
+`needsAttention`), `issue story update-from-merge-base`,
+`issue story request-human`, `issue task add`, `issue story comment`. Do not
+run any other mutating `issue` command.
 
 ## Bootstrap
 
@@ -53,10 +54,15 @@ files, per **SPEC § Project workspace**.
 - **Issue id + title** (Story) — the spawn `Issue:` value; pass it to
   `issue summary` and the Story-scoped commands in this body
 
+## Awaiting-human check
+
+At the start of the run, read `issue story get <storyId> review`. When it
+is `awaiting-human`, stop and leave it unchanged: the Story is waiting on a
+human's reply to its latest request. Otherwise continue at ## Behind check.
+
 ## Behind check
 
-At the start of the run, before ## What you do, read
-`issue story get <storyId> behindMergeBase`.
+Before ## What you do, read `issue story get <storyId> behindMergeBase`.
 
 When that get exits nonzero, run
 `issue story set <storyId> needsAttention true --reason "behindMergeBase get failed"`
@@ -78,7 +84,8 @@ When `reviewCurrent` is `false`, continue at ## What you do.
 
 ## What you do
 
-Run ## Behind check first. Continue here only when it says to.
+Run ## Awaiting-human check and ## Behind check first. Continue here only
+when they say to.
 
 1. **Preconditions.** Every Task on the Story must be `done`. If any is not,
    escalate per ## Escalation and stop.
@@ -135,11 +142,27 @@ Run ## Behind check first. Continue here only when it says to.
    - `findings` — take ### If gaps with each entry of `findings` as one
      remediation Task: its `title` is the Task title and its `spec` is the
      Task description.
+   - `needs-human` — take ### If a human is needed.
 
    Escalate per ## Escalation and stop when the delegation ends in a
    failure you do not retry under the Delegation include, or the reply
-   ends without a `json` block whose `outcome` is `clean` or `findings`.
-5. Take **exactly one** of the two paths below, as step 4 directs.
+   ends without a `json` block whose `outcome` is `clean`, `findings`, or
+   `needs-human`.
+5. Take **exactly one** of the three paths below, as step 4 directs.
+
+### If a human is needed
+
+Pipe the reply's `request` string, unchanged, to the CLI:
+
+```bash
+issue story request-human <storyId> --file - <<'EOF'
+<request>
+EOF
+```
+
+It posts the request and sets `review` to `awaiting-human`. Leave
+`reviewedTasks` unchanged and write no verdict. When the command refuses,
+escalate per ## Escalation with its error. Then stop.
 
 ### If gaps
 

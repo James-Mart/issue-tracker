@@ -55,6 +55,59 @@ afterEach(() => {
   vi.doUnmock("../api/queries");
 });
 
+const story: IssueDetail = {
+  id: "handoff",
+  kind: "story",
+  title: "Handoff",
+  partOf: "epic",
+  order: 0,
+  createdAt: t0,
+  updatedAt: t0,
+  archived: false,
+  description: "",
+  version: "1",
+  labels: [],
+  needsAttention: false,
+  attentionReason: null,
+  branchName: "handoff",
+  merged: false,
+  reviewedTasks: [],
+  review: "awaiting-human",
+};
+
+async function mountStoryChips() {
+  vi.resetModules();
+  vi.doMock("../api/queries", () => ({
+    useIssuesQuery: () => ({
+      data: {
+        issues: [],
+        derived: {
+          handoff: { blocked: false, storyStatus: "in-progress" },
+        },
+      },
+    }),
+  }));
+  const { IssueDetailStatusChips: Chips } = await import(
+    "./issue-detail-status-chips"
+  );
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() => {
+    root.render(<Chips issue={story} />);
+  });
+  return container;
+}
+
+describe("IssueDetailStatusChips story header", () => {
+  it("renders review: awaiting human in the attention hue", async () => {
+    const container = await mountStoryChips();
+    const badge = container.querySelector(".bg-warning\\/15");
+    expect(container.textContent).toContain("review: awaiting human");
+    expect(badge).toBeTruthy();
+  });
+});
+
 describe("IssueDetailStatusChips idea header", () => {
   it("renders the amber awaiting approval chip", async () => {
     const container = await mountChips("awaiting-approval");

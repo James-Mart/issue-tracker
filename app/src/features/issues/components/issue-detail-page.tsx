@@ -47,6 +47,7 @@ import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
 import { IssueDetailTabs } from "./issue-detail-tabs";
 import { StoryAppendActionsCard } from "./story-append-actions-card";
+import { StoryHumanRequestCard } from "./story-human-request-card";
 import { StoryTaskRail } from "./story-task-rail";
 import { StoryWorktreeCard } from "./story-worktree-card";
 import { EpicStoryRail } from "./epic-story-rail";
@@ -129,6 +130,7 @@ function IssueOverviewPanel({
   return (
     <div className="flex flex-col gap-4">
       <IssueMetaPanel issue={issue} catalog={catalog} />
+      {issue.kind === "story" ? <StoryHumanRequestCard issue={issue} /> : null}
       {issue.kind === "story" ? <StoryWorktreeCard issue={issue} /> : null}
       <IssueOverviewLaunch issue={issue} parentKind={parentKind} />
       {awaitingDirection ? (

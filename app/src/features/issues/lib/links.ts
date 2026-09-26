@@ -15,6 +15,13 @@ export function issuePath(projectId: string, id: string): string {
   return `/projects/${projectId}/issues/${id}`;
 }
 
+/** Hash target for the Project settings Secrets card. */
+export const PROJECT_SECRETS_CARD_ID = "secrets";
+
+export function projectSecretsCardPath(projectId: string): string {
+  return `${issuePath(projectId, projectId)}#${PROJECT_SECRETS_CARD_ID}`;
+}
+
 export function issueChannelPath(
   projectId: string,
   id: string,

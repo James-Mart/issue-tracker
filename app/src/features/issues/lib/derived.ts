@@ -77,6 +77,7 @@ export const EPIC_STATUS_BADGE_VARIANT: Record<
 export const REVIEW_LABEL: Record<ReviewStatus, string> = {
   passed: "passed",
   failed: "failed",
+  "awaiting-human": "awaiting human",
 };
 
 export const REVIEW_BADGE_VARIANT: Record<
@@ -85,6 +86,7 @@ export const REVIEW_BADGE_VARIANT: Record<
 > = {
   passed: "done",
   failed: "destructive",
+  "awaiting-human": "warn",
 };
 
 export const RETRO_LABEL: Record<RetroStatus, string> = {

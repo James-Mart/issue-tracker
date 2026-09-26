@@ -39,7 +39,8 @@ import { CHIP_UNSET } from "./server/services/merge-base.js";
 import { formatSummary, summarize } from "./server/services/summary.js";
 import { hasAttention } from "./server/kind.js";
 import { registerKindAdd } from "./cli-create.js";
-import { bindCliStdin } from "./cli-io.js";
+import { bindCliStdin, readCliFileArg } from "./cli-io.js";
+import { humanDone, requestHuman } from "./server/services/human-handoff.js";
 import { assertKind, registerKindGetSet } from "./cli-kind.js";
 import { registerBareIdOps, registerKindOps } from "./cli-ops.js";
 import { appendTaskCommit, taskHeadCommit } from "./server/services/commit-sha.js";
@@ -381,6 +382,32 @@ function createIssueProgram(run: Run): Command {
               console.log(treeLines.join("\n"));
             }
           }),
+        );
+      kindCmd
+        .command("request-human")
+        .argument("<storyId>", "story id")
+        .requiredOption(
+          "--file <path>",
+          "request body (path, or - for stdin); a Markdown bullet list of Secret, Input, and Observation items",
+        )
+        .description(
+          "post a story-review human-request comment and set review to awaiting-human",
+        )
+        .action((storyId: string, opts: { file: string }) =>
+          run(async () => {
+            const body = readCliFileArg(opts.file);
+            return requestHuman(storyId, body);
+          }),
+        );
+      kindCmd
+        .command("human-done")
+        .argument("<storyId>", "story id")
+        .option("--note <text>", "optional note stored as the human-response body")
+        .description(
+          "reply to the latest human-request with a human-response comment and clear review",
+        )
+        .action((storyId: string, opts: { note?: string }) =>
+          run(() => humanDone(storyId, opts.note)),
         );
       kindCmd
         .command("update-from-merge-base")

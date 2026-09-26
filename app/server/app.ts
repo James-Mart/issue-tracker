@@ -21,6 +21,7 @@ import {
   type InitiateRestart,
 } from "./routes/restart.js";
 import { mockupStackMiddleware } from "./routes/mockups.js";
+import { storiesRouter } from "./routes/stories.js";
 import { transcriptionsRouter } from "./routes/transcriptions.js";
 import { RESTART_SENTINEL_EXIT_CODE } from "./restart-contract.js";
 import {
@@ -91,6 +92,7 @@ export function createApp(
   }
 
   app.use("/api/issues", createIssuesRouter(sessions));
+  app.use("/api/stories", storiesRouter);
   app.use("/api/pipeline", pipelineRouter);
   app.use("/api/projects", projectsRouter);
   app.use("/api/conversations", createConversationsRouter(sessions));

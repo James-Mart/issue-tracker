@@ -95,7 +95,8 @@ type ViewOptions = {
 };
 
 function commentAuthor(message: Comment): string {
-  return message.name ?? message.role;
+  const author = message.name ?? message.role;
+  return message.type ? `${author} (${message.type})` : author;
 }
 
 function formatAnchorLocation(anchor: NonNullable<Comment["anchor"]>): string {
