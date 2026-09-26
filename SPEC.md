@@ -696,7 +696,7 @@ the YAML doc.
 | `codingStandards` | implementor, code-quality validator; plan-polish internal-consistency when tree prose makes claims the doc governs |
 | `designSystem` | implementor + code-quality validator when the Task appears UI-related (judgment from prose + paths; no Task flag); runtime validator when the Story changes UI (same judgment) |
 | `gateRubric` | auto-plan stakeholder |
-| `verification` | implementor bootstrap (Verify), runtime validator bootstrap |
+| `verification` | implementor (Verify), runtime validator bootstrap, issue-tracker-plan bootstrap, plan-polish bootstrap + internal-consistency (Task Verify vs playbook / `runtime`) |
 
 `issue-tracker-plan` is absent from `vision` because the vision is read from
 the seat that answers, not the seat that asks ([Roles](#roles)).

@@ -18,8 +18,11 @@ Absolute path for this file (Read this exact path):
    task description: discernable paths are staged, undiscernable paths stay
    unmerged, and that state raises attention and stops before record-commit.
    Other tasks still hand off with no unmerged paths.
-3. Verify as that description requires (tests, build, etc.). When this
-   Task builds on a prior Task's tests, keep verification focused on this
+3. Verify as that description requires (tests, build, etc.). **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
+   and consult `verification` per that file using the bootstrap summary
+   output. When this Task builds on a prior Task's tests, keep verification
+   focused on this
    Task's surface — do not re-run the prior Task's full matrix by default.
    When the Task appears UI-related (same judgment as the `designSystem`
    consult — Task prose and changed paths), **Read**

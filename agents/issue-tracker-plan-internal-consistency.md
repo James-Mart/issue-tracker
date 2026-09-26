@@ -24,7 +24,7 @@ and follow it. Below is only what you uniquely flag.
 
 After the shared-contract bootstrap (which already consults `vision`), **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
-and consult `vision` and `codingStandards` per that file
+and consult `vision`, `codingStandards`, and `verification` per that file
 (reuse vision if already loaded). Missing key or unreadable target → skip.
 
 ## What you flag
@@ -41,6 +41,9 @@ and consult `vision` and `codingStandards` per that file
 - Compare the tree against `vision` whenever that key is set and readable
 - Compare against `codingStandards` only when tree prose makes claims that
   doc would govern
+- Compare against `verification` when set: flag a Task `### Verify` /
+  `## Verify` section that asks for a check the playbook or the Project
+  `runtime:` line from bootstrap summary says the Project cannot run
 - Unset or unreadable keys → skip (never fail)
 
 **Severity.** Every finding is `"error"`.

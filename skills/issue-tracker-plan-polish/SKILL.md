@@ -51,7 +51,8 @@ If none is given:
    [`agents/_issue-tracker-plan-polish-check-base.md`](../../agents/_issue-tracker-plan-polish-check-base.md)
    § Bootstrap (bind `<rootKind>`; do not restate that block here).
 2. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
-   then consult `vision` per that file using the step-1 summary output.
+   then consult `vision` and `verification` per that file using the step-1
+   summary output.
 3. `issue tree <rootId>` — full Story/Task outline (implementation
    order).
 4. `issue view <rootId>` for the work-root description when preparing
@@ -79,10 +80,11 @@ contract lives only in
 — do not restate the findings schema here.
 
 **Internal-consistency supportingDocs scope.** That check compares the tree
-against `vision` (when set) and `codingStandards` only when tree prose makes
-claims that doc governs. It does **not** compare against `designSystem` —
-design-system adherence is enforced at implementation time, not during plan
-polish. Details:
+against `vision` (when set), `codingStandards` only when tree prose makes
+claims that doc governs, and `verification` (when set) for Task Verify
+sections that ask for checks the playbook or Project `runtime:` cannot run.
+It does **not** compare against `designSystem` — design-system adherence is
+enforced at implementation time, not during plan polish. Details:
 [`agents/issue-tracker-plan-internal-consistency.md`](../../agents/issue-tracker-plan-internal-consistency.md)
 and SPEC § Project supporting docs.
 
