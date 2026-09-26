@@ -166,6 +166,24 @@ export function useChannelSessionsQuery(
   });
 }
 
+export interface ProjectSecretKeysResponse {
+  keys: string[];
+}
+
+/** Secret key names for a Project. The response never includes values. */
+export function useProjectSecretKeys(
+  projectId: string,
+): UseQueryResult<ProjectSecretKeysResponse, Error> {
+  return useQuery({
+    queryKey: issuesKeys.projectSecrets(projectId),
+    queryFn: () =>
+      request<ProjectSecretKeysResponse>(
+        `/api/projects/${encodeURIComponent(projectId)}/secrets`,
+      ),
+    enabled: Boolean(projectId),
+  });
+}
+
 /** Live PR facts for a Project — mount + explicit invalidation only. */
 export function useProjectPullRequestsQuery(
   projectId: string,

@@ -18,6 +18,10 @@ vi.mock("../api/mutations", () => ({
   }),
 }));
 
+vi.mock("../api/queries", () => ({
+  useProjectSecretKeys: () => ({ data: { keys: [] }, isError: false }),
+}));
+
 vi.mock("./issue-workspace-field", () => ({
   IssueWorkspaceField: () => <div data-testid="workspace-field">Workspace</div>,
 }));
@@ -143,6 +147,20 @@ describe("ProjectSettingsOverview Delivery card", () => {
     expect(input).toBeInstanceOf(HTMLInputElement);
     expect((input as HTMLInputElement).value).toBe("2");
     expect((input as HTMLInputElement).type).toBe("number");
+  });
+
+  it("shows the Runtime card under Delivery", () => {
+    const { container } = mount(<ProjectSettingsOverview issue={project()} />);
+
+    const titles = [...container.querySelectorAll("p")].map(
+      (node) => node.textContent,
+    );
+    const delivery = titles.indexOf("Delivery");
+    const runtime = titles.indexOf("Runtime");
+    expect(delivery).toBeGreaterThanOrEqual(0);
+    expect(runtime).toBeGreaterThan(delivery);
+    expect(container.textContent).toContain("Compile before start.");
+    expect(container.textContent).toContain("AGENT_STACK_PORT");
   });
 
   it("does not render a worktree-root control in the Delivery card", () => {
