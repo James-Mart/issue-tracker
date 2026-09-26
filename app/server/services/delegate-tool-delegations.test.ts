@@ -207,6 +207,7 @@ describe("delegate delegations listing and lifecycle", () => {
         error: {
           message:
             "Authentication error. If you are logged in, try logging out and back in.",
+          code: "AUTH_TOKEN_EXPIRED",
           isRetryable: true,
         },
       },
@@ -431,6 +432,7 @@ describe("delegate delegations listing and lifecycle", () => {
         status: "error",
         error: {
           message: authMessage,
+          code: "AUTH_TOKEN_EXPIRED",
           isRetryable: true,
         },
       },

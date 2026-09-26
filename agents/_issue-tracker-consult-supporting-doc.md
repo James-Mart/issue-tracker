@@ -1,7 +1,7 @@
 # Supporting-doc consult (shared)
 
 Not a spawnable agent (no frontmatter). Parameter: `<key>` —
-`vision` | `codingStandards` | `designSystem` | `gateRubric`.
+`vision` | `codingStandards` | `designSystem` | `gateRubric` | `verification`.
 
 Resolve supporting docs **only** via `supportingDocs` on the Project
 (**consult-if-present**). No key or unreadable target → skip; never fail the

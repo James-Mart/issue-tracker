@@ -14,6 +14,7 @@ export const SUPPORTING_DOC_KEYS = [
   "codingStandards",
   "designSystem",
   "gateRubric",
+  "verification",
 ] as const;
 export type SupportingDocKey = (typeof SUPPORTING_DOC_KEYS)[number];
 
@@ -38,6 +39,9 @@ export const PARENT_KINDS: Record<IssueKind, readonly IssueKind[]> = {
   story: ["project", "epic"],
   task: ["story"],
 };
+
+/** Env-style Project secret key. Values stay in the secret store. */
+export const SECRET_KEY_RE = /^[A-Z_][A-Z0-9_]*$/;
 
 /** Predefined Task title appended by `update-from-merge-base`. */
 export const UPDATE_FROM_MERGE_BASE_TITLE = "Update from merge base";

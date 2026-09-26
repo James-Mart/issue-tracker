@@ -9,8 +9,8 @@ import {
 } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { SECRET_KEY_RE } from "../issue-constants.js";
 
-const SECRET_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 const FILE_MODE = 0o600;
 const DIR_MODE = 0o700;
 
@@ -25,7 +25,7 @@ export function secretFilePath(projectId: string): string {
 }
 
 export function assertSecretKey(key: string): void {
-  if (!SECRET_KEY_PATTERN.test(key)) {
+  if (!SECRET_KEY_RE.test(key)) {
     throw new Error(
       `invalid secret key "${key}" (expected ^[A-Z_][A-Z0-9_]*$)`,
     );

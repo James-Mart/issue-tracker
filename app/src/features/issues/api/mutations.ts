@@ -359,6 +359,54 @@ export function useSetupStoryWorktree(storyId: string) {
   });
 }
 
+type SecretKeyList = { keys: string[] };
+
+/**
+ * Set or replace one Project secret. The value is dropped from the mutation
+ * cache when the request settles so client state keeps key names only.
+ */
+export function useSetProjectSecret(projectId: string) {
+  const qc = useQueryClient();
+  const mutation = useMutation<SecretKeyList, Error, { key: string; value: string }>({
+    mutationFn: ({ key, value }) =>
+      request<SecretKeyList>(
+        `/api/projects/${encodeURIComponent(projectId)}/secrets/${encodeURIComponent(key)}`,
+        { method: "PUT", body: { value } },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      qc.setQueryData(issuesKeys.projectSecrets(projectId), { keys: data.keys });
+    },
+  });
+
+  return {
+    isPending: mutation.isPending,
+    mutateAsync: async (input: { key: string; value: string }) => {
+      try {
+        return await mutation.mutateAsync(input);
+      } finally {
+        mutation.reset();
+      }
+    },
+  };
+}
+
+/** Remove one Project secret. The response is key names only. */
+export function useDeleteProjectSecret(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation<SecretKeyList, Error, string>({
+    mutationFn: (key) =>
+      request<SecretKeyList>(
+        `/api/projects/${encodeURIComponent(projectId)}/secrets/${encodeURIComponent(key)}`,
+        { method: "DELETE" },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      qc.setQueryData(issuesKeys.projectSecrets(projectId), { keys: data.keys });
+    },
+  });
+}
+
 export function useDeletePartialPlan(issueId: string) {
   const qc = useQueryClient();
   return useMutation<void, Error, void>({

@@ -16,6 +16,18 @@ vi.mock("../api/mutations", () => ({
   useUpdateIssue: () => ({
     mutateAsync,
   }),
+  useSetProjectSecret: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useDeleteProjectSecret: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
+
+vi.mock("../api/queries", () => ({
+  useProjectSecretKeys: () => ({ data: { keys: [] }, isError: false }),
 }));
 
 vi.mock("./issue-workspace-field", () => ({
@@ -143,6 +155,23 @@ describe("ProjectSettingsOverview Delivery card", () => {
     expect(input).toBeInstanceOf(HTMLInputElement);
     expect((input as HTMLInputElement).value).toBe("2");
     expect((input as HTMLInputElement).type).toBe("number");
+  });
+
+  it("shows the Runtime card under Delivery", () => {
+    const { container } = mount(<ProjectSettingsOverview issue={project()} />);
+
+    const titles = [...container.querySelectorAll("p")].map(
+      (node) => node.textContent,
+    );
+    const delivery = titles.indexOf("Delivery");
+    const runtime = titles.indexOf("Runtime");
+    const secrets = titles.indexOf("Secrets");
+    expect(delivery).toBeGreaterThanOrEqual(0);
+    expect(runtime).toBeGreaterThan(delivery);
+    expect(secrets).toBeGreaterThan(runtime);
+    expect(container.textContent).toContain("Add secret");
+    expect(container.textContent).toContain("Compile before start.");
+    expect(container.textContent).toContain("AGENT_STACK_PORT");
   });
 
   it("does not render a worktree-root control in the Delivery card", () => {

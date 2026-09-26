@@ -94,21 +94,16 @@ describe("parseIssue - valid per kind", () => {
   });
 
   it("parses optional supportingDocs refs", () => {
-    const result = parseIssue({
-      ...project,
-      supportingDocs: {
-        vision: { type: "attachment", name: "vision.md" },
-        codingStandards: { type: "workspace", path: "docs/cs.md" },
-        gateRubric: { type: "attachment", name: "gate-rubric.md" },
-      },
-    });
+    const supportingDocs = {
+      vision: { type: "attachment", name: "vision.md" },
+      codingStandards: { type: "workspace", path: "docs/cs.md" },
+      gateRubric: { type: "attachment", name: "gate-rubric.md" },
+      verification: { type: "workspace", path: "docs/verify.md" },
+    };
+    const result = parseIssue({ ...project, supportingDocs });
     expect(result.ok).toBe(true);
     if (result.ok && result.issue.kind === "project") {
-      expect(result.issue.supportingDocs).toEqual({
-        vision: { type: "attachment", name: "vision.md" },
-        codingStandards: { type: "workspace", path: "docs/cs.md" },
-        gateRubric: { type: "attachment", name: "gate-rubric.md" },
-      });
+      expect(result.issue.supportingDocs).toEqual(supportingDocs);
     }
   });
 

@@ -15,6 +15,8 @@ import { IssueSetupCommandField } from "./issue-setup-command-field";
 import { IssueSupportingDocsField } from "./issue-supporting-docs-field";
 import { IssueWorkspaceField } from "./issue-workspace-field";
 import { MetaRow } from "./meta-row";
+import { ProjectRuntimeCard } from "./project-runtime-card";
+import { ProjectSecretsCard } from "./project-secrets-card";
 
 const SETTINGS_ROW_CLASS = "grid-cols-[7rem_minmax(0,1fr)]";
 
@@ -70,10 +72,12 @@ export function ProjectSettingsOverview({
               />
             </div>
           </SettingsCard>
+          <ProjectRuntimeCard issue={issue} />
           <IssueSupportingDocsField issue={issue} />
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-4">
+          <ProjectSecretsCard issue={issue} />
           <IssueProjectLabelsField issue={issue} />
           <IssueAttachmentsSection issue={issue} upload={upload} />
         </div>

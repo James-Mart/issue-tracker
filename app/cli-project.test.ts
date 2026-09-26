@@ -193,6 +193,75 @@ describe("project get/set", () => {
     }
   });
 
+  it("sets and clears verification supportingDocs by attachment and workspace", async () => {
+    const ws = makeGitWorkspace();
+    const verifyAttachSrc = join(dir, "verification.md");
+    writeFileSync(verifyAttachSrc, "# Verification\n\nRun npm test.");
+    writeFileSync(join(ws, "verify-ws.md"), "# Workspace verification");
+    try {
+      expect((await runIssueCli(["project", "set", "p", "workspace", ws], { env: env() })).status).toBe(0);
+      expect((await runIssueCli(["project", "attach", "p", verifyAttachSrc], { env: env() })).status).toBe(0);
+
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "supportingDocs",
+          "--doc",
+          "verification",
+          "--attachment",
+          "verification.md",
+        ], { env: env() })).status,
+      ).toBe(0);
+
+      const gotAttachment = await runIssueCli(["project", "get", "p", "supportingDocs"], { env: env() });
+      expect(gotAttachment.status).toBe(0);
+      expect(JSON.parse(gotAttachment.stdout)).toEqual({
+        verification: { type: "attachment", name: "verification.md" },
+      });
+
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "supportingDocs",
+          "--doc",
+          "verification",
+          "--workspace",
+          "verify-ws.md",
+        ], { env: env() })).status,
+      ).toBe(0);
+
+      const gotWorkspace = await runIssueCli(["project", "get", "p", "supportingDocs"], { env: env() });
+      expect(JSON.parse(gotWorkspace.stdout)).toEqual({
+        verification: { type: "workspace", path: "verify-ws.md" },
+      });
+
+      const summary = await runIssueCli(["summary", "p"], { env: env() });
+      expect(summary.stdout).toContain(
+        "supportingDocs: verification=workspace:verify-ws.md",
+      );
+
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "supportingDocs",
+          "--clear",
+          "--doc",
+          "verification",
+        ], { env: env() })).status,
+      ).toBe(0);
+      expect((await runIssueCli(["project", "get", "p", "supportingDocs"], { env: env() })).stdout).toBe("");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+      rmSync(verifyAttachSrc, { force: true });
+    }
+  });
+
   it("sets and clears gateRubric supportingDocs", async () => {
     const rubricSrc = join(dir, "gate-rubric.md");
     writeFileSync(

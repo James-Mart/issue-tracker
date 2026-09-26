@@ -99,6 +99,7 @@ describe("delegate end records", () => {
         status: "error",
         error: {
           message: authMessage,
+          code: "AUTH_TOKEN_EXPIRED",
           isRetryable: true,
         },
       },

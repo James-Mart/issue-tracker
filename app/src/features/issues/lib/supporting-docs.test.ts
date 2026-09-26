@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { SUPPORTING_DOC_KEYS } from "@server/issue-constants";
 import {
   emptySupportingDocDraft,
   formatSupportingDocRef,
+  SUPPORTING_DOC_KEY_LABELS,
   isSupportingDocDraftReady,
   previewableSupportingDocs,
   supportingDocContentUrl,
@@ -15,6 +17,15 @@ import {
   supportingDocsFromDraftPreservingIncomplete,
   workspaceFileApiPath,
 } from "./supporting-docs";
+
+describe("supporting-docs editor rows", () => {
+  it("includes a Verification row label in key order", () => {
+    expect(SUPPORTING_DOC_KEYS).toContain("verification");
+    expect(SUPPORTING_DOC_KEY_LABELS.verification).toBe("Verification");
+    const draft = supportingDocsDraftFromIssue(undefined);
+    expect(draft.verification).toEqual({ mode: "absent" });
+  });
+});
 
 describe("formatSupportingDocRef", () => {
   it("formats attachment and workspace refs", () => {
