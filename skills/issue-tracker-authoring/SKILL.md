@@ -217,6 +217,31 @@ Verify.
 Run the unit tests. Confirm X.
 ```
 
+## Human steps
+
+A runtime check that needs a human (a sandbox key, a third-party dashboard,
+a public webhook URL) goes under a `#### Human steps` heading inside the
+Verify content of the Story or Task it checks. Write one bullet per step,
+each starting with exactly one of the request prefixes
+([SPEC.md § Kind-scoped ops](../../SPEC.md#kind-scoped-ops), `request-human`):
+
+- ``Secret `KEY`:`` — the human sets the Project secret `KEY` (matching
+  `^[A-Z_][A-Z0-9_]*$`); the rest of the line says what value.
+- `Input:` — any other input the human gives in their note.
+- `Observation:` — something the human does or looks at and reports in
+  their note.
+
+```markdown
+### Verify
+
+Run the unit tests. On the verification stack, send a test payment.
+
+#### Human steps
+
+- Secret `PAYMENTS_API_KEY`: a sandbox API key from the payments dashboard
+- Observation: the test payment appears in the payments dashboard
+```
+
 ## Task footprint
 
 - Anything introduced purely to make an intermediate Task verifiable —
@@ -355,6 +380,9 @@ Before done:
 - Every Task with implementor work has a `### Verify` / `## Verify` heading
   (not inline `Verify:`) stating how to check the work (see
   [Task Verify heading](#task-verify-heading)).
+- Every runtime check that needs a human is a bullet under a
+  `#### Human steps` heading in that Verify content, starting with a request
+  prefix (see [Human steps](#human-steps)).
 - Every piece of verifiable scaffolding names the Task that removes it (see
   [Task footprint](#task-footprint)).
 - Every Task that mutates state outside the repository justifies in its prose

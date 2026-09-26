@@ -363,7 +363,8 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   `{id} [{at}] {author}: {body}` or, when anchored,
   `{id} [{at}] {author} @ {path}:{line} {side} {sha7}: {body}` (a range uses
   `{startLine}-{line}`; append ` (outdated)` after the location when the anchor
-  is outdated). `{author}` is `name` when set, else `role`. See
+  is outdated). `{author}` is `name` when set, else `role`, followed by
+  ` ({type})` when the comment has a `type`. See
   [`comments.jsonl` message shape](#commentsjsonl-message-shape). Prefer
   `issue get <id> <field>` for a single field. Label lines: see
   [Project labels](#project-labels).
@@ -1797,7 +1798,9 @@ so cannot drift:
   empty stdout when `branchName` is missing, derived `mergeBase` is missing,
   the worktree cannot be read, or ref resolution throws; it does not print
   `false`.
-  Story review reads `behindMergeBase` before it judges. A failed get raises
+  Story review first reads `review`; when it is `awaiting-human`, story
+  review stops and leaves it unchanged. Otherwise it reads
+  `behindMergeBase` before it judges. A failed get raises
   Story `needsAttention` and stops; it does not judge and it does not finish.
   When `behindMergeBase` is `true` and the Story has a not-done Task titled
   `Update from merge base`, story review stops without judging and without
@@ -1810,9 +1813,16 @@ so cannot drift:
   review judges the diff. When that finds no gaps and the Story has
   runtime-visible behavior (as `agents/issue-tracker-story-review.md`
   defines it), story review spawns `issue-tracker-runtime-validator`,
-  which boots the Story's stack and returns `clean` or `findings`;
-  findings become remediation Tasks through the same gap path. Diff gaps
-  take that path without spawning it.
+  which boots the Story's stack and returns `clean`, `findings`, or
+  `needs-human`; findings become remediation Tasks through the same gap
+  path. Diff gaps take that path without spawning it. On `needs-human`,
+  story review posts the validator's request with `issue story
+  request-human` and stops without a verdict, leaving `reviewedTasks`
+  unchanged. The coordinator parks a Story at `review` `awaiting-human` and
+  continues with Stories not nested under it; once the human's
+  `issue story human-done` clears `review`, Close a Story runs story review
+  again, whose runtime validator reads the reply to the latest
+  `human-request`. The verdict is always story review's.
   Close a Story does not finish on `reviewCurrent` `true` until that behind
   check has run. When the check appends an update Task, stops because one is
   already open, or raises attention, the coordinator re-syncs instead of

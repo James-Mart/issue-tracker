@@ -99,6 +99,17 @@ describe("story request-human and human-done", () => {
       replyTo: requested.stdout.trim(),
     });
 
+    const view = await runIssueCli(["story", "view", "s", "--comments"], {
+      env: env(),
+    });
+    expect(view.status).toBe(0);
+    expect(view.stdout).toContain(
+      `${requested.stdout.trim()} [${String(lines[0]?.at)}] story-review (human-request): ${REQUEST}`,
+    );
+    expect(view.stdout).toContain(
+      `  ${done.stdout.trim()} [${String(lines[1]?.at)}] human (human-response): key is set`,
+    );
+
     const early = await runIssueCli(["story", "human-done", "s"], { env: env() });
     expect(early.status).toBe(1);
     expect(early.stderr).toContain("review is not awaiting-human");
