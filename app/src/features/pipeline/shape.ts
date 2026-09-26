@@ -254,6 +254,14 @@ const work: Pipeline = {
       source: "agents/issue-tracker-story-review.md",
     },
     {
+      id: "runtime-validator",
+      name: "Runtime validator",
+      shortLabel: "Runtime",
+      kind: "gate",
+      pipeline: "work",
+      source: "agents/issue-tracker-runtime-validator.md",
+    },
+    {
       id: "finish",
       name: "Finish branch",
       kind: "step",
@@ -285,6 +293,8 @@ const work: Pipeline = {
     // `qa=changes-requested` re-enters the same implementor to revise.
     { from: "code-quality", to: "implement", kind: "loop" },
     { from: "code-quality", to: "story-review", kind: "flow" },
+    // Runs only for a Story with runtime-visible behavior and no diff gaps.
+    { from: "story-review", to: "runtime-validator", kind: "spawn" },
     // A reopened review sends remediation Tasks back through the Task cycle.
     { from: "story-review", to: "implement", kind: "loop" },
     { from: "story-review", to: "finish", kind: "flow" },

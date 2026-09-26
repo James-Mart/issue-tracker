@@ -2,9 +2,10 @@
 name: issue-tracker-story-review
 model: composer-2.5
 description: >-
-  Per-story review of the delivered change; owns Story review and
-  reviewedTasks, and appends the update-from-merge-base Task when the
-  branch is behind. Used by issue-tracker-work.
+  Per-story review of the delivered change, including a runtime check by the
+  runtime validator; owns Story review and reviewedTasks, and appends the
+  update-from-merge-base Task when the branch is behind. Used by
+  issue-tracker-work.
 readonly: false
 ---
 
@@ -23,6 +24,8 @@ that only reads as delivered.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
+
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
 Load all issue specs (Story and Task) via `issue story view` / `issue task view`.
 
@@ -117,7 +120,26 @@ Run ## Behind check first. Continue here only when it says to.
    Collect **only** findings. Omit anything you judge acceptable — the
    implementor treats anything not listed as fine. Each remediation Task
    description **is** the implementor's spec for that fix.
-4. Then take **exactly one** of the two paths below.
+4. **Runtime.** When Verify collected findings, take ### If gaps with them.
+
+   Otherwise decide whether the Story has runtime-visible behavior: its
+   prose or any of its Tasks' Verify sections require exercising the
+   running product, UI or not (booting, calling a service, browsing), or
+   contain a `#### Human steps` heading. When it has none, take ### If
+   clean.
+
+   When it has runtime-visible behavior, delegate the Runtime validator
+   stub and wait for its reply. Read the fenced `json` block that ends the
+   reply and branch on its `outcome`:
+   - `clean` — take ### If clean.
+   - `findings` — take ### If gaps with each entry of `findings` as one
+     remediation Task: its `title` is the Task title and its `spec` is the
+     Task description.
+
+   Escalate per ## Escalation and stop when the delegation ends in a
+   failure you do not retry under the Delegation include, or the reply
+   ends without a `json` block whose `outcome` is `clean` or `findings`.
+5. Take **exactly one** of the two paths below, as step 4 directs.
 
 ### If gaps
 
@@ -136,3 +158,13 @@ and follow it.
 Raise attention and stop — do not guess:
 
 `issue story set <storyId> needsAttention true --reason "..."`
+
+## Spawn stubs
+
+Pass the stub's delegate arguments (`role`, `issueId`, `prompt`) and inline
+the fields it lists. Channel rules are in the Delegation include already
+Read above.
+
+**Runtime validator** — `role: issue-tracker-runtime-validator`, `issueId: <storyId>`
+
+> Issue: `<storyId>`.

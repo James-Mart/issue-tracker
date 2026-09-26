@@ -1,7 +1,8 @@
 # Story review — If clean
 
 Not a spawnable agent (no frontmatter). Loaded only when the Verify step finds
-no gaps. Used by `issue-tracker-story-review`.
+no gaps and the runtime validator, when it ran, returned `clean`. Used by
+`issue-tracker-story-review`.
 
 Absolute path for this file (Read this exact path):
 

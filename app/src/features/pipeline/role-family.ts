@@ -33,6 +33,7 @@ const ROLE_FAMILY_TITLES: Record<string, string> = {
   git: "Git",
   "story-review": "Story review",
   "code-quality-validator": "Code-quality validator",
+  "runtime-validator": "Runtime validator",
   "design-conformance": "Design conformance",
   "plan-authoring-conformance": "Authoring conformance",
   "plan-dependency-order": "Dependency order",

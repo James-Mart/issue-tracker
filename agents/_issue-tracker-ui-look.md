@@ -1,7 +1,7 @@
 # UI look
 
 Not a spawnable agent (no frontmatter). Cross-cutting look procedure for
-UI-related Tasks. Callers **Read** this file from disk — a markdown link alone
+UI-related Tasks and Stories. Callers **Read** this file from disk — a markdown link alone
 is not enough.
 
 Absolute path for this file (Read this exact path):
@@ -10,28 +10,36 @@ Absolute path for this file (Read this exact path):
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`.
 
-1. Call `agent_stack_start` with `issueId` set to the issue being verified.
-   Export the returned `AGENT_STACK_BASE_URL` into the shell.
-2. Run `npm run screenshots -- <path-or-dialog>` or
-   `npm run screenshots -- --driver <absolute path>` from the plugin `app/` beside
-   `agents/_issue-tracker-ui-look.md` (workspace-relative `app/`). Pass the
-   Task's path or dialog, or write a driver script under `/tmp` that exports
-   `async function reach(page)` to open in-page state the harness cannot reach
-   with a path or dialog alone. The summary Workspace checkout is the server,
-   and this `app/` is the capture script. Read PNGs under
-   `/tmp/issue-tracker-screenshots`.
-3. If the look is loading, empty, failed, or unavailable, re-run the same
-   screenshots command once.
-4. If the second look is still loading, empty, failed, or unavailable, the look
-   failed. A completed look is a non-loading, non-empty PNG — liveness only.
-   The caller judges product quality on that capture; this include stops at
-   liveness.
-5. The caller records these three evidence fields on the Task comment they
-   already post for this look — do not post an extra comment solely for the
-   look:
-   - **Targets** — the path(s), dialog name(s), or driver path captured
-   - **Recapture** — whether step 3 ran (`yes` / `no`)
-   - **Look** — `pass` when step 4 produced a completed look; `fail` otherwise
-   The code-quality validator attaches each judged PNG to the Task
-   (`issue attach <taskId> <png>`) and embeds the stored basename in that same
-   comment as `![name](name)`. Other callers do not attach PNGs.
+`<issueId>` is the issue the caller is verifying. The caller names the
+targets: a path on the stack, or in-page state the browser tools can reach.
+
+1. Call `agent_stack_start` with `issueId` set to `<issueId>`. A result that
+   returns `AGENT_STACK_BASE_URL` (`state.baseUrl`) is the stack to browse.
+   A start that does not return that URL fails the look.
+2. Call `agent_stack_redeploy` with no arguments when the worktree has a
+   commit newer than the stack's last start or redeploy. Last start is
+   `state.startedAt` on the start result. Last redeploy is the latest
+   `agent_stack_redeploy` return in this run; when this run has not
+   redeployed, only `state.startedAt` counts. In `state.worktree`, a commit
+   is newer when `git log -1 --format=%cI` is a later time than that mark.
+   The tool runs the Project `redeploy` phase, then `readiness`. A
+   `ran: false` result means the runtime hot-reloads; continue. A non-zero
+   `redeploy` or `readiness` exit fails the look.
+3. Browse each target on the stack base URL with the Playwright MCP tools
+   (`browser_navigate`, `browser_snapshot`). Capture each target with
+   `browser_take_screenshot`, passing a `.png` filename. The tool writes
+   the file it returns.
+4. When a capture is loading, empty, failed, or unavailable, browse and
+   capture that target once more.
+5. When the second capture is still loading, empty, failed, or unavailable,
+   the look failed. A completed look is a non-loading, non-empty screenshot
+   — liveness only. The caller judges product quality on that capture.
+6. Attach each judged screenshot with `issue attach <issueId> <file>`,
+   using the file the screenshot tool wrote. Each attach prints the stored
+   basename.
+7. The caller records these three evidence fields in the report it already
+   makes for this look — do not post an extra comment solely for the look:
+   - **Targets** — the screens captured
+   - **Recapture** — whether step 4 ran (`yes` / `no`)
+   - **Look** — `pass` when step 5 left a completed look; `fail` otherwise
+   Cite each attached basename in that same report.

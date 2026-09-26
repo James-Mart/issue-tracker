@@ -677,8 +677,8 @@ the YAML doc.
   claims it governs.
 - `designSystem` — UI guidelines and inspiration, not a verbatim plan spec.
   Adherence is enforced during implementation (implementor / code-quality
-  validator when the Task is UI-related), not by plan-polish
-  internal-consistency.
+  validator when the Task is UI-related) and by the runtime validator when
+  the Story changes UI, not by plan-polish internal-consistency.
 - `gateRubric` — exemption rubric for the gated autonomous flow. Lists only
   when the human does **not** need to be asked — **silence means ask**: a
   decision the rubric does not clearly exempt goes to the human; no rubric →
@@ -692,11 +692,11 @@ the YAML doc.
 
 | Doc key | Who consults |
 | --- | --- |
-| `vision` | plan-polish check agents (shared bootstrap + internal-consistency cohesion), implementor bootstrap |
+| `vision` | plan-polish check agents (shared bootstrap + internal-consistency cohesion), implementor bootstrap, runtime validator bootstrap |
 | `codingStandards` | implementor, code-quality validator; plan-polish internal-consistency when tree prose makes claims the doc governs |
-| `designSystem` | implementor + code-quality validator when the Task appears UI-related (judgment from prose + paths; no Task flag) |
+| `designSystem` | implementor + code-quality validator when the Task appears UI-related (judgment from prose + paths; no Task flag); runtime validator when the Story changes UI (same judgment) |
 | `gateRubric` | auto-plan stakeholder |
-| `verification` | implementor bootstrap (Verify) |
+| `verification` | implementor (Verify), runtime validator bootstrap, issue-tracker-plan bootstrap, plan-polish bootstrap + internal-consistency (Task Verify vs playbook / `runtime`) |
 
 `issue-tracker-plan` is absent from `vision` because the vision is read from
 the seat that answers, not the seat that asks ([Roles](#roles)).
@@ -1784,7 +1784,12 @@ so cannot drift:
   and leaves stored `review` unchanged. When `behindMergeBase` is `false` and
   `reviewCurrent` is `true`, story review stops without writing `review`.
   When `behindMergeBase` is `false` and `reviewCurrent` is `false`, story
-  review judges the diff.
+  review judges the diff. When that finds no gaps and the Story has
+  runtime-visible behavior (as `agents/issue-tracker-story-review.md`
+  defines it), story review spawns `issue-tracker-runtime-validator`,
+  which boots the Story's stack and returns `clean` or `findings`;
+  findings become remediation Tasks through the same gap path. Diff gaps
+  take that path without spawning it.
   Close a Story does not finish on `reviewCurrent` `true` until that behind
   check has run. When the check appends an update Task, stops because one is
   already open, or raises attention, the coordinator re-syncs instead of

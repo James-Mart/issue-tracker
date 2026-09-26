@@ -18,16 +18,17 @@ Absolute path for this file (Read this exact path):
    task description: discernable paths are staged, undiscernable paths stay
    unmerged, and that state raises attention and stops before record-commit.
    Other tasks still hand off with no unmerged paths.
-3. Verify as that description requires (tests, build, etc.). When this
-   Task builds on a prior Task's tests, keep verification focused on this
+3. Verify as that description requires (tests, build, etc.). **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
+   and consult `verification` per that file using the bootstrap summary
+   output. When this Task builds on a prior Task's tests, keep verification
+   focused on this
    Task's surface — do not re-run the prior Task's full matrix by default.
    When the Task appears UI-related (same judgment as the `designSystem`
    consult — Task prose and changed paths), **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
-   and follow it as part of Verify. On the app channel, agents also have
-   Playwright MCP browser tools (`browser_navigate`, `browser_snapshot`, …)
-   after `agent_stack_start`; ui-look remains the screenshot capture path for
-   verify comments. Record the include's three evidence fields
+   and follow it as part of Verify. That look is this role's self-check.
+   Record the include's three evidence fields
    on one `issue task comment <id> --role implementor` (the Verify comment for
    this look — do not add a second look-only comment). If the look failed, then
    `issue task set <id> needsAttention true --reason "..."` and stop. Passing

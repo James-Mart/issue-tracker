@@ -1,7 +1,7 @@
 # Story review — If gaps
 
-Not a spawnable agent (no frontmatter). Loaded only when the Verify step finds
-gaps. Used by `issue-tracker-story-review`.
+Not a spawnable agent (no frontmatter). Loaded only when the Verify step or
+the runtime validator finds gaps. Used by `issue-tracker-story-review`.
 
 Absolute path for this file (Read this exact path):
 
@@ -18,7 +18,8 @@ Absolute path for this file (Read this exact path):
    <concrete fix spec>
    EOF
    ```
-   Capture each Task id printed on stdout.
+   A runtime finding supplies its `title` as the title and its `spec` as
+   the fix spec. Capture each Task id printed on stdout.
 4. Story comment that links the new Task(s) only — findings live on the Task
    descriptions, not duplicated in the Story comment body. Use GFM
    `issue:` links so the UI renders an `IssueLink`:

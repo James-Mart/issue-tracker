@@ -197,6 +197,7 @@ not from a spawn-time argument.
 | Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via **resume** | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7-high-fast`; `opus`→`claude-opus-5-5-thinking-high` | writes (see Field ownership) |
 | Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `status` / `needsAttention`; `issue task comment`) |
 | Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue task add`; `issue story comment`) |
+| Runtime validator | `issue-tracker-runtime-validator` | Spawned by Story review, not by you | `composer-2.5` | writes (`issue attach` on the Story) |
 
 ### Field ownership
 
@@ -218,8 +219,8 @@ Implement and revise are the **same** implementor agent. Code-quality is a
 cycle** — you do **not** count rounds). Story review is the Story gate
 recorder: it sets `review` and `reviewedTasks` and may append remediation
 Tasks or the update-from-merge-base Task (tracker writes only; never
-workspace source); you spawn/resume it and enforce the reopen cap (see
-**Close a Story**). Both keep findings out of
+workspace source), and it spawns the runtime validator itself; you
+spawn/resume it and enforce the reopen cap (see **Close a Story**). Both keep findings out of
 your context via comments / machine-readable fields.
 
 ## The loop
