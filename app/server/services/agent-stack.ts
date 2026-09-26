@@ -9,13 +9,19 @@ import {
   rmSync,
   statSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { createConnection, createServer, type AddressInfo, type Server } from "node:net";
 import { join, resolve } from "node:path";
+import type { Readable } from "node:stream";
 import { z } from "zod";
 import { conversationsDir } from "../config.js";
 import type { Issue, Runtime } from "../schemas.js";
 import { isSlugSafe } from "../slug.js";
+import {
+  createPhaseOutputMasker,
+  loadPhaseSecrets,
+} from "./agent-stack-secrets.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
 import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
@@ -298,36 +304,91 @@ function tailLog(path: string, maxLines = 20): string {
   return tailText(readFileSync(path, "utf8"), maxLines);
 }
 
+function unrefReadable(stream: Readable): void {
+  if ("unref" in stream && typeof stream.unref === "function") stream.unref();
+}
+
+function streamSettled(stream: Readable): Promise<void> {
+  if (stream.readableEnded) return Promise.resolve();
+  return new Promise((resolve) => {
+    stream.once("close", () => resolve());
+    stream.once("error", () => resolve());
+  });
+}
+
 /**
  * Spawn a stack child in its own process group (`detached`), so it outlives the
  * caller and `stop` can signal the whole tree, including children the start
- * script forks.
+ * script forks. This process writes stdout and stderr to the role log with
+ * Project secret values masked.
  */
-function spawnChild(
+async function spawnChild(
   role: AgentStackRole,
   command: string,
   args: string[],
   env: NodeJS.ProcessEnv,
   conversationId: string,
   cwdAppDir: string,
-): { child: ChildProcess; record: AgentStackProcess } {
-  const fd = openSync(logPath(conversationId, role), "w");
+  secrets: Record<string, string>,
+): Promise<{ child: ChildProcess; record: AgentStackProcess }> {
+  const logFd = openSync(logPath(conversationId, role), "w");
+  const masker = createPhaseOutputMasker(secrets);
+  let logClosed = false;
+  const writeMasked = (chunk: Buffer | string) => {
+    if (logClosed) return;
+    const text = masker.push(chunk);
+    if (text.length > 0) writeSync(logFd, text);
+  };
+  const closeLog = () => {
+    if (logClosed) return;
+    logClosed = true;
+    const text = masker.flush();
+    if (text.length > 0) writeSync(logFd, text);
+    closeSync(logFd);
+  };
   let child: ChildProcess;
   try {
     child = spawn(command, args, {
       cwd: cwdAppDir,
       env,
       detached: true,
-      stdio: ["ignore", fd, fd],
+      stdio: ["ignore", "pipe", "pipe"],
     });
-  } finally {
-    closeSync(fd);
+  } catch (err) {
+    closeLog();
+    throw err;
   }
+  const streams = [child.stdout, child.stderr].filter(
+    (stream): stream is Readable => stream !== null,
+  );
+  let pendingStreams = streams.length;
+  const streamDone = () => {
+    pendingStreams -= 1;
+    if (pendingStreams === 0) closeLog();
+  };
+  for (const stream of streams) {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      streamDone();
+    };
+    stream.on("data", writeMasked);
+    stream.on("close", done);
+    stream.on("error", done);
+    unrefReadable(stream);
+  }
+  if (streams.length === 0) closeLog();
   child.unref();
   const pid = child.pid;
-  if (pid === undefined) throw new Error(`failed to spawn agent stack ${role}`);
+  if (pid === undefined) {
+    closeLog();
+    throw new Error(`failed to spawn agent stack ${role}`);
+  }
   const info = readProcInfo(pid);
   if (info === null) {
+    await Promise.all(streams.map((stream) => streamSettled(stream)));
+    closeLog();
     throw new Error(
       `agent stack ${role} exited immediately:\n${tailLog(logPath(conversationId, role))}`,
     );
@@ -339,6 +400,7 @@ type StoryIssue = Extract<Issue, { kind: "story" }>;
 
 interface ResolvedBoot {
   issueId: string;
+  projectId: string;
   worktree: string;
   runtime: Runtime;
 }
@@ -405,7 +467,7 @@ function resolveBootTarget(issueId: string): ResolvedBoot {
       `Project "${project.id}" runtime is missing ${missing.join(" and ")}`,
     );
   }
-  return { issueId, worktree: resolve(recorded), runtime };
+  return { issueId, projectId: project.id, worktree: resolve(recorded), runtime };
 }
 
 function stackVarEnv(resources: StackResources): Record<string, string> {
@@ -419,8 +481,13 @@ function stackVarEnv(resources: StackResources): Record<string, string> {
 function phaseEnv(
   resources: StackResources,
   baseUrl: string | undefined,
+  secrets: Record<string, string>,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...stackVarEnv(resources) };
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...secrets,
+    ...stackVarEnv(resources),
+  };
   if (baseUrl === undefined) delete env.AGENT_STACK_BASE_URL;
   else env.AGENT_STACK_BASE_URL = baseUrl;
   return env;
@@ -442,6 +509,7 @@ function runShell(
   command: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
+  secrets: Record<string, string>,
   timeoutMs?: number,
 ): Promise<{ code: number; output: string }> {
   return new Promise((resolvePromise, reject) => {
@@ -450,6 +518,7 @@ function runShell(
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    const masker = createPhaseOutputMasker(secrets);
     let output = "";
     let settled = false;
     const finish = (fn: () => void) => {
@@ -458,7 +527,7 @@ function runShell(
       fn();
     };
     const append = (chunk: Buffer | string) => {
-      output += chunk.toString();
+      output += masker.push(chunk);
       if (output.length > 64_000) output = output.slice(-32_000);
     };
     child.stdout?.on("data", append);
@@ -472,6 +541,8 @@ function runShell(
     });
     child.on("close", (code) => {
       if (timer) clearTimeout(timer);
+      output += masker.flush();
+      if (output.length > 64_000) output = output.slice(-32_000);
       finish(() => resolvePromise({ code: code ?? 1, output }));
     });
   });
@@ -482,8 +553,9 @@ async function runShellOrThrow(
   command: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
+  secrets: Record<string, string>,
 ): Promise<void> {
-  const { code, output } = await runShell(command, cwd, env);
+  const { code, output } = await runShell(command, cwd, env, secrets);
   if (code !== 0) {
     throw new Error(`agent stack ${phase} failed (exit ${code}):\n${tailText(output)}`);
   }
@@ -494,12 +566,14 @@ export async function runAgentStackShell(
   command: string,
   cwd: string,
   state: Pick<AgentStackState, "port" | "auxPort" | "dataDir" | "baseUrl">,
+  secrets: Record<string, string>,
 ): Promise<{ exitStatus: number; output: string }> {
   const env = phaseEnv(
     { port: state.port, auxPort: state.auxPort, dataDir: state.dataDir },
     state.baseUrl,
+    secrets,
   );
-  const { code, output } = await runShell(command, cwd, env);
+  const { code, output } = await runShell(command, cwd, env, secrets);
   return { exitStatus: code, output: tailText(output) };
 }
 
@@ -551,6 +625,7 @@ async function waitForReadiness(
   command: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
+  secrets: Record<string, string>,
   spawned: { child: ChildProcess; record: AgentStackProcess },
 ): Promise<void> {
   const timeoutMs = readyTimeoutMs();
@@ -560,7 +635,7 @@ async function waitForReadiness(
   while (Date.now() < deadline) {
     throwIfExited(conversationId, spawned);
     const remaining = Math.max(1, deadline - Date.now());
-    const { code, output } = await runShell(command, cwd, env, remaining);
+    const { code, output } = await runShell(command, cwd, env, secrets, remaining);
     lastOutput = output;
     lastCode = String(code);
     if (code === 0) return;
@@ -604,6 +679,7 @@ async function bootDeclaredRuntime(
   conversationId: string,
   boot: ResolvedBoot,
   cursorConversationId: string | undefined,
+  secrets: Record<string, string>,
 ): Promise<AgentStackHandle> {
   const runtime = boot.runtime;
   const resources = await allocateStackResources(conversationId);
@@ -615,18 +691,25 @@ async function bootDeclaredRuntime(
     throw err;
   }
   let stateWritten = false;
-  let spawned: ReturnType<typeof spawnChild> | undefined;
+  let spawned: Awaited<ReturnType<typeof spawnChild>> | undefined;
   try {
     if (runtime.build) {
-      await runShellOrThrow("build", runtime.build, boot.worktree, phaseEnv(resources, undefined));
+      await runShellOrThrow(
+        "build",
+        runtime.build,
+        boot.worktree,
+        phaseEnv(resources, undefined, secrets),
+        secrets,
+      );
     }
-    spawned = spawnChild(
+    spawned = await spawnChild(
       "start",
       "sh",
       ["-c", runtime.start!],
-      phaseEnv(resources, undefined),
+      phaseEnv(resources, undefined, secrets),
       conversationId,
       boot.worktree,
+      secrets,
     );
     let state = freshState(conversationId, boot, resources, baseUrl, [spawned.record]);
     writeAgentStackState(state);
@@ -634,14 +717,21 @@ async function bootDeclaredRuntime(
     state = attachCursor(state, cursorConversationId);
     await waitForPort(conversationId, resources.port, spawned);
     if (runtime.seed) {
-      await runShellOrThrow("seed", runtime.seed, boot.worktree, phaseEnv(resources, baseUrl));
+      await runShellOrThrow(
+        "seed",
+        runtime.seed,
+        boot.worktree,
+        phaseEnv(resources, baseUrl, secrets),
+        secrets,
+      );
     }
     if (runtime.readiness) {
       await waitForReadiness(
         conversationId,
         runtime.readiness,
         boot.worktree,
-        phaseEnv(resources, baseUrl),
+        phaseEnv(resources, baseUrl, secrets),
+        secrets,
         spawned,
       );
     }
@@ -677,6 +767,7 @@ export async function startAgentStack(
     assertCursorConversationId(cursorConversationId);
   }
   const boot = resolveBootTarget(issueId);
+  const secrets = loadPhaseSecrets(boot.projectId);
 
   const existing = readAgentStackState(conversationId);
   if (existing) {
@@ -689,7 +780,7 @@ export async function startAgentStack(
     await stopAgentStack(conversationId);
   }
 
-  return bootDeclaredRuntime(conversationId, boot, cursorConversationId);
+  return bootDeclaredRuntime(conversationId, boot, cursorConversationId, secrets);
 }
 
 function signalGroup(pid: number, signal: NodeJS.Signals): void {

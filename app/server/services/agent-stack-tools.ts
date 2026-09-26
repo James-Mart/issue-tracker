@@ -83,7 +83,7 @@ export function createAgentStackTools(
   return {
     agent_stack_start: {
       description:
-        "Start (or reuse) this conversation's verification stack for an issue's Story worktree. Returns AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR, and AGENT_STACK_BASE_URL. Boots the Project runtime declaration in that worktree. Refuses when runtime lacks start or baseUrl. Reuse the running stack only when its recorded worktree matches. Do not restart the human's stack on 8060/8061.",
+        "Start (or reuse) this conversation's verification stack for an issue's Story worktree. Returns AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR, and AGENT_STACK_BASE_URL. Boots the Project runtime declaration in that worktree, injecting each Project secret into every phase's environment under its own key. Secret values in phase output are masked. Refuses when runtime lacks start or baseUrl, or when a secret key collides with an AGENT_STACK_* variable. Reuse the running stack only when its recorded worktree matches. Do not restart the human's stack on 8060/8061.",
       annotations: AGENT_STACK_START_ANNOTATIONS,
       outputSchema: toolOutputSchema(agentStackHandleSchema),
       inputSchema: {
@@ -127,7 +127,7 @@ export function createAgentStackTools(
     },
     agent_stack_redeploy: {
       description:
-        "Run the Project's redeploy phase in this conversation's live stack worktree with the stack environment, then re-run readiness. Refuses when this conversation has no live stack. When redeploy is empty, returns without running anything because the runtime hot-reloads. Returns each phase's exit status and output tail. Skips readiness when redeploy exits non-zero or readiness is empty.",
+        "Run the Project's redeploy phase in this conversation's live stack worktree with the stack environment and Project secrets, then re-run readiness. Secret values in phase output are masked. Refuses when this conversation has no live stack. When redeploy is empty, returns without running anything because the runtime hot-reloads. Returns each phase's exit status and output tail. Skips readiness when redeploy exits non-zero or readiness is empty.",
       inputSchema: {
         type: "object",
         properties: {},
