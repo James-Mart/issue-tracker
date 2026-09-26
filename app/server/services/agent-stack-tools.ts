@@ -42,28 +42,28 @@ export function createAgentStackTools(
   return {
     agent_stack_start: {
       description:
-        "Start (or reuse) this conversation's API+Vite verification stack on free ports for the summary Workspace checkout. Returns the AGENT_STACK_* env contract. The stack reads the live tracker store and refuses writes. Use before verifying server/UI changes; do not restart the human's stack on 8060/8061.",
+        "Start (or reuse) this conversation's verification stack for an issue's Story worktree. Returns AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR, and AGENT_STACK_BASE_URL. A Project with a runtime declaration boots that; a Project with no runtime field boots <worktree>/app on free ports, reading the live tracker store and refusing writes. Reuse the running stack only when its recorded worktree matches. Do not restart the human's stack on 8060/8061.",
       inputSchema: {
         type: "object",
         properties: {
-          workspace: {
+          issueId: {
             type: "string",
             description:
-              "Absolute path to the Project workspace checkout (the Workspace: path from issue summary).",
+              "Issue whose Story (itself or its containing Story) has the live worktree to boot.",
           },
         },
-        required: ["workspace"],
+        required: ["issueId"],
       },
       execute: async (input) => {
-        const workspace = (input as { workspace?: unknown }).workspace;
-        if (typeof workspace !== "string" || !workspace.trim()) {
-          throw new Error("agent_stack_start: workspace is required");
+        const issueId = (input as { issueId?: unknown }).issueId;
+        if (typeof issueId !== "string" || !issueId.trim()) {
+          throw new Error("agent_stack_start: issueId is required");
         }
         const cursorConversationId = requireCursorConversationId(
           options.getCursorConversationId,
         );
         const handle: AgentStackHandle = await startAgentStack(options.conversationId, {
-          workspace,
+          issueId,
           cursorConversationId,
         });
         return { ...handle };

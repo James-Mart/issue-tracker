@@ -54,6 +54,33 @@ let workspace: string;
 let workspaceB: string;
 const strays: ChildProcess[] = [];
 
+const STAMP = "2026-01-01T00:00:00.000Z";
+
+function writeIssue(id: string, body: Record<string, unknown>): void {
+  mkdirSync(join(issuesDir, id), { recursive: true });
+  writeFileSync(
+    join(issuesDir, id, "issue.json"),
+    JSON.stringify({
+      id,
+      title: id,
+      createdAt: STAMP,
+      updatedAt: STAMP,
+      ...body,
+    }),
+  );
+}
+
+function seedStories(stories: { id: string; worktreePath: string }[]): void {
+  writeIssue("proj", { kind: "project", title: "Proj" });
+  for (const story of stories) {
+    writeIssue(story.id, {
+      kind: "story",
+      partOf: "proj",
+      worktreePath: story.worktreePath,
+    });
+  }
+}
+
 function seedWorkspaceApp(dir: string, withNodeModules = true): void {
   const appDir = join(dir, "app");
   mkdirSync(appDir, { recursive: true });
@@ -78,6 +105,10 @@ beforeEach(() => {
   seedWorkspaceApp(workspaceB);
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", issuesDir);
+  seedStories([
+    { id: "story-a", worktreePath: workspace },
+    { id: "story-b", worktreePath: workspaceB },
+  ]);
 });
 
 afterEach(() => {
@@ -165,18 +196,20 @@ async function waitForCollection(pid: number): Promise<boolean> {
 function stackState(
   conversationId: string,
   pid: number,
-  workspacePath: string,
-  apiPort = 41001,
-  vitePort = 41002,
+  worktreePath: string,
+  port = 41002,
+  auxPort = 41001,
 ) {
   return {
     conversationId,
-    workspace: workspacePath,
-    apiPort,
-    vitePort,
-    baseUrl: `http://127.0.0.1:${vitePort}`,
+    issueId: "story-a",
+    worktree: worktreePath,
+    port,
+    auxPort,
+    dataDir: join(root, "data", conversationId),
+    baseUrl: `http://127.0.0.1:${port}`,
     startedAt: "2026-01-01T00:00:00.000Z",
-    processes: [{ role: "api", pid, startTime: procStartTime(pid) }],
+    processes: [{ role: "api" as const, pid, startTime: procStartTime(pid) }],
     cursorConversationIds: [],
   };
 }
@@ -228,17 +261,20 @@ describe("agent stack durable state", () => {
     expect(
       agentStackEnv({
         conversationId: "my-conversation",
-        workspace,
-        apiPort: 41001,
-        vitePort: 41002,
+        issueId: "story-a",
+        worktree: workspace,
+        port: 41002,
+        auxPort: 41001,
+        dataDir: join(root, "data", "my-conversation"),
         baseUrl: "http://127.0.0.1:41002",
         startedAt: "2026-01-01T00:00:00.000Z",
         processes: [],
         cursorConversationIds: [],
       }),
     ).toEqual({
-      AGENT_STACK_API_PORT: "41001",
-      AGENT_STACK_VITE_PORT: "41002",
+      AGENT_STACK_PORT: "41002",
+      AGENT_STACK_AUX_PORT: "41001",
+      AGENT_STACK_DATA_DIR: join(root, "data", "my-conversation"),
       AGENT_STACK_BASE_URL: "http://127.0.0.1:41002",
     });
   });
@@ -275,7 +311,7 @@ describe("agent stack cursor index", () => {
     );
 
     const handle = await startAgentStack("my-conversation", {
-      workspace,
+      issueId: "story-a",
       cursorConversationId: "cursor-session-1",
     });
 
@@ -304,30 +340,31 @@ describe("agent stack cursor index", () => {
 
     const pidA = spawnGroupLeader(join(root, "child-a.pid"));
     const pidB = spawnGroupLeader(join(root, "child-b.pid"));
-    for (const [conversationId, pid, apiPort, vitePort, workspacePath] of [
-      ["conv-a", pidA, 41001, 41002, workspace],
-      ["conv-b", pidB, 41003, 41004, workspaceB],
+    for (const [conversationId, pid, port, auxPort, worktreePath, issueId] of [
+      ["conv-a", pidA, 41002, 41001, workspace, "story-a"],
+      ["conv-b", pidB, 41004, 41003, workspaceB, "story-b"],
     ] as const) {
       mkdirSync(agentStackDir(conversationId), { recursive: true });
       writeFileSync(
         agentStackStatePath(conversationId),
-        JSON.stringify(
-          stackState(conversationId, pid, workspacePath, apiPort, vitePort),
-        ),
+        JSON.stringify({
+          ...stackState(conversationId, pid, worktreePath, port, auxPort),
+          issueId,
+        }),
       );
     }
 
     const a = await startAgentStack("conv-a", {
-      workspace,
+      issueId: "story-a",
       cursorConversationId: "cursor-a",
     });
     const b = await startAgentStack("conv-b", {
-      workspace: workspaceB,
+      issueId: "story-b",
       cursorConversationId: "cursor-b",
     });
 
-    expect(a.state.apiPort).not.toBe(b.state.apiPort);
-    expect(a.state.vitePort).not.toBe(b.state.vitePort);
+    expect(a.state.port).not.toBe(b.state.port);
+    expect(a.state.auxPort).not.toBe(b.state.auxPort);
     expect(
       JSON.parse(readFileSync(agentStackCursorIndexPath("cursor-a"), "utf8")),
     ).toEqual({ appConversationId: "conv-a" });
@@ -499,8 +536,8 @@ describe("startAgentStack", () => {
     try {
       const { startAgentStack } = await import("./agent-stack.js");
       await expect(
-        startAgentStack("my-conversation", { workspace: "   " }),
-      ).rejects.toThrow(/workspace is required/);
+        startAgentStack("my-conversation", { issueId: "   " }),
+      ).rejects.toThrow(/issueId is required/);
       expect(reaperCalls).toEqual(["ensure"]);
     } finally {
       vi.doUnmock("./child-reaper.js");
@@ -508,15 +545,15 @@ describe("startAgentStack", () => {
     }
   });
 
-  it("refuses a missing workspace before spawn", async () => {
+  it("refuses a missing issue id before spawn", async () => {
     const { startAgentStack } = await loadService();
 
     await expect(
-      startAgentStack("my-conversation", { workspace: "   " }),
-    ).rejects.toThrow(/workspace is required/);
+      startAgentStack("my-conversation", { issueId: "   " }),
+    ).rejects.toThrow(/issueId is required/);
   });
 
-  it("adopts the live stack when the workspace matches", async () => {
+  it("adopts the live stack when the worktree matches", async () => {
     const { agentStackDir, agentStackStatePath, startAgentStack } =
       await loadService();
     const pid = spawnGroupLeader(join(root, "child.pid"));
@@ -526,15 +563,16 @@ describe("startAgentStack", () => {
       JSON.stringify(stackState("my-conversation", pid, workspace)),
     );
 
-    const handle = await startAgentStack("my-conversation", { workspace });
+    const handle = await startAgentStack("my-conversation", { issueId: "story-a" });
 
     expect(handle.reused).toBe(true);
     expect(handle.env.AGENT_STACK_BASE_URL).toBe("http://127.0.0.1:41002");
-    expect(handle.state.apiPort).toBe(41001);
-    expect(handle.state.workspace).toBe(workspace);
+    expect(handle.state.port).toBe(41002);
+    expect(handle.state.auxPort).toBe(41001);
+    expect(handle.state.worktree).toBe(workspace);
   });
 
-  it("stops a live stack when the workspace differs", async () => {
+  it("stops a live stack when the worktree differs", async () => {
     stubReadyFetch();
     const {
       agentStackDir,
@@ -563,12 +601,12 @@ describe("startAgentStack", () => {
     };
 
     const handle = await startAgentStack("my-conversation", {
-      workspace: workspaceB,
+      issueId: "story-b",
     });
 
     expect(isCollected(pid)).toBe(true);
     expect(handle.reused).toBe(false);
-    expect(handle.state.workspace).toBe(resolve(workspaceB));
+    expect(handle.state.worktree).toBe(resolve(workspaceB));
     expect(readFileSync(agentStackStatePath("my-conversation"), "utf8")).toContain(
       workspaceB,
     );
@@ -595,7 +633,7 @@ describe("startAgentStack", () => {
       return child;
     };
 
-    await startAgentStack("my-conversation", { workspace });
+    await startAgentStack("my-conversation", { issueId: "story-a" });
 
     expect(captured.length).toBeGreaterThan(0);
     for (const env of captured) {
@@ -610,6 +648,11 @@ describe("startAgentStack", () => {
   it("runs npm install when node_modules is absent and leaves no state on failure", async () => {
     const bareWorkspace = join(root, "bare-workspace");
     mkdirSync(join(bareWorkspace, "app"), { recursive: true });
+    writeIssue("story-bare", {
+      kind: "story",
+      partOf: "proj",
+      worktreePath: bareWorkspace,
+    });
     const { agentStackStatePath, startAgentStack } = await loadService();
 
     spawnDelegate.impl = (command, _args, options) => {
@@ -620,7 +663,7 @@ describe("startAgentStack", () => {
     };
 
     await expect(
-      startAgentStack("my-conversation", { workspace: bareWorkspace }),
+      startAgentStack("my-conversation", { issueId: "story-bare" }),
     ).rejects.toThrow(/npm install/);
     expect(existsSync(agentStackStatePath("my-conversation"))).toBe(false);
   });
@@ -629,6 +672,11 @@ describe("startAgentStack", () => {
     stubReadyFetch();
     const bareWorkspace = join(root, "install-workspace");
     mkdirSync(join(bareWorkspace, "app"), { recursive: true });
+    writeIssue("story-bare", {
+      kind: "story",
+      partOf: "proj",
+      worktreePath: bareWorkspace,
+    });
     const { startAgentStack, stopAgentStack } = await loadService();
     let npmEnv: NodeJS.ProcessEnv | undefined;
 
@@ -647,7 +695,7 @@ describe("startAgentStack", () => {
       return child;
     };
 
-    await startAgentStack("my-conversation", { workspace: bareWorkspace });
+    await startAgentStack("my-conversation", { issueId: "story-bare" });
 
     expect(npmEnv?.ISSUE_TRACKER_SKIP_BROWSER_SETUP).toBe("1");
     expect(npmEnv?.ISSUE_TRACKER_SKIP_ASR_MODEL_SETUP).toBe("1");

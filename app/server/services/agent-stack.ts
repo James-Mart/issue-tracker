@@ -10,12 +10,15 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { createServer, type AddressInfo, type Server } from "node:net";
-import { isAbsolute, join, resolve } from "node:path";
+import { createConnection, createServer, type AddressInfo, type Server } from "node:net";
+import { join, resolve } from "node:path";
 import { z } from "zod";
 import { appDir, conversationsDir, issuesDir } from "../config.js";
+import type { Issue, Runtime } from "../schemas.js";
 import { isSlugSafe } from "../slug.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
+import { readAll } from "./issues.js";
+import { ancestorChain } from "./subtree.js";
 
 /**
  * A conversation's own API + Vite pair, on ports picked free at start time.
@@ -32,7 +35,7 @@ const KILL_GRACE_MS = 2_000;
 const EXIT_POLL_MS = 100;
 
 const agentStackProcessSchema = z.object({
-  role: z.enum(["api", "vite"]),
+  role: z.enum(["api", "vite", "start"]),
   pid: z.number().int().positive(),
   /**
    * `/proc/<pid>/stat` start time. Pins the pid to the process we spawned, so a
@@ -43,10 +46,16 @@ const agentStackProcessSchema = z.object({
 
 const agentStackStateSchema = z.object({
   conversationId: z.string().min(1),
-  /** Absolute Project workspace checkout this stack serves. */
-  workspace: z.string().min(1),
-  apiPort: z.number().int().positive(),
-  vitePort: z.number().int().positive(),
+  /** Issue whose Story worktree this stack booted. */
+  issueId: z.string().min(1),
+  /** Absolute Story worktree this stack booted. */
+  worktree: z.string().min(1),
+  /** Primary port (`AGENT_STACK_PORT`); the base URL points at it. */
+  port: z.number().int().positive(),
+  /** Second free port (`AGENT_STACK_AUX_PORT`). */
+  auxPort: z.number().int().positive(),
+  /** This stack's data directory, created on start and removed on stop. */
+  dataDir: z.string().min(1),
   baseUrl: z.string().min(1),
   startedAt: z.string().min(1),
   processes: z.array(agentStackProcessSchema),
@@ -62,8 +71,11 @@ export type AgentStackProcess = z.infer<typeof agentStackProcessSchema>;
 export type AgentStackState = z.infer<typeof agentStackStateSchema>;
 
 export interface AgentStackStartOptions {
-  /** Absolute Project workspace checkout to boot `<workspace>/app` from. */
-  workspace: string;
+  /**
+   * Issue whose Story (itself, or its containing Story) supplies the live
+   * worktree to boot.
+   */
+  issueId: string;
   /**
    * Cursor `conversation_id` for the calling session — the same value
    * `preToolUse` hooks receive on stdin. Required for the kill-guard index.
@@ -168,8 +180,9 @@ function logPath(conversationId: string, role: AgentStackRole): string {
 
 export function agentStackEnv(state: AgentStackState): Record<string, string> {
   return {
-    AGENT_STACK_API_PORT: String(state.apiPort),
-    AGENT_STACK_VITE_PORT: String(state.vitePort),
+    AGENT_STACK_PORT: String(state.port),
+    AGENT_STACK_AUX_PORT: String(state.auxPort),
+    AGENT_STACK_DATA_DIR: state.dataDir,
     AGENT_STACK_BASE_URL: state.baseUrl,
   };
 }
@@ -277,25 +290,8 @@ async function pickFreePortPair(): Promise<[number, number]> {
   return ports;
 }
 
-function resolveWorkspacePath(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    throw new Error("agent stack workspace is required");
-  }
-  if (!isAbsolute(trimmed)) {
-    throw new Error(
-      `agent stack workspace must be an absolute path, got ${JSON.stringify(raw)}`,
-    );
-  }
-  const resolved = resolve(trimmed);
-  if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
-    throw new Error(`agent stack workspace is not a directory: ${resolved}`);
-  }
-  return resolved;
-}
-
-function workspaceAppDir(workspace: string): string {
-  return join(workspace, "app");
+function workspaceAppDir(worktree: string): string {
+  return join(worktree, "app");
 }
 
 function hostAsrModelDir(): string {
@@ -342,7 +338,7 @@ async function ensureWorkspaceAppReady(
 ): Promise<string> {
   const cwdAppDir = workspaceAppDir(workspace);
   if (!existsSync(cwdAppDir) || !statSync(cwdAppDir).isDirectory()) {
-    throw new Error(`agent stack workspace has no app/ directory: ${cwdAppDir}`);
+    throw new Error(`agent stack worktree has no app/ directory: ${cwdAppDir}`);
   }
   if (!existsSync(join(cwdAppDir, "node_modules"))) {
     await runNpmInstall(cwdAppDir, asrModelDir);
@@ -350,9 +346,13 @@ async function ensureWorkspaceAppReady(
   return cwdAppDir;
 }
 
+function tailText(text: string, maxLines = 20): string {
+  return text.trimEnd().split("\n").slice(-maxLines).join("\n");
+}
+
 function tailLog(path: string, maxLines = 20): string {
   if (!existsSync(path)) return "";
-  return readFileSync(path, "utf8").trimEnd().split("\n").slice(-maxLines).join("\n");
+  return tailText(readFileSync(path, "utf8"), maxLines);
 }
 
 /**
@@ -432,6 +432,366 @@ async function waitForReady(
   );
 }
 
+type StoryIssue = Extract<Issue, { kind: "story" }>;
+
+interface ResolvedBoot {
+  issueId: string;
+  worktree: string;
+  runtime: Runtime | undefined;
+}
+
+interface StackResources {
+  port: number;
+  auxPort: number;
+  dataDir: string;
+}
+
+const BASE_URL_VAR = /\$\{(AGENT_STACK_[A-Z0-9_]+)\}|\$(AGENT_STACK_[A-Z0-9_]+)/g;
+
+function readyTimeoutMs(): number {
+  const raw = process.env.AGENT_STACK_READY_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return READY_TIMEOUT_MS;
+  const timeout = Number(raw);
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    throw new Error(
+      `AGENT_STACK_READY_TIMEOUT_MS must be a positive number, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return timeout;
+}
+
+function expandBaseUrl(template: string, env: Record<string, string>): string {
+  return template.replace(BASE_URL_VAR, (_match, braced: string | undefined, bare: string | undefined) => {
+    const key = (braced ?? bare)!;
+    const value = env[key];
+    if (value === undefined) {
+      throw new Error(`runtime baseUrl references unset ${key}`);
+    }
+    return value;
+  });
+}
+
+function resolveBootTarget(issueId: string): ResolvedBoot {
+  const { issues } = readAll();
+  const chain = ancestorChain(issueId, issues);
+  const target = chain[chain.length - 1]!;
+  const project = chain[0];
+  if (project?.kind !== "project") {
+    throw new Error(`issue "${issueId}" is not under a project`);
+  }
+  const story = target.kind === "story"
+    ? target
+    : target.kind === "task"
+      ? chain[chain.length - 2]
+      : undefined;
+  if (story?.kind !== "story") {
+    throw new Error(`issue "${issueId}" has no Story`);
+  }
+  const storyIssue: StoryIssue = story;
+  const recorded = storyIssue.worktreePath;
+  if (!recorded || !existsSync(recorded) || !statSync(recorded).isDirectory()) {
+    throw new Error(`Story "${storyIssue.id}" has no live worktree`);
+  }
+  const runtime = project.runtime;
+  if (runtime !== undefined) {
+    const missing = [
+      runtime.start ? undefined : "start",
+      runtime.baseUrl ? undefined : "baseUrl",
+    ].filter((key): key is string => key !== undefined);
+    if (missing.length > 0) {
+      throw new Error(
+        `Project "${project.id}" runtime is missing ${missing.join(" and ")}`,
+      );
+    }
+  }
+  return { issueId, worktree: resolve(recorded), runtime };
+}
+
+function stackVarEnv(resources: StackResources): Record<string, string> {
+  return {
+    AGENT_STACK_PORT: String(resources.port),
+    AGENT_STACK_AUX_PORT: String(resources.auxPort),
+    AGENT_STACK_DATA_DIR: resources.dataDir,
+  };
+}
+
+function phaseEnv(
+  resources: StackResources,
+  baseUrl: string | undefined,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...stackVarEnv(resources) };
+  if (baseUrl === undefined) delete env.AGENT_STACK_BASE_URL;
+  else env.AGENT_STACK_BASE_URL = baseUrl;
+  return env;
+}
+
+async function allocateStackResources(conversationId: string): Promise<StackResources> {
+  mkdirSync(agentStackDir(conversationId), { recursive: true });
+  const dataDir = join(agentStackDir(conversationId), "data");
+  mkdirSync(dataDir, { recursive: true });
+  const [port, auxPort] = await pickFreePortPair();
+  return { port, auxPort, dataDir };
+}
+
+function discardDataDir(dataDir: string): void {
+  rmSync(dataDir, { recursive: true, force: true });
+}
+
+function runShell(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs?: number,
+): Promise<{ code: number; output: string }> {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn("sh", ["-c", command], {
+      cwd,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      fn();
+    };
+    const append = (chunk: Buffer | string) => {
+      output += chunk.toString();
+      if (output.length > 64_000) output = output.slice(-32_000);
+    };
+    child.stdout?.on("data", append);
+    child.stderr?.on("data", append);
+    const timer = timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+    child.on("error", (err) => {
+      if (timer) clearTimeout(timer);
+      finish(() => reject(err));
+    });
+    child.on("close", (code) => {
+      if (timer) clearTimeout(timer);
+      finish(() => resolvePromise({ code: code ?? 1, output }));
+    });
+  });
+}
+
+async function runShellOrThrow(
+  phase: string,
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const { code, output } = await runShell(command, cwd, env);
+  if (code !== 0) {
+    throw new Error(`agent stack ${phase} failed (exit ${code}):\n${tailText(output)}`);
+  }
+}
+
+function throwIfExited(
+  conversationId: string,
+  spawned: { child: ChildProcess; record: AgentStackProcess },
+): void {
+  if (spawned.child.exitCode === null && spawned.child.signalCode === null) return;
+  throw new Error(
+    `agent stack ${spawned.record.role} exited while starting:\n${tailLog(logPath(conversationId, spawned.record.role))}`,
+  );
+}
+
+function tcpAccepts(port: number): Promise<boolean> {
+  return new Promise((resolvePromise) => {
+    const socket = createConnection({ port, host: "127.0.0.1" });
+    const done = (ok: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolvePromise(ok);
+    };
+    socket.setTimeout(READY_PROBE_TIMEOUT_MS, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
+async function waitForPort(
+  conversationId: string,
+  port: number,
+  spawned: { child: ChildProcess; record: AgentStackProcess },
+): Promise<void> {
+  const timeoutMs = readyTimeoutMs();
+  const deadline = Date.now() + timeoutMs;
+  let lastFailure = "no probe attempted";
+  while (Date.now() < deadline) {
+    throwIfExited(conversationId, spawned);
+    if (await tcpAccepts(port)) return;
+    lastFailure = `port ${port} refused`;
+    await delay(READY_POLL_MS);
+  }
+  throw new Error(
+    `agent stack port ${port} did not accept connections within ${timeoutMs}ms (${lastFailure}):\n${tailLog(logPath(conversationId, spawned.record.role))}`,
+  );
+}
+
+async function waitForReadiness(
+  conversationId: string,
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  spawned: { child: ChildProcess; record: AgentStackProcess },
+): Promise<void> {
+  const timeoutMs = readyTimeoutMs();
+  const deadline = Date.now() + timeoutMs;
+  let lastOutput = "";
+  let lastCode = "none";
+  while (Date.now() < deadline) {
+    throwIfExited(conversationId, spawned);
+    const remaining = Math.max(1, deadline - Date.now());
+    const { code, output } = await runShell(command, cwd, env, remaining);
+    lastOutput = output;
+    lastCode = String(code);
+    if (code === 0) return;
+    await delay(READY_POLL_MS);
+  }
+  throw new Error(
+    `agent stack readiness was not ready within ${timeoutMs}ms (exit ${lastCode}):\n${tailText(lastOutput)}`,
+  );
+}
+
+function freshState(
+  conversationId: string,
+  boot: ResolvedBoot,
+  resources: StackResources,
+  baseUrl: string,
+  processes: AgentStackProcess[],
+): AgentStackState {
+  return {
+    conversationId,
+    issueId: boot.issueId,
+    worktree: boot.worktree,
+    port: resources.port,
+    auxPort: resources.auxPort,
+    dataDir: resources.dataDir,
+    baseUrl,
+    startedAt: new Date().toISOString(),
+    processes,
+    cursorConversationIds: [],
+  };
+}
+
+function attachCursor(
+  state: AgentStackState,
+  cursorConversationId: string | undefined,
+): AgentStackState {
+  if (cursorConversationId === undefined) return state;
+  return rememberCursorConversationId(state, cursorConversationId);
+}
+
+async function bootDeclaredRuntime(
+  conversationId: string,
+  boot: ResolvedBoot,
+  cursorConversationId: string | undefined,
+): Promise<AgentStackHandle> {
+  const runtime = boot.runtime!;
+  const resources = await allocateStackResources(conversationId);
+  let baseUrl: string;
+  try {
+    baseUrl = expandBaseUrl(runtime.baseUrl!, stackVarEnv(resources));
+  } catch (err) {
+    discardDataDir(resources.dataDir);
+    throw err;
+  }
+  let stateWritten = false;
+  let spawned: ReturnType<typeof spawnChild> | undefined;
+  try {
+    if (runtime.build) {
+      await runShellOrThrow("build", runtime.build, boot.worktree, phaseEnv(resources, undefined));
+    }
+    spawned = spawnChild(
+      "start",
+      "sh",
+      ["-c", runtime.start!],
+      phaseEnv(resources, undefined),
+      conversationId,
+      boot.worktree,
+    );
+    let state = freshState(conversationId, boot, resources, baseUrl, [spawned.record]);
+    writeAgentStackState(state);
+    stateWritten = true;
+    state = attachCursor(state, cursorConversationId);
+    await waitForPort(conversationId, resources.port, spawned);
+    if (runtime.seed) {
+      await runShellOrThrow("seed", runtime.seed, boot.worktree, phaseEnv(resources, baseUrl));
+    }
+    if (runtime.readiness) {
+      await waitForReadiness(
+        conversationId,
+        runtime.readiness,
+        boot.worktree,
+        phaseEnv(resources, baseUrl),
+        spawned,
+      );
+    }
+    return { state, env: agentStackEnv(state), reused: false };
+  } catch (err) {
+    if (stateWritten) await stopAgentStack(conversationId);
+    else {
+      if (spawned) signalGroup(spawned.record.pid, "SIGTERM");
+      discardDataDir(resources.dataDir);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Tracker `app/` boot used when the Project has no `runtime` field.
+ * `declare-tracker-runtime` removes this path.
+ */
+async function bootTrackerApp(
+  conversationId: string,
+  boot: ResolvedBoot,
+  cursorConversationId: string | undefined,
+): Promise<AgentStackHandle> {
+  const asrModelDir = hostAsrModelDir();
+  const cwdAppDir = await ensureWorkspaceAppReady(boot.worktree, asrModelDir);
+  const vite = binPath("vite", cwdAppDir);
+  const tsx = binPath("tsx", cwdAppDir);
+  const resources = await allocateStackResources(conversationId);
+  const baseUrl = `http://127.0.0.1:${resources.port}`;
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ISSUES_DIR: issuesDir,
+    ISSUE_TRACKER_STORE_READ_ONLY: "1",
+    ISSUE_TRACKER_ASR_MODEL_DIR: asrModelDir,
+    PORT: String(resources.auxPort),
+    VITE_DEV_PORT: String(resources.port),
+    VITE_API_PROXY_TARGET: `http://127.0.0.1:${resources.auxPort}`,
+  };
+  const spawned: ReturnType<typeof spawnChild>[] = [];
+  let stateWritten = false;
+  try {
+    spawned.push(spawnChild("api", tsx, ["watch", "server/index.ts"], env, conversationId, cwdAppDir));
+    spawned.push(spawnChild("vite", vite, [], env, conversationId, cwdAppDir));
+    let state = freshState(
+      conversationId,
+      boot,
+      resources,
+      baseUrl,
+      spawned.map(({ record }) => record),
+    );
+    writeAgentStackState(state);
+    stateWritten = true;
+    state = attachCursor(state, cursorConversationId);
+    await waitForReady(conversationId, baseUrl, spawned);
+    return { state, env: agentStackEnv(state), reused: false };
+  } catch (err) {
+    if (stateWritten) await stopAgentStack(conversationId);
+    else {
+      for (const { record } of spawned) signalGroup(record.pid, "SIGTERM");
+      discardDataDir(resources.dataDir);
+    }
+    throw err;
+  }
+}
+
 /**
  * Start (or adopt) this conversation's stack and return the env contract.
  * A recorded stack whose processes are gone — a crash, or a machine restart —
@@ -446,90 +806,27 @@ export async function startAgentStack(
 ): Promise<AgentStackHandle> {
   ensureChildReaper();
   assertConversationId(conversationId);
-  const workspace = resolveWorkspacePath(options.workspace);
+  const issueId = options.issueId.trim();
+  if (!issueId) throw new Error("agent stack issueId is required");
   const { cursorConversationId } = options;
   if (cursorConversationId !== undefined) {
     assertCursorConversationId(cursorConversationId);
   }
+  const boot = resolveBootTarget(issueId);
 
   const existing = readAgentStackState(conversationId);
   if (existing) {
-    if (isStackLive(existing)) {
-      if (existing.workspace === workspace) {
-        const state =
-          cursorConversationId === undefined
-            ? existing
-            : rememberCursorConversationId(existing, cursorConversationId);
-        return { state, env: agentStackEnv(state), reused: true };
-      }
-      await stopAgentStack(conversationId);
-    } else {
-      await stopAgentStack(conversationId);
+    if (isStackLive(existing) && existing.worktree === boot.worktree) {
+      const state = cursorConversationId === undefined
+        ? existing
+        : rememberCursorConversationId(existing, cursorConversationId);
+      return { state, env: agentStackEnv(state), reused: true };
     }
-  }
-
-  const asrModelDir = hostAsrModelDir();
-  const cwdAppDir = await ensureWorkspaceAppReady(workspace, asrModelDir);
-  const vite = binPath("vite", cwdAppDir);
-  const tsx = binPath("tsx", cwdAppDir);
-  mkdirSync(agentStackDir(conversationId), { recursive: true });
-
-  const [apiPort, vitePort] = await pickFreePortPair();
-  const baseUrl = `http://127.0.0.1:${vitePort}`;
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    ISSUES_DIR: issuesDir,
-    ISSUE_TRACKER_STORE_READ_ONLY: "1",
-    ISSUE_TRACKER_ASR_MODEL_DIR: asrModelDir,
-    PORT: String(apiPort),
-    VITE_DEV_PORT: String(vitePort),
-    VITE_API_PROXY_TARGET: `http://127.0.0.1:${apiPort}`,
-  };
-
-  const spawned: ReturnType<typeof spawnChild>[] = [];
-  try {
-    spawned.push(
-      spawnChild(
-        "api",
-        tsx,
-        ["watch", "server/index.ts"],
-        env,
-        conversationId,
-        cwdAppDir,
-      ),
-    );
-    spawned.push(
-      spawnChild("vite", vite, [], env, conversationId, cwdAppDir),
-    );
-  } catch (err) {
-    // No state file yet, so nothing else can reclaim these ports for us.
-    for (const { record } of spawned) signalGroup(record.pid, "SIGTERM");
-    throw err;
-  }
-
-  let state: AgentStackState = {
-    conversationId,
-    workspace,
-    apiPort,
-    vitePort,
-    baseUrl,
-    startedAt: new Date().toISOString(),
-    processes: spawned.map(({ record }) => record),
-    cursorConversationIds: [],
-  };
-  writeAgentStackState(state);
-  if (cursorConversationId !== undefined) {
-    state = rememberCursorConversationId(state, cursorConversationId);
-  }
-
-  try {
-    await waitForReady(conversationId, baseUrl, spawned);
-  } catch (err) {
     await stopAgentStack(conversationId);
-    throw err;
   }
 
-  return { state, env: agentStackEnv(state), reused: false };
+  if (boot.runtime) return bootDeclaredRuntime(conversationId, boot, cursorConversationId);
+  return bootTrackerApp(conversationId, boot, cursorConversationId);
 }
 
 function signalGroup(pid: number, signal: NodeJS.Signals): void {
@@ -636,7 +933,7 @@ export async function stopAgentStack(
       if (!collectedOnKill) {
         const survivors = owned.filter(isOurRecordedProcess);
         await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
-        releaseAgentStackRecord(state);
+        releaseStoppedStack(state);
         throw new Error(
           `agent stack for ${conversationId} survived SIGKILL: ${
             survivors.map((proc) => `${proc.role}(${proc.pid})`).join(", ") ||
@@ -649,6 +946,11 @@ export async function stopAgentStack(
     await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
   }
 
-  releaseAgentStackRecord(state);
+  releaseStoppedStack(state);
   return { stopped: true, state };
+}
+
+function releaseStoppedStack(state: AgentStackState): void {
+  rmSync(state.dataDir, { recursive: true, force: true });
+  releaseAgentStackRecord(state);
 }

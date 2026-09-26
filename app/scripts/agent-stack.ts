@@ -2,7 +2,7 @@
 /**
  * Start or stop a conversation's agent verification stack.
  *
- * Usage: npm run agent-stack -- start|stop <conversationId> [<workspace>]
+ * Usage: npm run agent-stack -- start|stop <conversationId> [<issueId>]
  */
 
 import {
@@ -12,17 +12,18 @@ import {
 } from "../server/services/agent-stack.js";
 
 function usage(): string {
-  return `Usage: npm run agent-stack -- start|stop <conversationId> [<workspace>]
+  return `Usage: npm run agent-stack -- start|stop <conversationId> [<issueId>]
 
-start  Start (or adopt) the conversation's API + Vite stack on free ports for
-       <workspace> (absolute Project checkout path) and print its env contract
-       on stdout. Reuses the live stack only when its recorded workspace matches.
-stop   Stop the conversation's stack and clear its durable state.
+start  Start (or adopt) the conversation's stack for <issueId>'s Story worktree
+       and print AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR,
+       and AGENT_STACK_BASE_URL on stdout. Reuses the live stack only when its
+       recorded worktree matches.
+stop   Stop the conversation's stack, remove its data directory, and clear state.
 `;
 }
 
 async function main(): Promise<void> {
-  const [command, conversationId, workspace, ...rest] = process.argv.slice(2);
+  const [command, conversationId, issueId, ...rest] = process.argv.slice(2);
 
   if (!command || !conversationId || rest.length > 0) {
     process.stderr.write(usage());
@@ -30,12 +31,12 @@ async function main(): Promise<void> {
   }
 
   if (command === "start") {
-    if (!workspace) {
+    if (!issueId) {
       process.stderr.write(usage());
       process.exit(1);
     }
     const { state, env, reused } = await startAgentStack(conversationId, {
-      workspace,
+      issueId,
     });
     for (const [key, value] of Object.entries(env)) {
       process.stdout.write(`${key}=${value}\n`);
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
     const result = await stopAgentStack(conversationId);
     process.stderr.write(
       result.stopped
-        ? `stopped agent stack for ${conversationId} (freed ports ${result.state.apiPort}, ${result.state.vitePort})\n`
+        ? `stopped agent stack for ${conversationId} (freed ports ${result.state.port}, ${result.state.auxPort})\n`
         : `no agent stack recorded for ${conversationId}\n`,
     );
     return;

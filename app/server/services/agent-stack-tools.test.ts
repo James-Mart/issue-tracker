@@ -14,6 +14,12 @@ beforeEach(() => {
   issuesDir = join(root, "issues");
   workspace = join(root, "workspace");
   mkdirSync(issuesDir, { recursive: true });
+  writeIssue("proj", { kind: "project", title: "Proj" });
+  writeIssue("story-a", {
+    kind: "story",
+    partOf: "proj",
+    worktreePath: workspace,
+  });
   mkdirSync(join(workspace, "app", "node_modules", ".bin"), { recursive: true });
   for (const name of ["tsx", "vite"]) {
     writeFileSync(join(workspace, "app", "node_modules", ".bin", name), "#!/bin/sh\n");
@@ -36,6 +42,22 @@ afterEach(() => {
   vi.unstubAllEnvs();
   rmSync(root, { recursive: true, force: true });
 });
+
+const STAMP = "2026-01-01T00:00:00.000Z";
+
+function writeIssue(id: string, body: Record<string, unknown>): void {
+  mkdirSync(join(issuesDir, id), { recursive: true });
+  writeFileSync(
+    join(issuesDir, id, "issue.json"),
+    JSON.stringify({
+      id,
+      title: id,
+      createdAt: STAMP,
+      updatedAt: STAMP,
+      ...body,
+    }),
+  );
+}
 
 function procStartTime(pid: number): string {
   const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
@@ -66,13 +88,13 @@ describe("createAgentStackTools", () => {
     expect(tools.agent_stack_start!.inputSchema).toEqual({
       type: "object",
       properties: {
-        workspace: {
+        issueId: {
           type: "string",
           description:
-            "Absolute path to the Project workspace checkout (the Workspace: path from issue summary).",
+            "Issue whose Story (itself or its containing Story) has the live worktree to boot.",
         },
       },
-      required: ["workspace"],
+      required: ["issueId"],
     });
     expect(tools.agent_stack_stop!.inputSchema).toEqual({
       type: "object",
@@ -94,9 +116,11 @@ describe("createAgentStackTools", () => {
       agentStackStatePath("app-conv"),
       JSON.stringify({
         conversationId: "app-conv",
-        workspace,
-        apiPort: 42001,
-        vitePort: 42002,
+        issueId: "story-a",
+        worktree: workspace,
+        port: 42002,
+        auxPort: 42001,
+        dataDir: join(root, "data"),
         baseUrl: "http://127.0.0.1:42002",
         startedAt: "2026-01-01T00:00:00.000Z",
         processes: [{ role: "api", pid, startTime: procStartTime(pid) }],
@@ -110,18 +134,19 @@ describe("createAgentStackTools", () => {
     });
 
     const started = (await tools.agent_stack_start!.execute(
-      { workspace },
+      { issueId: "story-a" },
       {},
     )) as {
       reused: boolean;
       env: Record<string, string>;
-      state: { apiPort: number; vitePort: number };
+      state: { port: number; auxPort: number };
     };
 
     expect(started.reused).toBe(true);
     expect(started.env).toEqual({
-      AGENT_STACK_API_PORT: "42001",
-      AGENT_STACK_VITE_PORT: "42002",
+      AGENT_STACK_PORT: "42002",
+      AGENT_STACK_AUX_PORT: "42001",
+      AGENT_STACK_DATA_DIR: join(root, "data"),
       AGENT_STACK_BASE_URL: "http://127.0.0.1:42002",
     });
     expect(existsSync(agentStackStatePath("app-conv"))).toBe(true);
@@ -145,11 +170,11 @@ describe("createAgentStackTools", () => {
     });
 
     await expect(
-      tools.agent_stack_start!.execute({ workspace }, {}),
+      tools.agent_stack_start!.execute({ issueId: "story-a" }, {}),
     ).rejects.toThrow(/Cursor conversation_id is not available/);
   });
 
-  it("requires workspace in tool input", async () => {
+  it("requires issueId in tool input", async () => {
     const { createAgentStackTools } = await import("./agent-stack-tools.js");
     const tools = createAgentStackTools({
       conversationId: "app-conv",
@@ -157,7 +182,7 @@ describe("createAgentStackTools", () => {
     });
 
     await expect(tools.agent_stack_start!.execute({}, {})).rejects.toThrow(
-      /workspace is required/,
+      /issueId is required/,
     );
   });
 });
