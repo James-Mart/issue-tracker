@@ -1,4 +1,5 @@
 import type { Runtime } from "../schemas.js";
+import { loadPhaseSecrets } from "./agent-stack-secrets.js";
 import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
 import {
@@ -25,19 +26,19 @@ export type AgentStackRedeployResult =
 
 const HOT_RELOAD_MESSAGE = "the runtime hot-reloads";
 
-function projectRuntime(issueId: string): Runtime | undefined {
+function projectRuntime(issueId: string): { projectId: string; runtime: Runtime | undefined } {
   const { issues } = readAll();
   const project = ancestorChain(issueId, issues)[0]!;
   if (project.kind !== "project") {
     throw new Error(`issue "${issueId}" is not under a project`);
   }
-  return project.runtime;
+  return { projectId: project.id, runtime: project.runtime };
 }
 
 /**
  * Run the live stack's `redeploy` phase in its worktree with the stack
- * environment, then re-run `readiness`. Refuses when this conversation has
- * no live stack. An empty `redeploy` runs nothing.
+ * environment and Project secrets, then re-run `readiness`. Refuses when
+ * this conversation has no live stack. An empty `redeploy` runs nothing.
  */
 export async function redeployAgentStack(
   conversationId: string,
@@ -48,14 +49,16 @@ export async function redeployAgentStack(
       "agent_stack_redeploy: this conversation has no live stack",
     );
   }
-  const runtime = projectRuntime(state.issueId);
+  const { projectId, runtime } = projectRuntime(state.issueId);
   if (!runtime?.redeploy) {
     return { ran: false, message: HOT_RELOAD_MESSAGE };
   }
+  const secrets = loadPhaseSecrets(projectId);
   const redeploy = await runAgentStackShell(
     runtime.redeploy,
     state.worktree,
     state,
+    secrets,
   );
   if (redeploy.exitStatus !== 0 || !runtime.readiness) {
     return { ran: true, redeploy };
@@ -64,6 +67,7 @@ export async function redeployAgentStack(
     runtime.readiness,
     state.worktree,
     state,
+    secrets,
   );
   return { ran: true, redeploy, readiness };
 }

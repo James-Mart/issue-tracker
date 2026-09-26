@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { resolveRuntimeSet } from "./cli-kind.js";
+import { resolveRuntimeSet } from "./cli-runtime-set.js";
 
 describe("resolveRuntimeSet", () => {
   let dir: string;

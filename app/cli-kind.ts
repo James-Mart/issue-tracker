@@ -1,6 +1,8 @@
 import type { Command } from "commander";
 import { coerceBoolean, coerceEnum, coerceJson } from "./cli-coerce.js";
 import { readCliFileArg } from "./cli-io.js";
+import { resolveRuntimeSet, RUNTIME_PHASES_HELP } from "./cli-runtime-set.js";
+import { resolveSecretsSet } from "./cli-project-secrets.js";
 import { assertAllowedAgentModelSlug } from "./server/agent-model-slugs.js";
 import {
   assertStoryCanSetMergeBase,
@@ -16,7 +18,6 @@ import { storyMergeBaseRef } from "./server/services/resolve-merge-base-ref.js";
 import { validateFullCommitSha } from "./server/services/commit-sha.js";
 import {
   MERGE_POLICIES,
-  type RuntimePhaseKey,
 } from "./server/issue-constants.js";
 import {
   projectLabelSchema,
@@ -36,7 +37,11 @@ import {
   personaEntrySchema,
   personasSchema,
 } from "./server/schemas.js";
-import { isRuntimePhaseKey } from "./server/services/runtime.js";
+import {
+  deleteSecret,
+  listSecretKeys,
+  setSecret,
+} from "./server/services/secret-store.js";
 import { isSupportingDocKey } from "./server/services/supporting-docs.js";
 
 export type KindSetOptions = {
@@ -52,6 +57,8 @@ export type KindSetOptions = {
   workspace?: string;
   /** Runtime phase name for `runtime` (`--phase`). */
   phase?: string;
+  /** Secret key name for `secrets` (`--key`). */
+  key?: string;
 };
 
 function articleFor(kind: IssueKind): "a" | "an" {
@@ -335,76 +342,6 @@ export function resolveSupportingDocsSet(
   return { supportingDocs: next };
 }
 
-const RUNTIME_PHASES_HELP =
-  "build|start|readiness|seed|redeploy|baseUrl";
-
-/**
- * Resolve a `runtime` patch from CLI flags.
- * Modes: clear all; clear one `--phase`; set one `--phase` with `--file`.
- */
-export function resolveRuntimeSet(
-  opts: KindSetOptions,
-  current: Runtime | undefined,
-): IssuePatch {
-  const phase = opts.phase;
-  const wantsClear = Boolean(opts.clear);
-
-  if (opts.doc !== undefined || opts.attachment !== undefined) {
-    throw new Error("--doc and --attachment are not valid for runtime");
-  }
-  if (opts.workspace !== undefined) {
-    throw new Error("--workspace is not valid for runtime");
-  }
-  if (opts.add !== undefined || opts.remove !== undefined) {
-    throw new Error("--add and --remove are not valid for runtime");
-  }
-  if (opts.rename !== undefined) {
-    throw new Error("--rename is not valid for runtime");
-  }
-
-  if (wantsClear) {
-    if (opts.file !== undefined) {
-      throw new Error("--clear cannot be combined with --file");
-    }
-    if (phase === undefined) {
-      return { runtime: null };
-    }
-    if (!isRuntimePhaseKey(phase)) {
-      throw new Error(
-        `unknown runtime phase "${phase}" (expected ${RUNTIME_PHASES_HELP})`,
-      );
-    }
-    const next: Runtime = { ...(current ?? {}) };
-    delete next[phase];
-    return {
-      runtime: Object.keys(next).length === 0 ? null : next,
-    };
-  }
-
-  if (phase === undefined) {
-    throw new Error(`provide --phase <${RUNTIME_PHASES_HELP}> (or --clear)`);
-  }
-  if (!isRuntimePhaseKey(phase)) {
-    throw new Error(
-      `unknown runtime phase "${phase}" (expected ${RUNTIME_PHASES_HELP})`,
-    );
-  }
-  if (opts.file === undefined) {
-    throw new Error("provide --file <path|-> to set a runtime phase");
-  }
-
-  const raw = readCliFileArg(opts.file);
-  if (raw === "") {
-    throw new Error(
-      `runtime phase "${phase}" cannot be empty (clear the phase instead)`,
-    );
-  }
-
-  const key = phase as RuntimePhaseKey;
-  const next: Runtime = { ...(current ?? {}), [key]: raw };
-  return { runtime: next };
-}
-
 /**
  * Resolve an `inspirationApps` patch from CLI flags.
  * Modes: clear all; remove by `--remove <name>`; upsert one entry via
@@ -647,6 +584,10 @@ export function coerceSetPatch(
     throw new Error("runtime must be set via kindSet");
   }
 
+  if (spec.type === "secrets") {
+    throw new Error("secrets must be set via kindSet");
+  }
+
   if (spec.type === "inspirationApps") {
     throw new Error("inspirationApps must be set via kindSet");
   }
@@ -672,6 +613,9 @@ export function coerceSetPatch(
   }
   if (opts.phase !== undefined) {
     throw new Error("--phase is only valid for runtime");
+  }
+  if (opts.key !== undefined) {
+    throw new Error("--key is only valid for secrets");
   }
 
   const modes = countSetModes(value, opts);
@@ -795,6 +739,10 @@ export async function kindGetValue(
     if (kind === "story" && field === "mergeBaseRef") {
       return formatGetValue(await storyMergeBaseRef(id));
     }
+    if (kind === "project" && field === "secrets") {
+      const keys = listSecretKeys(id);
+      return keys.length === 0 ? null : keys.join("\n");
+    }
     const { derived } = list();
     const state = derived[id];
     if (!state) return null;
@@ -892,6 +840,21 @@ export function kindSet(
     return update(id, resolveRuntimeSet(opts, currentRuntime(detail)));
   }
 
+  if (spec.type === "secrets") {
+    if (value !== undefined) {
+      throw new Error(
+        "secrets does not take a positional value; use --key with --file or --clear",
+      );
+    }
+    const action = resolveSecretsSet(opts);
+    if (action.action === "set") {
+      setSecret(id, action.key, action.value);
+    } else {
+      deleteSecret(id, action.key);
+    }
+    return Promise.resolve(read(id));
+  }
+
   if (spec.type === "inspirationApps") {
     return update(
       id,
@@ -925,7 +888,7 @@ export function registerKindGetSet(
   const cmd = program.command(kind);
   if (kind === "project") {
     cmd.description(
-      `Project container — set workspace, setupCommand, trunk (default main), mergePolicy (${MERGE_POLICIES.join("|")}), supportingDocs, runtime, labels`,
+      `Project container — set workspace, setupCommand, trunk (default main), mergePolicy (${MERGE_POLICIES.join("|")}), supportingDocs, runtime, secrets, labels`,
     );
   }
 
@@ -973,6 +936,10 @@ export function registerKindGetSet(
     .option(
       "--phase <name>",
       `runtime phase: ${RUNTIME_PHASES_HELP}`,
+    )
+    .option(
+      "--key <name>",
+      "secrets key (^[A-Z_][A-Z0-9_]*$)",
     )
     .action(
       (id: string, field: string, value: string | undefined, opts: KindSetOptions) =>

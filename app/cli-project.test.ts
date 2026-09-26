@@ -1,4 +1,5 @@
-import { rmSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runIssueCli } from "./cli-program.js";
@@ -526,6 +527,114 @@ describe("project get/set", () => {
     ], { env: env(), stdin: "" });
     expect(emptyPhase.status).toBe(1);
     expect(emptyPhase.stderr).toContain("cannot be empty");
+  });
+
+  it("sets, gets, clears, and surfaces secrets without printing values", async () => {
+    const home = mkdtempSync(join(tmpdir(), "issue-cli-secrets-home-"));
+    const secretValue = "sk_test_super_secret_value";
+    const cliEnv = () => ({ ...env(), HOME: home });
+    try {
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "secrets",
+          "--key",
+          "STRIPE_SANDBOX_KEY",
+          "--file",
+          "-",
+        ], {
+          env: cliEnv(),
+          stdin: `${secretValue}\n`,
+        })).status,
+      ).toBe(0);
+
+      const got = await runIssueCli(["project", "get", "p", "secrets"], {
+        env: cliEnv(),
+      });
+      expect(got.status).toBe(0);
+      expect(got.stdout).toBe("STRIPE_SANDBOX_KEY\n");
+      expect(got.stdout).not.toContain(secretValue);
+
+      const summary = await runIssueCli(["summary", "p"], { env: cliEnv() });
+      expect(summary.status).toBe(0);
+      expect(summary.stdout).toContain("  secrets: STRIPE_SANDBOX_KEY");
+      expect(summary.stdout).not.toContain(secretValue);
+
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "secrets",
+          "--key",
+          "STRIPE_SANDBOX_KEY",
+          "--file",
+          "-",
+        ], {
+          env: cliEnv(),
+          stdin: "sk_test_replaced\n",
+        })).status,
+      ).toBe(0);
+      expect(
+        (await runIssueCli(["project", "get", "p", "secrets"], { env: cliEnv() }))
+          .stdout,
+      ).toBe("STRIPE_SANDBOX_KEY\n");
+
+      expect(
+        (await runIssueCli([
+          "project",
+          "set",
+          "p",
+          "secrets",
+          "--key",
+          "STRIPE_SANDBOX_KEY",
+          "--clear",
+        ], { env: cliEnv() })).status,
+      ).toBe(0);
+      expect(
+        (await runIssueCli(["project", "get", "p", "secrets"], { env: cliEnv() }))
+          .stdout,
+      ).toBe("");
+      expect(
+        (await runIssueCli(["summary", "p"], { env: cliEnv() })).stdout,
+      ).not.toContain("  secrets:");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses invalid secrets sets", async () => {
+    const home = mkdtempSync(join(tmpdir(), "issue-cli-secrets-invalid-"));
+    const cliEnv = () => ({ ...env(), HOME: home });
+    try {
+      const badKey = await runIssueCli([
+        "project",
+        "set",
+        "p",
+        "secrets",
+        "--key",
+        "bad-key",
+        "--file",
+        "-",
+      ], { env: cliEnv(), stdin: "x\n" });
+      expect(badKey.status).toBe(1);
+      expect(badKey.stderr).toContain("invalid secret key");
+
+      const missingFile = await runIssueCli([
+        "project",
+        "set",
+        "p",
+        "secrets",
+        "--key",
+        "STRIPE_SANDBOX_KEY",
+      ], { env: cliEnv() });
+      expect(missingFile.status).toBe(1);
+      expect(missingFile.stderr).toContain("--file");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it("refuses invalid supportingDocs sets", async () => {

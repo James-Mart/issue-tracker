@@ -499,7 +499,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 
 | kind | settable fields |
 | --- | --- |
-| project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `maxImplementingRuns`, `autonomous`, `labels`, `supportingDocs`, `runtime`, `description` |
+| project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `maxImplementingRuns`, `autonomous`, `labels`, `supportingDocs`, `runtime`, `secrets`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `workQueuedAt`, `description` |
 | idea | `title`, `archived`, `outlineGate`, `executionGate`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `workQueuedAt`, `description` |
@@ -530,6 +530,9 @@ and refuses a sha already present on that Task. Whole-series replace uses
   `--phase build|start|readiness|seed|redeploy|baseUrl` plus `--file <path|->`.
   `--clear` blanks the whole field; `--clear --phase <name>` removes one phase.
   See [Project runtime](#project-runtime).
+- **Project `secrets`:** no positional value. Set one key with
+  `--key <KEY>` plus `--file <path|->`; remove one with `--key <KEY> --clear`.
+  See [Project secrets](#project-secrets).
 - `--clear` (mutually exclusive with a positional value / `--add` / `--remove` /
   `--rename`):
   - **Clearable scalars** (`assignee`, `branchName`, `stackedOn`,
@@ -540,6 +543,8 @@ and refuses a sha already present on that Task. Whole-series replace uses
     `--doc <key>`, removes only that key.
   - **Project `runtime`**: blanks the field (absent / `null`); with
     `--phase <name>`, removes only that phase.
+  - **Project `secrets`**: `--clear --key <KEY>` removes one key (no whole-field
+    clear).
   - **`needsAttention`**: sets `false` and clears `attentionReason` (same as
     `needsAttention false`).
 - `description`: omit positional value when `--file <path|->` is passed.
@@ -755,6 +760,31 @@ operation the CLI uses.
 
 **`apply`.** Imperative-only — same class as `supportingDocs`. `apply`
 preserves `runtime` and never reads or writes it from the YAML doc.
+
+### Project secrets
+
+Each Project may store runtime secrets outside the repo and tracker store in
+one owner-only JSON file at `~/.config/issue-tracker/secrets/<projectId>.json`
+(directory mode `0700`, file mode `0600`). Keys must match
+`^[A-Z_][A-Z0-9_]*$`. Secret **values** are written and injected at runtime;
+no CLI output, API response, UI surface, comment, or log prints a value — only
+key names are readable. The store refuses to read a file whose mode is wider
+than `0600`.
+
+**CLI.**
+
+```
+issue project set <id> secrets --key <KEY> --file <path|->
+issue project set <id> secrets --key <KEY> --clear
+issue project get <id> secrets
+```
+
+`get` prints key names only, one per line. `summary` surfaces a `secrets:`
+line listing key names when any are set. There is no whole-field `--clear` for
+`secrets`; remove keys individually with `--clear --key <KEY>`.
+
+**`apply`.** Secrets live outside `issue.json`; `apply` never reads or writes
+them.
 
 ### Project workspace
 
@@ -1671,6 +1701,8 @@ preserves everything else from the existing same-kind issue.
 | `planQueuedAt` (Idea) | system writer; kind [`set`](#kind-scoped-get--set) accepts `--clear` only; `apply` preserves |
 | `mergePolicy` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; effective value derived on get |
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `runtime` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `secrets` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); stored outside the repo; `apply` never touches |
 | `labels` (Project catalog) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Epic / Idea / Story assignments) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `outlineGate` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
