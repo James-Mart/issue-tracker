@@ -73,8 +73,8 @@ Complete **## Bootstrap** first.
    Return block, is the report that carries its three evidence fields.
    Judge each completed capture against the Story's intent and the
    `designSystem` doc when that consult ran.
-4. **Evidence.** Copy each judged capture, and write each command output a
-   finding or check rests on, to a file under
+4. **Evidence.** The UI-look include attaches its judged screenshots. Write
+   each command output a finding or check rests on to a file under
    `/tmp/runtime-validator-<storyId>/`, then `issue attach <storyId> <file>`
    it. Each attach prints the stored basename; cite that basename in the
    finding it supports.
