@@ -77,6 +77,10 @@ export function useAgentSessionsTestFixtures(): void {
       workspace: workspaceDir,
       createdAt: AT,
       updatedAt: AT,
+      runtime: {
+        start: "sleep 30",
+        baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+      },
     });
   });
 

@@ -46,7 +46,7 @@ export function createAgentStackTools(
   return {
     agent_stack_start: {
       description:
-        "Start (or reuse) this conversation's verification stack for an issue's Story worktree. Returns AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR, and AGENT_STACK_BASE_URL. A Project with a runtime declaration boots that; a Project with no runtime field boots <worktree>/app on free ports, reading the live tracker store and refusing writes. Reuse the running stack only when its recorded worktree matches. Do not restart the human's stack on 8060/8061.",
+        "Start (or reuse) this conversation's verification stack for an issue's Story worktree. Returns AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR, and AGENT_STACK_BASE_URL. Boots the Project runtime declaration in that worktree. Refuses when runtime lacks start or baseUrl. Reuse the running stack only when its recorded worktree matches. Do not restart the human's stack on 8060/8061.",
       inputSchema: {
         type: "object",
         properties: {

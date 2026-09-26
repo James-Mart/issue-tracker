@@ -113,7 +113,8 @@ describe("POST /api/issues/:id/update-from-merge-base", () => {
     expect(task.order).toBe(1);
     expect(typeof task.description).toBe("string");
     expect(task.description).toContain("feat/a");
-    expect(task.description).toContain("main");
+    expect(task.description).toContain("issue story get a mergeBaseRef");
+    expect(task.description).toContain("git merge --no-commit");
 
     expect(existsSync(join(dir, "update-from-merge-base", "issue.json"))).toBe(
       true,

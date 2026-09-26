@@ -13,7 +13,7 @@ import {
 import { createConnection, createServer, type AddressInfo, type Server } from "node:net";
 import { join, resolve } from "node:path";
 import { z } from "zod";
-import { appDir, conversationsDir, issuesDir } from "../config.js";
+import { conversationsDir } from "../config.js";
 import type { Issue, Runtime } from "../schemas.js";
 import { isSlugSafe } from "../slug.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
@@ -21,10 +21,9 @@ import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
 
 /**
- * A conversation's own API + Vite pair, on ports picked free at start time.
- * Agents verify server/UI changes here instead of on the human's stack, so
- * watch mode is deliberate: this stack hosts no agent sessions and a reload
- * cancels nothing.
+ * One conversation's verification stack, on ports picked free at start time.
+ * The Project runtime declaration owns how that stack is built and started.
+ * Agents verify here instead of on the human's stack.
  */
 
 const READY_TIMEOUT_MS = 90_000;
@@ -290,62 +289,6 @@ async function pickFreePortPair(): Promise<[number, number]> {
   return ports;
 }
 
-function workspaceAppDir(worktree: string): string {
-  return join(worktree, "app");
-}
-
-function hostAsrModelDir(): string {
-  return process.env.ISSUE_TRACKER_ASR_MODEL_DIR ?? join(appDir, ".asr-models");
-}
-
-function binPath(name: string, cwdAppDir: string): string {
-  const bin = join(cwdAppDir, "node_modules", ".bin", name);
-  if (!existsSync(bin)) {
-    throw new Error(`missing ${bin} — run \`npm install\` from \`${cwdAppDir}\``);
-  }
-  return bin;
-}
-
-async function runNpmInstall(cwdAppDir: string, asrModelDir: string): Promise<void> {
-  await new Promise<void>((resolvePromise, reject) => {
-    const child = spawn("npm", ["install"], {
-      cwd: cwdAppDir,
-      env: {
-        ...process.env,
-        ISSUE_TRACKER_SKIP_BROWSER_SETUP: "1",
-        ISSUE_TRACKER_SKIP_ASR_MODEL_SETUP: "1",
-        ISSUE_TRACKER_ASR_MODEL_DIR: asrModelDir,
-      },
-      stdio: "inherit",
-    });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolvePromise();
-      else {
-        reject(
-          new Error(
-            `npm install in ${cwdAppDir} exited with code ${code ?? "unknown"}`,
-          ),
-        );
-      }
-    });
-  });
-}
-
-async function ensureWorkspaceAppReady(
-  workspace: string,
-  asrModelDir: string,
-): Promise<string> {
-  const cwdAppDir = workspaceAppDir(workspace);
-  if (!existsSync(cwdAppDir) || !statSync(cwdAppDir).isDirectory()) {
-    throw new Error(`agent stack worktree has no app/ directory: ${cwdAppDir}`);
-  }
-  if (!existsSync(join(cwdAppDir, "node_modules"))) {
-    await runNpmInstall(cwdAppDir, asrModelDir);
-  }
-  return cwdAppDir;
-}
-
 function tailText(text: string, maxLines = 20): string {
   return text.trimEnd().split("\n").slice(-maxLines).join("\n");
 }
@@ -357,8 +300,8 @@ function tailLog(path: string, maxLines = 20): string {
 
 /**
  * Spawn a stack child in its own process group (`detached`), so it outlives the
- * caller and `stop` can signal the whole tree — `tsx watch` and Vite each fork
- * further children.
+ * caller and `stop` can signal the whole tree, including children the start
+ * script forks.
  */
 function spawnChild(
   role: AgentStackRole,
@@ -392,52 +335,12 @@ function spawnChild(
   return { child, record: { role, pid, startTime: info.startTime } };
 }
 
-async function probe(url: string): Promise<Response> {
-  return fetch(url, { signal: AbortSignal.timeout(READY_PROBE_TIMEOUT_MS) });
-}
-
-/**
- * Ready means the base URL serves the client *and* proxies `/api` to this
- * stack's own API — the two things every caller of the env contract needs.
- */
-async function waitForReady(
-  conversationId: string,
-  baseUrl: string,
-  children: { child: ChildProcess; record: AgentStackProcess }[],
-): Promise<void> {
-  const deadline = Date.now() + READY_TIMEOUT_MS;
-  let lastFailure = "no probe attempted";
-  while (Date.now() < deadline) {
-    const dead = children.find(
-      ({ child }) => child.exitCode !== null || child.signalCode !== null,
-    );
-    if (dead) {
-      const { role } = dead.record;
-      throw new Error(
-        `agent stack ${role} exited while starting:\n${tailLog(logPath(conversationId, role))}`,
-      );
-    }
-    try {
-      const client = await probe(baseUrl);
-      const api = await probe(`${baseUrl}/api/conversations`);
-      if (client.ok && api.ok) return;
-      lastFailure = `client ${client.status}, /api/conversations ${api.status}`;
-    } catch (err) {
-      lastFailure = err instanceof Error ? err.message : String(err);
-    }
-    await delay(READY_POLL_MS);
-  }
-  throw new Error(
-    `agent stack for ${conversationId} was not ready within ${READY_TIMEOUT_MS}ms (${lastFailure})`,
-  );
-}
-
 type StoryIssue = Extract<Issue, { kind: "story" }>;
 
 interface ResolvedBoot {
   issueId: string;
   worktree: string;
-  runtime: Runtime | undefined;
+  runtime: Runtime;
 }
 
 interface StackResources {
@@ -493,16 +396,14 @@ function resolveBootTarget(issueId: string): ResolvedBoot {
     throw new Error(`Story "${storyIssue.id}" has no live worktree`);
   }
   const runtime = project.runtime;
-  if (runtime !== undefined) {
+  if (!runtime?.start || !runtime.baseUrl) {
     const missing = [
-      runtime.start ? undefined : "start",
-      runtime.baseUrl ? undefined : "baseUrl",
+      runtime?.start ? undefined : "start",
+      runtime?.baseUrl ? undefined : "baseUrl",
     ].filter((key): key is string => key !== undefined);
-    if (missing.length > 0) {
-      throw new Error(
-        `Project "${project.id}" runtime is missing ${missing.join(" and ")}`,
-      );
-    }
+    throw new Error(
+      `Project "${project.id}" runtime is missing ${missing.join(" and ")}`,
+    );
   }
   return { issueId, worktree: resolve(recorded), runtime };
 }
@@ -704,7 +605,7 @@ async function bootDeclaredRuntime(
   boot: ResolvedBoot,
   cursorConversationId: string | undefined,
 ): Promise<AgentStackHandle> {
-  const runtime = boot.runtime!;
+  const runtime = boot.runtime;
   const resources = await allocateStackResources(conversationId);
   let baseUrl: string;
   try {
@@ -756,57 +657,6 @@ async function bootDeclaredRuntime(
 }
 
 /**
- * Tracker `app/` boot used when the Project has no `runtime` field.
- * `declare-tracker-runtime` removes this path.
- */
-async function bootTrackerApp(
-  conversationId: string,
-  boot: ResolvedBoot,
-  cursorConversationId: string | undefined,
-): Promise<AgentStackHandle> {
-  const asrModelDir = hostAsrModelDir();
-  const cwdAppDir = await ensureWorkspaceAppReady(boot.worktree, asrModelDir);
-  const vite = binPath("vite", cwdAppDir);
-  const tsx = binPath("tsx", cwdAppDir);
-  const resources = await allocateStackResources(conversationId);
-  const baseUrl = `http://127.0.0.1:${resources.port}`;
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    ISSUES_DIR: issuesDir,
-    ISSUE_TRACKER_STORE_READ_ONLY: "1",
-    ISSUE_TRACKER_ASR_MODEL_DIR: asrModelDir,
-    PORT: String(resources.auxPort),
-    VITE_DEV_PORT: String(resources.port),
-    VITE_API_PROXY_TARGET: `http://127.0.0.1:${resources.auxPort}`,
-  };
-  const spawned: ReturnType<typeof spawnChild>[] = [];
-  let stateWritten = false;
-  try {
-    spawned.push(spawnChild("api", tsx, ["watch", "server/index.ts"], env, conversationId, cwdAppDir));
-    spawned.push(spawnChild("vite", vite, [], env, conversationId, cwdAppDir));
-    let state = freshState(
-      conversationId,
-      boot,
-      resources,
-      baseUrl,
-      spawned.map(({ record }) => record),
-    );
-    writeAgentStackState(state);
-    stateWritten = true;
-    state = attachCursor(state, cursorConversationId);
-    await waitForReady(conversationId, baseUrl, spawned);
-    return { state, env: agentStackEnv(state), reused: false };
-  } catch (err) {
-    if (stateWritten) await stopAgentStack(conversationId);
-    else {
-      for (const { record } of spawned) signalGroup(record.pid, "SIGTERM");
-      discardDataDir(resources.dataDir);
-    }
-    throw err;
-  }
-}
-
-/**
  * Start (or adopt) this conversation's stack and return the env contract.
  * A recorded stack whose processes are gone — a crash, or a machine restart —
  * is torn down first, so its state never squats the conversation.
@@ -839,8 +689,7 @@ export async function startAgentStack(
     await stopAgentStack(conversationId);
   }
 
-  if (boot.runtime) return bootDeclaredRuntime(conversationId, boot, cursorConversationId);
-  return bootTrackerApp(conversationId, boot, cursorConversationId);
+  return bootDeclaredRuntime(conversationId, boot, cursorConversationId);
 }
 
 function signalGroup(pid: number, signal: NodeJS.Signals): void {

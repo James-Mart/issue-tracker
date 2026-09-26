@@ -185,6 +185,11 @@ describe("declared runtime boot", () => {
       worktreePath: worktree,
     });
 
+    writeIssue("proj", { kind: "project" });
+    await expect(startAgentStack("conv", { issueId: "story-a" })).rejects.toThrow(
+      /Project "proj" runtime is missing start and baseUrl/,
+    );
+
     writeIssue("proj", { kind: "project", runtime: { baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT" } });
     await expect(startAgentStack("conv", { issueId: "story-a" })).rejects.toThrow(
       /Project "proj" runtime is missing start/,

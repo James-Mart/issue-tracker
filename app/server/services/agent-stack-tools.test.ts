@@ -14,16 +14,20 @@ beforeEach(() => {
   issuesDir = join(root, "issues");
   workspace = join(root, "workspace");
   mkdirSync(issuesDir, { recursive: true });
-  writeIssue("proj", { kind: "project", title: "Proj" });
+  writeIssue("proj", {
+    kind: "project",
+    title: "Proj",
+    runtime: {
+      start: "sleep 30",
+      baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+    },
+  });
   writeIssue("story-a", {
     kind: "story",
     partOf: "proj",
     worktreePath: workspace,
   });
-  mkdirSync(join(workspace, "app", "node_modules", ".bin"), { recursive: true });
-  for (const name of ["tsx", "vite"]) {
-    writeFileSync(join(workspace, "app", "node_modules", ".bin", name), "#!/bin/sh\n");
-  }
+  mkdirSync(workspace, { recursive: true });
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", issuesDir);
 });

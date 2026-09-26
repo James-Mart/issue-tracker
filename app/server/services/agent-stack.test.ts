@@ -71,25 +71,20 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
 }
 
 function seedStories(stories: { id: string; worktreePath: string }[]): void {
-  writeIssue("proj", { kind: "project", title: "Proj" });
+  writeIssue("proj", {
+    kind: "project",
+    title: "Proj",
+    runtime: {
+      start: "sleep 30",
+      baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+    },
+  });
   for (const story of stories) {
     writeIssue(story.id, {
       kind: "story",
       partOf: "proj",
       worktreePath: story.worktreePath,
     });
-  }
-}
-
-function seedWorkspaceApp(dir: string, withNodeModules = true): void {
-  const appDir = join(dir, "app");
-  mkdirSync(appDir, { recursive: true });
-  if (withNodeModules) {
-    const binDir = join(appDir, "node_modules", ".bin");
-    mkdirSync(binDir, { recursive: true });
-    for (const name of ["tsx", "vite"]) {
-      writeFileSync(join(binDir, name), "#!/bin/sh\nexit 0\n");
-    }
   }
 }
 
@@ -101,8 +96,6 @@ beforeEach(() => {
   mkdirSync(issuesDir, { recursive: true });
   mkdirSync(workspace, { recursive: true });
   mkdirSync(workspaceB, { recursive: true });
-  seedWorkspaceApp(workspace);
-  seedWorkspaceApp(workspaceB);
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", issuesDir);
   seedStories([
@@ -135,13 +128,6 @@ async function loadService() {
 
 async function loadConfig() {
   return import("../config.js");
-}
-
-function stubReadyFetch(): void {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => ({ ok: true, status: 200 }) as Response),
-  );
 }
 
 /** Independent read of the liveness token the service pins pids with. */
@@ -573,7 +559,6 @@ describe("startAgentStack", () => {
   });
 
   it("stops a live stack when the worktree differs", async () => {
-    stubReadyFetch();
     const {
       agentStackDir,
       agentStackStatePath,
@@ -587,15 +572,19 @@ describe("startAgentStack", () => {
       JSON.stringify(stackState("my-conversation", pid, workspace)),
     );
 
-    spawnDelegate.impl = (command, _args, options) => {
-      if (command === "npm") {
-        return realSpawn("sh", ["-c", "exit 0"], options ?? {});
-      }
-      const child = realSpawn("sh", ["-c", "sleep 300"], {
-        ...(options ?? {}),
-        detached: true,
-        stdio: "ignore",
-      });
+    spawnDelegate.impl = (_command, _args, options) => {
+      const child = realSpawn(
+        "node",
+        [
+          "-e",
+          "require('net').createServer().listen(Number(process.env.AGENT_STACK_PORT),'127.0.0.1'); setInterval(() => {}, 1e9);",
+        ],
+        {
+          ...(options ?? {}),
+          detached: true,
+          stdio: "ignore",
+        },
+      );
       strays.push(child);
       return child;
     };
@@ -610,96 +599,6 @@ describe("startAgentStack", () => {
     expect(readFileSync(agentStackStatePath("my-conversation"), "utf8")).toContain(
       workspaceB,
     );
-
-    await stopAgentStack("my-conversation");
-  });
-
-  it("passes the live store env to stack children", async () => {
-    stubReadyFetch();
-    const { startAgentStack, stopAgentStack } = await loadService();
-    const captured: NodeJS.ProcessEnv[] = [];
-
-    spawnDelegate.impl = (command, _args, options) => {
-      if (command === "npm") {
-        return realSpawn("sh", ["-c", "exit 0"], options ?? {});
-      }
-      captured.push({ ...(options?.env as NodeJS.ProcessEnv) });
-      const child = realSpawn("sh", ["-c", "sleep 300"], {
-        ...(options ?? {}),
-        detached: true,
-        stdio: "ignore",
-      });
-      strays.push(child);
-      return child;
-    };
-
-    await startAgentStack("my-conversation", { issueId: "story-a" });
-
-    expect(captured.length).toBeGreaterThan(0);
-    for (const env of captured) {
-      expect(env.ISSUES_DIR).toBe(issuesDir);
-      expect(env.ISSUE_TRACKER_STORE_READ_ONLY).toBe("1");
-      expect(env.ISSUE_TRACKER_ASR_MODEL_DIR).toBeTruthy();
-    }
-
-    await stopAgentStack("my-conversation");
-  });
-
-  it("runs npm install when node_modules is absent and leaves no state on failure", async () => {
-    const bareWorkspace = join(root, "bare-workspace");
-    mkdirSync(join(bareWorkspace, "app"), { recursive: true });
-    writeIssue("story-bare", {
-      kind: "story",
-      partOf: "proj",
-      worktreePath: bareWorkspace,
-    });
-    const { agentStackStatePath, startAgentStack } = await loadService();
-
-    spawnDelegate.impl = (command, _args, options) => {
-      if (command === "npm") {
-        return realSpawn("sh", ["-c", "exit 1"], options ?? {});
-      }
-      return realSpawn("sh", ["-c", "sleep 300"], options ?? {});
-    };
-
-    await expect(
-      startAgentStack("my-conversation", { issueId: "story-bare" }),
-    ).rejects.toThrow(/npm install/);
-    expect(existsSync(agentStackStatePath("my-conversation"))).toBe(false);
-  });
-
-  it("runs npm install with skip setup env when node_modules is absent", async () => {
-    stubReadyFetch();
-    const bareWorkspace = join(root, "install-workspace");
-    mkdirSync(join(bareWorkspace, "app"), { recursive: true });
-    writeIssue("story-bare", {
-      kind: "story",
-      partOf: "proj",
-      worktreePath: bareWorkspace,
-    });
-    const { startAgentStack, stopAgentStack } = await loadService();
-    let npmEnv: NodeJS.ProcessEnv | undefined;
-
-    spawnDelegate.impl = (command, _args, options) => {
-      if (command === "npm") {
-        npmEnv = { ...(options?.env as NodeJS.ProcessEnv) };
-        seedWorkspaceApp(bareWorkspace);
-        return realSpawn("sh", ["-c", "exit 0"], options ?? {});
-      }
-      const child = realSpawn("sh", ["-c", "sleep 300"], {
-        ...(options ?? {}),
-        detached: true,
-        stdio: "ignore",
-      });
-      strays.push(child);
-      return child;
-    };
-
-    await startAgentStack("my-conversation", { issueId: "story-bare" });
-
-    expect(npmEnv?.ISSUE_TRACKER_SKIP_BROWSER_SETUP).toBe("1");
-    expect(npmEnv?.ISSUE_TRACKER_SKIP_ASR_MODEL_SETUP).toBe("1");
-    expect(npmEnv?.ISSUE_TRACKER_ASR_MODEL_DIR).toBeTruthy();
 
     await stopAgentStack("my-conversation");
   });

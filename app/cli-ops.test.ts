@@ -77,11 +77,10 @@ function env() {
 async function loadModules(): Promise<void> {
   vi.resetModules();
   process.env.ISSUES_DIR = dir;
-  const [cliOps, delivery, cliProgram] = await Promise.all([
-    import("./cli-ops.js"),
-    import("./server/services/delivery.js"),
-    import("./cli-program.js"),
-  ]);
+  // cli-program imports cli-ops. A parallel import deadlocks Vitest's module runner.
+  const cliOps = await import("./cli-ops.js");
+  const delivery = await import("./server/services/delivery.js");
+  const cliProgram = await import("./cli-program.js");
   mergeStory = cliOps.mergeStory;
   setGhSpawnerForTests = delivery.setGhSpawnerForTests;
   runIssueCli = cliProgram.runIssueCli;
