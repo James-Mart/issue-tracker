@@ -14,13 +14,22 @@ const agentStackHandleSchema = z.object({
   state: agentStackStateSchema,
   env: z.record(z.string(), z.string()),
   reused: z.boolean(),
+  memoryLimitFailures: z.array(z.string()),
 });
 
 export type AgentStackHandleResult = z.infer<typeof agentStackHandleSchema>;
 
 const agentStackStopResultSchema = z.discriminatedUnion("stopped", [
-  z.object({ stopped: z.literal(true), state: agentStackStateSchema }),
-  z.object({ stopped: z.literal(false), state: z.null() }),
+  z.object({
+    stopped: z.literal(true),
+    state: agentStackStateSchema,
+    memoryLimitFailures: z.array(z.string()),
+  }),
+  z.object({
+    stopped: z.literal(false),
+    state: z.null(),
+    memoryLimitFailures: z.array(z.string()),
+  }),
 ]);
 
 export type AgentStackStopToolResult = z.infer<typeof agentStackStopResultSchema>;

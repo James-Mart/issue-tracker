@@ -18,10 +18,13 @@ import { z } from "zod";
 import { conversationsDir } from "../config.js";
 import type { Issue, Runtime } from "../schemas.js";
 import { isSlugSafe } from "../slug.js";
+import { collectAgentStackMemoryLimitFailures } from "./agent-stack-heap-reports.js";
 import {
   createPhaseOutputMasker,
   loadPhaseSecrets,
 } from "./agent-stack-secrets.js";
+
+export { agentStackMemoryLimitMessage } from "./agent-stack-heap-reports.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
 import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
@@ -96,12 +99,14 @@ export interface AgentStackHandle {
   env: Record<string, string>;
   /** True when a live stack for this conversation was already running. */
   reused: boolean;
+  /** Heap-limit death lines from this stack's reports, in report order. */
+  memoryLimitFailures: string[];
 }
 
 /** `stopped: false` means no stack was recorded for the conversation. */
 export type AgentStackStopResult =
-  | { stopped: true; state: AgentStackState }
-  | { stopped: false; state: null };
+  | { stopped: true; state: AgentStackState; memoryLimitFailures: string[] }
+  | { stopped: false; state: null; memoryLimitFailures: string[] };
 
 function assertConversationId(conversationId: string): void {
   if (!isSlugSafe(conversationId)) {
@@ -767,7 +772,12 @@ async function bootDeclaredRuntime(
         spawned,
       );
     }
-    return { state, env: agentStackEnv(state), reused: false };
+    return {
+      state,
+      env: agentStackEnv(state),
+      reused: false,
+      memoryLimitFailures: [],
+    };
   } catch (err) {
     if (stateWritten) await stopAgentStack(conversationId);
     else {
@@ -802,17 +812,30 @@ export async function startAgentStack(
   const secrets = loadPhaseSecrets(boot.projectId);
 
   const existing = readAgentStackState(conversationId);
+  let memoryLimitFailures: string[] = [];
   if (existing) {
     if (isStackLive(existing) && existing.worktree === boot.worktree) {
       const state = cursorConversationId === undefined
         ? existing
         : rememberCursorConversationId(existing, cursorConversationId);
-      return { state, env: agentStackEnv(state), reused: true };
+      return {
+        state,
+        env: agentStackEnv(state),
+        reused: true,
+        memoryLimitFailures: [],
+      };
     }
+    memoryLimitFailures = collectAgentStackMemoryLimitFailures(existing.dataDir);
     await stopAgentStack(conversationId);
   }
 
-  return bootDeclaredRuntime(conversationId, boot, cursorConversationId, secrets);
+  const handle = await bootDeclaredRuntime(
+    conversationId,
+    boot,
+    cursorConversationId,
+    secrets,
+  );
+  return { ...handle, memoryLimitFailures };
 }
 
 function signalGroup(pid: number, signal: NodeJS.Signals): void {
@@ -901,7 +924,9 @@ export async function stopAgentStack(
 ): Promise<AgentStackStopResult> {
   ensureChildReaper();
   const state = readAgentStackState(conversationId);
-  if (!state) return { stopped: false, state: null };
+  if (!state) return { stopped: false, state: null, memoryLimitFailures: [] };
+
+  const memoryLimitFailures = collectAgentStackMemoryLimitFailures(state.dataDir);
 
   const owned = state.processes.filter(isOurRecordedProcess);
   const live = owned.filter(isProcessLive);
@@ -934,7 +959,7 @@ export async function stopAgentStack(
   }
 
   releaseStoppedStack(state);
-  return { stopped: true, state };
+  return { stopped: true, state, memoryLimitFailures };
 }
 
 function releaseStoppedStack(state: AgentStackState): void {

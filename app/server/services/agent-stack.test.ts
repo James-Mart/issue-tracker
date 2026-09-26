@@ -399,6 +399,7 @@ describe("stopAgentStack", () => {
     await expect(stopAgentStack("my-conversation")).resolves.toEqual({
       stopped: false,
       state: null,
+      memoryLimitFailures: [],
     });
   });
 
@@ -722,6 +723,132 @@ describe("dropUnownedAgentStackRecords", () => {
 
     expect(dropUnownedAgentStackRecords()).toEqual([]);
     expect(existsSync(agentStackStatePath("my-conversation"))).toBe(true);
+  });
+});
+
+const HEAP_OOM_EVENT = "Allocation failed - JavaScript heap out of memory";
+
+function writeHeapLimitReport(
+  heapReportsDir: string,
+  commandLine: string[],
+): void {
+  mkdirSync(heapReportsDir, { recursive: true });
+  writeFileSync(
+    join(heapReportsDir, `report.1.127.0.0.1.${Date.now()}.json`),
+    JSON.stringify({ header: { event: HEAP_OOM_EVENT, commandLine } }),
+  );
+}
+
+describe("agent stack heap limit reporting", () => {
+  async function recordDeadStack(conversationId: string, dataDir: string) {
+    const { agentStackDir, agentStackStatePath } = await loadService();
+    mkdirSync(dataDir, { recursive: true });
+    mkdirSync(agentStackDir(conversationId), { recursive: true });
+    const deadPid = 2 ** 30;
+    writeFileSync(
+      agentStackStatePath(conversationId),
+      JSON.stringify({
+        conversationId,
+        issueId: "story-a",
+        worktree: workspace,
+        port: 41002,
+        auxPort: 41001,
+        dataDir,
+        baseUrl: "http://127.0.0.1:41002",
+        startedAt: STAMP,
+        processes: [{ role: "start" as const, pid: deadPid, startTime: "1" }],
+        cursorConversationIds: [],
+      }),
+    );
+  }
+
+  function spawnRuntimeStartListener(): typeof spawnDelegate.impl {
+    return (_command, _args, options) => {
+      const child = realSpawn(
+        "node",
+        [
+          "-e",
+          "require('net').createServer().listen(Number(process.env.AGENT_STACK_PORT),'127.0.0.1'); setInterval(() => {}, 1e9);",
+        ],
+        {
+          ...(options ?? {}),
+          detached: true,
+          stdio: "ignore",
+        },
+      );
+      strays.push(child);
+      return child;
+    };
+  }
+
+  it("start on a dead recorded stack returns the line in memoryLimitFailures and restarts", async () => {
+    spawnDelegate.impl = spawnRuntimeStartListener();
+    const { conversationsDir } = await loadConfig();
+    const dataDir = join(
+      conversationsDir,
+      "my-conversation",
+      "agent-stack",
+      "data",
+    );
+    const commandLine = ["node", "server.js"];
+    writeHeapLimitReport(join(dataDir, "heap-reports"), commandLine);
+    await recordDeadStack("my-conversation", dataDir);
+
+    const { startAgentStack, agentStackMemoryLimitMessage, stopAgentStack } =
+      await loadService();
+    const handle = await startAgentStack("my-conversation", { issueId: "story-a" });
+
+    expect(handle.memoryLimitFailures).toEqual([
+      agentStackMemoryLimitMessage(commandLine),
+    ]);
+    expect(handle.reused).toBe(false);
+    expect(handle.state.processes[0]!.pid).not.toBe(2 ** 30);
+
+    await stopAgentStack("my-conversation");
+  });
+
+  it("stop returns heap-limit lines in memoryLimitFailures", async () => {
+    const { conversationsDir } = await loadConfig();
+    const dataDir = join(
+      conversationsDir,
+      "my-conversation",
+      "agent-stack",
+      "data",
+    );
+    const commandLine = ["node", "vite.js"];
+    writeHeapLimitReport(join(dataDir, "heap-reports"), commandLine);
+    await recordDeadStack("my-conversation", dataDir);
+
+    const { stopAgentStack, agentStackMemoryLimitMessage } = await loadService();
+    const result = await stopAgentStack("my-conversation");
+
+    expect(result.stopped).toBe(true);
+    expect(result.memoryLimitFailures).toEqual([
+      agentStackMemoryLimitMessage(commandLine),
+    ]);
+  });
+
+  it("leaves memoryLimitFailures empty when the report event is not heap exhaustion", async () => {
+    const { conversationsDir } = await loadConfig();
+    const dataDir = join(
+      conversationsDir,
+      "my-conversation",
+      "agent-stack",
+      "data",
+    );
+    mkdirSync(join(dataDir, "heap-reports"), { recursive: true });
+    writeFileSync(
+      join(dataDir, "heap-reports", `report.1.127.0.0.1.${Date.now()}.json`),
+      JSON.stringify({
+        header: { event: "other", commandLine: ["node", "server.js"] },
+      }),
+    );
+    await recordDeadStack("my-conversation", dataDir);
+
+    const { stopAgentStack } = await loadService();
+    const result = await stopAgentStack("my-conversation");
+
+    expect(result.memoryLimitFailures).toEqual([]);
   });
 });
 

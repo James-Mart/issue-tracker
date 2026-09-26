@@ -126,14 +126,17 @@ describe("createAgentStackTools", () => {
         AGENT_STACK_BASE_URL: "http://127.0.0.1:42002",
       },
       reused: true,
+      memoryLimitFailures: [],
     });
     expectResultMatchesOutputSchema(tools.agent_stack_stop!, {
       stopped: true,
       state: sampleState,
+      memoryLimitFailures: [],
     });
     expectResultMatchesOutputSchema(tools.agent_stack_stop!, {
       stopped: false,
       state: null,
+      memoryLimitFailures: [],
     });
   });
 

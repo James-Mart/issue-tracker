@@ -35,9 +35,13 @@ async function main(): Promise<void> {
       process.stderr.write(usage());
       process.exit(1);
     }
-    const { state, env, reused } = await startAgentStack(conversationId, {
-      issueId,
-    });
+    const { state, env, reused, memoryLimitFailures } = await startAgentStack(
+      conversationId,
+      { issueId },
+    );
+    for (const line of memoryLimitFailures) {
+      process.stderr.write(`${line}\n`);
+    }
     for (const [key, value] of Object.entries(env)) {
       process.stdout.write(`${key}=${value}\n`);
     }
@@ -50,6 +54,9 @@ async function main(): Promise<void> {
 
   if (command === "stop") {
     const result = await stopAgentStack(conversationId);
+    for (const line of result.memoryLimitFailures) {
+      process.stderr.write(`${line}\n`);
+    }
     process.stderr.write(
       result.stopped
         ? `stopped agent stack for ${conversationId} (freed ports ${result.state.port}, ${result.state.auxPort})\n`
