@@ -771,15 +771,20 @@ describe("agent stack memory hardening", () => {
     nodePidFile: string,
   ): typeof spawnDelegate.impl {
     return (command, args, options) => {
-      if (isDetachedStartPhaseSpawn(command, args, options)) {
-        const env = options?.env as NodeJS.ProcessEnv;
-        const port = env.AGENT_STACK_PORT;
-        const patched = [
-          "-c",
-          `echo 1000 > /proc/self/oom_score_adj; node -e ${JSON.stringify(
-            `require('fs').writeFileSync(${JSON.stringify(nodePidFile)}, String(process.pid)); require('net').createServer().listen(Number(${JSON.stringify(port)}),'127.0.0.1'); setInterval(()=>{}, 1e9);`,
-          )}`,
-        ];
+      if (command === "sh" && args[1]?.includes("oom_score_adj")) {
+        const nodeScript =
+          `require('fs').writeFileSync(${JSON.stringify(nodePidFile)}, String(process.pid)); ` +
+          "require('net').createServer().listen(Number(process.env.AGENT_STACK_PORT),'127.0.0.1'); " +
+          "setInterval(()=>{}, 1e9);";
+        const patched = [...args];
+        const wrapped = patched[1]!;
+        patched[1] = wrapped.replace(
+          /; sleep 30$/,
+          `; node -e ${JSON.stringify(nodeScript)}`,
+        );
+        if (patched[1] === wrapped) {
+          throw new Error("expected seeded runtime start command in wrapped script");
+        }
         const child = realSpawn(command, patched, {
           ...(options ?? {}),
           detached: true,
