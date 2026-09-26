@@ -79,9 +79,12 @@ function scanIds(): string[] {
   );
 }
 
-/** Conversation store ids on disk — same enumeration as implementing-work-root lock scans. */
+/**
+ * Conversation store ids on disk. Side-state dirs (agent-stack, mockups,
+ * cursor index) share the store without a `meta.json` and are not conversations.
+ */
 export function listConversationIds(): string[] {
-  return scanIds();
+  return scanIds().filter((id) => existsSync(metaPathOf(id)));
 }
 
 function validateAnchor(
