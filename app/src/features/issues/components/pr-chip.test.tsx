@@ -290,6 +290,17 @@ describe("tree row touch menu PR chip text", () => {
     expect(labels).toEqual([]);
   });
 
+  it("mirrors review: awaiting human wherever the row shows Story review", () => {
+    const labels = treeRowTouchChipLabels(
+      story({ review: "awaiting-human" }),
+      { storyStatus: "in-progress", blocked: false },
+      [],
+      { kind: "hidden" },
+    );
+    expect(labels).toContain("review: awaiting human");
+    expect(labels).toContain("in progress");
+  });
+
   it("mirrors a merged Story chip label in the touch menu", () => {
     const facts = prFacts();
     const prChip = resolvePrChip({

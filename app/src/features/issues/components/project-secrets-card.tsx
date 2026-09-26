@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { KeyRound, Plus } from "lucide-react";
 import { SECRET_KEY_RE } from "@server/issue-constants";
 import type { IssueDetail } from "@server/schemas";
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDeleteProjectSecret, useSetProjectSecret } from "../api/mutations";
 import { useProjectSecretKeys } from "../api/queries";
+import { PROJECT_SECRETS_CARD_ID } from "../lib/links";
 import { SETTINGS_HEADING_CLASS, SettingsCard } from "./detail-section";
 
 const INTRO =
@@ -155,6 +156,13 @@ export function ProjectSecretsCard({
   const showEmpty =
     secrets.isSuccess && keys.length === 0 && draft?.mode !== "add";
 
+  useEffect(() => {
+    if (window.location.hash !== `#${PROJECT_SECRETS_CARD_ID}`) return;
+    document.getElementById(PROJECT_SECRETS_CARD_ID)?.scrollIntoView({
+      block: "start",
+    });
+  }, []);
+
   const closeDraft = () => {
     setDraft(null);
     setError(null);
@@ -194,7 +202,9 @@ export function ProjectSecretsCard({
 
   return (
     <SettingsCard
+      id={PROJECT_SECRETS_CARD_ID}
       title="Secrets"
+      className="scroll-mt-16"
       data-testid="secrets-card"
       action={
         <Button

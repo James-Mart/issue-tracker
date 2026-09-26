@@ -4,6 +4,7 @@ import {
   issuePath,
   parseIssueLink,
   projectLensPath,
+  projectSecretsCardPath,
 } from "./links";
 
 describe("parseIssueLink", () => {
@@ -28,6 +29,14 @@ describe("projectLensPath", () => {
     );
     expect(projectLensPath("proj", "structure")).toBe(
       "/projects/proj?lens=structure",
+    );
+  });
+});
+
+describe("projectSecretsCardPath", () => {
+  it("links a Project's own detail to the Secrets card", () => {
+    expect(projectSecretsCardPath("proj")).toBe(
+      "/projects/proj/issues/proj#secrets",
     );
   });
 });

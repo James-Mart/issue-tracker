@@ -13,6 +13,7 @@ import type {
   ChannelSessionListItem,
   Comment,
   CommentInput,
+  CommentsResponse,
   ConversationChannel,
   CreateInput,
   IssueDetail,
@@ -403,6 +404,49 @@ export function useDeleteProjectSecret(projectId: string) {
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
       qc.setQueryData(issuesKeys.projectSecrets(projectId), { keys: data.keys });
+    },
+  });
+}
+
+/** Clear Story `review` after the human finishes the open validator request. */
+export function useHumanDone(storyId: string) {
+  const qc = useQueryClient();
+  return useMutation<Comment, Error, { note?: string }>({
+    mutationFn: (input) =>
+      request<Comment>(
+        `/api/stories/${encodeURIComponent(storyId)}/human-done`,
+        {
+          method: "POST",
+          body: input.note === undefined ? {} : { note: input.note },
+        },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (message) => {
+      qc.setQueryData<CommentsResponse>(issuesKeys.comments(storyId), (current) => {
+        if (!current) return current;
+        if (current.messages.some((entry) => entry.id === message.id)) return current;
+        return { ...current, messages: [...current.messages, message] };
+      });
+      qc.setQueryData<IssueDetail>(issuesKeys.detail(storyId), (current) => {
+        if (!current || current.kind !== "story") return current;
+        return { ...current, review: undefined };
+      });
+      qc.setQueryData<IssuesResponse>(issuesKeys.list(), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          issues: current.issues.map((issue) =>
+            issue.id === storyId && issue.kind === "story"
+              ? { ...issue, review: undefined }
+              : issue,
+          ),
+        };
+      });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(storyId) });
+      qc.invalidateQueries({ queryKey: issuesKeys.comments(storyId) });
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
     },
   });
 }
