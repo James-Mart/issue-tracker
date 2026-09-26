@@ -49,7 +49,6 @@ const { startStoreBackupSnapshotDriver } = await import(
 startStoreBackupSnapshotDriver();
 
 const app = createApp();
-const prewarmReleases = await prewarmProjectWorkspaces();
 
 const { scrubOrphanedRunsAtBoot } = await import(
   "./services/orphan-run-scrub.js"
@@ -85,6 +84,13 @@ const server = app.listen(listenPort, () => {
 });
 attachMultiplexedWebSocket(server);
 attachMockupStackProxy(server);
+
+// Optional warm-up: the first `send()` against a cold workspace does the work
+// itself, so this must not delay `listen()`.
+const prewarmReleases = prewarmProjectWorkspaces().catch((err: unknown) => {
+  console.error("workspace prewarm failed", err);
+  return [];
+});
 
 let shuttingDown = false;
 

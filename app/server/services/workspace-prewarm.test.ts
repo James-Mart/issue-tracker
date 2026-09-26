@@ -182,6 +182,31 @@ describe("shutdown prewarm releases", () => {
     expect(order).toEqual(["dispose", "release-a", "release-b"]);
   });
 
+  it("disposes sessions before awaiting a still-pending prewarm", async () => {
+    const order: string[] = [];
+    let finishPrewarm!: (releases: Array<() => Promise<void>>) => void;
+    const pending = new Promise<Array<() => Promise<void>>>((resolve) => {
+      finishPrewarm = resolve;
+    });
+
+    const { disposeSessionsAndReleasePrewarm } = await import(
+      "./workspace-prewarm.js"
+    );
+    const shutdown = disposeSessionsAndReleasePrewarm(async () => {
+      order.push("dispose");
+    }, pending);
+    await Promise.resolve();
+    order.push("prewarm-done");
+    finishPrewarm([
+      async () => {
+        order.push("release");
+      },
+    ]);
+    await shutdown;
+
+    expect(order).toEqual(["dispose", "prewarm-done", "release"]);
+  });
+
   it("calls every release when one of them throws", async () => {
     const called: string[] = [];
     const { releasePrewarmedWorkspaces } = await import(

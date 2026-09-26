@@ -46,14 +46,15 @@ export async function releasePrewarmedWorkspaces(
 
 /**
  * Agent sessions dispose first so in-flight runs finish against the warmed
- * executor; the prewarm leases are released after that.
+ * executor; the prewarm leases are released after that. `releases` may still
+ * be pending when boot prewarm runs in the background.
  */
 export async function disposeSessionsAndReleasePrewarm(
   disposeAll: () => Promise<void>,
-  releases: readonly PrewarmRelease[],
+  releases: readonly PrewarmRelease[] | Promise<readonly PrewarmRelease[]>,
 ): Promise<void> {
   await disposeAll();
-  await releasePrewarmedWorkspaces(releases);
+  await releasePrewarmedWorkspaces(await releases);
 }
 
 function projectWorkspace(
