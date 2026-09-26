@@ -18,10 +18,13 @@ import { z } from "zod";
 import { conversationsDir } from "../config.js";
 import type { Issue, Runtime } from "../schemas.js";
 import { isSlugSafe } from "../slug.js";
+import { collectAgentStackMemoryLimitFailures } from "./agent-stack-heap-reports.js";
 import {
   createPhaseOutputMasker,
   loadPhaseSecrets,
 } from "./agent-stack-secrets.js";
+
+export { agentStackMemoryLimitMessage } from "./agent-stack-heap-reports.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
 import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
@@ -31,6 +34,8 @@ import { ancestorChain } from "./subtree.js";
  * The Project runtime declaration owns how that stack is built and started.
  * Agents verify here instead of on the human's stack.
  */
+
+const PHASE_HEAP_MB = 2048;
 
 const READY_TIMEOUT_MS = 90_000;
 const READY_POLL_MS = 250;
@@ -94,12 +99,14 @@ export interface AgentStackHandle {
   env: Record<string, string>;
   /** True when a live stack for this conversation was already running. */
   reused: boolean;
+  /** Heap-limit death lines from this stack's reports, in report order. */
+  memoryLimitFailures: string[];
 }
 
 /** `stopped: false` means no stack was recorded for the conversation. */
 export type AgentStackStopResult =
-  | { stopped: true; state: AgentStackState }
-  | { stopped: false; state: null };
+  | { stopped: true; state: AgentStackState; memoryLimitFailures: string[] }
+  | { stopped: false; state: null; memoryLimitFailures: string[] };
 
 function assertConversationId(conversationId: string): void {
   if (!isSlugSafe(conversationId)) {
@@ -481,15 +488,42 @@ function stackVarEnv(resources: StackResources): Record<string, string> {
   };
 }
 
+function appendNodeOptions(
+  existing: string | undefined,
+  ...flags: string[]
+): string {
+  const addition = flags.join(" ");
+  const trimmed = existing?.trim();
+  return trimmed ? `${trimmed} ${addition}` : addition;
+}
+
+function phaseNodeOptions(dataDir: string): string {
+  const heapReportDir = join(dataDir, "heap-reports");
+  return appendNodeOptions(
+    process.env.NODE_OPTIONS,
+    `--max-old-space-size=${PHASE_HEAP_MB}`,
+    "--report-on-fatalerror",
+    `--report-directory=${heapReportDir}`,
+  );
+}
+
+/** Linux phase shells set maximum OOM score before running the declared command. */
+function wrapPhaseShellCommand(command: string): string {
+  if (process.platform !== "linux") return command;
+  return `echo 1000 > /proc/self/oom_score_adj; ${command}`;
+}
+
 function phaseEnv(
   resources: StackResources,
   baseUrl: string | undefined,
   secrets: Record<string, string>,
 ): NodeJS.ProcessEnv {
+  mkdirSync(join(resources.dataDir, "heap-reports"), { recursive: true });
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...secrets,
     ...stackVarEnv(resources),
+    NODE_OPTIONS: phaseNodeOptions(resources.dataDir),
   };
   if (baseUrl === undefined) delete env.AGENT_STACK_BASE_URL;
   else env.AGENT_STACK_BASE_URL = baseUrl;
@@ -516,7 +550,7 @@ function runShell(
   timeoutMs?: number,
 ): Promise<{ code: number; output: string }> {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn("sh", ["-c", command], {
+    const child = spawn("sh", ["-c", wrapPhaseShellCommand(command)], {
       cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
@@ -708,7 +742,7 @@ async function bootDeclaredRuntime(
     spawned = await spawnChild(
       "start",
       "sh",
-      ["-c", runtime.start!],
+      ["-c", wrapPhaseShellCommand(runtime.start!)],
       phaseEnv(resources, undefined, secrets),
       conversationId,
       boot.worktree,
@@ -738,7 +772,12 @@ async function bootDeclaredRuntime(
         spawned,
       );
     }
-    return { state, env: agentStackEnv(state), reused: false };
+    return {
+      state,
+      env: agentStackEnv(state),
+      reused: false,
+      memoryLimitFailures: [],
+    };
   } catch (err) {
     if (stateWritten) await stopAgentStack(conversationId);
     else {
@@ -773,17 +812,30 @@ export async function startAgentStack(
   const secrets = loadPhaseSecrets(boot.projectId);
 
   const existing = readAgentStackState(conversationId);
+  let memoryLimitFailures: string[] = [];
   if (existing) {
     if (isStackLive(existing) && existing.worktree === boot.worktree) {
       const state = cursorConversationId === undefined
         ? existing
         : rememberCursorConversationId(existing, cursorConversationId);
-      return { state, env: agentStackEnv(state), reused: true };
+      return {
+        state,
+        env: agentStackEnv(state),
+        reused: true,
+        memoryLimitFailures: [],
+      };
     }
+    memoryLimitFailures = collectAgentStackMemoryLimitFailures(existing.dataDir);
     await stopAgentStack(conversationId);
   }
 
-  return bootDeclaredRuntime(conversationId, boot, cursorConversationId, secrets);
+  const handle = await bootDeclaredRuntime(
+    conversationId,
+    boot,
+    cursorConversationId,
+    secrets,
+  );
+  return { ...handle, memoryLimitFailures };
 }
 
 function signalGroup(pid: number, signal: NodeJS.Signals): void {
@@ -872,7 +924,9 @@ export async function stopAgentStack(
 ): Promise<AgentStackStopResult> {
   ensureChildReaper();
   const state = readAgentStackState(conversationId);
-  if (!state) return { stopped: false, state: null };
+  if (!state) return { stopped: false, state: null, memoryLimitFailures: [] };
+
+  const memoryLimitFailures = collectAgentStackMemoryLimitFailures(state.dataDir);
 
   const owned = state.processes.filter(isOurRecordedProcess);
   const live = owned.filter(isProcessLive);
@@ -905,7 +959,7 @@ export async function stopAgentStack(
   }
 
   releaseStoppedStack(state);
-  return { stopped: true, state };
+  return { stopped: true, state, memoryLimitFailures };
 }
 
 function releaseStoppedStack(state: AgentStackState): void {

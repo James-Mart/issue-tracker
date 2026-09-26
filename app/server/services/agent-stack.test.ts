@@ -399,6 +399,7 @@ describe("stopAgentStack", () => {
     await expect(stopAgentStack("my-conversation")).resolves.toEqual({
       stopped: false,
       state: null,
+      memoryLimitFailures: [],
     });
   });
 
@@ -723,4 +724,250 @@ describe("dropUnownedAgentStackRecords", () => {
     expect(dropUnownedAgentStackRecords()).toEqual([]);
     expect(existsSync(agentStackStatePath("my-conversation"))).toBe(true);
   });
+});
+
+const HEAP_OOM_EVENT = "Allocation failed - JavaScript heap out of memory";
+
+function writeHeapLimitReport(
+  heapReportsDir: string,
+  commandLine: string[],
+): void {
+  mkdirSync(heapReportsDir, { recursive: true });
+  writeFileSync(
+    join(heapReportsDir, `report.1.127.0.0.1.${Date.now()}.json`),
+    JSON.stringify({ header: { event: HEAP_OOM_EVENT, commandLine } }),
+  );
+}
+
+describe("agent stack heap limit reporting", () => {
+  async function recordDeadStack(conversationId: string, dataDir: string) {
+    const { agentStackDir, agentStackStatePath } = await loadService();
+    mkdirSync(dataDir, { recursive: true });
+    mkdirSync(agentStackDir(conversationId), { recursive: true });
+    const deadPid = 2 ** 30;
+    writeFileSync(
+      agentStackStatePath(conversationId),
+      JSON.stringify({
+        conversationId,
+        issueId: "story-a",
+        worktree: workspace,
+        port: 41002,
+        auxPort: 41001,
+        dataDir,
+        baseUrl: "http://127.0.0.1:41002",
+        startedAt: STAMP,
+        processes: [{ role: "start" as const, pid: deadPid, startTime: "1" }],
+        cursorConversationIds: [],
+      }),
+    );
+  }
+
+  function spawnRuntimeStartListener(): typeof spawnDelegate.impl {
+    return (_command, _args, options) => {
+      const child = realSpawn(
+        "node",
+        [
+          "-e",
+          "require('net').createServer().listen(Number(process.env.AGENT_STACK_PORT),'127.0.0.1'); setInterval(() => {}, 1e9);",
+        ],
+        {
+          ...(options ?? {}),
+          detached: true,
+          stdio: "ignore",
+        },
+      );
+      strays.push(child);
+      return child;
+    };
+  }
+
+  it("start on a dead recorded stack returns the line in memoryLimitFailures and restarts", async () => {
+    spawnDelegate.impl = spawnRuntimeStartListener();
+    const { conversationsDir } = await loadConfig();
+    const dataDir = join(
+      conversationsDir,
+      "my-conversation",
+      "agent-stack",
+      "data",
+    );
+    const commandLine = ["node", "server.js"];
+    writeHeapLimitReport(join(dataDir, "heap-reports"), commandLine);
+    await recordDeadStack("my-conversation", dataDir);
+
+    const { startAgentStack, agentStackMemoryLimitMessage, stopAgentStack } =
+      await loadService();
+    const handle = await startAgentStack("my-conversation", { issueId: "story-a" });
+
+    expect(handle.memoryLimitFailures).toEqual([
+      agentStackMemoryLimitMessage(commandLine),
+    ]);
+    expect(handle.reused).toBe(false);
+    expect(handle.state.processes[0]!.pid).not.toBe(2 ** 30);
+
+    await stopAgentStack("my-conversation");
+  });
+
+  it("stop returns heap-limit lines in memoryLimitFailures", async () => {
+    const { conversationsDir } = await loadConfig();
+    const dataDir = join(
+      conversationsDir,
+      "my-conversation",
+      "agent-stack",
+      "data",
+    );
+    const commandLine = ["node", "vite.js"];
+    writeHeapLimitReport(join(dataDir, "heap-reports"), commandLine);
+    await recordDeadStack("my-conversation", dataDir);
+
+    const { stopAgentStack, agentStackMemoryLimitMessage } = await loadService();
+    const result = await stopAgentStack("my-conversation");
+
+    expect(result.stopped).toBe(true);
+    expect(result.memoryLimitFailures).toEqual([
+      agentStackMemoryLimitMessage(commandLine),
+    ]);
+  });
+
+  it("leaves memoryLimitFailures empty when the report event is not heap exhaustion", async () => {
+    const { conversationsDir } = await loadConfig();
+    const dataDir = join(
+      conversationsDir,
+      "my-conversation",
+      "agent-stack",
+      "data",
+    );
+    mkdirSync(join(dataDir, "heap-reports"), { recursive: true });
+    writeFileSync(
+      join(dataDir, "heap-reports", `report.1.127.0.0.1.${Date.now()}.json`),
+      JSON.stringify({
+        header: { event: "other", commandLine: ["node", "server.js"] },
+      }),
+    );
+    await recordDeadStack("my-conversation", dataDir);
+
+    const { stopAgentStack } = await loadService();
+    const result = await stopAgentStack("my-conversation");
+
+    expect(result.memoryLimitFailures).toEqual([]);
+  });
+});
+
+describe("agent stack memory hardening", () => {
+  function isDetachedStartPhaseSpawn(
+    command: string,
+    args: readonly string[],
+    options: import("node:child_process").SpawnOptions | undefined,
+  ): boolean {
+    const env = options?.env as NodeJS.ProcessEnv | undefined;
+    return (
+      command === "sh" &&
+      args[0] === "-c" &&
+      options?.detached === true &&
+      env?.AGENT_STACK_PORT !== undefined
+    );
+  }
+
+  function spawnPhaseStartWithCapturedEnv(
+    capturedEnvs: NodeJS.ProcessEnv[],
+  ): typeof spawnDelegate.impl {
+    return (command, args, options) => {
+      if (isDetachedStartPhaseSpawn(command, args, options)) {
+        capturedEnvs.push({ ...(options?.env as NodeJS.ProcessEnv) });
+        const child = realSpawn(
+          "node",
+          [
+            "-e",
+            "require('net').createServer().listen(Number(process.env.AGENT_STACK_PORT),'127.0.0.1'); setInterval(() => {}, 1e9);",
+          ],
+          {
+            ...(options ?? {}),
+            detached: true,
+            stdio: "ignore",
+          },
+        );
+        strays.push(child);
+        return child;
+      }
+      const child = realSpawn(command, args, options ?? {});
+      if (options?.detached) strays.push(child);
+      return child;
+    };
+  }
+
+  function spawnPhaseStartWithNodeChild(
+    nodePidFile: string,
+  ): typeof spawnDelegate.impl {
+    return (command, args, options) => {
+      if (command === "sh" && args[1]?.includes("oom_score_adj")) {
+        const nodeScript =
+          `require('fs').writeFileSync(${JSON.stringify(nodePidFile)}, String(process.pid)); ` +
+          "require('net').createServer().listen(Number(process.env.AGENT_STACK_PORT),'127.0.0.1'); " +
+          "setInterval(()=>{}, 1e9);";
+        const patched = [...args];
+        const wrapped = patched[1]!;
+        patched[1] = wrapped.replace(
+          /; sleep 30$/,
+          `; node -e ${JSON.stringify(nodeScript)}`,
+        );
+        if (patched[1] === wrapped) {
+          throw new Error("expected seeded runtime start command in wrapped script");
+        }
+        const child = realSpawn(command, patched, {
+          ...(options ?? {}),
+          detached: true,
+          stdio: "ignore",
+        });
+        strays.push(child);
+        return child;
+      }
+      const child = realSpawn(command, args, options ?? {});
+      if (options?.detached) strays.push(child);
+      return child;
+    };
+  }
+
+  it("appends heap limit NODE_OPTIONS when spawning a runtime phase", async () => {
+    vi.stubEnv("NODE_OPTIONS", "--enable-source-maps");
+    const capturedEnvs: NodeJS.ProcessEnv[] = [];
+    spawnDelegate.impl = spawnPhaseStartWithCapturedEnv(capturedEnvs);
+
+    const { startAgentStack, stopAgentStack } = await loadService();
+    const { conversationsDir } = await loadConfig();
+
+    await startAgentStack("my-conversation", { issueId: "story-a" });
+
+    expect(capturedEnvs.length).toBeGreaterThan(0);
+    const env = capturedEnvs[0]!;
+    const dataDir = join(conversationsDir, "my-conversation", "agent-stack", "data");
+    const heapReports = join(dataDir, "heap-reports");
+    expect(env.NODE_OPTIONS).toContain("--enable-source-maps");
+    expect(env.NODE_OPTIONS).toContain("--max-old-space-size=2048");
+    expect(env.NODE_OPTIONS).toContain("--report-on-fatalerror");
+    expect(env.NODE_OPTIONS).toContain(`--report-directory=${heapReports}`);
+
+    await stopAgentStack("my-conversation");
+  });
+
+  it.skipIf(process.platform !== "linux")(
+    "sets oom_score_adj to 1000 on the phase shell and its Node child",
+    async () => {
+      const nodePidFile = join(root, "node.pid");
+      spawnDelegate.impl = spawnPhaseStartWithNodeChild(nodePidFile);
+      const serverOomBefore = readFileSync("/proc/self/oom_score_adj", "utf8").trim();
+
+      const { startAgentStack, stopAgentStack } = await loadService();
+
+      const handle = await startAgentStack("my-conversation", { issueId: "story-a" });
+      const shellPid = handle.state.processes[0]!.pid;
+      const nodePid = Number(await waitForFile(nodePidFile));
+
+      expect(readFileSync(`/proc/${shellPid}/oom_score_adj`, "utf8").trim()).toBe("1000");
+      expect(readFileSync(`/proc/${nodePid}/oom_score_adj`, "utf8").trim()).toBe("1000");
+      expect(readFileSync("/proc/self/oom_score_adj", "utf8").trim()).toBe(
+        serverOomBefore,
+      );
+
+      await stopAgentStack("my-conversation");
+    },
+  );
 });
