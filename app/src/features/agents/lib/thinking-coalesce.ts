@@ -11,6 +11,8 @@ export function isTopLevelThinkingInterrupt(event: TranscriptEvent): boolean {
   switch (event.type) {
     case "thinking":
     case "usage":
+    case "run_usage":
+    case "run_cost":
     case "subagent_update":
     case "absorbed_replay":
       return false;

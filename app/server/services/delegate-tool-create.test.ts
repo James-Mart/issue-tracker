@@ -565,7 +565,7 @@ describe("createDelegateCustomTools", () => {
     await Promise.all([...held, afterFailure]);
   });
 
-  it("returns structured auth failure when wait() resolves error with auth text", async () => {
+  it("returns structured auth failure when wait() resolves error with an auth code", async () => {
     const authMessage =
       "Authentication error. If you are logged in, try logging out and back in.";
     const fake = createFakeAgentSdk({
@@ -575,6 +575,7 @@ describe("createDelegateCustomTools", () => {
         status: "error",
         error: {
           message: authMessage,
+          code: "AUTH_TOKEN_EXPIRED",
           isRetryable: true,
         },
       },

@@ -50,7 +50,7 @@ export const DESKTOP_SEQUENCE_METRICS = {
   sectionHeaderHeight: 36,
   lifelineGap: 116,
   labelW: 88,
-  durationCol: 168,
+  durationCol: 420,
   openTail: 40,
   failedCap: 20,
 } as const;

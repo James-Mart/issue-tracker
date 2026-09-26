@@ -1,4 +1,8 @@
 import { formatRunDurationMs } from "@/features/issues/components/agent-runs-panel";
+import {
+  formatSequenceCostClause,
+  type SequenceCost,
+} from "@server/services/run-sequence-cost";
 import type { RunCondition } from "./run-list";
 
 export type SequenceLifelineKind = "human" | "coordinator" | "role";
@@ -46,6 +50,8 @@ export type SequenceBeat = {
   variant?: string;
   /** Sum of attributed `usage.totalTokens` for this beat. */
   tokenTotal?: number;
+  /** Attributed runs' cost, same states as the thread strip. */
+  cost?: SequenceCost;
   /** Wall-clock ms from run start to this closed beat's end. */
   cumulativeMs?: number;
 };
@@ -75,6 +81,8 @@ export type RunSequence = {
   rootIssue?: RunSequenceRootIssue;
   /** Sum of every persisted `usage.totalTokens` on the conversation. */
   tokenTotal?: number;
+  /** Cost rolled up from the beats this sequence shows. */
+  cost?: SequenceCost;
 };
 
 /** Greatest `beatEnd` in the section tree; `-1` when there are no sections. */
@@ -210,4 +218,26 @@ export function formatSequenceTokenTotal(
   const compact = formatSequenceTokens(tokenTotal);
   if (compact === undefined) return undefined;
   return `${compact} tokens`;
+}
+
+/** Token count plus the cost clause, separated by ` · `. */
+export function formatSequenceTokensAndCost(
+  tokenTotal: number | undefined,
+  cost: SequenceCost | undefined,
+): string | undefined {
+  const tokens = formatSequenceTokens(tokenTotal);
+  const clause = formatSequenceCostClause(cost);
+  if (tokens !== undefined && clause !== undefined) return `${tokens} · ${clause}`;
+  return tokens ?? clause;
+}
+
+/** Header token phrase plus the rolled-up cost clause. */
+export function formatSequenceHeaderTotals(
+  tokenTotal: number | undefined,
+  cost: SequenceCost | undefined,
+): string | undefined {
+  const tokens = formatSequenceTokenTotal(tokenTotal);
+  const clause = formatSequenceCostClause(cost);
+  if (tokens !== undefined && clause !== undefined) return `${tokens} · ${clause}`;
+  return tokens ?? clause;
 }

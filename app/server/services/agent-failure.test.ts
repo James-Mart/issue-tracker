@@ -112,20 +112,34 @@ describe("isContentEvent", () => {
 });
 
 describe("classifyAgentFailure", () => {
-  it("returns auth for auth failure text", () => {
+  it("returns auth for AuthenticationError name", () => {
     expect(
-      classifyAgentFailure("error", { message: AUTH_ERROR_TEXT }),
+      classifyAgentFailure("error", {
+        message: "token expired",
+        name: "AuthenticationError",
+      }),
     ).toBe("auth");
   });
 
-  it.each(["unauthenticated", "AUTH_TOKEN_EXPIRED", "UNAUTHORIZED"])(
-    "returns auth for error code %s",
-    (code) => {
-      expect(
-        classifyAgentFailure("error", { message: "something else", code }),
-      ).toBe("auth");
-    },
-  );
+  it.each([
+    "unauthenticated",
+    "AUTH_TOKEN_EXPIRED",
+    "UNAUTHORIZED",
+    "AUTH_TOKEN_NOT_FOUND",
+  ])("returns auth for error code %s", (code) => {
+    expect(
+      classifyAgentFailure("error", { message: "something else", code }),
+    ).toBe("auth");
+  });
+
+  it("returns transport-exhausted for NetworkError name", () => {
+    expect(
+      classifyAgentFailure("error", {
+        message: "service unavailable",
+        name: "NetworkError",
+      }),
+    ).toBe("transport-exhausted");
+  });
 
   it("returns cancelled for cancelled status", () => {
     expect(classifyAgentFailure("cancelled", undefined)).toBe("cancelled");
@@ -150,13 +164,20 @@ describe("classifyAgentFailure", () => {
     ).toBe("transport-exhausted");
   });
 
-  it("returns auth when auth text and a transport code both appear", () => {
+  it("returns auth when an auth code and a transport code both appear", () => {
     expect(
       classifyAgentFailure("error", {
-        message: AUTH_ERROR_TEXT,
-        code: "unavailable",
+        message: "something else",
+        code: "unauthenticated",
+        name: "NetworkError",
       }),
     ).toBe("auth");
+  });
+
+  it("does not classify auth failure text without a code or class name", () => {
+    expect(
+      classifyAgentFailure("error", { message: AUTH_ERROR_TEXT }),
+    ).toBe("agent-failed");
   });
 
   it("returns agent-failed for an unknown error", () => {

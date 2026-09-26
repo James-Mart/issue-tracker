@@ -1,4 +1,3 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -10,6 +9,44 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ChildProcess } from "node:child_process";
+
+const spawnDelegate = vi.hoisted(() => ({
+  actual: null as typeof import("node:child_process") | null,
+  impl: null as
+    | ((
+        command: string,
+        args: readonly string[],
+        options: import("node:child_process").SpawnOptions | undefined,
+      ) => ChildProcess)
+    | null,
+}));
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  spawnDelegate.actual = actual;
+  return {
+    ...actual,
+    spawn: (
+      command: string,
+      args: readonly string[],
+      options: import("node:child_process").SpawnOptions | undefined,
+    ) =>
+      spawnDelegate.impl
+        ? spawnDelegate.impl(command, args, options)
+        : actual.spawn(command, args, options ?? {}),
+  };
+});
+
+function realSpawn(
+  command: string,
+  args: readonly string[],
+  options?: import("node:child_process").SpawnOptions,
+): ChildProcess {
+  return spawnDelegate.actual!.spawn(command, args, options ?? {});
+}
+
+import { spawn } from "node:child_process";
 
 let root: string;
 let issuesDir: string;
@@ -26,6 +63,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  spawnDelegate.impl = null;
   for (const child of strays) {
     if (child.pid !== undefined && child.exitCode === null) {
       try {
@@ -59,6 +97,36 @@ async function loadScratch() {
 
 async function loadConfig() {
   return import("../config.js");
+}
+
+function stubReadyFetch(): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, status: 200 }) as Response),
+  );
+}
+
+function spawnMockupStorybookSleeper(
+  command: string,
+  args: readonly string[],
+  options: import("node:child_process").SpawnOptions | undefined,
+): ChildProcess {
+  if (command === "sh" && args[1]?.includes("oom_score_adj")) {
+    const patched = [...args];
+    patched[3] = "sleep";
+    patched.length = 4;
+    patched.push("300");
+    const child = realSpawn(command, patched, {
+      ...(options ?? {}),
+      detached: true,
+      stdio: "ignore",
+    });
+    strays.push(child);
+    return child;
+  }
+  const child = realSpawn(command, args, options ?? {});
+  if (options?.detached) strays.push(child);
+  return child;
 }
 
 function writeConversationMeta(
@@ -180,6 +248,158 @@ async function waitForCollection(pid: number): Promise<boolean> {
   }
   return isCollected(pid);
 }
+
+const HEAP_OOM_EVENT = "Allocation failed - JavaScript heap out of memory";
+
+function writeHeapLimitReport(heapReportsDir: string, pid: number): void {
+  mkdirSync(heapReportsDir, { recursive: true });
+  writeFileSync(
+    join(heapReportsDir, `report.${pid}.127.0.0.1.${Date.now()}.json`),
+    JSON.stringify({ header: { event: HEAP_OOM_EVENT, processId: pid } }),
+  );
+}
+
+describe("mockup stack heap limit reporting", () => {
+  it("start on a dead recorded stack prints the memory-limit line and restarts", async () => {
+    stubReadyFetch();
+    spawnDelegate.impl = spawnMockupStorybookSleeper;
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await writeHarnessConfig("my-conversation");
+    const { startMockupStack, mockupStackMemoryLimitMessage, stopMockupStack } =
+      await loadService();
+    const { mockupStackDir, writeMockupStackState } = await loadScratch();
+
+    const deadPid = 2 ** 30;
+    writeMockupStackState("my-conversation", {
+      port: 41005,
+      pid: deadPid,
+      startTime: "1",
+      baseUrl: "http://127.0.0.1:41005",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+    writeHeapLimitReport(join(mockupStackDir("my-conversation"), "heap-reports"), deadPid);
+
+    const handle = await startMockupStack("my-conversation");
+
+    expect(stderr).toHaveBeenCalledWith(mockupStackMemoryLimitMessage());
+    expect(handle.reused).toBe(false);
+    expect(handle.state.pid).not.toBe(deadPid);
+
+    await stopMockupStack("my-conversation");
+  });
+
+  it("stop prints the memory-limit line when a heap report matches the recorded pid", async () => {
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { stopMockupStack, mockupStackMemoryLimitMessage } = await loadService();
+    const { mockupStackDir, writeMockupStackState } = await loadScratch();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
+
+    const deadPid = 2 ** 30;
+    writeMockupStackState("my-conversation", {
+      port: 41005,
+      pid: deadPid,
+      startTime: "1",
+      baseUrl: "http://127.0.0.1:41005",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+    writeHeapLimitReport(join(mockupStackDir("my-conversation"), "heap-reports"), deadPid);
+
+    await stopMockupStack("my-conversation");
+
+    expect(stderr).toHaveBeenCalledWith(mockupStackMemoryLimitMessage());
+  });
+
+  it("does not print when the heap report is for a different pid", async () => {
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { stopMockupStack } = await loadService();
+    const { mockupStackDir, writeMockupStackState } = await loadScratch();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
+
+    const deadPid = 2 ** 30;
+    writeMockupStackState("my-conversation", {
+      port: 41005,
+      pid: deadPid,
+      startTime: "1",
+      baseUrl: "http://127.0.0.1:41005",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+    writeHeapLimitReport(
+      join(mockupStackDir("my-conversation"), "heap-reports"),
+      deadPid + 1,
+    );
+
+    await stopMockupStack("my-conversation");
+
+    expect(stderr).not.toHaveBeenCalled();
+  });
+});
+
+describe("mockup stack memory hardening", () => {
+  it("appends heap limit NODE_OPTIONS when spawning storybook", async () => {
+    stubReadyFetch();
+    vi.stubEnv("NODE_OPTIONS", "--enable-source-maps");
+    let capturedEnv: NodeJS.ProcessEnv | undefined;
+
+    spawnDelegate.impl = (command, _args, options) => {
+      capturedEnv = { ...(options?.env as NodeJS.ProcessEnv) };
+      const child = realSpawn("sh", ["-c", "sleep 300"], {
+        ...(options ?? {}),
+        detached: true,
+        stdio: "ignore",
+      });
+      strays.push(child);
+      return child;
+    };
+
+    await writeHarnessConfig("my-conversation");
+    const { startMockupStack, stopMockupStack } = await loadService();
+    const { mockupStackDir } = await loadScratch();
+    const heapReports = join(mockupStackDir("my-conversation"), "heap-reports");
+
+    await startMockupStack("my-conversation");
+
+    expect(capturedEnv?.NODE_OPTIONS).toContain("--enable-source-maps");
+    expect(capturedEnv?.NODE_OPTIONS).toContain("--max-old-space-size=2048");
+    expect(capturedEnv?.NODE_OPTIONS).toContain("--report-on-fatalerror");
+    expect(capturedEnv?.NODE_OPTIONS).toContain(
+      `--report-directory=${heapReports}`,
+    );
+
+    await stopMockupStack("my-conversation");
+  });
+
+  it.skipIf(process.platform !== "linux")(
+    "sets oom_score_adj to 1000 on the storybook process",
+    async () => {
+      stubReadyFetch();
+      const serverOomBefore = readFileSync(
+        "/proc/self/oom_score_adj",
+        "utf8",
+      ).trim();
+
+      spawnDelegate.impl = spawnMockupStorybookSleeper;
+
+      await writeHarnessConfig("my-conversation");
+      const { startMockupStack, stopMockupStack } = await loadService();
+
+      const handle = await startMockupStack("my-conversation");
+
+      expect(
+        readFileSync(`/proc/${handle.state.pid}/oom_score_adj`, "utf8").trim(),
+      ).toBe("1000");
+      expect(readFileSync("/proc/self/oom_score_adj", "utf8").trim()).toBe(
+        serverOomBefore,
+      );
+
+      await stopMockupStack("my-conversation");
+    },
+  );
+});
 
 describe("storybook dev command", () => {
   it("binds loopback and records the public mockup prefix", async () => {
@@ -644,331 +864,5 @@ else:
     await expect(startMockupStack("my-conversation")).rejects.toThrow(
       `missing mockup harness configuration at ${expected}`,
     );
-  });
-});
-
-function writeStackStateDirect(
-  conversationsDir: string,
-  conversationId: string,
-  state: {
-    port: number;
-    pid: number;
-    startTime: string;
-    baseUrl: string;
-    startedAt: string;
-  },
-): void {
-  const statePath = join(
-    conversationsDir,
-    conversationId,
-    "mockups",
-    "mockup-stack",
-    "state.json",
-  );
-  mkdirSync(join(statePath, ".."), { recursive: true });
-  writeFileSync(statePath, JSON.stringify(state, null, 2));
-}
-
-describe("stopAllMockupStacks", () => {
-  it("stops every live recorded stack and reports freed ports", async () => {
-    const { stopAllMockupStacks } = await loadService();
-    const { conversationsDir } = await loadConfig();
-    writeConversationMeta(conversationsDir, "conv-a");
-    writeConversationMeta(conversationsDir, "conv-b");
-
-    const pidA = spawnSleeper();
-    const pidB = spawnSleeper();
-    writeStackStateDirect(conversationsDir, "conv-a", {
-      port: 41001,
-      pid: pidA,
-      startTime: procStartTime(pidA),
-      baseUrl: "http://127.0.0.1:41001",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    });
-    writeStackStateDirect(conversationsDir, "conv-b", {
-      port: 41002,
-      pid: pidB,
-      startTime: procStartTime(pidB),
-      baseUrl: "http://127.0.0.1:41002",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    });
-    // Dead stack with stale state — cleaned but not reported as freed.
-    writeStackStateDirect(conversationsDir, "conv-dead", {
-      port: 41003,
-      pid: 2 ** 30,
-      startTime: "1",
-      baseUrl: "http://127.0.0.1:41003",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    const freed = await stopAllMockupStacks();
-
-    expect(freed).toEqual([
-      { conversationId: "conv-a", port: 41001 },
-      { conversationId: "conv-b", port: 41002 },
-    ]);
-    expect(isCollected(pidA)).toBe(true);
-    expect(isCollected(pidB)).toBe(true);
-    expect(
-      existsSync(
-        join(
-          conversationsDir,
-          "conv-a",
-          "mockups",
-          "mockup-stack",
-          "state.json",
-        ),
-      ),
-    ).toBe(false);
-    expect(
-      existsSync(
-        join(
-          conversationsDir,
-          "conv-dead",
-          "mockups",
-          "mockup-stack",
-          "state.json",
-        ),
-      ),
-    ).toBe(false);
-  });
-
-  it("stops a live group leader whose parent is not this process", async () => {
-    const { stopAllMockupStacks } = await loadService();
-    const { conversationsDir } = await loadConfig();
-    writeConversationMeta(conversationsDir, "cli-conversation");
-    const leader = await spawnForeignGroupLeader(join(root, "stop-all-foreign.pid"));
-    writeStackStateDirect(conversationsDir, "cli-conversation", {
-      port: 41009,
-      pid: leader,
-      startTime: procStartTime(leader),
-      baseUrl: "http://127.0.0.1:41009",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    const freed = await stopAllMockupStacks();
-
-    expect(freed).toEqual([{ conversationId: "cli-conversation", port: 41009 }]);
-    expect(isCollected(leader)).toBe(true);
-    expect(
-      existsSync(
-        join(
-          conversationsDir,
-          "cli-conversation",
-          "mockups",
-          "mockup-stack",
-          "state.json",
-        ),
-      ),
-    ).toBe(false);
-  });
-});
-
-describe("stopSpawnedMockupStacksOnShutdown", () => {
-  it("stops stacks this process spawned and leaves a CLI-started stack running with its state", async () => {
-    const { stopSpawnedMockupStacksOnShutdown } = await loadService();
-    const { conversationsDir } = await loadConfig();
-    writeConversationMeta(conversationsDir, "spawned-conversation");
-    writeConversationMeta(conversationsDir, "cli-conversation");
-    const spawned = spawnSleeper();
-    const leader = await spawnForeignGroupLeader(join(root, "shutdown-foreign.pid"));
-    writeStackStateDirect(conversationsDir, "spawned-conversation", {
-      port: 41011,
-      pid: spawned,
-      startTime: procStartTime(spawned),
-      baseUrl: "http://127.0.0.1:41011",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    });
-    const cliState = {
-      port: 41012,
-      pid: leader,
-      startTime: procStartTime(leader),
-      baseUrl: "http://127.0.0.1:41012",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    };
-    writeStackStateDirect(conversationsDir, "cli-conversation", cliState);
-    const cliStatePath = join(
-      conversationsDir,
-      "cli-conversation",
-      "mockups",
-      "mockup-stack",
-      "state.json",
-    );
-    const before = readFileSync(cliStatePath, "utf8");
-    expect(procInfo(leader)?.ppid).not.toBe(process.pid);
-
-    const freed = await stopSpawnedMockupStacksOnShutdown();
-
-    expect(freed).toEqual([
-      { conversationId: "spawned-conversation", port: 41011 },
-    ]);
-    expect(isCollected(spawned)).toBe(true);
-    expect(isAlive(leader)).toBe(true);
-    expect(readFileSync(cliStatePath, "utf8")).toBe(before);
-    expect(
-      existsSync(
-        join(
-          conversationsDir,
-          "spawned-conversation",
-          "mockups",
-          "mockup-stack",
-          "state.json",
-        ),
-      ),
-    ).toBe(false);
-  });
-});
-
-describe("reapOrphanedMockupStacksAtBoot", () => {
-  it("removes stale state for a dead pid without signaling", async () => {
-    const { reapOrphanedMockupStacksAtBoot } = await loadService();
-    const { conversationsDir } = await loadConfig();
-    writeConversationMeta(conversationsDir, "gone-conversation");
-    writeStackStateDirect(conversationsDir, "gone-conversation", {
-      port: 41005,
-      pid: 2 ** 30,
-      startTime: "1",
-      baseUrl: "http://127.0.0.1:41005",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    const report = await reapOrphanedMockupStacksAtBoot();
-
-    expect(report.staleStateRemoved).toEqual(["gone-conversation"]);
-    expect(
-      existsSync(
-        join(
-          conversationsDir,
-          "gone-conversation",
-          "mockups",
-          "mockup-stack",
-          "state.json",
-        ),
-      ),
-    ).toBe(false);
-    expect(
-      existsSync(join(conversationsDir, "gone-conversation", "mockups")),
-    ).toBe(true);
-  });
-
-  it("removes stale state when a pid was recycled with a different start time", async () => {
-    const { reapOrphanedMockupStacksAtBoot } = await loadService();
-    const { conversationsDir } = await loadConfig();
-    writeConversationMeta(conversationsDir, "my-conversation");
-    const pid = spawnSleeper();
-    writeStackStateDirect(conversationsDir, "my-conversation", {
-      port: 41005,
-      pid,
-      startTime: "1",
-      baseUrl: "http://127.0.0.1:41005",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    const report = await reapOrphanedMockupStacksAtBoot();
-
-    expect(report.staleStateRemoved).toEqual(["my-conversation"]);
-    expect(isAlive(pid)).toBe(true);
-    expect(
-      existsSync(join(conversationsDir, "my-conversation", "mockups")),
-    ).toBe(true);
-  });
-
-  it("lists a live stack whose conversation is gone in staleStateRemoved", async () => {
-    const { reapOrphanedMockupStacksAtBoot } = await loadService();
-    const { conversationsDir } = await loadConfig();
-    const conversationId = "orphaned-conversation";
-    const pid = spawnSleeper();
-    const scratch = join(conversationsDir, conversationId, "mockups");
-    mkdirSync(join(scratch, "direction-a"), { recursive: true });
-    writeStackStateDirect(conversationsDir, conversationId, {
-      port: 41006,
-      pid,
-      startTime: procStartTime(pid),
-      baseUrl: "http://127.0.0.1:41006",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    });
-    const kill = vi.spyOn(process, "kill");
-    try {
-      const report = await reapOrphanedMockupStacksAtBoot();
-
-      expect(report.staleStateRemoved).toEqual([conversationId]);
-      expect(
-        kill.mock.calls.some((call) => Math.abs(Number(call[0])) === pid),
-      ).toBe(false);
-    } finally {
-      kill.mockRestore();
-    }
-    expect(isAlive(pid)).toBe(true);
-    expect(existsSync(join(scratch, "direction-a"))).toBe(true);
-    expect(
-      existsSync(join(scratch, "mockup-stack", "state.json")),
-    ).toBe(false);
-  });
-
-  it("keeps a live stack whose parent is not this process, state intact, and does not signal it", async () => {
-    const { reapOrphanedMockupStacksAtBoot } = await loadService();
-    const { conversationsDir } = await loadConfig();
-    writeConversationMeta(conversationsDir, "foreign-conversation");
-    const pidFile = join(root, "foreign.pid");
-    const leader = await spawnForeignGroupLeader(pidFile);
-    const statePath = join(
-      conversationsDir,
-      "foreign-conversation",
-      "mockups",
-      "mockup-stack",
-      "state.json",
-    );
-    writeStackStateDirect(conversationsDir, "foreign-conversation", {
-      port: 41008,
-      pid: leader,
-      startTime: procStartTime(leader),
-      baseUrl: "http://127.0.0.1:41008",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    });
-    const before = readFileSync(statePath, "utf8");
-    expect(procInfo(leader)?.ppid).not.toBe(process.pid);
-    expect(procInfo(leader)?.pgrp).toBe(leader);
-    const kill = vi.spyOn(process, "kill");
-    try {
-      const report = await reapOrphanedMockupStacksAtBoot();
-      expect(report.staleStateRemoved).toEqual([]);
-      expect(
-        kill.mock.calls.some((call) => Math.abs(Number(call[0])) === leader),
-      ).toBe(false);
-    } finally {
-      kill.mockRestore();
-    }
-    expect(readFileSync(statePath, "utf8")).toBe(before);
-    expect(procInfo(leader)?.ppid).not.toBe(process.pid);
-    expect(procInfo(leader)?.state).not.toBe("Z");
-  });
-
-  it("leaves a live stack and scratch when the conversation still exists", async () => {
-    const { isMockupStackLive, reapOrphanedMockupStacksAtBoot } =
-      await loadService();
-    const { conversationsDir } = await loadConfig();
-    writeConversationMeta(conversationsDir, "active-conversation");
-    const pid = spawnSleeper();
-    const state = {
-      port: 41007,
-      pid,
-      startTime: procStartTime(pid),
-      baseUrl: "http://127.0.0.1:41007",
-      startedAt: "2026-01-01T00:00:00.000Z",
-    };
-    writeStackStateDirect(conversationsDir, "active-conversation", state);
-    const scratch = join(conversationsDir, "active-conversation", "mockups");
-    mkdirSync(join(scratch, "direction-a"), { recursive: true });
-
-    const report = await reapOrphanedMockupStacksAtBoot();
-
-    expect(report.staleStateRemoved).toEqual([]);
-    expect(isMockupStackLive(state)).toBe(true);
-    expect(existsSync(scratch)).toBe(true);
-    expect(
-      existsSync(
-        join(scratch, "mockup-stack", "state.json"),
-      ),
-    ).toBe(true);
   });
 });

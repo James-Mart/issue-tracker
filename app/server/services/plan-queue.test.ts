@@ -92,6 +92,7 @@ function fakeSessions(opts?: { failMessage?: string }): {
       const run: ActiveRun = {
         id: `run-${conversationId}`,
         startedAt: AT,
+        steer: async () => "complete_delivered",
         wait: () => Promise.resolve({} as Awaited<ReturnType<ActiveRun["wait"]>>),
       };
       active.set(conversationId, run);
