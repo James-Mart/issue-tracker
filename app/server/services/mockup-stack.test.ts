@@ -14,6 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let root: string;
 let issuesDir: string;
 const strays: ChildProcess[] = [];
+/** Detached group leaders whose parent is not this process. */
+const foreignLeaders: number[] = [];
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-mockup-stack-"));
@@ -34,6 +36,14 @@ afterEach(() => {
     }
   }
   strays.length = 0;
+  for (const pid of foreignLeaders) {
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      // Already reaped by the test.
+    }
+  }
+  foreignLeaders.length = 0;
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   rmSync(root, { recursive: true, force: true });
@@ -122,11 +132,46 @@ function isCollected(pid: number): boolean {
   return !existsSync(`/proc/${pid}`);
 }
 
-function procInfo(pid: number): { state: string; ppid: number } | null {
+function procInfo(
+  pid: number,
+): { state: string; ppid: number; pgrp: number } | null {
   if (!existsSync(`/proc/${pid}/stat`)) return null;
   const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
   const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-  return { state: fields[0]!, ppid: Number(fields[1]) };
+  return {
+    state: fields[0]!,
+    ppid: Number(fields[1]),
+    pgrp: Number(fields[2]),
+  };
+}
+
+/**
+ * A detached process-group leader whose parent is another process. The parent
+ * reaps it, so a stop that signals the group can observe it leave `/proc`.
+ */
+async function spawnForeignGroupLeader(pidFile: string): Promise<number> {
+  const holder = spawn(
+    "python3",
+    [
+      "-c",
+      `import os, time
+pid = os.fork()
+if pid == 0:
+    os.setsid()
+    open(${JSON.stringify(pidFile)}, "w").write(str(os.getpid()))
+    time.sleep(300)
+    os._exit(0)
+else:
+    os.wait()
+    time.sleep(1)
+`,
+    ],
+    { detached: true, stdio: "ignore" },
+  );
+  strays.push(holder);
+  const leader = Number(await waitForFile(pidFile));
+  foreignLeaders.push(leader);
+  return leader;
 }
 
 async function waitForCollection(pid: number): Promise<boolean> {
@@ -416,6 +461,56 @@ describe("mockup stack lifecycle", () => {
     expect(after?.state).not.toBe("Z");
   });
 
+  it("signals a live group leader whose parent is not this process", async () => {
+    const { stopMockupStack } = await loadService();
+    const { mockupStackStatePath, writeMockupStackState } = await loadScratch();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
+    const leader = await spawnForeignGroupLeader(join(root, "stop-foreign.pid"));
+    expect(procInfo(leader)?.ppid).not.toBe(process.pid);
+    expect(procInfo(leader)?.pgrp).toBe(leader);
+    writeMockupStackState("my-conversation", {
+      port: 41005,
+      pid: leader,
+      startTime: procStartTime(leader),
+      baseUrl: "http://127.0.0.1:41005",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const result = await stopMockupStack("my-conversation");
+
+    expect(result.stopped).toBe(true);
+    expect(isCollected(leader)).toBe(true);
+    expect(existsSync(mockupStackStatePath("my-conversation"))).toBe(false);
+  });
+
+  it("does not signal a recycled pid whose start time differs", async () => {
+    const { stopMockupStack } = await loadService();
+    const { mockupStackStatePath, writeMockupStackState } = await loadScratch();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "my-conversation");
+    const pid = spawnSleeper();
+    writeMockupStackState("my-conversation", {
+      port: 41005,
+      pid,
+      startTime: "1",
+      baseUrl: "http://127.0.0.1:41005",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const kill = vi.spyOn(process, "kill");
+    try {
+      const result = await stopMockupStack("my-conversation");
+      expect(result.stopped).toBe(true);
+      expect(existsSync(mockupStackStatePath("my-conversation"))).toBe(false);
+      expect(
+        kill.mock.calls.some((call) => Math.abs(Number(call[0])) === pid),
+      ).toBe(false);
+    } finally {
+      kill.mockRestore();
+    }
+    expect(isAlive(pid)).toBe(true);
+  });
+
   it(
     "rejects only after waitpid collects a group still uncollected past KILL_GRACE",
     async () => {
@@ -655,6 +750,91 @@ describe("stopAllMockupStacks", () => {
       ),
     ).toBe(false);
   });
+
+  it("stops a live group leader whose parent is not this process", async () => {
+    const { stopAllMockupStacks } = await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "cli-conversation");
+    const leader = await spawnForeignGroupLeader(join(root, "stop-all-foreign.pid"));
+    writeStackStateDirect(conversationsDir, "cli-conversation", {
+      port: 41009,
+      pid: leader,
+      startTime: procStartTime(leader),
+      baseUrl: "http://127.0.0.1:41009",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const freed = await stopAllMockupStacks();
+
+    expect(freed).toEqual([{ conversationId: "cli-conversation", port: 41009 }]);
+    expect(isCollected(leader)).toBe(true);
+    expect(
+      existsSync(
+        join(
+          conversationsDir,
+          "cli-conversation",
+          "mockups",
+          "mockup-stack",
+          "state.json",
+        ),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("stopSpawnedMockupStacksOnShutdown", () => {
+  it("stops stacks this process spawned and leaves a CLI-started stack running with its state", async () => {
+    const { stopSpawnedMockupStacksOnShutdown } = await loadService();
+    const { conversationsDir } = await loadConfig();
+    writeConversationMeta(conversationsDir, "spawned-conversation");
+    writeConversationMeta(conversationsDir, "cli-conversation");
+    const spawned = spawnSleeper();
+    const leader = await spawnForeignGroupLeader(join(root, "shutdown-foreign.pid"));
+    writeStackStateDirect(conversationsDir, "spawned-conversation", {
+      port: 41011,
+      pid: spawned,
+      startTime: procStartTime(spawned),
+      baseUrl: "http://127.0.0.1:41011",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const cliState = {
+      port: 41012,
+      pid: leader,
+      startTime: procStartTime(leader),
+      baseUrl: "http://127.0.0.1:41012",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    };
+    writeStackStateDirect(conversationsDir, "cli-conversation", cliState);
+    const cliStatePath = join(
+      conversationsDir,
+      "cli-conversation",
+      "mockups",
+      "mockup-stack",
+      "state.json",
+    );
+    const before = readFileSync(cliStatePath, "utf8");
+    expect(procInfo(leader)?.ppid).not.toBe(process.pid);
+
+    const freed = await stopSpawnedMockupStacksOnShutdown();
+
+    expect(freed).toEqual([
+      { conversationId: "spawned-conversation", port: 41011 },
+    ]);
+    expect(isCollected(spawned)).toBe(true);
+    expect(isAlive(leader)).toBe(true);
+    expect(readFileSync(cliStatePath, "utf8")).toBe(before);
+    expect(
+      existsSync(
+        join(
+          conversationsDir,
+          "spawned-conversation",
+          "mockups",
+          "mockup-stack",
+          "state.json",
+        ),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("reapOrphanedMockupStacksAtBoot", () => {
@@ -743,48 +923,42 @@ describe("reapOrphanedMockupStacksAtBoot", () => {
     ).toBe(false);
   });
 
-  it("removes a live recorded pid this process does not own and does not signal it", async () => {
+  it("keeps a live stack whose parent is not this process, state intact, and does not signal it", async () => {
     const { reapOrphanedMockupStacksAtBoot } = await loadService();
     const { conversationsDir } = await loadConfig();
     writeConversationMeta(conversationsDir, "foreign-conversation");
     const pidFile = join(root, "foreign.pid");
-    const holder = spawn(
-      "sh",
-      ["-c", `sleep 300 & echo $! > ${pidFile}; wait`],
-      { detached: true, stdio: "ignore" },
+    const leader = await spawnForeignGroupLeader(pidFile);
+    const statePath = join(
+      conversationsDir,
+      "foreign-conversation",
+      "mockups",
+      "mockup-stack",
+      "state.json",
     );
-    strays.push(holder);
-    const childPid = Number(await waitForFile(pidFile));
     writeStackStateDirect(conversationsDir, "foreign-conversation", {
       port: 41008,
-      pid: childPid,
-      startTime: procStartTime(childPid),
+      pid: leader,
+      startTime: procStartTime(leader),
       baseUrl: "http://127.0.0.1:41008",
       startedAt: "2026-01-01T00:00:00.000Z",
     });
+    const before = readFileSync(statePath, "utf8");
+    expect(procInfo(leader)?.ppid).not.toBe(process.pid);
+    expect(procInfo(leader)?.pgrp).toBe(leader);
     const kill = vi.spyOn(process, "kill");
     try {
       const report = await reapOrphanedMockupStacksAtBoot();
-      expect(report.staleStateRemoved).toEqual(["foreign-conversation"]);
+      expect(report.staleStateRemoved).toEqual([]);
       expect(
-        kill.mock.calls.some((call) => Math.abs(Number(call[0])) === childPid),
+        kill.mock.calls.some((call) => Math.abs(Number(call[0])) === leader),
       ).toBe(false);
     } finally {
       kill.mockRestore();
     }
-    expect(
-      existsSync(
-        join(
-          conversationsDir,
-          "foreign-conversation",
-          "mockups",
-          "mockup-stack",
-          "state.json",
-        ),
-      ),
-    ).toBe(false);
-    expect(procInfo(childPid)?.ppid).not.toBe(process.pid);
-    expect(procInfo(childPid)?.state).not.toBe("Z");
+    expect(readFileSync(statePath, "utf8")).toBe(before);
+    expect(procInfo(leader)?.ppid).not.toBe(process.pid);
+    expect(procInfo(leader)?.state).not.toBe("Z");
   });
 
   it("leaves a live stack and scratch when the conversation still exists", async () => {
