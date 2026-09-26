@@ -151,6 +151,7 @@ describe("supportingDocs helpers", () => {
       codingStandards: "coding-standards.md",
       designSystem: "design-system.md",
       gateRubric: "gate-rubric.md",
+      verification: "verification.md",
     });
   });
 

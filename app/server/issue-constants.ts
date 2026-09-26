@@ -14,6 +14,7 @@ export const SUPPORTING_DOC_KEYS = [
   "codingStandards",
   "designSystem",
   "gateRubric",
+  "verification",
 ] as const;
 export type SupportingDocKey = (typeof SUPPORTING_DOC_KEYS)[number];
 

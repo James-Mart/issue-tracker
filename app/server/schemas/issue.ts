@@ -149,6 +149,7 @@ export const supportingDocsSchema = z
     codingStandards: supportingDocRefSchema.optional(),
     designSystem: supportingDocRefSchema.optional(),
     gateRubric: supportingDocRefSchema.optional(),
+    verification: supportingDocRefSchema.optional(),
   })
   .strict();
 

@@ -522,7 +522,7 @@ and refuses a sha already present on that Task. Whole-series replace uses
   `--remove <ids...>`; `--rename <oldId> <newId>`; `--clear` → `[]`. Modes are
   mutually exclusive. See [Project labels](#project-labels).
 - **Project `supportingDocs`:** no positional value. Set one key with
-  `--doc vision|codingStandards|designSystem|gateRubric` plus exactly one of
+  `--doc vision|codingStandards|designSystem|gateRubric|verification` plus exactly one of
   `--attachment <name>` or `--workspace <path>`. `--clear` blanks the whole
   field; `--clear --doc <key>` removes one key. See
   [Project supporting docs](#project-supporting-docs).
@@ -625,7 +625,7 @@ Project — the common-to-every-kind fields plus:
 | `maxImplementingRuns` | int | how many implementing runs this Project may have in flight at once for automatic starts; integer ≥ 1; defaults `1` (see [Work queue](#work-queue)) |
 | `autonomous` | boolean? | absent until set; when true, creating an Idea with a `stakeholder` queues auto-plan at creation (see [Auto-plan queue](#auto-plan-queue)); `autonomous` governs only auto-plan at creation — auto-start of implementation applies in every Project |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
-| `supportingDocs` | `{ vision?, codingStandards?, designSystem?, gateRubric? }`? | optional pointers to vision / coding standards / design system / gate rubric docs (see [Project supporting docs](#project-supporting-docs)) |
+| `supportingDocs` | `{ vision?, codingStandards?, designSystem?, gateRubric?, verification? }`? | optional pointers to vision / coding standards / design system / gate rubric / verification docs (see [Project supporting docs](#project-supporting-docs)) |
 | `runtime` | `{ build?, start?, readiness?, seed?, redeploy?, baseUrl? }`? | optional imperative runtime phase scripts (see [Project runtime](#project-runtime)) |
 
 No `partOf`, no status, no assignee/needs-attention. Its `description.md` is a
@@ -633,8 +633,8 @@ short overview of the Project.
 
 ### Project supporting docs
 
-A Project may point at up to four optional supporting documents — **vision**,
-**coding standards**, **design system**, and **gate rubric** — via the imperative
+A Project may point at up to five optional supporting documents — **vision**,
+**coding standards**, **design system**, **gate rubric**, and **verification** — via the imperative
 `supportingDocs` field. Each present key is a `SupportingDocRef`:
 
 - `{ type: "attachment", name: string }` — basename already attached on the
@@ -650,12 +650,12 @@ target → skip; never fail the workflow for a missing doc. Authoring guidance:
 
 **Well-known attachment basenames** (skill default when choosing attachment
 storage): `vision.md`, `coding-standards.md`, `design-system.md`,
-`gate-rubric.md`.
+`gate-rubric.md`, `verification.md`.
 
 **CLI.**
 
 ```
-issue project set <id> supportingDocs --doc vision|codingStandards|designSystem|gateRubric \
+issue project set <id> supportingDocs --doc vision|codingStandards|designSystem|gateRubric|verification \
   --attachment <name>|--workspace <path>
 issue project set <id> supportingDocs --clear
 issue project set <id> supportingDocs --clear --doc <key>
@@ -684,6 +684,9 @@ the YAML doc.
   decision the rubric does not clearly exempt goes to the human; no rubric →
   both gates always apply. Use the section headings `## Outline does not need
   approval when` and `## Code does not need approval when`.
+- `verification` — how implementors and verifiers validate changes in this
+  Project (tests, runtime boot, browser checks, fixtures, and any
+  project-specific verification steps).
 
 **Consultation map.**
 
@@ -693,6 +696,7 @@ the YAML doc.
 | `codingStandards` | implementor, code-quality validator; plan-polish internal-consistency when tree prose makes claims the doc governs |
 | `designSystem` | implementor + code-quality validator when the Task appears UI-related (judgment from prose + paths; no Task flag) |
 | `gateRubric` | auto-plan stakeholder |
+| `verification` | implementor bootstrap (Verify) |
 
 `issue-tracker-plan` is absent from `vision` because the vision is read from
 the seat that answers, not the seat that asks ([Roles](#roles)).
@@ -702,7 +706,7 @@ prompts.
 
 **Subsystem vision docs (convention only).** Per-subsystem vision docs are
 ordinary Project **attachments**, not additional `supportingDocs` keys. The
-`supportingDocs` schema stays `{ vision?, codingStandards?, designSystem?, gateRubric? }`
+`supportingDocs` schema stays `{ vision?, codingStandards?, designSystem?, gateRubric?, verification? }`
 — no schema or CLI change. Index them from the main vision doc (the
 `supportingDocs.vision` target) under a `## Subsystem reference` section.
 Each entry is a markdown list item:
