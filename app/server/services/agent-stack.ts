@@ -588,6 +588,20 @@ async function runShellOrThrow(
   }
 }
 
+/** One redeploy or readiness command: stack phase env, exit status, output tail. */
+export async function runAgentStackShell(
+  command: string,
+  cwd: string,
+  state: Pick<AgentStackState, "port" | "auxPort" | "dataDir" | "baseUrl">,
+): Promise<{ exitStatus: number; output: string }> {
+  const env = phaseEnv(
+    { port: state.port, auxPort: state.auxPort, dataDir: state.dataDir },
+    state.baseUrl,
+  );
+  const { code, output } = await runShell(command, cwd, env);
+  return { exitStatus: code, output: tailText(output) };
+}
+
 function throwIfExited(
   conversationId: string,
   spawned: { child: ChildProcess; record: AgentStackProcess },

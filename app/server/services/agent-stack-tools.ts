@@ -5,6 +5,10 @@ import {
   type AgentStackHandle,
   type AgentStackStopResult,
 } from "./agent-stack.js";
+import {
+  redeployAgentStack,
+  type AgentStackRedeployResult,
+} from "./agent-stack-redeploy.js";
 
 export interface AgentStackToolOptions {
   /** App conversation that owns the stack (not the Cursor session id). */
@@ -78,6 +82,17 @@ export function createAgentStackTools(
       },
       execute: async (): Promise<AgentStackStopResult> => {
         return stopAgentStack(options.conversationId);
+      },
+    },
+    agent_stack_redeploy: {
+      description:
+        "Run the Project's redeploy phase in this conversation's live stack worktree with the stack environment, then re-run readiness. Refuses when this conversation has no live stack. When redeploy is empty, returns without running anything because the runtime hot-reloads. Returns each phase's exit status and output tail. Skips readiness when redeploy exits non-zero or readiness is empty.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+      execute: async (): Promise<AgentStackRedeployResult> => {
+        return redeployAgentStack(options.conversationId);
       },
     },
   };

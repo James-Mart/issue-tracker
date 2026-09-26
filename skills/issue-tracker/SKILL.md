@@ -53,7 +53,12 @@ refuses writes to it, and returns the env contract `AGENT_STACK_API_PORT`,
 when its recorded workspace matches the path you pass. Export those env vars
 into the shell before screenshots, Playwright e2e, or other probes. Do not stop
 or restart the human's stack on 8060/8061 to test a lifecycle path. Call
-`agent_stack_stop` when finished.
+`agent_stack_stop` when finished. `agent_stack_redeploy` takes no arguments.
+It runs the live stack's Project `redeploy` phase in that stack's worktree
+with the stack environment, then re-runs `readiness`, and returns each
+phase's exit status and output tail. It refuses when this conversation has
+no live stack. When `redeploy` is empty, it runs nothing and reports that
+the runtime hot-reloads.
 
 Outside agents-chat, the same lifecycle is available as:
 

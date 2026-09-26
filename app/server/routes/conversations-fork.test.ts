@@ -306,6 +306,7 @@ describe("POST /api/conversations/:id/fork", () => {
         delegations: expect.any(Object),
         agent_stack_start: expect.any(Object),
         agent_stack_stop: expect.any(Object),
+        agent_stack_redeploy: expect.any(Object),
         file_cursor_sdk_bug: expect.any(Object),
       });
     });

@@ -81,6 +81,7 @@ describe("createDelegateCustomTools", () => {
     });
 
     expect(Object.keys(customTools).sort()).toEqual([
+      "agent_stack_redeploy",
       "agent_stack_start",
       "agent_stack_stop",
       "delegate",
@@ -365,6 +366,7 @@ describe("createDelegateCustomTools", () => {
     expect(nestedTools?.delegate).toBeDefined();
     expect(nestedTools?.agent_stack_start).toBeDefined();
     expect(nestedTools?.agent_stack_stop).toBeDefined();
+    expect(nestedTools?.agent_stack_redeploy).toBeDefined();
 
     const nestedResult = await nestedTools!.delegate!.execute(
       { role: "pinned-role", prompt: "inner work" },

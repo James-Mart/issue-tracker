@@ -78,6 +78,11 @@ Agents verify server/UI changes on their own stack rather than restarting the
 one you are using. In agents-chat, call the custom tools `agent_stack_start`
 (with required `{ workspace }`: the absolute Project checkout path from issue
 summary) and `agent_stack_stop` (session-scoped; no conversation-id argument).
+`agent_stack_redeploy` takes no arguments: it runs the live stack's Project
+`redeploy` phase in that stack's worktree with the stack environment, then
+re-runs `readiness`, and returns each phase's exit status and output tail.
+It refuses when the conversation has no live stack. When `redeploy` is empty,
+it runs nothing and reports that the runtime hot-reloads.
 From a shell:
 
 ```bash
