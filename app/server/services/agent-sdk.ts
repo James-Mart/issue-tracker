@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import {
   Agent,
   Cursor,
@@ -8,6 +10,7 @@ import {
   createAgentPlatform,
   type AgentDefinition,
   type AgentOptions,
+  type McpServerConfig,
   type CursorRequestOptions,
   type InteractionUpdate,
   type ModelSelection,
@@ -199,6 +202,26 @@ const DISALLOWED_BUILTIN_TOOLS: NonNullable<AgentOptions["disallowedTools"]> = [
   "task",
 ];
 
+const require = createRequire(import.meta.url);
+const PLAYWRIGHT_MCP_CLI = join(
+  dirname(require.resolve("@playwright/mcp/package.json")),
+  "cli.js",
+);
+
+/** Session-scoped Playwright MCP for app-channel agents (headless, isolated context). */
+export const PLAYWRIGHT_MCP_SERVERS: Record<string, McpServerConfig> = {
+  playwright: {
+    command: "node",
+    args: [
+      PLAYWRIGHT_MCP_CLI,
+      "--headless",
+      "--isolated",
+      "--browser",
+      "chromium",
+    ],
+  },
+};
+
 const defaultDeps: AgentSdkDeps = {
   createSdkAgent: (options) => Agent.create(options),
   resumeSdkAgent: (agentId, options) => Agent.resume(agentId, options),
@@ -231,6 +254,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       ...(input.includeAgents ? { agents: input.agents } : {}),
       ...(input.tools !== undefined ? { tools: input.tools } : {}),
       disallowedTools: input.disallowedTools ?? DISALLOWED_BUILTIN_TOOLS,
+      mcpServers: PLAYWRIGHT_MCP_SERVERS,
       local:
         input.storeDir !== undefined
           ? localRuntime(input.cwd, input.storeDir, input.customTools)
