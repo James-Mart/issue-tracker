@@ -9,6 +9,7 @@
     "dev": "concurrently \"vite\" \"tsx watch server/index.ts\"",
     "serve": "concurrently \"vite\" \"tsx scripts/serve-api.ts\"",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "start": "tsx server/index.ts",
     "preview": "vite build && tsx server/index.ts",
     "cli": "tsx cli.ts",
