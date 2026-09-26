@@ -146,6 +146,7 @@ export const CLEARABLE_KEYS = [
   "workspace",
   "setupCommand",
   "qa",
+  "review",
   "retro",
   "mergeBaseOverride",
   "mergePolicy",
