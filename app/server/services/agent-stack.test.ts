@@ -724,3 +724,118 @@ describe("dropUnownedAgentStackRecords", () => {
     expect(existsSync(agentStackStatePath("my-conversation"))).toBe(true);
   });
 });
+
+describe("agent stack memory hardening", () => {
+  function isDetachedStartPhaseSpawn(
+    command: string,
+    args: readonly string[],
+    options: import("node:child_process").SpawnOptions | undefined,
+  ): boolean {
+    const env = options?.env as NodeJS.ProcessEnv | undefined;
+    return (
+      command === "sh" &&
+      args[0] === "-c" &&
+      options?.detached === true &&
+      env?.AGENT_STACK_PORT !== undefined
+    );
+  }
+
+  function spawnPhaseStartWithCapturedEnv(
+    capturedEnvs: NodeJS.ProcessEnv[],
+  ): typeof spawnDelegate.impl {
+    return (command, args, options) => {
+      if (isDetachedStartPhaseSpawn(command, args, options)) {
+        capturedEnvs.push({ ...(options?.env as NodeJS.ProcessEnv) });
+        const child = realSpawn(
+          "node",
+          [
+            "-e",
+            "require('net').createServer().listen(Number(process.env.AGENT_STACK_PORT),'127.0.0.1'); setInterval(() => {}, 1e9);",
+          ],
+          {
+            ...(options ?? {}),
+            detached: true,
+            stdio: "ignore",
+          },
+        );
+        strays.push(child);
+        return child;
+      }
+      const child = realSpawn(command, args, options ?? {});
+      if (options?.detached) strays.push(child);
+      return child;
+    };
+  }
+
+  function spawnPhaseStartWithNodeChild(
+    nodePidFile: string,
+  ): typeof spawnDelegate.impl {
+    return (command, args, options) => {
+      if (isDetachedStartPhaseSpawn(command, args, options)) {
+        const env = options?.env as NodeJS.ProcessEnv;
+        const port = env.AGENT_STACK_PORT;
+        const patched = [
+          "-c",
+          `echo 1000 > /proc/self/oom_score_adj; node -e ${JSON.stringify(
+            `require('fs').writeFileSync(${JSON.stringify(nodePidFile)}, String(process.pid)); require('net').createServer().listen(Number(${JSON.stringify(port)}),'127.0.0.1'); setInterval(()=>{}, 1e9);`,
+          )}`,
+        ];
+        const child = realSpawn(command, patched, {
+          ...(options ?? {}),
+          detached: true,
+          stdio: "ignore",
+        });
+        strays.push(child);
+        return child;
+      }
+      const child = realSpawn(command, args, options ?? {});
+      if (options?.detached) strays.push(child);
+      return child;
+    };
+  }
+
+  it("appends heap limit NODE_OPTIONS when spawning a runtime phase", async () => {
+    vi.stubEnv("NODE_OPTIONS", "--enable-source-maps");
+    const capturedEnvs: NodeJS.ProcessEnv[] = [];
+    spawnDelegate.impl = spawnPhaseStartWithCapturedEnv(capturedEnvs);
+
+    const { startAgentStack, stopAgentStack } = await loadService();
+    const { conversationsDir } = await loadConfig();
+
+    await startAgentStack("my-conversation", { issueId: "story-a" });
+
+    expect(capturedEnvs.length).toBeGreaterThan(0);
+    const env = capturedEnvs[0]!;
+    const dataDir = join(conversationsDir, "my-conversation", "agent-stack", "data");
+    const heapReports = join(dataDir, "heap-reports");
+    expect(env.NODE_OPTIONS).toContain("--enable-source-maps");
+    expect(env.NODE_OPTIONS).toContain("--max-old-space-size=2048");
+    expect(env.NODE_OPTIONS).toContain("--report-on-fatalerror");
+    expect(env.NODE_OPTIONS).toContain(`--report-directory=${heapReports}`);
+
+    await stopAgentStack("my-conversation");
+  });
+
+  it.skipIf(process.platform !== "linux")(
+    "sets oom_score_adj to 1000 on the phase shell and its Node child",
+    async () => {
+      const nodePidFile = join(root, "node.pid");
+      spawnDelegate.impl = spawnPhaseStartWithNodeChild(nodePidFile);
+      const serverOomBefore = readFileSync("/proc/self/oom_score_adj", "utf8").trim();
+
+      const { startAgentStack, stopAgentStack } = await loadService();
+
+      const handle = await startAgentStack("my-conversation", { issueId: "story-a" });
+      const shellPid = handle.state.processes[0]!.pid;
+      const nodePid = Number(await waitForFile(nodePidFile));
+
+      expect(readFileSync(`/proc/${shellPid}/oom_score_adj`, "utf8").trim()).toBe("1000");
+      expect(readFileSync(`/proc/${nodePid}/oom_score_adj`, "utf8").trim()).toBe("1000");
+      expect(readFileSync("/proc/self/oom_score_adj", "utf8").trim()).toBe(
+        serverOomBefore,
+      );
+
+      await stopAgentStack("my-conversation");
+    },
+  );
+});

@@ -32,6 +32,8 @@ import { ancestorChain } from "./subtree.js";
  * Agents verify here instead of on the human's stack.
  */
 
+const PHASE_HEAP_MB = 2048;
+
 const READY_TIMEOUT_MS = 90_000;
 const READY_POLL_MS = 250;
 const READY_PROBE_TIMEOUT_MS = 5_000;
@@ -481,15 +483,42 @@ function stackVarEnv(resources: StackResources): Record<string, string> {
   };
 }
 
+function appendNodeOptions(
+  existing: string | undefined,
+  ...flags: string[]
+): string {
+  const addition = flags.join(" ");
+  const trimmed = existing?.trim();
+  return trimmed ? `${trimmed} ${addition}` : addition;
+}
+
+function phaseNodeOptions(dataDir: string): string {
+  const heapReportDir = join(dataDir, "heap-reports");
+  return appendNodeOptions(
+    process.env.NODE_OPTIONS,
+    `--max-old-space-size=${PHASE_HEAP_MB}`,
+    "--report-on-fatalerror",
+    `--report-directory=${heapReportDir}`,
+  );
+}
+
+/** Linux phase shells set maximum OOM score before running the declared command. */
+function wrapPhaseShellCommand(command: string): string {
+  if (process.platform !== "linux") return command;
+  return `echo 1000 > /proc/self/oom_score_adj; ${command}`;
+}
+
 function phaseEnv(
   resources: StackResources,
   baseUrl: string | undefined,
   secrets: Record<string, string>,
 ): NodeJS.ProcessEnv {
+  mkdirSync(join(resources.dataDir, "heap-reports"), { recursive: true });
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...secrets,
     ...stackVarEnv(resources),
+    NODE_OPTIONS: phaseNodeOptions(resources.dataDir),
   };
   if (baseUrl === undefined) delete env.AGENT_STACK_BASE_URL;
   else env.AGENT_STACK_BASE_URL = baseUrl;
@@ -516,7 +545,7 @@ function runShell(
   timeoutMs?: number,
 ): Promise<{ code: number; output: string }> {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn("sh", ["-c", command], {
+    const child = spawn("sh", ["-c", wrapPhaseShellCommand(command)], {
       cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
@@ -708,7 +737,7 @@ async function bootDeclaredRuntime(
     spawned = await spawnChild(
       "start",
       "sh",
-      ["-c", runtime.start!],
+      ["-c", wrapPhaseShellCommand(runtime.start!)],
       phaseEnv(resources, undefined, secrets),
       conversationId,
       boot.worktree,
