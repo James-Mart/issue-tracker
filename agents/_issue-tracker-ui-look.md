@@ -1,7 +1,7 @@
 # UI look
 
 Not a spawnable agent (no frontmatter). Cross-cutting look procedure for
-UI-related Tasks. Callers **Read** this file from disk — a markdown link alone
+UI-related Tasks and Stories. Callers **Read** this file from disk — a markdown link alone
 is not enough.
 
 Absolute path for this file (Read this exact path):
@@ -26,12 +26,12 @@ Absolute path for this file (Read this exact path):
    failed. A completed look is a non-loading, non-empty PNG — liveness only.
    The caller judges product quality on that capture; this include stops at
    liveness.
-5. The caller records these three evidence fields on the Task comment they
-   already post for this look — do not post an extra comment solely for the
-   look:
+5. The caller records these three evidence fields in the report it already
+   makes for this look — do not post an extra comment solely for the look:
    - **Targets** — the path(s), dialog name(s), or driver path captured
    - **Recapture** — whether step 3 ran (`yes` / `no`)
    - **Look** — `pass` when step 4 produced a completed look; `fail` otherwise
    The code-quality validator attaches each judged PNG to the Task
    (`issue attach <taskId> <png>`) and embeds the stored basename in that same
-   comment as `![name](name)`. Other callers do not attach PNGs.
+   comment as `![name](name)`. The runtime validator attaches each judged PNG
+   to the Story. Other callers do not attach PNGs.
