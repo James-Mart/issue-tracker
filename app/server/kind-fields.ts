@@ -43,6 +43,7 @@ export type FieldCoerce =
   | { type: "labelCatalog" }
   | { type: "supportingDocs" }
   | { type: "runtime" }
+  | { type: "secrets" }
   | { type: "inspirationApps" }
   | { type: "personas" }
   | { type: "description" }
@@ -68,6 +69,7 @@ export const PROJECT_SET_FIELDS = {
   labels: { type: "labelCatalog" },
   supportingDocs: { type: "supportingDocs" },
   runtime: { type: "runtime" },
+  secrets: { type: "secrets" },
   inspirationApps: { type: "inspirationApps" },
   personas: { type: "personas" },
   description: { type: "description" },
@@ -171,6 +173,7 @@ export const PROJECT_GET_FIELDS = {
   labels: STORED,
   supportingDocs: STORED,
   runtime: STORED,
+  secrets: DERIVED,
   inspirationApps: STORED,
   personas: STORED,
   maxImplementingRuns: STORED,

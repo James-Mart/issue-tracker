@@ -15,6 +15,7 @@ import { ancestorChain } from "./subtree.js";
 import { formatInspirationAppsLine } from "./inspiration-apps.js";
 import { formatPersonasLine } from "./personas.js";
 import { formatRuntimeLine } from "./runtime.js";
+import { formatSecretsLine, listSecretKeys } from "./secret-store.js";
 import {
   formatSupportingDocsLine,
   readMissionParagraph,
@@ -88,6 +89,8 @@ export interface IssueSummary {
   mission?: string;
   supportingDocs?: SupportingDocs;
   runtime?: Runtime;
+  /** Secret key names for the Project root (values never included). */
+  secretKeys?: string[];
   inspirationApps?: InspirationApps;
   personas?: Personas;
 }
@@ -147,6 +150,12 @@ export function buildSummary(
       : {}),
     ...(root?.kind === "project" && root.runtime
       ? { runtime: root.runtime }
+      : {}),
+    ...(root?.kind === "project"
+      ? (() => {
+          const secretKeys = listSecretKeys(root.id);
+          return secretKeys.length > 0 ? { secretKeys } : {};
+        })()
       : {}),
     ...(root?.kind === "project" && root.inspirationApps
       ? { inspirationApps: root.inspirationApps }
@@ -218,6 +227,10 @@ export function formatSummary(summary: IssueSummary): string {
     if (node.kind === "project" && summary.runtime) {
       const line = formatRuntimeLine(summary.runtime);
       if (line) lines.push(`  runtime: ${line}`);
+    }
+    if (node.kind === "project" && summary.secretKeys) {
+      const line = formatSecretsLine(summary.secretKeys);
+      if (line) lines.push(`  secrets: ${line}`);
     }
     if (node.kind === "project" && summary.inspirationApps) {
       const line = formatInspirationAppsLine(summary.inspirationApps);
