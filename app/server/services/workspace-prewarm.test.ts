@@ -22,6 +22,7 @@ function workspaceOptions(options: AgentOptions) {
   return {
     apiKey: options.apiKey,
     disallowedTools: options.disallowedTools,
+    mcpServers: options.mcpServers,
     local: {
       cwd: options.local?.cwd,
       settingSources: options.local?.settingSources,

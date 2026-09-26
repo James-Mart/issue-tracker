@@ -626,6 +626,9 @@ export function createDelegateCustomTools(
                   // and a resumed local agent has no selection of its own.
                   model,
                   customTools: nestedCustomTools,
+                  ...(options.conversationId !== undefined
+                    ? { conversationId: options.conversationId }
+                    : {}),
                 },
               );
             } catch (err) {
@@ -658,6 +661,9 @@ export function createDelegateCustomTools(
               agentId,
               storeDir: nestedStoreDir,
               customTools: nestedCustomTools,
+              ...(options.conversationId !== undefined
+                ? { conversationId: options.conversationId }
+                : {}),
             });
           }
           tracked.cancel = () => handle!.cancel();

@@ -415,6 +415,12 @@ describe("stopAgentStack", () => {
     expect(isCollected(leaderPid)).toBe(true);
     expect(await waitForCollection(forkedPid)).toBe(true);
     expect(existsSync(agentStackStatePath("my-conversation"))).toBe(false);
+    const { liveBrowserOriginBaseUrl } = await import(
+      "./browser-origin-allowlist.js"
+    );
+    expect(
+      liveBrowserOriginBaseUrl(agentStackStatePath("my-conversation")),
+    ).toBeNull();
   });
 
   it("clears state left behind by processes that already died", async () => {
@@ -551,6 +557,12 @@ describe("startAgentStack", () => {
 
     const handle = await startAgentStack("my-conversation", { issueId: "story-a" });
 
+    const { liveBrowserOriginBaseUrl } = await import(
+      "./browser-origin-allowlist.js"
+    );
+    expect(liveBrowserOriginBaseUrl(agentStackStatePath("my-conversation"))).toBe(
+      "http://127.0.0.1:41002",
+    );
     expect(handle.reused).toBe(true);
     expect(handle.env.AGENT_STACK_BASE_URL).toBe("http://127.0.0.1:41002");
     expect(handle.state.port).toBe(41002);

@@ -24,7 +24,10 @@ Absolute path for this file (Read this exact path):
    When the Task appears UI-related (same judgment as the `designSystem`
    consult — Task prose and changed paths), **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
-   and follow it as part of Verify. Record the include's three evidence fields
+   and follow it as part of Verify. On the app channel, agents also have
+   Playwright MCP browser tools (`browser_navigate`, `browser_snapshot`, …)
+   after `agent_stack_start`; ui-look remains the screenshot capture path for
+   verify comments. Record the include's three evidence fields
    on one `issue task comment <id> --role implementor` (the Verify comment for
    this look — do not add a second look-only comment). If the look failed, then
    `issue task set <id> needsAttention true --reason "..."` and stop. Passing

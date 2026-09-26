@@ -171,6 +171,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           cwd,
           model,
           customTools,
+          conversationId,
         });
       } catch (err) {
         handle = await sdk.createAgent({
@@ -178,6 +179,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           model,
           storeDir,
           customTools,
+          conversationId,
         });
         cursorConversationIdRef.current = handle.agentId;
         await updateMeta(conversationId, { agentId: handle.agentId });
@@ -197,6 +199,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         model,
         storeDir,
         customTools,
+        conversationId,
       });
       cursorConversationIdRef.current = handle.agentId;
       await updateMeta(conversationId, { agentId: handle.agentId });

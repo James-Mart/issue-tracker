@@ -67,10 +67,19 @@ cd app && npm run agent-stack -- start <conversationId> <issueId>
 cd app && npm run agent-stack -- stop <conversationId>
 ```
 
+## Interactive browser (app channel)
+
+App-channel agent sessions include Playwright MCP tools
+(`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, …)
+— headless, one isolated browser context per conversation. Call
+`agent_stack_start` with the issue id and browse `AGENT_STACK_BASE_URL`
+(or stack subdomains). IDE chats use Cursor's browser MCP instead.
+
 ## UI screenshots
 
 For agents validating or attaching UI state, use the Playwright capture script
-(not Cursor IDE browser screenshot tools). Call `agent_stack_start` with the
+for known pages and dialogs; use Playwright MCP browser tools above for
+exploratory checks mid-conversation. Call `agent_stack_start` with the
 issue id when needed and export `AGENT_STACK_BASE_URL` into the
 shell. Run `npm run screenshots` from the harness plugin `app/` (the `app/`
 directory beside this plugin's `agents/` folder), not from the summary Workspace

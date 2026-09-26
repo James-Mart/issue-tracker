@@ -209,6 +209,9 @@ export function readAgentStackState(
 }
 
 function writeAgentStackState(state: AgentStackState): void {
+  // Browser tools derive their origin allowlist from this file on each
+  // navigation, so writing it is what lets a session browse a stack that
+  // starts mid-conversation.
   writeFileSync(
     agentStackStatePath(state.conversationId),
     `${JSON.stringify(state, null, 2)}\n`,
@@ -829,6 +832,7 @@ async function waitUntilGroupsCollected(
 }
 
 function releaseAgentStackRecord(state: AgentStackState): void {
+  // Removing the record is what refuses later browser navigations.
   clearCursorIndexes(state);
   rmSync(agentStackStatePath(state.conversationId), { force: true });
 }

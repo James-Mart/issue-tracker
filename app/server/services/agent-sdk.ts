@@ -1,3 +1,6 @@
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   Agent,
   Cursor,
@@ -8,6 +11,7 @@ import {
   createAgentPlatform,
   type AgentDefinition,
   type AgentOptions,
+  type McpServerConfig,
   type CursorRequestOptions,
   type InteractionUpdate,
   type ModelSelection,
@@ -23,6 +27,7 @@ import {
   type TokenUsage,
 } from "@cursor/sdk";
 import { cursorApiKey } from "../config.js";
+import { browserOriginMcpEnv } from "./browser-origin-allowlist.js";
 import { createAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { createCachedCheckpointsStore } from "./cached-checkpoints-store.js";
 
@@ -72,6 +77,11 @@ export interface CreateAgentOptions {
   model: ModelSelection;
   agentId?: string;
   storeDir: string;
+  /**
+   * App conversation that owns the live stack this session may browse.
+   * Omitted sessions have no stack, so every browser navigation is refused.
+   */
+  conversationId?: string;
   agents?: Record<string, AgentDefinition>;
   customTools?: Record<string, SDKCustomTool>;
   /** Restrict built-in tools; `[]` is text-only. Omitted keeps the default set. */
@@ -82,6 +92,11 @@ export interface CreateAgentOptions {
 export interface ResumeAgentOptions {
   cwd: string;
   model: ModelSelection;
+  /**
+   * App conversation that owns the live stack this session may browse.
+   * Omitted sessions have no stack, so every browser navigation is refused.
+   */
+  conversationId?: string;
   agents?: Record<string, AgentDefinition>;
   customTools?: Record<string, SDKCustomTool>;
   /** Restrict built-in tools; `[]` is text-only. Omitted keeps the default set. */
@@ -199,6 +214,44 @@ const DISALLOWED_BUILTIN_TOOLS: NonNullable<AgentOptions["disallowedTools"]> = [
   "task",
 ];
 
+const require = createRequire(import.meta.url);
+const PLAYWRIGHT_MCP_CLI = join(
+  dirname(require.resolve("@playwright/mcp/package.json")),
+  "cli.js",
+);
+const BROWSER_ORIGIN_INIT_PAGE = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "browser-origin-init-page.cjs",
+);
+
+/**
+ * Session-scoped Playwright MCP for app-channel agents (headless, isolated
+ * context). `--init-page` refuses navigations outside the live stack. With
+ * no conversation, the init page has no state file and refuses every one.
+ */
+function playwrightMcpServers(
+  env?: Record<string, string>,
+): Record<string, McpServerConfig> {
+  return {
+    playwright: {
+      command: "node",
+      args: [
+        PLAYWRIGHT_MCP_CLI,
+        "--headless",
+        "--isolated",
+        "--browser",
+        "chromium",
+        "--init-page",
+        BROWSER_ORIGIN_INIT_PAGE,
+      ],
+      ...(env !== undefined ? { env } : {}),
+    },
+  };
+}
+
+export const PLAYWRIGHT_MCP_SERVERS: Record<string, McpServerConfig> =
+  playwrightMcpServers();
+
 const defaultDeps: AgentSdkDeps = {
   createSdkAgent: (options) => Agent.create(options),
   resumeSdkAgent: (agentId, options) => Agent.resume(agentId, options),
@@ -219,6 +272,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
     customTools?: Record<string, SDKCustomTool>;
     tools?: NonNullable<AgentOptions["tools"]>;
     disallowedTools?: NonNullable<AgentOptions["disallowedTools"]>;
+    conversationId?: string;
     /** Create and resume always pass `agents`, even when omitted. Prewarm does not. */
     includeAgents: boolean;
     /** Create always passes `agentId`, even when omitted. Resume and prewarm do not. */
@@ -231,6 +285,10 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       ...(input.includeAgents ? { agents: input.agents } : {}),
       ...(input.tools !== undefined ? { tools: input.tools } : {}),
       disallowedTools: input.disallowedTools ?? DISALLOWED_BUILTIN_TOOLS,
+      mcpServers:
+        input.conversationId !== undefined
+          ? playwrightMcpServers(browserOriginMcpEnv(input.conversationId))
+          : PLAYWRIGHT_MCP_SERVERS,
       local:
         input.storeDir !== undefined
           ? localRuntime(input.cwd, input.storeDir, input.customTools)

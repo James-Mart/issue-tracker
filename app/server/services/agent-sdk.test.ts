@@ -13,8 +13,10 @@ import type {
 import { JsonlLocalAgentStore } from "@cursor/sdk";
 import { CursorSdkError } from "@cursor/sdk";
 import { describe, expect, it, vi } from "vitest";
+import { browserOriginMcpEnv } from "./browser-origin-allowlist.js";
 import {
   createAgentSdk,
+  PLAYWRIGHT_MCP_SERVERS,
   toNestedEvent,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
@@ -55,6 +57,14 @@ const SAMPLE_CUSTOM_TOOLS: Record<string, SDKCustomTool> = {
     execute: async () => "done",
   },
 };
+
+function expectPlaywrightMcpServers(options: AgentOptions): void {
+  expect(options.mcpServers).toEqual(PLAYWRIGHT_MCP_SERVERS);
+  const playwright = options.mcpServers?.playwright;
+  expect(playwright && "args" in playwright ? playwright.args : undefined).toEqual(
+    expect.arrayContaining(["--headless", "--isolated", "--browser", "chromium"]),
+  );
+}
 
 // A step in a fake run: either a top-level stream message or an `onDelta`
 // interaction the run fires while streaming.
@@ -159,6 +169,48 @@ describe("createAgent", () => {
     expect(options.model).toEqual(MODEL);
     expect(options.agentId).toBe("resume-me");
     expect(options.disallowedTools).toEqual(["task"]);
+    expectPlaywrightMcpServers(options);
+  });
+
+  it("points playwright at the conversation's live stack state", async () => {
+    const createSdkAgent = vi.fn(
+      async (_options: AgentOptions) => makeFakeSdkAgent([]),
+    );
+    const sdk = createAgentSdk({ createSdkAgent, apiKey: "key-abc" });
+
+    await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+      conversationId: "conv-1",
+    });
+
+    const playwright = createSdkAgent.mock.calls[0]![0].mcpServers?.playwright;
+    expect(playwright && "env" in playwright ? playwright.env : undefined).toEqual(
+      browserOriginMcpEnv("conv-1"),
+    );
+    const resumeSdkAgent = vi.fn(
+      async (_id: string, _options?: Partial<AgentOptions>) => makeFakeSdkAgent([]),
+    );
+    const resumeSdk = createAgentSdk({ resumeSdkAgent, apiKey: "key-abc" });
+    await resumeSdk.resumeAgent("agent-1", STORE_DIR, {
+      cwd: "/repo",
+      model: MODEL,
+      conversationId: "conv-1",
+    });
+    const resumed = resumeSdkAgent.mock.calls[0]![1]?.mcpServers?.playwright;
+    expect(resumed && "env" in resumed ? resumed.env : undefined).toEqual(
+      browserOriginMcpEnv("conv-1"),
+    );
+    expect(playwright && "args" in playwright ? playwright.args : undefined).toEqual(
+      expect.arrayContaining([
+        "--headless",
+        "--isolated",
+        "--browser",
+        "chromium",
+        "--init-page",
+      ]),
+    );
   });
 
   it("wires a composed store with a cached checkpoints substore", async () => {
@@ -285,6 +337,7 @@ describe("resumeAgent", () => {
       }),
     );
     expectCachedComposedStore(resumeSdkAgent.mock.calls[0]![1]?.local?.store);
+    expectPlaywrightMcpServers(resumeSdkAgent.mock.calls[0]![1]!);
   });
 
   // The workspace an agent runs in is also the workspace the SDK filed it
@@ -404,6 +457,24 @@ describe("resumeAgent", () => {
         disallowedTools: ["task", "edit", "delete", "shell"],
       }),
     );
+  });
+});
+
+describe("prewarmWorkspace", () => {
+  it("registers the playwright MCP server with headless and isolated flags", async () => {
+    const prewarmLocalWorkspace = vi.fn(async (_options: AgentOptions) => {
+      return async () => {};
+    });
+    const sdk = createAgentSdk({
+      createPlatform: async () => ({ prewarmLocalWorkspace }),
+      apiKey: "key-abc",
+    });
+
+    const release = await sdk.prewarmWorkspace("/repo");
+    await release();
+
+    expect(prewarmLocalWorkspace).toHaveBeenCalledTimes(1);
+    expectPlaywrightMcpServers(prewarmLocalWorkspace.mock.calls[0]![0]);
   });
 });
 
