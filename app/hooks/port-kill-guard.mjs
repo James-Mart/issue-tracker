@@ -289,11 +289,13 @@ export function loadOwnedPorts(cursorConversationId, conversationsDir) {
       continue;
     }
     if (!isProcessLive(proc)) continue;
-    if (proc.role === "api" && Number.isInteger(state.apiPort)) {
-      owned.add(state.apiPort);
-    }
-    if (proc.role === "vite" && Number.isInteger(state.vitePort)) {
-      owned.add(state.vitePort);
+    const primary = Number.isInteger(state.port) ? state.port : state.vitePort;
+    const aux = Number.isInteger(state.auxPort) ? state.auxPort : state.apiPort;
+    if (proc.role === "api" && Number.isInteger(aux)) owned.add(aux);
+    if (proc.role === "vite" && Number.isInteger(primary)) owned.add(primary);
+    if (proc.role === "start") {
+      if (Number.isInteger(primary)) owned.add(primary);
+      if (Number.isInteger(aux)) owned.add(aux);
     }
   }
   return owned;

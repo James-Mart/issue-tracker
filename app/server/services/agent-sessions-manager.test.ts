@@ -15,6 +15,7 @@ import {
   load,
   useAgentSessionsTestFixtures,
   workspaceDir,
+  writeIssue,
 } from "./agent-sessions.test-harness.js";
 
 useAgentSessionsTestFixtures();
@@ -81,13 +82,23 @@ describe("agent sessions manager", () => {
       .slice(procStat.lastIndexOf(")") + 2)
       .split(" ")[19]!;
     mkdirSync(agentStackDir(meta.id), { recursive: true });
+    writeIssue("platform-story", {
+      kind: "story",
+      title: "Story",
+      partOf: "platform",
+      worktreePath: workspaceDir,
+      createdAt: "2026-07-24T12:00:00.000Z",
+      updatedAt: "2026-07-24T12:00:00.000Z",
+    });
     writeFileSync(
       agentStackStatePath(meta.id),
       JSON.stringify({
         conversationId: meta.id,
-        workspace: workspaceDir,
-        apiPort: 43001,
-        vitePort: 43002,
+        issueId: "platform-story",
+        worktree: workspaceDir,
+        port: 43002,
+        auxPort: 43001,
+        dataDir: join(agentStackDir(meta.id), "data"),
         baseUrl: "http://127.0.0.1:43002",
         startedAt: "2026-01-01T00:00:00.000Z",
         processes: [{ role: "api", pid, startTime: startTok }],
@@ -96,7 +107,7 @@ describe("agent sessions manager", () => {
     );
     try {
       const started = (await fake.created[0]!.customTools!.agent_stack_start!.execute(
-        { workspace: workspaceDir },
+        { issueId: "platform-story" },
         {},
       )) as { reused: boolean };
       expect(started.reused).toBe(true);

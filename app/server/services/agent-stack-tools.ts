@@ -5,6 +5,10 @@ import {
   startAgentStack,
   stopAgentStack,
 } from "./agent-stack.js";
+import {
+  redeployAgentStack,
+  type AgentStackRedeployResult,
+} from "./agent-stack-redeploy.js";
 
 const agentStackHandleSchema = z.object({
   state: agentStackStateSchema,
@@ -79,30 +83,30 @@ export function createAgentStackTools(
   return {
     agent_stack_start: {
       description:
-        "Start (or reuse) this conversation's API+Vite verification stack on free ports for the summary Workspace checkout. Returns the AGENT_STACK_* env contract. The stack reads the live tracker store and refuses writes. Use before verifying server/UI changes; do not restart the human's stack on 8060/8061.",
+        "Start (or reuse) this conversation's verification stack for an issue's Story worktree. Returns AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR, and AGENT_STACK_BASE_URL. Boots the Project runtime declaration in that worktree. Refuses when runtime lacks start or baseUrl. Reuse the running stack only when its recorded worktree matches. Do not restart the human's stack on 8060/8061.",
       annotations: AGENT_STACK_START_ANNOTATIONS,
       outputSchema: toolOutputSchema(agentStackHandleSchema),
       inputSchema: {
         type: "object",
         properties: {
-          workspace: {
+          issueId: {
             type: "string",
             description:
-              "Absolute path to the Project workspace checkout (the Workspace: path from issue summary).",
+              "Issue whose Story (itself or its containing Story) has the live worktree to boot.",
           },
         },
-        required: ["workspace"],
+        required: ["issueId"],
       },
       execute: async (input) => {
-        const workspace = (input as { workspace?: unknown }).workspace;
-        if (typeof workspace !== "string" || !workspace.trim()) {
-          throw new Error("agent_stack_start: workspace is required");
+        const issueId = (input as { issueId?: unknown }).issueId;
+        if (typeof issueId !== "string" || !issueId.trim()) {
+          throw new Error("agent_stack_start: issueId is required");
         }
         const cursorConversationId = requireCursorConversationId(
           options.getCursorConversationId,
         );
         const handle = await startAgentStack(options.conversationId, {
-          workspace,
+          issueId,
           cursorConversationId,
         });
         return { ...handle } satisfies AgentStackHandleResult;
@@ -119,6 +123,17 @@ export function createAgentStackTools(
       },
       execute: async (): Promise<AgentStackStopToolResult> => {
         return stopAgentStack(options.conversationId);
+      },
+    },
+    agent_stack_redeploy: {
+      description:
+        "Run the Project's redeploy phase in this conversation's live stack worktree with the stack environment, then re-run readiness. Refuses when this conversation has no live stack. When redeploy is empty, returns without running anything because the runtime hot-reloads. Returns each phase's exit status and output tail. Skips readiness when redeploy exits non-zero or readiness is empty.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+      execute: async (): Promise<AgentStackRedeployResult> => {
+        return redeployAgentStack(options.conversationId);
       },
     },
   };

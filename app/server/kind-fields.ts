@@ -42,6 +42,7 @@ export type FieldCoerce =
   | { type: "array" }
   | { type: "labelCatalog" }
   | { type: "supportingDocs" }
+  | { type: "runtime" }
   | { type: "inspirationApps" }
   | { type: "personas" }
   | { type: "description" }
@@ -66,6 +67,7 @@ export const PROJECT_SET_FIELDS = {
   mergePolicy: { type: "enum", values: MERGE_POLICIES },
   labels: { type: "labelCatalog" },
   supportingDocs: { type: "supportingDocs" },
+  runtime: { type: "runtime" },
   inspirationApps: { type: "inspirationApps" },
   personas: { type: "personas" },
   description: { type: "description" },
@@ -168,6 +170,7 @@ export const PROJECT_GET_FIELDS = {
   mergePolicy: STORED,
   labels: STORED,
   supportingDocs: STORED,
+  runtime: STORED,
   inspirationApps: STORED,
   personas: STORED,
   maxImplementingRuns: STORED,

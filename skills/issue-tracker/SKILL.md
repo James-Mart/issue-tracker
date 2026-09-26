@@ -46,19 +46,24 @@ http://localhost:8060).
 When verifying server or UI changes from an in-app agents-chat session, call
 the custom tools `agent_stack_start` and `agent_stack_stop` (no conversation-id
 argument — they are scoped to the current conversation). `agent_stack_start`
-requires `{ workspace }`: the absolute `Workspace:` path from `issue summary`.
-It boots that checkout's `app/` on free ports, reads the live tracker store,
-refuses writes to it, and returns the env contract `AGENT_STACK_API_PORT`,
-`AGENT_STACK_VITE_PORT`, and `AGENT_STACK_BASE_URL`. Reuse the live stack only
-when its recorded workspace matches the path you pass. Export those env vars
-into the shell before screenshots, Playwright e2e, or other probes. Do not stop
-or restart the human's stack on 8060/8061 to test a lifecycle path. Call
-`agent_stack_stop` when finished.
+requires `{ issueId }`: the Story, or an issue under it, whose live worktree
+to boot. It boots that Project's runtime declaration and returns
+`AGENT_STACK_PORT`, `AGENT_STACK_AUX_PORT`, `AGENT_STACK_DATA_DIR`, and
+`AGENT_STACK_BASE_URL`. Reuse the live stack only when its recorded worktree
+matches. Export `AGENT_STACK_BASE_URL` into the shell before screenshots,
+Playwright e2e, or other probes. Do not stop or restart the human's stack on
+8060/8061 to test a lifecycle path. Call `agent_stack_stop` when finished.
+`agent_stack_redeploy` takes no arguments.
+It runs the live stack's Project `redeploy` phase in that stack's worktree
+with the stack environment, then re-runs `readiness`, and returns each
+phase's exit status and output tail. It refuses when this conversation has
+no live stack. When `redeploy` is empty, it runs nothing and reports that
+the runtime hot-reloads.
 
 Outside agents-chat, the same lifecycle is available as:
 
 ```bash
-cd app && npm run agent-stack -- start <conversationId> <workspace>
+cd app && npm run agent-stack -- start <conversationId> <issueId>
 cd app && npm run agent-stack -- stop <conversationId>
 ```
 
@@ -66,7 +71,7 @@ cd app && npm run agent-stack -- stop <conversationId>
 
 For agents validating or attaching UI state, use the Playwright capture script
 (not Cursor IDE browser screenshot tools). Call `agent_stack_start` with the
-summary `Workspace:` path when needed and export `AGENT_STACK_BASE_URL` into the
+issue id when needed and export `AGENT_STACK_BASE_URL` into the
 shell. Run `npm run screenshots` from the harness plugin `app/` (the `app/`
 directory beside this plugin's `agents/` folder), not from the summary Workspace
 checkout; the script uses `AGENT_STACK_BASE_URL` as its default base URL (still

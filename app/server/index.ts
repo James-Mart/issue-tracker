@@ -73,7 +73,12 @@ startWorkQueueLauncher(agentSessions);
 const { dropUnownedAgentStackRecords } = await import(
   "./services/agent-stack.js"
 );
-dropUnownedAgentStackRecords();
+// This process is the verification guest when the store is read-only. It
+// shares the live conversations directory, so sweeping would drop the parent
+// stack's record.
+if (process.env.ISSUE_TRACKER_STORE_READ_ONLY !== "1") {
+  dropUnownedAgentStackRecords();
+}
 
 const { stopSpawnedMockupStacksOnShutdown } = await import(
   "./services/mockup-stack.js"

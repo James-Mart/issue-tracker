@@ -155,6 +155,21 @@ export const supportingDocsSchema = z
 export type SupportingDocRef = z.infer<typeof supportingDocRefSchema>;
 export type SupportingDocs = z.infer<typeof supportingDocsSchema>;
 
+const runtimePhaseString = z.string().min(1);
+
+export const runtimeSchema = z
+  .object({
+    build: runtimePhaseString.optional(),
+    start: runtimePhaseString.optional(),
+    readiness: runtimePhaseString.optional(),
+    seed: runtimePhaseString.optional(),
+    redeploy: runtimePhaseString.optional(),
+    baseUrl: runtimePhaseString.optional(),
+  })
+  .strict();
+
+export type Runtime = z.infer<typeof runtimeSchema>;
+
 export const inspirationAppEntrySchema = z
   .object({
     name: nonEmpty,
@@ -226,6 +241,8 @@ export const projectSchema = z.object({
   labels: projectLabelsSchema,
   // Imperative pointers to vision / coding standards / design system / gate rubric docs.
   supportingDocs: supportingDocsSchema.optional(),
+  // Imperative runtime phase scripts (build, start, readiness, seed, redeploy, baseUrl).
+  runtime: runtimeSchema.optional(),
   // Imperative ordered list of reference apps (name, url, description).
   inspirationApps: inspirationAppsSchema.optional(),
   // Imperative ordered persona catalog (name, description).

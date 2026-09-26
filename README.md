@@ -76,25 +76,30 @@ directory).
 
 Agents verify server/UI changes on their own stack rather than restarting the
 one you are using. In agents-chat, call the custom tools `agent_stack_start`
-(with required `{ workspace }`: the absolute Project checkout path from issue
-summary) and `agent_stack_stop` (session-scoped; no conversation-id argument).
+(with required `{ issueId }`: the Story, or an issue under it, whose live
+worktree to boot) and `agent_stack_stop` (session-scoped; no conversation-id
+argument). `agent_stack_redeploy` takes no arguments: it runs the live stack's
+Project `redeploy` phase in that stack's worktree with the stack environment,
+then re-runs `readiness`, and returns each phase's exit status and output tail.
+It refuses when the conversation has no live stack. When `redeploy` is empty,
+it runs nothing and reports that the runtime hot-reloads.
 From a shell:
 
 ```bash
-cd app && npm run agent-stack -- start <conversationId> <workspace>
+cd app && npm run agent-stack -- start <conversationId> <issueId>
 cd app && npm run agent-stack -- stop <conversationId>
 ```
 
-`start` boots `<workspace>/app` on two free ports, points the child at the live
-tracker store with writes refused (`ISSUE_TRACKER_STORE_READ_ONLY=1`), records
-the workspace, ports, and pids at
+`start` boots the Project's runtime declaration in that Story worktree, on
+ports chosen free at start time. A declaration that lacks `start` or `baseUrl`
+is refused. It records the worktree, ports, and pids at
 `conversations/<conversationId>/agent-stack/state.json`, indexes the Cursor
 session under `conversations/agent-stack-cursor-index/` for the kill-guard, and
-prints the env contract callers use — `AGENT_STACK_API_PORT`,
-`AGENT_STACK_VITE_PORT`, and `AGENT_STACK_BASE_URL`. Starting again reuses the
-live stack only when the recorded workspace matches the path you pass.
-`stop` frees the ports and clears state plus the cursor index; child output
-stays in `api.log` / `vite.log` next to the state file.
+prints the env contract callers use — `AGENT_STACK_PORT`,
+`AGENT_STACK_AUX_PORT`, `AGENT_STACK_DATA_DIR`, and `AGENT_STACK_BASE_URL`.
+Starting again reuses the live stack only when the recorded worktree matches.
+`stop` frees the ports, removes the data directory, and clears state plus the
+cursor index; child output stays in `start.log` next to the state file.
 
 UI screenshot capture runs from this harness plugin's `app/` with
 `AGENT_STACK_BASE_URL` exported — the summary Workspace checkout is the server,

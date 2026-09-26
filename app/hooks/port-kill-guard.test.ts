@@ -224,6 +224,44 @@ describe("loadOwnedPorts + decidePortKillPermission", () => {
     });
   });
 
+  it("owns port and auxPort for api, vite, and start roles", () => {
+    const pid = process.pid;
+    const startTime = procStartTime(pid);
+    function writeRoles(
+      cursorId: string,
+      appId: string,
+      processes: Array<{ role: string; pid: number; startTime: string }>,
+    ) {
+      mkdirSync(join(conversationsDir, "agent-stack-cursor-index"), { recursive: true });
+      writeFileSync(
+        join(conversationsDir, "agent-stack-cursor-index", `${cursorId}.json`),
+        `${JSON.stringify({ appConversationId: appId }, null, 2)}\n`,
+      );
+      mkdirSync(join(conversationsDir, appId, "agent-stack"), { recursive: true });
+      writeFileSync(
+        join(conversationsDir, appId, "agent-stack", "state.json"),
+        `${JSON.stringify({
+          port: 41021,
+          auxPort: 41022,
+          processes,
+        }, null, 2)}\n`,
+      );
+    }
+
+    writeRoles("cursor-roles", "app-roles", [
+      { role: "api", pid, startTime },
+      { role: "vite", pid, startTime },
+    ]);
+    const split = loadOwnedPorts("cursor-roles", conversationsDir);
+    expect(split.has(41021)).toBe(true);
+    expect(split.has(41022)).toBe(true);
+
+    writeRoles("cursor-start", "app-start", [{ role: "start", pid, startTime }]);
+    const started = loadOwnedPorts("cursor-start", conversationsDir);
+    expect(started.has(41021)).toBe(true);
+    expect(started.has(41022)).toBe(true);
+  });
+
   it("does not treat stale recycled-port state as owned", async () => {
     const listener = await listenOnPort();
     try {

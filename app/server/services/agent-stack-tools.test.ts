@@ -18,10 +18,20 @@ beforeEach(() => {
   issuesDir = join(root, "issues");
   workspace = join(root, "workspace");
   mkdirSync(issuesDir, { recursive: true });
-  mkdirSync(join(workspace, "app", "node_modules", ".bin"), { recursive: true });
-  for (const name of ["tsx", "vite"]) {
-    writeFileSync(join(workspace, "app", "node_modules", ".bin", name), "#!/bin/sh\n");
-  }
+  writeIssue("proj", {
+    kind: "project",
+    title: "Proj",
+    runtime: {
+      start: "sleep 30",
+      baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+    },
+  });
+  writeIssue("story-a", {
+    kind: "story",
+    partOf: "proj",
+    worktreePath: workspace,
+  });
+  mkdirSync(workspace, { recursive: true });
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", issuesDir);
 });
@@ -40,6 +50,22 @@ afterEach(() => {
   vi.unstubAllEnvs();
   rmSync(root, { recursive: true, force: true });
 });
+
+const STAMP = "2026-01-01T00:00:00.000Z";
+
+function writeIssue(id: string, body: Record<string, unknown>): void {
+  mkdirSync(join(issuesDir, id), { recursive: true });
+  writeFileSync(
+    join(issuesDir, id, "issue.json"),
+    JSON.stringify({
+      id,
+      title: id,
+      createdAt: STAMP,
+      updatedAt: STAMP,
+      ...body,
+    }),
+  );
+}
 
 function procStartTime(pid: number): string {
   const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
@@ -81,9 +107,11 @@ describe("createAgentStackTools", () => {
 
     const sampleState = agentStackStateSchema.parse({
       conversationId: "app-conv",
-      workspace,
-      apiPort: 42001,
-      vitePort: 42002,
+      issueId: "story-a",
+      worktree: workspace,
+      port: 42002,
+      auxPort: 42001,
+      dataDir: join(root, "data"),
       baseUrl: "http://127.0.0.1:42002",
       startedAt: "2026-01-01T00:00:00.000Z",
       processes: [{ role: "api", pid: 1, startTime: "1" }],
@@ -92,8 +120,9 @@ describe("createAgentStackTools", () => {
     expectResultMatchesOutputSchema(tools.agent_stack_start!, {
       state: sampleState,
       env: {
-        AGENT_STACK_API_PORT: "42001",
-        AGENT_STACK_VITE_PORT: "42002",
+        AGENT_STACK_PORT: "42002",
+        AGENT_STACK_AUX_PORT: "42001",
+        AGENT_STACK_DATA_DIR: join(root, "data"),
         AGENT_STACK_BASE_URL: "http://127.0.0.1:42002",
       },
       reused: true,
@@ -116,21 +145,26 @@ describe("createAgentStackTools", () => {
     });
 
     expect(Object.keys(tools).sort()).toEqual([
+      "agent_stack_redeploy",
       "agent_stack_start",
       "agent_stack_stop",
     ]);
     expect(tools.agent_stack_start!.inputSchema).toEqual({
       type: "object",
       properties: {
-        workspace: {
+        issueId: {
           type: "string",
           description:
-            "Absolute path to the Project workspace checkout (the Workspace: path from issue summary).",
+            "Issue whose Story (itself or its containing Story) has the live worktree to boot.",
         },
       },
-      required: ["workspace"],
+      required: ["issueId"],
     });
     expect(tools.agent_stack_stop!.inputSchema).toEqual({
+      type: "object",
+      properties: {},
+    });
+    expect(tools.agent_stack_redeploy!.inputSchema).toEqual({
       type: "object",
       properties: {},
     });
@@ -150,9 +184,11 @@ describe("createAgentStackTools", () => {
       agentStackStatePath("app-conv"),
       JSON.stringify({
         conversationId: "app-conv",
-        workspace,
-        apiPort: 42001,
-        vitePort: 42002,
+        issueId: "story-a",
+        worktree: workspace,
+        port: 42002,
+        auxPort: 42001,
+        dataDir: join(root, "data"),
         baseUrl: "http://127.0.0.1:42002",
         startedAt: "2026-01-01T00:00:00.000Z",
         processes: [{ role: "api", pid, startTime: procStartTime(pid) }],
@@ -166,18 +202,19 @@ describe("createAgentStackTools", () => {
     });
 
     const started = (await tools.agent_stack_start!.execute(
-      { workspace },
+      { issueId: "story-a" },
       {},
     )) as {
       reused: boolean;
       env: Record<string, string>;
-      state: { apiPort: number; vitePort: number };
+      state: { port: number; auxPort: number };
     };
 
     expect(started.reused).toBe(true);
     expect(started.env).toEqual({
-      AGENT_STACK_API_PORT: "42001",
-      AGENT_STACK_VITE_PORT: "42002",
+      AGENT_STACK_PORT: "42002",
+      AGENT_STACK_AUX_PORT: "42001",
+      AGENT_STACK_DATA_DIR: join(root, "data"),
       AGENT_STACK_BASE_URL: "http://127.0.0.1:42002",
     });
     expect(existsSync(agentStackStatePath("app-conv"))).toBe(true);
@@ -201,11 +238,11 @@ describe("createAgentStackTools", () => {
     });
 
     await expect(
-      tools.agent_stack_start!.execute({ workspace }, {}),
+      tools.agent_stack_start!.execute({ issueId: "story-a" }, {}),
     ).rejects.toThrow(/Cursor conversation_id is not available/);
   });
 
-  it("requires workspace in tool input", async () => {
+  it("requires issueId in tool input", async () => {
     const { createAgentStackTools } = await import("./agent-stack-tools.js");
     const tools = createAgentStackTools({
       conversationId: "app-conv",
@@ -213,7 +250,152 @@ describe("createAgentStackTools", () => {
     });
 
     await expect(tools.agent_stack_start!.execute({}, {})).rejects.toThrow(
-      /workspace is required/,
+      /issueId is required/,
     );
   });
+
+  it("refuses redeploy when the conversation has no stack", async () => {
+    const { createAgentStackTools } = await import("./agent-stack-tools.js");
+    const tools = createAgentStackTools({
+      conversationId: "app-conv",
+      getCursorConversationId: () => "cursor-1",
+    });
+
+    await expect(tools.agent_stack_redeploy!.execute({}, {})).rejects.toThrow(
+      /no live stack/,
+    );
+  });
+
+  it("returns without running when redeploy is empty", async () => {
+    const { createAgentStackTools } = await import("./agent-stack-tools.js");
+    const { agentStackDir, agentStackStatePath } = await import("./agent-stack.js");
+    const marker = join(root, "readiness-ran");
+    const script = join(root, "should-not-run.cjs");
+    writeFileSync(
+      script,
+      `require("fs").writeFileSync(${JSON.stringify(marker)}, "x");\n`,
+    );
+    const pid = spawnGroupLeader(join(root, "child.pid"));
+    writeIssue("proj", {
+      kind: "project",
+      title: "Proj",
+      runtime: {
+        start: "sleep 30",
+        readiness: `node ${JSON.stringify(script)}`,
+        baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+      },
+    });
+    mkdirSync(agentStackDir("app-conv"), { recursive: true });
+    writeFileSync(
+      agentStackStatePath("app-conv"),
+      JSON.stringify({
+        conversationId: "app-conv",
+        issueId: "story-a",
+        worktree: workspace,
+        port: 42002,
+        auxPort: 42001,
+        dataDir: join(root, "data"),
+        baseUrl: "http://127.0.0.1:42002",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        processes: [{ role: "start", pid, startTime: procStartTime(pid) }],
+        cursorConversationIds: [],
+      }),
+    );
+
+    const tools = createAgentStackTools({
+      conversationId: "app-conv",
+      getCursorConversationId: () => "cursor-1",
+    });
+    const result = await tools.agent_stack_redeploy!.execute({}, {});
+
+    expect(result).toEqual({
+      ran: false,
+      message: "the runtime hot-reloads",
+    });
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it("runs redeploy with the stack variables, then readiness", async () => {
+    vi.stubEnv("AGENT_STACK_BASE_URL", "http://leaked.example");
+    const { createAgentStackTools } = await import("./agent-stack-tools.js");
+    const { agentStackDir, agentStackStatePath } = await import("./agent-stack.js");
+    const orderFile = join(root, "order");
+    const pid = spawnGroupLeader(join(root, "child.pid"));
+    writeIssue("proj", {
+      kind: "project",
+      title: "Proj",
+      runtime: {
+        start: "sleep 30",
+        redeploy: phaseCommand(orderFile, "redeploy"),
+        readiness: phaseCommand(orderFile, "readiness"),
+        baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+      },
+    });
+    mkdirSync(agentStackDir("app-conv"), { recursive: true });
+    writeFileSync(
+      agentStackStatePath("app-conv"),
+      JSON.stringify({
+        conversationId: "app-conv",
+        issueId: "story-a",
+        worktree: workspace,
+        port: 42002,
+        auxPort: 42001,
+        dataDir: join(root, "data"),
+        baseUrl: "http://stack.example:42002",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        processes: [{ role: "start", pid, startTime: procStartTime(pid) }],
+        cursorConversationIds: [],
+      }),
+    );
+
+    const tools = createAgentStackTools({
+      conversationId: "app-conv",
+      getCursorConversationId: () => "cursor-1",
+    });
+    const result = (await tools.agent_stack_redeploy!.execute({}, {})) as {
+      ran: boolean;
+      redeploy: { exitStatus: number; output: string };
+      readiness: { exitStatus: number; output: string };
+    };
+
+    const rows = readFileSync(orderFile, "utf8").trim().split("\n");
+    expect(rows.map((line) => line.split("\t")[0])).toEqual([
+      "redeploy",
+      "readiness",
+    ]);
+    for (const line of rows) {
+      expect(line.split("\t")).toEqual([
+        expect.any(String),
+        "42002",
+        "42001",
+        join(root, "data"),
+        "http://stack.example:42002",
+      ]);
+    }
+    expect(result).toEqual({
+      ran: true,
+      redeploy: { exitStatus: 0, output: "redeploy-ok" },
+      readiness: { exitStatus: 0, output: "readiness-ok" },
+    });
+  });
 });
+
+function phaseCommand(orderFile: string, phase: string): string {
+  const path = join(root, `${phase}.cjs`);
+  writeFileSync(
+    path,
+    `
+      const fs = require("fs");
+      if (process.cwd() !== ${JSON.stringify(workspace)}) process.exit(2);
+      fs.appendFileSync(${JSON.stringify(orderFile)}, [
+        ${JSON.stringify(phase)},
+        process.env.AGENT_STACK_PORT,
+        process.env.AGENT_STACK_AUX_PORT,
+        process.env.AGENT_STACK_DATA_DIR,
+        process.env.AGENT_STACK_BASE_URL ?? "",
+      ].join("\\t") + "\\n");
+      console.log(${JSON.stringify(`${phase}-ok`)});
+    `,
+  );
+  return `node ${JSON.stringify(path)}`;
+}

@@ -10,9 +10,8 @@ Absolute path for this file (Read this exact path):
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`.
 
-1. Call `agent_stack_start` with `workspace` set to the absolute `Workspace:`
-   path from `issue summary` of the issue being verified. Export the returned
-   `AGENT_STACK_BASE_URL` into the shell.
+1. Call `agent_stack_start` with `issueId` set to the issue being verified.
+   Export the returned `AGENT_STACK_BASE_URL` into the shell.
 2. Run `npm run screenshots -- <path-or-dialog>` or
    `npm run screenshots -- --driver <absolute path>` from the plugin `app/` beside
    `agents/_issue-tracker-ui-look.md` (workspace-relative `app/`). Pass the

@@ -35,6 +35,7 @@ import {
 import { formatAttachmentsSection } from "./server/services/summary.js";
 import { formatInspirationAppsLine } from "./server/services/inspiration-apps.js";
 import { formatPersonasLine } from "./server/services/personas.js";
+import { formatRuntimeLine } from "./server/services/runtime.js";
 import { formatSupportingDocsLine } from "./server/services/supporting-docs.js";
 import { coerceEnum, coercePositiveInt } from "./cli-coerce.js";
 import { assertKind, kindGetValue, resolveIssueKind } from "./cli-kind.js";
@@ -169,6 +170,10 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     if (detail.supportingDocs) {
       const line = formatSupportingDocsLine(detail.supportingDocs);
       if (line) lines.push(`supportingDocs: ${line}`);
+    }
+    if (detail.runtime) {
+      const line = formatRuntimeLine(detail.runtime);
+      if (line) lines.push(`runtime: ${line}`);
     }
     if (detail.inspirationApps && detail.inspirationApps.length > 0) {
       const line = formatInspirationAppsLine(detail.inspirationApps);
