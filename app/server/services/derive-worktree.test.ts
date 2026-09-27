@@ -171,7 +171,34 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
+  });
+
+  it("marks a locked worktree registration", async () => {
+    const workspace = initRepo();
+    const path = addWorktree(workspace, "feat-locked");
+    git(workspace, ["worktree", "lock", path]);
+    seedProject({ workspace });
+    writeStory("s", { branchName: "feat-locked", worktreePath: path });
+
+    const list = await loadList();
+    expect(worktreeOf(list().derived, "s").locked).toBe(true);
+    git(workspace, ["worktree", "unlock", path]);
+  });
+
+  it("marks a locked registration after the directory is gone", async () => {
+    const workspace = initRepo();
+    const path = addWorktree(workspace, "feat-locked-gone");
+    git(workspace, ["worktree", "lock", path]);
+    rmSync(path, { recursive: true, force: true });
+    seedProject({ workspace });
+    writeStory("s", { branchName: "feat-locked-gone", worktreePath: path });
+
+    const list = await loadList();
+    const worktree = worktreeOf(list().derived, "s");
+    expect(worktree.exists).toBe(false);
+    expect(worktree.locked).toBe(true);
   });
 
   it("counts a tracked modification", async () => {
@@ -260,6 +287,7 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
   });
 
@@ -275,6 +303,7 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
     rmSync(path, { recursive: true, force: true });
   });
@@ -294,6 +323,7 @@ describe("derived worktree on list()", () => {
     expect(worktree.uncommittedCount).toBe(0);
     expect(worktree.atRiskCommitCount).toBe(0);
     expect(worktree.retained).toBe(false);
+    expect(worktree.locked).toBe(false);
   });
 
   it("surfaces the recorded setup failure and blocked reason", async () => {
@@ -312,6 +342,7 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
       setupFailed: true,
       setupLogPath: logPath,
       setupOutput: "setup failed\n",
@@ -381,6 +412,7 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
   });
 
@@ -397,6 +429,7 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
   });
 

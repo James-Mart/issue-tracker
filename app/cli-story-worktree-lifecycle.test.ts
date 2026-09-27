@@ -204,6 +204,53 @@ describe("lifecycle worktree removal", () => {
     expect(record).toContain("\nlocked");
   });
 
+  it("keeps a locked worktree when merge refuses removal", async () => {
+    const path = await createCleanWorktree("locked-merge");
+    const workspace = issueJsonField<string>("p", "workspace");
+    git(workspace, ["worktree", "lock", path]);
+    await withIssuesDir(() => update("locked-merge", { merged: true }));
+    expect(issueJsonField("locked-merge", "merged")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("locked-merge", "worktreePath")).toBe(path);
+    const worktree = await runIssueCli(["story", "get", "locked-merge", "worktree"], {
+      env: env(),
+    });
+    expect(JSON.parse(worktree.stdout)).toMatchObject({
+      exists: true,
+      retained: true,
+      locked: true,
+      uncommittedCount: 0,
+      atRiskCommitCount: 0,
+    });
+    git(workspace, ["worktree", "unlock", path]);
+  });
+
+  it("keeps a locked worktree when archive refuses removal", async () => {
+    const path = await createCleanWorktree("locked-archive");
+    const workspace = issueJsonField<string>("p", "workspace");
+    git(workspace, ["worktree", "lock", path]);
+    const result = await runIssueCli(["story", "set", "locked-archive", "archived", "true"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(issueJsonField("locked-archive", "archived")).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(issueJsonField("locked-archive", "worktreePath")).toBe(path);
+    git(workspace, ["worktree", "unlock", path]);
+  });
+
+  it("deletes the Story and names the path when a locked worktree is refused", async () => {
+    const path = await createCleanWorktree("locked-delete");
+    const workspace = issueJsonField<string>("p", "workspace");
+    git(workspace, ["worktree", "lock", path]);
+    const result = await runIssueCli(["story", "delete", "locked-delete"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("deleted locked-delete");
+    expect(result.stdout).toContain(`retained worktree for locked-delete at ${path}`);
+    expect(existsSync(path)).toBe(true);
+    git(workspace, ["worktree", "unlock", path]);
+  });
+
   it("fails delete when worktree remove hits git-failed and does not report retained", async () => {
     const path = await createCleanWorktree();
     failGitWorktreeRemove();

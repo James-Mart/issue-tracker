@@ -715,6 +715,42 @@ describe("story worktree remove", () => {
     expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
   });
 
+  it("refuses a locked worktree and --discard does not override the lock", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("locked-a");
+
+    const expectedPath = trackWorktree(workspace, "p", "locked-a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "locked-a"], { env: env() })).status,
+    ).toBe(0);
+    writeFileSync(join(expectedPath, "README"), "dirty\n");
+    git(workspace, ["worktree", "lock", expectedPath]);
+
+    const refused = await runIssueCli(["story", "worktree", "remove", "locked-a"], {
+      env: env(),
+    });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain(
+      'worktree remove refuses Story "locked-a": worktree is locked',
+    );
+    expect(refused.stderr).not.toMatch(/uncommitted change/);
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("locked-a", "worktreePath")).toBe(expectedPath);
+
+    const discarded = await runIssueCli(
+      ["story", "worktree", "remove", "locked-a", "--discard"],
+      { env: env() },
+    );
+    expect(discarded.status).not.toBe(0);
+    expect(discarded.stderr).toContain(
+      'worktree remove refuses Story "locked-a": worktree is locked',
+    );
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("locked-a", "worktreePath")).toBe(expectedPath);
+    git(workspace, ["worktree", "unlock", expectedPath]);
+  });
+
   it("refuses when the Story has no worktree", async () => {
     const workspace = initRepo();
     seedProject(workspace);

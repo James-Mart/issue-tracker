@@ -17,6 +17,7 @@ const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   "remote",
   "status",
   "ls-files",
+  "worktree",
 ]);
 
 /** @internal Test seam for stubbing git spawn. */
@@ -51,6 +52,12 @@ function assertReadOnlyGitSubcommand(args: string[]): void {
     throw new IssueError(
       "validation",
       `git subcommand "remote ${args[1] ?? ""}" is not allowed; only remote get-url is permitted`,
+    );
+  }
+  if (subcommand === "worktree" && args[1] !== "list") {
+    throw new IssueError(
+      "validation",
+      `git subcommand "worktree ${args[1] ?? ""}" is not allowed; only worktree list is permitted`,
     );
   }
 }
@@ -181,6 +188,34 @@ export function refIsAncestor(
   const errText =
     result.stderr.trim() || `git exited with code ${result.status}`;
   throw new IssueError("git-failed", errText);
+}
+
+export type ListedWorktree = { path: string; locked: boolean };
+
+/** Parse `git worktree list --porcelain` into one entry per registered path. */
+export function listedWorktrees(porcelain: string): ListedWorktree[] {
+  const entries: ListedWorktree[] = [];
+  let current: ListedWorktree | undefined;
+  for (const line of porcelain.split("\n")) {
+    if (line.startsWith("worktree ")) {
+      if (current) entries.push(current);
+      current = { path: line.slice("worktree ".length), locked: false };
+      continue;
+    }
+    if (current && (line === "locked" || line.startsWith("locked "))) {
+      current.locked = true;
+    }
+  }
+  if (current) entries.push(current);
+  return entries;
+}
+
+/** True when porcelain marks `path` locked. */
+export function worktreePathLocked(cwd: string, path: string): boolean {
+  const porcelain = runGitSync(["worktree", "list", "--porcelain"], cwd);
+  return listedWorktrees(porcelain).some(
+    (item) => item.path === path && item.locked,
+  );
 }
 
 function porcelainLinePath(line: string): string {

@@ -19,8 +19,9 @@ export type WorktreeCardModel =
       path?: string;
       uncommittedCount: number;
       atRiskCommitCount: number;
+      locked: boolean;
     }
-  | { kind: "active"; path: string };
+  | { kind: "active"; path: string; locked: boolean };
 
 export const WORKTREE_PARENT_BRANCH_SUFFIX =
   "has no branch yet. Start its work loop before this Story can get a checkout.";
@@ -50,10 +51,11 @@ export function worktreeCardModel(
       path: worktree.path,
       uncommittedCount: worktree.uncommittedCount,
       atRiskCommitCount: worktree.atRiskCommitCount,
+      locked: worktree.locked,
     };
   }
   if (worktree.exists && worktree.path) {
-    return { kind: "active", path: worktree.path };
+    return { kind: "active", path: worktree.path, locked: worktree.locked };
   }
   return null;
 }
@@ -66,11 +68,35 @@ export function worktreeNounCount(
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+export const WORKTREE_RETAINED_LOCKED_COPY =
+  "This checkout outlived its Story — the worktree is locked outside the tracker.";
+
+export const WORKTREE_LOCKED_REMOVE_COPY =
+  "This worktree is locked outside the tracker. Unlock it (git worktree unlock) to remove it.";
+
 export function worktreeRetainedCopy(
   uncommittedCount: number,
   atRiskCommitCount: number,
+  locked = false,
 ): string {
+  if (locked && uncommittedCount === 0 && atRiskCommitCount === 0) {
+    return WORKTREE_RETAINED_LOCKED_COPY;
+  }
   return `This checkout outlived its Story — ${worktreeNounCount(uncommittedCount, "uncommitted change", "uncommitted changes")}, ${worktreeNounCount(atRiskCommitCount, "at-risk commit", "at-risk commits")}.`;
+}
+
+export function worktreeRemoveConflictCopy(message: string): string {
+  if (message.endsWith(": worktree is locked")) return WORKTREE_LOCKED_REMOVE_COPY;
+  return message;
+}
+
+export function worktreeCardConflict(
+  model: WorktreeCardModel,
+  conflict: string | null,
+): string | null {
+  if (model.kind === "active" && model.locked) return WORKTREE_LOCKED_REMOVE_COPY;
+  if (!conflict) return null;
+  return worktreeRemoveConflictCopy(conflict);
 }
 
 export const WORKTREE_REMOVE_DISABLED_REASON =

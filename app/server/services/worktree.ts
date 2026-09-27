@@ -8,7 +8,7 @@ import {
 } from "../worktree-constants.js";
 import { deriveStoryWorktree } from "./derive-worktree.js";
 import { IssueError } from "./errors.js";
-import { branchExists, currentBranch } from "./git-read.js";
+import { branchExists, currentBranch, listedWorktrees } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
 import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { hasActiveImplementingRun } from "./implementing-status.js";
@@ -93,30 +93,14 @@ export const REMOVE_UNSAFE_ERROR = (
 ) =>
   `worktree remove refuses Story "${storyId}": ${uncommittedCount} uncommitted change(s), ${atRiskCommitCount} at-risk commit(s)`;
 
+export const REMOVE_LOCKED_ERROR = (storyId: string) =>
+  `worktree remove refuses Story "${storyId}": worktree is locked`;
+
 async function addWorktree(
   workspace: string,
   args: string[],
 ): Promise<void> {
   await runGitWrite(["worktree", "add", ...args], workspace);
-}
-
-type ListedWorktree = { path: string; locked: boolean };
-
-function listedWorktrees(porcelain: string): ListedWorktree[] {
-  const entries: ListedWorktree[] = [];
-  let current: ListedWorktree | undefined;
-  for (const line of porcelain.split("\n")) {
-    if (line.startsWith("worktree ")) {
-      if (current) entries.push(current);
-      current = { path: line.slice("worktree ".length), locked: false };
-      continue;
-    }
-    if (current && (line === "locked" || line.startsWith("locked "))) {
-      current.locked = true;
-    }
-  }
-  if (current) entries.push(current);
-  return entries;
 }
 
 /** Drop this path's Git registration when the directory is already gone. A locked registration stays listed, and other registrations are left alone. */
@@ -285,8 +269,8 @@ export async function attemptStoryWorktreeRemoval(
     await removeStoryWorktree(storyId, { allowActiveRun: true });
     return { outcome: "removed", path };
   } catch (err) {
-    // Automatic callers never pass --discard. Absorb only an explicit
-    // removal refusal (unsafe checkout or active implementing).
+    // Automatic callers never pass --discard. Absorb a removal refusal
+    // (unsafe checkout, locked worktree, or active implementing).
     if (!(err instanceof IssueError) || err.code !== "conflict") throw err;
     if (path && existsSync(path)) return { outcome: "retained", path };
     return { outcome: "absent" };
@@ -341,6 +325,10 @@ export async function removeStoryWorktree(
 
   const worktree =
     derived[storyId]?.worktree ?? deriveStoryWorktree(story, issues);
+  if (worktree.locked) {
+    throw new IssueError("conflict", REMOVE_LOCKED_ERROR(storyId));
+  }
+
   const uncommittedCount = worktree.uncommittedCount;
   const atRiskCommitCount = worktree.atRiskCommitCount;
 

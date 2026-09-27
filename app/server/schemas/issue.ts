@@ -492,6 +492,7 @@ export interface DerivedWorktree {
   uncommittedCount: number;
   atRiskCommitCount: number;
   retained: boolean;
+  locked: boolean;
   setupFailed?: boolean;
   setupLogPath?: string;
   setupOutput?: string;
