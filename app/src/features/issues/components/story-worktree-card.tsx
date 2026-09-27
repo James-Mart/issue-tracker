@@ -15,6 +15,7 @@ import {
   WORKTREE_REMOVE_ACTIVE_CONFIRM,
   WORKTREE_REMOVE_DISABLED_REASON,
   WORKTREE_SETUP_FAILED_COPY,
+  worktreeCardConflict,
   worktreeCardModel,
   worktreeRemoveRetainedConfirm,
   worktreeRetainedCopy,
@@ -177,6 +178,7 @@ function CardBody({
           {worktreeRetainedCopy(
             model.uncommittedCount,
             model.atRiskCommitCount,
+            model.locked,
           )}
         </p>
       </div>
@@ -221,6 +223,7 @@ function StoryWorktreeCardInner({
           model.atRiskCommitCount,
         )
       : WORKTREE_REMOVE_ACTIVE_CONFIRM;
+  const alertCopy = worktreeCardConflict(model, conflict);
 
   const postRemove = () => {
     setConfirmOpen(false);
@@ -310,13 +313,13 @@ function StoryWorktreeCardInner({
           Retry setup
         </Button>
       ) : null}
-      {conflict ? (
+      {alertCopy ? (
         <p
           role="alert"
           data-testid="story-worktree-conflict"
           className="mt-3 text-sm text-destructive"
         >
-          {conflict}
+          {alertCopy}
         </p>
       ) : null}
       {canRemove ? (

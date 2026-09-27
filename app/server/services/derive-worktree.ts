@@ -2,7 +2,11 @@ import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import type { DerivedWorktree, DerivedState, Issue } from "../schemas.js";
 import { setupLogPathFor } from "../worktree-constants.js";
-import { atRiskCommitCount, porcelainStatusCount } from "./git-read.js";
+import {
+  atRiskCommitCount,
+  porcelainStatusCount,
+  worktreePathLocked,
+} from "./git-read.js";
 import { projectContaining } from "./subtree.js";
 
 type Story = Extract<Issue, { kind: "story" }>;
@@ -12,6 +16,20 @@ function trunkForStory(story: Story, byId: Map<string, Issue>): string {
   if (!projectId) return "main";
   const project = byId.get(projectId);
   return project?.kind === "project" ? project.trunk : "main";
+}
+
+function pathIsLocked(
+  path: string | undefined,
+  gitCheckout: boolean,
+  projectId: string | undefined,
+  byId: Map<string, Issue>,
+): boolean {
+  if (!path) return false;
+  if (gitCheckout) return worktreePathLocked(path, path);
+  const project = projectId ? byId.get(projectId) : undefined;
+  const workspace = project?.kind === "project" ? project.workspace : undefined;
+  if (!workspace || !existsSync(join(workspace, ".git"))) return false;
+  return worktreePathLocked(workspace, path);
 }
 
 function setupRecord(
@@ -55,6 +73,7 @@ export function deriveStoryWorktree(
     uncommittedCount,
     atRiskCommitCount: atRisk,
     retained: exists && (story.merged || story.archived),
+    locked: pathIsLocked(path, gitCheckout, projectId, byId),
     ...setupRecord(story, projectId),
     ...(story.worktreeBlockedReason
       ? { blockedReason: story.worktreeBlockedReason }

@@ -1,13 +1,15 @@
 import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { runIssueCli } from "./cli-program.js";
 import {
+  addSubmodule,
   git,
   initRepo,
+  initSubmoduleInWorktree,
   seedImplementingSession,
   seedProject,
   trackWorktree,
@@ -497,6 +499,26 @@ describe("story worktree remove", () => {
     expect(issueJsonField("a", "worktreePath")).toBeUndefined();
   });
 
+  it("removes a clean worktree that contains a submodule", async () => {
+    const workspace = initRepo();
+    addSubmodule(workspace, "libs/foo");
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    initSubmoduleInWorktree(expectedPath, "libs/foo");
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(expectedPath)).toBe(false);
+    expect(issueJsonField("a", "worktreePath")).toBeUndefined();
+  });
+
   it("removes a worktree when only gitignored files are present", async () => {
     const workspace = initRepo({ gitignore: "*.ignored\n" });
     seedProject(workspace);
@@ -532,6 +554,29 @@ describe("story worktree remove", () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/1 uncommitted change\(s\), 0 at-risk commit\(s\)/);
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
+  });
+
+  it("refuses removal when the only dirt is inside a submodule", async () => {
+    const workspace = initRepo();
+    addSubmodule(workspace, "libs/foo");
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    const subPath = initSubmoduleInWorktree(expectedPath, "libs/foo");
+    writeFileSync(join(subPath, "bar.txt"), "sub dirty\n");
+    writeFileSync(join(subPath, "extra.txt"), "new\n");
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/2 uncommitted change\(s\), 0 at-risk commit\(s\)/);
     expect(existsSync(expectedPath)).toBe(true);
     expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
   });
@@ -670,6 +715,42 @@ describe("story worktree remove", () => {
     expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
   });
 
+  it("refuses a locked worktree and --discard does not override the lock", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("locked-a");
+
+    const expectedPath = trackWorktree(workspace, "p", "locked-a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "locked-a"], { env: env() })).status,
+    ).toBe(0);
+    writeFileSync(join(expectedPath, "README"), "dirty\n");
+    git(workspace, ["worktree", "lock", expectedPath]);
+
+    const refused = await runIssueCli(["story", "worktree", "remove", "locked-a"], {
+      env: env(),
+    });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain(
+      'worktree remove refuses Story "locked-a": worktree is locked',
+    );
+    expect(refused.stderr).not.toMatch(/uncommitted change/);
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("locked-a", "worktreePath")).toBe(expectedPath);
+
+    const discarded = await runIssueCli(
+      ["story", "worktree", "remove", "locked-a", "--discard"],
+      { env: env() },
+    );
+    expect(discarded.status).not.toBe(0);
+    expect(discarded.stderr).toContain(
+      'worktree remove refuses Story "locked-a": worktree is locked',
+    );
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("locked-a", "worktreePath")).toBe(expectedPath);
+    git(workspace, ["worktree", "unlock", expectedPath]);
+  });
+
   it("refuses when the Story has no worktree", async () => {
     const workspace = initRepo();
     seedProject(workspace);
@@ -680,6 +761,91 @@ describe("story worktree remove", () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/requires an existing worktree/);
+  });
+
+  it("clears worktreePath when the directory is already gone", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("gone-a", { order: 0 });
+    writeStory("gone-b", { order: 1 });
+    writeStory("gone-c", { order: 2 });
+    const path = trackWorktree(workspace, "p", "gone-a");
+    const otherLive = trackWorktree(workspace, "p", "gone-b");
+    const otherStale = trackWorktree(workspace, "p", "gone-c");
+    expect((await runIssueCli(["story", "worktree", "create", "gone-a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "worktree", "create", "gone-b"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "worktree", "create", "gone-c"], { env: env() })).status).toBe(0);
+    rmSync(path, { recursive: true, force: true });
+    rmSync(otherStale, { recursive: true, force: true });
+
+    const result = await runIssueCli(["story", "worktree", "remove", "gone-a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(path);
+    expect(issueJsonField("gone-a", "worktreePath")).toBeUndefined();
+    const listed = git(workspace, ["worktree", "list", "--porcelain"]).split("\n");
+    expect(listed).not.toContain(`worktree ${path}`);
+    expect(listed).toContain(`worktree ${otherLive}`);
+    expect(listed).toContain(`worktree ${otherStale}`);
+    expect(issueJsonField("gone-b", "worktreePath")).toBe(otherLive);
+    expect(issueJsonField("gone-c", "worktreePath")).toBe(otherStale);
+  });
+
+  it("clears worktreePath and leaves a locked registration when the directory is already gone", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("gone-a", { order: 0 });
+    writeStory("gone-b", { order: 1 });
+    const path = trackWorktree(workspace, "p", "gone-a");
+    const otherLive = trackWorktree(workspace, "p", "gone-b");
+    expect((await runIssueCli(["story", "worktree", "create", "gone-a"], { env: env() })).status).toBe(0);
+    expect((await runIssueCli(["story", "worktree", "create", "gone-b"], { env: env() })).status).toBe(0);
+    git(workspace, ["worktree", "lock", path]);
+    rmSync(path, { recursive: true, force: true });
+
+    const result = await runIssueCli(["story", "worktree", "remove", "gone-a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(issueJsonField("gone-a", "worktreePath")).toBeUndefined();
+    const listed = git(workspace, ["worktree", "list", "--porcelain"]);
+    expect(listed.split("\n")).toContain(`worktree ${path}`);
+    expect(listed.split("\n")).toContain(`worktree ${otherLive}`);
+    const record = listed.split("\n\n").find((block) => block.startsWith(`worktree ${path}\n`));
+    expect(record).toContain("\nlocked");
+    expect(issueJsonField("gone-b", "worktreePath")).toBe(otherLive);
+  });
+
+  it("clears a stored path that has no Git registration", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("gone-b", { order: 1 });
+    const otherLive = trackWorktree(workspace, "p", "gone-b");
+    expect((await runIssueCli(["story", "worktree", "create", "gone-b"], { env: env() })).status).toBe(0);
+    const missing = trackWorktree(workspace, "p", "gone-a");
+    writeStory("gone-a", { order: 0, worktreePath: missing });
+
+    const result = await runIssueCli(["story", "worktree", "remove", "gone-a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(missing);
+    expect(issueJsonField("gone-a", "worktreePath")).toBeUndefined();
+    const listed = git(workspace, ["worktree", "list", "--porcelain"]).split("\n");
+    expect(listed).not.toContain(`worktree ${missing}`);
+    expect(listed).toContain(`worktree ${otherLive}`);
+  });
+
+  it("clears a missing directory while an implementing session is active", async () => {
+    const workspace = initRepo();
+    seedProject(workspace);
+    writeStory("gone-a");
+    const path = trackWorktree(workspace, "p", "gone-a");
+    expect((await runIssueCli(["story", "worktree", "create", "gone-a"], { env: env() })).status).toBe(0);
+    seedImplementingSession("conv-live", "gone-a", "p", { live: true });
+    rmSync(path, { recursive: true, force: true });
+
+    const result = await runIssueCli(["story", "worktree", "remove", "gone-a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(issueJsonField("gone-a", "worktreePath")).toBeUndefined();
+    expect(git(workspace, ["worktree", "list", "--porcelain"]).split("\n")).not.toContain(
+      `worktree ${path}`,
+    );
   });
 });
 

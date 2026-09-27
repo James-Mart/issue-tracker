@@ -6,9 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, DerivedWorktree, IssueDetail, IssueRecord } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
 import {
+  WORKTREE_LOCKED_REMOVE_COPY,
   WORKTREE_PARENT_BRANCH_SUFFIX,
   WORKTREE_REMOVE_ACTIVE_CONFIRM,
   WORKTREE_REMOVE_DISABLED_REASON,
+  WORKTREE_RETAINED_LOCKED_COPY,
   WORKTREE_SETUP_FAILED_COPY,
   worktreeRemoveRetainedConfirm,
   worktreeRetainedCopy,
@@ -89,6 +91,7 @@ function worktree(overrides: Partial<DerivedWorktree> = {}): DerivedWorktree {
     uncommittedCount: 0,
     atRiskCommitCount: 0,
     retained: false,
+    locked: false,
     ...overrides,
   };
 }
@@ -433,6 +436,105 @@ describe("StoryWorktreeCard", () => {
     expect(
       container.querySelector('[data-testid="story-worktree-retry"]'),
     ).toBeNull();
+  });
+
+  it("shows the unlock sentence on an active locked card", () => {
+    const issue = story();
+    seed(issue, worktree({ exists: true, path: PATH, locked: true }));
+    const { container } = mountCard(issue);
+    expect(
+      container.querySelector('[data-testid="story-worktree-card"]')
+        ?.getAttribute("data-state"),
+    ).toBe("active");
+    expect(
+      container.querySelector('[data-testid="story-worktree-conflict"]')
+        ?.textContent,
+    ).toBe(WORKTREE_LOCKED_REMOVE_COPY);
+    expect(container.textContent).not.toContain("worktree remove refuses");
+    expect(
+      container.querySelector('[data-testid="story-worktree-remove"]'),
+    ).not.toBeNull();
+  });
+
+  it("keeps the count sentence when a retained checkout is locked and dirty", () => {
+    const issue = story({ merged: true });
+    seed(
+      issue,
+      worktree({
+        exists: true,
+        path: PATH,
+        retained: true,
+        locked: true,
+        uncommittedCount: 2,
+        atRiskCommitCount: 1,
+      }),
+    );
+    const { container } = mountCard(issue);
+    expect(
+      container.querySelector('[data-testid="story-worktree-retained-copy"]')
+        ?.textContent,
+    ).toBe(worktreeRetainedCopy(2, 1, true));
+    expect(container.textContent).not.toContain(WORKTREE_RETAINED_LOCKED_COPY);
+  });
+
+  it("names a clean locked retained checkout without the count sentence", () => {
+    const issue = story({ merged: true });
+    seed(
+      issue,
+      worktree({
+        exists: true,
+        path: PATH,
+        retained: true,
+        locked: true,
+      }),
+    );
+    const { container } = mountCard(issue);
+    expect(
+      container.querySelector('[data-testid="story-worktree-retained-copy"]')
+        ?.textContent,
+    ).toBe(WORKTREE_RETAINED_LOCKED_COPY);
+    expect(
+      container.querySelector('[data-testid="story-worktree-conflict"]'),
+    ).toBeNull();
+  });
+
+  it("renders the unlock sentence instead of the CLI lock message", () => {
+    const issue = story({ merged: true });
+    seed(
+      issue,
+      worktree({
+        exists: true,
+        path: PATH,
+        retained: true,
+        locked: true,
+        uncommittedCount: 1,
+      }),
+    );
+    const { container } = mountCard(issue);
+    const message =
+      'worktree remove refuses Story "story-oauth-hardening": worktree is locked';
+    removeMutate.mockImplementation(
+      (_input, opts: { onError?: (err: Error) => void }) => {
+        opts.onError?.(new ApiError(message, 409, { error: message }));
+      },
+    );
+
+    act(() => {
+      actionButton(container, "story-worktree-remove").click();
+    });
+    act(() => {
+      actionButton(document.body, "remove-worktree-confirm").click();
+    });
+
+    expect(
+      container.querySelector('[data-testid="story-worktree-conflict"]')
+        ?.textContent,
+    ).toBe(WORKTREE_LOCKED_REMOVE_COPY);
+    expect(container.textContent).not.toContain("worktree remove refuses");
+    expect(
+      container.querySelector('[data-testid="story-worktree-retained-copy"]')
+        ?.textContent,
+    ).toBe(worktreeRetainedCopy(1, 0, true));
   });
 
   it("renders a 409 from remove on the card", () => {

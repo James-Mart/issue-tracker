@@ -268,7 +268,8 @@ These are computed by `derive()` and never written to disk (see
   `issue story get … worktree`: recorded `path`, whether that directory
   `exists`, porcelain `uncommittedCount` (ignored paths omitted),
   `atRiskCommitCount` (Story-branch commits reachable from neither trunk nor
-  upstream), `retained` (`exists` while merged or archived), last-setup
+  upstream), `retained` (`exists` while merged or archived), `locked`
+  (`git worktree list --porcelain` marks the stored path `locked`), last-setup
   `setupFailed` / `setupLogPath` / `setupOutput`, and `blockedReason`. A
   missing `worktreePath` or vanished directory is absent (`exists: false`,
   counts 0) rather than an error. See [Derived state](#derived-state).
@@ -388,7 +389,8 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   validated service layer (same path as `issue story set <storyId> merged
   true`); that write carries the stale-sibling cascade and attempts safe
   worktree removal (no `--discard`). An unsafe refusal leaves the checkout
-  and does not fail the merge. Other removal failures still fail the caller.
+  and does not fail the merge. A locked-worktree refusal is absorbed the
+  same way. Other removal failures still fail the caller.
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
@@ -1399,6 +1401,13 @@ fail the deletion; the CLI names each
 retained path so a human can clear it by hand. Other removal failures
 still fail the caller.
 
+A locked worktree is absorbed the same way. When the directory is still on
+disk and `git worktree list --porcelain` marks that path `locked`, removal
+throws `IssueError` code `conflict` with message
+`worktree remove refuses Story "<id>": worktree is locked` before
+`git worktree remove` runs. `discard` does not override a lock, so delete
+still succeeds and the checkout stays.
+
 **Invariant.** After `remove()`, `list().problems` gains no new
 dangling-reference, wrong-kind, or cycle problem — guaranteed by construction in
 `planDeletion()` and re-validated against the surviving set before any write.
@@ -1854,11 +1863,13 @@ so cannot drift:
   `git status --porcelain` in the worktree, without `--ignored`),
   `atRiskCommitCount` (commits on `branchName` reachable from neither the
   Project `trunk` nor the branch's upstream when one exists), `retained`
-  (`exists` while the Story is merged or archived), `setupFailed` /
+  (`exists` while the Story is merged or archived), `locked` (`git worktree
+  list --porcelain` marks the stored path `locked`), `setupFailed` /
   `setupLogPath` / `setupOutput` (last setup attempt; output is the log text),
   and `blockedReason` (`worktreeBlockedReason`). Merge, archive, and delete
   each attempt safe worktree removal automatically (no `--discard`); an
-  unsafe refusal is not an error, and `retained` is how a leftover checkout
+  unsafe refusal is not an error, and a locked-worktree refusal is absorbed
+  the same way. `retained` is how a leftover checkout
   is reported while the Story record still exists.
   Other removal failures still fail the caller. Counts are read through
   `app/server/services/git-read.ts` with the worktree as cwd. A Story with no

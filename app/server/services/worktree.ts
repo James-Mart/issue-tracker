@@ -8,7 +8,7 @@ import {
 } from "../worktree-constants.js";
 import { deriveStoryWorktree } from "./derive-worktree.js";
 import { IssueError } from "./errors.js";
-import { branchExists, currentBranch } from "./git-read.js";
+import { branchExists, currentBranch, listedWorktrees } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
 import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { hasActiveImplementingRun } from "./implementing-status.js";
@@ -93,11 +93,28 @@ export const REMOVE_UNSAFE_ERROR = (
 ) =>
   `worktree remove refuses Story "${storyId}": ${uncommittedCount} uncommitted change(s), ${atRiskCommitCount} at-risk commit(s)`;
 
+export const REMOVE_LOCKED_ERROR = (storyId: string) =>
+  `worktree remove refuses Story "${storyId}": worktree is locked`;
+
 async function addWorktree(
   workspace: string,
   args: string[],
 ): Promise<void> {
   await runGitWrite(["worktree", "add", ...args], workspace);
+}
+
+/** Drop this path's Git registration when the directory is already gone. A locked registration stays listed, and other registrations are left alone. */
+async function dropUnlockedMissingRegistration(
+  workspace: string,
+  path: string,
+): Promise<void> {
+  const porcelain = await runGitWrite(
+    ["worktree", "list", "--porcelain"],
+    workspace,
+  );
+  const entry = listedWorktrees(porcelain).find((item) => item.path === path);
+  if (!entry || entry.locked) return;
+  await runGitWrite(["worktree", "remove", "--force", entry.path], workspace);
 }
 
 function runSetupCommand(
@@ -248,12 +265,12 @@ export async function attemptStoryWorktreeRemoval(
     const story = readAll().issues.find((issue) => issue.id === storyId);
     if (!story || story.kind !== "story") return { outcome: "absent" };
     path = story.worktreePath;
-    if (!path || !existsSync(path)) return { outcome: "absent" };
+    if (!path) return { outcome: "absent" };
     await removeStoryWorktree(storyId, { allowActiveRun: true });
     return { outcome: "removed", path };
   } catch (err) {
-    // Automatic callers never pass --discard. Absorb only an explicit
-    // removal refusal (unsafe checkout or active implementing).
+    // Automatic callers never pass --discard. Absorb a removal refusal
+    // (unsafe checkout, locked worktree, or active implementing).
     if (!(err instanceof IssueError) || err.code !== "conflict") throw err;
     if (path && existsSync(path)) return { outcome: "retained", path };
     return { outcome: "absent" };
@@ -292,8 +309,14 @@ export async function removeStoryWorktree(
   const workspace = requireProjectWorkspace(projectId);
   const path = story.worktreePath;
 
-  if (!path || !existsSync(path)) {
+  if (!path) {
     throw new IssueError("validation", REMOVE_NO_WORKTREE_ERROR(storyId));
+  }
+
+  if (!existsSync(path)) {
+    await dropUnlockedMissingRegistration(workspace, path);
+    await update(storyId, { worktreePath: null });
+    return path;
   }
 
   if (!options.allowActiveRun && hasActiveImplementingRun(storyId)) {
@@ -302,6 +325,10 @@ export async function removeStoryWorktree(
 
   const worktree =
     derived[storyId]?.worktree ?? deriveStoryWorktree(story, issues);
+  if (worktree.locked) {
+    throw new IssueError("conflict", REMOVE_LOCKED_ERROR(storyId));
+  }
+
   const uncommittedCount = worktree.uncommittedCount;
   const atRiskCommitCount = worktree.atRiskCommitCount;
 
@@ -316,12 +343,7 @@ export async function removeStoryWorktree(
     );
   }
 
-  const args = [
-    "worktree",
-    "remove",
-    ...(options.discard ? ["--force"] : []),
-    path,
-  ];
+  const args = ["worktree", "remove", "--force", path];
   await runGitWrite(args, workspace);
   await update(storyId, { worktreePath: null });
   return path;

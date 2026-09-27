@@ -21,6 +21,8 @@ const GIT = [
   "user.email=test@example.com",
   "-c",
   "commit.gpgsign=false",
+  "-c",
+  "protocol.file.allow=always",
 ];
 
 let dir: string;
@@ -48,6 +50,32 @@ function addWorktree(workspace: string, branch: string): string {
   git(workspace, ["worktree", "add", "-b", branch, path]);
   trackedWorktrees.push({ workspace, path });
   return path;
+}
+
+function initCheckedOutSubmodule(
+  workspace: string,
+  mountPath: string,
+): string {
+  const subRepo = mkdtempSync(join(dir, "sub-repo-"));
+  git(subRepo, ["init", "-b", "main"]);
+  writeFileSync(join(subRepo, "bar.txt"), "sub\n");
+  writeFileSync(join(subRepo, ".gitignore"), "*.ignored\n");
+  git(subRepo, ["add", "bar.txt", ".gitignore"]);
+  git(subRepo, ["commit", "-m", "sub init"]);
+  git(workspace, ["submodule", "add", subRepo, mountPath]);
+  git(workspace, ["commit", "-m", "add submodule"]);
+  return subRepo;
+}
+
+function initSubmoduleWorktree(
+  branch: string,
+  mountPath: string,
+): { workspace: string; path: string; subPath: string } {
+  const workspace = initRepo();
+  initCheckedOutSubmodule(workspace, mountPath);
+  const path = addWorktree(workspace, branch);
+  git(path, ["submodule", "update", "--init"]);
+  return { workspace, path, subPath: join(path, mountPath) };
 }
 
 function writeIssue(id: string, body: Record<string, unknown>): void {
@@ -143,7 +171,34 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
+  });
+
+  it("marks a locked worktree registration", async () => {
+    const workspace = initRepo();
+    const path = addWorktree(workspace, "feat-locked");
+    git(workspace, ["worktree", "lock", path]);
+    seedProject({ workspace });
+    writeStory("s", { branchName: "feat-locked", worktreePath: path });
+
+    const list = await loadList();
+    expect(worktreeOf(list().derived, "s").locked).toBe(true);
+    git(workspace, ["worktree", "unlock", path]);
+  });
+
+  it("marks a locked registration after the directory is gone", async () => {
+    const workspace = initRepo();
+    const path = addWorktree(workspace, "feat-locked-gone");
+    git(workspace, ["worktree", "lock", path]);
+    rmSync(path, { recursive: true, force: true });
+    seedProject({ workspace });
+    writeStory("s", { branchName: "feat-locked-gone", worktreePath: path });
+
+    const list = await loadList();
+    const worktree = worktreeOf(list().derived, "s");
+    expect(worktree.exists).toBe(false);
+    expect(worktree.locked).toBe(true);
   });
 
   it("counts a tracked modification", async () => {
@@ -232,6 +287,7 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
   });
 
@@ -247,6 +303,7 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
     rmSync(path, { recursive: true, force: true });
   });
@@ -266,6 +323,7 @@ describe("derived worktree on list()", () => {
     expect(worktree.uncommittedCount).toBe(0);
     expect(worktree.atRiskCommitCount).toBe(0);
     expect(worktree.retained).toBe(false);
+    expect(worktree.locked).toBe(false);
   });
 
   it("surfaces the recorded setup failure and blocked reason", async () => {
@@ -284,6 +342,7 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
       setupFailed: true,
       setupLogPath: logPath,
       setupOutput: "setup failed\n",
@@ -353,6 +412,7 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
   });
 
@@ -369,6 +429,79 @@ describe("derived worktree on list()", () => {
       uncommittedCount: 0,
       atRiskCommitCount: 0,
       retained: false,
+      locked: false,
     });
+  });
+
+  it("counts a parent file change once alongside submodule dirt", async () => {
+    const { path, subPath } = initSubmoduleWorktree("feat-parent-file", "libs/foo");
+    writeFileSync(join(path, "README"), "parent dirty\n");
+    writeFileSync(join(subPath, "bar.txt"), "sub dirty\n");
+    seedProject();
+    writeStory("s", { branchName: "feat-parent-file", worktreePath: path });
+
+    const list = await loadList();
+    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(2);
+  });
+
+  it("uses submodule inner porcelain instead of the parent submodule line", async () => {
+    const { path, subPath } = initSubmoduleWorktree("feat-sub-inner", "libs/foo");
+    writeFileSync(join(subPath, "bar.txt"), "sub dirty\n");
+    writeFileSync(join(subPath, "extra.txt"), "new\n");
+    seedProject();
+    writeStory("s", { branchName: "feat-sub-inner", worktreePath: path });
+
+    const list = await loadList();
+    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(2);
+  });
+
+  it("counts the parent submodule line once when inner porcelain is empty", async () => {
+    const { path, subPath } = initSubmoduleWorktree("feat-sub-pointer", "libs/foo");
+    writeFileSync(join(subPath, "bar.txt"), "sub dirty\n");
+    git(subPath, ["add", "bar.txt"]);
+    git(subPath, ["commit", "-m", "sub change"]);
+    seedProject();
+    writeStory("s", { branchName: "feat-sub-pointer", worktreePath: path });
+
+    const list = await loadList();
+    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(1);
+  });
+
+  it("applies the once-per-change rule at nested submodule levels", async () => {
+    const workspace = initRepo();
+    const innerSubRepo = mkdtempSync(join(dir, "inner-sub-"));
+    git(innerSubRepo, ["init", "-b", "main"]);
+    writeFileSync(join(innerSubRepo, "inner.txt"), "inner\n");
+    git(innerSubRepo, ["add", "inner.txt"]);
+    git(innerSubRepo, ["commit", "-m", "inner init"]);
+
+    const outerSubRepo = mkdtempSync(join(dir, "outer-sub-"));
+    git(outerSubRepo, ["init", "-b", "main"]);
+    git(outerSubRepo, ["submodule", "add", innerSubRepo, "nested/inner"]);
+    git(outerSubRepo, ["commit", "-m", "outer with inner sub"]);
+    git(workspace, ["submodule", "add", outerSubRepo, "libs/outer"]);
+    git(workspace, ["commit", "-m", "add nested submodule"]);
+
+    const path = addWorktree(workspace, "feat-nested-sub");
+    git(path, ["submodule", "update", "--init", "--recursive"]);
+    const outerPath = join(path, "libs/outer");
+    const innerPath = join(outerPath, "nested/inner");
+    writeFileSync(join(innerPath, "inner.txt"), "nested dirty\n");
+    writeFileSync(join(innerPath, "leaf.txt"), "new leaf\n");
+    seedProject();
+    writeStory("s", { branchName: "feat-nested-sub", worktreePath: path });
+
+    const list = await loadList();
+    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(2);
+  });
+
+  it("does not count gitignored files inside a submodule", async () => {
+    const { path, subPath } = initSubmoduleWorktree("feat-sub-ignored", "libs/foo");
+    writeFileSync(join(subPath, "secret.ignored"), "nope\n");
+    seedProject();
+    writeStory("s", { branchName: "feat-sub-ignored", worktreePath: path });
+
+    const list = await loadList();
+    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(0);
   });
 });

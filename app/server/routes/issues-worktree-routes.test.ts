@@ -249,7 +249,7 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     expect(readStoryJson("a").worktreePath).toBe(path);
   });
 
-  it("omits --force when discard is absent", async () => {
+  it("passes --force once when discard is absent", async () => {
     recordGitRemoveCalls();
     writeStory("a");
     await createWorktree("a");
@@ -257,10 +257,10 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     const { status } = await postRemove("a");
     expect(status).toBe(204);
     expect(gitRemoveCalls).toHaveLength(1);
-    expect(gitRemoveCalls[0]).not.toContain("--force");
+    expect(gitRemoveCalls[0]).toEqual(["worktree", "remove", "--force", expect.any(String)]);
   });
 
-  it("passes discard: true through as --force", async () => {
+  it("passes --force once when discard is true", async () => {
     recordGitRemoveCalls();
     writeStory("a");
     const path = await createWorktree("a");
@@ -269,7 +269,7 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     const { status } = await postRemove("a", { discard: true });
     expect(status).toBe(204);
     expect(gitRemoveCalls).toHaveLength(1);
-    expect(gitRemoveCalls[0]).toContain("--force");
+    expect(gitRemoveCalls[0]).toEqual(["worktree", "remove", "--force", expect.any(String)]);
   });
 
   it("ignores allowActiveRun in the body and refuses while a session is live", async () => {
@@ -285,6 +285,43 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     });
     expect(existsSync(path)).toBe(true);
     expect(readStoryJson("a").worktreePath).toBe(path);
+  });
+
+  it("returns 204 and drops an unlocked registration when the directory is already gone", async () => {
+    recordGitRemoveCalls();
+    writeStory("gone-a");
+    const path = await createWorktree("gone-a");
+    rmSync(path, { recursive: true, force: true });
+
+    const { status, json } = await postRemove("gone-a");
+    expect(status).toBe(204);
+    expect(json).toBeNull();
+    expect(readStoryJson("gone-a").worktreePath).toBeUndefined();
+    expect(gitRemoveCalls).toEqual([["worktree", "remove", "--force", path]]);
+    expect(git(workspace, ["worktree", "list", "--porcelain"]).split("\n")).not.toContain(
+      `worktree ${path}`,
+    );
+  });
+
+  it("returns 204 and leaves a locked registration when the directory is already gone", async () => {
+    recordGitRemoveCalls();
+    writeStory("gone-a");
+    const path = await createWorktree("gone-a");
+    const other = trackWorktree(workspace, "p", "gone-b");
+    git(workspace, ["worktree", "add", "-b", "gone-b", other, "main"]);
+    git(workspace, ["worktree", "lock", path]);
+    rmSync(path, { recursive: true, force: true });
+
+    const { status } = await postRemove("gone-a");
+    expect(status).toBe(204);
+    expect(readStoryJson("gone-a").worktreePath).toBeUndefined();
+    expect(gitRemoveCalls).toEqual([]);
+    const listed = git(workspace, ["worktree", "list", "--porcelain"]);
+    expect(listed.split("\n")).toContain(`worktree ${path}`);
+    expect(listed.split("\n")).toContain(`worktree ${other}`);
+    expect(listed.split("\n\n").find((block) => block.startsWith(`worktree ${path}\n`))).toContain(
+      "\nlocked",
+    );
   });
 
   it("returns 400 when the id is not a Story", async () => {

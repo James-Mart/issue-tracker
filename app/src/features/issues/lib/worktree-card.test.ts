@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DerivedWorktree } from "@server/schemas";
 import {
+  WORKTREE_LOCKED_REMOVE_COPY,
+  WORKTREE_RETAINED_LOCKED_COPY,
+  worktreeCardConflict,
   worktreeCardModel,
   worktreeNounCount,
+  worktreeRemoveConflictCopy,
   worktreeRemoveRetainedConfirm,
   worktreeRetainedCopy,
 } from "./worktree-card";
@@ -13,6 +17,7 @@ function worktree(overrides: Partial<DerivedWorktree> = {}): DerivedWorktree {
     uncommittedCount: 0,
     atRiskCommitCount: 0,
     retained: false,
+    locked: false,
     ...overrides,
   };
 }
@@ -86,6 +91,7 @@ describe("worktreeCardModel", () => {
       path: "/tmp/wt",
       uncommittedCount: 2,
       atRiskCommitCount: 1,
+      locked: false,
     });
   });
 
@@ -100,6 +106,7 @@ describe("worktreeCardModel", () => {
     ).toEqual({
       kind: "active",
       path: "/root/issue-tracker-worktrees/p/s",
+      locked: false,
     });
   });
 
@@ -125,6 +132,32 @@ describe("worktree retained copy", () => {
     );
     expect(worktreeRetainedCopy(0, 0)).toBe(
       "This checkout outlived its Story — 0 uncommitted changes, 0 at-risk commits.",
+    );
+    expect(worktreeRetainedCopy(0, 0, true)).toBe(WORKTREE_RETAINED_LOCKED_COPY);
+    expect(worktreeRetainedCopy(2, 1, true)).toBe(
+      "This checkout outlived its Story — 2 uncommitted changes, 1 at-risk commit.",
+    );
+  });
+});
+
+describe("worktree locked refusal copy", () => {
+  it("replaces the CLI lock message and leaves other conflicts unchanged", () => {
+    const cli =
+      'worktree remove refuses Story "story-oauth-hardening": worktree is locked';
+    expect(worktreeRemoveConflictCopy(cli)).toBe(WORKTREE_LOCKED_REMOVE_COPY);
+    const unsafe =
+      'worktree remove refuses Story "story-oauth-hardening": 1 uncommitted change(s), 0 at-risk commit(s)';
+    expect(worktreeRemoveConflictCopy(unsafe)).toBe(unsafe);
+  });
+
+  it("shows the unlock sentence on an active locked card before a refusal arrives", () => {
+    const model = worktreeCardModel(
+      worktree({ exists: true, path: "/tmp/wt", locked: true }),
+    );
+    expect(model).toEqual({ kind: "active", path: "/tmp/wt", locked: true });
+    expect(worktreeCardConflict(model!, null)).toBe(WORKTREE_LOCKED_REMOVE_COPY);
+    expect(worktreeCardConflict(model!, "some other conflict")).toBe(
+      WORKTREE_LOCKED_REMOVE_COPY,
     );
   });
 });
