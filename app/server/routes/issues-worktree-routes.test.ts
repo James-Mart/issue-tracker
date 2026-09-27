@@ -249,7 +249,7 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     expect(readStoryJson("a").worktreePath).toBe(path);
   });
 
-  it("omits --force when discard is absent", async () => {
+  it("passes --force once when discard is absent", async () => {
     recordGitRemoveCalls();
     writeStory("a");
     await createWorktree("a");
@@ -257,10 +257,10 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     const { status } = await postRemove("a");
     expect(status).toBe(204);
     expect(gitRemoveCalls).toHaveLength(1);
-    expect(gitRemoveCalls[0]).not.toContain("--force");
+    expect(gitRemoveCalls[0]).toEqual(["worktree", "remove", "--force", expect.any(String)]);
   });
 
-  it("passes discard: true through as --force", async () => {
+  it("passes --force once when discard is true", async () => {
     recordGitRemoveCalls();
     writeStory("a");
     const path = await createWorktree("a");
@@ -269,7 +269,7 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     const { status } = await postRemove("a", { discard: true });
     expect(status).toBe(204);
     expect(gitRemoveCalls).toHaveLength(1);
-    expect(gitRemoveCalls[0]).toContain("--force");
+    expect(gitRemoveCalls[0]).toEqual(["worktree", "remove", "--force", expect.any(String)]);
   });
 
   it("ignores allowActiveRun in the body and refuses while a session is live", async () => {

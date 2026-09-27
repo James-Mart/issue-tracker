@@ -316,12 +316,7 @@ export async function removeStoryWorktree(
     );
   }
 
-  const args = [
-    "worktree",
-    "remove",
-    ...(options.discard ? ["--force"] : []),
-    path,
-  ];
+  const args = ["worktree", "remove", "--force", path];
   await runGitWrite(args, workspace);
   await update(storyId, { worktreePath: null });
   return path;

@@ -499,6 +499,26 @@ describe("story worktree remove", () => {
     expect(issueJsonField("a", "worktreePath")).toBeUndefined();
   });
 
+  it("removes a clean worktree that contains a submodule", async () => {
+    const workspace = initRepo();
+    addSubmodule(workspace, "libs/foo");
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    initSubmoduleInWorktree(expectedPath, "libs/foo");
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(expectedPath)).toBe(false);
+    expect(issueJsonField("a", "worktreePath")).toBeUndefined();
+  });
+
   it("removes a worktree when only gitignored files are present", async () => {
     const workspace = initRepo({ gitignore: "*.ignored\n" });
     seedProject(workspace);
