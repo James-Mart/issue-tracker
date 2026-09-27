@@ -3,6 +3,7 @@ import {
   spawnSync,
   type ChildProcessByStdio,
 } from "node:child_process";
+import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { IssueError } from "./errors.js";
 
@@ -15,6 +16,7 @@ const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   "merge-base",
   "remote",
   "status",
+  "ls-files",
 ]);
 
 /** @internal Test seam for stubbing git spawn. */
@@ -181,11 +183,39 @@ export function refIsAncestor(
   throw new IssueError("git-failed", errText);
 }
 
-/** Lines from `git status --porcelain` (ignored paths are omitted). */
+function porcelainLinePath(line: string): string {
+  const body = line.slice(3);
+  const arrow = body.indexOf(" -> ");
+  return arrow >= 0 ? body.slice(arrow + 4) : body;
+}
+
+function isGitlink(workspace: string, relPath: string): boolean {
+  const output = runGitSync(["ls-files", "-s", "--", relPath], workspace).trim();
+  if (output.length === 0) return false;
+  return output.split(/\s+/)[0] === "160000";
+}
+
+/**
+ * Lines from `git status --porcelain` (ignored paths are omitted), counting
+ * each change once. Submodule paths with inner porcelain use that inner count
+ * instead of the parent line; when inner porcelain is empty the parent line
+ * counts once. The same rule applies at every nested level.
+ */
 export function porcelainStatusCount(workspace: string): number {
   const output = runGitSync(["status", "--porcelain"], workspace);
   if (output.length === 0) return 0;
-  return output.split("\n").filter((line) => line.length > 0).length;
+  let count = 0;
+  for (const line of output.split("\n")) {
+    if (line.length === 0) continue;
+    const relPath = porcelainLinePath(line);
+    if (isGitlink(workspace, relPath)) {
+      const inner = porcelainStatusCount(join(workspace, relPath));
+      count += inner > 0 ? inner : 1;
+    } else {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 /**

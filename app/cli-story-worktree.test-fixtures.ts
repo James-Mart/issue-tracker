@@ -29,6 +29,8 @@ const GIT = [
   "user.email=test@example.com",
   "-c",
   "commit.gpgsign=false",
+  "-c",
+  "protocol.file.allow=always",
 ];
 
 export function git(repo: string, args: string[]): string {
@@ -50,6 +52,28 @@ export function initRepo(opts?: { gitignore?: string }): string {
   }
   git(repo, ["commit", "-m", "initial"]);
   return repo;
+}
+
+export function addSubmodule(
+  workspace: string,
+  mountPath: string,
+): { subRepo: string; subPath: string } {
+  const subRepo = mkdtempSync(join(tmpdir(), "issue-wt-sub-"));
+  git(subRepo, ["init", "-b", "main"]);
+  writeFileSync(join(subRepo, "bar.txt"), "sub\n");
+  git(subRepo, ["add", "bar.txt"]);
+  git(subRepo, ["commit", "-m", "sub init"]);
+  git(workspace, ["submodule", "add", subRepo, mountPath]);
+  git(workspace, ["commit", "-m", "add submodule"]);
+  return { subRepo, subPath: join(workspace, mountPath) };
+}
+
+export function initSubmoduleInWorktree(
+  worktreePath: string,
+  mountPath: string,
+): string {
+  git(worktreePath, ["submodule", "update", "--init"]);
+  return join(worktreePath, mountPath);
 }
 
 export function seedImplementingSession(

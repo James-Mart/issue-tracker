@@ -6,8 +6,10 @@ import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { runIssueCli } from "./cli-program.js";
 import {
+  addSubmodule,
   git,
   initRepo,
+  initSubmoduleInWorktree,
   seedImplementingSession,
   seedProject,
   trackWorktree,
@@ -532,6 +534,29 @@ describe("story worktree remove", () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/1 uncommitted change\(s\), 0 at-risk commit\(s\)/);
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
+  });
+
+  it("refuses removal when the only dirt is inside a submodule", async () => {
+    const workspace = initRepo();
+    addSubmodule(workspace, "libs/foo");
+    seedProject(workspace);
+    writeStory("a");
+
+    const expectedPath = trackWorktree(workspace, "p", "a");
+    expect(
+      (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    ).toBe(0);
+    const subPath = initSubmoduleInWorktree(expectedPath, "libs/foo");
+    writeFileSync(join(subPath, "bar.txt"), "sub dirty\n");
+    writeFileSync(join(subPath, "extra.txt"), "new\n");
+
+    const result = await runIssueCli(["story", "worktree", "remove", "a"], {
+      env: env(),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/2 uncommitted change\(s\), 0 at-risk commit\(s\)/);
     expect(existsSync(expectedPath)).toBe(true);
     expect(issueJsonField("a", "worktreePath")).toBe(expectedPath);
   });
