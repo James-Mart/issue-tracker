@@ -100,6 +100,39 @@ async function addWorktree(
   await runGitWrite(["worktree", "add", ...args], workspace);
 }
 
+type ListedWorktree = { path: string; locked: boolean };
+
+function listedWorktrees(porcelain: string): ListedWorktree[] {
+  const entries: ListedWorktree[] = [];
+  let current: ListedWorktree | undefined;
+  for (const line of porcelain.split("\n")) {
+    if (line.startsWith("worktree ")) {
+      if (current) entries.push(current);
+      current = { path: line.slice("worktree ".length), locked: false };
+      continue;
+    }
+    if (current && (line === "locked" || line.startsWith("locked "))) {
+      current.locked = true;
+    }
+  }
+  if (current) entries.push(current);
+  return entries;
+}
+
+/** Drop this path's Git registration when the directory is already gone. A locked registration stays listed, and other registrations are left alone. */
+async function dropUnlockedMissingRegistration(
+  workspace: string,
+  path: string,
+): Promise<void> {
+  const porcelain = await runGitWrite(
+    ["worktree", "list", "--porcelain"],
+    workspace,
+  );
+  const entry = listedWorktrees(porcelain).find((item) => item.path === path);
+  if (!entry || entry.locked) return;
+  await runGitWrite(["worktree", "remove", "--force", entry.path], workspace);
+}
+
 function runSetupCommand(
   cwd: string,
   command: string,
@@ -248,7 +281,7 @@ export async function attemptStoryWorktreeRemoval(
     const story = readAll().issues.find((issue) => issue.id === storyId);
     if (!story || story.kind !== "story") return { outcome: "absent" };
     path = story.worktreePath;
-    if (!path || !existsSync(path)) return { outcome: "absent" };
+    if (!path) return { outcome: "absent" };
     await removeStoryWorktree(storyId, { allowActiveRun: true });
     return { outcome: "removed", path };
   } catch (err) {
@@ -292,8 +325,14 @@ export async function removeStoryWorktree(
   const workspace = requireProjectWorkspace(projectId);
   const path = story.worktreePath;
 
-  if (!path || !existsSync(path)) {
+  if (!path) {
     throw new IssueError("validation", REMOVE_NO_WORKTREE_ERROR(storyId));
+  }
+
+  if (!existsSync(path)) {
+    await dropUnlockedMissingRegistration(workspace, path);
+    await update(storyId, { worktreePath: null });
+    return path;
   }
 
   if (!options.allowActiveRun && hasActiveImplementingRun(storyId)) {

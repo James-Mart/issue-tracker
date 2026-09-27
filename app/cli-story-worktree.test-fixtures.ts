@@ -196,13 +196,13 @@ export async function withIssuesDir<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function createCleanWorktree(): Promise<string> {
+export async function createCleanWorktree(storyId = "a"): Promise<string> {
   const workspace = initRepo();
   seedProject(workspace);
-  writeStory("a");
-  const path = trackWorktree(workspace, "p", "a");
+  writeStory(storyId);
+  const path = trackWorktree(workspace, "p", storyId);
   expect(
-    (await runIssueCli(["story", "worktree", "create", "a"], { env: env() })).status,
+    (await runIssueCli(["story", "worktree", "create", storyId], { env: env() })).status,
   ).toBe(0);
   return path;
 }

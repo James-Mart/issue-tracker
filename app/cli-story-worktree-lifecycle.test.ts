@@ -1,10 +1,11 @@
-import { existsSync, writeFileSync } from "fs";
+import { existsSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { runIssueCli } from "./cli-program.js";
 import {
   createCleanWorktree,
   failGitWorktreeRemove,
+  git,
   seedImplementingSession,
   useStoryWorktreeCliFixtures,
   withIssuesDir,
@@ -147,6 +148,60 @@ describe("lifecycle worktree removal", () => {
     expect(issueJsonField("a", "archived")).toBe(true);
     expect(existsSync(path)).toBe(true);
     expect(issueJsonField("a", "worktreePath")).toBe(path);
+  });
+
+  it("clears worktreePath on merge when the directory is already gone", async () => {
+    const path = await createCleanWorktree("gone-a");
+    const workspace = issueJsonField<string>("p", "workspace");
+    rmSync(path, { recursive: true, force: true });
+    await withIssuesDir(() => update("gone-a", { merged: true }));
+    expect(issueJsonField("gone-a", "merged")).toBe(true);
+    expect(issueJsonField("gone-a", "worktreePath")).toBeUndefined();
+    expect(git(workspace, ["worktree", "list", "--porcelain"]).split("\n")).not.toContain(
+      `worktree ${path}`,
+    );
+  });
+
+  it("clears worktreePath on archive when the directory is already gone", async () => {
+    const path = await createCleanWorktree("gone-a");
+    const workspace = issueJsonField<string>("p", "workspace");
+    rmSync(path, { recursive: true, force: true });
+    const result = await runIssueCli(["story", "set", "gone-a", "archived", "true"], {
+      env: env(),
+    });
+    expect(result.status).toBe(0);
+    expect(issueJsonField("gone-a", "archived")).toBe(true);
+    expect(issueJsonField("gone-a", "worktreePath")).toBeUndefined();
+    expect(git(workspace, ["worktree", "list", "--porcelain"]).split("\n")).not.toContain(
+      `worktree ${path}`,
+    );
+  });
+
+  it("deletes the Story without reporting retained when the directory is already gone", async () => {
+    const path = await createCleanWorktree("gone-a");
+    const workspace = issueJsonField<string>("p", "workspace");
+    rmSync(path, { recursive: true, force: true });
+    const result = await runIssueCli(["story", "delete", "gone-a"], { env: env() });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("deleted gone-a");
+    expect(result.stdout).not.toMatch(/retained worktree/);
+    expect(git(workspace, ["worktree", "list", "--porcelain"]).split("\n")).not.toContain(
+      `worktree ${path}`,
+    );
+  });
+
+  it("clears worktreePath on merge and leaves a locked registration when the directory is already gone", async () => {
+    const path = await createCleanWorktree("gone-a");
+    const workspace = issueJsonField<string>("p", "workspace");
+    git(workspace, ["worktree", "lock", path]);
+    rmSync(path, { recursive: true, force: true });
+    await withIssuesDir(() => update("gone-a", { merged: true }));
+    expect(issueJsonField("gone-a", "merged")).toBe(true);
+    expect(issueJsonField("gone-a", "worktreePath")).toBeUndefined();
+    const record = git(workspace, ["worktree", "list", "--porcelain"])
+      .split("\n\n")
+      .find((block) => block.startsWith(`worktree ${path}\n`));
+    expect(record).toContain("\nlocked");
   });
 
   it("fails delete when worktree remove hits git-failed and does not report retained", async () => {
