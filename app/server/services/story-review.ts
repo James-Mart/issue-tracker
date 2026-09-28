@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { issuesDir } from "../config.js";
+import { replaceFileAtomically } from "./issues-store-lock.js";
 import { forEachOnDiskIssue } from "./scan-disk.js";
 
 const RENAME_FLAG = ".spec-review-renamed";
@@ -37,7 +38,7 @@ export function ensureSpecReviewRenamed(): SpecReviewRenameResult {
     const obj = raw as Record<string, unknown>;
     obj.review = obj.specReview;
     delete obj.specReview;
-    writeFileSync(
+    replaceFileAtomically(
       join(issuesDir, id, "issue.json"),
       `${JSON.stringify(obj, null, 2)}\n`,
     );

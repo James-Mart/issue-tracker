@@ -6,9 +6,8 @@ import {
   readFileSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from "fs";
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import { join } from "path";
 import { issuesDir, storeReadOnly } from "../config.js";
 import {
@@ -87,17 +86,31 @@ import {
 import { assertAllowedAgentModelSlug } from "../agent-model-slugs.js";
 import { mergeCascade } from "./merge-consequences.js";
 import { assertStoreWritable } from "./store-read-only.js";
+import { replaceFileAtomically, withIssuesStoreLock } from "./issues-store-lock.js";
+import {
+  onDiskHasUnknownKeys,
+  readDescription,
+  toIssueDetail,
+  versionOf,
+} from "./issues-detail.js";
+
+export { onDiskHasUnknownKeys, readDescription, versionOf } from "./issues-detail.js";
 
 let writeChain: Promise<unknown> = Promise.resolve();
 
 // Exported, with `readAll`/`readDescription`/`readIssueOrThrow`/
 // `commitIssueBatch`, so sibling writers in the service layer (e.g. `apply`,
 // attachments) can read the current graph or a single issue and commit a
-// validated batch inside this same in-process write chain, and so cannot race
-// HTTP/CLI writes. These five are the whole seam: the low-level FS primitives
-// stay private to this module.
+// validated batch inside this same in-process write chain. The promise chain
+// orders writers in one process; `withIssuesStoreLock` keeps a second process
+// from interleaving. These five are the whole seam: the low-level FS
+// primitives stay private to this module.
 export function serialize<T>(fn: () => T): Promise<T> {
-  const run = writeChain.then(fn, fn);
+  assertStoreWritable();
+  const run = writeChain.then(
+    () => withIssuesStoreLock(fn),
+    () => withIssuesStoreLock(fn),
+  );
   writeChain = run.then(
     () => undefined,
     () => undefined,
@@ -213,7 +226,9 @@ export function ensureMigrations(): void {
 }
 
 export function list(): IssuesResponse {
-  ensureMigrations();
+  withIssuesStoreLock(() => {
+    ensureMigrations();
+  });
   const { issues, problems } = readAll();
   const derived = derive(issues);
   for (const [id, ideaStatus] of Object.entries(planningStatusById(issues))) {
@@ -238,61 +253,19 @@ export function list(): IssuesResponse {
   };
 }
 
-export function readDescription(id: string): string {
-  const path = join(dirOf(id), "description.md");
-  return existsSync(path) ? readFileSync(path, "utf8") : "";
-}
-
-// True when the on-disk issue.json carries keys the current schema no longer
-// recognizes (e.g. a Branch's pre-migration `blockedBy`). `parseIssue` strips
-// such keys on read, so a parsed issue never reflects them; comparing the raw
-// top-level keys against the parsed issue's is the only way to see the drift.
-// `apply` uses this so a re-apply reconciles stale fields off disk instead of
-// treating a semantically-unchanged-but-stale file as a no-op.
-export function onDiskHasUnknownKeys(issue: Issue): boolean {
-  const path = jsonPathOf(issue.id);
-  if (!existsSync(path)) return false;
-  let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(path, "utf8"));
-  } catch {
-    return false;
-  }
-  if (!raw || typeof raw !== "object") return false;
-  const known = new Set(Object.keys(issue));
-  return Object.keys(raw as Record<string, unknown>).some((key) => !known.has(key));
-}
-
-// The version covers issue.json + description.md, the two files the edit form
-// mutates. comments.jsonl is excluded on purpose: append-only comment updates live
-// through its own SSE-fed query and must not trip the external-edit banner.
-export function versionOf(jsonText: string, description: string): string {
-  return createHash("sha1")
-    .update(jsonText)
-    .update("\0")
-    .update(description)
-    .digest("hex");
-}
-
-function toDetail(issue: Issue, jsonText: string, description: string): IssueDetail {
-  return {
-    ...toRecord(issue),
-    description,
-    version: versionOf(jsonText, description),
-  };
-}
-
 export function read(id: string): IssueDetail {
-  // Surface post-migration fields on show/detail without requiring a prior list.
-  ensureMigrations();
-  if (!existsSync(dirOf(id))) {
-    throw new IssueError("not_found", `unknown issue "${id}"`);
-  }
-  const { issue, problem, text } = readRaw(id);
-  if (!issue || text === undefined) {
-    throw new IssueError("validation", problem?.message ?? `invalid issue "${id}"`);
-  }
-  return toDetail(issue, text, readDescription(id));
+  return withIssuesStoreLock(() => {
+    // Surface post-migration fields on show/detail without requiring a prior list.
+    ensureMigrations();
+    if (!existsSync(dirOf(id))) {
+      throw new IssueError("not_found", `unknown issue "${id}"`);
+    }
+    const { issue, problem, text } = readRaw(id);
+    if (!issue || text === undefined) {
+      throw new IssueError("validation", problem?.message ?? `invalid issue "${id}"`);
+    }
+    return toIssueDetail(issue, text, readDescription(id));
+  });
 }
 
 export function readIssueOrThrow(id: string): Issue {
@@ -328,7 +301,7 @@ function persist(issue: Issue, jsonText: string): void {
   assertStoreWritable();
   const dir = dirOf(issue.id);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(jsonPathOf(issue.id), jsonText);
+  replaceFileAtomically(jsonPathOf(issue.id), jsonText);
 }
 
 // A single issue to (re)write: its parsed record plus, when provided, the
@@ -351,7 +324,7 @@ export function commitIssueBatch(writes: IssueWrite[], deletes: string[]): void 
   for (const { issue, description } of writes) {
     persist(issue, serializeIssue(issue));
     if (description !== undefined) {
-      writeFileSync(join(dirOf(issue.id), "description.md"), description);
+      replaceFileAtomically(join(dirOf(issue.id), "description.md"), description);
     }
   }
   for (const id of deletes) {
@@ -467,7 +440,7 @@ export function create(input: CreateInput): Promise<IssueRecord> {
 
     assertWritable(parsed.issue, issues);
     persist(parsed.issue, serializeIssue(parsed.issue));
-    writeFileSync(
+    replaceFileAtomically(
       join(dirOf(id), "description.md"),
       input.description ?? `# ${title}\n`,
     );
@@ -584,7 +557,7 @@ export function renameProjectLabel(
 
     commitIssueBatch(writes, []);
     const jsonText = serializeIssue(projectParsed.issue);
-    return toDetail(projectParsed.issue, jsonText, readDescription(projectId));
+    return toIssueDetail(projectParsed.issue, jsonText, readDescription(projectId));
   });
 }
 
@@ -797,7 +770,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     const finalDescription =
       description !== undefined ? description : readDescription(id);
     return {
-      detail: toDetail(parsed.issue, jsonText, finalDescription),
+      detail: toIssueDetail(parsed.issue, jsonText, finalDescription),
       attemptIds: storyIdsForLifecycleRemoval(
         existing,
         parsed.issue,
