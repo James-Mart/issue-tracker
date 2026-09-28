@@ -1343,7 +1343,14 @@ no consumer can persist a broken file.
   on read and surfaced as `problems`; they never crash a read. A directory whose
   `issue.json` id disagrees with the directory name is reported as a problem.
 - **Serialized writes.** A single in-process promise chain serializes all writes
-  so concurrent CLI/HTTP calls cannot race.
+  in one process. Cross-process writers take `<issuesDir>/.store.lock` (body
+  `{ pid }` JSON) via exclusive create; a live foreign holder is waited out with
+  no deadline, a dead or malformed holder is removed and retried. `serialize`
+  holds that lock for its whole callback; `list` holds it only around
+  `ensureMigrations`; `read` holds it for the whole call (including
+  `ensureMigrations`, `issue.json`, and `description.md`) so the returned pair
+  and `version` match one publish. Write paths refuse a read-only store before
+  acquiring the lock.
 - **Change detection.** `read` returns a `version` (a hash over `issue.json` +
   `description.md`) so the UI can detect out-of-band edits to the open issue.
   `comments.jsonl` and `attachments/` are deliberately excluded from the version so

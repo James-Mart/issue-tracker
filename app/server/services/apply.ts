@@ -263,7 +263,7 @@ function resolveRoot(
 // commit list. The entire prospective set is validated with a single
 // `checkIntegrity` pass before any write, so a doc that would leave the graph
 // broken is refused with no changes on disk. Runs inside the shared write chain
-// so it cannot race HTTP/CLI writes.
+// and issues-store lock so a second process cannot interleave.
 export function apply(doc: ApplyDoc): Promise<ApplySummary> {
   return serialize(() => {
     // Same one-time migrations as list/create — strip stored mergeBase before
