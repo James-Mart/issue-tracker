@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { issuesDir } from "../config.js";
 import type { Issue } from "../schemas.js";
+import { replaceFileAtomically } from "./issues-store-lock.js";
 import { forEachOnDiskIssue } from "./scan-disk.js";
 
 const MIGRATION_FLAG = ".source-idea-migrated";
@@ -86,11 +87,11 @@ export function ensureSourceIdeaMigrated(): SourceIdeaMigrationResult {
     if (!raw || typeof raw !== "object") continue;
     const obj = raw as Record<string, unknown>;
     obj.sourceIdea = parsed.ideaId;
-    writeFileSync(
+    replaceFileAtomically(
       join(issuesDir, id, "issue.json"),
       `${JSON.stringify(obj, null, 2)}\n`,
     );
-    writeFileSync(descriptionPath, parsed.rest);
+    replaceFileAtomically(descriptionPath, parsed.rest);
     updated.push(id);
   }
 

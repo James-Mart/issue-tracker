@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
 import { issuesDir } from "../config.js";
+import { replaceFileAtomically } from "./issues-store-lock.js";
 
 const BACKFILL_FLAG = ".kind-renamed-story-task";
 
@@ -106,7 +107,7 @@ export function ensureKindRenamed(): KindRenameResult {
     // Skip id/directory mismatches — must not create a sibling directory.
     if (typeof obj.id === "string" && obj.id !== id) continue;
     obj.kind = nextKind;
-    writeFileSync(jsonPath, `${JSON.stringify(obj, null, 2)}\n`);
+    replaceFileAtomically(jsonPath, `${JSON.stringify(obj, null, 2)}\n`);
     updated.push(id);
   }
 

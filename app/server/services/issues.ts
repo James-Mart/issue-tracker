@@ -6,7 +6,6 @@ import {
   readFileSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from "fs";
 import { randomUUID } from "crypto";
 import { join } from "path";
@@ -87,7 +86,7 @@ import {
 import { assertAllowedAgentModelSlug } from "../agent-model-slugs.js";
 import { mergeCascade } from "./merge-consequences.js";
 import { assertStoreWritable } from "./store-read-only.js";
-import { withIssuesStoreLock } from "./issues-store-lock.js";
+import { replaceFileAtomically, withIssuesStoreLock } from "./issues-store-lock.js";
 import {
   onDiskHasUnknownKeys,
   readDescription,
@@ -302,7 +301,7 @@ function persist(issue: Issue, jsonText: string): void {
   assertStoreWritable();
   const dir = dirOf(issue.id);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(jsonPathOf(issue.id), jsonText);
+  replaceFileAtomically(jsonPathOf(issue.id), jsonText);
 }
 
 // A single issue to (re)write: its parsed record plus, when provided, the
@@ -325,7 +324,7 @@ export function commitIssueBatch(writes: IssueWrite[], deletes: string[]): void 
   for (const { issue, description } of writes) {
     persist(issue, serializeIssue(issue));
     if (description !== undefined) {
-      writeFileSync(join(dirOf(issue.id), "description.md"), description);
+      replaceFileAtomically(join(dirOf(issue.id), "description.md"), description);
     }
   }
   for (const id of deletes) {
@@ -441,7 +440,7 @@ export function create(input: CreateInput): Promise<IssueRecord> {
 
     assertWritable(parsed.issue, issues);
     persist(parsed.issue, serializeIssue(parsed.issue));
-    writeFileSync(
+    replaceFileAtomically(
       join(dirOf(id), "description.md"),
       input.description ?? `# ${title}\n`,
     );

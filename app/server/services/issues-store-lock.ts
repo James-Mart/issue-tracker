@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from "fs";
+import { readFileSync, renameSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { issuesDir } from "../config.js";
 
@@ -86,6 +86,12 @@ function releaseLock(): void {
   if (pid === process.pid) {
     rmSync(path, { force: true });
   }
+}
+
+export function replaceFileAtomically(filePath: string, contents: string): void {
+  const tempPath = `${filePath}.${process.pid}.issue-tmp`;
+  writeFileSync(tempPath, contents);
+  renameSync(tempPath, filePath);
 }
 
 /** Cross-process mutex for the issues store directory. Reentrant within one process. */
