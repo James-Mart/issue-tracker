@@ -10,6 +10,7 @@ import { useDiffLayoutPreference } from "@/features/issues/hooks/use-diff-layout
 import { useVirtualizedFileScroll } from "@/features/issues/hooks/use-virtualized-file-scroll";
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
 import { fileDiffsFromPatch } from "@/features/issues/lib/issue-change-file-diffs";
+import { useReviewDiffSearch } from "../hooks/use-review-diff-search";
 import { useReviewFileMarks } from "../hooks/use-review-file-marks";
 import {
   diffLineTotals,
@@ -26,7 +27,13 @@ import {
   type ReviewMarkOverrides,
 } from "../lib/review-scope";
 import { ReviewFileDiff, type ReviewFileDiffSource } from "./review-file-diff";
+import { ReviewDiffSearch } from "./review-diff-search";
 import { ReviewFileTree } from "./review-file-tree";
+import {
+  filesMatchingSearch,
+  snapshotSearchableDiff,
+  type DiffSearchMatch,
+} from "../lib/review-diff-search";
 
 type ScrollRequest = { path: string; nonce: number; scope: string };
 
@@ -140,6 +147,8 @@ function ReviewFileStack({
   scrollRequest,
   onToggleCollapsed,
   onReviewedChange,
+  searchNeedle,
+  currentMatch,
 }: {
   rows: ReviewFileRow[];
   fileDiffs: Map<string, FileDiffMetadata>;
@@ -153,6 +162,8 @@ function ReviewFileStack({
   scrollRequest: ScrollRequest | undefined;
   onToggleCollapsed: (row: ReviewFileRow) => void;
   onReviewedChange: (path: string, reviewed: boolean) => void;
+  searchNeedle: string;
+  currentMatch: DiffSearchMatch | undefined;
 }) {
   const fileRef = useVirtualizedFileScroll<HTMLElement>(
     scrollRequest?.path,
@@ -167,7 +178,10 @@ function ReviewFileStack({
           fileRef={fileRef(row.file.path)}
           row={row}
           fileDiff={fileDiffs.get(row.file.path)}
-          collapsed={isCollapsed(row)}
+          collapsed={
+            isCollapsed(row) &&
+            !(currentMatch?.kind === "content" && currentMatch.path === row.file.path)
+          }
           readOnly={readOnly}
           diffLayout={diffLayout}
           source={source}
@@ -175,6 +189,8 @@ function ReviewFileStack({
           localHint={localHint}
           onToggleCollapsed={() => onToggleCollapsed(row)}
           onReviewedChange={(next) => onReviewedChange(row.file.path, next)}
+          searchNeedle={searchNeedle}
+          currentMatch={currentMatch?.path === row.file.path ? currentMatch : undefined}
         />
       ))}
     </div>
@@ -215,10 +231,21 @@ export function ReviewDiffTab({
   const activeScroll = scrollRequest?.scope === scope ? scrollRequest : undefined;
   const contentsCache = useRef(new Map<string, Promise<string>>()).current;
 
-  const fileDiffs = useMemo(
-    () => new Map(fileDiffsFromPatch(diff.patch).map((file) => [file.name, file])),
-    [diff.patch],
-  );
+  const parsed = useMemo(() => {
+    const files = fileDiffsFromPatch(diff.patch);
+    return {
+      fileDiffs: new Map(files.map((file) => [file.name, file])),
+      searchDiffs: new Map(files.map((file) => [file.name, snapshotSearchableDiff(file)])),
+    };
+  }, [diff.patch]);
+  const search = useReviewDiffSearch(diff.files, parsed.searchDiffs, scope);
+  const matchedPaths = filesMatchingSearch(search.matches);
+  const visibleRows = search.filtering
+    ? rows.filter((row) => matchedPaths.has(row.file.path))
+    : rows;
+  const searchScroll = search.current
+    ? { path: search.current.path, scope, nonce: search.scrollNonce }
+    : undefined;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-diff-tab">
@@ -247,37 +274,60 @@ export function ReviewDiffTab({
       {rows.length > 0 ? (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 shell:flex-row">
           <ReviewFileTree
-            rows={rows}
-            selectedPath={activeScroll?.path}
-            onSelect={(path) =>
+            rows={visibleRows}
+            selectedPath={search.filtering ? search.current?.path : activeScroll?.path}
+            onSelect={(path) => {
+              if (search.filtering) {
+                search.goToPath(path);
+                return;
+              }
               setScrollRequest((prev) => ({
                 path,
                 scope,
                 nonce: (prev?.nonce ?? 0) + 1,
-              }))
-            }
+              }));
+            }}
           />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="review-diff-stack">
-            <Virtualizer className="max-h-[75svh] overflow-auto shell:max-h-none shell:min-h-0 shell:flex-1">
-              <ReviewFileStack
-                rows={rows}
-                fileDiffs={fileDiffs}
-                isCollapsed={isCollapsed}
-                readOnly={review.effectiveStatus === "archived"}
-                diffLayout={diffLayout}
-                source={{
-                  storyId,
-                  sha: scope === ALL_CHANGES_SCOPE ? commits.tip : scope,
-                  contentsCache,
-                }}
-                mergeBaseRef={commits.mergeBaseRef}
-                scope={scope}
-                localHint={fileTooLargeHint(scope)}
-                scrollRequest={activeScroll}
-                onToggleCollapsed={toggleCollapsed}
-                onReviewedChange={setReviewed}
-              />
-            </Virtualizer>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-diff-stack">
+            <ReviewDiffSearch
+              query={search.query}
+              matchIndex={search.currentIndex}
+              matchCount={search.matches.length}
+              onQueryChange={search.onQueryChange}
+              onPrevious={() => search.step(-1)}
+              onNext={() => search.step(1)}
+            />
+            {visibleRows.length === 0 ? (
+              <p
+                className="px-1 font-mono text-[11px] text-muted-foreground"
+                data-testid="review-diff-search-empty"
+              >
+                No matches in this diff. Clear the search or try another term.
+              </p>
+            ) : (
+              <Virtualizer className="max-h-[75svh] overflow-auto shell:max-h-none shell:min-h-0 shell:flex-1">
+                <ReviewFileStack
+                  rows={visibleRows}
+                  fileDiffs={parsed.fileDiffs}
+                  isCollapsed={isCollapsed}
+                  readOnly={review.effectiveStatus === "archived"}
+                  diffLayout={diffLayout}
+                  source={{
+                    storyId,
+                    sha: scope === ALL_CHANGES_SCOPE ? commits.tip : scope,
+                    contentsCache,
+                  }}
+                  mergeBaseRef={commits.mergeBaseRef}
+                  scope={scope}
+                  localHint={fileTooLargeHint(scope)}
+                  scrollRequest={search.filtering ? searchScroll : activeScroll}
+                  onToggleCollapsed={toggleCollapsed}
+                  onReviewedChange={setReviewed}
+                  searchNeedle={search.needle}
+                  currentMatch={search.current}
+                />
+              </Virtualizer>
+            )}
           </div>
         </div>
       ) : null}

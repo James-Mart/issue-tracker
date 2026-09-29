@@ -1,4 +1,4 @@
-import { useId, type Ref } from "react";
+import { useId, useRef, type MutableRefObject, type Ref } from "react";
 import { FileDiff, type FileDiffMetadata } from "@pierre/diffs/react";
 import { ChevronRight } from "lucide-react";
 import { ShellInlineFault } from "@/app/shell-state";
@@ -9,7 +9,11 @@ import { DiffLineCounts } from "@/features/issues/components/changed-file-row";
 import { useFileDiffContentsLoader } from "@/features/issues/hooks/use-file-diff-contents-loader";
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
 import type { ReviewFileRow } from "../lib/review-files";
+import type { DiffSearchMatch } from "../lib/review-diff-search";
+import { REVIEW_SEARCH_MATCH_CSS } from "../lib/review-diff-search-mark";
+import { useReviewSearchMark } from "../hooks/use-review-search-mark";
 import { ChangedSinceReviewedBadge } from "./changed-since-reviewed-badge";
+import { MarkedPathText } from "./review-search-marked-text";
 
 export type ReviewFileDiffSource = {
   storyId: string;
@@ -66,7 +70,12 @@ function RenderedFileDiff({
       <FileDiff
         fileDiff={fileDiff}
         disableWorkerPool
-        options={{ loadDiffFiles, diffStyle: diffLayout, disableFileHeader: true }}
+        options={{
+          loadDiffFiles,
+          diffStyle: diffLayout,
+          disableFileHeader: true,
+          unsafeCSS: REVIEW_SEARCH_MATCH_CSS,
+        }}
       />
     </div>
   );
@@ -84,6 +93,8 @@ export function ReviewFileDiff({
   onToggleCollapsed,
   onReviewedChange,
   fileRef,
+  searchNeedle = "",
+  currentMatch,
 }: {
   row: ReviewFileRow;
   /** Absent for a too-large file, whose section the server drops from the patch. */
@@ -97,14 +108,31 @@ export function ReviewFileDiff({
   onToggleCollapsed: () => void;
   onReviewedChange: (reviewed: boolean) => void;
   fileRef?: Ref<HTMLElement>;
+  searchNeedle?: string;
+  currentMatch?: DiffSearchMatch;
 }) {
   const { file, reviewed, changedSinceReviewed } = row;
   const checkboxId = useId();
   const bodyId = useId();
+  const sectionRef = useRef<HTMLElement | null>(null);
+  useReviewSearchMark(sectionRef, currentMatch, searchNeedle, collapsed);
+  const pathOccurrence =
+    currentMatch?.kind === "path" && currentMatch.field === "path"
+      ? currentMatch.occurrence
+      : undefined;
+  const oldPathOccurrence =
+    currentMatch?.kind === "path" && currentMatch.field === "oldPath"
+      ? currentMatch.occurrence
+      : undefined;
 
   return (
     <section
-      ref={fileRef}
+      ref={(node) => {
+        sectionRef.current = node;
+        if (typeof fileRef === "function") fileRef(node);
+        else if (fileRef) (fileRef as MutableRefObject<HTMLElement | null>).current = node;
+      }}
+      data-search-current={currentMatch ? "true" : undefined}
       className="min-w-0 overflow-hidden rounded-lg border border-border bg-card"
       data-testid="review-file"
       data-file-name={file.path}
@@ -132,9 +160,16 @@ export function ReviewFileDiff({
           title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
         >
           {file.oldPath ? (
-            <span className="text-muted-foreground">{file.oldPath} → </span>
+            <span className="text-muted-foreground">
+              <MarkedPathText
+                text={file.oldPath}
+                needle={searchNeedle}
+                occurrence={oldPathOccurrence}
+              />
+              {" → "}
+            </span>
           ) : null}
-          {file.path}
+          <MarkedPathText text={file.path} needle={searchNeedle} occurrence={pathOccurrence} />
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {changedSinceReviewed ? <ChangedSinceReviewedBadge /> : null}

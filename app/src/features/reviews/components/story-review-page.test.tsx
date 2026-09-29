@@ -244,6 +244,21 @@ function selectScope(row: HTMLElement) {
   });
 }
 
+function setInput(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  if (!setter) throw new Error("no input value setter");
+  act(() => {
+    setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function treePaths(container: HTMLElement): string[] {
+  return [...container.querySelectorAll("[data-testid='review-tree-file']")].map(
+    (row) => row.getAttribute("data-path") ?? "",
+  );
+}
+
 beforeAll(() => {
   (
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -562,5 +577,91 @@ describe("StoryReviewPage", () => {
 
     expect(lastLocation).toContain(`scope=${older}`);
     expect(label()).toBe(`Commit ${shortSha(older)} — older change`);
+  });
+
+  it("counts path-only and content-only matches and restores the tree when cleared", () => {
+    state.diff = {
+      scope: "all",
+      files: [
+        {
+          path: "src/needle-path.ts",
+          status: "added",
+          additions: 1,
+          deletions: 0,
+          blobSha: "path-1",
+          tooLarge: true,
+        },
+        {
+          path: "src/body.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 1,
+          blobSha: "body-1",
+          tooLarge: false,
+        },
+        {
+          path: "src/quiet.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          blobSha: "quiet-1",
+          tooLarge: false,
+        },
+      ],
+      patch: [
+        "diff --git a/src/body.ts b/src/body.ts",
+        "index 1111111..2222222 100644",
+        "--- a/src/body.ts",
+        "+++ b/src/body.ts",
+        "@@ -1 +1 @@",
+        "-gone",
+        "+see needle",
+        "diff --git a/src/quiet.ts b/src/quiet.ts",
+        "index 3333333..4444444 100644",
+        "--- a/src/quiet.ts",
+        "+++ b/src/quiet.ts",
+        "@@ -1 +1 @@",
+        "-old",
+        "+unrelated",
+      ].join("\n"),
+    } satisfies ReviewDiff;
+    const container = mountPage("tab=diff");
+    const progress = () => container.querySelector("[data-testid='review-progress']")?.textContent;
+    expect(progress()).toBe("0 / 3 files reviewed");
+    expect(treePaths(container)).toEqual(["src/needle-path.ts", "src/body.ts", "src/quiet.ts"]);
+
+    const input = container.querySelector<HTMLInputElement>("[data-testid='review-diff-search']");
+    if (!input) throw new Error("no diff search");
+    setInput(input, "NEEDLE");
+
+    expect(container.querySelector("[data-testid='review-diff-search-count']")?.textContent).toBe(
+      "1 of 2",
+    );
+    expect(treePaths(container)).toEqual(["src/needle-path.ts", "src/body.ts"]);
+    expect(
+      container.querySelector("[data-file-name='src/quiet.ts']"),
+    ).toBeNull();
+    expect(
+      fileCard(container, "src/needle-path.ts").querySelector("[data-testid='review-search-current']")
+        ?.textContent,
+    ).toBe("needle");
+    expect(progress()).toBe("0 / 3 files reviewed");
+    expect(state.setMark).not.toHaveBeenCalled();
+
+    click(container.querySelector("[data-testid='review-diff-search-next']")!);
+
+    expect(container.querySelector("[data-testid='review-diff-search-count']")?.textContent).toBe(
+      "2 of 2",
+    );
+    expect(fileCard(container, "src/body.ts").getAttribute("data-search-current")).toBe("true");
+    expect(fileCard(container, "src/needle-path.ts").getAttribute("data-search-current")).toBeNull();
+    expect(progress()).toBe("0 / 3 files reviewed");
+    expect(state.setMark).not.toHaveBeenCalled();
+
+    setInput(input, "");
+
+    expect(container.querySelector("[data-testid='review-diff-search-count']")).toBeNull();
+    expect(treePaths(container)).toEqual(["src/needle-path.ts", "src/body.ts", "src/quiet.ts"]);
+    expect(progress()).toBe("0 / 3 files reviewed");
   });
 });
