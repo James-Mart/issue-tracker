@@ -8,3 +8,7 @@ import { kindHas } from "@server/kind";
 export function supportsComments(kind: IssueKind): boolean {
   return kindHas(kind, "comment");
 }
+
+export function commentCountLabel(count: number): string {
+  return count === 1 ? "1 comment" : `${count} comments`;
+}

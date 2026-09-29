@@ -25,6 +25,7 @@ function comment(
 }
 
 const currentThread: CommentThreadData = {
+  state: "open",
   root: comment({
     id: "current-root",
     at: "2026-08-30T14:22:00.000Z",
@@ -50,6 +51,7 @@ const currentThread: CommentThreadData = {
 };
 
 const outdatedThread: CommentThreadData = {
+  state: "open",
   root: comment({
     id: "outdated-root",
     at: "2026-08-29T09:15:00.000Z",
@@ -188,5 +190,79 @@ describe("CommentThread", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onSeeInDiff).toHaveBeenCalledWith("current-root");
+  });
+
+  it("drops path and line on an inline thread and offers Resolve", () => {
+    const onResolve = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={currentThread}
+          inline
+          onReply={vi.fn()}
+          onResolve={onResolve}
+        />,
+      );
+    });
+
+    const thread = container.querySelector('[data-thread-root="current-root"]');
+    expect(thread?.getAttribute("data-thread-state")).toBe("open");
+    expect(thread?.querySelector('[data-testid="comment-anchor-meta"]')).toBeNull();
+    expect(thread?.textContent).not.toContain("diff-fetch.ts");
+    expect(thread?.textContent).not.toContain("line 94");
+    expect(thread?.textContent).toContain(
+      "Scope drafts per thread so Diff and Overview stay isolated.",
+    );
+
+    const resolve = thread?.querySelector('[data-testid="thread-resolve"]');
+    act(() => {
+      resolve?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onResolve).toHaveBeenCalledOnce();
+  });
+
+  it("collapses a resolved inline thread to a bar that expands and unresolves", () => {
+    const onUnresolve = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const resolved: CommentThreadData = { ...currentThread, state: "resolved" };
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={resolved}
+          inline
+          onReply={vi.fn()}
+          onUnresolve={onUnresolve}
+        />,
+      );
+    });
+
+    const thread = container.querySelector('[data-thread-root="current-root"]');
+    expect(thread?.hasAttribute("data-collapsed")).toBe(true);
+    expect(thread?.textContent).toContain("2 comments");
+    expect(thread?.textContent).toMatch(/resolved/i);
+    expect(thread?.textContent).not.toContain(
+      "Scope drafts per thread so Diff and Overview stay isolated.",
+    );
+
+    const expand = thread?.querySelector('[aria-label="Expand thread"]');
+    act(() => {
+      expand?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(thread?.hasAttribute("data-collapsed")).toBe(false);
+    expect(thread?.textContent).toContain(
+      "Scope drafts per thread so Diff and Overview stay isolated.",
+    );
+    expect(thread?.textContent).not.toContain("diff-fetch.ts");
+
+    const unresolve = thread?.querySelector('[data-testid="thread-unresolve"]');
+    act(() => {
+      unresolve?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onUnresolve).toHaveBeenCalledOnce();
   });
 });

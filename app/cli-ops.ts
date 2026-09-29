@@ -17,6 +17,7 @@ import type {
   IssueKind,
 } from "./server/schemas.js";
 import { readCommentsWithOutdated } from "./server/services/anchor-outdated.js";
+import { appendThreadEvent } from "./server/services/thread-events.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
 import {
   appendComment,
@@ -338,15 +339,21 @@ type CommentCliOptions = {
   startLine?: string;
   commit?: string;
   replyTo?: string;
+  resolve?: boolean;
 };
 
-function commentInputFromCliOpts(opts: CommentCliOptions): CommentInput {
-  const anyAnchor =
+function anchorFlagsPresent(opts: CommentCliOptions): boolean {
+  return (
     opts.path !== undefined ||
     opts.side !== undefined ||
     opts.line !== undefined ||
     opts.startLine !== undefined ||
-    opts.commit !== undefined;
+    opts.commit !== undefined
+  );
+}
+
+function commentInputFromCliOpts(opts: CommentCliOptions): CommentInput {
+  const anyAnchor = anchorFlagsPresent(opts);
 
   if (opts.replyTo && anyAnchor) {
     throw new Error(
@@ -408,6 +415,10 @@ function applyCommentOptions(cmd: Command): Command {
     .option(
       "--reply-to <commentId>",
       "post as a reply to that thread root (mutually exclusive with anchor flags)",
+    )
+    .option(
+      "--resolve",
+      "reply and resolve that Story thread; requires --reply-to and --body",
     );
 }
 
@@ -415,6 +426,22 @@ async function printComment(
   id: string,
   opts: CommentCliOptions,
 ): Promise<Comment> {
+  if (opts.resolve) {
+    if (anchorFlagsPresent(opts)) {
+      throw new Error(
+        "--resolve cannot be combined with anchor flags (--path, --side, --line, --start-line, --commit)",
+      );
+    }
+    if (!opts.replyTo || !opts.body) {
+      throw new Error("--resolve requires --reply-to and --body");
+    }
+    const { reply } = await appendThreadEvent(id, opts.replyTo, {
+      event: "resolved",
+      by: opts.name !== undefined ? { role: opts.role, name: opts.name } : { role: opts.role },
+      body: opts.body,
+    });
+    return reply;
+  }
   return appendComment(id, commentInputFromCliOpts(opts));
 }
 

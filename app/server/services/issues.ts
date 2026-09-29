@@ -16,7 +16,6 @@ import {
   type RefuseableCapability,
 } from "../kind.js";
 import {
-  parseComment,
   parseCommentInput,
   parseIssue,
   requiresPartOf,
@@ -32,6 +31,7 @@ import {
   type Problem,
 } from "../schemas.js";
 import { IssueError } from "./errors.js";
+import { parseCommentLog } from "./thread-state.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
 import { attachWorktreeDerived } from "./derive-worktree.js";
@@ -792,29 +792,39 @@ export function readComments(id: string): CommentsResponse {
     throw new IssueError("not_found", `unknown issue "${id}"`);
   }
   const path = commentsPathOf(id);
-  if (!existsSync(path)) return { messages: [], problems: [] };
-
-  const messages: Comment[] = [];
-  const problems: Problem[] = [];
-  const lines = readFileSync(path, "utf8").split("\n");
-  lines.forEach((line, index) => {
-    if (!line.trim()) return;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      problems.push({ id, message: `comments.jsonl line ${index + 1}: ${detail}` });
-      return;
-    }
-    const parsed = parseComment(raw);
-    if (parsed.ok) messages.push(parsed.message);
-    else problems.push({ id, message: `comments.jsonl line ${index + 1}: ${parsed.message}` });
-  });
-  return { messages, problems };
+  if (!existsSync(path)) return { messages: [], threads: [], problems: [] };
+  return parseCommentLog(id, readFileSync(path, "utf8"));
 }
 
-function validateCommentAppend(issueId: string, input: CommentInput): void {
+/** Validate and stamp one comment. Caller writes it inside `serialize`. */
+export function buildStoredComment(
+  issueId: string,
+  input: CommentInput,
+  messages?: Comment[],
+): Comment {
+  const parsed = parseCommentInput(input);
+  if (!parsed.ok) throw new IssueError("validation", parsed.message);
+  validateCommentAppend(issueId, parsed.input, messages);
+  return {
+    ...parsed.input,
+    id: randomUUID(),
+    at: new Date().toISOString(),
+  };
+}
+
+/** Append JSONL records in one write. Caller holds `serialize`. */
+export function appendCommentLogRecords(id: string, records: unknown[]): void {
+  appendFileSync(
+    commentsPathOf(id),
+    records.map((record) => `${JSON.stringify(record)}\n`).join(""),
+  );
+}
+
+function validateCommentAppend(
+  issueId: string,
+  input: CommentInput,
+  messages?: Comment[],
+): void {
   if (input.anchor) {
     validateFullCommitSha(input.anchor.commitSha);
     if (
@@ -837,8 +847,8 @@ function validateCommentAppend(issueId: string, input: CommentInput): void {
     );
   }
 
-  const { messages } = readComments(issueId);
-  const root = messages.find((message) => message.id === input.replyTo);
+  const known = messages ?? readComments(issueId).messages;
+  const root = known.find((message) => message.id === input.replyTo);
   if (!root) {
     throw new IssueError(
       "validation",
@@ -860,15 +870,8 @@ export function appendComment(
   return serialize(() => {
     assertStoreWritable();
     requireKindCapability(id, "comments");
-    const parsed = parseCommentInput(input);
-    if (!parsed.ok) throw new IssueError("validation", parsed.message);
-    validateCommentAppend(id, parsed.input);
-    const message: Comment = {
-      ...parsed.input,
-      id: randomUUID(),
-      at: new Date().toISOString(),
-    };
-    appendFileSync(commentsPathOf(id), `${JSON.stringify(message)}\n`);
+    const message = buildStoredComment(id, input);
+    appendCommentLogRecords(id, [message]);
     return message;
   });
 }

@@ -13,22 +13,28 @@ export function CommentAnchorMeta({
   anchor,
   outdated,
   onSeeInDiff,
+  showLocation = true,
 }: {
   anchor: NonNullable<CommentMessage["anchor"]>;
   outdated: boolean;
   onSeeInDiff?: () => void;
+  showLocation?: boolean;
 }) {
   return (
     <header
       data-testid="comment-anchor-meta"
       className="flex flex-wrap items-center gap-x-2 gap-y-1 pb-1.5 font-mono text-[10px] text-muted-foreground"
     >
-      <FileCode2 className="h-3 w-3 shrink-0" aria-hidden />
-      <span className="min-w-0 truncate text-foreground/85">{anchor.path}</span>
-      <span aria-hidden>·</span>
-      <span className="shrink-0 tabular-nums">
-        {formatAnchorLineLabel(anchor)}
-      </span>
+      {showLocation ? (
+        <>
+          <FileCode2 className="h-3 w-3 shrink-0" aria-hidden />
+          <span className="min-w-0 truncate text-foreground/85">{anchor.path}</span>
+          <span aria-hidden>·</span>
+          <span className="shrink-0 tabular-nums">
+            {formatAnchorLineLabel(anchor)}
+          </span>
+        </>
+      ) : null}
       {outdated ? (
         <Badge variant="warn" className="uppercase tracking-[0.08em]">
           outdated

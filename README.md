@@ -146,12 +146,15 @@ Three thin adapters sit over it:
   server-stamped `id`; optional `--reply-to` posts a one-level reply, and
   optional anchor flags (`--path`, `--side`, `--line`, `--commit`, optional
   `--start-line`) bind a root comment to a diff line at a commit sha.
+  `--resolve` with `--reply-to` and `--body` replies and resolves a Story
+  thread in that same write. There is no CLI unresolve.
   `issue view <id> --comments` prints the log with threads grouped (replies
   indented) and anchors rendered inline.
 - **HTTP API** (`routes/issues.ts`) — `GET /api/issues` (issues + derived +
   ready + problems), `GET /api/issues/:id`, `GET /api/issues/:id/comments`,
   `POST /api/issues`, `PATCH /api/issues/:id`, `DELETE /api/issues/:id`,
-  `POST /api/issues/:id/comments` — what the UI calls.
+  `POST /api/issues/:id/comments`,
+  `POST /api/issues/:storyId/threads/:threadId/events` — what the UI calls.
 - **WebSocket** (`/api/ws`) — one multiplexed connection per tab; the `issues`
   topic carries chokidar watcher frames so the UI updates live, and
   `conversation:<id>` carries conversation deltas.

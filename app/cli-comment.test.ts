@@ -155,6 +155,117 @@ describe("comment anchor and reply flags", () => {
     expect(stderr).toContain("--reply-to cannot be combined with anchor flags");
   });
 
+  it("replies and resolves a Story thread with --resolve", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeFileSync(
+      join(dir, "s", "comments.jsonl"),
+      `${JSON.stringify({
+        id: "root-id",
+        role: "story-review",
+        body: "fix the guard",
+        at: nextAt(),
+      })}\n`,
+    );
+
+    const { stdout, status } = await runIssueCli(
+      [
+        "comment",
+        "s",
+        "--role",
+        "implementor",
+        "--name",
+        "Ada",
+        "--body",
+        "added the guard in diff-fetch.ts",
+        "--reply-to",
+        "root-id",
+        "--resolve",
+      ],
+      { env: env() },
+    );
+    expect(status).toBe(0);
+    expect(stdout).toMatch(UUID_RE);
+
+    const lines = readFileSync(join(dir, "s", "comments.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(lines).toHaveLength(3);
+    expect(lines[1]).toMatchObject({
+      id: stdout.trim(),
+      role: "implementor",
+      name: "Ada",
+      body: "added the guard in diff-fetch.ts",
+      replyTo: "root-id",
+    });
+    expect(lines[2]).toMatchObject({
+      type: "thread-event",
+      threadId: "root-id",
+      event: "resolved",
+      by: { role: "implementor", name: "Ada" },
+    });
+  });
+
+  it("refuses --resolve without --reply-to and on a non-Story", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeFileSync(
+      join(dir, "s", "comments.jsonl"),
+      `${JSON.stringify({
+        id: "root-id",
+        role: "human",
+        body: "root",
+        at: nextAt(),
+      })}\n`,
+    );
+
+    const missingReply = await runIssueCli(
+      ["comment", "s", "--role", "implementor", "--body", "fix", "--resolve"],
+      { env: env() },
+    );
+    expect(missingReply.status).toBe(1);
+    expect(missingReply.stderr).toContain("--resolve requires --reply-to and --body");
+
+    const task = await runIssueCli(
+      [
+        "comment",
+        "t",
+        "--role",
+        "implementor",
+        "--body",
+        "fix",
+        "--reply-to",
+        "root-id",
+        "--resolve",
+      ],
+      { env: env() },
+    );
+    expect(task.status).toBe(1);
+    expect(task.stderr).toContain('issue "t" is not a Story');
+    expect(readFileSync(join(dir, "s", "comments.jsonl"), "utf8").trim().split("\n")).toHaveLength(1);
+  });
+
+  it("documents --resolve on comment --help", async () => {
+    const help = await runIssueCli(["comment", "--help"], { env: env() });
+    expect(help.status).toBe(0);
+    expect(help.stdout.replace(/\s+/g, " ")).toContain(
+      "--resolve reply and resolve that Story thread; requires --reply-to and --body",
+    );
+  });
+
   it("supports anchor flags on kind-scoped comment", async () => {
     const { stdout, status } = await runIssueCli(
       [

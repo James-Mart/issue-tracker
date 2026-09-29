@@ -55,6 +55,20 @@ describe("groupCommentThreads", () => {
     expect(threads.map((thread) => thread.root.id)).toEqual(["early", "late"]);
     expect(threads[1]?.replies.map((reply) => reply.id)).toEqual(["r1", "r2"]);
     expect(threads[0]?.replies).toEqual([]);
+    expect(threads.map((thread) => thread.state)).toEqual(["open", "open"]);
+  });
+
+  it("applies derived thread state by root id", () => {
+    const root = comment({
+      id: "root",
+      at: "2026-08-30T14:00:00.000Z",
+      body: "root",
+    });
+    const threads = groupCommentThreads(
+      [root],
+      [{ rootId: "root", kind: "review", state: "resolved" }],
+    );
+    expect(threads[0]?.state).toBe("resolved");
   });
 });
 

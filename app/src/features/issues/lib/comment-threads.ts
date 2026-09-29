@@ -1,16 +1,19 @@
-import type { CommentMessage, Problem } from "@server/schemas";
+import type { CommentMessage, Problem, ThreadView } from "@server/schemas";
 
 export type CommentThread = {
   root: CommentMessage;
   replies: CommentMessage[];
+  state: ThreadView["state"];
 };
 
 export function groupCommentThreads(
   messages: CommentMessage[],
+  views: ThreadView[] = [],
 ): CommentThread[] {
   const roots = messages.filter((message) => !message.replyTo);
   const rootIds = new Set(roots.map((root) => root.id));
   const repliesByRoot = new Map<string, CommentMessage[]>();
+  const stateByRoot = new Map(views.map((view) => [view.rootId, view.state]));
 
   for (const message of messages) {
     if (!message.replyTo || !rootIds.has(message.replyTo)) continue;
@@ -24,6 +27,7 @@ export function groupCommentThreads(
     .map((root) => ({
       root,
       replies: repliesByRoot.get(root.id) ?? [],
+      state: stateByRoot.get(root.id) ?? "open",
     }));
 }
 

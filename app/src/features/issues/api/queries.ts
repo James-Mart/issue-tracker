@@ -76,8 +76,8 @@ export function useCommentsQuery(id: string): UseQueryResult<CommentsResponse, E
 export function useCommentThreads(issueId: string): CommentThreadsResult {
   const { data } = useCommentsQuery(issueId);
   const threads = useMemo(
-    () => groupCommentThreads(data?.messages ?? []),
-    [data?.messages],
+    () => groupCommentThreads(data?.messages ?? [], data?.threads ?? []),
+    [data?.messages, data?.threads],
   );
   return {
     threads,

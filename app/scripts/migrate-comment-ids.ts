@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { issuesDir, refreshStorePathsFromEnv } from "../server/config.js";
 import { commentInputSchema } from "../server/schemas/issue.js";
+import { isThreadEventRecord } from "../server/services/thread-state.js";
 
 const legacyStoredCommentSchema = commentInputSchema.extend({
   at: z.string().min(1),
@@ -73,6 +74,11 @@ function migrateCommentsFile(
     }
 
     if (lineCarriesId(raw)) {
+      outLines.push(line);
+      continue;
+    }
+
+    if (isThreadEventRecord(raw)) {
       outLines.push(line);
       continue;
     }
