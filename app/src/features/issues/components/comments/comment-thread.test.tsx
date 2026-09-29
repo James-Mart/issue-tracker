@@ -264,6 +264,7 @@ describe("CommentThread", () => {
     expect(thread?.hasAttribute("data-collapsed")).toBe(true);
     expect(thread?.textContent).toContain("2 comments");
     expect(thread?.textContent).toMatch(/resolved/i);
+    expect(thread?.textContent).not.toMatch(/outdated/i);
     expect(thread?.textContent).not.toContain(
       "Scope drafts per thread so Diff and Overview stay isolated.",
     );
@@ -283,6 +284,44 @@ describe("CommentThread", () => {
       unresolve?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onUnresolve).toHaveBeenCalledOnce();
+  });
+
+  it("collapses an outdated thread to a line bar that expands to its snippet", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={outdatedThread}
+          issueId="task-threads"
+          inline
+          showAnchorContext
+          collapse="outdated"
+          onReply={vi.fn()}
+          onResolve={vi.fn()}
+        />,
+      );
+    });
+
+    const thread = container.querySelector('[data-thread-root="outdated-root"]');
+    const bar = thread?.querySelector('[data-testid="thread-collapsed-bar"]');
+    expect(thread?.hasAttribute("data-collapsed")).toBe(true);
+    expect(thread?.className).not.toContain("opacity-70");
+    expect(bar?.textContent).toBe("lines 88-90 · 1 comment");
+    expect(thread?.querySelector('[data-testid="thread-unresolve"]')).toBeNull();
+    expect(thread?.querySelector('[data-testid="comment-anchor-meta"]')).toBeNull();
+    expect(thread?.textContent).not.toContain("Run assertCommitReachable before git show.");
+
+    act(() => {
+      thread
+        ?.querySelector('[aria-label="Expand thread"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(thread?.hasAttribute("data-collapsed")).toBe(false);
+    expect(thread?.querySelector('[data-testid="comment-anchor-snippet"]')).not.toBeNull();
+    expect(thread?.textContent).toContain("Run assertCommitReachable before git show.");
+    expect(thread?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
   });
 
   it("renders a linked Task chip on inline threads", () => {
@@ -353,7 +392,7 @@ describe("CommentThread", () => {
       root.render(
         <CommentThread
           thread={resolved}
-          collapseResolved
+          collapse="resolved"
           showAnchorContext
           issueId="task-threads"
           onSeeInDiff={vi.fn()}

@@ -1,16 +1,31 @@
-import { useCallback, useEffect, useId, useMemo, useRef, type MutableRefObject, type Ref } from "react";
-import { FileDiff, useVirtualizer, type DiffLineAnnotation, type FileDiffMetadata } from "@pierre/diffs/react";
+import { useCallback, useEffect, useId, useRef, type MutableRefObject, type Ref } from "react";
+import {
+  FileDiff,
+  useVirtualizer,
+  type DiffLineAnnotation,
+  type FileDiffMetadata,
+} from "@pierre/diffs/react";
 import { ChevronRight } from "lucide-react";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils/cn";
 import { DiffLineCounts } from "@/features/issues/components/changed-file-row";
+import {
+  DiffThreadComposer,
+  useDiffComposer,
+} from "@/features/issues/components/comments/diff-thread-composer";
 import { useFileDiffContentsLoader } from "@/features/issues/hooks/use-file-diff-contents-loader";
+import { useFileThreadAnnotations } from "@/features/issues/hooks/use-file-thread-annotations";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
+import {
+  annotationSideToAnchorSide,
+  newComposerOnLine,
+  type AnchorSide,
+} from "@/features/issues/lib/diff-thread-anchor";
 import { threadNodeInPanel } from "@/features/issues/lib/issue-change-focus-thread";
-import { placeThreadsInFile } from "@/features/issues/lib/issue-change-inline-threads";
+import { NO_FILE_THREADS, type ReviewFileThreads } from "../lib/review-diff-threads";
 import type { ReviewFileRow } from "../lib/review-files";
 import type { DiffSearchMatch } from "../lib/review-diff-search";
 import {
@@ -24,9 +39,7 @@ import { usePinnedHeaderCollapse } from "../hooks/use-pinned-header-collapse";
 import { useReviewSearchMark } from "../hooks/use-review-search-mark";
 import { ChangedSinceReviewedHeaderMark } from "./changed-since-reviewed-badge";
 import { MarkedPathText } from "./review-search-marked-text";
-import { ReviewLineThreads } from "./review-thread";
-
-const NO_FILE_THREADS: CommentThread[] = [];
+import { ReviewLineThreads, ReviewOutdatedThreads } from "./review-thread";
 
 export type ReviewFileDiffSource = {
   storyId: string;
@@ -55,6 +68,48 @@ function FileTooLargeBody({
   );
 }
 
+function AnnotationThreads({
+  threads,
+  storyId,
+  file,
+  lineNumber,
+  side,
+}: {
+  threads: CommentThread[];
+  storyId: string;
+  file: FileDiffMetadata;
+  lineNumber: number;
+  side: AnchorSide;
+}) {
+  const { open } = useDiffComposer();
+  const target = newComposerOnLine(open, file, lineNumber, side);
+  return (
+    <ReviewLineThreads
+      threads={threads}
+      storyId={storyId}
+      composer={target ? <DiffThreadComposer target={target} /> : undefined}
+    />
+  );
+}
+
+/** Threads below the code: those without a painted line, then the Outdated group. */
+function FileEndThreads({
+  inline,
+  outdated,
+  storyId,
+}: {
+  inline: CommentThread[];
+  outdated: CommentThread[];
+  storyId: string;
+}) {
+  return (
+    <>
+      <ReviewLineThreads threads={inline} storyId={storyId} />
+      <ReviewOutdatedThreads threads={outdated} storyId={storyId} />
+    </>
+  );
+}
+
 function RenderedFileDiff({
   fileDiff,
   diffLayout,
@@ -64,22 +119,26 @@ function RenderedFileDiff({
   fileDiff: FileDiffMetadata;
   diffLayout: DiffLayout;
   source: ReviewFileDiffSource;
-  threads: CommentThread[];
+  threads: ReviewFileThreads;
 }) {
   const { loading, loadDiffFiles } = useFileDiffContentsLoader({
     issueId: source.storyId,
     sha: source.sha,
     cache: source.contentsCache,
   });
-  const { located, unlocated } = useMemo(
-    () => placeThreadsInFile(threads, fileDiff),
-    [fileDiff, threads],
-  );
+  const { annotations, unlocated, openFromRange, onLineSelected } =
+    useFileThreadAnnotations(fileDiff, threads.inline);
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<CommentThread[]>) => (
-      <ReviewLineThreads threads={annotation.metadata} storyId={source.storyId} />
+      <AnnotationThreads
+        threads={annotation.metadata}
+        storyId={source.storyId}
+        file={fileDiff}
+        lineNumber={annotation.lineNumber}
+        side={annotationSideToAnchorSide(annotation.side)}
+      />
     ),
-    [source.storyId],
+    [fileDiff, source.storyId],
   );
 
   return (
@@ -100,11 +159,15 @@ function RenderedFileDiff({
           diffStyle: diffLayout,
           disableFileHeader: true,
           unsafeCSS: REVIEW_SEARCH_MATCH_CSS,
+          enableGutterUtility: true,
+          enableLineSelection: true,
+          onGutterUtilityClick: openFromRange,
+          onLineSelected,
         }}
-        lineAnnotations={located}
+        lineAnnotations={annotations}
         renderAnnotation={renderAnnotation}
       />
-      <ReviewLineThreads threads={unlocated} storyId={source.storyId} />
+      <FileEndThreads inline={unlocated} outdated={threads.outdated} storyId={source.storyId} />
     </div>
   );
 }
@@ -140,7 +203,7 @@ export function ReviewFileDiff({
   fileRef?: Ref<HTMLElement>;
   searchNeedle?: string;
   currentMatch?: DiffSearchMatch;
-  threads?: CommentThread[];
+  threads?: ReviewFileThreads;
   scrollThreadId?: string;
 }) {
   const { file, reviewed, changedSinceReviewed } = row;
@@ -150,7 +213,8 @@ export function ReviewFileDiff({
   const virtualizer = useVirtualizer();
   useReviewSearchMark(sectionRef, currentMatch, searchNeedle, collapsed);
   const holdPinnedFile = usePinnedHeaderCollapse(sectionRef, collapsed);
-  const anchor = threads.find((thread) => thread.root.id === scrollThreadId)?.root.anchor;
+  // An Outdated-group thread has no line in this diff; the reveal scrolls to its node.
+  const anchor = threads.inline.find((thread) => thread.root.id === scrollThreadId)?.root.anchor;
   useEffect(() => {
     if (!scrollThreadId || collapsed) return;
     const panel = sectionRef.current;
@@ -356,7 +420,11 @@ export function ReviewFileDiff({
           {file.tooLarge ? (
             <>
               <FileTooLargeBody localCommand={localCommand} localHint={localHint} />
-              <ReviewLineThreads threads={threads} storyId={source.storyId} />
+              <FileEndThreads
+                inline={threads.inline}
+                outdated={threads.outdated}
+                storyId={source.storyId}
+              />
             </>
           ) : fileDiff ? (
             <RenderedFileDiff

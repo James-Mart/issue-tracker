@@ -68,7 +68,7 @@ function ConversationTimeline({
                 thread={thread}
                 storyId={storyId}
                 showAnchorContext
-                collapseResolved
+                collapse="resolved"
                 onSeeInDiff={
                   anchor
                     ? () => onOpenInDiff(thread.root.id, anchor.commitSha)

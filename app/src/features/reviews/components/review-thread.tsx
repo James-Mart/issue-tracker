@@ -1,8 +1,9 @@
-import { useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Send } from "lucide-react";
 import type { CommentThread as CommentThreadData } from "@/features/issues/lib/comment-threads";
 import { usePostComment, usePostThreadEvent } from "@/features/issues/api/mutations";
 import { CommentThread } from "@/features/issues/components/comments/comment-thread";
+import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -64,14 +65,14 @@ export function ReviewThread({
   storyId,
   inline = false,
   showAnchorContext = false,
-  collapseResolved = false,
+  collapse,
   onSeeInDiff,
 }: {
   thread: CommentThreadData;
   storyId: string;
   inline?: boolean;
   showAnchorContext?: boolean;
-  collapseResolved?: boolean;
+  collapse?: "resolved" | "outdated";
   onSeeInDiff?: () => void;
 }) {
   const post = usePostComment(storyId);
@@ -99,7 +100,7 @@ export function ReviewThread({
       issueId={storyId}
       inline={inline}
       showAnchorContext={showAnchorContext}
-      collapseResolved={collapseResolved}
+      collapse={collapse}
       onSeeInDiff={onSeeInDiff}
       onReply={() => setReplying(true)}
       replySlot={
@@ -127,19 +128,54 @@ export function ReviewThread({
 export function ReviewLineThreads({
   threads,
   storyId,
+  composer,
+}: {
+  threads: CommentThreadData[];
+  storyId: string;
+  /** New-thread composer open on this line. */
+  composer?: ReactNode;
+}) {
+  if (threads.length === 0 && composer == null) return null;
+  return (
+    // Annotations slot into the diff's shadow tree and would inherit its monospace code font.
+    <div
+      data-testid="review-line-threads"
+      className="flex flex-col gap-2 px-3 py-2 font-sans"
+    >
+      {threads.map((thread) => (
+        <ReviewThread key={thread.root.id} thread={thread} storyId={storyId} inline />
+      ))}
+      {composer}
+    </div>
+  );
+}
+
+/** All changes: threads whose anchor drifted, kept in their file card below the code. */
+export function ReviewOutdatedThreads({
+  threads,
+  storyId,
 }: {
   threads: CommentThreadData[];
   storyId: string;
 }) {
   if (threads.length === 0) return null;
   return (
-    <div
-      data-testid="review-line-threads"
-      className="flex flex-col gap-2 px-3 py-2"
+    <section
+      data-testid="review-outdated-threads"
+      aria-label="Outdated threads"
+      className="flex flex-col gap-2 border-t border-border px-3 py-2"
     >
+      <p className={SETTINGS_HEADING_CLASS}>Outdated</p>
       {threads.map((thread) => (
-        <ReviewThread key={thread.root.id} thread={thread} storyId={storyId} inline />
+        <ReviewThread
+          key={thread.root.id}
+          thread={thread}
+          storyId={storyId}
+          inline
+          showAnchorContext
+          collapse="outdated"
+        />
       ))}
-    </div>
+    </section>
   );
 }

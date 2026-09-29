@@ -6,7 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
 import { cn } from "@/lib/utils/cn";
-import { type CommentThread as CommentThreadData } from "../../lib/comment-threads";
+import {
+  formatAnchorLineLabel,
+  type CommentThread as CommentThreadData,
+} from "../../lib/comment-threads";
 import { commentCountLabel } from "../../lib/comments";
 import { Markdown } from "../markdown";
 import {
@@ -24,7 +27,7 @@ export function CommentThread({
   showAnchorContext = false,
   onSeeInDiff,
   inline = false,
-  collapseResolved = false,
+  collapse,
   onResolve,
   onUnresolve,
   resolvePending = false,
@@ -37,8 +40,11 @@ export function CommentThread({
   onSeeInDiff?: () => void;
   /** Inside a file diff: drop path and line, and collapse when resolved. */
   inline?: boolean;
-  /** Conversation timeline: collapse when resolved and keep the anchor header. */
-  collapseResolved?: boolean;
+  /**
+   * `resolved`: Conversation timeline, collapse when resolved and keep the anchor header.
+   * `outdated`: Diff Outdated group, collapse to a bar carrying the line.
+   */
+  collapse?: "resolved" | "outdated";
   onResolve?: () => void;
   onUnresolve?: () => void;
   resolvePending?: boolean;
@@ -48,10 +54,13 @@ export function CommentThread({
   const comments = [thread.root, ...thread.replies];
   const anchor = thread.root.anchor;
   const resolved = thread.state === "resolved";
-  const collapses = (inline || collapseResolved) && resolved;
+  const outdatedBar = collapse === "outdated" && outdated;
+  const collapses = outdatedBar || ((inline || collapse === "resolved") && resolved);
   const collapsed = collapses && !expanded;
   const showAnchorHeader =
-    anchor != null && (!inline || outdated || onSeeInDiff != null);
+    anchor != null &&
+    !outdatedBar &&
+    (!inline || outdated || onSeeInDiff != null);
 
   return (
     <article
@@ -63,7 +72,7 @@ export function CommentThread({
       className={cn(
         "flex min-w-0 flex-col rounded-md border border-border bg-card",
         collapsed ? "px-3 py-1.5" : "px-3 py-2",
-        outdated && "opacity-70",
+        outdated && !outdatedBar && "opacity-70",
       )}
     >
       {showAnchorHeader && anchor ? (
@@ -114,8 +123,10 @@ export function CommentThread({
       )}
 
       {collapses ? (
-        <ResolvedThreadBar
+        <CollapsedThreadBar
           count={comments.length}
+          lineLabel={outdatedBar && anchor ? formatAnchorLineLabel(anchor) : undefined}
+          resolved={resolved}
           expanded={expanded}
           pending={resolvePending}
           onToggle={() => setExpanded((open) => !open)}
@@ -134,14 +145,18 @@ function ThreadChipRow({ taskId }: { taskId: string }) {
   );
 }
 
-function ResolvedThreadBar({
+function CollapsedThreadBar({
   count,
+  lineLabel,
+  resolved,
   expanded,
   pending,
   onToggle,
   onUnresolve,
 }: {
   count: number;
+  lineLabel?: string;
+  resolved: boolean;
   expanded: boolean;
   pending: boolean;
   onToggle: () => void;
@@ -150,35 +165,40 @@ function ResolvedThreadBar({
   const toggleLabel = expanded ? "Collapse thread" : "Expand thread";
   return (
     <div
-      data-testid="thread-resolved-bar"
+      data-testid="thread-collapsed-bar"
       className="flex flex-wrap items-center gap-x-2 gap-y-1"
     >
       <Button
         type="button"
         variant="ghost"
         size="sm"
-        className="h-auto min-w-0 justify-start px-1.5 py-1 text-left font-normal [&_svg]:size-3.5"
+        className="h-auto min-w-0 flex-1 flex-wrap justify-start whitespace-normal px-1.5 py-1 text-left font-normal [&_svg]:size-3.5"
         aria-expanded={expanded}
         onClick={onToggle}
       >
         <Circle className="text-muted-foreground" aria-hidden />
-        <span className="font-mono text-xs tabular-nums text-muted-foreground">
+        <span className="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">
+          {lineLabel ? `${lineLabel} · ` : null}
           {commentCountLabel(count)}
         </span>
-        <Badge variant="done" className="uppercase tracking-[0.08em]">
-          Resolved
-        </Badge>
+        {resolved ? (
+          <Badge variant="done" className="uppercase tracking-[0.08em]">
+            Resolved
+          </Badge>
+        ) : null}
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={onUnresolve}
-        disabled={pending || !onUnresolve}
-        data-testid="thread-unresolve"
-      >
-        Unresolve
-      </Button>
+      {resolved ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onUnresolve}
+          disabled={pending || !onUnresolve}
+          data-testid="thread-unresolve"
+        >
+          Unresolve
+        </Button>
+      ) : null}
       <Button
         type="button"
         variant="ghost"

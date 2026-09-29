@@ -3,6 +3,7 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
+import { DiffComposerProvider } from "@/features/issues/components/comments/diff-thread-composer";
 import type { ReviewFileRow } from "../lib/review-files";
 import { ReviewFileDiff } from "./review-file-diff";
 
@@ -20,6 +21,10 @@ vi.mock("@pierre/diffs/react", () => ({
     scrollTo: scroller.scrollTo,
   }),
   FileDiff: () => <div data-testid="file-diff" />,
+}));
+
+vi.mock("@/features/issues/api/mutations", () => ({
+  usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const ROW: ReviewFileRow = {
@@ -64,7 +69,11 @@ function mount(): HTMLDivElement {
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root!.render(<Harness />);
+    root!.render(
+      <DiffComposerProvider issueId="story-1" commitSha="tip">
+        <Harness />
+      </DiffComposerProvider>,
+    );
   });
   return container;
 }

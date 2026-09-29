@@ -4,7 +4,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs/react";
+import type {
+  DiffLineAnnotation,
+  FileDiffMetadata,
+  SelectedLineRange,
+} from "@pierre/diffs/react";
 import type {
   ReviewCommits,
   ReviewDiff,
@@ -30,6 +34,7 @@ const state = vi.hoisted(() => ({
   archive: vi.fn(),
   reopen: vi.fn(),
   open: vi.fn(),
+  postComment: vi.fn(),
   commentThreads: [] as CommentThread[],
 }));
 
@@ -44,19 +49,39 @@ vi.mock("@pierre/diffs/react", () => ({
   }),
   FileDiff: ({
     fileDiff,
+    options,
     lineAnnotations = [],
     renderAnnotation,
   }: {
     fileDiff: FileDiffMetadata;
+    options?: { onGutterUtilityClick?: (range: SelectedLineRange) => void };
     lineAnnotations?: DiffLineAnnotation<CommentThread[]>[];
     renderAnnotation?: (annotation: DiffLineAnnotation<CommentThread[]>) => ReactNode;
   }) => (
     <div data-testid="file-diff" data-file-name={fileDiff.name}>
-      {lineAnnotations.map((annotation, index) => (
-        <div key={index}>{renderAnnotation?.(annotation)}</div>
+      <button
+        type="button"
+        data-testid="gutter-new-line-1"
+        onClick={() => options?.onGutterUtilityClick?.({ start: 1, end: 1, side: "additions" })}
+      />
+      {lineAnnotations.map((annotation) => (
+        <div
+          key={`${annotation.side}:${annotation.lineNumber}`}
+          data-testid="line-annotation"
+          data-side={annotation.side}
+          data-line={annotation.lineNumber}
+        >
+          {renderAnnotation?.(annotation)}
+        </div>
       ))}
     </div>
   ),
+}));
+
+vi.mock("@/features/issues/api/mutations", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  usePostComment: () => ({ mutate: state.postComment, isPending: false }),
+  usePostThreadEvent: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
@@ -188,6 +213,43 @@ function commitsFixture(overrides: Partial<ReviewCommits> = {}): ReviewCommits {
   };
 }
 
+const OLDER = "a3f91c2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+function commitFixture(sha: string): ReviewCommits["commits"][number] {
+  return {
+    sha,
+    subject: `change ${shortSha(sha)}`,
+    author: "agent",
+    authoredAt: "2026-09-29T00:00:00.000Z",
+    files: 1,
+    additions: 1,
+    deletions: 1,
+  };
+}
+
+/** A thread on `src/changed.ts` (new side), or a general thread without `anchor`. */
+function anchoredThread(
+  id: string,
+  body: string,
+  anchor?: { line: number; commitSha: string },
+  outdated = false,
+): CommentThread {
+  return {
+    state: "open",
+    readyToTask: true,
+    root: {
+      id,
+      at: "2026-09-28T16:40:00.000Z",
+      role: "human",
+      name: "Jared",
+      body,
+      ...(outdated ? { outdated: true } : {}),
+      ...(anchor ? { anchor: { path: "src/changed.ts", side: "new" as const, ...anchor } } : {}),
+    },
+    replies: [],
+  };
+}
+
 let root: Root | undefined;
 let lastLocation = "";
 
@@ -273,6 +335,15 @@ function setInput(input: HTMLInputElement, value: string) {
   act(() => {
     setter.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function setTextarea(textarea: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  if (!setter) throw new Error("no textarea value setter");
+  act(() => {
+    setter.call(textarea, value);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
@@ -420,6 +491,89 @@ describe("StoryReviewPage", () => {
     const card = fileCard(container, "src/changed.ts");
     expect(card.querySelector('[data-thread-root="drifted"]')?.textContent).toContain(
       "This line moved.",
+    );
+  });
+
+  it("places every anchored thread on All changes and groups outdated ones in their file", () => {
+    state.commentThreads = [
+      anchoredThread("general", "A general note."),
+      anchoredThread("current", "Check the new line.", { line: 1, commitSha: OLDER }),
+      anchoredThread("drifted", "This line moved.", { line: 5, commitSha: OLDER }, true),
+    ];
+    const container = mountPage("tab=diff");
+    const card = fileCard(container, "src/changed.ts");
+
+    const line = card.querySelector('[data-testid="line-annotation"][data-line="1"]');
+    expect(line?.querySelector('[data-thread-root="current"]')?.textContent).toContain(
+      "Check the new line.",
+    );
+    const outdated = card.querySelector('[data-testid="review-outdated-threads"]');
+    const drifted = outdated?.querySelector('[data-thread-root="drifted"]');
+    expect(drifted?.hasAttribute("data-collapsed")).toBe(true);
+    expect(drifted?.textContent).toContain("line 5 · 1 comment");
+    expect(line?.querySelector('[data-thread-root="drifted"]')).toBeNull();
+    expect(container.querySelector('[data-thread-root="general"]')).toBeNull();
+    expect(container.textContent).not.toContain("A general note.");
+  });
+
+  it("shows only threads anchored to the viewed commit, outdated ones at their line", () => {
+    state.commits = commitsFixture({ commits: [commitFixture(OLDER), commitFixture(TIP)] });
+    state.byScope[OLDER] = { scope: OLDER, files: [FILES[0]!], patch: PATCH } satisfies ReviewDiff;
+    state.commentThreads = [
+      anchoredThread("older", "From the older commit.", { line: 1, commitSha: OLDER }),
+      anchoredThread("drifted", "Drifted since.", { line: 1, commitSha: OLDER }, true),
+      anchoredThread("tip", "From the tip.", { line: 1, commitSha: TIP }),
+    ];
+    const container = mountPage(`tab=diff&scope=${OLDER}`);
+    const line = fileCard(container, "src/changed.ts").querySelector(
+      '[data-testid="line-annotation"][data-line="1"]',
+    );
+
+    expect(line?.querySelector('[data-thread-root="older"]')).not.toBeNull();
+    expect(line?.querySelector('[data-thread-root="drifted"]')).not.toBeNull();
+    expect(container.querySelector('[data-thread-root="tip"]')).toBeNull();
+    expect(container.querySelector('[data-testid="review-outdated-threads"]')).toBeNull();
+  });
+
+  it("widens to All changes when the opened thread is anchored to another commit", () => {
+    state.commits = commitsFixture({ commits: [commitFixture(OLDER), commitFixture(TIP)] });
+    state.byScope[OLDER] = { scope: OLDER, files: [FILES[0]!], patch: PATCH } satisfies ReviewDiff;
+    state.commentThreads = [
+      anchoredThread("tip", "From the tip.", { line: 1, commitSha: TIP }),
+    ];
+    const container = mountPage(`tab=diff&scope=${OLDER}&thread=tip`);
+
+    expect(lastLocation).toBe(`${storyReviewPath(PROJECT, STORY)}?tab=diff&scope=all&thread=tip`);
+    expect(
+      fileCard(container, "src/changed.ts").querySelector('[data-thread-root="tip"]'),
+    ).not.toBeNull();
+  });
+
+  it.each([
+    ["All changes", "all", TIP],
+    ["a commit", OLDER, OLDER],
+  ])("anchors a line comment on %s to the viewed commit", (_label, scope, commitSha) => {
+    state.commits = commitsFixture({ commits: [commitFixture(OLDER), commitFixture(TIP)] });
+    state.byScope[OLDER] = { scope: OLDER, files: [FILES[0]!], patch: PATCH } satisfies ReviewDiff;
+    const container = mountPage(`tab=diff&scope=${scope}`);
+    const card = fileCard(container, "src/changed.ts");
+
+    click(card.querySelector('[data-testid="gutter-new-line-1"]')!);
+
+    const composer = card.querySelector(
+      '[data-testid="line-annotation"][data-line="1"] [data-testid="diff-thread-composer"]',
+    );
+    expect(composer?.textContent).toContain("line 1");
+    setTextarea(composer!.querySelector("textarea")!, "Name this constant.");
+    click(composer!.querySelector('button[aria-label="Send"]')!);
+
+    expect(state.postComment).toHaveBeenCalledWith(
+      {
+        role: "human",
+        body: "Name this constant.",
+        anchor: { path: "src/changed.ts", side: "new", line: 1, commitSha },
+      },
+      expect.any(Object),
     );
   });
 

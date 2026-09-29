@@ -2,71 +2,57 @@ import { describe, expect, it } from "vitest";
 import {
   commentInputForComposer,
   composerDraftKey,
+  newComposerForRange,
   newThreadDraftId,
   pathForAnchorSide,
-  selectedRangeToAnchor,
   threadDraftKey,
 } from "./diff-thread-anchor";
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
 const PATH = "app/server/services/diff-fetch.ts";
 
-describe("selectedRangeToAnchor", () => {
+describe("newComposerForRange", () => {
+  const file = { name: PATH };
+
   it("maps a single addition line", () => {
     expect(
-      selectedRangeToAnchor(
-        { start: 94, end: 94, side: "additions" },
-        PATH,
-        SHA,
-      ),
-    ).toEqual({ path: PATH, side: "new", line: 94, commitSha: SHA });
+      newComposerForRange({ start: 94, end: 94, side: "additions" }, file),
+    ).toEqual({ kind: "new", path: PATH, side: "new", line: 94 });
   });
 
   it("maps a same-side range onto startLine + line", () => {
     expect(
-      selectedRangeToAnchor(
-        { start: 94, end: 96, side: "additions" },
-        PATH,
-        SHA,
-      ),
-    ).toEqual({
-      path: PATH,
-      side: "new",
-      line: 96,
-      startLine: 94,
-      commitSha: SHA,
-    });
+      newComposerForRange({ start: 94, end: 96, side: "additions" }, file),
+    ).toEqual({ kind: "new", path: PATH, side: "new", line: 96, startLine: 94 });
   });
 
   it("normalizes an upward drag so startLine is the lower line", () => {
     expect(
-      selectedRangeToAnchor(
-        { start: 96, end: 94, side: "additions" },
-        PATH,
-        SHA,
-      ),
-    ).toEqual({
-      path: PATH,
-      side: "new",
-      line: 96,
-      startLine: 94,
-      commitSha: SHA,
-    });
+      newComposerForRange({ start: 96, end: 94, side: "additions" }, file),
+    ).toEqual({ kind: "new", path: PATH, side: "new", line: 96, startLine: 94 });
   });
 
   it("drops startLine when the range crosses sides", () => {
     expect(
-      selectedRangeToAnchor(
+      newComposerForRange(
         {
           start: 90,
           end: 94,
           side: "deletions",
           endSide: "additions",
         },
-        PATH,
-        SHA,
+        file,
       ),
-    ).toEqual({ path: PATH, side: "new", line: 94, commitSha: SHA });
+    ).toEqual({ kind: "new", path: PATH, side: "new", line: 94 });
+  });
+
+  it("anchors a deletion on the pre-rename path", () => {
+    expect(
+      newComposerForRange(
+        { start: 12, end: 12, side: "deletions" },
+        { name: "new.ts", prevName: "old.ts" },
+      ),
+    ).toEqual({ kind: "new", path: "old.ts", side: "old", line: 12 });
   });
 });
 

@@ -5,16 +5,21 @@ import type { ReviewCommits, ReviewDiff, ReviewView } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { DiffLineCounts } from "@/features/issues/components/changed-file-row";
+import { DiffComposerProvider } from "@/features/issues/components/comments/diff-thread-composer";
 import { DiffLayoutToggle } from "@/features/issues/components/diff-layout-toggle";
 import { useDiffLayoutPreference } from "@/features/issues/hooks/use-diff-layout-preference";
 import { useVirtualizedFileScroll } from "@/features/issues/hooks/use-virtualized-file-scroll";
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
 import { useCommentThreads } from "@/features/issues/api/queries";
 import { fileDiffsFromPatch } from "@/features/issues/lib/issue-change-file-diffs";
-import type { CommentThread } from "@/features/issues/lib/comment-threads";
-import { fileNameForAnchorPath } from "@/features/issues/lib/issue-change-focus-thread";
 import { useReviewDiffSearch } from "../hooks/use-review-diff-search";
 import { useReviewFileMarks } from "../hooks/use-review-file-marks";
+import {
+  fileShowingThread,
+  NO_FILE_THREADS,
+  reviewDiffThreadsByFile,
+  type ReviewFileThreads,
+} from "../lib/review-diff-threads";
 import {
   diffLineTotals,
   fileCountLabel,
@@ -39,8 +44,6 @@ import {
 } from "../lib/review-diff-search";
 
 type ScrollRequest = { path: string; nonce: number; scope: string };
-
-const NO_THREADS: CommentThread[] = [];
 
 function ScopeStep({
   label,
@@ -154,8 +157,8 @@ function ReviewFileStack({
   onReviewedChange,
   searchNeedle,
   currentMatch,
+  threadsByFile,
   focusFile,
-  focusThreads,
   focusThreadId,
 }: {
   rows: ReviewFileRow[];
@@ -172,8 +175,8 @@ function ReviewFileStack({
   onReviewedChange: (path: string, reviewed: boolean) => void;
   searchNeedle: string;
   currentMatch: DiffSearchMatch | undefined;
+  threadsByFile: Map<string, ReviewFileThreads>;
   focusFile: string | undefined;
-  focusThreads: CommentThread[];
   focusThreadId: string | null;
 }) {
   const fileRef = useVirtualizedFileScroll<HTMLElement>(
@@ -194,7 +197,7 @@ function ReviewFileStack({
             !(currentMatch?.kind === "content" && currentMatch.path === row.file.path) &&
             row.file.path !== focusFile
           }
-          threads={row.file.path === focusFile ? focusThreads : NO_THREADS}
+          threads={threadsByFile.get(row.file.path) ?? NO_FILE_THREADS}
           scrollThreadId={row.file.path === focusFile ? focusThreadId ?? undefined : undefined}
           readOnly={readOnly}
           diffLayout={diffLayout}
@@ -248,6 +251,7 @@ export function ReviewDiffTab({
   const [scrollRequest, setScrollRequest] = useState<ScrollRequest>();
   const activeScroll = scrollRequest?.scope === scope ? scrollRequest : undefined;
   const contentsCache = useRef(new Map<string, Promise<string>>()).current;
+  const viewedSha = scope === ALL_CHANGES_SCOPE ? commits.tip : scope;
 
   const parsed = useMemo(() => {
     const files = fileDiffsFromPatch(diff.patch);
@@ -257,26 +261,23 @@ export function ReviewDiffTab({
     };
   }, [diff.patch]);
   const { threads } = useCommentThreads(storyId);
-  const focusThread = threads.find((thread) => thread.root.id === focusThreadId);
-  const focusPath = focusThread?.root.anchor?.path;
-  const focusFile =
-    focusPath === undefined
-      ? undefined
-      : fileNameForAnchorPath(
-          diff.files.map((file) => ({ name: file.path, prevName: file.oldPath })),
-          focusPath,
-        );
-  const focusThreads = useMemo(
-    () => (focusThread ? [focusThread] : NO_THREADS),
-    [focusThread],
+  const threadsByFile = useMemo(
+    () => reviewDiffThreadsByFile(threads, diff.files, scope),
+    [diff.files, scope, threads],
   );
+  const focusAnchored = threads.some(
+    (thread) => thread.root.id === focusThreadId && thread.root.anchor,
+  );
+  const focusFile =
+    focusThreadId == null ? undefined : fileShowingThread(threadsByFile, focusThreadId);
   useEffect(() => {
-    if (!focusThreadId || !focusPath || focusFile) return;
+    if (!focusAnchored || focusFile) return;
     if (scope === ALL_CHANGES_SCOPE) return;
-    // The anchor commit's diff does not contain this file. Widen to All changes
-    // so the thread can still render, matching resolveReviewScope.
+    // This commit does not show the thread: it is anchored to another commit,
+    // or this commit's diff lacks its file. Widen to All changes so the thread
+    // can still render, matching resolveReviewScope.
     onFocusFileMissing();
-  }, [focusFile, focusPath, focusThreadId, onFocusFileMissing, scope]);
+  }, [focusAnchored, focusFile, onFocusFileMissing, scope]);
   useEffect(() => {
     if (!focusFile || !focusThreadId) return;
     setScrollRequest({ path: focusFile, scope, nonce: 0 });
@@ -349,29 +350,28 @@ export function ReviewDiffTab({
               </p>
             ) : (
               <Virtualizer className="max-h-[75svh] overflow-auto shell:max-h-none shell:min-h-0 shell:flex-1">
-                <ReviewFileStack
-                  rows={visibleRows}
-                  fileDiffs={parsed.fileDiffs}
-                  isCollapsed={isCollapsed}
-                  readOnly={review.effectiveStatus === "archived"}
-                  diffLayout={diffLayout}
-                  source={{
-                    storyId,
-                    sha: scope === ALL_CHANGES_SCOPE ? commits.tip : scope,
-                    contentsCache,
-                  }}
-                  mergeBaseRef={commits.mergeBaseRef}
-                  scope={scope}
-                  localHint={fileTooLargeHint(scope)}
-                  scrollRequest={search.filtering ? searchScroll : activeScroll}
-                  onToggleCollapsed={toggleCollapsed}
-                  onReviewedChange={setReviewed}
-                  searchNeedle={search.needle}
-                  currentMatch={search.current}
-                  focusFile={focusFile}
-                  focusThreads={focusThreads}
-                  focusThreadId={focusThreadId}
-                />
+                {/* New threads anchor to the commit being viewed; the tip for All changes. */}
+                <DiffComposerProvider key={viewedSha} issueId={storyId} commitSha={viewedSha}>
+                  <ReviewFileStack
+                    rows={visibleRows}
+                    fileDiffs={parsed.fileDiffs}
+                    isCollapsed={isCollapsed}
+                    readOnly={review.effectiveStatus === "archived"}
+                    diffLayout={diffLayout}
+                    source={{ storyId, sha: viewedSha, contentsCache }}
+                    mergeBaseRef={commits.mergeBaseRef}
+                    scope={scope}
+                    localHint={fileTooLargeHint(scope)}
+                    scrollRequest={search.filtering ? searchScroll : activeScroll}
+                    onToggleCollapsed={toggleCollapsed}
+                    onReviewedChange={setReviewed}
+                    searchNeedle={search.needle}
+                    currentMatch={search.current}
+                    threadsByFile={threadsByFile}
+                    focusFile={focusFile}
+                    focusThreadId={focusThreadId}
+                  />
+                </DiffComposerProvider>
               </Virtualizer>
             )}
           </div>
