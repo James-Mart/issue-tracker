@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import type { IssueDetail } from "@server/schemas";
+import { StoryCodeReviewRow } from "@/features/reviews/components/story-code-review-row";
 import { useIssuesQuery } from "../api/queries";
 import {
   StoryGitMetaScalars,
@@ -18,7 +19,13 @@ export function GitStackPanel({ issue }: { issue: IssueDetail }) {
     const state = data.derived[issue.id];
     return (
       <>
-        <StoryGitMetaScalars issue={issue} mergeBase={state?.mergeBase} />
+        <StoryGitMetaScalars
+          issue={issue}
+          mergeBase={state?.mergeBase}
+          beforeStackedOn={
+            <StoryCodeReviewRow projectId={projectId} story={issue} />
+          }
+        />
         {issue.prUrl ? (
           <PrStatusPanel
             story={{ ...issue, prUrl: issue.prUrl }}

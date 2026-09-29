@@ -2,6 +2,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ConversationChannel, IdeaStatus, IssueDetail, IssueKind } from "@server/schemas";
 import { RosterActiveRunIndicator } from "@/features/agents/components/conversation-list-item";
+import { TabButton } from "@/components/ui/tab-button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { useIssueAgentRunsQuery, useIssuesQuery } from "../api/queries";
@@ -190,13 +191,13 @@ export function IssueDetailTabs({
                 {tab.label}
               </AgentsTabButton>
             ) : (
-              <TabButton
+              <IssueTabButton
                 key={tab.key}
                 selected={active === tab.key}
                 onClick={() => setActive(tab.key)}
               >
                 {tab.label}
-              </TabButton>
+              </IssueTabButton>
             ),
           )}
         </div>
@@ -335,13 +336,13 @@ function ChannelTabButton({
     sessionIndicator,
   );
   return (
-    <TabButton
+    <IssueTabButton
       selected={selected}
       onClick={onClick}
       indicator={indicator}
     >
       {children}
-    </TabButton>
+    </IssueTabButton>
   );
 }
 
@@ -359,13 +360,13 @@ function AgentsTabButton({
   const { data } = useIssueAgentRunsQuery(issueId);
   const count = data?.runs.length ?? 0;
   return (
-    <TabButton selected={selected} onClick={onClick} count={count || undefined}>
+    <IssueTabButton selected={selected} onClick={onClick} count={count || undefined}>
       {children}
-    </TabButton>
+    </IssueTabButton>
   );
 }
 
-function TabButton({
+function IssueTabButton({
   selected,
   onClick,
   children,
@@ -378,26 +379,12 @@ function TabButton({
   indicator?: ChannelTabIndicator | null;
   count?: number;
 }) {
-  const awaiting = indicator === "awaiting-human";
-  const activeRun = indicator === "active-run";
-
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={selected}
+    <TabButton
+      selected={selected}
+      tone={indicator === "awaiting-human" ? "warning" : "current"}
       onClick={onClick}
       data-channel-tab-indicator={indicator ?? undefined}
-      className={cn(
-        "-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors",
-        awaiting
-          ? selected
-            ? "border-[hsl(var(--warning))] [color:hsl(var(--warning))]"
-            : "border-transparent [color:hsl(var(--warning))] hover:[color:hsl(var(--warning))]"
-          : selected
-            ? "border-[hsl(var(--current))] text-[hsl(var(--current))]"
-            : "border-transparent text-muted-foreground hover:text-foreground",
-      )}
     >
       {children}
       {count != null ? (
@@ -408,7 +395,7 @@ function TabButton({
           {count}
         </span>
       ) : null}
-      <RosterActiveRunIndicator activeRun={activeRun} />
-    </button>
+      <RosterActiveRunIndicator activeRun={indicator === "active-run"} />
+    </TabButton>
   );
 }

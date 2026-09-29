@@ -7,3 +7,4 @@ export type {
 export * from "./schemas/issue.js";
 export * from "./schemas/conversation.js";
 export * from "./schemas/app-config.js";
+export * from "./schemas/review.js";

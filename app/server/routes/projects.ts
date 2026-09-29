@@ -1,13 +1,14 @@
 import { Router, type RequestHandler } from "express";
 import { readProjectPrs } from "../services/delivery.js";
 import { IssueError } from "../services/errors.js";
-import { readIssueOrThrow } from "../services/issues.js";
 import { getWorkspaceFile } from "../services/project-workspace.js";
+import { requireProject } from "../services/require-project.js";
 import {
   deleteSecret,
   listSecretKeys,
   setSecret,
 } from "../services/secret-store.js";
+import { reviewsRouter } from "./reviews.js";
 
 const asyncRoute =
   (handler: RequestHandler): RequestHandler =>
@@ -23,14 +24,6 @@ projectsRouter.get(
     res.json(body);
   }),
 );
-
-function requireProject(projectId: string): string {
-  const issue = readIssueOrThrow(projectId);
-  if (issue.kind !== "project") {
-    throw new IssueError("not_found", `unknown project "${projectId}"`);
-  }
-  return issue.id;
-}
 
 function secretKeyList(projectId: string): { keys: string[] } {
   return { keys: listSecretKeys(projectId) };
@@ -86,6 +79,8 @@ projectsRouter.delete(
     res.json(secretKeyList(projectId));
   }),
 );
+
+projectsRouter.use("/:projectId/reviews", reviewsRouter);
 
 projectsRouter.get(
   "/:projectId/workspace/:relativePath(*)",

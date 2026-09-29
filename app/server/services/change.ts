@@ -101,7 +101,7 @@ function isCommitUnreachableMessage(message: string): boolean {
   );
 }
 
-async function runGitOrCommitUnreachable(
+export async function runGitOrCommitUnreachable(
   args: string[],
   workspace: string,
 ): Promise<string> {
@@ -117,7 +117,7 @@ async function runGitOrCommitUnreachable(
   }
 }
 
-function parseShortstat(text: string): ChangeStats {
+export function parseShortstat(text: string): ChangeStats {
   const filesMatch = text.match(/(\d+) files? changed/);
   const insMatch = text.match(/(\d+) insertion/);
   const delMatch = text.match(/(\d+) deletion/);
@@ -164,26 +164,56 @@ async function assertCommitsContiguous(
   }
 }
 
-async function readStoryChange(
-  issueId: string,
+export type StoryChangePreparation =
+  | { state: "empty"; reason: "no-merge-base" }
+  | { state: "empty"; reason: "no-descendant-commits"; mergeBase: string }
+  | {
+      state: "ready";
+      mergeBase: string;
+      mergeBaseRef: string;
+      shas: string[];
+      tip: string;
+      range: string;
+    };
+
+/** Merge base through the tip of the Story's Task commits, same span as `readIssueChange`. */
+export async function prepareStoryChange(
+  storyId: string,
   workspace: string,
-): Promise<IssueChange> {
-  const mergeBase = derive(readAll().issues).byId[issueId]?.mergeBase;
+): Promise<StoryChangePreparation> {
+  const mergeBase = derive(readAll().issues).byId[storyId]?.mergeBase;
   if (!mergeBase) {
     return { state: "empty", reason: "no-merge-base" };
   }
 
-  const commits = collectDescendantCommits(issueId);
-  if (commits.length === 0) {
-    return { state: "empty", reason: "no-descendant-commits" };
+  const shas = issueChangeCommitShas(readIssueOrThrow(storyId));
+  if (shas.length === 0) {
+    return { state: "empty", reason: "no-descendant-commits", mergeBase };
   }
 
-  const shas = commits.map((commit) => commit.sha);
   await assertCommitsContiguous(shas, workspace);
-
-  const last = shas[shas.length - 1]!;
+  const tip = shas[shas.length - 1]!;
   const mergeBaseRef = await resolveMergeBaseRef(workspace, mergeBase);
-  const range = `${mergeBaseRef}...${last}`;
+  return {
+    state: "ready",
+    mergeBase,
+    mergeBaseRef,
+    shas,
+    tip,
+    range: `${mergeBaseRef}...${tip}`,
+  };
+}
+
+async function readStoryChange(
+  issueId: string,
+  workspace: string,
+): Promise<IssueChange> {
+  const prepared = await prepareStoryChange(issueId, workspace);
+  if (prepared.state === "empty") {
+    return { state: "empty", reason: prepared.reason };
+  }
+
+  const { range, mergeBaseRef, shas } = prepared;
   const statOut = await runGitOrCommitUnreachable(
     ["diff", "--shortstat", range],
     workspace,
@@ -192,11 +222,11 @@ async function readStoryChange(
   const patch = await runGitOrCommitUnreachable(["diff", range], workspace);
 
   const withSubjects = await Promise.all(
-    commits.map(async (commit) => ({
-      sha: commit.sha,
+    shas.map(async (sha) => ({
+      sha,
       subject: (
         await runGitOrCommitUnreachable(
-          ["show", "-s", "--format=%s", commit.sha],
+          ["show", "-s", "--format=%s", sha],
           workspace,
         )
       ).trimEnd(),

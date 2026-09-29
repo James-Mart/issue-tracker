@@ -2,6 +2,7 @@ import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils/cn";
 import { fileLineCounts } from "../lib/issue-change-file-diffs";
+import { changedFileRowClass, DiffLineCounts } from "./changed-file-row";
 
 export function IssueChangeFileNavigator({
   files,
@@ -59,18 +60,16 @@ export function IssueChangeFileNavigator({
                 data-file-name={file.name}
                 onClick={() => onSelect(file.name)}
                 className={cn(
-                  "flex max-w-[14rem] items-baseline gap-2 rounded-md border px-2 py-1.5 text-left font-mono text-[12px] leading-snug shell:w-full shell:max-w-none",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  selected
-                    ? "border-primary bg-[color-mix(in_srgb,hsl(var(--current))_12%,hsl(var(--panel)))]"
-                    : "border-border bg-card hover:border-[hsl(var(--rail-lit))]",
+                  "flex max-w-[14rem] items-baseline gap-2 shell:w-full shell:max-w-none",
+                  changedFileRowClass(selected),
                 )}
               >
                 <span className="min-w-0 truncate">{file.name}</span>
-                <span className="ml-auto shrink-0 tabular-nums">
-                  <span className="text-success">+{additions}</span>{" "}
-                  <span className="text-destructive">-{deletions}</span>
-                </span>
+                <DiffLineCounts
+                  additions={additions}
+                  deletions={deletions}
+                  className="ml-auto shrink-0"
+                />
               </button>
             </li>
           );
