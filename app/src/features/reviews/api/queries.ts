@@ -1,4 +1,4 @@
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useQuery, type Query, type UseQueryResult } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/errors";
 import type {
   ReviewCandidates,
@@ -25,13 +25,22 @@ function retryRead(count: number, error: Error): boolean {
 export function useReviewsQuery(
   projectId: string,
   storyId?: string,
-  options: { enabled?: boolean } = {},
+  options: {
+    enabled?: boolean;
+    refetchInterval?:
+      | number
+      | false
+      | ((
+          query: Query<{ reviews: ReviewView[] }, Error>,
+        ) => number | false | undefined);
+  } = {},
 ): UseQueryResult<{ reviews: ReviewView[] }, Error> {
   return useQuery({
     queryKey: reviewKeys.list(projectId, storyId),
     queryFn: () => fetchReviews(projectId, storyId),
     enabled: (options.enabled ?? true) && Boolean(projectId),
     retry: retryRead,
+    refetchInterval: options.refetchInterval,
   });
 }
 

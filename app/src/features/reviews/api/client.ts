@@ -104,6 +104,28 @@ export function postReopenReview(
   });
 }
 
+export function postSubmitReview(
+  projectId: string,
+  reviewId: string,
+  summary?: string,
+): Promise<ReviewView> {
+  return request<ReviewView>(`${reviewUrl(projectId, reviewId)}/submissions`, {
+    method: "POST",
+    body: summary === undefined ? {} : { summary },
+  });
+}
+
+export function postRetryReviewSubmission(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+): Promise<ReviewView> {
+  return request<ReviewView>(
+    `${reviewUrl(projectId, reviewId)}/submissions/${encodeURIComponent(submissionId)}/retry`,
+    { method: "POST", body: {} },
+  );
+}
+
 export function putReviewMark(
   projectId: string,
   reviewId: string,

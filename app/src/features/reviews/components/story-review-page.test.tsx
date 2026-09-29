@@ -34,6 +34,8 @@ const state = vi.hoisted(() => ({
   archive: vi.fn(),
   reopen: vi.fn(),
   open: vi.fn(),
+  submitReview: vi.fn(),
+  retrySubmission: vi.fn(),
   postComment: vi.fn(),
   commentThreads: [] as CommentThread[],
 }));
@@ -96,7 +98,11 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
     isLoading: false,
     error: null,
   }),
-  useCommentThreads: () => ({ threads: state.commentThreads, problems: [] }),
+  useCommentThreads: () => ({
+    threads: state.commentThreads,
+    problems: [],
+    loaded: true,
+  }),
   useIssueChangeFileQuery: () => ({ data: "new\n" }),
 }));
 
@@ -118,6 +124,8 @@ vi.mock("../api/mutations", () => ({
   useArchiveReview: () => ({ mutate: state.archive, isPending: false }),
   useReopenReview: () => ({ mutate: state.reopen, isPending: false }),
   useOpenReview: () => ({ mutate: state.open, isPending: false }),
+  useSubmitReview: () => ({ mutate: state.submitReview, isPending: false }),
+  useRetryReviewSubmission: () => ({ mutate: state.retrySubmission, isPending: false }),
 }));
 
 const FILES: ReviewDiffFile[] = [
@@ -189,6 +197,7 @@ function reviewFixture(overrides: Partial<ReviewView> = {}): ReviewView {
       },
     },
     effectiveStatus: "open",
+    submissions: [],
     ...overrides,
   } as ReviewView;
 }

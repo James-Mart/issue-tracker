@@ -5,6 +5,8 @@ import {
   postArchiveReview,
   postOpenReview,
   postReopenReview,
+  postRetryReviewSubmission,
+  postSubmitReview,
   putReviewMark,
 } from "./client";
 import { reviewKeys } from "./keys";
@@ -57,6 +59,22 @@ export function useArchiveReview(projectId: string) {
 export function useReopenReview(projectId: string) {
   return useReviewMutation(projectId, (reviewId: string) =>
     postReopenReview(projectId, reviewId),
+  );
+}
+
+export function useSubmitReview(projectId: string) {
+  return useReviewMutation(
+    projectId,
+    ({ reviewId, summary }: { reviewId: string; summary?: string }) =>
+      postSubmitReview(projectId, reviewId, summary),
+  );
+}
+
+export function useRetryReviewSubmission(projectId: string) {
+  return useReviewMutation(
+    projectId,
+    ({ reviewId, submissionId }: { reviewId: string; submissionId: string }) =>
+      postRetryReviewSubmission(projectId, reviewId, submissionId),
   );
 }
 

@@ -72,4 +72,6 @@ export function formatAnchorLineLabel(
 export type CommentThreadsResult = {
   threads: CommentThread[];
   problems: Problem[];
+  /** False until the comments query has data, including an empty log. */
+  loaded: boolean;
 };

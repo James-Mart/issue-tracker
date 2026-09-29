@@ -14,7 +14,8 @@ import { TabButton } from "@/components/ui/tab-button";
 import { ApiError } from "@/lib/api/errors";
 import { useIssueDetailQuery } from "@/features/issues/api/queries";
 import { useOpenReview } from "../api/mutations";
-import { useReviewDiffQuery, useReviewsQuery } from "../api/queries";
+import { useReviewDiffQuery } from "../api/queries";
+import { useStoryReviewList } from "../hooks/use-review-submission-sync";
 import type { ReviewMarkOverrides } from "../lib/review-scope";
 import { useReviewLiveRefresh } from "../hooks/use-review-live-refresh";
 import { useReviewWorkbenchLocation } from "../hooks/use-review-workbench-location";
@@ -119,11 +120,13 @@ function StoryReviewWorkbench({
   storyId,
   storyTitle,
   review,
+  merged,
 }: {
   projectId: string;
   storyId: string;
   storyTitle: string;
   review: ReviewView;
+  merged: boolean;
 }) {
   const commits = useReviewLiveRefresh(projectId, review.id);
   const knownShas = commits.data?.commits.map((commit) => commit.sha);
@@ -146,6 +149,7 @@ function StoryReviewWorkbench({
         storyTitle={storyTitle}
         review={review}
         commits={commits.data}
+        merged={merged}
       />
       <div
         role="tablist"
@@ -164,7 +168,11 @@ function StoryReviewWorkbench({
       </div>
       <div role="tabpanel" className="flex min-h-0 min-w-0 flex-1 flex-col">
         {active === "conversation" ? (
-          <ReviewConversationTab storyId={storyId} onOpenInDiff={openThreadInDiff} />
+          <ReviewConversationTab
+            storyId={storyId}
+            submissions={review.submissions}
+            onOpenInDiff={openThreadInDiff}
+          />
         ) : active === "commits" ? (
           <ReviewCommitsPanel
             projectId={projectId}
@@ -201,7 +209,7 @@ function StoryReviewBody({
   storyId: string;
 }) {
   const story = useIssueDetailQuery(storyId);
-  const reviews = useReviewsQuery(projectId, storyId);
+  const reviews = useStoryReviewList(projectId, storyId);
   const error = story.error ?? reviews.error;
   const missing = story.error instanceof ApiError && story.error.status === 404;
 
@@ -236,6 +244,7 @@ function StoryReviewBody({
           projectId={projectId}
           storyId={storyId}
           storyTitle={story.data.title}
+          merged={story.data.kind === "story" && story.data.merged}
         />
         <StartReviewState projectId={projectId} storyId={storyId} />
       </>
@@ -247,6 +256,7 @@ function StoryReviewBody({
       storyId={storyId}
       storyTitle={story.data.title}
       review={review}
+      merged={story.data.kind === "story" && story.data.merged}
     />
   );
 }
