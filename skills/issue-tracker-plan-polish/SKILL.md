@@ -3,7 +3,8 @@ name: issue-tracker-plan-polish
 disable-model-invocation: true
 description: >-
   Polish an existing Epic, project-level Story, or append-target Story
-  with parallel checks and a conciseness pass, then auto-apply when safe.
+  with parallel checks, conciseness and formatting passes, then auto-apply
+  when safe.
 ---
 
 # Issue Tracker — Plan Polish
@@ -11,8 +12,8 @@ description: >-
 Polish one **work root** already in the tracker: an **Epic**, a
 **project-level Story**, or an **append-target Story**. You are the
 **coordinator**: spawn read-only check agents, compose a full apply doc
-from their findings (keep it internal), run the conciseness pass on each
-description in that draft, auto-apply when safe, then show
+from their findings (keep it internal), run the conciseness and formatting
+passes on each description in that draft, auto-apply when safe, then show
 a short findings + changes summary in chat. Checkers advise; the planner
 may stop continued polish (veto) when returns diminish — leftover
 findings still appear in the summary. Behavioral contract: Epic
@@ -142,7 +143,7 @@ Idea unarchived.
 
 - Only this coordinator writes the tracker, and only when auto-apply is safe
   (or after the user resolves an escalate). Check agents and the conciseness
-  pass return suggestions.
+  and formatting passes return suggestions.
 - Do not ask the user to approve before auto-apply when fixes are clear.
 - Do not auto-chain into `issue-tracker-work` or other skills.
 - Do not edit workspace source files as part of polish (tracker plan only).

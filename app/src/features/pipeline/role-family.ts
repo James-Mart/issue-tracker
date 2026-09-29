@@ -42,6 +42,7 @@ const ROLE_FAMILY_TITLES: Record<string, string> = {
   "design-conformance": "Design conformance",
   "plan-authoring-conformance": "Authoring conformance",
   "plan-concise": "Conciseness",
+  "plan-format": "Formatting",
   "plan-dependency-order": "Dependency order",
   "plan-dry": "DRY",
   "plan-footprint": "Footprint",

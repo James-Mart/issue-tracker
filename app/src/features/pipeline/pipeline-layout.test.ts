@@ -32,6 +32,8 @@ describe("layoutPipelineDiagram", () => {
     expect(byId.concise!.y).toBe(byId["work-handoff"]!.y);
     expect(byId.concise!.cardW).toBeLessThan(width);
     expect(byId["work-handoff"]!.cardW).toBeLessThan(width);
+    expect(byId.format!.y).toBeGreaterThan(byId.concise!.y);
+    expect(byId.format!.cardW).toBe(width);
   });
 
   it("keeps every fan-out sibling inside the phone lane", () => {
