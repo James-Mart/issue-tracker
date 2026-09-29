@@ -1826,10 +1826,13 @@ so cannot drift:
   When `behindMergeBase` is `false` and `reviewCurrent` is `false`, story
   review judges the diff. When that finds no gaps and the Story has
   runtime-visible behavior (as `agents/issue-tracker-story-review.md`
-  defines it), story review spawns `issue-tracker-runtime-validator`,
-  which boots the Story's stack and returns `clean`, `findings`, or
-  `needs-human`; findings become remediation Tasks through the same gap
-  path. Diff gaps take that path without spawning it. On `needs-human`,
+  defines it), story review spawns `issue-tracker-runtime-validator`. The
+  validator derives its checks from the outcomes the Story states, boots
+  the Story's stack from the Project `runtime` declaration, and returns
+  `clean`, `findings`, or `needs-human`; findings become remediation Tasks
+  through the same gap path. Diff gaps take that path without spawning
+  it. The validator returns `needs-human` only when it is stuck on a check
+  for something only a human can supply or observe. On `needs-human`,
   story review posts the validator's request with `issue story
   request-human` and stops without a verdict, leaving `reviewedTasks`
   unchanged. The coordinator parks a Story at `review` `awaiting-human` and
