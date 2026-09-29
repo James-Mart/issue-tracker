@@ -783,16 +783,20 @@ describe("isReadyWorkFlowItem", () => {
 });
 
 describe("inFlightTaskOf", () => {
-  it("returns the earliest in-progress or fixing task under a Story", () => {
+  it("returns the earliest in-progress task under a Story", () => {
     const tDone = { ...task("t0", "s"), status: "done" as const, order: 0 };
     const tFlight = {
       ...task("t1", "s"),
       status: "in-progress" as const,
       order: 1,
     };
-    const tFix = { ...task("t2", "s"), status: "fixing" as const, order: 2 };
+    const tLater = {
+      ...task("t2", "s"),
+      status: "in-progress" as const,
+      order: 2,
+    };
     const s = story("s", "e");
-    const issues = [project("p"), epic("e", "p"), s, tDone, tFlight, tFix];
+    const issues = [project("p"), epic("e", "p"), s, tDone, tFlight, tLater];
 
     expect(inFlightTaskOf(s, issues)?.id).toBe("t1");
   });

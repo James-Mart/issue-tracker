@@ -9,8 +9,7 @@ import {
 } from "../issue-constants.js";
 import { SLUG_RE } from "../slug.js";
 
-export const TASK_STATUSES = ["todo", "in-progress", "fixing", "done"] as const;
-export const QA_STATUSES = ["reviewing", "changes-requested", "passed"] as const;
+export const TASK_STATUSES = ["todo", "in-progress", "done"] as const;
 export const RETRO_STATUSES = ["in-progress", "done"] as const;
 export const REVIEW_STATUSES = ["passed", "failed", "awaiting-human"] as const;
 export const COMMENT_TYPES = ["human-request", "human-response"] as const;
@@ -344,7 +343,6 @@ export const taskSchema = z.object({
   kind: z.literal("task"),
   partOf: nonEmpty,
   status: z.enum(TASK_STATUSES).default("todo"),
-  qa: z.enum(QA_STATUSES).optional(),
   commits: z.array(z.string()).default([]),
   noDiff: z.boolean().optional(),
   sourceIdea: z.string().optional(),
@@ -364,7 +362,6 @@ export const issueSchema = z.discriminatedUnion("kind", [
 
 export type Issue = z.infer<typeof issueSchema>;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
-export type QaStatus = (typeof QA_STATUSES)[number];
 export type RetroStatus = (typeof RETRO_STATUSES)[number];
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 export type CommentType = (typeof COMMENT_TYPES)[number];

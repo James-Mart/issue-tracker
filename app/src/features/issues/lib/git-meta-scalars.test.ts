@@ -82,16 +82,15 @@ describe("taskGitMetaScalars", () => {
     expect(taskGitMetaScalars(task())).toEqual([]);
   });
 
-  it("includes present parent branch, commit, noDiff, and qa", () => {
+  it("includes present parent branch, commit, and noDiff", () => {
     const scalars = taskGitMetaScalars(
-      task({ commits: ["abc123"], noDiff: true, qa: "passed" }),
+      task({ commits: ["abc123"], noDiff: true }),
       "feat/a",
     );
     expect(scalars.map((s) => s.key)).toEqual([
       "branchName",
       "commitSha",
       "noDiff",
-      "qa",
     ]);
     expect(scalars.find((s) => s.key === "commitSha")?.label).toBe("Commit");
   });

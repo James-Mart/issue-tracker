@@ -47,7 +47,6 @@ import {
   EPIC_STATUS_LABEL,
   isInFlight,
   leafTaskProgressCount,
-  QA_STATUS_LABEL,
   RETRO_LABEL,
   REVIEW_LABEL,
   STORY_STATUS_LABEL,
@@ -354,9 +353,6 @@ export function treeRowTouchChipLabels(
 
   if (issue.kind === "task") {
     labels.push(TASK_STATUS_LABEL[issue.status]);
-    if (issue.qa) {
-      labels.push(`qa: ${QA_STATUS_LABEL[issue.qa]}`);
-    }
     const head = taskHeadCommit(issue);
     if (head) {
       labels.push(head.slice(0, 7));
@@ -546,7 +542,7 @@ function TreeRow({
                 <PrChip model={prChip} />
                 <TreeRowDerivedMeta issue={issue} derived={state} />
                 {issue.kind === "task" ? (
-                  <TaskStatusChips status={issue.status} qa={issue.qa} />
+                  <TaskStatusChips status={issue.status} />
                 ) : null}
                 <RowActions issue={issue} />
               </>

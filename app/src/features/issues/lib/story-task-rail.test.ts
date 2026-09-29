@@ -33,9 +33,8 @@ function task(
 }
 
 describe("taskRailNodeState", () => {
-  it("maps in-progress and fixing to in-flight", () => {
+  it("maps in-progress to in-flight", () => {
     expect(taskRailNodeState(task("a", "s", "in-progress"))).toBe("in-flight");
-    expect(taskRailNodeState(task("b", "s", "fixing"))).toBe("in-flight");
   });
 
   it("maps done to merged whether or not commits is set", () => {

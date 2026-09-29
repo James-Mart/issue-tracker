@@ -3,7 +3,6 @@ import {
   type TaskStatus,
   type EpicStatus,
   type ReviewStatus,
-  type QaStatus,
   type RetroStatus,
   type IssueRecord,
   type DerivedState,
@@ -13,7 +12,6 @@ import type { BadgeProps } from "@/components/ui/badge";
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   todo: "todo",
   "in-progress": "in progress",
-  fixing: "fixing",
   done: "done",
 };
 
@@ -23,23 +21,7 @@ export const TASK_STATUS_BADGE_VARIANT: Record<
 > = {
   todo: "todo",
   "in-progress": "inProgress",
-  fixing: "current",
   done: "done",
-};
-
-export const QA_STATUS_LABEL: Record<QaStatus, string> = {
-  reviewing: "reviewing",
-  "changes-requested": "changes requested",
-  passed: "passed",
-};
-
-export const QA_STATUS_BADGE_VARIANT: Record<
-  QaStatus,
-  NonNullable<BadgeProps["variant"]>
-> = {
-  reviewing: "inProgress",
-  "changes-requested": "destructive",
-  passed: "done",
 };
 
 export const STORY_STATUS_LABEL: Record<StoryStatus, string> = {
@@ -102,15 +84,12 @@ export const RETRO_BADGE_VARIANT: Record<
   done: "done",
 };
 
-/** True when an agent is actively working this task (status in-progress or fixing). */
+/** True when an agent is actively working this task (status in-progress). */
 export function isInFlight(
   issue: IssueRecord,
   _state?: DerivedState | undefined,
 ): boolean {
-  return (
-    issue.kind === "task" &&
-    (issue.status === "in-progress" || issue.status === "fixing")
-  );
+  return issue.kind === "task" && issue.status === "in-progress";
 }
 
 /** True when any issue in the set has active in-flight work. */

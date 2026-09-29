@@ -133,17 +133,13 @@ describe("task get/set", () => {
     expect((await runIssueCli(["task", "set", "c1", "status", "in-progress"], { env: env() })).status).toBe(0);
     expect((await runIssueCli(["task", "get", "c1", "status"], { env: env() })).stdout).toBe("in-progress\n");
 
-    expect((await runIssueCli(["task", "set", "c1", "status", "fixing"], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["task", "get", "c1", "status"], { env: env() })).stdout).toBe("fixing\n");
+    const retiredFixing = await runIssueCli(["task", "set", "c1", "status", "fixing"], { env: env() });
+    expect(retiredFixing.status).toBe(1);
+    expect(retiredFixing.stderr).toMatch(/invalid status "fixing"/);
 
-    expect((await runIssueCli(["task", "set", "c1", "qa", "reviewing"], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["task", "get", "c1", "qa"], { env: env() })).stdout).toBe("reviewing\n");
-    expect((await runIssueCli(["task", "set", "c1", "qa", "--clear"], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["task", "get", "c1", "qa"], { env: env() })).stdout).toBe("");
-
-    const invalidQa = await runIssueCli(["task", "set", "c1", "qa", "pending"], { env: env() });
-    expect(invalidQa.status).toBe(1);
-    expect(invalidQa.stderr).toMatch(/invalid qa "pending"/);
+    const unknownQa = await runIssueCli(["task", "get", "c1", "qa"], { env: env() });
+    expect(unknownQa.status).toBe(1);
+    expect(unknownQa.stderr).toContain('unknown field "qa" for task');
 
     expect(
       (await runIssueCli(["task", "set", "c1", "commits", JSON.stringify([sha1])], { env: env() })).status,
@@ -268,14 +264,27 @@ describe("task get/set", () => {
     expect(badNoDiff.stderr).toMatch(/invalid noDiff "maybe"/);
   });
 
-  it("surfaces qa in view/tree and preserves it across apply", async () => {
-    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).not.toContain("qa:");
+  it("loads legacy qa on disk without surfacing it in view/tree and preserves status across apply", async () => {
+    writeFileSync(
+      join(dir, "c1", "issue.json"),
+      JSON.stringify({
+        id: "c1",
+        kind: "task",
+        title: "Commit 1",
+        partOf: "a",
+        status: "in-progress",
+        qa: "passed",
+        commits: [],
+        order: 0,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
 
-    expect((await runIssueCli(["task", "set", "c1", "status", "fixing"], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["task", "set", "c1", "qa", "passed"], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("status: fixing");
-    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("qa: passed");
-    expect((await runIssueCli(["tree", "p"], { env: env() })).stdout).toMatch(/^ {6}task c1\b.*\bqa=passed/m);
+    expect((await runIssueCli(["list", "task"], { env: env() })).stderr).toBe("");
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("status: in-progress");
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).not.toContain("qa:");
+    expect((await runIssueCli(["tree", "p"], { env: env() })).stdout).not.toMatch(/^ {6}task c1\b.*\bqa=/m);
 
     const applyPath = join(dir, "task-apply.yaml");
     writeFileSync(
@@ -296,13 +305,10 @@ epic:
     );
     expect((await runIssueCli(["apply", applyPath], { env: env() })).status).toBe(0);
     const onDisk = JSON.parse(readFileSync(join(dir, "c1", "issue.json"), "utf8"));
-    expect(onDisk.status).toBe("fixing");
-    expect(onDisk.qa).toBe("passed");
-    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("qa: passed");
+    expect(onDisk.status).toBe("in-progress");
+    expect(onDisk.qa).toBeUndefined();
     expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).toContain("title: Commit 1 renamed");
-
-    expect((await runIssueCli(["task", "set", "c1", "qa", "--clear"], { env: env() })).status).toBe(0);
-    expect((await runIssueCli(["tree", "p"], { env: env() })).stdout).not.toMatch(/^ {6}task c1\b.*\bqa=/m);
+    expect((await runIssueCli(["task", "view", "c1"], { env: env() })).stdout).not.toContain("qa:");
   });
 
   it("accepts sha256 commits and surfaces noDiff in view/summary", async () => {

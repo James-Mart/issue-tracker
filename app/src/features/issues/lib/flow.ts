@@ -157,7 +157,7 @@ export function flowItemNeedsAttention(item: FlowItem): boolean {
 
 /**
  * Current in-flight Task under a Flow row (Story or Epic): status
- * `in-progress` or `fixing`, earliest by sequence. Undefined when none.
+ * `in-progress`, earliest by sequence. Undefined when none.
  * Pass `byId` when the caller already has `issuesById(issues)` (e.g. per-row).
  */
 export function inFlightTaskOf(

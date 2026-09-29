@@ -174,7 +174,6 @@ function storyChips(story: StoryRecord, derived: Record<string, DerivedState>): 
 
 function taskChips(task: TaskRecord, derived: Record<string, DerivedState>): string[] {
   const chips = [`status=${task.status}`];
-  if (task.qa) chips.push(`qa=${task.qa}`);
   const head = taskHeadCommit(task);
   if (head) chips.push(`sha=${head.slice(0, 7)}`);
   if (derived[task.id]?.blocked) chips.push("blocked");

@@ -83,7 +83,6 @@ describe("issueRailNodeState", () => {
     expect(issueRailNodeState(task("in-progress"), undefined)).toBe(
       "in-flight",
     );
-    expect(issueRailNodeState(task("fixing"), undefined)).toBe("in-flight");
     expect(issueRailNodeState(task("done"), undefined)).toBe("merged");
   });
 
