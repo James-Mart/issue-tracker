@@ -12,6 +12,7 @@ function thread(
   outdated = false,
 ): CommentThread {
   return {
+    kind: "review",
     state: "open",
     readyToTask: true,
     root: {

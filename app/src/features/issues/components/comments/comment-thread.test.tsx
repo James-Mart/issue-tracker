@@ -39,6 +39,7 @@ function comment(
 }
 
 const currentThread: CommentThreadData = {
+  kind: "review",
   state: "open",
   readyToTask: true,
   root: comment({
@@ -66,6 +67,7 @@ const currentThread: CommentThreadData = {
 };
 
 const outdatedThread: CommentThreadData = {
+  kind: "review",
   state: "open",
   readyToTask: true,
   root: comment({
@@ -410,5 +412,67 @@ describe("CommentThread", () => {
     expect(thread?.textContent).not.toContain(
       "Scope drafts per thread so Diff and Overview stay isolated.",
     );
+  });
+
+  it("labels a question, hides the Task chip, and dismisses to a collapsed bar", () => {
+    const onDismiss = vi.fn();
+    const onReopen = vi.fn();
+    const question: CommentThreadData = {
+      ...currentThread,
+      kind: "question",
+      readyToTask: false,
+      linkedTaskId: "task-a",
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={question}
+          inline
+          onReply={vi.fn()}
+          onResolve={vi.fn()}
+          onDismiss={onDismiss}
+          onReopen={onReopen}
+        />,
+      );
+    });
+
+    const thread = container.querySelector('[data-thread-root="current-root"]');
+    expect(thread?.getAttribute("data-thread-kind")).toBe("question");
+    expect(thread?.hasAttribute("data-ready-to-task")).toBe(false);
+    expect(thread?.textContent).toContain("Question");
+    expect(thread?.querySelector('[data-testid="thread-linked-task"]')).toBeNull();
+    expect(thread?.querySelector('[data-testid="thread-resolve"]')).toBeNull();
+
+    act(() => {
+      thread
+        ?.querySelector('[data-testid="thread-dismiss"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onDismiss).toHaveBeenCalledOnce();
+
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={{ ...question, state: "dismissed" }}
+          inline
+          onReply={vi.fn()}
+          onDismiss={onDismiss}
+          onReopen={onReopen}
+        />,
+      );
+    });
+    const collapsed = container.querySelector('[data-thread-root="current-root"]');
+    expect(collapsed?.hasAttribute("data-collapsed")).toBe(true);
+    expect(collapsed?.textContent).toContain("Dismissed");
+    expect(collapsed?.textContent).not.toContain("Question");
+    act(() => {
+      collapsed
+        ?.querySelector('[data-testid="thread-reopen"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onReopen).toHaveBeenCalledOnce();
   });
 });

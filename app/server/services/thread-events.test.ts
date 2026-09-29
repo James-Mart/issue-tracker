@@ -258,4 +258,73 @@ describe("appendThreadEvent", () => {
     ]);
     expect(comments.messages).toHaveLength(1);
   });
+
+  it("lets a human dismiss and reopen a question without a reply", async () => {
+    const { appendComment, appendThreadEvent, readComments } = await load();
+    const root = await appendComment("s", {
+      role: "human",
+      body: "Does this short-circuit?",
+      kind: "question",
+    });
+
+    const dismissed = await appendThreadEvent("s", root.id, {
+      event: "dismissed",
+      by: { role: "human", name: "Jared" },
+    });
+    expect(dismissed.reply).toBeUndefined();
+    expect(dismissed.event).toMatchObject({
+      type: "thread-event",
+      threadId: root.id,
+      event: "dismissed",
+      by: { role: "human", name: "Jared" },
+    });
+    expect(dismissed.thread).toEqual({
+      rootId: root.id,
+      kind: "question",
+      state: "dismissed",
+      readyToTask: false,
+    });
+
+    const reopened = await appendThreadEvent("s", root.id, {
+      event: "reopened",
+      by: { role: "human" },
+    });
+    expect(reopened.thread).toEqual({
+      rootId: root.id,
+      kind: "question",
+      state: "open",
+      readyToTask: false,
+    });
+    expect(readComments("s").messages).toHaveLength(1);
+  });
+
+  it("refuses dismiss and reopen from an agent, and on a review thread", async () => {
+    const { appendComment, appendThreadEvent } = await load();
+    const review = await appendComment("s", { role: "human", body: "fix this" });
+    const question = await appendComment("s", {
+      role: "human",
+      body: "why?",
+      kind: "question",
+    });
+
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "dismissed",
+        by: { role: "implementor" },
+      }),
+    ).rejects.toThrow(/only a human can dismiss or reopen/);
+    await expect(
+      appendThreadEvent("s", review.id, {
+        event: "dismissed",
+        by: { role: "human" },
+      }),
+    ).rejects.toThrow(/only to a question thread/);
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "resolved",
+        by: { role: "human" },
+      }),
+    ).rejects.toThrow(/only to a review thread/);
+    expect(readFileSync(join(dir, "s", "comments.jsonl"), "utf8").trim().split("\n")).toHaveLength(2);
+  });
 });

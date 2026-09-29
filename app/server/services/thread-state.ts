@@ -14,6 +14,8 @@ import {
 const THREAD_EVENT_STATE = {
   resolved: "resolved",
   unresolved: "open",
+  dismissed: "dismissed",
+  reopened: "open",
 } as const satisfies Record<
   Exclude<ThreadEventName, "linked">,
   ThreadView["state"]
@@ -52,11 +54,18 @@ function parseLogRecord(
   return { ok: false, message: parsed.message };
 }
 
+export function commentThreadKind(root: {
+  kind?: ThreadView["kind"];
+}): ThreadView["kind"] {
+  return root.kind === "question" ? "question" : "review";
+}
+
 export function readyToTaskFrom(
+  kind: ThreadView["kind"],
   state: ThreadView["state"],
   linkedTaskId: string | undefined,
 ): boolean {
-  return state === "open" && linkedTaskId === undefined;
+  return kind === "review" && state === "open" && linkedTaskId === undefined;
 }
 
 /** Root ids of open threads linked to `taskId`, in thread order. */
@@ -66,15 +75,19 @@ export function openLinkedThreadRootIds(
 ): string[] {
   return threads
     .filter(
-      (thread) => thread.state === "open" && thread.linkedTaskId === taskId,
+      (thread) =>
+        thread.kind === "review" &&
+        thread.state === "open" &&
+        thread.linkedTaskId === taskId,
     )
     .map((thread) => thread.rootId);
 }
 
 export function formatThreadLine(thread: ThreadView): string {
+  const kind = thread.kind === "question" ? " question" : "";
   const linked =
     thread.linkedTaskId !== undefined ? ` linked=${thread.linkedTaskId}` : "";
-  return `${thread.rootId} ${thread.state}${linked}`;
+  return `${thread.rootId} ${thread.state}${kind}${linked}`;
 }
 
 export function formatThreadsForView(threads: ThreadView[]): string[] {
@@ -119,14 +132,15 @@ export function deriveThreadViews(
     .filter((message) => !message.replyTo)
     .sort((a, b) => a.at.localeCompare(b.at))
     .map((root): ThreadView => {
+      const kind = commentThreadKind(root);
       const threadState = state.get(root.id) ?? "open";
       const linked = linkedTaskId.get(root.id);
       return {
         rootId: root.id,
-        kind: "review",
+        kind,
         state: threadState,
         ...(linked ? { linkedTaskId: linked } : {}),
-        readyToTask: readyToTaskFrom(threadState, linked),
+        readyToTask: readyToTaskFrom(kind, threadState, linked),
       };
     });
   return { threads, problems };

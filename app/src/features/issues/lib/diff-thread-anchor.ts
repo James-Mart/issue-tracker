@@ -1,5 +1,6 @@
 import type { FileDiffMetadata, SelectedLineRange } from "@pierre/diffs/react";
 import type { CommentInput } from "@server/schemas";
+import { questionKindFields } from "@server/question-kind";
 
 export type AnchorSide = "old" | "new";
 
@@ -98,6 +99,7 @@ export function commentInputForComposer(
   open: OpenDiffComposer,
   body: string,
   commitSha: string,
+  kind?: "question",
 ): CommentInput {
   if (open.kind === "reply") {
     return { role: "human", body, replyTo: open.threadId };
@@ -105,6 +107,7 @@ export function commentInputForComposer(
   return {
     role: "human",
     body,
+    ...questionKindFields(kind),
     anchor: {
       path: open.path,
       side: open.side,

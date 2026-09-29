@@ -104,4 +104,32 @@ describe("deriveThreadViews task links", () => {
 
     expect(derived.threads[0]?.readyToTask).toBe(false);
   });
+
+  it("keeps a question thread out of readyToTask and derives dismiss and reopen", () => {
+    const question = { ...root("q"), kind: "question" as const };
+    const open = deriveThreadViews("story", [question], []);
+    expect(open.threads[0]).toEqual({
+      rootId: "q",
+      kind: "question",
+      state: "open",
+      readyToTask: false,
+    });
+
+    const dismissed = deriveThreadViews("story", [question], [
+      event("q", "dismissed"),
+    ]);
+    expect(dismissed.threads[0]?.state).toBe("dismissed");
+    expect(dismissed.threads[0]?.readyToTask).toBe(false);
+
+    const reopened = deriveThreadViews("story", [question], [
+      event("q", "dismissed"),
+      event("q", "reopened"),
+    ]);
+    expect(reopened.threads[0]).toEqual({
+      rootId: "q",
+      kind: "question",
+      state: "open",
+      readyToTask: false,
+    });
+  });
 });

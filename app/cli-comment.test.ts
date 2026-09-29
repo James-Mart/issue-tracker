@@ -258,11 +258,84 @@ describe("comment anchor and reply flags", () => {
     expect(readFileSync(join(dir, "s", "comments.jsonl"), "utf8").trim().split("\n")).toHaveLength(1);
   });
 
+  it("starts a question thread with --kind question and refuses it on a reply", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    const created = await runIssueCli(
+      [
+        "comment",
+        "s",
+        "--role",
+        "human",
+        "--body",
+        "Does the guard run locally?",
+        "--kind",
+        "question",
+      ],
+      { env: env() },
+    );
+    expect(created.status).toBe(0);
+    const lines = readFileSync(join(dir, "s", "comments.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      role: "human",
+      body: "Does the guard run locally?",
+      kind: "question",
+    });
+    expect(lines[0]?.replyTo).toBeUndefined();
+
+    const reply = await runIssueCli(
+      [
+        "comment",
+        "s",
+        "--role",
+        "human",
+        "--body",
+        "follow up",
+        "--reply-to",
+        String(lines[0]?.id),
+        "--kind",
+        "question",
+      ],
+      { env: env() },
+    );
+    expect(reply.status).toBe(1);
+    expect(reply.stderr).toContain("--kind question applies only to a new thread root");
+
+    const task = await runIssueCli(
+      [
+        "comment",
+        "t",
+        "--role",
+        "human",
+        "--body",
+        "not a story",
+        "--kind",
+        "question",
+      ],
+      { env: env() },
+    );
+    expect(task.status).toBe(1);
+    expect(task.stderr).toContain("comment kind is only valid on a Story");
+  });
+
   it("documents --resolve on comment --help", async () => {
     const help = await runIssueCli(["comment", "--help"], { env: env() });
     expect(help.status).toBe(0);
     expect(help.stdout.replace(/\s+/g, " ")).toContain(
       "--resolve reply and resolve that Story thread; requires --reply-to and --body",
+    );
+    expect(help.stdout.replace(/\s+/g, " ")).toContain(
+      "--kind <question> start a question thread; new Story thread root only",
     );
   });
 

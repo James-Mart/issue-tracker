@@ -39,6 +39,7 @@ vi.mock("../../api/queries", () => ({
 
 vi.mock("../../api/mutations", () => ({
   usePostComment: () => postComment,
+  usePostThreadEvent: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 function comment(

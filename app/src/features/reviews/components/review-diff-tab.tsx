@@ -351,7 +351,12 @@ export function ReviewDiffTab({
             ) : (
               <Virtualizer className="max-h-[75svh] overflow-auto shell:max-h-none shell:min-h-0 shell:flex-1">
                 {/* New threads anchor to the commit being viewed; the tip for All changes. */}
-                <DiffComposerProvider key={viewedSha} issueId={storyId} commitSha={viewedSha}>
+                <DiffComposerProvider
+                  key={viewedSha}
+                  issueId={storyId}
+                  commitSha={viewedSha}
+                  allowQuestion
+                >
                   <ReviewFileStack
                     rows={visibleRows}
                     fileDiffs={parsed.fileDiffs}

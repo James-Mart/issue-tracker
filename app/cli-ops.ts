@@ -9,6 +9,7 @@ import {
   kindHas,
   KIND_LABEL,
 } from "./server/kind.js";
+import { questionKindFields } from "./server/question-kind.js";
 import type {
   Comment,
   CommentInput,
@@ -350,6 +351,7 @@ type CommentCliOptions = {
   replyTo?: string;
   resolve?: boolean;
   linkTask?: string;
+  kind?: string;
 };
 
 function anchorFlagsPresent(opts: CommentCliOptions): boolean {
@@ -410,6 +412,7 @@ function commentInputFromCliOpts(opts: CommentCliOptions): CommentInput {
     role: opts.role,
     name: opts.name,
     body: opts.body,
+    ...questionKindFields(opts.kind === "question" ? "question" : undefined),
   };
 }
 
@@ -437,6 +440,10 @@ function applyCommentOptions(cmd: Command): Command {
     .option(
       "--link-task <taskId>",
       "record that a Task addresses that Story thread; requires --reply-to",
+    )
+    .option(
+      "--kind <question>",
+      "start a question thread; new Story thread root only",
     );
 }
 
@@ -454,10 +461,21 @@ function cliAuthor(opts: CommentCliOptions): { role: string; name?: string } {
     : { role: opts.role };
 }
 
+function assertQuestionKind(opts: CommentCliOptions): void {
+  if (opts.kind === undefined) return;
+  if (opts.kind !== "question") {
+    throw new Error("--kind must be question");
+  }
+  if (opts.replyTo || opts.resolve || opts.linkTask) {
+    throw new Error("--kind question applies only to a new thread root");
+  }
+}
+
 async function printComment(
   id: string,
   opts: CommentCliOptions,
 ): Promise<Comment | undefined> {
+  assertQuestionKind(opts);
   if (opts.linkTask) {
     assertNoAnchorForThreadAction(opts, "--link-task");
     if (!opts.replyTo) {

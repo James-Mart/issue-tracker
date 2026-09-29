@@ -76,6 +76,8 @@ export const commentAnchorSchema = z.object({
   commitSha: nonEmpty,
 });
 
+export const THREAD_KINDS = ["review", "question"] as const;
+
 const commentFields = {
   id: nonEmpty,
   role: nonEmpty,
@@ -85,18 +87,33 @@ const commentFields = {
   replyTo: nonEmpty.optional(),
   anchor: commentAnchorSchema.optional(),
   type: z.enum(COMMENT_TYPES).optional(),
+  /** Thread root only. Absent means review. */
+  kind: z.enum(THREAD_KINDS).optional(),
 };
 
 function refineCommentBody(
-  value: { body: string; type?: (typeof COMMENT_TYPES)[number] },
+  value: {
+    body: string;
+    type?: (typeof COMMENT_TYPES)[number];
+    kind?: (typeof THREAD_KINDS)[number];
+    replyTo?: string;
+  },
   ctx: z.RefinementCtx,
 ): void {
-  if (value.body.length > 0 || value.type === "human-response") return;
-  ctx.addIssue({
-    code: "custom",
-    message: "String must contain at least 1 character(s)",
-    path: ["body"],
-  });
+  if (value.body.length === 0 && value.type !== "human-response") {
+    ctx.addIssue({
+      code: "custom",
+      message: "String must contain at least 1 character(s)",
+      path: ["body"],
+    });
+  }
+  if (value.kind !== undefined && value.replyTo !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "kind is only valid on a thread root",
+      path: ["kind"],
+    });
+  }
 }
 
 const commentObject = z.object(commentFields);
@@ -115,10 +132,20 @@ export type CommentInput = z.infer<typeof commentInputSchema>;
 /** Stored comment plus read-time `outdated` on anchored messages only. */
 export type CommentMessage = Comment & { outdated?: boolean };
 
-export const THREAD_EVENTS = ["resolved", "unresolved", "linked"] as const;
-export const THREAD_UI_EVENTS = ["resolved", "unresolved"] as const;
-export const THREAD_KINDS = ["review"] as const;
-export const THREAD_STATES = ["open", "resolved"] as const;
+export const THREAD_EVENTS = [
+  "resolved",
+  "unresolved",
+  "linked",
+  "dismissed",
+  "reopened",
+] as const;
+export const THREAD_UI_EVENTS = [
+  "resolved",
+  "unresolved",
+  "dismissed",
+  "reopened",
+] as const;
+export const THREAD_STATES = ["open", "resolved", "dismissed"] as const;
 
 export const threadEventSchema = z
   .object({

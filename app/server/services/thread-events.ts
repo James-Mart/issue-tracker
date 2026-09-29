@@ -10,11 +10,21 @@ import {
   serialize,
   taskStatusesForStory,
 } from "./issues.js";
-import { deriveThreadViews, splitCommentLog } from "./thread-state.js";
+import {
+  commentThreadKind,
+  deriveThreadViews,
+  splitCommentLog,
+} from "./thread-state.js";
 
 export const AGENT_RESOLVE_REQUIRES_BODY =
   "resolving a thread requires a reply body";
 export const AGENT_CANNOT_UNRESOLVE = "agents cannot unresolve a thread";
+export const HUMAN_ONLY_QUESTION_EVENT =
+  "only a human can dismiss or reopen a question thread";
+export const QUESTION_EVENT_ON_REVIEW =
+  "dismiss and reopen apply only to a question thread";
+export const REVIEW_EVENT_ON_QUESTION =
+  "resolve and unresolve apply only to a review thread";
 
 export type AppendThreadEventInput = {
   event: ThreadEventName;
@@ -53,6 +63,12 @@ function assertActor(input: AppendThreadEventInput): void {
     }
     return;
   }
+  if (input.event === "dismissed" || input.event === "reopened") {
+    if (input.by.role !== "human") {
+      throw new IssueError("validation", HUMAN_ONLY_QUESTION_EVENT);
+    }
+    return;
+  }
   if (input.by.role === "human") return;
   if (input.event === "unresolved") {
     throw new IssueError("validation", AGENT_CANNOT_UNRESOLVE);
@@ -64,8 +80,9 @@ function assertActor(input: AppendThreadEventInput): void {
 
 /**
  * Append a thread event, and a reply when `body` is set, in one write.
- * Humans may resolve or unresolve with or without a reply. Any other role
- * may only resolve, and only with a reply.
+ * Humans may resolve or unresolve a review thread, with or without a reply,
+ * and may dismiss or reopen a question thread. Any other role may only
+ * resolve a review thread, and only with a reply.
  */
 export function appendThreadEvent(
   storyId: string,
@@ -105,6 +122,19 @@ export function appendThreadEvent(
         "validation",
         `thread "${threadId}" is not a thread root`,
       );
+    }
+    const kind = commentThreadKind(root);
+    if (
+      (input.event === "dismissed" || input.event === "reopened") &&
+      kind !== "question"
+    ) {
+      throw new IssueError("validation", QUESTION_EVENT_ON_REVIEW);
+    }
+    if (
+      (input.event === "resolved" || input.event === "unresolved") &&
+      kind === "question"
+    ) {
+      throw new IssueError("validation", REVIEW_EVENT_ON_QUESTION);
     }
 
     const records: unknown[] = [];

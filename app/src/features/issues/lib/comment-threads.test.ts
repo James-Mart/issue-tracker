@@ -3,6 +3,7 @@ import type { CommentMessage } from "@server/schemas";
 import {
   formatAnchorLineLabel,
   groupCommentThreads,
+  isPlainNote,
   selectAnchoredThreads,
 } from "./comment-threads";
 
@@ -100,6 +101,20 @@ describe("groupCommentThreads", () => {
     );
     expect(threads[0]?.linkedTaskId).toBe("task-a");
     expect(threads[0]?.readyToTask).toBe(false);
+  });
+
+  it("treats a question root as a thread even with no replies", () => {
+    const root = comment({
+      id: "asked",
+      at: "2026-08-30T14:00:00.000Z",
+      body: "why?",
+      kind: "question",
+    });
+    const threads = groupCommentThreads([root]);
+    expect(threads[0]?.kind).toBe("question");
+    expect(threads[0]?.readyToTask).toBe(false);
+    expect(isPlainNote(threads[0]!)).toBe(false);
+    expect(isPlainNote({ ...threads[0]!, kind: "review" })).toBe(true);
   });
 });
 
