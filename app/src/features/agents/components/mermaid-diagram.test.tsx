@@ -30,10 +30,12 @@ function mount(node: ReactElement): {
   return { container, root };
 }
 
+// Must give up before the test timeout: an abandoned loop keeps an async
+// act() scope open and swallows the next test's synchronous renders.
 async function settle(assert: () => void) {
   const start = Date.now();
   let last: unknown;
-  while (Date.now() - start < 10000) {
+  while (Date.now() - start < 3000) {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
