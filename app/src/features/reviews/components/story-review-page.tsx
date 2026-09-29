@@ -21,6 +21,7 @@ import { useReviewWorkbenchLocation } from "../hooks/use-review-workbench-locati
 import { ALL_CHANGES_SCOPE } from "../lib/review-scope";
 import { REVIEW_WORKBENCH_TABS } from "../lib/workbench-tabs";
 import { ReviewCommitsPanel } from "./review-commits-tab";
+import { ReviewConversationTab } from "./review-conversation-tab";
 import { ReviewDiffTab } from "./review-diff-tab";
 import { ReviewNoCommits } from "./review-no-commits";
 import { StoryReviewHeader } from "./story-review-header";
@@ -65,6 +66,8 @@ function DiffTabPanel({
   onScopeChange,
   overrides,
   setOverrides,
+  focusThreadId,
+  onFocusFileMissing,
 }: {
   projectId: string;
   storyId: string;
@@ -74,6 +77,8 @@ function DiffTabPanel({
   onScopeChange: (scope: string) => void;
   overrides: ReviewMarkOverrides;
   setOverrides: Dispatch<SetStateAction<ReviewMarkOverrides>>;
+  focusThreadId: string | null;
+  onFocusFileMissing: () => void;
 }) {
   const diffReady = scope === ALL_CHANGES_SCOPE || commits.data !== undefined;
   const diff = useReviewDiffQuery(projectId, review.id, scope, { enabled: diffReady });
@@ -103,6 +108,8 @@ function DiffTabPanel({
       onScopeChange={onScopeChange}
       overrides={overrides}
       setOverrides={setOverrides}
+      focusThreadId={focusThreadId}
+      onFocusFileMissing={onFocusFileMissing}
     />
   );
 }
@@ -120,7 +127,15 @@ function StoryReviewWorkbench({
 }) {
   const commits = useReviewLiveRefresh(projectId, review.id);
   const knownShas = commits.data?.commits.map((commit) => commit.sha);
-  const { active, setTab, scope, setScope } = useReviewWorkbenchLocation(knownShas);
+  const {
+    active,
+    setTab,
+    scope,
+    setScope,
+    threadId,
+    openThreadInDiff,
+    retargetThreadScope,
+  } = useReviewWorkbenchLocation(knownShas);
   const [markOverrides, setMarkOverrides] = useState<ReviewMarkOverrides>({});
 
   return (
@@ -148,7 +163,9 @@ function StoryReviewWorkbench({
         ))}
       </div>
       <div role="tabpanel" className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {active === "commits" ? (
+        {active === "conversation" ? (
+          <ReviewConversationTab storyId={storyId} onOpenInDiff={openThreadInDiff} />
+        ) : active === "commits" ? (
           <ReviewCommitsPanel
             projectId={projectId}
             review={review}
@@ -167,6 +184,8 @@ function StoryReviewWorkbench({
             onScopeChange={setScope}
             overrides={markOverrides}
             setOverrides={setMarkOverrides}
+            focusThreadId={threadId}
+            onFocusFileMissing={() => retargetThreadScope(ALL_CHANGES_SCOPE)}
           />
         )}
       </div>

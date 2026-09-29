@@ -7,15 +7,21 @@ export const ALL_CHANGES_SCOPE = "all";
 /** Optimistic Reviewed flags keyed by scope, then path. Shared across tabs. */
 export type ReviewMarkOverrides = Record<string, Record<string, boolean>>;
 
-/** Write the workbench tab and scope into the search params. Both stay explicit. */
+/**
+ * Write the workbench tab and scope into the search params. Both stay explicit.
+ * `threadId` omitted keeps `thread`; `null` clears it.
+ */
 export function writeReviewWorkbenchSearch(
   params: URLSearchParams,
   tab: ReviewWorkbenchTab,
   scope: string,
+  threadId?: string | null,
 ): URLSearchParams {
   const next = new URLSearchParams(params);
   next.set("tab", tab);
   next.set("scope", scope);
+  if (threadId === null) next.delete("thread");
+  else if (threadId !== undefined) next.set("thread", threadId);
   return next;
 }
 

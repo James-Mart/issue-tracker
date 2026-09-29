@@ -11,7 +11,6 @@ import {
   Virtualizer,
   type DiffLineAnnotation,
   type FileDiffMetadata,
-  type SelectedLineRange,
 } from "@pierre/diffs/react";
 import { Link } from "react-router-dom";
 import {
@@ -29,17 +28,15 @@ import { DetailEyebrow, SETTINGS_HEADING_CLASS } from "./detail-section";
 import { useCommentThreads, useIssueChangeQuery } from "../api/queries";
 import { useDiffLayoutPreference } from "../hooks/use-diff-layout-preference";
 import { useFileDiffContentsLoader } from "../hooks/use-file-diff-contents-loader";
+import { useFileThreadAnnotations } from "../hooks/use-file-thread-annotations";
 import { useVirtualizedFileScroll } from "../hooks/use-virtualized-file-scroll";
 import { useFocusDiffThread } from "../lib/issue-change-focus-thread";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
-import {
-  mergeComposerAnnotation,
-  placeThreadsInFile,
-} from "../lib/issue-change-inline-threads";
 import type { CommentThread as CommentThreadData } from "../lib/comment-threads";
 import {
-  pathForAnchorSide,
-  selectedRangeToAnchor,
+  annotationSideToAnchorSide,
+  newComposerOnLine,
+  type AnchorSide,
 } from "../lib/diff-thread-anchor";
 import { CommentThread } from "./comments/comment-thread";
 import {
@@ -348,37 +345,21 @@ export function IssueChangePanel({
   );
 }
 
-function fileComposerPaths(
-  file: Pick<FileDiffMetadata, "name" | "prevName">,
-): string[] {
-  if (file.prevName && file.prevName !== file.name) {
-    return [file.name, file.prevName];
-  }
-  return [file.name];
-}
-
 function FileLineThreads({
   threads,
   issueId,
-  lineNumber,
-  side,
-  paths,
+  line,
 }: {
   threads: CommentThreadData[];
   issueId: string;
-  lineNumber?: number;
-  side?: "old" | "new";
-  paths: string[];
+  line?: { file: FileDiffMetadata; lineNumber: number; side: AnchorSide };
 }) {
   const composer = useDiffComposer();
   const resolveThreads = useResolveThreads();
-  const showNew =
-    lineNumber != null &&
-    side != null &&
-    composer.open?.kind === "new" &&
-    composer.open.line === lineNumber &&
-    composer.open.side === side &&
-    paths.includes(composer.open.path);
+  const lineNumber = line?.lineNumber;
+  const newComposer = line
+    ? newComposerOnLine(composer.open, line.file, line.lineNumber, line.side)
+    : null;
 
   return (
     <div
@@ -388,7 +369,7 @@ function FileLineThreads({
           : "issue-change-line-threads"
       }
       data-line={lineNumber != null ? String(lineNumber) : undefined}
-      data-side={side}
+      data-side={line?.side}
       className="flex flex-col gap-2 px-3 py-2"
     >
       {threads.map((thread) => {
@@ -411,9 +392,7 @@ function FileLineThreads({
           />
         );
       })}
-      {showNew && composer.open?.kind === "new" ? (
-        <DiffThreadComposer target={composer.open} />
-      ) : null}
+      {newComposer ? <DiffThreadComposer target={newComposer} /> : null}
     </div>
   );
 }
@@ -440,52 +419,21 @@ function IssueChangeFileDiff({
     sha,
     cache: contentsCache,
   });
-  const composer = useDiffComposer();
-  const { located, unlocated } = useMemo(
-    () => placeThreadsInFile(threads, fileDiff),
-    [fileDiff, threads],
-  );
-  const paths = useMemo(() => fileComposerPaths(fileDiff), [fileDiff]);
-  const annotations = useMemo(() => {
-    const open = composer.open;
-    if (open?.kind !== "new" || !paths.includes(open.path)) return located;
-    return mergeComposerAnnotation(located, open);
-  }, [composer.open, located, paths]);
+  const { annotations, unlocated, openFromRange, onLineSelected } =
+    useFileThreadAnnotations(fileDiff, threads);
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<CommentThreadData[]>) => (
       <FileLineThreads
         threads={annotation.metadata}
         issueId={issueId}
-        lineNumber={annotation.lineNumber}
-        side={annotation.side === "deletions" ? "old" : "new"}
-        paths={paths}
+        line={{
+          file: fileDiff,
+          lineNumber: annotation.lineNumber,
+          side: annotationSideToAnchorSide(annotation.side),
+        }}
       />
     ),
-    [issueId, paths],
-  );
-  const openFromRange = useCallback(
-    (range: SelectedLineRange) => {
-      const side = selectedRangeToAnchor(range, fileDiff.name, sha).side;
-      const path = pathForAnchorSide(fileDiff, side);
-      const anchor = selectedRangeToAnchor(range, path, sha);
-      composer.openNew({
-        kind: "new",
-        path: anchor.path,
-        side: anchor.side,
-        line: anchor.line,
-        ...(anchor.startLine !== undefined
-          ? { startLine: anchor.startLine }
-          : {}),
-      });
-    },
-    [composer.openNew, fileDiff, sha],
-  );
-  const onLineSelected = useCallback(
-    (range: SelectedLineRange | null) => {
-      if (range == null || range.start === range.end) return;
-      openFromRange(range);
-    },
-    [openFromRange],
+    [fileDiff, issueId],
   );
 
   return (
@@ -520,7 +468,7 @@ function IssueChangeFileDiff({
         renderAnnotation={renderAnnotation}
       />
       {unlocated.length > 0 ? (
-        <FileLineThreads threads={unlocated} issueId={issueId} paths={paths} />
+        <FileLineThreads threads={unlocated} issueId={issueId} />
       ) : null}
     </div>
   );

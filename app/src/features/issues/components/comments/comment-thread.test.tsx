@@ -159,6 +159,9 @@ describe("CommentThread", () => {
     const currentMeta = current?.querySelector(
       '[data-testid="comment-anchor-meta"]',
     );
+    const path = currentMeta?.querySelector("span.min-w-0");
+    expect(path?.className).toContain("[direction:rtl]");
+    expect(path?.className).toContain("shell:[direction:ltr]");
     expect(currentMeta?.textContent).toContain(
       "app/server/services/diff-fetch.ts",
     );
@@ -261,6 +264,7 @@ describe("CommentThread", () => {
     expect(thread?.hasAttribute("data-collapsed")).toBe(true);
     expect(thread?.textContent).toContain("2 comments");
     expect(thread?.textContent).toMatch(/resolved/i);
+    expect(thread?.textContent).not.toMatch(/outdated/i);
     expect(thread?.textContent).not.toContain(
       "Scope drafts per thread so Diff and Overview stay isolated.",
     );
@@ -280,6 +284,44 @@ describe("CommentThread", () => {
       unresolve?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onUnresolve).toHaveBeenCalledOnce();
+  });
+
+  it("collapses an outdated thread to a line bar that expands to its snippet", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={outdatedThread}
+          issueId="task-threads"
+          inline
+          showAnchorContext
+          collapse="outdated"
+          onReply={vi.fn()}
+          onResolve={vi.fn()}
+        />,
+      );
+    });
+
+    const thread = container.querySelector('[data-thread-root="outdated-root"]');
+    const bar = thread?.querySelector('[data-testid="thread-collapsed-bar"]');
+    expect(thread?.hasAttribute("data-collapsed")).toBe(true);
+    expect(thread?.className).not.toContain("opacity-70");
+    expect(bar?.textContent).toBe("lines 88-90 · 1 comment");
+    expect(thread?.querySelector('[data-testid="thread-unresolve"]')).toBeNull();
+    expect(thread?.querySelector('[data-testid="comment-anchor-meta"]')).toBeNull();
+    expect(thread?.textContent).not.toContain("Run assertCommitReachable before git show.");
+
+    act(() => {
+      thread
+        ?.querySelector('[aria-label="Expand thread"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(thread?.hasAttribute("data-collapsed")).toBe(false);
+    expect(thread?.querySelector('[data-testid="comment-anchor-snippet"]')).not.toBeNull();
+    expect(thread?.textContent).toContain("Run assertCommitReachable before git show.");
+    expect(thread?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
   });
 
   it("renders a linked Task chip on inline threads", () => {
@@ -307,5 +349,66 @@ describe("CommentThread", () => {
         "data-ready-to-task",
       ),
     ).toBe(false);
+    expect(chip?.parentElement?.className).toContain("w-full");
+  });
+
+  it("puts the Task chip on its own row beside jump-to-Diff", () => {
+    const linked: CommentThreadData = {
+      ...currentThread,
+      linkedTaskId: "task-a",
+      readyToTask: false,
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/projects/issue-tracker/issues/story-threads"]}>
+          <CommentThread
+            thread={linked}
+            showAnchorContext
+            issueId="task-threads"
+            onSeeInDiff={vi.fn()}
+            onReply={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    const meta = container.querySelector('[data-testid="comment-anchor-meta"]');
+    const chip = container.querySelector('[data-testid="thread-linked-task"]');
+    const jump = container.querySelector('[data-testid="see-in-diff"]');
+    expect(meta?.contains(jump)).toBe(true);
+    expect(meta?.contains(chip)).toBe(false);
+    expect(chip?.parentElement?.className).toContain("w-full");
+  });
+
+  it("collapses a resolved conversation thread and keeps its anchor header", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const resolved: CommentThreadData = { ...currentThread, state: "resolved" };
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={resolved}
+          collapse="resolved"
+          showAnchorContext
+          issueId="task-threads"
+          onSeeInDiff={vi.fn()}
+          onReply={vi.fn()}
+          onUnresolve={vi.fn()}
+        />,
+      );
+    });
+
+    const thread = container.querySelector('[data-thread-root="current-root"]');
+    expect(thread?.hasAttribute("data-collapsed")).toBe(true);
+    expect(thread?.textContent).toContain("diff-fetch.ts");
+    expect(thread?.textContent).toContain("line 94");
+    expect(thread?.querySelector('[data-testid="see-in-diff"]')).not.toBeNull();
+    expect(thread?.textContent).not.toContain(
+      "Scope drafts per thread so Diff and Overview stay isolated.",
+    );
   });
 });

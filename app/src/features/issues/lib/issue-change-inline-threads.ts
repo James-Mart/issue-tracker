@@ -3,6 +3,7 @@ import {
   selectAnchoredThreads,
   type CommentThread,
 } from "./comment-threads";
+import { fileAnchorPaths } from "./diff-thread-anchor";
 
 export type FileThreadPlacement = {
   located: DiffLineAnnotation<CommentThread[]>[];
@@ -22,13 +23,6 @@ function hunkHasLine(
   return false;
 }
 
-function filePaths(file: Pick<FileDiffMetadata, "name" | "prevName">): string[] {
-  if (file.prevName && file.prevName !== file.name) {
-    return [file.name, file.prevName];
-  }
-  return [file.name];
-}
-
 /** Place anchored threads on this file's hunk lines, or at the file end. */
 export function placeThreadsInFile(
   threads: CommentThread[],
@@ -38,7 +32,7 @@ export function placeThreadsInFile(
   const unlocated: CommentThread[] = [];
   const seen = new Set<string>();
 
-  for (const path of filePaths(file)) {
+  for (const path of fileAnchorPaths(file)) {
     for (const side of ["old", "new"] as const) {
       const byLine = selectAnchoredThreads(threads, path, side);
       for (const [line, lineThreads] of byLine) {
