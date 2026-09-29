@@ -50,7 +50,7 @@ Absolute path for this file (Read this exact path):
    rely on it alone.
 5. If blocked, raise `issue task set <id> needsAttention true --reason "..."`
    and stop. This role's status writes are Bootstrap's entry `in-progress`
-   and step 9's terminal `done`.
+   and step 10's terminal `done`.
 6. **Review.** Reviewers read the uncommitted change and return a JSON array
    of findings. You have final authority over your code.
    1. Delegate the **Review** stub in parallel, one delegation per reviewer
@@ -72,4 +72,12 @@ Absolute path for this file (Read this exact path):
    finding you fixed (reviewer, finding) and each finding you declined
    (reviewer, finding, reason). For a `noDiff` Task, it says what was done,
    what was found, and why no source-controlled change is the right outcome.
-9. `issue task set <id> status done`.
+9. **Resolve linked threads.** Run `issue task get <id> openLinkedThreadRoots`.
+   Each stdout line is the root id of a Story thread that is open and linked
+   to this Task. Empty stdout means there are none. For each line `<rootId>`,
+   run `issue story comment <storyId> --role implementor --reply-to <rootId> --resolve --body "<fix>"`
+   (`<storyId>` is the parent Story from bootstrap). `<fix>` names what
+   changed and where. A thread this get omits stays as it is. A resolved
+   thread linked to this Task stays resolved; a human unresolve is what opens
+   it again.
+10. `issue task set <id> status done`.

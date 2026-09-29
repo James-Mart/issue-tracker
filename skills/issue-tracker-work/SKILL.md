@@ -21,7 +21,8 @@ of CLI commands, and spawns subagents in a fixed order — so it should itself r
 on the cheap model, **Composer 2.5**, not a premium model (see **Models and
 subagent roles**). The model discriminator assigns an implementor model onto
 each Task; the implementor writes code, runs its own code review, records the
-commit, and sets Task `status done`; the story-review agent records the Story
+commit, resolves each unresolved Story thread linked to that Task with a reply
+naming the fix, and sets Task `status done`; the story-review agent records the Story
 gate (`review`, `reviewedTasks`, optional remediation Tasks) without editing
 workspace source, pauses the Story at `review` `awaiting-human` when a runtime
 check needs a human, and when the branch is behind appends the
@@ -205,7 +206,7 @@ Coordinator never sets Task `status` or Task `commits`.
 | Field | Owner | When |
 |-------|-------|------|
 | Task `status` `in-progress` | Implementor | on implement entry |
-| Task `status` `done` | Implementor | after its review, commit, and summary comment |
+| Task `status` `done` | Implementor | after its review, commit, summary comment, and resolving each unresolved Story thread linked to the Task |
 | Task `commits` | Git | spawned by the implementor |
 | Story `review` | Story review | on each review round `passed` / `failed`; `awaiting-human` when it pauses for a human |
 | Story `review` cleared from `awaiting-human` | Human | Done on the Story's request (`issue story human-done`) |

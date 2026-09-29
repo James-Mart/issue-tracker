@@ -278,6 +278,10 @@ These are computed by `derive()` and never written to disk (see
   not read the flag as "nothing was done." Surfaced in the detail panel when
   set; omitted from the tree outline. An empty working tree alone is **not** a
   completion signal.
+- **openLinkedThreadRoots** — derived Task field, not stored. Read with
+  `issue task get <taskId> openLinkedThreadRoots`. One Story thread root id
+  per line: threads that are open and linked to that Task. Empty stdout when
+  there are none.
 - **archived** — stored visibility flag on Epic / Idea / Story / Task (never
   Project). Explicit; **not** auto-derived from Done. Cascade and CLI/UI
   filtering — see [Archived visibility](#archived-visibility).
@@ -363,7 +367,9 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   `{id} [{at}] {author} @ {path}:{line} {side} {sha7}: {body}` (a range uses
   `{startLine}-{line}`; append ` (outdated)` after the location when the anchor
   is outdated). `{author}` is `name` when set, else `role`, followed by
-  ` ({type})` when the comment has a `type`. See
+  ` ({type})` when the comment has a `type`. On a Story, `--comments` also
+  appends `--- threads ---`: one line per thread root, `{rootId} open|resolved`,
+  plus ` linked={taskId}` when that thread is linked to a Task. See
   [`comments.jsonl` message shape](#commentsjsonl-message-shape). Prefer
   `issue get <id> <field>` for a single field. Label lines: see
   [Project labels](#project-labels).
@@ -501,7 +507,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `worktree`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `worktree`, `openLinkedThreadRoots`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`

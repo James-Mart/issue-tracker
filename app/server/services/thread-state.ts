@@ -59,6 +59,28 @@ export function readyToTaskFrom(
   return state === "open" && linkedTaskId === undefined;
 }
 
+/** Root ids of open threads linked to `taskId`, in thread order. */
+export function openLinkedThreadRootIds(
+  threads: ThreadView[],
+  taskId: string,
+): string[] {
+  return threads
+    .filter(
+      (thread) => thread.state === "open" && thread.linkedTaskId === taskId,
+    )
+    .map((thread) => thread.rootId);
+}
+
+export function formatThreadLine(thread: ThreadView): string {
+  const linked =
+    thread.linkedTaskId !== undefined ? ` linked=${thread.linkedTaskId}` : "";
+  return `${thread.rootId} ${thread.state}${linked}`;
+}
+
+export function formatThreadsForView(threads: ThreadView[]): string[] {
+  return threads.map(formatThreadLine);
+}
+
 /** Last resolution and link events win. Unknown thread ids become problems. */
 export function deriveThreadViews(
   issueId: string,

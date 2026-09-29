@@ -402,12 +402,21 @@ describe("kind-scoped view / delete / comment / attach", () => {
       });
       expect(status).toBe(0);
 
-      const comments = stdout.split("--- comments ---")[1]!.trim().split("\n");
+      const comments = stdout
+        .split("--- comments ---")[1]!
+        .split("--- threads ---")[0]!
+        .trim()
+        .split("\n");
       expect(comments).toEqual([
         `plain-id [${at}] Ada: standalone note`,
         `current-id [${at}] reviewer @ ${relPath}:1 new ${shaInitial.slice(0, 7)}: still valid`,
         `outdated-id [${at}] reviewer @ ${relPath}:2 new ${shaInitial.slice(0, 7)} (outdated): fix this`,
         `  reply-id [${at}] agent: will do`,
+      ]);
+      expect(stdout.split("--- threads ---")[1]!.trim().split("\n")).toEqual([
+        "plain-id open",
+        "current-id open",
+        "outdated-id open",
       ]);
     } finally {
       rmSync(workspace, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Comment, ThreadEvent } from "../schemas.js";
-import { deriveThreadViews } from "./thread-state.js";
+import type { Comment, TaskStatus, ThreadEvent } from "../schemas.js";
+import { deriveThreadViews, openLinkedThreadRootIds } from "./thread-state.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 
@@ -53,7 +53,7 @@ describe("deriveThreadViews task links", () => {
       event("a", "resolved"),
       event("a", "unresolved"),
     ];
-    const taskStatusById = new Map([["task-a", "done"]]);
+    const taskStatusById = new Map<string, TaskStatus>([["task-a", "done"]]);
     const derived = deriveThreadViews("story", messages, events, taskStatusById);
 
     expect(derived.threads[0]).toEqual({
@@ -71,7 +71,7 @@ describe("deriveThreadViews task links", () => {
       event("a", "resolved"),
       event("a", "unresolved"),
     ];
-    const taskStatusById = new Map([["task-a", "in-progress"]]);
+    const taskStatusById = new Map<string, TaskStatus>([["task-a", "in-progress"]]);
     const derived = deriveThreadViews("story", messages, events, taskStatusById);
 
     expect(derived.threads[0]).toEqual({
@@ -81,6 +81,20 @@ describe("deriveThreadViews task links", () => {
       linkedTaskId: "task-a",
       readyToTask: false,
     });
+  });
+
+  it("lists open thread roots linked to a Task", () => {
+    const messages = [root("a"), root("b"), root("c")];
+    const events = [
+      event("a", "linked", "task-a"),
+      event("b", "linked", "task-a"),
+      event("b", "resolved"),
+      event("c", "linked", "task-b"),
+    ];
+    const { threads } = deriveThreadViews("story", messages, events);
+    expect(openLinkedThreadRootIds(threads, "task-a")).toEqual(["a"]);
+    expect(openLinkedThreadRootIds(threads, "task-b")).toEqual(["c"]);
+    expect(openLinkedThreadRootIds(threads, "task-missing")).toEqual([]);
   });
 
   it("sets readyToTask false on resolved threads even without a link", () => {

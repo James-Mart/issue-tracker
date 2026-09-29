@@ -17,6 +17,7 @@ import type {
   IssueKind,
 } from "./server/schemas.js";
 import { readCommentsWithOutdated } from "./server/services/anchor-outdated.js";
+import { formatThreadsForView } from "./server/services/thread-state.js";
 import { appendThreadEvent } from "./server/services/thread-events.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
 import {
@@ -242,12 +243,20 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   console.log(detail.description || "(no description)");
 
   if (opts.comments) {
-    const { messages, problems } = await readCommentsWithOutdated(id);
+    const { messages, threads, problems } = await readCommentsWithOutdated(id);
     console.log();
     console.log("--- comments ---");
     if (messages.length === 0) console.log("(no messages)");
     for (const line of formatCommentsForView(messages)) {
       console.log(line);
+    }
+    if (detail.kind === "story") {
+      console.log();
+      console.log("--- threads ---");
+      if (threads.length === 0) console.log("(no threads)");
+      for (const line of formatThreadsForView(threads)) {
+        console.log(line);
+      }
     }
     // Malformed comment lines are surfaced as stderr warnings but deliberately
     // do not fail the command: like list()'s `problems`, they are data

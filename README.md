@@ -149,7 +149,12 @@ Three thin adapters sit over it:
   `--resolve` with `--reply-to` and `--body` replies and resolves a Story
   thread in that same write. There is no CLI unresolve.
   `issue view <id> --comments` prints the log with threads grouped (replies
-  indented) and anchors rendered inline.
+  indented) and anchors rendered inline. On a Story it also prints
+  `--- threads ---`, one line per thread root: `{rootId} open|resolved`, plus
+  ` linked={taskId}` when that thread is linked to a Task.
+  `issue task get <taskId> openLinkedThreadRoots` prints one root id per line
+  for Story threads that are open and linked to that Task, and prints nothing
+  when there are none.
 - **HTTP API** (`routes/issues.ts`) — `GET /api/issues` (issues + derived +
   ready + problems), `GET /api/issues/:id`, `GET /api/issues/:id/comments`,
   `POST /api/issues`, `PATCH /api/issues/:id`, `DELETE /api/issues/:id`,
