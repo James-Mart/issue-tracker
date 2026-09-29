@@ -28,7 +28,7 @@ function comment(
     Pick<CommentMessage, "id" | "at" | "body">,
 ): CommentMessage {
   return {
-    role: "code-quality-validator",
+    role: "story-review",
     ...overrides,
   };
 }

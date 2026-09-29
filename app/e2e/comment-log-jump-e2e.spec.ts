@@ -88,7 +88,7 @@ const test = base.extend<
 
           const { appendComment } = await import("../server/services/issues.js");
           const anchored = await appendComment(task.id, {
-            role: "code-quality-validator",
+            role: "story-review",
             body: rootMessage,
             anchor: {
               path: "names.txt",

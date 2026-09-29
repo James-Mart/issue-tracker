@@ -36,18 +36,35 @@ Absolute path for this file (Read this exact path):
    A completed look with a visible product problem is fixed in this implement
    pass — it is not a reason to skip the look.
 4. **Intentional no-op.** If correctly satisfying the spec means there are **no
-   source-controlled file changes**, signal it explicitly:
-   `issue task set <id> noDiff true`, then `issue task comment <id> --role
-   implementor --body "..."` explaining why no diff is the right outcome.
+   source-controlled file changes**, signal it explicitly with
+   `issue task set <id> noDiff true`, then go to step 8.
    A real edit that only touches non-source-controlled files (e.g. a Project
-   attachment under the gitignored `issues/` store) still warrants `noDiff true`
-   with that explanatory comment. That structured flag plus the chat rationale
-   is how the empty source-controlled diff is judged and finalized downstream —
-   an empty tree on its own is **not** a completion signal, so never rely on it
-   alone.
+   attachment under the gitignored `issues/` store) still warrants `noDiff true`.
+   That structured flag plus the step 8 summary comment is what Story review
+   reads — an empty tree on its own is **not** a completion signal, so never
+   rely on it alone.
 5. If blocked, raise `issue task set <id> needsAttention true --reason "..."`
-   and stop. This role's only status writes are Bootstrap's entry
-   `in-progress` / `fixing`.
-6. **Read**
+   and stop. This role's status writes are Bootstrap's entry `in-progress`
+   and step 9's terminal `done`.
+6. **Review.** Reviewers read the uncommitted change and return a JSON array
+   of findings. You have final authority over your code.
+   1. Delegate the **Review** stub in parallel, one delegation per reviewer
+      role. Include `issue-tracker-review-design-system` only when the Task
+      is UI-related (the step 3 judgment). Keep each returned agent id.
+   2. For each finding, fix it or decline it with a reason.
+   3. Re-enter each reviewer with at least one finding you fixed, using the
+      **Review (recheck)** stub. Handle each reply as in step 6.2. Repeat
+      until a round fixes nothing.
+   4. Re-run step 3's tests and build. Re-run its UI look only when the Task
+      is UI-related and the review fixes changed at least one of the paths
+      that made it so; that look's three evidence fields go in the step 8
+      comment.
+7. **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-record-commit-beat.md`
    and follow it.
+8. Post one summary comment:
+   `issue task comment <id> --role implementor --body "..."`. It lists each
+   finding you fixed (reviewer, finding) and each finding you declined
+   (reviewer, finding, reason). For a `noDiff` Task, it says what was done,
+   what was found, and why no source-controlled change is the right outcome.
+9. `issue task set <id> status done`.

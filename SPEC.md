@@ -698,8 +698,8 @@ the YAML doc.
 - `codingStandards` — a specification the plan must honor when tree prose makes
   claims it governs.
 - `designSystem` — UI guidelines and inspiration, not a verbatim plan spec.
-  Adherence is enforced during implementation (implementor / code-quality
-  validator when the Task is UI-related) and by the runtime validator when
+  Adherence is enforced during implementation (implementor / design-system
+  reviewer when the Task is UI-related) and by the runtime validator when
   the Story changes UI, not by plan-polish internal-consistency.
 - `gateRubric` — exemption rubric for the gated autonomous flow. Lists only
   when the human does **not** need to be asked — **silence means ask**: a
@@ -715,8 +715,8 @@ the YAML doc.
 | Doc key | Who consults |
 | --- | --- |
 | `vision` | plan-polish check agents (shared bootstrap + internal-consistency cohesion), implementor bootstrap, runtime validator bootstrap |
-| `codingStandards` | implementor, code-quality validator; plan-polish internal-consistency when tree prose makes claims the doc governs |
-| `designSystem` | implementor + code-quality validator when the Task appears UI-related (judgment from prose + paths; no Task flag); runtime validator when the Story changes UI (same judgment) |
+| `codingStandards` | implementor, coding-standards reviewer; plan-polish internal-consistency when tree prose makes claims the doc governs |
+| `designSystem` | implementor + design-system reviewer when the Task appears UI-related (judgment from prose + paths; no Task flag); runtime validator when the Story changes UI (same judgment) |
 | `gateRubric` | auto-plan stakeholder |
 | `verification` | implementor (Verify), runtime validator bootstrap, issue-tracker-plan bootstrap, plan-polish bootstrap + internal-consistency (Task Verify vs playbook / `runtime`) |
 
@@ -822,7 +822,8 @@ line) and `issue summary` (a `Workspace:` line under the Project). Prefer
 `issue project get <projectId> workspace` for a single-field read.
 
 The field exists so the work loop's **repo-touching subagents** (git,
-implementor, and both validators) know where to operate. The **model
+implementor, the implementor's code reviewers, Story review, and the runtime
+validator) know where to operate. The **model
 discriminator** uses the same path for **read-only peeks** when scoring
 verification difficulty (see [Model discriminator (read-only peek)](#model-discriminator-read-only-peek)).
 The coordinator does no repo work and never needs a workspace. The contract

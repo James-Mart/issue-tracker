@@ -28,7 +28,7 @@ const currentThread: CommentThreadData = {
   root: comment({
     id: "current-root",
     at: "2026-08-30T14:22:00.000Z",
-    role: "code-quality-validator",
+    role: "story-review",
     body: "Scope drafts per thread so Diff and Overview stay isolated.",
     anchor: {
       path: "app/server/services/diff-fetch.ts",
@@ -53,7 +53,7 @@ const outdatedThread: CommentThreadData = {
   root: comment({
     id: "outdated-root",
     at: "2026-08-29T09:15:00.000Z",
-    role: "code-quality-validator",
+    role: "story-review",
     body: "Run assertCommitReachable before git show.",
     outdated: true,
     anchor: {
@@ -119,9 +119,9 @@ describe("CommentThread", () => {
 
     const agentHeader = comments?.[0]?.querySelector("header");
     expect(agentHeader?.querySelector("svg")).not.toBeNull();
-    expect(agentHeader?.textContent).toContain("Code-quality validator");
+    expect(agentHeader?.textContent).toContain("Story review");
     expect(agentHeader?.textContent).not.toContain("Jared");
-    expect(agentHeader?.textContent).not.toContain("code-quality-validator");
+    expect(agentHeader?.textContent).not.toContain("story-review");
 
     const humanHeader = comments?.[1]?.querySelector("header");
     expect(humanHeader?.querySelector("svg")).toBeNull();

@@ -114,39 +114,30 @@ const CHECK_STUB_PROMPT =
   "commands, and return the empty array [] as your entire reply.";
 
 /**
- * A migrated work role, and the one the work skill re-enters rather than
- * respawning: the code-quality validator is spawned once per Task and resumed
- * on every later `qa` beat.
+ * A work role the implementor re-enters rather than respawning: each code
+ * reviewer is spawned once per Task and resumed on every recheck round.
  */
-const WORK_ROLE = "issue-tracker-code-quality-validator";
+const WORK_ROLE = "issue-tracker-review-coding-standards";
 
 /**
- * The issue id the work stubs below carry. Deliberately not a tracked issue —
- * unlike the read-only check role, code-quality writes `qa` on entry, and a
- * wiring probe must not be able to move a real Task's gate even if a run
- * ignores {@link WORK_PROBE_GUARD}.
+ * The issue id the work stubs below carry. Deliberately not a tracked issue,
+ * so a run that ignores {@link WORK_PROBE_GUARD} reviews nothing real.
  */
 const PROBE_ISSUE_ID = "live-probe-no-such-issue";
 
-/** {@link PROBE_PROMPT}'s guard, worded for a role that writes the tracker. */
+/** {@link PROBE_PROMPT}'s guard, worded for a reviewer's findings reply. */
 const WORK_PROBE_GUARD =
-  "This is a wiring probe, not real work: do not read files, run commands " +
-  "(including `issue`), or set any tracker field, and reply with the single " +
-  "word ok.";
+  "This is a wiring probe, not real work: do not read files or run commands " +
+  "(including `issue`), and return the empty array [] as your entire reply.";
 
-/** The work skill's code-quality spawn stub, over its Issue context line. */
-const CODE_QUALITY_STUB_PROMPT =
-  `Work root: \`delegation-bridge\`. Issue: \`${PROBE_ISSUE_ID}\` ` +
-  "(live wiring probe). Mode: review. Comment role: " +
-  "`code-quality-validator`. " +
-  WORK_PROBE_GUARD;
+/** The implementor's Review stub. */
+const REVIEW_STUB_PROMPT =
+  `Issue: \`${PROBE_ISSUE_ID}\` (live wiring probe). ` + WORK_PROBE_GUARD;
 
-/** The work skill's code-quality resume stub — the re-entry beat. */
-const CODE_QUALITY_RESUME_STUB_PROMPT =
-  `Work root: \`delegation-bridge\`. Issue: \`${PROBE_ISSUE_ID}\` ` +
-  "(live wiring probe). Mode: resume. Comment role: " +
-  "`code-quality-validator`. Verify that previously requested changes were " +
-  "fixed. " +
+/** The implementor's Review (recheck) stub — the re-entry beat. */
+const REVIEW_RECHECK_STUB_PROMPT =
+  `Issue: \`${PROBE_ISSUE_ID}\` (live wiring probe). Mode: recheck. ` +
+  "Fixed: `probe-finding`. " +
   WORK_PROBE_GUARD;
 
 type ToolCallMessage = Extract<
@@ -465,13 +456,12 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
     LIVE_TIMEOUT_MS,
   );
 
-  // The same IDE claim, re-proved against the work vocabulary: work holds ten
-  // of the call sites and is the skill that runs this plan, so it is measured
-  // rather than inherited from the plan-polish assertion above. Its re-entry
-  // beat is the part no earlier assertion reaches — a coordinator that resumes
-  // code-quality on `qa` has to land back inside the agent it already has.
+  // The same IDE claim, re-proved against the work vocabulary, so it is
+  // measured rather than inherited from the plan-polish assertion above. Its
+  // re-entry beat is the part no earlier assertion reaches — an implementor
+  // that rechecks a reviewer has to land back inside the agent it already has.
   it(
-    "re-enters a migrated work delegation over Task when no delegate tool exists",
+    "re-enters a work reviewer over Task when no delegate tool exists",
     async () => {
       await using agent = await agentSdk.createAgent({
         cwd: process.cwd(),
@@ -483,8 +473,8 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
         await toolCallsFrom(
           await agent.send(
             "Call the Task tool exactly once, with subagent_type " +
-              `"${WORK_ROLE}", description "code quality", and prompt ` +
-              `${JSON.stringify(CODE_QUALITY_STUB_PROMPT)}. ` +
+              `"${WORK_ROLE}", description "coding standards review", and ` +
+              `prompt ${JSON.stringify(REVIEW_STUB_PROMPT)}. ` +
               "Pass no model argument on that call. " +
               "Then reply with the single word done.",
           ),
@@ -498,8 +488,8 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
           await agent.send(
             "Call the Task tool exactly once, with subagent_type " +
               `"${WORK_ROLE}", resume "${spawnedAgentId}", description ` +
-              '"code quality (resume)", and prompt ' +
-              `${JSON.stringify(CODE_QUALITY_RESUME_STUB_PROMPT)}. ` +
+              '"coding standards review (recheck)", and prompt ' +
+              `${JSON.stringify(REVIEW_RECHECK_STUB_PROMPT)}. ` +
               "Pass no model argument on that call. " +
               "Then reply with the single word done.",
           ),

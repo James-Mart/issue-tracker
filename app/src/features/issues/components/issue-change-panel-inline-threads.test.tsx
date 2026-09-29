@@ -35,7 +35,7 @@ const currentThread: CommentThreadData = groupCommentThreads([
   comment({
     id: "current-root",
     at: "2026-08-30T14:22:00.000Z",
-    role: "code-quality-validator",
+    role: "story-review",
     body: "Scope drafts per thread so Diff and Overview stay isolated.",
     anchor: {
       path: "app/server/services/diff-fetch.ts",
@@ -50,7 +50,7 @@ const outdatedThread: CommentThreadData = groupCommentThreads([
   comment({
     id: "outdated-root",
     at: "2026-08-29T09:15:00.000Z",
-    role: "code-quality-validator",
+    role: "story-review",
     body: "Run assertCommitReachable before git show.",
     outdated: true,
     anchor: {
@@ -67,7 +67,7 @@ const unlocatedThread: CommentThreadData = groupCommentThreads([
   comment({
     id: "unlocated-root",
     at: "2026-08-28T08:00:00.000Z",
-    role: "code-quality-validator",
+    role: "story-review",
     body: "This line is no longer in the patch.",
     outdated: true,
     anchor: {

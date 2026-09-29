@@ -82,7 +82,7 @@ const standaloneLate = comment({
 const anchoredRoot = comment({
   id: "anchored-root",
   at: "2026-08-30T13:00:00.000Z",
-  role: "code-quality-validator",
+  role: "story-review",
   body: "Scope drafts per thread so Diff and Overview stay isolated.",
   anchor: {
     path: "app/server/services/diff-fetch.ts",

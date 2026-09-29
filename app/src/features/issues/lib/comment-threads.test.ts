@@ -23,13 +23,13 @@ describe("groupCommentThreads", () => {
     const lateRoot = comment({
       id: "late",
       at: "2026-08-30T14:00:00.000Z",
-      role: "code-quality-validator",
+      role: "story-review",
       body: "later root",
     });
     const earlyRoot = comment({
       id: "early",
       at: "2026-08-29T09:00:00.000Z",
-      role: "code-quality-validator",
+      role: "story-review",
       body: "early root",
     });
     const secondReply = comment({
@@ -63,7 +63,7 @@ describe("selectAnchoredThreads", () => {
     const range = comment({
       id: "range",
       at: "2026-08-29T09:00:00.000Z",
-      role: "code-quality-validator",
+      role: "story-review",
       body: "range",
       outdated: true,
       anchor: {
@@ -77,7 +77,7 @@ describe("selectAnchoredThreads", () => {
     const current = comment({
       id: "line",
       at: "2026-08-30T14:00:00.000Z",
-      role: "code-quality-validator",
+      role: "story-review",
       body: "line",
       anchor: {
         path: "app/foo.ts",

@@ -239,12 +239,44 @@ const work: Pipeline = {
       source: "agents/_issue-tracker-ui-look.md",
     },
     {
-      id: "code-quality",
-      name: "Code-quality validator",
-      shortLabel: "Code quality",
+      id: "review-coding-standards",
+      name: "Coding standards review",
+      shortLabel: "Standards",
       kind: "gate",
       pipeline: "work",
-      source: "agents/issue-tracker-code-quality-validator.md",
+      source: "agents/issue-tracker-review-coding-standards.md",
+    },
+    {
+      id: "review-design-system",
+      name: "Design system review",
+      shortLabel: "Design system",
+      kind: "gate",
+      pipeline: "work",
+      source: "agents/issue-tracker-review-design-system.md",
+    },
+    {
+      id: "review-duplication",
+      name: "Duplication review",
+      shortLabel: "Duplication",
+      kind: "gate",
+      pipeline: "work",
+      source: "agents/issue-tracker-review-duplication.md",
+    },
+    {
+      id: "review-structure",
+      name: "Structure review",
+      shortLabel: "Structure",
+      kind: "gate",
+      pipeline: "work",
+      source: "agents/issue-tracker-review-structure.md",
+    },
+    {
+      id: "review-idiom",
+      name: "Idiom review",
+      shortLabel: "Idiom",
+      kind: "gate",
+      pipeline: "work",
+      source: "agents/issue-tracker-review-idiom.md",
     },
     {
       id: "story-review",
@@ -286,13 +318,19 @@ const work: Pipeline = {
   ],
   edges: [
     { from: "implement", to: "record-commit", kind: "spawn" },
-    // The look runs inside a UI Task's Verify; other Tasks go straight to QA.
+    // Each reviewer returns its findings to the implementor, as
+    // `record-commit` does, so none has an edge of its own onward.
+    { from: "implement", to: "review-coding-standards", kind: "spawn" },
+    // Spawned only for a UI-related Task.
+    { from: "implement", to: "review-design-system", kind: "spawn" },
+    { from: "implement", to: "review-duplication", kind: "spawn" },
+    { from: "implement", to: "review-structure", kind: "spawn" },
+    { from: "implement", to: "review-idiom", kind: "spawn" },
+    // The look runs inside a UI Task's Verify; other Tasks go straight to
+    // Story review.
     { from: "implement", to: "ui-look", kind: "flow" },
-    { from: "ui-look", to: "code-quality", kind: "flow" },
-    { from: "implement", to: "code-quality", kind: "flow" },
-    // `qa=changes-requested` re-enters the same implementor to revise.
-    { from: "code-quality", to: "implement", kind: "loop" },
-    { from: "code-quality", to: "story-review", kind: "flow" },
+    { from: "ui-look", to: "story-review", kind: "flow" },
+    { from: "implement", to: "story-review", kind: "flow" },
     // Runs only for a Story with runtime-visible behavior and no diff gaps.
     { from: "story-review", to: "runtime-validator", kind: "spawn" },
     // A reopened review sends remediation Tasks back through the Task cycle.
