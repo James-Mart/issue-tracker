@@ -36,6 +36,8 @@ vi.mock("@pierre/diffs/react", () => ({
   useVirtualizer: () => ({
     getRoot: () => document.body,
     getOffsetInScrollContainer: () => 0,
+    getScrollTop: () => 0,
+    markDOMDirty: () => {},
     scrollTo: () => {},
   }),
   FileDiff: ({ fileDiff }: { fileDiff: FileDiffMetadata }) => (

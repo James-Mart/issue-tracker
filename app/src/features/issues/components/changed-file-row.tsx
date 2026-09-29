@@ -1,3 +1,4 @@
+import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "@/lib/utils/cn";
 
 export function changedFileRowClass(selected: boolean): string {
@@ -14,13 +15,14 @@ export function DiffLineCounts({
   additions,
   deletions,
   className,
+  ...rest
 }: {
   additions: number;
   deletions: number;
   className?: string;
-}) {
+} & ComponentPropsWithoutRef<"span">) {
   return (
-    <span className={cn("tabular-nums", className)}>
+    <span className={cn("tabular-nums", className)} {...rest}>
       <span className="text-success">+{additions}</span>{" "}
       <span className="text-destructive">-{deletions}</span>
     </span>
