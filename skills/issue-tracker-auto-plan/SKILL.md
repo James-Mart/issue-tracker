@@ -242,14 +242,16 @@ specifics and stop; otherwise proceed to Flow.
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
 
-   **Coverage check.** A mockup-round question (conformant or escalated
-   presentation), any "shared understanding reached" / ready-for-outline
-   judgment, and the post-outline gate are the coverage-check triggers.
+   **Coverage check.** The mock-or-skip check, a mockup-round question
+   (conformant or escalated presentation), any "shared understanding
+   reached" / ready-for-outline judgment, and the post-outline gate are the
+   coverage-check triggers.
    Consult the implied-seam inventory (**## Bootstrap** step 10) before
    answering each of them, and again at every later one. Any seam still
    unopened → **push**: withhold that beat's answer, name the still-unopened
-   seams, and re-enter the planner with that as your reply. A push is the
-   **Terse grill answers** exception for context the griller lacks. Never
+   seams, and re-enter the planner with that as your reply. On the
+   mock-or-skip check, the push is your **Keep grilling** answer. A push is
+   the **Terse grill answers** exception for context the griller lacks. Never
    answer the gate no to mean keep grilling. With no seam left unopened,
    answer the beat as you otherwise would.
 
