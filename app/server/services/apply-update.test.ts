@@ -19,6 +19,9 @@ describe("apply — update preserves imperative progress state", () => {
 
     // Stamp imperative/runtime state that lives outside the doc.
     await update("epic-a", { retro: "in-progress" });
+    // `merged` lands before `worktreePath` so the merge flip has no checkout
+    // to remove; lifecycle removal is covered in cli-story-worktree-lifecycle.
+    await update("b2", { merged: true });
     await update("b2", {
       branchName: "feat/b2",
       worktreePath: "/root/issue-tracker-worktrees/proj/b2",
