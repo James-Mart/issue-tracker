@@ -172,6 +172,14 @@ const planning: Pipeline = {
         "skills/issue-tracker-plan-polish/references/aggregate-apply-summary.md",
     },
     {
+      id: "concise",
+      name: "Conciseness",
+      shortLabel: "Concise",
+      kind: "step",
+      pipeline: "planning",
+      source: "agents/issue-tracker-plan-concise.md",
+    },
+    {
       id: "work-handoff",
       name: "Work the stack",
       shortLabel: "Work",
@@ -198,6 +206,8 @@ const planning: Pipeline = {
     { from: "check-dependency-order", to: "polish-apply", kind: "flow" },
     { from: "check-internal-consistency", to: "polish-apply", kind: "flow" },
     { from: "check-footprint", to: "polish-apply", kind: "flow" },
+    // Per-description pass after the draft is composed, before the single apply.
+    { from: "polish-apply", to: "concise", kind: "spawn" },
     // Re-check round: an apply re-enters every check agent that had findings.
     { from: "polish-apply", to: "polish", kind: "loop" },
     { from: "polish-apply", to: "work-handoff", kind: "flow" },

@@ -166,9 +166,9 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
   hands-off stakeholder on opus 5.5; use when the user runs auto-plan or auto
   plan or wants hands-off planning of an Idea id.
 - **`issue-tracker-plan-polish`** — polish an existing Epic, project-level
-  Story, or append-target Story plan with parallel check agents, then
-  auto-apply when safe; use when polishing a plan, cleaning up a tracker
-  tree, or running plan-polish.
+  Story, or append-target Story plan with parallel check agents and a
+  conciseness pass on every description, then auto-apply when safe; use
+  when polishing a plan, cleaning up a tracker tree, or running plan-polish.
 - **`issue-tracker-mockup`** — run one mockup round for one UI surface via
   the design-conformance agent (one conformant direction by default, capture,
   attach); use when the user asks for a mockup round, UI mockups, or a design
