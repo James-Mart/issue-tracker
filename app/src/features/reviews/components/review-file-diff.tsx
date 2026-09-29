@@ -11,6 +11,7 @@ import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
 import type { ReviewFileRow } from "../lib/review-files";
 import type { DiffSearchMatch } from "../lib/review-diff-search";
 import { REVIEW_SEARCH_MATCH_CSS } from "../lib/review-diff-search-mark";
+import { usePinnedHeaderCollapse } from "../hooks/use-pinned-header-collapse";
 import { useReviewSearchMark } from "../hooks/use-review-search-mark";
 import { ChangedSinceReviewedBadge } from "./changed-since-reviewed-badge";
 import { MarkedPathText } from "./review-search-marked-text";
@@ -116,6 +117,7 @@ export function ReviewFileDiff({
   const bodyId = useId();
   const sectionRef = useRef<HTMLElement | null>(null);
   useReviewSearchMark(sectionRef, currentMatch, searchNeedle, collapsed);
+  const holdPinnedFile = usePinnedHeaderCollapse(sectionRef, collapsed);
   const pathOccurrence =
     currentMatch?.kind === "path" && currentMatch.field === "path"
       ? currentMatch.occurrence
@@ -133,13 +135,20 @@ export function ReviewFileDiff({
         else if (fileRef) (fileRef as MutableRefObject<HTMLElement | null>).current = node;
       }}
       data-search-current={currentMatch ? "true" : undefined}
-      className="min-w-0 overflow-hidden rounded-lg border border-border bg-card"
+      // Clip rather than hide overflow: a hidden-overflow section becomes the header's scroll container and stops it pinning.
+      className="min-w-0 overflow-clip rounded-lg border border-border bg-card"
       data-testid="review-file"
       data-file-name={file.path}
       data-collapsed={collapsed ? "true" : "false"}
       aria-label={file.path}
     >
-      <header className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1.5">
+      <header
+        className={cn(
+          "sticky top-0 z-10 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 bg-card px-2 py-1.5",
+          !collapsed && "border-b border-border",
+        )}
+        data-testid="review-file-header"
+      >
         <Button
           variant="ghost"
           size="icon-sm"
@@ -148,7 +157,10 @@ export function ReviewFileDiff({
           aria-controls={bodyId}
           aria-label={collapsed ? `Expand ${file.path}` : `Collapse ${file.path}`}
           data-testid="review-file-toggle"
-          onClick={onToggleCollapsed}
+          onClick={() => {
+            holdPinnedFile();
+            onToggleCollapsed();
+          }}
         >
           <ChevronRight
             className={cn("transition-transform", !collapsed && "rotate-90")}
@@ -187,7 +199,10 @@ export function ReviewFileDiff({
               checked={reviewed}
               disabled={readOnly}
               data-testid="review-file-reviewed"
-              onCheckedChange={(next) => onReviewedChange(next === true)}
+              onCheckedChange={(next) => {
+                if (next === true) holdPinnedFile();
+                onReviewedChange(next === true);
+              }}
             />
             <label
               htmlFor={checkboxId}
@@ -202,7 +217,7 @@ export function ReviewFileDiff({
         </span>
       </header>
       {collapsed ? null : (
-        <div id={bodyId} className="border-t border-border">
+        <div id={bodyId}>
           {file.tooLarge ? (
             <FileTooLargeBody localCommand={localCommand} localHint={localHint} />
           ) : fileDiff ? (
