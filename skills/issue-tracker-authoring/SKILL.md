@@ -299,12 +299,17 @@ from an Epic or Story record nothing. Rules:
 Some Tasks' work produces no source-controlled diff: tracker-state edits,
 measurements later Tasks depend on, human-only operations, end-to-end proofs.
 Such a Task states its outcome and any result later Tasks need, like any other
-Task. Set the flag **after** successful `apply` (imperative only — not in the
-YAML doc):
+Task. Set the flag after the Task lands (imperative only — not in the YAML
+doc):
+
+- New root: after successful `apply`
+- Appended Tasks: after successful `issue story append`, on each created Task
+  id
 
 `issue task set <taskId> noDiff true`
 
-`apply` never writes `noDiff`; it preserves an existing value. Rules:
+`apply` and `issue story append` never write `noDiff`; they preserve an
+existing value. Rules:
 [SPEC.md § Derived terms](../../SPEC.md#derived-terms).
 
 ## Promoted mockup artifacts
@@ -381,7 +386,8 @@ Before done:
 - Idea-sourced migrations record `sourceIdea` imperatively after `apply` or
   `issue story append` (see [Source idea (sourceIdea)](#source-idea-sourceidea))
   — never put the field in the YAML doc or a `Source idea:` description line.
-- Every Task with no diff uses imperative `noDiff` after `apply` (see
+- Every Task with no diff uses imperative `noDiff` after `apply` or
+  `issue story append` (see
   [Tasks with no diff (noDiff)](#tasks-with-no-diff-nodiff)) — never put the
   flag in the YAML doc.
 - Chosen mockup directions use imperative `mockup-promote` in copy mode after
