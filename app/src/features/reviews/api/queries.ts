@@ -1,8 +1,14 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/errors";
-import type { ReviewCommits, ReviewDiff, ReviewView } from "@server/schemas";
+import type {
+  ReviewCandidates,
+  ReviewCommits,
+  ReviewDiff,
+  ReviewView,
+} from "@server/schemas";
 import {
   fetchReview,
+  fetchReviewCandidates,
   fetchReviewCommits,
   fetchReviewDiff,
   fetchReviews,
@@ -24,6 +30,19 @@ export function useReviewsQuery(
   return useQuery({
     queryKey: reviewKeys.list(projectId, storyId),
     queryFn: () => fetchReviews(projectId, storyId),
+    enabled: (options.enabled ?? true) && Boolean(projectId),
+    retry: retryRead,
+  });
+}
+
+export function useReviewCandidatesQuery(
+  projectId: string,
+  query: string,
+  options: { enabled?: boolean } = {},
+): UseQueryResult<ReviewCandidates, Error> {
+  return useQuery({
+    queryKey: reviewKeys.candidates(projectId, query),
+    queryFn: () => fetchReviewCandidates(projectId, query),
     enabled: (options.enabled ?? true) && Boolean(projectId),
     retry: retryRead,
   });

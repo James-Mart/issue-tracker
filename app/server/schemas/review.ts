@@ -68,6 +68,19 @@ export type ReviewRecordView = Review & ReviewEffective;
 
 export type ReviewView = ReviewRecordView & { progress: ReviewProgress };
 
+/** A Story with at least one Task commit, offered when starting a review. */
+export type ReviewCandidate = {
+  storyId: string;
+  title: string;
+  merged: boolean;
+  reviewId?: string;
+  lastCommitAt: string;
+};
+
+export type ReviewCandidates = {
+  stories: ReviewCandidate[];
+};
+
 export const openReviewBodySchema = z
   .object({
     target: reviewTargetSchema,

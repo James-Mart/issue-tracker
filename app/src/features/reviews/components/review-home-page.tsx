@@ -14,6 +14,8 @@ import { useIssuesQuery } from "@/features/issues/api/queries";
 import { useOpenReview, useReopenReview } from "../api/mutations";
 import { useReviewsQuery } from "../api/queries";
 import { storyReviewPath } from "../lib/links";
+import { NewReviewPicker } from "./new-review-picker";
+import { ReviewIdentity } from "./review-identity";
 import {
   archivedReviewMeta,
   openReviewMeta,
@@ -27,7 +29,7 @@ import {
 
 function ReviewHomeHeader({ title }: { title: string }) {
   return (
-    <header>
+    <header className="min-w-0">
       <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
         Code review
       </p>
@@ -49,31 +51,6 @@ function SectionHeading({ id, label, count }: { id: string; label: string; count
         {count}
       </span>
     </h2>
-  );
-}
-
-function ReviewIdentity({
-  title,
-  id,
-  missing,
-}: {
-  title: string;
-  id: string;
-  missing?: boolean;
-}) {
-  return (
-    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-      <span
-        className={
-          missing
-            ? "truncate font-medium text-[hsl(var(--blocked))]"
-            : "truncate font-medium text-foreground"
-        }
-      >
-        {title}
-      </span>
-      <span className="font-mono text-xs text-muted-foreground">{id}</span>
-    </div>
   );
 }
 
@@ -369,7 +346,10 @@ export function ReviewHomePage() {
         </PageShell>
       ) : (
         <PageShell data-testid="review-home-page">
-          <ReviewHomeHeader title={project.title} />
+          <div className="flex items-start justify-between gap-3">
+            <ReviewHomeHeader title={project.title} />
+            <NewReviewPicker projectId={projectId} projectTitle={project.title} />
+          </div>
           <ProjectLensSwitcher projectId={projectId} active="review" />
           <ReviewHomeLists
             projectId={projectId}

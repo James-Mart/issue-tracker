@@ -1,10 +1,14 @@
 import { request } from "@/lib/api/client";
 import type {
+  ReviewCandidates,
   ReviewCommits,
   ReviewDiff,
   ReviewView,
   SetReviewMarkBody,
 } from "@server/schemas";
+
+/** Empty-search size for the new-review picker. */
+const NEW_REVIEW_PICKER_LIMIT = 5;
 
 export function reviewsUrl(projectId: string, storyId?: string): string {
   const path = `/api/projects/${encodeURIComponent(projectId)}/reviews`;
@@ -14,6 +18,20 @@ export function reviewsUrl(projectId: string, storyId?: string): string {
 
 export function reviewUrl(projectId: string, reviewId: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}/reviews/${encodeURIComponent(reviewId)}`;
+}
+
+export function reviewCandidatesUrl(projectId: string, query: string): string {
+  const params = new URLSearchParams();
+  if (query === "") params.set("limit", String(NEW_REVIEW_PICKER_LIMIT));
+  else params.set("query", query);
+  return `/api/projects/${encodeURIComponent(projectId)}/review-candidates?${params}`;
+}
+
+export function fetchReviewCandidates(
+  projectId: string,
+  query: string,
+): Promise<ReviewCandidates> {
+  return request<ReviewCandidates>(reviewCandidatesUrl(projectId, query));
 }
 
 export function fetchReviews(

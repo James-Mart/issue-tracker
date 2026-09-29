@@ -8,6 +8,7 @@ import {
   listSecretKeys,
   setSecret,
 } from "../services/secret-store.js";
+import { reviewCandidatesRouter } from "./review-candidates.js";
 import { reviewsRouter } from "./reviews.js";
 
 const asyncRoute =
@@ -80,6 +81,7 @@ projectsRouter.delete(
   }),
 );
 
+projectsRouter.use("/:projectId/review-candidates", reviewCandidatesRouter);
 projectsRouter.use("/:projectId/reviews", reviewsRouter);
 
 projectsRouter.get(

@@ -3,7 +3,7 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { IssueRecord, ReviewView } from "@server/schemas";
+import type { IssueRecord, ReviewCandidate, ReviewView } from "@server/schemas";
 import { projectReviewPath, storyReviewPath } from "../lib/links";
 import { ReviewHomePage } from "./review-home-page";
 
@@ -19,6 +19,9 @@ const state = vi.hoisted(() => ({
   reviewsError: null as Error | null,
   mutateAsync: vi.fn(),
   reopen: vi.fn(),
+  candidates: [] as ReviewCandidate[],
+  candidatesByQuery: {} as Record<string, ReviewCandidate[]>,
+  candidateQuery: "",
 }));
 
 vi.mock("@/features/issues/api/queries", () => ({
@@ -39,6 +42,16 @@ vi.mock("../api/queries", () => ({
     error: state.reviewsError,
     refetch: vi.fn(),
   }),
+  useReviewCandidatesQuery: (_projectId: string, query: string) => {
+    state.candidateQuery = query;
+    return {
+      data: { stories: state.candidatesByQuery[query] ?? state.candidates },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+  },
 }));
 
 vi.mock("../api/mutations", () => ({
@@ -161,6 +174,25 @@ function click(element: Element) {
   });
 }
 
+function setInput(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  if (!setter) throw new Error("no input value setter");
+  act(() => {
+    setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function candidate(id: string, title: string, overrides: Partial<ReviewCandidate> = {}): ReviewCandidate {
+  return {
+    storyId: id,
+    title,
+    merged: false,
+    lastCommitAt: t0,
+    ...overrides,
+  };
+}
+
 beforeAll(() => {
   (
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -179,6 +211,9 @@ afterEach(() => {
   state.reviewsError = null;
   state.mutateAsync.mockReset();
   state.reopen.mockReset();
+  state.candidates = [];
+  state.candidatesByQuery = {};
+  state.candidateQuery = "";
   lastLocation = "";
 });
 
@@ -306,5 +341,74 @@ describe("ReviewHomePage", () => {
     expect(reopen?.textContent).toBe("Reopen");
     await click(reopen!);
     expect(state.reopen).toHaveBeenCalledWith("rev-landed");
+  });
+
+  it("opens the picker on the five newest and searches titles past that limit", async () => {
+    state.issues = [project()];
+    state.candidates = [
+      candidate("s1", "Newest surface", { reviewId: "rev-1" }),
+      candidate("s2", "Two commits"),
+      candidate("s3", "Middle delegate"),
+      candidate("s4", "Cost metrics", { merged: true, reviewId: "rev-4" }),
+      candidate("s5", "Fifth export"),
+    ];
+    state.candidatesByQuery = {
+      LATTICE: [candidate("s6", "Alpha lattice")],
+    };
+    mount();
+    const open = document.body.querySelector('[data-testid="new-review-open"]');
+    expect(open?.textContent).toBe("New review");
+    await click(open!);
+
+    const picker = document.body.querySelector('[data-testid="new-review-picker"]');
+    expect(picker).not.toBeNull();
+    const rows = () => [
+      ...document.body.querySelectorAll('[data-testid="new-review-candidate"]'),
+    ];
+    expect(rows().map((row) => row.getAttribute("data-story-id"))).toEqual([
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+    ]);
+    expect(rows()[0]?.textContent).toContain("has review");
+    expect(rows()[0]?.textContent).not.toContain("merged");
+    expect(rows()[1]?.textContent).not.toContain("has review");
+    expect(rows()[1]?.textContent).not.toContain("no review");
+    expect(rows()[3]?.textContent).toContain("merged");
+    expect(rows()[3]?.textContent).toContain("has review");
+    expect(picker?.textContent).not.toContain("Alpha lattice");
+
+    const search = document.body.querySelector(
+      '[data-testid="new-review-search"]',
+    ) as HTMLInputElement;
+    setInput(search, "LATTICE");
+    expect(state.candidateQuery).toBe("LATTICE");
+    expect(rows().map((row) => row.getAttribute("data-story-id"))).toEqual(["s6"]);
+    expect(rows()[0]?.textContent).toContain("Alpha lattice");
+    expect(rows()[0]?.textContent).toContain("s6");
+  });
+
+  it("starts a review from a picker row", async () => {
+    state.issues = [project()];
+    state.candidates = [candidate("picked", "Picked story")];
+    state.mutateAsync.mockResolvedValue(undefined);
+    mount();
+    await click(document.body.querySelector('[data-testid="new-review-open"]')!);
+    await click(document.body.querySelector('[data-testid="new-review-candidate"]')!);
+    expect(state.mutateAsync).toHaveBeenCalledWith("picked");
+    expect(lastLocation).toBe(storyReviewPath(PROJECT, "picked"));
+  });
+
+  it("keeps the picker open when open-or-create fails", async () => {
+    state.issues = [project()];
+    state.candidates = [candidate("picked", "Picked story")];
+    state.mutateAsync.mockRejectedValue(new Error("refused"));
+    mount();
+    await click(document.body.querySelector('[data-testid="new-review-open"]')!);
+    await click(document.body.querySelector('[data-testid="new-review-candidate"]')!);
+    expect(lastLocation).toBe(`/projects/${PROJECT}/review`);
+    expect(document.body.querySelector('[data-testid="new-review-picker"]')).not.toBeNull();
   });
 });
