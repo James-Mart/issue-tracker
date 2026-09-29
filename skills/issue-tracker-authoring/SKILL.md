@@ -328,6 +328,9 @@ direction onto the Story that implements its surface **after** `apply`
 Copy mode moves bytes already attached — the scratch and harness are gone by
 migrate time. `apply` never writes attachment bytes.
 
+Write the tweak wording held with that direction (**Held tweak wording** in
+issue-tracker-plan) into that Story's description.
+
 In that Story's prose, name the copied files and state what they are:
 
 - each both-viewport capture
@@ -337,12 +340,14 @@ In that Story's prose, name the copied files and state what they are:
 Write the paragraph in your own words. It must claim: the screenshots record
 the direction chosen for the surface (content and hierarchy, states to
 support, where affordances live, how interactions behave) and an implementor
-honors those decisions while owning the execution; where a mockup diverges
-from the `designSystem` supporting doc or from the app's real components,
-those win and better spacing, copy, or polish is expected rather than
-deviation; no gate compares an implementation against the captures; the
-archive is reference material for composition, layout, class structure, and
-state enumeration (lift deliberately); prop shapes were invented for rendering
+honors those decisions while owning the execution; where the Story's prose
+and the attached mockup disagree, the prose wins on the point it names and
+the mockup stays the direction for everything the prose does not change;
+where a mockup diverges from the `designSystem` supporting doc or from the
+app's real components, those still win and better spacing, copy, or polish
+is expected rather than deviation; no gate compares an implementation
+against the captures; the archive is reference material for composition,
+layout, class structure, and state enumeration (lift deliberately); prop shapes were invented for rendering
 and wiring to real state is the work; the archive's source may rot as the
 project moves; there is no restore path and the archive must not be described
 as restorable.

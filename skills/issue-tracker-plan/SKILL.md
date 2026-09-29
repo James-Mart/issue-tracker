@@ -154,8 +154,19 @@ doc.
 
 - **Conformant return** — post it, then ask **one** question about
   vision-level fit: whether this direction serves the product the plan is
-  for. When the stakeholder is satisfied with it, take that direction id to
-  the round's acceptance beat.
+  for. Put your own small tweaks for the direction in that same message.
+  The answer takes one of two branches:
+  - **Satisfied, or asks only for small changes** — small as the
+    **Mock-or-skip check** defines it. The answer accepts the direction with
+    your tweaks and any it adds. Take that direction id to the round's
+    acceptance beat, and in the message that posts the acceptance, say the
+    direction is accepted with those tweaks. Ask no further yes/no.
+  - **Asks for a change that is not small, or for another direction** — that
+    request and your own tweaks re-enter the round already open as feedback,
+    the same way a redirection does. Neither the direction nor those tweaks
+    are accepted. It never starts a second round for that screen.
+- **Held tweak wording** — hold the wording of every accepted tweak, yours
+  and the stakeholder's, with its direction id through to migrate.
 - **Escalated return** — post the captures together with the violations the
   round named, labelled as failing conformance. Then ask **one** question
   whose three answers each carry their consequence in the answer list:
@@ -168,10 +179,6 @@ doc.
     `npm run mockup-stack -- stop <conversationId> --ended`, then the round
     ends for that screen with no direction, the plan proceeds without one,
     and migrate promotes nothing for that screen.
-- **Requested changes or alternatives** — when the answer to a conformant
-  return asks for changes or for another direction, that request re-enters
-  the round already open as feedback, the same way a redirection does. It
-  never starts a second round for that screen.
 - **A new product question** — when a return raises a product or dependency
   decision the grill has not settled, ask it and have it answered before the
   next screen's round starts.
