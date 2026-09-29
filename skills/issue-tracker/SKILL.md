@@ -151,10 +151,11 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
 
 ## Agent skills (pick by task)
 
-- **`issue-tracker-authoring`** — author a standalone issue-tracker plan tree as
-  one nested YAML doc and `apply` it (or `issue story append` to an existing
-  Story); use when planning git PR stacks, Epic/Story/Task grain, multi-root
-  splits, or turning a plan into tracked issues.
+- **`issue-tracker-authoring`** — author an issue-tracker plan tree compressed
+  to shape, seams, dependencies, and contracts as one nested YAML doc and
+  `apply` it (or `issue story append` to an existing Story); use when planning
+  git PR stacks, Epic/Story/Task grain, multi-root splits, or turning a plan
+  into tracked issues.
 - **`issue-tracker-work`** — coordinate implementation of an Epic or
   project-level Story by spawning plugin subagents — do not implement yourself;
   use when implementing or working a tracker Epic/Story.

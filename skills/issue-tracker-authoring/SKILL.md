@@ -2,17 +2,16 @@
 name: issue-tracker-authoring
 disable-model-invocation: true
 description: >-
-  Author a standalone issue-tracker plan tree as one nested YAML doc and
-  `apply` it (or `issue story append` when appending Tasks to an existing
-  Story). Use when planning a stack of git PRs, deciding Epic/Story/Task grain,
-  splitting captures into multiple roots, or turning a plan into tracked issues.
+  Author an issue-tracker plan tree compressed to shape, seams, dependencies,
+  and contracts as one nested YAML doc and `apply` it (or `issue story append`
+  Tasks onto an existing Story).
 ---
 
 # Issue Tracker — Author a Plan Tree
 
 Authoring the tracker is producing a **plan artifact**, so it is permitted in
-**Plan mode** (the tree is the plan). The tree is the **entire design** — it
-must replace any prior plan doc and stand alone. Companion material belongs
+**Plan mode** (the tree is the plan). The tree is the **design of record** — it
+replaces any prior plan doc and stands alone. Companion material belongs
 **with the issue that uses it** (prose in `description.md`, or opaque files as
 attachments — [SPEC.md § Attachments](../../SPEC.md#attachments)). Do not
 hand-edit `issue.json`. Glossary and apply-doc shape: [SPEC.md](../../SPEC.md).
@@ -25,6 +24,61 @@ Localize prose to the tier where it belongs — don't dump the whole spec in the
 Epic and leave children title-only, and don't enumerate in a parent the specific
 work its children each cover
 ([SPEC.md](../../SPEC.md#parent-prose-must-not-restate-descendant-lists)).
+
+## Compression target
+
+A plan is a **lossy compression** of the design conversation behind it. It
+keeps the **shape**, the **critical seams**, the **main dependencies**, and the
+**critical contracts**; nuance within those bounds is settled during
+implementation. The target fails in two directions:
+
+- **Too much** — detail neither the shape nor a critical contract needs:
+  construction steps, file layout, procedure, how to test.
+- **Too little** — a gap that would make the implementor invent architecture:
+  a missing seam, dependency, or contract.
+
+Each Story and Task states the outcomes it lands. The work loop checks the
+work against those outcomes; the implementor chooses how to verify them.
+
+### Examples
+
+**Too much** — a Task in a payments service:
+
+> In `src/billing/refunds.ts`, add a `computeRemainder` helper, call it from
+> `RefundController.create`, add cases to `refunds.test.ts`, and run the
+> suite. Verify: refunding a partial capture returns the remainder.
+
+Compressed:
+
+> A refund on a partially captured charge returns at most the captured
+> amount. Seam: `refund(chargeId, amountCents?) -> { refundId, amountCents,
+> status }`; omitting `amountCents` refunds everything captured.
+
+**Too little** — a Task in a notes app:
+
+> Notes can be edited offline.
+
+Compressed:
+
+> Notes edit offline and sync on reconnect. The server wins conflicts: the
+> client queues `{ noteId, body, baseVersion }`, and a stale `baseVersion` gets
+> `409` with the current note, which replaces the local edit.
+
+## Plan prose
+
+- **Background.** Each work root (Epic or project-level Story) opens with a
+  concise `# Background` giving the context that justifies the work.
+- **Vocabulary.** Prose uses the names the Project's own readers already use
+  for its areas and operations. Tracker vocabulary (work loop, polish, story
+  review) appears only when the Project being planned is the tracker.
+- **Names and paths.** Prose names no file paths. A name internal to a module
+  appears only when the shape or a critical contract needs it.
+- **Seams.** A Task that introduces or wires an interface gives an example
+  function shape and field names. The implementor may deviate when
+  implementation forces it.
+- **One answer on important choices.** Every choice about shape, seams,
+  dependencies, or contracts has one definitive answer. Detail deliberately
+  left to implementation is not an open choice.
 
 ## Author declaratively: one YAML doc, then `apply`
 
@@ -91,7 +145,7 @@ on that Story only (no new Epic or root Story; see
   **single Story plus its Tasks**. Author with Project `children:`
   `kind: story`, or story-form apply (`project:` + `story:`, no `epic:`).
 - **Epic** — you need **sibling root Stories**, **stacking**, or Epic
-  **`blockedBy`**. Overview + cross-cutting invariants only (not the full
+  **`blockedBy`**. Background + cross-cutting invariants only (not the full
   spec).
 
 Stacking under a Project is integrity-legal (same-container rule), but
@@ -126,24 +180,22 @@ For each resulting root, still choose Epic vs project-level Story by
 - **Project** — the top-level container that groups related Epics, Ideas, and
   project-level Stories. Organizational only (no status); its `description.md`
   is a short overview of the whole product area.
-- **Epic** — overview + cross-cutting design principles/invariants only
+- **Epic** — `# Background` + cross-cutting design principles/invariants only
   (what governs every phase). Not the full spec. When to choose an Epic vs a
   project-level Story: see
   [Epic grain](#epic-grain-project-level-story-vs-epic).
-- **Story** = one shippable unit: scope, approach, and any data-model or
-  interface detail specific to it. May be `partOf` an Epic or the Project
+- **Story** = one shippable unit: scope, approach, and the data-model or
+  interface contracts specific to it. May be `partOf` an Epic or the Project
   (project-level Story). Normally several tasks; one task's worth of work is a
   Task, not a Story. Phrase how the Story lands per
   [Merge-policy delivery prose](#merge-policy-delivery-prose).
-- **Task** = one git commit: implementor-resolution detail (what to do + how to
-  verify), no deeper than a good plan section. Must be a standalone vertical
-  slice that leaves the tip buildable/testable ([SPEC.md](../../SPEC.md#kinds)).
-  Any Task with implementor work ends with a markdown `### Verify` or
-  `## Verify` heading — not inline `Verify:` / `**Verify:**` (see
-  [Task Verify heading](#task-verify-heading)). Tree nesting supplies context,
-  so linking task → epic is unnecessary. **Tasks run in the order they appear
-  in the doc** (top-to-bottom); authors never specify `order` — array position
-  is implementation order.
+- **Task** = one git commit: the outcome it lands, plus the seams and contracts
+  it introduces ([Compression target](#compression-target)). Must be a
+  standalone vertical slice that leaves the tip buildable/testable
+  ([SPEC.md](../../SPEC.md#kinds)). Tree nesting supplies context, so linking
+  task → epic is unnecessary. **Tasks run in the order they appear in the doc**
+  (top-to-bottom); authors never specify `order` — array position is
+  implementation order.
 
 **Each Story must be independently mergeable into its derived `mergeBase`.**
 Stories merge into their merge base (stacked children after their fork-point
@@ -178,69 +230,6 @@ Tasks, reshape horizontal layering into vertical slices (split or merge until
 each Task stands alone as above). Split only a genuinely oversized phase. One
 todo → one Story (a stack of one-task Stories with an empty Task tier) means
 you split at the wrong tier.
-
-## Task interface seams
-
-Task descriptions that introduce or wire an interface must spell out **API
-shape and field names** (function names/signatures, HTTP paths/methods,
-multipart field name) so implementors do not invent them. Do not require file
-or middleware homes — those are implementor choices, not authoring seams.
-
-- **Bad:** "Add HTTP download for attachments" (implementor invents
-  `getAttachment`, multer, and multipart field `"file"`).
-- **Good:** "Add `GET /attachments/:id` returning the raw bytes; upload is
-  `POST /attachments` multipart field `attachment`."
-
-## Task Change paths
-
-When a Task Change **does** name a file path, that path MUST be relative to
-the Project `workspace` root.
-
-- **Bad:** `In /root/.cursor/plugins/local/issue-tracker/app/cli.ts` (absolute
-  path)
-- **Good:** `In app/cli.ts`
-
-## Task Verify heading
-
-Any Task with implementor work (a `### Change` section or equivalent
-implementable scope) must end with a markdown `### Verify` or `## Verify`
-heading that states how to check the work. Do not use inline `Verify:` or
-`**Verify:**` labels — plan-authoring-conformance flags those as missing
-Verify.
-
-- **Bad:** `Verify: run tests` or `**Verify:** read the file and confirm X`.
-- **Good:**
-
-```markdown
-### Verify
-
-Run the unit tests. Confirm X.
-```
-
-## Human steps
-
-A runtime check that needs a human (a sandbox key, a third-party dashboard,
-a public webhook URL) goes under a `#### Human steps` heading inside the
-Verify content of the Story or Task it checks. Write one bullet per step,
-each starting with exactly one of the request prefixes
-([SPEC.md § Kind-scoped ops](../../SPEC.md#kind-scoped-ops), `request-human`):
-
-- ``Secret `KEY`:`` — the human sets the Project secret `KEY` (matching
-  `^[A-Z_][A-Z0-9_]*$`); the rest of the line says what value.
-- `Input:` — any other input the human gives in their note.
-- `Observation:` — something the human does or looks at and reports in
-  their note.
-
-```markdown
-### Verify
-
-Run the unit tests. On the verification stack, send a test payment.
-
-#### Human steps
-
-- Secret `PAYMENTS_API_KEY`: a sandbox API key from the payments dashboard
-- Observation: the test payment appears in the payments dashboard
-```
 
 ## Task footprint
 
@@ -305,11 +294,13 @@ description prose or YAML. Only Idea-sourced migrations set this — replans
 from an Epic or Story record nothing. Rules:
 [SPEC.md § Relationships](../../SPEC.md#relationships).
 
-## Verification-only Tasks (noDiff)
+## Tasks with no diff (noDiff)
 
-When a Task's Change intentionally makes no source-controlled edits, describe
-the check in the Task's Change and `### Verify`, then set the flag **after**
-successful `apply` (imperative only — not in the YAML doc):
+Some Tasks' work produces no source-controlled diff: tracker-state edits,
+measurements later Tasks depend on, human-only operations, end-to-end proofs.
+Such a Task states its outcome and any result later Tasks need, like any other
+Task. Set the flag **after** successful `apply` (imperative only — not in the
+YAML doc):
 
 `issue task set <taskId> noDiff true`
 
@@ -358,9 +349,11 @@ Full migrate procedure:
 
 Before done:
 
-- Every part of the source design is represented.
-- Companion material follows [SPEC.md § Attachments](../../SPEC.md#attachments)
-  (no external workspace paths).
+- **Compression target** — the tree fails in neither direction (see
+  [Compression target](#compression-target)).
+- **Plan prose** — every rule holds across the tree (see
+  [Plan prose](#plan-prose)).
+- Companion material follows [SPEC.md § Attachments](../../SPEC.md#attachments).
 - **Epic grain** — single-Story plans use a project-level Story; Epics are for
   sibling roots, stacking, or `blockedBy` (see
   [Epic grain](#epic-grain-project-level-story-vs-epic)).
@@ -373,16 +366,6 @@ Before done:
   ([SPEC.md](../../SPEC.md#parent-prose-must-not-restate-descendant-lists)):
   Epic holds no phase- or task-level detail that belongs in children; no
   Project/Epic/Story restates its children's per-unit list.
-- Every Task that introduces or wires an interface spells out API shape and
-  field names (see [Task interface seams](#task-interface-seams)).
-- Every Task Change that names file paths uses workspace-relative paths (see
-  [Task Change paths](#task-change-paths)).
-- Every Task with implementor work has a `### Verify` / `## Verify` heading
-  (not inline `Verify:`) stating how to check the work (see
-  [Task Verify heading](#task-verify-heading)).
-- Every runtime check that needs a human is a bullet under a
-  `#### Human steps` heading in that Verify content, starting with a request
-  prefix (see [Human steps](#human-steps)).
 - Every piece of verifiable scaffolding names the Task that removes it (see
   [Task footprint](#task-footprint)).
 - Every Task that mutates state outside the repository justifies in its prose
@@ -398,9 +381,9 @@ Before done:
 - Idea-sourced migrations record `sourceIdea` imperatively after `apply` or
   `issue story append` (see [Source idea (sourceIdea)](#source-idea-sourceidea))
   — never put the field in the YAML doc or a `Source idea:` description line.
-- Verification-only Tasks use imperative `noDiff` after `apply` (see
-  [Verification-only Tasks (noDiff)](#verification-only-tasks-nodiff)) — never
-  put the flag in the YAML doc.
+- Every Task with no diff uses imperative `noDiff` after `apply` (see
+  [Tasks with no diff (noDiff)](#tasks-with-no-diff-nodiff)) — never put the
+  flag in the YAML doc.
 - Chosen mockup directions use imperative `mockup-promote` in copy mode after
   `apply`, and the receiving Story's prose names the promoted files
   (`mockup-<directionId>-<stateSlug>-<viewport>.png`,

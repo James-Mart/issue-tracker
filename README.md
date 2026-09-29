@@ -31,10 +31,11 @@ selects one Project and scopes the tree and Ready view to it.
 - `issues/` — one directory per issue; the on-disk source of truth.
 - `skills/issue-tracker/SKILL.md` — launch the issue-tracker web UI for the
   file-backed Project > Epic > Story > Task work tracker.
-- `skills/issue-tracker-authoring/SKILL.md` — author a standalone issue-tracker
-  plan tree as one nested YAML doc and `apply` it, or append Tasks to an
-  existing Story (git PR stacks, Epic/Story/Task grain, multi-root splits,
-  turning a plan into tracked issues).
+- `skills/issue-tracker-authoring/SKILL.md` — author an issue-tracker plan tree
+  compressed to shape, seams, dependencies, and contracts as one nested YAML
+  doc and `apply` it, or append Tasks to an existing Story (git PR stacks,
+  Epic/Story/Task grain, multi-root splits, turning a plan into tracked
+  issues).
 - `SPEC.md` — the canonical glossary + design rationale, referenced by both
   skills.
 

@@ -22,7 +22,7 @@ After a successful append:
 
 Verification-only Tasks: after append, `issue task set <taskId> noDiff true`
 per
-[Verification-only Tasks (noDiff)](../../issue-tracker-authoring/SKILL.md#verification-only-tasks-nodiff)
+[Tasks with no diff (noDiff)](../../issue-tracker-authoring/SKILL.md#tasks-with-no-diff-nodiff)
 — imperative only, not in the YAML doc.
 
 When the grill included mockup rounds with chosen directions, follow
@@ -53,7 +53,7 @@ resulting root id from that apply. Imperative only — not in the YAML doc.
   alike. Imperative only — not in the YAML doc.
 - Verification-only Tasks (intentionally no source-controlled edits): after
   `apply`, `issue task set <taskId> noDiff true` per
-  [Verification-only Tasks (noDiff)](../../issue-tracker-authoring/SKILL.md#verification-only-tasks-nodiff)
+  [Tasks with no diff (noDiff)](../../issue-tracker-authoring/SKILL.md#tasks-with-no-diff-nodiff)
   — imperative only, not in the YAML doc.
 
 ### Promoted mockup artifacts
