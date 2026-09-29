@@ -14,19 +14,13 @@ import {
   ShellLoadingState,
   ShellState,
 } from "@/app/shell-state";
-import { cn } from "@/lib/utils/cn";
 import { useUploadAttachment } from "../api/mutations";
 import { useIssueDetailQuery, useIssuesQuery } from "../api/queries";
 import {
   type FlowFilters,
   flowFiltersActive,
 } from "../lib/flow";
-import {
-  OVERVIEW_LENS_OPTIONS,
-  parseOverviewLens,
-  writeOverviewLensParam,
-  type OverviewLens,
-} from "../lib/overview-lens";
+import { parseOverviewLens } from "../lib/overview-lens";
 import { projectBoardRoots } from "../lib/project-board-roots";
 import {
   structureDoneNodes,
@@ -37,6 +31,7 @@ import {
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { IssueTree } from "./issue-tree";
 import { OverviewFlowFilters } from "./overview-flow-filters";
+import { ProjectLensSwitcher } from "./project-lens-switcher";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 
 function OverviewHeader({ title }: { title: string }) {
@@ -52,59 +47,13 @@ function OverviewHeader({ title }: { title: string }) {
   );
 }
 
-function LensSwitcher({
-  value,
-  onChange,
-}: {
-  value: OverviewLens;
-  onChange: (lens: OverviewLens) => void;
-}) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Overview lens"
-      className="flex flex-wrap items-center gap-0.5 rounded-md border border-border p-0.5"
-    >
-      {OVERVIEW_LENS_OPTIONS.map(({ id, label }) => {
-        const selected = value === id;
-        return (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            id={`overview-lens-tab-${id}`}
-            aria-controls={`overview-lens-panel-${id}`}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onChange(id)}
-            className={cn(
-              "rounded-[calc(var(--radius)-2px)] px-3 py-1.5 text-xs font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              selected
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /** Project-scoped Overview lens: the Project issue's own detail content. */
 function OverviewProjectLens({ projectId }: { projectId: string }) {
   const { data: issue, isLoading, error } = useIssueDetailQuery(projectId);
   const upload = useUploadAttachment(projectId);
 
   return (
-    <div
-      role="tabpanel"
-      id="overview-lens-panel-overview"
-      aria-labelledby="overview-lens-tab-overview"
-      className="flex flex-col gap-6"
-    >
+    <div className="flex flex-col gap-6">
       {isLoading && !issue ? (
         <ShellLoadingState label="Loading project…" />
       ) : null}
@@ -189,12 +138,7 @@ function OverviewStructureLens({
   };
 
   return (
-    <div
-      role="tabpanel"
-      id="overview-lens-panel-structure"
-      aria-labelledby="overview-lens-tab-structure"
-      className="flex flex-col gap-6"
-    >
+    <div className="flex flex-col gap-6">
       {filtersOn && !hasStructureContent ? (
         <ShellState
           eyebrow="Filtered"
@@ -224,7 +168,7 @@ function OverviewStructureLens({
 /** Per-project overview shell: shared toolbar + Structure / Overview lenses (`?lens=`). */
 export function OverviewPage() {
   const { projectId = "" } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const lens = parseOverviewLens(searchParams.get("lens"));
   const { data, isLoading, error, refetch, isFetching } = useIssuesQuery();
 
@@ -238,12 +182,6 @@ export function OverviewPage() {
     [issues, projectId],
   );
   const catalog = project?.kind === "project" ? (project.labels ?? []) : [];
-
-  const setLens = (next: OverviewLens) => {
-    setSearchParams((prev) => writeOverviewLensParam(prev, next), {
-      replace: true,
-    });
-  };
 
   return (
     <IssuesQueryShell
@@ -277,7 +215,7 @@ export function OverviewPage() {
       ) : (
         <PageShell>
           <OverviewHeader title={project.title} />
-          <LensSwitcher value={lens} onChange={setLens} />
+          <ProjectLensSwitcher projectId={projectId} active={lens} />
           {lens === "structure" ? (
             <OverviewFlowFilters projectId={projectId} catalog={catalog} />
           ) : null}

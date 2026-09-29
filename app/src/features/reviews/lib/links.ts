@@ -1,5 +1,9 @@
 import type { ReviewWorkbenchTab } from "./workbench-tabs";
 
+export function projectReviewPath(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/review`;
+}
+
 export function storyReviewPath(
   projectId: string,
   storyId: string,

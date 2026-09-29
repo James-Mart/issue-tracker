@@ -50,7 +50,7 @@ export function issueBelongsToProject(
 // Issues belonging to a project: the project node (when present) plus every
 // issue whose `partOf` chain reaches it (epics, their branches, commits, etc.).
 export function filterToProject(
-  issues: IssueRecord[],
+  issues: readonly IssueRecord[],
   projectId: string | null,
 ): IssueRecord[] {
   if (!projectId) return [];

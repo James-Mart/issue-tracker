@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  DEFAULT_OVERVIEW_LENS,
-  parseOverviewLens,
-  writeOverviewLensParam,
-} from "./overview-lens";
+import { DEFAULT_OVERVIEW_LENS, parseOverviewLens } from "./overview-lens";
 
 describe("parseOverviewLens", () => {
   it("defaults absent, unknown, and legacy flow values to structure", () => {
@@ -20,16 +16,3 @@ describe("parseOverviewLens", () => {
   });
 });
 
-describe("writeOverviewLensParam", () => {
-  it("omits the param for the default structure lens", () => {
-    const params = new URLSearchParams("lens=overview&x=1");
-    expect(writeOverviewLensParam(params, "structure").toString()).toBe("x=1");
-  });
-
-  it("sets lens for non-default selections", () => {
-    const params = new URLSearchParams("x=1");
-    expect(writeOverviewLensParam(params, "overview").toString()).toBe(
-      "x=1&lens=overview",
-    );
-  });
-});
