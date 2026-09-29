@@ -716,10 +716,12 @@ the YAML doc.
 | `codingStandards` | implementor, coding-standards reviewer; plan-polish internal-consistency when tree prose makes claims the doc governs |
 | `designSystem` | implementor + design-system reviewer when the Task appears UI-related (judgment from prose + paths; no Task flag); runtime validator when the Story changes UI (same judgment) |
 | `gateRubric` | auto-plan stakeholder |
-| `verification` | implementor (self-check), runtime validator bootstrap, issue-tracker-plan bootstrap |
+| `verification` | implementor (self-check), runtime validator bootstrap |
 
 `issue-tracker-plan` is absent from `vision` because the vision is read from
-the seat that answers, not the seat that asks ([Roles](#roles)).
+the seat that answers, not the seat that asks ([Roles](#roles)); it is absent
+from `verification` because planning does not run implementation verification
+(`issue-tracker-plan` bootstrap consults `codingStandards` only).
 
 Agents load these at bootstrap; coordinators do not pass doc paths in Task
 prompts.
