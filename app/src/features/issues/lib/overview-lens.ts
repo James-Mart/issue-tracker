@@ -29,19 +29,3 @@ export function parseOverviewLens(value: string | null): OverviewLens {
   return DEFAULT_OVERVIEW_LENS;
 }
 
-/**
- * Write lens into search params. Default (`structure`) omits the param so the
- * URL stays clean when absent means Structure.
- */
-export function writeOverviewLensParam(
-  params: URLSearchParams,
-  lens: OverviewLens,
-): URLSearchParams {
-  const next = new URLSearchParams(params);
-  if (lens === DEFAULT_OVERVIEW_LENS) {
-    next.delete("lens");
-  } else {
-    next.set("lens", lens);
-  }
-  return next;
-}

@@ -12,7 +12,7 @@ import type {
   ReviewView,
 } from "@server/schemas";
 import { shortSha } from "@/lib/utils/short-sha";
-import { storyReviewPath } from "../lib/links";
+import { projectReviewPath, storyReviewPath } from "../lib/links";
 import { StoryReviewPage } from "./story-review-page";
 
 const PROJECT = "proj";
@@ -291,6 +291,9 @@ describe("StoryReviewPage", () => {
     expect(
       container.querySelector('[data-testid="review-story-link"]')?.getAttribute("href"),
     ).toBe(`/projects/${PROJECT}/issues/${STORY}`);
+    expect(
+      container.querySelector('[data-testid="review-back-to-home"]')?.getAttribute("href"),
+    ).toBe(projectReviewPath(PROJECT));
     expect(container.textContent).toContain("Archive");
     expect(container.querySelector('[data-testid="review-commits-tab"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="review-diff-tab"]')).toBeNull();

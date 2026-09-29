@@ -45,6 +45,11 @@ const StoryReviewPage = lazy(() =>
     default: m.StoryReviewPage,
   })),
 );
+const ReviewHomePage = lazy(() =>
+  import("@/features/reviews/components/review-home-page").then((m) => ({
+    default: m.ReviewHomePage,
+  })),
+);
 const AppSettingsPage = lazy(() =>
   import("@/features/app-settings/components/app-settings-page").then((m) => ({
     default: m.AppSettingsPage,
@@ -95,6 +100,10 @@ export function App() {
             <Route
               path="/projects/:projectId/issues/:id"
               element={<IssueDetailPage />}
+            />
+            <Route
+              path="/projects/:projectId/review"
+              element={<ReviewHomePage />}
             />
             <Route
               path="/projects/:projectId/review/stories/:storyId"

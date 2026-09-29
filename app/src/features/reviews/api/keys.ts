@@ -8,6 +8,8 @@ export const reviewKeys = {
   details: () => [...reviewKeys.all, "detail"] as const,
   detail: (projectId: string, reviewId: string) =>
     [...reviewKeys.details(), projectId, reviewId] as const,
+  candidates: (projectId: string, query: string) =>
+    [...reviewKeys.all, "candidates", projectId, query] as const,
   commits: (projectId: string, reviewId: string) =>
     [...reviewKeys.all, "commits", projectId, reviewId] as const,
   diffs: (projectId: string, reviewId: string) =>

@@ -79,15 +79,24 @@ function collectFrom(issue: Issue, issues: Issue[], out: ChangeCommit[]): void {
 /**
  * Task shas in implementation order. A Story yields only its own Tasks;
  * an Epic walks child Stories (including stacked) depth-first.
+ * Pass `issues` to walk an already-loaded snapshot instead of reading the store again.
  */
-export function collectDescendantCommits(issueId: string): ChangeCommit[] {
-  const issue = readIssueOrThrow(issueId);
-  const issues = readAll().issues;
+export function collectDescendantCommits(
+  issueId: string,
+  issues?: Issue[],
+): ChangeCommit[] {
+  const issue = issues
+    ? issues.find((item) => item.id === issueId)
+    : readIssueOrThrow(issueId);
+  if (!issue) {
+    throw new IssueError("not_found", `unknown issue "${issueId}"`);
+  }
+  const all = issues ?? readAll().issues;
   const commits: ChangeCommit[] = [];
   if (issue.kind === "story") {
-    collectOwnTaskCommits(issue.id, issues, commits);
+    collectOwnTaskCommits(issue.id, all, commits);
   } else {
-    collectFrom(issue, issues, commits);
+    collectFrom(issue, all, commits);
   }
   return commits;
 }
@@ -302,13 +311,13 @@ function assertChangeSupported(issue: Issue): void {
  * Commit shas of this issue's change, in implementation order.
  * Empty when the change is empty (no commits, noDiff, or a kind with no range).
  */
-export function issueChangeCommitShas(issue: Issue): string[] {
+export function issueChangeCommitShas(issue: Issue, issues?: Issue[]): string[] {
   if (issue.kind === "task") {
     if (issue.commits.length === 0 || issue.noDiff) return [];
     return issue.commits;
   }
   if (issue.kind === "story") {
-    return collectDescendantCommits(issue.id).map((commit) => commit.sha);
+    return collectDescendantCommits(issue.id, issues).map((commit) => commit.sha);
   }
   return [];
 }
