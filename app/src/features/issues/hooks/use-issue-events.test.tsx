@@ -108,7 +108,7 @@ describe("useIssueEvents", () => {
     unmountHook(mounted);
   });
 
-  it("invalidates list and detail on planning-run scope", () => {
+  it("invalidates list, detail, and agent runs on planning-run scope", () => {
     const mounted = mountHook();
     const ws = FakeWebSocket.instances[0]!;
     act(() => {
@@ -129,6 +129,9 @@ describe("useIssueEvents", () => {
 
     expect(mounted.invalidateSpy).toHaveBeenCalledWith({
       queryKey: issuesKeys.detail("capture"),
+    });
+    expect(mounted.invalidateSpy).toHaveBeenCalledWith({
+      queryKey: issuesKeys.agentRuns("capture"),
     });
     expect(mounted.invalidateSpy).toHaveBeenCalledWith({
       queryKey: issuesKeys.list(),

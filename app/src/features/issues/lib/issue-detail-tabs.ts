@@ -33,6 +33,7 @@ const CHANNEL_TAB_LABELS: Record<ConversationChannel, string> = {
   planning: "Planning",
   implementing: "Implementing",
   export: "Export",
+  review: "Review",
 };
 
 /** Channel tab for an issue, when the kind offers one. */

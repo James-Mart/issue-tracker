@@ -225,6 +225,7 @@ export function openOrCreateReview(
       createdAt: now,
       updatedAt: now,
       marks: { all: {}, commits: {} },
+      submissions: [],
     };
     writeReview(review);
     return { created: true, review: toView(review, story) };

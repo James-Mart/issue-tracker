@@ -35,7 +35,11 @@ import {
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
-import { channelForIssue, offersExportChannel } from "../kind.js";
+import {
+  channelForIssue,
+  offersExportChannel,
+  offersReviewChannel,
+} from "../kind.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
 import { effectiveTranscriptSeq } from "./conversation-transcript-seq.js";
@@ -129,6 +133,7 @@ function channelsOfferedBy(issue: Issue): ConversationChannel[] {
   const channels: ConversationChannel[] = [];
   if (primary) channels.push(primary);
   if (offersExportChannel(issue, parentKind)) channels.push("export");
+  if (offersReviewChannel(issue)) channels.push("review");
   return channels;
 }
 

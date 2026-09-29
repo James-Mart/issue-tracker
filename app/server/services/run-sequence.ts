@@ -143,6 +143,9 @@ type IssueAncestry = {
 function coordinatorLabel(meta: ConversationMeta): string {
   if (meta.channel === "planning") return "Stakeholder";
   if (meta.channel === "implementing") return "Coordinator";
+  if (meta.channel === "review") {
+    return roleFamilyTitle("issue-tracker-review-tasker");
+  }
   return meta.title;
 }
 

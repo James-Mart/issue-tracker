@@ -5,11 +5,16 @@ import type {
   TranscriptEvent,
 } from "../schemas.js";
 import {
+  listConversationIds,
   listConversations,
   readConversation,
+  readConversationMeta,
   readDelegations,
-  listConversationIds,
 } from "./conversations.js";
+import {
+  conversationIdFromReviewTaskerDelegation,
+  reviewTaskerRunsForIssue,
+} from "./review-tasking.js";
 import { ancestorChain } from "./subtree.js";
 
 export type AgentRunsWorkRoot = {
@@ -117,6 +122,7 @@ export function listAgentRunsForIssue(issueId: string): AgentRun[] {
     runs.push(...runsForConversation(conversationId, issueId, delegations));
   }
 
+  runs.push(...reviewTaskerRunsForIssue(issueId));
   runs.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   return runs;
 }
@@ -138,6 +144,17 @@ export function listAgentRunEvents(
   issueId: string,
   delegationId: string,
 ): SubagentUpdateEvent[] | undefined {
+  const reviewConversationId =
+    conversationIdFromReviewTaskerDelegation(delegationId);
+  if (reviewConversationId) {
+    try {
+      const meta = readConversationMeta(reviewConversationId);
+      if (meta.issueId === issueId && meta.channel === "review") return [];
+    } catch {
+      return undefined;
+    }
+  }
+
   for (const conversationId of listConversationIds()) {
     let delegations: DelegationRecordWithEnd[];
     try {

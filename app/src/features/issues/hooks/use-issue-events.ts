@@ -62,6 +62,7 @@ export function useIssueEvents(): void {
       if (event.scope === "planning-run") {
         scheduleListInvalidate();
         qc.invalidateQueries({ queryKey: issuesKeys.detail(event.id) });
+        qc.invalidateQueries({ queryKey: issuesKeys.agentRuns(event.id) });
         return;
       }
       scheduleListInvalidate();

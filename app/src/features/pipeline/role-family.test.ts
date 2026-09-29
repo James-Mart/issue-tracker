@@ -25,6 +25,7 @@ describe("roleFamily", () => {
 describe("roleFamilyTitle", () => {
   it("maps a stripped family to its seat title", () => {
     expect(roleFamilyTitle("implementor")).toBe("Implementor");
+    expect(roleFamilyTitle("issue-tracker-review-tasker")).toBe("Review tasker");
     expect(roleFamilyTitle("issue-tracker-implementor")).toBe("Implementor");
     expect(roleFamilyTitle("auto-plan-discriminator")).toBe("Discriminator");
   });
