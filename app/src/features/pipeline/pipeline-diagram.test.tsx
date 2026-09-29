@@ -11,6 +11,7 @@ import {
 } from "./pipeline-layout";
 import {
   pipelines,
+  polishCheckIds,
   type Pipeline,
   type PipelineEdge,
   type PipelineId,
@@ -268,14 +269,7 @@ function nodeCenterX(el: HTMLElement): number {
 const planning = pipelines.find((pipeline) => pipeline.id === "planning")!;
 const work = pipelines.find((pipeline) => pipeline.id === "work")!;
 
-const POLISH_FANOUT = [
-  "check-authoring-conformance",
-  "check-dependency-order",
-  "check-dry",
-  "check-footprint",
-  "check-internal-consistency",
-  "check-no-ambiguity",
-] as const;
+const POLISH_FANOUT = polishCheckIds(planning);
 
 describe("PipelineDiagram phone width", () => {
   it("gives each fan-out sibling its own incoming edge", () => {

@@ -38,8 +38,7 @@ Broken or missing dependency / order structure:
   diamond cases that should be a separate `blockedBy` Epic instead of a fake
   Story edge (see SPEC stacked-PR / `blockedBy` guidance).
 - **Task order** — Tasks listed in an order that cannot work (consumer before
-  producer, verify-before-implement with no vertical slice, etc.). Array
-  position is implementation order.
+  producer). Array position is implementation order.
 - **Integrity smells visible from reads** — dangling/wrong-kind referents if
   `list`/`<kind> view` surfaces them; do not attempt repairs (coordinator applies).
 

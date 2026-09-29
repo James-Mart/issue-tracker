@@ -5,10 +5,12 @@ import {
   layoutPipelineDiagram,
   pickNodeLabel,
 } from "./pipeline-layout";
-import { pipelines } from "./shape";
+import { pipelines, polishCheckIds } from "./shape";
 
 const planning = pipelines.find((pipeline) => pipeline.id === "planning")!;
 const work = pipelines.find((pipeline) => pipeline.id === "work")!;
+
+const polishChecks = polishCheckIds(planning);
 
 const measure = (text: string) => text.length * 8;
 
@@ -32,8 +34,12 @@ describe("layoutPipelineDiagram", () => {
   it("keeps every fan-out sibling inside the phone lane", () => {
     const layout = layoutPipelineDiagram(planning, PHONE_WIDTH, measure);
     expect(layout.width).toBe(PHONE_WIDTH);
-    const checks = layout.nodes.filter((node) => node.id.startsWith("check-"));
-    expect(checks).toHaveLength(6);
+    const checks = layout.nodes.filter((node) =>
+      polishChecks.includes(node.id),
+    );
+    expect(checks.map((node) => node.id).sort()).toEqual(
+      [...polishChecks].sort(),
+    );
     for (const node of layout.nodes) {
       expect(node.x - node.cardW / 2).toBeGreaterThanOrEqual(0);
       expect(node.x + node.cardW / 2).toBeLessThanOrEqual(layout.width);
@@ -43,10 +49,14 @@ describe("layoutPipelineDiagram", () => {
 
   it("places fan-out siblings on distinct x with room for their own drop", () => {
     const layout = layoutPipelineDiagram(planning, PHONE_WIDTH, measure);
-    const checks = layout.nodes.filter((node) => node.id.startsWith("check-"));
-    expect(checks).toHaveLength(6);
+    const checks = layout.nodes.filter((node) =>
+      polishChecks.includes(node.id),
+    );
+    expect(checks.map((node) => node.id).sort()).toEqual(
+      [...polishChecks].sort(),
+    );
     const xs = checks.map((node) => node.x);
-    expect(new Set(xs.map((x) => Math.round(x))).size).toBe(6);
+    expect(new Set(xs.map((x) => Math.round(x))).size).toBe(polishChecks.length);
     expect(checks.every((node) => node.y === checks[0]!.y)).toBe(true);
   });
 

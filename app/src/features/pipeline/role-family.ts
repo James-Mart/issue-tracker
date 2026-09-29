@@ -45,7 +45,6 @@ const ROLE_FAMILY_TITLES: Record<string, string> = {
   "plan-dry": "DRY",
   "plan-footprint": "Footprint",
   "plan-internal-consistency": "Internal consistency",
-  "plan-no-ambiguity": "No-ambiguity",
 };
 
 /** Family id with the harness prefix removed; unmapped titles keep this string. */
