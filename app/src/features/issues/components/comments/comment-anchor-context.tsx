@@ -28,7 +28,9 @@ export function CommentAnchorMeta({
       {showLocation ? (
         <>
           <FileCode2 className="h-3 w-3 shrink-0" aria-hidden />
-          <span className="min-w-0 truncate text-foreground/85">{anchor.path}</span>
+          <span className="min-w-0 truncate text-foreground/85 [direction:rtl] [text-align:left] shell:[direction:ltr]">
+            {anchor.path}
+          </span>
           <span aria-hidden>·</span>
           <span className="shrink-0 tabular-nums">
             {formatAnchorLineLabel(anchor)}

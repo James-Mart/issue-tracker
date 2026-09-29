@@ -4,13 +4,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FileDiffMetadata } from "@pierre/diffs/react";
+import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs/react";
 import type {
   ReviewCommits,
   ReviewDiff,
   ReviewDiffFile,
   ReviewView,
 } from "@server/schemas";
+import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { shortSha } from "@/lib/utils/short-sha";
 import { projectReviewPath, storyReviewPath } from "../lib/links";
 import { StoryReviewPage } from "./story-review-page";
@@ -29,6 +30,7 @@ const state = vi.hoisted(() => ({
   archive: vi.fn(),
   reopen: vi.fn(),
   open: vi.fn(),
+  commentThreads: [] as CommentThread[],
 }));
 
 vi.mock("@pierre/diffs/react", () => ({
@@ -40,8 +42,20 @@ vi.mock("@pierre/diffs/react", () => ({
     markDOMDirty: () => {},
     scrollTo: () => {},
   }),
-  FileDiff: ({ fileDiff }: { fileDiff: FileDiffMetadata }) => (
-    <div data-testid="file-diff" data-file-name={fileDiff.name} />
+  FileDiff: ({
+    fileDiff,
+    lineAnnotations = [],
+    renderAnnotation,
+  }: {
+    fileDiff: FileDiffMetadata;
+    lineAnnotations?: DiffLineAnnotation<CommentThread[]>[];
+    renderAnnotation?: (annotation: DiffLineAnnotation<CommentThread[]>) => ReactNode;
+  }) => (
+    <div data-testid="file-diff" data-file-name={fileDiff.name}>
+      {lineAnnotations.map((annotation, index) => (
+        <div key={index}>{renderAnnotation?.(annotation)}</div>
+      ))}
+    </div>
   ),
 }));
 
@@ -52,6 +66,13 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
     error: null,
     isLoading: false,
   }),
+  useCommentsQuery: () => ({
+    data: { messages: [], threads: [], problems: [] },
+    isLoading: false,
+    error: null,
+  }),
+  useCommentThreads: () => ({ threads: state.commentThreads, problems: [] }),
+  useIssueChangeFileQuery: () => ({ data: "new\n" }),
 }));
 
 vi.mock("../api/queries", () => ({
@@ -273,6 +294,7 @@ beforeEach(() => {
   state.byScope = {};
   state.diffScope = "";
   state.commits = commitsFixture();
+  state.commentThreads = [];
 });
 
 afterEach(() => {
@@ -283,12 +305,14 @@ afterEach(() => {
 });
 
 describe("StoryReviewPage", () => {
-  it("opens the Commits tab by default and keeps the scope in the URL", () => {
+  it("opens the Conversation tab by default and keeps the scope in the URL", () => {
     const container = mountPage();
 
-    expect(lastLocation).toBe(`${storyReviewPath(PROJECT, STORY)}?tab=commits&scope=all`);
+    expect(lastLocation).toBe(
+      `${storyReviewPath(PROJECT, STORY)}?tab=conversation&scope=all`,
+    );
     const tabs = [...container.querySelectorAll('[role="tab"]')].map((el) => el.textContent);
-    expect(tabs).toEqual(["Commits", "Diff"]);
+    expect(tabs).toEqual(["Conversation", "Commits", "Diff"]);
     expect(container.querySelectorAll('[data-testid="review-merge-base"]')).toHaveLength(1);
     expect(
       container.querySelector('[data-testid="review-story-link"]')?.getAttribute("href"),
@@ -297,10 +321,106 @@ describe("StoryReviewPage", () => {
       container.querySelector('[data-testid="review-back-to-home"]')?.getAttribute("href"),
     ).toBe(projectReviewPath(PROJECT));
     expect(container.textContent).toContain("Archive");
-    expect(container.querySelector('[data-testid="review-commits-tab"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="review-conversation-tab"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="review-commits-tab"]')).toBeNull();
     expect(container.querySelector('[data-testid="review-diff-tab"]')).toBeNull();
+
+    click(tab(container, "Commits"));
+
+    expect(lastLocation).toBe(`${storyReviewPath(PROJECT, STORY)}?tab=commits&scope=all`);
+    expect(container.querySelector('[data-testid="review-commits-tab"]')).not.toBeNull();
     expect(scopeRow(container, "all").getAttribute("data-selected")).toBe("true");
     expect(scopeRow(container, "all").children).toHaveLength(1);
+  });
+
+  it("opens an anchored thread inline on the Diff tab at its commit", () => {
+    state.commentThreads = [
+      {
+        state: "open",
+        readyToTask: true,
+        root: {
+          id: "thread-1",
+          at: "2026-09-28T16:40:00.000Z",
+          role: "human",
+          name: "Jared",
+          body: "Check the new line.",
+          anchor: {
+            path: "src/changed.ts",
+            side: "new",
+            line: 1,
+            commitSha: TIP,
+          },
+        },
+        replies: [],
+      },
+    ];
+    const container = mountPage();
+    click(container.querySelector('[data-testid="see-in-diff"]')!);
+
+    expect(lastLocation).toBe(
+      `${storyReviewPath(PROJECT, STORY)}?tab=diff&scope=${TIP}&thread=thread-1`,
+    );
+    const card = fileCard(container, "src/changed.ts");
+    expect(card.dataset.collapsed).toBe("false");
+    const thread = card.querySelector('[data-thread-root="thread-1"]');
+    expect(thread?.textContent).toContain("Check the new line.");
+    expect(thread?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
+  });
+
+  it("opens All changes when the anchor commit no longer contains the file", () => {
+    state.byScope[TIP] = {
+      scope: TIP,
+      files: [
+        {
+          path: "src/other.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          blobSha: "other-1",
+          tooLarge: false,
+        },
+      ],
+      patch: [
+        "diff --git a/src/other.ts b/src/other.ts",
+        "index 1111111..2222222 100644",
+        "--- a/src/other.ts",
+        "+++ b/src/other.ts",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "",
+      ].join("\n"),
+    } satisfies ReviewDiff;
+    state.commentThreads = [
+      {
+        state: "open",
+        readyToTask: true,
+        root: {
+          id: "drifted",
+          at: "2026-09-28T16:40:00.000Z",
+          role: "human",
+          name: "Jared",
+          body: "This line moved.",
+          anchor: {
+            path: "src/changed.ts",
+            side: "new",
+            line: 1,
+            commitSha: TIP,
+          },
+        },
+        replies: [],
+      },
+    ];
+    const container = mountPage();
+    click(container.querySelector('[data-testid="see-in-diff"]')!);
+
+    expect(lastLocation).toBe(
+      `${storyReviewPath(PROJECT, STORY)}?tab=diff&scope=all&thread=drifted`,
+    );
+    const card = fileCard(container, "src/changed.ts");
+    expect(card.querySelector('[data-thread-root="drifted"]')?.textContent).toContain(
+      "This line moved.",
+    );
   });
 
   it("collapses a file when its Reviewed checkbox is checked and records the mark", () => {
@@ -403,7 +523,7 @@ describe("StoryReviewPage", () => {
   it("shows the empty state when the Story has no commits yet", () => {
     state.commits = commitsFixture({ tip: "", commits: [] });
     state.diff = { scope: "all", files: [], patch: "" } satisfies ReviewDiff;
-    const container = mountPage();
+    const container = mountPage("tab=commits");
 
     expect(container.querySelector('[data-testid="review-empty-diff"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="review-diff-tab"]')).toBeNull();
@@ -445,7 +565,7 @@ describe("StoryReviewPage", () => {
         },
       ],
     });
-    const container = mountPage();
+    const container = mountPage("tab=commits");
 
     const rows = [...container.querySelectorAll("[data-testid='review-scope-row']")];
     expect(rows.map((row) => row.getAttribute("data-scope"))).toEqual(["all", older, TIP]);

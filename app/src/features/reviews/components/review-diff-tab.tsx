@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Virtualizer, type FileDiffMetadata } from "@pierre/diffs/react";
 import type { ReviewCommits, ReviewDiff, ReviewView } from "@server/schemas";
@@ -9,7 +9,10 @@ import { DiffLayoutToggle } from "@/features/issues/components/diff-layout-toggl
 import { useDiffLayoutPreference } from "@/features/issues/hooks/use-diff-layout-preference";
 import { useVirtualizedFileScroll } from "@/features/issues/hooks/use-virtualized-file-scroll";
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
+import { useCommentThreads } from "@/features/issues/api/queries";
 import { fileDiffsFromPatch } from "@/features/issues/lib/issue-change-file-diffs";
+import type { CommentThread } from "@/features/issues/lib/comment-threads";
+import { fileNameForAnchorPath } from "@/features/issues/lib/issue-change-focus-thread";
 import { useReviewDiffSearch } from "../hooks/use-review-diff-search";
 import { useReviewFileMarks } from "../hooks/use-review-file-marks";
 import {
@@ -36,6 +39,8 @@ import {
 } from "../lib/review-diff-search";
 
 type ScrollRequest = { path: string; nonce: number; scope: string };
+
+const NO_THREADS: CommentThread[] = [];
 
 function ScopeStep({
   label,
@@ -149,6 +154,9 @@ function ReviewFileStack({
   onReviewedChange,
   searchNeedle,
   currentMatch,
+  focusFile,
+  focusThreads,
+  focusThreadId,
 }: {
   rows: ReviewFileRow[];
   fileDiffs: Map<string, FileDiffMetadata>;
@@ -164,6 +172,9 @@ function ReviewFileStack({
   onReviewedChange: (path: string, reviewed: boolean) => void;
   searchNeedle: string;
   currentMatch: DiffSearchMatch | undefined;
+  focusFile: string | undefined;
+  focusThreads: CommentThread[];
+  focusThreadId: string | null;
 }) {
   const fileRef = useVirtualizedFileScroll<HTMLElement>(
     scrollRequest?.path,
@@ -180,8 +191,11 @@ function ReviewFileStack({
           fileDiff={fileDiffs.get(row.file.path)}
           collapsed={
             isCollapsed(row) &&
-            !(currentMatch?.kind === "content" && currentMatch.path === row.file.path)
+            !(currentMatch?.kind === "content" && currentMatch.path === row.file.path) &&
+            row.file.path !== focusFile
           }
+          threads={row.file.path === focusFile ? focusThreads : NO_THREADS}
+          scrollThreadId={row.file.path === focusFile ? focusThreadId ?? undefined : undefined}
           readOnly={readOnly}
           diffLayout={diffLayout}
           source={source}
@@ -207,6 +221,8 @@ export function ReviewDiffTab({
   onScopeChange,
   overrides,
   setOverrides,
+  focusThreadId,
+  onFocusFileMissing,
 }: {
   projectId: string;
   storyId: string;
@@ -217,6 +233,8 @@ export function ReviewDiffTab({
   onScopeChange: (scope: string) => void;
   overrides: ReviewMarkOverrides;
   setOverrides: Dispatch<SetStateAction<ReviewMarkOverrides>>;
+  focusThreadId: string | null;
+  onFocusFileMissing: () => void;
 }) {
   const { layout, setLayout, diffLayout, isMobile } = useDiffLayoutPreference();
   const { rows, isCollapsed, toggleCollapsed, setReviewed } = useReviewFileMarks(
@@ -238,6 +256,31 @@ export function ReviewDiffTab({
       searchDiffs: new Map(files.map((file) => [file.name, snapshotSearchableDiff(file)])),
     };
   }, [diff.patch]);
+  const { threads } = useCommentThreads(storyId);
+  const focusThread = threads.find((thread) => thread.root.id === focusThreadId);
+  const focusPath = focusThread?.root.anchor?.path;
+  const focusFile =
+    focusPath === undefined
+      ? undefined
+      : fileNameForAnchorPath(
+          diff.files.map((file) => ({ name: file.path, prevName: file.oldPath })),
+          focusPath,
+        );
+  const focusThreads = useMemo(
+    () => (focusThread ? [focusThread] : NO_THREADS),
+    [focusThread],
+  );
+  useEffect(() => {
+    if (!focusThreadId || !focusPath || focusFile) return;
+    if (scope === ALL_CHANGES_SCOPE) return;
+    // The anchor commit's diff does not contain this file. Widen to All changes
+    // so the thread can still render, matching resolveReviewScope.
+    onFocusFileMissing();
+  }, [focusFile, focusPath, focusThreadId, onFocusFileMissing, scope]);
+  useEffect(() => {
+    if (!focusFile || !focusThreadId) return;
+    setScrollRequest({ path: focusFile, scope, nonce: 0 });
+  }, [focusFile, focusThreadId, scope]);
   const search = useReviewDiffSearch(diff.files, parsed.searchDiffs, scope);
   const matchedPaths = filesMatchingSearch(search.matches);
   const visibleRows = search.filtering
@@ -325,6 +368,9 @@ export function ReviewDiffTab({
                   onReviewedChange={setReviewed}
                   searchNeedle={search.needle}
                   currentMatch={search.current}
+                  focusFile={focusFile}
+                  focusThreads={focusThreads}
+                  focusThreadId={focusThreadId}
                 />
               </Virtualizer>
             )}

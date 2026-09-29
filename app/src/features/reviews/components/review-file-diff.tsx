@@ -1,5 +1,5 @@
-import { useId, useRef, type MutableRefObject, type Ref } from "react";
-import { FileDiff, type FileDiffMetadata } from "@pierre/diffs/react";
+import { useCallback, useEffect, useId, useMemo, useRef, type MutableRefObject, type Ref } from "react";
+import { FileDiff, useVirtualizer, type DiffLineAnnotation, type FileDiffMetadata } from "@pierre/diffs/react";
 import { ChevronRight } from "lucide-react";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -7,14 +7,26 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils/cn";
 import { DiffLineCounts } from "@/features/issues/components/changed-file-row";
 import { useFileDiffContentsLoader } from "@/features/issues/hooks/use-file-diff-contents-loader";
+import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
+import { threadNodeInPanel } from "@/features/issues/lib/issue-change-focus-thread";
+import { placeThreadsInFile } from "@/features/issues/lib/issue-change-inline-threads";
 import type { ReviewFileRow } from "../lib/review-files";
 import type { DiffSearchMatch } from "../lib/review-diff-search";
+import {
+  diffLineIsPainted,
+  nextDiffLineScrollTop,
+  paintedDiffLineSpan,
+  paintedLineForSide,
+} from "../lib/review-diff-line-scroll";
 import { REVIEW_SEARCH_MATCH_CSS } from "../lib/review-diff-search-mark";
 import { usePinnedHeaderCollapse } from "../hooks/use-pinned-header-collapse";
 import { useReviewSearchMark } from "../hooks/use-review-search-mark";
 import { ChangedSinceReviewedHeaderMark } from "./changed-since-reviewed-badge";
 import { MarkedPathText } from "./review-search-marked-text";
+import { ReviewLineThreads } from "./review-thread";
+
+const NO_FILE_THREADS: CommentThread[] = [];
 
 export type ReviewFileDiffSource = {
   storyId: string;
@@ -47,16 +59,28 @@ function RenderedFileDiff({
   fileDiff,
   diffLayout,
   source,
+  threads,
 }: {
   fileDiff: FileDiffMetadata;
   diffLayout: DiffLayout;
   source: ReviewFileDiffSource;
+  threads: CommentThread[];
 }) {
   const { loading, loadDiffFiles } = useFileDiffContentsLoader({
     issueId: source.storyId,
     sha: source.sha,
     cache: source.contentsCache,
   });
+  const { located, unlocated } = useMemo(
+    () => placeThreadsInFile(threads, fileDiff),
+    [fileDiff, threads],
+  );
+  const renderAnnotation = useCallback(
+    (annotation: DiffLineAnnotation<CommentThread[]>) => (
+      <ReviewLineThreads threads={annotation.metadata} storyId={source.storyId} />
+    ),
+    [source.storyId],
+  );
 
   return (
     <div data-context-loading={loading ? "true" : undefined}>
@@ -77,7 +101,10 @@ function RenderedFileDiff({
           disableFileHeader: true,
           unsafeCSS: REVIEW_SEARCH_MATCH_CSS,
         }}
+        lineAnnotations={located}
+        renderAnnotation={renderAnnotation}
       />
+      <ReviewLineThreads threads={unlocated} storyId={source.storyId} />
     </div>
   );
 }
@@ -96,6 +123,8 @@ export function ReviewFileDiff({
   fileRef,
   searchNeedle = "",
   currentMatch,
+  threads = NO_FILE_THREADS,
+  scrollThreadId,
 }: {
   row: ReviewFileRow;
   /** Absent for a too-large file, whose section the server drops from the patch. */
@@ -111,13 +140,119 @@ export function ReviewFileDiff({
   fileRef?: Ref<HTMLElement>;
   searchNeedle?: string;
   currentMatch?: DiffSearchMatch;
+  threads?: CommentThread[];
+  scrollThreadId?: string;
 }) {
   const { file, reviewed, changedSinceReviewed } = row;
   const checkboxId = useId();
   const bodyId = useId();
   const sectionRef = useRef<HTMLElement | null>(null);
+  const virtualizer = useVirtualizer();
   useReviewSearchMark(sectionRef, currentMatch, searchNeedle, collapsed);
   const holdPinnedFile = usePinnedHeaderCollapse(sectionRef, collapsed);
+  const anchor = threads.find((thread) => thread.root.id === scrollThreadId)?.root.anchor;
+  useEffect(() => {
+    if (!scrollThreadId || collapsed) return;
+    const panel = sectionRef.current;
+    if (!panel) return;
+    let cancelled = false;
+    let frame = 0;
+    let attempts = 0;
+    let lastSpanKey = "";
+    let stuck = 0;
+
+    const reveal = () => {
+      if (cancelled) return;
+      attempts += 1;
+      const node = threadNodeInPanel(panel, scrollThreadId);
+      const host = panel.querySelector("diffs-container");
+      const shadow = host instanceof HTMLElement ? host.shadowRoot : null;
+      const line = anchor?.line;
+      const side = anchor?.side;
+      if (line != null && side != null && shadow != null && diffLineIsPainted(shadow, side, line)) {
+        let row: HTMLElement | null = null;
+        for (const candidate of shadow.querySelectorAll("[data-line]")) {
+          if (paintedLineForSide(candidate, side) === line && candidate instanceof HTMLElement) {
+            row = candidate;
+            break;
+          }
+        }
+        const root = virtualizer?.getRoot();
+        const header = panel.querySelector('[data-testid="review-file-header"]');
+        const headerHeight =
+          header instanceof HTMLElement ? header.getBoundingClientRect().height : 0;
+        if (row != null && root instanceof HTMLElement && virtualizer != null) {
+          const delta =
+            row.getBoundingClientRect().top -
+            root.getBoundingClientRect().top -
+            headerHeight -
+            8;
+          if (Math.abs(delta) > 2) {
+            virtualizer.scrollTo({ top: virtualizer.getScrollTop() + delta });
+          }
+        } else {
+          node?.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
+        return;
+      }
+
+      const waitingOnDiff = line != null && side != null && shadow != null;
+
+      if (waitingOnDiff && virtualizer != null && attempts < 60) {
+        const root = virtualizer.getRoot();
+        const rootBox = root instanceof HTMLElement ? root.getBoundingClientRect() : null;
+        const panelBox = panel.getBoundingClientRect();
+        const fileInView =
+          rootBox == null || (panelBox.bottom > rootBox.top && panelBox.top < rootBox.bottom);
+        if (!fileInView) {
+          virtualizer.scrollTo({ top: virtualizer.getOffsetInScrollContainer(panel) });
+          lastSpanKey = "";
+          stuck = 0;
+          frame = requestAnimationFrame(reveal);
+          return;
+        }
+        const span = paintedDiffLineSpan(shadow, side);
+        if (span != null) {
+          const spanKey = `${span.min}:${span.max}`;
+          const next = nextDiffLineScrollTop(virtualizer.getScrollTop(), span, line);
+          // Land the line inside the window, not on the overscan edge that never paints it.
+          const cushion = span.height * 40;
+          const direction = line > span.max ? 1 : -1;
+          if (next != null && spanKey !== lastSpanKey) {
+            lastSpanKey = spanKey;
+            stuck = 0;
+            virtualizer.scrollTo({ top: next + direction * cushion });
+          } else if (next != null && stuck < 2) {
+            // Pierre's overscan can leave the target just outside the painted
+            // span after one jump, and the span key does not change. One more
+            // nudge of the same cushion is the bound; further jumps are not.
+            stuck += 1;
+            virtualizer.scrollTo({
+              top: virtualizer.getScrollTop() + direction * cushion,
+            });
+          }
+        }
+        frame = requestAnimationFrame(reveal);
+        return;
+      }
+
+      if (node != null && node.getBoundingClientRect().height > 0) {
+        node.scrollIntoView({ block: "nearest", inline: "nearest" });
+        return;
+      }
+      if (attempts < 60 && (node == null || shadow != null)) {
+        frame = requestAnimationFrame(reveal);
+        return;
+      }
+      node?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+
+    frame = requestAnimationFrame(reveal);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [anchor?.line, anchor?.side, collapsed, scrollThreadId, threads, virtualizer]);
   const pathOccurrence =
     currentMatch?.kind === "path" && currentMatch.field === "path"
       ? currentMatch.occurrence
@@ -219,12 +354,16 @@ export function ReviewFileDiff({
       {collapsed ? null : (
         <div id={bodyId}>
           {file.tooLarge ? (
-            <FileTooLargeBody localCommand={localCommand} localHint={localHint} />
+            <>
+              <FileTooLargeBody localCommand={localCommand} localHint={localHint} />
+              <ReviewLineThreads threads={threads} storyId={source.storyId} />
+            </>
           ) : fileDiff ? (
             <RenderedFileDiff
               fileDiff={fileDiff}
               diffLayout={diffLayout}
               source={source}
+              threads={threads}
             />
           ) : (
             <ShellInlineFault

@@ -24,6 +24,7 @@ export function CommentThread({
   showAnchorContext = false,
   onSeeInDiff,
   inline = false,
+  collapseResolved = false,
   onResolve,
   onUnresolve,
   resolvePending = false,
@@ -36,6 +37,8 @@ export function CommentThread({
   onSeeInDiff?: () => void;
   /** Inside a file diff: drop path and line, and collapse when resolved. */
   inline?: boolean;
+  /** Conversation timeline: collapse when resolved and keep the anchor header. */
+  collapseResolved?: boolean;
   onResolve?: () => void;
   onUnresolve?: () => void;
   resolvePending?: boolean;
@@ -45,7 +48,8 @@ export function CommentThread({
   const comments = [thread.root, ...thread.replies];
   const anchor = thread.root.anchor;
   const resolved = thread.state === "resolved";
-  const collapsed = inline && resolved && !expanded;
+  const collapses = (inline || collapseResolved) && resolved;
+  const collapsed = collapses && !expanded;
   const showAnchorHeader =
     anchor != null && (!inline || outdated || onSeeInDiff != null);
 
@@ -57,26 +61,24 @@ export function CommentThread({
       data-outdated={outdated ? "" : undefined}
       data-collapsed={collapsed ? "" : undefined}
       className={cn(
-        "flex flex-col rounded-md border border-border bg-card",
+        "flex min-w-0 flex-col rounded-md border border-border bg-card",
         collapsed ? "px-3 py-1.5" : "px-3 py-2",
         outdated && "opacity-70",
       )}
     >
+      {showAnchorHeader && anchor ? (
+        <CommentAnchorMeta
+          anchor={anchor}
+          outdated={outdated}
+          showLocation={!inline}
+          onSeeInDiff={onSeeInDiff}
+        />
+      ) : null}
+      {thread.linkedTaskId && (!collapsed || showAnchorHeader) ? (
+        <ThreadChipRow taskId={thread.linkedTaskId} />
+      ) : null}
       {collapsed ? null : (
         <>
-          {showAnchorHeader && anchor ? (
-            <CommentAnchorMeta
-              anchor={anchor}
-              outdated={outdated}
-              showLocation={!inline}
-              onSeeInDiff={onSeeInDiff}
-            />
-          ) : null}
-          {thread.linkedTaskId ? (
-            <div className="flex flex-wrap items-center justify-end gap-1 pb-1">
-              <ThreadLinkedTaskChip taskId={thread.linkedTaskId} />
-            </div>
-          ) : null}
           {showAnchorContext && issueId && anchor ? (
             <CommentAnchorSnippet issueId={issueId} anchor={anchor} />
           ) : null}
@@ -111,7 +113,7 @@ export function CommentThread({
         </>
       )}
 
-      {inline && resolved ? (
+      {collapses ? (
         <ResolvedThreadBar
           count={comments.length}
           expanded={expanded}
@@ -121,6 +123,14 @@ export function CommentThread({
         />
       ) : null}
     </article>
+  );
+}
+
+function ThreadChipRow({ taskId }: { taskId: string }) {
+  return (
+    <div className="flex w-full flex-wrap items-center justify-end gap-1 pb-1">
+      <ThreadLinkedTaskChip taskId={taskId} />
+    </div>
   );
 }
 

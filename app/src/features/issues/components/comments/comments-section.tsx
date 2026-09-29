@@ -18,31 +18,11 @@ import { writeDiffThreadSearchParam } from "../../lib/issue-detail-tabs";
 import { SettingsCard } from "../detail-section";
 import { Markdown } from "../markdown";
 import { CommentThread } from "./comment-thread";
-import { Marker } from "./marker";
+import { Marker, commentDayKey, commentDayLabel } from "./marker";
 import { Message } from "./message";
 import { Shimmer } from "./shimmer";
 
 const COMPOSER_ROLE = "human";
-
-function dayKey(at: string): string {
-  const date = new Date(at);
-  return Number.isNaN(date.getTime()) ? at : date.toDateString();
-}
-
-function dayLabel(at: string): string {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return at;
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return "Today";
-  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function isStandaloneUnanchored(thread: CommentThreadData): boolean {
   return thread.root.anchor === undefined && thread.replies.length === 0;
@@ -132,7 +112,7 @@ function CommentList({
   return (
     <div className="flex flex-col gap-3">
       {threads.map((thread) => {
-        const key = dayKey(thread.root.at);
+        const key = commentDayKey(thread.root.at);
         const showMarker = key !== lastDay;
         lastDay = key;
         return (
@@ -141,7 +121,7 @@ function CommentList({
             data-log-root={thread.root.id}
             className="flex flex-col"
           >
-            {showMarker ? <Marker>{dayLabel(thread.root.at)}</Marker> : null}
+            {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
             {isStandaloneUnanchored(thread) ? (
               <StandaloneComment
                 message={thread.root}
