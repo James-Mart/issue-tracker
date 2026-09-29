@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,9 +9,7 @@ import {
 import {
   FileDiff,
   Virtualizer,
-  useVirtualizer,
   type DiffLineAnnotation,
-  type FileDiffContentsLoader,
   type FileDiffMetadata,
   type SelectedLineRange,
 } from "@pierre/diffs/react";
@@ -25,12 +22,14 @@ import {
 } from "@/app/shell-state";
 import { Rail, RailNode } from "@/components/ui/rail";
 import { Button } from "@/components/ui/button";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError } from "@/lib/api/errors";
+import { shortSha } from "@/lib/utils/short-sha";
 import type { ChangeCommit, ChangeStats, IssueChange } from "@server/schemas";
 import { DetailEyebrow, SETTINGS_HEADING_CLASS } from "./detail-section";
 import { useCommentThreads, useIssueChangeQuery } from "../api/queries";
-import { loadFileDiffContents } from "../lib/issue-change-file-contents";
+import { useDiffLayoutPreference } from "../hooks/use-diff-layout-preference";
+import { useFileDiffContentsLoader } from "../hooks/use-file-diff-contents-loader";
+import { useVirtualizedFileScroll } from "../hooks/use-virtualized-file-scroll";
 import { useFocusDiffThread } from "../lib/issue-change-focus-thread";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
 import {
@@ -48,18 +47,9 @@ import {
   DiffThreadComposer,
   useDiffComposer,
 } from "./comments/diff-thread-composer";
-import {
-  effectiveDiffLayout,
-  readStoredDiffLayout,
-  writeStoredDiffLayout,
-  type DiffLayout,
-} from "../lib/diff-layout-preference";
+import type { DiffLayout } from "../lib/diff-layout-preference";
 import { DiffLayoutToggle } from "./diff-layout-toggle";
 import { IssueChangeFileNavigator } from "./issue-change-file-navigator";
-
-function shortSha(sha: string): string {
-  return sha.slice(0, 7);
-}
 
 function changeScopeStats(stats: ChangeStats, commitCount: number): string {
   const fileLabel = stats.filesChanged === 1 ? "1 file" : `${stats.filesChanged} files`;
@@ -435,23 +425,11 @@ function IssueChangeFileDiff({
   threads: CommentThreadData[];
   fileRef?: Ref<HTMLDivElement>;
 }) {
-  const [loading, setLoading] = useState(false);
-  const loadDiffFiles: FileDiffContentsLoader = useCallback(
-    async (diff) => {
-      setLoading(true);
-      try {
-        return await loadFileDiffContents({
-          issueId,
-          sha,
-          fileDiff: diff,
-          cache: contentsCache,
-        });
-      } finally {
-        setLoading(false);
-      }
-    },
-    [contentsCache, issueId, sha],
-  );
+  const { loading, loadDiffFiles } = useFileDiffContentsLoader({
+    issueId,
+    sha,
+    cache: contentsCache,
+  });
   const composer = useDiffComposer();
   const { located, unlocated } = useMemo(
     () => placeThreadsInFile(threads, fileDiff),
@@ -579,13 +557,7 @@ function IssueChangeLoadedPanel({
   const { threads } = useCommentThreads(issueId);
   const contentsCache = useRef(new Map<string, Promise<string>>()).current;
   const sha = change.commits[change.commits.length - 1]!.sha;
-  const isMobile = useIsMobile();
-  const [layout, setLayoutState] = useState<DiffLayout>(() => readStoredDiffLayout());
-  const diffLayout = effectiveDiffLayout(layout, isMobile);
-  const setLayout = useCallback((next: DiffLayout) => {
-    writeStoredDiffLayout(next);
-    setLayoutState(next);
-  }, []);
+  const { layout, setLayout, diffLayout, isMobile } = useDiffLayoutPreference();
   const [filter, setFilter] = useState("");
   const [selectedName, setSelectedName] = useState<string | undefined>();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -716,29 +688,14 @@ function IssueChangeVirtualizedFiles({
   diffLayout: DiffLayout;
   threads: CommentThreadData[];
 }) {
-  const virtualizer = useVirtualizer();
-  const fileNodes = useRef(new Map<string, HTMLDivElement>());
-
-  useLayoutEffect(() => {
-    if (selectedName == null || virtualizer == null || virtualizer.getRoot() == null) {
-      return;
-    }
-    const node = fileNodes.current.get(selectedName);
-    if (node == null) return;
-    virtualizer.scrollTo({
-      top: virtualizer.getOffsetInScrollContainer(node),
-    });
-  }, [selectedName, virtualizer]);
+  const fileRef = useVirtualizedFileScroll<HTMLDivElement>(selectedName);
 
   return (
     <div className="flex flex-col gap-3">
       {files.map((fileDiff, index) => (
         <IssueChangeFileDiff
           key={`${fileDiff.name}-${index}`}
-          fileRef={(node) => {
-            if (node) fileNodes.current.set(fileDiff.name, node);
-            else fileNodes.current.delete(fileDiff.name);
-          }}
+          fileRef={fileRef(fileDiff.name)}
           fileDiff={fileDiff}
           issueId={issueId}
           sha={sha}

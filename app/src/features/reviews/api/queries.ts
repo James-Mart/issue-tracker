@@ -43,12 +43,14 @@ export function useReviewQuery(
 export function useReviewCommitsQuery(
   projectId: string,
   reviewId: string,
+  options: { refetchInterval?: number } = {},
 ): UseQueryResult<ReviewCommits, Error> {
   return useQuery({
     queryKey: reviewKeys.commits(projectId, reviewId),
     queryFn: () => fetchReviewCommits(projectId, reviewId),
     enabled: Boolean(projectId) && Boolean(reviewId),
     retry: retryRead,
+    refetchInterval: options.refetchInterval,
   });
 }
 
