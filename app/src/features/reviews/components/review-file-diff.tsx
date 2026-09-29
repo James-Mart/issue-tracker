@@ -13,7 +13,7 @@ import type { DiffSearchMatch } from "../lib/review-diff-search";
 import { REVIEW_SEARCH_MATCH_CSS } from "../lib/review-diff-search-mark";
 import { usePinnedHeaderCollapse } from "../hooks/use-pinned-header-collapse";
 import { useReviewSearchMark } from "../hooks/use-review-search-mark";
-import { ChangedSinceReviewedBadge } from "./changed-since-reviewed-badge";
+import { ChangedSinceReviewedHeaderMark } from "./changed-since-reviewed-badge";
 import { MarkedPathText } from "./review-search-marked-text";
 
 export type ReviewFileDiffSource = {
@@ -144,7 +144,7 @@ export function ReviewFileDiff({
     >
       <header
         className={cn(
-          "sticky top-0 z-10 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 bg-card px-2 py-1.5",
+          "sticky top-0 z-10 flex min-w-0 flex-nowrap items-center gap-x-1 bg-card px-2 py-1.5 shell:flex-wrap shell:gap-x-2 shell:gap-y-1",
           !collapsed && "border-b border-border",
         )}
         data-testid="review-file-header"
@@ -166,13 +166,12 @@ export function ReviewFileDiff({
             className={cn("transition-transform", !collapsed && "rotate-90")}
           />
         </Button>
-        {/* Below the shell breakpoint the path owns the first line and the controls wrap under it. */}
         <span
-          className="min-w-0 flex-1 basis-[calc(100%-3.5rem)] truncate font-mono text-[12px] text-foreground shell:basis-0"
+          className="min-w-0 flex-1 truncate text-left font-mono text-[12px] text-foreground [direction:rtl] shell:[direction:ltr]"
           title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
         >
           {file.oldPath ? (
-            <span className="text-muted-foreground">
+            <span className="hidden text-muted-foreground shell:inline">
               <MarkedPathText
                 text={file.oldPath}
                 needle={searchNeedle}
@@ -183,12 +182,13 @@ export function ReviewFileDiff({
           ) : null}
           <MarkedPathText text={file.path} needle={searchNeedle} occurrence={pathOccurrence} />
         </span>
-        <span className="ml-auto flex shrink-0 items-center gap-2">
-          {changedSinceReviewed ? <ChangedSinceReviewedBadge /> : null}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 shell:gap-2">
+          {changedSinceReviewed ? <ChangedSinceReviewedHeaderMark /> : null}
           <DiffLineCounts
             additions={file.additions}
             deletions={file.deletions}
-            className="font-mono text-[12px]"
+            className="hidden font-mono text-[12px] shell:inline"
+            data-testid="review-file-line-counts"
           />
           <span
             className="flex items-center gap-1.5"

@@ -106,6 +106,22 @@ describe("ReviewFileDiff pinned header", () => {
     expect(header.textContent).toContain("src/long.ts");
   });
 
+  it("uses a compact single-row phone header with a dot and no line counts", () => {
+    const container = mount();
+    const header = container.querySelector<HTMLElement>('[data-testid="review-file-header"]')!;
+
+    expect(header.className).toMatch(/\bflex-nowrap\b/);
+    expect(header.querySelector('[data-testid="review-changed-since-dot"]')).not.toBeNull();
+    expect(header.querySelector('[data-testid="review-changed-since-badge"]')?.className).toMatch(
+      /\bhidden\b/,
+    );
+    expect(header.querySelector('[data-testid="review-file-line-counts"]')?.className).toMatch(
+      /\bhidden\b/,
+    );
+    const path = header.querySelector("span.min-w-0")!;
+    expect(path.className).toMatch(/\[direction:rtl\]/);
+  });
+
   it("returns to the file when it is collapsed from the pinned header", () => {
     const container = mount();
     scroller.fileOffset = 120;
