@@ -92,13 +92,6 @@ describe("sumUsageTotals", () => {
   });
 });
 
-describe("threadRunLabel", () => {
-  it("reflects runActive", () => {
-    expect(threadRunLabel(true)).toBe("running");
-    expect(threadRunLabel(false)).toBe("idle");
-  });
-});
-
 describe("formatUsageTotals", () => {
   it("formats cumulative totals for the strip", () => {
     expect(

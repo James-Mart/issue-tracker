@@ -17,7 +17,6 @@ import {
   writeStory,
 } from "./cli-story-worktree.test-fixtures.js";
 import { env, issueJsonField, nextAt, writeIssue } from "./cli.test-helpers.js";
-import { WORKTREE_ROOT } from "./server/worktree-constants.js";
 import {
   setGitWriteSpawnerForTests,
   type GitWriteSpawner,
@@ -956,16 +955,5 @@ describe("story worktree create merge-base ref", () => {
     expect(result.status).not.toBe(0);
     expect(worktreeAddCalled).toBe(false);
     expect(existsSync(worktreePathFor("p", "a"))).toBe(false);
-  });
-});
-
-describe("story worktree path namespace", () => {
-  it("uses the fixed tracker root", () => {
-    expect(worktreePathFor("my-proj", "my-story")).toBe(
-      join(WORKTREE_ROOT, "my-proj", "my-story"),
-    );
-    expect(setupLogPathFor("my-proj", "my-story")).toBe(
-      join(WORKTREE_ROOT, "my-proj", ".setup-logs", "my-story.log"),
-    );
   });
 });

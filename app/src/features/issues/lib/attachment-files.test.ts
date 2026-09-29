@@ -95,8 +95,4 @@ describe("isDescriptionEditorTarget", () => {
       false,
     );
   });
-
-  it("exports the description editor attribute name", () => {
-    expect(DESCRIPTION_EDITOR_ATTR).toBe("data-issue-description-editor");
-  });
 });

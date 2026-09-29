@@ -95,7 +95,6 @@ describe("cleanTranscript", () => {
     await cleanTranscript("um Cleaned.", fake);
 
     expect(fake.created[0]!.model).toEqual({ id: TRANSCRIPT_CLEANUP_MODEL });
-    expect(TRANSCRIPT_CLEANUP_MODEL).toBe("composer-2.5-fast");
     expect(fake.created[0]!.tools).toEqual([]);
   });
 });

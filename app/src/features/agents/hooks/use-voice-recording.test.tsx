@@ -527,9 +527,10 @@ describe("convertRecordingBlobTo16kHzMono", () => {
           ? new Float32Array([1, 0, 0])
           : new Float32Array([0, 1, 0]),
     }));
-    const offlineStartRendering = vi.fn(async () => ({
-      getChannelData: () => new Float32Array([0.5, 0.5, 0.5]),
-    }));
+    // Renders the scheduled source unchanged, so the result is exactly the
+    // mono buffer the code fed into the resampler.
+    let scheduled: { buffer: AudioBuffer | null } | undefined;
+    const offlineStartRendering = vi.fn(async () => scheduled!.buffer!);
 
     vi.stubGlobal("AudioContext", class {
       decodeAudioData = decodeAudioData;
@@ -558,11 +559,12 @@ describe("convertRecordingBlobTo16kHzMono", () => {
       }
 
       createBufferSource() {
-        return {
+        scheduled = {
           buffer: null as AudioBuffer | null,
           connect: vi.fn(),
           start: vi.fn(),
-        };
+        } as { buffer: AudioBuffer | null };
+        return scheduled;
       }
 
       get destination() {
@@ -573,7 +575,7 @@ describe("convertRecordingBlobTo16kHzMono", () => {
     });
 
     const samples = await convertRecordingBlobTo16kHzMono(new Blob(["audio"]));
-    expect(samples).toEqual(new Float32Array([0.5, 0.5, 0.5]));
+    expect(samples).toEqual(new Float32Array([0.5, 0.5, 0]));
     expect(offlineInstances.at(-1)?.sampleRate).toBe(
       VOICE_RECORDING_SAMPLE_RATE,
     );

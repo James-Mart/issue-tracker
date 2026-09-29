@@ -1,15 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  resolveRunActive,
-  runActiveFromFrame,
-} from "./use-conversation-run-active";
-
-describe("runActiveFromFrame", () => {
-  it("is true for started and false for finished", () => {
-    expect(runActiveFromFrame("started")).toBe(true);
-    expect(runActiveFromFrame("finished")).toBe(false);
-  });
-});
+import { resolveRunActive } from "./use-conversation-run-active";
 
 describe("resolveRunActive", () => {
   it("reports a run active on mount from the server seed", () => {

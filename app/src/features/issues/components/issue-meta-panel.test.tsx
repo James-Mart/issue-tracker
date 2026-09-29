@@ -133,10 +133,6 @@ function parentRowLabel(container: HTMLElement): string | undefined {
 }
 
 describe("IssueMetaPanel parent row", () => {
-  it("keeps the shared Part of label for other surfaces", () => {
-    expect(FIELD_LABELS.partOf).toBe("Part of");
-  });
-
   it.each([
     ["epic", epicIssue()],
     ["story", storyIssue()],

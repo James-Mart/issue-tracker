@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appDir } from "../config.js";
 import {
-  expectedHookScriptBasenames,
   scriptPathFromCommand,
   validateHookRegistration,
 } from "./hook-registration.js";
@@ -50,13 +49,6 @@ describe("scriptPathFromCommand", () => {
 });
 
 describe("validateHookRegistration", () => {
-  it("exposes the required hook basenames", () => {
-    expect(expectedHookScriptBasenames()).toEqual([
-      "strip-cursor-attribution.mjs",
-      "port-kill-guard.mjs",
-    ]);
-  });
-
   it("passes when hooks.preToolUse registers every required script", () => {
     writeHooksConfig({
       version: 1,

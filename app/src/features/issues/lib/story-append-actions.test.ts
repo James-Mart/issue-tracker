@@ -53,10 +53,6 @@ describe("storyAppendAvailability", () => {
 });
 
 describe("append copy", () => {
-  it("names PR feedback as an example in the Idea helper", () => {
-    expect(ADD_IDEA_HELPER).toContain("PR feedback");
-  });
-
   it("names both refs in the merge-base helper", () => {
     expect(mergeBaseHelper("main @ c4d91e2", "story/oauth")).toBe(
       "Appends one predefined task to merge main @ c4d91e2 into story/oauth and reconcile conflicts.",

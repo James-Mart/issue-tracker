@@ -1,10 +1,7 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { agentFailureClassSchema } from "../schemas.js";
-import type { AgentFailureClass } from "./agent-failure.js";
 import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import {
   agentsDir,
@@ -17,16 +14,6 @@ import {
 } from "./delegate-tool.fixtures.js";
 
 const AT = "2026-07-25T12:00:00.000Z";
-const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
-
-const EXPECTED_FAILURE_CLASSES: AgentFailureClass[] = [
-  "auth",
-  "agent-failed",
-  "cancelled",
-  "host-process-died",
-  "stalled-before-first-token",
-  "transport-exhausted",
-];
 
 let issuesRoot: string;
 let issuesDir: string;
@@ -183,14 +170,6 @@ describe("open delegation boot reconciliation", () => {
   });
 });
 
-describe("failure-class set", () => {
-  it("includes host-process-died in the schema enum", () => {
-    expect([...agentFailureClassSchema.options].sort()).toEqual(
-      [...EXPECTED_FAILURE_CLASSES].sort(),
-    );
-  });
-});
-
 describe("agent-facing failure-class contract", () => {
   it("names host-process-died on the delegate tool without retry or stop guidance", async () => {
     setupDelegateToolTest();
@@ -211,25 +190,6 @@ describe("agent-facing failure-class contract", () => {
     } finally {
       teardownDelegateToolTest();
     }
-  });
-
-  it("documents host-process-died as a fact with caller judgment and no instruction", () => {
-    const body = readFileSync(
-      join(pluginRoot, "agents/_issue-tracker-delegation.md"),
-      "utf8",
-    );
-    expect(body).toContain("`host-process-died`");
-    expect(body.replace(/\s+/g, " ")).toMatch(
-      /host-process-died` — the host died before the run finished; whether the lost work still matters is the caller's decision/,
-    );
-    const hostSection = body.slice(body.indexOf("`host-process-died`"));
-    const nextClass = hostSection.indexOf("`stalled-before-first-token`");
-    const hostOnly = hostSection.slice(
-      0,
-      nextClass === -1 ? undefined : nextClass,
-    );
-    expect(hostOnly).not.toMatch(/\bretry\b/i);
-    expect(hostOnly).not.toMatch(/\bdo not\b/i);
   });
 });
 

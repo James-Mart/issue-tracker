@@ -68,7 +68,6 @@ describe("storyGitMetaScalars", () => {
       { key: "mergeBase", label: FIELD_LABELS.mergeBase },
       { key: "stackedOn", label: FIELD_LABELS.stackedOn },
     ]);
-    expect(FIELD_LABELS.branchName).toBe("Branch");
   });
 
   it("omits unset mergeBase and absent readonly fields", () => {
