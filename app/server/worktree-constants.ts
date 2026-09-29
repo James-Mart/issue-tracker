@@ -1,7 +1,12 @@
 import { join } from "path";
 
-/** Tracker-managed worktree root — no per-Project override (SPEC § parallel worktree epic). */
-export const WORKTREE_ROOT = "/root/issue-tracker-worktrees";
+/**
+ * Tracker-managed worktree root — no per-Project override (SPEC § parallel worktree epic).
+ * `ISSUE_TRACKER_WORKTREE_ROOT` relocates the whole root so test workers never
+ * share checkouts with each other or with the real root.
+ */
+export const WORKTREE_ROOT =
+  process.env.ISSUE_TRACKER_WORKTREE_ROOT || "/root/issue-tracker-worktrees";
 
 export const WORKTREE_BLOCKED_REASONS = ["parent-branch"] as const;
 

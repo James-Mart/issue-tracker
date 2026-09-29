@@ -8,6 +8,7 @@ const workerTmp = mkdtempSync(join(baseTmp, "vitest-worker-"));
 process.env.TMPDIR = workerTmp;
 process.env.TMP = workerTmp;
 process.env.TEMP = workerTmp;
+process.env.ISSUE_TRACKER_WORKTREE_ROOT = join(workerTmp, "worktrees");
 
 process.on("exit", () => {
   rmSync(workerTmp, { recursive: true, force: true });
