@@ -3,16 +3,16 @@ name: issue-tracker-plan
 disable-model-invocation: true
 description: >-
   Grill an Idea into a plan tree via apply or story append (when appendTo is
-  set), raising a mockup round per affected screen, then auto-chain polish. Use
-  when the user asks to plan an Idea, flesh out a tracker plan, or run
-  issue-tracker-plan.
+  set), checking which affected screens to mock or skip before any mockup
+  round, then auto-chain polish. Use when the user asks to plan an Idea, flesh
+  out a tracker plan, or run issue-tracker-plan.
 ---
 
 # Issue Tracker — Plan (grill → plan tree)
 
-Turn a rough capture into a detailed plan. You grill the user, raise a
-mockup round for each screen the plan affects, show the outline, get one
-explicit-consequence yes, then migrate and auto-chain
+Turn a rough capture into a detailed plan. You grill the user, check which
+affected screens get a mockup round, run those rounds, show the outline, get
+one explicit-consequence yes, then migrate and auto-chain
 `issue-tracker-plan-polish`. Behavioral contract:
 Epic **auto-plan-polish-confirm** invariants (single post-outline gate +
 auto-chain polish) — do not restate that list here. Do not implement product
@@ -59,8 +59,8 @@ Before grilling:
 5. `issue project get <projectId> trunk` — default merge-base for the
    mandatory first grill question (`<projectId>` from step 1).
 6. `issue idea get <id> appendTo` — when this prints a Story id, `issue
-   view` that Story. After the grill (including mockup rounds), continue
-   at **## Append**.
+   view` that Story. After the grill (including the mock-or-skip check and
+   its rounds), continue at **## Append**.
 
 ## Grill-me protocol (inline)
 
@@ -115,16 +115,28 @@ mid-grill.
   questions that impact **user or developer experience** (UX/DX). When unsure
   about any of these, do not resolve product direction yourself; put each
   decision to them and wait.
-- **Raised mockup round per screen** — judge whether the plan will create or
-  change UI. When it will, run one mockup round per **screen** — the unit is
-  the screen: changes that land together on one screen are one round. Run
-  these rounds after the grill's other decisions are settled, one screen at a
-  time. For each affected screen, **Read**
-  `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-mockup/SKILL.md`
-  and follow it, naming that screen and passing the issue being planned as its
-  argument. Do not ask whether to run a round; do not skip a round for any
-  affected screen. What you do with what a round returns is
-  **## What a round returns** below.
+- **Mock-or-skip check** — judge whether the plan will create or change UI.
+  When it will, ask this check once you believe the product seams are
+  closed, before any mockup round. It is **one** question that names every
+  affected **screen** as **mock** or **skip**, each with a one-line reason —
+  the unit is the screen: changes that land together on one screen are one
+  entry. Mark a screen skip only when every change on it is small; mark
+  every other screen mock. A change is small when every part of it is
+  copy-only, layout-preserving, or reuses an existing pattern as-is. A new
+  screen, a new layout, a new interaction, or a new pattern is not small.
+  The answer list carries each answer's consequence:
+  - **Start** — run a mockup round for each mock screen, one screen at a
+    time, then go to the outline. For each, **Read**
+    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-mockup/SKILL.md`
+    and follow it, naming that screen and passing the issue being planned as
+    its argument. What you do with what a round returns is
+    **## What a round returns** below. With no mock screen, go straight to
+    the outline.
+  - **Keep grilling** — resume the grill, and ask this check again the next
+    time you believe the seams are closed.
+  - **Amend** — the reply moves named screens between mock and skip. Treat
+    it as **Start** on the amended list, without asking the check again. A
+    screen the reply does not name stays as the check proposed it.
 - **Do not enact** the plan (no tracker writes that materialize the
   tree) until the user answers yes at the single post-outline gate.
 - Do **not** ask a separate pre-outline “shared understanding?” confirm —
@@ -163,7 +175,7 @@ doc.
 - **A new product question** — when a return raises a product or dependency
   decision the grill has not settled, ask it and have it answered before the
   next screen's round starts.
-- **Before the outline** — every affected screen's round ends in an accepted
+- **Before the outline** — every mock screen's round ends in an accepted
   direction or a drop before you show the outline.
 
 ## Single post-outline gate, then migrate
