@@ -172,7 +172,11 @@ export default defineConfig({
   },
   test: {
     exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
-    setupFiles: ["./test/vitest-worker-temp.ts", "./test/vitest-worker-hardening.ts"],
+    setupFiles: [
+      "./test/vitest-worker-temp.ts",
+      "./test/vitest-worker-hardening.ts",
+      "./test/quiet-act-environment-warning.ts",
+    ],
     env: {
       VITEST_HEAP_REPORT_DIR: heapReportDir,
     },
