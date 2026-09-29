@@ -18,7 +18,7 @@ describe("layoutPipelineDiagram", () => {
   it("makes a one-node layer a full-width row at phone width", () => {
     const layout = layoutPipelineDiagram(planning, PHONE_WIDTH, measure);
     const byId = Object.fromEntries(layout.nodes.map((node) => [node.id, node]));
-    const singles = ["grill", "polish", "polish-apply", "work-handoff"];
+    const singles = ["grill", "polish", "polish-apply"];
     const width = byId.grill!.cardW;
     expect(width).toBeGreaterThan(200);
     for (const id of singles) {
@@ -29,6 +29,11 @@ describe("layoutPipelineDiagram", () => {
     }
     const sibling = byId.research!;
     expect(sibling.cardW).toBeLessThan(width);
+    expect(byId.concise!.y).toBe(byId["work-handoff"]!.y);
+    expect(byId.concise!.cardW).toBeLessThan(width);
+    expect(byId["work-handoff"]!.cardW).toBeLessThan(width);
+    expect(byId.format!.y).toBeGreaterThan(byId.concise!.y);
+    expect(byId.format!.cardW).toBe(width);
   });
 
   it("keeps every fan-out sibling inside the phone lane", () => {
