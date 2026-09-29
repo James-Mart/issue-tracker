@@ -135,25 +135,32 @@ describe("liveBrowserOriginBaseUrl", () => {
   });
 });
 
+type MockRoute = {
+  request: () => { url: () => string };
+  continue: () => Promise<void>;
+  abort: (errorCode?: string) => Promise<void>;
+};
+
+function mockRoute(url: string, log: string[]): MockRoute {
+  return {
+    request: () => ({ url: () => url }),
+    continue: async () => {
+      log.push(`continue ${url}`);
+    },
+    abort: async (errorCode) => {
+      log.push(`abort ${url} ${errorCode}`);
+    },
+  };
+}
+
 function mockPage(): Page & {
-  routes: Array<(route: {
-    request: () => { url: () => string };
-    continue: () => Promise<void>;
-  }) => Promise<void>>;
-  continued: string[];
+  routes: Array<(route: MockRoute) => Promise<void>>;
 } {
-  const routes: Array<(route: {
-    request: () => { url: () => string };
-    continue: () => Promise<void>;
-  }) => Promise<void>> = [];
-  const continued: string[] = [];
+  const routes: Array<(route: MockRoute) => Promise<void>> = [];
   const context = {
     route: async (
       _pattern: string,
-      handler: (route: {
-        request: () => { url: () => string };
-        continue: () => Promise<void>;
-      }) => Promise<void>,
+      handler: (route: MockRoute) => Promise<void>,
     ) => {
       routes.push(handler);
     },
@@ -165,9 +172,8 @@ function mockPage(): Page & {
     reload: async () => "original-reload",
     context: () => context,
   };
-  return Object.assign(page, { routes, continued }) as unknown as Page & {
+  return Object.assign(page, { routes }) as unknown as Page & {
     routes: typeof routes;
-    continued: string[];
   };
 }
 
@@ -197,39 +203,27 @@ describe("installBrowserOriginGuard", () => {
     ).rejects.toThrow(NO_LIVE_STACK_NAVIGATION_ERROR);
   });
 
-  it("blocks a request the navigation method did not name", async () => {
+  it("aborts a request the navigation method did not name, without throwing", async () => {
+    const log: string[] = [];
+    let baseUrl: string | null = null;
     const page = mockPage();
-    await installBrowserOriginGuard(page, () => null);
+    await installBrowserOriginGuard(page, () => baseUrl);
     const handler = page.routes[0]!;
-    await expect(
-      handler({
-        request: () => ({ url: () => "http://example.com/" }),
-        continue: async () => {
-          page.continued.push("example");
-        },
-      }),
-    ).rejects.toThrow(NO_LIVE_STACK_NAVIGATION_ERROR);
-    expect(page.continued).toEqual([]);
+    const inStack = "http://tokens.psibase.localhost:41234/a";
 
-    let baseUrl: string | null = BASE;
-    const allowed = mockPage();
-    await installBrowserOriginGuard(allowed, () => baseUrl);
-    await allowed.routes[0]!({
-      request: () => ({ url: () => "http://tokens.psibase.localhost:41234/a" }),
-      continue: async () => {
-        allowed.continued.push("ok");
-      },
-    });
-    expect(allowed.continued).toEqual(["ok"]);
+    await handler(mockRoute("http://example.com/", log));
+    baseUrl = BASE;
+    await handler(mockRoute(inStack, log));
+    await handler(mockRoute("http://localhost:44809/api/issues", log));
     baseUrl = null;
-    await expect(
-      allowed.routes[0]!({
-        request: () => ({ url: () => "http://tokens.psibase.localhost:41234/a" }),
-        continue: async () => {
-          allowed.continued.push("after-stop");
-        },
-      }),
-    ).rejects.toThrow(NO_LIVE_STACK_NAVIGATION_ERROR);
+    await handler(mockRoute(inStack, log));
+
+    expect(log).toEqual([
+      "abort http://example.com/ blockedbyclient",
+      `continue ${inStack}`,
+      "abort http://localhost:44809/api/issues blockedbyclient",
+      `abort ${inStack} blockedbyclient`,
+    ]);
   });
 });
 
@@ -264,6 +258,28 @@ describe("playwright page", () => {
       }
       expect(allowlistRefusal).toBe(false);
     } finally {
+      await browser.close();
+    }
+  });
+
+  it("fails an in-page request off the stack instead of leaving it hanging", async () => {
+    const browser = await chromium.launch({ headless: true });
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown) => rejections.push(reason);
+    process.on("unhandledRejection", onRejection);
+    try {
+      const page = await browser.newPage();
+      await installBrowserOriginGuard(page, () => null);
+      const outcome = await page.evaluate(() =>
+        fetch("http://example.com/").then(
+          () => "fetched",
+          (err: Error) => err.name,
+        ),
+      );
+      expect(outcome).toBe("TypeError");
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onRejection);
       await browser.close();
     }
   });

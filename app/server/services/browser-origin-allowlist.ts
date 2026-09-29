@@ -161,8 +161,11 @@ export async function installBrowserOriginGuard(
   const context = page.context();
   if (guardedContexts.has(context)) return;
   guardedContexts.add(context);
+  // Abort, never throw: Playwright MCP reports a route-handler throw on
+  // whichever tool call runs next, and the request is left hanging.
   await context.route("**/*", async (route) => {
-    assertBrowserNavigation(route.request().url(), readBaseUrl());
-    await route.continue();
+    const decision = decideBrowserNavigation(route.request().url(), readBaseUrl());
+    if (decision.allowed) await route.continue();
+    else await route.abort("blockedbyclient");
   });
 }
