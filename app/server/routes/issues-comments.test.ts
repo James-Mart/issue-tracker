@@ -205,8 +205,8 @@ describe("comments HTTP API", () => {
     expect(body.problems).toEqual([]);
     expect(body.messages).toHaveLength(3);
     expect(body.threads).toEqual([
-      { rootId: anchoredId, kind: "review", state: "open" },
-      { rootId: rootId, kind: "review", state: "open" },
+      { rootId: anchoredId, kind: "review", state: "open", readyToTask: true },
+      { rootId: rootId, kind: "review", state: "open", readyToTask: true },
     ]);
 
     const anchored = body.messages.find((m) => m.id === anchoredId);
@@ -363,6 +363,7 @@ describe("comments HTTP API", () => {
       rootId: threadId,
       kind: "review",
       state: "resolved",
+      readyToTask: false,
     });
     expect(resolvedJson.event.event).toBe("resolved");
     expect(resolvedJson.event.by).toEqual({ role: "human" });
@@ -376,7 +377,7 @@ describe("comments HTTP API", () => {
     };
     expect(resolvedView.messages).toHaveLength(2);
     expect(resolvedView.threads).toEqual([
-      { rootId: threadId, kind: "review", state: "resolved" },
+      { rootId: threadId, kind: "review", state: "resolved", readyToTask: false },
     ]);
 
     const unresolved = await fetch(

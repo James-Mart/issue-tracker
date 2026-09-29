@@ -266,6 +266,82 @@ describe("comment anchor and reply flags", () => {
     );
   });
 
+  it("links a Story thread to a Task with --link-task", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeIssue("task-a", {
+      kind: "task",
+      title: "Fix guard",
+      partOf: "s",
+      order: 0,
+      status: "todo",
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    writeFileSync(
+      join(dir, "s", "comments.jsonl"),
+      `${JSON.stringify({
+        id: "root-id",
+        role: "story-review",
+        body: "fix the guard",
+        at: nextAt(),
+      })}\n`,
+    );
+
+    const { stdout, status } = await runIssueCli(
+      [
+        "comment",
+        "s",
+        "--role",
+        "human",
+        "--reply-to",
+        "root-id",
+        "--link-task",
+        "task-a",
+      ],
+      { env: env() },
+    );
+    expect(status).toBe(0);
+    expect(stdout).toBe("");
+
+    const lines = readFileSync(join(dir, "s", "comments.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatchObject({
+      type: "thread-event",
+      threadId: "root-id",
+      event: "linked",
+      taskId: "task-a",
+      by: { role: "human" },
+    });
+  });
+
+  it("refuses --link-task without --reply-to", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const missingReply = await runIssueCli(
+      ["comment", "s", "--role", "human", "--link-task", "task-a"],
+      { env: env() },
+    );
+    expect(missingReply.status).toBe(1);
+    expect(missingReply.stderr).toContain("--link-task requires --reply-to");
+  });
+
   it("supports anchor flags on kind-scoped comment", async () => {
     const { stdout, status } = await runIssueCli(
       [

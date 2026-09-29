@@ -82,6 +82,7 @@ describe("appendThreadEvent", () => {
       rootId: root.id,
       kind: "review",
       state: "resolved",
+      readyToTask: false,
     });
 
     const lines = logLines("s");
@@ -156,6 +157,56 @@ describe("appendThreadEvent", () => {
     ).rejects.toThrow(/not a thread root/);
   });
 
+  it("links a thread to a Task under the Story", async () => {
+    const { appendComment, appendThreadEvent, readComments } = await load();
+    writeIssue("task-a", {
+      kind: "task",
+      title: "Fix guard",
+      partOf: "s",
+      order: 1,
+      status: "todo",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const root = await appendComment("s", { role: "story-review", body: "fix this" });
+
+    const linked = await appendThreadEvent("s", root.id, {
+      event: "linked",
+      taskId: "task-a",
+      by: { role: "human", name: "Jared" },
+    });
+    expect(linked.thread).toEqual({
+      rootId: root.id,
+      kind: "review",
+      state: "open",
+      linkedTaskId: "task-a",
+      readyToTask: false,
+    });
+    expect(logLines("s")[1]).toMatchObject({
+      type: "thread-event",
+      event: "linked",
+      taskId: "task-a",
+    });
+
+    writeIssue("other-task", {
+      kind: "task",
+      title: "Elsewhere",
+      partOf: "p",
+      order: 1,
+      status: "todo",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    await expect(
+      appendThreadEvent("s", root.id, {
+        event: "linked",
+        taskId: "other-task",
+        by: { role: "human" },
+      }),
+    ).rejects.toThrow(/not under story/);
+    expect(readComments("s").messages).toHaveLength(1);
+  });
+
   it("reports an event for an unknown thread as a problem and keeps last-event state", async () => {
     const { readComments } = await load();
     writeFileSync(
@@ -203,7 +254,7 @@ describe("appendThreadEvent", () => {
       'thread event references unknown thread "missing"',
     ]);
     expect(comments.threads).toEqual([
-      { rootId: "root", kind: "review", state: "resolved" },
+      { rootId: "root", kind: "review", state: "resolved", readyToTask: false },
     ]);
     expect(comments.messages).toHaveLength(1);
   });

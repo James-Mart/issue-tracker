@@ -29,6 +29,7 @@ import {
   type IssueRecord,
   type IssuesResponse,
   type Problem,
+  type TaskStatus,
 } from "../schemas.js";
 import { IssueError } from "./errors.js";
 import { parseCommentLog } from "./thread-state.js";
@@ -126,7 +127,7 @@ function jsonPathOf(id: string): string {
   return join(dirOf(id), "issue.json");
 }
 
-function commentsPathOf(id: string): string {
+export function commentsPathOf(id: string): string {
   return join(dirOf(id), "comments.jsonl");
 }
 
@@ -241,7 +242,9 @@ export function list(): IssuesResponse {
   // Parse each comments.jsonl so out-of-band corruption surfaces in the tree/CLI,
   // not just the comments panel. Comments are small local files, so the extra reads
   // are cheap; list() is not invalidated on every comment append (see events).
-  const commentProblems = issues.flatMap((issue) => readComments(issue.id).problems);
+  const commentProblems = issues.flatMap((issue) =>
+    readComments(issue.id, issues).problems,
+  );
   const legacyChatProblems = issues.flatMap((issue) => {
     if (!existsSync(legacyChatPathOf(issue.id))) return [];
     return [{ id: issue.id, message: "chat.jsonl" }];
@@ -787,13 +790,31 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
   });
 }
 
-export function readComments(id: string): CommentsResponse {
+export function taskStatusesForStory(
+  storyId: string,
+  issues: Issue[] = readAll().issues,
+): Map<string, TaskStatus> {
+  const statuses = new Map<string, TaskStatus>();
+  for (const issue of issues) {
+    if (issue.kind === "task" && issue.partOf === storyId) {
+      statuses.set(issue.id, issue.status);
+    }
+  }
+  return statuses;
+}
+
+export function readComments(id: string, issues?: Issue[]): CommentsResponse {
   if (!existsSync(dirOf(id))) {
     throw new IssueError("not_found", `unknown issue "${id}"`);
   }
   const path = commentsPathOf(id);
   if (!existsSync(path)) return { messages: [], threads: [], problems: [] };
-  return parseCommentLog(id, readFileSync(path, "utf8"));
+  const issue = readIssueOrThrow(id);
+  const taskStatusById =
+    issue.kind === "story"
+      ? taskStatusesForStory(id, issues ?? readAll().issues)
+      : new Map<string, TaskStatus>();
+  return parseCommentLog(id, readFileSync(path, "utf8"), taskStatusById);
 }
 
 /** Validate and stamp one comment. Caller writes it inside `serialize`. */

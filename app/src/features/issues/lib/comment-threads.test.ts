@@ -56,6 +56,7 @@ describe("groupCommentThreads", () => {
     expect(threads[1]?.replies.map((reply) => reply.id)).toEqual(["r1", "r2"]);
     expect(threads[0]?.replies).toEqual([]);
     expect(threads.map((thread) => thread.state)).toEqual(["open", "open"]);
+    expect(threads.map((thread) => thread.readyToTask)).toEqual([true, true]);
   });
 
   it("applies derived thread state by root id", () => {
@@ -66,9 +67,39 @@ describe("groupCommentThreads", () => {
     });
     const threads = groupCommentThreads(
       [root],
-      [{ rootId: "root", kind: "review", state: "resolved" }],
+      [
+        {
+          rootId: "root",
+          kind: "review",
+          state: "resolved",
+          readyToTask: false,
+        },
+      ],
     );
     expect(threads[0]?.state).toBe("resolved");
+    expect(threads[0]?.readyToTask).toBe(false);
+  });
+
+  it("maps linkedTaskId and readyToTask from thread views", () => {
+    const root = comment({
+      id: "root",
+      at: "2026-08-30T14:00:00.000Z",
+      body: "root",
+    });
+    const threads = groupCommentThreads(
+      [root],
+      [
+        {
+          rootId: "root",
+          kind: "review",
+          state: "open",
+          linkedTaskId: "task-a",
+          readyToTask: false,
+        },
+      ],
+    );
+    expect(threads[0]?.linkedTaskId).toBe("task-a");
+    expect(threads[0]?.readyToTask).toBe(false);
   });
 });
 

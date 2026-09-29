@@ -14,6 +14,7 @@ import {
   CommentAnchorSnippet,
 } from "./comment-anchor-context";
 import { isHumanRole } from "./message";
+import { ThreadLinkedTaskChip } from "./thread-linked-task-chip";
 
 export function CommentThread({
   thread,
@@ -52,6 +53,7 @@ export function CommentThread({
     <article
       data-thread-root={thread.root.id}
       data-thread-state={thread.state}
+      data-ready-to-task={thread.readyToTask ? "" : undefined}
       data-outdated={outdated ? "" : undefined}
       data-collapsed={collapsed ? "" : undefined}
       className={cn(
@@ -69,6 +71,11 @@ export function CommentThread({
               showLocation={!inline}
               onSeeInDiff={onSeeInDiff}
             />
+          ) : null}
+          {thread.linkedTaskId ? (
+            <div className="flex flex-wrap items-center justify-end gap-1 pb-1">
+              <ThreadLinkedTaskChip taskId={thread.linkedTaskId} />
+            </div>
           ) : null}
           {showAnchorContext && issueId && anchor ? (
             <CommentAnchorSnippet issueId={issueId} anchor={anchor} />

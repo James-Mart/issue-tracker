@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommentMessage } from "@server/schemas";
 import type { CommentThread as CommentThreadData } from "../../lib/comment-threads";
@@ -15,6 +16,19 @@ const FILE_CONTENTS = Array.from(
 
 vi.mock("../../api/queries", () => ({
   useIssueChangeFileQuery: () => ({ data: FILE_CONTENTS }),
+  useIssuesQuery: () => ({
+    data: {
+      issues: [
+        {
+          id: "task-a",
+          kind: "task",
+          title: "Tighten review API errors",
+          partOf: "story-threads",
+          status: "todo",
+        },
+      ],
+    },
+  }),
 }));
 
 function comment(
@@ -26,6 +40,7 @@ function comment(
 
 const currentThread: CommentThreadData = {
   state: "open",
+  readyToTask: true,
   root: comment({
     id: "current-root",
     at: "2026-08-30T14:22:00.000Z",
@@ -52,6 +67,7 @@ const currentThread: CommentThreadData = {
 
 const outdatedThread: CommentThreadData = {
   state: "open",
+  readyToTask: true,
   root: comment({
     id: "outdated-root",
     at: "2026-08-29T09:15:00.000Z",
@@ -264,5 +280,32 @@ describe("CommentThread", () => {
       unresolve?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onUnresolve).toHaveBeenCalledOnce();
+  });
+
+  it("renders a linked Task chip on inline threads", () => {
+    const linked: CommentThreadData = {
+      ...currentThread,
+      linkedTaskId: "task-a",
+      readyToTask: false,
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/projects/issue-tracker/issues/story-threads"]}>
+          <CommentThread thread={linked} inline onReply={vi.fn()} />
+        </MemoryRouter>,
+      );
+    });
+
+    const chip = container.querySelector('[data-testid="thread-linked-task"]');
+    expect(chip).not.toBeNull();
+    expect(chip?.textContent).toContain("Tighten review API errors");
+    expect(
+      container.querySelector('[data-thread-root="current-root"]')?.hasAttribute(
+        "data-ready-to-task",
+      ),
+    ).toBe(false);
   });
 });

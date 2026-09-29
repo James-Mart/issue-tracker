@@ -331,7 +331,7 @@ function registerMergeCommand(parent: Command, run: Run, kind: IssueKind): void 
 
 type CommentCliOptions = {
   role: string;
-  body: string;
+  body?: string;
   name?: string;
   path?: string;
   side?: string;
@@ -340,6 +340,7 @@ type CommentCliOptions = {
   commit?: string;
   replyTo?: string;
   resolve?: boolean;
+  linkTask?: string;
 };
 
 function anchorFlagsPresent(opts: CommentCliOptions): boolean {
@@ -359,6 +360,10 @@ function commentInputFromCliOpts(opts: CommentCliOptions): CommentInput {
     throw new Error(
       "--reply-to cannot be combined with anchor flags (--path, --side, --line, --start-line, --commit)",
     );
+  }
+
+  if (!opts.body) {
+    throw new Error("--body is required");
   }
 
   if (anyAnchor) {
@@ -419,25 +424,52 @@ function applyCommentOptions(cmd: Command): Command {
     .option(
       "--resolve",
       "reply and resolve that Story thread; requires --reply-to and --body",
+    )
+    .option(
+      "--link-task <taskId>",
+      "record that a Task addresses that Story thread; requires --reply-to",
     );
+}
+
+function assertNoAnchorForThreadAction(opts: CommentCliOptions, flag: string): void {
+  if (anchorFlagsPresent(opts)) {
+    throw new Error(
+      `${flag} cannot be combined with anchor flags (--path, --side, --line, --start-line, --commit)`,
+    );
+  }
+}
+
+function cliAuthor(opts: CommentCliOptions): { role: string; name?: string } {
+  return opts.name !== undefined
+    ? { role: opts.role, name: opts.name }
+    : { role: opts.role };
 }
 
 async function printComment(
   id: string,
   opts: CommentCliOptions,
-): Promise<Comment> {
-  if (opts.resolve) {
-    if (anchorFlagsPresent(opts)) {
-      throw new Error(
-        "--resolve cannot be combined with anchor flags (--path, --side, --line, --start-line, --commit)",
-      );
+): Promise<Comment | undefined> {
+  if (opts.linkTask) {
+    assertNoAnchorForThreadAction(opts, "--link-task");
+    if (!opts.replyTo) {
+      throw new Error("--link-task requires --reply-to");
     }
+    const result = await appendThreadEvent(id, opts.replyTo, {
+      event: "linked",
+      taskId: opts.linkTask,
+      by: cliAuthor(opts),
+      ...(opts.body !== undefined ? { body: opts.body } : {}),
+    });
+    return result.reply;
+  }
+  if (opts.resolve) {
+    assertNoAnchorForThreadAction(opts, "--resolve");
     if (!opts.replyTo || !opts.body) {
       throw new Error("--resolve requires --reply-to and --body");
     }
     const { reply } = await appendThreadEvent(id, opts.replyTo, {
       event: "resolved",
-      by: opts.name !== undefined ? { role: opts.role, name: opts.name } : { role: opts.role },
+      by: cliAuthor(opts),
       body: opts.body,
     });
     return reply;
@@ -482,7 +514,7 @@ function registerCommentCommand(parent: Command, run: Run, kind: IssueKind): voi
       .command("comment")
       .argument("<id>", "issue id")
       .requiredOption("--role <role>", "message author role (e.g. agent, human)")
-      .requiredOption("--body <text>", "message body (Markdown)")
+      .option("--body <text>", "message body (Markdown)")
       .option("--name <name>", "author display name"),
   ).action(
     (id: string, opts: CommentCliOptions) =>
@@ -582,7 +614,7 @@ export function registerBareIdOps(program: Command, run: Run): void {
       .command("comment")
       .argument("<id>", "issue id")
       .requiredOption("--role <role>", "message author role (e.g. agent, human)")
-      .requiredOption("--body <text>", "message body (Markdown)")
+      .option("--body <text>", "message body (Markdown)")
       .option("--name <name>", "author display name"),
   ).action(
     (id: string, opts: CommentCliOptions) =>
