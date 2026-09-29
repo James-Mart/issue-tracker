@@ -129,11 +129,11 @@ when they say to.
    description **is** the implementor's spec for that fix.
 4. **Runtime.** When Verify collected findings, take ### If gaps with them.
 
-   Otherwise decide whether the Story has runtime-visible behavior: its
-   prose or any of its Tasks' Verify sections require exercising the
-   running product, UI or not (booting, calling a service, browsing), or
-   contain a `#### Human steps` heading. When it has none, take ### If
-   clean.
+   Otherwise, on **Resume**, first run the **Fresh** diff command above.
+   Then decide whether the Story has runtime-visible behavior: judged from
+   the Story prose and that whole branch diff, it changes behavior a user
+   can observe in the running product, UI or not (a screen, a command's
+   output, a service's response). When it has none, take ### If clean.
 
    When it has runtime-visible behavior, delegate the Runtime validator
    stub and wait for its reply. Read the fenced `json` block that ends the

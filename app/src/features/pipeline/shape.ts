@@ -326,8 +326,8 @@ const work: Pipeline = {
     { from: "implement", to: "review-duplication", kind: "spawn" },
     { from: "implement", to: "review-structure", kind: "spawn" },
     { from: "implement", to: "review-idiom", kind: "spawn" },
-    // The look runs inside a UI Task's Verify; other Tasks go straight to
-    // Story review.
+    // The look runs inside the implementor's self-check on a UI-related
+    // Task; other Tasks go straight to Story review.
     { from: "implement", to: "ui-look", kind: "flow" },
     { from: "ui-look", to: "story-review", kind: "flow" },
     { from: "implement", to: "story-review", kind: "flow" },
