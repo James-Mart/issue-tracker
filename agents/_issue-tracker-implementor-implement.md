@@ -18,23 +18,28 @@ Absolute path for this file (Read this exact path):
    task description: discernable paths are staged, undiscernable paths stay
    unmerged, and that state raises attention and stops before record-commit.
    Other tasks still hand off with no unmerged paths.
-3. Verify as that description requires (tests, build, etc.). **Read**
+3. **Self-check.** Choose the checks that show the outcomes the Task states
+   hold, and run them. Unit-suite runs follow `codingStandards` § Unit
+   suite. For build, runtime, and browser checks, **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
    and consult `verification` per that file using the bootstrap summary
-   output. When this Task builds on a prior Task's tests, keep verification
-   focused on this
-   Task's surface — do not re-run the prior Task's full matrix by default.
-   When the Task appears UI-related (same judgment as the `designSystem`
-   consult — Task prose and changed paths), **Read**
+   output. A `### Verify` section in the Task is context for choosing checks.
+   When this Task builds on a prior Task's tests, keep the self-check focused
+   on this Task's surface — do not re-run the prior Task's full matrix by
+   default.
+   When the Task appears UI-related (the bootstrap `designSystem` judgment),
+   **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
-   and follow it as part of Verify. That look is this role's self-check.
+   and follow it as part of this self-check.
    Record the include's three evidence fields
-   on one `issue task comment <id> --role implementor` (the Verify comment for
-   this look — do not add a second look-only comment). If the look failed, then
+   on one `issue task comment <id> --role implementor` (the comment for this
+   look — do not add a second look-only comment). If the look failed, then
    `issue task set <id> needsAttention true --reason "..."` and stop. Passing
-   tests or build does not waive a failed look; tests and build stay required.
+   checks do not waive a failed look.
    A completed look with a visible product problem is fixed in this implement
    pass — it is not a reason to skip the look.
+   The self-check is done when every check you chose passes and, on a
+   UI-related Task, the look passed.
 4. **Intentional no-op.** If correctly satisfying the spec means there are **no
    source-controlled file changes**, signal it explicitly with
    `issue task set <id> noDiff true`, then go to step 8.
@@ -50,12 +55,12 @@ Absolute path for this file (Read this exact path):
    of findings. You have final authority over your code.
    1. Delegate the **Review** stub in parallel, one delegation per reviewer
       role. Include `issue-tracker-review-design-system` only when the Task
-      is UI-related (the step 3 judgment). Keep each returned agent id.
+      is UI-related (the bootstrap `designSystem` judgment). Keep each returned agent id.
    2. For each finding, fix it or decline it with a reason.
    3. Re-enter each reviewer with at least one finding you fixed, using the
       **Review (recheck)** stub. Handle each reply as in step 6.2. Repeat
       until a round fixes nothing.
-   4. Re-run step 3's tests and build. Re-run its UI look only when the Task
+   4. Re-run step 3's checks. Re-run its UI look only when the Task
       is UI-related and the review fixes changed at least one of the paths
       that made it so; that look's three evidence fields go in the step 8
       comment.
