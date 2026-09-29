@@ -115,6 +115,67 @@ export type CommentInput = z.infer<typeof commentInputSchema>;
 /** Stored comment plus read-time `outdated` on anchored messages only. */
 export type CommentMessage = Comment & { outdated?: boolean };
 
+export const THREAD_EVENTS = ["resolved", "unresolved", "linked"] as const;
+export const THREAD_UI_EVENTS = ["resolved", "unresolved"] as const;
+export const THREAD_KINDS = ["review"] as const;
+export const THREAD_STATES = ["open", "resolved"] as const;
+
+export const threadEventSchema = z
+  .object({
+    type: z.literal("thread-event"),
+    threadId: nonEmpty,
+    event: z.enum(THREAD_EVENTS),
+    taskId: nonEmpty.optional(),
+    by: z.object({
+      role: nonEmpty,
+      name: z.string().optional(),
+    }),
+    at: nonEmpty,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.event === "linked") {
+      if (!value.taskId) {
+        ctx.addIssue({
+          code: "custom",
+          message: "linked event requires taskId",
+          path: ["taskId"],
+        });
+      }
+      return;
+    }
+    if (value.taskId !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "taskId is only valid on linked events",
+        path: ["taskId"],
+      });
+    }
+  });
+
+export type ThreadEvent = z.infer<typeof threadEventSchema>;
+export type ThreadEventName = (typeof THREAD_EVENTS)[number];
+
+/** Caller body for the human thread-event route. `by` is stamped server-side. */
+export const threadEventRequestSchema = z
+  .object({
+    event: z.enum(THREAD_UI_EVENTS),
+    body: z.string().optional(),
+    name: z.string().optional(),
+  })
+  .strict();
+
+export type ThreadEventRequest = z.infer<typeof threadEventRequestSchema>;
+
+/** Read-time view derived from comments plus thread events. */
+export interface ThreadView {
+  rootId: string;
+  kind: (typeof THREAD_KINDS)[number];
+  state: (typeof THREAD_STATES)[number];
+  linkedTaskId?: string;
+  readyToTask: boolean;
+}
+
 export const mergeStoryBodySchema = z.object({
   auto: z.boolean().optional(),
   matchHeadCommit: z.string().optional(),
@@ -124,6 +185,7 @@ export type MergeStoryBody = z.infer<typeof mergeStoryBodySchema>;
 
 export interface CommentsResponse {
   messages: CommentMessage[];
+  threads: ThreadView[];
   problems: Problem[];
 }
 

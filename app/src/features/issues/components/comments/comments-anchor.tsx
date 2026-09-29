@@ -3,11 +3,7 @@ import type { IssueDetail } from "@server/schemas";
 import { hasAttention } from "@server/kind";
 import { cn } from "@/lib/utils/cn";
 import { useCommentsQuery } from "../../api/queries";
-import { supportsComments } from "../../lib/comments";
-
-function commentCountLabel(count: number): string {
-  return count === 1 ? "1 comment" : `${count} comments`;
-}
+import { commentCountLabel, supportsComments } from "../../lib/comments";
 
 /** Header link beside the issue id: comment count + scroll target for the thread. */
 export function CommentsAnchorLink({

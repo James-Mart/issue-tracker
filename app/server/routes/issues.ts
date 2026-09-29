@@ -10,6 +10,7 @@ import {
   formatZodError,
   type IssuePatch,
   mergeStoryBodySchema,
+  threadEventRequestSchema,
 } from "../schemas.js";
 import { exportDraftMarkdown } from "../middleware/export-draft-markdown.js";
 import { uploadAttachment } from "../middleware/upload-attachment.js";
@@ -44,6 +45,7 @@ import {
   update,
 } from "../services/issues.js";
 import { readCommentsWithOutdated } from "../services/anchor-outdated.js";
+import { appendThreadEvent } from "../services/thread-events.js";
 import { awaitingHumanFromTranscript } from "../services/awaiting-human.js";
 import {
   createIssueChannelSession,
@@ -382,6 +384,34 @@ export function createIssuesRouter(
         req.body as CommentInput,
       );
       res.status(201).json(message);
+    }),
+  );
+
+  router.post(
+    "/:id/threads/:threadId/events",
+    asyncRoute(async (req, res) => {
+      const parsed = threadEventRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new IssueError(
+          "validation",
+          formatZodError(parsed.error, "invalid thread event"),
+        );
+      }
+      const result = await appendThreadEvent(
+        req.params.id,
+        req.params.threadId,
+        {
+          event: parsed.data.event,
+          ...(parsed.data.body !== undefined ? { body: parsed.data.body } : {}),
+          by: {
+            role: "human",
+            ...(parsed.data.name !== undefined
+              ? { name: parsed.data.name }
+              : {}),
+          },
+        },
+      );
+      res.status(201).json(result);
     }),
   );
 

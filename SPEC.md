@@ -278,6 +278,10 @@ These are computed by `derive()` and never written to disk (see
   not read the flag as "nothing was done." Surfaced in the detail panel when
   set; omitted from the tree outline. An empty working tree alone is **not** a
   completion signal.
+- **openLinkedThreadRoots** — derived Task field, not stored. Read with
+  `issue task get <taskId> openLinkedThreadRoots`. One Story thread root id
+  per line: threads that are open and linked to that Task. Empty stdout when
+  there are none.
 - **archived** — stored visibility flag on Epic / Idea / Story / Task (never
   Project). Explicit; **not** auto-derived from Done. Cascade and CLI/UI
   filtering — see [Archived visibility](#archived-visibility).
@@ -363,7 +367,9 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   `{id} [{at}] {author} @ {path}:{line} {side} {sha7}: {body}` (a range uses
   `{startLine}-{line}`; append ` (outdated)` after the location when the anchor
   is outdated). `{author}` is `name` when set, else `role`, followed by
-  ` ({type})` when the comment has a `type`. See
+  ` ({type})` when the comment has a `type`. On a Story, `--comments` also
+  appends `--- threads ---`: one line per thread root, `{rootId} open|resolved`,
+  plus ` linked={taskId}` when that thread is linked to a Task. See
   [`comments.jsonl` message shape](#commentsjsonl-message-shape). Prefer
   `issue get <id> <field>` for a single field. Label lines: see
   [Project labels](#project-labels).
@@ -371,12 +377,15 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   [get / set](#kind-scoped-get--set).
 - **`comment`** — `issue comment <id> --role <role> --body <text>`
   (optional `--name`; optional anchor flags `--path`, `--side`, `--line`,
-  optional `--start-line`, `--commit`; optional `--reply-to <commentId>`).
+  optional `--start-line`, `--commit`; optional `--reply-to <commentId>`;
+  optional `--resolve`).
   Appends one message to `comments.jsonl` (the CLI verb is `comment`; the
   on-disk log is `comments.jsonl`); prints the server-stamped `id` on stdout;
   refuses a Project id. Anchor flags require all of `--path`, `--side`,
   `--line`, and `--commit` together; `--reply-to` is mutually exclusive with
-  anchor flags. See [`comments.jsonl` message shape](#commentsjsonl-message-shape)
+  anchor flags. `--resolve` replies and resolves that Story thread in the
+  same write; it requires `--reply-to` and `--body`, and there is no CLI
+  unresolve. See [`comments.jsonl` message shape](#commentsjsonl-message-shape)
   and [Service layer](#service-layer).
 - **`merge`** — `issue merge <storyId> [--auto] [--match-head-commit <sha>]`;
   shells out to `gh pr merge --merge` with owner/repo/number from the Story's
@@ -498,7 +507,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `worktree`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `worktree`, `openLinkedThreadRoots`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -1224,10 +1233,10 @@ header and tree-row hover expose Archive / Unarchive actions that PATCH
 
 ## `comments.jsonl` message shape
 
-Each line of `comments.jsonl` is one JSON message object
-(`commentSchema` in `app/server/schemas/issue.ts`). The log stays
-**append-only** — messages are never edited or deleted in place, and there is
-**no resolution state** (no resolved/unresolved flag or count).
+Each line of `comments.jsonl` is one JSON object — a comment
+(`commentSchema` in `app/server/schemas/issue.ts`) or a thread event.
+The log stays **append-only** — lines are never edited or deleted in place.
+Resolution is a thread event, not a flag on the comment.
 
 | field | type | notes |
 | --- | --- | --- |
@@ -1257,6 +1266,29 @@ an immutable commit. Object members:
 | `line` | number | anchored line (1-based) on that side |
 | `startLine` | number? | when set, range start (1-based); must satisfy `startLine <= line` |
 | `commitSha` | string | full 40- or 64-character hex object name; validated on append; never inferred from the issue |
+
+**Thread event (`type: "thread-event"`).** Records a change to a thread's
+resolution. Members:
+
+| member | type | notes |
+| --- | --- | --- |
+| `threadId` | string | id of the thread **root** |
+| `event` | `"resolved"` \| `"unresolved"` | later Stories add event names on the same route |
+| `by` | `{ role, name? }` | who recorded the event |
+| `at` | ISO string | server-stamped on append |
+
+`GET /api/issues/:id/comments` returns `messages` plus derived `threads`:
+`{ rootId, kind: "review", state: "open" | "resolved" }`. `state` is the last
+`resolved` or `unresolved` event for that root, or `open` when there is none.
+Every root this Story defines has `kind: "review"`. An event whose `threadId`
+is not a root is skipped into `problems`.
+
+Humans record either event, with an optional reply `body`, via
+`POST /api/issues/:storyId/threads/:threadId/events` with
+`{ event, body?, name? }`. A `body` appends a reply in the same write. The
+route is Story-only and stamps `by.role` as `human`. Agents record `resolved`
+only through `issue comment --resolve`, which requires a reply body. There is
+no CLI unresolve.
 
 **Outdated (`outdated`).** Read-time only — never stored in `comments.jsonl`.
 Present on anchored comments when the anchored line or range at
@@ -1317,8 +1349,14 @@ no consumer can persist a broken file.
   `POST /api/stories/:id/human-done` calls `humanDone`.
   Append-time validation refuses invalid `replyTo`, `anchor`, and `commitSha`
   values.
+- `appendThreadEvent(storyId, threadId, input)` — appends a thread event, and
+  a reply when `body` is set, in one write on a Story. Refuses a non-Story, a
+  `threadId` that is not a thread root, an agent `unresolved`, and an agent
+  `resolved` without `body`. `POST /api/issues/:storyId/threads/:threadId/events`
+  stamps `by.role` `human` and calls this path.
 - `readComments(id)` — reads/parses `comments.jsonl`, skipping malformed lines into
-  `problems`. An issue with no comment log returns empty messages.
+  `problems`. An issue with no comment log returns empty messages and threads.
+  `threads` is the derived view (`rootId`, `kind: "review"`, `state`).
 - Attachment bytes (`attachments.ts`): `listAttachments` / `getAttachment` /
   `putAttachment` (unique name on collision) / `removeAttachment` — see
   [Attachments](#attachments). Not part of `read(id)` payloads.

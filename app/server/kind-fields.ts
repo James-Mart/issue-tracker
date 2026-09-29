@@ -282,6 +282,7 @@ export const TASK_GET_FIELDS = {
   updatedAt: STORED,
   description: DESCRIPTION,
   blocked: DERIVED,
+  openLinkedThreadRoots: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const KIND_GET_FIELDS = {

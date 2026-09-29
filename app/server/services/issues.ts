@@ -16,7 +16,6 @@ import {
   type RefuseableCapability,
 } from "../kind.js";
 import {
-  parseComment,
   parseCommentInput,
   parseIssue,
   requiresPartOf,
@@ -30,8 +29,10 @@ import {
   type IssueRecord,
   type IssuesResponse,
   type Problem,
+  type TaskStatus,
 } from "../schemas.js";
 import { IssueError } from "./errors.js";
+import { parseCommentLog } from "./thread-state.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
 import { attachWorktreeDerived } from "./derive-worktree.js";
@@ -126,7 +127,7 @@ function jsonPathOf(id: string): string {
   return join(dirOf(id), "issue.json");
 }
 
-function commentsPathOf(id: string): string {
+export function commentsPathOf(id: string): string {
   return join(dirOf(id), "comments.jsonl");
 }
 
@@ -241,7 +242,9 @@ export function list(): IssuesResponse {
   // Parse each comments.jsonl so out-of-band corruption surfaces in the tree/CLI,
   // not just the comments panel. Comments are small local files, so the extra reads
   // are cheap; list() is not invalidated on every comment append (see events).
-  const commentProblems = issues.flatMap((issue) => readComments(issue.id).problems);
+  const commentProblems = issues.flatMap((issue) =>
+    readComments(issue.id, issues).problems,
+  );
   const legacyChatProblems = issues.flatMap((issue) => {
     if (!existsSync(legacyChatPathOf(issue.id))) return [];
     return [{ id: issue.id, message: "chat.jsonl" }];
@@ -787,34 +790,62 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
   });
 }
 
-export function readComments(id: string): CommentsResponse {
+export function taskStatusesForStory(
+  storyId: string,
+  issues: Issue[] = readAll().issues,
+): Map<string, TaskStatus> {
+  const statuses = new Map<string, TaskStatus>();
+  for (const issue of issues) {
+    if (issue.kind === "task" && issue.partOf === storyId) {
+      statuses.set(issue.id, issue.status);
+    }
+  }
+  return statuses;
+}
+
+export function readComments(id: string, issues?: Issue[]): CommentsResponse {
   if (!existsSync(dirOf(id))) {
     throw new IssueError("not_found", `unknown issue "${id}"`);
   }
   const path = commentsPathOf(id);
-  if (!existsSync(path)) return { messages: [], problems: [] };
-
-  const messages: Comment[] = [];
-  const problems: Problem[] = [];
-  const lines = readFileSync(path, "utf8").split("\n");
-  lines.forEach((line, index) => {
-    if (!line.trim()) return;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      problems.push({ id, message: `comments.jsonl line ${index + 1}: ${detail}` });
-      return;
-    }
-    const parsed = parseComment(raw);
-    if (parsed.ok) messages.push(parsed.message);
-    else problems.push({ id, message: `comments.jsonl line ${index + 1}: ${parsed.message}` });
-  });
-  return { messages, problems };
+  if (!existsSync(path)) return { messages: [], threads: [], problems: [] };
+  const issue = readIssueOrThrow(id);
+  const taskStatusById =
+    issue.kind === "story"
+      ? taskStatusesForStory(id, issues ?? readAll().issues)
+      : new Map<string, TaskStatus>();
+  return parseCommentLog(id, readFileSync(path, "utf8"), taskStatusById);
 }
 
-function validateCommentAppend(issueId: string, input: CommentInput): void {
+/** Validate and stamp one comment. Caller writes it inside `serialize`. */
+export function buildStoredComment(
+  issueId: string,
+  input: CommentInput,
+  messages?: Comment[],
+): Comment {
+  const parsed = parseCommentInput(input);
+  if (!parsed.ok) throw new IssueError("validation", parsed.message);
+  validateCommentAppend(issueId, parsed.input, messages);
+  return {
+    ...parsed.input,
+    id: randomUUID(),
+    at: new Date().toISOString(),
+  };
+}
+
+/** Append JSONL records in one write. Caller holds `serialize`. */
+export function appendCommentLogRecords(id: string, records: unknown[]): void {
+  appendFileSync(
+    commentsPathOf(id),
+    records.map((record) => `${JSON.stringify(record)}\n`).join(""),
+  );
+}
+
+function validateCommentAppend(
+  issueId: string,
+  input: CommentInput,
+  messages?: Comment[],
+): void {
   if (input.anchor) {
     validateFullCommitSha(input.anchor.commitSha);
     if (
@@ -837,8 +868,8 @@ function validateCommentAppend(issueId: string, input: CommentInput): void {
     );
   }
 
-  const { messages } = readComments(issueId);
-  const root = messages.find((message) => message.id === input.replyTo);
+  const known = messages ?? readComments(issueId).messages;
+  const root = known.find((message) => message.id === input.replyTo);
   if (!root) {
     throw new IssueError(
       "validation",
@@ -860,15 +891,8 @@ export function appendComment(
   return serialize(() => {
     assertStoreWritable();
     requireKindCapability(id, "comments");
-    const parsed = parseCommentInput(input);
-    if (!parsed.ok) throw new IssueError("validation", parsed.message);
-    validateCommentAppend(id, parsed.input);
-    const message: Comment = {
-      ...parsed.input,
-      id: randomUUID(),
-      at: new Date().toISOString(),
-    };
-    appendFileSync(commentsPathOf(id), `${JSON.stringify(message)}\n`);
+    const message = buildStoredComment(id, input);
+    appendCommentLogRecords(id, [message]);
     return message;
   });
 }

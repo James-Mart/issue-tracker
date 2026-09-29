@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommentMessage } from "@server/schemas";
 import type { CommentThread as CommentThreadData } from "../../lib/comment-threads";
@@ -15,6 +16,19 @@ const FILE_CONTENTS = Array.from(
 
 vi.mock("../../api/queries", () => ({
   useIssueChangeFileQuery: () => ({ data: FILE_CONTENTS }),
+  useIssuesQuery: () => ({
+    data: {
+      issues: [
+        {
+          id: "task-a",
+          kind: "task",
+          title: "Tighten review API errors",
+          partOf: "story-threads",
+          status: "todo",
+        },
+      ],
+    },
+  }),
 }));
 
 function comment(
@@ -25,6 +39,8 @@ function comment(
 }
 
 const currentThread: CommentThreadData = {
+  state: "open",
+  readyToTask: true,
   root: comment({
     id: "current-root",
     at: "2026-08-30T14:22:00.000Z",
@@ -50,6 +66,8 @@ const currentThread: CommentThreadData = {
 };
 
 const outdatedThread: CommentThreadData = {
+  state: "open",
+  readyToTask: true,
   root: comment({
     id: "outdated-root",
     at: "2026-08-29T09:15:00.000Z",
@@ -188,5 +206,106 @@ describe("CommentThread", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onSeeInDiff).toHaveBeenCalledWith("current-root");
+  });
+
+  it("drops path and line on an inline thread and offers Resolve", () => {
+    const onResolve = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={currentThread}
+          inline
+          onReply={vi.fn()}
+          onResolve={onResolve}
+        />,
+      );
+    });
+
+    const thread = container.querySelector('[data-thread-root="current-root"]');
+    expect(thread?.getAttribute("data-thread-state")).toBe("open");
+    expect(thread?.querySelector('[data-testid="comment-anchor-meta"]')).toBeNull();
+    expect(thread?.textContent).not.toContain("diff-fetch.ts");
+    expect(thread?.textContent).not.toContain("line 94");
+    expect(thread?.textContent).toContain(
+      "Scope drafts per thread so Diff and Overview stay isolated.",
+    );
+
+    const resolve = thread?.querySelector('[data-testid="thread-resolve"]');
+    act(() => {
+      resolve?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onResolve).toHaveBeenCalledOnce();
+  });
+
+  it("collapses a resolved inline thread to a bar that expands and unresolves", () => {
+    const onUnresolve = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const resolved: CommentThreadData = { ...currentThread, state: "resolved" };
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={resolved}
+          inline
+          onReply={vi.fn()}
+          onUnresolve={onUnresolve}
+        />,
+      );
+    });
+
+    const thread = container.querySelector('[data-thread-root="current-root"]');
+    expect(thread?.hasAttribute("data-collapsed")).toBe(true);
+    expect(thread?.textContent).toContain("2 comments");
+    expect(thread?.textContent).toMatch(/resolved/i);
+    expect(thread?.textContent).not.toContain(
+      "Scope drafts per thread so Diff and Overview stay isolated.",
+    );
+
+    const expand = thread?.querySelector('[aria-label="Expand thread"]');
+    act(() => {
+      expand?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(thread?.hasAttribute("data-collapsed")).toBe(false);
+    expect(thread?.textContent).toContain(
+      "Scope drafts per thread so Diff and Overview stay isolated.",
+    );
+    expect(thread?.textContent).not.toContain("diff-fetch.ts");
+
+    const unresolve = thread?.querySelector('[data-testid="thread-unresolve"]');
+    act(() => {
+      unresolve?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onUnresolve).toHaveBeenCalledOnce();
+  });
+
+  it("renders a linked Task chip on inline threads", () => {
+    const linked: CommentThreadData = {
+      ...currentThread,
+      linkedTaskId: "task-a",
+      readyToTask: false,
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/projects/issue-tracker/issues/story-threads"]}>
+          <CommentThread thread={linked} inline onReply={vi.fn()} />
+        </MemoryRouter>,
+      );
+    });
+
+    const chip = container.querySelector('[data-testid="thread-linked-task"]');
+    expect(chip).not.toBeNull();
+    expect(chip?.textContent).toContain("Tighten review API errors");
+    expect(
+      container.querySelector('[data-thread-root="current-root"]')?.hasAttribute(
+        "data-ready-to-task",
+      ),
+    ).toBe(false);
   });
 });

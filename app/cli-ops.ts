@@ -17,6 +17,8 @@ import type {
   IssueKind,
 } from "./server/schemas.js";
 import { readCommentsWithOutdated } from "./server/services/anchor-outdated.js";
+import { formatThreadsForView } from "./server/services/thread-state.js";
+import { appendThreadEvent } from "./server/services/thread-events.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
 import {
   appendComment,
@@ -241,12 +243,20 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   console.log(detail.description || "(no description)");
 
   if (opts.comments) {
-    const { messages, problems } = await readCommentsWithOutdated(id);
+    const { messages, threads, problems } = await readCommentsWithOutdated(id);
     console.log();
     console.log("--- comments ---");
     if (messages.length === 0) console.log("(no messages)");
     for (const line of formatCommentsForView(messages)) {
       console.log(line);
+    }
+    if (detail.kind === "story") {
+      console.log();
+      console.log("--- threads ---");
+      if (threads.length === 0) console.log("(no threads)");
+      for (const line of formatThreadsForView(threads)) {
+        console.log(line);
+      }
     }
     // Malformed comment lines are surfaced as stderr warnings but deliberately
     // do not fail the command: like list()'s `problems`, they are data
@@ -330,7 +340,7 @@ function registerMergeCommand(parent: Command, run: Run, kind: IssueKind): void 
 
 type CommentCliOptions = {
   role: string;
-  body: string;
+  body?: string;
   name?: string;
   path?: string;
   side?: string;
@@ -338,20 +348,31 @@ type CommentCliOptions = {
   startLine?: string;
   commit?: string;
   replyTo?: string;
+  resolve?: boolean;
+  linkTask?: string;
 };
 
-function commentInputFromCliOpts(opts: CommentCliOptions): CommentInput {
-  const anyAnchor =
+function anchorFlagsPresent(opts: CommentCliOptions): boolean {
+  return (
     opts.path !== undefined ||
     opts.side !== undefined ||
     opts.line !== undefined ||
     opts.startLine !== undefined ||
-    opts.commit !== undefined;
+    opts.commit !== undefined
+  );
+}
+
+function commentInputFromCliOpts(opts: CommentCliOptions): CommentInput {
+  const anyAnchor = anchorFlagsPresent(opts);
 
   if (opts.replyTo && anyAnchor) {
     throw new Error(
       "--reply-to cannot be combined with anchor flags (--path, --side, --line, --start-line, --commit)",
     );
+  }
+
+  if (!opts.body) {
+    throw new Error("--body is required");
   }
 
   if (anyAnchor) {
@@ -408,13 +429,60 @@ function applyCommentOptions(cmd: Command): Command {
     .option(
       "--reply-to <commentId>",
       "post as a reply to that thread root (mutually exclusive with anchor flags)",
+    )
+    .option(
+      "--resolve",
+      "reply and resolve that Story thread; requires --reply-to and --body",
+    )
+    .option(
+      "--link-task <taskId>",
+      "record that a Task addresses that Story thread; requires --reply-to",
     );
+}
+
+function assertNoAnchorForThreadAction(opts: CommentCliOptions, flag: string): void {
+  if (anchorFlagsPresent(opts)) {
+    throw new Error(
+      `${flag} cannot be combined with anchor flags (--path, --side, --line, --start-line, --commit)`,
+    );
+  }
+}
+
+function cliAuthor(opts: CommentCliOptions): { role: string; name?: string } {
+  return opts.name !== undefined
+    ? { role: opts.role, name: opts.name }
+    : { role: opts.role };
 }
 
 async function printComment(
   id: string,
   opts: CommentCliOptions,
-): Promise<Comment> {
+): Promise<Comment | undefined> {
+  if (opts.linkTask) {
+    assertNoAnchorForThreadAction(opts, "--link-task");
+    if (!opts.replyTo) {
+      throw new Error("--link-task requires --reply-to");
+    }
+    const result = await appendThreadEvent(id, opts.replyTo, {
+      event: "linked",
+      taskId: opts.linkTask,
+      by: cliAuthor(opts),
+      ...(opts.body !== undefined ? { body: opts.body } : {}),
+    });
+    return result.reply;
+  }
+  if (opts.resolve) {
+    assertNoAnchorForThreadAction(opts, "--resolve");
+    if (!opts.replyTo || !opts.body) {
+      throw new Error("--resolve requires --reply-to and --body");
+    }
+    const { reply } = await appendThreadEvent(id, opts.replyTo, {
+      event: "resolved",
+      by: cliAuthor(opts),
+      body: opts.body,
+    });
+    return reply;
+  }
   return appendComment(id, commentInputFromCliOpts(opts));
 }
 
@@ -455,7 +523,7 @@ function registerCommentCommand(parent: Command, run: Run, kind: IssueKind): voi
       .command("comment")
       .argument("<id>", "issue id")
       .requiredOption("--role <role>", "message author role (e.g. agent, human)")
-      .requiredOption("--body <text>", "message body (Markdown)")
+      .option("--body <text>", "message body (Markdown)")
       .option("--name <name>", "author display name"),
   ).action(
     (id: string, opts: CommentCliOptions) =>
@@ -555,7 +623,7 @@ export function registerBareIdOps(program: Command, run: Run): void {
       .command("comment")
       .argument("<id>", "issue id")
       .requiredOption("--role <role>", "message author role (e.g. agent, human)")
-      .requiredOption("--body <text>", "message body (Markdown)")
+      .option("--body <text>", "message body (Markdown)")
       .option("--name <name>", "author display name"),
   ).action(
     (id: string, opts: CommentCliOptions) =>

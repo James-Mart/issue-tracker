@@ -12,7 +12,14 @@ import {
   setFieldStoreKey,
   type SetFieldSpec,
 } from "./server/kind-fields.js";
-import { list, read, renameProjectLabel, update } from "./server/services/issues.js";
+import {
+  list,
+  read,
+  readComments,
+  renameProjectLabel,
+  update,
+} from "./server/services/issues.js";
+import { openLinkedThreadRootIds } from "./server/services/thread-state.js";
 import { storyBehindMergeBase } from "./server/services/merge-base-task.js";
 import { storyMergeBaseRef } from "./server/services/resolve-merge-base-ref.js";
 import { validateFullCommitSha } from "./server/services/commit-sha.js";
@@ -742,6 +749,16 @@ export async function kindGetValue(
     if (kind === "project" && field === "secrets") {
       const keys = listSecretKeys(id);
       return keys.length === 0 ? null : keys.join("\n");
+    }
+    if (kind === "task" && field === "openLinkedThreadRoots") {
+      // `kind === "task"` is not a literal, so `assertKind(kind, id)` does not
+      // narrow `detail`. The call already proved this issue is a Task.
+      const task = detail as DetailOfKind<"task">;
+      const ids = openLinkedThreadRootIds(
+        readComments(task.partOf).threads,
+        id,
+      );
+      return ids.length === 0 ? null : ids.join("\n");
     }
     const { derived } = list();
     const state = derived[id];

@@ -43,6 +43,11 @@ import {
 } from "../lib/diff-thread-anchor";
 import { CommentThread } from "./comments/comment-thread";
 import {
+  ResolveThreadsProvider,
+  StoryDiffThread,
+  useResolveThreads,
+} from "./comments/story-diff-thread";
+import {
   DiffComposerProvider,
   DiffThreadComposer,
   useDiffComposer,
@@ -241,10 +246,13 @@ export function IssueChangePanel({
   issueId,
   projectId,
   mergeBase,
+  resolveThreads = false,
 }: {
   issueId: string;
   projectId: string;
   mergeBase?: string;
+  /** Story detail Diff: resolve, unresolve, and inline thread chrome. */
+  resolveThreads?: boolean;
 }) {
   const { data, isLoading, error, refetch, isFetching } = useIssueChangeQuery(issueId);
 
@@ -335,6 +343,7 @@ export function IssueChangePanel({
       change={data}
       issueId={issueId}
       mergeBase={mergeBase}
+      resolveThreads={resolveThreads}
     />
   );
 }
@@ -362,6 +371,7 @@ function FileLineThreads({
   paths: string[];
 }) {
   const composer = useDiffComposer();
+  const resolveThreads = useResolveThreads();
   const showNew =
     lineNumber != null &&
     side != null &&
@@ -385,19 +395,19 @@ function FileLineThreads({
         const replying =
           composer.open?.kind === "reply" &&
           composer.open.threadId === thread.root.id;
+        const replySlot = replying ? (
+          <DiffThreadComposer
+            target={{ kind: "reply", threadId: thread.root.id }}
+          />
+        ) : undefined;
+        const Thread = resolveThreads ? StoryDiffThread : CommentThread;
         return (
-          <CommentThread
+          <Thread
             key={thread.root.id}
             thread={thread}
             issueId={issueId}
             onReply={() => composer.openReply(thread.root.id)}
-            replySlot={
-              replying ? (
-                <DiffThreadComposer
-                  target={{ kind: "reply", threadId: thread.root.id }}
-                />
-              ) : undefined
-            }
+            replySlot={replySlot}
           />
         );
       })}
@@ -548,10 +558,12 @@ function IssueChangeLoadedPanel({
   change,
   issueId,
   mergeBase,
+  resolveThreads,
 }: {
   change: Extract<IssueChange, { state: "loaded" }>;
   issueId: string;
   mergeBase?: string;
+  resolveThreads: boolean;
 }) {
   const files = useMemo(() => fileDiffsFromPatch(change.patch), [change.patch]);
   const { threads } = useCommentThreads(issueId);
@@ -574,6 +586,7 @@ function IssueChangeLoadedPanel({
   });
 
   return (
+    <ResolveThreadsProvider enabled={resolveThreads}>
     <DiffComposerProvider issueId={issueId} commitSha={sha}>
       <div
         ref={panelRef}
@@ -634,6 +647,7 @@ function IssueChangeLoadedPanel({
         </div>
       </div>
     </DiffComposerProvider>
+    </ResolveThreadsProvider>
   );
 }
 

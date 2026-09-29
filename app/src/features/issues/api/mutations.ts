@@ -108,6 +108,24 @@ export function useUpdateIssue() {
   });
 }
 
+export function usePostThreadEvent(issueId: string) {
+  const qc = useQueryClient();
+  return useMutation<
+    { thread: { rootId: string; state: "open" | "resolved" } },
+    Error,
+    { threadId: string; event: "resolved" | "unresolved"; body?: string }
+  >({
+    mutationFn: ({ threadId, event, body }) =>
+      request(`/api/issues/${issueId}/threads/${threadId}/events`, {
+        method: "POST",
+        body: body === undefined ? { event } : { event, body },
+      }),
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () =>
+      qc.invalidateQueries({ queryKey: issuesKeys.comments(issueId) }),
+  });
+}
+
 export function usePostComment(id: string) {
   const qc = useQueryClient();
   return useMutation<Comment, Error, CommentInput>({

@@ -263,7 +263,7 @@ describe("readComments", () => {
 
   it("returns empty for an issue without comments.jsonl", async () => {
     const { readComments } = await loadService();
-    expect(readComments("e")).toEqual({ messages: [], problems: [] });
+    expect(readComments("e")).toEqual({ messages: [], threads: [], problems: [] });
   });
 
   it("throws for an unknown issue", async () => {

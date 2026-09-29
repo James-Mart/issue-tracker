@@ -200,9 +200,14 @@ describe("comments HTTP API", () => {
         outdated?: boolean;
       }>;
       problems: unknown[];
+      threads: Array<{ rootId: string; kind: string; state: string }>;
     };
     expect(body.problems).toEqual([]);
     expect(body.messages).toHaveLength(3);
+    expect(body.threads).toEqual([
+      { rootId: anchoredId, kind: "review", state: "open", readyToTask: true },
+      { rootId: rootId, kind: "review", state: "open", readyToTask: true },
+    ]);
 
     const anchored = body.messages.find((m) => m.id === anchoredId);
     expect(anchored?.body).toBe("anchored");
@@ -322,6 +327,86 @@ describe("comments HTTP API", () => {
     expect(json).toMatchObject({
       error: expect.stringMatching(/unknown comment/i),
       code: "validation",
+    });
+  });
+
+  it("resolves and unresolves a Story thread, posting an optional reply in the same write", async () => {
+    writeIssue("story-1", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { json: rootJson } = await postComment("story-1", {
+      role: "story-review",
+      body: "please fix",
+    });
+    const threadId = (rootJson as { id: string }).id;
+
+    const resolved = await fetch(
+      `${baseUrl}/api/issues/story-1/threads/${threadId}/events`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ event: "resolved", body: "fixed it" }),
+      },
+    );
+    expect(resolved.status).toBe(201);
+    const resolvedJson = (await resolved.json()) as {
+      thread: { rootId: string; kind: string; state: string };
+      event: { event: string; by: { role: string } };
+      reply: { body: string; replyTo: string };
+    };
+    expect(resolvedJson.thread).toEqual({
+      rootId: threadId,
+      kind: "review",
+      state: "resolved",
+      readyToTask: false,
+    });
+    expect(resolvedJson.event.event).toBe("resolved");
+    expect(resolvedJson.event.by).toEqual({ role: "human" });
+    expect(resolvedJson.reply.body).toBe("fixed it");
+    expect(resolvedJson.reply.replyTo).toBe(threadId);
+
+    const { json: afterResolve } = await getComments("story-1");
+    const resolvedView = afterResolve as {
+      messages: unknown[];
+      threads: Array<{ state: string }>;
+    };
+    expect(resolvedView.messages).toHaveLength(2);
+    expect(resolvedView.threads).toEqual([
+      { rootId: threadId, kind: "review", state: "resolved", readyToTask: false },
+    ]);
+
+    const unresolved = await fetch(
+      `${baseUrl}/api/issues/story-1/threads/${threadId}/events`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ event: "unresolved" }),
+      },
+    );
+    expect(unresolved.status).toBe(201);
+    const { json: afterOpen } = await getComments("story-1");
+    const openView = afterOpen as {
+      messages: unknown[];
+      threads: Array<{ state: string }>;
+    };
+    expect(openView.messages).toHaveLength(2);
+    expect(openView.threads[0]?.state).toBe("open");
+  });
+
+  it("refuses a thread event when the issue is not a Story", async () => {
+    const res = await fetch(`${baseUrl}/api/issues/idea-1/threads/nope/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ event: "resolved" }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: expect.stringMatching(/not a Story/),
     });
   });
 });

@@ -2,6 +2,7 @@ import type { BadgeProps } from "@/components/ui/badge";
 import { Badge } from "@/components/ui/badge";
 import type { IssueRecord } from "@server/schemas";
 import type { PrFacts, PrUnavailable, ProjectPrsResponse } from "@server/services/delivery";
+import { commentCountLabel } from "../lib/comments";
 
 const UNAVAILABLE_LABEL = "PR state unavailable";
 
@@ -38,9 +39,6 @@ function reviewPart(decision: PrFacts["reviewDecision"]): string {
   return "No review";
 }
 
-function commentsPart(count: number): string {
-  return count === 1 ? "1 comment" : `${count} comments`;
-}
 
 /** Compact single-line label for a live PR facts row. */
 export function prFactsChipLabel(
@@ -51,7 +49,7 @@ export function prFactsChipLabel(
     readinessPart(facts.isDraft, storyMerged),
     checksPart(facts.checks),
     reviewPart(facts.reviewDecision),
-    commentsPart(facts.commentCount),
+    commentCountLabel(facts.commentCount),
   ].join(" · ");
 }
 

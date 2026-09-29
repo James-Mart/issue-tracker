@@ -102,9 +102,10 @@ export async function deriveAnchoredOutdated(
 export async function readCommentsWithOutdated(
   issueId: string,
 ): Promise<CommentsResponse> {
-  const { messages, problems } = readComments(issueId);
+  const { messages, threads, problems } = readComments(issueId);
   return {
     messages: await deriveAnchoredOutdated(issueId, messages),
+    threads,
     problems,
   };
 }

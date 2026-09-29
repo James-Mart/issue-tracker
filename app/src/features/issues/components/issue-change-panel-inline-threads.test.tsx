@@ -205,8 +205,14 @@ vi.mock("@pierre/diffs/react", () => ({
   useVirtualizer: () => undefined,
 }));
 
+const postThreadEvent = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+}));
+
 vi.mock("../api/mutations", () => ({
   usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
+  usePostThreadEvent: () => postThreadEvent,
 }));
 
 vi.mock("../api/queries", () => ({
@@ -223,14 +229,21 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
-function mountPanel(initialEntry = "/"): HTMLDivElement {
+function mountPanel(
+  initialEntry = "/",
+  resolveThreads = false,
+): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
     root.render(
       <MemoryRouter initialEntries={[initialEntry]}>
-        <IssueChangePanel issueId="task-threads" projectId="issue-tracker" />
+        <IssueChangePanel
+          issueId="story-threads"
+          projectId="issue-tracker"
+          resolveThreads={resolveThreads}
+        />
       </MemoryRouter>,
     );
   });
@@ -245,6 +258,8 @@ afterEach(() => {
   changeQueryState.isFetching = false;
   changeQueryState.refetch.mockReset();
   threadsState.threads = [];
+  postThreadEvent.mutate.mockReset();
+  postThreadEvent.isPending = false;
 });
 
 describe("IssueChangePanel inline threads", () => {
@@ -328,5 +343,46 @@ describe("IssueChangePanel inline threads", () => {
     } finally {
       HTMLElement.prototype.scrollIntoView = original;
     }
+  });
+
+  it("resolves an open inline thread and collapses a resolved one", () => {
+    changeQueryState.data = {
+      state: "loaded",
+      patch: PATCH,
+      commits: [{ sha: SHA, subject: "Fetch diff" }],
+      stats: { filesChanged: 1, insertions: 1, deletions: 1 },
+    };
+    threadsState.threads = [
+      currentThread,
+      { ...outdatedThread, state: "resolved" },
+    ];
+
+    const container = mountPanel("/", true);
+    const open = container.querySelector('[data-thread-root="current-root"]');
+    expect(open?.querySelector('[data-testid="comment-anchor-meta"]')).toBeNull();
+    expect(open?.textContent).not.toContain("diff-fetch.ts");
+    const resolve = open?.querySelector('[data-testid="thread-resolve"]');
+    act(() => {
+      resolve?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(postThreadEvent.mutate).toHaveBeenCalledWith({
+      threadId: "current-root",
+      event: "resolved",
+    });
+
+    const resolved = container.querySelector('[data-thread-root="outdated-root"]');
+    expect(resolved?.hasAttribute("data-collapsed")).toBe(true);
+    expect(resolved?.textContent).toContain("1 comment");
+    expect(resolved?.textContent).not.toContain(
+      "Run assertCommitReachable before git show.",
+    );
+    const unresolve = resolved?.querySelector('[data-testid="thread-unresolve"]');
+    act(() => {
+      unresolve?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(postThreadEvent.mutate).toHaveBeenCalledWith({
+      threadId: "outdated-root",
+      event: "unresolved",
+    });
   });
 });
