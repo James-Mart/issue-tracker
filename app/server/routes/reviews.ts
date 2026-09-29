@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import { IssueError } from "../services/errors.js";
+import { readReviewCommits, readReviewDiff } from "../services/review-diff.js";
 import {
   archiveReview,
   listReviewViews,
@@ -17,6 +18,13 @@ function storyIdQuery(raw: unknown): string | undefined {
   if (raw === undefined) return undefined;
   if (typeof raw !== "string" || raw.length === 0) {
     throw new IssueError("validation", "storyId must be a non-empty string");
+  }
+  return raw;
+}
+
+function scopeQuery(raw: unknown): string {
+  if (typeof raw !== "string" || raw.length === 0) {
+    throw new IssueError("validation", "scope must be a non-empty string");
   }
   return raw;
 }
@@ -42,6 +50,26 @@ reviewsRouter.get(
   "/:reviewId",
   asyncRoute((req, res) => {
     res.json(readReviewView(req.params.projectId, req.params.reviewId));
+  }),
+);
+
+reviewsRouter.get(
+  "/:reviewId/commits",
+  asyncRoute(async (req, res) => {
+    res.json(await readReviewCommits(req.params.projectId, req.params.reviewId));
+  }),
+);
+
+reviewsRouter.get(
+  "/:reviewId/diff",
+  asyncRoute(async (req, res) => {
+    res.json(
+      await readReviewDiff(
+        req.params.projectId,
+        req.params.reviewId,
+        scopeQuery(req.query.scope),
+      ),
+    );
   }),
 );
 

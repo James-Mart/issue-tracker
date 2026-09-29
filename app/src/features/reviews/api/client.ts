@@ -1,5 +1,5 @@
 import { request } from "@/lib/api/client";
-import type { ReviewView } from "@server/schemas";
+import type { ReviewCommits, ReviewDiff, ReviewView } from "@server/schemas";
 
 export function reviewsUrl(projectId: string, storyId?: string): string {
   const path = `/api/projects/${encodeURIComponent(projectId)}/reviews`;
@@ -23,6 +23,34 @@ export function fetchReview(
   reviewId: string,
 ): Promise<ReviewView> {
   return request<ReviewView>(reviewUrl(projectId, reviewId));
+}
+
+export function reviewCommitsUrl(projectId: string, reviewId: string): string {
+  return `${reviewUrl(projectId, reviewId)}/commits`;
+}
+
+export function reviewDiffUrl(
+  projectId: string,
+  reviewId: string,
+  scope: string,
+): string {
+  const params = new URLSearchParams({ scope });
+  return `${reviewUrl(projectId, reviewId)}/diff?${params}`;
+}
+
+export function fetchReviewCommits(
+  projectId: string,
+  reviewId: string,
+): Promise<ReviewCommits> {
+  return request<ReviewCommits>(reviewCommitsUrl(projectId, reviewId));
+}
+
+export function fetchReviewDiff(
+  projectId: string,
+  reviewId: string,
+  scope: string,
+): Promise<ReviewDiff> {
+  return request<ReviewDiff>(reviewDiffUrl(projectId, reviewId, scope));
 }
 
 export function postOpenReview(

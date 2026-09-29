@@ -88,3 +88,44 @@ export function parseReviewRecord(raw: unknown): ReviewParseResult {
     message: formatZodError(result.error, "invalid review"),
   };
 }
+
+export type ReviewDiffStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "copied"
+  | "typechange";
+
+export type ReviewCommitSummary = {
+  sha: string;
+  subject: string;
+  author: string;
+  authoredAt: string;
+  files: number;
+  additions: number;
+  deletions: number;
+};
+
+export type ReviewCommits = {
+  mergeBase: string;
+  mergeBaseRef: string;
+  tip: string;
+  commits: ReviewCommitSummary[];
+};
+
+export type ReviewDiffFile = {
+  path: string;
+  oldPath?: string;
+  status: ReviewDiffStatus;
+  additions: number;
+  deletions: number;
+  blobSha: string;
+  tooLarge: boolean;
+};
+
+export type ReviewDiff = {
+  scope: string;
+  files: ReviewDiffFile[];
+  patch: string;
+};

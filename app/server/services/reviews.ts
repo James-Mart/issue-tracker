@@ -39,7 +39,7 @@ function reviewFilePath(projectId: string, reviewId: string): string {
   return join(reviewsDir(projectId), `${reviewId}.json`);
 }
 
-function requireStoryInProject(projectId: string, storyId: string): Story {
+export function requireStoryInProject(projectId: string, storyId: string): Story {
   const story = readIssueOrThrow(storyId);
   if (story.kind !== "story") {
     throw new IssueError(
