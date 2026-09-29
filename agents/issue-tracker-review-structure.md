@@ -1,7 +1,9 @@
 ---
 name: issue-tracker-review-structure
 model: composer-2.5
-description: issue-tracker-review-structure — Used by issue-tracker-implementor
+description: >-
+  Read-only review for abstraction, control flow, and simpler
+  same-behavior structure. Used by issue-tracker-implementor.
 readonly: true
 ---
 

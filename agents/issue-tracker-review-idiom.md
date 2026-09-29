@@ -1,7 +1,9 @@
 ---
 name: issue-tracker-review-idiom
 model: composer-2.5
-description: issue-tracker-review-idiom — Used by issue-tracker-implementor
+description: >-
+  Read-only review for outdated, unclear, or inefficient patterns. Used
+  by issue-tracker-implementor.
 readonly: true
 ---
 

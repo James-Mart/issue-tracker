@@ -1,7 +1,9 @@
 ---
 name: issue-tracker-review-coding-standards
 model: composer-2.5
-description: issue-tracker-review-coding-standards — Used by issue-tracker-implementor
+description: >-
+  Read-only review of the change against the Project coding standards.
+  Used by issue-tracker-implementor.
 readonly: true
 ---
 

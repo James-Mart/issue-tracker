@@ -1,7 +1,9 @@
 ---
 name: issue-tracker-review-duplication
 model: composer-2.5
-description: issue-tracker-review-duplication — Used by issue-tracker-implementor
+description: >-
+  Read-only review for redundancy, leftover code, and re-implemented
+  helpers. Used by issue-tracker-implementor.
 readonly: true
 ---
 

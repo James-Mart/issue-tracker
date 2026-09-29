@@ -1,7 +1,9 @@
 ---
 name: issue-tracker-review-design-system
 model: composer-2.5
-description: issue-tracker-review-design-system — Used by issue-tracker-implementor
+description: >-
+  Read-only review of UI in the change against the Project design system.
+  Used by issue-tracker-implementor.
 readonly: true
 ---
 
