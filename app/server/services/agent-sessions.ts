@@ -496,10 +496,18 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       if (!handedOff) {
         let classified = false;
         try {
-          classified = classifyReviewTaskingRun(conversationId, {
-            status: result.status,
-            errorMessage: result.error?.message,
-          });
+          classified = await classifyReviewTaskingRun(
+            conversationId,
+            {
+              status: result.status,
+              errorMessage: result.error?.message,
+            },
+            {
+              getActiveRun: (id) => sessions.get(id)?.turn?.run,
+              sendPrompt: (id, options) =>
+                sendPromptInternal(id, options, false),
+            },
+          );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.error(

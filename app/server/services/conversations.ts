@@ -459,6 +459,18 @@ export function listConversations(): ConversationMeta[] {
   return metas;
 }
 
+/** Newest non-archived implementing conversation on a work root, if any. */
+export function activeImplementingConversationId(
+  workRootId: string,
+): string | undefined {
+  return listConversations().find(
+    (meta) =>
+      !meta.archived &&
+      meta.issueId === workRootId &&
+      meta.channel === "implementing",
+  )?.id;
+}
+
 /** Conversation `meta.json` only — no transcript or delegations. */
 export function readConversationMeta(id: string): ConversationMeta {
   return readMetaRaw(id);
@@ -723,7 +735,7 @@ export async function startConversationPrompt(
   conversationId: string,
   prompt: string,
   model: string | undefined,
-  sessions: AgentSessions,
+  sessions: Pick<AgentSessions, "sendPrompt">,
   opts?: { persistPrompt?: boolean; attachments?: string[] },
 ): Promise<{ ok: true; runId: string } | { ok: false; message: string }> {
   const persistPrompt = opts?.persistPrompt !== false;

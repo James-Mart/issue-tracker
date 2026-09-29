@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { AgentRun, ConversationMeta } from "../schemas.js";
+import type { AgentRun, ConversationMeta, Issue } from "../schemas.js";
 import type {
   ReviewRecordView,
   ReviewSubmission,
@@ -11,6 +11,11 @@ import {
 import type { AgentRunStatus } from "./agent-sdk.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import {
+  bringInCoordinator,
+  reviewAppendedTasksMessage,
+} from "./bring-in-coordinator.js";
+import type { ConversationMessageSessions } from "./conversation-message.js";
+import {
   createConversation,
   deleteConversation,
   listConversations,
@@ -19,6 +24,7 @@ import {
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { appendComment, readAll, readComments, readIssueOrThrow } from "./issues.js";
+import { ancestorChain, nearestImplementingWorkRootId } from "./subtree.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { requireProject } from "./require-project.js";
 import { isRunLive } from "./run-live.js";
@@ -134,8 +140,8 @@ function doneSubmission(
 function linkedNewTaskIds(
   storyId: string,
   submission: ReviewSubmission,
+  issues: Issue[],
 ): { taskIds: string[]; unlinkedThreadIds: string[] } {
-  const issues = readAll().issues;
   const byRoot = new Map(
     readComments(storyId, issues).threads.map((thread) => [thread.rootId, thread]),
   );
@@ -234,7 +240,7 @@ async function markStartFailed(
   submission: ReviewSubmission,
   message: string,
 ): Promise<void> {
-  const { taskIds } = linkedNewTaskIds(storyId, submission);
+  const { taskIds } = linkedNewTaskIds(storyId, submission, readAll().issues);
   replaceSubmission(
     projectId,
     reviewId,
@@ -383,7 +389,11 @@ export async function retryReviewSubmission(
       `submission "${submissionId}" is ${submission.status}`,
     );
   }
-  const { unlinkedThreadIds, taskIds } = linkedNewTaskIds(storyId, submission);
+  const { unlinkedThreadIds, taskIds } = linkedNewTaskIds(
+    storyId,
+    submission,
+    readAll().issues,
+  );
   if (unlinkedThreadIds.length === 0) {
     throw new IssueError(
       "validation",
@@ -442,28 +452,30 @@ function findTaskingSubmission(conversationId: string):
   };
 }
 
-export function classifyReviewTaskingRun(
+export async function classifyReviewTaskingRun(
   conversationId: string,
   outcome: TaskingRunOutcome,
-): boolean {
+  sessions: ConversationMessageSessions,
+): Promise<boolean> {
   const found = findTaskingSubmission(conversationId);
   if (!found) return false;
   const { projectId, storyId, review, submission } = found;
+  const issues = readAll().issues;
 
-  let wrote = false;
+  let saved: ReviewSubmission | undefined;
   updateStoredReview(projectId, review.id, (current) => {
     const index = current.submissions.findIndex(
       (item) => item.id === submission.id && item.status === "tasking",
     );
     if (index < 0) return current;
-    wrote = true;
     const currentSubmission = current.submissions[index]!;
     const { taskIds, unlinkedThreadIds } = linkedNewTaskIds(
       storyId,
       currentSubmission,
+      issues,
     );
     const submissions = current.submissions.slice();
-    submissions[index] =
+    const next =
       unlinkedThreadIds.length === 0
         ? doneSubmission(currentSubmission, taskIds)
         : failedSubmission(
@@ -471,13 +483,39 @@ export function classifyReviewTaskingRun(
             failureReason(outcome),
             taskIds,
           );
+    saved = next;
+    submissions[index] = next;
     return {
       ...current,
       updatedAt: new Date().toISOString(),
       submissions,
     };
   });
-  return wrote;
+  if (!saved) return false;
+
+  if (saved.status === "done") {
+    try {
+      const workRootId = nearestImplementingWorkRootId(
+        ancestorChain(storyId, issues),
+      );
+      if (workRootId === undefined) {
+        throw new Error(`story "${storyId}" has no implementing work root`);
+      }
+      await bringInCoordinator(
+        workRootId,
+        reviewAppendedTasksMessage(review.id, storyId, saved.taskIds),
+        sessions,
+      );
+    } catch (err) {
+      // Tasking already recorded done. A coordinator delivery failure must
+      // not roll that back; the error is logged for follow-up.
+      console.error(
+        `coordinator was not brought in after review ${review.id} on story ${storyId}`,
+        err,
+      );
+    }
+  }
+  return true;
 }
 
 export function failReviewTaskingClassification(
@@ -487,7 +525,11 @@ export function failReviewTaskingClassification(
   const found = findTaskingSubmission(conversationId);
   if (!found) return false;
   const reason = message.trim() || "review tasking classification failed";
-  const { taskIds } = linkedNewTaskIds(found.storyId, found.submission);
+  const { taskIds } = linkedNewTaskIds(
+    found.storyId,
+    found.submission,
+    readAll().issues,
+  );
   replaceSubmission(
     found.projectId,
     found.review.id,

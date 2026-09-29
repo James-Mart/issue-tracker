@@ -5,8 +5,8 @@ import type {
   TranscriptEvent,
 } from "../schemas.js";
 import {
+  activeImplementingConversationId,
   listConversationIds,
-  listConversations,
   readConversation,
   readConversationMeta,
   readDelegations,
@@ -15,7 +15,7 @@ import {
   conversationIdFromReviewTaskerDelegation,
   reviewTaskerRunsForIssue,
 } from "./review-tasking.js";
-import { ancestorChain } from "./subtree.js";
+import { ancestorChain, nearestImplementingWorkRootId } from "./subtree.js";
 
 export type AgentRunsWorkRoot = {
   issueId: string;
@@ -70,31 +70,6 @@ function runsForConversation(
   return runs;
 }
 
-function nearestImplementingWorkRootId(chain: Issue[]): string | undefined {
-  for (let i = chain.length - 1; i >= 0; i -= 1) {
-    const issue = chain[i]!;
-    if (issue.kind === "epic") return issue.id;
-    if (issue.kind === "story" && chain[i - 1]?.kind === "project") {
-      return issue.id;
-    }
-  }
-  return undefined;
-}
-
-function findCoordinatorConversation(workRootId: string): string | undefined {
-  for (const meta of listConversations()) {
-    if (
-      meta.archived ||
-      meta.issueId !== workRootId ||
-      meta.channel !== "implementing"
-    ) {
-      continue;
-    }
-    return meta.id;
-  }
-  return undefined;
-}
-
 /** Work root and implementing conversation for the coordinator link on agent runs. */
 export function findAgentRunsWorkRoot(
   issueId: string,
@@ -102,7 +77,7 @@ export function findAgentRunsWorkRoot(
 ): AgentRunsWorkRoot | undefined {
   const workRootId = nearestImplementingWorkRootId(ancestorChain(issueId, issues));
   if (!workRootId) return undefined;
-  const conversationId = findCoordinatorConversation(workRootId);
+  const conversationId = activeImplementingConversationId(workRootId);
   if (!conversationId) return undefined;
   return { issueId: workRootId, conversationId };
 }

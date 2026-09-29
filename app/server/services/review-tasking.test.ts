@@ -20,7 +20,10 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
   );
 }
 
-function seed(story: Record<string, unknown> = {}): void {
+function seed(
+  story: Record<string, unknown> = {},
+  parent: { partOf: string } = { partOf: "e" },
+): void {
   writeIssue("p", {
     kind: "project",
     title: "P",
@@ -29,18 +32,20 @@ function seed(story: Record<string, unknown> = {}): void {
     createdAt: AT,
     updatedAt: AT,
   });
-  writeIssue("e", {
-    kind: "epic",
-    title: "E",
-    partOf: "p",
-    order: 0,
-    createdAt: AT,
-    updatedAt: AT,
-  });
+  if (parent.partOf === "e") {
+    writeIssue("e", {
+      kind: "epic",
+      title: "E",
+      partOf: "p",
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+  }
   writeIssue("s", {
     kind: "story",
     title: "S",
-    partOf: "e",
+    partOf: parent.partOf,
     order: 0,
     createdAt: AT,
     updatedAt: AT,
@@ -273,9 +278,12 @@ describe("review tasking", () => {
       by: { role: "issue-tracker-review-tasker" },
     });
 
-    classifyReviewTaskingRun(recorded.conversationId, {
-      status: "finished",
-    });
+    await classifyReviewTaskingRun(
+      recorded.conversationId,
+      { status: "finished" },
+      stubSessions(prompts),
+    );
+    expect(prompts).toHaveLength(1);
     const failed = submission(readReviewView("p", REVIEW_ID));
     expect(failed).toMatchObject({
       status: "failed",
@@ -300,7 +308,11 @@ describe("review tasking", () => {
       taskId: "fix-kept",
       by: { role: "issue-tracker-review-tasker" },
     });
-    classifyReviewTaskingRun(recorded.conversationId, { status: "error", errorMessage: "late" });
+    await classifyReviewTaskingRun(
+      recorded.conversationId,
+      { status: "error", errorMessage: "late" },
+      stubSessions(prompts),
+    );
     const done = submission(readReviewView("p", REVIEW_ID));
     expect(done).toMatchObject({
       status: "done",
@@ -308,6 +320,15 @@ describe("review tasking", () => {
     });
     expect(done).not.toHaveProperty("error");
     expect(listAgentRunsForIssue("s")[0]?.status).toBe("completed");
+    const factual = `Review ${REVIEW_ID} appended Tasks fix-kept to Story s.`;
+    const { implementingSessionMessage } = await import("./implementing-launch.js");
+    expect(prompts[2]).toBe(`${implementingSessionMessage("e")}\n\n${factual}`);
+    const { listConversations } = await import("./conversations.js");
+    expect(
+      listConversations()
+        .filter((meta) => meta.channel === "implementing" && !meta.archived)
+        .map((meta) => meta.issueId),
+    ).toEqual(["e"]);
   });
 
   it("refuses retry unless the submission failed with unlinked threads", async () => {
@@ -338,13 +359,108 @@ describe("review tasking", () => {
       taskId: "fix-it",
       by: { role: "issue-tracker-review-tasker" },
     });
-    classifyReviewTaskingRun(recorded.conversationId, { status: "cancelled" });
+    await classifyReviewTaskingRun(
+      recorded.conversationId,
+      { status: "cancelled" },
+      stubSessions(prompts),
+    );
     await expect(
       retryReviewSubmission("p", REVIEW_ID, recorded.id, {}, stubSessions(prompts)),
     ).rejects.toThrow(`submission "${recorded.id}" is done`);
     await expect(
       retryReviewSubmission("p", REVIEW_ID, recorded.id, { summary: "no" }, stubSessions(prompts)),
     ).rejects.toThrow("retry body must be empty");
+  });
+
+  it("starts the coordinator on a project-level Story", async () => {
+    seed({}, { partOf: "p" });
+    const prompts: string[] = [];
+    const {
+      submitReview,
+      appendComment,
+      classifyReviewTaskingRun,
+      appendThreadEvent,
+    } = await load();
+    const rootComment = await appendComment("s", { role: "human", body: "Fix" });
+    const started = await submitReview("p", REVIEW_ID, {}, stubSessions(prompts));
+    const recorded = submission(started);
+    const later = new Date(Date.parse(recorded.at) + 1000).toISOString();
+    writeIssue("fix-it", {
+      kind: "task",
+      title: "Fix",
+      partOf: "s",
+      status: "todo",
+      order: 1,
+      createdAt: later,
+      updatedAt: later,
+    });
+    await appendThreadEvent("s", rootComment.id, {
+      event: "linked",
+      taskId: "fix-it",
+      by: { role: "issue-tracker-review-tasker" },
+    });
+    await classifyReviewTaskingRun(
+      recorded.conversationId,
+      { status: "finished" },
+      stubSessions(prompts),
+    );
+    const factual = `Review ${REVIEW_ID} appended Tasks fix-it to Story s.`;
+    const { implementingSessionMessage } = await import("./implementing-launch.js");
+    expect(prompts[1]).toBe(`${implementingSessionMessage("s")}\n\n${factual}`);
+    const { listConversations } = await import("./conversations.js");
+    expect(
+      listConversations()
+        .filter((meta) => meta.channel === "implementing" && !meta.archived)
+        .map((meta) => meta.issueId),
+    ).toEqual(["s"]);
+  });
+
+  it("leaves the submission done when the coordinator cannot be started", async () => {
+    seed();
+    const {
+      submitReview,
+      appendComment,
+      classifyReviewTaskingRun,
+      appendThreadEvent,
+      readReviewView,
+    } = await load();
+    const rootComment = await appendComment("s", { role: "human", body: "Fix" });
+    let calls = 0;
+    const sessions = {
+      getActiveRun: () => undefined,
+      sendPrompt: async () => {
+        calls += 1;
+        if (calls > 1) {
+          return {
+            ok: false as const,
+            cause: "never_started" as const,
+            error: new Error("coordinator down") as never,
+          };
+        }
+        return { ok: true as const, run: { id: "run-1" } as never };
+      },
+    } as unknown as AgentSessions;
+    const started = await submitReview("p", REVIEW_ID, {}, sessions);
+    const recorded = submission(started);
+    const later = new Date(Date.parse(recorded.at) + 1000).toISOString();
+    writeIssue("fix-it", {
+      kind: "task",
+      title: "Fix",
+      partOf: "s",
+      status: "todo",
+      order: 1,
+      createdAt: later,
+      updatedAt: later,
+    });
+    await appendThreadEvent("s", rootComment.id, {
+      event: "linked",
+      taskId: "fix-it",
+      by: { role: "issue-tracker-review-tasker" },
+    });
+    await expect(
+      classifyReviewTaskingRun(recorded.conversationId, { status: "finished" }, sessions),
+    ).resolves.toBe(true);
+    expect(submission(readReviewView("p", REVIEW_ID)).status).toBe("done");
   });
 });
 
