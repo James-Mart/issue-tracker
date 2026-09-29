@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import {
+  agentStackDir,
   agentStackStatePath,
   agentStackStateSchema,
   isStackLive,
@@ -27,6 +29,16 @@ export function browserOriginMcpEnv(
   return {
     [BROWSER_ORIGIN_STATE_ENV]: agentStackStatePath(conversationId),
   };
+}
+
+/**
+ * Working directory of the conversation's Playwright MCP, a sibling of
+ * `AGENT_STACK_DATA_DIR` that `agent_stack_stop` leaves in place. The SDK
+ * sends no MCP roots, so screenshot filenames, `.playwright-mcp/` snapshots,
+ * and console logs resolve here instead of in the app server's checkout.
+ */
+export function browserArtifactsDir(conversationId: string): string {
+  return join(agentStackDir(conversationId), "browser");
 }
 
 /**

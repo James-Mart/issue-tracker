@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,7 +28,10 @@ import {
   type TokenUsage,
 } from "@cursor/sdk";
 import { cursorApiKey } from "../config.js";
-import { browserOriginMcpEnv } from "./browser-origin-allowlist.js";
+import {
+  browserArtifactsDir,
+  browserOriginMcpEnv,
+} from "./browser-origin-allowlist.js";
 import { createAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { createCachedCheckpointsStore } from "./cached-checkpoints-store.js";
 
@@ -230,7 +234,7 @@ const BROWSER_ORIGIN_INIT_PAGE = join(
  * no conversation, the init page has no state file and refuses every one.
  */
 function playwrightMcpServers(
-  env?: Record<string, string>,
+  conversation?: { env: Record<string, string>; cwd: string },
 ): Record<string, McpServerConfig> {
   return {
     playwright: {
@@ -244,7 +248,7 @@ function playwrightMcpServers(
         "--init-page",
         BROWSER_ORIGIN_INIT_PAGE,
       ],
-      ...(env !== undefined ? { env } : {}),
+      ...(conversation ?? {}),
     },
   };
 }
@@ -252,11 +256,43 @@ function playwrightMcpServers(
 export const PLAYWRIGHT_MCP_SERVERS: Record<string, McpServerConfig> =
   playwrightMcpServers();
 
+function conversationPlaywrightMcpServers(
+  conversationId: string,
+): Record<string, McpServerConfig> {
+  return playwrightMcpServers({
+    env: browserOriginMcpEnv(conversationId),
+    cwd: browserArtifactsDir(conversationId),
+  });
+}
+
+/** The SDK spawns a stdio MCP server in its `cwd` and fails when that is missing. */
+function ensureMcpServerCwds(options: Partial<AgentOptions> | undefined): void {
+  for (const server of Object.values(options?.mcpServers ?? {})) {
+    if ("cwd" in server && server.cwd !== undefined) {
+      mkdirSync(server.cwd, { recursive: true });
+    }
+  }
+}
+
 const defaultDeps: AgentSdkDeps = {
-  createSdkAgent: (options) => Agent.create(options),
-  resumeSdkAgent: (agentId, options) => Agent.resume(agentId, options),
+  createSdkAgent: (options) => {
+    ensureMcpServerCwds(options);
+    return Agent.create(options);
+  },
+  resumeSdkAgent: (agentId, options) => {
+    ensureMcpServerCwds(options);
+    return Agent.resume(agentId, options);
+  },
   listSdkModels: (options) => Cursor.models.list(options),
-  createPlatform: () => createAgentPlatform(),
+  createPlatform: async () => {
+    const platform = await createAgentPlatform();
+    return {
+      prewarmLocalWorkspace(options) {
+        ensureMcpServerCwds(options);
+        return platform.prewarmLocalWorkspace(options);
+      },
+    };
+  },
   apiKey: cursorApiKey,
 };
 
@@ -287,7 +323,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       disallowedTools: input.disallowedTools ?? DISALLOWED_BUILTIN_TOOLS,
       mcpServers:
         input.conversationId !== undefined
-          ? playwrightMcpServers(browserOriginMcpEnv(input.conversationId))
+          ? conversationPlaywrightMcpServers(input.conversationId)
           : PLAYWRIGHT_MCP_SERVERS,
       local:
         input.storeDir !== undefined

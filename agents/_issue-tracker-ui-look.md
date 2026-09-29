@@ -26,17 +26,23 @@ targets: a path on the stack, or in-page state the browser tools can reach.
    `ran: false` result means the runtime hot-reloads; continue. A non-zero
    `redeploy` or `readiness` exit fails the look.
 3. Browse each target on the stack base URL with the Playwright MCP tools
-   (`browser_navigate`, `browser_snapshot`). Capture each target with
-   `browser_take_screenshot`, passing a `.png` filename. The tool writes
-   the file it returns.
+   (`browser_navigate`, `browser_snapshot`). Every agent in this
+   conversation shares one browser, so it may still show an earlier
+   agent's page on a stack that is gone; open the first target with
+   `browser_navigate` before any other browser call. Capture each target
+   with `browser_take_screenshot`, passing a bare `.png` filename. Relative
+   file links in browser tool results — the screenshot, and the
+   `.playwright-mcp/` snapshots and console logs — resolve against the
+   browser directory: `AGENT_STACK_DATA_DIR` from the start result's `env`,
+   with its final `data` segment replaced by `browser`.
 4. When a capture is loading, empty, failed, or unavailable, browse and
    capture that target once more.
 5. When the second capture is still loading, empty, failed, or unavailable,
    the look failed. A completed look is a non-loading, non-empty screenshot
    — liveness only. The caller judges product quality on that capture.
 6. Attach each judged screenshot with `issue attach <issueId> <file>`,
-   using the file the screenshot tool wrote. Each attach prints the stored
-   basename.
+   using its absolute path in the browser directory. Each attach
+   prints the stored basename.
 7. The caller records these three evidence fields in the report it already
    makes for this look — do not post an extra comment solely for the look:
    - **Targets** — the screens captured
