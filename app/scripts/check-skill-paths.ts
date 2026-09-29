@@ -5,7 +5,9 @@
 // paths do not resolve on disk:
 //
 // 1. Instruction corpus — every `.md` under `agents/` and `skills/`: paths
-//    beginning with the installed plugin prefix must exist.
+//    beginning with the installed plugin prefix must exist, either at that
+//    absolute path or as the same relative path under the scanned root
+//    (a Story worktree of this plugin).
 // 2. Launch composers — every `*-launch.ts` under
 //    `app/src/features/issues/lib/`: `skillPath("<name>")` must resolve to
 //    `skills/<name>/SKILL.md` under the plugin root.
@@ -20,8 +22,23 @@ const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT_DIR = resolve(APP_DIR, "..");
 
 /** Installed plugin prefix cited in instruction prose. */
-const PLUGIN_PATH_RE =
-  /\/root\/\.cursor\/plugins\/local\/issue-tracker(?:\/[\w.-]+)+/g;
+const INSTALLED_PLUGIN_PREFIX = "/root/.cursor/plugins/local/issue-tracker";
+
+const PLUGIN_PATH_RE = new RegExp(
+  `${INSTALLED_PLUGIN_PREFIX.replaceAll(".", "\\.")}(?:\\/[\\w.-]+)+`,
+  "g",
+);
+
+/**
+ * A cited install path resolves when that absolute file exists, or when
+ * the same relative path exists under the scanned root.
+ */
+function citedPluginPathExists(rootDir: string, target: string): boolean {
+  if (existsSync(target)) return true;
+  const prefix = `${INSTALLED_PLUGIN_PREFIX}/`;
+  if (!target.startsWith(prefix)) return false;
+  return existsSync(resolve(rootDir, target.slice(prefix.length)));
+}
 
 /** Trailing markdown/code punctuation trimmed from a cited path. */
 const TRAILING_PUNCT_RE = /[.,)\]`"'>\;]+$/;
@@ -86,7 +103,7 @@ export function collectSkillPathViolations(
     let m: RegExpExecArray | null;
     while ((m = PLUGIN_PATH_RE.exec(src))) {
       const target = trimPathTarget(m[0]);
-      if (!existsSync(target)) {
+      if (!citedPluginPathExists(rootDir, target)) {
         violations.push({
           file: rel(file),
           line: lineAt(src, m.index),

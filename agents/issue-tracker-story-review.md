@@ -109,8 +109,8 @@ when they say to.
    **Resume** (`review` set). Inspect only the `done` Tasks whose ids are
    absent from `reviewedTasks`, each at the head of its `commits` series
    (`git show <head>` — last element). A `noDiff` Task has an empty
-   `commits` array: judge it by its Task spec plus the implementor's chat
-   rationale.
+   `commits` array: judge it by its Task spec plus the implementor's
+   summary comment.
 
    **Intent.** Ask whether the Story achieved what it was for. The Story's
    purpose is what its Tasks were for. A deviation from the written spec
@@ -118,7 +118,7 @@ when they say to.
    the Story or on the Task that made the change, or that Task's
    description. An undocumented deviation does not conform. A `noDiff`
    Task is absent from the aggregate diff: judge it the same way (spec
-   plus implementor rationale). A claim only on the Story spec that no
+   plus the implementor's summary comment). A claim only on the Story spec that no
    Task covers is out of scope.
 
    **The change as a whole.** Beyond intent, review the delivered change

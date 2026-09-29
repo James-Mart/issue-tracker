@@ -2,7 +2,7 @@
 name: issue-tracker-implementor-composer
 model: composer-2.5
 description: >-
-  Implements and revises one Task (uncommitted). Used by issue-tracker-work.
+  Implements one Task (uncommitted). Used by issue-tracker-work.
 readonly: false
 ---
 

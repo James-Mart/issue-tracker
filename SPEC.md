@@ -84,11 +84,9 @@ Every issue has a `kind`, one of:
   Story tip, the package must still **build** and tests must remain
   **meaningful** (vertical slices, not horizontal layers such as types-only,
   wire-up-later, or half-migrations that do not compile). The only kind with a
-  **stored** `status` (`todo` / `in-progress` / `fixing` / `done`), an optional
+  **stored** `status` (`todo` / `in-progress` / `done`), an optional
   `assignee` (Task-only ownership; in the work loop, overloaded as the
-  implementor model family key — `composer`, `grok`, or `opus`), an optional
-  `qa` gate (`reviewing` /
-  `changes-requested` / `passed`), `commits` (ordered oldest-first full shas;
+  implementor model family key — `composer`, `grok`, or `opus`), `commits` (ordered oldest-first full shas;
   empty until a commit is recorded, and empty for a `noDiff` Task), and an optional `noDiff` flag (set via kind
   [`set`](#kind-scoped-get--set) when the implementor deliberately lands no
   source-controlled file changes).
@@ -525,7 +523,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `workQueuedAt`, `description` |
 | idea | `title`, `archived`, `outlineGate`, `executionGate`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `workQueuedAt`, `description` |
-| task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `qa`, `commits`, `noDiff`, `sourceIdea`, `description` |
+| task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `commits`, `noDiff`, `sourceIdea`, `description` |
 
 `issue task add-commit <taskId> <sha>` appends one full sha to Task `commits`
 and refuses a sha already present on that Task. Whole-series replace uses
@@ -558,7 +556,7 @@ and refuses a sha already present on that Task. Whole-series replace uses
 - `--clear` (mutually exclusive with a positional value / `--add` / `--remove` /
   `--rename`):
   - **Clearable scalars** (`assignee`, `branchName`, `stackedOn`,
-    `prUrl`, `workspace`, `setupCommand`, `qa`, `review`, `retro`, `sourceIdea`, `appendTo`): blanks the field (absent / `null`).
+    `prUrl`, `workspace`, `setupCommand`, `review`, `retro`, `sourceIdea`, `appendTo`): blanks the field (absent / `null`).
   - **`blockedBy`** / **`reviewedTasks`** / assignment **`labels`**: sets `[]` (empty array, not null).
   - **Project `labels`**: sets `[]` (empty catalog).
   - **Project `supportingDocs`**: blanks the field (absent / `null`); with
@@ -698,8 +696,8 @@ the YAML doc.
 - `codingStandards` — a specification the plan must honor when tree prose makes
   claims it governs.
 - `designSystem` — UI guidelines and inspiration, not a verbatim plan spec.
-  Adherence is enforced during implementation (implementor / code-quality
-  validator when the Task is UI-related) and by the runtime validator when
+  Adherence is enforced during implementation (implementor / design-system
+  reviewer when the Task is UI-related) and by the runtime validator when
   the Story changes UI, not by plan-polish internal-consistency.
 - `gateRubric` — exemption rubric for the gated autonomous flow. Lists only
   when the human does **not** need to be asked — **silence means ask**: a
@@ -715,8 +713,8 @@ the YAML doc.
 | Doc key | Who consults |
 | --- | --- |
 | `vision` | plan-polish check agents (shared bootstrap + internal-consistency cohesion), implementor bootstrap, runtime validator bootstrap |
-| `codingStandards` | implementor, code-quality validator; plan-polish internal-consistency when tree prose makes claims the doc governs |
-| `designSystem` | implementor + code-quality validator when the Task appears UI-related (judgment from prose + paths; no Task flag); runtime validator when the Story changes UI (same judgment) |
+| `codingStandards` | implementor, coding-standards reviewer; plan-polish internal-consistency when tree prose makes claims the doc governs |
+| `designSystem` | implementor + design-system reviewer when the Task appears UI-related (judgment from prose + paths; no Task flag); runtime validator when the Story changes UI (same judgment) |
 | `gateRubric` | auto-plan stakeholder |
 | `verification` | implementor (Verify), runtime validator bootstrap, issue-tracker-plan bootstrap, plan-polish bootstrap + internal-consistency (Task Verify vs playbook / `runtime`) |
 
@@ -822,7 +820,8 @@ line) and `issue summary` (a `Workspace:` line under the Project). Prefer
 `issue project get <projectId> workspace` for a single-field read.
 
 The field exists so the work loop's **repo-touching subagents** (git,
-implementor, and both validators) know where to operate. The **model
+implementor, the implementor's code reviewers, Story review, and the runtime
+validator) know where to operate. The **model
 discriminator** uses the same path for **read-only peeks** when scoring
 verification difficulty (see [Model discriminator (read-only peek)](#model-discriminator-read-only-peek)).
 The coordinator does no repo work and never needs a workspace. The contract
@@ -1135,8 +1134,7 @@ Task — the Epic/Story/Task needs-attention common fields plus:
 | --- | --- | --- |
 | `assignee` | string? | optional; in the work loop, overloaded as the implementor model family key (`composer`, `grok`, or `opus`) |
 | `partOf` | string | the Story id (required) |
-| `status` | `"todo"` \| `"in-progress"` \| `"fixing"` \| `"done"` | defaults `todo`; the only stored status |
-| `qa` | `"reviewing"` \| `"changes-requested"` \| `"passed"`? | absent until set; machine-readable QA gate |
+| `status` | `"todo"` \| `"in-progress"` \| `"done"` | defaults `todo`; the only stored status |
 | `commits` | string[] | ordered oldest first; each element a full 40- or 64-character hex object name; defaults `[]`; set via `issue task set <taskId> commits '<json array>'` or appended with `issue task add-commit <taskId> <sha>` (refuses a sha already on that Task); presentation surfaces show the head (last element) |
 | `noDiff` | boolean? | absent until set; signals no source-controlled implementor changes |
 | `sourceIdea` | string? | optional; names one Idea in the same Project that produced this Task (append path; see [Relationships](#relationships)) |
@@ -1295,7 +1293,7 @@ no consumer can persist a broken file.
   `needsAttention`/`attentionReason`, `archived` (Epic / Idea / Story / Task;
   cascades to
   descendants — see [Archived visibility](#archived-visibility)), `partOf`, the
-  kind-specific fields (`blockedBy` for an Epic; `status`/`qa`/`commits`/`noDiff`
+  kind-specific fields (`blockedBy` for an Epic; `status`/`commits`/`noDiff`
   for a Task; `branchName`/`stackedOn`/`prUrl`/`merged`/
   `review` for a Story), `labels` (Project catalog; Epic / Idea / Story
   assignments — see [Project labels](#project-labels)), and `description`
@@ -1758,7 +1756,7 @@ preserves everything else from the existing same-kind issue.
 | `kind` | explicit on every `children:` entry (allow-lists above); omitted on root nodes (form key implies kind) |
 | `partOf`, `stackedOn` | inferred from nesting (a story-rooted doc has no nesting, so it preserves the on-disk `stackedOn`); runtime `partOf`/`stackedOn` edits use kind [`set`](#kind-scoped-get--set) |
 | `id`, `createdAt` | set on create; `apply` preserves them, never rewrites |
-| `status`, `qa`, `commits`, `noDiff`, `sourceIdea` (Task) | imperative only (kind [`set`](#kind-scoped-get--set) / `issue task add-commit`); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
+| `status`, `commits`, `noDiff`, `sourceIdea` (Task) | imperative only (kind [`set`](#kind-scoped-get--set) / `issue task add-commit`); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
 | `appended` (Task) | append path only (`issue story append`, `issue story update-from-merge-base`); readable via kind [`get`](#kind-scoped-get--set); not settable; `apply` preserves |
 | `branchName`, `worktreePath`, `worktreeBlockedReason`, `worktreeSetupFailed`, `prUrl`, `merged`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `mergeBaseOverride` (Epic / Story) | imperative only via kind [`set`](#kind-scoped-get--set) field `mergeBase` (stores as `mergeBaseOverride`); `apply` preserves |

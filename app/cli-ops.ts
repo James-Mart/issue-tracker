@@ -222,7 +222,6 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   }
   if (detail.kind === "task") {
     lines.push(`status: ${detail.status}`);
-    if (detail.qa) lines.push(`qa: ${detail.qa}`);
     const head = taskHeadCommit(detail);
     if (head) lines.push(`commitSha: ${head}`);
     if (detail.noDiff) lines.push(`noDiff: true`);

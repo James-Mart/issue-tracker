@@ -2,7 +2,7 @@
 name: issue-tracker-implementor-opus
 model: claude-opus-5-5-thinking-high
 description: >-
-  Implements and revises one Task (uncommitted). Used by issue-tracker-work.
+  Implements one Task (uncommitted). Used by issue-tracker-work.
 readonly: false
 ---
 

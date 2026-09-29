@@ -8,8 +8,7 @@ export type GitMetaScalarKey =
   | "mergeBase"
   | "stackedOn"
   | "commitSha"
-  | "noDiff"
-  | "qa";
+  | "noDiff";
 
 export type GitMetaScalar = {
   key: GitMetaScalarKey;
@@ -52,9 +51,6 @@ export function taskGitMetaScalars(
   }
   if (issue.noDiff) {
     out.push({ key: "noDiff", label: FIELD_LABELS.noDiff });
-  }
-  if (issue.qa) {
-    out.push({ key: "qa", label: FIELD_LABELS.qa });
   }
   return out;
 }

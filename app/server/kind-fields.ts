@@ -2,7 +2,6 @@ import { CLEARABLE_KEYS } from "./fields.js";
 import { MERGE_POLICIES } from "./issue-constants.js";
 import {
   TASK_STATUSES,
-  QA_STATUSES,
   RETRO_STATUSES,
   REVIEW_STATUSES,
   type IssueKind,
@@ -137,7 +136,6 @@ export const TASK_SET_FIELDS = {
   archived: { type: "boolean" },
   partOf: { type: "string" },
   status: { type: "enum", values: TASK_STATUSES },
-  qa: { type: "enum", values: QA_STATUSES },
   commits: { type: "commits" },
   noDiff: { type: "boolean" },
   sourceIdea: { type: "string" },
@@ -275,7 +273,6 @@ export const TASK_GET_FIELDS = {
   attentionReason: STORED,
   archived: STORED,
   status: STORED,
-  qa: STORED,
   commits: STORED,
   noDiff: STORED,
   sourceIdea: STORED,

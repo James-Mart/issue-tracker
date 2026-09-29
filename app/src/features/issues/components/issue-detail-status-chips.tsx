@@ -36,11 +36,7 @@ export function IssueDetailStatusChips({
 
   if (issue.kind === "task") {
     return (
-      <TaskStatusChips
-        status={issue.status}
-        qa={issue.qa}
-        className={className}
-      />
+      <TaskStatusChips status={issue.status} className={className} />
     );
   }
 

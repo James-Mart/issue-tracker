@@ -35,7 +35,7 @@ const currentThread: CommentThreadData = groupCommentThreads([
   comment({
     id: "current-root",
     at: "2026-08-30T14:22:00.000Z",
-    role: "code-quality-validator",
+    role: "story-review",
     body: "Scope drafts per thread so Diff and Overview stay isolated.",
     anchor: {
       path: "app/server/services/diff-fetch.ts",
@@ -50,7 +50,7 @@ const secondThread: CommentThreadData = groupCommentThreads([
   comment({
     id: "second-root",
     at: "2026-08-30T15:00:00.000Z",
-    role: "code-quality-validator",
+    role: "story-review",
     body: "Second thread on the same file.",
     anchor: {
       path: "app/server/services/diff-fetch.ts",

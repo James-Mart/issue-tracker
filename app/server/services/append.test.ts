@@ -53,7 +53,7 @@ function seedStory(opts?: { merged?: boolean }): void {
     kind: "task",
     title: "Restated",
     partOf: "s1",
-    status: "fixing",
+    status: "in-progress",
     commits: [SHA],
     order: 2,
     createdAt: AT,
@@ -125,7 +125,7 @@ describe("appendTasks", () => {
 
     const restated = readIssue("restated");
     expect(restated.title).toBe("Restated renamed");
-    expect(restated.status).toBe("fixing");
+    expect(restated.status).toBe("in-progress");
     expect(restated.commits).toEqual([SHA]);
     expect(restated.order).toBe(2);
     expect(restated.appended).toBeUndefined();

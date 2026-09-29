@@ -112,12 +112,11 @@ export const IDEA_RUNTIME_OPTIONAL_KEYS = [
 // (e.g. noDiff) live in TASK_IMPERATIVE_ONLY_KEYS and are excluded.
 export const TASK_FORM_FIELD_KEYS = ["status", "commits"] as const;
 
-export const TASK_IMPERATIVE_ONLY_KEYS = ["noDiff", "qa", "sourceIdea"] as const;
+export const TASK_IMPERATIVE_ONLY_KEYS = ["noDiff", "sourceIdea"] as const;
 
 export const TASK_RUNTIME_OPTIONAL_KEYS = [
   "commits",
   "noDiff",
-  "qa",
   "sourceIdea",
   "appended",
 ] as const;
@@ -145,7 +144,6 @@ export const CLEARABLE_KEYS = [
   "needsRebase",
   "workspace",
   "setupCommand",
-  "qa",
   "review",
   "retro",
   "mergeBaseOverride",
@@ -207,7 +205,6 @@ export const FIELD_LABELS = {
   reviewedTasks: "Reviewed tasks",
   needsRebase: "Needs rebase",
   status: "Status",
-  qa: "QA",
   retro: "Retro",
   commitSha: "Commit",
   noDiff: "No diff",

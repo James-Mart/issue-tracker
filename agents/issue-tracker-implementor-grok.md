@@ -2,7 +2,7 @@
 name: issue-tracker-implementor-grok
 model: cursor-grok-4.7-high-fast
 description: >-
-  Implements and revises one Task (uncommitted). Used by issue-tracker-work.
+  Implements one Task (uncommitted). Used by issue-tracker-work.
 readonly: false
 ---
 

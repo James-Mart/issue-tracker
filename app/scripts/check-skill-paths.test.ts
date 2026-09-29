@@ -109,6 +109,17 @@ describe("collectSkillPathViolations", () => {
     );
   });
 
+  it("accepts an install-prefix path that exists under the scanned root", () => {
+    const name = "_worktree-only-include.md";
+    writeAgent(name, "# include\n");
+    writeAgent(
+      "fixture.md",
+      `**Read** \`${INSTALLED_PREFIX}/agents/${name}\`.`,
+    );
+
+    expect(collectSkillPathViolations(rootDir)).toEqual([]);
+  });
+
   it("returns no violations when every cited path resolves", () => {
     writeSkill("ok-skill/SKILL.md", "# ok\n", "utf8");
 

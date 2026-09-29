@@ -4,8 +4,6 @@ import { BADGE_VARIANTS } from "@/components/ui/badge";
 import {
   EPIC_STATUS_BADGE_VARIANT,
   EPIC_STATUS_LABEL,
-  QA_STATUS_BADGE_VARIANT,
-  QA_STATUS_LABEL,
   RETRO_BADGE_VARIANT,
   RETRO_LABEL,
   REVIEW_BADGE_VARIANT,
@@ -111,14 +109,8 @@ describe("status badge variant maps", () => {
     );
   });
 
-  it("maps fixing to the current hue (not warn)", () => {
-    expect(TASK_STATUS_BADGE_VARIANT.fixing).toBe("current");
-    expect(TASK_STATUS_BADGE_VARIANT.fixing).not.toBe("warn");
+  it("maps in-progress to the inProgress hue", () => {
     expect(TASK_STATUS_BADGE_VARIANT["in-progress"]).toBe("inProgress");
-  });
-
-  it("maps every qa status to an existing Badge variant", () => {
-    expectLabelAndBadgeMapsAlign(QA_STATUS_LABEL, QA_STATUS_BADGE_VARIANT);
   });
 
   it("maps every story status to an existing Badge variant", () => {
@@ -145,9 +137,8 @@ describe("status badge variant maps", () => {
 });
 
 describe("liveness helpers", () => {
-  it("treats in-progress and fixing tasks as in flight", () => {
+  it("treats in-progress tasks as in flight", () => {
     expect(isInFlight(task("a", "in-progress"), undefined)).toBe(true);
-    expect(isInFlight(task("b", "fixing"), undefined)).toBe(true);
   });
 
   it("treats todo and done tasks as not in flight", () => {
@@ -183,7 +174,6 @@ describe("liveness helpers", () => {
     };
     expect(hasInFlightWork(issues, storyOnlyActive)).toBe(false);
 
-    expect(hasInFlightWork([task("t", "fixing")], idle)).toBe(true);
     expect(hasInFlightWork([task("t", "in-progress")], idle)).toBe(true);
   });
 

@@ -1,7 +1,6 @@
 import { CHIP_UNSET } from "@server/fields";
 import type { IssueDetail, IssueRecord } from "@server/schemas";
 import { taskHeadCommit } from "@server/services/commit-sha";
-import { QA_STATUS_LABEL } from "../lib/derived";
 import {
   storyGitMetaScalars,
   taskGitMetaScalars,
@@ -44,8 +43,6 @@ function taskScalarValue(
       return <CommitShaDisplay commitSha={taskHeadCommit(issue)} />;
     case "noDiff":
       return <span>yes</span>;
-    case "qa":
-      return issue.qa ? <span>{QA_STATUS_LABEL[issue.qa]}</span> : null;
     default:
       return null;
   }

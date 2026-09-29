@@ -20,9 +20,8 @@ The coordinator does no real reasoning — it reads tracker state, runs a thin s
 of CLI commands, and spawns subagents in a fixed order — so it should itself run
 on the cheap model, **Composer 2.5**, not a premium model (see **Models and
 subagent roles**). The model discriminator assigns an implementor model onto
-each Task; the implementor writes code; the code-quality validator owns Task
-`qa` (writes the gate, resumes across rounds, three-strike escalate) and Task
-`status done` at the terminal gate; the story-review agent records the Story
+each Task; the implementor writes code, runs its own code review, records the
+commit, and sets Task `status done`; the story-review agent records the Story
 gate (`review`, `reviewedTasks`, optional remediation Tasks) without editing
 workspace source, pauses the Story at `review` `awaiting-human` when a runtime
 check needs a human, and when the branch is behind appends the
@@ -34,7 +33,7 @@ plan with `issue tree` and spawn subagents. Do **essentially no reasoning**:
 every coordinator step below is a CLI invocation or a fixed linear action —
 this skill is meant to be replaced by a deterministic script. Never set status
 on a Story or Epic — Story/Epic status derives automatically (see SPEC.md).
-Task `status` / `qa` / `commits` writes are subagent-owned — see **Field
+Task `status` / `commits` writes are subagent-owned — see **Field
 ownership**. Git and git-fact recording are delegated — see Rules. Task
 `assignee` holds the implementor **family key** (or a legacy model slug).
 Before each implementor spawn, **Resolve implementor family** (below) and
@@ -195,36 +194,31 @@ not from a spawn-time argument.
 | Coordinator (you) | — | Drive the whole run: thin CLI + spawn subagents | Composer 2.5 (`composer-2.5`) | spawn/CLI only |
 | Git | `issue-tracker-git` | Start a Story; finish a Story | `composer-2.5` | writes |
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
-| Implementor | `issue-tracker-implementor-<family>` | Implement a Task; per-task revise via **resume** | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7-high-fast`; `opus`→`claude-opus-5-5-thinking-high` | writes (see Field ownership) |
-| Code-quality validator | `issue-tracker-code-quality-validator` | Per-Task cycle steps 3–4 (canonical spawn/resume on `qa`) | `composer-2.5` | writes (`issue task set … qa` / `status` / `needsAttention`; `issue task comment`) |
+| Implementor | `issue-tracker-implementor-<family>` | Implement, review, and commit a Task | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7-high-fast`; `opus`→`claude-opus-5-5-thinking-high` | writes (see Field ownership) |
 | Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue story request-human`; `issue task add`; `issue story comment`) |
 | Runtime validator | `issue-tracker-runtime-validator` | Spawned by Story review, not by you | `composer-2.5` | writes (`issue attach` on the Story) |
 
 ### Field ownership
 
-Coordinator never sets Task `status`, Task `qa`, or Task `commits`.
+Coordinator never sets Task `status` or Task `commits`.
 
 | Field | Owner | When |
 |-------|-------|------|
-| Task `status` `in-progress` | Implementor | on first implement entry |
-| Task `status` `fixing` | Implementor | on every revise entry |
-| Task `status` `done` | Code-quality | at the terminal gate |
-| Task `qa` | Code-quality | on each entry `reviewing`, then terminal `passed` / `changes-requested` (three-strike → `needsAttention`); never the coordinator |
+| Task `status` `in-progress` | Implementor | on implement entry |
+| Task `status` `done` | Implementor | after its review, commit, and summary comment |
 | Task `commits` | Git | spawned by the implementor |
 | Story `review` | Story review | on each review round `passed` / `failed`; `awaiting-human` when it pauses for a human |
 | Story `review` cleared from `awaiting-human` | Human | Done on the Story's request (`issue story human-done`) |
 | Story `reviewedTasks` | Story review | all `done` Tasks inspected in that round |
 | Story `needsAttention` (review three-strike) | Coordinator | on the 3rd counted story-review resume in one session — see **Close a Story** |
 
-Implement and revise are the **same** implementor agent. Code-quality is a
-**writer** of Task `qa` (spawn/resume and three-strike escalate: see **Per-Task
-cycle** — you do **not** count rounds). Story review is the Story gate
-recorder: it sets `review` and `reviewedTasks` and may append remediation
-Tasks or the update-from-merge-base Task, or pause for a human (tracker
-writes only; never workspace source), and it spawns the runtime validator
-itself; you
-spawn/resume it and enforce the reopen cap (see **Close a Story**). Both keep findings out of
-your context via comments / machine-readable fields.
+The implementor spawns its own code reviewers; per-Task review never reaches
+you. Story review is the Story gate recorder: it sets `review` and
+`reviewedTasks` and may append remediation Tasks or the update-from-merge-base
+Task, or pause for a human (tracker writes only; never workspace source), and
+it spawns the runtime validator itself; you spawn/resume it and enforce the
+reopen cap (see **Close a Story**). Both keep findings out of your context via
+comments / machine-readable fields.
 
 ## The loop
 
@@ -250,83 +244,34 @@ creates or resumes the Story branch (worktree + `branchName`).
 
 ### Per-Task cycle (for each Task, in sequence)
 
-**Canonical** definition of implementor / code-quality spawn and resume.
-Other sections only cross-reference this. Status transitions during this cycle
-are owned by subagents — see **Field ownership**. Do not set Task `status`,
-`qa`, or `commits` yourself. Do not count QA rounds.
+**Canonical** definition of the implementor spawn. Other sections only
+cross-reference this. Status transitions during this cycle are owned by
+subagents — see **Field ownership**. Do not set Task `status` or `commits`
+yourself.
 
 0. **Entry gate.** On every entry to this cycle for `<task>` (including skill
    re-run and Close-Story not-done), read via `issue task get` — in order —
-   `needsAttention`, then `qa`. First match wins; jump to that step and
-   continue the numbered flow from there. Do **not** re-run this gate
-   mid-cycle (after a subagent returns, follow the step that sent you there).
+   `needsAttention`, then `status`. First match wins; jump to that step and
+   continue the numbered flow from there.
    - `needsAttention` is `true` → stop (Escalation).
-   - `qa` is `passed` → step 5 (Advance).
-   - `qa` is `reviewing` → step 3 (resume code-quality; stuck mid-review).
-   - `qa` is `changes-requested` → step 2b (revise; do not Mode `implement`).
-   - otherwise (`qa` unset) → step 1.
+   - `status` is `done` → step 3 (Advance).
+   - otherwise → step 1.
 
-   **Cold-restart limits** (no separate phase field — do not invent one here).
-   Task `status` is set on implementor *entry* (`in-progress` / `fixing`),
-   not on exit, so it is **not** a completion signal and must not be used to
-   infer “implementor finished.” Disk alone cannot uniquely recover these
-   windows; prefer staying in-cycle (`resumeId` + step flow) when possible:
-   - `qa` unset while implementor may still be in flight → falls through to
-     step 1 (may re-spawn Mode `implement`). Accept that window rather than
-     treating `in-progress`/`fixing` as “ready for QA.”
-   - `qa=changes-requested` is identical for mid-revise and post-revise
-     awaiting code-quality → entry gate always takes step 2b. In-cycle
-     re-review (step 2 → step 3) is unaffected; a skill re-run in the
-     post-revise window may run an extra revise before code-quality.
+   **Cold-restart limit.** A Task whose implementor is still in flight reads
+   `in-progress`, so a skill re-run in that window falls through to step 1
+   and may spawn a second implementor. Accept that window.
 
 1. **Assign model.** Delegate `issue-tracker-model-discriminator` with the
    model-discriminator spawn stub. Wait until it finishes (or raises
-   needsAttention). Do not read its result. Then step 2a.
+   needsAttention). Do not read its result. Then step 2.
 
-2. **Implementor (spawn or resume).** Resolve implementor family for `<task>`.
-   Wait for finished or blocked (needsAttention on `<id>`). Do not
-   read its diff or ingest a report. When the implementor finishes, go to
-   step 3 (including after revise — that is how in-cycle re-review runs).
-   - **2a. Spawn (implement).** Delegate `issue-tracker-implementor-<family>`
-     with the implement spawn stub. Fresh path only (from step 1). Keep the
-     returned nested agent id as `resumeId` for later revises.
-   - **2b. Resume (revise).** Re-enter that implementor with the revise stub
-     (same family role) and its `resumeId`. When the coordinator has lost
-     the `resumeId` (skill re-run), look it up with `delegations` — the
-     most recent entry in its `delegations` array whose `role` is
-     `issue-tracker-implementor-<family>` — rather than starting a second
-     implementor. Never Mode `implement`
-     when entering from `qa=changes-requested`.
+2. **Implementor.** Resolve implementor family for `<task>`, then delegate
+   `issue-tracker-implementor-<family>` with the implement spawn stub. Wait
+   until it finishes. Do not read its diff or ingest a report. Then read
+   `issue task get <task> needsAttention`: `true` → stop (Escalation);
+   otherwise step 3.
 
-3. **Validate (code quality).** Read `issue task get <task> qa`. Branch on
-   the value (do not count QA rounds yourself):
-   - unset → **Delegate** `issue-tracker-code-quality-validator` with the
-     code-quality spawn stub; keep the returned nested agent id as
-     `resumeId`.
-   - `changes-requested` or `reviewing` → **re-enter** that same
-     code-quality agent with the code-quality resume stub and its
-     `resumeId` (`reviewing` means a prior entry did not reach a terminal
-     qa — resume, do not start a second agent). When the coordinator has
-     lost the `resumeId` (skill re-run), look it up with `delegations` —
-     the most recent entry in the returned `delegations` array whose `role`
-     is `issue-tracker-code-quality-validator` — rather than starting a
-     second code-quality agent.
-   - `passed` → skip to step 5 (Advance); do not spawn or resume
-     code-quality again.
-   Wait until a spawn/resume finishes (or raises needsAttention) before
-   step 4.
-
-4. **Gate after code-quality.** Read both
-   `issue task get <task> needsAttention` and `issue task get <task> qa`
-   (in that order). Branch:
-   - `needsAttention` is `true` → stop (Escalation). Check this **before**
-     `qa`, because three-strike leaves terminal `qa=changes-requested` **and**
-     `needsAttention` — do not resume the implementor in that case.
-   - `qa` is `passed` → step 5.
-   - `qa` is `changes-requested` and `needsAttention` is `false` →
-     step 2b (revise), which then continues at step 3.
-
-5. **Advance** to the next Task.
+3. **Advance** to the next Task.
 
 ### Close a Story
 
@@ -334,7 +279,7 @@ Repeat until finish-branch or park:
 
 1. **Re-sync.** Re-read `issue tree <id>` and re-sync your todo list.
 2. **Not-done Tasks.** If any Task on the Story is not `done` (including a
-   validator-injected remediation Task), **run** the full Per-Task cycle
+   remediation Task Story review appended), **run** the full Per-Task cycle
    for each in tree order (entry gate + steps there). Then continue from
    step 1.
 3. **Review gate.** Read `review` with
@@ -436,8 +381,8 @@ own static behavior via their `agents/*.md` files — do not paste workflow
 instructions here. Channel rules: **## Delegation** (do not re-Read the
 include here).
 
-**Issue context line** — shared prefix for discriminator, implement,
-code-quality, story-review, and revise stubs:
+**Issue context line** — shared prefix for discriminator, implement, and
+story-review stubs:
 
 > Work root: `<rootId>`. Issue: `<id>` (`<title>`).
 
@@ -461,17 +406,6 @@ Git stubs (`start-branch`, `finish-branch`): coordinator passes
 
 > *(Issue context line.)* Mode: implement.
 
-**Code-quality validator** — `role: issue-tracker-code-quality-validator`, `issueId: <id>`
-(when to spawn vs resume: Per-Task cycle step 3)
-
-> *(Issue context line.)* Mode: review.
-
-**Code-quality validator (resume)** — `role: issue-tracker-code-quality-validator`, `issueId: <id>`
-(when to resume: Per-Task cycle step 3)
-
-> *(Issue context line.)* Mode: resume. Verify that previously requested changes were
-> fixed.
-
 **Story review** — `role: issue-tracker-story-review`, `issueId: <id>`
 (when to spawn: Close-Story step 3)
 
@@ -482,11 +416,6 @@ Git stubs (`start-branch`, `finish-branch`): coordinator passes
 
 > *(Issue context line.)* Mode: resume.
 
-**Revise** — `role: issue-tracker-implementor-<family>`, `issueId: <id>`
-(re-enter with `resumeId`; look up that role via `delegations` when lost)
-
-> *(Issue context line.)* Mode: revise.
-
 ## Rules
 
 - Never implement, verify, or run the app yourself — always delegate. You own
@@ -495,26 +424,21 @@ Git stubs (`start-branch`, `finish-branch`): coordinator passes
 - Prefer `issue get` for scalar field reads — do not parse `view` /
   `summary` / `tree` for a single field (except `summary`'s `Workspace:`
   bootstrap line and `tree` chips for walk order).
-- Never write Task `status`, Task `qa`, or Task `commits` yourself (Field
-  ownership).
+- Never write Task `status` or Task `commits` yourself (Field ownership).
 - Never run `git`/`gh` or the git-fact record commands (`issue story set …
   branchName` / `issue task add-commit` / `issue story set … prUrl` /
   `issue story set … merged`) yourself — spawn `issue-tracker-git` for Story
-  start and Story finish only. Code-quality sets Task `status` `done` at the
-  terminal gate; implementor owns `in-progress` / `fixing`.
+  start and Story finish only.
 - Work one root, one Task at a time, in the Story order `issue tree` prints;
   finish a Story before the Stories stacked on it.
 - Re-read `issue tree <id>` every time control returns to you and re-sync
   your todo list, so Stories or Tasks injected into the in-progress work root
   mid-run are picked up. Never act from a cached outline.
-- Per-Task QA loop (entry gate, spawn/resume, three-strike): see **Per-Task
-  cycle** — single canonical definition; you never count QA rounds.
-  Story-review spawn/resume and reopen cap: see **Close a Story** — single
-  canonical definition. Story-review remediation is Close-Story's job — no
-  story-level revise.
+- Per-Task entry gate and implementor spawn: see **Per-Task cycle** — single
+  canonical definition. Story-review spawn/resume and reopen cap: see
+  **Close a Story** — single canonical definition. Story-review remediation is
+  Close-Story's job, through remediation Tasks.
 - Never let a validator edit workspace source (write scopes: Models table).
-  Code-quality may write Task `qa` / `status` / `needsAttention` and comments
-  only.
 - Never set status on a Story or Epic. Do not decide whether to open or merge a
   PR — that is the Story's effective `mergePolicy`, applied by
   `issue-tracker-git` on finish-branch. Always spawn finish-branch; never read
