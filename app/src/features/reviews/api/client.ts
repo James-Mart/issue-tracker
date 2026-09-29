@@ -1,5 +1,10 @@
 import { request } from "@/lib/api/client";
-import type { ReviewCommits, ReviewDiff, ReviewView } from "@server/schemas";
+import type {
+  ReviewCommits,
+  ReviewDiff,
+  ReviewView,
+  SetReviewMarkBody,
+} from "@server/schemas";
 
 export function reviewsUrl(projectId: string, storyId?: string): string {
   const path = `/api/projects/${encodeURIComponent(projectId)}/reviews`;
@@ -78,5 +83,16 @@ export function postReopenReview(
 ): Promise<ReviewView> {
   return request<ReviewView>(`${reviewUrl(projectId, reviewId)}/reopen`, {
     method: "POST",
+  });
+}
+
+export function putReviewMark(
+  projectId: string,
+  reviewId: string,
+  body: SetReviewMarkBody,
+): Promise<ReviewView> {
+  return request<ReviewView>(`${reviewUrl(projectId, reviewId)}/marks`, {
+    method: "PUT",
+    body,
   });
 }

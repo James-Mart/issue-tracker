@@ -1,7 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { ReviewView } from "@server/schemas";
-import { postArchiveReview, postOpenReview, postReopenReview } from "./client";
+import type { ReviewView, SetReviewMarkBody } from "@server/schemas";
+import {
+  postArchiveReview,
+  postOpenReview,
+  postReopenReview,
+  putReviewMark,
+} from "./client";
 import { reviewKeys } from "./keys";
 
 function messageOf(err: unknown): string {
@@ -40,5 +45,13 @@ export function useArchiveReview(projectId: string) {
 export function useReopenReview(projectId: string) {
   return useReviewMutation(projectId, (reviewId: string) =>
     postReopenReview(projectId, reviewId),
+  );
+}
+
+export function useSetReviewMark(projectId: string) {
+  return useReviewMutation(
+    projectId,
+    ({ reviewId, ...body }: SetReviewMarkBody & { reviewId: string }) =>
+      putReviewMark(projectId, reviewId, body),
   );
 }

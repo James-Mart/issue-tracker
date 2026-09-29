@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
@@ -5,11 +6,37 @@ import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const AT = "2026-07-09T14:00:00.000Z";
-const SHA = "a".repeat(40);
 
 let dir: string;
+let repo: string;
+let commitSha: string;
 let server: Server;
 let baseUrl: string;
+
+const gitEnv = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "Tester",
+  GIT_AUTHOR_EMAIL: "tester@example.com",
+  GIT_COMMITTER_NAME: "Tester",
+  GIT_COMMITTER_EMAIL: "tester@example.com",
+};
+
+function git(args: string[], cwd = repo): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8", env: gitEnv });
+}
+
+function initRepo(): void {
+  repo = mkdtempSync(join(tmpdir(), "issue-tracker-reviews-repo-"));
+  git(["init", "-b", "main"]);
+  writeFileSync(join(repo, "file.txt"), "base\n");
+  git(["add", "file.txt"]);
+  git(["commit", "-m", "base"]);
+  git(["checkout", "-q", "-b", "story"]);
+  writeFileSync(join(repo, "file.txt"), "changed\n");
+  git(["add", "file.txt"]);
+  git(["commit", "-m", "change"]);
+  commitSha = git(["rev-parse", "HEAD"]).trim();
+}
 
 function writeIssue(id: string, body: Record<string, unknown>): void {
   mkdirSync(join(dir, id), { recursive: true });
@@ -20,6 +47,7 @@ function seedProjectTree(): void {
   writeIssue("p", {
     kind: "project",
     title: "P",
+    workspace: repo,
     order: 0,
     createdAt: AT,
     updatedAt: AT,
@@ -44,7 +72,7 @@ function seedProjectTree(): void {
     kind: "task",
     title: "T",
     partOf: "s",
-    commits: [SHA],
+    commits: [commitSha],
     order: 0,
     createdAt: AT,
     updatedAt: AT,
@@ -76,7 +104,7 @@ function seedProjectTree(): void {
     kind: "task",
     title: "Other task",
     partOf: "other",
-    commits: [SHA],
+    commits: [commitSha],
     order: 0,
     createdAt: AT,
     updatedAt: AT,
@@ -114,6 +142,7 @@ function openReview(projectId: string, storyId: string): Promise<Response> {
 describe("review record API", () => {
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), "issue-tracker-reviews-"));
+    initRepo();
     vi.resetModules();
     vi.stubEnv("ISSUES_DIR", dir);
     vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", "");
@@ -125,6 +154,7 @@ describe("review record API", () => {
     vi.unstubAllEnvs();
     await closeServer();
     rmSync(dir, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
   });
 
   it("returns the same review on a second open-or-create", async () => {
@@ -290,6 +320,7 @@ describe("review record API read-only", () => {
 
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), "issue-tracker-reviews-ro-"));
+    initRepo();
     vi.resetModules();
     vi.stubEnv("ISSUES_DIR", dir);
     vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", "1");
@@ -316,6 +347,7 @@ describe("review record API read-only", () => {
     vi.unstubAllEnvs();
     await closeServer();
     rmSync(dir, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
   });
 
   it("refuses review writes and still reads the stored review", async () => {
@@ -338,6 +370,14 @@ describe("review record API read-only", () => {
     );
     expect(reopened.status).toBe(403);
     expect(await reopened.json()).toMatchObject({ code: "read_only" });
+
+    const marked = await fetch(`${baseUrl}/api/projects/p/reviews/${reviewId}/marks`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "all", path: "file.txt", reviewed: true }),
+    });
+    expect(marked.status).toBe(403);
+    expect(await marked.json()).toMatchObject({ code: "read_only" });
 
     expect(readFileSync(join(dir, "p", "reviews", `${reviewId}.json`), "utf8")).toBe(before);
     expect(readdirSync(join(dir, "p", "reviews"))).toEqual([`${reviewId}.json`]);

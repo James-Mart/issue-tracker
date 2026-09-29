@@ -5,7 +5,8 @@ const nonEmpty = z.string().min(1);
 
 const allMarkSchema = z
   .object({
-    blobSha: nonEmpty,
+    // Empty when the post-image has no blob (a deletion).
+    blobSha: z.string(),
     markedAt: nonEmpty,
   })
   .strict();
@@ -48,12 +49,24 @@ export const reviewSchema = z
 
 export type Review = z.infer<typeof reviewSchema>;
 
-export type ReviewView =
-  | (Review & { effectiveStatus: "open" })
-  | (Review & {
-      effectiveStatus: "archived";
-      archivedReason: "explicit" | "merged";
-    });
+export type ReviewScopeProgress = {
+  reviewed: number;
+  total: number;
+};
+
+export type ReviewProgress = {
+  all: ReviewScopeProgress & { changedSinceReviewed: string[] };
+  commits: Record<string, ReviewScopeProgress>;
+};
+
+type ReviewEffective =
+  | { effectiveStatus: "open" }
+  | { effectiveStatus: "archived"; archivedReason: "explicit" | "merged" };
+
+/** Stored review plus effective archive, before derived progress is attached. */
+export type ReviewRecordView = Review & ReviewEffective;
+
+export type ReviewView = ReviewRecordView & { progress: ReviewProgress };
 
 export const openReviewBodySchema = z
   .object({
@@ -73,6 +86,29 @@ export function parseOpenReviewBody(raw: unknown): OpenReviewBodyParseResult {
   return {
     ok: false,
     message: formatZodError(result.error, "invalid review body"),
+  };
+}
+
+export const setReviewMarkBodySchema = z
+  .object({
+    scope: nonEmpty,
+    path: nonEmpty,
+    reviewed: z.boolean(),
+  })
+  .strict();
+
+export type SetReviewMarkBody = z.infer<typeof setReviewMarkBodySchema>;
+
+export type SetReviewMarkBodyParseResult =
+  | { ok: true; body: SetReviewMarkBody }
+  | { ok: false; message: string };
+
+export function parseSetReviewMarkBody(raw: unknown): SetReviewMarkBodyParseResult {
+  const result = setReviewMarkBodySchema.safeParse(raw);
+  if (result.success) return { ok: true, body: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid review mark"),
   };
 }
 

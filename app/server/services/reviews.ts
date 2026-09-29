@@ -7,7 +7,7 @@ import {
   parseOpenReviewBody,
   parseReviewRecord,
   type Review,
-  type ReviewView,
+  type ReviewRecordView,
 } from "../schemas/review.js";
 import { collectDescendantCommits } from "./change.js";
 import { IssueError } from "./errors.js";
@@ -156,7 +156,7 @@ function storyForReview(review: Review, byId?: Map<string, Issue>): Story {
  * Effective archive is computed on read. Stored `status: "archived"` is an
  * explicit archive. A merged Story archives a review that is not a post-mortem.
  */
-function toView(review: Review, story: Story): ReviewView {
+function toView(review: Review, story: Story): ReviewRecordView {
   if (review.status === "archived") {
     return { ...review, effectiveStatus: "archived", archivedReason: "explicit" };
   }
@@ -183,7 +183,7 @@ function withReviewWrite<T>(projectId: string, fn: (projectId: string) => T): T 
 export function listReviewViews(
   projectId: string,
   storyId?: string,
-): { reviews: ReviewView[] } {
+): { reviews: ReviewRecordView[] } {
   const id = requireProject(projectId);
   const reviews = listStoredReviews(id);
   const matched =
@@ -196,7 +196,7 @@ export function listReviewViews(
   };
 }
 
-export function readReviewView(projectId: string, reviewId: string): ReviewView {
+export function readReviewView(projectId: string, reviewId: string): ReviewRecordView {
   const id = requireProject(projectId);
   const review = readStoredReview(id, reviewId);
   return toView(review, storyForReview(review));
@@ -205,7 +205,7 @@ export function readReviewView(projectId: string, reviewId: string): ReviewView 
 export function openOrCreateReview(
   projectId: string,
   body: unknown,
-): { created: boolean; review: ReviewView } {
+): { created: boolean; review: ReviewRecordView } {
   const parsed = parseOpenReviewBody(body);
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
   const storyId = parsed.body.target.storyId;
@@ -231,7 +231,7 @@ export function openOrCreateReview(
   });
 }
 
-export function archiveReview(projectId: string, reviewId: string): ReviewView {
+export function archiveReview(projectId: string, reviewId: string): ReviewRecordView {
   return withReviewWrite(projectId, (id) => {
     const review = readStoredReview(id, reviewId);
     const story = storyForReview(review);
@@ -246,7 +246,7 @@ export function archiveReview(projectId: string, reviewId: string): ReviewView {
   });
 }
 
-export function reopenReview(projectId: string, reviewId: string): ReviewView {
+export function reopenReview(projectId: string, reviewId: string): ReviewRecordView {
   return withReviewWrite(projectId, (id) => {
     const review = readStoredReview(id, reviewId);
     const story = requireStoryInProject(id, review.target.storyId);
@@ -262,5 +262,24 @@ export function reopenReview(projectId: string, reviewId: string): ReviewView {
     };
     writeReview(next);
     return toView(next, story);
+  });
+}
+
+/**
+ * Replace a stored review under the store lock.
+ * `mutate` returns the same object to leave the file untouched.
+ */
+export function updateStoredReview(
+  projectId: string,
+  reviewId: string,
+  mutate: (current: Review, view: ReviewRecordView) => Review,
+): ReviewRecordView {
+  return withReviewWrite(projectId, (id) => {
+    const review = readStoredReview(id, reviewId);
+    const story = storyForReview(review);
+    const view = toView(review, story);
+    const next = mutate(review, view);
+    if (next !== review) writeReview(next);
+    return toView(next === review ? review : next, story);
   });
 }

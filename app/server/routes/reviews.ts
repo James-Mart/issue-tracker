@@ -1,6 +1,12 @@
-import { Router, type RequestHandler } from "express";
+import { Router, type RequestHandler, type Response } from "express";
+import type { ReviewRecordView } from "../schemas/review.js";
 import { IssueError } from "../services/errors.js";
 import { readReviewCommits, readReviewDiff } from "../services/review-diff.js";
+import {
+  setReviewMark,
+  withReviewProgress,
+  withReviewProgressList,
+} from "../services/review-marks.js";
 import {
   archiveReview,
   listReviewViews,
@@ -29,27 +35,49 @@ function scopeQuery(raw: unknown): string {
   return raw;
 }
 
+async function sendReview(
+  res: Response,
+  projectId: string,
+  view: ReviewRecordView,
+  status = 200,
+): Promise<void> {
+  res.status(status).json(await withReviewProgress(projectId, view));
+}
+
+async function sendReviewList(
+  res: Response,
+  projectId: string,
+  views: ReviewRecordView[],
+): Promise<void> {
+  res.json({ reviews: await withReviewProgressList(projectId, views) });
+}
+
 export const reviewsRouter = Router({ mergeParams: true });
 
 reviewsRouter.post(
   "/",
-  asyncRoute((req, res) => {
+  asyncRoute(async (req, res) => {
     const { created, review } = openOrCreateReview(req.params.projectId, req.body);
-    res.status(created ? 201 : 200).json(review);
+    await sendReview(res, req.params.projectId, review, created ? 201 : 200);
   }),
 );
 
 reviewsRouter.get(
   "/",
-  asyncRoute((req, res) => {
-    res.json(listReviewViews(req.params.projectId, storyIdQuery(req.query.storyId)));
+  asyncRoute(async (req, res) => {
+    const listed = listReviewViews(req.params.projectId, storyIdQuery(req.query.storyId));
+    await sendReviewList(res, req.params.projectId, listed.reviews);
   }),
 );
 
 reviewsRouter.get(
   "/:reviewId",
-  asyncRoute((req, res) => {
-    res.json(readReviewView(req.params.projectId, req.params.reviewId));
+  asyncRoute(async (req, res) => {
+    await sendReview(
+      res,
+      req.params.projectId,
+      readReviewView(req.params.projectId, req.params.reviewId),
+    );
   }),
 );
 
@@ -75,14 +103,29 @@ reviewsRouter.get(
 
 reviewsRouter.post(
   "/:reviewId/archive",
-  asyncRoute((req, res) => {
-    res.json(archiveReview(req.params.projectId, req.params.reviewId));
+  asyncRoute(async (req, res) => {
+    await sendReview(
+      res,
+      req.params.projectId,
+      archiveReview(req.params.projectId, req.params.reviewId),
+    );
   }),
 );
 
 reviewsRouter.post(
   "/:reviewId/reopen",
-  asyncRoute((req, res) => {
-    res.json(reopenReview(req.params.projectId, req.params.reviewId));
+  asyncRoute(async (req, res) => {
+    await sendReview(
+      res,
+      req.params.projectId,
+      reopenReview(req.params.projectId, req.params.reviewId),
+    );
+  }),
+);
+
+reviewsRouter.put(
+  "/:reviewId/marks",
+  asyncRoute(async (req, res) => {
+    res.json(await setReviewMark(req.params.projectId, req.params.reviewId, req.body));
   }),
 );

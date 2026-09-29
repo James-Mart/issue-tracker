@@ -31,16 +31,22 @@ type Numstat = {
   deletions: number;
 };
 
+async function loadPrepared(
+  projectId: string,
+  storyId: string,
+): Promise<{ storyId: string; workspace: string; prepared: StoryChangePreparation }> {
+  requireStoryInProject(projectId, storyId);
+  const workspace = requireProjectWorkspace(projectId);
+  const prepared = await prepareStoryChange(storyId, workspace);
+  return { storyId, workspace, prepared };
+}
+
 async function loadSpan(
   projectId: string,
   reviewId: string,
 ): Promise<{ storyId: string; workspace: string; prepared: StoryChangePreparation }> {
   const review = readReviewView(projectId, reviewId);
-  const storyId = review.target.storyId;
-  requireStoryInProject(projectId, storyId);
-  const workspace = requireProjectWorkspace(projectId);
-  const prepared = await prepareStoryChange(storyId, workspace);
-  return { storyId, workspace, prepared };
+  return loadPrepared(projectId, review.target.storyId);
 }
 
 function requireMergeBase(
@@ -148,8 +154,15 @@ function parseNumstat(text: string): Numstat[] {
   return stats;
 }
 
-function listDiffFiles(rawText: string, numstatText: string): Array<RawFile & Numstat> {
-  const raw = parseRaw(rawText);
+async function readParsedRaw(workspace: string, range: string): Promise<RawFile[]> {
+  const rawText = await runGitOrCommitUnreachable(
+    ["diff", "--raw", "--abbrev=40", "-z", range],
+    workspace,
+  );
+  return parseRaw(rawText);
+}
+
+function listDiffFiles(raw: RawFile[], numstatText: string): Array<RawFile & Numstat> {
   const stats = parseNumstat(numstatText);
   if (raw.length !== stats.length) {
     throw new IssueError(
@@ -209,15 +222,12 @@ async function readRangeDiff(
   range: string,
   scope: string,
 ): Promise<ReviewDiff> {
-  const [rawText, numstatText, patch] = await Promise.all([
-    runGitOrCommitUnreachable(
-      ["diff", "--raw", "--abbrev=40", "-z", range],
-      workspace,
-    ),
+  const [raw, numstatText, patch] = await Promise.all([
+    readParsedRaw(workspace, range),
     runGitOrCommitUnreachable(["diff", "--numstat", "-z", range], workspace),
     runGitOrCommitUnreachable(["diff", range], workspace),
   ]);
-  const applied = applyPatchCeiling(listDiffFiles(rawText, numstatText), patch);
+  const applied = applyPatchCeiling(listDiffFiles(raw, numstatText), patch);
   return { scope, files: applied.files, patch: applied.patch };
 }
 
@@ -252,7 +262,7 @@ async function readOneCommit(
   };
 }
 
-function refuseForeignSha(scope: string): never {
+export function refuseForeignSha(scope: string): never {
   throw new IssueError(
     "validation",
     `sha "${scope}" is not one of this story's commits`,
@@ -310,4 +320,46 @@ async function parentRange(sha: string, workspace: string): Promise<string> {
     await runGitOrCommitUnreachable(["rev-parse", `${sha}^`], workspace)
   ).trim();
   return `${parent}..${sha}`;
+}
+
+export type DiffBlob = {
+  path: string;
+  blobSha: string;
+};
+
+/** Post-image path and blob for each file in a diff range. */
+export async function readDiffBlobs(workspace: string, range: string): Promise<DiffBlob[]> {
+  const raw = await readParsedRaw(workspace, range);
+  return raw.map((file) => ({ path: file.path, blobSha: file.blobSha }));
+}
+
+export type ReviewChangeSpan =
+  | { state: "empty" }
+  | {
+      state: "ready";
+      workspace: string;
+      allRange: string;
+      commits: Array<{ sha: string; range: string }>;
+    };
+
+/** Whole-review range and each Story commit's parent range, without re-reading the review. */
+export async function loadReviewChangeSpan(
+  projectId: string,
+  storyId: string,
+): Promise<ReviewChangeSpan> {
+  const loaded = await loadPrepared(projectId, storyId);
+  const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
+  if (prepared.state === "empty") return { state: "empty" };
+  const commits = await Promise.all(
+    prepared.shas.map(async (sha) => ({
+      sha,
+      range: await parentRange(sha, loaded.workspace),
+    })),
+  );
+  return {
+    state: "ready",
+    workspace: loaded.workspace,
+    allRange: prepared.range,
+    commits,
+  };
 }
