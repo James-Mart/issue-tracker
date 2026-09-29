@@ -1,5 +1,11 @@
 # Migrate
 
+### Post-migrate imperatives
+
+After any successful `issue story append` or root `apply`, set `noDiff` per
+[Tasks with no diff (noDiff)](../../issue-tracker-authoring/SKILL.md#tasks-with-no-diff-nodiff)
+— imperative only, not in the YAML doc.
+
 ### Append
 
 When the Idea's `appendTo` names a Story, write a story-form apply doc
@@ -19,11 +25,7 @@ finishes.
 After a successful append:
 `issue task set <taskId> sourceIdea <ideaId>` for each created Task id.
 `<ideaId>` is the source Idea's id. Imperative only — not in the YAML doc.
-
-Verification-only Tasks: after append, `issue task set <taskId> noDiff true`
-per
-[Verification-only Tasks (noDiff)](../../issue-tracker-authoring/SKILL.md#verification-only-tasks-nodiff)
-— imperative only, not in the YAML doc.
+Then follow **Post-migrate imperatives** for `noDiff`.
 
 When the grill included mockup rounds with chosen directions, follow
 **### Promoted mockup artifacts** using the target Story as `<storyId>`.
@@ -51,10 +53,8 @@ resulting root id from that apply. Imperative only — not in the YAML doc.
   `<rootId>` is the resulting root id from that apply; `<ideaId>` is the
   source Idea's id. Applies to **single-root** and **multi-root** migrations
   alike. Imperative only — not in the YAML doc.
-- Verification-only Tasks (intentionally no source-controlled edits): after
-  `apply`, `issue task set <taskId> noDiff true` per
-  [Verification-only Tasks (noDiff)](../../issue-tracker-authoring/SKILL.md#verification-only-tasks-nodiff)
-  — imperative only, not in the YAML doc.
+- After each successful root `apply`, follow **Post-migrate imperatives** for
+  `noDiff`.
 
 ### Promoted mockup artifacts
 

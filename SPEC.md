@@ -716,10 +716,12 @@ the YAML doc.
 | `codingStandards` | implementor, coding-standards reviewer; plan-polish internal-consistency when tree prose makes claims the doc governs |
 | `designSystem` | implementor + design-system reviewer when the Task appears UI-related (judgment from prose + paths; no Task flag); runtime validator when the Story changes UI (same judgment) |
 | `gateRubric` | auto-plan stakeholder |
-| `verification` | implementor (self-check), runtime validator bootstrap, issue-tracker-plan bootstrap, plan-polish bootstrap + internal-consistency (Task Verify vs playbook / `runtime`) |
+| `verification` | implementor (self-check), runtime validator bootstrap |
 
 `issue-tracker-plan` is absent from `vision` because the vision is read from
-the seat that answers, not the seat that asks ([Roles](#roles)).
+the seat that answers, not the seat that asks ([Roles](#roles)); it is absent
+from `verification` because planning does not run implementation verification
+(`issue-tracker-plan` bootstrap consults `codingStandards` only).
 
 Agents load these at bootstrap; coordinators do not pass doc paths in Task
 prompts.
@@ -1592,7 +1594,7 @@ project:
               id: first-task
               title: First task
               description: |
-                Implementor-resolution detail + how to verify.
+                The outcome this commit lands, plus its seams and contracts.
             - kind: story      # stacked on base-story; partOf my-epic
               id: follow-up
               title: Follow-up
@@ -1970,10 +1972,14 @@ may dangle — see [Attachments](#attachments).
 
 <a id="parent-prose-must-not-restate-descendant-lists"></a>
 
-**The complete design lives distributed across tiers.** The Epic replaces a
-giant plan/spec only when the whole design is captured in the tree: overview and
-cross-cutting invariants in the Epic, standalone unit prose in each Story,
-implementor-resolution detail in each Task. Companion material belongs **with
+**The plan lives distributed across tiers.** The Epic replaces a giant
+plan/spec only when the plan's shape, seams, dependencies, and contracts are
+captured in the tree: background and cross-cutting invariants in the Epic,
+standalone unit prose in each Story, and each Task's outcome, seams, and
+contracts per the
+[compression target](skills/issue-tracker-authoring/SKILL.md#compression-target)
+in issue-tracker-authoring.
+Companion material belongs **with
 the issue that uses it** — inlined in `description.md` or attached beside it
 (link rules in [Attachments](#attachments)). Verbatim copy into the Epic with
 empty children is not sufficient — distribution and a completeness pass are

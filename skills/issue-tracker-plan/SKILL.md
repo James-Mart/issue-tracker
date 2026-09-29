@@ -51,11 +51,9 @@ Before grilling:
    and apply it using this summary output (codebase lookup during the grill
    needs cwd = `Workspace:`).
 2. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
-   then consult `codingStandards` and `verification` per that file using the
-   step-1 summary output (`codingStandards` to avoid locking a plan direction
-   the standards forbid — not for implementation detail in Task prose;
-   `verification` so Story and Task Verify sections match what the Project
-   can run).
+   then consult `codingStandards` per that file using the step-1 summary output
+   (to avoid locking a plan direction the standards forbid — not for
+   implementation detail in Task prose).
 3. Kind gate — **Idea** → proceed; any other kind → refuse.
 4. `issue view <id>` — load the full capture (`description.md`).
 5. `issue project get <projectId> trunk` — default merge-base for the

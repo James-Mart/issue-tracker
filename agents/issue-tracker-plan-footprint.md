@@ -42,7 +42,8 @@ Plan prose violating the two **Task footprint** rules:
 **Attribution.** Flag the Task whose Change introduces the scaffolding or
 mutation.
 
-Do **not** flag structural violations authoring-conformance owns (missing
-Verify, bad Change paths, interface seams, grain, attachments, merge-policy
-prose); near-verbatim duplication (plan-dry); or dependency/order problems
+Do **not** flag **Too much detail** through **Open choice**, parent
+enumeration, grain, or merge-policy prose
+(`issue-tracker-plan-authoring-conformance` § What you flag); near-verbatim
+duplication (plan-dry); or dependency/order problems
 (plan-dependency-order).

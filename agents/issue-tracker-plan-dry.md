@@ -33,9 +33,8 @@ place:
 
 Do **not** flag:
 
-- Parent *enumeration* of child work (authoring-conformance owns that)
-- Structural gaps (missing Verify, bad Change paths, interface seams, grain,
-  attachments) — authoring-conformance
+- **Too much detail** through **Open choice**, parent enumeration, and grain
+  (`issue-tracker-plan-authoring-conformance` § What you flag)
 - Necessary brief cross-links or one-line scope reminders that are not
   full restatements
 - Unique content parked at the wrong tier with no duplicate elsewhere

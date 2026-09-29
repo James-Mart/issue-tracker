@@ -125,13 +125,6 @@ const planning: Pipeline = {
       source: POLISH_SKILL,
     },
     {
-      id: "check-no-ambiguity",
-      name: "No-ambiguity",
-      kind: "step",
-      pipeline: "planning",
-      source: "agents/issue-tracker-plan-no-ambiguity.md",
-    },
-    {
       id: "check-dry",
       name: "DRY",
       kind: "step",
@@ -195,13 +188,11 @@ const planning: Pipeline = {
     { from: "mockup-round", to: "outline-gate", kind: "flow" },
     { from: "outline-gate", to: "migrate", kind: "flow" },
     { from: "migrate", to: "polish", kind: "flow" },
-    { from: "polish", to: "check-no-ambiguity", kind: "spawn" },
     { from: "polish", to: "check-dry", kind: "spawn" },
     { from: "polish", to: "check-authoring-conformance", kind: "spawn" },
     { from: "polish", to: "check-dependency-order", kind: "spawn" },
     { from: "polish", to: "check-internal-consistency", kind: "spawn" },
     { from: "polish", to: "check-footprint", kind: "spawn" },
-    { from: "check-no-ambiguity", to: "polish-apply", kind: "flow" },
     { from: "check-dry", to: "polish-apply", kind: "flow" },
     { from: "check-authoring-conformance", to: "polish-apply", kind: "flow" },
     { from: "check-dependency-order", to: "polish-apply", kind: "flow" },
@@ -342,3 +333,10 @@ const work: Pipeline = {
 };
 
 export const pipelines: Pipeline[] = [planning, work];
+
+/** Node ids a pipeline spawns from its polish step, in edge order. */
+export function polishCheckIds(pipeline: Pipeline): string[] {
+  return pipeline.edges
+    .filter((edge) => edge.from === "polish" && edge.kind === "spawn")
+    .map((edge) => edge.to);
+}

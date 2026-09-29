@@ -19,6 +19,10 @@ Nothing is posted to GitHub. The work merges to trunk.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-authoring/SKILL.md`
+— apply ## Compression target when deciding what to keep and drop in export
+bodies.
+
 Use the default issues dir (do not set `ISSUES_DIR`).
 
 ## Argument
@@ -86,9 +90,9 @@ names it, not a procedural task title. Prefer the tracker's own section and
 task area names over invented labels. A table appears only when behavior is
 a matrix.
 
-The body keeps outcomes, object shapes, and behavior rules an implementor
-still needs. File paths, symbol names, and task-by-task procedure stay in
-the tracker unless the outcome is unclear without them.
+What to keep and drop in the body follows the compression target in
+issue-tracker-authoring (Read above) — apply that target when rewriting export
+bodies; do not restate it here.
 
 When a Story has to land after another, its prose names the piece it follows
 in ordinary language. A Story whose `stackedOn` is set lands after that

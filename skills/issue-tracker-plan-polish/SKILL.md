@@ -51,8 +51,7 @@ If none is given:
    [`agents/_issue-tracker-plan-polish-check-base.md`](../../agents/_issue-tracker-plan-polish-check-base.md)
    § Bootstrap (bind `<rootKind>`; do not restate that block here).
 2. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`,
-   then consult `vision` and `verification` per that file using the step-1
-   summary output.
+   then consult `vision` per that file using the step-1 summary output.
 3. `issue tree <rootId>` — full Story/Task outline (implementation
    order).
 4. `issue view <rootId>` for the work-root description when preparing
@@ -61,13 +60,12 @@ If none is given:
 
 ## Parallel check agents
 
-Delegate **all six** checks **in parallel** via the **Spawn stubs** below.
+Delegate **all five** checks **in parallel** via the **Spawn stubs** below.
 Pass **only** the fields each stub lists — children own static behavior in
 `agents/*.md`; do not paste agent workflow into the prompt.
 
 | Role (`role`) |
 | --- |
-| `issue-tracker-plan-no-ambiguity` |
 | `issue-tracker-plan-dry` |
 | `issue-tracker-plan-authoring-conformance` |
 | `issue-tracker-plan-dependency-order` |
@@ -79,15 +77,6 @@ contract lives only in
 [`agents/_issue-tracker-plan-polish-check-base.md`](../../agents/_issue-tracker-plan-polish-check-base.md)
 — do not restate the findings schema here.
 
-**Internal-consistency supportingDocs scope.** That check compares the tree
-against `vision` (when set), `codingStandards` only when tree prose makes
-claims that doc governs, and `verification` (when set) for Task Verify
-sections that ask for checks the playbook or Project `runtime:` cannot run.
-It does **not** compare against `designSystem` — design-system adherence is
-enforced at implementation time, not during plan polish. Details:
-[`agents/issue-tracker-plan-internal-consistency.md`](../../agents/issue-tracker-plan-internal-consistency.md)
-and SPEC § Project supporting docs.
-
 ## Spawn stubs
 
 Pass these as the delegation `prompt` (inline the work-root id/title where
@@ -97,7 +86,7 @@ paste workflow instructions here.
 **Delegation** — **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-delegation.md`.
 
-**Work-root context line** — shared prefix for all six check stubs:
+**Work-root context line** — shared prefix for all five check stubs:
 
 > Work root: `<rootId>` (`<title>`).
 
@@ -107,10 +96,6 @@ are re-read each spawn while agent injection may be frozen):
 > Return only a JSON findings array per
 > `agents/_issue-tracker-plan-polish-check-base.md` (detection-only — no
 > fixes; no prose wrapper).
-
-**No-ambiguity** — `role: issue-tracker-plan-no-ambiguity`
-
-> *(Work-root context line.)* *(Findings return line.)*
 
 **DRY** — `role: issue-tracker-plan-dry`
 
@@ -134,7 +119,7 @@ are re-read each spawn while agent injection may be frozen):
 
 ## Aggregate → apply → summary
 
-After all six check agents return, **Read**
+After all five check agents return, **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/references/aggregate-apply-summary.md`
 and follow it.
 
