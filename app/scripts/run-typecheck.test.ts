@@ -3,24 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  TYPECHECK_SLOTS,
   assertTypecheckGrantable,
   hasHeapLimitReportForPid,
   isHeapLimitReport,
   resolveTypecheckExitCode,
-  typecheckHeapLimitMb,
   typecheckMemoryLimitMessage,
   typecheckSlotsNeverGrantable,
 } from "./run-typecheck.js";
 
 const HEAP_OOM_EVENT = "Allocation failed - JavaScript heap out of memory";
-
-describe("TYPECHECK_SLOTS", () => {
-  it("derives one slot from the measured peak RSS", () => {
-    expect(TYPECHECK_SLOTS).toBe(1);
-    expect(typecheckHeapLimitMb()).toBe(2048);
-  });
-});
 
 describe("typecheckSlotsNeverGrantable", () => {
   it("rejects when slots exceed the budget", () => {

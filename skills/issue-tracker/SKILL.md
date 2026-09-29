@@ -73,7 +73,9 @@ App-channel agent sessions include Playwright MCP tools
 (`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, …)
 — headless, one isolated browser context per conversation. Call
 `agent_stack_start` with the issue id and browse `AGENT_STACK_BASE_URL`
-(or stack subdomains). IDE chats use Cursor's browser MCP instead.
+(or stack subdomains). The tools write their files (screenshots,
+snapshots, console logs) under `AGENT_STACK_DATA_DIR` with its final `data`
+segment replaced by `browser`. IDE chats use Cursor's browser MCP instead.
 
 ## UI screenshots
 

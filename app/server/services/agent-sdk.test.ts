@@ -13,7 +13,10 @@ import type {
 import { JsonlLocalAgentStore } from "@cursor/sdk";
 import { CursorSdkError } from "@cursor/sdk";
 import { describe, expect, it, vi } from "vitest";
-import { browserOriginMcpEnv } from "./browser-origin-allowlist.js";
+import {
+  browserArtifactsDir,
+  browserOriginMcpEnv,
+} from "./browser-origin-allowlist.js";
 import {
   createAgentSdk,
   PLAYWRIGHT_MCP_SERVERS,
@@ -188,6 +191,9 @@ describe("createAgent", () => {
     const playwright = createSdkAgent.mock.calls[0]![0].mcpServers?.playwright;
     expect(playwright && "env" in playwright ? playwright.env : undefined).toEqual(
       browserOriginMcpEnv("conv-1"),
+    );
+    expect(playwright && "cwd" in playwright ? playwright.cwd : undefined).toBe(
+      browserArtifactsDir("conv-1"),
     );
     const resumeSdkAgent = vi.fn(
       async (_id: string, _options?: Partial<AgentOptions>) => makeFakeSdkAgent([]),

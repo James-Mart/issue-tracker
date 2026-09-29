@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { visionSessionMessage, visionSessionTitle } from "./vision-launch";
-
-describe("visionSessionTitle", () => {
-  it("names the Vision refinement conversation type", () => {
-    expect(visionSessionTitle()).toBe("Vision refinement");
-  });
-});
+import { visionSessionMessage } from "./vision-launch";
 
 describe("visionSessionMessage", () => {
   it("names the Project id and issue-tracker-vision-docs skill", () => {

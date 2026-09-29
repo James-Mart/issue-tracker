@@ -380,33 +380,15 @@ describe("Composer voice dictation", () => {
     expect(mic.title).toBe("Speech model unavailable");
   });
 
-  it.each([
-    "recording",
-    "review",
-    "transcribing",
-    "error",
-  ] as const)(
-    "renders the mic disabled while the description field holds the voice lock (%s)",
-    () => {
-      tryAcquire("description");
-      ({ container, root, rerender } = mountComposer());
-
-      const mic = micButton(container!);
-      expect(mic.disabled).toBe(true);
-
-      act(() => {
-        mic.click();
-      });
-      expect(voiceRecording.start).not.toHaveBeenCalled();
-    },
-  );
-
-  it("does not start when the description field holds the voice lock", () => {
+  it("renders the mic disabled and does not start while the description field holds the voice lock", () => {
     tryAcquire("description");
     ({ container, root, rerender } = mountComposer());
 
+    const mic = micButton(container!);
+    expect(mic.disabled).toBe(true);
+
     act(() => {
-      micButton(container!).click();
+      mic.click();
     });
     expect(voiceRecording.start).not.toHaveBeenCalled();
   });

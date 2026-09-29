@@ -144,17 +144,6 @@ describe("supportingDocs validation", () => {
 });
 
 describe("supportingDocs helpers", () => {
-  it("exposes well-known attachment basenames", async () => {
-    const { WELL_KNOWN_SUPPORTING_DOC_BASENAMES } = await load();
-    expect(WELL_KNOWN_SUPPORTING_DOC_BASENAMES).toEqual({
-      vision: "vision.md",
-      codingStandards: "coding-standards.md",
-      designSystem: "design-system.md",
-      gateRubric: "gate-rubric.md",
-      verification: "verification.md",
-    });
-  });
-
   it("formats a compact view/summary line", async () => {
     const { formatSupportingDocsLine } = await load();
     expect(

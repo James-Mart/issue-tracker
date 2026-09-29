@@ -107,7 +107,11 @@ let writeChain: Promise<unknown> = Promise.resolve();
 // from interleaving. These five are the whole seam: the low-level FS
 // primitives stay private to this module.
 export function serialize<T>(fn: () => T): Promise<T> {
-  assertStoreWritable();
+  try {
+    assertStoreWritable();
+  } catch (err) {
+    return Promise.reject(err);
+  }
   const run = writeChain.then(
     () => withIssuesStoreLock(fn),
     () => withIssuesStoreLock(fn),
@@ -227,9 +231,11 @@ export function ensureMigrations(): void {
 }
 
 export function list(): IssuesResponse {
-  withIssuesStoreLock(() => {
-    ensureMigrations();
-  });
+  if (!storeReadOnly && existsSync(issuesDir)) {
+    withIssuesStoreLock(() => {
+      ensureMigrations();
+    });
+  }
   const { issues, problems } = readAll();
   const derived = derive(issues);
   for (const [id, ideaStatus] of Object.entries(planningStatusById(issues))) {
