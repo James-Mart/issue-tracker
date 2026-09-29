@@ -19,11 +19,12 @@ function retryRead(count: number, error: Error): boolean {
 export function useReviewsQuery(
   projectId: string,
   storyId?: string,
+  options: { enabled?: boolean } = {},
 ): UseQueryResult<{ reviews: ReviewView[] }, Error> {
   return useQuery({
     queryKey: reviewKeys.list(projectId, storyId),
     queryFn: () => fetchReviews(projectId, storyId),
-    enabled: Boolean(projectId),
+    enabled: (options.enabled ?? true) && Boolean(projectId),
     retry: retryRead,
   });
 }

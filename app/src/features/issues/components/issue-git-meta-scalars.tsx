@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
 import { CHIP_UNSET } from "@server/fields";
 import type { IssueDetail, IssueRecord } from "@server/schemas";
 import { taskHeadCommit } from "@server/services/commit-sha";
 import {
   storyGitMetaScalars,
   taskGitMetaScalars,
+  type GitMetaScalar,
   type GitMetaScalarKey,
 } from "../lib/git-meta-scalars";
 import { CompactMetaItem } from "./compact-meta";
@@ -48,25 +50,37 @@ function taskScalarValue(
   }
 }
 
+function storyScalarRows(
+  scalars: GitMetaScalar[],
+  issue: Extract<IssueDetail, { kind: "story" }>,
+  mergeBase?: string,
+) {
+  return scalars.map(({ key, label }) => (
+    <CompactMetaItem
+      key={key}
+      label={label}
+      value={storyScalarValue(key, issue, mergeBase)}
+    />
+  ));
+}
+
 /** Story git/spec scalar rows (no outer card — parent owns the block). */
 export function StoryGitMetaScalars({
   issue,
   mergeBase,
+  beforeStackedOn,
 }: {
   issue: Extract<IssueDetail, { kind: "story" }>;
   mergeBase?: string;
+  /** Sits with Branch and Merge base. `stackedOn` is always the last scalar. */
+  beforeStackedOn?: ReactNode;
 }) {
   const scalars = storyGitMetaScalars(issue, mergeBase);
-  if (scalars.length === 0) return null;
   return (
     <>
-      {scalars.map(({ key, label }) => (
-        <CompactMetaItem
-          key={key}
-          label={label}
-          value={storyScalarValue(key, issue, mergeBase)}
-        />
-      ))}
+      {storyScalarRows(scalars.slice(0, -1), issue, mergeBase)}
+      {beforeStackedOn}
+      {storyScalarRows(scalars.slice(-1), issue, mergeBase)}
     </>
   );
 }
