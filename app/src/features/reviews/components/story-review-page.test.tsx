@@ -11,6 +11,7 @@ import type {
   ReviewDiffFile,
   ReviewView,
 } from "@server/schemas";
+import { shortSha } from "@/lib/utils/short-sha";
 import { storyReviewPath } from "../lib/links";
 import { StoryReviewPage } from "./story-review-page";
 
@@ -21,6 +22,8 @@ const TIP = "c1d7f88aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const state = vi.hoisted(() => ({
   reviews: [] as unknown[],
   diff: undefined as unknown,
+  byScope: {} as Record<string, unknown>,
+  diffScope: "",
   commits: undefined as unknown,
   setMark: vi.fn(),
   archive: vi.fn(),
@@ -51,7 +54,10 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
 
 vi.mock("../api/queries", () => ({
   useReviewsQuery: () => ({ data: { reviews: state.reviews }, error: null }),
-  useReviewDiffQuery: () => ({ data: state.diff, error: null }),
+  useReviewDiffQuery: (_projectId: string, _reviewId: string, scope: string) => {
+    state.diffScope = scope;
+    return { data: state.byScope[scope] ?? state.diff, error: null };
+  },
   useReviewCommitsQuery: () => ({
     data: state.commits,
     error: null,
@@ -130,7 +136,9 @@ function reviewFixture(overrides: Partial<ReviewView> = {}): ReviewView {
     },
     progress: {
       all: { reviewed: 1, total: 3, changedSinceReviewed: ["src/changed.ts"] },
-      commits: {},
+      commits: {
+        [TIP]: { reviewed: 0, total: 3 },
+      },
     },
     effectiveStatus: "open",
     ...overrides,
@@ -166,15 +174,16 @@ function LocationProbe() {
   return null;
 }
 
-function mountPage(): HTMLDivElement {
+function mountPage(search?: string): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const path = storyReviewPath(PROJECT, STORY);
   act(() => {
     root!.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={[storyReviewPath(PROJECT, STORY)]}>
+        <MemoryRouter initialEntries={[search ? `${path}?${search}` : path]}>
           <Routes>
             <Route
               path="/projects/:projectId/review/stories/:storyId"
@@ -211,6 +220,30 @@ function click(element: Element) {
   });
 }
 
+function tab(container: HTMLElement, name: string): HTMLElement {
+  const match = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+    (el) => el.textContent === name,
+  );
+  if (!match) throw new Error(`no tab ${name}`);
+  return match;
+}
+
+function scopeRow(container: HTMLElement, scope: string): HTMLElement {
+  const row = container.querySelector<HTMLElement>(
+    `[data-testid="review-scope-row"][data-scope="${scope}"]`,
+  );
+  if (!row) throw new Error(`no scope row ${scope}`);
+  return row;
+}
+
+function selectScope(row: HTMLElement) {
+  const input = row.querySelector("input");
+  if (!input) throw new Error("no scope radio");
+  act(() => {
+    input.click();
+  });
+}
+
 beforeAll(() => {
   (
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -220,6 +253,8 @@ beforeAll(() => {
 beforeEach(() => {
   state.reviews = [reviewFixture()];
   state.diff = { scope: "all", files: FILES, patch: PATCH } satisfies ReviewDiff;
+  state.byScope = {};
+  state.diffScope = "";
   state.commits = commitsFixture();
 });
 
@@ -231,24 +266,28 @@ afterEach(() => {
 });
 
 describe("StoryReviewPage", () => {
-  it("writes the Diff tab into the URL and renders one Merge base line", () => {
+  it("opens the Commits tab by default and keeps the scope in the URL", () => {
     const container = mountPage();
 
-    expect(lastLocation).toBe(`${storyReviewPath(PROJECT, STORY)}?tab=diff`);
-    const tabs = [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
-    expect(tabs).toEqual(["Diff"]);
+    expect(lastLocation).toBe(`${storyReviewPath(PROJECT, STORY)}?tab=commits&scope=all`);
+    const tabs = [...container.querySelectorAll('[role="tab"]')].map((el) => el.textContent);
+    expect(tabs).toEqual(["Commits", "Diff"]);
     expect(container.querySelectorAll('[data-testid="review-merge-base"]')).toHaveLength(1);
     expect(
       container.querySelector('[data-testid="review-story-link"]')?.getAttribute("href"),
     ).toBe(`/projects/${PROJECT}/issues/${STORY}`);
     expect(container.textContent).toContain("Archive");
-    expect(
-      container.querySelector('[data-testid="review-progress"]')?.textContent,
-    ).toBe("1 / 3 files reviewed");
+    expect(container.querySelector('[data-testid="review-commits-tab"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="review-diff-tab"]')).toBeNull();
+    expect(scopeRow(container, "all").getAttribute("data-selected")).toBe("true");
+    expect(scopeRow(container, "all").children).toHaveLength(1);
   });
 
   it("collapses a file when its Reviewed checkbox is checked and records the mark", () => {
-    const container = mountPage();
+    const container = mountPage("tab=diff");
+    expect(
+      container.querySelector('[data-testid="review-progress"]')?.textContent,
+    ).toBe("1 / 3 files reviewed");
     expect(fileCard(container, "src/changed.ts").dataset.collapsed).toBe("false");
     expect(
       fileCard(container, "src/changed.ts").querySelector('[data-testid="file-diff"]'),
@@ -271,7 +310,7 @@ describe("StoryReviewPage", () => {
   });
 
   it("starts reviewed files collapsed and expands them from the header toggle", () => {
-    const container = mountPage();
+    const container = mountPage("tab=diff");
     const done = fileCard(container, "src/done.ts");
     expect(done.dataset.collapsed).toBe("true");
     expect(reviewedBox(container, "src/done.ts").getAttribute("aria-checked")).toBe("true");
@@ -285,7 +324,7 @@ describe("StoryReviewPage", () => {
   });
 
   it("badges a file whose whole-review mark went stale, in the tree and the file header", () => {
-    const container = mountPage();
+    const container = mountPage("tab=diff");
     const treeRow = container.querySelector(
       '[data-testid="review-tree-file"][data-path="src/changed.ts"]',
     );
@@ -306,7 +345,7 @@ describe("StoryReviewPage", () => {
     state.reviews = [
       reviewFixture({ effectiveStatus: "archived", archivedReason: "explicit" } as Partial<ReviewView>),
     ];
-    const container = mountPage();
+    const container = mountPage("tab=diff");
 
     const boxes = container.querySelectorAll<HTMLButtonElement>(
       '[data-testid="review-file-reviewed"]',
@@ -324,7 +363,7 @@ describe("StoryReviewPage", () => {
   });
 
   it("shows the local git command for a file too large to render", () => {
-    const container = mountPage();
+    const container = mountPage("tab=diff");
     const tooLarge = fileCard(container, "src/big.ts").querySelector(
       '[data-testid="review-file-too-large"]',
     );
@@ -348,5 +387,180 @@ describe("StoryReviewPage", () => {
 
     expect(container.querySelector('[data-testid="review-empty-diff"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="review-diff-tab"]')).toBeNull();
+    expect(container.querySelector('[data-testid="review-commits-tab"]')).toBeNull();
+  });
+
+  it("lists All changes, then commits oldest first, and selecting one sets the scope", () => {
+    const older = "a3f91c2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    state.reviews = [
+      reviewFixture({
+        progress: {
+          all: { reviewed: 1, total: 3, changedSinceReviewed: ["src/changed.ts"] },
+          commits: {
+            [older]: { reviewed: 0, total: 1 },
+            [TIP]: { reviewed: 2, total: 2 },
+          },
+        },
+      }),
+    ];
+    state.commits = commitsFixture({
+      commits: [
+        {
+          sha: older,
+          subject: "older change",
+          author: "ada",
+          authoredAt: "2026-09-27T16:12:00.000Z",
+          files: 1,
+          additions: 4,
+          deletions: 1,
+        },
+        {
+          sha: TIP,
+          subject: "newer change",
+          author: "grace",
+          authoredAt: "2026-09-28T09:05:00.000Z",
+          files: 2,
+          additions: 8,
+          deletions: 0,
+        },
+      ],
+    });
+    const container = mountPage();
+
+    const rows = [...container.querySelectorAll("[data-testid='review-scope-row']")];
+    expect(rows.map((row) => row.getAttribute("data-scope"))).toEqual(["all", older, TIP]);
+    expect(scopeRow(container, "all").textContent).toContain("All changes");
+    expect(scopeRow(container, "all").textContent).toContain("3 files");
+    expect(scopeRow(container, "all").textContent).toContain("1 / 3 files");
+    const olderRow = scopeRow(container, older);
+    expect(olderRow.textContent).toContain(shortSha(older));
+    expect(olderRow.textContent).toContain("older change");
+    expect(olderRow.textContent).toContain("ada");
+    expect(olderRow.querySelector("time")?.getAttribute("dateTime")).toBe(
+      "2026-09-27T16:12:00.000Z",
+    );
+    expect(olderRow.textContent).toContain("1 file");
+    expect(olderRow.textContent).toContain("0 / 1 files");
+    expect(scopeRow(container, TIP).textContent).toContain("2 / 2 files");
+
+    selectScope(olderRow);
+
+    expect(lastLocation).toContain(`scope=${older}`);
+    expect(olderRow.getAttribute("data-selected")).toBe("true");
+    expect(scopeRow(container, "all").getAttribute("data-selected")).toBe("false");
+    expect(olderRow.children).toHaveLength(1);
+  });
+
+  it("a commit-scoped mark does not change whole-review progress", () => {
+    const commit = "b8e2041aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    state.reviews = [
+      reviewFixture({
+        progress: {
+          all: { reviewed: 1, total: 3, changedSinceReviewed: ["src/changed.ts"] },
+          commits: { [commit]: { reviewed: 0, total: 1 } },
+        },
+      }),
+    ];
+    state.commits = commitsFixture({
+      commits: [
+        {
+          sha: commit,
+          subject: "wire navigator",
+          author: "ada",
+          authoredAt: "2026-09-27T16:12:00.000Z",
+          files: 1,
+          additions: 1,
+          deletions: 1,
+        },
+      ],
+    });
+    state.byScope[commit] = {
+      scope: commit,
+      files: [FILES[0]],
+      patch: PATCH,
+    } satisfies ReviewDiff;
+    const container = mountPage(`tab=diff&scope=${commit}`);
+
+    expect(container.querySelector('[data-testid="review-scope-label"]')?.textContent).toBe(
+      `Commit ${shortSha(commit)} — wire navigator`,
+    );
+    expect(
+      fileCard(container, "src/changed.ts").querySelector(
+        '[data-testid="review-changed-since-badge"]',
+      ),
+    ).toBeNull();
+    expect(container.querySelector('[data-testid="review-progress"]')?.textContent).toBe(
+      "0 / 1 files reviewed",
+    );
+
+    click(reviewedBox(container, "src/changed.ts"));
+
+    expect(state.setMark).toHaveBeenCalledWith(
+      { reviewId: "rev-1", scope: commit, path: "src/changed.ts", reviewed: true },
+      expect.any(Object),
+    );
+    expect(container.querySelector('[data-testid="review-progress"]')?.textContent).toBe(
+      "1 / 1 files reviewed",
+    );
+
+    click(tab(container, "Commits"));
+
+    expect(scopeRow(container, "all").textContent).toContain("1 / 3 files");
+    expect(scopeRow(container, commit).textContent).toContain("1 / 1 files");
+  });
+
+  it("steps previous and next through All changes and the commits", () => {
+    const older = "a3f91c2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    state.commits = commitsFixture({
+      commits: [
+        {
+          sha: older,
+          subject: "older change",
+          author: "ada",
+          authoredAt: "2026-09-27T16:12:00.000Z",
+          files: 1,
+          additions: 4,
+          deletions: 0,
+        },
+        {
+          sha: TIP,
+          subject: "newer change",
+          author: "grace",
+          authoredAt: "2026-09-28T09:05:00.000Z",
+          files: 2,
+          additions: 8,
+          deletions: 0,
+        },
+      ],
+    });
+    const container = mountPage("tab=diff");
+    const label = () =>
+      container.querySelector('[data-testid="review-scope-label"]')?.textContent;
+    const previous = () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="review-scope-previous"]')!;
+    const next = () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="review-scope-next"]')!;
+
+    expect(label()).toBe("All changes");
+    expect(previous().disabled).toBe(true);
+    expect(state.diffScope).toBe("all");
+
+    click(next());
+
+    expect(lastLocation).toContain(`scope=${older}`);
+    expect(label()).toBe(`Commit ${shortSha(older)} — older change`);
+    expect(state.diffScope).toBe(older);
+    expect(previous().disabled).toBe(false);
+
+    click(next());
+
+    expect(lastLocation).toContain(`scope=${TIP}`);
+    expect(label()).toBe(`Commit ${shortSha(TIP)} — newer change`);
+    expect(next().disabled).toBe(true);
+
+    click(previous());
+
+    expect(lastLocation).toContain(`scope=${older}`);
+    expect(label()).toBe(`Commit ${shortSha(older)} — older change`);
   });
 });

@@ -13,20 +13,24 @@ import { ChangedSinceReviewedBadge } from "./changed-since-reviewed-badge";
 
 export type ReviewFileDiffSource = {
   storyId: string;
-  tip: string;
+  /** Commit whose tree holds the file's post-image. The tip for "All changes". */
+  sha: string;
   contentsCache: Map<string, Promise<string>>;
 };
 
-function FileTooLargeBody({ localCommand }: { localCommand: string }) {
+function FileTooLargeBody({
+  localCommand,
+  localHint,
+}: {
+  localCommand: string;
+  localHint: string;
+}) {
   return (
     <div className="flex flex-col gap-2 px-4 py-4" data-testid="review-file-too-large">
       <p className="text-sm font-semibold text-foreground">
         This file is too large to render in the browser.
       </p>
-      <p className="text-sm text-muted-foreground">
-        Read it in the project workspace with git diff from the merge base
-        through the Story tip.
-      </p>
+      <p className="text-sm text-muted-foreground">{localHint}</p>
       <code className="block break-all rounded-md border border-border bg-[hsl(var(--panel-2))] px-3 py-1.5 font-mono text-xs text-foreground">
         {localCommand}
       </code>
@@ -45,7 +49,7 @@ function RenderedFileDiff({
 }) {
   const { loading, loadDiffFiles } = useFileDiffContentsLoader({
     issueId: source.storyId,
-    sha: source.tip,
+    sha: source.sha,
     cache: source.contentsCache,
   });
 
@@ -76,6 +80,7 @@ export function ReviewFileDiff({
   diffLayout,
   source,
   localCommand,
+  localHint,
   onToggleCollapsed,
   onReviewedChange,
   fileRef,
@@ -88,6 +93,7 @@ export function ReviewFileDiff({
   diffLayout: DiffLayout;
   source: ReviewFileDiffSource;
   localCommand: string;
+  localHint: string;
   onToggleCollapsed: () => void;
   onReviewedChange: (reviewed: boolean) => void;
   fileRef?: Ref<HTMLElement>;
@@ -163,7 +169,7 @@ export function ReviewFileDiff({
       {collapsed ? null : (
         <div id={bodyId} className="border-t border-border">
           {file.tooLarge ? (
-            <FileTooLargeBody localCommand={localCommand} />
+            <FileTooLargeBody localCommand={localCommand} localHint={localHint} />
           ) : fileDiff ? (
             <RenderedFileDiff
               fileDiff={fileDiff}

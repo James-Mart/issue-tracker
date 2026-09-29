@@ -1,5 +1,6 @@
 import type { ReviewDiffFile, ReviewView } from "@server/schemas";
 import { shortSha } from "@/lib/utils/short-sha";
+import { ALL_CHANGES_SCOPE } from "./review-scope";
 
 export type ReviewFileRow = {
   file: ReviewDiffFile;
@@ -20,6 +21,41 @@ export function allChangesFileRows(
   }));
 }
 
+/**
+ * Rows for the active scope. Commit marks never go stale: a commit's content
+ * is fixed, so they carry no "changed since reviewed" signal.
+ */
+export function scopeFileRows(
+  review: ReviewView,
+  files: ReviewDiffFile[],
+  scope: string,
+): ReviewFileRow[] {
+  if (scope === ALL_CHANGES_SCOPE) return allChangesFileRows(review, files);
+  const bucket = review.marks.commits[scope] ?? {};
+  return files.map((file) => ({
+    file,
+    reviewed: file.path in bucket,
+    changedSinceReviewed: false,
+  }));
+}
+
+/** Whole-review progress from the net diff, plus optimistic "All changes" marks. */
+export function allChangesReviewedCount(
+  review: ReviewView,
+  files: ReviewDiffFile[],
+  overrides: Record<string, boolean> | undefined,
+): { reviewed: number; total: number } {
+  let reviewed = 0;
+  for (const row of allChangesFileRows(review, files)) {
+    if (overrides?.[row.file.path] ?? row.reviewed) reviewed += 1;
+  }
+  return { reviewed, total: files.length };
+}
+
+export function fileCountLabel(count: number): string {
+  return count === 1 ? "1 file" : `${count} files`;
+}
+
 export function diffLineTotals(files: ReviewDiffFile[]): {
   additions: number;
   deletions: number;
@@ -33,11 +69,22 @@ export function diffLineTotals(files: ReviewDiffFile[]): {
   return { additions, deletions };
 }
 
-/** Command that shows one file's "All changes" diff in a local checkout. */
+/** Command that shows one file's diff for this scope in a local checkout. */
 export function localFileDiffCommand(
   mergeBaseRef: string,
   tip: string,
   path: string,
+  scope: string,
 ): string {
-  return `git diff ${mergeBaseRef}...${shortSha(tip)} -- ${path}`;
+  if (scope === ALL_CHANGES_SCOPE) {
+    return `git diff ${mergeBaseRef}...${shortSha(tip)} -- ${path}`;
+  }
+  return `git show ${shortSha(scope)} -- ${path}`;
+}
+
+export function fileTooLargeHint(scope: string): string {
+  if (scope === ALL_CHANGES_SCOPE) {
+    return "Read it in the project workspace with git diff from the merge base through the Story tip.";
+  }
+  return "Read it in the project workspace with git show on this commit.";
 }

@@ -58,11 +58,16 @@ export function useReviewDiffQuery(
   projectId: string,
   reviewId: string,
   scope: string,
+  options: { enabled?: boolean } = {},
 ): UseQueryResult<ReviewDiff, Error> {
   return useQuery({
     queryKey: reviewKeys.diff(projectId, reviewId, scope),
     queryFn: () => fetchReviewDiff(projectId, reviewId, scope),
-    enabled: Boolean(projectId) && Boolean(reviewId) && Boolean(scope),
+    enabled:
+      (options.enabled ?? true) &&
+      Boolean(projectId) &&
+      Boolean(reviewId) &&
+      Boolean(scope),
     retry: retryRead,
   });
 }

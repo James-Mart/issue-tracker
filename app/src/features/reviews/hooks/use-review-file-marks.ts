@@ -1,19 +1,21 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { ReviewDiffFile, ReviewView } from "@server/schemas";
 import { useSetReviewMark } from "../api/mutations";
-import { allChangesFileRows, type ReviewFileRow } from "../lib/review-files";
-
-const ALL_CHANGES_SCOPE = "all";
+import { scopeFileRows, type ReviewFileRow } from "../lib/review-files";
+import type { ReviewMarkOverrides } from "../lib/review-scope";
 
 /**
- * "All changes" rows with optimistic Reviewed marks, plus each file's collapse
- * state. A file starts collapsed when reviewed; checking collapses it and
- * unchecking expands it. A failed write reverts both the mark and the collapse.
+ * Scope rows with optimistic Reviewed marks, plus each file's collapse state.
+ * A file starts collapsed when reviewed; checking collapses it and unchecking
+ * expands it. A failed write reverts both the mark and the collapse.
  */
 export function useReviewFileMarks(
   projectId: string,
   review: ReviewView,
   files: ReviewDiffFile[],
+  scope: string,
+  overrides: ReviewMarkOverrides,
+  setOverrides: Dispatch<SetStateAction<ReviewMarkOverrides>>,
 ): {
   rows: ReviewFileRow[];
   isCollapsed: (row: ReviewFileRow) => boolean;
@@ -21,38 +23,56 @@ export function useReviewFileMarks(
   setReviewed: (path: string, reviewed: boolean) => void;
 } {
   const setMark = useSetReviewMark(projectId);
-  const [optimisticMarks, setOptimisticMarks] = useState<Record<string, boolean>>({});
-  const [collapsedOverrides, setCollapsedOverrides] = useState<Record<string, boolean>>({});
+  const [collapsedOverrides, setCollapsedOverrides] = useState<
+    Record<string, Record<string, boolean>>
+  >({});
+  const scopeOverrides = overrides[scope];
+  const scopeCollapsed = collapsedOverrides[scope];
 
   const rows = useMemo(
     () =>
-      allChangesFileRows(review, files).map((row) => ({
+      scopeFileRows(review, files, scope).map((row) => ({
         ...row,
-        reviewed: optimisticMarks[row.file.path] ?? row.reviewed,
+        reviewed: scopeOverrides?.[row.file.path] ?? row.reviewed,
       })),
-    [files, optimisticMarks, review],
+    [files, review, scope, scopeOverrides],
   );
 
   const isCollapsed = (row: ReviewFileRow) =>
-    collapsedOverrides[row.file.path] ?? row.reviewed;
+    scopeCollapsed?.[row.file.path] ?? row.reviewed;
 
   const toggleCollapsed = (row: ReviewFileRow) =>
-    setCollapsedOverrides((prev) => ({ ...prev, [row.file.path]: !isCollapsed(row) }));
+    setCollapsedOverrides((prev) => ({
+      ...prev,
+      [scope]: { ...prev[scope], [row.file.path]: !isCollapsed(row) },
+    }));
 
   const setReviewed = (path: string, reviewed: boolean) => {
-    setOptimisticMarks((prev) => ({ ...prev, [path]: reviewed }));
-    setCollapsedOverrides((prev) => ({ ...prev, [path]: reviewed }));
+    setOverrides((prev) => ({
+      ...prev,
+      [scope]: { ...prev[scope], [path]: reviewed },
+    }));
+    setCollapsedOverrides((prev) => ({
+      ...prev,
+      [scope]: { ...prev[scope], [path]: reviewed },
+    }));
     setMark.mutate(
-      { reviewId: review.id, scope: ALL_CHANGES_SCOPE, path, reviewed },
+      { reviewId: review.id, scope, path, reviewed },
       {
         onError: () =>
-          setCollapsedOverrides(({ [path]: _dropped, ...rest }) => rest),
+          setCollapsedOverrides((prev) => {
+            const bucket = prev[scope];
+            if (!bucket || !(path in bucket)) return prev;
+            const { [path]: _dropped, ...rest } = bucket;
+            return { ...prev, [scope]: rest };
+          }),
         // A later click on the same file owns the optimistic mark until its own write settles.
         onSettled: () =>
-          setOptimisticMarks((prev) => {
-            if (prev[path] !== reviewed) return prev;
-            const { [path]: _dropped, ...rest } = prev;
-            return rest;
+          setOverrides((prev) => {
+            const bucket = prev[scope];
+            if (!bucket || bucket[path] !== reviewed) return prev;
+            const { [path]: _dropped, ...rest } = bucket;
+            return { ...prev, [scope]: rest };
           }),
       },
     );
