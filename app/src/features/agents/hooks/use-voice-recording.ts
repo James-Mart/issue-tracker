@@ -33,6 +33,12 @@ function errorMessage(error: unknown): string {
   return "Something went wrong";
 }
 
+function stopMediaStream(stream: MediaStream | null | undefined) {
+  for (const track of stream?.getTracks() ?? []) {
+    track.stop();
+  }
+}
+
 function mixToMono(audioBuffer: AudioBuffer): Float32Array<ArrayBuffer> {
   const { length, numberOfChannels } = audioBuffer;
   const mono = new Float32Array(length);
@@ -105,6 +111,8 @@ export function useVoiceRecording({
   const elapsedIntervalRef = useRef<number | null>(null);
   const stopCapturePromiseRef = useRef<Promise<Blob> | null>(null);
   const captureStartingRef = useRef(false);
+  const captureRequestRef = useRef(0);
+  const permissionPendingRef = useRef(false);
   const confirmInFlightRef = useRef(false);
   const transcriptionInFlightRef = useRef(false);
 
@@ -116,9 +124,7 @@ export function useVoiceRecording({
   }, []);
 
   const releaseMicrophoneTrack = useCallback(() => {
-    for (const track of mediaStreamRef.current?.getTracks() ?? []) {
-      track.stop();
-    }
+    stopMediaStream(mediaStreamRef.current);
     mediaStreamRef.current = null;
   }, []);
 
@@ -185,9 +191,19 @@ export function useVoiceRecording({
   }, [clearElapsedInterval, stopCapture]);
 
   const beginCapture = useCallback(async () => {
+    const request = captureRequestRef.current;
     resetRecordingSession();
+    permissionPendingRef.current = true;
+    // Permission can settle after cancel or unmount. That result is stale.
+    const discardIfStale = (stream?: MediaStream) => {
+      if (request === captureRequestRef.current) return false;
+      if (stream) stopMediaStream(stream);
+      return true;
+    };
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      permissionPendingRef.current = false;
+      if (discardIfStale(stream)) return;
       mediaStreamRef.current = stream;
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
@@ -203,10 +219,13 @@ export function useVoiceRecording({
       setState("recording");
       startElapsedTimer();
     } catch (error) {
+      if (discardIfStale()) return;
       resetRecordingSession();
       setErrorKind("permission");
       setErrorReason(errorMessage(error));
       setState("error");
+    } finally {
+      permissionPendingRef.current = false;
     }
   }, [resetRecordingSession, startElapsedTimer]);
 
@@ -226,13 +245,16 @@ export function useVoiceRecording({
   }, [startCapture, state]);
 
   const cancel = useCallback(() => {
-    if (
-      state !== "recording" &&
-      state !== "review" &&
-      state !== "error"
-    ) {
+    // The permission prompt is still open and no recorder exists. Invalidating
+    // the request is enough; the stream is stopped when permission settles.
+    if (permissionPendingRef.current && state === "idle") {
+      captureRequestRef.current += 1;
       return;
     }
+    const mayCancel =
+      state === "recording" || state === "review" || state === "error";
+    if (!mayCancel) return;
+    captureRequestRef.current += 1;
     clearElapsedInterval();
     void stopCapture();
     resetRecordingSession();
@@ -328,6 +350,7 @@ export function useVoiceRecording({
 
   useEffect(() => {
     return () => {
+      captureRequestRef.current += 1;
       clearElapsedInterval();
       void stopCapture();
       releaseMicrophoneTrack();

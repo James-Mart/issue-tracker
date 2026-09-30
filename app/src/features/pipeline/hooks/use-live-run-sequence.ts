@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ConversationStreamEvent } from "@server/schemas";
 import {
@@ -26,13 +26,25 @@ export function useLiveRunSequence(
   fetched: RunSequence | undefined,
 ): RunSequence | undefined {
   const qc = useQueryClient();
-  const [frames, setFrames] = useState<ConversationStreamEvent[]>([]);
+  const framesRef = useRef<ConversationStreamEvent[]>([]);
+  // The store object is a new identity on each publish. In-order inserts
+  // append onto the same array, so the array itself cannot be the state.
+  const [frameStore, setFrameStore] = useState<{
+    frames: ConversationStreamEvent[];
+  }>({ frames: framesRef.current });
+
+  const publishFrames = useCallback((frames: ConversationStreamEvent[]) => {
+    framesRef.current = frames;
+    setFrameStore({ frames });
+  }, []);
 
   useEffect(() => {
-    setFrames([]);
-  }, [conversationId]);
+    publishFrames([]);
+  }, [conversationId, publishFrames]);
 
-  const sequence = fetched ? applyLiveFrames(fetched, frames) : undefined;
+  const sequence = fetched
+    ? applyLiveFrames(fetched, frameStore.frames)
+    : undefined;
   const shouldSubscribe = Boolean(
     conversationId && sequence?.condition === "in-flight",
   );
@@ -44,7 +56,7 @@ export function useLiveRunSequence(
     const onTopicMessage = (message: TopicMessage): void => {
       if (disposed) return;
       if (message.type === "reset") {
-        setFrames([]);
+        publishFrames([]);
         void qc.invalidateQueries({
           queryKey: pipelineKeys.run(conversationId),
         });
@@ -52,7 +64,9 @@ export function useLiveRunSequence(
         return;
       }
       const event = message.event as ConversationStreamEvent;
-      setFrames((prev) => insertFrameBySeq(prev, event));
+      const inserted = insertFrameBySeq(framesRef.current, event);
+      if (!inserted.changed) return;
+      publishFrames(inserted.frames);
     };
 
     const unsubscribe = subscribeTopic(
@@ -63,7 +77,7 @@ export function useLiveRunSequence(
       disposed = true;
       unsubscribe();
     };
-  }, [conversationId, shouldSubscribe, qc]);
+  }, [conversationId, shouldSubscribe, qc, publishFrames]);
 
   return sequence;
 }

@@ -141,11 +141,35 @@ function mount(
   };
 }
 
+function beatLabels(container: HTMLElement): (string | null)[] {
+  return Array.from(container.querySelectorAll("[data-testid='live-beat']")).map(
+    (node) => node.getAttribute("data-label"),
+  );
+}
+
 function deliver(topic: string, message: TopicMessage) {
   const listener = topicState.listeners.get(topic);
   expect(listener).toBeTruthy();
   act(() => {
     listener!(message);
+  });
+}
+
+function deliverDelegation(
+  topic: string,
+  seq: number,
+  runOverrides: Partial<AgentRun> = {},
+  at = AT_NESTED,
+) {
+  deliver(topic, {
+    type: "event",
+    seq,
+    event: {
+      type: "delegation",
+      run: sampleRun(runOverrides),
+      at,
+      seq,
+    },
   });
 }
 
@@ -168,22 +192,12 @@ describe("useLiveRunSequence", () => {
     });
     expect(topicState.listeners.has("conversation:conv-live")).toBe(true);
 
-    deliver("conversation:conv-live", {
-      type: "event",
-      seq: 10,
-      event: {
-        type: "delegation",
-        run: sampleRun(),
-        at: AT_NESTED,
-        seq: 10,
-      },
-    });
+    deliverDelegation("conversation:conv-live", 10);
 
-    expect(
-      Array.from(container.querySelectorAll("[data-testid='live-beat']")).map(
-        (node) => node.getAttribute("data-label"),
-      ),
-    ).toEqual(["spawn implementor", "spawn validator"]);
+    expect(beatLabels(container)).toEqual([
+      "spawn implementor",
+      "spawn validator",
+    ]);
     expect(
       container.querySelector("[data-testid='live-sequence']")?.getAttribute(
         "data-condition",
@@ -253,6 +267,83 @@ describe("useLiveRunSequence", () => {
       fetched: sequence("completed"),
     });
     expect(topicState.listeners.has("conversation:conv-done")).toBe(false);
+  });
+
+  it("appends each in-order delegation as it arrives", () => {
+    const { container } = mount({
+      conversationId: "conv-live",
+      fetched: sequence("in-flight"),
+    });
+
+    deliverDelegation("conversation:conv-live", 10);
+    deliverDelegation(
+      "conversation:conv-live",
+      11,
+      {
+        delegationId: "del-review",
+        parentCallId: "call-review",
+        role: "reviewer",
+      },
+      AT_END,
+    );
+
+    expect(beatLabels(container)).toEqual([
+      "spawn implementor",
+      "spawn validator",
+      "spawn reviewer",
+    ]);
+  });
+
+  it("ignores a frame kind the overlay does not apply", () => {
+    const { container } = mount({
+      conversationId: "conv-live",
+      fetched: sequence("in-flight"),
+    });
+
+    deliver("conversation:conv-live", {
+      type: "event",
+      seq: 9,
+      event: {
+        type: "prompt",
+        text: "hello",
+        at: AT,
+        seq: 9,
+      },
+    });
+
+    expect(beatLabels(container)).toEqual(["spawn implementor"]);
+  });
+
+  it("drops overlaid frames when the conversation changes", () => {
+    const { container, rerender } = mount({
+      conversationId: "conv-a",
+      fetched: sequence("in-flight"),
+    });
+
+    deliverDelegation("conversation:conv-a", 10);
+    expect(beatLabels(container)).toEqual([
+      "spawn implementor",
+      "spawn validator",
+    ]);
+
+    rerender({
+      conversationId: "conv-b",
+      fetched: sequence("in-flight"),
+    });
+
+    expect(beatLabels(container)).toEqual(["spawn implementor"]);
+  });
+
+  it("clears overlaid frames on topic reset", () => {
+    const { container } = mount({
+      conversationId: "conv-live",
+      fetched: sequence("in-flight"),
+    });
+
+    deliverDelegation("conversation:conv-live", 10);
+    deliver("conversation:conv-live", { type: "reset" });
+
+    expect(beatLabels(container)).toEqual(["spawn implementor"]);
   });
 
   it("never subscribes to a failed run", () => {

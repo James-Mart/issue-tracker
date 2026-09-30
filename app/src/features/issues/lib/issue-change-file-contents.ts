@@ -99,7 +99,8 @@ export function cachedFileContents(
   const hit = cache.get(key);
   if (hit) return hit;
   const pending = load().catch((error: unknown) => {
-    cache.delete(key);
+    // A superseded in-flight fetch can reject after a replacement was stored.
+    if (cache.get(key) === pending) cache.delete(key);
     throw error;
   });
   cache.set(key, pending);
@@ -108,6 +109,17 @@ export function cachedFileContents(
 
 export function changeFileCacheKey(sha: string, path: string): string {
   return `${sha}:${path}`;
+}
+
+/** Drop cached file contents for every SHA other than the current tip. */
+export function pruneSupersededDiffContents(
+  cache: Map<string, Promise<string>>,
+  tipSha: string,
+): void {
+  const prefix = `${tipSha}:`;
+  for (const key of cache.keys()) {
+    if (!key.startsWith(prefix)) cache.delete(key);
+  }
 }
 
 export async function loadFileDiffContents(args: {

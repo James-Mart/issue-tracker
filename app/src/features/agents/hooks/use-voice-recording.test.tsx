@@ -130,6 +130,16 @@ async function flushPromises() {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function monoAudioBuffer(): AudioBuffer {
   return {
     sampleRate: 48_000,
@@ -324,13 +334,8 @@ describe("useVoiceRecording", () => {
   });
 
   it("ignores duplicate start calls while microphone access is in flight", async () => {
-    let resolveGetUserMedia: (stream: MediaStream) => void = () => {};
-    getUserMedia.mockImplementationOnce(
-      () =>
-        new Promise<MediaStream>((resolve) => {
-          resolveGetUserMedia = resolve;
-        }),
-    );
+    const pending = deferred<MediaStream>();
+    getUserMedia.mockImplementationOnce(() => pending.promise);
     const harness = mountHook();
 
     act(() => {
@@ -341,11 +346,117 @@ describe("useVoiceRecording", () => {
     expect(getUserMedia).toHaveBeenCalledTimes(1);
 
     act(() => {
-      resolveGetUserMedia(stream as unknown as MediaStream);
+      pending.resolve(stream as unknown as MediaStream);
     });
     await flushPromises();
 
     expect(harness.getView().state).toBe("recording");
+  });
+
+  it("stops a stream that resolves after cancel and does not start capture", async () => {
+    const pending = deferred<MediaStream>();
+    getUserMedia.mockImplementationOnce(() => pending.promise);
+    const harness = mountHook();
+
+    act(() => {
+      harness.getView().start();
+    });
+    expect(harness.getView().state).toBe("idle");
+
+    act(() => {
+      harness.getView().cancel();
+    });
+    act(() => {
+      pending.resolve(stream as unknown as MediaStream);
+    });
+    await flushPromises();
+
+    expect(track.stop).toHaveBeenCalled();
+    expect(FakeMediaRecorder.instances).toHaveLength(0);
+    expect(harness.getView().state).toBe("idle");
+    expect(harness.getView().elapsedSeconds).toBe(0);
+
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    expect(harness.getView().elapsedSeconds).toBe(0);
+    expect(harness.getView().state).toBe("idle");
+  });
+
+  it("ignores a permission failure that settles after cancel", async () => {
+    const pending = deferred<MediaStream>();
+    getUserMedia.mockImplementationOnce(() => pending.promise);
+    const harness = mountHook();
+
+    act(() => {
+      harness.getView().start();
+    });
+    act(() => {
+      harness.getView().cancel();
+    });
+    act(() => {
+      pending.reject(new DOMException("denied", "NotAllowedError"));
+    });
+    await flushPromises();
+
+    expect(harness.getView().state).toBe("idle");
+    expect(harness.getView().errorKind).toBeNull();
+    expect(FakeMediaRecorder.instances).toHaveLength(0);
+  });
+
+  it("stops a stream that resolves after cancel during a permission retry", async () => {
+    getUserMedia.mockRejectedValueOnce(
+      new DOMException("denied", "NotAllowedError"),
+    );
+    const pending = deferred<MediaStream>();
+    getUserMedia.mockImplementationOnce(() => pending.promise);
+    const retryTrack = new FakeMediaStreamTrack();
+    const retryStream = new FakeMediaStream([retryTrack]);
+    const harness = mountHook();
+
+    act(() => {
+      harness.getView().start();
+    });
+    await flushPromises();
+    expect(harness.getView().state).toBe("error");
+
+    act(() => {
+      harness.getView().retry();
+    });
+    act(() => {
+      harness.getView().cancel();
+    });
+    act(() => {
+      pending.resolve(retryStream as unknown as MediaStream);
+    });
+    await flushPromises();
+
+    expect(retryTrack.stop).toHaveBeenCalled();
+    expect(FakeMediaRecorder.instances).toHaveLength(0);
+    expect(harness.getView().state).toBe("idle");
+    expect(harness.getView().errorKind).toBeNull();
+  });
+
+  it("stops a stream that resolves after unmount and does not start capture", async () => {
+    const pending = deferred<MediaStream>();
+    getUserMedia.mockImplementationOnce(() => pending.promise);
+    const harness = mountHook();
+
+    act(() => {
+      harness.getView().start();
+    });
+    act(() => {
+      harness.root.unmount();
+    });
+    act(() => {
+      pending.resolve(stream as unknown as MediaStream);
+    });
+    await flushPromises();
+
+    expect(track.stop).toHaveBeenCalled();
+    expect(FakeMediaRecorder.instances).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("ignores duplicate confirm calls while conversion is in flight", async () => {
