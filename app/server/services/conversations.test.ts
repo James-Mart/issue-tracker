@@ -806,6 +806,128 @@ describe("appendEvent prompt live frames", () => {
   });
 });
 
+describe("awaitingHuman metadata", () => {
+  it("sets awaitingHuman false when appendEvent persists a prompt", async () => {
+    const { createConversation, appendEvent, readConversationMeta } =
+      await loadService();
+
+    const meta = await createConversation({
+      title: "Prompt flag",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    await appendEvent(meta.id, { type: "prompt", text: "go" });
+
+    expect(readConversationMeta(meta.id).awaitingHuman).toBe(false);
+  });
+
+  it("sets awaitingHuman true when appendEvent persists assistant or error", async () => {
+    const { createConversation, appendEvent, readConversationMeta } =
+      await loadService();
+
+    const meta = await createConversation({
+      title: "Agent flag",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    await appendEvent(meta.id, { type: "prompt", text: "go" });
+    await appendEvent(meta.id, { type: "assistant", text: "done" });
+
+    expect(readConversationMeta(meta.id).awaitingHuman).toBe(true);
+
+    await appendEvent(meta.id, { type: "prompt", text: "again" });
+    expect(readConversationMeta(meta.id).awaitingHuman).toBe(false);
+
+    await appendEvent(meta.id, { type: "error", message: "boom" });
+    expect(readConversationMeta(meta.id).awaitingHuman).toBe(true);
+  });
+
+  it.each([
+    {
+      label: "assistant reply",
+      lines: [
+        { type: "prompt", text: "go" },
+        { type: "assistant", text: "ok" },
+      ],
+      expected: true,
+    },
+    {
+      label: "trailing prompt",
+      lines: [
+        { type: "prompt", text: "go" },
+        { type: "assistant", text: "ok" },
+        { type: "prompt", text: "again" },
+      ],
+      expected: false,
+    },
+    {
+      label: "error",
+      lines: [
+        { type: "prompt", text: "go" },
+        { type: "error", message: "boom" },
+      ],
+      expected: true,
+    },
+  ])(
+    "backfills awaitingHuman from the transcript when meta lacks the field ($label)",
+    async ({ lines, expected }) => {
+      const { conversationsDir } = await loadConfig();
+      const { createConversation, resolveAwaitingHuman, readConversationMeta } =
+        await loadService();
+
+      const meta = await createConversation({
+        title: "Legacy",
+        projectId: "platform",
+        model: "composer-2.5",
+      });
+      const { awaitingHuman: _omit, ...legacyMeta } = readConversationMeta(
+        meta.id,
+      );
+      writeFileSync(
+        join(conversationsDir, meta.id, "meta.json"),
+        `${JSON.stringify(legacyMeta, null, 2)}\n`,
+      );
+      writeFileSync(
+        join(conversationsDir, meta.id, "transcript.jsonl"),
+        lines
+          .map((line, index) =>
+            JSON.stringify({ ...line, at: AT, seq: index + 1 }),
+          )
+          .join("\n") + "\n",
+      );
+
+      const loaded = readConversationMeta(meta.id);
+      await expect(resolveAwaitingHuman(loaded)).resolves.toBe(expected);
+      expect(readConversationMeta(meta.id).awaitingHuman).toBe(expected);
+    },
+  );
+
+  it("returns cached awaitingHuman without reading the transcript", async () => {
+    const { conversationsDir } = await loadConfig();
+    const { createConversation, resolveAwaitingHuman } = await loadService();
+
+    const meta = await createConversation({
+      title: "Cached",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    writeFileSync(
+      join(conversationsDir, meta.id, "meta.json"),
+      JSON.stringify({
+        ...meta,
+        awaitingHuman: false,
+      }),
+    );
+    writeFileSync(
+      join(conversationsDir, meta.id, "transcript.jsonl"),
+      JSON.stringify({ type: "assistant", text: "would say true", at: AT }) +
+        "\n",
+    );
+
+    await expect(resolveAwaitingHuman(meta)).resolves.toBe(false);
+  });
+});
+
 describe("prompt assembly", () => {
   async function loadAttachments() {
     return import("./conversation-attachments.js");

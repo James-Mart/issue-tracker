@@ -53,6 +53,8 @@ export const conversationMetaSchema = z
     forkedFrom: nonEmpty.optional(),
     forkedAtSeq: z.number().int().nonnegative().optional(),
     readOnly: z.boolean().optional(),
+    /** Cached from the last turn-boundary event; backfilled on first read when absent. */
+    awaitingHuman: z.boolean().optional(),
     createdAt: nonEmpty,
     updatedAt: nonEmpty,
   })

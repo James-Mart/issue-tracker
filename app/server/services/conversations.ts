@@ -42,6 +42,8 @@ import {
 import type { AgentSessions } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
 import { readAllTranscriptEvents } from "./conversation-transcript-seq.js";
+import { awaitingHumanAfterTurnBoundary } from "./awaiting-human.js";
+import { awaitingHumanFromTranscriptFile } from "./transcript-page.js";
 import { readTranscriptPage } from "./transcript-page.js";
 import { IssueError } from "./errors.js";
 import {
@@ -191,9 +193,9 @@ function persistNewConversation(
     id,
     createdAt: now,
     updatedAt: now,
+    awaitingHuman: false,
   };
   mkdirSync(dirOf(id), { recursive: true });
-  writeMeta(meta);
   writeFileSync(transcriptPathOf(id), "");
   writeFileSync(delegationsPathOf(id), "");
   if (opts?.initialPrompt) {
@@ -204,6 +206,7 @@ function persistNewConversation(
     };
     appendFileSync(transcriptPathOf(id), `${JSON.stringify(stamped)}\n`);
   }
+  writeMeta(meta);
   return meta;
 }
 
@@ -466,6 +469,25 @@ export function readConversation(id: string): ConversationDetail {
   return { meta, transcript: readAllTranscriptEvents(id) };
 }
 
+/**
+ * Session-list flag from conversation metadata. When the field is absent on
+ * legacy conversations, derive once from the transcript and persist.
+ */
+export function resolveAwaitingHuman(meta: ConversationMeta): Promise<boolean> {
+  if (meta.awaitingHuman !== undefined) {
+    return Promise.resolve(meta.awaitingHuman);
+  }
+  return serialize(() => {
+    const fresh = readMetaRaw(meta.id);
+    if (fresh.awaitingHuman !== undefined) {
+      return fresh.awaitingHuman;
+    }
+    const awaitingHuman = awaitingHumanFromTranscriptFile(meta.id);
+    writeMeta({ ...fresh, awaitingHuman });
+    return awaitingHuman;
+  });
+}
+
 /** Meta must exist. The page itself is read from the tail of the transcript. */
 export function readConversationTranscriptPage(
   id: string,
@@ -492,7 +514,12 @@ export function appendEvent(
       seq,
     };
     appendFileSync(transcriptPathOf(id), `${JSON.stringify(stamped)}\n`);
-    writeMeta({ ...meta, updatedAt: new Date().toISOString() });
+    const awaitingHuman = awaitingHumanAfterTurnBoundary(stamped.type);
+    writeMeta({
+      ...meta,
+      updatedAt: new Date().toISOString(),
+      ...(awaitingHuman !== undefined ? { awaitingHuman } : {}),
+    });
     if (stamped.type === "prompt") {
       publishFrame(id, { event: stamped, persist: false });
     }

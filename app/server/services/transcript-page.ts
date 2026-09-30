@@ -1,6 +1,10 @@
 import * as fs from "fs";
 import type { ConversationTranscriptPage, TranscriptEvent } from "../schemas.js";
 import {
+  awaitingHumanAfterTurnBoundary,
+  awaitingHumanFromTranscript,
+} from "./awaiting-human.js";
+import {
   parseStampedTranscriptLine,
   readAllTranscriptEvents,
   transcriptPathOf,
@@ -229,6 +233,52 @@ function readLineFrom(
     pos += n;
   }
   return { text: Buffer.concat(chunks).toString("utf8"), end: size };
+}
+
+/**
+ * Derive awaitingHuman from the transcript on disk. Uses a backward tail scan
+ * and falls back to a full read only when an unstamped legacy line appears.
+ */
+export function awaitingHumanFromTranscriptFile(
+  conversationId: string,
+): boolean {
+  const tail = scanAwaitingHumanTailEvents(conversationId);
+  if (tail === "full") {
+    return awaitingHumanFromTranscript(
+      readAllTranscriptEvents(conversationId),
+    );
+  }
+  return awaitingHumanFromTranscript(tail);
+}
+
+function scanAwaitingHumanTailEvents(
+  conversationId: string,
+): readonly TranscriptEvent[] | "full" {
+  const path = transcriptPathOf(conversationId);
+  if (!fs.existsSync(path)) return [];
+  const fd = fs.openSync(path, "r");
+  try {
+    const size = fs.fstatSync(fd).size;
+    if (size === 0) return [];
+    const tailEvents: TranscriptEvent[] = [];
+    let full = false;
+    forEachLineBackward(fd, size, (line) => {
+      if (!line.trim()) return false;
+      const parsed = parseStampedTranscriptLine(line);
+      if (!parsed) return false;
+      if (!parsed.stamped) {
+        full = true;
+        return true;
+      }
+      tailEvents.push(parsed.event);
+      return awaitingHumanAfterTurnBoundary(parsed.event.type) !== undefined;
+    });
+    if (full) return "full";
+    tailEvents.reverse();
+    return tailEvents;
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 /** Newest line first. `onLine` returns true to stop. */
