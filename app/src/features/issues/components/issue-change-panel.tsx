@@ -26,6 +26,7 @@ import { shortSha } from "@/lib/utils/short-sha";
 import type { ChangeCommit, ChangeStats, IssueChange } from "@server/schemas";
 import { DetailEyebrow, SETTINGS_HEADING_CLASS } from "./detail-section";
 import { useCommentThreads, useIssueChangeQuery } from "../api/queries";
+import { useDiffContentsCache } from "../hooks/use-diff-contents-cache";
 import { useDiffLayoutPreference } from "../hooks/use-diff-layout-preference";
 import { useFileDiffContentsLoader } from "../hooks/use-file-diff-contents-loader";
 import { useFileThreadAnnotations } from "../hooks/use-file-thread-annotations";
@@ -515,8 +516,8 @@ function IssueChangeLoadedPanel({
 }) {
   const files = useMemo(() => fileDiffsFromPatch(change.patch), [change.patch]);
   const { threads } = useCommentThreads(issueId);
-  const contentsCache = useRef(new Map<string, Promise<string>>()).current;
   const sha = change.commits[change.commits.length - 1]!.sha;
+  const contentsCache = useDiffContentsCache(sha);
   const { layout, setLayout, diffLayout, isMobile } = useDiffLayoutPreference();
   const [filter, setFilter] = useState("");
   const [selectedName, setSelectedName] = useState<string | undefined>();

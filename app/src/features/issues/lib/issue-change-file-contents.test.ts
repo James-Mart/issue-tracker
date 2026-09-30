@@ -5,6 +5,7 @@ import {
   changeFileCacheKey,
   fileDiffLoadedFiles,
   loadFileDiffContents,
+  pruneSupersededDiffContents,
   reconstructOldFileContents,
 } from "./issue-change-file-contents";
 
@@ -99,6 +100,16 @@ function jsonResponse(body: unknown, status = 200) {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -153,6 +164,39 @@ describe("cachedFileContents", () => {
     await expect(cachedFileContents(cache, "k", load)).resolves.toBe("ok");
     await expect(cachedFileContents(cache, "k", load)).resolves.toBe("ok");
     expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a replacement when a superseded fetch rejects", async () => {
+    const cache = new Map<string, Promise<string>>();
+    const first = deferred<string>();
+    const superseded = cachedFileContents(cache, "k", () => first.promise);
+    const rejection = superseded.catch((error: unknown) => error);
+    cache.delete("k");
+    const replacement = Promise.resolve("kept");
+    cache.set("k", replacement);
+
+    first.reject(new Error("stale"));
+    await rejection;
+
+    expect(cache.get("k")).toBe(replacement);
+    await expect(cachedFileContents(cache, "k", vi.fn())).resolves.toBe("kept");
+  });
+});
+
+describe("pruneSupersededDiffContents", () => {
+  it("drops every SHA other than the current tip and keeps the tip", () => {
+    const tip = SHA;
+    const other = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const prefixSha = SHA.slice(0, 12);
+    const cache = new Map<string, Promise<string>>([
+      [changeFileCacheKey(tip, "keep.ts"), Promise.resolve("keep")],
+      [changeFileCacheKey(other, "drop.ts"), Promise.resolve("drop")],
+      [changeFileCacheKey(prefixSha, "drop-prefix.ts"), Promise.resolve("prefix")],
+    ]);
+
+    pruneSupersededDiffContents(cache, tip);
+
+    expect([...cache.keys()]).toEqual([changeFileCacheKey(tip, "keep.ts")]);
   });
 });
 

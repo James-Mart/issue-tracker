@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Virtualizer, type FileDiffMetadata } from "@pierre/diffs/react";
 import type { ReviewCommits, ReviewDiff, ReviewView } from "@server/schemas";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DiffLineCounts } from "@/features/issues/components/changed-file-row";
 import { DiffComposerProvider } from "@/features/issues/components/comments/diff-thread-composer";
 import { DiffLayoutToggle } from "@/features/issues/components/diff-layout-toggle";
+import { useDiffContentsCache } from "@/features/issues/hooks/use-diff-contents-cache";
 import { useDiffLayoutPreference } from "@/features/issues/hooks/use-diff-layout-preference";
 import { useVirtualizedFileScroll } from "@/features/issues/hooks/use-virtualized-file-scroll";
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
@@ -250,7 +251,7 @@ export function ReviewDiffTab({
   );
   const [scrollRequest, setScrollRequest] = useState<ScrollRequest>();
   const activeScroll = scrollRequest?.scope === scope ? scrollRequest : undefined;
-  const contentsCache = useRef(new Map<string, Promise<string>>()).current;
+  const contentsCache = useDiffContentsCache(commits.tip);
   const viewedSha = scope === ALL_CHANGES_SCOPE ? commits.tip : scope;
 
   const parsed = useMemo(() => {
