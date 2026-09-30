@@ -10,6 +10,11 @@ import {
 import { homedir } from "os";
 import { join } from "path";
 import { SECRET_KEY_RE } from "../issue-constants.js";
+import {
+  assertGuestAllowsOutwardEffect,
+  GUEST_REFUSED_SECRET_DELETE,
+  GUEST_REFUSED_SECRET_WRITE,
+} from "./guest-outward-effects.js";
 
 const FILE_MODE = 0o600;
 const DIR_MODE = 0o700;
@@ -100,6 +105,7 @@ export function setSecret(
   key: string,
   value: string,
 ): void {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_SECRET_WRITE);
   assertSecretKey(key);
   const secrets = readSecretsFile(projectId);
   secrets[key] = value;
@@ -107,6 +113,7 @@ export function setSecret(
 }
 
 export function deleteSecret(projectId: string, key: string): void {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_SECRET_DELETE);
   assertSecretKey(key);
   const secrets = readSecretsFile(projectId);
   delete secrets[key];

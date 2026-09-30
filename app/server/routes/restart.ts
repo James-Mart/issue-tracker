@@ -2,6 +2,10 @@ import { Router, type RequestHandler } from "express";
 import { bootId } from "../boot-info.js";
 import { isRestartSupervised } from "../restart-contract.js";
 import type { AgentSessions } from "../services/agent-sessions.js";
+import {
+  assertGuestAllowsOutwardEffect,
+  GUEST_REFUSED_RESTART,
+} from "../services/guest-outward-effects.js";
 
 const asyncRoute =
   (handler: RequestHandler): RequestHandler =>
@@ -19,6 +23,7 @@ export function createRestartRouter(
   router.post(
     "/",
     asyncRoute(async (req, res) => {
+      assertGuestAllowsOutwardEffect(GUEST_REFUSED_RESTART);
       if (!isRestartSupervised()) {
         res.status(409).json({ code: "not-supervised" });
         return;

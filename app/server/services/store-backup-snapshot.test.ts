@@ -569,3 +569,46 @@ describe("formatSnapshotCommitMessage", () => {
     expect(formatSnapshotCommitMessage()).toBe("Snapshot issue store");
   });
 });
+
+describe("startStoreBackupSnapshotDriver", () => {
+  it("skips the watcher when read-only and starts it when neither flag is set", async () => {
+    const root = mkdtempSync(join(tmpdir(), "backup-guest-duty-"));
+    storeRoots.push(root);
+    const issues = join(root, "issues");
+    mkdirSync(issues, { recursive: true });
+    writeFileSync(
+      join(root, "app-config.json"),
+      `${JSON.stringify({
+        backup: {
+          remote: "git@github.com:me/tracker-backup.git",
+          enabled: true,
+        },
+      })}\n`,
+    );
+    const watcher = { on: vi.fn().mockReturnThis(), close: vi.fn() };
+
+    async function watchCount(readOnly: string): Promise<number> {
+      const watch = vi.fn(() => watcher);
+      vi.doMock("chokidar", () => ({ default: { watch } }));
+      vi.resetModules();
+      vi.stubEnv("ISSUES_DIR", issues);
+      vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", readOnly);
+      vi.stubEnv("ISSUE_TRACKER_GUEST", "");
+      const mod = await import("./store-backup-snapshot.js");
+      try {
+        mod.startStoreBackupSnapshotDriver();
+        return watch.mock.calls.length;
+      } finally {
+        mod.resetStoreBackupSnapshotDriverForTests();
+        vi.doUnmock("chokidar");
+      }
+    }
+
+    try {
+      expect(await watchCount("1")).toBe(0);
+      expect(await watchCount("")).toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});

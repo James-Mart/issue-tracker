@@ -6,6 +6,7 @@ import {
 } from "./conversation-stream.js";
 import { listConversations } from "./conversations.js";
 import { IssueError } from "./errors.js";
+import { guestRefusesAgentLaunch } from "./guest-agent-launch.js";
 import {
   implementingSessionMessage,
   implementingSessionTitle,
@@ -123,6 +124,9 @@ async function drainProject(
  * read when nothing is queued and otherwise derives at most once.
  */
 export async function runLauncherPass(sessions: AgentSessions): Promise<void> {
+  // No HTTP caller. Throwing is caught and written as auto-start failure,
+  // which would mutate the copied queue, so guest mode skips the pass.
+  if (guestRefusesAgentLaunch()) return;
   if (!hasQueuedWork(readAll().issues)) return;
   await drainPlanQueue(sessions);
   const { issues, derived } = list();

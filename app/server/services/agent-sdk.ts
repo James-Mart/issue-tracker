@@ -29,6 +29,12 @@ import {
 } from "@cursor/sdk";
 import { cursorApiKey } from "../config.js";
 import {
+  assertGuestAllowsAgentLaunch,
+  GUEST_REFUSED_PREWARM,
+  GUEST_REFUSED_RESUME_AGENT,
+  GUEST_REFUSED_START_AGENT,
+} from "./guest-agent-launch.js";
+import {
   browserArtifactsDir,
   browserOriginMcpEnv,
 } from "./browser-origin-allowlist.js";
@@ -338,6 +344,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
     },
 
     async createAgent(input) {
+      assertGuestAllowsAgentLaunch(GUEST_REFUSED_START_AGENT);
       const sdkAgent = await deps.createSdkAgent(
         conversationAgentOptions({
           ...input,
@@ -349,6 +356,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
     },
 
     async resumeAgent(agentId, storeDir, input) {
+      assertGuestAllowsAgentLaunch(GUEST_REFUSED_RESUME_AGENT);
       const sdkAgent = await deps.resumeSdkAgent(
         agentId,
         conversationAgentOptions({
@@ -362,6 +370,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
     },
 
     async prewarmWorkspace(cwd) {
+      assertGuestAllowsAgentLaunch(GUEST_REFUSED_PREWARM);
       const platform = await deps.createPlatform();
       return platform.prewarmLocalWorkspace(
         conversationAgentOptions({

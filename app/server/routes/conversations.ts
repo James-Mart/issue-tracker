@@ -17,6 +17,10 @@ import {
   type ConversationMessageDelivery,
 } from "../services/conversation-message.js";
 import { IssueError } from "../services/errors.js";
+import {
+  assertGuestAllowsAgentLaunch,
+  GUEST_REFUSED_CONVERSATION_PROMPT,
+} from "../services/guest-agent-launch.js";
 import { forkConversation } from "../services/conversation-fork.js";
 import {
   createConversation,
@@ -475,6 +479,8 @@ export function createConversationsRouter(
         typeof body.model === "string" && body.model.trim()
           ? body.model.trim()
           : undefined;
+
+      assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_PROMPT);
 
       const activeRun = sessions.getActiveRun(conversationId);
       if (activeRun) {

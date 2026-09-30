@@ -25,6 +25,10 @@ import {
   readDelegations,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
+import {
+  assertGuestAllowsAgentLaunch,
+  GUEST_REFUSED_DELEGATE,
+} from "./guest-agent-launch.js";
 import { readIssueOrThrow } from "./issues.js";
 import { EventPipeline } from "./event-pipeline.js";
 import {
@@ -533,6 +537,7 @@ export function createDelegateCustomTools(
         required: ["role", "prompt"],
       },
       execute: async (args, context) => {
+        assertGuestAllowsAgentLaunch(GUEST_REFUSED_DELEGATE);
         const role = requireString(args, "role");
         const prompt = requireString(args, "prompt");
         const resumeId = optionalResumeId(args);

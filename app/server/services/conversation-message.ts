@@ -4,6 +4,10 @@ import {
   setPendingMessage,
   startConversationPrompt,
 } from "./conversations.js";
+import {
+  assertGuestAllowsAgentLaunch,
+  GUEST_REFUSED_CONVERSATION_MESSAGE,
+} from "./guest-agent-launch.js";
 
 export type ConversationMessageSessions = Pick<
   AgentSessions,
@@ -30,6 +34,7 @@ export async function postConversationMessage(
   const attachments = options?.attachments ?? [];
   const activeRun = sessions.getActiveRun(conversationId);
   if (activeRun) {
+    assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_MESSAGE);
     if (attachments.length > 0) {
       await setPendingMessage(conversationId, prompt, attachments);
       return { status: "pending" };

@@ -1,5 +1,6 @@
 import type { Issue } from "../schemas.js";
 import { agentSdk, type AgentSdk } from "./agent-sdk.js";
+import { guestRefusesAgentLaunch } from "./guest-agent-launch.js";
 import { readAll } from "./issues.js";
 
 export type PrewarmRelease = () => Promise<void>;
@@ -13,6 +14,9 @@ export type PrewarmRelease = () => Promise<void>;
 export async function prewarmProjectWorkspaces(
   sdk: AgentSdk = agentSdk,
 ): Promise<PrewarmRelease[]> {
+  // No HTTP caller. A thrown refusal is logged as a prewarm failure for
+  // every Project workspace, so guest mode skips and returns no releases.
+  if (guestRefusesAgentLaunch()) return [];
   const releases: PrewarmRelease[] = [];
   for (const issue of readAll().issues) {
     if (issue.kind !== "project") continue;

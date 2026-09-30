@@ -14,7 +14,6 @@ import {
   backupMirrorDir,
   backupStatusPath,
   issuesDir,
-  storeReadOnly,
 } from "../config.js";
 import type { AppConfig, BackupConfig } from "../schemas.js";
 import {
@@ -25,6 +24,7 @@ import {
 } from "./store-backup-identity.js";
 import { writeProjectsManifest } from "./store-backup-projects-manifest.js";
 import { writeRestoreRunbook } from "./store-backup-restore-runbook.js";
+import { skipsGuestDuties } from "./store-read-only.js";
 import { pushWithRetry } from "./store-backup-status.js";
 import {
   commitChanges,
@@ -283,9 +283,9 @@ const defaultDeps = (): StoreBackupSnapshotDeps => ({
 let activeDriver: ReturnType<typeof createStoreBackupSnapshotDriver> | null =
   null;
 
-/** Start observing the store for debounced mirror snapshots at server boot. */
+/** Start the snapshot driver. Read-only or guest skips it. */
 export function startStoreBackupSnapshotDriver(): void {
-  if (storeReadOnly) return;
+  if (skipsGuestDuties()) return;
   if (activeDriver) return;
   activeDriver = createStoreBackupSnapshotDriver(defaultDeps());
   activeDriver.start();

@@ -9,7 +9,7 @@ import {
 } from "fs";
 import { randomUUID } from "crypto";
 import { join } from "path";
-import { issuesDir, storeReadOnly } from "../config.js";
+import { issuesDir } from "../config.js";
 import {
   kindCapabilityRefusal,
   kindHas,
@@ -86,7 +86,7 @@ import {
 } from "./labels.js";
 import { assertAllowedAgentModelSlug } from "../agent-model-slugs.js";
 import { mergeCascade } from "./merge-consequences.js";
-import { assertStoreWritable } from "./store-read-only.js";
+import { assertStoreWritable, refusesStoreWrites } from "./store-read-only.js";
 import { replaceFileAtomically, withIssuesStoreLock } from "./issues-store-lock.js";
 import {
   onDiskHasUnknownKeys,
@@ -221,7 +221,7 @@ export function ensureSourceIdeaMigration(): void {
 
 /** Run every one-shot on-disk migration. Prefer this over calling each ensure* alone. */
 export function ensureMigrations(): void {
-  if (storeReadOnly) return;
+  if (refusesStoreWrites()) return;
   // Kind rename must run before parseIssue-based migrations (old kinds won't parse).
   ensureKindRenamed();
   ensureMergeBasesMigrated();
@@ -231,7 +231,7 @@ export function ensureMigrations(): void {
 }
 
 export function list(): IssuesResponse {
-  if (!storeReadOnly && existsSync(issuesDir)) {
+  if (!refusesStoreWrites() && existsSync(issuesDir)) {
     withIssuesStoreLock(() => {
       ensureMigrations();
     });

@@ -1459,7 +1459,12 @@ no consumer can persist a broken file.
   `ensureMigrations`; `read` holds it for the whole call (including
   `ensureMigrations`, `issue.json`, and `description.md`) so the returned pair
   and `version` match one publish. Write paths refuse a read-only store before
-  acquiring the lock.
+  acquiring the lock when `ISSUE_TRACKER_STORE_READ_ONLY=1` and
+  `ISSUE_TRACKER_GUEST` is not `1`. That refusal covers issue writes,
+  migrations, reviews, review marks, and attachments. `ISSUE_TRACKER_GUEST=1`
+  allows those writes even when the read-only flag is also set. Either flag
+  skips the boot-time agent-stack record sweep and the store backup snapshot
+  driver.
 - **Change detection.** `read` returns a `version` (a hash over `issue.json` +
   `description.md`) so the UI can detect out-of-band edits to the open issue.
   `comments.jsonl` and `attachments/` are deliberately excluded from the version so
