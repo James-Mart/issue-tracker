@@ -91,4 +91,48 @@ describe("ISSUE_TRACKER_STORE_READ_ONLY", () => {
     expect(readdirSync(issuesDir).sort()).toEqual(before);
     expect(existsSync(join(issuesDir, "leaf-idea"))).toBe(true);
   });
+
+  it("runs migrations and accepts writes when guest is set beside read-only", async () => {
+    vi.stubEnv("ISSUE_TRACKER_GUEST", "1");
+    vi.resetModules();
+    seedProject("demo");
+
+    const { list, create } = await import("./issues.js");
+    list();
+    expect(existsSync(join(issuesDir, ".source-idea-migrated"))).toBe(true);
+
+    await expect(
+      create({ kind: "idea", title: "New", partOf: "demo" }),
+    ).resolves.toMatchObject({ id: "new", kind: "idea" });
+  });
+});
+
+describe("two-phase read-only", () => {
+  async function load(readOnly: string, guest: string) {
+    vi.resetModules();
+    vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", readOnly);
+    vi.stubEnv("ISSUE_TRACKER_GUEST", guest);
+    return import("./store-read-only.js");
+  }
+
+  it.each([
+    ["", "", false, false, true],
+    ["1", "", true, true, false],
+    ["", "1", false, true, true],
+    ["1", "1", false, true, true],
+  ] as const)(
+    "read-only %j guest %j refuses %s skips %s writable %s",
+    async (readOnly, guest, refuses, skips, writable) => {
+      const mod = await load(readOnly, guest);
+      expect(mod.refusesStoreWrites()).toBe(refuses);
+      expect(mod.skipsGuestDuties()).toBe(skips);
+      if (writable) {
+        expect(() => mod.assertStoreWritable()).not.toThrow();
+      } else {
+        expect(() => mod.assertStoreWritable()).toThrow(
+          expect.objectContaining({ code: "read_only", status: 403 }),
+        );
+      }
+    },
+  );
 });
