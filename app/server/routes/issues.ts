@@ -46,6 +46,11 @@ import {
 } from "../services/issues.js";
 import { readCommentsWithOutdated } from "../services/anchor-outdated.js";
 import { appendThreadEvent } from "../services/thread-events.js";
+import {
+  retryQuestionResearcher,
+  startQuestionResearcher,
+} from "../services/question-researcher.js";
+import { withResearcherRuns } from "../services/researcher-runs.js";
 import { awaitingHumanFromTranscript } from "../services/awaiting-human.js";
 import {
   createIssueChannelSession,
@@ -119,7 +124,7 @@ export function createIssuesRouter(
   router.get(
     "/:id/comments",
     asyncRoute(async (req, res) => {
-      res.json(await readCommentsWithOutdated(req.params.id));
+      res.json(withResearcherRuns(await readCommentsWithOutdated(req.params.id)));
     }),
   );
 
@@ -383,7 +388,28 @@ export function createIssuesRouter(
         req.params.id,
         req.body as CommentInput,
       );
+      if (message.kind === "question") {
+        await startQuestionResearcher(
+          req.params.id,
+          message,
+          projectIdForIssue(req.params.id),
+          sessions,
+        );
+      }
       res.status(201).json(message);
+    }),
+  );
+
+  router.post(
+    "/:id/threads/:threadId/researcher/retry",
+    asyncRoute(async (req, res) => {
+      await retryQuestionResearcher(
+        req.params.id,
+        req.params.threadId,
+        projectIdForIssue(req.params.id),
+        sessions,
+      );
+      res.status(204).end();
     }),
   );
 

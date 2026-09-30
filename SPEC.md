@@ -1277,18 +1277,45 @@ state. Members:
 | member | type | notes |
 | --- | --- | --- |
 | `threadId` | string | id of the thread **root** |
-| `event` | `"resolved"` \| `"unresolved"` \| `"linked"` \| `"dismissed"` \| `"reopened"` | `linked` carries `taskId`. `dismissed` and `reopened` apply only to a question thread |
+| `event` | `"resolved"` \| `"unresolved"` \| `"linked"` \| `"dismissed"` \| `"reopened"` \| `"researcher-session"` | `linked` carries `taskId`. `researcher-session` carries `conversationId`. `dismissed`, `reopened`, and `researcher-session` apply only to a question thread |
 | `by` | `{ role, name? }` | who recorded the event |
 | `at` | ISO string | server-stamped on append |
 
 `GET /api/issues/:id/comments` returns `messages` plus derived `threads`:
-`{ rootId, kind: "review" | "question", state: "open" | "resolved" | "dismissed", linkedTaskId?, readyToTask }`.
+`{ rootId, kind: "review" | "question", state: "open" | "resolved" | "dismissed", linkedTaskId?, researcherConversationId?, readyToTask, researcherRun? }`.
 `kind` is the root comment's `kind`, or `review` when that field is absent.
 `state` is the last state event for that root (`resolved`, `unresolved` → open,
 `dismissed`, `reopened` → open), or `open` when there is none. `readyToTask`
 is true only for an open review thread with no linked Task. A question thread
-is never ready to task. An event whose `threadId` is not a root is skipped
-into `problems`.
+is never ready to task. `researcherConversationId` is the last
+`researcher-session` event's `conversationId`. An event whose `threadId` is
+not a root is skipped into `problems`.
+
+**Question researcher.** Posting a question root on a Story through
+`POST /api/issues/:id/comments` starts that question's researcher before the
+route responds: a fresh conversation on the Story's `review` channel (offered
+on every Story) with role
+[`issue-tracker-review-question`](agents/issue-tracker-review-question.md) at
+its model pin. Its prompt is the role body, notice that a reviewer asked about
+the Story's changes, the Story, thread id, and Project workspace, the question,
+and either the anchor (path, side, lines, commit) or, for a general question,
+the Story's diff range. Once the run has started, or has failed to start, the
+server appends `researcher-session` with `by: { role: "agent", name: "Researcher" }`.
+The researcher reads code read-only and replies once with
+`issue comment <storyId> --reply-to <threadId> --role agent --name Researcher`.
+A CLI-posted question starts no researcher.
+
+`researcherRun` is read-time only, served by the comments route on an open
+question thread with a `researcherConversationId` and no non-human reply since
+that conversation was created: `{ status: "running" }` while its run is live,
+else `{ status: "failed", error }`. `error` is the conversation's last
+transcript `error` event, which a review-channel run that ends other than
+`finished` records. When there is none, it says the run ended without a reply,
+or that the conversation no longer exists.
+`POST /api/issues/:storyId/threads/:threadId/researcher/retry` starts a fresh
+researcher conversation for that question and returns `204`. It refuses with
+`conflict` unless `researcherRun` is `failed`. Each researcher conversation is
+listed among the Story's agent runs with role `issue-tracker-review-question`.
 
 Humans record `resolved`, `unresolved`, `dismissed`, or `reopened`, with an
 optional reply `body`, via
@@ -1362,13 +1389,14 @@ no consumer can persist a broken file.
   a reply when `body` is set, in one write on a Story. Refuses a non-Story, a
   `threadId` that is not a thread root, an agent `unresolved`, an agent
   `resolved` without `body`, dismiss or reopen from a non-human, dismiss or
-  reopen on a review thread, and resolve or unresolve on a question thread.
+  reopen on a review thread, resolve or unresolve on a question thread, and
+  `researcher-session` without `conversationId` or on a review thread.
   `POST /api/issues/:storyId/threads/:threadId/events`
   stamps `by.role` `human` and calls this path.
 - `readComments(id)` — reads/parses `comments.jsonl`, skipping malformed lines into
   `problems`. An issue with no comment log returns empty messages and threads.
   `threads` is the derived view (`rootId`, `kind`, `state`, `readyToTask`,
-  optional `linkedTaskId`).
+  optional `linkedTaskId` and `researcherConversationId`).
 - Attachment bytes (`attachments.ts`): `listAttachments` / `getAttachment` /
   `putAttachment` (unique name on collision) / `removeAttachment` — see
   [Attachments](#attachments). Not part of `read(id)` payloads.

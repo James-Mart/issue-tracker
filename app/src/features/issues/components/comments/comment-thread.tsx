@@ -18,6 +18,7 @@ import {
   CommentAnchorSnippet,
 } from "./comment-anchor-context";
 import { isHumanRole } from "./message";
+import { QuestionResearcherStatus } from "./question-researcher-status";
 import { ThreadLinkedTaskChip } from "./thread-linked-task-chip";
 
 export function CommentThread({
@@ -119,6 +120,14 @@ export function CommentThread({
               issueId={issueId}
             />
           ))}
+
+          {thread.researcherRun && issueId ? (
+            <QuestionResearcherStatus
+              storyId={issueId}
+              threadId={thread.root.id}
+              run={thread.researcherRun}
+            />
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-1 pt-1">
             {replySlot ?? (
@@ -314,7 +323,7 @@ function ThreadAuthorship({ comment }: { comment: CommentMessage }) {
     <header className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
       <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />
       <span className="font-medium text-foreground/80">
-        {roleFamilyCaption(comment.role).caption}
+        {comment.name ?? roleFamilyCaption(comment.role).caption}
       </span>
       {time ? <time dateTime={comment.at}>{time}</time> : null}
     </header>

@@ -21,6 +21,7 @@ import {
 } from "./agent-failure.js";
 import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import {
+  appendErrorEvent,
   appendEvent,
   assembleAgentPrompt,
   listConversationIds,
@@ -43,6 +44,10 @@ import { stopAgentStack } from "./agent-stack.js";
 import { resolveConversationModel } from "./model-selection.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { reconcileOrphanedConversation } from "./orphan-run-scrub.js";
+import {
+  isQuestionResearcherConversation,
+  recordResearcherRunFailure,
+} from "./researcher-runs.js";
 import { runCostRecorder } from "./run-cost-recorder.js";
 export type { NormalizedStep };
 
@@ -335,9 +340,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         `orphaned run scrub failed for conversation ${conversationId}:`,
         err,
       );
-      const event = { type: "error" as const, message: SCRUB_REFUSED_MESSAGE };
-      publishFrame(conversationId, { event, persist: true });
-      await appendEvent(conversationId, event);
+      await appendErrorEvent(conversationId, SCRUB_REFUSED_MESSAGE);
       return {
         ok: false,
         cause: "scrub_refused",
@@ -406,9 +409,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         event: { type: "run", status: "finished", runId: agentRun.id },
         persist: false,
       });
-      if (runMeta.issueId) {
-        publishPlanningRunIssueFrame(runMeta.issueId);
-      }
 
       const result = await settleResult(agentRun);
       if (result.usage) {
@@ -427,14 +427,31 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           endedAt: Date.now(),
         });
       }
+      const replaysAuth =
+        !isReplay && (sawAuthFailure || isAuthFailureResult(result));
+      if (!replaysAuth && isQuestionResearcherConversation(runMeta)) {
+        // A throw here would leave `wait()` unsettled for every caller.
+        try {
+          await recordResearcherRunFailure(conversationId, result);
+        } catch (err) {
+          console.error(
+            `failed to record researcher run failure for ${conversationId}:`,
+            err,
+          );
+        }
+      }
       if (entry.turn === turn) {
         entry.turn = undefined;
         clearRunLiveMarker(conversationId);
         publishPipelineRunEvent("finished", conversationId);
       }
+      // After the marker clears, so issue readers refetching on this frame see the run settled.
+      if (runMeta.issueId) {
+        publishPlanningRunIssueFrame(runMeta.issueId);
+      }
 
       // One replay. A second auth failure surfaces as the replay's own result.
-      if (!isReplay && (sawAuthFailure || isAuthFailureResult(result))) {
+      if (replaysAuth) {
         const replacement = await recoverFromAuthFailure(
           conversationId,
           options,
@@ -477,10 +494,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
               pending.attachments,
             );
             if (fired.cause !== "scrub_refused") {
-              const message = fired.error.message;
-              const event = { type: "error" as const, message };
-              publishFrame(conversationId, { event, persist: true });
-              await appendEvent(conversationId, event);
+              await appendErrorEvent(conversationId, fired.error.message);
             }
           }
         }

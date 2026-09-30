@@ -1,6 +1,8 @@
 import type {
   CommentMessage,
+  CommentThreadView,
   Problem,
+  ResearcherRun,
   ThreadEventRequest,
   ThreadView,
 } from "@server/schemas";
@@ -14,6 +16,7 @@ export type CommentThread = {
   kind: ThreadView["kind"];
   state: ThreadView["state"];
   linkedTaskId?: string;
+  researcherRun?: ResearcherRun;
   readyToTask: boolean;
 };
 
@@ -53,7 +56,7 @@ export function threadStateActions(
 
 export function groupCommentThreads(
   messages: CommentMessage[],
-  views: ThreadView[] = [],
+  views: CommentThreadView[] = [],
 ): CommentThread[] {
   const roots = messages.filter((message) => !message.replyTo);
   const rootIds = new Set(roots.map((root) => root.id));
@@ -74,12 +77,14 @@ export function groupCommentThreads(
       const state = view?.state ?? "open";
       const kind = view?.kind ?? (root.kind === "question" ? "question" : "review");
       const linkedTaskId = view?.linkedTaskId;
+      const researcherRun = view?.researcherRun;
       return {
         root,
         replies: repliesByRoot.get(root.id) ?? [],
         kind,
         state,
         ...(linkedTaskId ? { linkedTaskId } : {}),
+        ...(researcherRun ? { researcherRun } : {}),
         readyToTask: view?.readyToTask ?? !isQuestionThread({ kind }),
       };
     });

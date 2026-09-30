@@ -138,6 +138,7 @@ export const THREAD_EVENTS = [
   "linked",
   "dismissed",
   "reopened",
+  "researcher-session",
 ] as const;
 export const THREAD_UI_EVENTS = [
   "resolved",
@@ -147,12 +148,19 @@ export const THREAD_UI_EVENTS = [
 ] as const;
 export const THREAD_STATES = ["open", "resolved", "dismissed"] as const;
 
+/** Events that carry a payload field, which no other event may carry. */
+export const THREAD_EVENT_PAYLOADS = [
+  { field: "taskId", event: "linked" },
+  { field: "conversationId", event: "researcher-session" },
+] as const;
+
 export const threadEventSchema = z
   .object({
     type: z.literal("thread-event"),
     threadId: nonEmpty,
     event: z.enum(THREAD_EVENTS),
     taskId: nonEmpty.optional(),
+    conversationId: nonEmpty.optional(),
     by: z.object({
       role: nonEmpty,
       name: z.string().optional(),
@@ -161,22 +169,21 @@ export const threadEventSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    if (value.event === "linked") {
-      if (!value.taskId) {
+    for (const { field, event } of THREAD_EVENT_PAYLOADS) {
+      if (value.event === event && !value[field]) {
         ctx.addIssue({
           code: "custom",
-          message: "linked event requires taskId",
-          path: ["taskId"],
+          message: `${event} event requires ${field}`,
+          path: [field],
         });
       }
-      return;
-    }
-    if (value.taskId !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        message: "taskId is only valid on linked events",
-        path: ["taskId"],
-      });
+      if (value.event !== event && value[field] !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: `${field} is only valid on ${event} events`,
+          path: [field],
+        });
+      }
     }
   });
 
@@ -200,8 +207,18 @@ export interface ThreadView {
   kind: (typeof THREAD_KINDS)[number];
   state: (typeof THREAD_STATES)[number];
   linkedTaskId?: string;
+  /** Latest `researcher-session` conversation on a question thread. */
+  researcherConversationId?: string;
   readyToTask: boolean;
 }
+
+/** Read-time researcher state on an open question thread still awaiting its answer. */
+export type ResearcherRun =
+  | { status: "running" }
+  | { status: "failed"; error: string };
+
+/** Thread view plus read-time `researcherRun`, served by the comments route. */
+export type CommentThreadView = ThreadView & { researcherRun?: ResearcherRun };
 
 export const mergeStoryBodySchema = z.object({
   auto: z.boolean().optional(),
@@ -212,7 +229,7 @@ export type MergeStoryBody = z.infer<typeof mergeStoryBodySchema>;
 
 export interface CommentsResponse {
   messages: CommentMessage[];
-  threads: ThreadView[];
+  threads: CommentThreadView[];
   problems: Problem[];
 }
 

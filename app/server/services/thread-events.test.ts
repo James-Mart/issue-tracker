@@ -327,4 +327,54 @@ describe("appendThreadEvent", () => {
     ).rejects.toThrow(/only to a review thread/);
     expect(readFileSync(join(dir, "s", "comments.jsonl"), "utf8").trim().split("\n")).toHaveLength(2);
   });
+
+  it("records the latest researcher session on a question, and refuses it on a review thread", async () => {
+    const { appendComment, appendThreadEvent, readComments } = await load();
+    const review = await appendComment("s", { role: "human", body: "fix this" });
+    const question = await appendComment("s", {
+      role: "human",
+      body: "why?",
+      kind: "question",
+    });
+    const researcher = { role: "agent", name: "Researcher" };
+
+    await appendThreadEvent("s", question.id, {
+      event: "researcher-session",
+      conversationId: "conv-1",
+      by: researcher,
+    });
+    const second = await appendThreadEvent("s", question.id, {
+      event: "researcher-session",
+      conversationId: "conv-2",
+      by: researcher,
+    });
+    expect(second.event).toMatchObject({
+      type: "thread-event",
+      event: "researcher-session",
+      conversationId: "conv-2",
+      by: researcher,
+    });
+    expect(readComments("s").threads[1]).toEqual({
+      rootId: question.id,
+      kind: "question",
+      state: "open",
+      researcherConversationId: "conv-2",
+      readyToTask: false,
+    });
+
+    await expect(
+      appendThreadEvent("s", review.id, {
+        event: "researcher-session",
+        conversationId: "conv-3",
+        by: researcher,
+      }),
+    ).rejects.toThrow(/only to a question thread/);
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "researcher-session",
+        by: researcher,
+      }),
+    ).rejects.toThrow(/requires conversationId/);
+    expect(logLines("s")).toHaveLength(4);
+  });
 });

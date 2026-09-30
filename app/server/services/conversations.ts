@@ -35,7 +35,11 @@ import {
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
-import { channelForIssue, offersExportChannel } from "../kind.js";
+import {
+  channelForIssue,
+  offersExportChannel,
+  offersReviewChannel,
+} from "../kind.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
 import { effectiveTranscriptSeq } from "./conversation-transcript-seq.js";
@@ -129,6 +133,7 @@ function channelsOfferedBy(issue: Issue): ConversationChannel[] {
   const channels: ConversationChannel[] = [];
   if (primary) channels.push(primary);
   if (offersExportChannel(issue, parentKind)) channels.push("export");
+  if (offersReviewChannel(issue)) channels.push("review");
   return channels;
 }
 
@@ -489,6 +494,16 @@ export function appendEvent(
   });
 }
 
+/** Show an error in the live transcript and persist it. */
+export async function appendErrorEvent(
+  id: string,
+  message: string,
+): Promise<void> {
+  const event = { type: "error" as const, message };
+  publishFrame(id, { event, persist: true });
+  await appendEvent(id, event);
+}
+
 type ParsedDelegationLine =
   | { kind: "start"; record: DelegationRecord }
   | { kind: "end"; record: DelegationEndRecord };
@@ -751,9 +766,7 @@ export async function startConversationPrompt(
       return { ok: false, message: result.message };
     }
     const message = result.error.message;
-    const event = { type: "error" as const, message };
-    publishFrame(conversationId, { event, persist: true });
-    await appendEvent(conversationId, event);
+    await appendErrorEvent(conversationId, message);
     return { ok: false, message };
   }
 

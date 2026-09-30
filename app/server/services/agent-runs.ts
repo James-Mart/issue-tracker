@@ -10,6 +10,11 @@ import {
   readDelegations,
   listConversationIds,
 } from "./conversations.js";
+import {
+  conversationIdFromResearcherDelegation,
+  researcherConversationIds,
+  researcherRunsForIssue,
+} from "./researcher-runs.js";
 import { ancestorChain } from "./subtree.js";
 
 export type AgentRunsWorkRoot = {
@@ -117,6 +122,7 @@ export function listAgentRunsForIssue(issueId: string): AgentRun[] {
     runs.push(...runsForConversation(conversationId, issueId, delegations));
   }
 
+  runs.push(...researcherRunsForIssue(issueId));
   runs.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   return runs;
 }
@@ -138,6 +144,14 @@ export function listAgentRunEvents(
   issueId: string,
   delegationId: string,
 ): SubagentUpdateEvent[] | undefined {
+  const researcherConversationId =
+    conversationIdFromResearcherDelegation(delegationId);
+  if (researcherConversationId) {
+    return researcherConversationIds(issueId).includes(researcherConversationId)
+      ? []
+      : undefined;
+  }
+
   for (const conversationId of listConversationIds()) {
     let delegations: DelegationRecordWithEnd[];
     try {

@@ -1,20 +1,21 @@
-import { existsSync, readFileSync } from "fs";
-import type { Comment, ThreadEvent, ThreadEventName, ThreadView } from "../schemas.js";
+import {
+  THREAD_EVENT_PAYLOADS,
+  type Comment,
+  type ThreadEvent,
+  type ThreadEventName,
+  type ThreadView,
+} from "../schemas.js";
 import { IssueError } from "./errors.js";
 import {
   appendCommentLogRecords,
   buildStoredComment,
-  commentsPathOf,
   readAll,
   readIssueOrThrow,
   serialize,
   taskStatusesForStory,
 } from "./issues.js";
-import {
-  commentThreadKind,
-  deriveThreadViews,
-  splitCommentLog,
-} from "./thread-state.js";
+import { readCommentLog } from "./comment-log.js";
+import { commentThreadKind, deriveThreadViews } from "./thread-state.js";
 
 export const AGENT_RESOLVE_REQUIRES_BODY =
   "resolving a thread requires a reply body";
@@ -25,10 +26,13 @@ export const QUESTION_EVENT_ON_REVIEW =
   "dismiss and reopen apply only to a question thread";
 export const REVIEW_EVENT_ON_QUESTION =
   "resolve and unresolve apply only to a review thread";
+export const RESEARCHER_ON_REVIEW =
+  "a researcher session applies only to a question thread";
 
 export type AppendThreadEventInput = {
   event: ThreadEventName;
   taskId?: string;
+  conversationId?: string;
   by: { role: string; name?: string };
   body?: string;
 };
@@ -56,10 +60,22 @@ function assertLinkedTask(storyId: string, taskId: string): void {
   }
 }
 
+export function findThreadRoot(messages: Comment[], threadId: string): Comment {
+  const root = messages.find((message) => message.id === threadId);
+  if (!root || root.replyTo) {
+    throw new IssueError("validation", `thread "${threadId}" is not a thread root`);
+  }
+  return root;
+}
+
 function assertActor(input: AppendThreadEventInput): void {
-  if (input.event === "linked") {
-    if (!input.taskId) {
-      throw new IssueError("validation", "linked event requires taskId");
+  const payload = THREAD_EVENT_PAYLOADS.find(({ event }) => event === input.event);
+  if (payload) {
+    if (!input[payload.field]) {
+      throw new IssueError(
+        "validation",
+        `${payload.event} event requires ${payload.field}`,
+      );
     }
     return;
   }
@@ -82,7 +98,8 @@ function assertActor(input: AppendThreadEventInput): void {
  * Append a thread event, and a reply when `body` is set, in one write.
  * Humans may resolve or unresolve a review thread, with or without a reply,
  * and may dismiss or reopen a question thread. Any other role may only
- * resolve a review thread, and only with a reply.
+ * resolve a review thread, and only with a reply. `researcher-session` is
+ * server-recorded when a question thread's researcher conversation starts.
  */
 export function appendThreadEvent(
   storyId: string,
@@ -111,19 +128,8 @@ export function appendThreadEvent(
 
     const { issues } = readAll();
     const taskStatusById = taskStatusesForStory(storyId, issues);
-    const path = commentsPathOf(storyId);
-    const split = splitCommentLog(
-      storyId,
-      existsSync(path) ? readFileSync(path, "utf8") : "",
-    );
-    const root = split.messages.find((message) => message.id === threadId);
-    if (!root || root.replyTo) {
-      throw new IssueError(
-        "validation",
-        `thread "${threadId}" is not a thread root`,
-      );
-    }
-    const kind = commentThreadKind(root);
+    const split = readCommentLog(storyId);
+    const kind = commentThreadKind(findThreadRoot(split.messages, threadId));
     if (
       (input.event === "dismissed" || input.event === "reopened") &&
       kind !== "question"
@@ -135,6 +141,9 @@ export function appendThreadEvent(
       kind === "question"
     ) {
       throw new IssueError("validation", REVIEW_EVENT_ON_QUESTION);
+    }
+    if (input.event === "researcher-session" && kind !== "question") {
+      throw new IssueError("validation", RESEARCHER_ON_REVIEW);
     }
 
     const records: unknown[] = [];
@@ -157,6 +166,9 @@ export function appendThreadEvent(
       threadId,
       event: input.event,
       ...(input.event === "linked" ? { taskId: input.taskId } : {}),
+      ...(input.event === "researcher-session"
+        ? { conversationId: input.conversationId }
+        : {}),
       by: author(input.by),
       at: new Date().toISOString(),
     };

@@ -132,6 +132,21 @@ export function usePostThreadEvent(issueId: string) {
   });
 }
 
+export function useRetryQuestionResearcher(storyId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (threadId) =>
+      request(`/api/issues/${storyId}/threads/${threadId}/researcher/retry`, {
+        method: "POST",
+      }),
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.comments(storyId) });
+      qc.invalidateQueries({ queryKey: issuesKeys.agentRuns(storyId) });
+    },
+  });
+}
+
 export function usePostComment(id: string) {
   const qc = useQueryClient();
   return useMutation<Comment, Error, CommentInput>({

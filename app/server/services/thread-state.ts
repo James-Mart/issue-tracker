@@ -11,18 +11,20 @@ import {
   type ThreadView,
 } from "../schemas.js";
 
+type ThreadStateEventName = Exclude<
+  ThreadEventName,
+  "linked" | "researcher-session"
+>;
+
 const THREAD_EVENT_STATE = {
   resolved: "resolved",
   unresolved: "open",
   dismissed: "dismissed",
   reopened: "open",
-} as const satisfies Record<
-  Exclude<ThreadEventName, "linked">,
-  ThreadView["state"]
->;
+} as const satisfies Record<ThreadStateEventName, ThreadView["state"]>;
 
 export function threadStateForEvent(
-  event: Exclude<ThreadEventName, "linked">,
+  event: ThreadStateEventName,
 ): ThreadView["state"] {
   return THREAD_EVENT_STATE[event];
 }
@@ -107,6 +109,7 @@ export function deriveThreadViews(
   const problems: Problem[] = [];
   const state = new Map<string, ThreadView["state"]>();
   const linkedTaskId = new Map<string, string>();
+  const researcherConversationId = new Map<string, string>();
   for (const event of events) {
     if (!roots.has(event.threadId)) {
       problems.push({
@@ -117,6 +120,10 @@ export function deriveThreadViews(
     }
     if (event.event === "linked") {
       linkedTaskId.set(event.threadId, event.taskId!);
+      continue;
+    }
+    if (event.event === "researcher-session") {
+      researcherConversationId.set(event.threadId, event.conversationId!);
       continue;
     }
     state.set(event.threadId, threadStateForEvent(event.event));
@@ -135,22 +142,27 @@ export function deriveThreadViews(
       const kind = commentThreadKind(root);
       const threadState = state.get(root.id) ?? "open";
       const linked = linkedTaskId.get(root.id);
+      const researcher = researcherConversationId.get(root.id);
       return {
         rootId: root.id,
         kind,
         state: threadState,
         ...(linked ? { linkedTaskId: linked } : {}),
+        ...(researcher ? { researcherConversationId: researcher } : {}),
         readyToTask: readyToTaskFrom(kind, threadState, linked),
       };
     });
   return { threads, problems };
 }
 
+export type CommentLog = {
+  messages: Comment[];
+  events: ThreadEvent[];
+  problems: Problem[];
+};
+
 /** Split a `comments.jsonl` body into comments, thread events, and parse problems. */
-export function splitCommentLog(
-  issueId: string,
-  text: string,
-): { messages: Comment[]; events: ThreadEvent[]; problems: Problem[] } {
+export function splitCommentLog(issueId: string, text: string): CommentLog {
   const messages: Comment[] = [];
   const events: ThreadEvent[] = [];
   const problems: Problem[] = [];

@@ -213,6 +213,16 @@ export async function prepareStoryChange(
   };
 }
 
+export function requireMergeBase(
+  storyId: string,
+  prepared: StoryChangePreparation,
+): Exclude<StoryChangePreparation, { reason: "no-merge-base" }> {
+  if (prepared.state === "empty" && prepared.reason === "no-merge-base") {
+    throw new IssueError("validation", `story "${storyId}" has no merge base`);
+  }
+  return prepared;
+}
+
 async function readStoryChange(
   issueId: string,
   workspace: string,
