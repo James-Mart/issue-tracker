@@ -78,13 +78,29 @@ describe("getConversationTranscript", () => {
     vi.stubGlobal("fetch", fetchMock);
     const caller = new AbortController();
 
-    const pending = getConversationTranscript("conv-1", undefined, caller.signal);
+    const pending = getConversationTranscript("conv-1", { signal: caller.signal });
     void pending.catch(() => undefined);
     expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
 
     caller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  });
+
+  it("requests the newest page without before, and an older page with it", async () => {
+    const fetchMock = vi.fn((_input: string, _init?: RequestInit) =>
+      Promise.resolve(jsonResponse({ events: [], latestSeq: 0, hasMore: false })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getConversationTranscript("conv-1");
+    await getConversationTranscript("conv-1", { before: 41 });
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/conversations/conv-1/transcript",
+      "/api/conversations/conv-1/transcript?before=41",
+    ]);
+    expect(AbortSignal.timeout).toHaveBeenCalledTimes(2);
   });
 });
 

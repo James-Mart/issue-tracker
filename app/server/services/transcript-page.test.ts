@@ -2,18 +2,23 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { TranscriptEvent } from "../schemas.js";
 import type { readTranscriptPage as ReadTranscriptPage } from "./transcript-page.js";
 
 const io = vi.hoisted(() => ({ bytes: 0, armed: false }));
 
 vi.mock("fs", async () => {
   const actual = await vi.importActual<typeof import("fs")>("fs");
-  const readSync: typeof actual.readSync = (...args) => {
+  const readSync = ((...args: unknown[]) => {
     if (io.armed && typeof args[3] === "number") io.bytes += args[3];
-    return actual.readSync(...args);
-  };
+    return (actual.readSync as (...forwarded: unknown[]) => number)(...args);
+  }) as typeof actual.readSync;
   return { ...actual, readSync };
 });
+
+function textOf(event: TranscriptEvent): string | undefined {
+  return "text" in event ? event.text : undefined;
+}
 
 const AT = "2026-07-24T12:00:00.000Z";
 
@@ -113,7 +118,7 @@ describe("readTranscriptPage", () => {
     const newest = readTranscriptPage("c", { limit: 2 });
     expect(newest.latestSeq).toBe(4);
     expect(newest.hasMore).toBe(true);
-    expect(newest.events.map((event) => event.text)).toEqual(["two", "four"]);
+    expect(newest.events.map(textOf)).toEqual(["two", "four"]);
 
     const older = readTranscriptPage("c", { before: 4, limit: 10 });
     expect(older).toMatchObject({ latestSeq: 4, hasMore: false });
@@ -134,12 +139,12 @@ describe("readTranscriptPage", () => {
     expect(newest.latestSeq).toBe(5);
     expect(newest.hasMore).toBe(true);
     expect(newest.events.map((event) => event.seq)).toEqual([3, 5]);
-    expect(newest.events.map((event) => event.text)).toEqual(["c", "d"]);
+    expect(newest.events.map(textOf)).toEqual(["c", "d"]);
 
     const older = readTranscriptPage("c", { before: 3, limit: 10 });
     expect(older.hasMore).toBe(false);
     expect(older.latestSeq).toBe(5);
-    expect(older.events.map((event) => ({ seq: event.seq, text: event.text }))).toEqual([
+    expect(older.events.map((event) => ({ seq: event.seq, text: textOf(event) }))).toEqual([
       { seq: 1, text: "a" },
       { seq: 2, text: "b" },
     ]);
@@ -163,7 +168,7 @@ describe("readTranscriptPage", () => {
     const plain = readTranscriptPage("plain", { limit: 10 });
     expect(plain.hasMore).toBe(false);
     expect(plain.latestSeq).toBe(2);
-    expect(plain.events.map((event) => event.text)).toEqual(["héllo 你好", "tail"]);
+    expect(plain.events.map(textOf)).toEqual(["héllo 你好", "tail"]);
   });
 
   it("reads a page from the tail of a long transcript", async () => {

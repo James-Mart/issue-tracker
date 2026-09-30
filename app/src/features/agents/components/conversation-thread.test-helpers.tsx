@@ -46,12 +46,16 @@ const mocks = vi.hoisted(() => ({
     historyFailed: false,
     historyErrorMessage: undefined as string | undefined,
     isRefetchingHistory: false,
+    hasOlder: false,
+    olderStatus: "idle" as "idle" | "loading" | "error",
+    prependedRows: 0,
   },
   attachmentStore: {
     attachments: [] as Array<{ name: string; size: number; mimeType: string }>,
     isLoading: false,
   },
   refetchHistory: vi.fn(),
+  loadOlder: vi.fn(),
   updatePendingMutate: vi.fn(),
   clearPendingMutate: vi.fn(),
   sendMutate: vi.fn(),
@@ -63,6 +67,7 @@ export const transcriptState = mocks.transcriptState;
 export const threadUi = mocks.threadUi;
 export const attachmentStore = mocks.attachmentStore;
 export const refetchHistory = mocks.refetchHistory;
+export const loadOlder = mocks.loadOlder;
 export const updatePendingMutate = mocks.updatePendingMutate;
 export const clearPendingMutate = mocks.clearPendingMutate;
 export const sendMutate = mocks.sendMutate;
@@ -141,6 +146,10 @@ vi.mock("../hooks/use-conversation-events", () => ({
     historyError: threadUi.historyErrorMessage
       ? new Error(threadUi.historyErrorMessage)
       : null,
+    hasOlder: threadUi.hasOlder,
+    olderStatus: threadUi.olderStatus,
+    prependedRows: threadUi.prependedRows,
+    loadOlder,
   }),
 }));
 
@@ -218,6 +227,9 @@ export function resetThreadMocks() {
   threadUi.historyFailed = false;
   threadUi.historyErrorMessage = undefined;
   threadUi.isRefetchingHistory = false;
+  threadUi.hasOlder = false;
+  threadUi.olderStatus = "idle";
+  threadUi.prependedRows = 0;
   attachmentStore.attachments = [];
   attachmentStore.isLoading = false;
   updatePendingMutate.mockClear();
@@ -226,4 +238,5 @@ export function resetThreadMocks() {
   forkMutate.mockClear();
   navigate.mockClear();
   refetchHistory.mockClear();
+  loadOlder.mockClear();
 }

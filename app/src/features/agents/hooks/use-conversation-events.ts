@@ -1,12 +1,20 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConversationTranscriptQuery } from "../api/queries";
 import { agentsKeys } from "../api/keys";
 import {
   applyConversationHistorySeed,
+  loadOlderConversationEvents,
   subscribeConversation,
 } from "../lib/conversation-events-registry";
 import {
+  idleConversationEventsState,
   type ConversationEventsState,
 } from "../lib/conversation-events-state";
 import { patchChannelSessionActiveRunInCache } from "@/features/issues/lib/retire-channel-live-session";
@@ -18,16 +26,6 @@ export {
   foldTranscriptEvents,
   mergeTranscriptDeltas,
 } from "../lib/conversation-events-state";
-
-const idleState = (): ConversationEventsState => ({
-  events: [],
-  ready: false,
-  streamRunActive: null,
-  runResyncKey: 0,
-  pendingText: undefined,
-  steeringText: null,
-  pendingSteerFallback: false,
-});
 
 function isOnScreenThread(host: Element | null | undefined): boolean {
   if (document.visibilityState !== "visible") return false;
@@ -51,6 +49,8 @@ export type ConversationEventsResult = ConversationEventsState & {
   refetchHistory: () => Promise<unknown>;
   isRefetchingHistory: boolean;
   historyError: Error | null;
+  /** Fetch the next older page (scroll-up and its Retry). */
+  loadOlder: () => void;
 };
 
 export function useConversationEvents(
@@ -59,7 +59,9 @@ export function useConversationEvents(
 ): ConversationEventsResult {
   const qc = useQueryClient();
   const history = useConversationTranscriptQuery(conversationId);
-  const [state, setState] = useState<ConversationEventsState>(idleState);
+  const [state, setState] = useState<ConversationEventsState>(
+    idleConversationEventsState,
+  );
   const prevRef = useRef<ConversationEventsState | null>(null);
   const historyFailed = history.isError;
   const seededForIdRef = useRef<string | null>(null);
@@ -84,7 +86,7 @@ export function useConversationEvents(
   useEffect(() => {
     if (!historyReady || !conversationId || !history.data) {
       prevRef.current = null;
-      setState(idleState());
+      setState(idleConversationEventsState());
       return;
     }
     const id = conversationId;
@@ -155,11 +157,16 @@ export function useConversationEvents(
     };
   }, [conversationId, hostRef, qc]);
 
+  const loadOlder = useCallback(() => {
+    if (conversationId) loadOlderConversationEvents(conversationId);
+  }, [conversationId]);
+
   return {
     ...state,
     historyFailed,
     refetchHistory: history.refetch,
     isRefetchingHistory: history.isFetching,
     historyError: history.error,
+    loadOlder,
   };
 }

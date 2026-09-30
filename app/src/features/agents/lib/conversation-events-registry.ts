@@ -1,6 +1,7 @@
 import type {
   ConversationStreamEvent,
   ConversationTranscriptPage,
+  TranscriptEvent,
 } from "@server/schemas";
 import { getConversationTranscript } from "../api/client";
 import {
@@ -11,6 +12,10 @@ import {
 import {
   applyTranscriptDelta,
   foldTranscriptEvents,
+  idleConversationEventsState,
+  joinLatestPage,
+  pageEventSeq,
+  prependOlderPage,
   type ConversationEventsState,
 } from "./conversation-events-state";
 
@@ -23,20 +28,12 @@ export type ConversationHistorySeed = ConversationTranscriptPage;
 type ConversationEntry = {
   listeners: Set<ConversationEventsListener>;
   state: ConversationEventsState;
+  applyLatestPage: (seed: ConversationHistorySeed) => void;
+  loadOlder: () => void;
   dispose: () => void;
 };
 
 const entries = new Map<string, ConversationEntry>();
-
-const emptyState = (): ConversationEventsState => ({
-  events: [],
-  ready: false,
-  streamRunActive: null,
-  runResyncKey: 0,
-  pendingText: undefined,
-  steeringText: null,
-  pendingSteerFallback: false,
-});
 
 function conversationTopic(conversationId: string): string {
   return `conversation:${conversationId}`;
@@ -58,13 +55,52 @@ function openEntry(
   let reseedGeneration = 0;
   let reseeding = false;
   const buffered: ConversationStreamEvent[] = [];
+  // Raw GET pages in seq order; live deltas fold into `state.events` only.
+  let loadedPages: TranscriptEvent[] = seed.events;
 
   const entry: ConversationEntry = {
     listeners: new Set(),
     state: {
-      ...emptyState(),
+      ...idleConversationEventsState(),
       events: foldTranscriptEvents(seed.events),
       ready: true,
+      hasOlder: seed.hasMore === true,
+    },
+    applyLatestPage: (page) => {
+      const joined = joinLatestPage(loadedPages, entry.state.hasOlder, page);
+      loadedPages = joined.events;
+      entry.state = {
+        ...entry.state,
+        events: foldTranscriptEvents(joined.events),
+        ready: true,
+        hasOlder: joined.hasOlder,
+        prependedRows: joined.joined ? entry.state.prependedRows : 0,
+      };
+    },
+    loadOlder: () => {
+      if (!entry.state.hasOlder || entry.state.olderStatus === "loading") {
+        return;
+      }
+      const before = pageEventSeq(loadedPages[0]!);
+      setState({ olderStatus: "loading" });
+      void getConversationTranscript(conversationId, { before })
+        .then((page) => {
+          if (disposed) return;
+          // A latest page that replaced the loaded range moved the cursor.
+          if (loadedPages[0]?.seq !== before) {
+            setState({ olderStatus: "idle" });
+            return;
+          }
+          loadedPages = [...page.events, ...loadedPages];
+          setState({
+            ...prependOlderPage(entry.state, page),
+            olderStatus: "idle",
+          });
+        })
+        .catch(() => {
+          if (disposed) return;
+          setState({ olderStatus: "error" });
+        });
     },
     dispose: () => {
       disposed = true;
@@ -145,11 +181,7 @@ function openEntry(
     void getConversationTranscript(conversationId)
       .then((page) => {
         if (disposed || generation !== reseedGeneration) return;
-        entry.state = {
-          ...entry.state,
-          events: foldTranscriptEvents(page.events),
-          ready: true,
-        };
+        entry.applyLatestPage(page);
         holdTopicSeq(topic, page.latestSeq);
         const queued = buffered.splice(0, buffered.length);
         reseeding = false;
@@ -192,8 +224,9 @@ function openEntry(
 
 /**
  * Replace a live entry's painted history with a later GET page (tab-return
- * catch-up) without tearing the topic subscription down. No-op when no entry
- * is open — the subscribe path seeds the first page.
+ * catch-up) without tearing the topic subscription down. Older pages already
+ * loaded stay when the page reaches back to them. No-op when no entry is
+ * open — the subscribe path seeds the first page.
  */
 export function applyConversationHistorySeed(
   conversationId: string,
@@ -207,16 +240,20 @@ export function applyConversationHistorySeed(
     seed.events.some(
       (event) => event.type === "prompt" && event.text === steeringText,
     );
-  entry.state = {
-    ...entry.state,
-    events: foldTranscriptEvents(seed.events),
-    ready: true,
-    ...(delivered ? { steeringText: null } : {}),
-  };
+  entry.applyLatestPage(seed);
+  if (delivered) entry.state = { ...entry.state, steeringText: null };
   if (seed.latestSeq > 0) {
     holdTopicSeq(conversationTopic(conversationId), seed.latestSeq);
   }
   notify(entry);
+}
+
+/**
+ * Fetch and prepend the page older than the oldest loaded event. No-op when
+ * no entry is open, no older events remain, or a page is already in flight.
+ */
+export function loadOlderConversationEvents(conversationId: string): void {
+  entries.get(conversationId)?.loadOlder();
 }
 
 /**

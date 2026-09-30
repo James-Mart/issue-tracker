@@ -27,6 +27,7 @@ import {
 import { useForkConversation } from "../api/mutations";
 import { useConversationEvents } from "../hooks/use-conversation-events";
 import { useConversationRunActive } from "../hooks/use-conversation-run-active";
+import type { OlderEventsStatus } from "../lib/conversation-events-state";
 import { agentsConversationPath } from "../lib/links";
 import {
   deriveSubAgents,
@@ -53,6 +54,7 @@ import {
   forkPointMarkerDueBeforeSegment,
   segmentEventIndices,
 } from "./fork-point-inline-marker";
+import { OlderEventsRow } from "./older-events-row";
 import { PendingMessageRow } from "./pending-message-row";
 import { SubagentCard } from "./subagent-card";
 import {
@@ -488,6 +490,10 @@ function ThreadBody({
   historyErrorMessage,
   isRefetchingHistory,
   onRetryHistory,
+  hasOlder,
+  olderStatus,
+  prependedRows,
+  onLoadOlder,
   pendingMessageText,
   steeringText,
   pendingSteerFallback,
@@ -503,6 +509,10 @@ function ThreadBody({
   historyErrorMessage?: string;
   isRefetchingHistory: boolean;
   onRetryHistory: () => void;
+  hasOlder: boolean;
+  olderStatus: OlderEventsStatus;
+  prependedRows: number;
+  onLoadOlder: () => void;
   pendingMessageText: string | null;
   steeringText: string | null;
   pendingSteerFallback: boolean;
@@ -611,7 +621,10 @@ function ThreadBody({
           ? forkCuts.get(segment.event.seq)
           : undefined;
       transcriptRows.push(
-        <div key={eventKey(segment.event, index)} className="min-w-0">
+        <div
+          key={eventKey(segment.event, index - prependedRows)}
+          className="min-w-0"
+        >
           <TranscriptEventRow
             event={segment.event}
             subAgentsByCallId={subAgentsByCallId}
@@ -673,6 +686,8 @@ function ThreadBody({
         keyboardInset,
         steeringText,
       )}
+      topKey={`${olderStatus}:${prependedRows}`}
+      onReachTop={hasOlder && olderStatus === "idle" ? onLoadOlder : undefined}
       className="min-w-0 overflow-x-hidden px-4 py-4"
       role="log"
       aria-label="Conversation transcript"
@@ -680,6 +695,9 @@ function ThreadBody({
       aria-relevant="additions text"
     >
       <div className={cn("mx-auto w-full min-w-0", READING_MEASURE_CLASS)}>
+        {hasOlder ? (
+          <OlderEventsRow status={olderStatus} onRetry={onLoadOlder} />
+        ) : null}
         {transcriptRows}
         {steeringText ? <SteeringDelivering text={steeringText} /> : null}
         {pendingMessageText ? (
@@ -858,6 +876,10 @@ export function ConversationThread({
     refetchHistory,
     isRefetchingHistory,
     historyError,
+    hasOlder,
+    olderStatus,
+    prependedRows,
+    loadOlder,
   } = useConversationEvents(conversationId, hostRef);
   const { runActive } = useConversationRunActive(
     conversationId,
@@ -909,6 +931,10 @@ export function ConversationThread({
           historyErrorMessage={historyError?.message}
           isRefetchingHistory={isRefetchingHistory}
           onRetryHistory={() => void refetchHistory()}
+          hasOlder={hasOlder}
+          olderStatus={olderStatus}
+          prependedRows={prependedRows}
+          onLoadOlder={loadOlder}
           pendingMessageText={pendingMessageText}
           steeringText={steeringText}
           pendingSteerFallback={pendingSteerFallback}

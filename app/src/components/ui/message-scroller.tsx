@@ -43,19 +43,48 @@ export function scrollToBottom(el: ScrollMetrics): void {
   el.scrollTop = el.scrollHeight;
 }
 
+/** True when the scroll position sits within `thresholdPx` of the top. */
+export function isScrollAtTop(
+  metrics: Pick<ScrollMetrics, "scrollTop">,
+  thresholdPx = SCROLL_PIN_THRESHOLD_PX,
+): boolean {
+  return metrics.scrollTop <= thresholdPx;
+}
+
+/** Put the content back at the same distance from the bottom after rows land above it. */
+export function restoreDistanceFromBottom(
+  el: ScrollMetrics,
+  distanceFromBottom: number,
+): void {
+  el.scrollTop = el.scrollHeight - distanceFromBottom;
+}
+
 export function MessageScroller({
   children,
   bottomKey,
+  topKey,
+  onReachTop,
   className,
   ...rest
 }: {
   children: ReactNode;
   bottomKey: unknown;
+  /** Changes when rows are added or swapped above the content. */
+  topKey?: unknown;
+  /** Called while the reader sits at the top, on scroll and after each render. */
+  onReachTop?: () => void;
   className?: string;
 } & Omit<ComponentPropsWithoutRef<"div">, "children" | "className" | "onScroll">) {
   const ref = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
+  const distanceFromBottomRef = useRef(0);
   const [pinned, setPinned] = useState(true);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    restoreDistanceFromBottom(el, distanceFromBottomRef.current);
+  }, [topKey]);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -63,8 +92,24 @@ export function MessageScroller({
     applyAutoscroll(el, pinnedRef.current);
   }, [bottomKey]);
 
+  function syncTopEdge(el: ScrollMetrics) {
+    distanceFromBottomRef.current = el.scrollHeight - el.scrollTop;
+    if (onReachTop && isScrollAtTop(el)) onReachTop();
+  }
+
+  // Every commit: live rows grow the content while the reader is up the
+  // thread, the next top insert restores against this distance, and a page
+  // too short to scroll still reaches the top.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    syncTopEdge(el);
+  });
+
   function handleScroll(event: UIEvent<HTMLDivElement>) {
-    const next = isScrollPinned(event.currentTarget);
+    const el = event.currentTarget;
+    syncTopEdge(el);
+    const next = isScrollPinned(el);
     if (pinnedRef.current === next) return;
     pinnedRef.current = next;
     setPinned(next);
