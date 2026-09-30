@@ -10,12 +10,14 @@ import {
   KIND_LABEL,
 } from "./server/kind.js";
 import { questionKindFields } from "./server/question-kind.js";
-import type {
-  Comment,
-  CommentInput,
-  CommentMessage,
-  IssueDetail,
-  IssueKind,
+import {
+  convertedQuestionText,
+  type Comment,
+  type CommentInput,
+  type CommentMessage,
+  type IssueDetail,
+  type IssueKind,
+  type ThreadView,
 } from "./server/schemas.js";
 import { enrichCommentsForRead } from "./server/services/researcher-runs.js";
 import { formatThreadsForView } from "./server/services/thread-state.js";
@@ -121,7 +123,10 @@ function formatCommentLine(message: CommentMessage, indent = ""): string {
   return `${head}: ${message.body}`;
 }
 
-function formatCommentsForView(messages: CommentMessage[]): string[] {
+function formatCommentsForView(
+  messages: CommentMessage[],
+  threads: ThreadView[],
+): string[] {
   const rootIds = new Set(
     messages.filter((message) => !message.replyTo).map((message) => message.id),
   );
@@ -134,12 +139,21 @@ function formatCommentsForView(messages: CommentMessage[]): string[] {
     }
   }
 
+  const convertedByRoot = new Map<string, NonNullable<ThreadView["converted"]>>();
+  for (const thread of threads) {
+    if (thread.converted) convertedByRoot.set(thread.rootId, thread.converted);
+  }
+
   const lines: string[] = [];
   for (const message of messages) {
     if (message.replyTo && rootIds.has(message.replyTo)) continue;
     lines.push(formatCommentLine(message));
     for (const reply of repliesByRoot.get(message.id) ?? []) {
       lines.push(formatCommentLine(reply, "  "));
+    }
+    const converted = convertedByRoot.get(message.id);
+    if (converted) {
+      lines.push(`  [${converted.at}] ${convertedQuestionText(converted.by)}`);
     }
   }
   return lines;
@@ -249,7 +263,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     console.log();
     console.log("--- comments ---");
     if (messages.length === 0) console.log("(no messages)");
-    for (const line of formatCommentsForView(messages)) {
+    for (const line of formatCommentsForView(messages, threads)) {
       console.log(line);
     }
     if (detail.kind === "story") {

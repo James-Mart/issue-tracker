@@ -279,6 +279,29 @@ describe("ReviewConversationTab", () => {
     });
   });
 
+  it("posts convert on an open question", () => {
+    state.threads = [
+      thread({
+        kind: "question",
+        readyToTask: false,
+        root: {
+          id: "asked",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          name: "Jared",
+          kind: "question",
+          body: "Does the guard consult remotes?",
+        },
+      }),
+    ];
+    const container = mount();
+    click(container.querySelector('[data-testid="thread-convert"]'));
+    expect(events.mutate).toHaveBeenCalledWith({
+      threadId: "asked",
+      event: "converted",
+    });
+  });
+
   it("collapses a resolved thread and still offers jump-to-Diff", () => {
     state.threads = [
       thread({

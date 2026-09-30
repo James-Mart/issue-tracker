@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bot, ChevronRight, Circle, HelpCircle } from "lucide-react";
+import { Bot, ChevronRight, Circle, HelpCircle, User } from "lucide-react";
 import type { ReactNode } from "react";
 import type { CommentMessage } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ export function CommentThread({
   onUnresolve,
   onDismiss,
   onReopen,
+  onConvert,
   resolvePending = false,
 }: {
   thread: CommentThreadData;
@@ -53,6 +54,7 @@ export function CommentThread({
   onUnresolve?: () => void;
   onDismiss?: () => void;
   onReopen?: () => void;
+  onConvert?: () => void;
   resolvePending?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -129,6 +131,10 @@ export function CommentThread({
             />
           ) : null}
 
+          {thread.converted ? (
+            <ThreadConvertedEvent converted={thread.converted} />
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-1 pt-1">
             {replySlot ?? (
               <Button type="button" variant="ghost" size="sm" onClick={onReply}>
@@ -159,6 +165,18 @@ export function CommentThread({
                 Dismiss
               </Button>
             ) : null}
+            {question && !dismissed && onConvert ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onConvert}
+                disabled={resolvePending}
+                data-testid="thread-convert"
+              >
+                Convert to review comment
+              </Button>
+            ) : null}
           </div>
         </>
       )}
@@ -178,6 +196,34 @@ export function CommentThread({
         />
       ) : null}
     </article>
+  );
+}
+
+function ThreadConvertedEvent({
+  converted,
+}: {
+  converted: NonNullable<CommentThreadData["converted"]>;
+}) {
+  const name = converted.by.name ?? converted.by.role;
+  const time = formatTime(converted.at);
+  return (
+    <section
+      data-testid="thread-converted"
+      className="flex flex-col gap-0.5 border-b border-border py-2 text-[11px] text-muted-foreground"
+    >
+      <p className="flex items-start gap-2">
+        <User className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span>
+          <span className="font-medium text-foreground/80">{name}</span>
+          {" converted this question to a review comment"}
+        </span>
+      </p>
+      {time ? (
+        <time dateTime={converted.at} className="pl-5">
+          {time}
+        </time>
+      ) : null}
+    </section>
   );
 }
 

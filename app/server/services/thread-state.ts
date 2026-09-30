@@ -13,7 +13,7 @@ import {
 
 type ThreadStateEventName = Exclude<
   ThreadEventName,
-  "linked" | "researcher-session"
+  "linked" | "researcher-session" | "converted"
 >;
 
 const THREAD_EVENT_STATE = {
@@ -110,6 +110,7 @@ export function deriveThreadViews(
   const state = new Map<string, ThreadView["state"]>();
   const linkedTaskId = new Map<string, string>();
   const researcherConversationId = new Map<string, string>();
+  const converted = new Map<string, NonNullable<ThreadView["converted"]>>();
   for (const event of events) {
     if (!roots.has(event.threadId)) {
       problems.push({
@@ -126,6 +127,10 @@ export function deriveThreadViews(
       researcherConversationId.set(event.threadId, event.conversationId!);
       continue;
     }
+    if (event.event === "converted") {
+      converted.set(event.threadId, { by: event.by, at: event.at });
+      continue;
+    }
     state.set(event.threadId, threadStateForEvent(event.event));
     if (event.event === "unresolved") {
       const linked = linkedTaskId.get(event.threadId);
@@ -139,7 +144,8 @@ export function deriveThreadViews(
     .filter((message) => !message.replyTo)
     .sort((a, b) => a.at.localeCompare(b.at))
     .map((root): ThreadView => {
-      const kind = commentThreadKind(root);
+      const conversion = converted.get(root.id);
+      const kind = conversion ? "review" : commentThreadKind(root);
       const threadState = state.get(root.id) ?? "open";
       const linked = linkedTaskId.get(root.id);
       const researcher = researcherConversationId.get(root.id);
@@ -148,7 +154,10 @@ export function deriveThreadViews(
         kind,
         state: threadState,
         ...(linked ? { linkedTaskId: linked } : {}),
-        ...(researcher ? { researcherConversationId: researcher } : {}),
+        ...(researcher && !conversion
+          ? { researcherConversationId: researcher }
+          : {}),
+        ...(conversion ? { converted: conversion } : {}),
         readyToTask: readyToTaskFrom(kind, threadState, linked),
       };
     });

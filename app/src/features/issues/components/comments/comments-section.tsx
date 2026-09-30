@@ -155,7 +155,8 @@ function CommentList({
                 }
                 onReply={() => onReply(thread.root.id)}
                 replySlot={replySlotFor(thread.root.id)}
-                {...(storyComposer && isQuestionThread(thread)
+                {...(storyComposer &&
+                (isQuestionThread(thread) || thread.converted)
                   ? threadStateActions(thread, (event) =>
                       onThreadEvent(thread.root.id, event),
                     )

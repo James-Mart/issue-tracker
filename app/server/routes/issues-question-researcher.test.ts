@@ -531,4 +531,38 @@ describe("question researcher", () => {
     expect(reply.status).toBe(201);
     expect(fake.handles.flatMap((handle) => handle.sends)).toHaveLength(1);
   });
+
+  it("does not resume the researcher after the question is converted", async () => {
+    await startApp();
+    const rootId = await askQuestion({ body: "Why?" });
+    await settledThread(rootId);
+    const converted = await post(`/api/issues/s/threads/${rootId}/events`, {
+      event: "converted",
+      name: "Jared",
+    });
+    expect(converted.status).toBe(201);
+    const view = await thread(rootId);
+    expect(view.kind).toBe("review");
+    expect(view.state).toBe("open");
+    expect(view.readyToTask).toBe(true);
+    expect(view.researcherConversationId).toBeUndefined();
+    expect(view.researcherRun).toBeUndefined();
+    expect(view.converted?.by).toEqual({ role: "human", name: "Jared" });
+
+    const reply = await post("/api/issues/s/comments", {
+      role: "human",
+      name: "Jared",
+      body: "Please task this.",
+      replyTo: rootId,
+    });
+    expect(reply.status).toBe(201);
+    expect(fake.handles.flatMap((handle) => handle.sends)).toHaveLength(1);
+    const comments = (await fetch(`${baseUrl}/api/issues/s/comments`).then((r) =>
+      r.json(),
+    )) as { messages: Array<{ body: string }> };
+    expect(comments.messages.map((message) => message.body)).toEqual([
+      "Why?",
+      "Please task this.",
+    ]);
+  });
 });

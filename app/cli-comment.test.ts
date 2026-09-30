@@ -517,6 +517,60 @@ describe("comment anchor and reply flags", () => {
     expect(taskView.stdout).not.toContain("--- threads ---");
   });
 
+  it("prints a converted question as a review thread with its history", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    const askedAt = nextAt();
+    const answeredAt = nextAt();
+    const convertedAt = nextAt();
+    writeFileSync(
+      join(dir, "s", "comments.jsonl"),
+      [
+        JSON.stringify({
+          id: "q",
+          role: "human",
+          name: "Jared",
+          kind: "question",
+          body: "Does the guard consult remotes?",
+          at: askedAt,
+        }),
+        JSON.stringify({
+          id: "a",
+          role: "agent",
+          name: "Researcher",
+          body: "Local refs only.",
+          replyTo: "q",
+          at: answeredAt,
+        }),
+        JSON.stringify({
+          type: "thread-event",
+          threadId: "q",
+          event: "converted",
+          by: { role: "human", name: "Jared" },
+          at: convertedAt,
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const view = await runIssueCli(["story", "view", "s", "--comments"], {
+      env: env(),
+    });
+    expect(view.status).toBe(0);
+    const comments = view.stdout.split("--- comments ---")[1]!.split("--- threads ---")[0]!;
+    expect(comments).toContain("Does the guard consult remotes?");
+    expect(comments).toContain("Local refs only.");
+    expect(comments).toContain(
+      `[${convertedAt}] Jared converted this question to a review comment`,
+    );
+    expect(view.stdout.split("--- threads ---")[1]!.trim()).toBe("q open");
+  });
+
   it("refuses --link-task without --reply-to", async () => {
     writeIssue("s", {
       kind: "story",

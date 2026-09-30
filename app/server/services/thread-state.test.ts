@@ -132,4 +132,46 @@ describe("deriveThreadViews task links", () => {
       readyToTask: false,
     });
   });
+
+  it("turns a converted question into an open review thread and drops the researcher id", () => {
+    const question = { ...root("q"), kind: "question" as const };
+    const answer = {
+      id: "a",
+      role: "agent",
+      name: "Researcher",
+      body: "Yes.",
+      replyTo: "q",
+      at: AT,
+    };
+    const derived = deriveThreadViews("story", [question, answer], [
+      {
+        type: "thread-event",
+        threadId: "q",
+        event: "researcher-session",
+        conversationId: "conv-1",
+        by: { role: "agent", name: "Researcher" },
+        at: AT,
+      },
+      {
+        type: "thread-event",
+        threadId: "q",
+        event: "converted",
+        by: { role: "human", name: "Jared" },
+        at: "2026-07-09T15:00:00.000Z",
+      },
+    ]);
+    expect(derived.threads).toEqual([
+      {
+        rootId: "q",
+        kind: "review",
+        state: "open",
+        converted: {
+          by: { role: "human", name: "Jared" },
+          at: "2026-07-09T15:00:00.000Z",
+        },
+        readyToTask: true,
+      },
+    ]);
+    expect(derived.problems).toEqual([]);
+  });
 });

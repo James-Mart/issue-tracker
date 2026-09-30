@@ -145,6 +145,7 @@ export const THREAD_EVENTS = [
   "linked",
   "dismissed",
   "reopened",
+  "converted",
   "researcher-session",
 ] as const;
 export const THREAD_UI_EVENTS = [
@@ -152,6 +153,7 @@ export const THREAD_UI_EVENTS = [
   "unresolved",
   "dismissed",
   "reopened",
+  "converted",
 ] as const;
 export const THREAD_STATES = ["open", "resolved", "dismissed"] as const;
 
@@ -206,6 +208,15 @@ export const threadEventSchema = z
 export type ThreadEvent = z.infer<typeof threadEventSchema>;
 export type ThreadEventName = (typeof THREAD_EVENTS)[number];
 
+/** Credit line for a question that became a review thread. */
+export function convertedQuestionText(by: {
+  role: string;
+  name?: string;
+}): string {
+  const name = by.name ?? by.role;
+  return `${name} converted this question to a review comment`;
+}
+
 /** Caller body for the human thread-event route. `by` is stamped server-side. */
 export const threadEventRequestSchema = z
   .object({
@@ -223,8 +234,13 @@ export interface ThreadView {
   kind: (typeof THREAD_KINDS)[number];
   state: (typeof THREAD_STATES)[number];
   linkedTaskId?: string;
-  /** Latest `researcher-session` conversation on a question thread. */
+  /** Latest `researcher-session` conversation on an unconverted question thread. */
   researcherConversationId?: string;
+  /** Set once a question thread is converted to a review thread. */
+  converted?: {
+    by: { role: string; name?: string };
+    at: string;
+  };
   readyToTask: boolean;
 }
 

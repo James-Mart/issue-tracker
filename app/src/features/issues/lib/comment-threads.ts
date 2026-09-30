@@ -17,6 +17,7 @@ export type CommentThread = {
   state: ThreadView["state"];
   linkedTaskId?: string;
   researcherRun?: ResearcherRun;
+  converted?: ThreadView["converted"];
   readyToTask: boolean;
 };
 
@@ -28,6 +29,7 @@ export function isQuestionThread(thread: { kind: ThreadView["kind"] }): boolean 
 export function isPlainNote(thread: CommentThread): boolean {
   return (
     !isQuestionThread(thread) &&
+    thread.converted === undefined &&
     thread.root.anchor === undefined &&
     thread.replies.length === 0
   );
@@ -41,11 +43,13 @@ export function threadStateActions(
   onUnresolve?: () => void;
   onDismiss?: () => void;
   onReopen?: () => void;
+  onConvert?: () => void;
 } {
   if (isQuestionThread(thread)) {
     return {
       onDismiss: () => post("dismissed"),
       onReopen: () => post("reopened"),
+      onConvert: () => post("converted"),
     };
   }
   return {
@@ -78,6 +82,7 @@ export function groupCommentThreads(
       const kind = view?.kind ?? (root.kind === "question" ? "question" : "review");
       const linkedTaskId = view?.linkedTaskId;
       const researcherRun = view?.researcherRun;
+      const converted = view?.converted;
       return {
         root,
         replies: repliesByRoot.get(root.id) ?? [],
@@ -85,6 +90,7 @@ export function groupCommentThreads(
         state,
         ...(linkedTaskId ? { linkedTaskId } : {}),
         ...(researcherRun ? { researcherRun } : {}),
+        ...(converted ? { converted } : {}),
         readyToTask: view?.readyToTask ?? !isQuestionThread({ kind }),
       };
     });

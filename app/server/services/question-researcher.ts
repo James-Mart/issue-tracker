@@ -197,8 +197,8 @@ async function startQuestionResearcher(
 }
 
 /**
- * Open question for a human reply. Dismissed questions and review threads
- * leave the researcher as it is.
+ * Open question for a human reply. Dismissed questions, converted threads,
+ * and review threads leave the researcher as it is.
  */
 function openQuestionFollowUp(
   comments: CommentsResponse,
