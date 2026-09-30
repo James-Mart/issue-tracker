@@ -4,6 +4,7 @@ import {
   applyLiveFrame,
   applyLiveFrames,
   insertFrameBySeq,
+  isAppliedLiveFrame,
 } from "./live-run-sequence";
 import type { RunSequence, RunSequenceSection, SequenceBeat } from "./run-sequence";
 import { formatSequenceCostClause } from "@server/services/run-sequence-cost";
@@ -513,6 +514,85 @@ describe("applyLiveFrame", () => {
   });
 });
 
+describe("isAppliedLiveFrame", () => {
+  it("matches the kinds the overlay applies", () => {
+    expect(isAppliedLiveFrame(delegationFrame())).toBe(true);
+    expect(
+      isAppliedLiveFrame({
+        type: "delegation_end",
+        delegationId: "del-qa",
+        parentCallId: "call-qa",
+        status: "completed",
+        endedAt: AT_END,
+        at: AT_END,
+        seq: 11,
+      }),
+    ).toBe(true);
+    expect(
+      isAppliedLiveFrame({
+        type: "subagent_update",
+        parentCallId: "call-impl",
+        step: { kind: "text", text: "still going" },
+        at: AT_MID,
+        seq: 7,
+      }),
+    ).toBe(true);
+    const usage = {
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 2,
+    };
+    expect(
+      isAppliedLiveFrame({
+        type: "usage",
+        usage,
+        at: AT_MID,
+        seq: 8,
+      }),
+    ).toBe(true);
+    expect(
+      isAppliedLiveFrame({
+        type: "run_usage",
+        runId: "run-nested",
+        agentId: "agent-nested",
+        usage,
+        at: AT_END,
+        seq: 9,
+      }),
+    ).toBe(true);
+    expect(
+      isAppliedLiveFrame({
+        type: "run_cost",
+        runId: "run-nested",
+        agentId: "agent-nested",
+        status: "settled",
+        cumulative: { rawCostCents: 18, chargedCents: 0 },
+        cost: { rawCostCents: 18, chargedCents: 0 },
+        at: AT_END,
+        seq: 9,
+      }),
+    ).toBe(true);
+    expect(
+      isAppliedLiveFrame({
+        type: "prompt",
+        text: "hello",
+        at: AT,
+        seq: 1,
+      }),
+    ).toBe(false);
+    expect(
+      isAppliedLiveFrame({
+        type: "pending",
+        text: null,
+        at: AT,
+        seq: 2,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("insertFrameBySeq / applyLiveFrames", () => {
   it("applies out-of-order frames in seq order", () => {
     const frames = [
@@ -529,7 +609,7 @@ describe("insertFrameBySeq / applyLiveFrames", () => {
     ];
     let ordered: ConversationStreamEvent[] = [];
     for (const frame of frames) {
-      ordered = insertFrameBySeq(ordered, frame);
+      ordered = insertFrameBySeq(ordered, frame).frames;
     }
     expect(ordered.map((frame) => frame.seq)).toEqual([10, 11]);
     const next = applyLiveFrames(inFlight(), ordered);
@@ -546,7 +626,44 @@ describe("insertFrameBySeq / applyLiveFrames", () => {
 
   it("skips a duplicate seq", () => {
     const first = delegationFrame();
-    const frames = insertFrameBySeq([first], { ...first, at: AT_END });
-    expect(frames).toHaveLength(1);
+    const inserted = insertFrameBySeq([first], { ...first, at: AT_END });
+    expect(inserted.changed).toBe(false);
+    expect(inserted.frames).toHaveLength(1);
+  });
+
+  it("appends an in-order frame without copying the list", () => {
+    const frames = [delegationFrame()];
+    const inserted = insertFrameBySeq(frames, {
+      type: "subagent_update",
+      parentCallId: "call-impl",
+      step: { kind: "text", text: "still going" },
+      at: AT_END,
+      seq: 11,
+    });
+    expect(inserted.changed).toBe(true);
+    expect(inserted.frames).toBe(frames);
+    expect(inserted.frames.map((frame) => frame.seq)).toEqual([10, 11]);
+  });
+
+  it("orders an out-of-order frame in a new list", () => {
+    const frames = [delegationFrame({}, 11, AT_END)];
+    const inserted = insertFrameBySeq(frames, delegationFrame());
+    expect(inserted.changed).toBe(true);
+    expect(inserted.frames).not.toBe(frames);
+    expect(frames.map((frame) => frame.seq)).toEqual([11]);
+    expect(inserted.frames.map((frame) => frame.seq)).toEqual([10, 11]);
+  });
+
+  it("does not store a frame kind the overlay ignores", () => {
+    const frames = [delegationFrame()];
+    const inserted = insertFrameBySeq(frames, {
+      type: "prompt",
+      text: "hello",
+      at: AT_END,
+      seq: 11,
+    });
+    expect(inserted.changed).toBe(false);
+    expect(inserted.frames).toBe(frames);
+    expect(inserted.frames).toHaveLength(1);
   });
 });

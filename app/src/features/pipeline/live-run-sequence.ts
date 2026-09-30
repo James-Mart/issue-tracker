@@ -443,23 +443,53 @@ function applyRunCost(
   return withBeatCost(sequence, beats, beatIndexForCost(beats, event), event);
 }
 
+type AppliedLiveFrame = Extract<
+  ConversationStreamEvent,
+  {
+    type:
+      | "delegation"
+      | "delegation_end"
+      | "subagent_update"
+      | "usage"
+      | "run_usage"
+      | "run_cost";
+  }
+>;
+
+const liveFrameAppliers: {
+  [K in AppliedLiveFrame["type"]]: (
+    sequence: RunSequence,
+    event: Extract<AppliedLiveFrame, { type: K }>,
+  ) => RunSequence;
+} = {
+  delegation: applyDelegation,
+  delegation_end: applyDelegationEnd,
+  subagent_update: applySubagentUpdate,
+  usage: applyUsage,
+  run_usage: applyUsage,
+  run_cost: applyRunCost,
+};
+
+/** Kinds `applyLiveFrame` folds in. Other stream frames are not stored. */
+export function isAppliedLiveFrame(
+  event: ConversationStreamEvent,
+): event is AppliedLiveFrame {
+  return Object.hasOwn(liveFrameAppliers, event.type);
+}
+
 /** Fold one conversation frame onto a fetched (or already-overlaid) sequence. */
 export function applyLiveFrame(
   sequence: RunSequence,
   event: ConversationStreamEvent,
 ): RunSequence {
-  if (event.type === "delegation") return applyDelegation(sequence, event);
-  if (event.type === "delegation_end") {
-    return applyDelegationEnd(sequence, event);
-  }
-  if (event.type === "subagent_update") {
-    return applySubagentUpdate(sequence, event);
-  }
-  if (event.type === "usage" || event.type === "run_usage") {
-    return applyUsage(sequence, event);
-  }
-  if (event.type === "run_cost") return applyRunCost(sequence, event);
-  return sequence;
+  if (!isAppliedLiveFrame(event)) return sequence;
+  // The map key selects the matching applier. TypeScript cannot correlate
+  // that key with the union member, so the call is asserted.
+  const apply = liveFrameAppliers[event.type] as (
+    sequence: RunSequence,
+    event: AppliedLiveFrame,
+  ) => RunSequence;
+  return apply(sequence, event);
 }
 
 function withoutSupersededStreamUsage(
@@ -478,17 +508,30 @@ function withoutSupersededStreamUsage(
   );
 }
 
-/** Insert `event` by `seq`, skipping a duplicate seq. */
+/**
+ * Insert `event` by `seq`, skipping a duplicate seq and any kind
+ * `applyLiveFrame` ignores. `changed` is false when the list is left
+ * as passed. An in-order append mutates `frames` and returns it; an
+ * out-of-order insert returns a new array.
+ */
 export function insertFrameBySeq(
   frames: ConversationStreamEvent[],
   event: ConversationStreamEvent,
-): ConversationStreamEvent[] {
-  if (frames.some((existing) => existing.seq === event.seq)) return frames;
+): { frames: ConversationStreamEvent[]; changed: boolean } {
+  if (!isAppliedLiveFrame(event)) return { frames, changed: false };
+  const last = frames[frames.length - 1];
+  if (last === undefined || event.seq > last.seq) {
+    frames.push(event);
+    return { frames, changed: true };
+  }
+  if (frames.some((existing) => existing.seq === event.seq)) {
+    return { frames, changed: false };
+  }
   const idx = frames.findIndex((existing) => existing.seq > event.seq);
   const at = idx === -1 ? frames.length : idx;
   const next = frames.slice();
   next.splice(at, 0, event);
-  return next;
+  return { frames: next, changed: true };
 }
 
 export function applyLiveFrames(
