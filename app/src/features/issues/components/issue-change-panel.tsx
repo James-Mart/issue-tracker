@@ -535,7 +535,11 @@ function IssueChangeLoadedPanel({
 
   return (
     <ResolveThreadsProvider enabled={resolveThreads}>
-    <DiffComposerProvider issueId={issueId} commitSha={sha}>
+    <DiffComposerProvider
+      issueId={issueId}
+      commitSha={sha}
+      allowQuestion={resolveThreads}
+    >
       <div
         ref={panelRef}
         className="flex min-w-0 flex-col gap-3"

@@ -1,6 +1,9 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { usePostThreadEvent } from "../../api/mutations";
-import { type CommentThread as CommentThreadData } from "../../lib/comment-threads";
+import {
+  threadStateActions,
+  type CommentThread as CommentThreadData,
+} from "../../lib/comment-threads";
 import { CommentThread } from "./comment-thread";
 
 const ResolveThreadsContext = createContext(false);
@@ -44,12 +47,9 @@ export function StoryDiffThread({
       replySlot={replySlot}
       inline
       resolvePending={post.isPending}
-      onResolve={() =>
-        post.mutate({ threadId: thread.root.id, event: "resolved" })
-      }
-      onUnresolve={() =>
-        post.mutate({ threadId: thread.root.id, event: "unresolved" })
-      }
+      {...threadStateActions(thread, (event) =>
+        post.mutate({ threadId: thread.root.id, event }),
+      )}
     />
   );
 }

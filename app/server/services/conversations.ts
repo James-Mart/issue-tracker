@@ -10,7 +10,7 @@ import {
 } from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
-import type { AgentImage } from "./agent-sdk.js";
+import type { AgentImage, AgentSteerOutcome } from "./agent-sdk.js";
 import { getConversationAttachment } from "./conversation-attachments.js";
 import {
   parseConversationMeta,
@@ -35,7 +35,11 @@ import {
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
-import { channelForIssue, offersExportChannel } from "../kind.js";
+import {
+  channelForIssue,
+  offersExportChannel,
+  offersReviewChannel,
+} from "../kind.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
 import { effectiveTranscriptSeq } from "./conversation-transcript-seq.js";
@@ -134,6 +138,7 @@ function channelsOfferedBy(issue: Issue): ConversationChannel[] {
   const channels: ConversationChannel[] = [];
   if (primary) channels.push(primary);
   if (offersExportChannel(issue, parentKind)) channels.push("export");
+  if (offersReviewChannel(issue)) channels.push("review");
   return channels;
 }
 
@@ -498,6 +503,16 @@ export function appendEvent(
   });
 }
 
+/** Show an error in the live transcript and persist it. */
+export async function appendErrorEvent(
+  id: string,
+  message: string,
+): Promise<void> {
+  const event = { type: "error" as const, message };
+  publishFrame(id, { event, persist: true });
+  await appendEvent(id, event);
+}
+
 type ParsedDelegationLine =
   | { kind: "start"; record: DelegationRecord }
   | { kind: "end"; record: DelegationEndRecord };
@@ -719,6 +734,24 @@ export async function assembleAgentPrompt(
 }
 
 /**
+ * Deliver text into a live run. A steer the run accepts is the delivery;
+ * otherwise the text waits as the pending message sent when the run finishes.
+ */
+export async function deliverLivePrompt(
+  conversationId: string,
+  prompt: string,
+  steer: (text: string) => Promise<AgentSteerOutcome>,
+): Promise<"steered" | "pending"> {
+  publishFrame(conversationId, {
+    event: { type: "steering", text: prompt },
+    persist: false,
+  });
+  if ((await steer(prompt)) === "complete_delivered") return "steered";
+  await setPendingMessage(conversationId, prompt);
+  return "pending";
+}
+
+/**
  * Start a run from a user prompt (shared by /messages and channel-session create).
  * Pass `persistPrompt: false` when the prompt event was already written (e.g. inside
  * `createIssueChannelSession`'s atomic turn).
@@ -761,9 +794,7 @@ export async function startConversationPrompt(
       return { ok: false, message: result.message };
     }
     const message = result.error.message;
-    const event = { type: "error" as const, message };
-    publishFrame(conversationId, { event, persist: true });
-    await appendEvent(conversationId, event);
+    await appendErrorEvent(conversationId, message);
     return { ok: false, message };
   }
 

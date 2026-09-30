@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bot, ChevronRight, Circle } from "lucide-react";
+import { Bot, ChevronRight, Circle, HelpCircle, User } from "lucide-react";
 import type { ReactNode } from "react";
 import type { CommentMessage } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { roleFamilyCaption } from "@/features/pipeline/role-family";
 import { cn } from "@/lib/utils/cn";
 import {
   formatAnchorLineLabel,
+  isQuestionThread,
   type CommentThread as CommentThreadData,
 } from "../../lib/comment-threads";
 import { commentCountLabel } from "../../lib/comments";
@@ -17,6 +18,7 @@ import {
   CommentAnchorSnippet,
 } from "./comment-anchor-context";
 import { isHumanRole } from "./message";
+import { QuestionResearcherStatus } from "./question-researcher-status";
 import { ThreadLinkedTaskChip } from "./thread-linked-task-chip";
 
 export function CommentThread({
@@ -30,6 +32,9 @@ export function CommentThread({
   collapse,
   onResolve,
   onUnresolve,
+  onDismiss,
+  onReopen,
+  onConvert,
   resolvePending = false,
 }: {
   thread: CommentThreadData;
@@ -47,15 +52,23 @@ export function CommentThread({
   collapse?: "resolved" | "outdated";
   onResolve?: () => void;
   onUnresolve?: () => void;
+  onDismiss?: () => void;
+  onReopen?: () => void;
+  onConvert?: () => void;
   resolvePending?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const outdated = thread.root.outdated === true;
   const comments = [thread.root, ...thread.replies];
   const anchor = thread.root.anchor;
+  const question = isQuestionThread(thread);
   const resolved = thread.state === "resolved";
+  const dismissed = thread.state === "dismissed";
   const outdatedBar = collapse === "outdated" && outdated;
-  const collapses = outdatedBar || ((inline || collapse === "resolved") && resolved);
+  const collapses =
+    outdatedBar ||
+    ((inline || collapse === "resolved") && resolved) ||
+    dismissed;
   const collapsed = collapses && !expanded;
   const showAnchorHeader =
     anchor != null &&
@@ -65,6 +78,7 @@ export function CommentThread({
   return (
     <article
       data-thread-root={thread.root.id}
+      data-thread-kind={question ? "question" : "review"}
       data-thread-state={thread.state}
       data-ready-to-task={thread.readyToTask ? "" : undefined}
       data-outdated={outdated ? "" : undefined}
@@ -83,11 +97,20 @@ export function CommentThread({
           onSeeInDiff={onSeeInDiff}
         />
       ) : null}
-      {thread.linkedTaskId && (!collapsed || showAnchorHeader) ? (
+      {thread.linkedTaskId && !question && (!collapsed || showAnchorHeader) ? (
         <ThreadChipRow taskId={thread.linkedTaskId} />
       ) : null}
       {collapsed ? null : (
         <>
+          {question ? (
+            <Badge
+              variant="secondary"
+              data-testid="thread-question-label"
+              className="w-fit uppercase tracking-[0.08em]"
+            >
+              Question
+            </Badge>
+          ) : null}
           {showAnchorContext && issueId && anchor ? (
             <CommentAnchorSnippet issueId={issueId} anchor={anchor} />
           ) : null}
@@ -100,13 +123,25 @@ export function CommentThread({
             />
           ))}
 
+          {thread.researcherRun && issueId ? (
+            <QuestionResearcherStatus
+              storyId={issueId}
+              threadId={thread.root.id}
+              run={thread.researcherRun}
+            />
+          ) : null}
+
+          {thread.converted ? (
+            <ThreadConvertedEvent converted={thread.converted} />
+          ) : null}
+
           <div className="flex flex-wrap items-center gap-1 pt-1">
             {replySlot ?? (
               <Button type="button" variant="ghost" size="sm" onClick={onReply}>
                 Reply
               </Button>
             )}
-            {onResolve && !resolved ? (
+            {!question && onResolve && !resolved ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -118,6 +153,30 @@ export function CommentThread({
                 Resolve
               </Button>
             ) : null}
+            {question && !dismissed && onDismiss ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onDismiss}
+                disabled={resolvePending}
+                data-testid="thread-dismiss"
+              >
+                Dismiss
+              </Button>
+            ) : null}
+            {question && !dismissed && onConvert ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onConvert}
+                disabled={resolvePending}
+                data-testid="thread-convert"
+              >
+                Convert to review comment
+              </Button>
+            ) : null}
           </div>
         </>
       )}
@@ -126,14 +185,45 @@ export function CommentThread({
         <CollapsedThreadBar
           count={comments.length}
           lineLabel={outdatedBar && anchor ? formatAnchorLineLabel(anchor) : undefined}
+          question={question}
           resolved={resolved}
+          dismissed={dismissed}
           expanded={expanded}
           pending={resolvePending}
           onToggle={() => setExpanded((open) => !open)}
           onUnresolve={onUnresolve}
+          onReopen={onReopen}
         />
       ) : null}
     </article>
+  );
+}
+
+function ThreadConvertedEvent({
+  converted,
+}: {
+  converted: NonNullable<CommentThreadData["converted"]>;
+}) {
+  const name = converted.by.name ?? converted.by.role;
+  const time = formatTime(converted.at);
+  return (
+    <section
+      data-testid="thread-converted"
+      className="flex flex-col gap-0.5 border-b border-border py-2 text-[11px] text-muted-foreground"
+    >
+      <p className="flex items-start gap-2">
+        <User className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span>
+          <span className="font-medium text-foreground/80">{name}</span>
+          {" converted this question to a review comment"}
+        </span>
+      </p>
+      {time ? (
+        <time dateTime={converted.at} className="pl-5">
+          {time}
+        </time>
+      ) : null}
+    </section>
   );
 }
 
@@ -148,19 +238,25 @@ function ThreadChipRow({ taskId }: { taskId: string }) {
 function CollapsedThreadBar({
   count,
   lineLabel,
+  question,
   resolved,
+  dismissed,
   expanded,
   pending,
   onToggle,
   onUnresolve,
+  onReopen,
 }: {
   count: number;
   lineLabel?: string;
+  question: boolean;
   resolved: boolean;
+  dismissed: boolean;
   expanded: boolean;
   pending: boolean;
   onToggle: () => void;
   onUnresolve?: () => void;
+  onReopen?: () => void;
 }) {
   const toggleLabel = expanded ? "Collapse thread" : "Expand thread";
   return (
@@ -176,7 +272,11 @@ function CollapsedThreadBar({
         aria-expanded={expanded}
         onClick={onToggle}
       >
-        <Circle className="text-muted-foreground" aria-hidden />
+        {question ? (
+          <HelpCircle className="text-muted-foreground" aria-hidden />
+        ) : (
+          <Circle className="text-muted-foreground" aria-hidden />
+        )}
         <span className="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">
           {lineLabel ? `${lineLabel} · ` : null}
           {commentCountLabel(count)}
@@ -184,6 +284,11 @@ function CollapsedThreadBar({
         {resolved ? (
           <Badge variant="done" className="uppercase tracking-[0.08em]">
             Resolved
+          </Badge>
+        ) : null}
+        {dismissed ? (
+          <Badge variant="secondary" className="uppercase tracking-[0.08em]">
+            Dismissed
           </Badge>
         ) : null}
       </Button>
@@ -197,6 +302,18 @@ function CollapsedThreadBar({
           data-testid="thread-unresolve"
         >
           Unresolve
+        </Button>
+      ) : null}
+      {dismissed ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onReopen}
+          disabled={pending || !onReopen}
+          data-testid="thread-reopen"
+        >
+          Reopen
         </Button>
       ) : null}
       <Button
@@ -252,8 +369,17 @@ function ThreadAuthorship({ comment }: { comment: CommentMessage }) {
     <header className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
       <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />
       <span className="font-medium text-foreground/80">
-        {roleFamilyCaption(comment.role).caption}
+        {comment.name ?? roleFamilyCaption(comment.role).caption}
       </span>
+      {comment.newSession ? (
+        <Badge
+          variant="current"
+          data-testid="researcher-new-session"
+          className="uppercase tracking-[0.08em]"
+        >
+          New session
+        </Badge>
+      ) : null}
       {time ? <time dateTime={comment.at}>{time}</time> : null}
     </header>
   );

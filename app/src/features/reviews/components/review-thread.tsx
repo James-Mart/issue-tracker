@@ -3,6 +3,7 @@ import { Send } from "lucide-react";
 import type { CommentThread as CommentThreadData } from "@/features/issues/lib/comment-threads";
 import { usePostComment, usePostThreadEvent } from "@/features/issues/api/mutations";
 import { CommentThread } from "@/features/issues/components/comments/comment-thread";
+import { threadStateActions } from "@/features/issues/lib/comment-threads";
 import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -115,12 +116,9 @@ export function ReviewThread({
         ) : undefined
       }
       resolvePending={events.isPending}
-      onResolve={() =>
-        events.mutate({ threadId: thread.root.id, event: "resolved" })
-      }
-      onUnresolve={() =>
-        events.mutate({ threadId: thread.root.id, event: "unresolved" })
-      }
+      {...threadStateActions(thread, (event) =>
+        events.mutate({ threadId: thread.root.id, event }),
+      )}
     />
   );
 }

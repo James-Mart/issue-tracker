@@ -9,14 +9,17 @@ import {
   kindHas,
   KIND_LABEL,
 } from "./server/kind.js";
-import type {
-  Comment,
-  CommentInput,
-  CommentMessage,
-  IssueDetail,
-  IssueKind,
+import { questionKindFields } from "./server/question-kind.js";
+import {
+  convertedQuestionText,
+  type Comment,
+  type CommentInput,
+  type CommentMessage,
+  type IssueDetail,
+  type IssueKind,
+  type ThreadView,
 } from "./server/schemas.js";
-import { readCommentsWithOutdated } from "./server/services/anchor-outdated.js";
+import { enrichCommentsForRead } from "./server/services/researcher-runs.js";
 import { formatThreadsForView } from "./server/services/thread-state.js";
 import { appendThreadEvent } from "./server/services/thread-events.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
@@ -116,7 +119,8 @@ function formatAnchorLocation(anchor: NonNullable<Comment["anchor"]>): string {
 
 function formatCommentLine(message: CommentMessage, indent = ""): string {
   const author = commentAuthor(message);
-  const head = `${indent}${message.id} [${message.at}] ${author}`;
+  const session = message.newSession ? " (new session)" : "";
+  const head = `${indent}${message.id} [${message.at}] ${author}${session}`;
   if (message.anchor) {
     const outdated = message.outdated ? " (outdated)" : "";
     return `${head} @ ${formatAnchorLocation(message.anchor)}${outdated}: ${message.body}`;
@@ -124,7 +128,10 @@ function formatCommentLine(message: CommentMessage, indent = ""): string {
   return `${head}: ${message.body}`;
 }
 
-function formatCommentsForView(messages: CommentMessage[]): string[] {
+function formatCommentsForView(
+  messages: CommentMessage[],
+  threads: ThreadView[],
+): string[] {
   const rootIds = new Set(
     messages.filter((message) => !message.replyTo).map((message) => message.id),
   );
@@ -137,12 +144,21 @@ function formatCommentsForView(messages: CommentMessage[]): string[] {
     }
   }
 
+  const convertedByRoot = new Map<string, NonNullable<ThreadView["converted"]>>();
+  for (const thread of threads) {
+    if (thread.converted) convertedByRoot.set(thread.rootId, thread.converted);
+  }
+
   const lines: string[] = [];
   for (const message of messages) {
     if (message.replyTo && rootIds.has(message.replyTo)) continue;
     lines.push(formatCommentLine(message));
     for (const reply of repliesByRoot.get(message.id) ?? []) {
       lines.push(formatCommentLine(reply, "  "));
+    }
+    const converted = convertedByRoot.get(message.id);
+    if (converted) {
+      lines.push(`  [${converted.at}] ${convertedQuestionText(converted.by)}`);
     }
   }
   return lines;
@@ -248,11 +264,11 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   console.log(detail.description || "(no description)");
 
   if (opts.comments) {
-    const { messages, threads, problems } = await readCommentsWithOutdated(id);
+    const { messages, threads, problems } = await enrichCommentsForRead(id);
     console.log();
     console.log("--- comments ---");
     if (messages.length === 0) console.log("(no messages)");
-    for (const line of formatCommentsForView(messages)) {
+    for (const line of formatCommentsForView(messages, threads)) {
       console.log(line);
     }
     if (detail.kind === "story") {
@@ -355,6 +371,7 @@ type CommentCliOptions = {
   replyTo?: string;
   resolve?: boolean;
   linkTask?: string;
+  kind?: string;
 };
 
 function anchorFlagsPresent(opts: CommentCliOptions): boolean {
@@ -415,6 +432,7 @@ function commentInputFromCliOpts(opts: CommentCliOptions): CommentInput {
     role: opts.role,
     name: opts.name,
     body: opts.body,
+    ...questionKindFields(opts.kind === "question" ? "question" : undefined),
   };
 }
 
@@ -442,6 +460,10 @@ function applyCommentOptions(cmd: Command): Command {
     .option(
       "--link-task <taskId>",
       "record that a Task addresses that Story thread; requires --reply-to",
+    )
+    .option(
+      "--kind <question>",
+      "start a question thread; new Story thread root only",
     );
 }
 
@@ -459,10 +481,21 @@ function cliAuthor(opts: CommentCliOptions): { role: string; name?: string } {
     : { role: opts.role };
 }
 
+function assertQuestionKind(opts: CommentCliOptions): void {
+  if (opts.kind === undefined) return;
+  if (opts.kind !== "question") {
+    throw new Error("--kind must be question");
+  }
+  if (opts.replyTo || opts.resolve || opts.linkTask) {
+    throw new Error("--kind question applies only to a new thread root");
+  }
+}
+
 async function printComment(
   id: string,
   opts: CommentCliOptions,
 ): Promise<Comment | undefined> {
+  assertQuestionKind(opts);
   if (opts.linkTask) {
     assertNoAnchorForThreadAction(opts, "--link-task");
     if (!opts.replyTo) {

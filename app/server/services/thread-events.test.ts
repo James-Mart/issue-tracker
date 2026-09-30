@@ -258,4 +258,240 @@ describe("appendThreadEvent", () => {
     ]);
     expect(comments.messages).toHaveLength(1);
   });
+
+  it("lets a human dismiss and reopen a question without a reply", async () => {
+    const { appendComment, appendThreadEvent, readComments } = await load();
+    const root = await appendComment("s", {
+      role: "human",
+      body: "Does this short-circuit?",
+      kind: "question",
+    });
+
+    const dismissed = await appendThreadEvent("s", root.id, {
+      event: "dismissed",
+      by: { role: "human", name: "Jared" },
+    });
+    expect(dismissed.reply).toBeUndefined();
+    expect(dismissed.event).toMatchObject({
+      type: "thread-event",
+      threadId: root.id,
+      event: "dismissed",
+      by: { role: "human", name: "Jared" },
+    });
+    expect(dismissed.thread).toEqual({
+      rootId: root.id,
+      kind: "question",
+      state: "dismissed",
+      readyToTask: false,
+    });
+
+    const reopened = await appendThreadEvent("s", root.id, {
+      event: "reopened",
+      by: { role: "human" },
+    });
+    expect(reopened.thread).toEqual({
+      rootId: root.id,
+      kind: "question",
+      state: "open",
+      readyToTask: false,
+    });
+    expect(readComments("s").messages).toHaveLength(1);
+  });
+
+  it("refuses dismiss and reopen from an agent, and on a review thread", async () => {
+    const { appendComment, appendThreadEvent } = await load();
+    const review = await appendComment("s", { role: "human", body: "fix this" });
+    const question = await appendComment("s", {
+      role: "human",
+      body: "why?",
+      kind: "question",
+    });
+
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "dismissed",
+        by: { role: "implementor" },
+      }),
+    ).rejects.toThrow(/only a human can dismiss or reopen/);
+    await expect(
+      appendThreadEvent("s", review.id, {
+        event: "dismissed",
+        by: { role: "human" },
+      }),
+    ).rejects.toThrow(/only to a question thread/);
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "resolved",
+        by: { role: "human" },
+      }),
+    ).rejects.toThrow(/only to a review thread/);
+    expect(readFileSync(join(dir, "s", "comments.jsonl"), "utf8").trim().split("\n")).toHaveLength(2);
+  });
+
+  it("converts an open question into a review thread and keeps its comments", async () => {
+    const { appendComment, appendThreadEvent, readComments } = await load();
+    const root = await appendComment("s", {
+      role: "human",
+      name: "Jared",
+      body: "Does this short-circuit?",
+      kind: "question",
+    });
+    const answer = await appendComment("s", {
+      role: "agent",
+      name: "Researcher",
+      body: "Only on the local ref.",
+      replyTo: root.id,
+    });
+
+    const converted = await appendThreadEvent("s", root.id, {
+      event: "converted",
+      by: { role: "human", name: "Jared" },
+    });
+    expect(converted.reply).toBeUndefined();
+    expect(converted.event).toMatchObject({
+      type: "thread-event",
+      threadId: root.id,
+      event: "converted",
+      by: { role: "human", name: "Jared" },
+    });
+    expect(converted.thread).toMatchObject({
+      rootId: root.id,
+      kind: "review",
+      state: "open",
+      readyToTask: true,
+      converted: {
+        by: { role: "human", name: "Jared" },
+      },
+    });
+    expect(converted.thread.researcherConversationId).toBeUndefined();
+
+    const comments = readComments("s");
+    expect(comments.messages.map((message) => message.id)).toEqual([
+      root.id,
+      answer.id,
+    ]);
+    expect(comments.threads[0]?.kind).toBe("review");
+    expect(comments.threads[0]?.readyToTask).toBe(true);
+
+    const resolved = await appendThreadEvent("s", root.id, {
+      event: "resolved",
+      by: { role: "human" },
+    });
+    expect(resolved.thread.state).toBe("resolved");
+    expect(resolved.thread.kind).toBe("review");
+    expect(resolved.thread.readyToTask).toBe(false);
+    expect(resolved.thread.converted?.by).toEqual({ role: "human", name: "Jared" });
+  });
+
+  it("refuses convert from an agent, on a review or dismissed question, and a second time", async () => {
+    const { appendComment, appendThreadEvent } = await load();
+    const review = await appendComment("s", { role: "human", body: "fix this" });
+    const question = await appendComment("s", {
+      role: "human",
+      body: "why?",
+      kind: "question",
+    });
+
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "converted",
+        by: { role: "implementor" },
+      }),
+    ).rejects.toThrow(/only a human can convert/);
+    await expect(
+      appendThreadEvent("s", review.id, {
+        event: "converted",
+        by: { role: "human" },
+      }),
+    ).rejects.toThrow(/only to an open question/);
+
+    await appendThreadEvent("s", question.id, {
+      event: "dismissed",
+      by: { role: "human" },
+    });
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "converted",
+        by: { role: "human" },
+      }),
+    ).rejects.toThrow(/only to an open question/);
+
+    await appendThreadEvent("s", question.id, {
+      event: "reopened",
+      by: { role: "human" },
+    });
+    await appendThreadEvent("s", question.id, {
+      event: "converted",
+      by: { role: "human" },
+    });
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "converted",
+        by: { role: "human" },
+      }),
+    ).rejects.toThrow(/only to an open question/);
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "dismissed",
+        by: { role: "human" },
+      }),
+    ).rejects.toThrow(/only to a question thread/);
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "researcher-session",
+        conversationId: "conv-after",
+        by: { role: "agent", name: "Researcher" },
+      }),
+    ).rejects.toThrow(/only to a question thread/);
+  });
+
+  it("records the latest researcher session on a question, and refuses it on a review thread", async () => {
+    const { appendComment, appendThreadEvent, readComments } = await load();
+    const review = await appendComment("s", { role: "human", body: "fix this" });
+    const question = await appendComment("s", {
+      role: "human",
+      body: "why?",
+      kind: "question",
+    });
+    const researcher = { role: "agent", name: "Researcher" };
+
+    await appendThreadEvent("s", question.id, {
+      event: "researcher-session",
+      conversationId: "conv-1",
+      by: researcher,
+    });
+    const second = await appendThreadEvent("s", question.id, {
+      event: "researcher-session",
+      conversationId: "conv-2",
+      by: researcher,
+    });
+    expect(second.event).toMatchObject({
+      type: "thread-event",
+      event: "researcher-session",
+      conversationId: "conv-2",
+      by: researcher,
+    });
+    expect(readComments("s").threads[1]).toEqual({
+      rootId: question.id,
+      kind: "question",
+      state: "open",
+      researcherConversationId: "conv-2",
+      readyToTask: false,
+    });
+
+    await expect(
+      appendThreadEvent("s", review.id, {
+        event: "researcher-session",
+        conversationId: "conv-3",
+        by: researcher,
+      }),
+    ).rejects.toThrow(/only to a question thread/);
+    await expect(
+      appendThreadEvent("s", question.id, {
+        event: "researcher-session",
+        by: researcher,
+      }),
+    ).rejects.toThrow(/requires conversationId/);
+    expect(logLines("s")).toHaveLength(4);
+  });
 });

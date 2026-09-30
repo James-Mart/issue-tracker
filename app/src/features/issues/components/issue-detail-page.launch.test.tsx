@@ -153,30 +153,17 @@ vi.mock("@/features/agents/components/conversation-thread", () => ({
   ),
 }));
 
-vi.mock("./issue-meta-panel", () => ({
-  IssueMetaPanel: () => null,
-}));
-vi.mock("./attachments-panel", () => ({
-  IssueAttachmentsSection: () => null,
-}));
-vi.mock("./issue-description-field", () => ({
-  IssueDescriptionField: () => null,
-}));
-vi.mock("./comments/comments-section", () => ({
-  IssueCommentsSection: () => null,
-}));
-vi.mock("./epic-story-rail", () => ({
-  EpicStoryRail: () => null,
-}));
+vi.mock("./issue-meta-panel", () => ({ IssueMetaPanel: () => null }));
+vi.mock("./attachments-panel", () => ({ IssueAttachmentsSection: () => null }));
+vi.mock("./issue-description-field", () => ({ IssueDescriptionField: () => null }));
+vi.mock("./comments/comments-section", () => ({ IssueCommentsSection: () => null }));
+vi.mock("./epic-story-rail", () => ({ EpicStoryRail: () => null }));
 vi.mock("./story-task-rail", () => ({
   StoryTaskRail: () => <div data-testid="story-task-rail">rail</div>,
 }));
-vi.mock("./delete-partial-plan-control", () => ({
-  DeletePartialPlanDetailAction: () => null,
-}));
-vi.mock("./channel-retro-control", () => ({
-  ChannelRetroControl: () => null,
-}));
+vi.mock("./delete-partial-plan-control", () => ({ DeletePartialPlanDetailAction: () => null }));
+vi.mock("./channel-retro-control", () => ({ ChannelRetroControl: () => null }));
+vi.mock("./agent-runs-panel", () => ({ AgentRunsPanel: () => null }));
 
 const t0 = "2026-07-01T00:00:00.000Z";
 
