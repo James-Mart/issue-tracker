@@ -10,7 +10,7 @@ import {
 } from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
-import type { AgentImage } from "./agent-sdk.js";
+import type { AgentImage, AgentSteerOutcome } from "./agent-sdk.js";
 import { getConversationAttachment } from "./conversation-attachments.js";
 import {
   parseConversationMeta,
@@ -295,6 +295,7 @@ export function createConversation(
       model,
     };
     if (input.agentId?.trim()) fields.agentId = input.agentId.trim();
+    if (input.role) fields.role = input.role;
     if (anchor) {
       fields.issueId = anchor.issueId;
       fields.channel = anchor.channel;
@@ -504,6 +505,16 @@ export function appendEvent(
     }
     return stamped;
   });
+}
+
+/** Show an error in the live transcript and persist it. */
+export async function appendErrorEvent(
+  id: string,
+  message: string,
+): Promise<void> {
+  const event = { type: "error" as const, message };
+  publishFrame(id, { event, persist: true });
+  await appendEvent(id, event);
 }
 
 type ParsedDelegationLine =
@@ -727,6 +738,24 @@ export async function assembleAgentPrompt(
 }
 
 /**
+ * Deliver text into a live run. A steer the run accepts is the delivery;
+ * otherwise the text waits as the pending message sent when the run finishes.
+ */
+export async function deliverLivePrompt(
+  conversationId: string,
+  prompt: string,
+  steer: (text: string) => Promise<AgentSteerOutcome>,
+): Promise<"steered" | "pending"> {
+  publishFrame(conversationId, {
+    event: { type: "steering", text: prompt },
+    persist: false,
+  });
+  if ((await steer(prompt)) === "complete_delivered") return "steered";
+  await setPendingMessage(conversationId, prompt);
+  return "pending";
+}
+
+/**
  * Start a run from a user prompt (shared by /messages and channel-session create).
  * Pass `persistPrompt: false` when the prompt event was already written (e.g. inside
  * `createIssueChannelSession`'s atomic turn).
@@ -768,9 +797,7 @@ export async function startConversationPrompt(
       return { ok: false, message: result.message };
     }
     const message = result.error.message;
-    const event = { type: "error" as const, message };
-    publishFrame(conversationId, { event, persist: true });
-    await appendEvent(conversationId, event);
+    await appendErrorEvent(conversationId, message);
     return { ok: false, message };
   }
 

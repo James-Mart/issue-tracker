@@ -281,6 +281,7 @@ export async function submitReview(
     model,
     issueId: storyId,
     channel: "review",
+    role: REVIEW_TASKER_ROLE,
     message: prompt,
   });
 
@@ -541,28 +542,26 @@ export function failReviewTaskingClassification(
 
 function agentRunStatus(
   live: boolean,
-  submission: ReviewSubmission | undefined,
+  submission: ReviewSubmission,
 ): AgentRun["status"] {
   if (live) return "running";
-  if (submission?.status === "failed") return "error";
-  if (submission?.status === "done") return "completed";
+  if (submission.status === "failed") return "error";
+  if (submission.status === "done") return "completed";
   return "unknown";
 }
 
-export function reviewTaskerAgentRun(meta: ConversationMeta): AgentRun | undefined {
-  if (meta.channel !== "review" || meta.issueId === undefined) return undefined;
-  const submission = submissionOnStory(
-    meta.projectId,
-    meta.issueId,
-    meta.id,
-  );
+function reviewTaskerAgentRun(
+  meta: ConversationMeta,
+  issueId: string,
+  submission: ReviewSubmission,
+): AgentRun {
   const status = agentRunStatus(isRunLive(meta.id), submission);
   return {
     delegationId: reviewTaskerDelegationId(meta.id),
     agentId: meta.agentId ?? meta.id,
     role: REVIEW_TASKER_ROLE,
     model: meta.model,
-    issueId: meta.issueId,
+    issueId,
     parentCallId: meta.id,
     conversationId: meta.id,
     startedAt: meta.createdAt,
@@ -574,12 +573,27 @@ export function reviewTaskerAgentRun(meta: ConversationMeta): AgentRun | undefin
   };
 }
 
-export function reviewTaskerRunsForIssue(issueId: string): AgentRun[] {
-  const runs: AgentRun[] = [];
+/** Story conversations named by a review submission, with that submission. */
+function taskerConversations(
+  storyId: string,
+): { meta: ConversationMeta; submission: ReviewSubmission }[] {
+  const found: { meta: ConversationMeta; submission: ReviewSubmission }[] = [];
   for (const meta of listConversations()) {
-    if (meta.issueId !== issueId) continue;
-    const run = reviewTaskerAgentRun(meta);
-    if (run) runs.push(run);
+    if (meta.issueId !== storyId || meta.channel !== "review") continue;
+    const submission = submissionOnStory(meta.projectId, storyId, meta.id);
+    if (submission) found.push({ meta, submission });
   }
-  return runs;
+  return found;
+}
+
+/** Every tasker conversation a review submission started on the Story. */
+export function reviewTaskerConversationIds(storyId: string): string[] {
+  return taskerConversations(storyId).map(({ meta }) => meta.id);
+}
+
+/** One agent run per tasker conversation a review submission started on the Story. */
+export function reviewTaskerRunsForIssue(issueId: string): AgentRun[] {
+  return taskerConversations(issueId).map(({ meta, submission }) =>
+    reviewTaskerAgentRun(meta, issueId, submission),
+  );
 }

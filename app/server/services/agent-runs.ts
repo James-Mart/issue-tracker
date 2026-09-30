@@ -8,11 +8,16 @@ import {
   activeImplementingConversationId,
   listConversationIds,
   readConversation,
-  readConversationMeta,
   readDelegations,
 } from "./conversations.js";
 import {
+  conversationIdFromResearcherDelegation,
+  researcherConversationIds,
+  researcherRunsForIssue,
+} from "./researcher-runs.js";
+import {
   conversationIdFromReviewTaskerDelegation,
+  reviewTaskerConversationIds,
   reviewTaskerRunsForIssue,
 } from "./review-tasking.js";
 import { ancestorChain, nearestImplementingWorkRootId } from "./subtree.js";
@@ -98,6 +103,7 @@ export function listAgentRunsForIssue(issueId: string): AgentRun[] {
   }
 
   runs.push(...reviewTaskerRunsForIssue(issueId));
+  runs.push(...researcherRunsForIssue(issueId));
   runs.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   return runs;
 }
@@ -119,15 +125,20 @@ export function listAgentRunEvents(
   issueId: string,
   delegationId: string,
 ): SubagentUpdateEvent[] | undefined {
-  const reviewConversationId =
+  const taskerConversationId =
     conversationIdFromReviewTaskerDelegation(delegationId);
-  if (reviewConversationId) {
-    try {
-      const meta = readConversationMeta(reviewConversationId);
-      if (meta.issueId === issueId && meta.channel === "review") return [];
-    } catch {
-      return undefined;
-    }
+  if (taskerConversationId) {
+    return reviewTaskerConversationIds(issueId).includes(taskerConversationId)
+      ? []
+      : undefined;
+  }
+
+  const researcherConversationId =
+    conversationIdFromResearcherDelegation(delegationId);
+  if (researcherConversationId) {
+    return researcherConversationIds(issueId).includes(researcherConversationId)
+      ? []
+      : undefined;
   }
 
   for (const conversationId of listConversationIds()) {

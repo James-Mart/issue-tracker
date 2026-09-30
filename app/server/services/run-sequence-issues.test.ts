@@ -56,6 +56,30 @@ describe("runSequence", () => {
     ]);
   });
 
+  it("labels a review-channel coordinator from the role recorded on the conversation", async () => {
+    writeConversation("conv-tasker", {
+      meta: { issueId: "s", channel: "review", role: "issue-tracker-review-tasker" },
+      transcript: [prompt("task these threads", AT, 1)],
+    });
+    writeConversation("conv-researcher", {
+      meta: { issueId: "s", channel: "review", role: "issue-tracker-review-question" },
+      transcript: [prompt("why add two?", AT, 1)],
+    });
+
+    const runSequence = await loadRunSequence();
+
+    expect(runSequence("conv-tasker").lifelines).toContainEqual({
+      id: "coordinator",
+      label: "Review tasker",
+      kind: "coordinator",
+    });
+    expect(runSequence("conv-researcher").lifelines).toContainEqual({
+      id: "coordinator",
+      label: "Researcher",
+      kind: "coordinator",
+    });
+  });
+
   it("resolves rootIssue from the earliest delegation issue", async () => {
     writeIssue("platform", {
       kind: "project",

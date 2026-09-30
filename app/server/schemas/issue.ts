@@ -76,6 +76,8 @@ export const commentAnchorSchema = z.object({
   commitSha: nonEmpty,
 });
 
+export const THREAD_KINDS = ["review", "question"] as const;
+
 const commentFields = {
   id: nonEmpty,
   role: nonEmpty,
@@ -85,18 +87,33 @@ const commentFields = {
   replyTo: nonEmpty.optional(),
   anchor: commentAnchorSchema.optional(),
   type: z.enum(COMMENT_TYPES).optional(),
+  /** Thread root only. Absent means review. */
+  kind: z.enum(THREAD_KINDS).optional(),
 };
 
 function refineCommentBody(
-  value: { body: string; type?: (typeof COMMENT_TYPES)[number] },
+  value: {
+    body: string;
+    type?: (typeof COMMENT_TYPES)[number];
+    kind?: (typeof THREAD_KINDS)[number];
+    replyTo?: string;
+  },
   ctx: z.RefinementCtx,
 ): void {
-  if (value.body.length > 0 || value.type === "human-response") return;
-  ctx.addIssue({
-    code: "custom",
-    message: "String must contain at least 1 character(s)",
-    path: ["body"],
-  });
+  if (value.body.length === 0 && value.type !== "human-response") {
+    ctx.addIssue({
+      code: "custom",
+      message: "String must contain at least 1 character(s)",
+      path: ["body"],
+    });
+  }
+  if (value.kind !== undefined && value.replyTo !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "kind is only valid on a thread root",
+      path: ["kind"],
+    });
+  }
 }
 
 const commentObject = z.object(commentFields);
@@ -112,13 +129,39 @@ export const commentInputSchema = commentObject
 export type Comment = z.infer<typeof commentSchema>;
 export type CommentInput = z.infer<typeof commentInputSchema>;
 
-/** Stored comment plus read-time `outdated` on anchored messages only. */
-export type CommentMessage = Comment & { outdated?: boolean };
+/**
+ * Stored comment plus read-time flags. `outdated` is set on anchored messages
+ * whose lines changed. `newSession` is set on the first non-human reply of a
+ * recovered researcher session.
+ */
+export type CommentMessage = Comment & {
+  outdated?: boolean;
+  newSession?: boolean;
+};
 
-export const THREAD_EVENTS = ["resolved", "unresolved", "linked"] as const;
-export const THREAD_UI_EVENTS = ["resolved", "unresolved"] as const;
-export const THREAD_KINDS = ["review"] as const;
-export const THREAD_STATES = ["open", "resolved"] as const;
+export const THREAD_EVENTS = [
+  "resolved",
+  "unresolved",
+  "linked",
+  "dismissed",
+  "reopened",
+  "converted",
+  "researcher-session",
+] as const;
+export const THREAD_UI_EVENTS = [
+  "resolved",
+  "unresolved",
+  "dismissed",
+  "reopened",
+  "converted",
+] as const;
+export const THREAD_STATES = ["open", "resolved", "dismissed"] as const;
+
+/** Events that carry a payload field, which no other event may carry. */
+export const THREAD_EVENT_PAYLOADS = [
+  { field: "taskId", event: "linked" },
+  { field: "conversationId", event: "researcher-session" },
+] as const;
 
 export const threadEventSchema = z
   .object({
@@ -126,6 +169,9 @@ export const threadEventSchema = z
     threadId: nonEmpty,
     event: z.enum(THREAD_EVENTS),
     taskId: nonEmpty.optional(),
+    conversationId: nonEmpty.optional(),
+    /** Set when this session replaced an archived or unreadable conversation. */
+    recovered: z.literal(true).optional(),
     by: z.object({
       role: nonEmpty,
       name: z.string().optional(),
@@ -134,27 +180,42 @@ export const threadEventSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    if (value.event === "linked") {
-      if (!value.taskId) {
+    for (const { field, event } of THREAD_EVENT_PAYLOADS) {
+      if (value.event === event && !value[field]) {
         ctx.addIssue({
           code: "custom",
-          message: "linked event requires taskId",
-          path: ["taskId"],
+          message: `${event} event requires ${field}`,
+          path: [field],
         });
       }
-      return;
+      if (value.event !== event && value[field] !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: `${field} is only valid on ${event} events`,
+          path: [field],
+        });
+      }
     }
-    if (value.taskId !== undefined) {
+    if (value.recovered !== undefined && value.event !== "researcher-session") {
       ctx.addIssue({
         code: "custom",
-        message: "taskId is only valid on linked events",
-        path: ["taskId"],
+        message: "recovered is only valid on researcher-session events",
+        path: ["recovered"],
       });
     }
   });
 
 export type ThreadEvent = z.infer<typeof threadEventSchema>;
 export type ThreadEventName = (typeof THREAD_EVENTS)[number];
+
+/** Credit line for a question that became a review thread. */
+export function convertedQuestionText(by: {
+  role: string;
+  name?: string;
+}): string {
+  const name = by.name ?? by.role;
+  return `${name} converted this question to a review comment`;
+}
 
 /** Caller body for the human thread-event route. `by` is stamped server-side. */
 export const threadEventRequestSchema = z
@@ -173,8 +234,23 @@ export interface ThreadView {
   kind: (typeof THREAD_KINDS)[number];
   state: (typeof THREAD_STATES)[number];
   linkedTaskId?: string;
+  /** Latest `researcher-session` conversation on an unconverted question thread. */
+  researcherConversationId?: string;
+  /** Set once a question thread is converted to a review thread. */
+  converted?: {
+    by: { role: string; name?: string };
+    at: string;
+  };
   readyToTask: boolean;
 }
+
+/** Read-time researcher state on an open question thread still awaiting its answer. */
+export type ResearcherRun =
+  | { status: "running" }
+  | { status: "failed"; error: string };
+
+/** Thread view plus read-time `researcherRun`, served by the comments route. */
+export type CommentThreadView = ThreadView & { researcherRun?: ResearcherRun };
 
 export const mergeStoryBodySchema = z.object({
   auto: z.boolean().optional(),
@@ -185,7 +261,7 @@ export type MergeStoryBody = z.infer<typeof mergeStoryBodySchema>;
 
 export interface CommentsResponse {
   messages: CommentMessage[];
-  threads: ThreadView[];
+  threads: CommentThreadView[];
   problems: Problem[];
 }
 

@@ -63,6 +63,8 @@ export function useIssueEvents(): void {
         scheduleListInvalidate();
         qc.invalidateQueries({ queryKey: issuesKeys.detail(event.id) });
         qc.invalidateQueries({ queryKey: issuesKeys.agentRuns(event.id) });
+        // A question's researcher state is derived from its run.
+        qc.invalidateQueries({ queryKey: issuesKeys.comments(event.id) });
         return;
       }
       scheduleListInvalidate();

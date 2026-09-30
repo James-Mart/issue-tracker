@@ -21,6 +21,8 @@ import type {
   IssueRecord,
   IssuesResponse,
   MergeStoryBody,
+  ThreadEventRequest,
+  ThreadView,
 } from "@server/schemas";
 import type { Attachment } from "@server/services/attachments";
 import type { DeletionResult } from "@server/services/deletion";
@@ -111,9 +113,13 @@ export function useUpdateIssue() {
 export function usePostThreadEvent(issueId: string) {
   const qc = useQueryClient();
   return useMutation<
-    { thread: { rootId: string; state: "open" | "resolved" } },
+    { thread: ThreadView },
     Error,
-    { threadId: string; event: "resolved" | "unresolved"; body?: string }
+    {
+      threadId: string;
+      event: ThreadEventRequest["event"];
+      body?: string;
+    }
   >({
     mutationFn: ({ threadId, event, body }) =>
       request(`/api/issues/${issueId}/threads/${threadId}/events`, {
@@ -123,6 +129,21 @@ export function usePostThreadEvent(issueId: string) {
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () =>
       qc.invalidateQueries({ queryKey: issuesKeys.comments(issueId) }),
+  });
+}
+
+export function useRetryQuestionResearcher(storyId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (threadId) =>
+      request(`/api/issues/${storyId}/threads/${threadId}/researcher/retry`, {
+        method: "POST",
+      }),
+    onError: (err) => toast.error(messageOf(err)),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.comments(storyId) });
+      qc.invalidateQueries({ queryKey: issuesKeys.agentRuns(storyId) });
+    },
   });
 }
 

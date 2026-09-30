@@ -58,6 +58,7 @@ vi.mock("@/features/issues/api/mutations", () => ({
 
 function thread(overrides: Partial<CommentThread> & Pick<CommentThread, "root">): CommentThread {
   return {
+    kind: "review",
     state: "open",
     readyToTask: true,
     replies: [],
@@ -216,12 +217,97 @@ describe("ReviewConversationTab", () => {
     );
     if (!composer) throw new Error("no composer");
     setTextarea(composer, "Ship the note");
-    click(container.querySelector('[aria-label="Send"]'));
+    click(container.querySelector('[aria-label="Comment"]'));
 
     expect(post.mutate).toHaveBeenCalledWith(
       { role: "human", body: "Ship the note" },
       expect.any(Object),
     );
+  });
+
+  it("asks a question from the conversation composer", () => {
+    const container = mount();
+    const composer = container.querySelector<HTMLTextAreaElement>(
+      '[data-testid="review-conversation-composer"]',
+    );
+    if (!composer) throw new Error("no composer");
+    setTextarea(composer, "Does the guard consult remotes?");
+    click(container.querySelector('[aria-label="Ask a question"]'));
+
+    expect(post.mutate).toHaveBeenCalledWith(
+      {
+        role: "human",
+        body: "Does the guard consult remotes?",
+        kind: "question",
+      },
+      expect.any(Object),
+    );
+  });
+
+  it("collapses a dismissed question and reopens it without a reply", () => {
+    state.threads = [
+      thread({
+        kind: "question",
+        state: "dismissed",
+        readyToTask: false,
+        linkedTaskId: "task-a",
+        root: {
+          id: "asked",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          name: "Jared",
+          kind: "question",
+          body: "Does the guard consult remotes?",
+        },
+        replies: [
+          {
+            id: "answer",
+            at: "2026-09-29T14:20:00.000Z",
+            role: "human",
+            replyTo: "asked",
+            body: "Local refs only.",
+          },
+        ],
+      }),
+    ];
+    const container = mount();
+    const card = container.querySelector('[data-thread-root="asked"]');
+    expect(card?.getAttribute("data-collapsed")).toBe("");
+    expect(card?.getAttribute("data-thread-kind")).toBe("question");
+    expect(card?.hasAttribute("data-ready-to-task")).toBe(false);
+    expect(card?.textContent).toContain("Dismissed");
+    expect(card?.textContent).not.toContain("Does the guard consult remotes?");
+    expect(card?.querySelector('[data-testid="thread-linked-task"]')).toBeNull();
+    expect(card?.querySelector('[data-testid="thread-resolve"]')).toBeNull();
+
+    click(card?.querySelector('[data-testid="thread-reopen"]') ?? null);
+    expect(events.mutate).toHaveBeenCalledWith({
+      threadId: "asked",
+      event: "reopened",
+    });
+  });
+
+  it("posts convert on an open question", () => {
+    state.threads = [
+      thread({
+        kind: "question",
+        readyToTask: false,
+        root: {
+          id: "asked",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          name: "Jared",
+          kind: "question",
+          body: "Does the guard consult remotes?",
+        },
+      }),
+    ];
+    const container = mount();
+    click(container.querySelector('[data-testid="thread-convert"]'));
+    expect(events.mutate).toHaveBeenCalledWith({
+      threadId: "asked",
+      event: "converted",
+    });
   });
 
   it("collapses a resolved thread and still offers jump-to-Diff", () => {

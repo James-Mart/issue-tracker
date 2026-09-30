@@ -12,6 +12,7 @@ import type { CommentInput } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { usePostComment } from "../../api/mutations";
+import { StoryComposerActions } from "./story-composer-actions";
 import {
   commentInputForComposer,
   composerDraftKey,
@@ -23,12 +24,13 @@ const COMPOSER_HINT = "Enter to send, Shift+Enter for a newline";
 type DiffComposerContextValue = {
   issueId: string;
   commitSha: string;
+  allowQuestion: boolean;
   open: OpenDiffComposer | null;
   openNew: (anchor: Extract<OpenDiffComposer, { kind: "new" }>) => void;
   openReply: (threadId: string) => void;
   drafts: Record<string, string>;
   setDraft: (key: string, value: string) => void;
-  send: (open: OpenDiffComposer) => void;
+  send: (open: OpenDiffComposer, kind?: "question") => void;
   pending: boolean;
 };
 
@@ -39,10 +41,13 @@ const DiffComposerContext = createContext<DiffComposerContextValue | null>(
 export function DiffComposerProvider({
   issueId,
   commitSha,
+  allowQuestion = false,
   children,
 }: {
   issueId: string;
   commitSha: string;
+  /** Story composers offer Ask a question beside Comment. */
+  allowQuestion?: boolean;
   children: ReactNode;
 }) {
   const post = usePostComment(issueId);
@@ -62,7 +67,7 @@ export function DiffComposerProvider({
     setDrafts((prev) => ({ ...prev, [key]: value }));
   }, []);
   const send = useCallback(
-    (target: OpenDiffComposer) => {
+    (target: OpenDiffComposer, kind?: "question") => {
       const key = composerDraftKey(target);
       const body = (drafts[key] ?? "").trim();
       if (!body || post.isPending) return;
@@ -70,6 +75,7 @@ export function DiffComposerProvider({
         target,
         body,
         commitSha,
+        kind,
       );
       post.mutate(input, {
         onSuccess: () => {
@@ -82,13 +88,14 @@ export function DiffComposerProvider({
         },
       });
     },
-    [commitSha, drafts, post],
+    [allowQuestion, commitSha, drafts, post],
   );
 
   const value = useMemo(
     () => ({
       issueId,
       commitSha,
+      allowQuestion,
       open,
       openNew,
       openReply,
@@ -100,6 +107,7 @@ export function DiffComposerProvider({
     [
       issueId,
       commitSha,
+      allowQuestion,
       open,
       openNew,
       openReply,
@@ -137,11 +145,15 @@ export function DiffThreadComposer({
 }: {
   target: OpenDiffComposer;
 }) {
-  const { drafts, setDraft, send, pending } = useDiffComposer();
+  const { drafts, setDraft, send, pending, allowQuestion } = useDiffComposer();
   const draftKey = composerDraftKey(target);
   const draft = drafts[draftKey] ?? "";
-  const heading =
-    target.kind === "new" ? "Start a review thread" : "Reply";
+  const askQuestion = allowQuestion && target.kind === "new";
+  const heading = askQuestion
+    ? "Comment or ask a question"
+    : target.kind === "new"
+      ? "Start a review thread"
+      : "Reply";
   const placeholder =
     target.kind === "new"
       ? target.startLine !== undefined
@@ -168,8 +180,10 @@ export function DiffThreadComposer({
           {lineCaption(target)}
         </p>
       ) : null}
-      <p className="text-sm text-foreground">{heading}</p>
-      <div className="flex min-w-0 items-end gap-2">
+      {askQuestion ? null : (
+        <p className="text-sm text-foreground">{heading}</p>
+      )}
+      <div className={askQuestion ? "flex flex-col gap-2" : "flex min-w-0 items-end gap-2"}>
         <Textarea
           value={draft}
           onChange={(event) => setDraft(draftKey, event.target.value)}
@@ -177,19 +191,28 @@ export function DiffThreadComposer({
           placeholder={placeholder}
           title={COMPOSER_HINT}
           aria-label={heading}
-          className="min-h-[40px] min-w-0 flex-1 resize-none touch:min-h-[44px]"
+          className={`min-h-[40px] min-w-0 resize-none touch:min-h-[44px]${askQuestion ? "" : " flex-1"}`}
         />
-        <Button
-          size="icon"
-          variant="primary"
-          className="h-11 w-11 shrink-0"
-          onClick={() => send(target)}
-          disabled={pending || !draft.trim()}
-          title="Send"
-          aria-label="Send"
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+        {askQuestion ? (
+          <StoryComposerActions
+            pending={pending}
+            canSend={draft.trim().length > 0}
+            onComment={() => send(target)}
+            onQuestion={() => send(target, "question")}
+          />
+        ) : (
+          <Button
+            size="icon"
+            variant="primary"
+            className="h-11 w-11 shrink-0"
+            onClick={() => send(target)}
+            disabled={pending || !draft.trim()}
+            title="Send"
+            aria-label="Send"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   );

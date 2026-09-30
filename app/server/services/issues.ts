@@ -852,6 +852,10 @@ function validateCommentAppend(
   input: CommentInput,
   messages?: Comment[],
 ): void {
+  if (input.kind !== undefined && readIssueOrThrow(issueId).kind !== "story") {
+    throw new IssueError("validation", "comment kind is only valid on a Story");
+  }
+
   if (input.anchor) {
     validateFullCommitSha(input.anchor.commitSha);
     if (

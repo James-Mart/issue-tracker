@@ -244,6 +244,7 @@ function anchoredThread(
   outdated = false,
 ): CommentThread {
   return {
+    kind: "review",
     state: "open",
     readyToTask: true,
     root: {
@@ -416,6 +417,7 @@ describe("StoryReviewPage", () => {
   it("opens an anchored thread inline on the Diff tab at its commit", () => {
     state.commentThreads = [
       {
+        kind: "review",
         state: "open",
         readyToTask: true,
         root: {
@@ -473,6 +475,7 @@ describe("StoryReviewPage", () => {
     } satisfies ReviewDiff;
     state.commentThreads = [
       {
+        kind: "review",
         state: "open",
         readyToTask: true,
         root: {
@@ -574,7 +577,7 @@ describe("StoryReviewPage", () => {
     );
     expect(composer?.textContent).toContain("line 1");
     setTextarea(composer!.querySelector("textarea")!, "Name this constant.");
-    click(composer!.querySelector('button[aria-label="Send"]')!);
+    click(composer!.querySelector('button[aria-label="Comment"]')!);
 
     expect(state.postComment).toHaveBeenCalledWith(
       {

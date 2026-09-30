@@ -1,10 +1,9 @@
 import { useState, type KeyboardEvent } from "react";
-import { Send } from "lucide-react";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { usePostComment } from "@/features/issues/api/mutations";
 import { useCommentThreads, useCommentsQuery } from "@/features/issues/api/queries";
+import { StoryComposerActions } from "@/features/issues/components/comments/story-composer-actions";
 import { Markdown } from "@/features/issues/components/markdown";
 import {
   Marker,
@@ -15,7 +14,12 @@ import { isHumanRole, Message } from "@/features/issues/components/comments/mess
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
 import { Shimmer } from "@/features/issues/components/comments/shimmer";
 import type { CommentMessage, ReviewSubmission } from "@server/schemas";
-import type { CommentThread as CommentThreadData } from "@/features/issues/lib/comment-threads";
+import { questionKindFields } from "@server/question-kind";
+import {
+  isPlainNote,
+  STORY_COMPOSER_LABEL,
+  type CommentThread as CommentThreadData,
+} from "@/features/issues/lib/comment-threads";
 import { ThreadLinkedTaskChip } from "@/features/issues/components/comments/thread-linked-task-chip";
 import {
   conversationTimelineItems,
@@ -25,10 +29,6 @@ import {
 import { ReviewThread } from "./review-thread";
 
 const COMPOSER_ROLE = "human";
-
-function isStandaloneComment(thread: CommentThreadData): boolean {
-  return thread.root.anchor === undefined && thread.replies.length === 0;
-}
 
 function StandaloneComment({
   message,
@@ -99,7 +99,7 @@ function ConversationTimeline({
         return (
           <div key={`thread:${thread.root.id}`} className="flex min-w-0 flex-col">
             {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
-            {isStandaloneComment(thread) ? (
+            {isPlainNote(thread) ? (
               <StandaloneComment message={thread.root} storyId={storyId} />
             ) : (
               <ReviewThread
@@ -136,11 +136,15 @@ export function ReviewConversationTab({
   const post = usePostComment(storyId);
   const [draft, setDraft] = useState("");
 
-  const send = () => {
+  const send = (kind?: "question") => {
     const body = draft.trim();
     if (!body || post.isPending) return;
     post.mutate(
-      { role: COMPOSER_ROLE, body },
+      {
+        role: COMPOSER_ROLE,
+        body,
+        ...questionKindFields(kind),
+      },
       { onSuccess: () => setDraft("") },
     );
   };
@@ -203,28 +207,23 @@ export function ReviewConversationTab({
         ) : null}
       </div>
       {post.isPending ? <Shimmer label="Sending…" /> : null}
-      <div className="flex min-w-0 shrink-0 items-end gap-2 border-t border-border px-1 py-3">
+      <div className="flex min-w-0 shrink-0 flex-col gap-2 border-t border-border px-1 py-3">
         <Textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Add a comment"
-          title="Enter to send, Shift+Enter for a newline"
-          aria-label="Add a comment"
+          placeholder={STORY_COMPOSER_LABEL}
+          title="Enter to send a comment, Shift+Enter for a newline"
+          aria-label={STORY_COMPOSER_LABEL}
           data-testid="review-conversation-composer"
           className="min-h-[40px] min-w-0 flex-1 resize-none touch:min-h-[44px]"
         />
-        <Button
-          size="icon"
-          variant="primary"
-          className="h-11 w-11 shrink-0"
-          onClick={send}
-          disabled={post.isPending || !draft.trim()}
-          title="Send"
-          aria-label="Send"
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+        <StoryComposerActions
+          pending={post.isPending}
+          canSend={draft.trim().length > 0}
+          onComment={() => send()}
+          onQuestion={() => send("question")}
+        />
       </div>
     </div>
   );

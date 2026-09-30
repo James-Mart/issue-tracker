@@ -51,6 +51,7 @@ function review(overrides: Partial<ReviewView> = {}): ReviewView {
 
 function readyThread(): CommentThread {
   return {
+    kind: "review",
     state: "open",
     readyToTask: true,
     replies: [],

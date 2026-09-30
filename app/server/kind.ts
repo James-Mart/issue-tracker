@@ -117,7 +117,7 @@ export function offersExportChannel(
   return false;
 }
 
-/** Review-tasking conversations anchor to the Story they submit. */
+/** Review conversations (review taskers, question researchers) anchor to the Story under review. */
 export function offersReviewChannel(issue: Issue): boolean {
   return issue.kind === "story";
 }

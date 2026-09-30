@@ -1,15 +1,24 @@
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Send } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import type { CommentMessage, IssueDetail } from "@server/schemas";
+import type {
+  CommentMessage,
+  IssueDetail,
+  ThreadEventRequest,
+} from "@server/schemas";
+import { questionKindFields } from "@server/question-kind";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useCommentsQuery, useIssuesQuery } from "../../api/queries";
-import { usePostComment } from "../../api/mutations";
+import { usePostComment, usePostThreadEvent } from "../../api/mutations";
 import { supportsAttachments } from "../../lib/attachments";
 import {
   groupCommentThreads,
+  isPlainNote,
+  isQuestionThread,
+  STORY_COMPOSER_LABEL,
+  threadStateActions,
   type CommentThread as CommentThreadData,
 } from "../../lib/comment-threads";
 import { supportsComments } from "../../lib/comments";
@@ -18,15 +27,12 @@ import { writeDiffThreadSearchParam } from "../../lib/issue-detail-tabs";
 import { SettingsCard } from "../detail-section";
 import { Markdown } from "../markdown";
 import { CommentThread } from "./comment-thread";
+import { StoryComposerActions } from "./story-composer-actions";
 import { Marker, commentDayKey, commentDayLabel } from "./marker";
 import { Message } from "./message";
 import { Shimmer } from "./shimmer";
 
 const COMPOSER_ROLE = "human";
-
-function isStandaloneUnanchored(thread: CommentThreadData): boolean {
-  return thread.root.anchor === undefined && thread.replies.length === 0;
-}
 
 function StandaloneComment({
   message,
@@ -100,6 +106,9 @@ function CommentList({
   replySlotFor,
   onReply,
   onSeeInDiff,
+  storyComposer,
+  onThreadEvent,
+  eventPending,
 }: {
   threads: CommentThreadData[];
   issueId: string;
@@ -107,6 +116,12 @@ function CommentList({
   replySlotFor: (threadId: string) => ReactNode;
   onReply: (threadId: string) => void;
   onSeeInDiff: (threadId: string) => void;
+  storyComposer: boolean;
+  onThreadEvent: (
+    threadId: string,
+    event: ThreadEventRequest["event"],
+  ) => void;
+  eventPending: boolean;
 }) {
   let lastDay = "";
   return (
@@ -122,7 +137,7 @@ function CommentList({
             className="flex flex-col"
           >
             {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
-            {isStandaloneUnanchored(thread) ? (
+            {isPlainNote(thread) ? (
               <StandaloneComment
                 message={thread.root}
                 attachmentsIssueId={attachmentsIssueId}
@@ -132,6 +147,7 @@ function CommentList({
                 thread={thread}
                 issueId={issueId}
                 showAnchorContext
+                resolvePending={eventPending}
                 onSeeInDiff={
                   thread.root.anchor
                     ? () => onSeeInDiff(thread.root.id)
@@ -139,6 +155,12 @@ function CommentList({
                 }
                 onReply={() => onReply(thread.root.id)}
                 replySlot={replySlotFor(thread.root.id)}
+                {...(storyComposer &&
+                (isQuestionThread(thread) || thread.converted)
+                  ? threadStateActions(thread, (event) =>
+                      onThreadEvent(thread.root.id, event),
+                    )
+                  : {})}
               />
             )}
           </div>
@@ -158,7 +180,11 @@ export function IssueCommentsSection({ issue }: { issue: IssueDetail }) {
 
   return (
     <div data-region="comments" id="comments" className="scroll-mt-8">
-      <CommentsPanel id={issue.id} attachmentsIssueId={attachmentsIssueId} />
+      <CommentsPanel
+        id={issue.id}
+        attachmentsIssueId={attachmentsIssueId}
+        storyComposer={issue.kind === "story"}
+      />
     </div>
   );
 }
@@ -166,13 +192,16 @@ export function IssueCommentsSection({ issue }: { issue: IssueDetail }) {
 function CommentsPanel({
   id,
   attachmentsIssueId,
+  storyComposer,
 }: {
   id: string;
   attachmentsIssueId?: string;
+  storyComposer: boolean;
 }) {
   const { data, isLoading, error } = useCommentsQuery(id);
   const { data: list } = useIssuesQuery();
   const post = usePostComment(id);
+  const events = usePostThreadEvent(id);
   const [, setSearchParams] = useSearchParams();
   const [draft, setDraft] = useState("");
   const [openReplyId, setOpenReplyId] = useState<string | null>(null);
@@ -180,7 +209,10 @@ function CommentsPanel({
 
   const messages = data?.messages ?? [];
   const problems = data?.problems ?? [];
-  const threads = useMemo(() => groupCommentThreads(messages), [messages]);
+  const threads = useMemo(
+    () => groupCommentThreads(messages, data?.threads ?? []),
+    [data?.threads, messages],
+  );
 
   const agentLive = useMemo(() => {
     const issue = list?.issues.find((item) => item.id === id);
@@ -188,10 +220,17 @@ function CommentsPanel({
     return isInFlight(issue, list?.derived[id]);
   }, [id, list?.derived, list?.issues]);
 
-  const send = () => {
+  const send = (kind?: "question") => {
     const body = draft.trim();
     if (!body || post.isPending) return;
-    post.mutate({ role: COMPOSER_ROLE, body }, { onSuccess: () => setDraft("") });
+    post.mutate(
+      {
+        role: COMPOSER_ROLE,
+        body,
+        ...questionKindFields(kind),
+      },
+      { onSuccess: () => setDraft("") },
+    );
   };
 
   const sendReply = (threadId: string) => {
@@ -280,6 +319,11 @@ function CommentsPanel({
             attachmentsIssueId={attachmentsIssueId}
             replySlotFor={replySlotFor}
             onReply={setOpenReplyId}
+            storyComposer={storyComposer}
+            eventPending={events.isPending}
+            onThreadEvent={(threadId, event) =>
+              events.mutate({ threadId, event })
+            }
             onSeeInDiff={(threadId) =>
               setSearchParams((prev) => writeDiffThreadSearchParam(prev, threadId), {
                 replace: true,
@@ -294,27 +338,42 @@ function CommentsPanel({
           <Shimmer />
         ) : null}
 
-        <div className="flex min-w-0 shrink-0 items-end gap-2 border-t border-border pt-3">
+        <div
+          className={
+            storyComposer
+              ? "flex min-w-0 shrink-0 flex-col gap-2 border-t border-border pt-3"
+              : "flex min-w-0 shrink-0 items-end gap-2 border-t border-border pt-3"
+          }
+        >
           <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Add a comment"
+            placeholder={storyComposer ? STORY_COMPOSER_LABEL : "Add a comment"}
             title="Enter to send, Shift+Enter for a newline"
-            aria-label="Add a comment"
+            aria-label={storyComposer ? STORY_COMPOSER_LABEL : "Add a comment"}
             className="min-h-[40px] min-w-0 flex-1 resize-none touch:min-h-[44px]"
           />
-          <Button
-            size="icon"
-            variant="primary"
-            className="h-11 w-11 shrink-0"
-            onClick={send}
-            disabled={post.isPending || !draft.trim()}
-            title="Send"
-            aria-label="Send"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          {storyComposer ? (
+            <StoryComposerActions
+              pending={post.isPending}
+              canSend={draft.trim().length > 0}
+              onComment={() => send()}
+              onQuestion={() => send("question")}
+            />
+          ) : (
+            <Button
+              size="icon"
+              variant="primary"
+              className="h-11 w-11 shrink-0"
+              onClick={() => send()}
+              disabled={post.isPending || !draft.trim()}
+              title="Send"
+              aria-label="Send"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </SettingsCard>

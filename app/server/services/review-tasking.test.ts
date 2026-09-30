@@ -162,6 +162,44 @@ describe("review tasking", () => {
     ).toEqual([]);
   });
 
+  it("claims only submission-named conversations on the shared review channel", async () => {
+    seed();
+    const {
+      submitReview,
+      appendComment,
+      REVIEW_TASKER_ROLE,
+      reviewTaskerDelegationId,
+      listAgentRunsForIssue,
+      listAgentRunEvents,
+    } = await load();
+    const { createConversation, readConversation } = await import(
+      "./conversations.js"
+    );
+    const { REVIEW_QUESTION_ROLE, isQuestionResearcherConversation } =
+      await import("./researcher-runs.js");
+    await appendComment("s", { role: "human", body: "Fix it" });
+    const view = await submitReview("p", REVIEW_ID, {}, stubSessions([]));
+    const tasker = readConversation(submission(view).conversationId).meta;
+    const researcher = await createConversation({
+      title: "Researcher: why?",
+      projectId: "p",
+      model: "composer-2.5",
+      issueId: "s",
+      channel: "review",
+      role: REVIEW_QUESTION_ROLE,
+    });
+
+    expect(tasker.role).toBe(REVIEW_TASKER_ROLE);
+    expect(listAgentRunsForIssue("s").map((run) => run.conversationId)).toEqual([
+      tasker.id,
+    ]);
+    expect(
+      listAgentRunEvents("s", reviewTaskerDelegationId(researcher.id)),
+    ).toBeUndefined();
+    expect(isQuestionResearcherConversation(tasker)).toBe(false);
+    expect(isQuestionResearcherConversation(researcher)).toBe(true);
+  });
+
   it("refuses a merged story and a story with no ready threads", async () => {
     seed({ merged: true });
     const { submitReview, appendComment, mergedStoryTaskingError, NO_READY_THREADS_ERROR } =

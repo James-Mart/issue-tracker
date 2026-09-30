@@ -1,6 +1,9 @@
 import type { AgentSessions } from "./agent-sessions.js";
-import { publishFrame } from "./conversation-stream.js";
-import { setPendingMessage, startConversationPrompt } from "./conversations.js";
+import {
+  deliverLivePrompt,
+  setPendingMessage,
+  startConversationPrompt,
+} from "./conversations.js";
 
 export type ConversationMessageSessions = Pick<
   AgentSessions,
@@ -32,16 +35,11 @@ export async function postConversationMessage(
       return { status: "pending" };
     }
 
-    publishFrame(conversationId, {
-      event: { type: "steering", text: prompt },
-      persist: false,
-    });
-    const outcome = await activeRun.steer(prompt);
-    if (outcome === "complete_delivered") {
-      return { status: "steered" };
-    }
-    await setPendingMessage(conversationId, prompt);
-    return { status: "pending" };
+    return {
+      status: await deliverLivePrompt(conversationId, prompt, (text) =>
+        activeRun.steer(text),
+      ),
+    };
   }
 
   const result = await startConversationPrompt(

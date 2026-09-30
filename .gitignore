@@ -6,6 +6,9 @@ plans/
 # Conversation runtime store (peer of issues/)
 /conversations/
 
+# API process logs and crash reports (peer of issues/)
+/logs/
+
 # Durable SDK model catalog (peer of issues/ / conversations/)
 /model-slug-catalog.json
 

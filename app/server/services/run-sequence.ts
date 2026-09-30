@@ -139,13 +139,11 @@ type IssueAncestry = {
   title: string;
 };
 
-/** Seat title: planning → Stakeholder, implementing → Coordinator, else title. */
+/** Seat title: planning → Stakeholder, implementing → Coordinator, recorded role → its family, else title. */
 function coordinatorLabel(meta: ConversationMeta): string {
   if (meta.channel === "planning") return "Stakeholder";
   if (meta.channel === "implementing") return "Coordinator";
-  if (meta.channel === "review") {
-    return roleFamilyTitle("issue-tracker-review-tasker");
-  }
+  if (meta.role) return roleFamilyTitle(meta.role);
   return meta.title;
 }
 

@@ -112,12 +112,12 @@ describe("channelTabForIssue", () => {
 });
 
 describe("agentsTabForIssue", () => {
-  it("returns true for Task and Epic-child Story only", () => {
+  it("returns true for Task and a Story whose parent is known", () => {
     expect(agentsTabForIssue(task)).toBe(true);
     expect(agentsTabForIssue(epicStory, "epic")).toBe(true);
+    expect(agentsTabForIssue(projectStory, "project")).toBe(true);
     expect(agentsTabForIssue(idea)).toBe(false);
     expect(agentsTabForIssue(epic)).toBe(false);
-    expect(agentsTabForIssue(projectStory, "project")).toBe(false);
     expect(agentsTabForIssue(epicStory)).toBe(false);
   });
 });
@@ -160,13 +160,13 @@ describe("tabsForIssueDetail", () => {
       tabsForIssueDetail(projectStory, "project", { includeExport: true }).map(
         (t) => t.key,
       ),
-    ).toEqual(["overview", "implementing", "export", "diff"]);
+    ).toEqual(["overview", "implementing", "export", "agents", "diff"]);
   });
 
-  it("Story: channel when parent is Project, plus Diff", () => {
+  it("Story: channel when parent is Project, plus Agents and Diff", () => {
     expect(
       tabsForIssueDetail(projectStory, "project").map((t) => t.key),
-    ).toEqual(["overview", "implementing", "diff"]);
+    ).toEqual(["overview", "implementing", "agents", "diff"]);
     expect(tabsForIssueDetail(epicStory, "epic").map((t) => t.key)).toEqual([
       "overview",
       "agents",

@@ -9,7 +9,26 @@
  *   the next command's cwd. When that directory is removed (e.g. a Story
  *   worktree deleted by merge), the next spawn fails with
  *   `spawn /bin/bash ENOENT`. Only that tool call fails.
+ * - Network `ConnectError`: before every shell command the SDK looks up the
+ *   team repo blocklist over RPC and does not catch a transport failure, so a
+ *   momentary `ECONNRESET` escapes from that one tool call.
+ *
+ * Anything else is fatal, and leaves a crash report in `logsDir`.
  */
+
+import { writeCrashReport } from "./crash-report.js";
+
+const NETWORK_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "EAI_AGAIN",
+]);
+
+const MAX_CAUSE_DEPTH = 8;
 
 export function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
@@ -21,10 +40,34 @@ export function isSpawnEnoent(err: unknown): boolean {
   return code === "ENOENT" && typeof syscall === "string" && syscall.startsWith("spawn");
 }
 
+/** A Connect RPC error whose cause chain bottoms out in a transport errno. */
+export function isNetworkConnectError(err: unknown): boolean {
+  if (!(err instanceof Error) || err.name !== "ConnectError") return false;
+  let current: unknown = err;
+  for (let depth = 0; current instanceof Error && depth < MAX_CAUSE_DEPTH; depth++) {
+    const { code } = current as NodeJS.ErrnoException;
+    if (typeof code === "string" && NETWORK_ERROR_CODES.has(code)) return true;
+    current = current.cause;
+  }
+  return false;
+}
+
 function survivableLabel(err: unknown): string | null {
   if (isAbortError(err)) return "AbortError";
   if (isSpawnEnoent(err)) return "spawn ENOENT";
+  if (isNetworkConnectError(err)) return "network ConnectError";
   return null;
+}
+
+function exitFatally(err: unknown, origin: string): never {
+  console.error(`[abort-guard] fatal ${origin}:`, err);
+  const reportPath = writeCrashReport(err, origin);
+  console.error(
+    reportPath
+      ? `[abort-guard] crash report written to ${reportPath}`
+      : "[abort-guard] crash report could not be written",
+  );
+  process.exit(1);
 }
 
 export function installAbortErrorGuard(): void {
@@ -34,15 +77,14 @@ export function installAbortErrorGuard(): void {
       console.warn(`[abort-guard] ignored unhandled ${label}`, reason);
       return;
     }
-    throw reason;
+    exitFatally(reason, "unhandledRejection");
   });
-  process.on("uncaughtException", (err) => {
+  process.on("uncaughtException", (err, origin) => {
     const label = survivableLabel(err);
     if (label) {
       console.warn(`[abort-guard] ignored uncaught ${label}`, err);
       return;
     }
-    console.error(err);
-    process.exit(1);
+    exitFatally(err, origin);
   });
 }
