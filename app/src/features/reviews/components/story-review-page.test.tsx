@@ -577,7 +577,7 @@ describe("StoryReviewPage", () => {
     );
     expect(composer?.textContent).toContain("line 1");
     setTextarea(composer!.querySelector("textarea")!, "Name this constant.");
-    click(composer!.querySelector('button[aria-label="Comment"]')!);
+    click(composer!.querySelector('button[aria-label="Send"]')!);
 
     expect(state.postComment).toHaveBeenCalledWith(
       {

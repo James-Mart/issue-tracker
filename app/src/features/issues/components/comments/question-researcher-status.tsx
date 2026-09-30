@@ -4,18 +4,32 @@ import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { useRetryQuestionResearcher } from "../../api/mutations";
 
-/** Live or failed researcher on an open question thread awaiting its answer. */
-export function QuestionResearcherStatus({
+/** Retry sits in the question card footer, ahead of Dismiss and Convert. */
+export function ResearcherRetryButton({
   storyId,
   threadId,
-  run,
 }: {
   storyId: string;
   threadId: string;
-  run: ResearcherRun;
 }) {
   const retry = useRetryQuestionResearcher(storyId);
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={() => retry.mutate(threadId)}
+      disabled={retry.isPending}
+      data-testid="researcher-retry"
+    >
+      <RotateCcw aria-hidden />
+      Retry
+    </Button>
+  );
+}
 
+/** Live or failed researcher on an open question thread awaiting its answer. */
+export function QuestionResearcherStatus({ run }: { run: ResearcherRun }) {
   if (run.status === "running") {
     return (
       <div
@@ -36,17 +50,6 @@ export function QuestionResearcherStatus({
         message={`Researcher couldn't get an answer — ${run.error}`}
         hint="Retry to start a fresh researcher run for this question."
       />
-      <Button
-        type="button"
-        size="sm"
-        className="self-end"
-        onClick={() => retry.mutate(threadId)}
-        disabled={retry.isPending}
-        data-testid="researcher-retry"
-      >
-        <RotateCcw aria-hidden />
-        Retry
-      </Button>
     </div>
   );
 }

@@ -1,64 +1,14 @@
-import { useState, type KeyboardEvent, type ReactNode } from "react";
-import { Send } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import type { CommentThread as CommentThreadData } from "@/features/issues/lib/comment-threads";
 import { usePostComment, usePostThreadEvent } from "@/features/issues/api/mutations";
+import { postCommentWhenIdle } from "@/features/issues/lib/post-comment-when-idle";
+import { replyDraftKey } from "@/features/reviews/lib/review-draft-key";
 import { CommentThread } from "@/features/issues/components/comments/comment-thread";
 import { threadStateActions } from "@/features/issues/lib/comment-threads";
 import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { ReviewComposer } from "./review-composer";
 
 const COMPOSER_ROLE = "human";
-
-function ReplyComposer({
-  threadId,
-  draft,
-  pending,
-  onDraftChange,
-  onSend,
-}: {
-  threadId: string;
-  draft: string;
-  pending: boolean;
-  onDraftChange: (value: string) => void;
-  onSend: () => void;
-}) {
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      onSend();
-    }
-  };
-
-  return (
-    <div
-      data-testid="review-thread-reply"
-      data-thread-id={threadId}
-      className="flex min-w-0 items-end gap-2"
-    >
-      <Textarea
-        value={draft}
-        onChange={(event) => onDraftChange(event.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder="Reply"
-        title="Enter to send, Shift+Enter for a newline"
-        aria-label="Reply"
-        className="min-h-[40px] min-w-0 flex-1 resize-none touch:min-h-[44px]"
-      />
-      <Button
-        size="icon"
-        variant="primary"
-        className="h-11 w-11 shrink-0"
-        onClick={onSend}
-        disabled={pending || !draft.trim()}
-        title="Send"
-        aria-label="Send"
-      >
-        <Send className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-}
 
 /** Story thread on the review workbench: reply, resolve, and unresolve. */
 export function ReviewThread({
@@ -79,21 +29,15 @@ export function ReviewThread({
   const post = usePostComment(storyId);
   const events = usePostThreadEvent(storyId);
   const [replying, setReplying] = useState(false);
-  const [draft, setDraft] = useState("");
 
-  const sendReply = () => {
-    const body = draft.trim();
-    if (!body || post.isPending) return;
-    post.mutate(
-      { role: COMPOSER_ROLE, body, replyTo: thread.root.id },
-      {
-        onSuccess: () => {
-          setDraft("");
-          setReplying(false);
-        },
-      },
-    );
-  };
+  const sendReply = (body: string) =>
+    postCommentWhenIdle(post, {
+      role: COMPOSER_ROLE,
+      body,
+      replyTo: thread.root.id,
+    }).then(() => {
+      setReplying(false);
+    });
 
   return (
     <CommentThread
@@ -106,13 +50,16 @@ export function ReviewThread({
       onReply={() => setReplying(true)}
       replySlot={
         replying ? (
-          <ReplyComposer
-            threadId={thread.root.id}
-            draft={draft}
-            pending={post.isPending}
-            onDraftChange={setDraft}
-            onSend={sendReply}
-          />
+          <div data-testid="review-thread-reply" data-thread-id={thread.root.id}>
+            <ReviewComposer
+              draftKey={replyDraftKey(storyId, thread.root.id)}
+              placeholder="Reply"
+              submitLabel="Send"
+              pending={post.isPending}
+              onSubmit={sendReply}
+              onCancel={() => setReplying(false)}
+            />
+          </div>
         ) : undefined
       }
       resolvePending={events.isPending}

@@ -213,11 +213,20 @@ describe("ReviewConversationTab", () => {
   it("posts a general comment from the bottom composer", () => {
     const container = mount();
     const composer = container.querySelector<HTMLTextAreaElement>(
-      '[data-testid="review-conversation-composer"]',
+      '[data-testid="review-conversation-composer"] textarea',
     );
     if (!composer) throw new Error("no composer");
+    expect(
+      container.querySelector(
+        '[data-testid="review-conversation-composer"] [aria-label="Cancel"]',
+      ),
+    ).toBeNull();
     setTextarea(composer, "Ship the note");
-    click(container.querySelector('[aria-label="Comment"]'));
+    click(
+      container.querySelector(
+        '[data-testid="review-conversation-composer"] [aria-label="Send"]',
+      ),
+    );
 
     expect(post.mutate).toHaveBeenCalledWith(
       { role: "human", body: "Ship the note" },
@@ -228,11 +237,15 @@ describe("ReviewConversationTab", () => {
   it("asks a question from the conversation composer", () => {
     const container = mount();
     const composer = container.querySelector<HTMLTextAreaElement>(
-      '[data-testid="review-conversation-composer"]',
+      '[data-testid="review-conversation-composer"] textarea',
     );
     if (!composer) throw new Error("no composer");
     setTextarea(composer, "Does the guard consult remotes?");
-    click(container.querySelector('[aria-label="Ask a question"]'));
+    click(
+      container.querySelector(
+        '[data-testid="review-conversation-composer"] [aria-label="Ask a question"]',
+      ),
+    );
 
     expect(post.mutate).toHaveBeenCalledWith(
       {
@@ -285,6 +298,37 @@ describe("ReviewConversationTab", () => {
       threadId: "asked",
       event: "reopened",
     });
+  });
+
+  it("opens a question reply empty and keeps thread actions in the footer", () => {
+    state.threads = [
+      thread({
+        kind: "question",
+        readyToTask: false,
+        root: {
+          id: "asked",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          name: "Jared",
+          kind: "question",
+          body: "Would you add a serde_json dep?",
+        },
+      }),
+    ];
+    const container = mount();
+    const card = container.querySelector('[data-thread-root="asked"]');
+    const reply = [...(card?.querySelectorAll("button") ?? [])].find((button) =>
+      button.textContent?.includes("Reply"),
+    );
+    click(reply ?? null);
+    expect(card?.querySelector("textarea")?.value).toBe("");
+    const footer = card?.querySelector('[data-testid="question-card-footer"]');
+    expect(
+      [...(footer?.querySelectorAll("button") ?? [])].map((button) =>
+        button.textContent?.trim(),
+      ),
+    ).toEqual(["Dismiss question", "Convert to review comment"]);
+    expect(footer?.querySelector('[aria-label="Cancel"]')).toBeNull();
   });
 
   it("posts convert on an open question", () => {

@@ -18,7 +18,10 @@ import {
   CommentAnchorSnippet,
 } from "./comment-anchor-context";
 import { isHumanRole } from "./message";
-import { QuestionResearcherStatus } from "./question-researcher-status";
+import {
+  QuestionResearcherStatus,
+  ResearcherRetryButton,
+} from "./question-researcher-status";
 import { ThreadLinkedTaskChip } from "./thread-linked-task-chip";
 
 export function CommentThread({
@@ -64,6 +67,8 @@ export function CommentThread({
   const question = isQuestionThread(thread);
   const resolved = thread.state === "resolved";
   const dismissed = thread.state === "dismissed";
+  const showReplyButton = replySlot == null;
+  const showResolveButton = !question && onResolve != null && !resolved;
   const outdatedBar = collapse === "outdated" && outdated;
   const collapses =
     outdatedBar ||
@@ -124,60 +129,47 @@ export function CommentThread({
           ))}
 
           {thread.researcherRun && issueId ? (
-            <QuestionResearcherStatus
-              storyId={issueId}
-              threadId={thread.root.id}
-              run={thread.researcherRun}
-            />
+            <QuestionResearcherStatus run={thread.researcherRun} />
           ) : null}
 
           {thread.converted ? (
             <ThreadConvertedEvent converted={thread.converted} />
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-1 pt-1">
-            {replySlot ?? (
-              <Button type="button" variant="ghost" size="sm" onClick={onReply}>
-                Reply
-              </Button>
-            )}
-            {!question && onResolve && !resolved ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onResolve}
-                disabled={resolvePending}
-                data-testid="thread-resolve"
-              >
-                Resolve
-              </Button>
-            ) : null}
-            {question && !dismissed && onDismiss ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onDismiss}
-                disabled={resolvePending}
-                data-testid="thread-dismiss"
-              >
-                Dismiss
-              </Button>
-            ) : null}
-            {question && !dismissed && onConvert ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onConvert}
-                disabled={resolvePending}
-                data-testid="thread-convert"
-              >
-                Convert to review comment
-              </Button>
+          <div className="flex flex-col gap-2 pt-1">
+            {replySlot}
+            {showReplyButton || showResolveButton ? (
+              <div className="flex flex-wrap items-center gap-1">
+                {showReplyButton ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={onReply}>
+                    Reply
+                  </Button>
+                ) : null}
+                {showResolveButton ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={onResolve}
+                    disabled={resolvePending}
+                    data-testid="thread-resolve"
+                  >
+                    Resolve
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
           </div>
+          {question && !dismissed ? (
+            <QuestionCardFooter
+              issueId={issueId}
+              threadId={thread.root.id}
+              failed={thread.researcherRun?.status === "failed"}
+              pending={resolvePending}
+              onDismiss={onDismiss}
+              onConvert={onConvert}
+            />
+          ) : null}
         </>
       )}
 
@@ -196,6 +188,59 @@ export function CommentThread({
         />
       ) : null}
     </article>
+  );
+}
+
+function QuestionCardFooter({
+  issueId,
+  threadId,
+  failed,
+  pending,
+  onDismiss,
+  onConvert,
+}: {
+  issueId?: string;
+  threadId: string;
+  failed: boolean;
+  pending: boolean;
+  onDismiss?: () => void;
+  onConvert?: () => void;
+}) {
+  const showRetry = failed && issueId != null;
+  if (!showRetry && !onDismiss && !onConvert) return null;
+  return (
+    <footer
+      data-testid="question-card-footer"
+      className="mt-2 flex flex-wrap items-center gap-1 border-t border-border pt-2"
+    >
+      {showRetry ? (
+        <ResearcherRetryButton storyId={issueId} threadId={threadId} />
+      ) : null}
+      {onDismiss ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onDismiss}
+          disabled={pending}
+          data-testid="thread-dismiss"
+        >
+          Dismiss question
+        </Button>
+      ) : null}
+      {onConvert ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onConvert}
+          disabled={pending}
+          data-testid="thread-convert"
+        >
+          Convert to review comment
+        </Button>
+      ) : null}
+    </footer>
   );
 }
 

@@ -4,22 +4,17 @@ import {
   useContext,
   useMemo,
   useState,
-  type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { Send } from "lucide-react";
 import type { CommentInput } from "@server/schemas";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { ReviewComposer, ReviewDraftScope } from "@/features/reviews/components/review-composer";
 import { usePostComment } from "../../api/mutations";
-import { StoryComposerActions } from "./story-composer-actions";
+import { postCommentWhenIdle } from "../../lib/post-comment-when-idle";
 import {
   commentInputForComposer,
   composerDraftKey,
   type OpenDiffComposer,
 } from "../../lib/diff-thread-anchor";
-
-const COMPOSER_HINT = "Enter to send, Shift+Enter for a newline";
 
 type DiffComposerContextValue = {
   issueId: string;
@@ -28,9 +23,12 @@ type DiffComposerContextValue = {
   open: OpenDiffComposer | null;
   openNew: (anchor: Extract<OpenDiffComposer, { kind: "new" }>) => void;
   openReply: (threadId: string) => void;
-  drafts: Record<string, string>;
-  setDraft: (key: string, value: string) => void;
-  send: (open: OpenDiffComposer, kind?: "question") => void;
+  close: () => void;
+  send: (
+    open: OpenDiffComposer,
+    body: string,
+    kind?: "question",
+  ) => Promise<void>;
   pending: boolean;
 };
 
@@ -46,13 +44,12 @@ export function DiffComposerProvider({
 }: {
   issueId: string;
   commitSha: string;
-  /** Story composers offer Ask a question beside Comment. */
+  /** Story composers offer Ask a question beside Send. */
   allowQuestion?: boolean;
   children: ReactNode;
 }) {
   const post = usePostComment(issueId);
   const [open, setOpen] = useState<OpenDiffComposer | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const openNew = useCallback(
     (anchor: Extract<OpenDiffComposer, { kind: "new" }>) => {
@@ -63,32 +60,24 @@ export function DiffComposerProvider({
   const openReply = useCallback((threadId: string) => {
     setOpen({ kind: "reply", threadId });
   }, []);
-  const setDraft = useCallback((key: string, value: string) => {
-    setDrafts((prev) => ({ ...prev, [key]: value }));
-  }, []);
+  const close = useCallback(() => setOpen(null), []);
   const send = useCallback(
-    (target: OpenDiffComposer, kind?: "question") => {
-      const key = composerDraftKey(target);
-      const body = (drafts[key] ?? "").trim();
-      if (!body || post.isPending) return;
+    (target: OpenDiffComposer, body: string, kind?: "question") => {
+      const trimmed = body.trim();
+      if (!trimmed) {
+        return Promise.reject(new Error("comment was not posted"));
+      }
       const input: CommentInput = commentInputForComposer(
         target,
-        body,
+        trimmed,
         commitSha,
         kind,
       );
-      post.mutate(input, {
-        onSuccess: () => {
-          setDrafts((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
-          setOpen(null);
-        },
+      return postCommentWhenIdle(post, input).then(() => {
+        setOpen(null);
       });
     },
-    [allowQuestion, commitSha, drafts, post],
+    [commitSha, post],
   );
 
   const value = useMemo(
@@ -99,8 +88,7 @@ export function DiffComposerProvider({
       open,
       openNew,
       openReply,
-      drafts,
-      setDraft,
+      close,
       send,
       pending: post.isPending,
     }),
@@ -111,8 +99,7 @@ export function DiffComposerProvider({
       open,
       openNew,
       openReply,
-      drafts,
-      setDraft,
+      close,
       send,
       post.isPending,
     ],
@@ -120,7 +107,7 @@ export function DiffComposerProvider({
 
   return (
     <DiffComposerContext.Provider value={value}>
-      {children}
+      <ReviewDraftScope>{children}</ReviewDraftScope>
     </DiffComposerContext.Provider>
   );
 }
@@ -145,28 +132,15 @@ export function DiffThreadComposer({
 }: {
   target: OpenDiffComposer;
 }) {
-  const { drafts, setDraft, send, pending, allowQuestion } = useDiffComposer();
-  const draftKey = composerDraftKey(target);
-  const draft = drafts[draftKey] ?? "";
+  const { issueId, send, close, pending, allowQuestion } = useDiffComposer();
+  const draftKey = composerDraftKey(issueId, target);
   const askQuestion = allowQuestion && target.kind === "new";
-  const heading = askQuestion
-    ? "Comment or ask a question"
-    : target.kind === "new"
-      ? "Start a review thread"
-      : "Reply";
   const placeholder =
     target.kind === "new"
       ? target.startLine !== undefined
         ? `Comment on ${lineCaption(target)}`
         : "Add a comment"
       : "Reply";
-
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      send(target);
-    }
-  };
 
   return (
     <div
@@ -180,40 +154,18 @@ export function DiffThreadComposer({
           {lineCaption(target)}
         </p>
       ) : null}
-      {askQuestion ? null : (
-        <p className="text-sm text-foreground">{heading}</p>
-      )}
-      <div className={askQuestion ? "flex flex-col gap-2" : "flex min-w-0 items-end gap-2"}>
-        <Textarea
-          value={draft}
-          onChange={(event) => setDraft(draftKey, event.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={placeholder}
-          title={COMPOSER_HINT}
-          aria-label={heading}
-          className={`min-h-[40px] min-w-0 resize-none touch:min-h-[44px]${askQuestion ? "" : " flex-1"}`}
-        />
-        {askQuestion ? (
-          <StoryComposerActions
-            pending={pending}
-            canSend={draft.trim().length > 0}
-            onComment={() => send(target)}
-            onQuestion={() => send(target, "question")}
-          />
-        ) : (
-          <Button
-            size="icon"
-            variant="primary"
-            className="h-11 w-11 shrink-0"
-            onClick={() => send(target)}
-            disabled={pending || !draft.trim()}
-            title="Send"
-            aria-label="Send"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
+      {target.kind === "new" && !askQuestion ? (
+        <p className="text-sm text-foreground">Start a review thread</p>
+      ) : null}
+      <ReviewComposer
+        draftKey={draftKey}
+        placeholder={placeholder}
+        submitLabel="Send"
+        pending={pending}
+        onSubmit={(body) => send(target, body)}
+        onQuestion={askQuestion ? (body) => send(target, body, "question") : undefined}
+        onCancel={close}
+      />
     </div>
   );
 }

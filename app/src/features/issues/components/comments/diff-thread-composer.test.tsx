@@ -133,7 +133,7 @@ describe("DiffThreadComposer", () => {
     );
   });
 
-  it("offers Comment and Ask a question on a Story line composer", () => {
+  it("offers Send and Ask a question on a Story line composer", () => {
     const container = mount(true);
     act(() => {
       container

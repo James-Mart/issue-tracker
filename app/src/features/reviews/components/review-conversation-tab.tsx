@@ -1,9 +1,8 @@
-import { useState, type KeyboardEvent } from "react";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
-import { Textarea } from "@/components/ui/textarea";
 import { usePostComment } from "@/features/issues/api/mutations";
 import { useCommentThreads, useCommentsQuery } from "@/features/issues/api/queries";
-import { StoryComposerActions } from "@/features/issues/components/comments/story-composer-actions";
+import { postHumanComment } from "@/features/issues/lib/post-comment-when-idle";
+import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
 import { Markdown } from "@/features/issues/components/markdown";
 import {
   Marker,
@@ -14,7 +13,6 @@ import { isHumanRole, Message } from "@/features/issues/components/comments/mess
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
 import { Shimmer } from "@/features/issues/components/comments/shimmer";
 import type { CommentMessage, ReviewSubmission } from "@server/schemas";
-import { questionKindFields } from "@server/question-kind";
 import {
   isPlainNote,
   STORY_COMPOSER_LABEL,
@@ -26,9 +24,8 @@ import {
   reviewSubmittedLabel,
   type ConversationTimelineItem,
 } from "../lib/review-submission-ui";
+import { ReviewComposer, ReviewDraftScope } from "./review-composer";
 import { ReviewThread } from "./review-thread";
-
-const COMPOSER_ROLE = "human";
 
 function StandaloneComment({
   message,
@@ -134,36 +131,19 @@ export function ReviewConversationTab({
   const comments = useCommentsQuery(storyId);
   const { threads, problems } = useCommentThreads(storyId);
   const post = usePostComment(storyId);
-  const [draft, setDraft] = useState("");
 
-  const send = (kind?: "question") => {
-    const body = draft.trim();
-    if (!body || post.isPending) return;
-    post.mutate(
-      {
-        role: COMPOSER_ROLE,
-        body,
-        ...questionKindFields(kind),
-      },
-      { onSuccess: () => setDraft("") },
-    );
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      send();
-    }
-  };
+  const send = (body: string, kind?: "question") =>
+    postHumanComment(post, body, kind);
 
   const timeline = conversationTimelineItems(threads, submissions);
   const commentsReady = !comments.error && !comments.isLoading;
 
   return (
-    <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col"
-      data-testid="review-conversation-tab"
-    >
+    <ReviewDraftScope>
+      <div
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+        data-testid="review-conversation-tab"
+      >
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-3">
         {comments.error ? (
           <ShellState
@@ -207,24 +187,21 @@ export function ReviewConversationTab({
         ) : null}
       </div>
       {post.isPending ? <Shimmer label="Sending…" /> : null}
-      <div className="flex min-w-0 shrink-0 flex-col gap-2 border-t border-border px-1 py-3">
-        <Textarea
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={onKeyDown}
+      <div
+        className="flex min-w-0 shrink-0 flex-col gap-2 border-t border-border px-1 py-3"
+        data-testid="review-conversation-composer"
+      >
+        <ReviewComposer
+          draftKey={conversationDraftKey(storyId)}
           placeholder={STORY_COMPOSER_LABEL}
-          title="Enter to send a comment, Shift+Enter for a newline"
-          aria-label={STORY_COMPOSER_LABEL}
-          data-testid="review-conversation-composer"
-          className="min-h-[40px] min-w-0 flex-1 resize-none touch:min-h-[44px]"
-        />
-        <StoryComposerActions
+          submitLabel="Send"
           pending={post.isPending}
-          canSend={draft.trim().length > 0}
-          onComment={() => send()}
-          onQuestion={() => send("question")}
+          persistent
+          onSubmit={(body) => send(body)}
+          onQuestion={(body) => send(body, "question")}
         />
       </div>
-    </div>
+      </div>
+    </ReviewDraftScope>
   );
 }

@@ -63,12 +63,40 @@ describe("question researcher status", () => {
       "Researcher couldn't get an answer — the run timed out.",
     );
 
+    expect(failed?.querySelector('[data-testid="researcher-retry"]')).toBeNull();
     act(() => {
-      failed
-        ?.querySelector('[data-testid="researcher-retry"]')
+      thread
+        .querySelector(
+          '[data-testid="question-card-footer"] [data-testid="researcher-retry"]',
+        )
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(retry.mutate).toHaveBeenCalledWith("q-root");
+  });
+
+  it("leads the question footer with Retry, then Dismiss question and Convert", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    act(() => {
+      createRoot(container).render(
+        <CommentThread
+          thread={{
+            ...question,
+            researcherRun: { status: "failed", error: "the run timed out." },
+          }}
+          issueId="story-a"
+          onReply={vi.fn()}
+          onDismiss={vi.fn()}
+          onConvert={vi.fn()}
+        />,
+      );
+    });
+    const footer = container.querySelector('[data-testid="question-card-footer"]');
+    expect(
+      [...(footer?.querySelectorAll("button") ?? [])].map((button) =>
+        button.textContent?.replace(/\s+/g, " ").trim(),
+      ),
+    ).toEqual(["Retry", "Dismiss question", "Convert to review comment"]);
   });
 
   it("disables Retry while a retry is in flight", () => {
