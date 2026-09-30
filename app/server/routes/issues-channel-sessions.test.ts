@@ -883,7 +883,7 @@ describe("export channel sessions", () => {
     );
     expect(child.status).toBe(400);
     expect(await child.json()).toEqual({
-      error: 'issue "child-story" does not offer a channel',
+      error: 'channel "export" is not offered by issue "child-story"',
       code: "validation",
     });
 

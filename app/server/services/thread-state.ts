@@ -11,16 +11,20 @@ import {
   type ThreadView,
 } from "../schemas.js";
 
+type ThreadStateEventName = Exclude<
+  ThreadEventName,
+  "linked" | "researcher-session" | "converted"
+>;
+
 const THREAD_EVENT_STATE = {
   resolved: "resolved",
   unresolved: "open",
-} as const satisfies Record<
-  Exclude<ThreadEventName, "linked">,
-  ThreadView["state"]
->;
+  dismissed: "dismissed",
+  reopened: "open",
+} as const satisfies Record<ThreadStateEventName, ThreadView["state"]>;
 
 export function threadStateForEvent(
-  event: Exclude<ThreadEventName, "linked">,
+  event: ThreadStateEventName,
 ): ThreadView["state"] {
   return THREAD_EVENT_STATE[event];
 }
@@ -52,11 +56,18 @@ function parseLogRecord(
   return { ok: false, message: parsed.message };
 }
 
+export function commentThreadKind(root: {
+  kind?: ThreadView["kind"];
+}): ThreadView["kind"] {
+  return root.kind === "question" ? "question" : "review";
+}
+
 export function readyToTaskFrom(
+  kind: ThreadView["kind"],
   state: ThreadView["state"],
   linkedTaskId: string | undefined,
 ): boolean {
-  return state === "open" && linkedTaskId === undefined;
+  return kind === "review" && state === "open" && linkedTaskId === undefined;
 }
 
 /** Root ids of open threads linked to `taskId`, in thread order. */
@@ -66,15 +77,19 @@ export function openLinkedThreadRootIds(
 ): string[] {
   return threads
     .filter(
-      (thread) => thread.state === "open" && thread.linkedTaskId === taskId,
+      (thread) =>
+        thread.kind === "review" &&
+        thread.state === "open" &&
+        thread.linkedTaskId === taskId,
     )
     .map((thread) => thread.rootId);
 }
 
 export function formatThreadLine(thread: ThreadView): string {
+  const kind = thread.kind === "question" ? " question" : "";
   const linked =
     thread.linkedTaskId !== undefined ? ` linked=${thread.linkedTaskId}` : "";
-  return `${thread.rootId} ${thread.state}${linked}`;
+  return `${thread.rootId} ${thread.state}${kind}${linked}`;
 }
 
 export function formatThreadsForView(threads: ThreadView[]): string[] {
@@ -94,6 +109,8 @@ export function deriveThreadViews(
   const problems: Problem[] = [];
   const state = new Map<string, ThreadView["state"]>();
   const linkedTaskId = new Map<string, string>();
+  const researcherConversationId = new Map<string, string>();
+  const converted = new Map<string, NonNullable<ThreadView["converted"]>>();
   for (const event of events) {
     if (!roots.has(event.threadId)) {
       problems.push({
@@ -104,6 +121,14 @@ export function deriveThreadViews(
     }
     if (event.event === "linked") {
       linkedTaskId.set(event.threadId, event.taskId!);
+      continue;
+    }
+    if (event.event === "researcher-session") {
+      researcherConversationId.set(event.threadId, event.conversationId!);
+      continue;
+    }
+    if (event.event === "converted") {
+      converted.set(event.threadId, { by: event.by, at: event.at });
       continue;
     }
     state.set(event.threadId, threadStateForEvent(event.event));
@@ -119,24 +144,34 @@ export function deriveThreadViews(
     .filter((message) => !message.replyTo)
     .sort((a, b) => a.at.localeCompare(b.at))
     .map((root): ThreadView => {
+      const conversion = converted.get(root.id);
+      const kind = conversion ? "review" : commentThreadKind(root);
       const threadState = state.get(root.id) ?? "open";
       const linked = linkedTaskId.get(root.id);
+      const researcher = researcherConversationId.get(root.id);
       return {
         rootId: root.id,
-        kind: "review",
+        kind,
         state: threadState,
         ...(linked ? { linkedTaskId: linked } : {}),
-        readyToTask: readyToTaskFrom(threadState, linked),
+        ...(researcher && !conversion
+          ? { researcherConversationId: researcher }
+          : {}),
+        ...(conversion ? { converted: conversion } : {}),
+        readyToTask: readyToTaskFrom(kind, threadState, linked),
       };
     });
   return { threads, problems };
 }
 
+export type CommentLog = {
+  messages: Comment[];
+  events: ThreadEvent[];
+  problems: Problem[];
+};
+
 /** Split a `comments.jsonl` body into comments, thread events, and parse problems. */
-export function splitCommentLog(
-  issueId: string,
-  text: string,
-): { messages: Comment[]; events: ThreadEvent[]; problems: Problem[] } {
+export function splitCommentLog(issueId: string, text: string): CommentLog {
   const messages: Comment[] = [];
   const events: ThreadEvent[] = [];
   const problems: Problem[] = [];
@@ -167,22 +202,34 @@ export function splitCommentLog(
   return { messages, events, problems };
 }
 
+/** Thread views and problems for an already-split comment log. */
+export function commentsFromLog(
+  issueId: string,
+  log: CommentLog,
+  taskStatusById: Map<string, TaskStatus> = new Map(),
+): CommentsResponse {
+  const derived = deriveThreadViews(
+    issueId,
+    log.messages,
+    log.events,
+    taskStatusById,
+  );
+  return {
+    messages: log.messages,
+    threads: derived.threads,
+    problems: [...log.problems, ...derived.problems],
+  };
+}
+
 /** Parse a `comments.jsonl` body into comments, thread views, and problems. */
 export function parseCommentLog(
   issueId: string,
   text: string,
   taskStatusById: Map<string, TaskStatus> = new Map(),
 ): CommentsResponse {
-  const split = splitCommentLog(issueId, text);
-  const derived = deriveThreadViews(
+  return commentsFromLog(
     issueId,
-    split.messages,
-    split.events,
+    splitCommentLog(issueId, text),
     taskStatusById,
   );
-  return {
-    messages: split.messages,
-    threads: derived.threads,
-    problems: [...split.problems, ...derived.problems],
-  };
 }

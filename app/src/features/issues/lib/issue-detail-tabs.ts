@@ -33,6 +33,7 @@ const CHANNEL_TAB_LABELS: Record<ConversationChannel, string> = {
   planning: "Planning",
   implementing: "Implementing",
   export: "Export",
+  review: "Review",
 };
 
 /** Channel tab for an issue, when the kind offers one. */
@@ -50,14 +51,13 @@ export function channelTabForIssue(
   return undefined;
 }
 
-/** Agents tab for Task and Epic-child Story — kind-only, not data-dependent. */
+/** Agents tab for Task and Story (once its parent is known) — kind-only, not data-dependent. */
 export function agentsTabForIssue(
   issue: Issue,
   parentKind?: IssueKind,
 ): boolean {
   if (issue.kind === "task") return true;
-  if (issue.kind === "story" && parentKind === "epic") return true;
-  return false;
+  return issue.kind === "story" && parentKind !== undefined;
 }
 
 /** Diff tab for Task and Story — kind-only, not data-dependent. */

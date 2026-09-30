@@ -49,13 +49,17 @@ function Host() {
   );
 }
 
-function mount(): HTMLDivElement {
+function mount(allowQuestion = false): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
     root.render(
-      <DiffComposerProvider issueId="task-threads" commitSha={SHA}>
+      <DiffComposerProvider
+        issueId="task-threads"
+        commitSha={SHA}
+        allowQuestion={allowQuestion}
+      >
         <Host />
       </DiffComposerProvider>,
     );
@@ -118,6 +122,37 @@ describe("DiffThreadComposer", () => {
       {
         role: "human",
         body: "Include issue id in the draft key?",
+        anchor: {
+          path: "app/foo.ts",
+          side: "new",
+          line: 94,
+          commitSha: SHA,
+        },
+      },
+      expect.any(Object),
+    );
+  });
+
+  it("offers Comment and Ask a question on a Story line composer", () => {
+    const container = mount(true);
+    act(() => {
+      container
+        .querySelector('[data-testid="open-new"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const input = container.querySelector("textarea");
+    expect(input).not.toBeNull();
+    setDraft(input!, "Does this short-circuit?");
+    act(() => {
+      container
+        .querySelector('button[aria-label="Ask a question"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(postComment.mutate).toHaveBeenCalledWith(
+      {
+        role: "human",
+        body: "Does this short-circuit?",
+        kind: "question",
         anchor: {
           path: "app/foo.ts",
           side: "new",

@@ -368,8 +368,12 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   `{startLine}-{line}`; append ` (outdated)` after the location when the anchor
   is outdated). `{author}` is `name` when set, else `role`, followed by
   ` ({type})` when the comment has a `type`. On a Story, `--comments` also
-  appends `--- threads ---`: one line per thread root, `{rootId} open|resolved`,
-  plus ` linked={taskId}` when that thread is linked to a Task. See
+  appends `--- threads ---`: one line per thread root,
+  `{rootId} open|resolved|dismissed`, plus ` question` when the thread is a
+  question, plus ` linked={taskId}` when that thread is linked to a Task. A
+  converted question is a review thread, so that line omits ` question`. After
+  that thread's replies, `--comments` prints
+  `  [{at}] {name} converted this question to a review comment`. See
   [`comments.jsonl` message shape](#commentsjsonl-message-shape). Prefer
   `issue get <id> <field>` for a single field. Label lines: see
   [Project labels](#project-labels).
@@ -378,14 +382,16 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
 - **`comment`** — `issue comment <id> --role <role> --body <text>`
   (optional `--name`; optional anchor flags `--path`, `--side`, `--line`,
   optional `--start-line`, `--commit`; optional `--reply-to <commentId>`;
-  optional `--resolve`).
+  optional `--resolve`; optional `--kind question`).
   Appends one message to `comments.jsonl` (the CLI verb is `comment`; the
   on-disk log is `comments.jsonl`); prints the server-stamped `id` on stdout;
   refuses a Project id. Anchor flags require all of `--path`, `--side`,
   `--line`, and `--commit` together; `--reply-to` is mutually exclusive with
   anchor flags. `--resolve` replies and resolves that Story thread in the
   same write; it requires `--reply-to` and `--body`, and there is no CLI
-  unresolve. See [`comments.jsonl` message shape](#commentsjsonl-message-shape)
+  unresolve. `--kind question` starts a question thread on a new Story thread
+  root (a root with no `kind` is a review thread) and applies only to that
+  new root, not a reply. See [`comments.jsonl` message shape](#commentsjsonl-message-shape)
   and [Service layer](#service-layer).
 - **`merge`** — `issue merge <storyId> [--auto] [--match-head-commit <sha>]`;
   shells out to `gh pr merge --merge` with owner/repo/number from the Story's
@@ -1248,6 +1254,7 @@ Resolution is a thread event, not a flag on the comment.
 | `replyTo` | string? | when set, the `id` of the thread **root** this message replies to |
 | `type` | `"human-request"` \| `"human-response"`? | absent on ordinary comments; `request-human` writes `human-request` on a thread root, `human-done` writes `human-response` on the reply |
 | `anchor` | object? | optional line anchor on a root comment only (see below) |
+| `kind` | `"review"` \| `"question"`? | thread root only; absent means review. Refused on a reply and on a non-Story |
 
 **Threading (`replyTo`).** A thread is one root plus an ordered list of
 replies. Threads are exactly **one level deep**: `replyTo` must name a comment
@@ -1268,27 +1275,85 @@ an immutable commit. Object members:
 | `commitSha` | string | full 40- or 64-character hex object name; validated on append; never inferred from the issue |
 
 **Thread event (`type: "thread-event"`).** Records a change to a thread's
-resolution. Members:
+state. Members:
 
 | member | type | notes |
 | --- | --- | --- |
 | `threadId` | string | id of the thread **root** |
-| `event` | `"resolved"` \| `"unresolved"` | later Stories add event names on the same route |
+| `event` | `"resolved"` \| `"unresolved"` \| `"linked"` \| `"dismissed"` \| `"reopened"` \| `"converted"` \| `"researcher-session"` | `linked` carries `taskId`. `researcher-session` carries `conversationId`, and `recovered: true` when that session replaced an archived or unreadable conversation. `dismissed`, `reopened`, and `researcher-session` apply only to a question thread. `converted` is human-only and applies only to an open question thread; it turns that thread into a review thread without removing its comments |
 | `by` | `{ role, name? }` | who recorded the event |
 | `at` | ISO string | server-stamped on append |
 
 `GET /api/issues/:id/comments` returns `messages` plus derived `threads`:
-`{ rootId, kind: "review", state: "open" | "resolved" }`. `state` is the last
-`resolved` or `unresolved` event for that root, or `open` when there is none.
-Every root this Story defines has `kind: "review"`. An event whose `threadId`
-is not a root is skipped into `problems`.
+`{ rootId, kind: "review" | "question", state: "open" | "resolved" | "dismissed", linkedTaskId?, researcherConversationId?, readyToTask, researcherRun?, converted? }`.
+`kind` is `review` when a `converted` event exists for that root; otherwise it
+is the root comment's `kind`, or `review` when that field is absent.
+`converted` is `{ by, at }` from that event. `state` is the last state event
+for that root (`resolved`, `unresolved` → open, `dismissed`, `reopened` →
+open), or `open` when there is none. `converted` does not change `state`.
+`readyToTask` is true only for an open review thread with no linked Task. A
+question thread is never ready to task; a converted thread is a review thread
+and follows that rule. `researcherConversationId` is the last
+`researcher-session` event's `conversationId`, omitted once the thread is
+converted. An event whose `threadId` is not a root is skipped into `problems`.
 
-Humans record either event, with an optional reply `body`, via
+**Question researcher.** Posting a question root on a Story through
+`POST /api/issues/:id/comments` starts that question's researcher before the
+route responds: a fresh conversation on the Story's `review` channel (offered
+on every Story) with role
+[`issue-tracker-review-question`](agents/issue-tracker-review-question.md) at
+its model pin. Its prompt is the role body, notice that a reviewer asked about
+the Story's changes, the Story, thread id, and Project workspace, the question,
+and either the anchor (path, side, lines, commit) or, for a general question,
+the Story's diff range. Once the run has started, or has failed to start, the
+server appends `researcher-session` with `by: { role: "agent", name: "Researcher" }`.
+The researcher reads code read-only and replies in the thread with
+`issue comment <storyId> --reply-to <threadId> --role agent --name Researcher`.
+A CLI-posted question starts no researcher.
+
+A human reply (`role` `human`) to an open question thread through
+`POST /api/issues/:id/comments` resumes that thread's recorded researcher
+conversation, using the reply as the prompt. A live run receives the reply
+directly; a run that does not accept it holds the reply and sends it when
+the run finishes. An archived conversation, or one that cannot be read, is
+replaced: a new review-channel conversation is seeded with the role body,
+Story context, the anchor or diff range, and the thread's messages in order,
+and a `researcher-session` event with `recovered: true` becomes the current
+conversation. The first non-human reply after that event, and before the next
+`researcher-session`, has read-time `newSession: true`. `issue view --comments`
+appends ` (new session)` after that reply's author. A reply on a dismissed
+question, a converted thread, a review thread, or from a non-human leaves the
+researcher as it is.
+A CLI-posted reply does not resume it.
+
+`researcherRun` is read-time only, served by the comments route on an open
+question thread with a `researcherConversationId` and no non-human reply after
+the latest human message on the thread (the root, or a later human reply):
+`{ status: "running" }` while its run is live,
+else `{ status: "failed", error }`. `error` is the conversation's last
+transcript `error` event, which a review-channel run that ends other than
+`finished` records. When there is none, it says the run ended without a reply,
+or that the conversation no longer exists.
+`POST /api/issues/:storyId/threads/:threadId/researcher/retry` starts a fresh
+researcher conversation for that question and returns `204`. It refuses with
+`conflict` unless `researcherRun` is `failed`. Each researcher conversation is
+listed among the Story's agent runs with role `issue-tracker-review-question`.
+
+Humans record `resolved`, `unresolved`, `dismissed`, `reopened`, or
+`converted`, with an optional reply `body`, via
 `POST /api/issues/:storyId/threads/:threadId/events` with
 `{ event, body?, name? }`. A `body` appends a reply in the same write. The
-route is Story-only and stamps `by.role` as `human`. Agents record `resolved`
-only through `issue comment --resolve`, which requires a reply body. There is
-no CLI unresolve.
+route is Story-only and stamps `by.role` as `human`. `dismissed`,
+`reopened`, and `converted` are human-only; there is no CLI for them. The
+thread keeps its question and answers. Surfaces show the conversion as a
+system event credited to the converting human
+(`{name} converted this question to a review comment`, using `by.name` or
+`by.role`), not as a researcher reply. `issue view --comments` prints that
+sentence indented under the thread's replies. After conversion the thread
+offers Resolve and Unresolve, shows a Task chip when linked, and counts
+toward Submit when ready. The researcher is not resumed for that thread
+again. Agents record `resolved` only through `issue comment --resolve`,
+which requires a reply body. There is no CLI unresolve.
 
 **Outdated (`outdated`).** Read-time only — never stored in `comments.jsonl`.
 Present on anchored comments when the anchored line or range at
@@ -1349,14 +1414,20 @@ no consumer can persist a broken file.
   `POST /api/stories/:id/human-done` calls `humanDone`.
   Append-time validation refuses invalid `replyTo`, `anchor`, and `commitSha`
   values.
-- `appendThreadEvent(storyId, threadId, input)` — appends a thread event, and
+-   `appendThreadEvent(storyId, threadId, input)` — appends a thread event, and
   a reply when `body` is set, in one write on a Story. Refuses a non-Story, a
-  `threadId` that is not a thread root, an agent `unresolved`, and an agent
-  `resolved` without `body`. `POST /api/issues/:storyId/threads/:threadId/events`
+  `threadId` that is not a thread root, an agent `unresolved`, an agent
+  `resolved` without `body`, dismiss, reopen, or convert from a non-human,
+  dismiss or reopen on a review thread (including one already converted),
+  convert unless the thread is an open question, resolve or unresolve on a
+  question thread, and `researcher-session` without `conversationId` or on a
+  review thread.
+  `POST /api/issues/:storyId/threads/:threadId/events`
   stamps `by.role` `human` and calls this path.
 - `readComments(id)` — reads/parses `comments.jsonl`, skipping malformed lines into
   `problems`. An issue with no comment log returns empty messages and threads.
-  `threads` is the derived view (`rootId`, `kind: "review"`, `state`).
+  `threads` is the derived view (`rootId`, `kind`, `state`, `readyToTask`,
+  optional `linkedTaskId`, `researcherConversationId`, and `converted`).
 - Attachment bytes (`attachments.ts`): `listAttachments` / `getAttachment` /
   `putAttachment` (unique name on collision) / `removeAttachment` — see
   [Attachments](#attachments). Not part of `read(id)` payloads.

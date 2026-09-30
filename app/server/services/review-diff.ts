@@ -9,6 +9,7 @@ import {
   maxPatchBytes,
   parseShortstat,
   prepareStoryChange,
+  requireMergeBase,
   runGitOrCommitUnreachable,
   type StoryChangePreparation,
 } from "./change.js";
@@ -47,16 +48,6 @@ async function loadSpan(
 ): Promise<{ storyId: string; workspace: string; prepared: StoryChangePreparation }> {
   const review = readReviewView(projectId, reviewId);
   return loadPrepared(projectId, review.target.storyId);
-}
-
-function requireMergeBase(
-  storyId: string,
-  prepared: StoryChangePreparation,
-): Exclude<StoryChangePreparation, { reason: "no-merge-base" }> {
-  if (prepared.state === "empty" && prepared.reason === "no-merge-base") {
-    throw new IssueError("validation", `story "${storyId}" has no merge base`);
-  }
-  return prepared;
 }
 
 function nulRecords(text: string): string[] {

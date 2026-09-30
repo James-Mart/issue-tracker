@@ -3,13 +3,14 @@ import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useSearchParams } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CommentMessage, IssueDetail } from "@server/schemas";
+import type { CommentMessage, CommentThreadView, IssueDetail } from "@server/schemas";
 import { IssueCommentsSection } from "./comments-section";
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
 
 const commentsState = vi.hoisted(() => ({
   messages: [] as CommentMessage[],
+  threads: [] as CommentThreadView[],
   isLoading: false,
   error: null as Error | null,
 }));
@@ -21,7 +22,11 @@ const postComment = vi.hoisted(() => ({
 
 const useCommentsQuery = vi.hoisted(() =>
   vi.fn(() => ({
-    data: { messages: commentsState.messages, problems: [] },
+    data: {
+      messages: commentsState.messages,
+      threads: commentsState.threads,
+      problems: [],
+    },
     isLoading: commentsState.isLoading,
     error: commentsState.error,
   })),
@@ -39,6 +44,7 @@ vi.mock("../../api/queries", () => ({
 
 vi.mock("../../api/mutations", () => ({
   usePostComment: () => postComment,
+  usePostThreadEvent: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 function comment(
@@ -131,8 +137,27 @@ function SearchProbe({
   return null;
 }
 
+function story(): IssueDetail {
+  return {
+    id: "story-threads",
+    kind: "story",
+    title: "Story threads",
+    partOf: "review-conversations",
+    order: 0,
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+    needsAttention: false,
+    attentionReason: null,
+    archived: false,
+    description: "",
+    version: "1",
+    merged: false,
+  };
+}
+
 function mount(
   onSearch?: (search: string) => void,
+  issue: IssueDetail = task(),
 ): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -141,7 +166,7 @@ function mount(
     root.render(
       <MemoryRouter>
         {onSearch ? <SearchProbe onSearch={onSearch} /> : null}
-        <IssueCommentsSection issue={task()} />
+        <IssueCommentsSection issue={issue} />
       </MemoryRouter>,
     );
   });
@@ -162,6 +187,7 @@ function setDraft(input: HTMLTextAreaElement, value: string) {
 afterEach(() => {
   document.body.innerHTML = "";
   commentsState.messages = [];
+  commentsState.threads = [];
   commentsState.isLoading = false;
   commentsState.error = null;
   postComment.mutate.mockReset();
@@ -301,5 +327,38 @@ describe("IssueCommentsSection", () => {
       anchor?: unknown;
     };
     expect(payload.anchor).toBeUndefined();
+  });
+
+  it("offers Resolve after a question is converted on the story comments column", () => {
+    commentsState.messages = [
+      comment({
+        id: "asked",
+        at: "2026-09-30T03:06:00.000Z",
+        role: "human",
+        name: "Jared",
+        kind: "question",
+        body: "Why does resolving a thread post its reply in the same write?",
+      }),
+    ];
+    commentsState.threads = [
+      {
+        rootId: "asked",
+        kind: "review",
+        state: "open",
+        readyToTask: true,
+        converted: {
+          by: { role: "human", name: "Jared" },
+          at: "2026-09-30T03:50:00.000Z",
+        },
+      },
+    ];
+    const container = mount(undefined, story());
+    const card = container.querySelector('[data-thread-root="asked"]');
+    expect(card?.getAttribute("data-thread-kind")).toBe("review");
+    expect(card?.textContent).toContain(
+      "Jared converted this question to a review comment",
+    );
+    expect(card?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
+    expect(card?.querySelector('[data-testid="thread-convert"]')).toBeNull();
   });
 });

@@ -117,6 +117,11 @@ export function offersExportChannel(
   return false;
 }
 
+/** Review conversations (question researchers) anchor to the Story under review. */
+export function offersReviewChannel(issue: Issue): boolean {
+  return issue.kind === "story";
+}
+
 export type AttentionIssue = Extract<
   Issue,
   { kind: "epic" | "story" | "task" }
