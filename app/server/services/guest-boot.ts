@@ -5,7 +5,7 @@ import { issuesDir, trackerGuest } from "../config.js";
 export const AGENT_STACK_DATA_DIR_ENV = "AGENT_STACK_DATA_DIR";
 
 /** Real path, or undefined when the path is absent (ENOENT / ENOTDIR). */
-function realPath(path: string): string | undefined {
+export function realPath(path: string): string | undefined {
   try {
     return realpathSync(resolve(path));
   } catch (err) {
