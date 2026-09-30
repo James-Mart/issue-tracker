@@ -7,6 +7,10 @@ import type { StoryApplyDoc } from "./apply-schema.js";
 import { appendTasks, type AppendSummary } from "./append.js";
 import { IssueError } from "./errors.js";
 import { refIsAncestor } from "./git-read.js";
+import {
+  assertGuestAllowsOutwardEffect,
+  GUEST_REFUSED_UPDATE_FROM_MERGE_BASE,
+} from "./guest-outward-effects.js";
 import { list } from "./issues.js";
 import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { uniqueSlug } from "./slug.js";
@@ -152,6 +156,7 @@ function mergeBaseAppendDoc(
 }
 
 export function appendUpdateFromMergeBase(storyId: string): Promise<AppendSummary> {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_UPDATE_FROM_MERGE_BASE);
   const { issues, derived } = list();
   const detail = issues.find((issue) => issue.id === storyId);
   if (!detail || detail.kind !== "story") {

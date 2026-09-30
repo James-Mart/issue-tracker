@@ -1,14 +1,11 @@
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import type { Server } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessions } from "./agent-sessions.js";
@@ -22,11 +19,21 @@ import {
   GUEST_REFUSED_RESUME_AGENT,
   GUEST_REFUSED_START_AGENT,
 } from "./guest-agent-launch.js";
+import {
+  AT,
+  createGuestStore,
+  disposeGuestStore,
+  expectGuest,
+  type GuestStore,
+  listen,
+  readIssue,
+  writeIssue,
+} from "./guest-refusal.test-harness.js";
 
-const AT = "2026-07-09T14:00:00.000Z";
 const AT_END = "2026-07-09T16:00:00.000Z";
 const QUEUED = "2026-07-01T00:00:00.000Z";
 
+let store: GuestStore;
 let root: string;
 let issuesDir: string;
 let conversationsDir: string;
@@ -35,18 +42,6 @@ let baseUrl: string;
 let sendPrompt: ReturnType<typeof vi.fn>;
 let cancel: ReturnType<typeof vi.fn>;
 let steer: ReturnType<typeof vi.fn>;
-
-function writeIssue(id: string, body: Record<string, unknown>): void {
-  mkdirSync(join(issuesDir, id), { recursive: true });
-  writeFileSync(
-    join(issuesDir, id, "issue.json"),
-    JSON.stringify({ id, createdAt: AT, updatedAt: AT, ...body }),
-  );
-}
-
-function readRaw(id: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(issuesDir, id, "issue.json"), "utf8"));
-}
 
 function conversationIds(): string[] {
   if (!existsSync(conversationsDir)) return [];
@@ -79,39 +74,23 @@ function stubSessions(): AgentSessions {
   };
 }
 
-async function expectGuest(res: Response, error: string): Promise<void> {
-  expect(res.status).toBe(403);
-  expect(await res.json()).toEqual({ error, code: "guest" });
-}
-
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "issue-tracker-guest-launch-"));
-  issuesDir = join(root, "issues");
+  store = createGuestStore("issue-tracker-guest-launch-");
+  ({ root, issuesDir } = store);
   conversationsDir = join(root, "conversations");
-  mkdirSync(issuesDir, { recursive: true });
   mkdirSync(conversationsDir, { recursive: true });
-  vi.resetModules();
-  vi.stubEnv("ISSUES_DIR", issuesDir);
-  vi.stubEnv("ISSUE_TRACKER_GUEST", "1");
   server = undefined;
 });
 
 afterEach(async () => {
-  vi.unstubAllEnvs();
-  if (server) {
-    const listening = server;
-    await new Promise<void>((resolve, reject) => {
-      listening.close((err) => (err ? reject(err) : resolve()));
-    });
-  }
-  rmSync(root, { recursive: true, force: true });
+  await disposeGuestStore(store, server);
 });
 
 describe("guest agent launch refusals", () => {
   beforeEach(async () => {
     const workspace = join(root, "workspace");
     mkdirSync(workspace, { recursive: true });
-    writeIssue("platform", {
+    writeIssue(issuesDir, "platform", {
       kind: "project",
       title: "Platform",
       order: 0,
@@ -119,27 +98,27 @@ describe("guest agent launch refusals", () => {
       maxImplementingRuns: 1,
       autonomous: true,
     });
-    writeIssue("ship", {
+    writeIssue(issuesDir, "ship", {
       kind: "epic",
       title: "Ship",
       partOf: "platform",
       order: 1,
       workQueuedAt: QUEUED,
     });
-    writeIssue("story", {
+    writeIssue(issuesDir, "story", {
       kind: "story",
       title: "Story",
       partOf: "ship",
       order: 1,
     });
-    writeIssue("linked-task", {
+    writeIssue(issuesDir, "linked-task", {
       kind: "task",
       title: "Linked task",
       partOf: "story",
       status: "todo",
       order: 1,
     });
-    writeIssue("idea", {
+    writeIssue(issuesDir, "idea", {
       kind: "idea",
       title: "Idea",
       partOf: "platform",
@@ -214,15 +193,7 @@ describe("guest agent launch refusals", () => {
     );
 
     const { createApp } = await import("../app.js");
-    const app = createApp(stubSessions());
-    await new Promise<void>((resolve) => {
-      server = app.listen(0, "127.0.0.1", () => resolve());
-    });
-    const addr = server!.address();
-    if (!addr || typeof addr === "string") {
-      throw new Error("expected TCP listen address");
-    }
-    baseUrl = `http://127.0.0.1:${addr.port}`;
+    ({ server, baseUrl } = await listen(createApp(stubSessions())));
   });
 
   it("reads copied conversations, channel sessions, and runs", async () => {
@@ -329,9 +300,9 @@ describe("guest agent launch refusals", () => {
     await runLauncherPass(stubSessions());
 
     expect(sendPrompt).not.toHaveBeenCalled();
-    expect(readRaw("ship").workQueuedAt).toBe(QUEUED);
-    expect(readRaw("ship").needsAttention).toBeUndefined();
-    expect(readRaw("idea").planQueuedAt).toBe(QUEUED);
+    expect(readIssue(issuesDir, "ship").workQueuedAt).toBe(QUEUED);
+    expect(readIssue(issuesDir, "ship").needsAttention).toBeUndefined();
+    expect(readIssue(issuesDir, "idea").planQueuedAt).toBe(QUEUED);
     expect(existsSync(join(issuesDir, "idea", "comments.jsonl"))).toBe(false);
     expect(conversationIds()).toEqual(["channel-copied", "copied"]);
 

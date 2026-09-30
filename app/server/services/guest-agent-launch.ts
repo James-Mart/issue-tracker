@@ -1,5 +1,5 @@
 import { trackerGuest } from "../config.js";
-import { IssueError } from "./errors.js";
+import { throwGuestRefusal } from "./guest-refusal.js";
 
 export const GUEST_REFUSED_CONVERSATION_PROMPT =
   "guest refused to start a conversation prompt";
@@ -18,12 +18,7 @@ export function guestRefusesAgentLaunch(): boolean {
   return trackerGuest;
 }
 
-/**
- * Throw before a conversation write or SDK call. HTTP surfaces this as 403
- * `{ error: what, code: "guest" }` through the usual error handler.
- */
+/** Throw a guest refusal before a conversation write or SDK call. */
 export function assertGuestAllowsAgentLaunch(what: string): void {
-  if (guestRefusesAgentLaunch()) {
-    throw new IssueError("guest", what);
-  }
+  if (guestRefusesAgentLaunch()) throwGuestRefusal(what);
 }
