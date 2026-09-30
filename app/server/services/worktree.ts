@@ -1,11 +1,20 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  renameSync,
+  unlinkSync,
+  writeSync,
+} from "fs";
 import { dirname } from "path";
 import type { Issue, IssuePatch } from "../schemas.js";
 import {
   setupLogPathFor,
   worktreePathFor,
 } from "../worktree-constants.js";
+import { appendOutputTail, killProcessGroup } from "./bounded-process.js";
 import { deriveStoryWorktree } from "./derive-worktree.js";
 import { IssueError } from "./errors.js";
 import { branchExists, currentBranch, listedWorktrees } from "./git-read.js";
@@ -125,28 +134,143 @@ async function dropUnlockedMissingRegistration(
   await runGitWrite(["worktree", "remove", "--force", entry.path], workspace);
 }
 
+/** Setup is sometimes legitimately slow. Past this, the process group is killed. */
+const WORKTREE_SETUP_TIMEOUT_MINUTES = 10;
+const WORKTREE_SETUP_TIMEOUT_MS = WORKTREE_SETUP_TIMEOUT_MINUTES * 60 * 1000;
+
+export const WORKTREE_SETUP_TIMEOUT_LINE =
+  `command timed out after ${WORKTREE_SETUP_TIMEOUT_MINUTES} minutes`;
+
+let setupTimeoutMsForTests: number | undefined;
+
+/** Test-only. `undefined` restores `WORKTREE_SETUP_TIMEOUT_MS`. */
+export function setWorktreeSetupTimeoutMsForTests(ms: number | undefined): void {
+  setupTimeoutMsForTests = ms;
+}
+
+function setupTimeoutMs(): number {
+  return setupTimeoutMsForTests ?? WORKTREE_SETUP_TIMEOUT_MS;
+}
+
+/** Move an existing log aside so a successful run can put it back. */
+function parkSetupLog(logPath: string): string | undefined {
+  if (!existsSync(logPath)) return undefined;
+  const prior = `${logPath}.prior`;
+  if (existsSync(prior)) {
+    throw new IssueError(
+      "conflict",
+      `setup log "${logPath}" and "${prior}" both exist`,
+    );
+  }
+  renameSync(logPath, prior);
+  return prior;
+}
+
+/** A failed run replaces the parked log with the new one. */
+function commitSetupLog(prior: string | undefined): void {
+  if (prior) unlinkSync(prior);
+}
+
+/** A successful run drops its log and restores the parked one. */
+function discardSetupLog(logPath: string, prior: string | undefined): void {
+  unlinkSync(logPath);
+  if (prior) renameSync(prior, logPath);
+}
+
+/**
+ * Stream combined stdout and stderr to `logPath`. Memory keeps only a bounded
+ * tail of that text. The child leads its own process group; at the setup
+ * timeout the group is killed and the log ends with the timeout line. Exit 0
+ * drops this run's log.
+ */
 function runSetupCommand(
   cwd: string,
   command: string,
-): Promise<{ code: number; output: string }> {
+  logPath: string,
+): Promise<{ code: number }> {
+  mkdirSync(dirname(logPath), { recursive: true });
+  const prior = parkSetupLog(logPath);
+  let logFd: number | undefined;
+  try {
+    logFd = openSync(logPath, "w");
+  } catch (err) {
+    if (prior) renameSync(prior, logPath);
+    throw err;
+  }
   return new Promise((resolve, reject) => {
-    let output = "";
+    let tail = "";
+    let settled = false;
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const closeLog = () => {
+      if (logFd === undefined) return;
+      closeSync(logFd);
+      logFd = undefined;
+    };
+    const beginSettle = (): boolean => {
+      if (settled) return false;
+      settled = true;
+      clearTimeout(timer);
+      return true;
+    };
+    const discardRun = () => {
+      closeLog();
+      discardSetupLog(logPath, prior);
+    };
     const child = spawn("sh", ["-c", command], {
       cwd,
       env: process.env,
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    child.stdout.on("data", (chunk: Buffer | string) => {
-      output += chunk;
-    });
-    child.stderr.on("data", (chunk: Buffer | string) => {
-      output += chunk;
-    });
+    timer = setTimeout(() => {
+      if (settled) return;
+      timedOut = true;
+      if (child.pid !== undefined) killProcessGroup(child.pid);
+    }, setupTimeoutMs());
+    const onData = (chunk: Buffer | string) => {
+      if (settled || logFd === undefined) return;
+      try {
+        if (typeof chunk === "string") writeSync(logFd, chunk);
+        else writeSync(logFd, chunk);
+      } catch (err) {
+        if (!beginSettle()) return;
+        if (child.pid !== undefined) killProcessGroup(child.pid);
+        discardRun();
+        reject(err instanceof Error ? err : new Error(String(err)));
+        return;
+      }
+      const text = typeof chunk === "string" ? chunk : chunk.toString();
+      tail = appendOutputTail(tail, text);
+    };
+    child.stdout?.on("data", onData);
+    child.stderr?.on("data", onData);
     child.on("error", (err: NodeJS.ErrnoException) => {
+      if (!beginSettle()) return;
+      discardRun();
       reject(new IssueError("validation", err.message));
     });
-    child.on("close", (code) => {
-      resolve({ code: code ?? 1, output });
+    child.on("close", (code, signal) => {
+      if (!beginSettle()) return;
+      const killedOnTimeout = timedOut && signal !== null;
+      try {
+        if (killedOnTimeout && logFd !== undefined) {
+          const breakLine = tail.length > 0 && !tail.endsWith("\n") ? "\n" : "";
+          writeSync(logFd, `${breakLine}${WORKTREE_SETUP_TIMEOUT_LINE}\n`);
+        }
+        closeLog();
+        const success = code === 0 && signal === null;
+        if (success) discardSetupLog(logPath, prior);
+        else commitSetupLog(prior);
+        resolve({ code: success ? 0 : (code ?? 1) });
+      } catch (err) {
+        try {
+          discardRun();
+        } catch {
+          // A second cleanup failure must not escape this close handler.
+        }
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
     });
   });
 }
@@ -154,13 +278,10 @@ function runSetupCommand(
 async function recordSetupFailure(
   storyId: string,
   projectId: string,
-  output: string,
   code: number,
   extra: IssuePatch,
 ): Promise<never> {
   const logPath = setupLogPathFor(projectId, storyId);
-  mkdirSync(dirname(logPath), { recursive: true });
-  writeFileSync(logPath, output);
   await update(storyId, { ...extra, worktreeSetupFailed: true });
   throw new IssueError("conflict", SETUP_FAILED_ERROR(storyId, code, logPath), {
     setupLogPath: logPath,
@@ -178,12 +299,13 @@ async function applySetupCommand(
     await update(storyId, { ...extra, worktreeSetupFailed: false });
     return;
   }
-  const { code, output } = await runSetupCommand(worktreePath, setupCommand);
+  const logPath = setupLogPathFor(projectId, storyId);
+  const { code } = await runSetupCommand(worktreePath, setupCommand, logPath);
   if (code === 0) {
     await update(storyId, { ...extra, worktreeSetupFailed: false });
     return;
   }
-  await recordSetupFailure(storyId, projectId, output, code, extra);
+  await recordSetupFailure(storyId, projectId, code, extra);
 }
 
 export async function createStoryWorktree(storyId: string): Promise<string> {

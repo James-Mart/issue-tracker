@@ -11,6 +11,7 @@ import {
 import { join } from "node:path";
 import { createServer, type AddressInfo, type Server } from "node:net";
 import { appDir } from "../config.js";
+import { killProcessGroup } from "./bounded-process.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
 import {
   conversationMetaExists,
@@ -397,14 +398,6 @@ export async function startMockupStack(
   return { state, reused: false };
 }
 
-function signalGroup(pid: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(-pid, signal);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
-  }
-}
-
 /**
  * True while any process still belongs to one of these groups, including a
  * group reparented away from this process. Zombies count until they are
@@ -497,14 +490,14 @@ async function stopRecordedGroup(state: MockupStackState): Promise<void> {
 
   const groups = new Set<number>([info.pgrp]);
   if (isMockupStackLive(state)) {
-    signalGroup(state.pid, "SIGTERM");
+    killProcessGroup(state.pid, "SIGTERM");
     const releasedOnTerm = await waitUntilReleased(
       groups,
       state.port,
       TERM_GRACE_MS,
     );
     if (!releasedOnTerm) {
-      signalGroup(info.pgrp, "SIGKILL");
+      killProcessGroup(info.pgrp, "SIGKILL");
       const releasedOnKill = await waitUntilReleased(
         groups,
         state.port,

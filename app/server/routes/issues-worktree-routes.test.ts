@@ -162,6 +162,25 @@ async function postRemove(
   return { status: res.status, json };
 }
 
+async function waitForLogText(logPath: string, text: string): Promise<void> {
+  for (let i = 0; i < 100; i++) {
+    if (existsSync(logPath) && readFileSync(logPath, "utf8").includes(text)) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`timed out waiting for ${text} in ${logPath}`);
+}
+
+function isPidCollected(pid: number): boolean {
+  return !existsSync(`/proc/${pid}`);
+}
+
+async function waitUntilCollected(pid: number): Promise<boolean> {
+  for (let i = 0; i < 100 && !isPidCollected(pid); i++) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return isPidCollected(pid);
+}
+
 async function postSetup(
   id: string,
 ): Promise<{ status: number; json: unknown }> {
@@ -376,6 +395,8 @@ describe("POST /api/issues/:id/worktree/setup", () => {
     writeStory("a");
     const path = await createWorktree("a");
     const logPath = setupLogPathFor("p", "a");
+    mkdirSync(dirname(logPath), { recursive: true });
+    writeFileSync(logPath, "previous failure\n");
 
     const { status, json } = await postSetup("a");
     expect(status).toBe(409);
@@ -384,9 +405,123 @@ describe("POST /api/issues/:id/worktree/setup", () => {
       code: "conflict",
       setupLogPath: logPath,
     });
-    expect(existsSync(logPath)).toBe(true);
+    expect(readFileSync(logPath, "utf8")).toContain("FAIL");
+    expect(readFileSync(logPath, "utf8")).not.toContain("previous failure");
+    expect(existsSync(`${logPath}.prior`)).toBe(false);
     expect(readStoryJson("a").worktreeSetupFailed).toBe(true);
     expect(existsSync(path)).toBe(true);
+  });
+
+  it("keeps the full setup log when output exceeds the in-memory tail", async () => {
+    const { OUTPUT_TAIL_LIMIT } = await import("../services/bounded-process.js");
+    const bytes = OUTPUT_TAIL_LIMIT + 50;
+    const script = `process.stdout.write("HEAD\\n" + "x".repeat(${bytes}) + "\\nTAIL\\n"); process.exit(1)`;
+    writeIssue("p", {
+      kind: "project",
+      title: "Proj",
+      workspace,
+      setupCommand: `node -e ${JSON.stringify(script)}`,
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeStory("a");
+    await createWorktree("a");
+    const logPath = setupLogPathFor("p", "a");
+
+    const { status, json } = await postSetup("a");
+    expect(status).toBe(409);
+    expect(json).toEqual({
+      error: expect.stringMatching(/setup command failed/),
+      code: "conflict",
+      setupLogPath: logPath,
+    });
+    const body = readFileSync(logPath, "utf8");
+    expect(body.startsWith("HEAD\n")).toBe(true);
+    expect(body.endsWith("\nTAIL\n")).toBe(true);
+    expect(body.length).toBeGreaterThan(OUTPUT_TAIL_LIMIT);
+    expect(readStoryJson("a").worktreeSetupFailed).toBe(true);
+  });
+
+  it("streams setup output before the command exits and leaves no log on success", async () => {
+    const sentinel = join(dir, "hold-setup");
+    writeFileSync(sentinel, "hold");
+    const script = 'process.stdout.write("STREAMED\\n")';
+    writeIssue("p", {
+      kind: "project",
+      title: "Proj",
+      workspace,
+      setupCommand: `node -e ${JSON.stringify(script)}; while [ -f ${JSON.stringify(sentinel)} ]; do sleep 0.05; done`,
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeStory("a");
+    await createWorktree("a");
+    const logPath = setupLogPathFor("p", "a");
+    const pending = postSetup("a");
+    try {
+      await waitForLogText(logPath, "STREAMED");
+    } finally {
+      rmSync(sentinel, { force: true });
+    }
+    const { status, json } = await pending;
+    expect(status).toBe(204);
+    expect(json).toBeNull();
+    expect(existsSync(logPath)).toBe(false);
+    expect(readStoryJson("a").worktreeSetupFailed).toBeUndefined();
+  });
+
+  it("puts an existing setup log back when setup succeeds", async () => {
+    writeStory("a");
+    await createWorktree("a");
+    const logPath = setupLogPathFor("p", "a");
+    mkdirSync(dirname(logPath), { recursive: true });
+    writeFileSync(logPath, "previous failure\n");
+
+    const { status } = await postSetup("a");
+    expect(status).toBe(204);
+    expect(readFileSync(logPath, "utf8")).toBe("previous failure\n");
+    expect(existsSync(`${logPath}.prior`)).toBe(false);
+    expect(readStoryJson("a").worktreeSetupFailed).toBeUndefined();
+  });
+
+  it("kills the setup process group at the timeout and records a failing setup", async () => {
+    // beforeEach resetModules, so the server is bound to a fresh worktree module.
+    const { setWorktreeSetupTimeoutMsForTests, WORKTREE_SETUP_TIMEOUT_LINE } = await import(
+      "../services/worktree.js"
+    );
+    setWorktreeSetupTimeoutMsForTests(400);
+    const pidFile = join(dir, "grandchild.pid");
+    writeIssue("p", {
+      kind: "project",
+      title: "Proj",
+      workspace,
+      setupCommand: `printf partial; bash -c 'trap "" HUP; sleep 2' & echo $! > ${JSON.stringify(pidFile)}; wait`,
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeStory("a");
+    const path = await createWorktree("a");
+    const logPath = setupLogPathFor("p", "a");
+
+    try {
+      const { status, json } = await postSetup("a");
+      expect(status).toBe(409);
+      expect(json).toEqual({
+        error: expect.stringMatching(/setup command failed/),
+        code: "conflict",
+        setupLogPath: logPath,
+      });
+      expect(readFileSync(logPath, "utf8")).toBe(`partial\n${WORKTREE_SETUP_TIMEOUT_LINE}\n`);
+      expect(readStoryJson("a").worktreeSetupFailed).toBe(true);
+      expect(existsSync(path)).toBe(true);
+      const grandchild = Number(readFileSync(pidFile, "utf8").trim());
+      expect(await waitUntilCollected(grandchild)).toBe(true);
+    } finally {
+      setWorktreeSetupTimeoutMsForTests(undefined);
+    }
   });
 
   it("returns 400 when the id is not a Story", async () => {
