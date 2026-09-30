@@ -9,11 +9,26 @@
  *   the next command's cwd. When that directory is removed (e.g. a Story
  *   worktree deleted by merge), the next spawn fails with
  *   `spawn /bin/bash ENOENT`. Only that tool call fails.
+ * - Network `ConnectError`: before every shell command the SDK looks up the
+ *   team repo blocklist over RPC and does not catch a transport failure, so a
+ *   momentary `ECONNRESET` escapes from that one tool call.
  *
  * Anything else is fatal, and leaves a crash report in `logsDir`.
  */
 
 import { writeCrashReport } from "./crash-report.js";
+
+const NETWORK_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "EAI_AGAIN",
+]);
+
+const MAX_CAUSE_DEPTH = 8;
 
 export function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
@@ -25,9 +40,22 @@ export function isSpawnEnoent(err: unknown): boolean {
   return code === "ENOENT" && typeof syscall === "string" && syscall.startsWith("spawn");
 }
 
+/** A Connect RPC error whose cause chain bottoms out in a transport errno. */
+export function isNetworkConnectError(err: unknown): boolean {
+  if (!(err instanceof Error) || err.name !== "ConnectError") return false;
+  let current: unknown = err;
+  for (let depth = 0; current instanceof Error && depth < MAX_CAUSE_DEPTH; depth++) {
+    const { code } = current as NodeJS.ErrnoException;
+    if (typeof code === "string" && NETWORK_ERROR_CODES.has(code)) return true;
+    current = current.cause;
+  }
+  return false;
+}
+
 function survivableLabel(err: unknown): string | null {
   if (isAbortError(err)) return "AbortError";
   if (isSpawnEnoent(err)) return "spawn ENOENT";
+  if (isNetworkConnectError(err)) return "network ConnectError";
   return null;
 }
 
