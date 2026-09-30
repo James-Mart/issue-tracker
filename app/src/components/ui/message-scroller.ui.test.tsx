@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isScrollPinned, MessageScroller } from "./message-scroller";
 
 function mockOverflow(scroller: HTMLDivElement, scrollHeight = 800) {
@@ -28,42 +28,45 @@ function scrollAway(scroller: HTMLDivElement) {
   });
 }
 
-function mountScroller(bottomKey: unknown = 0): {
-  container: HTMLDivElement;
-  root: Root;
-} {
-  const container = document.createElement("div");
+type ScrollerProps = { topKey?: unknown; onReachTop?: () => void };
+
+let container: HTMLDivElement | undefined;
+let root: Root | undefined;
+
+afterEach(() => {
+  if (root) act(() => root!.unmount());
+  container?.remove();
+  container = undefined;
+  root = undefined;
+});
+
+/** Mounts into `container` / `root`; the returned render re-renders with new props. */
+function mountScroller(props: ScrollerProps = {}) {
+  container = document.createElement("div");
   container.style.height = "240px";
   container.style.width = "480px";
   container.style.display = "flex";
   container.style.flexDirection = "column";
   document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(
-      <MessageScroller bottomKey={bottomKey}>
-        <div data-testid="content" style={{ minHeight: 800 }}>
-          Long transcript content
-        </div>
-      </MessageScroller>,
-    );
-  });
-  return { container, root };
+  const mounted = createRoot(container);
+  root = mounted;
+  const render = (next: ScrollerProps) =>
+    act(() => {
+      mounted.render(
+        <MessageScroller bottomKey={0} {...next}>
+          <div data-testid="content" style={{ minHeight: 800 }}>
+            Long transcript content
+          </div>
+        </MessageScroller>,
+      );
+    });
+  render(props);
+  return render;
 }
 
 describe("MessageScroller jump-to-bottom", () => {
-  let container: HTMLDivElement | undefined;
-  let root: Root | undefined;
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount());
-    container?.remove();
-    container = undefined;
-    root = undefined;
-  });
-
   it("hides the control while pinned at the bottom", () => {
-    ({ container, root } = mountScroller());
+    mountScroller();
     const scroller = scrollerEl(container!);
     mockOverflow(scroller);
     expect(scroller.getAttribute("data-pinned")).toBe("true");
@@ -71,7 +74,7 @@ describe("MessageScroller jump-to-bottom", () => {
   });
 
   it("shows the control after the reader scrolls away", () => {
-    ({ container, root } = mountScroller());
+    mountScroller();
     const scroller = scrollerEl(container!);
     mockOverflow(scroller);
     scrollAway(scroller);
@@ -81,7 +84,7 @@ describe("MessageScroller jump-to-bottom", () => {
   });
 
   it("re-pins and hides the control when activated", () => {
-    ({ container, root } = mountScroller());
+    mountScroller();
     const scroller = scrollerEl(container!);
     mockOverflow(scroller);
     scrollAway(scroller);
@@ -100,7 +103,7 @@ describe("MessageScroller jump-to-bottom", () => {
   });
 
   it("hides the control when the reader scrolls back to the bottom", () => {
-    ({ container, root } = mountScroller());
+    mountScroller();
     const scroller = scrollerEl(container!);
     mockOverflow(scroller);
     scrollAway(scroller);
@@ -113,5 +116,47 @@ describe("MessageScroller jump-to-bottom", () => {
 
     expect(scroller.getAttribute("data-pinned")).toBe("true");
     expect(container!.querySelector('[data-testid="jump-to-bottom"]')).toBeNull();
+  });
+});
+
+describe("MessageScroller top edge", () => {
+  function scrollTo(scroller: HTMLDivElement, top: number) {
+    scroller.scrollTop = top;
+    act(() => {
+      scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+  }
+
+  it("keeps the content at the same distance from the bottom when rows land above it", () => {
+    const render = mountScroller({ topKey: "idle:0" });
+    const scroller = scrollerEl(container!);
+    mockOverflow(scroller, 800);
+    scrollTo(scroller, 20);
+
+    mockOverflow(scroller, 1400);
+    render({ topKey: "idle:12" });
+
+    expect(scroller.scrollTop).toBe(620);
+  });
+
+  it("calls onReachTop at the top edge, not further down", () => {
+    const onReachTop = vi.fn();
+    mountScroller({ topKey: 0, onReachTop });
+    const scroller = scrollerEl(container!);
+    mockOverflow(scroller, 800);
+    onReachTop.mockClear();
+
+    scrollTo(scroller, 400);
+    expect(onReachTop).not.toHaveBeenCalled();
+
+    scrollTo(scroller, 10);
+    expect(onReachTop).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onReachTop after a render when the content does not fill the viewport", () => {
+    const onReachTop = vi.fn();
+    mountScroller({ topKey: 0, onReachTop });
+
+    expect(onReachTop).toHaveBeenCalled();
   });
 });

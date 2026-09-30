@@ -31,6 +31,7 @@ import {
 import {
   effectiveTranscriptSeq,
   parseTranscriptEvent,
+  parseTranscriptLine,
   transcriptPathOf,
 } from "./conversation-transcript-seq.js";
 
@@ -122,20 +123,9 @@ function readTranscriptEventAt(
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
     lineSeq += 1;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const parsed = parseTranscriptEvent(raw);
-    if (!parsed.ok) continue;
-    const effectiveSeq =
-      parsed.event.seq ?? effectiveTranscriptSeq(raw, lineSeq);
-    if (effectiveSeq !== seq) continue;
-    return parsed.event.seq === undefined
-      ? { ...parsed.event, seq: effectiveSeq }
-      : parsed.event;
+    const parsed = parseTranscriptLine(line, lineSeq);
+    if (!parsed || parsed.event.seq !== seq) continue;
+    return parsed.event;
   }
 
   throw new Error(

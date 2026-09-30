@@ -1,6 +1,7 @@
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "fs";
@@ -427,7 +428,7 @@ describe("channel sessions HTTP API", () => {
     ]);
   });
 
-  it("lists awaitingHuman from the session transcript turn-boundary rule", async () => {
+  it("lists awaitingHuman from metadata, backfilling a legacy transcript once", async () => {
     await startApp();
 
     const created = await fetch(
@@ -441,41 +442,21 @@ describe("channel sessions HTTP API", () => {
     expect(created.status).toBe(201);
     const { id } = await created.json();
 
+    const metaPath = join(conversationsDir(), id, "meta.json");
+    const meta = JSON.parse(readFileSync(metaPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    delete meta.awaitingHuman;
+    writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
     writeTranscript(id, [
-      { type: "prompt", text: "go" },
-      { type: "assistant", text: "done" },
+      { type: "prompt", text: "go", seq: 1 },
+      { type: "assistant", text: "done", seq: 2 },
     ]);
     const awaiting = await fetch(
       `${baseUrl}/api/issues/capture/channels/planning/sessions`,
     ).then((r) => r.json());
     expect(awaiting[0]).toMatchObject({
-      id,
-      activeRun: false,
-      awaitingHuman: true,
-    });
-
-    writeTranscript(id, [
-      { type: "prompt", text: "go" },
-      { type: "assistant", text: "done" },
-      { type: "prompt", text: "again" },
-    ]);
-    const quiet = await fetch(
-      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
-    ).then((r) => r.json());
-    expect(quiet[0]).toMatchObject({
-      id,
-      activeRun: false,
-      awaitingHuman: false,
-    });
-
-    writeTranscript(id, [
-      { type: "prompt", text: "go" },
-      { type: "error", message: "boom" },
-    ]);
-    const errored = await fetch(
-      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
-    ).then((r) => r.json());
-    expect(errored[0]).toMatchObject({
       id,
       activeRun: false,
       awaitingHuman: true,

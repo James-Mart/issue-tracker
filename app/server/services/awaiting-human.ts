@@ -1,16 +1,12 @@
-import type { TranscriptEvent } from "../schemas.js";
+import type { TranscriptEvent, TranscriptEventInput } from "../schemas.js";
 
-function isTurnBoundary(
-  event: TranscriptEvent,
-): event is Extract<
-  TranscriptEvent,
-  { type: "prompt" | "assistant" | "error" }
-> {
-  return (
-    event.type === "prompt" ||
-    event.type === "assistant" ||
-    event.type === "error"
-  );
+/** Turn-boundary append rule: prompt → false, assistant/error → true. */
+export function awaitingHumanAfterTurnBoundary(
+  type: TranscriptEventInput["type"],
+): boolean | undefined {
+  if (type === "prompt") return false;
+  if (type === "assistant" || type === "error") return true;
+  return undefined;
 }
 
 /**
@@ -21,10 +17,8 @@ export function awaitingHumanFromTranscript(
   events: readonly TranscriptEvent[],
 ): boolean {
   for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
-    if (!isTurnBoundary(event)) continue;
-    if (event.type === "prompt") return false;
-    return true;
+    const value = awaitingHumanAfterTurnBoundary(events[i]!.type);
+    if (value !== undefined) return value;
   }
   return false;
 }

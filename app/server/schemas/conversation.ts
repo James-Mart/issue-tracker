@@ -53,6 +53,8 @@ export const conversationMetaSchema = z
     forkedFrom: nonEmpty.optional(),
     forkedAtSeq: z.number().int().nonnegative().optional(),
     readOnly: z.boolean().optional(),
+    /** Cached from the last turn-boundary event; backfilled on first read when absent. */
+    awaitingHuman: z.boolean().optional(),
     createdAt: nonEmpty,
     updatedAt: nonEmpty,
   })
@@ -464,10 +466,14 @@ export type ConversationDetail = {
   transcript: TranscriptEvent[];
 };
 
-/** GET /api/conversations/:id/transcript — cacheable history page. */
+/**
+ * GET /api/conversations/:id/transcript.
+ * A before/limit page includes `hasMore`. sinceSeq catch-up omits it.
+ */
 export const conversationTranscriptPageSchema = z.object({
   events: z.array(transcriptEventSchema),
   latestSeq: frameSeq,
+  hasMore: z.boolean().optional(),
 });
 
 export type ConversationTranscriptPage = z.infer<

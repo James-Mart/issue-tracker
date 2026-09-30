@@ -27,11 +27,13 @@ import {
   deleteConversation,
   listConversations,
   readConversation,
+  readConversationTranscriptPage,
   setPendingMessage,
   startConversationPrompt,
   updateMeta,
 } from "../services/conversations.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
+import { DEFAULT_TRANSCRIPT_PAGE_LIMIT } from "../services/transcript-page.js";
 import {
   assertConversationActiveRun,
   assertConversationAttachmentMeta,
@@ -52,17 +54,60 @@ function parseForkSeqBody(raw: unknown): number | { error: string } {
   return raw;
 }
 
-function parseSinceSeqQuery(raw: unknown): number | { error: string } {
-  if (raw === undefined) return 0;
+function parseIntQuery(
+  raw: unknown,
+  name: string,
+  min: number,
+): number | { error: string } {
   const text = Array.isArray(raw) ? raw[0] : raw;
+  const bound = min === 0 ? "non-negative" : "positive";
   if (typeof text !== "string" && typeof text !== "number") {
-    return { error: "sinceSeq must be a non-negative integer" };
+    return { error: `${name} must be a ${bound} integer` };
   }
   const value = typeof text === "number" ? text : Number(text);
-  if (!Number.isInteger(value) || value < 0) {
-    return { error: "sinceSeq must be a non-negative integer" };
+  if (!Number.isInteger(value) || value < min) {
+    return { error: `${name} must be a ${bound} integer` };
   }
   return value;
+}
+
+type TranscriptHistoryQuery =
+  | { ok: true; mode: "since"; sinceSeq: number }
+  | { ok: true; mode: "page"; before?: number; limit: number }
+  | { ok: false; error: string };
+
+function parseTranscriptHistoryQuery(query: {
+  sinceSeq?: unknown;
+  before?: unknown;
+  limit?: unknown;
+}): TranscriptHistoryQuery {
+  if (query.sinceSeq !== undefined && query.before !== undefined) {
+    return { ok: false, error: "sinceSeq cannot be combined with before" };
+  }
+  if (query.sinceSeq !== undefined && query.limit !== undefined) {
+    return { ok: false, error: "sinceSeq cannot be combined with limit" };
+  }
+  if (query.sinceSeq !== undefined) {
+    const sinceSeq = parseIntQuery(query.sinceSeq, "sinceSeq", 0);
+    if (typeof sinceSeq === "object") return { ok: false, error: sinceSeq.error };
+    return { ok: true, mode: "since", sinceSeq };
+  }
+  const before =
+    query.before === undefined
+      ? undefined
+      : parseIntQuery(query.before, "before", 1);
+  if (typeof before === "object") return { ok: false, error: before.error };
+  const limit =
+    query.limit === undefined
+      ? DEFAULT_TRANSCRIPT_PAGE_LIMIT
+      : parseIntQuery(query.limit, "limit", 1);
+  if (typeof limit === "object") return { ok: false, error: limit.error };
+  return {
+    ok: true,
+    mode: "page",
+    limit,
+    ...(before !== undefined ? { before } : {}),
+  };
 }
 
 const asyncRoute =
@@ -304,17 +349,27 @@ export function createConversationsRouter(
   router.get(
     "/:id/transcript",
     asyncRoute(async (req, res) => {
-      const sinceSeq = parseSinceSeqQuery(req.query.sinceSeq);
-      if (typeof sinceSeq === "object") {
-        res.status(400).json({ error: sinceSeq.error });
+      const parsed = parseTranscriptHistoryQuery(req.query);
+      if (!parsed.ok) {
+        res.status(400).json({ error: parsed.error });
         return;
       }
-
-      const { transcript } = readConversation(req.params.id);
-      const latestSeq = transcript.at(-1)?.seq ?? 0;
-      const events = transcript.filter((event) => (event.seq ?? 0) > sinceSeq);
+      if (parsed.mode === "since") {
+        const { transcript } = readConversation(req.params.id);
+        const latestSeq = transcript.at(-1)?.seq ?? 0;
+        const events = transcript.filter(
+          (event) => (event.seq ?? 0) > parsed.sinceSeq,
+        );
+        res.json(assertConversationTranscriptPage({ events, latestSeq }));
+        return;
+      }
       res.json(
-        assertConversationTranscriptPage({ events, latestSeq }),
+        assertConversationTranscriptPage(
+          readConversationTranscriptPage(req.params.id, {
+            limit: parsed.limit,
+            ...(parsed.before !== undefined ? { before: parsed.before } : {}),
+          }),
+        ),
       );
     }),
   );

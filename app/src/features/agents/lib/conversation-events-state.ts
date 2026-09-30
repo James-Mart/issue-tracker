@@ -1,9 +1,14 @@
-import type { TranscriptEvent } from "@server/schemas";
+import type {
+  ConversationTranscriptPage,
+  TranscriptEvent,
+} from "@server/schemas";
 import {
   findOpenThinkingIndex,
   isBlankThinkingText,
   isTopLevelThinkingInterrupt,
 } from "./thinking-coalesce";
+
+export type OlderEventsStatus = "idle" | "loading" | "error";
 
 export type ConversationEventsState = {
   events: TranscriptEvent[];
@@ -39,7 +44,90 @@ export type ConversationEventsState = {
    * steer — the queued row is a mid-run delivery fallback.
    */
   pendingSteerFallback: boolean;
+  /** Persisted events remain before the oldest loaded page. */
+  hasOlder: boolean;
+  /** Scroll-up fetch of the next older page. */
+  olderStatus: OlderEventsStatus;
+  /**
+   * Folded rows that older pages added ahead of the first seeded page. Index
+   * row keys subtract it so rows already on screen keep their keys.
+   */
+  prependedRows: number;
 };
+
+export const idleConversationEventsState = (): ConversationEventsState => ({
+  events: [],
+  ready: false,
+  streamRunActive: null,
+  runResyncKey: 0,
+  pendingText: undefined,
+  steeringText: null,
+  pendingSteerFallback: false,
+  hasOlder: false,
+  olderStatus: "idle",
+  prependedRows: 0,
+});
+
+/** GET pages always stamp `seq`; a page event without one is a server bug. */
+export function pageEventSeq(event: TranscriptEvent): number {
+  if (event.seq === undefined) {
+    throw new Error(`transcript page ${event.type} event has no seq`);
+  }
+  return event.seq;
+}
+
+export type JoinedLatestPage = {
+  events: TranscriptEvent[];
+  hasOlder: boolean;
+  /** False when the page replaced the loaded events instead of extending them. */
+  joined: boolean;
+};
+
+/**
+ * Join a refetched latest page onto the raw pages loaded so far. The join
+ * holds when the page is the whole transcript or reaches back into the loaded
+ * range. Otherwise events that were never loaded sit between the two, and the
+ * page replaces what was loaded.
+ */
+export function joinLatestPage(
+  loaded: readonly TranscriptEvent[],
+  hasOlder: boolean,
+  page: ConversationTranscriptPage,
+): JoinedLatestPage {
+  if (page.hasMore !== true) {
+    return { events: page.events, hasOlder: false, joined: true };
+  }
+  const first = pageEventSeq(page.events[0]!);
+  const last = loaded.at(-1);
+  if (last === undefined || first > pageEventSeq(last)) {
+    return { events: page.events, hasOlder: true, joined: false };
+  }
+  return {
+    events: [
+      ...loaded.filter((event) => pageEventSeq(event) < first),
+      ...page.events,
+    ],
+    hasOlder,
+    joined: true,
+  };
+}
+
+/**
+ * Fold an older page onto the rows on screen. Those rows carry live deltas the
+ * raw pages never saw; folding them again leaves them unchanged, while a chain
+ * that crosses the page boundary merges into one row.
+ */
+export function prependOlderPage(
+  state: Pick<ConversationEventsState, "events" | "prependedRows">,
+  page: ConversationTranscriptPage,
+): Pick<ConversationEventsState, "events" | "hasOlder" | "prependedRows"> {
+  const events = foldTranscriptEvents([...page.events, ...state.events]);
+  return {
+    events,
+    hasOlder: page.hasMore === true,
+    prependedRows: state.prependedRows + events.length - state.events.length,
+  };
+}
 
 function applyThinkingEvent(
   events: TranscriptEvent[],

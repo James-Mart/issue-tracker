@@ -34,7 +34,7 @@ export function useConversationTranscriptQuery(
   return useQuery({
     queryKey: agentsKeys.transcript(conversationId ?? ""),
     queryFn: ({ signal }) =>
-      getConversationTranscript(conversationId!, undefined, signal),
+      getConversationTranscript(conversationId!, { signal }),
     enabled: Boolean(conversationId),
     // App query defaults retry once; a hang must surface at 10s, not ~20s.
     retry: false,

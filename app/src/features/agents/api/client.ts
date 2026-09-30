@@ -76,13 +76,14 @@ export function getConversationRun(id: string): Promise<ConversationActiveRun> {
 /** Transcript GET is the only client helper that takes this deadline. */
 export const TRANSCRIPT_FETCH_TIMEOUT_MS = 10_000;
 
+/** Newest page when `before` is omitted; otherwise the page of events older than it. */
 export function getConversationTranscript(
   id: string,
-  sinceSeq?: number,
-  signal?: AbortSignal,
+  options: { before?: number; signal?: AbortSignal } = {},
 ): Promise<ConversationTranscriptPage> {
+  const { before, signal } = options;
   const qs =
-    sinceSeq === undefined ? "" : `?sinceSeq=${encodeURIComponent(String(sinceSeq))}`;
+    before === undefined ? "" : `?before=${encodeURIComponent(String(before))}`;
   const timeout = AbortSignal.timeout(TRANSCRIPT_FETCH_TIMEOUT_MS);
   const abort = signal ? AbortSignal.any([timeout, signal]) : timeout;
   return request<ConversationTranscriptPage>(

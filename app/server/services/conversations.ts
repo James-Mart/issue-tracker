@@ -14,11 +14,8 @@ import type { AgentImage, AgentSteerOutcome } from "./agent-sdk.js";
 import { getConversationAttachment } from "./conversation-attachments.js";
 import {
   parseConversationMeta,
-  parseDelegationEndRecord,
   parseDelegationEndRecordInput,
-  parseDelegationRecord,
   parseDelegationRecordInput,
-  parseTranscriptEvent,
   parseTranscriptEventInput,
   type ConversationChannel,
   type ConversationDetail,
@@ -42,7 +39,16 @@ import {
 } from "../kind.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
-import { effectiveTranscriptSeq } from "./conversation-transcript-seq.js";
+import { readDelegationLines, type ParsedDelegationLine } from "./delegation-log.js";
+import {
+  forgetConversationDelegations,
+  recordDelegation,
+} from "./delegation-index.js";
+import { recordSubagentUpdate } from "./run-event-log.js";
+import { readAllTranscriptEvents } from "./conversation-transcript-seq.js";
+import { awaitingHumanAfterTurnBoundary } from "./awaiting-human.js";
+import { awaitingHumanFromTranscriptFile } from "./transcript-page.js";
+import { readTranscriptPage } from "./transcript-page.js";
 import { IssueError } from "./errors.js";
 import {
   assertGuestAllowsAgentLaunch,
@@ -81,19 +87,16 @@ function delegationsPathOf(id: string): string {
   return join(dirOf(id), "delegations.jsonl");
 }
 
+export {
+  conversationExists,
+  listConversationIds,
+} from "./conversation-ids.js";
+
 function scanIds(): string[] {
   if (!existsSync(conversationsDir)) return [];
   return readdirSync(conversationsDir).filter((entry) =>
     statSync(dirOf(entry)).isDirectory(),
   );
-}
-
-/**
- * Conversation store ids on disk. Side-state dirs (agent-stack, mockups,
- * cursor index) share the store without a `meta.json` and are not conversations.
- */
-export function listConversationIds(): string[] {
-  return scanIds().filter((id) => existsSync(metaPathOf(id)));
 }
 
 function validateAnchor(
@@ -169,31 +172,6 @@ function writeMeta(meta: ConversationMeta): void {
   writeFileSync(metaPathOf(meta.id), `${JSON.stringify(meta, null, 2)}\n`);
 }
 
-function readTranscriptLines(id: string): TranscriptEvent[] {
-  const path = transcriptPathOf(id);
-  if (!existsSync(path)) return [];
-  const events: TranscriptEvent[] = [];
-  let lineSeq = 0;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    lineSeq += 1;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const parsed = parseTranscriptEvent(raw);
-    if (!parsed.ok) continue;
-    events.push(
-      parsed.event.seq === undefined
-        ? { ...parsed.event, seq: effectiveTranscriptSeq(raw, lineSeq) }
-        : parsed.event,
-    );
-  }
-  return events;
-}
-
 /**
  * Allocate a conversation id and write its on-disk bootstrap (meta + empty
  * transcript/delegations), optionally persisting the first prompt line.
@@ -216,9 +194,9 @@ function persistNewConversation(
     id,
     createdAt: now,
     updatedAt: now,
+    awaitingHuman: false,
   };
   mkdirSync(dirOf(id), { recursive: true });
-  writeMeta(meta);
   writeFileSync(transcriptPathOf(id), "");
   writeFileSync(delegationsPathOf(id), "");
   if (opts?.initialPrompt) {
@@ -229,6 +207,7 @@ function persistNewConversation(
     };
     appendFileSync(transcriptPathOf(id), `${JSON.stringify(stamped)}\n`);
   }
+  writeMeta(meta);
   return meta;
 }
 
@@ -488,7 +467,35 @@ export function readConversationMeta(id: string): ConversationMeta {
 
 export function readConversation(id: string): ConversationDetail {
   const meta = readMetaRaw(id);
-  return { meta, transcript: readTranscriptLines(id) };
+  return { meta, transcript: readAllTranscriptEvents(id) };
+}
+
+/**
+ * Session-list flag from conversation metadata. When the field is absent on
+ * legacy conversations, derive once from the transcript and persist.
+ */
+export function resolveAwaitingHuman(meta: ConversationMeta): Promise<boolean> {
+  if (meta.awaitingHuman !== undefined) {
+    return Promise.resolve(meta.awaitingHuman);
+  }
+  return serialize(() => {
+    const fresh = readMetaRaw(meta.id);
+    if (fresh.awaitingHuman !== undefined) {
+      return fresh.awaitingHuman;
+    }
+    const awaitingHuman = awaitingHumanFromTranscriptFile(meta.id);
+    writeMeta({ ...fresh, awaitingHuman });
+    return awaitingHuman;
+  });
+}
+
+/** Meta must exist. The page itself is read from the tail of the transcript. */
+export function readConversationTranscriptPage(
+  id: string,
+  options: { before?: number; limit: number },
+) {
+  readConversationMeta(id);
+  return readTranscriptPage(id, options);
 }
 
 export function appendEvent(
@@ -508,7 +515,15 @@ export function appendEvent(
       seq,
     };
     appendFileSync(transcriptPathOf(id), `${JSON.stringify(stamped)}\n`);
-    writeMeta({ ...meta, updatedAt: new Date().toISOString() });
+    if (stamped.type === "subagent_update") {
+      recordSubagentUpdate(id, stamped);
+    }
+    const awaitingHuman = awaitingHumanAfterTurnBoundary(stamped.type);
+    writeMeta({
+      ...meta,
+      updatedAt: new Date().toISOString(),
+      ...(awaitingHuman !== undefined ? { awaitingHuman } : {}),
+    });
     if (stamped.type === "prompt") {
       publishFrame(id, { event: stamped, persist: false });
     }
@@ -524,35 +539,6 @@ export async function appendErrorEvent(
   const event = { type: "error" as const, message };
   publishFrame(id, { event, persist: true });
   await appendEvent(id, event);
-}
-
-type ParsedDelegationLine =
-  | { kind: "start"; record: DelegationRecord }
-  | { kind: "end"; record: DelegationEndRecord };
-
-function readDelegationLines(id: string): ParsedDelegationLine[] {
-  const path = delegationsPathOf(id);
-  if (!existsSync(path)) return [];
-  const lines: ParsedDelegationLine[] = [];
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const endParsed = parseDelegationEndRecord(raw);
-    if (endParsed.ok) {
-      lines.push({ kind: "end", record: endParsed.record });
-      continue;
-    }
-    const startParsed = parseDelegationRecord(raw);
-    if (startParsed.ok) {
-      lines.push({ kind: "start", record: startParsed.record });
-    }
-  }
-  return lines;
 }
 
 function agentRunAtDelegationStart(
@@ -595,6 +581,7 @@ export function appendDelegation(
       at: new Date().toISOString(),
     };
     appendFileSync(delegationsPathOf(id), `${JSON.stringify(stamped)}\n`);
+    recordDelegation(id, stamped);
     writeMeta({ ...meta, updatedAt: new Date().toISOString() });
     const run = agentRunAtDelegationStart(
       id,
@@ -632,6 +619,7 @@ export function appendDelegationEnd(
       endedAt: new Date().toISOString(),
     };
     appendFileSync(delegationsPathOf(id), `${JSON.stringify(stamped)}\n`);
+    recordDelegation(id, start?.record);
     writeMeta({ ...meta, updatedAt: new Date().toISOString() });
     if (start?.record.issueId && start.record.parentCallId) {
       publishFrame(id, {
@@ -676,11 +664,6 @@ export function readDelegations(id: string): DelegationRecordWithEnd[] {
     byId.set(line.record.delegationId, withEnd);
   }
   return records;
-}
-
-/** True when `meta.json` exists for the conversation id. */
-export function conversationExists(id: string): boolean {
-  return existsSync(metaPathOf(id));
 }
 
 /** Write pending message meta and publish the matching live-only frame. */
@@ -860,5 +843,6 @@ export function deleteConversation(id: string): Promise<void> {
       throw new IssueError("not_found", `unknown conversation "${id}"`);
     }
     rmSync(dirOf(id), { recursive: true, force: true });
+    forgetConversationDelegations(id);
   });
 }
