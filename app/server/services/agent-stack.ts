@@ -25,6 +25,7 @@ import {
 } from "./agent-stack-secrets.js";
 
 export { agentStackMemoryLimitMessage } from "./agent-stack-heap-reports.js";
+import { appendOutputTail, killProcessGroup } from "./bounded-process.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
 import { readAll } from "./issues.js";
 import { ancestorChain } from "./subtree.js";
@@ -564,8 +565,7 @@ function runShell(
       fn();
     };
     const append = (chunk: Buffer | string) => {
-      output += masker.push(chunk);
-      if (output.length > 64_000) output = output.slice(-32_000);
+      output = appendOutputTail(output, masker.push(chunk));
     };
     child.stdout?.on("data", append);
     child.stderr?.on("data", append);
@@ -578,8 +578,7 @@ function runShell(
     });
     child.on("close", (code) => {
       if (timer) clearTimeout(timer);
-      output += masker.flush();
-      if (output.length > 64_000) output = output.slice(-32_000);
+      output = appendOutputTail(output, masker.flush());
       finish(() => resolvePromise({ code: code ?? 1, output }));
     });
   });
@@ -781,7 +780,7 @@ async function bootDeclaredRuntime(
   } catch (err) {
     if (stateWritten) await stopAgentStack(conversationId);
     else {
-      if (spawned) signalGroup(spawned.record.pid, "SIGTERM");
+      if (spawned) killProcessGroup(spawned.record.pid, "SIGTERM");
       discardDataDir(resources.dataDir);
     }
     throw err;
@@ -836,15 +835,6 @@ export async function startAgentStack(
     secrets,
   );
   return { ...handle, memoryLimitFailures };
-}
-
-function signalGroup(pid: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(-pid, signal);
-  } catch (err) {
-    // Racing the process's own exit is expected; anything else is not.
-    if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
-  }
 }
 
 /** True when any child of this process still belongs to one of these groups. */
@@ -937,10 +927,10 @@ export async function stopAgentStack(
   }
 
   if (live.length > 0) {
-    for (const proc of live) signalGroup(proc.pid, "SIGTERM");
+    for (const proc of live) killProcessGroup(proc.pid, "SIGTERM");
     const collectedOnTerm = await waitUntilGroupsCollected(groups, TERM_GRACE_MS);
     if (!collectedOnTerm) {
-      for (const pgrp of groups) signalGroup(pgrp, "SIGKILL");
+      for (const pgrp of groups) killProcessGroup(pgrp, "SIGKILL");
       const collectedOnKill = await waitUntilGroupsCollected(groups, KILL_GRACE_MS);
       if (!collectedOnKill) {
         const survivors = owned.filter(isOurRecordedProcess);
