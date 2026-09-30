@@ -1,8 +1,8 @@
-import type { Comment, CommentMessage, CommentsResponse } from "../schemas.js";
+import type { Comment, CommentMessage } from "../schemas.js";
 import { issueChangeCommitShas } from "./change.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
-import { readAll, readComments, readIssueOrThrow } from "./issues.js";
+import { readAll, readIssueOrThrow } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { ancestorChain } from "./subtree.js";
 
@@ -97,15 +97,4 @@ export async function deriveAnchoredOutdated(
       return { ...comment, outdated: true };
     }),
   );
-}
-
-export async function readCommentsWithOutdated(
-  issueId: string,
-): Promise<CommentsResponse> {
-  const { messages, threads, problems } = readComments(issueId);
-  return {
-    messages: await deriveAnchoredOutdated(issueId, messages),
-    threads,
-    problems,
-  };
 }

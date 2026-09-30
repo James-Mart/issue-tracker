@@ -17,7 +17,7 @@ import type {
   IssueDetail,
   IssueKind,
 } from "./server/schemas.js";
-import { readCommentsWithOutdated } from "./server/services/anchor-outdated.js";
+import { enrichCommentsForRead } from "./server/services/researcher-runs.js";
 import { formatThreadsForView } from "./server/services/thread-state.js";
 import { appendThreadEvent } from "./server/services/thread-events.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
@@ -112,7 +112,8 @@ function formatAnchorLocation(anchor: NonNullable<Comment["anchor"]>): string {
 
 function formatCommentLine(message: CommentMessage, indent = ""): string {
   const author = commentAuthor(message);
-  const head = `${indent}${message.id} [${message.at}] ${author}`;
+  const session = message.newSession ? " (new session)" : "";
+  const head = `${indent}${message.id} [${message.at}] ${author}${session}`;
   if (message.anchor) {
     const outdated = message.outdated ? " (outdated)" : "";
     return `${head} @ ${formatAnchorLocation(message.anchor)}${outdated}: ${message.body}`;
@@ -244,7 +245,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   console.log(detail.description || "(no description)");
 
   if (opts.comments) {
-    const { messages, threads, problems } = await readCommentsWithOutdated(id);
+    const { messages, threads, problems } = await enrichCommentsForRead(id);
     console.log();
     console.log("--- comments ---");
     if (messages.length === 0) console.log("(no messages)");

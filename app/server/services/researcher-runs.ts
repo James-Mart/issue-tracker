@@ -6,6 +6,7 @@ import type {
   ConversationDetail,
   ConversationMeta,
   ResearcherRun,
+  ThreadEvent,
   ThreadView,
   TranscriptEvent,
 } from "../schemas.js";
@@ -15,8 +16,12 @@ import {
   conversationExists,
   readConversation,
 } from "./conversations.js";
+import { deriveAnchoredOutdated } from "./anchor-outdated.js";
+import { findThreadRoot } from "./thread-events.js";
 import { readCommentLog } from "./comment-log.js";
+import { readIssueOrThrow, taskStatusesForStory } from "./issues.js";
 import { isRunLive } from "./run-live.js";
+import { commentsFromLog } from "./thread-state.js";
 
 export const REVIEW_QUESTION_ROLE = "issue-tracker-review-question";
 
@@ -32,6 +37,14 @@ function lastErrorMessage(transcript: TranscriptEvent[]): string | undefined {
     if (event.type === "error") return event.message;
   }
   return undefined;
+}
+
+/** Conversation id when this thread is an open question with a researcher. */
+export function activeResearcherConversationId(
+  thread: Pick<ThreadView, "kind" | "state" | "researcherConversationId">,
+): string | undefined {
+  if (thread.kind !== "question" || thread.state !== "open") return undefined;
+  return thread.researcherConversationId;
 }
 
 /** Review-channel conversations are question researchers. */
@@ -53,24 +66,35 @@ export async function recordResearcherRunFailure(
   );
 }
 
+/** Time of the question, or of the last human reply in append order. */
+function latestAskAt(thread: ThreadView, messages: Comment[]): string {
+  const root = findThreadRoot(messages, thread.rootId);
+  let at = root.at;
+  for (const message of messages) {
+    if (message.replyTo === thread.rootId && message.role === "human") {
+      at = message.at;
+    }
+  }
+  return at;
+}
+
 function researcherRunFor(
   thread: ThreadView,
   messages: Comment[],
 ): ResearcherRun | undefined {
-  const conversationId = thread.researcherConversationId;
-  if (thread.kind !== "question" || thread.state !== "open" || !conversationId) {
-    return undefined;
-  }
+  const conversationId = activeResearcherConversationId(thread);
+  if (!conversationId) return undefined;
   if (!conversationExists(conversationId)) {
     return { status: "failed", error: RESEARCHER_GONE };
   }
   if (isRunLive(conversationId)) return { status: "running" };
-  const { meta, transcript } = readConversation(conversationId);
+  const { transcript } = readConversation(conversationId);
+  const askedAt = latestAskAt(thread, messages);
   const answered = messages.some(
     (message) =>
       message.replyTo === thread.rootId &&
       message.role !== "human" &&
-      message.at >= meta.createdAt,
+      message.at > askedAt,
   );
   if (answered) return undefined;
   return {
@@ -79,8 +103,48 @@ function researcherRunFor(
   };
 }
 
+function researcherSessionEvents(events: ThreadEvent[]): ThreadEvent[] {
+  return events.filter((event) => event.event === "researcher-session");
+}
+
+/**
+ * Mark the first non-human reply of each recovered researcher session.
+ * The note stays on that reply until the next `researcher-session` event.
+ * `events` are the same log parse that produced `response`.
+ */
+function withNewSessionNotes(
+  response: CommentsResponse,
+  events: ThreadEvent[],
+): CommentsResponse {
+  const sessions = researcherSessionEvents(events);
+  if (!sessions.some((event) => event.recovered)) return response;
+
+  const ids = new Set<string>();
+  for (const [index, event] of sessions.entries()) {
+    if (!event.recovered) continue;
+    const next = sessions
+      .slice(index + 1)
+      .find((later) => later.threadId === event.threadId);
+    const reply = response.messages.find(
+      (message) =>
+        message.replyTo === event.threadId &&
+        message.role !== "human" &&
+        message.at >= event.at &&
+        (next === undefined || message.at < next.at),
+    );
+    if (reply) ids.add(reply.id);
+  }
+  if (ids.size === 0) return response;
+  return {
+    ...response,
+    messages: response.messages.map((message) =>
+      ids.has(message.id) ? { ...message, newSession: true } : message,
+    ),
+  };
+}
+
 /** Decorate open question threads with their researcher's live or failed state. */
-export function withResearcherRuns(response: CommentsResponse): CommentsResponse {
+function withResearcherRuns(response: CommentsResponse): CommentsResponse {
   return {
     ...response,
     threads: response.threads.map((thread): CommentThreadView => {
@@ -88,6 +152,22 @@ export function withResearcherRuns(response: CommentsResponse): CommentsResponse
       return researcherRun ? { ...thread, researcherRun } : thread;
     }),
   };
+}
+
+/** Comments read used by the HTTP route and `issue view --comments`. */
+export async function enrichCommentsForRead(
+  issueId: string,
+): Promise<CommentsResponse> {
+  const issue = readIssueOrThrow(issueId);
+  const taskStatusById =
+    issue.kind === "story" ? taskStatusesForStory(issueId) : new Map();
+  const log = readCommentLog(issueId);
+  const parsed = commentsFromLog(issueId, log, taskStatusById);
+  const response: CommentsResponse = {
+    ...parsed,
+    messages: await deriveAnchoredOutdated(issueId, parsed.messages),
+  };
+  return withNewSessionNotes(withResearcherRuns(response), log.events);
 }
 
 /** The researcher state for one thread, as the comments route would serve it. */
@@ -101,8 +181,8 @@ export function researcherRunForThread(
 
 /** Every researcher conversation recorded on the Story, oldest first. */
 export function researcherConversationIds(storyId: string): string[] {
-  return readCommentLog(storyId).events.flatMap((event) =>
-    event.event === "researcher-session" ? [event.conversationId!] : [],
+  return researcherSessionEvents(readCommentLog(storyId).events).flatMap(
+    (event) => [event.conversationId!],
   );
 }
 

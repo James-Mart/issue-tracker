@@ -44,13 +44,12 @@ import {
   remove,
   update,
 } from "../services/issues.js";
-import { readCommentsWithOutdated } from "../services/anchor-outdated.js";
 import { appendThreadEvent } from "../services/thread-events.js";
 import {
+  onQuestionComment,
   retryQuestionResearcher,
-  startQuestionResearcher,
 } from "../services/question-researcher.js";
-import { withResearcherRuns } from "../services/researcher-runs.js";
+import { enrichCommentsForRead } from "../services/researcher-runs.js";
 import { awaitingHumanFromTranscript } from "../services/awaiting-human.js";
 import {
   createIssueChannelSession,
@@ -124,7 +123,7 @@ export function createIssuesRouter(
   router.get(
     "/:id/comments",
     asyncRoute(async (req, res) => {
-      res.json(withResearcherRuns(await readCommentsWithOutdated(req.params.id)));
+      res.json(await enrichCommentsForRead(req.params.id));
     }),
   );
 
@@ -388,14 +387,12 @@ export function createIssuesRouter(
         req.params.id,
         req.body as CommentInput,
       );
-      if (message.kind === "question") {
-        await startQuestionResearcher(
-          req.params.id,
-          message,
-          projectIdForIssue(req.params.id),
-          sessions,
-        );
-      }
+      await onQuestionComment(
+        req.params.id,
+        message,
+        projectIdForIssue(req.params.id),
+        sessions,
+      );
       res.status(201).json(message);
     }),
   );

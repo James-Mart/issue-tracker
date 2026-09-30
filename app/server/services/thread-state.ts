@@ -193,22 +193,34 @@ export function splitCommentLog(issueId: string, text: string): CommentLog {
   return { messages, events, problems };
 }
 
+/** Thread views and problems for an already-split comment log. */
+export function commentsFromLog(
+  issueId: string,
+  log: CommentLog,
+  taskStatusById: Map<string, TaskStatus> = new Map(),
+): CommentsResponse {
+  const derived = deriveThreadViews(
+    issueId,
+    log.messages,
+    log.events,
+    taskStatusById,
+  );
+  return {
+    messages: log.messages,
+    threads: derived.threads,
+    problems: [...log.problems, ...derived.problems],
+  };
+}
+
 /** Parse a `comments.jsonl` body into comments, thread views, and problems. */
 export function parseCommentLog(
   issueId: string,
   text: string,
   taskStatusById: Map<string, TaskStatus> = new Map(),
 ): CommentsResponse {
-  const split = splitCommentLog(issueId, text);
-  const derived = deriveThreadViews(
+  return commentsFromLog(
     issueId,
-    split.messages,
-    split.events,
+    splitCommentLog(issueId, text),
     taskStatusById,
   );
-  return {
-    messages: split.messages,
-    threads: derived.threads,
-    problems: [...split.problems, ...derived.problems],
-  };
 }

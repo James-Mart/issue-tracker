@@ -1277,7 +1277,7 @@ state. Members:
 | member | type | notes |
 | --- | --- | --- |
 | `threadId` | string | id of the thread **root** |
-| `event` | `"resolved"` \| `"unresolved"` \| `"linked"` \| `"dismissed"` \| `"reopened"` \| `"researcher-session"` | `linked` carries `taskId`. `researcher-session` carries `conversationId`. `dismissed`, `reopened`, and `researcher-session` apply only to a question thread |
+| `event` | `"resolved"` \| `"unresolved"` \| `"linked"` \| `"dismissed"` \| `"reopened"` \| `"researcher-session"` | `linked` carries `taskId`. `researcher-session` carries `conversationId`, and `recovered: true` when that session replaced an archived or unreadable conversation. `dismissed`, `reopened`, and `researcher-session` apply only to a question thread |
 | `by` | `{ role, name? }` | who recorded the event |
 | `at` | ISO string | server-stamped on append |
 
@@ -1301,13 +1301,28 @@ the Story's changes, the Story, thread id, and Project workspace, the question,
 and either the anchor (path, side, lines, commit) or, for a general question,
 the Story's diff range. Once the run has started, or has failed to start, the
 server appends `researcher-session` with `by: { role: "agent", name: "Researcher" }`.
-The researcher reads code read-only and replies once with
+The researcher reads code read-only and replies in the thread with
 `issue comment <storyId> --reply-to <threadId> --role agent --name Researcher`.
 A CLI-posted question starts no researcher.
 
+A human reply (`role` `human`) to an open question thread through
+`POST /api/issues/:id/comments` resumes that thread's recorded researcher
+conversation, using the reply as the prompt. A live run receives the reply
+directly; a run that does not accept it holds the reply and sends it when
+the run finishes. An archived conversation, or one that cannot be read, is
+replaced: a new review-channel conversation is seeded with the role body,
+Story context, the anchor or diff range, and the thread's messages in order,
+and a `researcher-session` event with `recovered: true` becomes the current
+conversation. The first non-human reply after that event, and before the next
+`researcher-session`, has read-time `newSession: true`. `issue view --comments`
+appends ` (new session)` after that reply's author. A reply on a dismissed
+question, a review thread, or from a non-human leaves the researcher as it is.
+A CLI-posted reply does not resume it.
+
 `researcherRun` is read-time only, served by the comments route on an open
-question thread with a `researcherConversationId` and no non-human reply since
-that conversation was created: `{ status: "running" }` while its run is live,
+question thread with a `researcherConversationId` and no non-human reply after
+the latest human message on the thread (the root, or a later human reply):
+`{ status: "running" }` while its run is live,
 else `{ status: "failed", error }`. `error` is the conversation's last
 transcript `error` event, which a review-channel run that ends other than
 `finished` records. When there is none, it says the run ended without a reply,

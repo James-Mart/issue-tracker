@@ -101,7 +101,28 @@ describe("question researcher status", () => {
     const header = thread.querySelector('[data-comment-id="q-answer"] header');
     expect(header?.querySelector("svg")).not.toBeNull();
     expect(header?.textContent).toContain("Researcher");
+    expect(thread.querySelector('[data-testid="researcher-new-session"]')).toBeNull();
     expect(thread.querySelector('[data-testid="researcher-running"]')).toBeNull();
     expect(thread.querySelector('[data-testid="researcher-failed"]')).toBeNull();
+  });
+
+  it("marks a recovered session's reply with a New session note", () => {
+    const thread = mount({
+      ...question,
+      replies: [
+        {
+          id: "q-answer",
+          at: "2026-09-29T14:48:00.000Z",
+          role: "agent",
+          name: "Researcher",
+          replyTo: "q-root",
+          body: "After conversion the thread becomes a review comment.",
+          newSession: true,
+        },
+      ],
+    });
+    const note = thread.querySelector('[data-testid="researcher-new-session"]');
+    expect(note?.textContent).toBe("New session");
+    expect(note?.parentElement?.textContent).toContain("Researcher");
   });
 });

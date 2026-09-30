@@ -13,11 +13,11 @@ import {
   removeConversationAttachment,
 } from "../services/conversation-attachments.js";
 import { IssueError } from "../services/errors.js";
-import { publishFrame } from "../services/conversation-stream.js";
 import { forkConversation } from "../services/conversation-fork.js";
 import {
   createConversation,
   deleteConversation,
+  deliverLivePrompt,
   listConversations,
   readConversation,
   setPendingMessage,
@@ -442,17 +442,14 @@ export function createConversationsRouter(
           return;
         }
 
-        publishFrame(conversationId, {
-          event: { type: "steering", text: prompt },
-          persist: false,
-        });
-        const outcome = await activeRun.steer(prompt);
-        if (outcome === "complete_delivered") {
-          res.status(202).json({ steered: true });
-          return;
-        }
-        await setPendingMessage(conversationId, prompt);
-        res.status(202).json({ pending: true });
+        const delivered = await deliverLivePrompt(
+          conversationId,
+          prompt,
+          (text) => activeRun.steer(text),
+        );
+        res
+          .status(202)
+          .json(delivered === "steered" ? { steered: true } : { pending: true });
         return;
       }
 

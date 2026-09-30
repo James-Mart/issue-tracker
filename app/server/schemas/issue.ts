@@ -129,8 +129,15 @@ export const commentInputSchema = commentObject
 export type Comment = z.infer<typeof commentSchema>;
 export type CommentInput = z.infer<typeof commentInputSchema>;
 
-/** Stored comment plus read-time `outdated` on anchored messages only. */
-export type CommentMessage = Comment & { outdated?: boolean };
+/**
+ * Stored comment plus read-time flags. `outdated` is set on anchored messages
+ * whose lines changed. `newSession` is set on the first non-human reply of a
+ * recovered researcher session.
+ */
+export type CommentMessage = Comment & {
+  outdated?: boolean;
+  newSession?: boolean;
+};
 
 export const THREAD_EVENTS = [
   "resolved",
@@ -161,6 +168,8 @@ export const threadEventSchema = z
     event: z.enum(THREAD_EVENTS),
     taskId: nonEmpty.optional(),
     conversationId: nonEmpty.optional(),
+    /** Set when this session replaced an archived or unreadable conversation. */
+    recovered: z.literal(true).optional(),
     by: z.object({
       role: nonEmpty,
       name: z.string().optional(),
@@ -184,6 +193,13 @@ export const threadEventSchema = z
           path: [field],
         });
       }
+    }
+    if (value.recovered !== undefined && value.event !== "researcher-session") {
+      ctx.addIssue({
+        code: "custom",
+        message: "recovered is only valid on researcher-session events",
+        path: ["recovered"],
+      });
     }
   });
 

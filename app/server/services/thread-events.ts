@@ -33,6 +33,8 @@ export type AppendThreadEventInput = {
   event: ThreadEventName;
   taskId?: string;
   conversationId?: string;
+  /** The session replaces an archived or unreadable researcher conversation. */
+  recovered?: true;
   by: { role: string; name?: string };
   body?: string;
 };
@@ -167,7 +169,10 @@ export function appendThreadEvent(
       event: input.event,
       ...(input.event === "linked" ? { taskId: input.taskId } : {}),
       ...(input.event === "researcher-session"
-        ? { conversationId: input.conversationId }
+        ? {
+            conversationId: input.conversationId,
+            ...(input.recovered ? { recovered: true as const } : {}),
+          }
         : {}),
       by: author(input.by),
       at: new Date().toISOString(),

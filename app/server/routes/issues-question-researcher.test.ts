@@ -313,7 +313,222 @@ describe("question researcher", () => {
       body: "Rename this.",
     });
     expect(res.status).toBe(201);
+    const rootId = ((await res.json()) as { id: string }).id;
+    const reply = await post("/api/issues/s/comments", {
+      role: "human",
+      body: "And here.",
+      replyTo: rootId,
+    });
+    expect(reply.status).toBe(201);
     expect(conversationIds()).toEqual([]);
     expect(fake.handles).toEqual([]);
+  });
+
+  it("resumes an open question with the human reply", async () => {
+    let release!: () => void;
+    await startApp({
+      sendScript: [{}, { hold: new Promise<void>((resolve) => (release = resolve)) }],
+    });
+    const rootId = await askQuestion({ body: "Why?" });
+    await settledThread(rootId);
+    await post("/api/issues/s/comments", {
+      role: "agent",
+      name: "Researcher",
+      body: "Because a.ts needs it.",
+      replyTo: rootId,
+    });
+    const before = (await thread(rootId)).researcherConversationId;
+
+    const reply = await post("/api/issues/s/comments", {
+      role: "human",
+      name: "Jared",
+      body: "And the tests?",
+      replyTo: rootId,
+    });
+    expect(reply.status).toBe(201);
+    const live = await thread(rootId);
+    expect(live.researcherConversationId).toBe(before);
+    expect(live.researcherRun).toEqual({ status: "running" });
+    expect(sentPrompt(1)).toBe("And the tests?");
+    expect(fake.handles).toHaveLength(1);
+
+    release();
+    expect((await settledThread(rootId)).researcherRun).toEqual({
+      status: "failed",
+      error: "the run ended without a reply.",
+    });
+  });
+
+  it("delivers a reply into the live researcher run", async () => {
+    let release!: () => void;
+    await startApp({ hold: new Promise<void>((resolve) => (release = resolve)) });
+    const rootId = await askQuestion({ body: "Why?" });
+    expect((await thread(rootId)).researcherRun).toEqual({ status: "running" });
+
+    const reply = await post("/api/issues/s/comments", {
+      role: "human",
+      body: "And the tests?",
+      replyTo: rootId,
+    });
+    expect(reply.status).toBe(201);
+    expect(fake.handles.flatMap((handle) => handle.steers)).toEqual([
+      "And the tests?",
+    ]);
+    expect(fake.handles.flatMap((handle) => handle.sends)).toHaveLength(1);
+    release();
+  });
+
+  it("queues a mid-run reply when the run cannot take it", async () => {
+    let release!: () => void;
+    await startApp({
+      hold: new Promise<void>((resolve) => (release = resolve)),
+      steerResult: "revert_to_followup",
+    });
+    const rootId = await askQuestion({ body: "Why?" });
+    const conversationId = (await thread(rootId)).researcherConversationId!;
+
+    const reply = await post("/api/issues/s/comments", {
+      role: "human",
+      body: "And the tests?",
+      replyTo: rootId,
+    });
+    expect(reply.status).toBe(201);
+    expect(conversationMeta(conversationId).pendingMessage).toMatchObject({
+      text: "And the tests?",
+    });
+    release();
+  });
+
+  it("starts a new session when the researcher conversation is archived", async () => {
+    let release!: () => void;
+    await startApp({
+      sendScript: [
+        {},
+        { hold: new Promise<void>((resolve) => (release = resolve)) },
+      ],
+    });
+    const rootId = await askQuestion({
+      body: "Why add two?",
+      anchor: { path: "a.ts", side: "new", line: 2, commitSha: tip },
+    });
+    await settledThread(rootId);
+    const first = (await thread(rootId)).researcherConversationId!;
+    await post("/api/issues/s/comments", {
+      role: "agent",
+      name: "Researcher",
+      body: "Because a.ts:2 needs it.",
+      replyTo: rootId,
+    });
+    const archived = await fetch(`${baseUrl}/api/conversations/${first}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+    expect(archived.status).toBe(200);
+
+    const reply = await post("/api/issues/s/comments", {
+      role: "human",
+      name: "Jared",
+      body: "And the tests?",
+      replyTo: rootId,
+    });
+    expect(reply.status).toBe(201);
+    const live = await thread(rootId);
+    expect(live.researcherConversationId).not.toBe(first);
+    expect(live.researcherRun).toEqual({ status: "running" });
+    const prompt = sentPrompt(1);
+    expect(prompt).toContain(
+      "The previous researcher conversation for this thread is gone. This is a new session.",
+    );
+    expect(prompt).toContain(`Anchor: a.ts, new side, line 2, commit ${tip}`);
+    expect(prompt).toContain("Jared:\nWhy add two?");
+    expect(prompt).toContain("Researcher:\nBecause a.ts:2 needs it.");
+    expect(prompt).toContain("Jared:\nAnd the tests?");
+
+    const log = readFileSync(join(issuesRoot, "s", "comments.jsonl"), "utf8");
+    expect(log).toContain(`"recovered":true`);
+    expect(log).toContain(`"conversationId":"${live.researcherConversationId}"`);
+
+    release();
+    await settledThread(rootId);
+    const answer = await post("/api/issues/s/comments", {
+      role: "agent",
+      name: "Researcher",
+      body: "The tests cover the new line.",
+      replyTo: rootId,
+    });
+    const answerId = ((await answer.json()) as { id: string }).id;
+    const comments = (await fetch(`${baseUrl}/api/issues/s/comments`).then((r) =>
+      r.json(),
+    )) as { messages: Array<{ id: string; newSession?: boolean }> };
+    expect(comments.messages.find((message) => message.id === answerId)?.newSession).toBe(
+      true,
+    );
+
+    await post("/api/issues/s/comments", {
+      role: "human",
+      body: "Thanks.",
+      replyTo: rootId,
+    });
+    await settledThread(rootId);
+    const later = await post("/api/issues/s/comments", {
+      role: "agent",
+      name: "Researcher",
+      body: "Anytime.",
+      replyTo: rootId,
+    });
+    const laterId = ((await later.json()) as { id: string }).id;
+    const again = (await fetch(`${baseUrl}/api/issues/s/comments`).then((r) =>
+      r.json(),
+    )) as { messages: Array<{ id: string; newSession?: boolean }> };
+    expect(again.messages.find((message) => message.id === answerId)?.newSession).toBe(
+      true,
+    );
+    expect(again.messages.find((message) => message.id === laterId)?.newSession).toBeUndefined();
+  });
+
+  it("starts a new session when the researcher conversation is gone", async () => {
+    await startApp();
+    const rootId = await askQuestion({ body: "Why?" });
+    await settledThread(rootId);
+    const first = (await thread(rootId)).researcherConversationId!;
+    rmSync(join(dirname(issuesRoot), "conversations", first), {
+      recursive: true,
+    });
+
+    const reply = await post("/api/issues/s/comments", {
+      role: "human",
+      name: "Jared",
+      body: "Still there?",
+      replyTo: rootId,
+    });
+    expect(reply.status).toBe(201);
+    const live = await thread(rootId);
+    expect(fake.handles).toHaveLength(2);
+    expect(sentPrompt(1)).toContain("Jared:\nWhy?");
+    expect(sentPrompt(1)).toContain("Jared:\nStill there?");
+    expect(sentPrompt(1)).toContain("This is a new session.");
+    const log = readFileSync(join(issuesRoot, "s", "comments.jsonl"), "utf8");
+    expect(log).toContain(
+      `"conversationId":"${live.researcherConversationId}","recovered":true`,
+    );
+  });
+
+  it("leaves a dismissed question's researcher idle when a human replies", async () => {
+    await startApp();
+    const rootId = await askQuestion({ body: "Why?" });
+    await settledThread(rootId);
+    const dismissed = await post(`/api/issues/s/threads/${rootId}/events`, {
+      event: "dismissed",
+    });
+    expect(dismissed.status).toBe(201);
+
+    const reply = await post("/api/issues/s/comments", {
+      role: "human",
+      body: "One more thing",
+      replyTo: rootId,
+    });
+    expect(reply.status).toBe(201);
+    expect(fake.handles.flatMap((handle) => handle.sends)).toHaveLength(1);
   });
 });

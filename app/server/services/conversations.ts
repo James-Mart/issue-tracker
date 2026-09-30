@@ -10,7 +10,7 @@ import {
 } from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
-import type { AgentImage } from "./agent-sdk.js";
+import type { AgentImage, AgentSteerOutcome } from "./agent-sdk.js";
 import { getConversationAttachment } from "./conversation-attachments.js";
 import {
   parseConversationMeta,
@@ -722,6 +722,24 @@ export async function assembleAgentPrompt(
   const block = blockLines.join("\n");
   const prompt = text ? `${text}\n\n${block}` : block;
   return images.length > 0 ? { prompt, images } : { prompt };
+}
+
+/**
+ * Deliver text into a live run. A steer the run accepts is the delivery;
+ * otherwise the text waits as the pending message sent when the run finishes.
+ */
+export async function deliverLivePrompt(
+  conversationId: string,
+  prompt: string,
+  steer: (text: string) => Promise<AgentSteerOutcome>,
+): Promise<"steered" | "pending"> {
+  publishFrame(conversationId, {
+    event: { type: "steering", text: prompt },
+    persist: false,
+  });
+  if ((await steer(prompt)) === "complete_delivered") return "steered";
+  await setPendingMessage(conversationId, prompt);
+  return "pending";
 }
 
 /**

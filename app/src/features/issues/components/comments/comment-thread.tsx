@@ -325,6 +325,15 @@ function ThreadAuthorship({ comment }: { comment: CommentMessage }) {
       <span className="font-medium text-foreground/80">
         {comment.name ?? roleFamilyCaption(comment.role).caption}
       </span>
+      {comment.newSession ? (
+        <Badge
+          variant="current"
+          data-testid="researcher-new-session"
+          className="uppercase tracking-[0.08em]"
+        >
+          New session
+        </Badge>
+      ) : null}
       {time ? <time dateTime={comment.at}>{time}</time> : null}
     </header>
   );
