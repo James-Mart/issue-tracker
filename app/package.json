@@ -23,6 +23,7 @@
     "typecheck": "tsx scripts/run-typecheck.ts",
     "screenshots": "tsx scripts/capture-screenshots.ts",
     "agent-stack": "tsx scripts/agent-stack.ts",
+    "copy-guest-store": "tsx scripts/copy-guest-store.ts",
     "mockup-stack": "tsx scripts/mockup-stack.ts",
     "mockup-capture": "tsx scripts/mockup-capture.ts",
     "mockup-promote": "tsx scripts/mockup-promote.ts",

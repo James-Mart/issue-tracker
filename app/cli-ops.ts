@@ -45,6 +45,10 @@ import { formatSupportingDocsLine } from "./server/services/supporting-docs.js";
 import { coerceEnum, coercePositiveInt } from "./cli-coerce.js";
 import { assertKind, kindGetValue, resolveIssueKind } from "./cli-kind.js";
 import { parsePrUrl, runGh } from "./server/services/delivery.js";
+import {
+  assertGuestAllowsOutwardEffect,
+  GUEST_REFUSED_MERGE,
+} from "./server/services/guest-outward-effects.js";
 import { requireProjectWorkspace } from "./server/services/project-workspace.js";
 import { ancestorChain } from "./server/services/subtree.js";
 import { taskHeadCommit } from "./server/services/commit-sha.js";
@@ -65,6 +69,7 @@ export async function mergeStory(
   id: string,
   opts: MergeStoryOptions = {},
 ): Promise<void> {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_MERGE);
   const detail = read(id);
   if (detail.kind !== "story") {
     throw new Error(mergeKindRefusal(detail.kind, id));

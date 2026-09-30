@@ -10,6 +10,14 @@ import { deriveStoryWorktree } from "./derive-worktree.js";
 import { IssueError } from "./errors.js";
 import { branchExists, currentBranch, listedWorktrees } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
+import {
+  assertGuestAllowsOutwardEffect,
+  GUEST_REFUSED_WORKTREE_ATTACH,
+  GUEST_REFUSED_WORKTREE_CREATE,
+  GUEST_REFUSED_WORKTREE_REMOVE,
+  GUEST_REFUSED_WORKTREE_SETUP,
+  guestRefusesOutwardEffect,
+} from "./guest-outward-effects.js";
 import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { hasActiveImplementingRun } from "./implementing-status.js";
 import { list, readAll, update } from "./issues.js";
@@ -179,6 +187,7 @@ async function applySetupCommand(
 }
 
 export async function createStoryWorktree(storyId: string): Promise<string> {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_WORKTREE_CREATE);
   const { issues, derived } = list();
   const story = requireStory(storyId);
   const projectId = projectIdFor(story, issues);
@@ -217,6 +226,7 @@ export async function createStoryWorktree(storyId: string): Promise<string> {
 }
 
 export async function attachStoryWorktree(storyId: string): Promise<string> {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_WORKTREE_ATTACH);
   const { issues } = list();
   const story = requireStory(storyId);
   const projectId = projectIdFor(story, issues);
@@ -266,6 +276,13 @@ export async function attemptStoryWorktreeRemoval(
     if (!story || story.kind !== "story") return { outcome: "absent" };
     path = story.worktreePath;
     if (!path) return { outcome: "absent" };
+    // The copied store records the human's worktree paths. Guest keeps them
+    // so the store write that triggered removal still lands.
+    if (guestRefusesOutwardEffect()) {
+      return existsSync(path)
+        ? { outcome: "retained", path }
+        : { outcome: "absent" };
+    }
     await removeStoryWorktree(storyId, { allowActiveRun: true });
     return { outcome: "removed", path };
   } catch (err) {
@@ -303,6 +320,7 @@ export async function removeStoryWorktree(
   storyId: string,
   options: { discard?: boolean; allowActiveRun?: boolean } = {},
 ): Promise<string> {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_WORKTREE_REMOVE);
   const { issues, derived } = list();
   const story = requireStory(storyId);
   const projectId = projectIdFor(story, issues);
@@ -350,6 +368,7 @@ export async function removeStoryWorktree(
 }
 
 export async function setupStoryWorktree(storyId: string): Promise<string> {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_WORKTREE_SETUP);
   const { issues } = list();
   const story = requireStory(storyId);
   const projectId = projectIdFor(story, issues);

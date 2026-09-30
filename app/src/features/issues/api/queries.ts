@@ -35,6 +35,7 @@ export interface HealthResponse {
   bootId: string;
   startedAt: string;
   restartSupported: boolean;
+  guest: boolean;
 }
 
 export function useHealthQuery(): UseQueryResult<HealthResponse, Error> {

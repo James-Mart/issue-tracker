@@ -25,6 +25,10 @@ import {
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import {
+  assertGuestAllowsAgentLaunch,
+  GUEST_REFUSED_FORK,
+} from "./guest-agent-launch.js";
+import {
   effectiveTranscriptSeq,
   parseTranscriptEvent,
   transcriptPathOf,
@@ -485,6 +489,7 @@ export function forkConversation(
   sourceId: string,
   input: { seq: number },
 ): Promise<string> {
+  assertGuestAllowsAgentLaunch(GUEST_REFUSED_FORK);
   return serialize(() => {
     const sourceMeta = readConversationMeta(sourceId);
     let forkPoint: ResolvedForkPoint;

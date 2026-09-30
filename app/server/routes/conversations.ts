@@ -13,6 +13,11 @@ import {
   removeConversationAttachment,
 } from "../services/conversation-attachments.js";
 import { IssueError } from "../services/errors.js";
+import {
+  assertGuestAllowsAgentLaunch,
+  GUEST_REFUSED_CONVERSATION_MESSAGE,
+  GUEST_REFUSED_CONVERSATION_PROMPT,
+} from "../services/guest-agent-launch.js";
 import { forkConversation } from "../services/conversation-fork.js";
 import {
   createConversation,
@@ -436,6 +441,7 @@ export function createConversationsRouter(
 
       const activeRun = sessions.getActiveRun(conversationId);
       if (activeRun) {
+        assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_MESSAGE);
         if (attachments.length > 0) {
           await setPendingMessage(conversationId, prompt, attachments);
           res.status(202).json({ pending: true });
@@ -495,6 +501,8 @@ export function createConversationsRouter(
         typeof body.model === "string" && body.model.trim()
           ? body.model.trim()
           : undefined;
+
+      assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_PROMPT);
 
       const activeRun = sessions.getActiveRun(conversationId);
       if (activeRun) {

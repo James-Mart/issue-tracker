@@ -3,7 +3,7 @@ import {
   spawnSync,
   type ChildProcessByStdio,
 } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { IssueError } from "./errors.js";
 
@@ -157,6 +157,18 @@ function runGitSync(args: string[], workspace: string): string {
   }
   const errText = result.stderr.trim() || `git exited with code ${result.status}`;
   throw new IssueError("git-failed", errText);
+}
+
+/**
+ * Main worktree for `checkout`. Linked worktrees share one common git dir;
+ * its parent is the checkout that holds the live store.
+ */
+export function mainCheckoutRoot(checkout: string): string {
+  const common = runGitSync(
+    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    checkout,
+  ).trim();
+  return dirname(common);
 }
 
 /**

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { bootId, processStartedAt } from "../boot-info.js";
+import { trackerGuest } from "../config.js";
 import { isRestartSupervised } from "../restart-contract.js";
 
 export function createHealthRouter(): Router {
@@ -10,6 +11,7 @@ export function createHealthRouter(): Router {
       bootId,
       startedAt: new Date(processStartedAt).toISOString(),
       restartSupported: isRestartSupervised(),
+      guest: trackerGuest,
     });
   });
 

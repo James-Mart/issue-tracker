@@ -17,8 +17,12 @@ function stubSessions(): AgentSessions {
   };
 }
 
-async function startApp(options?: { supervised?: boolean }): Promise<void> {
+async function startApp(options?: {
+  supervised?: boolean;
+  guest?: boolean;
+}): Promise<void> {
   vi.resetModules();
+  vi.stubEnv("ISSUE_TRACKER_GUEST", options?.guest ? "1" : "");
   initiateRestart = vi.fn();
   const { createApp } = await import("../app.js");
   if (options?.supervised) {
@@ -67,6 +71,7 @@ describe("GET /api/health", () => {
       firstBody.startedAt,
     );
     expect(firstBody.restartSupported).toBe(true);
+    expect(firstBody.guest).toBe(false);
 
     const second = await getHealth();
     expect(second.status).toBe(200);
@@ -86,5 +91,15 @@ describe("GET /api/health", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.restartSupported).toBe(false);
+    expect(body.guest).toBe(false);
+  });
+
+  it("reports guest true when ISSUE_TRACKER_GUEST=1", async () => {
+    await startApp({ guest: true });
+
+    const res = await getHealth();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.guest).toBe(true);
   });
 });

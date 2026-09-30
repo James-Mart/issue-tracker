@@ -46,6 +46,7 @@ function healthBody(
     bootId: "boot-1",
     startedAt: "2026-08-20T00:00:00.000Z",
     restartSupported: true,
+    guest: false,
     ...overrides,
   };
 }

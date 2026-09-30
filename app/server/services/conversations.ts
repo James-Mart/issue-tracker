@@ -44,6 +44,11 @@ import type { AgentSessions } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
 import { effectiveTranscriptSeq } from "./conversation-transcript-seq.js";
 import { IssueError } from "./errors.js";
+import {
+  assertGuestAllowsAgentLaunch,
+  GUEST_REFUSED_CHANNEL_SESSION,
+  GUEST_REFUSED_CONVERSATION_PROMPT,
+} from "./guest-agent-launch.js";
 import { readIssueOrThrow } from "./issues.js";
 import { uniqueSlug } from "./slug.js";
 
@@ -276,6 +281,9 @@ export function createForkedConversation(
 export function createConversation(
   input: CreateConversationInput,
 ): Promise<ConversationMeta> {
+  if (input.message?.trim()) {
+    assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_PROMPT);
+  }
   return serialize(() => {
     const title = input.title.trim();
     if (!title) throw new IssueError("validation", "title is required");
@@ -391,6 +399,7 @@ export async function createIssueChannelSession(
   input: CreateIssueChannelSessionInput,
   sessions: ActiveRunLookup,
 ): Promise<CreateIssueChannelSessionResult> {
+  assertGuestAllowsAgentLaunch(GUEST_REFUSED_CHANNEL_SESSION);
   const created = await serialize(() => {
     const issueId = input.issueId.trim();
     if (!issueId) throw new IssueError("validation", "issueId is required");
@@ -754,6 +763,7 @@ export async function startConversationPrompt(
   sessions: AgentSessions,
   opts?: { persistPrompt?: boolean; attachments?: string[] },
 ): Promise<{ ok: true; runId: string } | { ok: false; message: string }> {
+  assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_PROMPT);
   const persistPrompt = opts?.persistPrompt !== false;
   const attachments = opts?.attachments;
   const { meta } = readConversation(conversationId);

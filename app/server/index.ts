@@ -4,6 +4,9 @@ import { assertSupportedNodeRuntime } from "./node-runtime.js";
 // `@cursor/sdk` (via agent-sessions) and can native-crash on Node < 22.13.
 assertSupportedNodeRuntime();
 
+const { assertGuestBoot } = await import("./services/guest-boot.js");
+assertGuestBoot();
+
 const { installAbortErrorGuard } = await import("./abort-error-guard.js");
 installAbortErrorGuard();
 
@@ -73,10 +76,10 @@ startWorkQueueLauncher(agentSessions);
 const { dropUnownedAgentStackRecords } = await import(
   "./services/agent-stack.js"
 );
-// This process is the verification guest when the store is read-only. It
-// shares the live conversations directory, so sweeping would drop the parent
-// stack's record.
-if (process.env.ISSUE_TRACKER_STORE_READ_ONLY !== "1") {
+const { skipsGuestDuties } = await import("./services/store-read-only.js");
+// Read-only shares the live conversations directory. Guest must not drop
+// the parent stack's record either. Either flag skips the sweep.
+if (!skipsGuestDuties()) {
   dropUnownedAgentStackRecords();
 }
 

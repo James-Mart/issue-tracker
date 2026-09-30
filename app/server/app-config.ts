@@ -2,6 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { appConfigPath } from "./config.js";
 import {
+  assertGuestAllowsOutwardEffect,
+  GUEST_REFUSED_BACKUP_CONFIG,
+} from "./services/guest-outward-effects.js";
+import {
   appConfigSchema,
   formatZodError,
   parseAppConfig,
@@ -48,6 +52,7 @@ export function writeBackupConfig(
   backup: BackupConfig,
   options: WriteBackupConfigOptions = {},
 ): void {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_BACKUP_CONFIG);
   const path = options.configPath ?? appConfigPath;
   const existing = existsSync(path)
     ? parseAppConfigFile(readFileSync(path, "utf8"), path)
