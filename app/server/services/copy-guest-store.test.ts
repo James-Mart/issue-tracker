@@ -10,13 +10,22 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { pluginDir } from "../config.js";
 import {
   copyGuestStore,
   DEFAULT_BYTE_CAP,
   DEFAULT_CONVERSATION_CAP,
   formatCopyGuestStoreResult,
 } from "./copy-guest-store.js";
+
+const gitRead = vi.hoisted(() => ({
+  mainCheckoutRoot: vi.fn<(checkout: string) => string>(),
+}));
+
+vi.mock("./git-read.js", () => ({
+  mainCheckoutRoot: (checkout: string) => gitRead.mainCheckoutRoot(checkout),
+}));
 
 const roots: string[] = [];
 
@@ -27,6 +36,7 @@ function tempDir(prefix: string): string {
 }
 
 afterEach(() => {
+  gitRead.mainCheckoutRoot.mockReset();
   for (const root of roots) rmSync(root, { recursive: true, force: true });
   roots.length = 0;
 });
@@ -208,6 +218,22 @@ describe("copyGuestStore", () => {
 
     expect(result.issues).toBe(1);
     expect(existsSync(join(realpathSync(into), "issues", "task-a"))).toBe(true);
+  });
+
+  it("copies the main checkout store when sourceRoot is omitted", () => {
+    const source = tempDir("guest-copy-src-");
+    writeIssue(source, "task-a");
+    gitRead.mainCheckoutRoot.mockImplementation((checkout) => {
+      expect(checkout).toBe(pluginDir);
+      return source;
+    });
+
+    const data = tempDir("guest-copy-data-");
+    const into = join(data, "guest");
+    const result = copyGuestStore({ into, dataDir: data });
+
+    expect(result.issues).toBe(1);
+    expect(existsSync(join(into, "issues", "task-a"))).toBe(true);
   });
 
   it("formats summary counts for stdout", () => {

@@ -9,6 +9,7 @@ import {
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pluginDir } from "../config.js";
 import { parseConversationMeta } from "../schemas.js";
+import { mainCheckoutRoot } from "./git-read.js";
 import { AGENT_STACK_DATA_DIR_ENV, realPath } from "./guest-boot.js";
 
 export const DEFAULT_CONVERSATION_CAP = 50;
@@ -37,6 +38,15 @@ type ConversationCandidate = {
   id: string;
   updatedAt: string;
 };
+
+function liveSourceRoot(checkout: string): string {
+  try {
+    return mainCheckoutRoot(checkout);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`copy-guest-store refused: ${detail}`);
+  }
+}
 
 function resolvedUnderData(into: string, dataDir: string): string {
   const dataResolved = resolve(dataDir);
@@ -207,11 +217,11 @@ function copySelectedConversations(
   return { conversations, bytes };
 }
 
-/** Copy the default store beside the checkout into a guest data directory. */
+/** Copy the live tracker store from the main checkout into a guest data directory. */
 export function copyGuestStore(
   options: CopyGuestStoreOptions,
 ): CopyGuestStoreResult {
-  const sourceRoot = options.sourceRoot ?? pluginDir;
+  const sourceRoot = options.sourceRoot ?? liveSourceRoot(pluginDir);
   const dataDir = options.dataDir ?? process.env[AGENT_STACK_DATA_DIR_ENV];
   const refusal = copyGuestStoreRefusal(options.into, dataDir);
   if (refusal) throw new Error(refusal);

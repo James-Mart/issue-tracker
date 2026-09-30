@@ -1,8 +1,16 @@
-import { ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  ChildProcess,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { git } from "../../cli-story-worktree.test-fixtures.js";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { IssueError } from "./errors.js";
 import {
+  mainCheckoutRoot,
   runGit,
   getOriginRemoteUrl,
   setGitSpawnerForTests,
@@ -152,6 +160,37 @@ describe("runGit", () => {
         err.code === "git-failed" &&
         err.message === "fatal: bad object HEAD",
     );
+  });
+});
+
+describe("mainCheckoutRoot", () => {
+  const roots: string[] = [];
+
+  function tempDir(prefix: string): string {
+    const dir = mkdtempSync(join(tmpdir(), prefix));
+    roots.push(dir);
+    return dir;
+  }
+
+  afterEach(() => {
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+    roots.length = 0;
+  });
+
+  it("returns the main worktree for a linked worktree", () => {
+    const main = tempDir("git-read-main-");
+    git(main, ["init", "-b", "main"]);
+    git(main, ["commit", "--allow-empty", "-m", "init"]);
+    const link = join(tempDir("git-read-wt-"), "story");
+    git(main, ["worktree", "add", "--detach", link, "HEAD"]);
+
+    expect(mainCheckoutRoot(link)).toBe(main);
+    expect(mainCheckoutRoot(main)).toBe(main);
+  });
+
+  it("throws when the path is not a git checkout", () => {
+    const dir = tempDir("git-read-plain-");
+    expect(() => mainCheckoutRoot(dir)).toThrow(IssueError);
   });
 });
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Copy the default issue-tracker store into a guest data directory.
+ * Copy the live tracker store into a guest data directory.
  *
  * Usage: npm run copy-guest-store -- --into <dir>
  */
@@ -13,8 +13,8 @@ import {
 function usage(): string {
   return `Usage: npm run copy-guest-store -- --into <dir>
 
-Copy the default store beside this checkout into <dir>. <dir> must resolve
-under AGENT_STACK_DATA_DIR and must not already hold a store.
+Copy the live tracker store from the main checkout into <dir>. <dir> must
+resolve under AGENT_STACK_DATA_DIR and must not already hold a store.
 `;
 }
 
