@@ -24,6 +24,8 @@ export let appConfigPath = join(dirname(issuesDir), "app-config.json");
 export let backupMirrorDir = join(dirname(issuesDir), "backup-mirror");
 /** Peer of `issuesDir` — engine-written backup run state; not `app-config.json`. */
 export let backupStatusPath = join(dirname(issuesDir), "backup-status.json");
+/** Peer of `issuesDir` — API process logs and crash reports. */
+export let logsDir = join(dirname(issuesDir), "logs");
 
 export function refreshStorePathsFromEnv(): void {
   issuesDir = process.env.ISSUES_DIR ?? defaultIssuesDir;
@@ -36,6 +38,7 @@ export function refreshStorePathsFromEnv(): void {
   appConfigPath = join(dirname(issuesDir), "app-config.json");
   backupMirrorDir = join(dirname(issuesDir), "backup-mirror");
   backupStatusPath = join(dirname(issuesDir), "backup-status.json");
+  logsDir = join(dirname(issuesDir), "logs");
 }
 
 // Cursor SDK credential. Read once here so every `@cursor/sdk` call can pass it
