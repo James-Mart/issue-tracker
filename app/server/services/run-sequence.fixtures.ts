@@ -270,6 +270,10 @@ export function teardownRunSequenceTest(): void {
   rmSync(root, { recursive: true, force: true });
 }
 
+export function fixtureConversationsDir(): string {
+  return conversationsDir;
+}
+
 export async function loadRunSequence() {
   const { runSequence } = await import("./run-sequence.js");
   return runSequence;

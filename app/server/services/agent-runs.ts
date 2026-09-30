@@ -7,9 +7,10 @@ import type {
 import {
   activeImplementingConversationId,
   listConversationIds,
-  readConversation,
   readDelegations,
 } from "./conversations.js";
+import { resolveDelegation } from "./delegation-index.js";
+import { readRunEvents } from "./run-event-log.js";
 import {
   conversationIdFromResearcherDelegation,
   researcherConversationIds,
@@ -108,18 +109,6 @@ export function listAgentRunsForIssue(issueId: string): AgentRun[] {
   return runs;
 }
 
-function subagentEventsForRun(
-  conversationId: string,
-  parentCallId: string,
-): SubagentUpdateEvent[] {
-  const events = readConversation(conversationId).transcript.filter(
-    (e): e is SubagentUpdateEvent =>
-      e.type === "subagent_update" && e.parentCallId === parentCallId,
-  );
-  events.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
-  return events;
-}
-
 /** Persisted nested-run events for one linked agent run, in `seq` order. */
 export function listAgentRunEvents(
   issueId: string,
@@ -141,20 +130,7 @@ export function listAgentRunEvents(
       : undefined;
   }
 
-  for (const conversationId of listConversationIds()) {
-    let delegations: DelegationRecordWithEnd[];
-    try {
-      delegations = readDelegations(conversationId);
-    } catch {
-      continue;
-    }
-
-    const record = delegations.find(
-      (d) => d.delegationId === delegationId && d.issueId === issueId,
-    );
-    if (!record?.parentCallId) continue;
-
-    return subagentEventsForRun(conversationId, record.parentCallId);
-  }
-  return undefined;
+  const located = resolveDelegation(delegationId);
+  if (!located || located.issueId !== issueId) return undefined;
+  return readRunEvents(located.conversationId, located.parentCallId);
 }
