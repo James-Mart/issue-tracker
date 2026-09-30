@@ -26,6 +26,41 @@ export const reviewTargetSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
+const reviewSubmissionFields = {
+  id: nonEmpty,
+  at: nonEmpty,
+  summaryCommentId: nonEmpty.optional(),
+  threadIds: z.array(nonEmpty).min(1),
+  conversationId: nonEmpty,
+};
+
+export const reviewSubmissionSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      ...reviewSubmissionFields,
+      status: z.literal("tasking"),
+      taskIds: z.array(nonEmpty).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...reviewSubmissionFields,
+      status: z.literal("failed"),
+      taskIds: z.array(nonEmpty).optional(),
+      error: nonEmpty,
+    })
+    .strict(),
+  z
+    .object({
+      ...reviewSubmissionFields,
+      status: z.literal("done"),
+      taskIds: z.array(nonEmpty).min(1),
+    })
+    .strict(),
+]);
+
+export type ReviewSubmission = z.infer<typeof reviewSubmissionSchema>;
+
 export const reviewSchema = z
   .object({
     id: nonEmpty,
@@ -44,6 +79,7 @@ export const reviewSchema = z
         ),
       })
       .strict(),
+    submissions: z.array(reviewSubmissionSchema).default([]),
   })
   .strict();
 
@@ -88,6 +124,41 @@ export const openReviewBodySchema = z
   .strict();
 
 export type OpenReviewBody = z.infer<typeof openReviewBodySchema>;
+
+export const submitReviewBodySchema = z
+  .object({
+    summary: z.string().optional(),
+  })
+  .strict();
+
+export type SubmitReviewBody = z.infer<typeof submitReviewBodySchema>;
+
+export type SubmitReviewBodyParseResult =
+  | { ok: true; body: SubmitReviewBody }
+  | { ok: false; message: string };
+
+export function parseSubmitReviewBody(raw: unknown): SubmitReviewBodyParseResult {
+  const result = submitReviewBodySchema.safeParse(raw ?? {});
+  if (result.success) return { ok: true, body: result.data };
+  return {
+    ok: false,
+    message: formatZodError(result.error, "invalid submission body"),
+  };
+}
+
+export const retryReviewSubmissionBodySchema = z.object({}).strict();
+
+export type RetryReviewSubmissionBodyParseResult =
+  | { ok: true }
+  | { ok: false; message: string };
+
+export function parseRetryReviewSubmissionBody(
+  raw: unknown,
+): RetryReviewSubmissionBodyParseResult {
+  const result = retryReviewSubmissionBodySchema.safeParse(raw ?? {});
+  if (result.success) return { ok: true };
+  return { ok: false, message: "retry body must be empty" };
+}
 
 export type OpenReviewBodyParseResult =
   | { ok: true; body: OpenReviewBody }

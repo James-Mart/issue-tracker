@@ -152,6 +152,7 @@ function story(): IssueDetail {
     description: "",
     version: "1",
     merged: false,
+    reviewedTasks: [],
   };
 }
 

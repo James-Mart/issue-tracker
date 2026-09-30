@@ -131,10 +131,10 @@ describe("useIssueEvents", () => {
       queryKey: issuesKeys.detail("capture"),
     });
     expect(mounted.invalidateSpy).toHaveBeenCalledWith({
-      queryKey: issuesKeys.list(),
+      queryKey: issuesKeys.agentRuns("capture"),
     });
     expect(mounted.invalidateSpy).toHaveBeenCalledWith({
-      queryKey: issuesKeys.agentRuns("capture"),
+      queryKey: issuesKeys.list(),
     });
     expect(mounted.invalidateSpy).toHaveBeenCalledWith({
       queryKey: issuesKeys.comments("capture"),

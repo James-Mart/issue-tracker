@@ -83,6 +83,7 @@ export function useCommentThreads(issueId: string): CommentThreadsResult {
   return {
     threads,
     problems: data?.problems ?? [],
+    loaded: data !== undefined,
   };
 }
 

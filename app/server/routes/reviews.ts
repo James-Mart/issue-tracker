@@ -7,6 +7,11 @@ import {
   withReviewProgress,
   withReviewProgressList,
 } from "../services/review-marks.js";
+import { agentSessions } from "../services/agent-sessions.js";
+import {
+  retryReviewSubmission,
+  submitReview,
+} from "../services/review-tasking.js";
 import {
   archiveReview,
   listReviewViews,
@@ -120,6 +125,33 @@ reviewsRouter.post(
       req.params.projectId,
       reopenReview(req.params.projectId, req.params.reviewId),
     );
+  }),
+);
+
+reviewsRouter.post(
+  "/:reviewId/submissions",
+  asyncRoute(async (req, res) => {
+    const view = await submitReview(
+      req.params.projectId,
+      req.params.reviewId,
+      req.body,
+      agentSessions,
+    );
+    await sendReview(res, req.params.projectId, view, 201);
+  }),
+);
+
+reviewsRouter.post(
+  "/:reviewId/submissions/:submissionId/retry",
+  asyncRoute(async (req, res) => {
+    const view = await retryReviewSubmission(
+      req.params.projectId,
+      req.params.reviewId,
+      req.params.submissionId,
+      req.body,
+      agentSessions,
+    );
+    await sendReview(res, req.params.projectId, view);
   }),
 );
 

@@ -38,6 +38,7 @@ const ROLE_FAMILY_TITLES: Record<string, string> = {
   "review-duplication": "Duplication review",
   "review-structure": "Structure review",
   "review-idiom": "Idiom review",
+  "review-tasker": "Review tasker",
   "review-question": "Researcher",
   "runtime-validator": "Runtime validator",
   "design-conformance": "Design conformance",

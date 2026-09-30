@@ -12,17 +12,19 @@ import {
   putConversationAttachment,
   removeConversationAttachment,
 } from "../services/conversation-attachments.js";
+import {
+  postConversationMessage,
+  type ConversationMessageDelivery,
+} from "../services/conversation-message.js";
 import { IssueError } from "../services/errors.js";
 import {
   assertGuestAllowsAgentLaunch,
-  GUEST_REFUSED_CONVERSATION_MESSAGE,
   GUEST_REFUSED_CONVERSATION_PROMPT,
 } from "../services/guest-agent-launch.js";
 import { forkConversation } from "../services/conversation-fork.js";
 import {
   createConversation,
   deleteConversation,
-  deliverLivePrompt,
   listConversations,
   readConversation,
   setPendingMessage,
@@ -134,26 +136,23 @@ function attachmentValidationError(
   return `attachment not found: ${missing.join(", ")}`;
 }
 
-async function deliverPrompt(
-  conversationId: string,
-  prompt: string,
-  model: string | undefined,
-  attachments: string[],
-  sessions: AgentSessions,
+function respondWithConversationMessage(
   res: Response,
-): Promise<void> {
-  const result = await startConversationPrompt(
-    conversationId,
-    prompt,
-    model,
-    sessions,
-    { attachments },
-  );
-  if (!result.ok) {
-    res.status(502).json({ error: result.message });
+  delivery: ConversationMessageDelivery,
+): void {
+  if (delivery.status === "failed") {
+    res.status(502).json({ error: delivery.message });
     return;
   }
-  res.status(202).json({ runId: result.runId });
+  if (delivery.status === "started") {
+    res.status(202).json({ runId: delivery.runId });
+    return;
+  }
+  if (delivery.status === "steered") {
+    res.status(202).json({ steered: true });
+    return;
+  }
+  res.status(202).json({ pending: true });
 }
 
 export function createConversationsRouter(
@@ -439,33 +438,12 @@ export function createConversationsRouter(
         return;
       }
 
-      const activeRun = sessions.getActiveRun(conversationId);
-      if (activeRun) {
-        assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_MESSAGE);
-        if (attachments.length > 0) {
-          await setPendingMessage(conversationId, prompt, attachments);
-          res.status(202).json({ pending: true });
-          return;
-        }
-
-        const delivered = await deliverLivePrompt(
-          conversationId,
-          prompt,
-          (text) => activeRun.steer(text),
-        );
-        res
-          .status(202)
-          .json(delivered === "steered" ? { steered: true } : { pending: true });
-        return;
-      }
-
-      await deliverPrompt(
-        conversationId,
-        prompt,
-        model,
-        attachments,
-        sessions,
+      respondWithConversationMessage(
         res,
+        await postConversationMessage(conversationId, prompt, sessions, {
+          model,
+          attachments,
+        }),
       );
     }),
   );
@@ -510,7 +488,12 @@ export function createConversationsRouter(
         await activeRun.wait();
       }
 
-      await deliverPrompt(conversationId, prompt, model, [], sessions, res);
+      respondWithConversationMessage(
+        res,
+        await postConversationMessage(conversationId, prompt, sessions, {
+          model,
+        }),
+      );
     }),
   );
 

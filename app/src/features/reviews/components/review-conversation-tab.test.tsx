@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReviewSubmission } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { ReviewConversationTab } from "./review-conversation-tab";
 
@@ -67,7 +68,10 @@ function thread(overrides: Partial<CommentThread> & Pick<CommentThread, "root">)
 
 let root: Root | undefined;
 
-function mount(onOpenInDiff = vi.fn()): HTMLDivElement {
+function mount(
+  onOpenInDiff = vi.fn(),
+  submissions: ReviewSubmission[] = [],
+): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -78,7 +82,11 @@ function mount(onOpenInDiff = vi.fn()): HTMLDivElement {
           <Route
             path="/projects/:projectId/review/stories/:storyId"
             element={
-              <ReviewConversationTab storyId="story-1" onOpenInDiff={onOpenInDiff} />
+              <ReviewConversationTab
+                storyId="story-1"
+                submissions={submissions}
+                onOpenInDiff={onOpenInDiff}
+              />
             }
           />
         </Routes>
@@ -329,5 +337,50 @@ describe("ReviewConversationTab", () => {
     expect(card?.textContent).not.toContain("This landed.");
     expect(card?.querySelector('[data-testid="see-in-diff"]')).not.toBeNull();
     expect(card?.querySelector('[data-testid="thread-unresolve"]')).not.toBeNull();
+  });
+
+  it("inserts a finished submission into the timeline", () => {
+    state.threads = [
+      thread({
+        root: {
+          id: "note",
+          at: "2026-09-28T16:40:00.000Z",
+          role: "human",
+          name: "Jared",
+          body: "A general note.",
+        },
+      }),
+      thread({
+        root: {
+          id: "later",
+          at: "2026-09-29T18:00:00.000Z",
+          role: "human",
+          name: "Jared",
+          body: "After the submission.",
+        },
+      }),
+    ];
+    const done: ReviewSubmission = {
+      id: "sub-1",
+      at: "2026-09-29T12:00:00.000Z",
+      status: "done",
+      threadIds: ["note", "later"],
+      taskIds: ["task-a"],
+      conversationId: "conv-1",
+    };
+    const container = mount(vi.fn(), [done]);
+    const text = container.textContent ?? "";
+    const note = text.indexOf("A general note.");
+    const event = text.indexOf("Review submitted — 2 threads → Task");
+    const later = text.indexOf("After the submission.");
+    expect(note).toBeGreaterThan(-1);
+    expect(event).toBeGreaterThan(note);
+    expect(later).toBeGreaterThan(event);
+    expect(container.querySelector('[data-testid="review-submitted-event"]')?.textContent).toContain(
+      "Tighten review API errors",
+    );
+    expect(container.querySelector('[data-testid="thread-linked-task"]')?.textContent).toContain(
+      "task-a",
+    );
   });
 });

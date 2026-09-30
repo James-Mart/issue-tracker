@@ -196,6 +196,7 @@ describe("question researcher", () => {
     expect(conversationMeta(conversationId)).toMatchObject({
       issueId: "s",
       channel: "review",
+      role: "issue-tracker-review-question",
       model: "composer-2.5",
     });
 

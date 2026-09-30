@@ -13,13 +13,19 @@ import {
 import { isHumanRole, Message } from "@/features/issues/components/comments/message";
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
 import { Shimmer } from "@/features/issues/components/comments/shimmer";
-import type { CommentMessage } from "@server/schemas";
+import type { CommentMessage, ReviewSubmission } from "@server/schemas";
 import { questionKindFields } from "@server/question-kind";
 import {
   isPlainNote,
   STORY_COMPOSER_LABEL,
   type CommentThread as CommentThreadData,
 } from "@/features/issues/lib/comment-threads";
+import { ThreadLinkedTaskChip } from "@/features/issues/components/comments/thread-linked-task-chip";
+import {
+  conversationTimelineItems,
+  reviewSubmittedLabel,
+  type ConversationTimelineItem,
+} from "../lib/review-submission-ui";
 import { ReviewThread } from "./review-thread";
 
 const COMPOSER_ROLE = "human";
@@ -41,25 +47,57 @@ function StandaloneComment({
   );
 }
 
+function ReviewSubmittedEvent({
+  submission,
+}: {
+  submission: Extract<ReviewSubmission, { status: "done" }>;
+}) {
+  return (
+    <article
+      data-testid="review-submitted-event"
+      data-submission-id={submission.id}
+      className="flex flex-col gap-1.5 border-b border-border py-3"
+    >
+      <p className="text-sm text-foreground">
+        {reviewSubmittedLabel(submission.threadIds.length, submission.taskIds.length)}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {submission.taskIds.map((taskId) => (
+          <ThreadLinkedTaskChip key={taskId} taskId={taskId} />
+        ))}
+      </div>
+    </article>
+  );
+}
+
 function ConversationTimeline({
-  threads,
+  items,
   storyId,
   onOpenInDiff,
 }: {
-  threads: CommentThreadData[];
+  items: ConversationTimelineItem<CommentThreadData>[];
   storyId: string;
   onOpenInDiff: (threadId: string, commitSha: string) => void;
 }) {
   let lastDay = "";
   return (
     <div className="flex flex-col gap-3">
-      {threads.map((thread) => {
-        const key = commentDayKey(thread.root.at);
+      {items.map((item) => {
+        const key = commentDayKey(item.at);
         const showMarker = key !== lastDay;
         lastDay = key;
+        if (item.kind === "submitted") {
+          return (
+            <div key={`submission:${item.submission.id}`} className="flex min-w-0 flex-col">
+              {showMarker ? <Marker>{commentDayLabel(item.at)}</Marker> : null}
+              <ReviewSubmittedEvent submission={item.submission} />
+            </div>
+          );
+        }
+        const thread = item.thread;
         const anchor = thread.root.anchor;
         return (
-          <div key={thread.root.id} className="flex min-w-0 flex-col">
+          <div key={`thread:${thread.root.id}`} className="flex min-w-0 flex-col">
             {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
             {isPlainNote(thread) ? (
               <StandaloneComment message={thread.root} storyId={storyId} />
@@ -86,9 +124,11 @@ function ConversationTimeline({
 /** Chronological Story comments and threads, with a general-comment composer. */
 export function ReviewConversationTab({
   storyId,
+  submissions = [],
   onOpenInDiff,
 }: {
   storyId: string;
+  submissions?: ReviewSubmission[];
   onOpenInDiff: (threadId: string, commitSha: string) => void;
 }) {
   const comments = useCommentsQuery(storyId);
@@ -115,6 +155,9 @@ export function ReviewConversationTab({
       send();
     }
   };
+
+  const timeline = conversationTimelineItems(threads, submissions);
+  const commentsReady = !comments.error && !comments.isLoading;
 
   return (
     <div
@@ -148,19 +191,20 @@ export function ReviewConversationTab({
             ))}
           </div>
         ) : null}
-        {comments.error || comments.isLoading ? null : threads.length === 0 ? (
+        {commentsReady && timeline.length === 0 ? (
           <ShellState
             className="border-0 bg-transparent px-4 py-8 shadow-none"
             title="No comments yet."
             detail="Add one below to leave a note on this Story."
           />
-        ) : (
+        ) : null}
+        {commentsReady && timeline.length > 0 ? (
           <ConversationTimeline
-            threads={threads}
+            items={timeline}
             storyId={storyId}
             onOpenInDiff={onOpenInDiff}
           />
-        )}
+        ) : null}
       </div>
       {post.isPending ? <Shimmer label="Sending…" /> : null}
       <div className="flex min-w-0 shrink-0 flex-col gap-2 border-t border-border px-1 py-3">

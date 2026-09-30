@@ -47,6 +47,13 @@ function isUsableCatalog(
   return catalog !== null && catalog.models.length > 0;
 }
 
+/** Catalog on disk when it lists models; otherwise the built-in fake catalog. */
+export function listedAgentModels(): { id: string; displayName: string }[] {
+  const disk = readAgentModelSlugCatalog(modelSlugCatalogPath);
+  if (isUsableCatalog(disk)) return disk.models;
+  return FAKE_MODELS;
+}
+
 export function readAgentModelSlugCatalog(
   catalogPath: string,
 ): AgentModelCatalogFile | null {

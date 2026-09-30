@@ -47,11 +47,16 @@ export function activeResearcherConversationId(
   return thread.researcherConversationId;
 }
 
-/** Review-channel conversations are question researchers. */
+/**
+ * A conversation a `researcher-session` event names, or one started for the
+ * researcher role. The role covers a run that ends before its event lands.
+ */
 export function isQuestionResearcherConversation(
-  meta: Pick<ConversationMeta, "channel">,
+  meta: Pick<ConversationMeta, "id" | "issueId" | "channel" | "role">,
 ): boolean {
-  return meta.channel === "review";
+  if (meta.role === REVIEW_QUESTION_ROLE) return true;
+  if (meta.channel !== "review" || meta.issueId === undefined) return false;
+  return researcherConversationIds(meta.issueId).includes(meta.id);
 }
 
 /** Record why a researcher run ended without finishing, for the thread's failure notice. */

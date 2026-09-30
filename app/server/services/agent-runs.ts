@@ -5,17 +5,22 @@ import type {
   TranscriptEvent,
 } from "../schemas.js";
 import {
-  listConversations,
+  activeImplementingConversationId,
+  listConversationIds,
   readConversation,
   readDelegations,
-  listConversationIds,
 } from "./conversations.js";
 import {
   conversationIdFromResearcherDelegation,
   researcherConversationIds,
   researcherRunsForIssue,
 } from "./researcher-runs.js";
-import { ancestorChain } from "./subtree.js";
+import {
+  conversationIdFromReviewTaskerDelegation,
+  reviewTaskerConversationIds,
+  reviewTaskerRunsForIssue,
+} from "./review-tasking.js";
+import { ancestorChain, nearestImplementingWorkRootId } from "./subtree.js";
 
 export type AgentRunsWorkRoot = {
   issueId: string;
@@ -70,31 +75,6 @@ function runsForConversation(
   return runs;
 }
 
-function nearestImplementingWorkRootId(chain: Issue[]): string | undefined {
-  for (let i = chain.length - 1; i >= 0; i -= 1) {
-    const issue = chain[i]!;
-    if (issue.kind === "epic") return issue.id;
-    if (issue.kind === "story" && chain[i - 1]?.kind === "project") {
-      return issue.id;
-    }
-  }
-  return undefined;
-}
-
-function findCoordinatorConversation(workRootId: string): string | undefined {
-  for (const meta of listConversations()) {
-    if (
-      meta.archived ||
-      meta.issueId !== workRootId ||
-      meta.channel !== "implementing"
-    ) {
-      continue;
-    }
-    return meta.id;
-  }
-  return undefined;
-}
-
 /** Work root and implementing conversation for the coordinator link on agent runs. */
 export function findAgentRunsWorkRoot(
   issueId: string,
@@ -102,7 +82,7 @@ export function findAgentRunsWorkRoot(
 ): AgentRunsWorkRoot | undefined {
   const workRootId = nearestImplementingWorkRootId(ancestorChain(issueId, issues));
   if (!workRootId) return undefined;
-  const conversationId = findCoordinatorConversation(workRootId);
+  const conversationId = activeImplementingConversationId(workRootId);
   if (!conversationId) return undefined;
   return { issueId: workRootId, conversationId };
 }
@@ -122,6 +102,7 @@ export function listAgentRunsForIssue(issueId: string): AgentRun[] {
     runs.push(...runsForConversation(conversationId, issueId, delegations));
   }
 
+  runs.push(...reviewTaskerRunsForIssue(issueId));
   runs.push(...researcherRunsForIssue(issueId));
   runs.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   return runs;
@@ -144,6 +125,14 @@ export function listAgentRunEvents(
   issueId: string,
   delegationId: string,
 ): SubagentUpdateEvent[] | undefined {
+  const taskerConversationId =
+    conversationIdFromReviewTaskerDelegation(delegationId);
+  if (taskerConversationId) {
+    return reviewTaskerConversationIds(issueId).includes(taskerConversationId)
+      ? []
+      : undefined;
+  }
+
   const researcherConversationId =
     conversationIdFromResearcherDelegation(delegationId);
   if (researcherConversationId) {

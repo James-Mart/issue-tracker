@@ -29,6 +29,7 @@ export const conversationMetaSchema = z
     projectId: nonEmpty,
     issueId: nonEmpty.optional(),
     channel: z.enum(CONVERSATION_CHANNELS).optional(),
+    role: nonEmpty.optional(),
     agentId: nonEmpty.optional(),
     model: nonEmpty,
     pendingMessage: z
@@ -447,6 +448,7 @@ export type CreateConversationInput = {
   agentId?: string;
   issueId?: string;
   channel?: ConversationChannel;
+  role?: string;
   /** When set, the first prompt event is persisted in the same write turn. */
   message?: string;
 };

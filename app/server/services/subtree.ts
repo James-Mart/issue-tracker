@@ -1,3 +1,4 @@
+import { channelForIssue } from "../kind.js";
 import type { Issue } from "../schemas.js";
 import { IssueError } from "./errors.js";
 
@@ -72,6 +73,27 @@ export function ancestorChain(id: string, issues: Issue[]): Issue[] {
     );
   }
   return ascending;
+}
+
+/**
+ * Nearest Epic on a Project → … → target chain, or the project-level Story
+ * when the chain has no Epic.
+ */
+export function nearestImplementingWorkRootId(
+  chain: Issue[],
+): string | undefined {
+  for (let i = chain.length - 1; i >= 0; i -= 1) {
+    const issue = chain[i]!;
+    const parentKind = chain[i - 1]?.kind;
+    const channel =
+      issue.kind === "story"
+        ? parentKind
+          ? channelForIssue(issue, parentKind)
+          : undefined
+        : channelForIssue(issue);
+    if (channel === "implementing") return issue.id;
+  }
+  return undefined;
 }
 
 /**

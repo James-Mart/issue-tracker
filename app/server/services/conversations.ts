@@ -303,6 +303,7 @@ export function createConversation(
       model,
     };
     if (input.agentId?.trim()) fields.agentId = input.agentId.trim();
+    if (input.role) fields.role = input.role;
     if (anchor) {
       fields.issueId = anchor.issueId;
       fields.channel = anchor.channel;
@@ -466,6 +467,18 @@ export function listConversations(): ConversationMeta[] {
   }
   metas.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return metas;
+}
+
+/** Newest non-archived implementing conversation on a work root, if any. */
+export function activeImplementingConversationId(
+  workRootId: string,
+): string | undefined {
+  return listConversations().find(
+    (meta) =>
+      !meta.archived &&
+      meta.issueId === workRootId &&
+      meta.channel === "implementing",
+  )?.id;
 }
 
 /** Conversation `meta.json` only — no transcript or delegations. */
@@ -760,7 +773,7 @@ export async function startConversationPrompt(
   conversationId: string,
   prompt: string,
   model: string | undefined,
-  sessions: AgentSessions,
+  sessions: Pick<AgentSessions, "sendPrompt">,
   opts?: { persistPrompt?: boolean; attachments?: string[] },
 ): Promise<{ ok: true; runId: string } | { ok: false; message: string }> {
   assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_PROMPT);

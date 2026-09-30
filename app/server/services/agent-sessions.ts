@@ -35,6 +35,10 @@ import {
 } from "./delegate-tool.js";
 import { clearCatchupBuffer, publishFrame } from "./conversation-stream.js";
 import { ISSUES_TOPIC } from "./issue-events.js";
+import {
+  classifyReviewTaskingRun,
+  failReviewTaskingClassification,
+} from "./review-tasking.js";
 import { publishPipelineRunEvent } from "./pipeline-runs-events.js";
 import {
   EventPipeline,
@@ -462,6 +466,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         }
       }
 
+      let handedOff = false;
       if (result.status === "finished") {
         const { meta } = readConversation(conversationId);
         const pending = meta.pendingMessage;
@@ -487,7 +492,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
             },
             false,
           );
-          if (!fired.ok) {
+          if (fired.ok) {
+            handedOff = true;
+          } else {
             await setPendingMessage(
               conversationId,
               pending.text,
@@ -497,6 +504,41 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
               await appendErrorEvent(conversationId, fired.error.message);
             }
           }
+        }
+      }
+
+      if (!handedOff) {
+        let classified = false;
+        try {
+          classified = await classifyReviewTaskingRun(
+            conversationId,
+            {
+              status: result.status,
+              errorMessage: result.error?.message,
+            },
+            {
+              getActiveRun: (id) => sessions.get(id)?.turn?.run,
+              sendPrompt: (id, options) =>
+                sendPromptInternal(id, options, false),
+            },
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(
+            `review tasking classification failed for conversation ${conversationId}`,
+            err,
+          );
+          try {
+            classified = failReviewTaskingClassification(conversationId, message);
+          } catch (markErr) {
+            console.error(
+              `review tasking failure was not recorded for conversation ${conversationId}`,
+              markErr,
+            );
+          }
+        }
+        if (classified && runMeta.issueId) {
+          publishPlanningRunIssueFrame(runMeta.issueId);
         }
       }
 

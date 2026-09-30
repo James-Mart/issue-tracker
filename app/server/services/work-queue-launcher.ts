@@ -1,37 +1,23 @@
-import { readAgentModelSlugCatalog } from "../agent-model-slugs.js";
-import { modelSlugCatalogPath } from "../config.js";
 import type { Issue, IssuePatch, IssuesResponse } from "../schemas.js";
-import { FAKE_MODELS } from "./agent-sdk.fake.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import {
   subscribeFrames,
   type ConversationFrame,
 } from "./conversation-stream.js";
-import {
-  createIssueChannelSession,
-  listConversations,
-  startConversationPrompt,
-} from "./conversations.js";
+import { listConversations } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { guestRefusesAgentLaunch } from "./guest-agent-launch.js";
 import {
   implementingSessionMessage,
-  implementingSessionModel,
   implementingSessionTitle,
 } from "./implementing-launch.js";
+import { startImplementingChannelSession } from "./implementing-session.js";
 import { ISSUES_TOPIC, startIssueEventsWatcher } from "./issue-events.js";
 import { list, readAll, update } from "./issues.js";
 import { drainPlanQueue } from "./plan-queue-launcher.js";
-import { requireProjectWorkspace } from "./project-workspace.js";
 import { projectContaining } from "./subtree.js";
 
 type WorkRoot = Extract<Issue, { kind: "epic" | "story" }>;
-
-function listedModels(): { id: string; displayName: string }[] {
-  const disk = readAgentModelSlugCatalog(modelSlugCatalogPath);
-  if (disk && disk.models.length > 0) return disk.models;
-  return FAKE_MODELS;
-}
 
 function countActiveImplementingRuns(
   projectId: string,
@@ -101,35 +87,15 @@ async function startQueuedRoot(
   projectId: string,
   sessions: AgentSessions,
 ): Promise<void> {
-  requireProjectWorkspace(projectId);
-  const model = implementingSessionModel(listedModels());
-  if (!model) {
-    throw new Error("no coordinator model is available");
-  }
-  const title = implementingSessionTitle(root.title);
-  const message = implementingSessionMessage(root.id);
-  const { meta, initialPrompt } = await createIssueChannelSession(
+  await startImplementingChannelSession(
     {
       projectId,
-      title,
-      model,
       issueId: root.id,
-      channel: "implementing",
-      message,
+      title: implementingSessionTitle(root.title),
+      message: implementingSessionMessage(root.id),
     },
     sessions,
   );
-  if (!initialPrompt) return;
-  const started = await startConversationPrompt(
-    meta.id,
-    initialPrompt,
-    model,
-    sessions,
-    { persistPrompt: false },
-  );
-  if (!started.ok) {
-    throw new Error(started.message);
-  }
 }
 
 async function drainProject(

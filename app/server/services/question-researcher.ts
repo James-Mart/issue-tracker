@@ -151,6 +151,7 @@ async function openResearcherConversation(
     model: loadRoleModelPin(REVIEW_QUESTION_ROLE),
     issueId: storyId,
     channel: "review",
+    role: REVIEW_QUESTION_ROLE,
   });
   try {
     const workspace = requireProjectWorkspace(projectId);
