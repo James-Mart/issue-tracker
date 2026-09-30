@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appendJsonlRecord,
+  releasePreparedAppendPaths,
   resetJsonlAppendState,
 } from "./jsonl-append.js";
 
@@ -107,6 +108,38 @@ describe("appendJsonlRecord", () => {
     writeFileSync(filePath, '{"a":1}\n{"a":2,"unfin', { flag: "w" });
     await appendJsonlRecord(filePath, { a: 3 });
     expect(readFileSync(filePath, "utf8")).toBe('{"a":1}\n{"a":3}\n');
+  });
+
+  it("prepares a path again after its directory is released", async () => {
+    const filePath = join(dir, "nested", "rows.ndjson");
+    await appendJsonlRecord(filePath, { a: 1 });
+
+    writeFileSync(filePath, '{"a":1}\n{"a":2,"unfin', { flag: "w" });
+    releasePreparedAppendPaths(dir);
+    await appendJsonlRecord(filePath, { a: 3 });
+
+    expect(readFileSync(filePath, "utf8")).toBe('{"a":1}\n{"a":3}\n');
+  });
+
+  it("leaves prepared paths outside the released directory", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "jsonl-append-"));
+    dirs.push(parent);
+    const keptDir = join(parent, "conv");
+    const releasedDir = join(parent, "conv-other");
+    const kept = join(keptDir, "rows.ndjson");
+    const released = join(releasedDir, "rows.ndjson");
+
+    await appendJsonlRecord(kept, { a: 1 });
+    await appendJsonlRecord(released, { a: 1 });
+    writeFileSync(kept, '{"a":1}\n{"torn', { flag: "w" });
+    writeFileSync(released, '{"a":1}\n{"torn', { flag: "w" });
+
+    releasePreparedAppendPaths(releasedDir);
+    await appendJsonlRecord(kept, { a: 2 });
+    await appendJsonlRecord(released, { a: 2 });
+
+    expect(readFileSync(kept, "utf8")).toBe('{"a":1}\n{"torn{"a":2}\n');
+    expect(readFileSync(released, "utf8")).toBe('{"a":1}\n{"a":2}\n');
   });
 
   it("keeps later appends working after one fails", async () => {

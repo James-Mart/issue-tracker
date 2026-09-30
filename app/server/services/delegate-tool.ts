@@ -234,8 +234,7 @@ export function resetDelegationConcurrencyForTests(): void {
   nestedRunsByConversation.clear();
 }
 
-/** Test helper: outstanding nested work for a conversation concurrency key. */
-export function conversationDelegationOutstandingForTests(
+function outstandingDelegations(
   conversationId: string,
 ): { inFlight: number; queued: number; nestedTracked: number } {
   const gate = conversationGates.get(conversationId);
@@ -247,6 +246,19 @@ export function conversationDelegationOutstandingForTests(
     queued: (gate?.waiters.length ?? 0) + globalQueued,
     nestedTracked: nestedRunsByConversation.get(conversationId)?.size ?? 0,
   };
+}
+
+/** Test helper: outstanding nested work for a conversation concurrency key. */
+export function conversationDelegationOutstandingForTests(
+  conversationId: string,
+): { inFlight: number; queued: number; nestedTracked: number } {
+  return outstandingDelegations(conversationId);
+}
+
+/** Whether a conversation has a nested run holding a slot or queued for one. */
+export function hasOutstandingDelegations(conversationId: string): boolean {
+  const { inFlight, queued } = outstandingDelegations(conversationId);
+  return inFlight > 0 || queued > 0;
 }
 
 function conversationGate(key: string): SlotGate {

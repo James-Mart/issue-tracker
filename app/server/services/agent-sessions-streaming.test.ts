@@ -676,7 +676,9 @@ describe("agent sessions streaming", () => {
   });
 
   it("dispose and disposeAll always clear the catch-up buffer", async () => {
-    const { createConversation, createAgentSessions } = await load();
+    const { createConversation, readConversation, createAgentSessions } =
+      await load();
+    const { coalesceCustomTools } = await import("./custom-tool-coalesce.js");
     const { publishFrame, getFramesSince } = await import(
       "./conversation-stream.js"
     );
@@ -688,8 +690,12 @@ describe("agent sessions streaming", () => {
       projectId: "platform",
       model: "auto",
     });
+    const bufferedEvent: { type: "assistant"; text: string; seq?: number } = {
+      type: "assistant",
+      text: "buffered",
+    };
     publishFrame(meta.id, {
-      event: { type: "assistant", text: "buffered" },
+      event: bufferedEvent,
       persist: false,
     });
     const buffered = getFramesSince(meta.id, 0);
@@ -697,11 +703,30 @@ describe("agent sessions streaming", () => {
     if (buffered.resetRequired) return;
     expect(buffered.frames).toHaveLength(1);
 
+    let runs = 0;
+    const wrapped = coalesceCustomTools(
+      {
+        delegate: {
+          execute: async () => {
+            runs += 1;
+            return { value: "stored" };
+          },
+        },
+      },
+      meta.id,
+    );
+    await wrapped.delegate!.execute({}, { toolCallId: "dispose-call" });
+
     await sessions.dispose(meta.id);
     expect(getFramesSince(meta.id, 0)).toEqual({
       resetRequired: false,
       frames: [],
     });
+    expect(getFramesSince(meta.id, bufferedEvent.seq!)).toEqual({
+      resetRequired: true,
+    });
+    await wrapped.delegate!.execute({}, { toolCallId: "dispose-call" });
+    expect(runs).toBe(2);
 
     publishFrame(meta.id, {
       event: { type: "assistant", text: "buffered again" },
@@ -716,18 +741,27 @@ describe("agent sessions streaming", () => {
       event: { type: "run", status: "started", runId: "run-2" },
       persist: false,
     });
-    // Buffer was cleared on dispose, so the window no longer reaches seq 0;
-    // ask from the pre-dispose high-water mark.
+    // Dispose released the live seq, so catch-up starts from the last
+    // persisted seq. The pre-dispose live frame was not persisted.
     const afterRun = getFramesSince(meta.id, 1);
     expect(afterRun.resetRequired).toBe(false);
     if (afterRun.resetRequired) return;
     expect(afterRun.frames.length).toBeGreaterThan(0);
 
+    await wrapped.delegate!.execute({}, { toolCallId: "dispose-call" });
+    expect(runs).toBe(2);
+
     await sessions.disposeAll();
-    expect(getFramesSince(meta.id, 1)).toEqual({
+    const persisted = readConversation(meta.id).transcript.at(-1)?.seq ?? 0;
+    expect(getFramesSince(meta.id, persisted)).toEqual({
       resetRequired: false,
       frames: [],
     });
+    expect(getFramesSince(meta.id, persisted + 1)).toEqual({
+      resetRequired: true,
+    });
+    await wrapped.delegate!.execute({}, { toolCallId: "dispose-call" });
+    expect(runs).toBe(3);
   });
 
   it("dispose stops a live agent stack and clears durable ownership", async () => {

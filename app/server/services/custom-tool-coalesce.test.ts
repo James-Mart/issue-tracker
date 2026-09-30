@@ -196,4 +196,91 @@ describe("coalesceCustomTools", () => {
       }),
     ]);
   });
+
+  it("drops settled results for the conversation, including a nested tool, and leaves another conversation stored", async () => {
+    const { createConversation, coalesceCustomTools } = await load();
+    const { releaseCoalescedCustomTools } = await import(
+      "./custom-tool-coalesce.js"
+    );
+    const owned = await createConversation({
+      title: "Owned",
+      projectId: "issue-tracker",
+      model: "composer-2.5",
+    });
+    const other = await createConversation({
+      title: "Other",
+      projectId: "issue-tracker",
+      model: "composer-2.5",
+    });
+    let ownedRuns = 0;
+    let nestedRuns = 0;
+    let otherRuns = 0;
+    const ownedTools = coalesceCustomTools(
+      {
+        delegate: tool(async () => {
+          ownedRuns += 1;
+          return { value: "root" };
+        }),
+        delegations: tool(async () => {
+          nestedRuns += 1;
+          return { value: "nested" };
+        }),
+      },
+      owned.id,
+    );
+    const otherTools = coalesceCustomTools(
+      {
+        delegate: tool(async () => {
+          otherRuns += 1;
+          return { value: "other" };
+        }),
+      },
+      other.id,
+    );
+    await ownedTools.delegate!.execute({}, { toolCallId: "root-call" });
+    await ownedTools.delegations!.execute({}, { toolCallId: "nested-call" });
+    await otherTools.delegate!.execute({}, { toolCallId: "other-call" });
+
+    releaseCoalescedCustomTools(owned.id);
+
+    await ownedTools.delegate!.execute({}, { toolCallId: "root-call" });
+    await ownedTools.delegations!.execute({}, { toolCallId: "nested-call" });
+    await otherTools.delegate!.execute({}, { toolCallId: "other-call" });
+    expect(ownedRuns).toBe(2);
+    expect(nestedRuns).toBe(2);
+    expect(otherRuns).toBe(1);
+  });
+
+  it("does not store a result that settles after the conversation was released", async () => {
+    const { createConversation, coalesceCustomTools } = await load();
+    const { releaseCoalescedCustomTools } = await import(
+      "./custom-tool-coalesce.js"
+    );
+    const conversation = await createConversation({
+      title: "In flight",
+      projectId: "issue-tracker",
+      model: "composer-2.5",
+    });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let runs = 0;
+    const wrapped = coalesceCustomTools(
+      {
+        delegate: tool(async () => {
+          runs += 1;
+          await gate;
+          return { value: "late" };
+        }),
+      },
+      conversation.id,
+    );
+    const first = wrapped.delegate!.execute({}, { toolCallId: "call-1" });
+    releaseCoalescedCustomTools(conversation.id);
+    release();
+    await expect(first).resolves.toEqual({ value: "late" });
+    await wrapped.delegate!.execute({}, { toolCallId: "call-1" });
+    expect(runs).toBe(2);
+  });
 });

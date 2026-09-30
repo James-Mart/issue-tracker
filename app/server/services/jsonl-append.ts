@@ -1,5 +1,5 @@
 import { mkdir, open } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 
 /**
  * Append one record to an NDJSON file the SDK's `JsonlLocalAgentStore` also
@@ -130,6 +130,17 @@ export function appendJsonlRecord(
       await handle.close();
     }
   });
+}
+
+/**
+ * Drop append preparation for paths under `directory`. The next append to
+ * such a path creates its directory and repairs a torn tail again.
+ */
+export function releasePreparedAppendPaths(directory: string): void {
+  const prefix = `${resolve(directory)}${sep}`;
+  for (const filePath of prepared) {
+    if (resolve(filePath).startsWith(prefix)) prepared.delete(filePath);
+  }
 }
 
 /** Test seam: forget which paths were prepared. */

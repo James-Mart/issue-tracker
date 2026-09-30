@@ -353,6 +353,91 @@ describe("run cost recorder", () => {
       }),
     ]);
   });
+
+  it("drops an agent queue once it drains and creates it again for the next record", async () => {
+    getUsage.mockImplementation(async () => ({
+      cost: { rawCostCents: 4, chargedCents: 1 },
+    }));
+
+    const meta = await createTestConversation("Queue lifetime");
+    const recorder = makeRecorder();
+    const recorded = {
+      conversationId: meta.id,
+      agentId: "agent-1",
+      endedAt: Date.now(),
+    };
+    recorder.onRunUsage({ ...recorded, runId: "run-1" });
+    expect(recorder.agentQueueHeldForTests(meta.id, "agent-1")).toBe(true);
+
+    await advanceToFirstPoll();
+    expect(recorder.agentQueueHeldForTests(meta.id, "agent-1")).toBe(true);
+
+    await advanceToSecondPoll();
+    expect(runCostEvents(meta.id)).toEqual([
+      expect.objectContaining({ runId: "run-1", status: "settled" }),
+    ]);
+    expect(recorder.agentQueueHeldForTests(meta.id, "agent-1")).toBe(false);
+
+    recorder.onRunUsage({
+      ...recorded,
+      runId: "run-2",
+      endedAt: Date.now(),
+    });
+    expect(recorder.agentQueueHeldForTests(meta.id, "agent-1")).toBe(true);
+
+    await advanceToFirstPoll();
+    await advanceToSecondPoll();
+    expect(runCostEvents(meta.id).map((event) => event.runId)).toEqual([
+      "run-1",
+      "run-2",
+    ]);
+    expect(recorder.agentQueueHeldForTests(meta.id, "agent-1")).toBe(false);
+  });
+
+  it("keeps the queue while a later run for the same agent is still waiting", async () => {
+    getUsage.mockImplementation(async () => ({
+      cost: { rawCostCents: getUsage.mock.calls.length, chargedCents: 0 },
+    }));
+
+    const meta = await createTestConversation("Queue pending");
+    const start = Date.now();
+    const recorder = createRunCostRecorder({
+      getUsage,
+      logError,
+      clock: {
+        now: () => Date.now(),
+        sleep: (ms) =>
+          new Promise((resolve) => {
+            setTimeout(resolve, ms);
+          }),
+      },
+    });
+    recorder.onRunUsage({
+      conversationId: meta.id,
+      runId: "run-1",
+      agentId: "agent-1",
+      endedAt: start,
+    });
+    recorder.onRunUsage({
+      conversationId: meta.id,
+      runId: "run-2",
+      agentId: "agent-1",
+      endedAt: start + 1_000_000,
+    });
+
+    await advanceThroughPollWindow();
+    expect(runCostEvents(meta.id).map((event) => event.runId)).toEqual([
+      "run-1",
+    ]);
+    expect(recorder.agentQueueHeldForTests(meta.id, "agent-1")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1_000_000);
+    expect(runCostEvents(meta.id).map((event) => event.runId)).toEqual([
+      "run-1",
+      "run-2",
+    ]);
+    expect(recorder.agentQueueHeldForTests(meta.id, "agent-1")).toBe(false);
+  });
 });
 
 describe("previousSettledCumulative", () => {
