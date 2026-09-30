@@ -179,6 +179,19 @@ export function createRunCostRecorder(deps: RunCostRecorderDeps) {
     await appendUnavailable(run);
   }
 
+  function finishActivePoll(key: string): void {
+    const current = queues.get(key);
+    if (!current) return;
+    current.pending.shift();
+    current.active = undefined;
+    // An empty queue is only bookkeeping; the next record creates it again.
+    if (current.pending.length === 0) {
+      queues.delete(key);
+      return;
+    }
+    drainQueue(key);
+  }
+
   function drainQueue(key: string): void {
     const state = queues.get(key);
     if (!state || state.active !== undefined || state.pending.length === 0) {
@@ -193,13 +206,7 @@ export function createRunCostRecorder(deps: RunCostRecorderDeps) {
           err,
         );
       })
-      .finally(async () => {
-        const current = queues.get(key);
-        if (!current) return;
-        current.pending.shift();
-        current.active = undefined;
-        drainQueue(key);
-      });
+      .finally(() => finishActivePoll(key));
   }
 
   function enqueue(run: PendingRun): void {
@@ -216,6 +223,11 @@ export function createRunCostRecorder(deps: RunCostRecorderDeps) {
   return {
     onRunUsage(recorded: RunUsageRecorded): void {
       enqueue(recorded);
+    },
+
+    /** Whether this recorder still holds a queue for the pair. */
+    agentQueueHeldForTests(conversationId: string, agentId: string): boolean {
+      return queues.has(agentQueueKey(conversationId, agentId));
     },
 
     async resumeAtBoot(): Promise<void> {

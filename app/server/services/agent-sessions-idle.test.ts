@@ -7,6 +7,7 @@ import {
   type FakeAgentSdk,
 } from "./agent-sdk.fake.js";
 import {
+  conversationDir,
   load,
   storeDir,
   useAgentSessionsTestFixtures,
@@ -78,6 +79,8 @@ describe("agent sessions idle teardown", () => {
     const timeout = await idleTimeout();
     const caches = await import("./agent-state-caches.js");
     const evictSpy = vi.spyOn(caches, "evictConversationStoreCaches");
+    const append = await import("./jsonl-append.js");
+    const releaseSpy = vi.spyOn(append, "releasePreparedAppendPaths");
     const stack = await import("./agent-stack.js");
     const stopSpy = vi.spyOn(stack, "stopAgentStack");
     const fake = createFakeAgentSdk();
@@ -90,6 +93,7 @@ describe("agent sessions idle teardown", () => {
 
     await runOnce(sessions, meta.id, "go");
     evictSpy.mockClear();
+    releaseSpy.mockClear();
     stopSpy.mockClear();
 
     await vi.advanceTimersByTimeAsync(timeout - 1);
@@ -100,8 +104,10 @@ describe("agent sessions idle teardown", () => {
     await until(() => stopSpy.mock.calls.length > 0);
     expect(fake.handles[0]?.disposed).toBe(true);
     expect(evictSpy).toHaveBeenCalledWith(storeDir(meta.id));
+    expect(releaseSpy).toHaveBeenCalledWith(conversationDir(meta.id));
     expect(stopSpy).toHaveBeenCalledWith(meta.id);
     evictSpy.mockRestore();
+    releaseSpy.mockRestore();
     stopSpy.mockRestore();
   });
 

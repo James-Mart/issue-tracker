@@ -39,6 +39,7 @@ import {
   releaseConversationStream,
 } from "./conversation-stream.js";
 import { releaseCoalescedCustomTools } from "./custom-tool-coalesce.js";
+import { releasePreparedAppendPaths } from "./jsonl-append.js";
 import { ISSUES_TOPIC } from "./issue-events.js";
 import {
   classifyReviewTaskingRun,
@@ -143,8 +144,12 @@ function isAuthFailureResult(result: AgentRunResult): boolean {
   return classifyAgentFailure(result.status, result.error) === "auth";
 }
 
+function conversationDir(conversationId: string): string {
+  return join(conversationsDir, conversationId);
+}
+
 function conversationStoreDir(conversationId: string): string {
-  return join(conversationsDir, conversationId, "agent-state");
+  return join(conversationDir(conversationId), "agent-state");
 }
 
 function publishPlanningRunIssueFrame(issueId: string): void {
@@ -300,6 +305,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
   function releaseConversationEphemeralState(conversationId: string): void {
     releaseCoalescedCustomTools(conversationId);
     releaseConversationStream(conversationId);
+    releasePreparedAppendPaths(conversationDir(conversationId));
   }
 
   async function tearDown(
