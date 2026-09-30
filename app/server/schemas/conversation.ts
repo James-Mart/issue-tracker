@@ -464,10 +464,14 @@ export type ConversationDetail = {
   transcript: TranscriptEvent[];
 };
 
-/** GET /api/conversations/:id/transcript — cacheable history page. */
+/**
+ * GET /api/conversations/:id/transcript.
+ * A before/limit page includes `hasMore`. sinceSeq catch-up omits it.
+ */
 export const conversationTranscriptPageSchema = z.object({
   events: z.array(transcriptEventSchema),
   latestSeq: frameSeq,
+  hasMore: z.boolean().optional(),
 });
 
 export type ConversationTranscriptPage = z.infer<

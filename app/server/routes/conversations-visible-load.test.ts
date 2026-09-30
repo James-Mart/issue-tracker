@@ -123,7 +123,7 @@ afterEach(async () => {
 });
 
 describe("visible transcript load against large hidden channel sessions", () => {
-  it("completes GET /transcript as { events, latestSeq } while other channels hold large histories", async () => {
+  it("completes GET /transcript as one newest page while other channels hold large histories", async () => {
     const hiddenIds = [
       await createChannelSession("ship-it", "implementing", "Hidden one"),
       await createChannelSession("ship-it", "implementing", "Hidden two"),
@@ -159,7 +159,7 @@ describe("visible transcript load against large hidden channel sessions", () => 
     expect(pageRes.ok).toBe(true);
 
     const page = (await pageRes.json()) as Record<string, unknown>;
-    expect(Object.keys(page).sort()).toEqual(["events", "latestSeq"]);
+    expect(Object.keys(page).sort()).toEqual(["events", "hasMore", "latestSeq"]);
     expect(page).toEqual({
       events: [
         expect.objectContaining({
@@ -174,9 +174,9 @@ describe("visible transcript load against large hidden channel sessions", () => 
         }),
       ],
       latestSeq: second.seq,
+      hasMore: false,
     });
     expect(page).not.toHaveProperty("limit");
     expect(page).not.toHaveProperty("beforeSeq");
-    expect(page).not.toHaveProperty("hasMore");
   });
 });

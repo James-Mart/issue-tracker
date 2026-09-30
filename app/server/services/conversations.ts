@@ -18,7 +18,6 @@ import {
   parseDelegationEndRecordInput,
   parseDelegationRecord,
   parseDelegationRecordInput,
-  parseTranscriptEvent,
   parseTranscriptEventInput,
   type ConversationChannel,
   type ConversationDetail,
@@ -42,7 +41,8 @@ import {
 } from "../kind.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
-import { effectiveTranscriptSeq } from "./conversation-transcript-seq.js";
+import { readAllTranscriptEvents } from "./conversation-transcript-seq.js";
+import { readTranscriptPage } from "./transcript-page.js";
 import { IssueError } from "./errors.js";
 import {
   assertGuestAllowsAgentLaunch,
@@ -167,31 +167,6 @@ function readMetaRaw(id: string): ConversationMeta {
 
 function writeMeta(meta: ConversationMeta): void {
   writeFileSync(metaPathOf(meta.id), `${JSON.stringify(meta, null, 2)}\n`);
-}
-
-function readTranscriptLines(id: string): TranscriptEvent[] {
-  const path = transcriptPathOf(id);
-  if (!existsSync(path)) return [];
-  const events: TranscriptEvent[] = [];
-  let lineSeq = 0;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    lineSeq += 1;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const parsed = parseTranscriptEvent(raw);
-    if (!parsed.ok) continue;
-    events.push(
-      parsed.event.seq === undefined
-        ? { ...parsed.event, seq: effectiveTranscriptSeq(raw, lineSeq) }
-        : parsed.event,
-    );
-  }
-  return events;
 }
 
 /**
@@ -488,7 +463,16 @@ export function readConversationMeta(id: string): ConversationMeta {
 
 export function readConversation(id: string): ConversationDetail {
   const meta = readMetaRaw(id);
-  return { meta, transcript: readTranscriptLines(id) };
+  return { meta, transcript: readAllTranscriptEvents(id) };
+}
+
+/** Meta must exist. The page itself is read from the tail of the transcript. */
+export function readConversationTranscriptPage(
+  id: string,
+  options: { before?: number; limit: number },
+) {
+  readConversationMeta(id);
+  return readTranscriptPage(id, options);
 }
 
 export function appendEvent(

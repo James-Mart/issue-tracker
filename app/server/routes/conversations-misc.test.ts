@@ -1,10 +1,14 @@
+import { writeFileSync } from "fs";
 import type { Server } from "http";
+import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FAKE_RUN_ID } from "../services/agent-sdk.fake.js";
 import type { AgentSessions } from "../services/agent-sessions.js";
+import { DEFAULT_TRANSCRIPT_PAGE_LIMIT } from "../services/transcript-page.js";
 import {
   AT,
   baseUrl,
+  conversationsDir,
   startHeldConversationRouter,
   useConversationsTestFixtures,
 } from "./conversations.test-harness.js";
@@ -87,6 +91,7 @@ describe("GET /api/conversations/:id/transcript", () => {
       `${baseUrl}/api/conversations/${created.id}/transcript`,
     ).then((r) => r.json());
     expect(all.latestSeq).toBe(third.seq);
+    expect(all.hasMore).toBe(false);
     expect(all.events.map((e: { text: string }) => e.text)).toEqual([
       "one",
       "two",
@@ -106,6 +111,129 @@ describe("GET /api/conversations/:id/transcript", () => {
       `${baseUrl}/api/conversations/${created.id}/transcript?sinceSeq=${third.seq}`,
     ).then((r) => r.json());
     expect(empty).toEqual({ events: [], latestSeq: third.seq });
+    expect(empty).not.toHaveProperty("hasMore");
+  });
+
+  it("returns the newest limit events before a seq, ascending, with hasMore", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Paged transcript" }),
+    }).then((r) => r.json());
+
+    const lines = Array.from({ length: 6 }, (_, i) =>
+      JSON.stringify({
+        type: "assistant",
+        text: `n${i + 1}`,
+        at: AT,
+        seq: i + 1,
+      }),
+    );
+    writeFileSync(
+      join(conversationsDir(), created.id, "transcript.jsonl"),
+      `${lines.join("\n")}\n`,
+    );
+
+    const page = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/transcript?before=5&limit=2`,
+    ).then((r) => r.json());
+    expect(page.latestSeq).toBe(6);
+    expect(page.hasMore).toBe(true);
+    expect(page.events.map((e: { text: string; seq: number }) => e)).toEqual([
+      expect.objectContaining({ text: "n3", seq: 3 }),
+      expect.objectContaining({ text: "n4", seq: 4 }),
+    ]);
+
+    const newest = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/transcript?limit=2`,
+    ).then((r) => r.json());
+    expect(newest).toMatchObject({
+      latestSeq: 6,
+      hasMore: true,
+    });
+    expect(newest.events.map((e: { seq: number }) => e.seq)).toEqual([5, 6]);
+  });
+
+  it("defaults limit and rejects a non-positive or non-integer before or limit", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Default page" }),
+    }).then((r) => r.json());
+
+    const total = DEFAULT_TRANSCRIPT_PAGE_LIMIT + 2;
+    const lines = Array.from({ length: total }, (_, i) =>
+      JSON.stringify({
+        type: "assistant",
+        text: `d${i + 1}`,
+        at: AT,
+        seq: i + 1,
+      }),
+    );
+    writeFileSync(
+      join(conversationsDir(), created.id, "transcript.jsonl"),
+      `${lines.join("\n")}\n`,
+    );
+
+    const page = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/transcript`,
+    ).then((r) => r.json());
+    expect(page.hasMore).toBe(true);
+    expect(page.latestSeq).toBe(total);
+    expect(page.events).toHaveLength(DEFAULT_TRANSCRIPT_PAGE_LIMIT);
+    expect(page.events[0].seq).toBe(total - DEFAULT_TRANSCRIPT_PAGE_LIMIT + 1);
+    expect(page.events.at(-1).seq).toBe(total);
+
+    for (const query of [
+      "before=0",
+      "before=-3",
+      "before=1.5",
+      "before=nope",
+      "limit=0",
+      "limit=-1",
+      "limit=2.2",
+      "limit=nope",
+    ]) {
+      const res = await fetch(
+        `${baseUrl}/api/conversations/${created.id}/transcript?${query}`,
+      );
+      expect(res.status, query).toBe(400);
+      const body = await res.json();
+      expect(body.error, query).toMatch(/must be a positive integer/);
+    }
+  });
+
+  it("rejects sinceSeq combined with before or limit", async () => {
+    const created = await fetch(`${baseUrl}/api/conversations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: "platform", title: "Mixed cursor" }),
+    }).then((r) => r.json());
+
+    const withBefore = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/transcript?sinceSeq=1&before=4`,
+    );
+    expect(withBefore.status).toBe(400);
+    expect(await withBefore.json()).toEqual({
+      error: "sinceSeq cannot be combined with before",
+    });
+
+    const withLimit = await fetch(
+      `${baseUrl}/api/conversations/${created.id}/transcript?sinceSeq=1&limit=2`,
+    );
+    expect(withLimit.status).toBe(400);
+    expect(await withLimit.json()).toEqual({
+      error: "sinceSeq cannot be combined with limit",
+    });
+  });
+
+  it("returns 404 for an unknown conversation", async () => {
+    const res = await fetch(`${baseUrl}/api/conversations/missing-thread/transcript`);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({
+      error: 'unknown conversation "missing-thread"',
+      code: "not_found",
+    });
   });
 });
 
