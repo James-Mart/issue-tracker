@@ -115,10 +115,26 @@ function frameSeq(frame: ConversationFrame): number {
   return seq;
 }
 
+/** Conversation streams persist a transcript. Issue and pipeline topics do not. */
+function isConversationStream(streamKey: string): boolean {
+  return streamKey !== ISSUES_TOPIC && streamKey !== PIPELINE_RUNS_TOPIC;
+}
+
+/**
+ * Last persisted seq for a conversation stream, or `undefined` for multiplex
+ * topics that are not conversation transcripts.
+ */
+function persistedSeqFloor(streamKey: string): number | undefined {
+  if (!isConversationStream(streamKey)) return undefined;
+  return maxSeqFromTranscriptFile(streamKey);
+}
+
 /**
  * Frames after `sinceSeq` still held in the catch-up window, in order.
- * Returns `resetRequired` when `sinceSeq` is older than the oldest retained
- * frame — the gap can no longer be served completely.
+ * Returns `resetRequired` when the gap cannot be served, or when `sinceSeq`
+ * is ahead of both the buffer and the persisted transcript — the next frame
+ * continues from the last persisted seq and would otherwise duplicate or
+ * move backwards.
  */
 export function getFramesSince(
   conversationId: string,
@@ -126,19 +142,29 @@ export function getFramesSince(
 ): FramesSinceResult {
   const buffer = catchupBuffers.get(conversationId);
   if (!buffer || buffer.length === 0) {
+    const persisted = persistedSeqFloor(conversationId);
+    if (persisted !== undefined && sinceSeq !== persisted) {
+      return { resetRequired: true };
+    }
     return { resetRequired: false, frames: [] };
   }
   const oldestSeq = frameSeq(buffer[0]!);
-  if (sinceSeq < oldestSeq - 1) {
+  const newestSeq = frameSeq(buffer[buffer.length - 1]!);
+  if (sinceSeq < oldestSeq - 1 || sinceSeq > newestSeq) {
     return { resetRequired: true };
   }
   const frames = buffer.filter((frame) => frameSeq(frame) > sinceSeq);
   return { resetRequired: false, frames };
 }
 
-/** Drop a conversation's catch-up buffer (session teardown or delete). */
-export function clearCatchupBuffer(conversationId: string): void {
+/**
+ * Drop catch-up frames and in-memory seq bookkeeping. The next frame
+ * continues from the last seq persisted in the transcript.
+ */
+export function releaseConversationStream(conversationId: string): void {
   catchupBuffers.delete(conversationId);
+  seqByConversation.delete(conversationId);
+  seqInitialized.delete(conversationId);
 }
 
 export function publishFrame(
@@ -159,7 +185,7 @@ export function publishFrame(
       : new Date().toISOString();
   Object.assign(frame.event, { seq, at });
 
-  if (conversationId !== ISSUES_TOPIC && conversationId !== PIPELINE_RUNS_TOPIC) {
+  if (isConversationStream(conversationId)) {
     const parsed = parseConversationFrame(frame.event);
     if (!parsed.ok) {
       console.warn(

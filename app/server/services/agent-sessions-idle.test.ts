@@ -323,6 +323,85 @@ describe("agent sessions idle teardown", () => {
     stopSpy.mockRestore();
   });
 
+  it("releases tool results and stream state when the session goes idle", async () => {
+    const { createConversation, readConversation, createAgentSessions } =
+      await load();
+    const { coalesceCustomTools } = await import("./custom-tool-coalesce.js");
+    const { publishFrame, getFramesSince } = await import(
+      "./conversation-stream.js"
+    );
+    const timeout = await idleTimeout();
+    const fake = createFakeAgentSdk();
+    const sessions = createAgentSessions(fake);
+    const meta = await createConversation({
+      title: "Release on idle",
+      projectId: "platform",
+      model: "auto",
+    });
+
+    await runOnce(sessions, meta.id, "go");
+    const persisted = readConversation(meta.id).transcript.at(-1)?.seq ?? 0;
+    let runs = 0;
+    const wrapped = coalesceCustomTools(
+      {
+        delegate: {
+          execute: async () => {
+            runs += 1;
+            return { value: "stored" };
+          },
+        },
+        delegations: {
+          execute: async () => {
+            runs += 1;
+            return { value: "nested" };
+          },
+        },
+      },
+      meta.id,
+    );
+    await wrapped.delegate!.execute({}, { toolCallId: "root-call" });
+    await wrapped.delegations!.execute({}, { toolCallId: "nested-call" });
+
+    const live: {
+      type: "run";
+      status: "started";
+      runId: string;
+      seq?: number;
+    } = {
+      type: "run",
+      status: "started",
+      runId: "live",
+    };
+    publishFrame(meta.id, { event: live, persist: false });
+    expect(live.seq).toBeGreaterThan(persisted);
+
+    await vi.advanceTimersByTimeAsync(timeout);
+    await until(disposed(fake.handles[0]));
+
+    expect(getFramesSince(meta.id, persisted)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
+    expect(getFramesSince(meta.id, live.seq!)).toEqual({ resetRequired: true });
+
+    await wrapped.delegate!.execute({}, { toolCallId: "root-call" });
+    await wrapped.delegations!.execute({}, { toolCallId: "nested-call" });
+    expect(runs).toBe(4);
+
+    const next: { type: "pending"; text: string; seq?: number } = {
+      type: "pending",
+      text: "after idle",
+    };
+    publishFrame(meta.id, { event: next, persist: false });
+    expect(next.seq).toBe(persisted + 1);
+    const caughtUp = getFramesSince(meta.id, persisted);
+    expect(caughtUp.resetRequired).toBe(false);
+    if (caughtUp.resetRequired) return;
+    expect(caughtUp.frames.map((frame) => frame.event.seq)).toEqual([
+      persisted + 1,
+    ]);
+  });
+
   it("does not hold the process open with the idle timer", async () => {
     const { createConversation, createAgentSessions } = await load();
     const timeout = await idleTimeout();

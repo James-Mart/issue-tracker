@@ -166,14 +166,32 @@ describe("conversation-stream catch-up buffer", () => {
     });
   });
 
-  it("drops a conversation buffer on clearCatchupBuffer", async () => {
-    const { publishFrame, getFramesSince, clearCatchupBuffer } = await load();
+  it("drops a conversation buffer when the stream is released", async () => {
+    const { publishFrame, getFramesSince, releaseConversationStream } =
+      await load();
     publishFrame("conv-a", {
       event: { type: "run" as const, status: "started" as const, runId: "r1" },
       persist: false,
     });
-    clearCatchupBuffer("conv-a");
+    releaseConversationStream("conv-a");
     expect(getFramesSince("conv-a", 0)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
+  });
+
+  it("resets when sinceSeq is ahead of every retained frame", async () => {
+    const { publishFrame, getFramesSince } = await load();
+    publishFrame("conv-a", {
+      event: { type: "assistant" as const, text: "only" },
+      persist: false,
+    });
+    expect(getFramesSince("conv-a", 2)).toEqual({ resetRequired: true });
+  });
+
+  it("does not reset an empty non-conversation topic", async () => {
+    const { getFramesSince } = await load();
+    expect(getFramesSince("issues", 4)).toEqual({
       resetRequired: false,
       frames: [],
     });
@@ -415,5 +433,46 @@ describe("conversation-stream sequence numbers", () => {
       text: "after legacy",
     });
     expect(next.seq).toBe(3);
+  });
+
+  it("continues from the last persisted seq after the stream is released", async () => {
+    const { publishFrame, getFramesSince, releaseConversationStream } =
+      await loadConversationStream();
+    const { createConversation, appendEvent } = await loadConversations();
+
+    const meta = await createConversation({
+      title: "Seq after release",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    await appendEvent(meta.id, { type: "prompt", text: "one" });
+    await appendEvent(meta.id, { type: "assistant", text: "two" });
+
+    const live = withSeq({
+      type: "run" as const,
+      status: "started" as const,
+      runId: "live",
+    });
+    publishFrame(meta.id, { event: live, persist: false });
+    expect(live.seq).toBe(3);
+
+    releaseConversationStream(meta.id);
+
+    expect(getFramesSince(meta.id, 2)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
+    expect(getFramesSince(meta.id, 1)).toEqual({ resetRequired: true });
+    expect(getFramesSince(meta.id, 3)).toEqual({ resetRequired: true });
+
+    const next = withSeq({ type: "pending" as const, text: "after" });
+    publishFrame(meta.id, { event: next, persist: false });
+    expect(next.seq).toBe(3);
+
+    const caughtUp = getFramesSince(meta.id, 2);
+    expect(caughtUp.resetRequired).toBe(false);
+    if (caughtUp.resetRequired) return;
+    expect(caughtUp.frames.map((frame) => frame.event.seq)).toEqual([3]);
+    expect(getFramesSince(meta.id, 4)).toEqual({ resetRequired: true });
   });
 });

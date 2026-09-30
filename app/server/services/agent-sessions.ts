@@ -34,7 +34,11 @@ import {
   createDelegateCustomTools,
   hasOutstandingDelegations,
 } from "./delegate-tool.js";
-import { clearCatchupBuffer, publishFrame } from "./conversation-stream.js";
+import {
+  publishFrame,
+  releaseConversationStream,
+} from "./conversation-stream.js";
+import { releaseCoalescedCustomTools } from "./custom-tool-coalesce.js";
 import { ISSUES_TOPIC } from "./issue-events.js";
 import {
   classifyReviewTaskingRun,
@@ -293,14 +297,23 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     evictConversationStoreCaches(conversationStoreDir(conversationId));
   }
 
+  function releaseConversationEphemeralState(conversationId: string): void {
+    releaseCoalescedCustomTools(conversationId);
+    releaseConversationStream(conversationId);
+  }
+
   async function tearDown(
     conversationId: string,
     entry: SessionEntry,
   ): Promise<void> {
     stopIdleClock(entry);
     sessions.delete(conversationId);
-    await tearDownEntry(conversationId, entry);
-    await stopConversationAgentStackBestEffort(conversationId);
+    try {
+      await tearDownEntry(conversationId, entry);
+      await stopConversationAgentStackBestEffort(conversationId);
+    } finally {
+      releaseConversationEphemeralState(conversationId);
+    }
   }
 
   function tearDownIdle(conversationId: string, entry: SessionEntry): void {
@@ -682,8 +695,10 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       const idleTeardown = teardowns.get(conversationId);
       if (entry) await tearDown(conversationId, entry);
       else if (idleTeardown) await idleTeardown;
-      else await stopConversationAgentStackBestEffort(conversationId);
-      clearCatchupBuffer(conversationId);
+      else {
+        await stopConversationAgentStackBestEffort(conversationId);
+        releaseConversationEphemeralState(conversationId);
+      }
     },
 
     async disposeAll() {
@@ -695,9 +710,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           tearDown(conversationId, entry),
         ),
       ]);
-      for (const [conversationId] of entries) {
-        clearCatchupBuffer(conversationId);
-      }
     },
   };
 }

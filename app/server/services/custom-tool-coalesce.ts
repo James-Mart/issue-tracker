@@ -59,6 +59,19 @@ async function replayResult(
   return existing.promise;
 }
 
+/**
+ * A settlement may be stored only while this execute is still the in-flight
+ * entry. Release removes that entry, and a newer execute replaces it; either
+ * way a late settlement must not write a cached result back.
+ */
+function isCurrentPending(
+  key: string,
+  promise: Promise<SDKCustomToolResult>,
+): boolean {
+  const current = calls.get(key);
+  return current?.status === "pending" && current.promise === promise;
+}
+
 function remember(
   key: string,
   promise: Promise<SDKCustomToolResult>,
@@ -66,13 +79,27 @@ function remember(
   calls.set(key, { status: "pending", promise });
   promise.then(
     (result) => {
+      if (!isCurrentPending(key, promise)) return;
       calls.set(key, { status: "fulfilled", result });
     },
     (error: unknown) => {
+      if (!isCurrentPending(key, promise)) return;
       calls.set(key, { status: "rejected", error });
     },
   );
   return promise;
+}
+
+/**
+ * Drop stored tool results for one conversation, including nested delegate
+ * calls coalesced on that same id. Waiters of an in-flight call still receive
+ * its result; a later execute runs the tool again, matching a process restart.
+ */
+export function releaseCoalescedCustomTools(conversationId: string): void {
+  const prefix = callKey(conversationId, "");
+  for (const key of [...calls.keys()]) {
+    if (key.startsWith(prefix)) calls.delete(key);
+  }
 }
 
 /**
