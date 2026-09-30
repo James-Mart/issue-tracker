@@ -1,28 +1,21 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { join } from "path";
 import { JSONL_LOCAL_AGENT_STORE_FILES } from "@cursor/sdk";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentHandle, AgentSdk } from "./agent-sdk.js";
 import { createFakeAgentSdk, type FakeAgentSdk } from "./agent-sdk.fake.js";
 import {
-  issuesRoot,
+  conversationDir,
   load,
   runLiveMarkerPath,
+  storeDir,
   useAgentSessionsTestFixtures,
 } from "./agent-sessions.test-harness.js";
 
 useAgentSessionsTestFixtures();
 
 const ACTIVE_RUN = "already has active run";
-
-function conversationDir(id: string): string {
-  return join(dirname(issuesRoot), "conversations", id);
-}
-
-function storeDir(id: string): string {
-  return join(conversationDir(id), "agent-state");
-}
 
 async function deadPid(): Promise<number> {
   const child = spawn("true", [], { stdio: "ignore" });

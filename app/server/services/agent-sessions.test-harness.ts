@@ -23,13 +23,16 @@ export function writeIssue(id: string, body: Record<string, unknown>): void {
   writeFileSync(join(issuesRoot, id, "issue.json"), JSON.stringify({ id, ...body }));
 }
 
+export function conversationDir(conversationId: string): string {
+  return join(dirname(issuesRoot), "conversations", conversationId);
+}
+
+export function storeDir(conversationId: string): string {
+  return join(conversationDir(conversationId), "agent-state");
+}
+
 export function runLiveMarkerPath(conversationId: string): string {
-  return join(
-    dirname(issuesRoot),
-    "conversations",
-    conversationId,
-    "run-live.json",
-  );
+  return join(conversationDir(conversationId), "run-live.json");
 }
 
 export async function load() {

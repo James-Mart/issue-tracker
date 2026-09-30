@@ -32,6 +32,7 @@ import {
 import {
   cancelConversationDelegations,
   createDelegateCustomTools,
+  hasOutstandingDelegations,
 } from "./delegate-tool.js";
 import { clearCatchupBuffer, publishFrame } from "./conversation-stream.js";
 import { ISSUES_TOPIC } from "./issue-events.js";
@@ -101,9 +102,21 @@ type SessionEntry = {
   handle: AgentHandle;
   /** The turn in flight; absent while the session is idle. */
   turn?: LiveTurn;
-  /** Background streaming + persistence; settles when the run finishes. */
-  pump?: Promise<void>;
+  /**
+   * Background streaming + persistence, one per run until it settles. An auth
+   * replay or a pending-message hand-off starts its pump from inside the
+   * previous one, so more than one can be live.
+   */
+  pumps: Set<Promise<void>>;
+  /** Armed only while the session is idle. */
+  idleTimer?: ReturnType<typeof setTimeout>;
 };
+
+/**
+ * A session idle this long is torn down. The next prompt resumes the stored
+ * agent id from disk, the same path a server restart takes.
+ */
+export const AGENT_SESSION_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
 
 /**
  * The SDK surfaces a failed turn as `Connection failed repeatedly` — an in-band
@@ -145,12 +158,36 @@ export { isRunLive } from "./run-live.js";
  */
 export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
   const sessions = new Map<string, SessionEntry>();
+  /** Sessions being created or resumed, so concurrent prompts share one handle. */
+  const openings = new Map<string, Promise<SessionEntry>>();
+  /**
+   * Idle teardowns still releasing a session already removed from `sessions`.
+   * Only idle ones: a delete or shutdown teardown awaits the pump, and a pump
+   * tail can reopen the session, which must not wait on that same teardown.
+   */
+  const teardowns = new Map<string, Promise<void>>();
 
   async function ensureHandle(
     conversationId: string,
   ): Promise<{ handle: AgentHandle; entry: SessionEntry }> {
     const existing = sessions.get(conversationId);
     if (existing) return { handle: existing.handle, entry: existing };
+
+    let opening = openings.get(conversationId);
+    if (!opening) {
+      opening = openSession(conversationId).finally(() => {
+        openings.delete(conversationId);
+      });
+      openings.set(conversationId, opening);
+    }
+    const entry = await opening;
+    return { handle: entry.handle, entry };
+  }
+
+  async function openSession(conversationId: string): Promise<SessionEntry> {
+    // Resuming while the previous handle is still disposing would race its
+    // cache eviction and leave two live handles on one agent-state store.
+    await teardowns.get(conversationId);
 
     const { meta } = readConversation(conversationId);
     const cwd = requireProjectWorkspace(meta.projectId);
@@ -214,9 +251,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       await updateMeta(conversationId, { agentId: handle.agentId });
     }
 
-    const entry: SessionEntry = { handle };
+    const entry: SessionEntry = { handle, pumps: new Set() };
     sessions.set(conversationId, entry);
-    return { handle, entry };
+    return entry;
   }
 
   async function stopConversationAgentStackBestEffort(
@@ -246,19 +283,65 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     } catch {
       // Continue disposing even if cancel fails.
     }
-    if (entry.pump) {
-      try {
-        await entry.pump;
-      } catch {
-        // Best-effort — pump errors are handled internally.
-      }
-    }
+    // Best-effort — pump errors are handled internally.
+    await Promise.allSettled(entry.pumps);
     try {
       await entry.handle[Symbol.asyncDispose]();
     } catch {
       // Best-effort dispose.
     }
     evictConversationStoreCaches(conversationStoreDir(conversationId));
+  }
+
+  async function tearDown(
+    conversationId: string,
+    entry: SessionEntry,
+  ): Promise<void> {
+    stopIdleClock(entry);
+    sessions.delete(conversationId);
+    await tearDownEntry(conversationId, entry);
+    await stopConversationAgentStackBestEffort(conversationId);
+  }
+
+  function tearDownIdle(conversationId: string, entry: SessionEntry): void {
+    const done = tearDown(conversationId, entry)
+      // Nothing awaits a timer-driven teardown, and a failed one leaves nothing
+      // the next prompt depends on: it resumes from disk either way.
+      .catch((err) => {
+        console.error(
+          `idle teardown failed for conversation ${conversationId}`,
+          err,
+        );
+      })
+      .finally(() => {
+        teardowns.delete(conversationId);
+      });
+    teardowns.set(conversationId, done);
+  }
+
+  function stopIdleClock(entry: SessionEntry): void {
+    clearTimeout(entry.idleTimer);
+    entry.idleTimer = undefined;
+  }
+
+  /**
+   * (Re)start the idle clock once the session has no turn and no pump left.
+   * A nested delegation still in flight at the deadline defers teardown by
+   * another full timeout rather than cancelling it.
+   */
+  function startIdleClock(conversationId: string): void {
+    const entry = sessions.get(conversationId);
+    if (!entry || entry.turn || entry.pumps.size > 0) return;
+    stopIdleClock(entry);
+    entry.idleTimer = setTimeout(() => {
+      entry.idleTimer = undefined;
+      if (hasOutstandingDelegations(conversationId)) {
+        startIdleClock(conversationId);
+        return;
+      }
+      tearDownIdle(conversationId, entry);
+    }, AGENT_SESSION_IDLE_TIMEOUT_MS);
+    entry.idleTimer.unref();
   }
 
   /** Stream one run into the transcript, reporting any in-band auth failure. */
@@ -329,6 +412,21 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
   }
 
   async function sendPromptInternal(
+    conversationId: string,
+    options: SendPromptOptions,
+    isReplay: boolean,
+  ): Promise<SendPromptResult> {
+    const live = sessions.get(conversationId);
+    if (live) stopIdleClock(live);
+    try {
+      return await startTurn(conversationId, options, isReplay);
+    } finally {
+      // A send that never started a run leaves the session idle again.
+      startIdleClock(conversationId);
+    }
+  }
+
+  async function startTurn(
     conversationId: string,
     options: SendPromptOptions,
     isReplay: boolean,
@@ -406,7 +504,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       publishPlanningRunIssueFrame(runMeta.issueId);
     }
 
-    entry.pump = (async () => {
+    const drain = async (): Promise<void> => {
       const { sawAuthFailure } = await pumpEvents(conversationId, agentRun);
 
       publishFrame(conversationId, {
@@ -543,7 +641,13 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       }
 
       settleWait(result);
-    })();
+    };
+
+    const pump = drain().finally(() => {
+      entry.pumps.delete(pump);
+      startIdleClock(conversationId);
+    });
+    entry.pumps.add(pump);
 
     return { ok: true, run: activeRun };
   }
@@ -575,27 +679,22 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     async dispose(conversationId) {
       const entry = sessions.get(conversationId);
-      if (entry) {
-        sessions.delete(conversationId);
-        await tearDownEntry(conversationId, entry);
-      }
-      await stopConversationAgentStackBestEffort(conversationId);
+      const idleTeardown = teardowns.get(conversationId);
+      if (entry) await tearDown(conversationId, entry);
+      else if (idleTeardown) await idleTeardown;
+      else await stopConversationAgentStackBestEffort(conversationId);
       clearCatchupBuffer(conversationId);
     },
 
     async disposeAll() {
       const entries = [...sessions.entries()];
-      sessions.clear();
-      await Promise.all(
-        entries.map(([conversationId, entry]) =>
-          tearDownEntry(conversationId, entry),
+      const inProgress = [...teardowns.values()];
+      await Promise.all([
+        ...inProgress,
+        ...entries.map(([conversationId, entry]) =>
+          tearDown(conversationId, entry),
         ),
-      );
-      await Promise.all(
-        entries.map(([conversationId]) =>
-          stopConversationAgentStackBestEffort(conversationId),
-        ),
-      );
+      ]);
       for (const [conversationId] of entries) {
         clearCatchupBuffer(conversationId);
       }
