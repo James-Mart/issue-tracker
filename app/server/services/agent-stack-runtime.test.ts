@@ -149,6 +149,17 @@ async function loadService() {
   return import("./agent-stack.js");
 }
 
+async function waitForFile(path: string): Promise<string> {
+  for (let i = 0; i < 100; i++) {
+    if (existsSync(path)) {
+      const body = readFileSync(path, "utf8").trim();
+      if (body) return body;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`timed out waiting for ${path}`);
+}
+
 describe("declared runtime boot", () => {
   it("refuses when the Story has no live worktree", async () => {
     writeIssue("proj", {
@@ -278,6 +289,34 @@ describe("declared runtime boot", () => {
       `http://127.0.0.1:${handle.env.AGENT_STACK_PORT}`,
     );
     await stopAgentStack("conv");
+  });
+
+  it("kills the readiness process group when a poll exceeds its timeout", async () => {
+    vi.stubEnv("AGENT_STACK_READY_TIMEOUT_MS", "800");
+    const pidFile = join(root, "readiness-grandchild.pid");
+    writeIssue("proj", {
+      kind: "project",
+      runtime: {
+        start: listenNow(),
+        readiness: `bash -c 'trap "" HUP; sleep 30' & echo $! > ${JSON.stringify(pidFile)}; sleep 30; exit 1`,
+        baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+      },
+    });
+    writeIssue("story-a", {
+      kind: "story",
+      partOf: "proj",
+      worktreePath: worktree,
+    });
+    const { startAgentStack } = await loadService();
+
+    await expect(startAgentStack("conv", { issueId: "story-a" })).rejects.toThrow(
+      /readiness was not ready/,
+    );
+    const grandchild = Number(await waitForFile(pidFile));
+    await expect.poll(
+      () => !existsSync(`/proc/${grandchild}`),
+      { timeout: 2000, interval: 20 },
+    ).toBe(true);
   });
 
   it("fails a readiness timeout with the phase output and removes the data directory", async () => {

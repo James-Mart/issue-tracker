@@ -554,6 +554,7 @@ function runShell(
     const child = spawn("sh", ["-c", wrapPhaseShellCommand(command)], {
       cwd,
       env,
+      detached: timeoutMs !== undefined,
       stdio: ["ignore", "pipe", "pipe"],
     });
     const masker = createPhaseOutputMasker(secrets);
@@ -571,7 +572,10 @@ function runShell(
     child.stderr?.on("data", append);
     const timer = timeoutMs === undefined
       ? undefined
-      : setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+      : setTimeout(() => {
+          if (settled) return;
+          if (child.pid !== undefined) killProcessGroup(child.pid);
+        }, timeoutMs);
     child.on("error", (err) => {
       if (timer) clearTimeout(timer);
       finish(() => reject(err));
