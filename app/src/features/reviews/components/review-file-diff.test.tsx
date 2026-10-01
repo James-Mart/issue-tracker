@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { DiffComposerProvider } from "@/features/issues/components/comments/diff-thread-composer";
+import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import type { ReviewFileRow } from "../lib/review-files";
 import { ReviewFileDiff } from "./review-file-diff";
 
@@ -33,6 +34,7 @@ vi.mock("@/features/agents/api/queries", () => ({
 
 vi.mock("@/features/issues/api/mutations", () => ({
   usePostComment: () => vi.fn(),
+  usePostThreadEvent: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const ROW: ReviewFileRow = {
@@ -78,7 +80,7 @@ function mount(): HTMLDivElement {
   root = createRoot(container);
   act(() => {
     root!.render(
-      <DiffComposerProvider issueId="story-1" commitSha="tip">
+      <DiffComposerProvider issueId="story-1" commitSha="tip" allowQuestion>
         <Harness />
       </DiffComposerProvider>,
     );
@@ -183,5 +185,112 @@ describe("ReviewFileDiff pinned header", () => {
 
     expect(container.querySelector('[data-testid="review-file"]')!.getAttribute("data-collapsed")).toBe("false");
     expect(scroller.scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+const FILE_THREAD: CommentThread = {
+  kind: "review",
+  state: "open",
+  readyToTask: true,
+  root: {
+    id: "file-root",
+    at: "2026-09-28T16:40:00.000Z",
+    role: "human",
+    body: "Whole file.",
+    anchor: { path: "src/long.ts", commitSha: "tip" },
+  },
+  replies: [],
+};
+
+const MISSING_LINE: CommentThread = {
+  kind: "review",
+  state: "open",
+  readyToTask: true,
+  root: {
+    id: "missing-line",
+    at: "2026-09-28T16:41:00.000Z",
+    role: "human",
+    body: "Lost line.",
+    anchor: { path: "src/long.ts", side: "new", line: 400, commitSha: "tip" },
+  },
+  replies: [],
+};
+
+function mountThreads(): HTMLDivElement {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => {
+    root!.render(
+      <DiffComposerProvider issueId="story-1" commitSha="tip" allowQuestion>
+        <ReviewFileDiff
+          row={ROW}
+          fileDiff={{ name: ROW.file.path, hunks: [] } as FileDiffMetadata}
+          collapsed={false}
+          readOnly={false}
+          diffLayout="unified"
+          source={{ storyId: "story-1", sha: "tip", contentsCache: new Map() }}
+          localCommand="git diff"
+          localHint="Read it locally."
+          onToggleCollapsed={() => {}}
+          onReviewedChange={() => {}}
+          threads={{ file: [FILE_THREAD], inline: [MISSING_LINE], outdated: [] }}
+        />
+      </DiffComposerProvider>,
+    );
+  });
+  return container;
+}
+
+describe("ReviewFileDiff file comments", () => {
+  it("opens the shared composer above the diff from the header button", () => {
+    const container = mount();
+    const button = container.querySelector('[data-testid="review-file-comment"]');
+    expect(button?.getAttribute("aria-label")).toBe("Comment on file");
+    expect(button?.getAttribute("title")).toBe("Comment on file");
+    expect(container.querySelector('[data-testid="review-file-comments"]')).toBeNull();
+
+    click(button);
+
+    const comments = container.querySelector<HTMLElement>('[data-testid="review-file-comments"]')!;
+    const diff = container.querySelector('[data-testid="file-diff"]')!;
+    const composer = comments.querySelector('[data-testid="diff-thread-composer"]');
+    expect(comments.textContent).toContain("File comment");
+    expect(composer?.querySelector('button[aria-label="Send"]')).not.toBeNull();
+    expect(composer?.querySelector('button[aria-label="Ask a question"]')).not.toBeNull();
+    expect(comments.compareDocumentPosition(diff) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  it("expands a collapsed file so the file composer is visible", () => {
+    const container = mount();
+    click(container.querySelector('[data-testid="review-file-toggle"]'));
+    expect(container.querySelector('[data-testid="review-file"]')!.getAttribute("data-collapsed")).toBe(
+      "true",
+    );
+
+    click(container.querySelector('[data-testid="review-file-comment"]'));
+
+    expect(container.querySelector('[data-testid="review-file"]')!.getAttribute("data-collapsed")).toBe(
+      "false",
+    );
+    expect(container.querySelector('[data-testid="diff-thread-composer"]')).not.toBeNull();
+  });
+
+  it("renders a file thread above the diff and keeps an unlocated line below it", () => {
+    const container = mountThreads();
+    const comments = container.querySelector<HTMLElement>('[data-testid="review-file-comments"]')!;
+    const diff = container.querySelector('[data-testid="file-diff"]')!;
+    const fileCard = comments.querySelector('[data-thread-root="file-root"]');
+    const end = [...container.querySelectorAll('[data-testid="review-line-threads"]')].find(
+      (node) => !comments.contains(node),
+    );
+
+    expect(fileCard?.textContent).toContain("Whole file.");
+    expect(fileCard?.querySelector('[data-testid="comment-anchor-meta"]')).toBeNull();
+    expect(end?.querySelector('[data-thread-root="missing-line"]')?.textContent).toContain(
+      "Lost line.",
+    );
+    expect(comments.compareDocumentPosition(diff) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(diff.compareDocumentPosition(end!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });
 });

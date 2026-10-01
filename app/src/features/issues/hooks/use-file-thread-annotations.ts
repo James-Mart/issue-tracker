@@ -6,7 +6,11 @@ import type {
 } from "@pierre/diffs/react";
 import { useDiffComposer } from "../components/comments/diff-thread-composer";
 import type { CommentThread } from "../lib/comment-threads";
-import { composerOpensInFile, newComposerForRange } from "../lib/diff-thread-anchor";
+import {
+  composerOpensInFile,
+  isLineComposer,
+  newComposerForRange,
+} from "../lib/diff-thread-anchor";
 import {
   keepAnnotationOrder,
   mergeComposerAnnotation,
@@ -33,7 +37,9 @@ export function useFileThreadAnnotations(fileDiff: FileDiffMetadata, threads: Co
     [fileDiff, threads],
   );
   const lines = useMemo(() => {
-    if (open?.kind !== "new" || !composerOpensInFile(open, fileDiff)) return located;
+    if (open?.kind !== "new" || !isLineComposer(open) || !composerOpensInFile(open, fileDiff)) {
+      return located;
+    }
     return mergeComposerAnnotation(located, open);
   }, [fileDiff, located, open]);
   const annotations = useKeepAnnotationOrder(lines);

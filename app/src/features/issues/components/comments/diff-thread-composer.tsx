@@ -11,6 +11,9 @@ import { usePostComment } from "../../api/mutations";
 import {
   commentInputForComposer,
   composerDraftKey,
+  isLineComposer,
+  type NewDiffComposer,
+  type NewLineComposer,
   type OpenDiffComposer,
 } from "../../lib/diff-thread-anchor";
 
@@ -19,7 +22,7 @@ type DiffComposerContextValue = {
   commitSha: string;
   allowQuestion: boolean;
   open: OpenDiffComposer | null;
-  openNew: (anchor: Extract<OpenDiffComposer, { kind: "new" }>) => void;
+  openNew: (anchor: NewDiffComposer) => void;
   openReply: (threadId: string) => void;
   close: () => void;
   send: (open: OpenDiffComposer, body: string, kind?: "question") => void;
@@ -45,7 +48,7 @@ export function DiffComposerProvider({
   const [open, setOpen] = useState<OpenDiffComposer | null>(null);
 
   const openNew = useCallback(
-    (anchor: Extract<OpenDiffComposer, { kind: "new" }>) => {
+    (anchor: NewDiffComposer) => {
       setOpen(anchor);
     },
     [],
@@ -91,7 +94,7 @@ export function useDiffComposer(): DiffComposerContextValue {
   return value;
 }
 
-function lineCaption(open: Extract<OpenDiffComposer, { kind: "new" }>): string {
+function lineCaption(open: NewLineComposer): string {
   if (open.startLine !== undefined) {
     return `lines ${open.startLine}-${open.line}`;
   }
@@ -106,12 +109,13 @@ export function DiffThreadComposer({
   const { issueId, send, close, allowQuestion } = useDiffComposer();
   const draftKey = composerDraftKey(issueId, target);
   const askQuestion = allowQuestion && target.kind === "new";
+  const lineTarget = target.kind === "new" && isLineComposer(target) ? target : null;
   const placeholder =
-    target.kind === "new"
-      ? target.startLine !== undefined
-        ? `Comment on ${lineCaption(target)}`
-        : "Add a comment"
-      : "Reply";
+    target.kind !== "new"
+      ? "Reply"
+      : lineTarget?.startLine !== undefined
+        ? `Comment on ${lineCaption(lineTarget)}`
+        : "Add a comment";
 
   return (
     <div
@@ -120,9 +124,9 @@ export function DiffThreadComposer({
       data-draft-key={draftKey}
       className="flex flex-col gap-2 rounded-md border border-border bg-card px-3 py-2"
     >
-      {target.kind === "new" ? (
+      {lineTarget ? (
         <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
-          {lineCaption(target)}
+          {lineCaption(lineTarget)}
         </p>
       ) : null}
       {target.kind === "new" && !askQuestion ? (

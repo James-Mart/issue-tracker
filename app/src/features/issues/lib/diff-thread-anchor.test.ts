@@ -84,10 +84,13 @@ describe("draft keys and write payloads", () => {
       line: 96,
       startLine: 94,
     });
+    const file = composerDraftKey("story-1", { kind: "new", path: PATH });
     expect(neu).toBe(`review:story-1:line:${PATH}:new:94`);
     expect(reply).toBe("review:story-1:reply:current-root");
     expect(range).toBe(`review:story-1:line:${PATH}:new:94-96`);
+    expect(file).toBe(`review:story-1:file:${PATH}`);
     expect(neu).not.toBe(reply);
+    expect(file).not.toBe(neu);
   });
 
   it("builds a single-line anchor post and a reply with no anchor", () => {
@@ -135,6 +138,26 @@ describe("draft keys and write payloads", () => {
       role: "human",
       body: "reply body",
       replyTo: "current-root",
+    });
+    expect(
+      commentInputForComposer({ kind: "new", path: PATH }, "whole file", SHA),
+    ).toEqual({
+      role: "human",
+      body: "whole file",
+      anchor: { path: PATH, commitSha: SHA },
+    });
+    expect(
+      commentInputForComposer(
+        { kind: "new", path: PATH },
+        "why this file?",
+        SHA,
+        "question",
+      ),
+    ).toEqual({
+      role: "human",
+      body: "why this file?",
+      kind: "question",
+      anchor: { path: PATH, commitSha: SHA },
     });
   });
 });

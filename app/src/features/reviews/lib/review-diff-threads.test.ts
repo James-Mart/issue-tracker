@@ -86,7 +86,8 @@ describe("reviewDiffThreadsByFile", () => {
       ALL_CHANGES_SCOPE,
     );
 
-    expect(ids(byFile.get("src/a.ts")?.inline)).toEqual(["file"]);
+    expect(ids(byFile.get("src/a.ts")?.file)).toEqual(["file"]);
+    expect(byFile.get("src/a.ts")?.inline).toEqual([]);
     expect(ids(byFile.get("src/a.ts")?.outdated)).toEqual(["gone", "late"]);
   });
 
