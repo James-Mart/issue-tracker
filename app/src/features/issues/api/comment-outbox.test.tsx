@@ -120,7 +120,10 @@ describe("comment outbox", () => {
       kind: "question",
       delivery: { status: "sending" },
     });
-    expect(pending?.researcherRun).toEqual({ status: "starting" });
+    expect(pending?.researcherRun).toEqual({
+      status: "running",
+      startedAt: pending?.root.at,
+    });
     expect(pending?.readyToTask).toBe(false);
 
     await settle(() => posts[0]!.store("stored-1"));

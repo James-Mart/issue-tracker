@@ -141,12 +141,36 @@ export function usePostThreadEvent(issueId: string) {
 
 export function useRetryQuestionResearcher(storyId: string) {
   const qc = useQueryClient();
-  return useMutation<void, Error, string>({
+  return useMutation<void, Error, string, { previous?: CommentsResponse }>({
     mutationFn: (threadId) =>
       request(`/api/issues/${storyId}/threads/${threadId}/researcher/retry`, {
         method: "POST",
       }),
-    onError: (err) => toast.error(messageOf(err)),
+    onMutate: async (threadId) => {
+      await qc.cancelQueries({ queryKey: issuesKeys.comments(storyId) });
+      const previous = qc.getQueryData<CommentsResponse>(
+        issuesKeys.comments(storyId),
+      );
+      const startedAt = new Date().toISOString();
+      qc.setQueryData<CommentsResponse>(issuesKeys.comments(storyId), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          threads: current.threads.map((thread) =>
+            thread.rootId === threadId
+              ? { ...thread, researcherRun: { status: "running", startedAt } }
+              : thread,
+          ),
+        };
+      });
+      return { previous };
+    },
+    onError: (err, _threadId, context) => {
+      if (context?.previous) {
+        qc.setQueryData(issuesKeys.comments(storyId), context.previous);
+      }
+      toast.error(messageOf(err));
+    },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: issuesKeys.comments(storyId) });
       qc.invalidateQueries({ queryKey: issuesKeys.agentRuns(storyId) });

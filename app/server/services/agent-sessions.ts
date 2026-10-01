@@ -56,6 +56,8 @@ import { requireProjectWorkspace } from "./project-workspace.js";
 import { reconcileOrphanedConversation } from "./orphan-run-scrub.js";
 import {
   isQuestionResearcherConversation,
+  noteResearcherRunStarted,
+  recordResearcherRunEnd,
   recordResearcherRunFailure,
 } from "./researcher-runs.js";
 import { runCostRecorder } from "./run-cost-recorder.js";
@@ -519,6 +521,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       persist: false,
     });
     const { meta: runMeta } = readConversation(conversationId);
+    if (isQuestionResearcherConversation(runMeta)) {
+      noteResearcherRunStarted(conversationId, activeRun.startedAt);
+    }
     if (runMeta.issueId) {
       publishPlanningRunIssueFrame(runMeta.issueId);
     }
@@ -561,7 +566,8 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           );
         }
       }
-      if (entry.turn === turn) {
+      const thisTurnEnded = entry.turn === turn;
+      if (thisTurnEnded) {
         entry.turn = undefined;
         clearRunLiveMarker(conversationId);
         publishPipelineRunEvent("finished", conversationId);
@@ -655,6 +661,26 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           }
         }
         if (classified && runMeta.issueId) {
+          publishPlanningRunIssueFrame(runMeta.issueId);
+        }
+      }
+
+      if (
+        thisTurnEnded &&
+        !handedOff &&
+        entry.turn === undefined &&
+        isQuestionResearcherConversation(runMeta)
+      ) {
+        try {
+          recordResearcherRunEnd(conversationId, activeRun.startedAt);
+        } catch (err) {
+          // A throw here would leave `wait()` unsettled for every caller.
+          console.error(
+            `failed to record researcher run end for ${conversationId}:`,
+            err,
+          );
+        }
+        if (runMeta.issueId) {
           publishPlanningRunIssueFrame(runMeta.issueId);
         }
       }

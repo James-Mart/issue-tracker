@@ -1,3 +1,7 @@
+import { existsSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { join } from "path";
+import { z } from "zod";
+import { conversationsDir } from "../config.js";
 import type {
   AgentRun,
   Comment,
@@ -15,6 +19,7 @@ import {
   appendErrorEvent,
   conversationExists,
   readConversation,
+  readConversationMeta,
 } from "./conversations.js";
 import { deriveAnchoredOutdated } from "./anchor-outdated.js";
 import { findThreadRoot } from "./thread-events.js";
@@ -31,16 +36,97 @@ const DELEGATION_PREFIX = "review-question:";
 export const RESEARCHER_GONE = "its conversation no longer exists.";
 export const RESEARCHER_NO_REPLY = "the run ended without a reply.";
 
+const RUN_STARTED = "run-started.json";
+const RUN_END = "run-end.json";
+
+const runStampSchema = z
+  .object({
+    startedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
+      message: "startedAt must be an ISO timestamp",
+    }),
+  })
+  .strict();
+
+function markerPath(conversationId: string, name: string): string {
+  return join(conversationsDir, conversationId, name);
+}
+
+function readStamp(conversationId: string, name: string): string | undefined {
+  const path = markerPath(conversationId, name);
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw new Error(
+      `unreadable ${name} at ${path}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `unparseable ${name} at ${path}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  const result = runStampSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(`unparseable ${name} at ${path}: ${result.error.message}`);
+  }
+  return result.data.startedAt;
+}
+
+/** When this researcher run started, from its stamps or the conversation's creation. */
+function researcherStartedAt(conversationId: string): string {
+  return (
+    readStamp(conversationId, RUN_STARTED) ??
+    readStamp(conversationId, RUN_END) ??
+    readConversationMeta(conversationId).createdAt
+  );
+}
+
+export function researcherRunEndRecorded(conversationId: string): boolean {
+  return existsSync(markerPath(conversationId, RUN_END));
+}
+
+/** A researcher run became live. Drops the previous run's end marker. */
+export function noteResearcherRunStarted(
+  conversationId: string,
+  startedAt: string,
+): void {
+  writeFileSync(
+    markerPath(conversationId, RUN_STARTED),
+    `${JSON.stringify({ startedAt })}\n`,
+  );
+  rmSync(markerPath(conversationId, RUN_END), { force: true });
+}
+
+/**
+ * The transcript has fully flushed and this run is not continuing.
+ * Failure is read from this marker, not from the live marker merely being gone.
+ */
+export function recordResearcherRunEnd(
+  conversationId: string,
+  startedAt?: string,
+): void {
+  const at = startedAt ?? researcherStartedAt(conversationId);
+  writeFileSync(
+    markerPath(conversationId, RUN_END),
+    `${JSON.stringify({ startedAt: at })}\n`,
+  );
+}
+
 /**
  * Launches that run after the comment response, keyed by thread root id.
- * A launch is `starting` until it settles. One that throws before it records
+ * The overlay is `running` until it settles. One that throws before it records
  * a conversation stays `failed` until the next launch on that thread. Process
  * memory only: a restart forgets a launch that never recorded a conversation.
  */
 const researcherLaunches = new Map<string, ResearcherRun>();
 
 /**
- * Show `threadId` as starting while `launch` runs. The launch is started
+ * Show `threadId` as running while `launch` runs. The launch is started
  * synchronously, so a read right after this call already sees it.
  */
 export async function trackResearcherLaunch(
@@ -48,17 +134,21 @@ export async function trackResearcherLaunch(
   launch: () => Promise<void>,
 ): Promise<void> {
   // A later launch on the same thread owns the entry once it starts.
-  const starting: ResearcherRun = { status: "starting" };
-  researcherLaunches.set(threadId, starting);
+  const launchRun: ResearcherRun = {
+    status: "running",
+    startedAt: new Date().toISOString(),
+  };
+  researcherLaunches.set(threadId, launchRun);
   try {
     await launch();
-    if (researcherLaunches.get(threadId) === starting) {
+    if (researcherLaunches.get(threadId) === launchRun) {
       researcherLaunches.delete(threadId);
     }
   } catch (err) {
-    if (researcherLaunches.get(threadId) === starting) {
+    if (researcherLaunches.get(threadId) === launchRun) {
       researcherLaunches.set(threadId, {
         status: "failed",
+        startedAt: launchRun.startedAt,
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -66,10 +156,16 @@ export async function trackResearcherLaunch(
   }
 }
 
-function lastErrorMessage(transcript: TranscriptEvent[]): string | undefined {
+/** Latest transcript error, optionally only those at or after `since`. */
+function latestTranscriptError(
+  transcript: TranscriptEvent[],
+  since?: string,
+): string | undefined {
   for (let i = transcript.length - 1; i >= 0; i -= 1) {
     const event = transcript[i]!;
-    if (event.type === "error") return event.message;
+    if (event.type !== "error") continue;
+    if (since !== undefined && event.at < since) continue;
+    return event.message;
   }
   return undefined;
 }
@@ -121,6 +217,19 @@ function latestAskAt(thread: ThreadView, messages: Comment[]): string {
   return at;
 }
 
+function qualifyingReply(
+  thread: ThreadView,
+  messages: Comment[],
+): boolean {
+  const askedAt = latestAskAt(thread, messages);
+  return messages.some(
+    (message) =>
+      message.replyTo === thread.rootId &&
+      message.role !== "human" &&
+      message.at > askedAt,
+  );
+}
+
 function researcherRunFor(
   thread: ThreadView,
   messages: Comment[],
@@ -130,22 +239,21 @@ function researcherRunFor(
   if (launch) return launch;
   const conversationId = thread.researcherConversationId;
   if (!conversationId) return undefined;
-  if (!conversationExists(conversationId)) {
-    return { status: "failed", error: RESEARCHER_GONE };
-  }
-  if (isRunLive(conversationId)) return { status: "running" };
-  const { transcript } = readConversation(conversationId);
+  if (qualifyingReply(thread, messages)) return undefined;
   const askedAt = latestAskAt(thread, messages);
-  const answered = messages.some(
-    (message) =>
-      message.replyTo === thread.rootId &&
-      message.role !== "human" &&
-      message.at > askedAt,
-  );
-  if (answered) return undefined;
+  if (!conversationExists(conversationId)) {
+    return { status: "failed", startedAt: askedAt, error: RESEARCHER_GONE };
+  }
+  const startedAt = researcherStartedAt(conversationId);
+  if (isRunLive(conversationId)) return { status: "running", startedAt };
+  if (!researcherRunEndRecorded(conversationId)) {
+    return { status: "finishing", startedAt };
+  }
+  const { transcript } = readConversation(conversationId);
   return {
     status: "failed",
-    error: lastErrorMessage(transcript) ?? RESEARCHER_NO_REPLY,
+    startedAt,
+    error: latestTranscriptError(transcript, startedAt) ?? RESEARCHER_NO_REPLY,
   };
 }
 
@@ -237,7 +345,7 @@ function researcherAgentRun(
   issueId: string,
 ): AgentRun {
   const running = isRunLive(meta.id);
-  const failed = !running && lastErrorMessage(transcript) !== undefined;
+  const failed = !running && latestTranscriptError(transcript) !== undefined;
   return {
     delegationId: `${DELEGATION_PREFIX}${meta.id}`,
     agentId: meta.agentId ?? meta.id,

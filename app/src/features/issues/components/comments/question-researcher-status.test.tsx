@@ -38,33 +38,63 @@ function mount(thread: CommentThreadData): HTMLElement {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   document.body.innerHTML = "";
   retry.mutate.mockReset();
   retry.isPending = false;
 });
 
 describe("question researcher status", () => {
-  it("shows Researcher starting… until the launch puts a live run on the thread", () => {
-    const thread = mount({ ...question, researcherRun: { status: "starting" } });
-    const starting = thread.querySelector('[data-testid="researcher-starting"]');
-    expect(starting?.textContent).toBe("Researcher starting…");
-    expect(starting?.getAttribute("role")).toBe("status");
+  it("shows Researcher is looking into this… with an elapsed timer while the run is live", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-29T13:41:24.000Z"));
+    const thread = mount({
+      ...question,
+      researcherRun: { status: "running", startedAt: "2026-09-29T13:40:00.000Z" },
+    });
+    const running = thread.querySelector('[data-testid="researcher-running"]');
+    const status = running?.querySelector('[role="status"]');
+    expect(status?.textContent).toBe("Researcher is looking into this…");
+    expect(status?.getAttribute("aria-live")).toBe("polite");
+    expect(running?.querySelector('[data-testid="researcher-elapsed"]')?.textContent).toBe(
+      "1:24",
+    );
+    expect(running?.querySelector('[data-testid="researcher-elapsed"]')?.getAttribute("aria-hidden")).toBe(
+      "true",
+    );
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(running?.querySelector('[data-testid="researcher-elapsed"]')?.textContent).toBe(
+      "1:25",
+    );
     expect(thread.querySelector('[data-testid="researcher-retry"]')).toBeNull();
+    expect(thread.querySelector('[data-testid="researcher-failed"]')).toBeNull();
+    vi.useRealTimers();
   });
 
-  it("shows Researching… while the run is live", () => {
-    const thread = mount({ ...question, researcherRun: { status: "running" } });
-    const running = thread.querySelector('[data-testid="researcher-running"]');
-    expect(running?.textContent).toBe("Researching…");
-    expect(running?.getAttribute("role")).toBe("status");
-    expect(running?.getAttribute("aria-live")).toBe("polite");
+  it("shows Posting answer… once the run has ended and no reply is visible yet", () => {
+    const thread = mount({
+      ...question,
+      researcherRun: { status: "finishing", startedAt: "2026-09-29T13:40:00.000Z" },
+    });
+    const posting = thread.querySelector('[data-testid="researcher-finishing"]');
+    const status = posting?.querySelector('[role="status"]');
+    expect(status?.textContent).toBe("Posting answer…");
+    expect(status?.getAttribute("aria-live")).toBe("polite");
+    expect(posting?.querySelector('[data-testid="researcher-elapsed"]')).toBeNull();
+    expect(thread.querySelector('[data-testid="researcher-retry"]')).toBeNull();
     expect(thread.querySelector('[data-testid="researcher-failed"]')).toBeNull();
   });
 
   it("shows the failure inline and retries the same question", () => {
     const thread = mount({
       ...question,
-      researcherRun: { status: "failed", error: "the run timed out." },
+      researcherRun: {
+        status: "failed",
+        startedAt: "2026-09-29T13:40:00.000Z",
+        error: "the run timed out.",
+      },
     });
     const failed = thread.querySelector('[data-testid="researcher-failed"]');
     expect(failed?.querySelector('[role="alert"]')?.textContent).toContain(
@@ -90,7 +120,11 @@ describe("question researcher status", () => {
         <CommentThread
           thread={{
             ...question,
-            researcherRun: { status: "failed", error: "the run timed out." },
+            researcherRun: {
+              status: "failed",
+              startedAt: "2026-09-29T13:40:00.000Z",
+              error: "the run timed out.",
+            },
           }}
           issueId="story-a"
           onReply={vi.fn()}
@@ -111,7 +145,11 @@ describe("question researcher status", () => {
     retry.isPending = true;
     const thread = mount({
       ...question,
-      researcherRun: { status: "failed", error: "the run timed out." },
+      researcherRun: {
+        status: "failed",
+        startedAt: "2026-09-29T13:40:00.000Z",
+        error: "the run timed out.",
+      },
     });
     expect(
       thread
