@@ -1,4 +1,5 @@
 import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs/react";
+import { isLineAnchor } from "./comment-anchor";
 import {
   selectAnchoredThreads,
   type CommentThread,
@@ -65,6 +66,14 @@ export function placeThreadsInFile(
         });
       }
     }
+  }
+
+  for (const thread of threads) {
+    const anchor = thread.root.anchor;
+    if (!anchor || isLineAnchor(anchor) || seen.has(thread.root.id)) continue;
+    if (!fileAnchorPaths(file).includes(anchor.path)) continue;
+    seen.add(thread.root.id);
+    unlocated.push(thread);
   }
 
   return { located: [...locatedByKey.values()], unlocated };

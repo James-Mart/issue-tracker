@@ -110,6 +110,21 @@ describe("placeThreadsInFile", () => {
     ]);
   });
 
+  it("parks a file anchor at the file end", () => {
+    const fileThread = comment({
+      id: "file-root",
+      at: "2026-08-30T14:22:00.000Z",
+      body: "whole file",
+      anchor: {
+        path: "app/server/services/diff-fetch.ts",
+        commitSha: SHA,
+      },
+    });
+    const placed = placeThreadsInFile(groupCommentThreads([fileThread]), file());
+    expect(placed.located).toEqual([]);
+    expect(placed.unlocated.map((thread) => thread.root.id)).toEqual(["file-root"]);
+  });
+
   it("adds a composer-only annotation when that line has no threads", () => {
     const current = comment({
       id: "current-root",

@@ -8,9 +8,19 @@ const TIP = "c1d7f88aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 function thread(
   id: string,
-  anchor?: { path: string; commitSha: string; line?: number },
+  anchor?: { path: string; commitSha: string; line?: number; file?: boolean },
   outdated = false,
 ): CommentThread {
+  const stored = anchor
+    ? anchor.file
+      ? { path: anchor.path, commitSha: anchor.commitSha }
+      : {
+          side: "new" as const,
+          line: anchor.line ?? 1,
+          path: anchor.path,
+          commitSha: anchor.commitSha,
+        }
+    : undefined;
   return {
     kind: "review",
     state: "open",
@@ -21,9 +31,7 @@ function thread(
       role: "human",
       body: id,
       ...(outdated ? { outdated: true } : {}),
-      ...(anchor
-        ? { anchor: { side: "new" as const, line: anchor.line ?? 1, ...anchor } }
-        : {}),
+      ...(stored ? { anchor: stored } : {}),
     },
     replies: [],
   };
@@ -65,6 +73,22 @@ describe("reviewDiffThreadsByFile", () => {
     );
 
     expect(ids(byFile.get("src/a.ts")?.outdated)).toEqual(["early", "late"]);
+  });
+
+  it("keeps a file anchor on its file and sorts an outdated one ahead of lines", () => {
+    const byFile = reviewDiffThreadsByFile(
+      [
+        thread("file", { path: "src/a.ts", commitSha: TIP, file: true }),
+        thread("gone", { path: "src/a.ts", commitSha: OLDER, file: true }, true),
+        thread("late", { path: "src/a.ts", commitSha: OLDER, line: 40 }, true),
+      ],
+      FILES,
+      ALL_CHANGES_SCOPE,
+    );
+
+    expect(ids(byFile.get("src/a.ts")?.file)).toEqual(["file"]);
+    expect(byFile.get("src/a.ts")?.inline).toEqual([]);
+    expect(ids(byFile.get("src/a.ts")?.outdated)).toEqual(["gone", "late"]);
   });
 
   it("shows only threads anchored to the viewed commit, outdated ones inline", () => {

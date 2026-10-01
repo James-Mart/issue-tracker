@@ -8,6 +8,17 @@ import {
   type MergePolicy,
 } from "../issue-constants.js";
 import { SLUG_RE } from "../slug.js";
+import type {
+  FileCommentAnchor,
+  LineCommentAnchor,
+} from "@/features/issues/lib/comment-anchor";
+
+export {
+  isLineAnchor,
+  type CommentAnchor,
+  type FileCommentAnchor,
+  type LineCommentAnchor,
+} from "@/features/issues/lib/comment-anchor";
 
 export const TASK_STATUSES = ["todo", "in-progress", "done"] as const;
 export const RETRO_STATUSES = ["in-progress", "done"] as const;
@@ -68,13 +79,27 @@ const assignmentLabelsSchema = z
   .transform(dedupePreserveOrder)
   .optional();
 
-export const commentAnchorSchema = z.object({
-  path: nonEmpty,
-  side: z.enum(["old", "new"]),
-  line: z.number().int().positive(),
-  startLine: z.number().int().positive().optional(),
-  commitSha: nonEmpty,
-});
+const lineCommentAnchorSchema = z
+  .object({
+    path: nonEmpty,
+    side: z.enum(["old", "new"]),
+    line: z.number().int().positive(),
+    startLine: z.number().int().positive().optional(),
+    commitSha: nonEmpty,
+  })
+  .strict() satisfies z.ZodType<LineCommentAnchor>;
+
+const fileCommentAnchorSchema = z
+  .object({
+    path: nonEmpty,
+    commitSha: nonEmpty,
+  })
+  .strict() satisfies z.ZodType<FileCommentAnchor>;
+
+export const commentAnchorSchema = z.union([
+  lineCommentAnchorSchema,
+  fileCommentAnchorSchema,
+]);
 
 export const THREAD_KINDS = ["review", "question"] as const;
 

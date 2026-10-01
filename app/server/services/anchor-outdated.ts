@@ -1,4 +1,4 @@
-import type { Comment, CommentMessage } from "../schemas.js";
+import { isLineAnchor, type Comment, type CommentMessage } from "../schemas.js";
 import { issueChangeCommitShas } from "./change.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
@@ -87,7 +87,13 @@ export async function deriveAnchoredOutdated(
   return Promise.all(
     comments.map(async (comment) => {
       if (!comment.anchor) return comment;
-      const { path, commitSha, line, startLine } = comment.anchor;
+      const { path, commitSha } = comment.anchor;
+      if (!isLineAnchor(comment.anchor)) {
+        const atHead = await showPathAtCommit(workspace, head, path);
+        if (atHead === null) return { ...comment, outdated: true };
+        return comment;
+      }
+      const { line, startLine } = comment.anchor;
       const start = startLine ?? line;
       const [atAnchor, atHead] = await Promise.all([
         showPathAtCommit(workspace, commitSha, path),

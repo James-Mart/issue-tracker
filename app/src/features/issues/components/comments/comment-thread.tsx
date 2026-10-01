@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bot, ChevronRight, Circle, HelpCircle, User } from "lucide-react";
 import type { ReactNode } from "react";
+import { isLineAnchor } from "../../lib/comment-anchor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
@@ -179,7 +180,11 @@ export function CommentThread({
       {collapses ? (
         <CollapsedThreadBar
           count={comments.length}
-          lineLabel={outdatedBar && anchor ? formatAnchorLineLabel(anchor) : undefined}
+          lineLabel={
+            outdatedBar && anchor && isLineAnchor(anchor)
+              ? formatAnchorLineLabel(anchor)
+              : undefined
+          }
           question={question}
           resolved={resolved}
           dismissed={dismissed}

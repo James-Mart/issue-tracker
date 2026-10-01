@@ -6,6 +6,7 @@ import type {
   ThreadEventRequest,
   ThreadView,
 } from "@server/schemas";
+import { isLineAnchor } from "./comment-anchor";
 import type { ThreadMessage } from "./comment-outbox";
 
 export const STORY_COMPOSER_LABEL =
@@ -131,7 +132,9 @@ export function selectAnchoredThreads(
   const byLine = new Map<number, CommentThread[]>();
   for (const thread of threads) {
     const anchor = thread.root.anchor;
-    if (!anchor || anchor.path !== path || anchor.side !== side) continue;
+    if (!anchor || !isLineAnchor(anchor) || anchor.path !== path || anchor.side !== side) {
+      continue;
+    }
     const list = byLine.get(anchor.line) ?? [];
     list.push(thread);
     byLine.set(anchor.line, list);
@@ -139,9 +142,10 @@ export function selectAnchoredThreads(
   return byLine;
 }
 
-export function formatAnchorLineLabel(
-  anchor: Pick<NonNullable<CommentMessage["anchor"]>, "line" | "startLine">,
-): string {
+export function formatAnchorLineLabel(anchor: {
+  line: number;
+  startLine?: number;
+}): string {
   if (anchor.startLine === undefined || anchor.startLine === anchor.line) {
     return `line ${anchor.line}`;
   }

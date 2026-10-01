@@ -222,6 +222,40 @@ describe("appendComment", () => {
     ).rejects.toThrow(/replyTo and anchor/);
   });
 
+  it("appends a file anchor with path and commit only", async () => {
+    const { appendComment, readComments } = await loadService();
+    const message = await appendComment("e", {
+      role: "agent",
+      body: "on this file",
+      anchor: {
+        path: "app/server/services/issues.ts",
+        commitSha: COMMIT_SHA,
+      },
+    });
+
+    expect(message.anchor).toEqual({
+      path: "app/server/services/issues.ts",
+      commitSha: COMMIT_SHA,
+    });
+    const comments = readComments("e");
+    expect(comments.messages[0]?.anchor).toEqual(message.anchor);
+  });
+
+  it("refuses a line anchor missing side", async () => {
+    const { appendComment } = await loadService();
+    await expect(
+      appendComment("e", {
+        role: "agent",
+        body: "half a line",
+        anchor: {
+          path: "app/server/services/issues.ts",
+          line: 4,
+          commitSha: COMMIT_SHA,
+        },
+      } as Parameters<typeof appendComment>[1]),
+    ).rejects.toThrow(/invalid input/i);
+  });
+
   it("refuses anchor.startLine greater than anchor.line", async () => {
     const { appendComment } = await loadService();
     await expect(

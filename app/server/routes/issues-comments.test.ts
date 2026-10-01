@@ -143,6 +143,28 @@ describe("comments HTTP API", () => {
     expect(body.anchor).toEqual(anchor);
   });
 
+  it("accepts a file anchor and refuses one that sets line without side", async () => {
+    const anchor = {
+      path: "app/server/services/issues.ts",
+      commitSha: COMMIT_SHA,
+    };
+    const { status, json } = await postComment("idea-1", {
+      role: "agent",
+      body: "on this file",
+      anchor,
+    });
+    expect(status).toBe(201);
+    const body = json as { id: string; anchor: typeof anchor };
+    expect(body.anchor).toEqual(anchor);
+
+    const refused = await postComment("idea-1", {
+      role: "agent",
+      body: "half",
+      anchor: { ...anchor, line: 4 },
+    });
+    expect(refused.status).toBe(400);
+  });
+
   it("accepts a reply and returns its id and replyTo", async () => {
     const { json: rootJson } = await postComment("idea-1", {
       role: "agent",

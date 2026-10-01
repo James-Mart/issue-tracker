@@ -596,6 +596,41 @@ describe("StoryReviewPage", () => {
     );
   });
 
+  it("shows a file thread above the diff and asks a question on the viewed commit", () => {
+    state.commentThreads = [
+      {
+        kind: "review",
+        state: "open",
+        readyToTask: true,
+        root: {
+          id: "file-note",
+          at: "2026-09-28T16:40:00.000Z",
+          role: "human",
+          body: "Look at the whole file.",
+          anchor: { path: "src/changed.ts", commitSha: TIP },
+        },
+        replies: [],
+      },
+    ];
+    const container = mountPage("tab=diff");
+    const card = fileCard(container, "src/changed.ts");
+    const comments = card.querySelector('[data-testid="review-file-comments"]')!;
+    const diff = card.querySelector('[data-testid="file-diff"]')!;
+    expect(comments.textContent).toContain("Look at the whole file.");
+    expect(comments.compareDocumentPosition(diff) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+
+    click(card.querySelector('[data-testid="review-file-comment"]')!);
+    const composer = comments.querySelector('[data-testid="diff-thread-composer"]')!;
+    setTextarea(composer.querySelector("textarea")!, "Why this module?");
+    click(composer.querySelector('button[aria-label="Ask a question"]')!);
+    expect(state.postComment).toHaveBeenCalledWith({
+      role: "human",
+      body: "Why this module?",
+      kind: "question",
+      anchor: { path: "src/changed.ts", commitSha: TIP },
+    });
+  });
+
   it("collapses a file when its Reviewed checkbox is checked and records the mark", () => {
     const container = mountPage("tab=diff");
     expect(

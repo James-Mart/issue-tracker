@@ -5,17 +5,28 @@ import { replyDraftKey, reviewDraftKey } from "@/features/reviews/lib/review-dra
 
 export type AnchorSide = "old" | "new";
 
-export type DiffThreadAnchor = {
+/** New line thread. `startLine` is set only for a same-side range. */
+export type NewLineComposer = {
+  kind: "new";
   path: string;
   side: AnchorSide;
   line: number;
   startLine?: number;
-  commitSha: string;
 };
 
-export type NewDiffComposer = { kind: "new" } & Omit<DiffThreadAnchor, "commitSha">;
+/** New file thread. `side` and `line` are both absent. */
+export type NewFileComposer = {
+  kind: "new";
+  path: string;
+};
+
+export type NewDiffComposer = NewLineComposer | NewFileComposer;
 
 export type OpenDiffComposer = NewDiffComposer | { kind: "reply"; threadId: string };
+
+export function isLineComposer(open: NewDiffComposer): open is NewLineComposer {
+  return "line" in open;
+}
 
 export function annotationSideToAnchorSide(
   side: "deletions" | "additions",
@@ -52,9 +63,19 @@ export function newComposerOnLine(
   file: Pick<FileDiffMetadata, "name" | "prevName">,
   line: number,
   side: AnchorSide,
-): NewDiffComposer | null {
-  if (open?.kind !== "new" || open.line !== line || open.side !== side) return null;
+): NewLineComposer | null {
+  if (open?.kind !== "new" || !isLineComposer(open)) return null;
+  if (open.line !== line || open.side !== side) return null;
   return composerOpensInFile(open, file) ? open : null;
+}
+
+/** The new file composer when it is open on this path, else null. */
+export function newFileComposerOnFile(
+  open: OpenDiffComposer | null,
+  path: string,
+): NewFileComposer | null {
+  if (open?.kind !== "new" || isLineComposer(open) || open.path !== path) return null;
+  return open;
 }
 
 /** Map a pierre line selection onto a new-thread composer on that side's path. */
@@ -84,6 +105,9 @@ export function composerDraftKey(
   if (open.kind === "reply") {
     return replyDraftKey(reviewId, open.threadId);
   }
+  if (!isLineComposer(open)) {
+    return reviewDraftKey(reviewId, `file:${open.path}`);
+  }
   const span =
     open.startLine !== undefined
       ? `${open.startLine}-${open.line}`
@@ -99,6 +123,14 @@ export function commentInputForComposer(
 ): CommentInput {
   if (open.kind === "reply") {
     return { role: "human", body, replyTo: open.threadId };
+  }
+  if (!isLineComposer(open)) {
+    return {
+      role: "human",
+      body,
+      ...questionKindFields(kind),
+      anchor: { path: open.path, commitSha },
+    };
   }
   return {
     role: "human",

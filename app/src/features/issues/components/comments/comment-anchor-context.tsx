@@ -1,5 +1,6 @@
 import { FileCode2, FileDiff } from "lucide-react";
 import type { CommentMessage } from "@server/schemas";
+import { isLineAnchor } from "../../lib/comment-anchor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
@@ -20,6 +21,7 @@ export function CommentAnchorMeta({
   onSeeInDiff?: () => void;
   showLocation?: boolean;
 }) {
+  const lineAnchor = isLineAnchor(anchor);
   return (
     <header
       data-testid="comment-anchor-meta"
@@ -27,14 +29,26 @@ export function CommentAnchorMeta({
     >
       {showLocation ? (
         <>
+          {lineAnchor ? null : (
+            <span
+              data-testid="file-comment-label"
+              className="shrink-0 font-sans text-muted-foreground"
+            >
+              File comment
+            </span>
+          )}
           <FileCode2 className="h-3 w-3 shrink-0" aria-hidden />
           <span className="min-w-0 truncate text-foreground/85 [direction:rtl] [text-align:left] shell:[direction:ltr]">
             {anchor.path}
           </span>
-          <span aria-hidden>·</span>
-          <span className="shrink-0 tabular-nums">
-            {formatAnchorLineLabel(anchor)}
-          </span>
+          {lineAnchor ? (
+            <>
+              <span aria-hidden>·</span>
+              <span className="shrink-0 tabular-nums">
+                {formatAnchorLineLabel(anchor)}
+              </span>
+            </>
+          ) : null}
         </>
       ) : null}
       {outdated ? (
@@ -67,13 +81,14 @@ export function CommentAnchorSnippet({
   issueId: string;
   anchor: NonNullable<CommentMessage["anchor"]>;
 }) {
+  const lineAnchor = isLineAnchor(anchor) ? anchor : undefined;
   const { data: contents } = useIssueChangeFileQuery(
     issueId,
-    anchor.commitSha,
-    anchor.path,
+    lineAnchor?.commitSha,
+    lineAnchor?.path,
   );
-  if (contents == null) return null;
-  const lines = snippetLinesFromContents(contents, anchor);
+  if (!lineAnchor || contents == null) return null;
+  const lines = snippetLinesFromContents(contents, lineAnchor);
   if (lines.length === 0) return null;
 
   return (
@@ -95,10 +110,10 @@ export function CommentAnchorSnippet({
             )}
           >
             <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/70">
-              {anchor.side === "old" ? line.line : ""}
+              {lineAnchor.side === "old" ? line.line : ""}
             </span>
             <span className="select-none px-1.5 text-right tabular-nums text-muted-foreground/70">
-              {anchor.side === "new" ? line.line : ""}
+              {lineAnchor.side === "new" ? line.line : ""}
             </span>
             <span className="select-none text-center text-muted-foreground/70">
               {" "}

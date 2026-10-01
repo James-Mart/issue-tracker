@@ -1,15 +1,25 @@
-import { useCallback, useEffect, useId, useRef, type MutableRefObject, type Ref } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  type MutableRefObject,
+  type ReactNode,
+  type Ref,
+} from "react";
 import {
   FileDiff,
   useVirtualizer,
   type DiffLineAnnotation,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
-import { ChevronRight } from "lucide-react";
+import { isLineAnchor } from "@/features/issues/lib/comment-anchor";
+import { ChevronRight, MessageSquare } from "lucide-react";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils/cn";
+import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
 import { DiffLineCounts } from "@/features/issues/components/changed-file-row";
 import {
   DiffThreadComposer,
@@ -22,6 +32,7 @@ import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
 import {
   annotationSideToAnchorSide,
   newComposerOnLine,
+  newFileComposerOnFile,
   type AnchorSide,
 } from "@/features/issues/lib/diff-thread-anchor";
 import { threadNodeInPanel } from "@/features/issues/lib/issue-change-focus-thread";
@@ -110,16 +121,37 @@ function FileEndThreads({
   );
 }
 
+/** File-anchor threads and the new file composer, above the first hunk. */
+function FileCommentSection({
+  threads,
+  storyId,
+  composer,
+}: {
+  threads: CommentThread[];
+  storyId: string;
+  composer?: ReactNode;
+}) {
+  if (threads.length === 0 && composer == null) return null;
+  return (
+    <div data-testid="review-file-comments" className="border-b border-border">
+      <p className={`${SETTINGS_HEADING_CLASS} px-3 pt-2`}>File comment</p>
+      <ReviewLineThreads threads={threads} storyId={storyId} composer={composer} />
+    </div>
+  );
+}
+
 function RenderedFileDiff({
   fileDiff,
   diffLayout,
   source,
-  threads,
+  lineThreads,
+  outdated,
 }: {
   fileDiff: FileDiffMetadata;
   diffLayout: DiffLayout;
   source: ReviewFileDiffSource;
-  threads: ReviewFileThreads;
+  lineThreads: CommentThread[];
+  outdated: CommentThread[];
 }) {
   const { loading, loadDiffFiles } = useFileDiffContentsLoader({
     issueId: source.storyId,
@@ -127,7 +159,7 @@ function RenderedFileDiff({
     cache: source.contentsCache,
   });
   const { annotations, unlocated, openFromRange, onLineSelected } =
-    useFileThreadAnnotations(fileDiff, threads.inline);
+    useFileThreadAnnotations(fileDiff, lineThreads);
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<CommentThread[]>) => (
       <AnnotationThreads
@@ -167,7 +199,7 @@ function RenderedFileDiff({
         lineAnnotations={annotations}
         renderAnnotation={renderAnnotation}
       />
-      <FileEndThreads inline={unlocated} outdated={threads.outdated} storyId={source.storyId} />
+      <FileEndThreads inline={unlocated} outdated={outdated} storyId={source.storyId} />
     </div>
   );
 }
@@ -207,6 +239,15 @@ export function ReviewFileDiff({
   scrollThreadId?: string;
 }) {
   const { file, reviewed, changedSinceReviewed } = row;
+  const { open, openNew } = useDiffComposer();
+  const fileComposer = newFileComposerOnFile(open, file.path);
+  const fileComments = (
+    <FileCommentSection
+      threads={threads.file}
+      storyId={source.storyId}
+      composer={fileComposer ? <DiffThreadComposer target={fileComposer} /> : undefined}
+    />
+  );
   const checkboxId = useId();
   const bodyId = useId();
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -214,7 +255,10 @@ export function ReviewFileDiff({
   useReviewSearchMark(sectionRef, currentMatch, searchNeedle, collapsed);
   const holdPinnedFile = usePinnedHeaderCollapse(sectionRef, collapsed);
   // An Outdated-group thread has no line in this diff; the reveal scrolls to its node.
-  const anchor = threads.inline.find((thread) => thread.root.id === scrollThreadId)?.root.anchor;
+  // A file anchor has no line either; the reveal scrolls to the thread node.
+  const anchor = threads.inline.find((thread) => thread.root.id === scrollThreadId)?.root
+    .anchor;
+  const lineAnchor = anchor && isLineAnchor(anchor) ? anchor : undefined;
   useEffect(() => {
     if (!scrollThreadId || collapsed) return;
     const panel = sectionRef.current;
@@ -231,8 +275,8 @@ export function ReviewFileDiff({
       const node = threadNodeInPanel(panel, scrollThreadId);
       const host = panel.querySelector("diffs-container");
       const shadow = host instanceof HTMLElement ? host.shadowRoot : null;
-      const line = anchor?.line;
-      const side = anchor?.side;
+      const line = lineAnchor?.line;
+      const side = lineAnchor?.side;
       if (line != null && side != null && shadow != null && diffLineIsPainted(shadow, side, line)) {
         let row: HTMLElement | null = null;
         for (const candidate of shadow.querySelectorAll("[data-line]")) {
@@ -316,7 +360,7 @@ export function ReviewFileDiff({
       cancelled = true;
       cancelAnimationFrame(frame);
     };
-  }, [anchor?.line, anchor?.side, collapsed, scrollThreadId, threads, virtualizer]);
+  }, [collapsed, lineAnchor?.line, lineAnchor?.side, scrollThreadId, threads, virtualizer]);
   const pathOccurrence =
     currentMatch?.kind === "path" && currentMatch.field === "path"
       ? currentMatch.occurrence
@@ -383,6 +427,20 @@ export function ReviewFileDiff({
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5 shell:gap-2">
           {changedSinceReviewed ? <ChangedSinceReviewedHeaderMark /> : null}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground"
+            title="Comment on file"
+            aria-label="Comment on file"
+            data-testid="review-file-comment"
+            onClick={() => {
+              if (collapsed) onToggleCollapsed();
+              openNew({ kind: "new", path: file.path });
+            }}
+          >
+            <MessageSquare />
+          </Button>
           <DiffLineCounts
             additions={file.additions}
             deletions={file.deletions}
@@ -417,6 +475,7 @@ export function ReviewFileDiff({
       </header>
       {collapsed ? null : (
         <div id={bodyId}>
+          {fileComments}
           {file.tooLarge ? (
             <>
               <FileTooLargeBody localCommand={localCommand} localHint={localHint} />
@@ -431,7 +490,8 @@ export function ReviewFileDiff({
               fileDiff={fileDiff}
               diffLayout={diffLayout}
               source={source}
-              threads={threads}
+              lineThreads={threads.inline}
+              outdated={threads.outdated}
             />
           ) : (
             <ShellInlineFault

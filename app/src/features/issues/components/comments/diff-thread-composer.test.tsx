@@ -44,12 +44,26 @@ function OpenNew({ testId, line }: { testId: string; line: number }) {
   );
 }
 
+function OpenFile() {
+  const { openNew } = useDiffComposer();
+  return (
+    <button
+      type="button"
+      data-testid="open-file"
+      onClick={() => openNew({ kind: "new", path: "app/foo.ts" })}
+    >
+      open file
+    </button>
+  );
+}
+
 function Host() {
   const { open } = useDiffComposer();
   return (
     <>
       <OpenNew testId="open-new" line={94} />
       <OpenNew testId="open-other" line={12} />
+      <OpenFile />
       {open ? <DiffThreadComposer target={open} /> : null}
     </>
   );
@@ -187,5 +201,27 @@ describe("DiffThreadComposer", () => {
 
     click(container, "open-new");
     expect(container.querySelector("textarea")?.value).toBe("");
+  });
+
+  it("posts a file anchor for a comment and a question", () => {
+    const container = mount(true);
+    click(container, "open-file");
+    const composer = container.querySelector('[data-testid="diff-thread-composer"]');
+    expect(composer?.textContent).not.toMatch(/line \d/);
+    expect(composer?.getAttribute("data-draft-key")).toBe(
+      "review:task-threads:file:app/foo.ts",
+    );
+    setDraft(composer!.querySelector("textarea")!, "Move this module.");
+    act(() => {
+      composer
+        ?.querySelector('button[aria-label="Ask a question"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(postComment).toHaveBeenCalledWith({
+      role: "human",
+      body: "Move this module.",
+      kind: "question",
+      anchor: { path: "app/foo.ts", commitSha: SHA },
+    });
   });
 });

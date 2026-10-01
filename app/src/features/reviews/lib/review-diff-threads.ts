@@ -1,16 +1,21 @@
 import type { ReviewDiffFile } from "@server/schemas";
+import { isLineAnchor } from "@/features/issues/lib/comment-anchor";
 import { anchorLineRange } from "@/features/issues/lib/comment-anchor-snippet";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { fileNameForAnchorPath } from "@/features/issues/lib/issue-change-focus-thread";
 import { ALL_CHANGES_SCOPE } from "./review-scope";
 
-/** One file card's threads: at anchor lines, and in its Outdated group. */
+/** One file card's threads: whole-file, at anchor lines, and in its Outdated group. */
 export type ReviewFileThreads = {
+  file: CommentThread[];
   inline: CommentThread[];
   outdated: CommentThread[];
 };
 
-export const NO_FILE_THREADS: ReviewFileThreads = { inline: [], outdated: [] };
+export const NO_FILE_THREADS: ReviewFileThreads = { file: [], inline: [], outdated: [] };
+
+/** File anchors have no line; they sort ahead of every line number. */
+const FILE_ANCHOR_SORT_START = 0;
 
 /**
  * Anchored threads the Diff tab shows in this scope, keyed by file path.
@@ -31,7 +36,10 @@ export function reviewDiffThreadsByFile(
     // A file no longer in this diff has no card; its threads stay on Conversation.
     const path = fileNameForAnchorPath(names, anchor.path);
     if (path === undefined) return [];
-    return [{ thread, path, start: anchorLineRange(anchor).start }];
+    const start = isLineAnchor(anchor)
+      ? anchorLineRange(anchor).start
+      : FILE_ANCHOR_SORT_START;
+    return [{ thread, path, start }];
   });
   const moved = ({ thread }: { thread: CommentThread }) =>
     scope === ALL_CHANGES_SCOPE && thread.root.outdated === true;
@@ -40,13 +48,16 @@ export function reviewDiffThreadsByFile(
   const bucketFor = (path: string) => {
     let bucket = byFile.get(path);
     if (!bucket) {
-      bucket = { inline: [], outdated: [] };
+      bucket = { file: [], inline: [], outdated: [] };
       byFile.set(path, bucket);
     }
     return bucket;
   };
   for (const { thread, path } of shown.filter((entry) => !moved(entry))) {
-    bucketFor(path).inline.push(thread);
+    const bucket = bucketFor(path);
+    const anchor = thread.root.anchor;
+    if (anchor && !isLineAnchor(anchor)) bucket.file.push(thread);
+    else bucket.inline.push(thread);
   }
   for (const { thread, path } of shown.filter(moved).sort((a, b) => a.start - b.start)) {
     bucketFor(path).outdated.push(thread);
@@ -59,8 +70,8 @@ export function fileShowingThread(
   threadId: string,
 ): string | undefined {
   const isThread = (thread: CommentThread) => thread.root.id === threadId;
-  for (const [path, { inline, outdated }] of byFile) {
-    if (inline.some(isThread) || outdated.some(isThread)) return path;
+  for (const [path, { file, inline, outdated }] of byFile) {
+    if (file.some(isThread) || inline.some(isThread) || outdated.some(isThread)) return path;
   }
   return undefined;
 }

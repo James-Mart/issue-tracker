@@ -1,5 +1,11 @@
 import { anchorLineRange } from "@/features/issues/lib/comment-anchor-snippet";
-import type { Comment, CommentsResponse, ConversationMeta, Issue } from "../schemas.js";
+import {
+  isLineAnchor,
+  type Comment,
+  type CommentsResponse,
+  type ConversationMeta,
+  type Issue,
+} from "../schemas.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { prepareStoryChange, requireMergeBase } from "./change.js";
 import {
@@ -38,6 +44,9 @@ function titleFor(question: string): string {
 }
 
 function anchorLine(anchor: NonNullable<Comment["anchor"]>): string {
+  if (!isLineAnchor(anchor)) {
+    return `Anchor: ${anchor.path}, commit ${anchor.commitSha}`;
+  }
   const { start, end } = anchorLineRange(anchor);
   const lines = start < end ? `lines ${start}-${end}` : `line ${end}`;
   return `Anchor: ${anchor.path}, ${anchor.side} side, ${lines}, commit ${anchor.commitSha}`;

@@ -211,6 +211,19 @@ describe("selectAnchoredThreads", () => {
     expect([...newSide.keys()]).toEqual([94]);
     expect(newSide.get(94)?.map((thread) => thread.root.id)).toEqual(["line"]);
   });
+
+  it("leaves a file anchor off every line map", () => {
+    const threads = groupCommentThreads([
+      comment({
+        id: "file",
+        at: "2026-08-30T14:00:00.000Z",
+        body: "whole file",
+        anchor: { path: "app/foo.ts", commitSha: SHA },
+      }),
+    ]);
+    expect(selectAnchoredThreads(threads, "app/foo.ts", "new").size).toBe(0);
+    expect(selectAnchoredThreads(threads, "app/foo.ts", "old").size).toBe(0);
+  });
 });
 
 describe("formatAnchorLineLabel", () => {

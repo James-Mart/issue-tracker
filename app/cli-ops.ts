@@ -12,6 +12,7 @@ import {
 import { questionKindFields } from "./server/question-kind.js";
 import {
   convertedQuestionText,
+  isLineAnchor,
   type Comment,
   type CommentInput,
   type CommentMessage,
@@ -110,11 +111,13 @@ function commentAuthor(message: Comment): string {
 }
 
 function formatAnchorLocation(anchor: NonNullable<Comment["anchor"]>): string {
+  const sha = anchor.commitSha.slice(0, 7);
+  if (!isLineAnchor(anchor)) return `${anchor.path} ${sha}`;
   const linePart =
     anchor.startLine !== undefined
       ? `${anchor.startLine}-${anchor.line}`
       : String(anchor.line);
-  return `${anchor.path}:${linePart} ${anchor.side} ${anchor.commitSha.slice(0, 7)}`;
+  return `${anchor.path}:${linePart} ${anchor.side} ${sha}`;
 }
 
 function formatCommentLine(message: CommentMessage, indent = ""): string {
@@ -397,48 +400,67 @@ function commentInputFromCliOpts(opts: CommentCliOptions): CommentInput {
     throw new Error("--body is required");
   }
 
-  if (anyAnchor) {
-    if (!opts.path || !opts.side || !opts.line || !opts.commit) {
-      throw new Error(
-        "anchor requires --path, --side, --line, and --commit",
-      );
-    }
-    return {
-      role: opts.role,
-      name: opts.name,
-      body: opts.body,
-      anchor: {
-        path: opts.path,
-        side: coerceEnum(opts.side, "side", ["old", "new"]) as "old" | "new",
-        line: coercePositiveInt(opts.line, "line"),
-        commitSha: opts.commit,
-        ...(opts.startLine !== undefined
-          ? { startLine: coercePositiveInt(opts.startLine, "start-line") }
-          : {}),
-      },
-    };
-  }
-
-  if (opts.replyTo) {
-    return {
-      role: opts.role,
-      name: opts.name,
-      body: opts.body,
-      replyTo: opts.replyTo,
-    };
-  }
-
-  return {
+  const kind = questionKindFields(
+    opts.kind === "question" ? "question" : undefined,
+  );
+  const message = {
     role: opts.role,
     name: opts.name,
     body: opts.body,
-    ...questionKindFields(opts.kind === "question" ? "question" : undefined),
+    ...kind,
+  };
+
+  if (!anyAnchor) {
+    if (opts.replyTo) {
+      return {
+        role: opts.role,
+        name: opts.name,
+        body: opts.body,
+        replyTo: opts.replyTo,
+      };
+    }
+    return message;
+  }
+
+  const lineFlags =
+    opts.side !== undefined ||
+    opts.line !== undefined ||
+    opts.startLine !== undefined;
+  if (!lineFlags) {
+    if (!opts.path || !opts.commit) {
+      throw new Error("a file anchor requires --path and --commit");
+    }
+    return {
+      ...message,
+      anchor: { path: opts.path, commitSha: opts.commit },
+    };
+  }
+
+  if (!opts.path || !opts.side || !opts.line || !opts.commit) {
+    throw new Error(
+      "a line anchor requires --path, --side, --line, and --commit",
+    );
+  }
+  return {
+    ...message,
+    anchor: {
+      path: opts.path,
+      side: coerceEnum(opts.side, "side", ["old", "new"]) as "old" | "new",
+      line: coercePositiveInt(opts.line, "line"),
+      commitSha: opts.commit,
+      ...(opts.startLine !== undefined
+        ? { startLine: coercePositiveInt(opts.startLine, "start-line") }
+        : {}),
+    },
   };
 }
 
 function applyCommentOptions(cmd: Command): Command {
   return cmd
-    .option("--path <path>", "repository-relative file path for a line anchor")
+    .option(
+      "--path <path>",
+      "repository-relative file path for a line or file anchor",
+    )
     .option(
       "--side <old|new>",
       "which side of the diff the anchor points at",
