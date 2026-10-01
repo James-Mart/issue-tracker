@@ -2,9 +2,11 @@ import { useEffect, type MutableRefObject } from "react";
 import { useVirtualizer } from "@pierre/diffs/react";
 import { threadNodeInPanel } from "@/features/issues/lib/issue-change-focus-thread";
 import {
-  nextDiffLineScrollTop,
+  diffScrollRoot,
+  diffViewBelowHeader,
   paintedDiffLine,
-  paintedDiffLineSpan,
+  seekPaintedDiffLine,
+  type DiffLineSeek,
 } from "../lib/review-diff-line-scroll";
 import type { DiffThreadReveal } from "./use-review-workbench-location";
 
@@ -43,8 +45,7 @@ export function useDiffThreadReveal({
     let cancelled = false;
     let frame = 0;
     let attempts = 0;
-    let lastSpanKey = "";
-    let stuck = 0;
+    const seek: DiffLineSeek = { spanKey: "", stuck: 0 };
 
     const landed = (node?: HTMLElement | null) => {
       node?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -62,62 +63,18 @@ export function useDiffThreadReveal({
           ? paintedDiffLine(shadow, side, line)
           : null;
       if (row != null) {
-        const root = virtualizer.getRoot();
-        const header = panel.querySelector('[data-testid="review-file-header"]');
-        const headerHeight =
-          header instanceof HTMLElement ? header.getBoundingClientRect().height : 0;
-        if (root instanceof HTMLElement) {
-          const delta =
-            row.getBoundingClientRect().top -
-            root.getBoundingClientRect().top -
-            headerHeight -
-            8;
-          if (Math.abs(delta) > 2) {
-            virtualizer.scrollTo({ top: virtualizer.getScrollTop() + delta });
-          }
-          landed();
-        } else {
-          landed(node);
+        const root = diffScrollRoot(virtualizer);
+        const delta =
+          row.getBoundingClientRect().top - diffViewBelowHeader(root, panel).start - 8;
+        if (Math.abs(delta) > 2) {
+          virtualizer.scrollTo({ top: virtualizer.getScrollTop() + delta });
         }
+        landed();
         return;
       }
 
-      const waitingOnDiff = line != null && side != null && shadow != null;
-
-      if (waitingOnDiff && attempts < 60) {
-        const root = virtualizer.getRoot();
-        const rootBox = root instanceof HTMLElement ? root.getBoundingClientRect() : null;
-        const panelBox = panel.getBoundingClientRect();
-        const fileInView =
-          rootBox == null || (panelBox.bottom > rootBox.top && panelBox.top < rootBox.bottom);
-        if (!fileInView) {
-          virtualizer.scrollTo({ top: virtualizer.getOffsetInScrollContainer(panel) });
-          lastSpanKey = "";
-          stuck = 0;
-          frame = requestAnimationFrame(step);
-          return;
-        }
-        const span = paintedDiffLineSpan(shadow, side);
-        if (span != null) {
-          const spanKey = `${span.min}:${span.max}`;
-          const next = nextDiffLineScrollTop(virtualizer.getScrollTop(), span, line);
-          // Land the line inside the window, not on the overscan edge that never paints it.
-          const cushion = span.height * 40;
-          const direction = line > span.max ? 1 : -1;
-          if (next != null && spanKey !== lastSpanKey) {
-            lastSpanKey = spanKey;
-            stuck = 0;
-            virtualizer.scrollTo({ top: next + direction * cushion });
-          } else if (next != null && stuck < 2) {
-            // Pierre's overscan can leave the target just outside the painted
-            // span after one jump, and the span key does not change. One more
-            // nudge of the same cushion is the bound; further jumps are not.
-            stuck += 1;
-            virtualizer.scrollTo({
-              top: virtualizer.getScrollTop() + direction * cushion,
-            });
-          }
-        }
+      if (line != null && side != null && shadow != null && attempts < 60) {
+        seekPaintedDiffLine(virtualizer, panel, shadow, side, line, seek);
         frame = requestAnimationFrame(step);
         return;
       }

@@ -49,6 +49,17 @@ import {
 
 type ScrollRequest = { path: string; nonce: number; scope: string };
 
+/**
+ * The search bar over the diff scroller, which pins the bar while the diff
+ * scrolls. Desktop's bounded page gives the stack the diff pane's height. On
+ * phone the page scrolls, so the stack is capped at the viewport under the
+ * sticky app bar (3rem) less the page's bottom padding (2rem): scrolled to
+ * the end, the bar rests at the top of the screen and the page cannot carry
+ * it under the app bar.
+ */
+const DIFF_STACK_CLASS =
+  "flex max-h-[calc(100svh-5rem)] min-h-0 min-w-0 flex-1 flex-col gap-2 shell:max-h-none";
+
 function ScopeStep({
   label,
   direction,
@@ -301,9 +312,12 @@ export function ReviewDiffTab({
   const visibleRows = search.filtering
     ? rows.filter((row) => matchedPaths.has(row.file.path))
     : rows;
-  const searchScroll = search.current
-    ? { path: search.current.path, scope, nonce: search.scrollNonce }
-    : undefined;
+  // A path hit sits in the file's header, so it lands with the file's top; a
+  // content hit lands on its own line.
+  const searchScroll =
+    search.current?.kind === "path"
+      ? { path: search.current.path, scope, nonce: search.scrollNonce }
+      : undefined;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-diff-tab">
@@ -349,7 +363,7 @@ export function ReviewDiffTab({
             />
           }
         >
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-diff-stack">
+          <div className={DIFF_STACK_CLASS} data-testid="review-diff-stack">
             <ReviewDiffSearch
               query={search.query}
               matchIndex={search.currentIndex}
@@ -367,7 +381,7 @@ export function ReviewDiffTab({
               </p>
             ) : (
               // useDiffScrollAnchor holds the reader in place; native anchoring would fight it.
-              <Virtualizer className="max-h-[75svh] overflow-auto [overflow-anchor:none] shell:max-h-none shell:min-h-0 shell:flex-1">
+              <Virtualizer className="min-h-0 flex-1 overflow-auto [overflow-anchor:none]">
                 {/* New threads anchor to the commit being viewed; the tip for All changes. */}
                 <DiffComposerProvider
                   key={scope}

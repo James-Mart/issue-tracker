@@ -39,7 +39,7 @@ import type { DiffSearchMatch } from "../lib/review-diff-search";
 import { REVIEW_SEARCH_MATCH_CSS } from "../lib/review-diff-search-mark";
 import { useDiffThreadReveal } from "../hooks/use-diff-thread-reveal";
 import { usePinnedHeaderCollapse } from "../hooks/use-pinned-header-collapse";
-import { useReviewSearchMark } from "../hooks/use-review-search-mark";
+import { useReviewSearchMarks } from "../hooks/use-review-search-marks";
 import type { DiffThreadReveal } from "../hooks/use-review-workbench-location";
 import { ChangedSinceReviewedHeaderMark } from "./changed-since-reviewed-badge";
 import { MarkedPathText } from "./review-search-marked-text";
@@ -247,7 +247,7 @@ export function ReviewFileDiff({
   const checkboxId = useId();
   const bodyId = useId();
   const sectionRef = useRef<HTMLElement | null>(null);
-  useReviewSearchMark(sectionRef, currentMatch, searchNeedle, collapsed);
+  useReviewSearchMarks(sectionRef, currentMatch, searchNeedle, collapsed);
   const holdPinnedFile = usePinnedHeaderCollapse(sectionRef, collapsed);
   // An Outdated-group thread has no line in this diff; the reveal scrolls to its node.
   // A file anchor has no line either; the reveal scrolls to the thread node.

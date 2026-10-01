@@ -38,13 +38,13 @@ export function snapshotSearchableDiff(file: FileDiffMetadata): SearchableDiff {
 }
 
 /**
- * Non-overlapping, case-insensitive hits. `onHit` returns true to stop.
- * Both `nthIndex` and match collection scan through this.
+ * Non-overlapping, case-insensitive hits. Both match collection and the marks
+ * scan through this, so a match's `occurrence` names the hit it marks.
  */
 function forEachOccurrence(
   text: string,
   needle: string,
-  onHit: (occurrence: number, start: number) => boolean | void,
+  onHit: (occurrence: number, start: number) => void,
 ) {
   if (needle.length === 0) return;
   const hay = text.toLowerCase();
@@ -54,22 +54,21 @@ function forEachOccurrence(
   while (from <= hay.length - n.length) {
     const at = hay.indexOf(n, from);
     if (at < 0) return;
-    if (onHit(occurrence, at)) return;
+    onHit(occurrence, at);
     occurrence += 1;
     from = at + n.length;
   }
 }
 
-/** Index of the `occurrence`th non-overlapping, case-insensitive hit, or -1. */
-export function nthIndex(haystack: string, needle: string, occurrence: number): number {
-  if (occurrence < 0) return -1;
-  let found = -1;
-  forEachOccurrence(haystack, needle, (index, start) => {
-    if (index !== occurrence) return;
-    found = start;
-    return true;
+export type SearchHit = { start: number; end: number; current: boolean };
+
+/** Every hit in occurrence order; the `current`th one, if any, is current. */
+export function searchHits(text: string, needle: string, current: number | undefined): SearchHit[] {
+  const hits: SearchHit[] = [];
+  forEachOccurrence(text, needle, (occurrence, start) => {
+    hits.push({ start, end: start + needle.length, current: occurrence === current });
   });
-  return found;
+  return hits;
 }
 
 function lineAt(lines: string[], index: number, path: string): string {
