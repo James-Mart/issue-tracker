@@ -326,12 +326,12 @@ describe("ReviewConversationTab", () => {
     expect(resend).toHaveBeenCalledWith("client-1");
   });
 
-  it("shows a question being sent as starting its researcher, with no thread actions yet", () => {
+  it("shows a question being sent as its researcher looking into it, with no thread actions yet", () => {
     state.threads = [
       thread({
         kind: "question",
         readyToTask: false,
-        researcherRun: { status: "starting" },
+        researcherRun: { status: "running", startedAt: "2026-09-29T14:05:00.000Z" },
         root: {
           id: "client-1",
           clientId: "client-1",
@@ -345,8 +345,8 @@ describe("ReviewConversationTab", () => {
     ];
     const container = mount();
     const card = container.querySelector('[data-thread-root="client-1"]');
-    expect(card?.querySelector('[data-testid="researcher-starting"]')?.textContent).toBe(
-      "Researcher starting…",
+    expect(card?.querySelector('[data-testid="researcher-running"]')?.textContent).toContain(
+      "Researcher is looking into this…",
     );
     expect(card?.querySelector('[data-testid="comment-sending"]')).not.toBeNull();
     expect(

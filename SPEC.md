@@ -1333,13 +1333,22 @@ researcher as it is.
 A CLI-posted reply does not resume it.
 
 `researcherRun` is read-time only, served by the comments route on an open
-question thread with a `researcherConversationId` and no non-human reply after
-the latest human message on the thread (the root, or a later human reply):
-`{ status: "running" }` while its run is live,
-else `{ status: "failed", error }`. `error` is the conversation's last
-transcript `error` event, which a review-channel run that ends other than
-`finished` records. When there is none, it says the run ended without a reply,
-or that the conversation no longer exists.
+question thread with no non-human reply after the latest human message on
+the thread (the root, or a later human reply):
+`{ status: "running" | "finishing", startedAt } | { status: "failed", startedAt, error }`.
+`startedAt` is when that run started. `running` while its run is live,
+including a launch that has not opened a conversation yet. `finishing` when
+the run is not live, the conversation has no run-end marker yet, and no
+qualifying reply exists. `failed` when that marker is recorded and no
+qualifying reply exists, or when the launch fails before it opens a
+conversation. `error` is the last transcript `error` event at or after
+`startedAt`, which a review-channel run that ends other than `finished`
+records. When there is none, it says the run ended without a reply, or that
+the conversation no longer exists. The researcher conversation records the
+run-end marker after its transcript has fully flushed, and only once that
+run is not continuing into a replay or a held follow-up. A new run clears
+the marker when it becomes live. A launch that fails before a conversation
+exists is `failed` without a marker.
 `POST /api/issues/:storyId/threads/:threadId/researcher/retry` starts a fresh
 researcher conversation for that question and returns `204`. It refuses with
 `conflict` unless `researcherRun` is `failed`. Each researcher conversation is

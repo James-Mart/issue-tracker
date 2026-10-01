@@ -67,17 +67,19 @@ function rootKind(root: CommentMessage): ThreadView["kind"] {
 
 /**
  * A thread this browser is posting: open, not yet taskable, and a question
- * reads as starting its researcher unless the post failed.
+ * reads as its researcher looking into it unless the post failed.
  */
 function outboxThread(root: ThreadMessage, replies: ThreadMessage[]): CommentThread {
   const kind = rootKind(root);
-  const starting = isQuestionThread({ kind }) && root.delivery?.status !== "failed";
+  const looking = isQuestionThread({ kind }) && root.delivery?.status !== "failed";
   return {
     root,
     replies,
     kind,
     state: "open",
-    ...(starting ? { researcherRun: { status: "starting" } } : {}),
+    ...(looking
+      ? { researcherRun: { status: "running" as const, startedAt: root.at } }
+      : {}),
     readyToTask: false,
   };
 }

@@ -22,6 +22,7 @@ import { requireProjectWorkspace } from "./project-workspace.js";
 import {
   REVIEW_QUESTION_ROLE,
   activeResearcherConversationId,
+  recordResearcherRunEnd,
   researcherRunForThread,
   trackResearcherLaunch,
 } from "./researcher-runs.js";
@@ -144,9 +145,34 @@ function usableResearcherConversation(
 /**
  * Open a researcher conversation and start its run. A failure to start is
  * recorded on that conversation, so the thread shows it with Retry. The
- * `researcher-session` event lands after the run is live, so the thread never
- * names a conversation that is still starting.
+ * `researcher-session` event lands after the run is live or has failed to
+ * start, so the thread never names a conversation that is still opening.
  */
+async function recordResearcherStartFailure(
+  conversationId: string,
+  err: unknown,
+): Promise<void> {
+  console.error(`researcher start failed for ${conversationId}:`, err);
+  await appendErrorEvent(
+    conversationId,
+    err instanceof Error ? err.message : String(err),
+  );
+  recordResearcherRunEnd(conversationId);
+}
+
+/** Record that a researcher prompt never became a live run. */
+async function settleResearcherStart(
+  conversationId: string,
+  start: () => Promise<{ ok: boolean }>,
+): Promise<void> {
+  try {
+    const started = await start();
+    if (!started.ok) recordResearcherRunEnd(conversationId);
+  } catch (err) {
+    await recordResearcherStartFailure(conversationId, err);
+  }
+}
+
 async function openResearcherConversation(
   storyId: string,
   root: Comment,
@@ -166,18 +192,16 @@ async function openResearcherConversation(
   try {
     const workspace = requireProjectWorkspace(projectId);
     const prompt = await promptFor(workspace);
-    await startConversationPrompt(
-      conversation.id,
-      prompt,
-      conversation.model,
-      sessions,
+    await settleResearcherStart(conversation.id, () =>
+      startConversationPrompt(
+        conversation.id,
+        prompt,
+        conversation.model,
+        sessions,
+      ),
     );
   } catch (err) {
-    console.error(`researcher start failed for ${conversation.id}:`, err);
-    await appendErrorEvent(
-      conversation.id,
-      err instanceof Error ? err.message : String(err),
-    );
+    await recordResearcherStartFailure(conversation.id, err);
   }
   await appendThreadEvent(storyId, root.id, {
     event: "researcher-session",
@@ -269,24 +293,22 @@ async function followUpQuestionResearcher(
       );
       return;
     }
-    await startConversationPrompt(
-      conversationId,
-      reply.body,
-      meta.model,
-      sessions,
+    await settleResearcherStart(conversationId, () =>
+      startConversationPrompt(
+        conversationId,
+        reply.body,
+        meta.model,
+        sessions,
+      ),
     );
   } catch (err) {
-    console.error(`researcher follow-up failed for ${conversationId}:`, err);
-    await appendErrorEvent(
-      conversationId,
-      err instanceof Error ? err.message : String(err),
-    );
+    await recordResearcherStartFailure(conversationId, err);
   }
 }
 
 /**
  * Start a researcher for a new question, or resume one for a human reply.
- * The thread reads as starting from this call until the launch settles.
+ * The thread reads as running from this call until the launch settles.
  */
 export async function onQuestionComment(
   storyId: string,

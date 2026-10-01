@@ -45,10 +45,12 @@ The prompt ends with:
 4. For a **Diff**, read `git diff <range>`. A `Diff: none` line means the
    Story has no commits yet; answer from the Story and the workspace.
 5. Read only what answering the question needs.
-6. Reply in the thread, as briefly as a full answer allows. Name the
-   files and lines your answer rests on. When the code does not settle the
-   question, say what you found and what stays open. One reply per turn:
-   when the reviewer writes again, answer that reply the same way.
+6. Reply in the thread. Lead with the direct answer in one to three
+   sentences, then at most a few file:line references. That is the
+   whole reply; the reviewer asks a follow-up in the thread for more.
+   When the code does not settle the question, say in those sentences
+   what you found and what stays open. When the reviewer writes
+   again, answer that reply the same way.
 
    A prompt that says the previous conversation is gone includes the thread
    history. Answer its latest reply. The product marks that reply as a new

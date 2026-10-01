@@ -14,6 +14,10 @@ import type { TranscriptEvent, TranscriptEventInput } from "../schemas.js";
 import { evictConversationStoreCaches } from "./agent-state-caches.js";
 import { appendEvent, listConversationIds, readConversation } from "./conversations.js";
 import {
+  isQuestionResearcherConversation,
+  recordResearcherRunEnd,
+} from "./researcher-runs.js";
+import {
   clearRunLiveMarker,
   isRunLive,
   runLiveMarkerExists,
@@ -331,7 +335,7 @@ function runningToolCloses(
 async function scrubOrphan(conversationId: string): Promise<void> {
   const scrubbedAt = Date.now();
   const stores = readStores(conversationId);
-  const { transcript } = readConversation(conversationId);
+  const { meta, transcript } = readConversation(conversationId);
   const closes = runningToolCloses(transcript);
   const closedRun = scrubStores(stores, scrubbedAt);
   try {
@@ -354,6 +358,9 @@ async function scrubOrphan(conversationId: string): Promise<void> {
       type: "host_crash_recovery",
       message: HOST_CRASH_RECOVERY_MESSAGE,
     });
+  }
+  if (isQuestionResearcherConversation(meta)) {
+    recordResearcherRunEnd(conversationId);
   }
   clearRunLiveMarker(conversationId);
 }
