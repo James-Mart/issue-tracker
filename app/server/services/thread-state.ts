@@ -1,8 +1,10 @@
 import {
+  commentEditSchema,
   formatZodError,
   parseComment,
   threadEventSchema,
   type Comment,
+  type CommentEdit,
   type CommentsResponse,
   type Problem,
   type TaskStatus,
@@ -37,11 +39,20 @@ export function isThreadEventRecord(raw: unknown): boolean {
   );
 }
 
+function isCommentEditRecord(raw: unknown): boolean {
+  return (
+    typeof raw === "object" &&
+    raw !== null &&
+    (raw as { type?: unknown }).type === "comment-edit"
+  );
+}
+
 function parseLogRecord(
   raw: unknown,
 ):
   | { ok: true; kind: "comment"; message: Comment }
   | { ok: true; kind: "event"; event: ThreadEvent }
+  | { ok: true; kind: "edit"; edit: CommentEdit }
   | { ok: false; message: string } {
   if (isThreadEventRecord(raw)) {
     const result = threadEventSchema.safeParse(raw);
@@ -49,6 +60,14 @@ function parseLogRecord(
     return {
       ok: false,
       message: formatZodError(result.error, "invalid thread event"),
+    };
+  }
+  if (isCommentEditRecord(raw)) {
+    const result = commentEditSchema.safeParse(raw);
+    if (result.success) return { ok: true, kind: "edit", edit: result.data };
+    return {
+      ok: false,
+      message: formatZodError(result.error, "invalid comment edit"),
     };
   }
   const parsed = parseComment(raw);
@@ -167,13 +186,44 @@ export function deriveThreadViews(
 export type CommentLog = {
   messages: Comment[];
   events: ThreadEvent[];
+  edits: CommentEdit[];
   problems: Problem[];
 };
 
-/** Split a `comments.jsonl` body into comments, thread events, and parse problems. */
+/** Latest edit body per comment. Unknown targets become problems. */
+export function foldCommentEdits(
+  issueId: string,
+  messages: Comment[],
+  edits: CommentEdit[],
+): { messages: Comment[]; problems: Problem[] } {
+  const known = new Set(messages.map((message) => message.id));
+  const latest = new Map<string, string>();
+  const problems: Problem[] = [];
+  for (const edit of edits) {
+    if (!known.has(edit.commentId)) {
+      problems.push({
+        id: issueId,
+        message: `comment edit references unknown comment "${edit.commentId}"`,
+      });
+      continue;
+    }
+    latest.set(edit.commentId, edit.body);
+  }
+  if (latest.size === 0) return { messages, problems };
+  return {
+    problems,
+    messages: messages.map((message) => {
+      const body = latest.get(message.id);
+      return body === undefined ? message : { ...message, body };
+    }),
+  };
+}
+
+/** Split a `comments.jsonl` body into comments, thread events, edits, and parse problems. */
 export function splitCommentLog(issueId: string, text: string): CommentLog {
   const messages: Comment[] = [];
   const events: ThreadEvent[] = [];
+  const edits: CommentEdit[] = [];
   const problems: Problem[] = [];
   text.split("\n").forEach((line, index) => {
     if (!line.trim()) return;
@@ -197,9 +247,10 @@ export function splitCommentLog(issueId: string, text: string): CommentLog {
       return;
     }
     if (parsed.kind === "comment") messages.push(parsed.message);
+    else if (parsed.kind === "edit") edits.push(parsed.edit);
     else events.push(parsed.event);
   });
-  return { messages, events, problems };
+  return { messages, events, edits, problems };
 }
 
 /** Thread views and problems for an already-split comment log. */
@@ -208,16 +259,17 @@ export function commentsFromLog(
   log: CommentLog,
   taskStatusById: Map<string, TaskStatus> = new Map(),
 ): CommentsResponse {
+  const folded = foldCommentEdits(issueId, log.messages, log.edits);
   const derived = deriveThreadViews(
     issueId,
-    log.messages,
+    folded.messages,
     log.events,
     taskStatusById,
   );
   return {
-    messages: log.messages,
+    messages: folded.messages,
     threads: derived.threads,
-    problems: [...log.problems, ...derived.problems],
+    problems: [...log.problems, ...folded.problems, ...derived.problems],
   };
 }
 

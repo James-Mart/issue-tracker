@@ -13,12 +13,12 @@ import {
 } from "../../lib/comment-threads";
 import type { ThreadMessage } from "../../lib/comment-outbox";
 import { commentCountLabel } from "../../lib/comments";
-import { Markdown } from "../markdown";
 import {
   CommentAnchorMeta,
   CommentAnchorSnippet,
 } from "./comment-anchor-context";
-import { CommentSendFailure, CommentSendingMark } from "./comment-delivery";
+import { EditableCommentBody } from "./comment-edit";
+import { CommentSendingMark } from "./comment-delivery";
 import { isHumanRole } from "./message";
 import {
   QuestionResearcherStatus,
@@ -41,6 +41,7 @@ export function CommentThread({
   onReopen,
   onConvert,
   resolvePending = false,
+  onEdit,
 }: {
   thread: CommentThreadData;
   onReply: () => void;
@@ -61,6 +62,7 @@ export function CommentThread({
   onReopen?: () => void;
   onConvert?: () => void;
   resolvePending?: boolean;
+  onEdit?: (commentId: string, body: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const outdated = thread.root.outdated === true;
@@ -129,6 +131,7 @@ export function CommentThread({
               key={comment.id}
               comment={comment}
               issueId={issueId}
+              onEdit={onEdit}
             />
           ))}
 
@@ -389,9 +392,11 @@ function CollapsedThreadBar({
 function ThreadComment({
   comment,
   issueId,
+  onEdit,
 }: {
   comment: ThreadMessage;
   issueId?: string;
+  onEdit?: (commentId: string, body: string) => Promise<void>;
 }) {
   return (
     <section
@@ -400,8 +405,7 @@ function ThreadComment({
       className="flex flex-col gap-1 border-b border-border py-2 last:border-b-0"
     >
       <ThreadAuthorship comment={comment} />
-      <Markdown issueId={issueId}>{comment.body}</Markdown>
-      <CommentSendFailure message={comment} />
+      <EditableCommentBody comment={comment} issueId={issueId} onEdit={onEdit} />
     </section>
   );
 }

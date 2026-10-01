@@ -156,14 +156,41 @@ export const commentInputSchema = commentObject
 export type Comment = z.infer<typeof commentSchema>;
 export type CommentInput = z.infer<typeof commentInputSchema>;
 
+export const commentEditSchema = z
+  .object({
+    type: z.literal("comment-edit"),
+    commentId: nonEmpty,
+    body: nonEmpty,
+    at: nonEmpty,
+    role: nonEmpty,
+    name: z.string().optional(),
+  })
+  .strict();
+
+export type CommentEdit = z.infer<typeof commentEditSchema>;
+
+export const commentEditAuthorSchema = commentEditSchema.pick({
+  role: true,
+  name: true,
+});
+
+/** Caller body for PATCH. `role` is stamped server-side. */
+export const commentEditRequestSchema = z
+  .object({
+    body: nonEmpty,
+  })
+  .strict();
+
 /**
  * Stored comment plus read-time flags. `outdated` is set on anchored messages
  * whose lines changed. `newSession` is set on the first non-human reply of a
- * recovered researcher session.
+ * recovered researcher session. `editable` is set on every message of the
+ * comments view.
  */
 export type CommentMessage = Comment & {
   outdated?: boolean;
   newSession?: boolean;
+  editable?: boolean;
 };
 
 export const THREAD_EVENTS = [

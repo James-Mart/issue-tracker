@@ -383,7 +383,8 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
 - **`comment`** — `issue comment <id> --role <role> --body <text>`
   (optional `--name`; optional anchor flags `--path`, `--side`, `--line`,
   optional `--start-line`, `--commit`; optional `--reply-to <commentId>`;
-  optional `--resolve`; optional `--kind question`).
+  optional `--resolve`; optional `--kind question`; optional
+  `--edit <commentId>`).
   Appends one message to `comments.jsonl` (the CLI verb is `comment`; the
   on-disk log is `comments.jsonl`); prints the server-stamped `id` on stdout;
   refuses a Project id. A line anchor is `--path`, `--side`, `--line`, and
@@ -395,7 +396,9 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   same write; it requires `--reply-to` and `--body`, and there is no CLI
   unresolve. `--kind question` starts a question thread on a new Story thread
   root (a root with no `kind` is a review thread) and applies only to that
-  new root, not a reply. See [`comments.jsonl` message shape](#commentsjsonl-message-shape)
+  new root, not a reply. `--edit` appends a `comment-edit` for that comment
+  and is exclusive with anchor flags, `--reply-to`, `--kind`, `--resolve`,
+  and `--link-task`. See [`comments.jsonl` message shape](#commentsjsonl-message-shape)
   and [Service layer](#service-layer).
 - **`merge`** — `issue merge <storyId> [--auto] [--match-head-commit <sha>]`;
   shells out to `gh pr merge --merge` with owner/repo/number from the Story's
@@ -1244,8 +1247,10 @@ header and tree-row hover expose Archive / Unarchive actions that PATCH
 ## `comments.jsonl` message shape
 
 Each line of `comments.jsonl` is one JSON object — a comment
-(`commentSchema` in `app/server/schemas/issue.ts`) or a thread event.
-The log stays **append-only** — lines are never edited or deleted in place.
+(`commentSchema` in `app/server/schemas/issue.ts`), a thread event, or a
+comment edit. The log stays **append-only** — lines are never edited or
+deleted in place. A comment's body on read is the latest `comment-edit`
+for that id, or the original body when it has none.
 Resolution is a thread event, not a flag on the comment.
 
 | field | type | notes |
@@ -1290,8 +1295,45 @@ state. Members:
 | `by` | `{ role, name? }` | who recorded the event |
 | `at` | ISO string | server-stamped on append |
 
+**Comment edit (`type: "comment-edit"`).** Appends a new body for an existing
+comment. The original comment line stays. Members:
+
+| member | type | notes |
+| --- | --- | --- |
+| `commentId` | string | id of the comment this edit replaces |
+| `body` | string | non-empty replacement body |
+| `at` | ISO string | server-stamped on append |
+| `role` | string | non-empty author role |
+| `name` | string? | optional author display name |
+
+Edits apply in log order; the last one for a `commentId` is that comment's
+body on read. An edit whose `commentId` is not a comment in the log is
+skipped into `problems`.
+
+A comment is editable when its thread is an anchored review thread (a line
+or file anchor, `kind` review, including a converted question) on a Story,
+that thread is open with no linked Task, and the root id appears in no
+submission of that Story's review. A researcher reply (`replyTo` set, `role`
+`agent`, `name` `Researcher`) is never editable. Unconverted questions and
+unanchored Story notes are never editable. A comment that is not on a Story
+is not editable.
+
+`PATCH /api/issues/:id/comments/:commentId` with `{ body }` appends one
+comment-edit, stamps `role` `human`, and returns the updated message.
+`issue comment <id> --edit <commentId> --body <text>` appends the same
+record using `--role` and optional `--name`, and prints the comment id.
+`--edit` is exclusive with anchor flags, `--reply-to`, and `--kind`, and
+also with `--resolve` and `--link-task`. A non-editable comment is refused
+with `cannot edit comment "<id>": <reason>`, where `<reason>` is
+`submitted`, `linked`, `question`, `researcher reply`, `Story note`, or
+`resolved` (the thread is no longer open). The HTTP status is `409`. An
+unknown comment is `404`. The append changes `comments.jsonl`, so the
+issues watcher publishes a comments-scope event.
+
 `GET /api/issues/:id/comments` returns `messages` plus derived `threads`:
 `{ rootId, kind: "review" | "question", state: "open" | "resolved" | "dismissed", linkedTaskId?, researcherConversationId?, readyToTask, researcherRun?, converted? }`.
+Every message carries `editable: boolean` from the comment-edit rule above,
+and its `body` is the latest edit.
 `kind` is `review` when a `converted` event exists for that root; otherwise it
 is the root comment's `kind`, or `review` when that field is absent.
 `converted` is `{ by, at }` from that event. `state` is the last state event
@@ -1441,6 +1483,12 @@ no consumer can persist a broken file.
   review thread.
   `POST /api/issues/:storyId/threads/:threadId/events`
   stamps `by.role` `human` and calls this path.
+- `editComment(id, commentId, { body, role, name? })` — appends a
+  `comment-edit` when that comment is editable (see
+  [`comments.jsonl` message shape](#commentsjsonl-message-shape)).
+  `PATCH /api/issues/:id/comments/:commentId` stamps `role` `human` and
+  calls this path. `issue comment --edit` passes the CLI `--role` and
+  `--name`.
 - `readComments(id)` — reads/parses `comments.jsonl`, skipping malformed lines into
   `problems`. An issue with no comment log returns empty messages and threads.
   `threads` is the derived view (`rootId`, `kind`, `state`, `readyToTask`,

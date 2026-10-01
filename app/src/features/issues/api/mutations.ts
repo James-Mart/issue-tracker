@@ -18,6 +18,7 @@ import type {
   ChannelSessionListItem,
   Comment,
   CommentInput,
+  CommentMessage,
   CommentsResponse,
   ConversationChannel,
   CreateInput,
@@ -34,6 +35,7 @@ import type { DeletionResult } from "@server/services/deletion";
 import { subtreeIds } from "@server/services/subtree";
 import { attachmentsApiPath } from "../lib/attachments";
 import type { OutboxComment } from "../lib/comment-outbox";
+import { useCommentEditStore } from "../store/use-comment-edit-store";
 import { useCommentOutboxStore } from "../store/use-comment-outbox-store";
 import { deletePartialPlanSessions } from "../lib/delete-partial-plan";
 import { parseRunsInFlightRefusal } from "../lib/restart-refusal";
@@ -215,6 +217,68 @@ export function usePostComment(issueId: string): (input: CommentInput) => void {
     },
     [issueId, qc],
   );
+}
+
+/**
+ * Save an edit to a pending review comment. The comments cache shows the new
+ * body at once. A refusal puts the previous body back and records an inline
+ * error for that comment.
+ */
+export function useEditComment(issueId: string) {
+  const qc = useQueryClient();
+  return useMutation<
+    CommentMessage,
+    Error,
+    { commentId: string; body: string },
+    { priorBody?: string }
+  >({
+    mutationFn: ({ commentId, body }) =>
+      request<CommentMessage>(
+        `/api/issues/${issueId}/comments/${commentId}`,
+        { method: "PATCH", body: { body } },
+      ),
+    onMutate: async ({ commentId, body }) => {
+      const edits = useCommentEditStore.getState();
+      edits.begin(commentId);
+      const key = issuesKeys.comments(issueId);
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<CommentsResponse>(key);
+      const priorBody = previous?.messages.find(
+        (message) => message.id === commentId,
+      )?.body;
+      if (previous && priorBody !== undefined) {
+        qc.setQueryData<CommentsResponse>(key, {
+          ...previous,
+          messages: previous.messages.map((message) =>
+            message.id === commentId ? { ...message, body } : message,
+          ),
+        });
+      }
+      return { priorBody };
+    },
+    onError: (err, vars, context) => {
+      const key = issuesKeys.comments(issueId);
+      const current = qc.getQueryData<CommentsResponse>(key);
+      const priorBody = context?.priorBody;
+      const message = current?.messages.find((item) => item.id === vars.commentId);
+      if (current && priorBody !== undefined && message?.body === vars.body) {
+        qc.setQueryData<CommentsResponse>(key, {
+          ...current,
+          messages: current.messages.map((item) =>
+            item.id === vars.commentId ? { ...item, body: priorBody } : item,
+          ),
+        });
+      }
+      useCommentEditStore.getState().fail(vars.commentId, messageOf(err));
+    },
+    onSuccess: (_data, vars) => {
+      useCommentEditStore.getState().clearError(vars.commentId);
+    },
+    onSettled: (_data, _err, vars) => {
+      useCommentEditStore.getState().end(vars.commentId);
+      void qc.invalidateQueries({ queryKey: issuesKeys.comments(issueId) });
+    },
+  });
 }
 
 /** Resend a failed comment with the same body and client id. */

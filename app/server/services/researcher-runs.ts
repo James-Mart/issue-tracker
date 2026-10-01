@@ -22,6 +22,7 @@ import {
   readConversationMeta,
 } from "./conversations.js";
 import { deriveAnchoredOutdated } from "./anchor-outdated.js";
+import { withEditableFlag } from "./comment-edit.js";
 import { findThreadRoot } from "./thread-events.js";
 import { readCommentLog } from "./comment-log.js";
 import { readIssueOrThrow, taskStatusesForStory } from "./issues.js";
@@ -321,7 +322,10 @@ export async function enrichCommentsForRead(
     ...parsed,
     messages: await deriveAnchoredOutdated(issueId, parsed.messages),
   };
-  return withNewSessionNotes(withResearcherRuns(response), log.events);
+  return withEditableFlag(
+    issue,
+    withNewSessionNotes(withResearcherRuns(response), log.events),
+  );
 }
 
 /** The researcher state for one thread, as the comments route would serve it. */

@@ -49,6 +49,7 @@ import {
   onQuestionComment,
   retryQuestionResearcher,
 } from "../services/question-researcher.js";
+import { editComment } from "../services/comment-edit.js";
 import { enrichCommentsForRead } from "../services/researcher-runs.js";
 import {
   createIssueChannelSession,
@@ -385,6 +386,19 @@ export function createIssuesRouter(
     asyncRoute(async (req, res) => {
       const record = await create(req.body as CreateInput);
       res.status(201).json(record);
+    }),
+  );
+
+  router.patch(
+    "/:id/comments/:commentId",
+    asyncRoute(async (req, res) => {
+      const message = await editComment(
+        req.params.id,
+        req.params.commentId,
+        req.body,
+        { role: "human" },
+      );
+      res.json(message);
     }),
   );
 

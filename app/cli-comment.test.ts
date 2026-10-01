@@ -448,6 +448,9 @@ describe("comment anchor and reply flags", () => {
     expect(help.stdout.replace(/\s+/g, " ")).toContain(
       "--kind <question> start a question thread; new Story thread root only",
     );
+    expect(help.stdout.replace(/\s+/g, " ")).toContain(
+      "--edit <commentId> replace that comment's body (exclusive with anchor, --reply-to, --kind, --resolve, and --link-task)",
+    );
   });
 
   it("links a Story thread to a Task with --link-task", async () => {
@@ -728,5 +731,108 @@ describe("comment anchor and reply flags", () => {
       readFileSync(join(dir, "t", "comments.jsonl"), "utf8").trim(),
     );
     expect(stored.anchor?.side).toBe("old");
+  });
+
+  it("edits a pending review comment and refuses combining --edit with other flags", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    const created = await runIssueCli(
+      [
+        "comment",
+        "s",
+        "--role",
+        "human",
+        "--body",
+        "pending",
+        "--path",
+        "src/review.ts",
+        "--side",
+        "new",
+        "--line",
+        "8",
+        "--commit",
+        COMMIT_SHA,
+      ],
+      { env: env() },
+    );
+    expect(created.status).toBe(0);
+    const commentId = created.stdout.trim();
+
+    const edited = await runIssueCli(
+      [
+        "comment",
+        "s",
+        "--role",
+        "human",
+        "--name",
+        "Ada",
+        "--edit",
+        commentId,
+        "--body",
+        "rewritten",
+      ],
+      { env: env() },
+    );
+    expect(edited.status).toBe(0);
+    expect(edited.stdout.trim()).toBe(commentId);
+
+    const stored = readFileSync(join(dir, "s", "comments.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { body?: string; type?: string; name?: string });
+    expect(stored[0]?.body).toBe("pending");
+    expect(stored[1]).toMatchObject({
+      type: "comment-edit",
+      body: "rewritten",
+      role: "human",
+      name: "Ada",
+    });
+
+    const view = await runIssueCli(["view", "s", "--comments"], { env: env() });
+    expect(view.status).toBe(0);
+    expect(view.stdout).toContain("rewritten");
+    expect(view.stdout).not.toContain(": pending");
+
+    const note = await runIssueCli(
+      ["comment", "s", "--role", "human", "--body", "a note"],
+      { env: env() },
+    );
+    const refused = await runIssueCli(
+      [
+        "story",
+        "comment",
+        "s",
+        "--role",
+        "human",
+        "--edit",
+        note.stdout.trim(),
+        "--body",
+        "nope",
+      ],
+      { env: env() },
+    );
+    expect(refused.status).toBe(1);
+    expect(refused.stderr).toContain("Story note");
+
+    for (const extra of [
+      ["--reply-to", commentId],
+      ["--kind", "question"],
+      ["--path", "src/review.ts", "--commit", COMMIT_SHA],
+      ["--resolve"],
+      ["--link-task", "task-a"],
+    ]) {
+      const combined = await runIssueCli(
+        ["comment", "s", "--role", "human", "--body", "x", "--edit", commentId, ...extra],
+        { env: env() },
+      );
+      expect(combined.status).toBe(1);
+      expect(combined.stderr).toContain("--edit cannot be combined");
+    }
   });
 });
