@@ -44,6 +44,14 @@ afterEach(() => {
 });
 
 describe("question researcher status", () => {
+  it("shows Researcher starting… until the launch puts a live run on the thread", () => {
+    const thread = mount({ ...question, researcherRun: { status: "starting" } });
+    const starting = thread.querySelector('[data-testid="researcher-starting"]');
+    expect(starting?.textContent).toBe("Researcher starting…");
+    expect(starting?.getAttribute("role")).toBe("status");
+    expect(thread.querySelector('[data-testid="researcher-retry"]')).toBeNull();
+  });
+
   it("shows Researching… while the run is live", () => {
     const thread = mount({ ...question, researcherRun: { status: "running" } });
     const running = thread.querySelector('[data-testid="researcher-running"]');

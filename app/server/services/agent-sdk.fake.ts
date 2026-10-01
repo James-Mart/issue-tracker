@@ -246,6 +246,8 @@ export interface FakeAgentSdkOptions {
     holdAfterStream?: Promise<void>;
     /** When set, this send rejects before returning a run. */
     sendError?: Error;
+    /** When set, this send waits on it before returning a run, so the run is not yet live. */
+    sendHold?: Promise<void>;
   }>;
 }
 
@@ -328,6 +330,7 @@ export function createFakeAgentSdk(
       async send(outbound, sendOptions = {}) {
         handle.sends.push({ message: outbound, options: sendOptions });
         const scripted = sendScript.shift();
+        if (scripted?.sendHold) await scripted.sendHold;
         if (scripted?.sendError) throw scripted.sendError;
         if (options.sendError) throw options.sendError;
         const runStream = scripted?.stream ?? stream;

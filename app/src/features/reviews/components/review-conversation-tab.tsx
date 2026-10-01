@@ -1,18 +1,18 @@
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { usePostComment } from "@/features/issues/api/mutations";
 import { useCommentThreads, useCommentsQuery } from "@/features/issues/api/queries";
-import { postHumanComment } from "@/features/issues/lib/post-comment-when-idle";
+import type { ThreadMessage } from "@/features/issues/lib/comment-outbox";
+import { humanComment } from "@/features/issues/lib/comments";
 import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
-import { Markdown } from "@/features/issues/components/markdown";
+import { DeliverableMessage } from "@/features/issues/components/comments/comment-delivery";
 import {
   Marker,
   commentDayKey,
   commentDayLabel,
 } from "@/features/issues/components/comments/marker";
-import { isHumanRole, Message } from "@/features/issues/components/comments/message";
+import { isHumanRole } from "@/features/issues/components/comments/message";
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
-import { Shimmer } from "@/features/issues/components/comments/shimmer";
-import type { CommentMessage, ReviewSubmission } from "@server/schemas";
+import type { ReviewSubmission } from "@server/schemas";
 import {
   isPlainNote,
   STORY_COMPOSER_LABEL,
@@ -31,16 +31,14 @@ function StandaloneComment({
   message,
   storyId,
 }: {
-  message: CommentMessage;
+  message: ThreadMessage;
   storyId: string;
 }) {
   const author = isHumanRole(message.role)
     ? (message.name ?? message.role)
     : roleFamilyCaption(message.role).caption;
   return (
-    <Message author={author} role={message.role} at={message.at}>
-      <Markdown issueId={storyId}>{message.body}</Markdown>
-    </Message>
+    <DeliverableMessage message={message} author={author} attachmentsIssueId={storyId} />
   );
 }
 
@@ -133,7 +131,7 @@ export function ReviewConversationTab({
   const post = usePostComment(storyId);
 
   const send = (body: string, kind?: "question") =>
-    postHumanComment(post, body, kind);
+    post(humanComment(body, kind));
 
   const timeline = conversationTimelineItems(threads, submissions);
   const commentsReady = !comments.error && !comments.isLoading;
@@ -185,7 +183,6 @@ export function ReviewConversationTab({
           />
         ) : null}
       </div>
-      {post.isPending ? <Shimmer label="Sending…" /> : null}
       <div
         className="flex min-w-0 shrink-0 flex-col gap-2 border-t border-border px-1 py-3"
         data-testid="review-conversation-composer"
@@ -194,7 +191,6 @@ export function ReviewConversationTab({
           draftKey={conversationDraftKey(storyId)}
           placeholder={STORY_COMPOSER_LABEL}
           submitLabel="Send"
-          pending={post.isPending}
           persistent
           onSubmit={(body) => send(body)}
           onQuestion={(body) => send(body, "question")}

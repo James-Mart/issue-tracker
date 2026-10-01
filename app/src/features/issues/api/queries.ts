@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   useQueries,
   useQuery,
@@ -18,10 +18,15 @@ import type { Attachment } from "@server/services/attachments";
 import type { ProjectPrsResponse } from "@server/services/delivery";
 import { ApiError } from "@/lib/api/errors";
 import { attachmentsApiPath } from "../lib/attachments";
+import { storedClientIds, withOutboxComments } from "../lib/comment-outbox";
 import {
   groupCommentThreads,
   type CommentThreadsResult,
 } from "../lib/comment-threads";
+import {
+  useCommentOutboxStore,
+  useIssueCommentOutbox,
+} from "../store/use-comment-outbox-store";
 import { fetchIssueAgentRunEvents, fetchIssueAgentRuns } from "./agent-runs";
 import { listChannelSessions } from "./channel-sessions";
 import { healthKeys, issuesKeys } from "./keys";
@@ -74,11 +79,24 @@ export function useCommentsQuery(id: string): UseQueryResult<CommentsResponse, E
   });
 }
 
+/** Stored threads plus comments this browser posted that the list does not carry yet. */
 export function useCommentThreads(issueId: string): CommentThreadsResult {
   const { data } = useCommentsQuery(issueId);
+  const outbox = useIssueCommentOutbox(issueId);
+  const messages = data?.messages;
+  useEffect(() => {
+    if (!messages) return;
+    useCommentOutboxStore
+      .getState()
+      .reconcile(issueId, storedClientIds(messages));
+  }, [issueId, messages]);
   const threads = useMemo(
-    () => groupCommentThreads(data?.messages ?? [], data?.threads ?? []),
-    [data?.messages, data?.threads],
+    () =>
+      groupCommentThreads(
+        withOutboxComments(messages ?? [], outbox),
+        data?.threads ?? [],
+      ),
+    [messages, outbox, data?.threads],
   );
   return {
     threads,

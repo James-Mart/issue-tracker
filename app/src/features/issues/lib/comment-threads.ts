@@ -6,13 +6,15 @@ import type {
   ThreadEventRequest,
   ThreadView,
 } from "@server/schemas";
+import type { ThreadMessage } from "./comment-outbox";
 
 export const STORY_COMPOSER_LABEL =
   "Add a comment or ask a question about this change";
 
 export type CommentThread = {
-  root: CommentMessage;
-  replies: CommentMessage[];
+  /** `delivery` is set while the root is this browser's copy of a post. */
+  root: ThreadMessage;
+  replies: ThreadMessage[];
   kind: ThreadView["kind"];
   state: ThreadView["state"];
   linkedTaskId?: string;
@@ -58,13 +60,34 @@ export function threadStateActions(
   };
 }
 
+function rootKind(root: CommentMessage): ThreadView["kind"] {
+  return root.kind === "question" ? "question" : "review";
+}
+
+/**
+ * A thread this browser is posting: open, not yet taskable, and a question
+ * reads as starting its researcher unless the post failed.
+ */
+function outboxThread(root: ThreadMessage, replies: ThreadMessage[]): CommentThread {
+  const kind = rootKind(root);
+  const starting = isQuestionThread({ kind }) && root.delivery?.status !== "failed";
+  return {
+    root,
+    replies,
+    kind,
+    state: "open",
+    ...(starting ? { researcherRun: { status: "starting" } } : {}),
+    readyToTask: false,
+  };
+}
+
 export function groupCommentThreads(
-  messages: CommentMessage[],
+  messages: ThreadMessage[],
   views: CommentThreadView[] = [],
 ): CommentThread[] {
   const roots = messages.filter((message) => !message.replyTo);
   const rootIds = new Set(roots.map((root) => root.id));
-  const repliesByRoot = new Map<string, CommentMessage[]>();
+  const repliesByRoot = new Map<string, ThreadMessage[]>();
   const viewByRoot = new Map(views.map((view) => [view.rootId, view]));
 
   for (const message of messages) {
@@ -76,16 +99,18 @@ export function groupCommentThreads(
 
   return [...roots]
     .sort((a, b) => a.at.localeCompare(b.at))
-    .map((root) => {
+    .map((root): CommentThread => {
+      const replies = repliesByRoot.get(root.id) ?? [];
+      if (root.delivery) return outboxThread(root, replies);
       const view = viewByRoot.get(root.id);
       const state = view?.state ?? "open";
-      const kind = view?.kind ?? (root.kind === "question" ? "question" : "review");
+      const kind = view?.kind ?? rootKind(root);
       const linkedTaskId = view?.linkedTaskId;
       const researcherRun = view?.researcherRun;
       const converted = view?.converted;
       return {
         root,
-        replies: repliesByRoot.get(root.id) ?? [],
+        replies,
         kind,
         state,
         ...(linkedTaskId ? { linkedTaskId } : {}),

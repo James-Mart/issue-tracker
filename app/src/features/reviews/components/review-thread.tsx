@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { CommentThread as CommentThreadData } from "@/features/issues/lib/comment-threads";
 import { usePostComment, usePostThreadEvent } from "@/features/issues/api/mutations";
-import { postCommentWhenIdle } from "@/features/issues/lib/post-comment-when-idle";
 import { replyDraftKey } from "@/features/reviews/lib/review-draft-key";
 import { CommentThread } from "@/features/issues/components/comments/comment-thread";
 import { threadStateActions } from "@/features/issues/lib/comment-threads";
@@ -30,14 +29,10 @@ export function ReviewThread({
   const events = usePostThreadEvent(storyId);
   const [replying, setReplying] = useState(false);
 
-  const sendReply = (body: string) =>
-    postCommentWhenIdle(post, {
-      role: COMPOSER_ROLE,
-      body,
-      replyTo: thread.root.id,
-    }).then(() => {
-      setReplying(false);
-    });
+  const sendReply = (body: string) => {
+    post({ role: COMPOSER_ROLE, body, replyTo: thread.root.id });
+    setReplying(false);
+  };
 
   return (
     <CommentThread
@@ -55,7 +50,6 @@ export function ReviewThread({
               draftKey={replyDraftKey(storyId, thread.root.id)}
               placeholder="Reply"
               submitLabel="Send"
-              pending={post.isPending}
               onSubmit={sendReply}
               onCancel={() => setReplying(false)}
             />

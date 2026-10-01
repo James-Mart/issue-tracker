@@ -115,15 +115,25 @@ async function thread(rootId: string): Promise<CommentThreadView> {
   return view;
 }
 
-async function settledThread(rootId: string): Promise<CommentThreadView> {
+/** The thread once the launch that follows a comment response has settled. */
+type ResearcherStatus = NonNullable<CommentThreadView["researcherRun"]>["status"];
+
+async function threadPast(
+  rootId: string,
+  pending: ResearcherStatus[],
+): Promise<CommentThreadView> {
   return vi.waitFor(async () => {
     const view = await thread(rootId);
-    if (view.researcherRun?.status === "running") {
-      throw new Error("researcher still running");
+    const status = view.researcherRun?.status;
+    if (status && pending.includes(status)) {
+      throw new Error(`researcher still ${status}`);
     }
     return view;
   });
 }
+
+const launchedThread = (rootId: string) => threadPast(rootId, ["starting"]);
+const settledThread = (rootId: string) => threadPast(rootId, ["starting", "running"]);
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-question-researcher-"));
@@ -181,6 +191,79 @@ afterEach(async () => {
 });
 
 describe("question researcher", () => {
+  it("responds with the client id before the researcher launch, which shows as starting", async () => {
+    let release!: () => void;
+    let finish!: () => void;
+    await startApp({
+      sendScript: [
+        {
+          sendHold: new Promise<void>((r) => (release = r)),
+          hold: new Promise<void>((r) => (finish = r)),
+        },
+      ],
+    });
+
+    const res = await post("/api/issues/s/comments", {
+      role: "human",
+      kind: "question",
+      body: "Why?",
+      clientId: "client-1",
+    });
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as { id: string; clientId?: string };
+    expect(created.clientId).toBe("client-1");
+
+    const starting = await thread(created.id);
+    expect(starting.researcherRun).toEqual({ status: "starting" });
+    expect(starting.researcherConversationId).toBeUndefined();
+    const comments = (await fetch(`${baseUrl}/api/issues/s/comments`).then((r) =>
+      r.json(),
+    )) as { messages: Array<{ id: string; clientId?: string }> };
+    expect(comments.messages.find((m) => m.id === created.id)?.clientId).toBe(
+      "client-1",
+    );
+
+    release();
+    expect((await launchedThread(created.id)).researcherRun).toEqual({
+      status: "running",
+    });
+    finish();
+  });
+
+  it("shows a launch that fails before it opens a conversation as failed, and Retry recovers it", async () => {
+    vi.doMock("../services/conversations.js", async (importOriginal) => {
+      const actual =
+        await importOriginal<typeof import("../services/conversations.js")>();
+      let refused = false;
+      return {
+        ...actual,
+        createConversation: (input: Parameters<typeof actual.createConversation>[0]) => {
+          if (refused) return actual.createConversation(input);
+          refused = true;
+          return Promise.reject(new Error("conversation store is read-only"));
+        },
+      };
+    });
+    try {
+      let release!: () => void;
+      await startApp({ hold: new Promise<void>((r) => (release = r)) });
+      const rootId = await askQuestion({ body: "Why?" });
+
+      expect((await launchedThread(rootId)).researcherRun).toEqual({
+        status: "failed",
+        error: "conversation store is read-only",
+      });
+      expect(conversationIds()).toEqual([]);
+
+      const retried = await post(`/api/issues/s/threads/${rootId}/researcher/retry`);
+      expect(retried.status).toBe(204);
+      expect((await thread(rootId)).researcherRun).toEqual({ status: "running" });
+      release();
+    } finally {
+      vi.doUnmock("../services/conversations.js");
+    }
+  });
+
   it("starts a pinned researcher on the Story's review channel and shows it live", async () => {
     let release!: () => void;
     await startApp({ hold: new Promise<void>((r) => (release = r)) });
@@ -190,7 +273,7 @@ describe("question researcher", () => {
       anchor: { path: "a.ts", side: "new", line: 2, startLine: 1, commitSha: tip },
     });
 
-    const live = await thread(rootId);
+    const live = await launchedThread(rootId);
     expect(live.researcherRun).toEqual({ status: "running" });
     const conversationId = live.researcherConversationId!;
     expect(conversationMeta(conversationId)).toMatchObject({
@@ -233,7 +316,7 @@ describe("question researcher", () => {
 
   it("gives a general question the Story's diff range", async () => {
     await startApp();
-    await askQuestion({ body: "What changed overall?" });
+    await launchedThread(await askQuestion({ body: "What changed overall?" }));
     expect(sentPrompt(0)).toMatch(
       new RegExp(`\\nDiff: \\S+\\.\\.\\.${tip}\\nQuestion:\\nWhat changed overall\\?$`),
     );
@@ -321,6 +404,7 @@ describe("question researcher", () => {
       replyTo: rootId,
     });
     expect(reply.status).toBe(201);
+    await thread(rootId);
     expect(conversationIds()).toEqual([]);
     expect(fake.handles).toEqual([]);
   });
@@ -347,7 +431,7 @@ describe("question researcher", () => {
       replyTo: rootId,
     });
     expect(reply.status).toBe(201);
-    const live = await thread(rootId);
+    const live = await launchedThread(rootId);
     expect(live.researcherConversationId).toBe(before);
     expect(live.researcherRun).toEqual({ status: "running" });
     expect(sentPrompt(1)).toBe("And the tests?");
@@ -364,7 +448,7 @@ describe("question researcher", () => {
     let release!: () => void;
     await startApp({ hold: new Promise<void>((resolve) => (release = resolve)) });
     const rootId = await askQuestion({ body: "Why?" });
-    expect((await thread(rootId)).researcherRun).toEqual({ status: "running" });
+    expect((await launchedThread(rootId)).researcherRun).toEqual({ status: "running" });
 
     const reply = await post("/api/issues/s/comments", {
       role: "human",
@@ -372,6 +456,7 @@ describe("question researcher", () => {
       replyTo: rootId,
     });
     expect(reply.status).toBe(201);
+    await launchedThread(rootId);
     expect(fake.handles.flatMap((handle) => handle.steers)).toEqual([
       "And the tests?",
     ]);
@@ -386,7 +471,7 @@ describe("question researcher", () => {
       steerResult: "revert_to_followup",
     });
     const rootId = await askQuestion({ body: "Why?" });
-    const conversationId = (await thread(rootId)).researcherConversationId!;
+    const conversationId = (await launchedThread(rootId)).researcherConversationId!;
 
     const reply = await post("/api/issues/s/comments", {
       role: "human",
@@ -394,6 +479,7 @@ describe("question researcher", () => {
       replyTo: rootId,
     });
     expect(reply.status).toBe(201);
+    await launchedThread(rootId);
     expect(conversationMeta(conversationId).pendingMessage).toMatchObject({
       text: "And the tests?",
     });
@@ -434,7 +520,7 @@ describe("question researcher", () => {
       replyTo: rootId,
     });
     expect(reply.status).toBe(201);
-    const live = await thread(rootId);
+    const live = await launchedThread(rootId);
     expect(live.researcherConversationId).not.toBe(first);
     expect(live.researcherRun).toEqual({ status: "running" });
     const prompt = sentPrompt(1);
@@ -504,7 +590,7 @@ describe("question researcher", () => {
       replyTo: rootId,
     });
     expect(reply.status).toBe(201);
-    const live = await thread(rootId);
+    const live = await launchedThread(rootId);
     expect(fake.handles).toHaveLength(2);
     expect(sentPrompt(1)).toContain("Jared:\nWhy?");
     expect(sentPrompt(1)).toContain("Jared:\nStill there?");
@@ -530,6 +616,7 @@ describe("question researcher", () => {
       replyTo: rootId,
     });
     expect(reply.status).toBe(201);
+    await thread(rootId);
     expect(fake.handles.flatMap((handle) => handle.sends)).toHaveLength(1);
   });
 
@@ -557,6 +644,7 @@ describe("question researcher", () => {
       replyTo: rootId,
     });
     expect(reply.status).toBe(201);
+    await thread(rootId);
     expect(fake.handles.flatMap((handle) => handle.sends)).toHaveLength(1);
     const comments = (await fetch(`${baseUrl}/api/issues/s/comments`).then((r) =>
       r.json(),

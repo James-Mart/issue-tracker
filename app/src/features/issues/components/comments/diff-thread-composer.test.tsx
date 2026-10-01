@@ -8,10 +8,7 @@ import {
   useDiffComposer,
 } from "./diff-thread-composer";
 
-const postComment = vi.hoisted(() => ({
-  mutate: vi.fn(),
-  isPending: false,
-}));
+const postComment = vi.hoisted(() => vi.fn());
 
 vi.mock("@/features/agents/api/queries", () => ({
   useTranscriptionCapabilityQuery: () => ({
@@ -98,8 +95,7 @@ function setDraft(input: HTMLTextAreaElement, value: string) {
 afterEach(() => {
   document.body.innerHTML = "";
   localStorage.clear();
-  postComment.mutate.mockReset();
-  postComment.isPending = false;
+  postComment.mockReset();
 });
 
 describe("DiffThreadComposer", () => {
@@ -125,7 +121,7 @@ describe("DiffThreadComposer", () => {
       input!.dispatchEvent(shiftEnter);
     });
     expect(shiftEnter.defaultPrevented).toBe(false);
-    expect(postComment.mutate).not.toHaveBeenCalled();
+    expect(postComment).not.toHaveBeenCalled();
 
     const enter = new KeyboardEvent("keydown", {
       key: "Enter",
@@ -136,19 +132,16 @@ describe("DiffThreadComposer", () => {
       input!.dispatchEvent(enter);
     });
     expect(enter.defaultPrevented).toBe(true);
-    expect(postComment.mutate).toHaveBeenCalledWith(
-      {
-        role: "human",
-        body: "Include issue id in the draft key?",
-        anchor: {
-          path: "app/foo.ts",
-          side: "new",
-          line: 94,
-          commitSha: SHA,
-        },
+    expect(postComment).toHaveBeenCalledWith({
+      role: "human",
+      body: "Include issue id in the draft key?",
+      anchor: {
+        path: "app/foo.ts",
+        side: "new",
+        line: 94,
+        commitSha: SHA,
       },
-      expect.any(Object),
-    );
+    });
   });
 
   it("offers Send and Ask a question on a Story line composer", () => {
@@ -166,49 +159,33 @@ describe("DiffThreadComposer", () => {
         .querySelector('button[aria-label="Ask a question"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    expect(postComment.mutate).toHaveBeenCalledWith(
-      {
-        role: "human",
-        body: "Does this short-circuit?",
-        kind: "question",
-        anchor: {
-          path: "app/foo.ts",
-          side: "new",
-          line: 94,
-          commitSha: SHA,
-        },
+    expect(postComment).toHaveBeenCalledWith({
+      role: "human",
+      body: "Does this short-circuit?",
+      kind: "question",
+      anchor: {
+        path: "app/foo.ts",
+        side: "new",
+        line: 94,
+        commitSha: SHA,
       },
-      expect.any(Object),
-    );
+    });
   });
 
-  it("closes only the sending composer when its post lands after another opens", async () => {
+  it("closes the composer and clears its draft as soon as it sends", async () => {
     const container = mount();
     click(container, "open-new");
     setDraft(container.querySelector("textarea")!, "First thread");
-    act(() => {
+    await act(async () => {
       container
         .querySelector('button[aria-label="Send"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    expect(postComment.mutate).toHaveBeenCalledOnce();
-    const [, options] = postComment.mutate.mock.calls[0]!;
-
-    click(container, "open-other");
-    setDraft(container.querySelector("textarea")!, "Second thread");
-
-    await act(async () => {
-      options.onSuccess();
-    });
-
-    const composer = container.querySelector('[data-testid="diff-thread-composer"]');
-    expect(composer?.getAttribute("data-draft-key")).toBe(
-      "review:task-threads:line:app/foo.ts:new:12",
-    );
-    expect(container.querySelector("textarea")?.value).toBe("Second thread");
+    expect(postComment).toHaveBeenCalledOnce();
+    expect(container.querySelector('[data-testid="diff-thread-composer"]')).toBeNull();
     expect(localStorage.getItem("review:task-threads:line:app/foo.ts:new:94")).toBeNull();
-    expect(localStorage.getItem("review:task-threads:line:app/foo.ts:new:12")).toBe(
-      "Second thread",
-    );
+
+    click(container, "open-new");
+    expect(container.querySelector("textarea")?.value).toBe("");
   });
 });

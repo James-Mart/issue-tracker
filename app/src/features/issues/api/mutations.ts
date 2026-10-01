@@ -1,4 +1,9 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
+import {
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { deleteConversation } from "@/features/agents/api/client";
 import { agentsKeys } from "@/features/agents/api/keys";
@@ -28,6 +33,8 @@ import type { Attachment } from "@server/services/attachments";
 import type { DeletionResult } from "@server/services/deletion";
 import { subtreeIds } from "@server/services/subtree";
 import { attachmentsApiPath } from "../lib/attachments";
+import type { OutboxComment } from "../lib/comment-outbox";
+import { useCommentOutboxStore } from "../store/use-comment-outbox-store";
 import { deletePartialPlanSessions } from "../lib/delete-partial-plan";
 import { parseRunsInFlightRefusal } from "../lib/restart-refusal";
 import { issuesKeys } from "./keys";
@@ -147,17 +154,59 @@ export function useRetryQuestionResearcher(storyId: string) {
   });
 }
 
-export function usePostComment(id: string) {
+async function deliverComment(qc: QueryClient, entry: OutboxComment): Promise<void> {
+  const { setDelivery } = useCommentOutboxStore.getState();
+  try {
+    await request<Comment>(`/api/issues/${entry.issueId}/comments`, {
+      method: "POST",
+      body: entry.input,
+    });
+    setDelivery(entry.clientId, { status: "sent" });
+  } catch (err) {
+    setDelivery(entry.clientId, { status: "failed", error: messageOf(err) });
+  } finally {
+    // A post that failed in transit may still have been stored; the list reconciles it.
+    void qc.invalidateQueries({ queryKey: issuesKeys.comments(entry.issueId) });
+  }
+}
+
+/**
+ * Post a comment from this browser. It shows in its thread at once; a failed
+ * post stays there with its error until it is resent.
+ */
+export function usePostComment(issueId: string): (input: CommentInput) => void {
   const qc = useQueryClient();
-  return useMutation<Comment, Error, CommentInput>({
-    mutationFn: (input) =>
-      request<Comment>(`/api/issues/${id}/comments`, {
-        method: "POST",
-        body: input,
-      }),
-    onError: (err) => toast.error(messageOf(err)),
-    onSettled: () => qc.invalidateQueries({ queryKey: issuesKeys.comments(id) }),
-  });
+  return useCallback(
+    (input) => {
+      const clientId = crypto.randomUUID();
+      const entry: OutboxComment = {
+        issueId,
+        clientId,
+        input: { ...input, clientId },
+        at: new Date().toISOString(),
+        delivery: { status: "sending" },
+      };
+      useCommentOutboxStore.getState().enqueue(entry);
+      void deliverComment(qc, entry);
+    },
+    [issueId, qc],
+  );
+}
+
+/** Resend a failed comment with the same body and client id. */
+export function useResendComment(): (clientId: string) => void {
+  const qc = useQueryClient();
+  return useCallback(
+    (clientId) => {
+      const outbox = useCommentOutboxStore.getState();
+      const entry = outbox.byClientId[clientId];
+      // Gone when a refetch showed the failed post was stored after all.
+      if (!entry) return;
+      outbox.setDelivery(clientId, { status: "sending" });
+      void deliverComment(qc, entry);
+    },
+    [qc],
+  );
 }
 
 export function useDeleteIssue() {

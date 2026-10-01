@@ -16,10 +16,8 @@ const state = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
-const post = vi.hoisted(() => ({
-  mutate: vi.fn(),
-  isPending: false,
-}));
+const post = vi.hoisted(() => vi.fn());
+const resend = vi.hoisted(() => vi.fn());
 
 const events = vi.hoisted(() => ({
   mutate: vi.fn(),
@@ -61,6 +59,7 @@ vi.mock("@/features/issues/api/queries", () => ({
 
 vi.mock("@/features/issues/api/mutations", () => ({
   usePostComment: () => post,
+  useResendComment: () => resend,
   usePostThreadEvent: () => events,
 }));
 
@@ -132,7 +131,6 @@ beforeEach(() => {
   state.problems = [];
   state.isLoading = false;
   state.error = null;
-  post.isPending = false;
   events.isPending = false;
 });
 
@@ -218,7 +216,7 @@ describe("ReviewConversationTab", () => {
     });
   });
 
-  it("posts a general comment from the bottom composer", () => {
+  it("posts a general comment from the bottom composer and clears it at once", async () => {
     const container = mount();
     const composer = container.querySelector<HTMLTextAreaElement>(
       '[data-testid="review-conversation-composer"] textarea',
@@ -230,16 +228,14 @@ describe("ReviewConversationTab", () => {
       ),
     ).toBeNull();
     setTextarea(composer, "Ship the note");
-    click(
-      container.querySelector(
-        '[data-testid="review-conversation-composer"] [aria-label="Send"]',
-      ),
-    );
+    await act(async () => {
+      container
+        .querySelector('[data-testid="review-conversation-composer"] [aria-label="Send"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
-    expect(post.mutate).toHaveBeenCalledWith(
-      { role: "human", body: "Ship the note" },
-      expect.any(Object),
-    );
+    expect(post).toHaveBeenCalledWith({ role: "human", body: "Ship the note" });
+    expect(composer.value).toBe("");
   });
 
   it("asks a question from the conversation composer", () => {
@@ -255,14 +251,85 @@ describe("ReviewConversationTab", () => {
       ),
     );
 
-    expect(post.mutate).toHaveBeenCalledWith(
-      {
-        role: "human",
-        body: "Does the guard consult remotes?",
+    expect(post).toHaveBeenCalledWith({
+      role: "human",
+      body: "Does the guard consult remotes?",
+      kind: "question",
+    });
+  });
+
+  it("marks a comment that is still sending beside its time", () => {
+    state.threads = [
+      thread({
+        readyToTask: false,
+        root: {
+          id: "client-1",
+          clientId: "client-1",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          body: "Reject empty values before formatting.",
+          delivery: { status: "sending" },
+        },
+      }),
+    ];
+    const container = mount();
+    const mark = container.querySelector('[data-testid="comment-sending"]');
+    expect(mark?.textContent).toContain("sending");
+    expect(mark?.closest("header")).not.toBeNull();
+    expect(container.querySelector('[data-testid="comment-send-retry"]')).toBeNull();
+  });
+
+  it("keeps a failed comment in place with its error, and Retry resends it", () => {
+    state.threads = [
+      thread({
+        readyToTask: false,
+        root: {
+          id: "client-1",
+          clientId: "client-1",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          body: "Reject empty values before formatting.",
+          delivery: { status: "failed", error: "Failed to fetch" },
+        },
+      }),
+    ];
+    const container = mount();
+    expect(container.textContent).toContain("Reject empty values before formatting.");
+    expect(container.querySelector('[data-testid="comment-sending"]')).toBeNull();
+    const notice = container.querySelector('[role="alert"]');
+    expect(notice?.textContent).toContain("Could not send this comment — Failed to fetch");
+
+    click(container.querySelector('[data-testid="comment-send-retry"]'));
+    expect(resend).toHaveBeenCalledWith("client-1");
+  });
+
+  it("shows a question being sent as starting its researcher, with no thread actions yet", () => {
+    state.threads = [
+      thread({
         kind: "question",
-      },
-      expect.any(Object),
+        readyToTask: false,
+        researcherRun: { status: "starting" },
+        root: {
+          id: "client-1",
+          clientId: "client-1",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          kind: "question",
+          body: "Does the guard consult remotes?",
+          delivery: { status: "sending" },
+        },
+      }),
+    ];
+    const container = mount();
+    const card = container.querySelector('[data-thread-root="client-1"]');
+    expect(card?.querySelector('[data-testid="researcher-starting"]')?.textContent).toBe(
+      "Researcher starting…",
     );
+    expect(card?.querySelector('[data-testid="comment-sending"]')).not.toBeNull();
+    expect(
+      [...(card?.querySelectorAll("button") ?? [])].map((button) => button.textContent?.trim()),
+    ).toEqual([]);
+    expect(card?.querySelector('[data-testid="question-card-footer"]')).toBeNull();
   });
 
   it("collapses a dismissed question and reopens it without a reply", () => {

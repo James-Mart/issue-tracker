@@ -31,6 +31,41 @@ const DELEGATION_PREFIX = "review-question:";
 export const RESEARCHER_GONE = "its conversation no longer exists.";
 export const RESEARCHER_NO_REPLY = "the run ended without a reply.";
 
+/**
+ * Launches that run after the comment response, keyed by thread root id.
+ * A launch is `starting` until it settles. One that throws before it records
+ * a conversation stays `failed` until the next launch on that thread. Process
+ * memory only: a restart forgets a launch that never recorded a conversation.
+ */
+const researcherLaunches = new Map<string, ResearcherRun>();
+
+/**
+ * Show `threadId` as starting while `launch` runs. The launch is started
+ * synchronously, so a read right after this call already sees it.
+ */
+export async function trackResearcherLaunch(
+  threadId: string,
+  launch: () => Promise<void>,
+): Promise<void> {
+  // A later launch on the same thread owns the entry once it starts.
+  const starting: ResearcherRun = { status: "starting" };
+  researcherLaunches.set(threadId, starting);
+  try {
+    await launch();
+    if (researcherLaunches.get(threadId) === starting) {
+      researcherLaunches.delete(threadId);
+    }
+  } catch (err) {
+    if (researcherLaunches.get(threadId) === starting) {
+      researcherLaunches.set(threadId, {
+        status: "failed",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    throw err;
+  }
+}
+
 function lastErrorMessage(transcript: TranscriptEvent[]): string | undefined {
   for (let i = transcript.length - 1; i >= 0; i -= 1) {
     const event = transcript[i]!;
@@ -39,12 +74,15 @@ function lastErrorMessage(transcript: TranscriptEvent[]): string | undefined {
   return undefined;
 }
 
+function isOpenQuestion(thread: Pick<ThreadView, "kind" | "state">): boolean {
+  return thread.kind === "question" && thread.state === "open";
+}
+
 /** Conversation id when this thread is an open question with a researcher. */
 export function activeResearcherConversationId(
   thread: Pick<ThreadView, "kind" | "state" | "researcherConversationId">,
 ): string | undefined {
-  if (thread.kind !== "question" || thread.state !== "open") return undefined;
-  return thread.researcherConversationId;
+  return isOpenQuestion(thread) ? thread.researcherConversationId : undefined;
 }
 
 /**
@@ -87,7 +125,10 @@ function researcherRunFor(
   thread: ThreadView,
   messages: Comment[],
 ): ResearcherRun | undefined {
-  const conversationId = activeResearcherConversationId(thread);
+  if (!isOpenQuestion(thread)) return undefined;
+  const launch = researcherLaunches.get(thread.rootId);
+  if (launch) return launch;
+  const conversationId = thread.researcherConversationId;
   if (!conversationId) return undefined;
   if (!conversationExists(conversationId)) {
     return { status: "failed", error: RESEARCHER_GONE };

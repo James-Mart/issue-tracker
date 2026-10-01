@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Bot, ChevronRight, Circle, HelpCircle, User } from "lucide-react";
 import type { ReactNode } from "react";
-import type { CommentMessage } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
@@ -11,12 +10,14 @@ import {
   isQuestionThread,
   type CommentThread as CommentThreadData,
 } from "../../lib/comment-threads";
+import type { ThreadMessage } from "../../lib/comment-outbox";
 import { commentCountLabel } from "../../lib/comments";
 import { Markdown } from "../markdown";
 import {
   CommentAnchorMeta,
   CommentAnchorSnippet,
 } from "./comment-anchor-context";
+import { CommentSendFailure, CommentSendingMark } from "./comment-delivery";
 import { isHumanRole } from "./message";
 import {
   QuestionResearcherStatus,
@@ -67,8 +68,10 @@ export function CommentThread({
   const question = isQuestionThread(thread);
   const resolved = thread.state === "resolved";
   const dismissed = thread.state === "dismissed";
-  const showReplyButton = replySlot == null;
-  const showResolveButton = !question && onResolve != null && !resolved;
+  // The server has no thread to reply to or act on until the root is stored.
+  const stored = thread.root.delivery === undefined;
+  const showReplyButton = stored && replySlot == null;
+  const showResolveButton = stored && !question && onResolve != null && !resolved;
   const outdatedBar = collapse === "outdated" && outdated;
   const collapses =
     outdatedBar ||
@@ -160,7 +163,7 @@ export function CommentThread({
               </div>
             ) : null}
           </div>
-          {question && !dismissed ? (
+          {stored && question && !dismissed ? (
             <QuestionCardFooter
               issueId={issueId}
               threadId={thread.root.id}
@@ -382,21 +385,23 @@ function ThreadComment({
   comment,
   issueId,
 }: {
-  comment: CommentMessage;
+  comment: ThreadMessage;
   issueId?: string;
 }) {
   return (
     <section
       data-comment-id={comment.id}
+      data-delivery={comment.delivery?.status}
       className="flex flex-col gap-1 border-b border-border py-2 last:border-b-0"
     >
       <ThreadAuthorship comment={comment} />
       <Markdown issueId={issueId}>{comment.body}</Markdown>
+      <CommentSendFailure message={comment} />
     </section>
   );
 }
 
-function ThreadAuthorship({ comment }: { comment: CommentMessage }) {
+function ThreadAuthorship({ comment }: { comment: ThreadMessage }) {
   const time = formatTime(comment.at);
 
   if (isHumanRole(comment.role)) {
@@ -406,6 +411,7 @@ function ThreadAuthorship({ comment }: { comment: CommentMessage }) {
           {comment.name ?? comment.role}
         </span>
         {time ? <time dateTime={comment.at}>{time}</time> : null}
+        <CommentSendingMark message={comment} />
       </header>
     );
   }
