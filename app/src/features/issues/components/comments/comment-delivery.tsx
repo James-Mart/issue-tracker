@@ -4,22 +4,21 @@ import { Button } from "@/components/ui/button";
 import { useResendComment } from "../../api/mutations";
 import type { ThreadMessage } from "../../lib/comment-outbox";
 import { Markdown } from "../markdown";
-import { Message } from "./message";
+import { commentHeaderLabels, Message } from "./message";
 
 /** A comment outside any thread, with its delivery state when it is this browser's post. */
 export function DeliverableMessage({
   message,
-  author,
   attachmentsIssueId,
 }: {
   message: ThreadMessage;
-  author: string;
   attachmentsIssueId?: string;
 }) {
+  const { author, roleBadge } = commentHeaderLabels(message.role, message.name);
   return (
     <Message
       author={author}
-      role={message.role}
+      roleBadge={roleBadge}
       at={message.at}
       status={<CommentSendingMark message={message} />}
     >

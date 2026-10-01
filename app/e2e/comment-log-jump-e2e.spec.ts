@@ -155,7 +155,7 @@ test.describe("Comment log jump e2e", () => {
     await expect(anchoredLine).toContainText("INDIA", { exact: true });
     await expect(snippet.getByText("charlie", { exact: true })).toBeVisible();
 
-    await logThread.getByRole("button", { name: "See this comment in the diff" }).click();
+    await logThread.getByRole("button", { name: "See in diff" }).click();
 
     await expect(page).toHaveURL(
       new RegExp(`[?&]tab=diff(?:&|$).*thread=${threadId}|thread=${threadId}.*[?&]tab=diff`),

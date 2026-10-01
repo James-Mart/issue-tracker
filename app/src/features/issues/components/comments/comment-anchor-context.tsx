@@ -1,4 +1,5 @@
 import { FileCode2, FileDiff } from "lucide-react";
+import type { ReactNode } from "react";
 import type { CommentMessage } from "@server/schemas";
 import { isLineAnchor } from "../../lib/comment-anchor";
 import { Badge } from "@/components/ui/badge";
@@ -8,24 +9,27 @@ import { useIssueChangeFileQuery } from "../../api/queries";
 import { snippetLinesFromContents } from "../../lib/comment-anchor-snippet";
 import { formatAnchorLineLabel } from "../../lib/comment-threads";
 
-const SEE_IN_DIFF_LABEL = "See this comment in the diff";
+const SEE_IN_DIFF_LABEL = "See in diff";
 
 export function CommentAnchorMeta({
   anchor,
   outdated,
   onSeeInDiff,
   showLocation = true,
+  badges,
 }: {
   anchor: NonNullable<CommentMessage["anchor"]>;
   outdated: boolean;
   onSeeInDiff?: () => void;
   showLocation?: boolean;
+  /** Status chips (question, dismissed) in this header row, beside outdated. */
+  badges?: ReactNode;
 }) {
   const lineAnchor = isLineAnchor(anchor);
   return (
     <header
       data-testid="comment-anchor-meta"
-      className="flex flex-wrap items-center gap-x-2 gap-y-1 pb-1.5 font-mono text-[10px] text-muted-foreground"
+      className="flex min-w-0 flex-nowrap items-center gap-x-2 pb-1.5 font-mono text-[10px] text-muted-foreground"
     >
       {showLocation ? (
         <>
@@ -38,12 +42,12 @@ export function CommentAnchorMeta({
             </span>
           )}
           <FileCode2 className="h-3 w-3 shrink-0" aria-hidden />
-          <span className="min-w-0 truncate text-foreground/85 [direction:rtl] [text-align:left] shell:[direction:ltr]">
+          <span className="min-w-0 shrink truncate text-foreground/85 [direction:rtl] [text-align:left] shell:[direction:ltr]">
             {anchor.path}
           </span>
           {lineAnchor ? (
             <>
-              <span aria-hidden>·</span>
+              <span className="shrink-0" aria-hidden>·</span>
               <span className="shrink-0 tabular-nums">
                 {formatAnchorLineLabel(anchor)}
               </span>
@@ -52,16 +56,17 @@ export function CommentAnchorMeta({
         </>
       ) : null}
       {outdated ? (
-        <Badge variant="warn" className="uppercase tracking-[0.08em]">
+        <Badge variant="warn" className="shrink-0 uppercase tracking-[0.08em]">
           outdated
         </Badge>
       ) : null}
+      {badges}
       {onSeeInDiff ? (
         <Button
           type="button"
           size="icon-sm"
           variant="outline"
-          className="ml-auto"
+          className="ml-auto shrink-0"
           title={SEE_IN_DIFF_LABEL}
           aria-label={SEE_IN_DIFF_LABEL}
           data-testid="see-in-diff"

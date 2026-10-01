@@ -1,17 +1,17 @@
+import { Check, RotateCcw } from "lucide-react";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
+import { Button } from "@/components/ui/button";
 import { usePostComment } from "@/features/issues/api/mutations";
 import { useCommentThreads, useCommentsQuery } from "@/features/issues/api/queries";
-import type { ThreadMessage } from "@/features/issues/lib/comment-outbox";
 import { humanComment } from "@/features/issues/lib/comments";
 import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
-import { DeliverableMessage } from "@/features/issues/components/comments/comment-delivery";
+import { CommentThread } from "@/features/issues/components/comments/comment-thread";
 import {
   Marker,
   commentDayKey,
   commentDayLabel,
 } from "@/features/issues/components/comments/marker";
-import { isHumanRole } from "@/features/issues/components/comments/message";
-import { roleFamilyCaption } from "@/features/pipeline/role-family";
+import { cn } from "@/lib/utils/cn";
 import type { ReviewSubmission } from "@server/schemas";
 import {
   isPlainNote,
@@ -20,27 +20,22 @@ import {
 } from "@/features/issues/lib/comment-threads";
 import { ThreadLinkedTaskChip } from "@/features/issues/components/comments/thread-linked-task-chip";
 import {
+  CONVERSATION_FILTER_CHIPS,
+  conversationFilterCounts,
+  conversationFilterIsDefault,
+  filterConversationTimeline,
+  useConversationFilter,
+  type ConversationFilter,
+  type ConversationFilterCounts,
+  type ConversationFilterKey,
+} from "../lib/review-conversation-filter";
+import {
   conversationTimelineItems,
   reviewSubmittedLabel,
   type ConversationTimelineItem,
 } from "../lib/review-submission-ui";
 import { ReviewComposer } from "./review-composer";
 import { ReviewThread } from "./review-thread";
-
-function StandaloneComment({
-  message,
-  storyId,
-}: {
-  message: ThreadMessage;
-  storyId: string;
-}) {
-  const author = isHumanRole(message.role)
-    ? (message.name ?? message.role)
-    : roleFamilyCaption(message.role).caption;
-  return (
-    <DeliverableMessage message={message} author={author} attachmentsIssueId={storyId} />
-  );
-}
 
 function ReviewSubmittedEvent({
   submission,
@@ -62,6 +57,72 @@ function ReviewSubmittedEvent({
         ))}
       </div>
     </article>
+  );
+}
+
+function ConversationFilterBar({
+  filter,
+  counts,
+  showReset,
+  onToggle,
+  onReset,
+}: {
+  filter: ConversationFilter;
+  counts: ConversationFilterCounts;
+  showReset: boolean;
+  onToggle: (key: ConversationFilterKey) => void;
+  onReset: () => void;
+}) {
+  return (
+    <div
+      className="flex shrink-0 flex-col gap-2 border-b border-border px-1 py-2 shell:flex-row shell:flex-wrap shell:items-center"
+      data-testid="review-conversation-filter"
+    >
+      <span className="font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Show
+      </span>
+      <div
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5"
+        role="group"
+        aria-label="Show"
+      >
+        {CONVERSATION_FILTER_CHIPS.map((chip) => {
+          const selected = filter[chip.key];
+          return (
+            <Button
+              key={chip.key}
+              type="button"
+              size="sm"
+              variant={selected ? "primary" : "outline"}
+              aria-pressed={selected}
+              data-testid={`conversation-filter-${chip.key}`}
+              className={cn(
+                "font-normal",
+                !selected && "bg-transparent text-muted-foreground",
+              )}
+              onClick={() => onToggle(chip.key)}
+            >
+              {selected ? <Check aria-hidden /> : null}
+              <span>{chip.label}</span>
+              <span className="font-mono text-xs tabular-nums">{` · ${counts[chip.key]}`}</span>
+            </Button>
+          );
+        })}
+      </div>
+      {showReset ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="self-end text-muted-foreground shell:self-center"
+          data-testid="conversation-filter-reset"
+          onClick={onReset}
+        >
+          <RotateCcw aria-hidden />
+          Reset
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -95,7 +156,7 @@ function ConversationTimeline({
           <div key={`thread:${thread.root.id}`} className="flex min-w-0 flex-col">
             {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
             {isPlainNote(thread) ? (
-              <StandaloneComment message={thread.root} storyId={storyId} />
+              <CommentThread thread={thread} issueId={storyId} />
             ) : (
               <ReviewThread
                 thread={thread}
@@ -133,7 +194,9 @@ export function ReviewConversationTab({
   const send = (body: string, kind?: "question") =>
     post(humanComment(body, kind));
 
+  const { filter, toggle, reset } = useConversationFilter();
   const timeline = conversationTimelineItems(threads, submissions);
+  const visible = filterConversationTimeline(timeline, filter);
   const commentsReady = !comments.error && !comments.isLoading;
 
   return (
@@ -141,6 +204,15 @@ export function ReviewConversationTab({
       className="flex min-h-0 min-w-0 flex-1 flex-col"
       data-testid="review-conversation-tab"
     >
+      {commentsReady ? (
+        <ConversationFilterBar
+          filter={filter}
+          counts={conversationFilterCounts(timeline)}
+          showReset={!conversationFilterIsDefault(filter)}
+          onToggle={toggle}
+          onReset={reset}
+        />
+      ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-3">
         {comments.error ? (
           <ShellState
@@ -175,9 +247,17 @@ export function ReviewConversationTab({
             detail="Add one below to leave a note on this Story."
           />
         ) : null}
-        {commentsReady && timeline.length > 0 ? (
+        {commentsReady && timeline.length > 0 && visible.length === 0 ? (
+          <ShellState
+            className="border-0 bg-transparent px-4 py-8 shadow-none"
+            eyebrow="Filtered"
+            title="Nothing matches these filters."
+            detail="Turn a category back on, or reset to the default view."
+          />
+        ) : null}
+        {commentsReady && visible.length > 0 ? (
           <ConversationTimeline
-            items={timeline}
+            items={visible}
             storyId={storyId}
             onOpenInDiff={onOpenInDiff}
           />
