@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewSubmission } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
+import { REVIEW_CONVERSATION_FILTER_STORAGE_KEY } from "../lib/review-conversation-filter";
 import { ReviewConversationTab } from "./review-conversation-tab";
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
@@ -133,6 +134,7 @@ beforeEach(() => {
   state.isLoading = false;
   state.error = null;
   events.isPending = false;
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -396,6 +398,8 @@ describe("ReviewConversationTab", () => {
       }),
     ];
     const container = mount();
+    expect(container.querySelector('[data-thread-root="asked"]')).toBeNull();
+    click(container.querySelector('[data-testid="conversation-filter-dismissed"]'));
     const card = container.querySelector('[data-thread-root="asked"]');
     expect(card?.getAttribute("data-collapsed")).toBe("");
     expect(card?.getAttribute("data-thread-kind")).toBe("question");
@@ -538,5 +542,153 @@ describe("ReviewConversationTab", () => {
     expect(container.querySelector('[data-testid="thread-linked-task"]')?.textContent).toContain(
       "task-a",
     );
+  });
+
+  it("filters the timeline with counted chips and remembers the selection", () => {
+    state.threads = [
+      thread({
+        root: {
+          id: "note",
+          at: "2026-09-28T16:40:00.000Z",
+          role: "human",
+          name: "Jared",
+          body: "A general note.",
+        },
+      }),
+      thread({
+        state: "resolved",
+        root: {
+          id: "done",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          name: "Jared",
+          body: "This landed.",
+          anchor: {
+            path: "src/header.tsx",
+            side: "new",
+            line: 30,
+            commitSha: SHA,
+          },
+        },
+      }),
+      thread({
+        kind: "question",
+        readyToTask: false,
+        root: {
+          id: "asked",
+          at: "2026-09-29T15:00:00.000Z",
+          role: "human",
+          name: "Jared",
+          kind: "question",
+          body: "Does the guard consult remotes?",
+        },
+      }),
+      thread({
+        kind: "question",
+        state: "dismissed",
+        readyToTask: false,
+        root: {
+          id: "dropped",
+          at: "2026-09-29T16:00:00.000Z",
+          role: "human",
+          name: "Jared",
+          kind: "question",
+          body: "Should we bump OpenSSL?",
+        },
+      }),
+    ];
+    const container = mount();
+    const chip = (key: string) =>
+      container.querySelector(`[data-testid="conversation-filter-${key}"]`);
+
+    expect(chip("comments")?.textContent).toContain("Comments · 1");
+    expect(chip("comments")?.getAttribute("aria-pressed")).toBe("true");
+    expect(chip("comments")?.querySelector("svg")).not.toBeNull();
+    expect(chip("resolved")?.textContent).toContain("Resolved comments · 1");
+    expect(chip("resolved")?.getAttribute("aria-pressed")).toBe("true");
+    expect(chip("questions")?.textContent).toContain("Questions (open) · 1");
+    expect(chip("questions")?.getAttribute("aria-pressed")).toBe("true");
+    expect(chip("dismissed")?.textContent).toContain("Dismissed questions · 1");
+    expect(chip("dismissed")?.getAttribute("aria-pressed")).toBe("false");
+    expect(chip("dismissed")?.querySelector("svg")).toBeNull();
+    expect(container.querySelector('[data-testid="conversation-filter-reset"]')).toBeNull();
+    expect(container.querySelector('[data-thread-root="dropped"]')).toBeNull();
+    expect(container.textContent).toContain("A general note.");
+    expect(container.querySelector('[data-thread-root="done"]')?.hasAttribute("data-collapsed")).toBe(
+      true,
+    );
+
+    click(chip("dismissed"));
+    expect(chip("dismissed")?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector('[data-thread-root="dropped"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="conversation-filter-reset"]')).not.toBeNull();
+    expect(localStorage.getItem(REVIEW_CONVERSATION_FILTER_STORAGE_KEY)).toContain(
+      '"dismissed":true',
+    );
+
+    act(() => root?.unmount());
+    const again = mount();
+    expect(again.querySelector('[data-thread-root="dropped"]')).not.toBeNull();
+    expect(again.querySelector('[data-testid="conversation-filter-reset"]')).not.toBeNull();
+
+    click(again.querySelector('[data-testid="conversation-filter-reset"]'));
+    expect(again.querySelector('[data-thread-root="dropped"]')).toBeNull();
+    expect(again.querySelector('[data-testid="conversation-filter-reset"]')).toBeNull();
+    expect(localStorage.getItem(REVIEW_CONVERSATION_FILTER_STORAGE_KEY)).toBeNull();
+  });
+
+  it("shows an empty state when the filter hides every entry", () => {
+    state.threads = [
+      thread({
+        root: {
+          id: "note",
+          at: "2026-09-28T16:40:00.000Z",
+          role: "human",
+          name: "Jared",
+          body: "A general note.",
+        },
+      }),
+    ];
+    const container = mount();
+    click(container.querySelector('[data-testid="conversation-filter-comments"]'));
+    expect(container.textContent).toContain("Nothing matches these filters.");
+    expect(container.textContent).toContain(
+      "Turn a category back on, or reset to the default view.",
+    );
+    expect(container.textContent).not.toContain("A general note.");
+    expect(container.querySelector('[data-testid="conversation-filter-reset"]')).not.toBeNull();
+  });
+
+  it("keeps a review submission when every chip is off", () => {
+    state.threads = [
+      thread({
+        kind: "question",
+        state: "dismissed",
+        readyToTask: false,
+        root: {
+          id: "dropped",
+          at: "2026-09-29T16:00:00.000Z",
+          role: "human",
+          name: "Jared",
+          kind: "question",
+          body: "Should we bump OpenSSL?",
+        },
+      }),
+    ];
+    const done: ReviewSubmission = {
+      id: "sub-1",
+      at: "2026-09-29T12:00:00.000Z",
+      status: "done",
+      threadIds: ["dropped"],
+      taskIds: ["task-a"],
+      conversationId: "conv-1",
+    };
+    const container = mount(vi.fn(), [done]);
+    for (const key of ["comments", "resolved", "questions"]) {
+      click(container.querySelector(`[data-testid="conversation-filter-${key}"]`));
+    }
+    expect(container.querySelector('[data-testid="review-submitted-event"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Nothing matches these filters.");
+    expect(container.querySelector('[data-thread-root="dropped"]')).toBeNull();
   });
 });
