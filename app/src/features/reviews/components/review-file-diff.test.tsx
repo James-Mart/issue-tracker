@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { DiffComposerProvider } from "@/features/issues/components/comments/diff-thread-composer";
 import { fileDiffsFromPatch } from "@/features/issues/lib/issue-change-file-diffs";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
+import type { DiffThreadReveal } from "../hooks/use-review-workbench-location";
 import type { ReviewFileRow } from "../lib/review-files";
 import { ReviewFileDiff } from "./review-file-diff";
 
@@ -14,13 +15,15 @@ const scroller = vi.hoisted(() => ({
   scrollTo: vi.fn(),
 }));
 
+const virtualizer = vi.hoisted(() => ({
+  getScrollTop: () => scroller.scrollTop,
+  getOffsetInScrollContainer: () => scroller.fileOffset,
+  markDOMDirty: () => {},
+  scrollTo: (options: { top: number }) => scroller.scrollTo(options),
+}));
+
 vi.mock("@pierre/diffs/react", () => ({
-  useVirtualizer: () => ({
-    getScrollTop: () => scroller.scrollTop,
-    getOffsetInScrollContainer: () => scroller.fileOffset,
-    markDOMDirty: () => {},
-    scrollTo: scroller.scrollTo,
-  }),
+  useVirtualizer: () => virtualizer,
   FileDiff: () => <div data-testid="file-diff" />,
 }));
 
@@ -233,10 +236,11 @@ const MISSING_LINE: CommentThread = {
   replies: [],
 };
 
-function mountThreads(): HTMLDivElement {
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  root = createRoot(container);
+function renderThreads(
+  inline: CommentThread[] = [MISSING_LINE],
+  reveal?: DiffThreadReveal,
+  onRevealed?: (reveal: DiffThreadReveal) => void,
+) {
   act(() => {
     root!.render(
       <DiffComposerProvider issueId="story-1" commitSha="tip" allowQuestion>
@@ -251,11 +255,20 @@ function mountThreads(): HTMLDivElement {
           localHint="Read it locally."
           onToggleCollapsed={() => {}}
           onReviewedChange={() => {}}
-          threads={{ file: [FILE_THREAD], inline: [MISSING_LINE], outdated: [] }}
+          threads={{ file: [FILE_THREAD], inline, outdated: [] }}
+          reveal={reveal}
+          onRevealed={onRevealed}
         />
       </DiffComposerProvider>,
     );
   });
+}
+
+function mountThreads(...args: Parameters<typeof renderThreads>): HTMLDivElement {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  renderThreads(...args);
   return container;
 }
 
@@ -309,5 +322,78 @@ describe("ReviewFileDiff file comments", () => {
     );
     expect(comments.compareDocumentPosition(diff) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(diff.compareDocumentPosition(end!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+});
+
+describe("ReviewFileDiff thread reveal", () => {
+  const frames: FrameRequestCallback[] = [];
+  const scrolled: string[] = [];
+
+  function flushFrames() {
+    act(() => {
+      while (frames.length > 0) frames.shift()!(0);
+    });
+  }
+
+  beforeEach(() => {
+    frames.length = 0;
+    scrolled.length = 0;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () => ({ top: 0, bottom: 40, height: 40 }) as DOMRect,
+    );
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      scrolled.push(this.getAttribute("data-thread-root") ?? "");
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const REPLIED: CommentThread = {
+    ...MISSING_LINE,
+    replies: [
+      { id: "reply-1", at: "2026-09-28T16:42:00.000Z", role: "researcher", body: "Found it." },
+    ],
+  };
+
+  it("scrolls to the thread once and reports the request revealed", () => {
+    const onRevealed = vi.fn();
+    mountThreads([MISSING_LINE], { threadId: "missing-line", request: 0 }, onRevealed);
+    flushFrames();
+
+    expect(scrolled).toEqual(["missing-line"]);
+    expect(onRevealed.mock.calls).toEqual([[{ threadId: "missing-line", request: 0 }]]);
+  });
+
+  it("leaves the view alone when the thread's data refreshes", () => {
+    const onRevealed = vi.fn();
+    mountThreads([MISSING_LINE], { threadId: "missing-line", request: 0 }, onRevealed);
+    flushFrames();
+
+    renderThreads([REPLIED], { threadId: "missing-line", request: 0 }, onRevealed);
+    flushFrames();
+
+    expect(scrolled).toEqual(["missing-line"]);
+  });
+
+  it("scrolls again for a new request to the same thread", () => {
+    const onRevealed = vi.fn();
+    mountThreads([MISSING_LINE], { threadId: "missing-line", request: 0 }, onRevealed);
+    flushFrames();
+
+    renderThreads([MISSING_LINE], { threadId: "missing-line", request: 1 }, onRevealed);
+    flushFrames();
+
+    expect(scrolled).toEqual(["missing-line", "missing-line"]);
+    expect(onRevealed).toHaveBeenLastCalledWith({ threadId: "missing-line", request: 1 });
   });
 });

@@ -18,7 +18,10 @@ import { useReviewDiffQuery } from "../api/queries";
 import { useStoryReviewList } from "../hooks/use-review-submission-sync";
 import type { ReviewMarkOverrides } from "../lib/review-scope";
 import { useReviewLiveRefresh } from "../hooks/use-review-live-refresh";
-import { useReviewWorkbenchLocation } from "../hooks/use-review-workbench-location";
+import {
+  useReviewWorkbenchLocation,
+  type DiffThreadReveal,
+} from "../hooks/use-review-workbench-location";
 import { ALL_CHANGES_SCOPE } from "../lib/review-scope";
 import { REVIEW_WORKBENCH_TABS } from "../lib/workbench-tabs";
 import { ReviewCommitsPanel } from "./review-commits-tab";
@@ -68,6 +71,8 @@ function DiffTabPanel({
   overrides,
   setOverrides,
   focusThreadId,
+  threadReveal,
+  onThreadRevealed,
   onFocusFileMissing,
 }: {
   projectId: string;
@@ -79,6 +84,8 @@ function DiffTabPanel({
   overrides: ReviewMarkOverrides;
   setOverrides: Dispatch<SetStateAction<ReviewMarkOverrides>>;
   focusThreadId: string | null;
+  threadReveal: DiffThreadReveal | null;
+  onThreadRevealed: (reveal: DiffThreadReveal) => void;
   onFocusFileMissing: () => void;
 }) {
   const diffReady = scope === ALL_CHANGES_SCOPE || commits.data !== undefined;
@@ -110,6 +117,8 @@ function DiffTabPanel({
       overrides={overrides}
       setOverrides={setOverrides}
       focusThreadId={focusThreadId}
+      threadReveal={threadReveal}
+      onThreadRevealed={onThreadRevealed}
       onFocusFileMissing={onFocusFileMissing}
     />
   );
@@ -136,6 +145,8 @@ function StoryReviewWorkbench({
     scope,
     setScope,
     threadId,
+    threadReveal,
+    markThreadRevealed,
     openThreadInDiff,
     openThread,
     retargetThreadScope,
@@ -196,6 +207,8 @@ function StoryReviewWorkbench({
             overrides={markOverrides}
             setOverrides={setMarkOverrides}
             focusThreadId={threadId}
+            threadReveal={threadReveal}
+            onThreadRevealed={markThreadRevealed}
             onFocusFileMissing={() => retargetThreadScope(ALL_CHANGES_SCOPE)}
           />
         )}

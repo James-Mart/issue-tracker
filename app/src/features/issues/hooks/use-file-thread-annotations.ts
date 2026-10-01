@@ -17,12 +17,18 @@ import {
   placeThreadsInFile,
 } from "../lib/issue-change-inline-threads";
 
+/** Fills the slot of a line that no longer has threads or a composer. */
+const NO_THREADS: CommentThread[] = [];
+
 /** `keepAnnotationOrder` against the annotations the last committed render showed. */
-function useKeepAnnotationOrder<T>(
-  next: DiffLineAnnotation<T>[],
-): DiffLineAnnotation<T>[] {
-  const shownRef = useRef<DiffLineAnnotation<T>[]>([]);
-  const ordered = useMemo(() => keepAnnotationOrder(shownRef.current, next), [next]);
+function useKeepAnnotationOrder(
+  next: DiffLineAnnotation<CommentThread[]>[],
+): DiffLineAnnotation<CommentThread[]>[] {
+  const shownRef = useRef<DiffLineAnnotation<CommentThread[]>[]>([]);
+  const ordered = useMemo(
+    () => keepAnnotationOrder(shownRef.current, next, NO_THREADS),
+    [next],
+  );
   useEffect(() => {
     shownRef.current = ordered;
   }, [ordered]);

@@ -37,15 +37,16 @@ export function paintedLineForSide(
   return alt ?? primary;
 }
 
-export function diffLineIsPainted(
+/** The painted row for this file line, or null while Pierre has not painted it. */
+export function paintedDiffLine(
   root: ParentNode,
   side: "old" | "new",
   line: number,
-): boolean {
+): HTMLElement | null {
   for (const row of root.querySelectorAll("[data-line]")) {
-    if (paintedLineForSide(row, side) === line) return true;
+    if (row instanceof HTMLElement && paintedLineForSide(row, side) === line) return row;
   }
-  return false;
+  return null;
 }
 
 /** Line numbers Pierre has actually painted for this anchor side, plus one row's height. */
