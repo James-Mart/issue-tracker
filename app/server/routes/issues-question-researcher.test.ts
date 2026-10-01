@@ -385,6 +385,56 @@ describe("question researcher", () => {
     expect((await thread(rootId)).researcherRun).toBeUndefined();
   });
 
+  it("retries a failed follow-up with full thread history, not the opening question", async () => {
+    let release!: () => void;
+    await startApp({
+      sendScript: [
+        {},
+        { waitResult: { id: "run-1", status: "error", error: { message: "the run timed out" } } },
+        { hold: new Promise<void>((r) => (release = r)) },
+      ],
+    });
+    const rootId = await askQuestion({ body: "Why add two?" });
+    await settledThread(rootId);
+    await post("/api/issues/s/comments", {
+      role: "agent",
+      name: "Researcher",
+      body: "Because a.ts:2 needs it.",
+      replyTo: rootId,
+    });
+
+    const reply = await post("/api/issues/s/comments", {
+      role: "human",
+      name: "Jared",
+      body: "And the tests?",
+      replyTo: rootId,
+    });
+    expect(reply.status).toBe(201);
+
+    const failed = await settledThread(rootId);
+    expect(failed.researcherRun).toEqual(failedRun("the run timed out"));
+
+    const retried = await post(`/api/issues/s/threads/${rootId}/researcher/retry`);
+    expect(retried.status).toBe(204);
+    const live = await thread(rootId);
+    expect(live.researcherRun).toEqual(runningRun);
+    expect(live.researcherConversationId).not.toBe(failed.researcherConversationId);
+
+    const prompt = sentPrompt(2);
+    expect(prompt).toContain(
+      "The previous researcher conversation for this thread is gone. This is a new session.",
+    );
+    expect(prompt).toContain("Answer the latest reply.");
+    expect(prompt).toContain("Jared:\nWhy add two?");
+    expect(prompt).toContain("Researcher:\nBecause a.ts:2 needs it.");
+    expect(prompt).toContain("Jared:\nAnd the tests?");
+    expect(prompt).not.toContain("Question:\nWhy add two?");
+
+    const log = readFileSync(join(issuesRoot, "s", "comments.jsonl"), "utf8");
+    expect(log).toContain(`"recovered":true`);
+    release();
+  });
+
   it("shows a failed run's error, and Retry starts a fresh researcher", async () => {
     let release!: () => void;
     await startApp({
