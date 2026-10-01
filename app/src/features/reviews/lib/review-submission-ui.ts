@@ -136,3 +136,52 @@ export function conversationTimelineItems<T extends { root: { at: string } }>(
   items.sort((a, b) => a.at.localeCompare(b.at) || (a.kind === "thread" ? -1 : 1));
   return items;
 }
+
+function taskingFromFailed(
+  submission: Extract<ReviewSubmission, { status: "failed" }>,
+): Extract<ReviewSubmission, { status: "tasking" }> {
+  return {
+    id: submission.id,
+    at: submission.at,
+    status: "tasking",
+    threadIds: submission.threadIds,
+    ...(submission.summaryCommentId
+      ? { summaryCommentId: submission.summaryCommentId }
+      : {}),
+    ...(submission.conversationId ? { conversationId: submission.conversationId } : {}),
+    ...(submission.taskIds ? { taskIds: submission.taskIds } : {}),
+  };
+}
+
+/**
+ * Tasking the moment submit or retry is confirmed. A server tasking record
+ * replaces the local submit mark; a retry mark stands in until that record
+ * is tasking again.
+ */
+export function acknowledgedSubmissions(
+  submissions: readonly ReviewSubmission[],
+  pendingThreadIds: readonly string[] | undefined,
+  retryingId: string | undefined,
+): ReviewSubmission[] {
+  const next = submissions.map((submission) =>
+    submission.status === "failed" && submission.id === retryingId
+      ? taskingFromFailed(submission)
+      : submission,
+  );
+  if (
+    !pendingThreadIds ||
+    pendingThreadIds.length === 0 ||
+    next.some((submission) => submission.status === "tasking")
+  ) {
+    return next;
+  }
+  return [
+    ...next,
+    {
+      id: "pending-submit",
+      at: "pending",
+      status: "tasking",
+      threadIds: [...pendingThreadIds],
+    },
+  ];
+}

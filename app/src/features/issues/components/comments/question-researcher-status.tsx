@@ -28,18 +28,23 @@ export function ResearcherRetryButton({
   );
 }
 
-/** Live or failed researcher on an open question thread awaiting its answer. */
+const LIVE_LABEL = {
+  starting: "Researcher starting…",
+  running: "Researching…",
+} as const;
+
+/** Starting, live, or failed researcher on an open question thread awaiting its answer. */
 export function QuestionResearcherStatus({ run }: { run: ResearcherRun }) {
-  if (run.status === "running") {
+  if (run.status !== "failed") {
     return (
       <div
-        data-testid="researcher-running"
+        data-testid={`researcher-${run.status}`}
         role="status"
         aria-live="polite"
         className="flex items-center gap-2 py-2 text-sm text-[hsl(var(--current))]"
       >
         <Loader2 className="h-4 w-4 shrink-0 motion-safe:animate-spin" aria-hidden />
-        <span>Researching…</span>
+        <span>{LIVE_LABEL[run.status]}</span>
       </div>
     );
   }

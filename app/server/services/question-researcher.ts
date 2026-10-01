@@ -17,6 +17,7 @@ import {
   REVIEW_QUESTION_ROLE,
   activeResearcherConversationId,
   researcherRunForThread,
+  trackResearcherLaunch,
 } from "./researcher-runs.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 import { appendThreadEvent, findThreadRoot } from "./thread-events.js";
@@ -274,7 +275,10 @@ async function followUpQuestionResearcher(
   }
 }
 
-/** Start a researcher for a new question, or resume one for a human reply. */
+/**
+ * Start a researcher for a new question, or resume one for a human reply.
+ * The thread reads as starting from this call until the launch settles.
+ */
 export async function onQuestionComment(
   storyId: string,
   message: Comment,
@@ -282,12 +286,16 @@ export async function onQuestionComment(
   sessions: AgentSessions,
 ): Promise<void> {
   if (message.kind === "question") {
-    await startQuestionResearcher(storyId, message, projectId, sessions);
+    await trackResearcherLaunch(message.id, () =>
+      startQuestionResearcher(storyId, message, projectId, sessions),
+    );
     return;
   }
   // Review threads and non-human replies do not resume a researcher.
   if (message.replyTo && message.role === "human") {
-    await followUpQuestionResearcher(storyId, message, projectId, sessions);
+    await trackResearcherLaunch(message.replyTo, () =>
+      followUpQuestionResearcher(storyId, message, projectId, sessions),
+    );
   }
 }
 
@@ -303,5 +311,7 @@ export async function retryQuestionResearcher(
   if (researcherRunForThread(comments, threadId)?.status !== "failed") {
     throw new IssueError("conflict", RETRY_NOT_FAILED);
   }
-  await startQuestionResearcher(storyId, root, projectId, sessions);
+  await trackResearcherLaunch(threadId, () =>
+    startQuestionResearcher(storyId, root, projectId, sessions),
+  );
 }

@@ -211,7 +211,7 @@ const postThreadEvent = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/mutations", () => ({
-  usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
+  usePostComment: () => vi.fn(),
   usePostThreadEvent: () => postThreadEvent,
 }));
 

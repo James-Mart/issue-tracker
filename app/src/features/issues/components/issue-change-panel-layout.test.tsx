@@ -58,7 +58,7 @@ vi.mock("@pierre/diffs/react", () => ({
 }));
 
 vi.mock("../api/mutations", () => ({
-  usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
+  usePostComment: () => vi.fn(),
 }));
 
 vi.mock("../api/queries", () => ({

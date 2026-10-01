@@ -26,25 +26,27 @@ export const reviewTargetSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-const reviewSubmissionFields = {
+const reviewSubmissionIdentity = {
   id: nonEmpty,
   at: nonEmpty,
   summaryCommentId: nonEmpty.optional(),
   threadIds: z.array(nonEmpty).min(1),
-  conversationId: nonEmpty,
 };
 
 export const reviewSubmissionSchema = z.discriminatedUnion("status", [
   z
     .object({
-      ...reviewSubmissionFields,
+      ...reviewSubmissionIdentity,
+      // Filled once the background launch has created the tasker conversation.
+      conversationId: nonEmpty.optional(),
       status: z.literal("tasking"),
       taskIds: z.array(nonEmpty).optional(),
     })
     .strict(),
   z
     .object({
-      ...reviewSubmissionFields,
+      ...reviewSubmissionIdentity,
+      conversationId: nonEmpty.optional(),
       status: z.literal("failed"),
       taskIds: z.array(nonEmpty).optional(),
       error: nonEmpty,
@@ -52,7 +54,8 @@ export const reviewSubmissionSchema = z.discriminatedUnion("status", [
     .strict(),
   z
     .object({
-      ...reviewSubmissionFields,
+      ...reviewSubmissionIdentity,
+      conversationId: nonEmpty,
       status: z.literal("done"),
       taskIds: z.array(nonEmpty).min(1),
     })

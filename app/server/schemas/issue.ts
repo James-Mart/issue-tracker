@@ -89,6 +89,8 @@ const commentFields = {
   type: z.enum(COMMENT_TYPES).optional(),
   /** Thread root only. Absent means review. */
   kind: z.enum(THREAD_KINDS).optional(),
+  /** Set by the poster so an optimistic copy can find this record once it is stored. */
+  clientId: nonEmpty.optional(),
 };
 
 function refineCommentBody(
@@ -244,8 +246,12 @@ export interface ThreadView {
   readyToTask: boolean;
 }
 
-/** Read-time researcher state on an open question thread still awaiting its answer. */
+/**
+ * Read-time researcher state on an open question thread still awaiting its answer.
+ * `starting` covers a launch that has not yet put a live run on the thread.
+ */
 export type ResearcherRun =
+  | { status: "starting" }
   | { status: "running" }
   | { status: "failed"; error: string };
 

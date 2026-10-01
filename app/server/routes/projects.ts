@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from "express";
+import type { AgentSessions } from "../services/agent-sessions.js";
 import { readProjectPrs } from "../services/delivery.js";
 import { IssueError } from "../services/errors.js";
 import { getWorkspaceFile } from "../services/project-workspace.js";
@@ -9,22 +10,12 @@ import {
   setSecret,
 } from "../services/secret-store.js";
 import { reviewCandidatesRouter } from "./review-candidates.js";
-import { reviewsRouter } from "./reviews.js";
+import { createReviewsRouter } from "./reviews.js";
 
 const asyncRoute =
   (handler: RequestHandler): RequestHandler =>
   (req, res, next) =>
     Promise.resolve(handler(req, res, next)).catch(next);
-
-export const projectsRouter = Router();
-
-projectsRouter.get(
-  "/:projectId/prs",
-  asyncRoute(async (req, res) => {
-    const body = await readProjectPrs(req.params.projectId);
-    res.json(body);
-  }),
-);
 
 function secretKeyList(projectId: string): { keys: string[] } {
   return { keys: listSecretKeys(projectId) };
@@ -54,44 +45,58 @@ function callSecretStore(fn: () => void): void {
   }
 }
 
-projectsRouter.get(
-  "/:projectId/secrets",
-  asyncRoute((req, res) => {
-    const projectId = requireProject(req.params.projectId);
-    res.json(secretKeyList(projectId));
-  }),
-);
+export function createProjectsRouter(sessions: AgentSessions): Router {
+  const projectsRouter = Router();
 
-projectsRouter.put(
-  "/:projectId/secrets/:key",
-  asyncRoute((req, res) => {
-    const projectId = requireProject(req.params.projectId);
-    const value = readSecretValue(req.body);
-    callSecretStore(() => setSecret(projectId, req.params.key, value));
-    res.json(secretKeyList(projectId));
-  }),
-);
+  projectsRouter.get(
+    "/:projectId/prs",
+    asyncRoute(async (req, res) => {
+      const body = await readProjectPrs(req.params.projectId);
+      res.json(body);
+    }),
+  );
 
-projectsRouter.delete(
-  "/:projectId/secrets/:key",
-  asyncRoute((req, res) => {
-    const projectId = requireProject(req.params.projectId);
-    callSecretStore(() => deleteSecret(projectId, req.params.key));
-    res.json(secretKeyList(projectId));
-  }),
-);
+  projectsRouter.get(
+    "/:projectId/secrets",
+    asyncRoute((req, res) => {
+      const projectId = requireProject(req.params.projectId);
+      res.json(secretKeyList(projectId));
+    }),
+  );
 
-projectsRouter.use("/:projectId/review-candidates", reviewCandidatesRouter);
-projectsRouter.use("/:projectId/reviews", reviewsRouter);
+  projectsRouter.put(
+    "/:projectId/secrets/:key",
+    asyncRoute((req, res) => {
+      const projectId = requireProject(req.params.projectId);
+      const value = readSecretValue(req.body);
+      callSecretStore(() => setSecret(projectId, req.params.key, value));
+      res.json(secretKeyList(projectId));
+    }),
+  );
 
-projectsRouter.get(
-  "/:projectId/workspace/:relativePath(*)",
-  asyncRoute((req, res) => {
-    const { bytes, mime: contentType } = getWorkspaceFile(
-      req.params.projectId,
-      req.params.relativePath,
-    );
-    res.type(contentType);
-    res.send(bytes);
-  }),
-);
+  projectsRouter.delete(
+    "/:projectId/secrets/:key",
+    asyncRoute((req, res) => {
+      const projectId = requireProject(req.params.projectId);
+      callSecretStore(() => deleteSecret(projectId, req.params.key));
+      res.json(secretKeyList(projectId));
+    }),
+  );
+
+  projectsRouter.use("/:projectId/review-candidates", reviewCandidatesRouter);
+  projectsRouter.use("/:projectId/reviews", createReviewsRouter(sessions));
+
+  projectsRouter.get(
+    "/:projectId/workspace/:relativePath(*)",
+    asyncRoute((req, res) => {
+      const { bytes, mime: contentType } = getWorkspaceFile(
+        req.params.projectId,
+        req.params.relativePath,
+      );
+      res.type(contentType);
+      res.send(bytes);
+    }),
+  );
+
+  return projectsRouter;
+}

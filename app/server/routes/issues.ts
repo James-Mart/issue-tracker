@@ -391,17 +391,14 @@ export function createIssuesRouter(
   router.post(
     "/:id/comments",
     asyncRoute(async (req, res) => {
-      const message = await appendComment(
-        req.params.id,
-        req.body as CommentInput,
-      );
-      await onQuestionComment(
-        req.params.id,
-        message,
-        projectIdForIssue(req.params.id),
-        sessions,
-      );
+      const issueId = req.params.id;
+      const message = await appendComment(issueId, req.body as CommentInput);
+      const projectId = projectIdForIssue(issueId);
       res.status(201).json(message);
+      // A failed launch shows on the thread's researcher state, not on this response.
+      onQuestionComment(issueId, message, projectId, sessions).catch((err: unknown) => {
+        console.error(`researcher launch failed for comment ${message.id}:`, err);
+      });
     }),
   );
 

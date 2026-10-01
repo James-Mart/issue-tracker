@@ -90,7 +90,7 @@ vi.mock("@pierre/diffs/react", () => ({
 
 vi.mock("@/features/issues/api/mutations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  usePostComment: () => ({ mutate: state.postComment, isPending: false }),
+  usePostComment: () => state.postComment,
   usePostThreadEvent: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -593,7 +593,6 @@ describe("StoryReviewPage", () => {
         body: "Name this constant.",
         anchor: { path: "src/changed.ts", side: "new", line: 1, commitSha },
       },
-      expect.any(Object),
     );
   });
 

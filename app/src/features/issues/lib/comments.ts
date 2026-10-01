@@ -1,5 +1,11 @@
-import type { IssueKind } from "@server/schemas";
+import type { CommentInput, IssueKind } from "@server/schemas";
 import { kindHas } from "@server/kind";
+import { questionKindFields } from "@server/question-kind";
+
+/** Top-level human comment, optionally posted as a question. */
+export function humanComment(body: string, kind?: "question"): CommentInput {
+  return { role: "human", body, ...questionKindFields(kind) };
+}
 
 /**
  * Kinds that show the inline comments section on issue detail.

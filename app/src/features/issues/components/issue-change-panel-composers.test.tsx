@@ -73,10 +73,7 @@ const threadsState = vi.hoisted(() => ({
   threads: [] as CommentThreadData[],
 }));
 
-const postComment = vi.hoisted(() => ({
-  mutate: vi.fn(),
-  isPending: false,
-}));
+const postComment = vi.hoisted(() => vi.fn());
 
 function annotationsForRow(
   lineAnnotations: DiffLineAnnotation<CommentThreadData[]>[],
@@ -367,8 +364,7 @@ afterEach(() => {
   changeQueryState.isFetching = false;
   changeQueryState.refetch.mockReset();
   threadsState.threads = [];
-  postComment.mutate.mockReset();
-  postComment.isPending = false;
+  postComment.mockReset();
 });
 
 describe("IssueChangePanel composers", () => {
@@ -395,7 +391,7 @@ describe("IssueChangePanel composers", () => {
     setDraft(input!, "Include issue id in the draft key?");
     sendComposer(container);
 
-    expect(postComment.mutate).toHaveBeenCalledWith(
+    expect(postComment).toHaveBeenCalledWith(
       {
         role: "human",
         body: "Include issue id in the draft key?",
@@ -406,7 +402,6 @@ describe("IssueChangePanel composers", () => {
           commitSha: SHA,
         },
       },
-      expect.any(Object),
     );
   });
 
@@ -429,7 +424,7 @@ describe("IssueChangePanel composers", () => {
     setDraft(input!, "Comment on the span.");
     sendComposer(container);
 
-    expect(postComment.mutate).toHaveBeenCalledWith(
+    expect(postComment).toHaveBeenCalledWith(
       {
         role: "human",
         body: "Comment on the span.",
@@ -441,7 +436,6 @@ describe("IssueChangePanel composers", () => {
           commitSha: SHA,
         },
       },
-      expect.any(Object),
     );
   });
 
@@ -465,15 +459,14 @@ describe("IssueChangePanel composers", () => {
     setDraft(input!, "Agreed. Per-thread draft keys.");
     sendComposer(container);
 
-    expect(postComment.mutate).toHaveBeenCalledWith(
+    expect(postComment).toHaveBeenCalledWith(
       {
         role: "human",
         body: "Agreed. Per-thread draft keys.",
         replyTo: "current-root",
       },
-      expect.any(Object),
     );
-    const payload = postComment.mutate.mock.calls[0]?.[0] as {
+    const payload = postComment.mock.calls[0]?.[0] as {
       anchor?: unknown;
     };
     expect(payload.anchor).toBeUndefined();

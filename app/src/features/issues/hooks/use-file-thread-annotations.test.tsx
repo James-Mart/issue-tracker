@@ -9,7 +9,7 @@ import { fileDiffsFromPatch } from "../lib/issue-change-file-diffs";
 import { useFileThreadAnnotations } from "./use-file-thread-annotations";
 
 vi.mock("@/features/issues/api/mutations", () => ({
-  usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
+  usePostComment: () => vi.fn(),
 }));
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";

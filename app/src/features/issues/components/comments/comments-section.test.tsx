@@ -15,10 +15,7 @@ const commentsState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
-const postComment = vi.hoisted(() => ({
-  mutate: vi.fn(),
-  isPending: false,
-}));
+const postComment = vi.hoisted(() => vi.fn());
 
 const useCommentsQuery = vi.hoisted(() =>
   vi.fn(() => ({
@@ -40,15 +37,23 @@ vi.mock("@/features/agents/api/queries", () => ({
   }),
 }));
 
-vi.mock("../../api/queries", () => ({
-  useCommentsQuery,
-  useIssuesQuery: () => ({ data: undefined }),
-  useIssueChangeFileQuery: () => ({
-    data: Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join(
-      "\n",
-    ),
-  }),
-}));
+vi.mock("../../api/queries", async () => {
+  const { groupCommentThreads } = await import("../../lib/comment-threads");
+  return {
+    useCommentsQuery,
+    useCommentThreads: () => ({
+      threads: groupCommentThreads(commentsState.messages, commentsState.threads),
+      problems: [],
+      loaded: true,
+    }),
+    useIssuesQuery: () => ({ data: undefined }),
+    useIssueChangeFileQuery: () => ({
+      data: Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join(
+        "\n",
+      ),
+    }),
+  };
+});
 
 vi.mock("../../api/mutations", () => ({
   usePostComment: () => postComment,
@@ -199,8 +204,7 @@ afterEach(() => {
   commentsState.threads = [];
   commentsState.isLoading = false;
   commentsState.error = null;
-  postComment.mutate.mockReset();
-  postComment.isPending = false;
+  postComment.mockReset();
   useCommentsQuery.mockClear();
 });
 
@@ -324,18 +328,20 @@ describe("IssueCommentsSection", () => {
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(postComment.mutate).toHaveBeenCalledWith(
-      {
-        role: "human",
-        body: "Will keep drafts scoped to this thread.",
-        replyTo: "unanchored-root",
-      },
-      expect.any(Object),
-    );
-    const payload = postComment.mutate.mock.calls[0]?.[0] as {
+    expect(postComment).toHaveBeenCalledWith({
+      role: "human",
+      body: "Will keep drafts scoped to this thread.",
+      replyTo: "unanchored-root",
+    });
+    const payload = postComment.mock.calls[0]?.[0] as {
       anchor?: unknown;
     };
     expect(payload.anchor).toBeUndefined();
+    expect(
+      container.querySelector(
+        '[data-testid="comment-log-reply-composer"][data-thread-id="unanchored-root"]',
+      ),
+    ).toBeNull();
   });
 
   it("offers Resolve after a question is converted on the story comments column", () => {

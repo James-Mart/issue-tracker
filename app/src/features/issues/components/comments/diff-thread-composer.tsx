@@ -6,10 +6,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { CommentInput } from "@server/schemas";
 import { ReviewComposer } from "@/features/reviews/components/review-composer";
 import { usePostComment } from "../../api/mutations";
-import { postCommentWhenIdle } from "../../lib/post-comment-when-idle";
 import {
   commentInputForComposer,
   composerDraftKey,
@@ -24,12 +22,7 @@ type DiffComposerContextValue = {
   openNew: (anchor: Extract<OpenDiffComposer, { kind: "new" }>) => void;
   openReply: (threadId: string) => void;
   close: () => void;
-  send: (
-    open: OpenDiffComposer,
-    body: string,
-    kind?: "question",
-  ) => Promise<void>;
-  pending: boolean;
+  send: (open: OpenDiffComposer, body: string, kind?: "question") => void;
 };
 
 const DiffComposerContext = createContext<DiffComposerContextValue | null>(
@@ -63,24 +56,10 @@ export function DiffComposerProvider({
   const close = useCallback(() => setOpen(null), []);
   const send = useCallback(
     (target: OpenDiffComposer, body: string, kind?: "question") => {
-      const trimmed = body.trim();
-      if (!trimmed) {
-        return Promise.reject(new Error("comment was not posted"));
-      }
-      const input: CommentInput = commentInputForComposer(
-        target,
-        trimmed,
-        commitSha,
-        kind,
-      );
-      const sentKey = composerDraftKey(issueId, target);
-      return postCommentWhenIdle(post, input).then(() => {
-        setOpen((current) =>
-          current && composerDraftKey(issueId, current) === sentKey ? null : current,
-        );
-      });
+      post(commentInputForComposer(target, body, commitSha, kind));
+      setOpen(null);
     },
-    [commitSha, issueId, post],
+    [commitSha, post],
   );
 
   const value = useMemo(
@@ -93,19 +72,8 @@ export function DiffComposerProvider({
       openReply,
       close,
       send,
-      pending: post.isPending,
     }),
-    [
-      issueId,
-      commitSha,
-      allowQuestion,
-      open,
-      openNew,
-      openReply,
-      close,
-      send,
-      post.isPending,
-    ],
+    [issueId, commitSha, allowQuestion, open, openNew, openReply, close, send],
   );
 
   return (
@@ -135,7 +103,7 @@ export function DiffThreadComposer({
 }: {
   target: OpenDiffComposer;
 }) {
-  const { issueId, send, close, pending, allowQuestion } = useDiffComposer();
+  const { issueId, send, close, allowQuestion } = useDiffComposer();
   const draftKey = composerDraftKey(issueId, target);
   const askQuestion = allowQuestion && target.kind === "new";
   const placeholder =
@@ -164,7 +132,6 @@ export function DiffThreadComposer({
         draftKey={draftKey}
         placeholder={placeholder}
         submitLabel="Send"
-        pending={pending}
         onSubmit={(body) => send(target, body)}
         onQuestion={askQuestion ? (body) => send(target, body, "question") : undefined}
         onCancel={close}

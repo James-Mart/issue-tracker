@@ -11,11 +11,14 @@ export function Message({
   author,
   role,
   at,
+  status,
   children,
 }: {
   author: string;
   role: string;
   at: string;
+  /** Trails the time in the header. */
+  status?: ReactNode;
   children: ReactNode;
 }) {
   const time = formatTime(at);
@@ -31,6 +34,7 @@ export function Message({
         ) : null}
         <span className="font-medium text-foreground/80">{author}</span>
         {time ? <time dateTime={at}>{time}</time> : null}
+        {status}
       </header>
       <div className={cn("min-w-0", READING_MEASURE_CLASS)}>{children}</div>
     </article>

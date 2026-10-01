@@ -32,7 +32,7 @@ vi.mock("@/features/agents/api/queries", () => ({
 }));
 
 vi.mock("@/features/issues/api/mutations", () => ({
-  usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
+  usePostComment: () => vi.fn(),
 }));
 
 const ROW: ReviewFileRow = {
