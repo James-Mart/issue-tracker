@@ -237,14 +237,41 @@ describe("CommentThread", () => {
       '[data-testid="see-in-diff"]',
     );
     expect(button?.textContent).toBe("");
-    expect(button?.getAttribute("aria-label")).toBe(
-      "See this comment in the diff",
-    );
+    expect(button?.getAttribute("aria-label")).toBe("See in diff");
+    expect(button?.getAttribute("title")).toBe("See in diff");
+    expect(button?.parentElement?.className).toContain("flex-nowrap");
 
     act(() => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onSeeInDiff).toHaveBeenCalledWith("current-root");
+  });
+
+  it("puts question and outdated badges in the anchor header beside See in diff", () => {
+    const container = mount(
+      [
+        {
+          ...currentThread,
+          kind: "question",
+          readyToTask: false,
+          root: {
+            ...currentThread.root,
+            outdated: true,
+            kind: "question",
+          },
+        },
+      ],
+      vi.fn(),
+    );
+    const meta = container.querySelector('[data-testid="comment-anchor-meta"]');
+    expect(meta?.className).toContain("flex-nowrap");
+    expect(meta?.querySelector('[data-testid="thread-question-label"]')?.textContent).toBe(
+      "Question",
+    );
+    expect(meta?.textContent).toMatch(/outdated/i);
+    expect(meta?.querySelector('[data-testid="see-in-diff"]')).not.toBeNull();
+    const snippet = container.querySelector('[data-testid="comment-anchor-snippet"]');
+    expect(snippet?.querySelector('[data-testid="thread-question-label"]')).toBeNull();
   });
 
   it("drops path and line on an inline thread and offers Resolve", () => {

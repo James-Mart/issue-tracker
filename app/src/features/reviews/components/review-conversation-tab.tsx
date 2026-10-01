@@ -1,17 +1,14 @@
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { usePostComment } from "@/features/issues/api/mutations";
 import { useCommentThreads, useCommentsQuery } from "@/features/issues/api/queries";
-import type { ThreadMessage } from "@/features/issues/lib/comment-outbox";
 import { humanComment } from "@/features/issues/lib/comments";
 import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
-import { DeliverableMessage } from "@/features/issues/components/comments/comment-delivery";
+import { CommentThread } from "@/features/issues/components/comments/comment-thread";
 import {
   Marker,
   commentDayKey,
   commentDayLabel,
 } from "@/features/issues/components/comments/marker";
-import { isHumanRole } from "@/features/issues/components/comments/message";
-import { roleFamilyCaption } from "@/features/pipeline/role-family";
 import type { ReviewSubmission } from "@server/schemas";
 import {
   isPlainNote,
@@ -26,21 +23,6 @@ import {
 } from "../lib/review-submission-ui";
 import { ReviewComposer } from "./review-composer";
 import { ReviewThread } from "./review-thread";
-
-function StandaloneComment({
-  message,
-  storyId,
-}: {
-  message: ThreadMessage;
-  storyId: string;
-}) {
-  const author = isHumanRole(message.role)
-    ? (message.name ?? message.role)
-    : roleFamilyCaption(message.role).caption;
-  return (
-    <DeliverableMessage message={message} author={author} attachmentsIssueId={storyId} />
-  );
-}
 
 function ReviewSubmittedEvent({
   submission,
@@ -95,7 +77,7 @@ function ConversationTimeline({
           <div key={`thread:${thread.root.id}`} className="flex min-w-0 flex-col">
             {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
             {isPlainNote(thread) ? (
-              <StandaloneComment message={thread.root} storyId={storyId} />
+              <CommentThread thread={thread} issueId={storyId} />
             ) : (
               <ReviewThread
                 thread={thread}

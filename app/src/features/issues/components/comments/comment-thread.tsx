@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { isLineAnchor } from "../../lib/comment-anchor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { roleFamilyCaption } from "@/features/pipeline/role-family";
 import { cn } from "@/lib/utils/cn";
 import {
   formatAnchorLineLabel,
@@ -19,7 +18,12 @@ import {
 } from "./comment-anchor-context";
 import { EditableCommentBody } from "./comment-edit";
 import { CommentSendingMark } from "./comment-delivery";
-import { isHumanRole } from "./message";
+import {
+  CommentHeader,
+  commentHeaderLabels,
+  formatCommentTime,
+  isHumanRole,
+} from "./message";
 import {
   QuestionResearcherStatus,
   ResearcherRetryButton,
@@ -44,7 +48,8 @@ export function CommentThread({
   onEdit,
 }: {
   thread: CommentThreadData;
-  onReply: () => void;
+  /** Absent on a flat Story note: no Reply control. */
+  onReply?: () => void;
   issueId?: string;
   replySlot?: ReactNode;
   showAnchorContext?: boolean;
@@ -66,14 +71,13 @@ export function CommentThread({
 }) {
   const [expanded, setExpanded] = useState(false);
   const outdated = thread.root.outdated === true;
-  const comments = [thread.root, ...thread.replies];
   const anchor = thread.root.anchor;
   const question = isQuestionThread(thread);
   const resolved = thread.state === "resolved";
   const dismissed = thread.state === "dismissed";
   // The server has no thread to reply to or act on until the root is stored.
   const stored = thread.root.delivery === undefined;
-  const showReplyButton = stored && replySlot == null;
+  const reply = stored && replySlot == null ? onReply : undefined;
   const showResolveButton = stored && !question && onResolve != null && !resolved;
   const outdatedBar = collapse === "outdated" && outdated;
   const collapses =
@@ -85,6 +89,13 @@ export function CommentThread({
     anchor != null &&
     !outdatedBar &&
     (!inline || outdated || onSeeInDiff != null);
+  const showQuestionBadge = question && !dismissed;
+  const statusBadgeHost = statusBadgePlacement({
+    showAnchorHeader,
+    collapsed,
+    showQuestionBadge,
+    dismissed,
+  });
 
   return (
     <article
@@ -106,6 +117,14 @@ export function CommentThread({
           outdated={outdated}
           showLocation={!inline}
           onSeeInDiff={onSeeInDiff}
+          badges={
+            statusBadgeHost === "anchor" ? (
+              <ThreadStatusBadges
+                question={showQuestionBadge}
+                dismissed={dismissed}
+              />
+            ) : null
+          }
         />
       ) : null}
       {thread.linkedTaskId && !question && (!collapsed || showAnchorHeader) ? (
@@ -113,20 +132,24 @@ export function CommentThread({
       ) : null}
       {collapsed ? null : (
         <>
-          {question ? (
-            <Badge
-              variant="secondary"
-              data-testid="thread-question-label"
-              className="w-fit uppercase tracking-[0.08em]"
-            >
-              Question
-            </Badge>
-          ) : null}
           {showAnchorContext && issueId && anchor ? (
             <CommentAnchorSnippet issueId={issueId} anchor={anchor} />
           ) : null}
 
-          {comments.map((comment) => (
+          <ThreadComment
+            comment={thread.root}
+            issueId={issueId}
+            onEdit={onEdit}
+            badges={
+              statusBadgeHost === "root" ? (
+                <ThreadStatusBadges
+                  question={showQuestionBadge}
+                  dismissed={dismissed}
+                />
+              ) : null
+            }
+          />
+          {thread.replies.map((comment) => (
             <ThreadComment
               key={comment.id}
               comment={comment}
@@ -143,12 +166,13 @@ export function CommentThread({
             <ThreadConvertedEvent converted={thread.converted} />
           ) : null}
 
+          {replySlot != null || reply != null || showResolveButton ? (
           <div className="flex flex-col gap-2 pt-1">
             {replySlot}
-            {showReplyButton || showResolveButton ? (
+            {reply != null || showResolveButton ? (
               <div className="flex flex-wrap items-center gap-1">
-                {showReplyButton ? (
-                  <Button type="button" variant="ghost" size="sm" onClick={onReply}>
+                {reply != null ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={reply}>
                     Reply
                   </Button>
                 ) : null}
@@ -167,6 +191,7 @@ export function CommentThread({
               </div>
             ) : null}
           </div>
+          ) : null}
           {stored && question && !dismissed ? (
             <QuestionCardFooter
               issueId={issueId}
@@ -182,7 +207,7 @@ export function CommentThread({
 
       {collapses ? (
         <CollapsedThreadBar
-          count={comments.length}
+          count={1 + thread.replies.length}
           lineLabel={
             outdatedBar && anchor && isLineAnchor(anchor)
               ? formatAnchorLineLabel(anchor)
@@ -191,6 +216,7 @@ export function CommentThread({
           question={question}
           resolved={resolved}
           dismissed={dismissed}
+          showDismissedBadge={statusBadgeHost === "bar"}
           expanded={expanded}
           pending={resolvePending}
           onToggle={() => setExpanded((open) => !open)}
@@ -261,7 +287,7 @@ function ThreadConvertedEvent({
   converted: NonNullable<CommentThreadData["converted"]>;
 }) {
   const name = converted.by.name ?? converted.by.role;
-  const time = formatTime(converted.at);
+  const time = formatCommentTime(converted.at);
   return (
     <section
       data-testid="thread-converted"
@@ -297,6 +323,7 @@ function CollapsedThreadBar({
   question,
   resolved,
   dismissed,
+  showDismissedBadge,
   expanded,
   pending,
   onToggle,
@@ -308,6 +335,7 @@ function CollapsedThreadBar({
   question: boolean;
   resolved: boolean;
   dismissed: boolean;
+  showDismissedBadge: boolean;
   expanded: boolean;
   pending: boolean;
   onToggle: () => void;
@@ -342,10 +370,8 @@ function CollapsedThreadBar({
             Resolved
           </Badge>
         ) : null}
-        {dismissed ? (
-          <Badge variant="secondary" className="uppercase tracking-[0.08em]">
-            Dismissed
-          </Badge>
+        {showDismissedBadge ? (
+          <ThreadStatusBadges question={false} dismissed />
         ) : null}
       </Button>
       {resolved ? (
@@ -389,69 +415,99 @@ function CollapsedThreadBar({
   );
 }
 
+function ThreadStatusBadges({
+  question,
+  dismissed,
+}: {
+  question: boolean;
+  dismissed: boolean;
+}) {
+  if (!question && !dismissed) return null;
+  return (
+    <>
+      {question ? (
+        <Badge
+          variant="secondary"
+          data-testid="thread-question-label"
+          className="shrink-0 uppercase tracking-[0.08em]"
+        >
+          Question
+        </Badge>
+      ) : null}
+      {dismissed ? (
+        <Badge
+          variant="secondary"
+          data-testid="thread-dismissed-label"
+          className="shrink-0 uppercase tracking-[0.08em]"
+        >
+          Dismissed
+        </Badge>
+      ) : null}
+    </>
+  );
+}
+
+function statusBadgePlacement({
+  showAnchorHeader,
+  collapsed,
+  showQuestionBadge,
+  dismissed,
+}: {
+  showAnchorHeader: boolean;
+  collapsed: boolean;
+  showQuestionBadge: boolean;
+  dismissed: boolean;
+}): "anchor" | "root" | "bar" | "none" {
+  if (!showQuestionBadge && !dismissed) return "none";
+  if (showAnchorHeader) return "anchor";
+  if (collapsed) return dismissed ? "bar" : "none";
+  return "root";
+}
+
 function ThreadComment({
   comment,
   issueId,
   onEdit,
+  badges,
 }: {
   comment: ThreadMessage;
   issueId?: string;
   onEdit?: (commentId: string, body: string) => Promise<void>;
+  badges?: ReactNode;
 }) {
+  const { author, roleBadge } = commentHeaderLabels(comment.role, comment.name);
   return (
     <section
       data-comment-id={comment.id}
       data-delivery={comment.delivery?.status}
       className="flex flex-col gap-1 border-b border-border py-2 last:border-b-0"
     >
-      <ThreadAuthorship comment={comment} />
+      <CommentHeader
+        author={author}
+        roleBadge={roleBadge}
+        at={comment.at}
+        leading={
+          isHumanRole(comment.role) ? undefined : (
+            <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          )
+        }
+        extra={
+          <>
+            {badges}
+            {comment.newSession ? (
+              <Badge
+                variant="current"
+                data-testid="researcher-new-session"
+                className="uppercase tracking-[0.08em]"
+              >
+                New session
+              </Badge>
+            ) : null}
+          </>
+        }
+        status={<CommentSendingMark message={comment} />}
+      />
       <EditableCommentBody comment={comment} issueId={issueId} onEdit={onEdit} />
     </section>
   );
-}
-
-function ThreadAuthorship({ comment }: { comment: ThreadMessage }) {
-  const time = formatTime(comment.at);
-
-  if (isHumanRole(comment.role)) {
-    return (
-      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-        <span className="font-medium text-foreground/80">
-          {comment.name ?? comment.role}
-        </span>
-        {time ? <time dateTime={comment.at}>{time}</time> : null}
-        <CommentSendingMark message={comment} />
-      </header>
-    );
-  }
-
-  return (
-    <header className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-      <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      <span className="font-medium text-foreground/80">
-        {comment.name ?? roleFamilyCaption(comment.role).caption}
-      </span>
-      {comment.newSession ? (
-        <Badge
-          variant="current"
-          data-testid="researcher-new-session"
-          className="uppercase tracking-[0.08em]"
-        >
-          New session
-        </Badge>
-      ) : null}
-      {time ? <time dateTime={comment.at}>{time}</time> : null}
-    </header>
-  );
-}
-
-function formatTime(at: string): string {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }

@@ -124,7 +124,6 @@ function CommentList({
             {isPlainNote(thread) ? (
               <DeliverableMessage
                 message={thread.root}
-                author={thread.root.name ?? thread.root.role}
                 attachmentsIssueId={attachmentsIssueId}
               />
             ) : (

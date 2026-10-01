@@ -191,6 +191,19 @@ describe("ReviewConversationTab", () => {
     const anchored = container.textContent?.indexOf("Run the reachability check.") ?? -1;
     expect(note).toBeGreaterThan(-1);
     expect(anchored).toBeGreaterThan(note);
+
+    const noteCard = container.querySelector('[data-thread-root="note"]');
+    expect(noteCard?.className).toContain("rounded-md");
+    expect(noteCard?.className).toContain("bg-card");
+    expect(noteCard?.querySelector('[data-testid="comment-role-badge"]')?.textContent).toBe(
+      "Human",
+    );
+    expect(noteCard?.querySelector("header")?.textContent).toContain("Jared");
+    expect(
+      [...(noteCard?.querySelectorAll("button") ?? [])].map((button) =>
+        button.textContent?.trim(),
+      ),
+    ).toEqual([]);
     expect(roots.length).toBeGreaterThan(0);
 
     const card = container.querySelector('[data-thread-root="anchored"]');
