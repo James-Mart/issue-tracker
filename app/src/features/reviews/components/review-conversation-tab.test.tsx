@@ -61,6 +61,7 @@ vi.mock("@/features/issues/api/mutations", () => ({
   usePostComment: () => post,
   useResendComment: () => resend,
   usePostThreadEvent: () => events,
+  useEditComment: () => ({ mutateAsync: vi.fn(async () => undefined) }),
 }));
 
 function thread(overrides: Partial<CommentThread> & Pick<CommentThread, "root">): CommentThread {

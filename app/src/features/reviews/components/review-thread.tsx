@@ -1,6 +1,10 @@
 import { useState, type ReactNode } from "react";
 import type { CommentThread as CommentThreadData } from "@/features/issues/lib/comment-threads";
-import { usePostComment, usePostThreadEvent } from "@/features/issues/api/mutations";
+import {
+  useEditComment,
+  usePostComment,
+  usePostThreadEvent,
+} from "@/features/issues/api/mutations";
 import { replyDraftKey } from "@/features/reviews/lib/review-draft-key";
 import { CommentThread } from "@/features/issues/components/comments/comment-thread";
 import { threadStateActions } from "@/features/issues/lib/comment-threads";
@@ -26,6 +30,7 @@ export function ReviewThread({
   onSeeInDiff?: () => void;
 }) {
   const post = usePostComment(storyId);
+  const edit = useEditComment(storyId);
   const events = usePostThreadEvent(storyId);
   const [replying, setReplying] = useState(false);
 
@@ -57,6 +62,9 @@ export function ReviewThread({
         ) : undefined
       }
       resolvePending={events.isPending}
+      onEdit={async (commentId, body) => {
+        await edit.mutateAsync({ commentId, body });
+      }}
       {...threadStateActions(thread, (event) =>
         events.mutate({ threadId: thread.root.id, event }),
       )}

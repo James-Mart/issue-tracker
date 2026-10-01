@@ -35,6 +35,7 @@ vi.mock("@/features/agents/api/queries", () => ({
 vi.mock("@/features/issues/api/mutations", () => ({
   usePostComment: () => vi.fn(),
   usePostThreadEvent: () => ({ mutate: vi.fn(), isPending: false }),
+  useEditComment: () => ({ mutateAsync: vi.fn(async () => undefined) }),
 }));
 
 const PATH = "src/long.ts";

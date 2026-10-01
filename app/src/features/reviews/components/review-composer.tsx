@@ -123,6 +123,15 @@ type ReviewComposerFields = {
   pending?: boolean;
   /** Story composers post the same draft as a question. */
   onQuestion?: (body: string) => void | Promise<void>;
+  /**
+   * Saved text this composer opened with. Cancel confirms only when the
+   * draft differs from it. New composers omit it and confirm whenever
+   * the field holds text.
+   */
+  baseline?: string;
+  autoFocus?: boolean;
+  /** Hover hint on the field. Defaults to the send hint. */
+  fieldHint?: string;
 };
 
 export type ReviewComposerProps = ReviewComposerFields &
@@ -144,6 +153,9 @@ export function ReviewComposer({
   persistent = false,
   pending = false,
   onQuestion,
+  baseline,
+  autoFocus = false,
+  fieldHint = COMPOSER_HINT,
 }: ReviewComposerProps) {
   const [draft, setDraft] = useReviewDraft(draftKey);
   const [confirming, setConfirming] = useState(false);
@@ -219,6 +231,7 @@ export function ReviewComposer({
         : "Dictate comment";
 
   const holdingDraft = draft.trim().length > 0;
+  const dirty = baseline === undefined ? holdingDraft : draft !== baseline;
   const canSend = holdingDraft && !pending && !voiceSessionActive;
   const showCancel = !persistent || holdingDraft;
 
@@ -272,7 +285,7 @@ export function ReviewComposer({
   };
 
   const requestClose = () => {
-    if (holdingDraft) {
+    if (dirty) {
       setConfirming(true);
       return;
     }
@@ -347,8 +360,9 @@ export function ReviewComposer({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onTextareaKeyDown}
             placeholder={placeholder}
-            title={COMPOSER_HINT}
+            title={fieldHint}
             aria-label={placeholder}
+            autoFocus={autoFocus}
             className="max-h-[16.125rem] min-h-[4.875rem] w-full resize-none leading-5"
           />
           <div className="flex flex-wrap items-center gap-2">

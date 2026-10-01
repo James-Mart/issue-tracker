@@ -2,6 +2,7 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { seedReviewDraftIfAbsent } from "../lib/review-draft-storage";
 import {
   REVIEW_COMPOSER_LINE_HEIGHT_PX,
   REVIEW_COMPOSER_MAX_LINES,
@@ -229,6 +230,36 @@ describe("ReviewComposer", () => {
     await act(async () => settle!.resolve());
     expect(localStorage.getItem("review:story-1:conversation")).toBeNull();
     expect(container.querySelector("textarea")?.value).toBe("");
+  });
+
+  it("closes an unchanged edit immediately and confirms only after the text changes", () => {
+    seedReviewDraftIfAbsent("review:story-1:conversation", "Original note");
+    const onCancel = vi.fn();
+    const { container } = mount({ onCancel, baseline: "Original note" });
+    expect(container.querySelector("textarea")?.value).toBe("Original note");
+    act(() => {
+      container
+        .querySelector('[aria-label="Cancel"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(
+      document.body.querySelector('[data-testid="review-composer-discard-dialog"]'),
+    ).toBeNull();
+
+    onCancel.mockClear();
+    setDraft(container.querySelector("textarea")!, "Original note, revised");
+    act(() => {
+      container
+        .querySelector('[aria-label="Cancel"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(
+      document.body
+        .querySelector('[data-testid="review-composer-discard-dialog"]')
+        ?.textContent,
+    ).toContain("Discard this draft?");
   });
 
   it("clears the stored draft on a confirmed discard", () => {
