@@ -20,6 +20,7 @@ import {
   type IssueKind,
   type ThreadView,
 } from "./server/schemas.js";
+import { editComment } from "./server/services/comment-edit.js";
 import { enrichCommentsForRead } from "./server/services/researcher-runs.js";
 import { formatThreadsForView } from "./server/services/thread-state.js";
 import { appendThreadEvent } from "./server/services/thread-events.js";
@@ -375,6 +376,7 @@ type CommentCliOptions = {
   resolve?: boolean;
   linkTask?: string;
   kind?: string;
+  edit?: string;
 };
 
 function anchorFlagsPresent(opts: CommentCliOptions): boolean {
@@ -486,6 +488,10 @@ function applyCommentOptions(cmd: Command): Command {
     .option(
       "--kind <question>",
       "start a question thread; new Story thread root only",
+    )
+    .option(
+      "--edit <commentId>",
+      "replace that comment's body (exclusive with anchor, --reply-to, --kind, --resolve, and --link-task)",
     );
 }
 
@@ -513,10 +519,31 @@ function assertQuestionKind(opts: CommentCliOptions): void {
   }
 }
 
+function editCommentFromCli(
+  id: string,
+  commentId: string,
+  opts: CommentCliOptions,
+): Promise<Comment> {
+  if (
+    opts.replyTo !== undefined ||
+    opts.kind !== undefined ||
+    opts.resolve ||
+    opts.linkTask !== undefined ||
+    anchorFlagsPresent(opts)
+  ) {
+    throw new Error(
+      "--edit cannot be combined with anchor, --reply-to, --kind, --resolve, or --link-task",
+    );
+  }
+  if (!opts.body) throw new Error("--body is required");
+  return editComment(id, commentId, { body: opts.body }, cliAuthor(opts));
+}
+
 async function printComment(
   id: string,
   opts: CommentCliOptions,
 ): Promise<Comment | undefined> {
+  if (opts.edit !== undefined) return editCommentFromCli(id, opts.edit, opts);
   assertQuestionKind(opts);
   if (opts.linkTask) {
     assertNoAnchorForThreadAction(opts, "--link-task");

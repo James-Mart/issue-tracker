@@ -1,107 +1,35 @@
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
-  rmSync,
   writeFileSync,
 } from "fs";
-import { tmpdir } from "os";
 import { dirname, join } from "path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentSessions } from "./agent-sessions.js";
+import { describe, expect, it, vi } from "vitest";
 import type { ConversationFrame } from "./conversation-stream.js";
+import {
+  AT,
+  conversationIssuesDir,
+  conversationRoot,
+  loadConfig,
+  loadService,
+  stubSessions,
+  useConversationFixtures,
+} from "./conversations.test-fixtures.js";
 
-const AT = "2026-07-09T14:00:00.000Z";
-let root: string;
-let issuesDir: string;
-
-function writeIssue(id: string, body: Record<string, unknown>): void {
-  mkdirSync(join(issuesDir, id), { recursive: true });
-  writeFileSync(
-    join(issuesDir, id, "issue.json"),
-    JSON.stringify({ id, ...body }),
-  );
-}
-
-beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "issue-tracker-conversations-"));
-  issuesDir = join(root, "issues");
-  mkdirSync(issuesDir, { recursive: true });
-  vi.resetModules();
-  vi.stubEnv("ISSUES_DIR", issuesDir);
-  writeIssue("platform", {
-    kind: "project",
-    title: "Platform",
-    createdAt: AT,
-    updatedAt: AT,
-  });
-  writeIssue("capture", {
-    kind: "idea",
-    title: "Capture",
-    partOf: "platform",
-    createdAt: AT,
-    updatedAt: AT,
-  });
-  writeIssue("add-auth", {
-    kind: "epic",
-    title: "Add auth",
-    partOf: "platform",
-    createdAt: AT,
-    updatedAt: AT,
-  });
-  writeIssue("root-story", {
-    kind: "story",
-    title: "Root story",
-    partOf: "platform",
-    createdAt: AT,
-    updatedAt: AT,
-  });
-});
-
-afterEach(() => {
-  vi.unstubAllEnvs();
-  rmSync(root, { recursive: true, force: true });
-});
-
-async function loadService() {
-  return import("./conversations.js");
-}
-
-async function loadConfig() {
-  return import("../config.js");
-}
-
-function stubSessions() {
-  return {
-    sendPrompt: vi.fn<AgentSessions["sendPrompt"]>(async () => ({
-      ok: true,
-      run: {
-        id: "run-1",
-        startedAt: AT,
-        steer: async () => "complete_delivered" as const,
-        wait: async () => ({ id: "run-1", status: "finished" }),
-      },
-    })),
-    getActiveRun: () => undefined,
-    listActiveRuns: () => [],
-    cancel: async () => false,
-    dispose: async () => {},
-    disposeAll: async () => {},
-  } satisfies AgentSessions;
-}
+useConversationFixtures();
 
 describe("conversations store", () => {
   it("stores conversations as a peer of issues/, never under the issues service", async () => {
     const { conversationsDir } = await loadConfig();
     const { createConversation } = await loadService();
 
-    expect(conversationsDir).toBe(join(root, "conversations"));
-    expect(dirname(conversationsDir)).toBe(dirname(issuesDir));
-    expect(conversationsDir).not.toBe(issuesDir);
+    expect(conversationsDir).toBe(join(conversationRoot(), "conversations"));
+    expect(dirname(conversationsDir)).toBe(dirname(conversationIssuesDir()));
+    expect(conversationsDir).not.toBe(conversationIssuesDir());
 
-    const issueIdsBefore = readdirSync(issuesDir).sort();
+    const issueIdsBefore = readdirSync(conversationIssuesDir()).sort();
 
     const meta = await createConversation({
       title: "Hello World",
@@ -117,8 +45,8 @@ describe("conversations store", () => {
       existsSync(join(conversationsDir, meta.id, "delegations.jsonl")),
     ).toBe(true);
     // Peer of issues/ — not nested inside the issues store.
-    expect(existsSync(join(issuesDir, meta.id))).toBe(false);
-    expect(readdirSync(issuesDir).sort()).toEqual(issueIdsBefore);
+    expect(existsSync(join(conversationIssuesDir(), meta.id))).toBe(false);
+    expect(readdirSync(conversationIssuesDir()).sort()).toEqual(issueIdsBefore);
   });
 
   it("creates, appends, reads in order, updates meta, and deletes", async () => {
@@ -925,183 +853,5 @@ describe("awaitingHuman metadata", () => {
     );
 
     await expect(resolveAwaitingHuman(meta)).resolves.toBe(false);
-  });
-});
-
-describe("prompt assembly", () => {
-  async function loadAttachments() {
-    return import("./conversation-attachments.js");
-  }
-
-  it("sends text unchanged with no images when there are no attachments", async () => {
-    const { createConversation, startConversationPrompt } = await loadService();
-    const sessions = stubSessions();
-
-    const meta = await createConversation({
-      title: "Plain send",
-      projectId: "platform",
-      model: "composer-2.5",
-    });
-
-    await startConversationPrompt(
-      meta.id,
-      "hello agent",
-      undefined,
-      sessions,
-    );
-
-    expect(sessions.sendPrompt).toHaveBeenCalledWith(meta.id, {
-      prompt: "hello agent",
-      model: undefined,
-    });
-  });
-
-  it("appends an attachment block after the human text", async () => {
-    const { conversationsDir } = await loadConfig();
-    const { createConversation, startConversationPrompt, assembleAgentPrompt } =
-      await loadService();
-    const { putConversationAttachment } = await loadAttachments();
-    const sessions = stubSessions();
-
-    const meta = await createConversation({
-      title: "Attach block",
-      projectId: "platform",
-      model: "composer-2.5",
-    });
-    await putConversationAttachment(
-      meta.id,
-      "notes.txt",
-      Buffer.from("context\n"),
-    );
-    const absolutePath = join(
-      conversationsDir,
-      meta.id,
-      "attachments",
-      "notes.txt",
-    );
-
-    await startConversationPrompt(
-      meta.id,
-      "review this",
-      undefined,
-      sessions,
-      { attachments: ["notes.txt"] },
-    );
-
-    expect(sessions.sendPrompt).toHaveBeenCalledWith(meta.id, {
-      prompt: `review this\n\nAttachments:\n- notes.txt — ${absolutePath}`,
-      model: undefined,
-    });
-
-    const { readConversation } = await loadService();
-    const { transcript } = readConversation(meta.id);
-    expect(transcript[0]).toMatchObject({
-      type: "prompt",
-      text: "review this",
-      attachments: ["notes.txt"],
-    });
-
-    const assembled = await assembleAgentPrompt(meta.id, "review this", [
-      "notes.txt",
-    ]);
-    expect(assembled).toEqual({
-      prompt: `review this\n\nAttachments:\n- notes.txt — ${absolutePath}`,
-    });
-    expect(assembled.images).toBeUndefined();
-  });
-
-  it("uses the attachment block alone when human text is empty", async () => {
-    const { conversationsDir } = await loadConfig();
-    const { createConversation, assembleAgentPrompt } = await loadService();
-    const { putConversationAttachment } = await loadAttachments();
-
-    const meta = await createConversation({
-      title: "Attach only",
-      projectId: "platform",
-      model: "composer-2.5",
-    });
-    await putConversationAttachment(
-      meta.id,
-      "notes.txt",
-      Buffer.from("context\n"),
-    );
-    const absolutePath = join(
-      conversationsDir,
-      meta.id,
-      "attachments",
-      "notes.txt",
-    );
-
-    const assembled = await assembleAgentPrompt(meta.id, "", ["notes.txt"]);
-    expect(assembled).toEqual({
-      prompt: `Attachments:\n- notes.txt — ${absolutePath}`,
-    });
-    expect(assembled.images).toBeUndefined();
-  });
-
-  it("includes one image payload for an image attachment", async () => {
-    const { conversationsDir } = await loadConfig();
-    const { createConversation, assembleAgentPrompt } = await loadService();
-    const { putConversationAttachment } = await loadAttachments();
-    const pngBytes = Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    ]);
-
-    const meta = await createConversation({
-      title: "Image attach",
-      projectId: "platform",
-      model: "composer-2.5",
-    });
-    await putConversationAttachment(meta.id, "diagram.png", pngBytes);
-    const absolutePath = join(
-      conversationsDir,
-      meta.id,
-      "attachments",
-      "diagram.png",
-    );
-
-    const assembled = await assembleAgentPrompt(meta.id, "what is this?", [
-      "diagram.png",
-    ]);
-    expect(assembled.prompt).toBe(
-      `what is this?\n\nAttachments:\n- diagram.png — ${absolutePath}`,
-    );
-    expect(assembled.images).toEqual([
-      {
-        data: pngBytes.toString("base64"),
-        mimeType: "image/png",
-      },
-    ]);
-  });
-
-  it("does not add images for a non-image attachment", async () => {
-    const { conversationsDir } = await loadConfig();
-    const { createConversation, assembleAgentPrompt } = await loadService();
-    const { putConversationAttachment } = await loadAttachments();
-
-    const meta = await createConversation({
-      title: "File attach",
-      projectId: "platform",
-      model: "composer-2.5",
-    });
-    await putConversationAttachment(
-      meta.id,
-      "mock.tsx",
-      Buffer.from("export const x = 1;\n"),
-    );
-    const absolutePath = join(
-      conversationsDir,
-      meta.id,
-      "attachments",
-      "mock.tsx",
-    );
-
-    const assembled = await assembleAgentPrompt(meta.id, "review", [
-      "mock.tsx",
-    ]);
-    expect(assembled).toEqual({
-      prompt: `review\n\nAttachments:\n- mock.tsx — ${absolutePath}`,
-    });
-    expect(assembled.images).toBeUndefined();
   });
 });

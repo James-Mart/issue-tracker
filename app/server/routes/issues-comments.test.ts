@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "fs";
@@ -418,6 +419,104 @@ describe("comments HTTP API", () => {
     };
     expect(openView.messages).toHaveLength(2);
     expect(openView.threads[0]?.state).toBe("open");
+  });
+
+  it("PATCH edits an anchored review comment and refuses a story note", async () => {
+    writeIssue("story-edit", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { json: created } = await postComment("story-edit", {
+      role: "human",
+      body: "pending",
+      anchor: {
+        path: "src/review.ts",
+        side: "new",
+        line: 2,
+        commitSha: COMMIT_SHA,
+      },
+    });
+    const commentId = (created as { id: string }).id;
+
+    const extra = await fetch(
+      `${baseUrl}/api/issues/story-edit/comments/${commentId}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body: "next", role: "agent" }),
+      },
+    );
+    expect(extra.status).toBe(400);
+
+    const patched = await fetch(
+      `${baseUrl}/api/issues/story-edit/comments/${commentId}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body: "next" }),
+      },
+    );
+    expect(patched.status).toBe(200);
+    expect(await patched.json()).toMatchObject({
+      id: commentId,
+      body: "next",
+      editable: true,
+      role: "human",
+    });
+
+    const { json } = await getComments("story-edit");
+    const view = json as {
+      messages: Array<{ id: string; body: string; editable: boolean }>;
+    };
+    expect(view.messages[0]).toMatchObject({
+      id: commentId,
+      body: "next",
+      editable: true,
+    });
+
+    const lines = readFileSync(join(dir, "story-edit", "comments.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type?: string; body: string; role?: string });
+    expect(lines[0]?.body).toBe("pending");
+    expect(lines[1]).toMatchObject({
+      type: "comment-edit",
+      body: "next",
+      role: "human",
+    });
+
+    const { json: note } = await postComment("story-edit", {
+      role: "human",
+      body: "a note",
+    });
+    const noteId = (note as { id: string }).id;
+    const refused = await fetch(
+      `${baseUrl}/api/issues/story-edit/comments/${noteId}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body: "nope" }),
+      },
+    );
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      code: "conflict",
+      error: expect.stringContaining("Story note"),
+    });
+
+    const missing = await fetch(
+      `${baseUrl}/api/issues/story-edit/comments/missing`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body: "nope" }),
+      },
+    );
+    expect(missing.status).toBe(404);
   });
 
   it("refuses a thread event when the issue is not a Story", async () => {
