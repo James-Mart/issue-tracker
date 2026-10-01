@@ -1,4 +1,5 @@
-import type { ReviewSubmission } from "@server/schemas";
+import type { ReviewSubmission, ReviewSubmissionView } from "@server/schemas";
+import { isRetryableSubmission } from "@server/review-submission-status";
 
 /** Visible reason when a merged Story cannot accept appended Tasks. */
 export const MERGED_STORY_SUBMIT_REASON =
@@ -7,25 +8,54 @@ export const MERGED_STORY_SUBMIT_REASON =
 /** How often to re-read a review while a submission is still tasking. */
 export const REVIEW_SUBMISSION_POLL_MS = 3_000;
 
-export type ReviewSubmitHeader =
-  | {
-      mode: "submit";
-      label: string;
-      disabled: boolean;
-      readyCount: number | undefined;
-      reason?: string;
-    }
-  | {
-      mode: "tasking";
-      label: string;
-    }
-  | {
-      mode: "failed";
-      submissionId: string;
-      error: string;
-      retryDisabled: boolean;
-      reason?: string;
-    };
+export type ReviewSubmitAction = {
+  label: string;
+  disabled: boolean;
+  readyCount: number | undefined;
+  reason?: string;
+};
+
+export type ReviewRetryAction = {
+  submissionIds: string[];
+  disabled: boolean;
+  reason?: string;
+};
+
+export type ReviewFailureLine = {
+  submissionId: string;
+  message: string;
+};
+
+export type ReviewOpenRound = {
+  submissionId: string;
+  round: number;
+  threadIds: readonly string[];
+};
+
+/** Submit, Retry, tasking, failures, and open rounds can all show together. */
+export type ReviewSubmitHeader = {
+  /** Set while any submission is tasking. Submit is omitted for that time. */
+  taskingLabel?: string;
+  submit?: ReviewSubmitAction;
+  /** One control for every incomplete or failed submission. */
+  retry?: ReviewRetryAction;
+  failures: ReviewFailureLine[];
+  openRounds: ReviewOpenRound[];
+};
+
+/** Local submit mark, before the server records a round. */
+type PendingSubmit = {
+  id: string;
+  at: "pending";
+  status: "tasking";
+  threadIds: string[];
+};
+
+type HeaderSubmission = ReviewSubmissionView | PendingSubmit;
+
+function isPendingSubmit(submission: { at: string }): submission is PendingSubmit {
+  return submission.at === "pending";
+}
 
 function countLabel(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
@@ -54,52 +84,74 @@ function mergedReason(merged: boolean): string | undefined {
   return merged ? MERGED_STORY_SUBMIT_REASON : undefined;
 }
 
-function latestFailed(
-  submissions: readonly ReviewSubmission[],
-): Extract<ReviewSubmission, { status: "failed" }> | undefined {
-  let latest: Extract<ReviewSubmission, { status: "failed" }> | undefined;
+export function openThreadsHeadline(count: number): string {
+  return `${count} submitted ${count === 1 ? "thread" : "threads"} still open`;
+}
+
+function failureLines(submissions: readonly HeaderSubmission[]): ReviewFailureLine[] {
+  const lines: ReviewFailureLine[] = [];
   for (const submission of submissions) {
     if (submission.status !== "failed") continue;
-    if (!latest || submission.at > latest.at) latest = submission;
+    lines.push({ submissionId: submission.id, message: submission.error });
   }
-  return latest;
+  return lines;
+}
+
+function openRounds(submissions: readonly HeaderSubmission[]): ReviewOpenRound[] {
+  const rounds: ReviewOpenRound[] = [];
+  for (const submission of submissions) {
+    if (submission.status === "done" || isPendingSubmit(submission)) continue;
+    if (submission.openThreadIds.length === 0) continue;
+    rounds.push({
+      submissionId: submission.id,
+      round: submission.round,
+      threadIds: submission.openThreadIds,
+    });
+  }
+  return rounds;
 }
 
 /**
- * Header control for the workbench. A tasking submission wins, then the latest
- * failure, otherwise Submit review with the ready-thread count.
+ * Workbench header from submission state. Tasking replaces Submit. Incomplete
+ * and failed never do: Submit stays for threads that are ready, one Retry
+ * covers every incomplete or failed submission, and each failed run keeps its
+ * error line. Open threads from every submission that is not done feed the
+ * disclosure.
  */
 export function reviewSubmitHeader(input: {
   merged: boolean;
   readyCount: number | undefined;
-  submissions: readonly ReviewSubmission[];
+  submissions: readonly HeaderSubmission[];
 }): ReviewSubmitHeader {
-  const tasking = input.submissions.find((submission) => submission.status === "tasking");
-  if (tasking) {
-    return {
-      mode: "tasking",
-      label: taskingLabel(tasking.threadIds.length),
-    };
-  }
-  const failed = latestFailed(input.submissions);
-  if (failed) {
-    const reason = mergedReason(input.merged);
-    return {
-      mode: "failed",
-      submissionId: failed.id,
-      error: failed.error,
-      retryDisabled: reason !== undefined,
-      ...(reason ? { reason } : {}),
-    };
-  }
+  const tasking = input.submissions.filter((submission) => submission.status === "tasking");
+  const retryable = input.submissions.filter(isRetryableSubmission);
   const reason = mergedReason(input.merged);
   const readyCount = input.readyCount;
+  const retry =
+    retryable.length === 0
+      ? undefined
+      : {
+          submissionIds: retryable.map((submission) => submission.id),
+          disabled: reason !== undefined || tasking.length > 0,
+          ...(reason ? { reason } : {}),
+        };
+  const shared = {
+    ...(retry ? { retry } : {}),
+    failures: failureLines(input.submissions),
+    openRounds: openRounds(input.submissions),
+  };
+  if (tasking.length > 0) {
+    const threadCount = tasking.reduce((sum, submission) => sum + submission.threadIds.length, 0);
+    return { taskingLabel: taskingLabel(threadCount), ...shared };
+  }
   return {
-    mode: "submit",
-    readyCount,
-    label: readyCount === undefined ? "Submit review" : submitReviewLabel(readyCount),
-    disabled: reason !== undefined || readyCount === undefined || readyCount === 0,
-    ...(reason ? { reason } : {}),
+    submit: {
+      readyCount,
+      label: readyCount === undefined ? "Submit review" : submitReviewLabel(readyCount),
+      disabled: reason !== undefined || readyCount === undefined || readyCount === 0,
+      ...(reason ? { reason } : {}),
+    },
+    ...shared,
   };
 }
 
@@ -137,20 +189,14 @@ export function conversationTimelineItems<T extends { root: { at: string } }>(
   return items;
 }
 
-function taskingFromFailed(
-  submission: Extract<ReviewSubmission, { status: "failed" }>,
-): Extract<ReviewSubmission, { status: "tasking" }> {
-  return {
-    id: submission.id,
-    at: submission.at,
-    status: "tasking",
-    threadIds: submission.threadIds,
-    ...(submission.summaryCommentId
-      ? { summaryCommentId: submission.summaryCommentId }
-      : {}),
-    ...(submission.conversationId ? { conversationId: submission.conversationId } : {}),
-    ...(submission.taskIds ? { taskIds: submission.taskIds } : {}),
-  };
+function taskingFromRetryable(
+  submission: Extract<ReviewSubmissionView, { status: "failed" | "incomplete" }>,
+): Extract<ReviewSubmissionView, { status: "tasking" }> {
+  if (submission.status === "failed") {
+    const { error: _error, ...rest } = submission;
+    return { ...rest, status: "tasking" };
+  }
+  return { ...submission, status: "tasking" };
 }
 
 /**
@@ -159,13 +205,15 @@ function taskingFromFailed(
  * is tasking again.
  */
 export function acknowledgedSubmissions(
-  submissions: readonly ReviewSubmission[],
+  submissions: readonly ReviewSubmissionView[],
   pendingThreadIds: readonly string[] | undefined,
-  retryingId: string | undefined,
-): ReviewSubmission[] {
+  retryingIds: readonly string[] | undefined,
+): HeaderSubmission[] {
+  const retrying = new Set(retryingIds ?? []);
   const next = submissions.map((submission) =>
-    submission.status === "failed" && submission.id === retryingId
-      ? taskingFromFailed(submission)
+    (submission.status === "failed" || submission.status === "incomplete") &&
+    retrying.has(submission.id)
+      ? taskingFromRetryable(submission)
       : submission,
   );
   if (

@@ -10,6 +10,7 @@ import {
 import type { AgentSessions } from "../services/agent-sessions.js";
 import {
   launchRecordedSubmission,
+  retryOpenReviewSubmissions,
   retryReviewSubmission,
   submitReview,
 } from "../services/review-tasking.js";
@@ -169,6 +170,32 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
           ? launchRecordedSubmission(projectId, reviewId, pending.id, "start", sessions)
           : Promise.resolve(),
       );
+    }),
+  );
+
+  reviewsRouter.post(
+    "/:reviewId/submissions/retry",
+    asyncRoute(async (req, res) => {
+      const projectId = req.params.projectId;
+      const reviewId = req.params.reviewId;
+      const view = await retryOpenReviewSubmissions(
+        projectId,
+        reviewId,
+        req.body,
+        sessions,
+      );
+      const launching = view.submissions.filter((item) => item.status === "tasking");
+      await sendReviewThenLaunch(res, projectId, view, 200, async () => {
+        for (const submission of launching) {
+          await launchRecordedSubmission(
+            projectId,
+            reviewId,
+            submission.id,
+            "retry",
+            sessions,
+          );
+        }
+      });
     }),
   );
 

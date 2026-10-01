@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { Check, RotateCcw } from "lucide-react";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -5,16 +6,15 @@ import { usePostComment } from "@/features/issues/api/mutations";
 import { useCommentThreads, useCommentsQuery } from "@/features/issues/api/queries";
 import { humanComment } from "@/features/issues/lib/comments";
 import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
-import { CommentThread } from "@/features/issues/components/comments/comment-thread";
 import {
   Marker,
   commentDayKey,
   commentDayLabel,
 } from "@/features/issues/components/comments/marker";
+import { scrollThreadNodeInPanel } from "@/features/issues/lib/issue-change-focus-thread";
 import { cn } from "@/lib/utils/cn";
 import type { ReviewSubmission } from "@server/schemas";
 import {
-  isPlainNote,
   STORY_COMPOSER_LABEL,
   type CommentThread as CommentThreadData,
 } from "@/features/issues/lib/comment-threads";
@@ -155,21 +155,17 @@ function ConversationTimeline({
         return (
           <div key={`thread:${thread.root.id}`} className="flex min-w-0 flex-col">
             {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
-            {isPlainNote(thread) ? (
-              <CommentThread thread={thread} issueId={storyId} />
-            ) : (
-              <ReviewThread
-                thread={thread}
-                storyId={storyId}
-                showAnchorContext
-                collapse="resolved"
-                onSeeInDiff={
-                  anchor
-                    ? () => onOpenInDiff(thread.root.id, anchor.commitSha)
-                    : undefined
-                }
-              />
-            )}
+            <ReviewThread
+              thread={thread}
+              storyId={storyId}
+              showAnchorContext
+              collapse="resolved"
+              onSeeInDiff={
+                anchor
+                  ? () => onOpenInDiff(thread.root.id, anchor.commitSha)
+                  : undefined
+              }
+            />
           </div>
         );
       })}
@@ -182,10 +178,13 @@ export function ReviewConversationTab({
   storyId,
   submissions = [],
   onOpenInDiff,
+  focusThreadId = null,
 }: {
   storyId: string;
   submissions?: ReviewSubmission[];
   onOpenInDiff: (threadId: string, commitSha: string) => void;
+  /** Story comment selected from the header disclosure. */
+  focusThreadId?: string | null;
 }) {
   const comments = useCommentsQuery(storyId);
   const { threads, problems } = useCommentThreads(storyId);
@@ -198,6 +197,14 @@ export function ReviewConversationTab({
   const timeline = conversationTimelineItems(threads, submissions);
   const visible = filterConversationTimeline(timeline, filter);
   const commentsReady = !comments.error && !comments.isLoading;
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!focusThreadId || !commentsReady) return;
+    const panel = scrollerRef.current;
+    if (!panel) return;
+    return scrollThreadNodeInPanel(panel, focusThreadId, { block: "center" });
+  }, [commentsReady, focusThreadId, threads]);
 
   return (
     <div
@@ -213,7 +220,7 @@ export function ReviewConversationTab({
           onReset={reset}
         />
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto px-1 py-3">
+      <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-1 py-3">
         {comments.error ? (
           <ShellState
             tone="blocked"

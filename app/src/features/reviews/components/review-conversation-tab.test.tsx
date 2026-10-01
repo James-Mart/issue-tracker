@@ -201,11 +201,12 @@ describe("ReviewConversationTab", () => {
       "Human",
     );
     expect(noteCard?.querySelector("header")?.textContent).toContain("Jared");
+    expect(noteCard?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
     expect(
       [...(noteCard?.querySelectorAll("button") ?? [])].map((button) =>
         button.textContent?.trim(),
       ),
-    ).toEqual([]);
+    ).toEqual(["Resolve"]);
     expect(roots.length).toBeGreaterThan(0);
 
     const card = container.querySelector('[data-thread-root="anchored"]');

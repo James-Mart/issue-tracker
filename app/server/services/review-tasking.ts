@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { AgentRun, ConversationMeta, Issue } from "../schemas.js";
+import type { AgentRun, ConversationMeta } from "../schemas.js";
 import type {
   ReviewRecordView,
   ReviewSubmission,
@@ -24,13 +24,20 @@ import {
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { appendComment, readAll, readComments, readIssueOrThrow } from "./issues.js";
+import { submittableRootIds } from "../../src/features/reviews/lib/review-submittable.js";
+import { isRetryableSubmission } from "../review-submission-status.js";
 import { ancestorChain, nearestImplementingWorkRootId } from "./subtree.js";
+import {
+  splitSubmissionThreads,
+  submissionThreads,
+} from "./review-submission-threads.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { requireProject } from "./require-project.js";
 import { isRunLive } from "./run-live.js";
 import {
   listReviewViews,
   readReviewView,
+  storedReviewsForStory,
   updateStoredReview,
 } from "./reviews.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
@@ -41,8 +48,7 @@ export const NO_READY_THREADS_ERROR = "no threads are ready to task";
 
 export const SUBMISSION_TASKING_ERROR = "a submission is already tasking";
 
-export const TASKING_INCOMPLETE_REASON =
-  "not every submitted thread links to a new Task";
+export const NO_RETRYABLE_SUBMISSION_ERROR = "no submission to retry";
 
 const REVIEW_TASKER_DELEGATION_PREFIX = "review-tasker:";
 
@@ -67,10 +73,11 @@ export type TaskingRunOutcome = {
   errorMessage?: string;
 };
 
-function readyThreadIds(storyId: string): string[] {
-  return readComments(storyId)
-    .threads.filter((thread) => thread.readyToTask)
-    .map((thread) => thread.rootId);
+function submittableThreadIds(
+  storyId: string,
+  submissions: readonly ReviewSubmission[],
+): string[] {
+  return submittableRootIds(readComments(storyId).threads, submissions);
 }
 
 function taskingPrompt(
@@ -132,54 +139,54 @@ function doneSubmission(
   submission: ReviewSubmission,
   taskIds: string[],
 ): Extract<ReviewSubmission, { status: "done" }> {
-  if (!submission.conversationId) {
-    throw new Error(`submission "${submission.id}" has no tasker conversation`);
-  }
   return {
     ...submissionBase(submission),
-    conversationId: submission.conversationId,
     status: "done",
     taskIds,
   };
 }
 
-function linkedNewTaskIds(
-  storyId: string,
+function incompleteSubmission(
   submission: ReviewSubmission,
-  issues: Issue[],
-): { taskIds: string[]; unlinkedThreadIds: string[] } {
-  const byRoot = new Map(
-    readComments(storyId, issues).threads.map((thread) => [thread.rootId, thread]),
-  );
-  const createdAt = new Map<string, string>();
-  for (const issue of issues) {
-    if (issue.kind === "task" && issue.partOf === storyId) {
-      createdAt.set(issue.id, issue.createdAt);
-    }
-  }
-  const taskIds: string[] = [];
-  const unlinkedThreadIds: string[] = [];
-  const seen = new Set<string>();
-  for (const threadId of submission.threadIds) {
-    const linked = byRoot.get(threadId)?.linkedTaskId;
-    const at = linked ? createdAt.get(linked) : undefined;
-    if (linked && at !== undefined && at >= submission.at) {
-      if (!seen.has(linked)) {
-        seen.add(linked);
-        taskIds.push(linked);
-      }
-      continue;
-    }
-    unlinkedThreadIds.push(threadId);
-  }
-  return { taskIds, unlinkedThreadIds };
+  taskIds: string[],
+): Extract<ReviewSubmission, { status: "incomplete" }> {
+  return {
+    ...submissionBase(submission),
+    status: "incomplete",
+    ...(taskIds.length > 0 ? { taskIds } : {}),
+  };
 }
 
 function failureReason(outcome: TaskingRunOutcome): string {
-  if (outcome.status === "finished") return TASKING_INCOMPLETE_REASON;
   const message = outcome.errorMessage?.trim();
   if (message) return message;
   return `tasking run ${outcome.status}`;
+}
+
+function settledSubmission(
+  submission: ReviewSubmission,
+  split: { taskIds: string[]; openThreadIds: string[] },
+  whenOpen: (taskIds: string[]) => ReviewSubmission,
+): ReviewSubmission {
+  if (split.openThreadIds.length === 0) return doneSubmission(submission, split.taskIds);
+  return whenOpen(split.taskIds);
+}
+
+async function completeWhenSettled(
+  projectId: string,
+  reviewId: string,
+  storyId: string,
+  submission: ReviewSubmission,
+  split: { taskIds: string[]; openThreadIds: string[] },
+  sessions: ConversationMessageSessions,
+): Promise<boolean> {
+  const next = settledSubmission(submission, split, () => submission);
+  if (next.status !== "done") return false;
+  replaceSubmission(projectId, reviewId, submission.id, next);
+  if (next.taskIds.length > 0) {
+    await bringCoordinatorForDone(reviewId, storyId, next.taskIds, sessions);
+  }
+  return true;
 }
 
 function reviewForStory(
@@ -246,12 +253,14 @@ async function markStartFailed(
   submission: ReviewSubmission,
   message: string,
 ): Promise<void> {
-  const { taskIds } = linkedNewTaskIds(storyId, submission, readAll().issues);
+  const split = submissionThreads(storyId, submission, readAll().issues);
   replaceSubmission(
     projectId,
     reviewId,
     submission.id,
-    failedSubmission(submission, message, taskIds),
+    settledSubmission(submission, split, (taskIds) =>
+      failedSubmission(submission, message, taskIds),
+    ),
   );
 }
 
@@ -268,7 +277,7 @@ export async function submitReview(
   const storyId = review.target.storyId;
   assertStoryOpenForTasking(storyId);
   assertNoTasking(review.submissions);
-  const threadIds = readyThreadIds(storyId);
+  const threadIds = submittableThreadIds(storyId, review.submissions);
   if (threadIds.length === 0) {
     throw new IssueError("validation", NO_READY_THREADS_ERROR);
   }
@@ -290,7 +299,7 @@ export async function submitReview(
   updateStoredReview(project, reviewId, (current) => {
     assertStoryOpenForTasking(storyId);
     assertNoTasking(current.submissions);
-    const readyNow = new Set(readyThreadIds(storyId));
+    const readyNow = new Set(submittableThreadIds(storyId, current.submissions));
     if (threadIds.some((id) => !readyNow.has(id))) {
       throw new IssueError(
         "conflict",
@@ -391,26 +400,24 @@ export async function launchRecordedSubmission(
   const storyId = review.target.storyId;
   try {
     const story = assertStoryOpenForTasking(storyId);
-    const linked = linkedNewTaskIds(storyId, submission, readAll().issues);
-    const threadIds =
-      kind === "retry" ? linked.unlinkedThreadIds : submission.threadIds;
-    if (threadIds.length === 0) {
-      if (!submission.conversationId || linked.taskIds.length === 0) {
-        throw new Error(`submission "${submission.id}" has no threads left to task`);
-      }
-      replaceSubmission(
+    const linked = submissionThreads(storyId, submission, readAll().issues);
+    if (
+      await completeWhenSettled(
         projectId,
         reviewId,
-        submission.id,
-        doneSubmission(submission, linked.taskIds),
-      );
-      await bringCoordinatorForDone(review.id, storyId, linked.taskIds, sessions);
+        storyId,
+        submission,
+        linked,
+        sessions,
+      )
+    ) {
       return;
     }
 
+    const threadIds = linked.openThreadIds;
     const prompt = taskingPrompt(storyId, threadIds, submission.summaryCommentId);
     const model = loadRoleModelPin(REVIEW_TASKER_ROLE);
-    let current = submission;
+    let current: ReviewSubmission = submission;
     const persisted = submission.conversationId !== undefined;
     if (!submission.conversationId) {
       const meta = await createConversation({
@@ -491,33 +498,95 @@ export async function retryReviewSubmission(
   if (!submission) {
     throw new IssueError("not_found", `unknown submission "${submissionId}"`);
   }
-  if (submission.status !== "failed") {
+  if (!isRetryableSubmission(submission)) {
     throw new IssueError(
       "validation",
       `submission "${submissionId}" is ${submission.status}`,
     );
   }
-  const { unlinkedThreadIds, taskIds } = linkedNewTaskIds(
-    storyId,
-    submission,
-    readAll().issues,
-  );
-  if (unlinkedThreadIds.length === 0) {
-    throw new IssueError(
-      "validation",
-      `submission "${submissionId}" has no unlinked threads`,
-    );
-  }
-  if (
-    submission.conversationId &&
-    sessions.getActiveRun(submission.conversationId)
-  ) {
-    throw new IssueError("conflict", "a tasking run is already active");
+  const split = submissionThreads(storyId, submission, readAll().issues);
+  const next = nextRetrySubmission(submission, split, sessions);
+  if (next.status === "done") {
+    replaceSubmission(project, reviewId, submissionId, next);
+    if (next.taskIds.length > 0) {
+      await bringCoordinatorForDone(reviewId, storyId, next.taskIds, sessions);
+    }
+    return readReviewView(project, reviewId);
   }
   requireProjectWorkspace(project);
-
-  const next = taskingSubmission(submission, taskIds);
   replaceSubmission(project, reviewId, submissionId, next);
+  return readReviewView(project, reviewId);
+}
+
+/**
+ * Handled threads become done. Leftovers return to tasking unless that
+ * submission's tasker run is already active.
+ */
+function nextRetrySubmission(
+  submission: Extract<ReviewSubmission, { status: "incomplete" | "failed" }>,
+  split: { taskIds: string[]; openThreadIds: string[] },
+  sessions: AgentSessions,
+): ReviewSubmission {
+  return settledSubmission(submission, split, (taskIds) => {
+    if (
+      submission.conversationId &&
+      sessions.getActiveRun(submission.conversationId)
+    ) {
+      throw new IssueError("conflict", "a tasking run is already active");
+    }
+    return taskingSubmission(submission, taskIds);
+  });
+}
+
+/**
+ * Retry every incomplete or failed submission. Threads already handled
+ * become done; every leftover returns to tasking in one write.
+ */
+export async function retryOpenReviewSubmissions(
+  projectId: string,
+  reviewId: string,
+  body: unknown,
+  sessions: AgentSessions,
+): Promise<ReviewRecordView> {
+  const parsed = parseRetryReviewSubmissionBody(body);
+  if (!parsed.ok) throw new IssueError("validation", parsed.message);
+  const project = requireProject(projectId);
+  const review = readReviewView(project, reviewId);
+  const storyId = review.target.storyId;
+  assertStoryOpenForTasking(storyId);
+
+  let finished: Extract<ReviewSubmission, { status: "done" }>[] = [];
+  updateStoredReview(project, reviewId, (current) => {
+    assertStoryOpenForTasking(storyId);
+    assertNoTasking(current.submissions);
+    const issues = readAll().issues;
+    const done: Extract<ReviewSubmission, { status: "done" }>[] = [];
+    let any = false;
+    let needsLaunch = false;
+    const submissions = current.submissions.map((submission) => {
+      if (!isRetryableSubmission(submission)) return submission;
+      any = true;
+      const split = submissionThreads(storyId, submission, issues);
+      const next = nextRetrySubmission(submission, split, sessions);
+      if (next.status === "done") done.push(next);
+      if (next.status === "tasking") needsLaunch = true;
+      return next;
+    });
+    if (!any) throw new IssueError("validation", NO_RETRYABLE_SUBMISSION_ERROR);
+    if (needsLaunch) requireProjectWorkspace(project);
+    finished = done;
+    return {
+      ...current,
+      updatedAt: new Date().toISOString(),
+      submissions,
+    };
+  });
+
+  for (const done of finished) {
+    if (done.taskIds.length > 0) {
+      await bringCoordinatorForDone(reviewId, storyId, done.taskIds, sessions);
+    }
+  }
   return readReviewView(project, reviewId);
 }
 
@@ -562,20 +631,13 @@ export async function classifyReviewTaskingRun(
     );
     if (index < 0) return current;
     const currentSubmission = current.submissions[index]!;
-    const { taskIds, unlinkedThreadIds } = linkedNewTaskIds(
-      storyId,
-      currentSubmission,
-      issues,
-    );
+    const split = submissionThreads(storyId, currentSubmission, issues);
     const submissions = current.submissions.slice();
-    const next =
-      unlinkedThreadIds.length === 0
-        ? doneSubmission(currentSubmission, taskIds)
-        : failedSubmission(
-            currentSubmission,
-            failureReason(outcome),
-            taskIds,
-          );
+    const next = settledSubmission(currentSubmission, split, (taskIds) =>
+      outcome.status === "finished"
+        ? incompleteSubmission(currentSubmission, taskIds)
+        : failedSubmission(currentSubmission, failureReason(outcome), taskIds),
+    );
     saved = next;
     submissions[index] = next;
     return {
@@ -586,7 +648,7 @@ export async function classifyReviewTaskingRun(
   });
   if (!saved) return false;
 
-  if (saved.status === "done") {
+  if (saved.status === "done" && saved.taskIds.length > 0) {
     await bringCoordinatorForDone(review.id, storyId, saved.taskIds, sessions);
   }
   return true;
@@ -599,7 +661,7 @@ export function failReviewTaskingClassification(
   const found = findTaskingSubmission(conversationId);
   if (!found) return false;
   const reason = message.trim() || "review tasking classification failed";
-  const { taskIds } = linkedNewTaskIds(
+  const split = submissionThreads(
     found.storyId,
     found.submission,
     readAll().issues,
@@ -608,7 +670,9 @@ export function failReviewTaskingClassification(
     found.projectId,
     found.review.id,
     found.submission.id,
-    failedSubmission(found.submission, reason, taskIds),
+    settledSubmission(found.submission, split, (taskIds) =>
+      failedSubmission(found.submission, reason, taskIds),
+    ),
   );
   return true;
 }
@@ -619,8 +683,52 @@ function agentRunStatus(
 ): AgentRun["status"] {
   if (live) return "running";
   if (submission.status === "failed") return "error";
-  if (submission.status === "done") return "completed";
+  if (submission.status === "done" || submission.status === "incomplete") {
+    return "completed";
+  }
   return "unknown";
+}
+
+/**
+ * Resolving, unresolving, or linking a thread can finish its submission.
+ * A `done` submission stays done. A `tasking` submission waits for the run.
+ */
+export function reevaluateStorySubmissions(storyId: string, threadId: string): void {
+  const issues = readAll().issues;
+  const projectId = ancestorChain(storyId, issues)[0]!.id;
+  const reviews = storedReviewsForStory(projectId, storyId);
+  const affected = reviews.some((review) =>
+    review.submissions.some(
+      (submission) =>
+        isRetryableSubmission(submission) && submission.threadIds.includes(threadId),
+    ),
+  );
+  if (!affected) return;
+  const threads = readComments(storyId, issues).threads;
+  for (const review of reviews) {
+    updateStoredReview(projectId, review.id, (current) => {
+      let changed = false;
+      const submissions = current.submissions.map((submission) => {
+        if (
+          !isRetryableSubmission(submission) ||
+          !submission.threadIds.includes(threadId)
+        ) {
+          return submission;
+        }
+        const split = splitSubmissionThreads(submission, threads, issues, storyId);
+        const next = settledSubmission(submission, split, () => submission);
+        if (next === submission) return submission;
+        changed = true;
+        return next;
+      });
+      if (!changed) return current;
+      return {
+        ...current,
+        updatedAt: new Date().toISOString(),
+        submissions,
+      };
+    });
+  }
 }
 
 function reviewTaskerAgentRun(

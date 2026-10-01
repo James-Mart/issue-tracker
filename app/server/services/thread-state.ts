@@ -1,3 +1,4 @@
+import { readyToTaskFrom } from "../../src/features/issues/lib/ready-to-task.js";
 import {
   commentEditSchema,
   formatZodError,
@@ -79,14 +80,6 @@ export function commentThreadKind(root: {
   kind?: ThreadView["kind"];
 }): ThreadView["kind"] {
   return root.kind === "question" ? "question" : "review";
-}
-
-export function readyToTaskFrom(
-  kind: ThreadView["kind"],
-  state: ThreadView["state"],
-  linkedTaskId: string | undefined,
-): boolean {
-  return kind === "review" && state === "open" && linkedTaskId === undefined;
 }
 
 /** Root ids of open threads linked to `taskId`, in thread order. */

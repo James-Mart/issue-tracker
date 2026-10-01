@@ -5,7 +5,7 @@ import {
   postArchiveReview,
   postOpenReview,
   postReopenReview,
-  postRetryReviewSubmission,
+  postRetryOpenReviewSubmissions,
   postSubmitReview,
   putReviewMark,
 } from "./client";
@@ -70,11 +70,9 @@ export function useSubmitReview(projectId: string) {
   );
 }
 
-export function useRetryReviewSubmission(projectId: string) {
-  return useReviewMutation(
-    projectId,
-    ({ reviewId, submissionId }: { reviewId: string; submissionId: string }) =>
-      postRetryReviewSubmission(projectId, reviewId, submissionId),
+export function useRetryOpenReviewSubmissions(projectId: string) {
+  return useReviewMutation(projectId, (reviewId: string) =>
+    postRetryOpenReviewSubmissions(projectId, reviewId),
   );
 }
 

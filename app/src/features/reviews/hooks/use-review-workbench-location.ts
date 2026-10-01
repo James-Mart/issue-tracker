@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { readDiffThreadSearchParam } from "@/features/issues/lib/issue-detail-tabs";
 import {
   ALL_CHANGES_SCOPE,
@@ -23,6 +24,8 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
   setScope: (scope: string) => void;
   threadId: string | null;
   openThreadInDiff: (threadId: string, commitSha: string) => void;
+  openThreadInConversation: (threadId: string) => void;
+  openThread: (thread: CommentThread) => void;
   /** Move scope without dropping the Diff thread the workbench is opening. */
   retargetThreadScope: (scope: string) => void;
 } {
@@ -54,6 +57,10 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
     (nextScope: string) => write(active, nextScope, null),
     [active, write],
   );
+  const openThreadInConversation = useCallback(
+    (nextThreadId: string) => write("conversation", scope, nextThreadId),
+    [scope, write],
+  );
   const openThreadInDiff = useCallback(
     (nextThreadId: string, commitSha: string) => {
       // A missing or stale anchor commit is not in this review's commit list.
@@ -67,6 +74,14 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
       write("diff", nextScope, nextThreadId);
     },
     [knownShas, write],
+  );
+  const openThread = useCallback(
+    (thread: CommentThread) => {
+      const anchor = thread.root.anchor;
+      if (anchor) openThreadInDiff(thread.root.id, anchor.commitSha);
+      else openThreadInConversation(thread.root.id);
+    },
+    [openThreadInConversation, openThreadInDiff],
   );
   const retargetThreadScope = useCallback(
     (nextScope: string) => {
@@ -97,6 +112,8 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
     setScope,
     threadId,
     openThreadInDiff,
+    openThreadInConversation,
+    openThread,
     retargetThreadScope,
   };
 }

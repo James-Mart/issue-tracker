@@ -94,6 +94,10 @@ async function researcherPrompt(
   ].join("\n");
 }
 
+function threadReplies(messages: Comment[], rootId: string): Comment[] {
+  return messages.filter((message) => message.replyTo === rootId);
+}
+
 function formatThreadHistory(root: Comment, replies: Comment[]): string {
   const turns = [root, ...replies].map((message) => {
     const name = message.name ?? message.role;
@@ -231,6 +235,27 @@ async function startQuestionResearcher(
   );
 }
 
+/** Fresh researcher session with full thread history after a conversation is gone or retry. */
+async function replaceResearcherWithRecoveredHistory(
+  storyId: string,
+  root: Comment,
+  replies: Comment[],
+  projectId: string,
+  sessions: AgentSessions,
+  conversationId?: string,
+): Promise<void> {
+  if (conversationId) await sessions.dispose(conversationId);
+  const story = readIssueOrThrow(storyId);
+  await openResearcherConversation(
+    storyId,
+    root,
+    projectId,
+    sessions,
+    (workspace) => recoveredResearcherPrompt(story, root, replies, workspace),
+    true,
+  );
+}
+
 /**
  * Open question for a human reply. Dismissed questions, converted threads,
  * and review threads leave the researcher as it is.
@@ -262,25 +287,13 @@ async function followUpQuestionResearcher(
   const { root, conversationId } = target;
   const meta = usableResearcherConversation(conversationId);
   if (!meta) {
-    // Drop a live handle for this id before a replacement conversation can
-    // reuse it. A deleted conversation frees its slug.
-    await sessions.dispose(conversationId);
-    const replies = comments.messages.filter(
-      (message) => message.replyTo === root.id,
-    );
-    await openResearcherConversation(
+    await replaceResearcherWithRecoveredHistory(
       storyId,
       root,
+      threadReplies(comments.messages, root.id),
       projectId,
       sessions,
-      (workspace) =>
-        recoveredResearcherPrompt(
-          readIssueOrThrow(storyId),
-          root,
-          replies,
-          workspace,
-        ),
-      true,
+      conversationId,
     );
     return;
   }
@@ -342,7 +355,21 @@ export async function retryQuestionResearcher(
   if (researcherRunForThread(comments, threadId)?.status !== "failed") {
     throw new IssueError("conflict", RETRY_NOT_FAILED);
   }
-  await trackResearcherLaunch(threadId, () =>
-    startQuestionResearcher(storyId, root, projectId, sessions),
+  const replies = threadReplies(comments.messages, root.id);
+  const thread = comments.threads.find((view) => view.rootId === threadId);
+  const conversationId = thread && activeResearcherConversationId(thread);
+  await trackResearcherLaunch(
+    threadId,
+    replies.length === 0
+      ? () => startQuestionResearcher(storyId, root, projectId, sessions)
+      : () =>
+          replaceResearcherWithRecoveredHistory(
+            storyId,
+            root,
+            replies,
+            projectId,
+            sessions,
+            conversationId,
+          ),
   );
 }

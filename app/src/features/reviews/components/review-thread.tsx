@@ -7,7 +7,7 @@ import {
 } from "@/features/issues/api/mutations";
 import { replyDraftKey } from "@/features/reviews/lib/review-draft-key";
 import { CommentThread } from "@/features/issues/components/comments/comment-thread";
-import { threadStateActions } from "@/features/issues/lib/comment-threads";
+import { isPlainNote, threadStateActions } from "@/features/issues/lib/comment-threads";
 import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
 import { ReviewComposer } from "./review-composer";
 
@@ -47,7 +47,7 @@ export function ReviewThread({
       showAnchorContext={showAnchorContext}
       collapse={collapse}
       onSeeInDiff={onSeeInDiff}
-      onReply={() => setReplying(true)}
+      onReply={isPlainNote(thread) ? undefined : () => setReplying(true)}
       replySlot={
         replying ? (
           <div data-testid="review-thread-reply" data-thread-id={thread.root.id}>
