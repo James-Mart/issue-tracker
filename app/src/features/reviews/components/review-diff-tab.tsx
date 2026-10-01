@@ -37,6 +37,7 @@ import {
 } from "../lib/review-scope";
 import { ReviewFileDiff, type ReviewFileDiffSource } from "./review-file-diff";
 import { ReviewDiffSearch } from "./review-diff-search";
+import { ReviewFileListLayout } from "./review-file-list-resize";
 import { ReviewFileTree } from "./review-file-tree";
 import {
   filesMatchingSearch,
@@ -317,22 +318,25 @@ export function ReviewDiffTab({
       ) : null}
       {/* A third column to the right of the stack is reserved for future review tools. */}
       {rows.length > 0 ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 shell:flex-row">
-          <ReviewFileTree
-            rows={visibleRows}
-            selectedPath={search.filtering ? search.current?.path : activeScroll?.path}
-            onSelect={(path) => {
-              if (search.filtering) {
-                search.goToPath(path);
-                return;
-              }
-              setScrollRequest((prev) => ({
-                path,
-                scope,
-                nonce: (prev?.nonce ?? 0) + 1,
-              }));
-            }}
-          />
+        <ReviewFileListLayout
+          tree={
+            <ReviewFileTree
+              rows={visibleRows}
+              selectedPath={search.filtering ? search.current?.path : activeScroll?.path}
+              onSelect={(path) => {
+                if (search.filtering) {
+                  search.goToPath(path);
+                  return;
+                }
+                setScrollRequest((prev) => ({
+                  path,
+                  scope,
+                  nonce: (prev?.nonce ?? 0) + 1,
+                }));
+              }}
+            />
+          }
+        >
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-diff-stack">
             <ReviewDiffSearch
               query={search.query}
@@ -381,7 +385,7 @@ export function ReviewDiffTab({
               </Virtualizer>
             )}
           </div>
-        </div>
+        </ReviewFileListLayout>
       ) : null}
     </div>
   );

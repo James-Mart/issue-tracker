@@ -36,7 +36,7 @@ export function ReviewFileTree({
     <nav
       aria-label="Changed files"
       data-testid="review-file-tree"
-      className="min-w-0 shell:w-64 shell:shrink-0 shell:overflow-y-auto"
+      className="min-w-0"
     >
       <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto shell:max-h-none shell:overflow-visible">
         {rows.map(({ file, reviewed, changedSinceReviewed }) => {
