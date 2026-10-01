@@ -11,14 +11,14 @@ import { SLUG_RE } from "../slug.js";
 import type {
   FileCommentAnchor,
   LineCommentAnchor,
-} from "@/features/issues/lib/comment-anchor";
+} from "../../src/features/issues/lib/comment-anchor.js";
 
 export {
   isLineAnchor,
   type CommentAnchor,
   type FileCommentAnchor,
   type LineCommentAnchor,
-} from "@/features/issues/lib/comment-anchor";
+} from "../../src/features/issues/lib/comment-anchor.js";
 
 export const TASK_STATUSES = ["todo", "in-progress", "done"] as const;
 export const RETRO_STATUSES = ["in-progress", "done"] as const;
