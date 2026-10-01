@@ -1,12 +1,12 @@
-import {
-  isLineAnchor,
-  type CommentMessage,
-  type CommentThreadView,
-  type Problem,
-  type ResearcherRun,
-  type ThreadEventRequest,
-  type ThreadView,
+import type {
+  CommentMessage,
+  CommentThreadView,
+  Problem,
+  ResearcherRun,
+  ThreadEventRequest,
+  ThreadView,
 } from "@server/schemas";
+import { isLineAnchor } from "./comment-anchor";
 import type { ThreadMessage } from "./comment-outbox";
 
 export const STORY_COMPOSER_LABEL =

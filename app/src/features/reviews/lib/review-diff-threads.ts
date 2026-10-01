@@ -1,4 +1,5 @@
-import { isLineAnchor, type ReviewDiffFile } from "@server/schemas";
+import type { ReviewDiffFile } from "@server/schemas";
+import { isLineAnchor } from "@/features/issues/lib/comment-anchor";
 import { anchorLineRange } from "@/features/issues/lib/comment-anchor-snippet";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { fileNameForAnchorPath } from "@/features/issues/lib/issue-change-focus-thread";

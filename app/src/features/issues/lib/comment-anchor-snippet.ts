@@ -1,4 +1,8 @@
+import type { LineCommentAnchor } from "./comment-anchor";
+
 export const SNIPPET_CONTEXT_LINES = 3;
+
+type LineAnchorRange = Pick<LineCommentAnchor, "line" | "startLine">;
 
 export type AnchorSnippetLine = {
   line: number;
@@ -13,10 +17,7 @@ export function fileContentLines(contents: string): string[] {
   return lines;
 }
 
-export function anchorLineRange(anchor: {
-  line: number;
-  startLine?: number;
-}): { start: number; end: number } {
+export function anchorLineRange(anchor: LineAnchorRange): { start: number; end: number } {
   const end = anchor.line;
   const start = anchor.startLine ?? end;
   return {
@@ -28,7 +29,7 @@ export function anchorLineRange(anchor: {
 /** Compact window of file-at-sha lines around the anchored range. */
 export function snippetLinesFromContents(
   contents: string,
-  anchor: { line: number; startLine?: number },
+  anchor: LineAnchorRange,
   context = SNIPPET_CONTEXT_LINES,
 ): AnchorSnippetLine[] {
   const lines = fileContentLines(contents);

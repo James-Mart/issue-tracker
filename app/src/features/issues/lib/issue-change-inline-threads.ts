@@ -1,5 +1,5 @@
 import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs/react";
-import { isLineAnchor } from "@server/schemas";
+import { isLineAnchor } from "./comment-anchor";
 import {
   selectAnchoredThreads,
   type CommentThread,

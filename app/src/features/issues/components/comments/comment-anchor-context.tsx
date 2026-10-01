@@ -1,5 +1,6 @@
 import { FileCode2, FileDiff } from "lucide-react";
-import { isLineAnchor, type CommentMessage } from "@server/schemas";
+import type { CommentMessage } from "@server/schemas";
+import { isLineAnchor } from "../../lib/comment-anchor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";

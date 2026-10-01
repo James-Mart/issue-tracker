@@ -13,7 +13,7 @@ import {
   type DiffLineAnnotation,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
-import { isLineAnchor } from "@server/schemas";
+import { isLineAnchor } from "@/features/issues/lib/comment-anchor";
 import { ChevronRight, MessageSquare } from "lucide-react";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";

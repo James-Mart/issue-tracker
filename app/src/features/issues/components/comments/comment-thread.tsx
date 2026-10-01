@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Bot, ChevronRight, Circle, HelpCircle, User } from "lucide-react";
 import type { ReactNode } from "react";
-import { isLineAnchor } from "@server/schemas";
+import { isLineAnchor } from "../../lib/comment-anchor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
