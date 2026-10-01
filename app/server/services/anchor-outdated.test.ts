@@ -190,6 +190,28 @@ describe("deriveAnchoredOutdated", () => {
     expect(result?.outdated).toBe(true);
   });
 
+  it("leaves a file anchor current when the file's contents change", async () => {
+    const { deriveAnchoredOutdated } = await load();
+    const [result] = await deriveAnchoredOutdated("t-series", [
+      anchored("file-changed", {
+        path: "src/lines.ts",
+        commitSha: shaInitial,
+      }),
+    ]);
+    expect(result).not.toHaveProperty("outdated");
+  });
+
+  it("marks a file anchor outdated only when the file is gone at head", async () => {
+    const { deriveAnchoredOutdated } = await load();
+    const [result] = await deriveAnchoredOutdated("t-series", [
+      anchored("file-gone", {
+        path: "src/doomed.ts",
+        commitSha: shaInitial,
+      }),
+    ]);
+    expect(result?.outdated).toBe(true);
+  });
+
   it("marks an anchor outdated when the file was deleted after it", async () => {
     const { deriveAnchoredOutdated } = await load();
     const [result] = await deriveAnchoredOutdated("t-series", [

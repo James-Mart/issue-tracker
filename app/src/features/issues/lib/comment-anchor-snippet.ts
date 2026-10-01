@@ -1,5 +1,3 @@
-import type { CommentMessage } from "@server/schemas";
-
 export const SNIPPET_CONTEXT_LINES = 3;
 
 export type AnchorSnippetLine = {
@@ -15,9 +13,10 @@ export function fileContentLines(contents: string): string[] {
   return lines;
 }
 
-export function anchorLineRange(
-  anchor: Pick<NonNullable<CommentMessage["anchor"]>, "line" | "startLine">,
-): { start: number; end: number } {
+export function anchorLineRange(anchor: {
+  line: number;
+  startLine?: number;
+}): { start: number; end: number } {
   const end = anchor.line;
   const start = anchor.startLine ?? end;
   return {
@@ -29,7 +28,7 @@ export function anchorLineRange(
 /** Compact window of file-at-sha lines around the anchored range. */
 export function snippetLinesFromContents(
   contents: string,
-  anchor: Pick<NonNullable<CommentMessage["anchor"]>, "line" | "startLine">,
+  anchor: { line: number; startLine?: number },
   context = SNIPPET_CONTEXT_LINES,
 ): AnchorSnippetLine[] {
   const lines = fileContentLines(contents);

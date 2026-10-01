@@ -68,13 +68,48 @@ const assignmentLabelsSchema = z
   .transform(dedupePreserveOrder)
   .optional();
 
-export const commentAnchorSchema = z.object({
-  path: nonEmpty,
-  side: z.enum(["old", "new"]),
-  line: z.number().int().positive(),
-  startLine: z.number().int().positive().optional(),
-  commitSha: nonEmpty,
-});
+/** A line (or line range) in a diff at one commit. */
+export type LineCommentAnchor = {
+  path: string;
+  side: "old" | "new";
+  line: number;
+  startLine?: number;
+  commitSha: string;
+};
+
+/** A whole file at one commit. `side` and `line` are both absent. */
+export type FileCommentAnchor = {
+  path: string;
+  commitSha: string;
+};
+
+export type CommentAnchor = LineCommentAnchor | FileCommentAnchor;
+
+export function isLineAnchor(anchor: CommentAnchor): anchor is LineCommentAnchor {
+  return "line" in anchor && typeof anchor.line === "number";
+}
+
+const lineCommentAnchorSchema = z
+  .object({
+    path: nonEmpty,
+    side: z.enum(["old", "new"]),
+    line: z.number().int().positive(),
+    startLine: z.number().int().positive().optional(),
+    commitSha: nonEmpty,
+  })
+  .strict();
+
+const fileCommentAnchorSchema = z
+  .object({
+    path: nonEmpty,
+    commitSha: nonEmpty,
+  })
+  .strict();
+
+export const commentAnchorSchema = z.union([
+  lineCommentAnchorSchema,
+  fileCommentAnchorSchema,
+]);
 
 export const THREAD_KINDS = ["review", "question"] as const;
 

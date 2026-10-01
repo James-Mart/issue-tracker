@@ -72,6 +72,115 @@ describe("comment anchor and reply flags", () => {
     });
   });
 
+  it("appends a file anchor with path and commit and no line or side", async () => {
+    writeIssue("s", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    const created = await runIssueCli(
+      [
+        "comment",
+        "s",
+        "--role",
+        "human",
+        "--body",
+        "on this file",
+        "--path",
+        "app/cli-ops.ts",
+        "--commit",
+        COMMIT_SHA,
+      ],
+      { env: env() },
+    );
+    expect(created.status).toBe(0);
+    const stored = JSON.parse(
+      readFileSync(join(dir, "s", "comments.jsonl"), "utf8").trim(),
+    ) as { anchor: Record<string, unknown> };
+    expect(stored.anchor).toEqual({
+      path: "app/cli-ops.ts",
+      commitSha: COMMIT_SHA,
+    });
+
+    const question = await runIssueCli(
+      [
+        "comment",
+        "s",
+        "--role",
+        "human",
+        "--body",
+        "Why this file?",
+        "--kind",
+        "question",
+        "--path",
+        "app/cli-ops.ts",
+        "--commit",
+        COMMIT_SHA,
+      ],
+      { env: env() },
+    );
+    expect(question.status).toBe(0);
+    const lines = readFileSync(join(dir, "s", "comments.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(lines[1]).toMatchObject({
+      kind: "question",
+      anchor: { path: "app/cli-ops.ts", commitSha: COMMIT_SHA },
+    });
+
+    const viewed = await runIssueCli(["view", "s", "--comments"], { env: env() });
+    expect(viewed.status).toBe(0);
+    expect(viewed.stdout).toContain(
+      `@ app/cli-ops.ts ${COMMIT_SHA.slice(0, 7)} (outdated): on this file`,
+    );
+  });
+
+  it("refuses a file anchor that also passes --start-line", async () => {
+    const { stderr, status } = await runIssueCli(
+      [
+        "comment",
+        "t",
+        "--role",
+        "agent",
+        "--body",
+        "mixed",
+        "--path",
+        "app/cli-ops.ts",
+        "--commit",
+        COMMIT_SHA,
+        "--start-line",
+        "4",
+      ],
+      { env: env() },
+    );
+    expect(status).toBe(1);
+    expect(stderr).toContain(
+      "a line anchor requires --path, --side, --line, and --commit",
+    );
+  });
+
+  it("refuses a file anchor missing --commit", async () => {
+    const { stderr, status } = await runIssueCli(
+      [
+        "comment",
+        "t",
+        "--role",
+        "agent",
+        "--body",
+        "path only",
+        "--path",
+        "app/cli-ops.ts",
+      ],
+      { env: env() },
+    );
+    expect(status).toBe(1);
+    expect(stderr).toContain("a file anchor requires --path and --commit");
+  });
+
   it("appends a reply and prints its id", async () => {
     writeFileSync(
       join(dir, "t", "comments.jsonl"),
@@ -126,7 +235,9 @@ describe("comment anchor and reply flags", () => {
       { env: env() },
     );
     expect(status).toBe(1);
-    expect(stderr).toContain("anchor requires --path, --side, --line, and --commit");
+    expect(stderr).toContain(
+      "a line anchor requires --path, --side, --line, and --commit",
+    );
   });
 
   it("refuses --reply-to combined with --path", async () => {

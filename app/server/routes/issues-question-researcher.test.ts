@@ -314,6 +314,18 @@ describe("question researcher", () => {
     });
   });
 
+  it("gives a file-anchored question the path and commit without a line", async () => {
+    await startApp();
+    await launchedThread(
+      await askQuestion({
+        body: "Why this file?",
+        anchor: { path: "a.ts", commitSha: tip },
+      }),
+    );
+    expect(sentPrompt(0)).toContain(`Anchor: a.ts, commit ${tip}`);
+    expect(sentPrompt(0)).not.toContain("new side");
+  });
+
   it("gives a general question the Story's diff range", async () => {
     await startApp();
     await launchedThread(await askQuestion({ body: "What changed overall?" }));

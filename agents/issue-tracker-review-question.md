@@ -28,6 +28,8 @@ The prompt ends with:
 - `Workspace: <path>` — absolute Project workspace
 - `Anchor: <path>, <side> side, <lines>, commit <sha>` — present when the
   question is about lines of the diff
+- `Anchor: <path>, commit <sha>` — present when the question is about a
+  whole file
 - `Diff: <range>` — present when the question is about the whole change
 - `Question:` followed by the question text
 
@@ -35,9 +37,11 @@ The prompt ends with:
 
 1. Run `issue summary <storyId>` for Story context.
 2. Pass **Workspace** as `working_directory` for every git command.
-3. For an **Anchor**, read the code at the anchor commit. A `new`-side line is
-   in `git show <sha>:<path>`. An `old`-side line is on the removed side of
-   the diff that ends at `<sha>`.
+3. For an **Anchor** that names a side and lines, read the code at the
+   anchor commit. A `new`-side line is in `git show <sha>:<path>`. An
+   `old`-side line is on the removed side of the diff that ends at `<sha>`.
+   An **Anchor** that names only a path and commit is the whole file: read
+   `git show <sha>:<path>`.
 4. For a **Diff**, read `git diff <range>`. A `Diff: none` line means the
    Story has no commits yet; answer from the Story and the workspace.
 5. Read only what answering the question needs.

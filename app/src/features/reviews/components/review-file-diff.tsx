@@ -5,6 +5,7 @@ import {
   type DiffLineAnnotation,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
+import { isLineAnchor } from "@server/schemas";
 import { ChevronRight } from "lucide-react";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -214,7 +215,10 @@ export function ReviewFileDiff({
   useReviewSearchMark(sectionRef, currentMatch, searchNeedle, collapsed);
   const holdPinnedFile = usePinnedHeaderCollapse(sectionRef, collapsed);
   // An Outdated-group thread has no line in this diff; the reveal scrolls to its node.
-  const anchor = threads.inline.find((thread) => thread.root.id === scrollThreadId)?.root.anchor;
+  // A file anchor has no line either; the reveal scrolls to the thread node.
+  const anchor = threads.inline.find((thread) => thread.root.id === scrollThreadId)?.root
+    .anchor;
+  const lineAnchor = anchor && isLineAnchor(anchor) ? anchor : undefined;
   useEffect(() => {
     if (!scrollThreadId || collapsed) return;
     const panel = sectionRef.current;
@@ -231,8 +235,8 @@ export function ReviewFileDiff({
       const node = threadNodeInPanel(panel, scrollThreadId);
       const host = panel.querySelector("diffs-container");
       const shadow = host instanceof HTMLElement ? host.shadowRoot : null;
-      const line = anchor?.line;
-      const side = anchor?.side;
+      const line = lineAnchor?.line;
+      const side = lineAnchor?.side;
       if (line != null && side != null && shadow != null && diffLineIsPainted(shadow, side, line)) {
         let row: HTMLElement | null = null;
         for (const candidate of shadow.querySelectorAll("[data-line]")) {
@@ -316,7 +320,7 @@ export function ReviewFileDiff({
       cancelled = true;
       cancelAnimationFrame(frame);
     };
-  }, [anchor?.line, anchor?.side, collapsed, scrollThreadId, threads, virtualizer]);
+  }, [collapsed, lineAnchor?.line, lineAnchor?.side, scrollThreadId, threads, virtualizer]);
   const pathOccurrence =
     currentMatch?.kind === "path" && currentMatch.field === "path"
       ? currentMatch.occurrence

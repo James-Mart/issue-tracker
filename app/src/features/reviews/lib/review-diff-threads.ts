@@ -1,4 +1,4 @@
-import type { ReviewDiffFile } from "@server/schemas";
+import { isLineAnchor, type ReviewDiffFile } from "@server/schemas";
 import { anchorLineRange } from "@/features/issues/lib/comment-anchor-snippet";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { fileNameForAnchorPath } from "@/features/issues/lib/issue-change-focus-thread";
@@ -11,6 +11,9 @@ export type ReviewFileThreads = {
 };
 
 export const NO_FILE_THREADS: ReviewFileThreads = { inline: [], outdated: [] };
+
+/** File anchors have no line; they sort ahead of every line number. */
+const FILE_ANCHOR_SORT_START = 0;
 
 /**
  * Anchored threads the Diff tab shows in this scope, keyed by file path.
@@ -31,7 +34,10 @@ export function reviewDiffThreadsByFile(
     // A file no longer in this diff has no card; its threads stay on Conversation.
     const path = fileNameForAnchorPath(names, anchor.path);
     if (path === undefined) return [];
-    return [{ thread, path, start: anchorLineRange(anchor).start }];
+    const start = isLineAnchor(anchor)
+      ? anchorLineRange(anchor).start
+      : FILE_ANCHOR_SORT_START;
+    return [{ thread, path, start }];
   });
   const moved = ({ thread }: { thread: CommentThread }) =>
     scope === ALL_CHANGES_SCOPE && thread.root.outdated === true;

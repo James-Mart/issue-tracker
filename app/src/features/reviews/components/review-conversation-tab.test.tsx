@@ -216,6 +216,29 @@ describe("ReviewConversationTab", () => {
     });
   });
 
+  it("labels a file thread File comment with the path and See in diff", () => {
+    state.threads = [
+      thread({
+        root: {
+          id: "file-thread",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          name: "Jared",
+          body: "Look at the whole module.",
+          anchor: {
+            path: "app/server/services/diff-fetch.ts",
+            commitSha: SHA,
+          },
+        },
+      }),
+    ];
+    const onOpenInDiff = vi.fn();
+    const container = mount(onOpenInDiff);
+    const card = container.querySelector('[data-thread-root="file-thread"]');
+    click(card?.querySelector('[data-testid="see-in-diff"]') ?? null);
+    expect(onOpenInDiff).toHaveBeenCalledWith("file-thread", SHA);
+  });
+
   it("posts a general comment from the bottom composer and clears it at once", async () => {
     const container = mount();
     const composer = container.querySelector<HTMLTextAreaElement>(

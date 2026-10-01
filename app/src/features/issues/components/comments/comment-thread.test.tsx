@@ -196,6 +196,40 @@ describe("CommentThread", () => {
     expect(outdatedMarked).toEqual(["88", "89", "90"]);
   });
 
+  it("labels a file thread File comment with the path and no line excerpt", () => {
+    const onSeeInDiff = vi.fn();
+    const container = mount(
+      [
+        {
+          kind: "review",
+          state: "open",
+          readyToTask: true,
+          root: comment({
+            id: "file-root",
+            at: "2026-08-30T14:22:00.000Z",
+            role: "human",
+            name: "Jared",
+            body: "The whole module.",
+            anchor: {
+              path: "app/server/services/diff-fetch.ts",
+              commitSha: SHA,
+            },
+          }),
+          replies: [],
+        },
+      ],
+      onSeeInDiff,
+    );
+    const card = container.querySelector('[data-thread-root="file-root"]');
+    expect(card?.querySelector('[data-testid="file-comment-label"]')?.textContent).toBe(
+      "File comment",
+    );
+    expect(card?.textContent).toContain("app/server/services/diff-fetch.ts");
+    expect(card?.textContent).not.toMatch(/line \d/);
+    expect(card?.querySelector('[data-testid="comment-anchor-snippet"]')).toBeNull();
+    expect(card?.querySelector('[data-testid="see-in-diff"]')).not.toBeNull();
+  });
+
   it("invokes see-in-diff from the icon-only affordance", () => {
     const onSeeInDiff = vi.fn();
     const container = mount([currentThread], onSeeInDiff);

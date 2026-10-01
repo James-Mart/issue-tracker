@@ -365,7 +365,8 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   under its root; every line is
   `{id} [{at}] {author}: {body}` or, when anchored,
   `{id} [{at}] {author} @ {path}:{line} {side} {sha7}: {body}` (a range uses
-  `{startLine}-{line}`; append ` (outdated)` after the location when the anchor
+  `{startLine}-{line}`; a file anchor is `{path} {sha7}` with no line or side;
+  append ` (outdated)` after the location when the anchor
   is outdated). `{author}` is `name` when set, else `role`, followed by
   ` ({type})` when the comment has a `type`. On a Story, `--comments` also
   appends `--- threads ---`: one line per thread root,
@@ -385,8 +386,11 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   optional `--resolve`; optional `--kind question`).
   Appends one message to `comments.jsonl` (the CLI verb is `comment`; the
   on-disk log is `comments.jsonl`); prints the server-stamped `id` on stdout;
-  refuses a Project id. Anchor flags require all of `--path`, `--side`,
-  `--line`, and `--commit` together; `--reply-to` is mutually exclusive with
+  refuses a Project id. A line anchor is `--path`, `--side`, `--line`, and
+  `--commit` together, with optional `--start-line`. A file anchor is
+  `--path` and `--commit` with `--side`, `--line`, and `--start-line` all
+  absent. Either shape accepts `--kind question` on a new Story thread root.
+  `--reply-to` is mutually exclusive with
   anchor flags. `--resolve` replies and resolves that Story thread in the
   same write; it requires `--reply-to` and `--body`, and there is no CLI
   unresolve. `--kind question` starts a question thread on a new Story thread
@@ -1253,7 +1257,7 @@ Resolution is a thread event, not a flag on the comment.
 | `at` | ISO string | server-stamped on append (not supplied by the caller) |
 | `replyTo` | string? | when set, the `id` of the thread **root** this message replies to |
 | `type` | `"human-request"` \| `"human-response"`? | absent on ordinary comments; `request-human` writes `human-request` on a thread root, `human-done` writes `human-response` on the reply |
-| `anchor` | object? | optional line anchor on a root comment only (see below) |
+| `anchor` | object? | optional line or file anchor on a root comment only (see below) |
 | `kind` | `"review"` \| `"question"`? | thread root only; absent means review. Refused on a reply and on a non-Story |
 
 **Threading (`replyTo`).** A thread is one root plus an ordered list of
@@ -1263,15 +1267,17 @@ time (not flattened silently). `replyTo` referencing an unknown id is refused.
 `replyTo` and `anchor` cannot both be set on the same comment; replies carry
 no anchor of their own.
 
-**Anchor (`anchor`).** Binds the comment to a line or line range in a diff at
-an immutable commit. Object members:
+**Anchor (`anchor`).** Binds the comment to a line, a line range, or a whole
+file at an immutable commit. A line anchor sets `side` and `line` (and
+optional `startLine`). A file anchor sets `path` and `commitSha` only —
+`side`, `line`, and `startLine` are absent. Object members:
 
 | member | type | notes |
 | --- | --- | --- |
 | `path` | string | repository-relative file path |
-| `side` | `"old"` \| `"new"` | which side of the diff the anchor points at |
-| `line` | number | anchored line (1-based) on that side |
-| `startLine` | number? | when set, range start (1-based); must satisfy `startLine <= line` |
+| `side` | `"old"` \| `"new"`? | required with `line`; absent on a file anchor. Which side of the diff the anchor points at |
+| `line` | number? | required with `side`; absent on a file anchor. Anchored line (1-based) on that side |
+| `startLine` | number? | line anchors only; when set, range start (1-based); must satisfy `startLine <= line` |
 | `commitSha` | string | full 40- or 64-character hex object name; validated on append; never inferred from the issue |
 
 **Thread event (`type: "thread-event"`).** Records a change to a thread's
@@ -1304,8 +1310,8 @@ on every Story) with role
 [`issue-tracker-review-question`](agents/issue-tracker-review-question.md) at
 its model pin. Its prompt is the role body, notice that a reviewer asked about
 the Story's changes, the Story, thread id, and Project workspace, the question,
-and either the anchor (path, side, lines, commit) or, for a general question,
-the Story's diff range. Once the run has started, or has failed to start, the
+and either a line anchor (path, side, lines, commit), a file anchor (path,
+commit), or, for a general question, the Story's diff range. Once the run has started, or has failed to start, the
 server appends `researcher-session` with `by: { role: "agent", name: "Researcher" }`.
 The researcher reads code read-only and replies in the thread with
 `issue comment <storyId> --reply-to <threadId> --role agent --name Researcher`.
@@ -1356,10 +1362,12 @@ again. Agents record `resolved` only through `issue comment --resolve`,
 which requires a reply body. There is no CLI unresolve.
 
 **Outdated (`outdated`).** Read-time only — never stored in `comments.jsonl`.
-Present on anchored comments when the anchored line or range at
+Present on a line anchor when the anchored line or range at
 `anchor.commitSha` differs from the same path at the issue's head commit
 (Task: last commit in its series; Story: last commit rolled up from
-descendant Tasks; no commits on the issue → outdated). Omitted on
+descendant Tasks; no commits on the issue → outdated). A file anchor is
+outdated only when that path no longer exists at the head commit; a content
+change at the path leaves it current. Omitted on
 unanchored comments and on current anchors. `issue view --comments` appends
 ` (outdated)` after the location on outdated anchored roots; the HTTP
 comments payload carries the boolean field instead.
