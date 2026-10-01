@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewSubmission } from "@server/schemas";
+import { TASKING_INCOMPLETE_REASON } from "@server/review-submission-status";
 import {
   MERGED_STORY_SUBMIT_REASON,
   REVIEW_SUBMISSION_POLL_MS,
@@ -33,6 +34,9 @@ function submission(
         ? overrides.error
         : "Tasking agent stopped.";
     return { ...base, status, error };
+  }
+  if (status === "incomplete") {
+    return { ...base, status: "incomplete" };
   }
   return { ...base, status };
 }
@@ -118,6 +122,30 @@ describe("reviewSubmitHeader", () => {
       reason: MERGED_STORY_SUBMIT_REASON,
     });
   });
+
+  it("shows an incomplete submission on the failure line", () => {
+    const incomplete = submission("incomplete", {
+      id: "open",
+      at: "2026-09-29T13:00:00.000Z",
+    });
+    const olderFailure = submission("failed", {
+      id: "older",
+      at: "2026-09-29T11:00:00.000Z",
+      error: "older",
+    });
+    expect(
+      reviewSubmitHeader({
+        merged: false,
+        readyCount: 1,
+        submissions: [olderFailure, incomplete],
+      }),
+    ).toMatchObject({
+      mode: "failed",
+      submissionId: "open",
+      error: TASKING_INCOMPLETE_REASON,
+      retryDisabled: false,
+    });
+  });
 });
 
 describe("submission copy", () => {
@@ -154,6 +182,10 @@ describe("acknowledgedSubmissions", () => {
       threadIds: failed.threadIds,
     });
     expect(marked[0]).not.toHaveProperty("error");
+
+    const incomplete = submission("incomplete");
+    const retried = acknowledgedSubmissions([incomplete], undefined, incomplete.id);
+    expect(retried[0]).toMatchObject({ id: incomplete.id, status: "tasking" });
   });
 });
 
@@ -174,6 +206,7 @@ describe("conversationTimelineItems", () => {
     ];
     const items = conversationTimelineItems(threads, [
       submission("tasking", { id: "run", at: "2026-09-29T11:00:00.000Z" }),
+      submission("incomplete", { id: "open", at: "2026-09-29T11:15:00.000Z" }),
       submission("failed", { id: "bad", at: "2026-09-29T11:30:00.000Z" }),
       submission("done", { id: "ok", at: "2026-09-29T12:00:00.000Z" }),
     ]);

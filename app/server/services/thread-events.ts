@@ -15,6 +15,7 @@ import {
   taskStatusesForStory,
 } from "./issues.js";
 import { readCommentLog } from "./comment-log.js";
+import { reevaluateStorySubmissions } from "./review-tasking.js";
 import { deriveThreadViews } from "./thread-state.js";
 
 export const AGENT_RESOLVE_REQUIRES_BODY =
@@ -206,6 +207,13 @@ export function appendThreadEvent(
     };
     records.push(event);
     appendCommentLogRecords(storyId, records);
+    if (
+      input.event === "resolved" ||
+      input.event === "unresolved" ||
+      input.event === "linked"
+    ) {
+      reevaluateStorySubmissions(storyId, threadId);
+    }
 
     const messages = reply ? [...split.messages, reply] : split.messages;
     const events = [...split.events, event];

@@ -1,15 +1,7 @@
 import type { ReviewSubmission, ThreadView } from "@server/schemas";
 import { readyToTaskFrom } from "../../issues/lib/ready-to-task";
 
-/**
- * `incomplete` is named by the submission-state rules and is not stored yet.
- * A claim holds for it the same way it holds for `failed` and `tasking`.
- */
-export type SubmissionClaimStatus = ReviewSubmission["status"] | "incomplete";
-
-export type SubmissionClaim = Pick<ReviewSubmission, "threadIds"> & {
-  status: SubmissionClaimStatus;
-};
+export type SubmissionClaim = Pick<ReviewSubmission, "threadIds" | "status">;
 
 export type SubmittableThread = Pick<
   ThreadView,

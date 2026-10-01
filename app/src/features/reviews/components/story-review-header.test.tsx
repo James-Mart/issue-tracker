@@ -3,9 +3,10 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReviewSubmission, ReviewView } from "@server/schemas";
+import type { ReviewSubmissionView, ReviewView } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { MERGED_STORY_SUBMIT_REASON } from "../lib/review-submission-ui";
+import { TASKING_INCOMPLETE_REASON } from "@server/review-submission-status";
 import { StoryReviewHeader } from "./story-review-header";
 
 const state = vi.hoisted(() => ({
@@ -64,7 +65,7 @@ function readyThread(): CommentThread {
   };
 }
 
-function failedSubmission(): ReviewSubmission {
+function failedSubmission(): ReviewSubmissionView {
   return {
     id: "sub-1",
     at: "2026-09-29T12:00:00.000Z",
@@ -72,6 +73,8 @@ function failedSubmission(): ReviewSubmission {
     threadIds: ["thread-1", "thread-2", "thread-3"],
     conversationId: "conv-1",
     error: "Tasking agent stopped — could not append Tasks for 3 threads.",
+    round: 1,
+    openThreadIds: ["thread-1", "thread-2", "thread-3"],
   };
 }
 
@@ -225,6 +228,8 @@ describe("StoryReviewHeader submit", () => {
               status: "tasking",
               threadIds: ["a", "b", "c"],
               conversationId: "conv-1",
+              round: 1,
+              openThreadIds: ["a", "b", "c"],
             },
           ],
         })}
@@ -304,14 +309,8 @@ describe("StoryReviewHeader submit", () => {
     expect(button?.disabled).toBe(false);
   });
 
-  it("leaves a thread claimed by an open submission out of the submit count", () => {
-    state.threads = [
-      readyThread(),
-      {
-        ...readyThread(),
-        root: { ...readyThread().root, id: "thread-new" },
-      },
-    ];
+  it("renders an incomplete submission on the failure line with Retry", () => {
+    state.threads = [readyThread()];
     const container = mount(
       <StoryReviewHeader
         projectId="proj"
@@ -322,23 +321,28 @@ describe("StoryReviewHeader submit", () => {
             {
               id: "sub-1",
               at: "2026-09-29T12:00:00.000Z",
-              // `incomplete` is not stored yet. The count still uses the claim rule.
               status: "incomplete",
               threadIds: ["thread-1"],
               conversationId: "conv-1",
-              error: "held",
-            } as unknown as ReviewSubmission,
+              round: 1,
+              openThreadIds: ["thread-1"],
+            },
           ],
         })}
         merged={false}
       />,
     );
-    const button = container.querySelector<HTMLButtonElement>('[data-testid="submit-review"]');
-    expect(button?.textContent).toBe("Submit review (1)");
-    expect(button?.getAttribute("data-ready-count")).toBe("1");
-    click(button);
-    expect(document.body.querySelector('[data-testid="submit-review-dialog"]')?.textContent).toContain(
-      "Turn 1 unresolved thread into Tasks.",
+    expect(container.querySelector('[data-testid="submit-review"]')).toBeNull();
+    expect(container.querySelector('[data-testid="review-tasking-error"]')?.textContent).toContain(
+      TASKING_INCOMPLETE_REASON,
+    );
+    click(container.querySelector('[data-testid="review-submission-retry"]'));
+    expect(state.retry).toHaveBeenCalledWith(
+      { reviewId: "rev-1", submissionId: "sub-1" },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
+    expect(container.querySelector('[data-testid="review-tasking-status"]')?.textContent).toContain(
+      "Tasking 1 thread…",
     );
   });
 });

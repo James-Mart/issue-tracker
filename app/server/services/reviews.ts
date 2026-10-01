@@ -13,6 +13,7 @@ import { collectDescendantCommits } from "./change.js";
 import { IssueError } from "./errors.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
 import { replaceFileAtomically, withIssuesStoreLock } from "./issues-store-lock.js";
+import { presentSubmissions } from "./review-submission-threads.js";
 import { requireProject } from "./require-project.js";
 import { assertStoreWritable } from "./store-read-only.js";
 import { ancestorChain } from "./subtree.js";
@@ -156,14 +157,23 @@ function storyForReview(review: Review, byId?: Map<string, Issue>): Story {
  * Effective archive is computed on read. Stored `status: "archived"` is an
  * explicit archive. A merged Story archives a review that is not a post-mortem.
  */
-function toView(review: Review, story: Story): ReviewRecordView {
+function toView(
+  review: Review,
+  story: Story,
+  issues?: Issue[],
+): ReviewRecordView {
+  const graph = issues ?? readAll().issues;
+  const viewed = {
+    ...review,
+    submissions: presentSubmissions(review.target.storyId, review.submissions, graph),
+  };
   if (review.status === "archived") {
-    return { ...review, effectiveStatus: "archived", archivedReason: "explicit" };
+    return { ...viewed, effectiveStatus: "archived", archivedReason: "explicit" };
   }
   if (story.merged && !review.postMortem) {
-    return { ...review, effectiveStatus: "archived", archivedReason: "merged" };
+    return { ...viewed, effectiveStatus: "archived", archivedReason: "merged" };
   }
-  return { ...review, effectiveStatus: "open" };
+  return { ...viewed, effectiveStatus: "open" };
 }
 
 function writeReview(review: Review): void {
@@ -190,10 +200,20 @@ export function listReviewViews(
     storyId === undefined
       ? reviews
       : reviews.filter((review) => review.target.storyId === storyId);
-  const byId = new Map(readAll().issues.map((issue) => [issue.id, issue]));
+  const issues = readAll().issues;
+  const byId = new Map(issues.map((issue) => [issue.id, issue]));
   return {
-    reviews: matched.map((review) => toView(review, storyForReview(review, byId))),
+    reviews: matched.map((review) =>
+      toView(review, storyForReview(review, byId), issues),
+    ),
   };
+}
+
+/** Stored reviews for one Story, without the read-model fields. */
+export function storedReviewsForStory(projectId: string, storyId: string): Review[] {
+  return listStoredReviews(requireProject(projectId)).filter(
+    (review) => review.target.storyId === storyId,
+  );
 }
 
 export function readReviewView(projectId: string, reviewId: string): ReviewRecordView {

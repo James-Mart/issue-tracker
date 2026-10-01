@@ -47,6 +47,14 @@ export const reviewSubmissionSchema = z.discriminatedUnion("status", [
     .object({
       ...reviewSubmissionIdentity,
       conversationId: nonEmpty.optional(),
+      status: z.literal("incomplete"),
+      taskIds: z.array(nonEmpty).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...reviewSubmissionIdentity,
+      conversationId: nonEmpty.optional(),
       status: z.literal("failed"),
       taskIds: z.array(nonEmpty).optional(),
       error: nonEmpty,
@@ -55,14 +63,24 @@ export const reviewSubmissionSchema = z.discriminatedUnion("status", [
   z
     .object({
       ...reviewSubmissionIdentity,
-      conversationId: nonEmpty,
+      conversationId: nonEmpty.optional(),
       status: z.literal("done"),
-      taskIds: z.array(nonEmpty).min(1),
+      taskIds: z.array(nonEmpty),
     })
     .strict(),
 ]);
 
 export type ReviewSubmission = z.infer<typeof reviewSubmissionSchema>;
+
+/** Derived on read for every submission that is not `done`. */
+export type ReviewSubmissionOpen = {
+  round: number;
+  openThreadIds: string[];
+};
+
+export type ReviewSubmissionView =
+  | Extract<ReviewSubmission, { status: "done" }>
+  | (Exclude<ReviewSubmission, { status: "done" }> & ReviewSubmissionOpen);
 
 export const reviewSchema = z
   .object({
@@ -103,7 +121,8 @@ type ReviewEffective =
   | { effectiveStatus: "archived"; archivedReason: "explicit" | "merged" };
 
 /** Stored review plus effective archive, before derived progress is attached. */
-export type ReviewRecordView = Review & ReviewEffective;
+export type ReviewRecordView = Omit<Review, "submissions"> &
+  ReviewEffective & { submissions: ReviewSubmissionView[] };
 
 export type ReviewView = ReviewRecordView & { progress: ReviewProgress };
 

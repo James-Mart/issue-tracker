@@ -5,6 +5,7 @@ import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessions } from "./agent-sessions.js";
 import type { ReviewSubmission } from "../schemas/review.js";
+import { TASKING_INCOMPLETE_REASON } from "../review-submission-status.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const REVIEW_ID = "11111111-1111-4111-8111-111111111111";
@@ -338,7 +339,6 @@ describe("review tasking", () => {
       retryReviewSubmission,
       readReviewView,
       appendThreadEvent,
-      TASKING_INCOMPLETE_REASON,
       listAgentRunsForIssue,
     } = await load();
     const kept = await appendComment("s", { role: "human", body: "Keep" });
@@ -388,13 +388,15 @@ describe("review tasking", () => {
       stubSessions(prompts),
     );
     expect(prompts).toHaveLength(1);
-    const failed = submission(readReviewView("p", REVIEW_ID));
-    expect(failed).toMatchObject({
-      status: "failed",
-      error: TASKING_INCOMPLETE_REASON,
+    const incomplete = submission(readReviewView("p", REVIEW_ID));
+    expect(incomplete).toMatchObject({
+      status: "incomplete",
       taskIds: ["fix-kept"],
+      round: 1,
+      openThreadIds: [missed.id],
     });
-    expect(listAgentRunsForIssue("s")[0]?.status).toBe("error");
+    expect(incomplete).not.toHaveProperty("error");
+    expect(listAgentRunsForIssue("s")[0]?.status).toBe("completed");
 
     const retried = await retryReviewSubmission(
       "p",
@@ -599,7 +601,7 @@ describe("review tasking", () => {
     expect(submission(readReviewView("p", REVIEW_ID)).status).toBe("done");
   });
 
-  it("keeps a thread with a failed submission after it is unresolved", async () => {
+  it("finishes a failed submission when its last thread is resolved", async () => {
     seed();
     const {
       submitReview,
@@ -607,7 +609,6 @@ describe("review tasking", () => {
       readReviewView,
       appendComment,
       appendThreadEvent,
-      NO_READY_THREADS_ERROR,
     } = await load();
     const claimed = await appendComment("s", { role: "human", body: "Already sent" });
     const sessions = stubSessions([], "sdk down");
@@ -617,25 +618,212 @@ describe("review tasking", () => {
       recordedView,
       sessions,
     );
-    const failed = submission(readReviewView("p", REVIEW_ID));
-    expect(failed).toMatchObject({ status: "failed", threadIds: [claimed.id] });
-
+    expect(submission(readReviewView("p", REVIEW_ID))).toMatchObject({
+      status: "failed",
+      threadIds: [claimed.id],
+    });
     await appendThreadEvent("s", claimed.id, {
       event: "resolved",
       by: { role: "human" },
     });
+    const done = submission(readReviewView("p", REVIEW_ID));
+    expect(done).toMatchObject({ id: recordedView.submissions[0]!.id, status: "done" });
+    expect(done).not.toHaveProperty("error");
     await appendThreadEvent("s", claimed.id, {
       event: "unresolved",
       by: { role: "human" },
     });
-    await expect(submitReview("p", REVIEW_ID, {})).rejects.toThrow(NO_READY_THREADS_ERROR);
-
-    const fresh = await appendComment("s", { role: "human", body: "New note" });
     const again = await submitReview("p", REVIEW_ID, {});
-    expect(again.submissions[0]).toMatchObject({ id: failed.id, status: "failed" });
+    expect(again.submissions[0]).toMatchObject({ id: done.id, status: "done" });
     expect(again.submissions[1]).toMatchObject({
       status: "tasking",
-      threadIds: [fresh.id],
+      threadIds: [claimed.id],
+    });
+  });
+
+  it("keeps an open thread on an incomplete submission after it is unresolved", async () => {
+    seed();
+    const prompts: string[] = [];
+    const {
+      submitReview,
+      launchRecordedSubmission,
+      readReviewView,
+      appendComment,
+      appendThreadEvent,
+      classifyReviewTaskingRun,
+      NO_READY_THREADS_ERROR,
+    } = await load();
+    const stayed = await appendComment("s", { role: "human", body: "Stays open" });
+    const toggled = await appendComment("s", { role: "human", body: "Toggle" });
+    const sessions = stubSessions(prompts);
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const started = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
+    );
+    await classifyReviewTaskingRun(
+      requireConversation(submission(started)),
+      { status: "finished" },
+      sessions,
+    );
+    const incomplete = submission(readReviewView("p", REVIEW_ID));
+    expect(incomplete).toMatchObject({
+      status: "incomplete",
+      openThreadIds: [stayed.id, toggled.id],
+    });
+
+    await appendThreadEvent("s", toggled.id, {
+      event: "resolved",
+      by: { role: "human" },
+    });
+    expect(submission(readReviewView("p", REVIEW_ID))).toMatchObject({
+      status: "incomplete",
+      openThreadIds: [stayed.id],
+    });
+    await appendThreadEvent("s", toggled.id, {
+      event: "unresolved",
+      by: { role: "human" },
+    });
+    expect(submission(readReviewView("p", REVIEW_ID))).toMatchObject({
+      status: "incomplete",
+      openThreadIds: [stayed.id, toggled.id],
+    });
+    await expect(submitReview("p", REVIEW_ID, {})).rejects.toThrow(NO_READY_THREADS_ERROR);
+
+    const later = new Date(Date.parse(incomplete.at) + 1000).toISOString();
+    const task = (id: string, title: string, order: number) =>
+      writeIssue(id, {
+        kind: "task", title, partOf: "s", status: "todo", order, createdAt: later, updatedAt: later,
+      });
+    task("stay-task", "Stay", 1);
+    task("toggle-task", "Toggle", 2);
+    await appendThreadEvent("s", stayed.id, {
+      event: "linked",
+      taskId: "stay-task",
+      by: { role: "human" },
+    });
+    expect(submission(readReviewView("p", REVIEW_ID))).toMatchObject({
+      status: "incomplete",
+      openThreadIds: [toggled.id],
+    });
+    await appendThreadEvent("s", toggled.id, {
+      event: "linked",
+      taskId: "toggle-task",
+      by: { role: "human" },
+    });
+    expect(submission(readReviewView("p", REVIEW_ID))).toMatchObject({
+      status: "done",
+      taskIds: ["stay-task", "toggle-task"],
+    });
+  });
+
+  it("retries only open unlinked threads and finishes when none remain", async () => {
+    seed();
+    const prompts: string[] = [];
+    const {
+      submitReview,
+      launchRecordedSubmission,
+      readReviewView,
+      appendComment,
+      appendThreadEvent,
+      classifyReviewTaskingRun,
+      retryReviewSubmission,
+    } = await load();
+    const resolved = await appendComment("s", { role: "human", body: "Resolved" });
+    const open = await appendComment("s", { role: "human", body: "Still open" });
+    const sessions = stubSessions(prompts);
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const started = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
+    );
+    const recorded = submission(started);
+    await classifyReviewTaskingRun(
+      requireConversation(recorded),
+      { status: "finished" },
+      sessions,
+    );
+
+    await appendThreadEvent("s", resolved.id, {
+      event: "resolved",
+      by: { role: "human" },
+    });
+    const retried = await retryReviewSubmission("p", REVIEW_ID, recorded.id, {}, sessions);
+    expect(submission(retried).status).toBe("tasking");
+    await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      retried,
+      sessions,
+      "retry",
+    );
+    expect(prompts[1]).toContain(`Threads: ${open.id}`);
+    expect(prompts[1]).not.toContain(resolved.id);
+
+    await appendThreadEvent("s", open.id, {
+      event: "resolved",
+      by: { role: "human" },
+    });
+    expect(submission(readReviewView("p", REVIEW_ID)).status).toBe("tasking");
+    const promptsBefore = prompts.length;
+    await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      retried,
+      sessions,
+      "retry",
+    );
+    expect(prompts).toHaveLength(promptsBefore);
+    const done = submission(readReviewView("p", REVIEW_ID));
+    expect(done).toMatchObject({ status: "done", taskIds: [] });
+    expect(done).not.toHaveProperty("error");
+    const legacyThread = await appendComment("s", { role: "human", body: "Legacy open" });
+    const storedPath = join(issuesDir, "p", "reviews", `${REVIEW_ID}.json`);
+    const stored = JSON.parse(readFileSync(storedPath, "utf8"));
+    stored.submissions = [{
+      id: recorded.id,
+      at: recorded.at,
+      threadIds: [legacyThread.id],
+      status: "failed",
+      error: TASKING_INCOMPLETE_REASON,
+      conversationId: recorded.conversationId,
+    }];
+    writeFileSync(storedPath, JSON.stringify(stored));
+    const legacy = submission(readReviewView("p", REVIEW_ID));
+    expect(legacy).toMatchObject({
+      status: "incomplete",
+      round: 1,
+      openThreadIds: [legacyThread.id],
+    });
+    expect(legacy).not.toHaveProperty("error");
+  });
+
+  it("records an errored run as failed while a clean run with leftovers is incomplete", async () => {
+    seed();
+    const {
+      submitReview,
+      launchRecordedSubmission,
+      readReviewView,
+      appendComment,
+      classifyReviewTaskingRun,
+    } = await load();
+    await appendComment("s", { role: "human", body: "Fix" });
+    const sessions = stubSessions([]);
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const started = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
+    );
+    await classifyReviewTaskingRun(
+      requireConversation(submission(started)),
+      { status: "error", errorMessage: "tasker exploded" },
+      sessions,
+    );
+    expect(submission(readReviewView("p", REVIEW_ID))).toMatchObject({
+      status: "failed",
+      error: "tasker exploded",
+      round: 1,
     });
   });
 

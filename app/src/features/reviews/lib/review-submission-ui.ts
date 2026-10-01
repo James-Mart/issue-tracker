@@ -1,4 +1,8 @@
 import type { ReviewSubmission } from "@server/schemas";
+import {
+  isRetryableSubmission,
+  TASKING_INCOMPLETE_REASON,
+} from "@server/review-submission-status";
 
 /** Visible reason when a merged Story cannot accept appended Tasks. */
 export const MERGED_STORY_SUBMIT_REASON =
@@ -54,12 +58,14 @@ function mergedReason(merged: boolean): string | undefined {
   return merged ? MERGED_STORY_SUBMIT_REASON : undefined;
 }
 
-function latestFailed(
+function latestRetryable(
   submissions: readonly ReviewSubmission[],
-): Extract<ReviewSubmission, { status: "failed" }> | undefined {
-  let latest: Extract<ReviewSubmission, { status: "failed" }> | undefined;
+): Extract<ReviewSubmission, { status: "incomplete" | "failed" }> | undefined {
+  let latest:
+    | Extract<ReviewSubmission, { status: "incomplete" | "failed" }>
+    | undefined;
   for (const submission of submissions) {
-    if (submission.status !== "failed") continue;
+    if (!isRetryableSubmission(submission)) continue;
     if (!latest || submission.at > latest.at) latest = submission;
   }
   return latest;
@@ -67,7 +73,8 @@ function latestFailed(
 
 /**
  * Header control for the workbench. A tasking submission wins, then the latest
- * failure, otherwise Submit review with the ready-thread count.
+ * incomplete or failed submission, otherwise Submit review with the ready-thread
+ * count. Incomplete uses the failure line until the multi-round header lands.
  */
 export function reviewSubmitHeader(input: {
   merged: boolean;
@@ -81,13 +88,14 @@ export function reviewSubmitHeader(input: {
       label: taskingLabel(tasking.threadIds.length),
     };
   }
-  const failed = latestFailed(input.submissions);
-  if (failed) {
+  const retryable = latestRetryable(input.submissions);
+  if (retryable) {
     const reason = mergedReason(input.merged);
     return {
       mode: "failed",
-      submissionId: failed.id,
-      error: failed.error,
+      submissionId: retryable.id,
+      error:
+        retryable.status === "failed" ? retryable.error : TASKING_INCOMPLETE_REASON,
       retryDisabled: reason !== undefined,
       ...(reason ? { reason } : {}),
     };
@@ -137,8 +145,8 @@ export function conversationTimelineItems<T extends { root: { at: string } }>(
   return items;
 }
 
-function taskingFromFailed(
-  submission: Extract<ReviewSubmission, { status: "failed" }>,
+function taskingFromRetryable(
+  submission: Extract<ReviewSubmission, { status: "failed" | "incomplete" }>,
 ): Extract<ReviewSubmission, { status: "tasking" }> {
   return {
     id: submission.id,
@@ -164,8 +172,8 @@ export function acknowledgedSubmissions(
   retryingId: string | undefined,
 ): ReviewSubmission[] {
   const next = submissions.map((submission) =>
-    submission.status === "failed" && submission.id === retryingId
-      ? taskingFromFailed(submission)
+    isRetryableSubmission(submission) && submission.id === retryingId
+      ? taskingFromRetryable(submission)
       : submission,
   );
   if (
