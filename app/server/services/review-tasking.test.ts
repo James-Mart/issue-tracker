@@ -88,6 +88,39 @@ function submission(view: { submissions: ReviewSubmission[] }): ReviewSubmission
   return view.submissions[0]!;
 }
 
+function requireConversation(recorded: ReviewSubmission): string {
+  if (!recorded.conversationId) throw new Error("expected tasker conversation");
+  return recorded.conversationId;
+}
+
+async function launchRecorded(
+  api: {
+    launchRecordedSubmission: (
+      projectId: string,
+      reviewId: string,
+      submissionId: string,
+      kind: "start" | "retry",
+      sessions: AgentSessions,
+    ) => Promise<void>;
+    readReviewView: (
+      projectId: string,
+      reviewId: string,
+    ) => { submissions: ReviewSubmission[] };
+  },
+  recorded: { submissions: ReviewSubmission[] },
+  sessions: AgentSessions,
+  kind: "start" | "retry" = "start",
+) {
+  await api.launchRecordedSubmission(
+    "p",
+    REVIEW_ID,
+    submission(recorded).id,
+    kind,
+    sessions,
+  );
+  return api.readReviewView("p", REVIEW_ID);
+}
+
 async function load() {
   const tasking = await import("./review-tasking.js");
   const issues = await import("./issues.js");
@@ -117,6 +150,8 @@ describe("review tasking", () => {
     const prompts: string[] = [];
     const {
       submitReview,
+      launchRecordedSubmission,
+      readReviewView,
       appendComment,
       readComments,
       SUBMISSION_TASKING_ERROR,
@@ -127,17 +162,24 @@ describe("review tasking", () => {
     } = await load();
     const first = await appendComment("s", { role: "human", body: "Fix the anchor" });
     const second = await appendComment("s", { role: "human", body: "And the name" });
+    const sessions = stubSessions(prompts);
 
-    const view = await submitReview(
-      "p",
-      REVIEW_ID,
-      { summary: "Ship the wording" },
-      stubSessions(prompts),
+    const recordedView = await submitReview("p", REVIEW_ID, { summary: "Ship the wording" });
+    expect(submission(recordedView)).toMatchObject({
+      status: "tasking",
+      threadIds: [first.id, second.id],
+    });
+    expect(submission(recordedView).conversationId).toBeUndefined();
+    expect(prompts).toHaveLength(0);
+
+    const view = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
     );
     const recorded = submission(view);
     expect(recorded.status).toBe("tasking");
-    expect(recorded.threadIds).toEqual([first.id, second.id]);
-    expect(recorded.summaryCommentId).toBeDefined();
+    expect(recorded.summaryCommentId).toBe(submission(recordedView).summaryCommentId);
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain(`Story: s`);
     expect(prompts[0]).toContain(`Threads: ${first.id}, ${second.id}`);
@@ -149,16 +191,14 @@ describe("review tasking", () => {
       "Ship the wording",
     );
 
-    await expect(
-      submitReview("p", REVIEW_ID, {}, stubSessions(prompts)),
-    ).rejects.toThrow(SUBMISSION_TASKING_ERROR);
+    await expect(submitReview("p", REVIEW_ID, {})).rejects.toThrow(SUBMISSION_TASKING_ERROR);
 
     const runs = listAgentRunsForIssue("s");
     expect(runs.map((run) => run.role)).toEqual([REVIEW_TASKER_ROLE]);
-    expect(runs[0]?.conversationId).toBe(recorded.conversationId);
+    expect(runs[0]?.conversationId).toBe(requireConversation(recorded));
     expect(runs[0]?.status).toBe("unknown");
     expect(
-      listAgentRunEvents("s", reviewTaskerDelegationId(recorded.conversationId)),
+      listAgentRunEvents("s", reviewTaskerDelegationId(requireConversation(recorded))),
     ).toEqual([]);
   });
 
@@ -166,6 +206,8 @@ describe("review tasking", () => {
     seed();
     const {
       submitReview,
+      launchRecordedSubmission,
+      readReviewView,
       appendComment,
       REVIEW_TASKER_ROLE,
       reviewTaskerDelegationId,
@@ -178,8 +220,14 @@ describe("review tasking", () => {
     const { REVIEW_QUESTION_ROLE, isQuestionResearcherConversation } =
       await import("./researcher-runs.js");
     await appendComment("s", { role: "human", body: "Fix it" });
-    const view = await submitReview("p", REVIEW_ID, {}, stubSessions([]));
-    const tasker = readConversation(submission(view).conversationId).meta;
+    const sessions = stubSessions([]);
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const view = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
+    );
+    const tasker = readConversation(requireConversation(submission(view))).meta;
     const researcher = await createConversation({
       title: "Researcher: why?",
       projectId: "p",
@@ -205,9 +253,9 @@ describe("review tasking", () => {
     const { submitReview, appendComment, mergedStoryTaskingError, NO_READY_THREADS_ERROR } =
       await load();
     await appendComment("s", { role: "human", body: "Still open" });
-    await expect(
-      submitReview("p", REVIEW_ID, {}, stubSessions([])),
-    ).rejects.toThrow(mergedStoryTaskingError("s"));
+    await expect(submitReview("p", REVIEW_ID, {})).rejects.toThrow(
+      mergedStoryTaskingError("s"),
+    );
 
     writeFileSync(
       join(issuesDir, "s", "issue.json"),
@@ -223,26 +271,30 @@ describe("review tasking", () => {
       }),
     );
     writeFileSync(join(issuesDir, "s", "comments.jsonl"), "");
-    await expect(
-      submitReview("p", REVIEW_ID, { summary: "   " }, stubSessions([])),
-    ).rejects.toThrow(NO_READY_THREADS_ERROR);
+    await expect(submitReview("p", REVIEW_ID, { summary: "   " })).rejects.toThrow(
+      NO_READY_THREADS_ERROR,
+    );
     expect(readFileSync(join(issuesDir, "s", "comments.jsonl"), "utf8")).toBe("");
   });
 
   it("records a failed submission when the tasker does not start", async () => {
     seed();
-    const { submitReview, appendComment } = await load();
+    const { submitReview, launchRecordedSubmission, readReviewView, appendComment } =
+      await load();
     await appendComment("s", { role: "human", body: "Fix it" });
-    const view = await submitReview(
-      "p",
-      REVIEW_ID,
-      {},
-      stubSessions([], "sdk down"),
+    const sessions = stubSessions([], "sdk down");
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    expect(submission(recordedView).status).toBe("tasking");
+    const view = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
     );
     expect(submission(view)).toMatchObject({
       status: "failed",
       error: "sdk down",
     });
+    expect(submission(view).conversationId).toBeDefined();
     expect(submission(view).summaryCommentId).toBeUndefined();
   });
 
@@ -250,22 +302,28 @@ describe("review tasking", () => {
     seed();
     const {
       submitReview,
+      launchRecordedSubmission,
       appendComment,
       failReviewTaskingClassification,
       readReviewView,
     } = await load();
     await appendComment("s", { role: "human", body: "Fix it" });
-    const view = await submitReview("p", REVIEW_ID, {}, stubSessions([]));
+    const sessions = stubSessions([]);
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const view = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
+    );
     const recorded = submission(view);
-    expect(
-      failReviewTaskingClassification(recorded.conversationId, "classify boom"),
-    ).toBe(true);
+    const conversationId = requireConversation(recorded);
+    expect(failReviewTaskingClassification(conversationId, "classify boom")).toBe(true);
     expect(submission(readReviewView("p", REVIEW_ID))).toMatchObject({
       status: "failed",
       error: "classify boom",
     });
     expect(
-      failReviewTaskingClassification(recorded.conversationId, "again"),
+      failReviewTaskingClassification(conversationId, "again"),
     ).toBe(false);
   });
 
@@ -274,6 +332,7 @@ describe("review tasking", () => {
     const prompts: string[] = [];
     const {
       submitReview,
+      launchRecordedSubmission,
       appendComment,
       classifyReviewTaskingRun,
       retryReviewSubmission,
@@ -284,8 +343,15 @@ describe("review tasking", () => {
     } = await load();
     const kept = await appendComment("s", { role: "human", body: "Keep" });
     const missed = await appendComment("s", { role: "human", body: "Miss" });
-    const started = await submitReview("p", REVIEW_ID, {}, stubSessions(prompts));
+    const sessions = stubSessions(prompts);
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const started = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
+    );
     const recorded = submission(started);
+    const conversationId = requireConversation(recorded);
     const later = new Date(Date.parse(recorded.at) + 1000).toISOString();
     writeIssue("fix-kept", {
       kind: "task",
@@ -317,7 +383,7 @@ describe("review tasking", () => {
     });
 
     await classifyReviewTaskingRun(
-      recorded.conversationId,
+      conversationId,
       { status: "finished" },
       stubSessions(prompts),
     );
@@ -335,9 +401,16 @@ describe("review tasking", () => {
       REVIEW_ID,
       recorded.id,
       {},
-      stubSessions(prompts),
+      sessions,
     );
     expect(submission(retried).status).toBe("tasking");
+    expect(prompts).toHaveLength(1);
+    await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      retried,
+      sessions,
+      "retry",
+    );
     expect(prompts[1]).toContain(`Threads: ${missed.id}`);
     expect(prompts[1]).not.toContain(kept.id);
 
@@ -347,7 +420,7 @@ describe("review tasking", () => {
       by: { role: "issue-tracker-review-tasker" },
     });
     await classifyReviewTaskingRun(
-      recorded.conversationId,
+      conversationId,
       { status: "error", errorMessage: "late" },
       stubSessions(prompts),
     );
@@ -374,14 +447,23 @@ describe("review tasking", () => {
     const prompts: string[] = [];
     const {
       submitReview,
+      launchRecordedSubmission,
+      readReviewView,
       appendComment,
       classifyReviewTaskingRun,
       retryReviewSubmission,
       appendThreadEvent,
     } = await load();
     const rootComment = await appendComment("s", { role: "human", body: "Fix" });
-    const started = await submitReview("p", REVIEW_ID, {}, stubSessions(prompts));
+    const sessions = stubSessions(prompts);
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const started = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
+    );
     const recorded = submission(started);
+    const conversationId = requireConversation(recorded);
     const later = new Date(Date.parse(recorded.at) + 1000).toISOString();
     writeIssue("fix-it", {
       kind: "task",
@@ -398,15 +480,15 @@ describe("review tasking", () => {
       by: { role: "issue-tracker-review-tasker" },
     });
     await classifyReviewTaskingRun(
-      recorded.conversationId,
+      conversationId,
       { status: "cancelled" },
       stubSessions(prompts),
     );
     await expect(
-      retryReviewSubmission("p", REVIEW_ID, recorded.id, {}, stubSessions(prompts)),
+      retryReviewSubmission("p", REVIEW_ID, recorded.id, {}, sessions),
     ).rejects.toThrow(`submission "${recorded.id}" is done`);
     await expect(
-      retryReviewSubmission("p", REVIEW_ID, recorded.id, { summary: "no" }, stubSessions(prompts)),
+      retryReviewSubmission("p", REVIEW_ID, recorded.id, { summary: "no" }, sessions),
     ).rejects.toThrow("retry body must be empty");
   });
 
@@ -415,13 +497,22 @@ describe("review tasking", () => {
     const prompts: string[] = [];
     const {
       submitReview,
+      launchRecordedSubmission,
+      readReviewView,
       appendComment,
       classifyReviewTaskingRun,
       appendThreadEvent,
     } = await load();
     const rootComment = await appendComment("s", { role: "human", body: "Fix" });
-    const started = await submitReview("p", REVIEW_ID, {}, stubSessions(prompts));
+    const sessions = stubSessions(prompts);
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const started = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
+    );
     const recorded = submission(started);
+    const conversationId = requireConversation(recorded);
     const later = new Date(Date.parse(recorded.at) + 1000).toISOString();
     writeIssue("fix-it", {
       kind: "task",
@@ -438,9 +529,9 @@ describe("review tasking", () => {
       by: { role: "issue-tracker-review-tasker" },
     });
     await classifyReviewTaskingRun(
-      recorded.conversationId,
+      conversationId,
       { status: "finished" },
-      stubSessions(prompts),
+      sessions,
     );
     const factual = `Review ${REVIEW_ID} appended Tasks fix-it to Story s.`;
     const { implementingSessionMessage } = await import("./implementing-launch.js");
@@ -457,6 +548,7 @@ describe("review tasking", () => {
     seed();
     const {
       submitReview,
+      launchRecordedSubmission,
       appendComment,
       classifyReviewTaskingRun,
       appendThreadEvent,
@@ -478,8 +570,14 @@ describe("review tasking", () => {
         return { ok: true as const, run: { id: "run-1" } as never };
       },
     } as unknown as AgentSessions;
-    const started = await submitReview("p", REVIEW_ID, {}, sessions);
+    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const started = await launchRecorded(
+      { launchRecordedSubmission, readReviewView },
+      recordedView,
+      sessions,
+    );
     const recorded = submission(started);
+    const conversationId = requireConversation(recorded);
     const later = new Date(Date.parse(recorded.at) + 1000).toISOString();
     writeIssue("fix-it", {
       kind: "task",
@@ -496,7 +594,7 @@ describe("review tasking", () => {
       by: { role: "issue-tracker-review-tasker" },
     });
     await expect(
-      classifyReviewTaskingRun(recorded.conversationId, { status: "finished" }, sessions),
+      classifyReviewTaskingRun(conversationId, { status: "finished" }, sessions),
     ).resolves.toBe(true);
     expect(submission(readReviewView("p", REVIEW_ID)).status).toBe("done");
   });
@@ -550,5 +648,54 @@ describe("review submission routes", () => {
       code: "validation",
       error: NO_READY_THREADS_ERROR,
     });
+  });
+
+  it("responds with a tasking submission before the tasker starts", async () => {
+    let started = false;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sessions = {
+      getActiveRun: () => undefined,
+      sendPrompt: async () => {
+        started = true;
+        await gate;
+        return { ok: true as const, run: { id: "run-1" } as never };
+      },
+    } as unknown as AgentSessions;
+    const { appendComment } = await import("./issues.js");
+    const { createApp } = await import("../app.js");
+    const comment = await appendComment("s", { role: "human", body: "Fix it" });
+    const app = createApp(sessions);
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, "127.0.0.1", () => resolve());
+    });
+    const addr = server.address();
+    if (!addr || typeof addr === "string") throw new Error("expected TCP listen address");
+    baseUrl = `http://127.0.0.1:${addr.port}`;
+
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/projects/p/reviews/${REVIEW_ID}/submissions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ summary: "Ship it" }),
+        },
+      );
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        submissions: { status: string; threadIds: string[]; conversationId?: string }[];
+      };
+      expect(body.submissions[0]).toMatchObject({
+        status: "tasking",
+        threadIds: [comment.id],
+      });
+      expect(body.submissions[0]?.conversationId).toBeUndefined();
+      await vi.waitFor(() => expect(started).toBe(true));
+    } finally {
+      release();
+    }
   });
 });

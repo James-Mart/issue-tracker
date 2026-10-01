@@ -15,7 +15,7 @@ import { createConversationsRouter } from "./routes/conversations.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { createHealthRouter } from "./routes/health.js";
 import { pipelineRouter } from "./routes/pipeline.js";
-import { projectsRouter } from "./routes/projects.js";
+import { createProjectsRouter } from "./routes/projects.js";
 import {
   createRestartRouter,
   type InitiateRestart,
@@ -94,7 +94,7 @@ export function createApp(
   app.use("/api/issues", createIssuesRouter(sessions));
   app.use("/api/stories", storiesRouter);
   app.use("/api/pipeline", pipelineRouter);
-  app.use("/api/projects", projectsRouter);
+  app.use("/api/projects", createProjectsRouter(sessions));
   app.use("/api/conversations", createConversationsRouter(sessions));
   app.use("/api/agent-models", agentModelsRouter);
   app.use("/api/health", createHealthRouter());

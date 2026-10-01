@@ -176,11 +176,20 @@ describe("StoryReviewHeader submit", () => {
 
     expect(state.submit).toHaveBeenCalledWith(
       { reviewId: "rev-1", summary: "Ship the reachability check." },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     );
-    const onSuccess = state.submit.mock.calls[0]?.[1]?.onSuccess as (() => void) | undefined;
-    act(() => onSuccess?.());
     expect(document.body.querySelector('[data-testid="submit-review-dialog"]')).toBeNull();
+    expect(container.querySelector('[data-testid="review-tasking-status"]')?.textContent).toContain(
+      "Tasking 2 threads…",
+    );
+
+    const onError = state.submit.mock.calls[0]?.[1]?.onError as (() => void) | undefined;
+    act(() => onError?.());
+    const restored = document.body.querySelector<HTMLTextAreaElement>(
+      '[data-testid="submit-review-summary"]',
+    );
+    expect(restored?.value).toBe("  Ship the reachability check.  ");
+    expect(container.querySelector('[data-testid="submit-review"]')).not.toBeNull();
   });
 
   it("names the merged Story under a disabled submit", () => {
@@ -248,9 +257,23 @@ describe("StoryReviewHeader submit", () => {
     );
     expect(container.querySelector('[data-testid="submit-review"]')).toBeNull();
     click(container.querySelector('[data-testid="review-submission-retry"]'));
-    expect(state.retry).toHaveBeenCalledWith({
-      reviewId: "rev-1",
-      submissionId: "sub-1",
-    });
+    expect(state.retry).toHaveBeenCalledWith(
+      {
+        reviewId: "rev-1",
+        submissionId: "sub-1",
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
+    expect(container.querySelector('[data-testid="review-tasking-status"]')?.textContent).toContain(
+      "Tasking 3 threads…",
+    );
+    expect(container.querySelector('[data-testid="review-tasking-error"]')).toBeNull();
+
+    const onError = state.retry.mock.calls[0]?.[1]?.onError as (() => void) | undefined;
+    act(() => onError?.());
+    expect(container.querySelector('[data-testid="review-submission-retry"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="review-tasking-error"]')?.textContent).toContain(
+      "Tasking agent stopped — could not append Tasks for 3 threads.",
+    );
   });
 });

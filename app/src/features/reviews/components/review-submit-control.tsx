@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CircleAlert, Loader2, RefreshCw } from "lucide-react";
 import type { ReviewView } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import {
   useSubmitReview,
 } from "../api/mutations";
 import {
+  acknowledgedSubmissions,
   reviewSubmitHeader,
   submitReviewDialogDetail,
   type ReviewSubmitHeader,
@@ -65,23 +66,20 @@ function ReviewStatusAction({
 function SubmitReviewDialog({
   open,
   readyCount,
-  pending,
+  summary,
+  onSummaryChange,
   onOpenChange,
   onSubmit,
 }: {
   open: boolean;
   readyCount: number;
-  pending: boolean;
+  summary: string;
+  onSummaryChange: (summary: string) => void;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (summary: string | undefined) => void;
+  onSubmit: () => void;
 }) {
-  const [summary, setSummary] = useState("");
-  const close = (next: boolean) => {
-    if (!next) setSummary("");
-    onOpenChange(next);
-  };
   return (
-    <Dialog open={open} onOpenChange={close}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="submit-review-dialog">
         <DialogHeader>
           <DialogTitle>Submit review</DialogTitle>
@@ -93,23 +91,18 @@ function SubmitReviewDialog({
             id="submit-review-summary"
             value={summary}
             data-testid="submit-review-summary"
-            disabled={pending}
-            onChange={(event) => setSummary(event.target.value)}
+            onChange={(event) => onSummaryChange(event.target.value)}
           />
         </DialogField>
         <DialogFooter>
-          <Button type="button" onClick={() => close(false)} disabled={pending}>
+          <Button type="button" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             type="button"
             variant="primary"
             data-testid="submit-review-confirm"
-            disabled={pending}
-            onClick={() => {
-              const trimmed = summary.trim();
-              onSubmit(trimmed === "" ? undefined : trimmed);
-            }}
+            onClick={onSubmit}
           >
             Submit review
           </Button>
@@ -185,14 +178,30 @@ function ReviewSubmitActions({
   projectId,
   review,
   header,
+  onAcknowledge,
+  onAcknowledgeEnd,
+  onRetryStart,
+  onRetryEnd,
 }: {
   projectId: string;
   review: ReviewView;
   header: ReviewSubmitHeader;
+  onAcknowledge: () => void;
+  onAcknowledgeEnd: () => void;
+  onRetryStart: (submissionId: string) => void;
+  onRetryEnd: () => void;
 }) {
   const submit = useSubmitReview(projectId);
   const retry = useRetryReviewSubmission(projectId);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [summary, setSummary] = useState("");
+  const keepSummary = useRef(false);
+
+  const closeDialog = (next: boolean) => {
+    if (!next && !keepSummary.current) setSummary("");
+    if (!next) keepSummary.current = false;
+    setDialogOpen(next);
+  };
 
   return (
     <div className="flex max-w-full flex-col items-end gap-1">
@@ -201,7 +210,16 @@ function ReviewSubmitActions({
           header={header}
           submitPending={submit.isPending}
           retryPending={retry.isPending}
-          onRetry={(submissionId) => retry.mutate({ reviewId: review.id, submissionId })}
+          onRetry={(submissionId) => {
+            onRetryStart(submissionId);
+            retry.mutate(
+              { reviewId: review.id, submissionId },
+              {
+                onSuccess: () => onRetryEnd(),
+                onError: () => onRetryEnd(),
+              },
+            );
+          }}
           onOpen={() => setDialogOpen(true)}
         />
         <ReviewStatusAction projectId={projectId} review={review} />
@@ -210,14 +228,30 @@ function ReviewSubmitActions({
         <SubmitReviewDialog
           open={dialogOpen}
           readyCount={header.readyCount}
-          pending={submit.isPending}
-          onOpenChange={setDialogOpen}
-          onSubmit={(summary) =>
+          summary={summary}
+          onSummaryChange={setSummary}
+          onOpenChange={closeDialog}
+          onSubmit={() => {
+            const trimmed = summary.trim();
+            keepSummary.current = true;
+            setDialogOpen(false);
+            onAcknowledge();
             submit.mutate(
-              { reviewId: review.id, summary },
-              { onSuccess: () => setDialogOpen(false) },
-            )
-          }
+              { reviewId: review.id, summary: trimmed === "" ? undefined : trimmed },
+              {
+                onSuccess: () => {
+                  setSummary("");
+                  keepSummary.current = false;
+                  onAcknowledgeEnd();
+                },
+                onError: () => {
+                  keepSummary.current = false;
+                  onAcknowledgeEnd();
+                  setDialogOpen(true);
+                },
+              },
+            );
+          }}
         />
       ) : null}
       {header.mode !== "tasking" && header.reason ? (
@@ -248,14 +282,19 @@ export function ReviewSubmitColumns({
   merged: boolean;
 }) {
   const { threads, loaded } = useCommentThreads(storyId);
-  const readyCount = loaded
-    ? threads.filter((thread) => thread.readyToTask).length
-    : undefined;
+  const readyThreads = loaded ? threads.filter((thread) => thread.readyToTask) : undefined;
+  const readyCount = readyThreads?.length;
+  const [pendingThreadIds, setPendingThreadIds] = useState<string[] | undefined>();
+  const [retryingId, setRetryingId] = useState<string | undefined>();
   const header = review
     ? reviewSubmitHeader({
         merged,
         readyCount,
-        submissions: review.submissions,
+        submissions: acknowledgedSubmissions(
+          review.submissions,
+          pendingThreadIds,
+          retryingId,
+        ),
       })
     : undefined;
 
@@ -277,7 +316,17 @@ export function ReviewSubmitColumns({
         ) : null}
       </div>
       {review && header ? (
-        <ReviewSubmitActions projectId={projectId} review={review} header={header} />
+        <ReviewSubmitActions
+          projectId={projectId}
+          review={review}
+          header={header}
+          onAcknowledge={() =>
+            setPendingThreadIds(readyThreads?.map((thread) => thread.root.id))
+          }
+          onAcknowledgeEnd={() => setPendingThreadIds(undefined)}
+          onRetryStart={setRetryingId}
+          onRetryEnd={() => setRetryingId(undefined)}
+        />
       ) : null}
     </>
   );

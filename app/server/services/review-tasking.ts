@@ -98,14 +98,16 @@ function submissionBase(
       ? { summaryCommentId: submission.summaryCommentId }
       : {}),
     threadIds: submission.threadIds,
-    conversationId: submission.conversationId,
+    ...(submission.conversationId
+      ? { conversationId: submission.conversationId }
+      : {}),
   };
 }
 
 function taskingSubmission(
   submission: ReviewSubmission,
   taskIds: string[] | undefined,
-): ReviewSubmission {
+): Extract<ReviewSubmission, { status: "tasking" }> {
   return {
     ...submissionBase(submission),
     status: "tasking",
@@ -129,9 +131,13 @@ function failedSubmission(
 function doneSubmission(
   submission: ReviewSubmission,
   taskIds: string[],
-): ReviewSubmission {
+): Extract<ReviewSubmission, { status: "done" }> {
+  if (!submission.conversationId) {
+    throw new Error(`submission "${submission.id}" has no tasker conversation`);
+  }
   return {
     ...submissionBase(submission),
+    conversationId: submission.conversationId,
     status: "done",
     taskIds,
   };
@@ -253,7 +259,6 @@ export async function submitReview(
   projectId: string,
   reviewId: string,
   body: unknown,
-  sessions: AgentSessions,
 ): Promise<ReviewRecordView> {
   const parsed = parseSubmitReviewBody(body);
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
@@ -261,7 +266,7 @@ export async function submitReview(
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
   const storyId = review.target.storyId;
-  const story = assertStoryOpenForTasking(storyId);
+  assertStoryOpenForTasking(storyId);
   assertNoTasking(review.submissions);
   const threadIds = readyThreadIds(storyId);
   if (threadIds.length === 0) {
@@ -273,60 +278,31 @@ export async function submitReview(
   const summaryComment = summary
     ? await appendComment(storyId, { role: "human", body: summary })
     : undefined;
-  const prompt = taskingPrompt(storyId, threadIds, summaryComment?.id);
-  const model = loadRoleModelPin(REVIEW_TASKER_ROLE);
-  const meta = await createConversation({
-    title: `Tasking ${story.title}`,
-    projectId: project,
-    model,
-    issueId: storyId,
-    channel: "review",
-    role: REVIEW_TASKER_ROLE,
-    message: prompt,
-  });
 
   const submission: ReviewSubmission = {
     id: randomUUID(),
     at: new Date().toISOString(),
     ...(summaryComment ? { summaryCommentId: summaryComment.id } : {}),
     threadIds,
-    conversationId: meta.id,
     status: "tasking",
   };
 
-  try {
-    updateStoredReview(project, reviewId, (current) => {
-      assertStoryOpenForTasking(storyId);
-      assertNoTasking(current.submissions);
-      const readyNow = new Set(readyThreadIds(storyId));
-      if (threadIds.some((id) => !readyNow.has(id))) {
-        throw new IssueError(
-          "conflict",
-          "ready threads changed before the submission was recorded",
-        );
-      }
-      return {
-        ...current,
-        updatedAt: submission.at,
-        submissions: [...current.submissions, submission],
-      };
-    });
-  } catch (err) {
-    await deleteConversation(meta.id);
-    throw err;
-  }
-
-  await launchTasking(
-    project,
-    reviewId,
-    storyId,
-    submission,
-    meta.id,
-    prompt,
-    model,
-    sessions,
-    false,
-  );
+  updateStoredReview(project, reviewId, (current) => {
+    assertStoryOpenForTasking(storyId);
+    assertNoTasking(current.submissions);
+    const readyNow = new Set(readyThreadIds(storyId));
+    if (threadIds.some((id) => !readyNow.has(id))) {
+      throw new IssueError(
+        "conflict",
+        "ready threads changed before the submission was recorded",
+      );
+    }
+    return {
+      ...current,
+      updatedAt: submission.at,
+      submissions: [...current.submissions, submission],
+    };
+  });
 
   return readReviewView(project, reviewId);
 }
@@ -362,7 +338,138 @@ async function launchTasking(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await markStartFailed(projectId, reviewId, storyId, submission, message);
-    throw err;
+  }
+}
+
+async function bringCoordinatorForDone(
+  reviewId: string,
+  storyId: string,
+  taskIds: string[],
+  sessions: ConversationMessageSessions,
+): Promise<void> {
+  try {
+    const workRootId = nearestImplementingWorkRootId(
+      ancestorChain(storyId, readAll().issues),
+    );
+    if (workRootId === undefined) {
+      throw new Error(`story "${storyId}" has no implementing work root`);
+    }
+    await bringInCoordinator(
+      workRootId,
+      reviewAppendedTasksMessage(reviewId, storyId, taskIds),
+      sessions,
+    );
+  } catch (err) {
+    // Tasking already recorded done. A coordinator delivery failure must
+    // not roll that back; the error is logged for follow-up.
+    console.error(
+      `coordinator was not brought in after review ${reviewId} on story ${storyId}`,
+      err,
+    );
+  }
+}
+
+/**
+ * Create the tasker conversation if this submission does not have one, then
+ * start the run. Called after the submit or retry response. A failure is
+ * stored on the submission.
+ */
+export async function launchRecordedSubmission(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  kind: "start" | "retry",
+  sessions: AgentSessions,
+): Promise<void> {
+  const review = readReviewView(projectId, reviewId);
+  const submission = review.submissions.find((item) => item.id === submissionId);
+  // A second finish callback, or a launch that already attached a conversation,
+  // must not start another tasker.
+  if (!submission || submission.status !== "tasking") return;
+  if (kind === "start" && submission.conversationId) return;
+
+  const storyId = review.target.storyId;
+  try {
+    const story = assertStoryOpenForTasking(storyId);
+    const linked = linkedNewTaskIds(storyId, submission, readAll().issues);
+    const threadIds =
+      kind === "retry" ? linked.unlinkedThreadIds : submission.threadIds;
+    if (threadIds.length === 0) {
+      if (!submission.conversationId || linked.taskIds.length === 0) {
+        throw new Error(`submission "${submission.id}" has no threads left to task`);
+      }
+      replaceSubmission(
+        projectId,
+        reviewId,
+        submission.id,
+        doneSubmission(submission, linked.taskIds),
+      );
+      await bringCoordinatorForDone(review.id, storyId, linked.taskIds, sessions);
+      return;
+    }
+
+    const prompt = taskingPrompt(storyId, threadIds, submission.summaryCommentId);
+    const model = loadRoleModelPin(REVIEW_TASKER_ROLE);
+    let current = submission;
+    const persisted = submission.conversationId !== undefined;
+    if (!submission.conversationId) {
+      const meta = await createConversation({
+        title: `Tasking ${story.title}`,
+        projectId,
+        model,
+        issueId: storyId,
+        channel: "review",
+        role: REVIEW_TASKER_ROLE,
+        message: prompt,
+      });
+      current = taskingSubmission(
+        { ...submission, conversationId: meta.id },
+        submission.taskIds,
+      );
+      try {
+        replaceSubmission(projectId, reviewId, submissionId, current);
+      } catch (err) {
+        await deleteConversation(meta.id);
+        throw err;
+      }
+    }
+
+    const conversationId = current.conversationId;
+    if (!conversationId) {
+      throw new Error(`submission "${submissionId}" has no tasker conversation`);
+    }
+    await launchTasking(
+      projectId,
+      reviewId,
+      storyId,
+      current,
+      conversationId,
+      prompt,
+      model,
+      sessions,
+      kind === "retry" && persisted,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const latest =
+      readReviewView(projectId, reviewId).submissions.find(
+        (item) => item.id === submission.id,
+      ) ?? submission;
+    if (latest.status !== "tasking") {
+      // Classified while this launch was still starting. Leave that record.
+      return;
+    }
+    try {
+      await markStartFailed(projectId, reviewId, storyId, latest, message);
+    } catch (markErr) {
+      // The submission is already recorded as tasking, and the HTTP response
+      // has been sent. A markStartFailed failure must not reject this background
+      // launch; log it for follow-up, same as bringCoordinatorForDone.
+      console.error(
+        `could not record tasking failure for submission ${submission.id}:`,
+        markErr,
+      );
+    }
   }
 }
 
@@ -401,31 +508,16 @@ export async function retryReviewSubmission(
       `submission "${submissionId}" has no unlinked threads`,
     );
   }
-  if (sessions.getActiveRun(submission.conversationId)) {
+  if (
+    submission.conversationId &&
+    sessions.getActiveRun(submission.conversationId)
+  ) {
     throw new IssueError("conflict", "a tasking run is already active");
   }
   requireProjectWorkspace(project);
 
   const next = taskingSubmission(submission, taskIds);
   replaceSubmission(project, reviewId, submissionId, next);
-
-  const prompt = taskingPrompt(
-    storyId,
-    unlinkedThreadIds,
-    submission.summaryCommentId,
-  );
-  await launchTasking(
-    project,
-    reviewId,
-    storyId,
-    next,
-    submission.conversationId,
-    prompt,
-    loadRoleModelPin(REVIEW_TASKER_ROLE),
-    sessions,
-    true,
-  );
-
   return readReviewView(project, reviewId);
 }
 
@@ -495,26 +587,7 @@ export async function classifyReviewTaskingRun(
   if (!saved) return false;
 
   if (saved.status === "done") {
-    try {
-      const workRootId = nearestImplementingWorkRootId(
-        ancestorChain(storyId, issues),
-      );
-      if (workRootId === undefined) {
-        throw new Error(`story "${storyId}" has no implementing work root`);
-      }
-      await bringInCoordinator(
-        workRootId,
-        reviewAppendedTasksMessage(review.id, storyId, saved.taskIds),
-        sessions,
-      );
-    } catch (err) {
-      // Tasking already recorded done. A coordinator delivery failure must
-      // not roll that back; the error is logged for follow-up.
-      console.error(
-        `coordinator was not brought in after review ${review.id} on story ${storyId}`,
-        err,
-      );
-    }
+    await bringCoordinatorForDone(review.id, storyId, saved.taskIds, sessions);
   }
   return true;
 }

@@ -3,6 +3,7 @@ import type { ReviewSubmission } from "@server/schemas";
 import {
   MERGED_STORY_SUBMIT_REASON,
   REVIEW_SUBMISSION_POLL_MS,
+  acknowledgedSubmissions,
   conversationTimelineItems,
   reviewSubmitHeader,
   reviewSubmittedLabel,
@@ -74,7 +75,7 @@ describe("reviewSubmitHeader", () => {
     const header = reviewSubmitHeader({
       merged: false,
       readyCount: 0,
-      submissions: [submission("tasking")],
+      submissions: [submission("tasking", { conversationId: undefined })],
     });
     expect(header).toEqual({
       mode: "tasking",
@@ -127,6 +128,32 @@ describe("submission copy", () => {
     expect(taskingLabel(1)).toBe("Tasking 1 thread…");
     expect(reviewSubmittedLabel(3, 2)).toBe("Review submitted — 3 threads → Tasks");
     expect(reviewSubmittedLabel(1, 1)).toBe("Review submitted — 1 thread → Task");
+  });
+});
+
+describe("acknowledgedSubmissions", () => {
+  it("marks a submit as tasking before the server record exists", () => {
+    const marked = acknowledgedSubmissions([], ["thread-a"], undefined);
+    expect(marked).toMatchObject([
+      { status: "tasking", threadIds: ["thread-a"] },
+    ]);
+    expect(marked[0]).not.toHaveProperty("conversationId");
+  });
+
+  it("keeps the server tasking record once it arrives", () => {
+    const server = submission("tasking", { conversationId: undefined });
+    expect(acknowledgedSubmissions([server], ["thread-a"], undefined)).toEqual([server]);
+  });
+
+  it("shows a retry as tasking until the request settles", () => {
+    const failed = submission("failed");
+    const marked = acknowledgedSubmissions([failed], undefined, failed.id);
+    expect(marked[0]).toMatchObject({
+      id: failed.id,
+      status: "tasking",
+      threadIds: failed.threadIds,
+    });
+    expect(marked[0]).not.toHaveProperty("error");
   });
 });
 
