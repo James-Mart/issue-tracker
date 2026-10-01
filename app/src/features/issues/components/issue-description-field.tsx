@@ -11,6 +11,7 @@ import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 import { insertTextAtCaret } from "@/lib/insert-text-at-caret";
+import { transcriptTextForCaret } from "@/lib/transcript-text-for-caret";
 import { transcribeAudio } from "@/features/agents/api/client";
 import { useTranscriptionCapabilityQuery } from "@/features/agents/api/queries";
 import {
@@ -34,7 +35,6 @@ import {
   readDescriptionDraft,
   writeDescriptionDraft,
 } from "../lib/description-draft-storage";
-import { transcriptTextForCaret } from "../lib/description-voice-insert";
 import { InlineField } from "./inline-field";
 import { Markdown } from "./markdown";
 
@@ -70,16 +70,12 @@ export function IssueDescriptionField({
     setDraftRef.current?.(next);
   }, []);
 
-  const { textareaRef, textareaProps, isUploading } = useDescriptionEditorUpload(
-    upload,
-    draft,
-    applyDraft,
-  );
+  const { textareaRef, textareaProps, isUploading } =
+    useDescriptionEditorUpload(upload, draft, applyDraft);
 
   const onTranscript = useCallback(
     (text: string) => {
-      const caret =
-        caretPositionRef.current ?? draftRef.current.length;
+      const caret = caretPositionRef.current ?? draftRef.current.length;
       const insert = transcriptTextForCaret(draftRef.current, caret, text);
       const inserted = insertTextAtCaret(
         draftRef.current,
@@ -290,7 +286,9 @@ export function IssueDescriptionField({
           }}
           renderDisplayContent={(value) =>
             value.trim() ? (
-              <Markdown issueId={attach ? issue.id : undefined}>{value}</Markdown>
+              <Markdown issueId={attach ? issue.id : undefined}>
+                {value}
+              </Markdown>
             ) : (
               <p className="text-[15px] leading-[1.55] text-muted-foreground">
                 Add a description.

@@ -13,6 +13,14 @@ const postComment = vi.hoisted(() => ({
   isPending: false,
 }));
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("../../api/mutations", () => ({
   usePostComment: () => postComment,
 }));

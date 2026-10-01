@@ -3,6 +3,7 @@ import {
   activeOwner,
   release,
   resetVoiceSessionLockForTests,
+  reviewVoiceOwner,
   tryAcquire,
 } from "./voice-session-lock";
 
@@ -31,6 +32,18 @@ describe("voiceSessionLock", () => {
     expect(activeOwner()).toBeNull();
     expect(tryAcquire("composer")).toBe(true);
     expect(activeOwner()).toBe("composer");
+  });
+
+  it("keeps two review composers from sharing one session", () => {
+    const first = reviewVoiceOwner("review:story-1:conversation");
+    const second = reviewVoiceOwner("review:story-1:reply:a");
+    expect(tryAcquire(first)).toBe(true);
+    expect(tryAcquire(second)).toBe(false);
+    expect(activeOwner()).toBe(first);
+
+    release(first);
+    expect(tryAcquire(second)).toBe(true);
+    expect(activeOwner()).toBe(second);
   });
 
   it("release only clears when the caller is the holder", () => {

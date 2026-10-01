@@ -26,6 +26,14 @@ const events = vi.hoisted(() => ({
   isPending: false,
 }));
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("@/features/issues/api/queries", () => ({
   useCommentsQuery: () => ({
     data: { messages: [], threads: [], problems: state.problems },

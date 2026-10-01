@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 
-export type VoiceSessionOwner = "composer" | "description";
+export type VoiceSessionOwner = "composer" | "description" | `review:${string}`;
+
+/** One lock per review composer, keyed by its draft so peers stay quiet. */
+export function reviewVoiceOwner(draftKey: string): `review:${string}` {
+  return `review:${draftKey}`;
+}
 
 let holder: VoiceSessionOwner | null = null;
 const listeners = new Set<() => void>();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { transcriptTextForCaret } from "./description-voice-insert";
+import { transcriptTextForCaret } from "./transcript-text-for-caret";
 
 describe("transcriptTextForCaret", () => {
   it("prepends a leading space when the caret follows non-whitespace", () => {

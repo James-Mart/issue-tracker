@@ -23,6 +23,14 @@ vi.mock("@pierre/diffs/react", () => ({
   FileDiff: () => <div data-testid="file-diff" />,
 }));
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("@/features/issues/api/mutations", () => ({
   usePostComment: () => ({ mutate: vi.fn(), isPending: false }),
 }));

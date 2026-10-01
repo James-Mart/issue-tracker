@@ -40,6 +40,14 @@ const state = vi.hoisted(() => ({
   commentThreads: [] as CommentThread[],
 }));
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("@pierre/diffs/react", () => ({
   Virtualizer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   useVirtualizer: () => ({

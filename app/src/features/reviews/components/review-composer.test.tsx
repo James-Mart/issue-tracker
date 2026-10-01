@@ -11,6 +11,14 @@ import {
   reviewComposerFieldHeight,
 } from "./review-composer";
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 function mount(
   props: Partial<ComponentProps<typeof ReviewComposer>> = {},
 ): { container: HTMLDivElement; root: Root } {
