@@ -276,4 +276,69 @@ describe("StoryReviewHeader submit", () => {
       "Tasking agent stopped — could not append Tasks for 3 threads.",
     );
   });
+
+  it("counts a thread again after its done submission released it", () => {
+    state.threads = [readyThread()];
+    const container = mount(
+      <StoryReviewHeader
+        projectId="proj"
+        storyId="story-1"
+        storyTitle="Story review workbench"
+        review={review({
+          submissions: [
+            {
+              id: "sub-done",
+              at: "2026-09-29T12:00:00.000Z",
+              status: "done",
+              threadIds: ["thread-1"],
+              conversationId: "conv-1",
+              taskIds: ["task-1"],
+            },
+          ],
+        })}
+        merged={false}
+      />,
+    );
+    const button = container.querySelector<HTMLButtonElement>('[data-testid="submit-review"]');
+    expect(button?.textContent).toBe("Submit review (1)");
+    expect(button?.disabled).toBe(false);
+  });
+
+  it("leaves a thread claimed by an open submission out of the submit count", () => {
+    state.threads = [
+      readyThread(),
+      {
+        ...readyThread(),
+        root: { ...readyThread().root, id: "thread-new" },
+      },
+    ];
+    const container = mount(
+      <StoryReviewHeader
+        projectId="proj"
+        storyId="story-1"
+        storyTitle="Story review workbench"
+        review={review({
+          submissions: [
+            {
+              id: "sub-1",
+              at: "2026-09-29T12:00:00.000Z",
+              // `incomplete` is not stored yet. The count still uses the claim rule.
+              status: "incomplete",
+              threadIds: ["thread-1"],
+              conversationId: "conv-1",
+              error: "held",
+            } as unknown as ReviewSubmission,
+          ],
+        })}
+        merged={false}
+      />,
+    );
+    const button = container.querySelector<HTMLButtonElement>('[data-testid="submit-review"]');
+    expect(button?.textContent).toBe("Submit review (1)");
+    expect(button?.getAttribute("data-ready-count")).toBe("1");
+    click(button);
+    expect(document.body.querySelector('[data-testid="submit-review-dialog"]')?.textContent).toContain(
+      "Turn 1 unresolved thread into Tasks.",
+    );
+  });
 });

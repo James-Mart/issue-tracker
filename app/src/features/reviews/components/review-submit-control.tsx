@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { CircleAlert, Loader2, RefreshCw } from "lucide-react";
 import type { ReviewView } from "@server/schemas";
+import { submittableCommentThreads } from "../lib/review-submittable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -282,7 +283,9 @@ export function ReviewSubmitColumns({
   merged: boolean;
 }) {
   const { threads, loaded } = useCommentThreads(storyId);
-  const readyThreads = loaded ? threads.filter((thread) => thread.readyToTask) : undefined;
+  const readyThreads = loaded
+    ? submittableCommentThreads(threads, review?.submissions ?? [])
+    : undefined;
   const readyCount = readyThreads?.length;
   const [pendingThreadIds, setPendingThreadIds] = useState<string[] | undefined>();
   const [retryingId, setRetryingId] = useState<string | undefined>();

@@ -24,6 +24,7 @@ import {
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { appendComment, readAll, readComments, readIssueOrThrow } from "./issues.js";
+import { submittableRootIds } from "../../src/features/reviews/lib/review-submittable.js";
 import { ancestorChain, nearestImplementingWorkRootId } from "./subtree.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { requireProject } from "./require-project.js";
@@ -67,10 +68,11 @@ export type TaskingRunOutcome = {
   errorMessage?: string;
 };
 
-function readyThreadIds(storyId: string): string[] {
-  return readComments(storyId)
-    .threads.filter((thread) => thread.readyToTask)
-    .map((thread) => thread.rootId);
+function submittableThreadIds(
+  storyId: string,
+  submissions: readonly ReviewSubmission[],
+): string[] {
+  return submittableRootIds(readComments(storyId).threads, submissions);
 }
 
 function taskingPrompt(
@@ -268,7 +270,7 @@ export async function submitReview(
   const storyId = review.target.storyId;
   assertStoryOpenForTasking(storyId);
   assertNoTasking(review.submissions);
-  const threadIds = readyThreadIds(storyId);
+  const threadIds = submittableThreadIds(storyId, review.submissions);
   if (threadIds.length === 0) {
     throw new IssueError("validation", NO_READY_THREADS_ERROR);
   }
@@ -290,7 +292,7 @@ export async function submitReview(
   updateStoredReview(project, reviewId, (current) => {
     assertStoryOpenForTasking(storyId);
     assertNoTasking(current.submissions);
-    const readyNow = new Set(readyThreadIds(storyId));
+    const readyNow = new Set(submittableThreadIds(storyId, current.submissions));
     if (threadIds.some((id) => !readyNow.has(id))) {
       throw new IssueError(
         "conflict",
