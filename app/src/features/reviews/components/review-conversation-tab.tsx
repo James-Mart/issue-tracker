@@ -5,7 +5,6 @@ import { usePostComment } from "@/features/issues/api/mutations";
 import { useCommentThreads, useCommentsQuery } from "@/features/issues/api/queries";
 import { humanComment } from "@/features/issues/lib/comments";
 import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
-import { CommentThread } from "@/features/issues/components/comments/comment-thread";
 import {
   Marker,
   commentDayKey,
@@ -14,7 +13,6 @@ import {
 import { cn } from "@/lib/utils/cn";
 import type { ReviewSubmission } from "@server/schemas";
 import {
-  isPlainNote,
   STORY_COMPOSER_LABEL,
   type CommentThread as CommentThreadData,
 } from "@/features/issues/lib/comment-threads";
@@ -155,21 +153,17 @@ function ConversationTimeline({
         return (
           <div key={`thread:${thread.root.id}`} className="flex min-w-0 flex-col">
             {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
-            {isPlainNote(thread) ? (
-              <CommentThread thread={thread} issueId={storyId} />
-            ) : (
-              <ReviewThread
-                thread={thread}
-                storyId={storyId}
-                showAnchorContext
-                collapse="resolved"
-                onSeeInDiff={
-                  anchor
-                    ? () => onOpenInDiff(thread.root.id, anchor.commitSha)
-                    : undefined
-                }
-              />
-            )}
+            <ReviewThread
+              thread={thread}
+              storyId={storyId}
+              showAnchorContext
+              collapse="resolved"
+              onSeeInDiff={
+                anchor
+                  ? () => onOpenInDiff(thread.root.id, anchor.commitSha)
+                  : undefined
+              }
+            />
           </div>
         );
       })}
