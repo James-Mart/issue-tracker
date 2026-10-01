@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { readDiffThreadSearchParam } from "@/features/issues/lib/issue-detail-tabs";
@@ -12,6 +12,13 @@ import {
   type ReviewWorkbenchTab,
 } from "../lib/workbench-tabs";
 
+/** One request to scroll the Diff to a thread: a page load with `?thread=`, or one open. */
+export type DiffThreadReveal = {
+  threadId: string;
+  /** Tells apart repeat opens of the same thread. */
+  request: number;
+};
+
 /**
  * Active tab (`?tab=`), review scope (`?scope=`), and the Diff thread to
  * open (`?thread=`). A missing or unknown tab is rewritten to the resolved
@@ -23,6 +30,9 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
   scope: string;
   setScope: (scope: string) => void;
   threadId: string | null;
+  /** The open thread until the Diff has scrolled to it for this request; then null. */
+  threadReveal: DiffThreadReveal | null;
+  markThreadRevealed: (reveal: DiffThreadReveal) => void;
   openThreadInDiff: (threadId: string, commitSha: string) => void;
   openThreadInConversation: (threadId: string) => void;
   openThread: (thread: CommentThread) => void;
@@ -35,6 +45,13 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
   const active = resolveReviewWorkbenchTab(rawTab);
   const scope = resolveReviewScope(rawScope, knownShas);
   const threadId = readDiffThreadSearchParam(searchParams);
+  const [threadRequest, setThreadRequest] = useState(0);
+  const [revealed, setRevealed] = useState<DiffThreadReveal | null>(null);
+  const threadReveal =
+    threadId !== null &&
+    (revealed?.threadId !== threadId || revealed.request !== threadRequest)
+      ? { threadId, request: threadRequest }
+      : null;
 
   const write = useCallback(
     (
@@ -71,6 +88,7 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
           : knownShas.includes(commitSha)
             ? commitSha
             : ALL_CHANGES_SCOPE;
+      setThreadRequest((request) => request + 1);
       write("diff", nextScope, nextThreadId);
     },
     [knownShas, write],
@@ -111,6 +129,8 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
     scope,
     setScope,
     threadId,
+    threadReveal,
+    markThreadRevealed: setRevealed,
     openThreadInDiff,
     openThreadInConversation,
     openThread,

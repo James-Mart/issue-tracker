@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import {
+  bandRevealDelta,
   nextDiffLineScrollTop,
   paintedDiffLineSpan,
   paintedLineForSide,
@@ -99,5 +100,22 @@ describe("nextDiffLineScrollTop", () => {
 
   it("stays put when the line is already inside the painted window", () => {
     expect(nextDiffLineScrollTop(100, span, 40)).toBeNull();
+  });
+});
+
+describe("bandRevealDelta", () => {
+  const band = { start: 100, end: 500 };
+
+  it("leaves a hit that is wholly inside the band", () => {
+    expect(bandRevealDelta(band, 100, 120)).toBe(0);
+    expect(bandRevealDelta(band, 480, 500)).toBe(0);
+  });
+
+  it("centers a hit that sits under the pinned header", () => {
+    expect(bandRevealDelta(band, 90, 110)).toBe(-200);
+  });
+
+  it("centers a hit below the band", () => {
+    expect(bandRevealDelta(band, 900, 920)).toBe(610);
   });
 });

@@ -104,11 +104,13 @@ export function mergeComposerAnnotation(
  * Pierre keys annotation slots by array index, so a line whose index moves
  * remounts its threads and any composer open in them. Keep lines from the
  * previous render in their previous order and append new lines after them.
- * A removed line still shifts the lines after it.
+ * A removed line keeps its slot with `empty` metadata, which must render
+ * nothing, so the lines after it keep theirs; removed lines at the end drop.
  */
 export function keepAnnotationOrder<T>(
   previous: readonly DiffLineAnnotation<T>[],
   next: DiffLineAnnotation<T>[],
+  empty: T,
 ): DiffLineAnnotation<T>[] {
   const pending = new Map(
     next.map((annotation) => [lineAnnotationKey(annotation), annotation]),
@@ -116,11 +118,10 @@ export function keepAnnotationOrder<T>(
   const ordered: DiffLineAnnotation<T>[] = [];
   for (const annotation of previous) {
     const key = lineAnnotationKey(annotation);
-    const current = pending.get(key);
-    if (!current) continue;
-    ordered.push(current);
+    ordered.push(pending.get(key) ?? { ...annotation, metadata: empty });
     pending.delete(key);
   }
+  while (ordered.length > 0 && ordered.at(-1)!.metadata === empty) ordered.pop();
   ordered.push(...pending.values());
   return ordered.every((annotation, index) => annotation === next[index])
     ? next

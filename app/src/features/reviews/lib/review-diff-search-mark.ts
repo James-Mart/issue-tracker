@@ -1,23 +1,40 @@
+import { bandRevealDelta } from "./review-diff-line-scroll";
 import type { DiffSearchLineType, DiffSearchMatch } from "./review-diff-search";
-import { nthIndex } from "./review-diff-search";
+import { searchHits } from "./review-diff-search";
 
 export const REVIEW_SEARCH_CURRENT_ATTR = "data-review-search-current";
+export const REVIEW_SEARCH_MATCH_ATTR = "data-review-search-match";
+
+const MARK_SELECTOR = `[${REVIEW_SEARCH_CURRENT_ATTR}], [${REVIEW_SEARCH_MATCH_ATTR}]`;
 
 const reviewSearchRadius = "2px";
 const reviewSearchOutline = "2px solid hsl(var(--current))";
+const reviewSearchCurrentFill = "hsl(var(--current) / 0.32)";
+const reviewSearchMatchFill = "hsl(var(--current) / 0.16)";
 
 /** Injected into the diff shadow root, which does not see the app stylesheet. */
 export const REVIEW_SEARCH_MATCH_CSS = `
 [${REVIEW_SEARCH_CURRENT_ATTR}] {
   border-radius: ${reviewSearchRadius};
   outline: ${reviewSearchOutline};
+  background-color: ${reviewSearchCurrentFill};
+}
+[${REVIEW_SEARCH_MATCH_ATTR}] {
+  border-radius: ${reviewSearchRadius};
+  background-color: ${reviewSearchMatchFill};
 }
 `;
 
-/** Same outline as `REVIEW_SEARCH_MATCH_CSS`, for a light-DOM path mark. */
+/** Same marks as `REVIEW_SEARCH_MATCH_CSS`, for light-DOM path text. */
 export const reviewSearchCurrentStyle = {
   borderRadius: reviewSearchRadius,
   outline: reviewSearchOutline,
+  backgroundColor: reviewSearchCurrentFill,
+} as const;
+
+export const reviewSearchMatchStyle = {
+  borderRadius: reviewSearchRadius,
+  backgroundColor: reviewSearchMatchFill,
 } as const;
 
 type ContentMatch = Extract<DiffSearchMatch, { kind: "content" }>;
@@ -43,114 +60,61 @@ function lineSelectors(match: ContentMatch): string[] {
   ];
 }
 
-function collectMarks(root: ParentNode, out: HTMLElement[]) {
-  if (!(root instanceof Element) && !(root instanceof DocumentFragment) && !(root instanceof ShadowRoot)) {
-    return;
+/** Unwrap the marks in the section's diff shadow roots. Path marks belong to React. */
+export function clearReviewSearchMarks(section: ParentNode) {
+  const parents = new Set<Node>();
+  for (const host of section.querySelectorAll("diffs-container")) {
+    for (const mark of host.shadowRoot?.querySelectorAll(MARK_SELECTOR) ?? []) {
+      parents.add(mark.parentNode!);
+      mark.replaceWith(...mark.childNodes);
+    }
   }
-  for (const mark of root.querySelectorAll<HTMLElement>(`[${REVIEW_SEARCH_CURRENT_ATTR}]`)) {
-    out.push(mark);
-  }
-  for (const el of root.querySelectorAll("*")) {
-    if (el.shadowRoot) collectMarks(el.shadowRoot, out);
-  }
+  for (const parent of parents) parent.normalize();
 }
 
-export function clearReviewSearchMarks(root: ParentNode) {
-  const marks: HTMLElement[] = [];
-  collectMarks(root, marks);
-  for (const mark of marks) {
-    const parent = mark.parentNode;
-    if (!parent) continue;
-    mark.replaceWith(...mark.childNodes);
-    parent.normalize();
-  }
-}
-
-/** Wrap the `occurrence`th needle hit inside `container`. The hit may span tokens. */
-export function wrapTextOccurrence(
-  container: HTMLElement,
-  needle: string,
-  occurrence: number,
-): HTMLElement | null {
+function textNodes(container: HTMLElement): Text[] {
   const nodes: Text[] = [];
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  let current = walker.nextNode();
-  while (current) {
-    nodes.push(current as Text);
-    current = walker.nextNode();
-  }
-  const full = nodes.map((node) => node.textContent ?? "").join("");
-  const start = nthIndex(full, needle, occurrence);
-  if (start < 0) return null;
-  const end = start + needle.length;
-
-  let cursor = 0;
-  let first: HTMLElement | null = null;
-  for (const textNode of nodes) {
-    const text = textNode.textContent ?? "";
-    const nodeStart = cursor;
-    const nodeEnd = cursor + text.length;
-    cursor = nodeEnd;
-    if (nodeEnd <= start || nodeStart >= end) continue;
-    const localStart = Math.max(0, start - nodeStart);
-    const localEnd = Math.min(text.length, end - nodeStart);
-    let target = textNode;
-    if (localStart > 0) target = textNode.splitText(localStart);
-    const kept = localEnd - localStart;
-    if ((target.textContent ?? "").length > kept) target.splitText(kept);
-    const span = document.createElement("span");
-    span.setAttribute(REVIEW_SEARCH_CURRENT_ATTR, "true");
-    target.parentNode?.replaceChild(span, target);
-    span.appendChild(target);
-    first ??= span;
-  }
-  return first;
-}
-
-function scrollParent(start: HTMLElement): HTMLElement | null {
-  let node = start.parentElement;
-  while (node) {
-    const overflow = getComputedStyle(node).overflowY;
-    if (
-      (overflow === "auto" || overflow === "scroll") &&
-      node.scrollHeight > node.clientHeight + 1
-    ) {
-      return node;
-    }
-    node = node.parentElement;
-  }
-  return null;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) nodes.push(node as Text);
+  return nodes;
 }
 
 /**
- * The diff virtualizer only mounts a window of lines. Nudge its scroll parent
- * so `lineNumber` enters that window. Returns false when the line is already
- * in range or the scroll position cannot move.
+ * Wrap every needle hit inside `container`; a hit may span tokens. The
+ * `current`th hit gets the current mark and the rest the dimmer match mark.
+ * Returns the current hit's first piece.
  */
-export function scrollDiffTowardLine(section: HTMLElement, lineNumber: number): boolean {
-  const shadow = section.querySelector("diffs-container")?.shadowRoot;
-  if (!shadow) return false;
-  const rendered = [
-    ...shadow.querySelectorAll<HTMLElement>("[data-content] [data-line]"),
-  ];
-  if (rendered.length === 0) return false;
-  const numbers = rendered.map((el) => Number(el.getAttribute("data-line")));
-  const min = Math.min(...numbers);
-  const max = Math.max(...numbers);
-  if (lineNumber >= min && lineNumber <= max) return false;
-
-  const pre = shadow.querySelector("pre");
-  const renderedHeight = pre?.getBoundingClientRect().height ?? 0;
-  if (renderedHeight <= 0) return false;
-  const lineHeight = renderedHeight / rendered.length;
-  const scroller = scrollParent(section);
-  if (!scroller) return false;
-
-  const delta = lineNumber > max ? lineNumber - max : lineNumber - min;
-  const next = Math.max(0, scroller.scrollTop + delta * lineHeight);
-  if (Math.abs(scroller.scrollTop - next) < 2) return false;
-  scroller.scrollTop = next;
-  return true;
+export function wrapTextOccurrences(
+  container: HTMLElement,
+  needle: string,
+  current: number | undefined,
+): HTMLElement | null {
+  const nodes = textNodes(container);
+  const hits = searchHits(nodes.map((node) => node.data).join(""), needle, current);
+  let first: HTMLElement | null = null;
+  let cursor = 0;
+  let from = 0;
+  for (const node of nodes) {
+    const nodeStart = cursor;
+    const nodeEnd = cursor + node.data.length;
+    cursor = nodeEnd;
+    while (from < hits.length && hits[from].end <= nodeStart) from += 1;
+    let to = from;
+    while (to < hits.length && hits[to].start < nodeEnd) to += 1;
+    // Split from the right so the offsets of pieces further left stay valid.
+    for (const hit of hits.slice(from, to).reverse()) {
+      const localStart = Math.max(0, hit.start - nodeStart);
+      const localEnd = Math.min(nodeEnd, hit.end) - nodeStart;
+      if (localEnd < node.data.length) node.splitText(localEnd);
+      const target = localStart > 0 ? node.splitText(localStart) : node;
+      const span = document.createElement("span");
+      span.setAttribute(hit.current ? REVIEW_SEARCH_CURRENT_ATTR : REVIEW_SEARCH_MATCH_ATTR, "true");
+      target.parentNode?.replaceChild(span, target);
+      span.appendChild(target);
+      if (hit.current) first ??= span;
+    }
+  }
+  return first;
 }
 
 function findContentLine(section: ParentNode, match: ContentMatch): HTMLElement | null {
@@ -166,16 +130,39 @@ function findContentLine(section: ParentNode, match: ContentMatch): HTMLElement 
 }
 
 /**
- * Mark the current content hit inside the rendered diff and return it.
- * Callers scroll that node into view.
+ * Mark every hit on the diff lines painted so far, leaving lines already
+ * marked alone, and return the current hit's mark once its line is painted.
  */
-export function markReviewContentMatch(
+export function markReviewContentHits(
   section: ParentNode,
-  match: ContentMatch,
   needle: string,
+  match: ContentMatch | undefined,
 ): HTMLElement | null {
-  clearReviewSearchMarks(section);
-  const line = findContentLine(section, match);
-  if (!line) return null;
-  return wrapTextOccurrence(line, needle, match.occurrence);
+  const currentLine = match ? findContentLine(section, match) : null;
+  for (const host of section.querySelectorAll("diffs-container")) {
+    for (const line of host.shadowRoot?.querySelectorAll<HTMLElement>("[data-content] [data-line]") ?? []) {
+      if (line.querySelector(MARK_SELECTOR)) continue;
+      wrapTextOccurrences(line, needle, line === currentLine ? match?.occurrence : undefined);
+    }
+  }
+  return currentLine?.querySelector<HTMLElement>(`[${REVIEW_SEARCH_CURRENT_ATTR}]`) ?? null;
+}
+
+/**
+ * Bring `mark` into view across its code column, which scrolls sideways under
+ * a sticky line-number gutter. Only that column moves.
+ */
+export function revealMarkInCodeColumn(mark: HTMLElement) {
+  const column = mark.closest<HTMLElement>("[data-code]");
+  if (column == null || column.scrollWidth <= column.clientWidth) return;
+  const box = column.getBoundingClientRect();
+  const gutter = column.querySelector<HTMLElement>(":scope > [data-gutter]");
+  if (gutter == null) throw new Error("revealMarkInCodeColumn: the code column has no gutter");
+  const hit = mark.getBoundingClientRect();
+  const delta = bandRevealDelta(
+    { start: box.left + gutter.getBoundingClientRect().width, end: box.right },
+    hit.left,
+    hit.right,
+  );
+  if (delta !== 0) column.scrollLeft += delta;
 }

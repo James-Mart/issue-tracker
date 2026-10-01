@@ -13,8 +13,10 @@ import { useVirtualizedFileScroll } from "@/features/issues/hooks/use-virtualize
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
 import { useCommentThreads } from "@/features/issues/api/queries";
 import { fileDiffsFromPatch } from "@/features/issues/lib/issue-change-file-diffs";
+import { useDiffScrollAnchor } from "../hooks/use-diff-scroll-anchor";
 import { useReviewDiffSearch } from "../hooks/use-review-diff-search";
 import { useReviewFileMarks } from "../hooks/use-review-file-marks";
+import type { DiffThreadReveal } from "../hooks/use-review-workbench-location";
 import {
   fileShowingThread,
   NO_FILE_THREADS,
@@ -46,6 +48,17 @@ import {
 } from "../lib/review-diff-search";
 
 type ScrollRequest = { path: string; nonce: number; scope: string };
+
+/**
+ * The search bar over the diff scroller, which pins the bar while the diff
+ * scrolls. Desktop's bounded page gives the stack the diff pane's height. On
+ * phone the page scrolls, so the stack is capped at the viewport under the
+ * sticky app bar (3rem) less the page's bottom padding (2rem): scrolled to
+ * the end, the bar rests at the top of the screen and the page cannot carry
+ * it under the app bar.
+ */
+const DIFF_STACK_CLASS =
+  "flex max-h-[calc(100svh-5rem)] min-h-0 min-w-0 flex-1 flex-col gap-2 shell:max-h-none";
 
 function ScopeStep({
   label,
@@ -161,7 +174,8 @@ function ReviewFileStack({
   currentMatch,
   threadsByFile,
   focusFile,
-  focusThreadId,
+  threadReveal,
+  onThreadRevealed,
 }: {
   rows: ReviewFileRow[];
   fileDiffs: Map<string, FileDiffMetadata>;
@@ -179,12 +193,14 @@ function ReviewFileStack({
   currentMatch: DiffSearchMatch | undefined;
   threadsByFile: Map<string, ReviewFileThreads>;
   focusFile: string | undefined;
-  focusThreadId: string | null;
+  threadReveal: DiffThreadReveal | null;
+  onThreadRevealed: (reveal: DiffThreadReveal) => void;
 }) {
   const fileRef = useVirtualizedFileScroll<HTMLElement>(
     scrollRequest?.path,
     scrollRequest?.nonce,
   );
+  useDiffScrollAnchor();
 
   return (
     <div className="flex flex-col gap-3">
@@ -200,7 +216,8 @@ function ReviewFileStack({
             row.file.path !== focusFile
           }
           threads={threadsByFile.get(row.file.path) ?? NO_FILE_THREADS}
-          scrollThreadId={row.file.path === focusFile ? focusThreadId ?? undefined : undefined}
+          reveal={row.file.path === focusFile ? threadReveal ?? undefined : undefined}
+          onRevealed={onThreadRevealed}
           readOnly={readOnly}
           diffLayout={diffLayout}
           source={source}
@@ -227,6 +244,8 @@ export function ReviewDiffTab({
   overrides,
   setOverrides,
   focusThreadId,
+  threadReveal,
+  onThreadRevealed,
   onFocusFileMissing,
 }: {
   projectId: string;
@@ -238,7 +257,10 @@ export function ReviewDiffTab({
   onScopeChange: (scope: string) => void;
   overrides: ReviewMarkOverrides;
   setOverrides: Dispatch<SetStateAction<ReviewMarkOverrides>>;
+  /** The open thread; its file stays expanded. */
   focusThreadId: string | null;
+  threadReveal: DiffThreadReveal | null;
+  onThreadRevealed: (reveal: DiffThreadReveal) => void;
   onFocusFileMissing: () => void;
 }) {
   const { layout, setLayout, diffLayout, isMobile } = useDiffLayoutPreference();
@@ -280,18 +302,22 @@ export function ReviewDiffTab({
     // can still render, matching resolveReviewScope.
     onFocusFileMissing();
   }, [focusAnchored, focusFile, onFocusFileMissing, scope]);
+  const revealRequest = threadReveal?.request;
   useEffect(() => {
-    if (!focusFile || !focusThreadId) return;
+    if (!focusFile || revealRequest === undefined) return;
     setScrollRequest({ path: focusFile, scope, nonce: 0 });
-  }, [focusFile, focusThreadId, scope]);
+  }, [focusFile, revealRequest, scope]);
   const search = useReviewDiffSearch(diff.files, parsed.searchDiffs, scope);
   const matchedPaths = filesMatchingSearch(search.matches);
   const visibleRows = search.filtering
     ? rows.filter((row) => matchedPaths.has(row.file.path))
     : rows;
-  const searchScroll = search.current
-    ? { path: search.current.path, scope, nonce: search.scrollNonce }
-    : undefined;
+  // A path hit sits in the file's header, so it lands with the file's top; a
+  // content hit lands on its own line.
+  const searchScroll =
+    search.current?.kind === "path"
+      ? { path: search.current.path, scope, nonce: search.scrollNonce }
+      : undefined;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-diff-tab">
@@ -337,7 +363,7 @@ export function ReviewDiffTab({
             />
           }
         >
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-diff-stack">
+          <div className={DIFF_STACK_CLASS} data-testid="review-diff-stack">
             <ReviewDiffSearch
               query={search.query}
               matchIndex={search.currentIndex}
@@ -354,7 +380,8 @@ export function ReviewDiffTab({
                 No matches in this diff. Clear the search or try another term.
               </p>
             ) : (
-              <Virtualizer className="max-h-[75svh] overflow-auto shell:max-h-none shell:min-h-0 shell:flex-1">
+              // useDiffScrollAnchor holds the reader in place; native anchoring would fight it.
+              <Virtualizer className="min-h-0 flex-1 overflow-auto [overflow-anchor:none]">
                 {/* New threads anchor to the commit being viewed; the tip for All changes. */}
                 <DiffComposerProvider
                   key={scope}
@@ -379,7 +406,8 @@ export function ReviewDiffTab({
                     currentMatch={search.current}
                     threadsByFile={threadsByFile}
                     focusFile={focusFile}
-                    focusThreadId={focusThreadId}
+                    threadReveal={threadReveal}
+                    onThreadRevealed={onThreadRevealed}
                   />
                 </DiffComposerProvider>
               </Virtualizer>

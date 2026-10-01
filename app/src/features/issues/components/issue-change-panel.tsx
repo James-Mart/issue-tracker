@@ -361,6 +361,7 @@ function FileLineThreads({
   const newComposer = line
     ? newComposerOnLine(composer.open, line.file, line.lineNumber, line.side)
     : null;
+  if (threads.length === 0 && newComposer == null) return null;
 
   return (
     <div

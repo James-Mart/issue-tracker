@@ -161,9 +161,11 @@ describe("keepAnnotationOrder", () => {
     metadata,
   });
 
+  const EMPTY: string[] = [];
+
   it("returns the next list unchanged when its order already matches", () => {
     const next = [line("deletions", 90), line("additions", 94)];
-    expect(keepAnnotationOrder([line("deletions", 90)], next)).toBe(next);
+    expect(keepAnnotationOrder([line("deletions", 90)], next, EMPTY)).toBe(next);
   });
 
   it("keeps earlier lines at their indices and appends new ones", () => {
@@ -173,17 +175,34 @@ describe("keepAnnotationOrder", () => {
       line("additions", 92, ["sent"]),
       line("additions", 94, ["reply"]),
     ];
-    expect(keepAnnotationOrder(previous, next)).toEqual([
+    expect(keepAnnotationOrder(previous, next, EMPTY)).toEqual([
       line("additions", 94, ["reply"]),
       line("additions", 92, ["sent"]),
       line("deletions", 90, ["new-thread"]),
     ]);
   });
 
-  it("drops lines that are gone", () => {
-    const previous = [line("additions", 92), line("additions", 94)];
-    expect(keepAnnotationOrder(previous, [line("additions", 94)])).toEqual([
-      line("additions", 94),
-    ]);
+  it("keeps a removed line's slot empty so the lines after it keep their index", () => {
+    const later = line("additions", 150, ["arrived"]);
+    const previous = [line("additions", 20, ["a"]), line("additions", 50), later];
+    const ordered = keepAnnotationOrder(previous, [previous[0]!, later], EMPTY);
+
+    expect(ordered).toEqual([previous[0], line("additions", 50, EMPTY), later]);
+    expect(ordered[1]!.metadata).toBe(EMPTY);
+    expect(ordered[2]).toBe(later);
+  });
+
+  it("drops removed lines at the end", () => {
+    const previous = [line("additions", 94, ["a"]), line("additions", 92), line("additions", 96)];
+    const next = [previous[0]!];
+    expect(keepAnnotationOrder(previous, next, EMPTY)).toBe(next);
+  });
+
+  it("reuses an empty slot when its line comes back", () => {
+    const previous = [line("additions", 20, ["a"]), line("additions", 50, EMPTY), line("additions", 70, ["b"])];
+    const back = line("additions", 50, ["new-thread"]);
+    expect(
+      keepAnnotationOrder(previous, [previous[0]!, back, previous[2]!], EMPTY),
+    ).toEqual([previous[0], back, previous[2]]);
   });
 });
