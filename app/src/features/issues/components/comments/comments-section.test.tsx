@@ -32,6 +32,14 @@ const useCommentsQuery = vi.hoisted(() =>
   })),
 );
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("../../api/queries", () => ({
   useCommentsQuery,
   useIssuesQuery: () => ({ data: undefined }),

@@ -40,6 +40,14 @@ const state = vi.hoisted(() => ({
   commentThreads: [] as CommentThread[],
 }));
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("@pierre/diffs/react", () => ({
   Virtualizer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   useVirtualizer: () => ({
@@ -577,7 +585,7 @@ describe("StoryReviewPage", () => {
     );
     expect(composer?.textContent).toContain("line 1");
     setTextarea(composer!.querySelector("textarea")!, "Name this constant.");
-    click(composer!.querySelector('button[aria-label="Comment"]')!);
+    click(composer!.querySelector('button[aria-label="Send"]')!);
 
     expect(state.postComment).toHaveBeenCalledWith(
       {

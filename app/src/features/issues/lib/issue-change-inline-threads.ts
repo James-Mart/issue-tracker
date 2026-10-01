@@ -23,6 +23,12 @@ function hunkHasLine(
   return false;
 }
 
+function lineAnnotationKey(
+  annotation: Pick<DiffLineAnnotation<unknown>, "side" | "lineNumber">,
+): string {
+  return `${annotation.side}:${annotation.lineNumber}`;
+}
+
 /** Place anchored threads on this file's hunk lines, or at the file end. */
 export function placeThreadsInFile(
   threads: CommentThread[],
@@ -46,7 +52,7 @@ export function placeThreadsInFile(
         }
 
         const annotationSide = side === "old" ? "deletions" : "additions";
-        const key = `${annotationSide}:${line}`;
+        const key = lineAnnotationKey({ side: annotationSide, lineNumber: line });
         const existing = locatedByKey.get(key);
         if (existing) {
           existing.metadata.push(...fresh);
@@ -83,4 +89,31 @@ export function mergeComposerAnnotation(
     ...located,
     { side, lineNumber: composer.line, metadata: [] },
   ];
+}
+
+/**
+ * Pierre keys annotation slots by array index, so a line whose index moves
+ * remounts its threads and any composer open in them. Keep lines from the
+ * previous render in their previous order and append new lines after them.
+ * A removed line still shifts the lines after it.
+ */
+export function keepAnnotationOrder<T>(
+  previous: readonly DiffLineAnnotation<T>[],
+  next: DiffLineAnnotation<T>[],
+): DiffLineAnnotation<T>[] {
+  const pending = new Map(
+    next.map((annotation) => [lineAnnotationKey(annotation), annotation]),
+  );
+  const ordered: DiffLineAnnotation<T>[] = [];
+  for (const annotation of previous) {
+    const key = lineAnnotationKey(annotation);
+    const current = pending.get(key);
+    if (!current) continue;
+    ordered.push(current);
+    pending.delete(key);
+  }
+  ordered.push(...pending.values());
+  return ordered.every((annotation, index) => annotation === next[index])
+    ? next
+    : ordered;
 }

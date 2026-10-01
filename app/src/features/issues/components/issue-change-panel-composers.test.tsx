@@ -103,6 +103,14 @@ function annotationsForRow(
   });
 }
 
+vi.mock("@/features/agents/api/queries", () => ({
+  useTranscriptionCapabilityQuery: () => ({
+    data: { available: true },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("@pierre/diffs/react", () => ({
   FileDiff: function FileDiffMock({
     fileDiff,

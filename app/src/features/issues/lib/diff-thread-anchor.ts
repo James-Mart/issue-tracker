@@ -1,6 +1,7 @@
 import type { FileDiffMetadata, SelectedLineRange } from "@pierre/diffs/react";
 import type { CommentInput } from "@server/schemas";
 import { questionKindFields } from "@server/question-kind";
+import { replyDraftKey, reviewDraftKey } from "@/features/reviews/lib/review-draft-key";
 
 export type AnchorSide = "old" | "new";
 
@@ -76,23 +77,18 @@ export function newComposerForRange(
   return { kind: "new", path, side, line: end, startLine: start };
 }
 
-export function newThreadDraftId(
-  anchor: Pick<DiffThreadAnchor, "path" | "side" | "line" | "startLine">,
+export function composerDraftKey(
+  reviewId: string,
+  open: OpenDiffComposer,
 ): string {
+  if (open.kind === "reply") {
+    return replyDraftKey(reviewId, open.threadId);
+  }
   const span =
-    anchor.startLine !== undefined
-      ? `${anchor.startLine}-${anchor.line}`
-      : String(anchor.line);
-  return `${anchor.path}:${anchor.side}:${span}`;
-}
-
-export function threadDraftKey(kind: "new" | "reply", id: string): string {
-  return `diff-thread-draft:${kind}:${id}`;
-}
-
-export function composerDraftKey(open: OpenDiffComposer): string {
-  if (open.kind === "reply") return threadDraftKey("reply", open.threadId);
-  return threadDraftKey("new", newThreadDraftId(open));
+    open.startLine !== undefined
+      ? `${open.startLine}-${open.line}`
+      : String(open.line);
+  return reviewDraftKey(reviewId, `line:${open.path}:${open.side}:${span}`);
 }
 
 export function commentInputForComposer(

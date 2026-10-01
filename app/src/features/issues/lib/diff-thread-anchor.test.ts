@@ -3,9 +3,7 @@ import {
   commentInputForComposer,
   composerDraftKey,
   newComposerForRange,
-  newThreadDraftId,
   pathForAnchorSide,
-  threadDraftKey,
 } from "./diff-thread-anchor";
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
@@ -69,17 +67,26 @@ describe("pathForAnchorSide", () => {
 
 describe("draft keys and write payloads", () => {
   it("scopes new-thread and reply drafts on different keys", () => {
-    const neu = composerDraftKey({
+    const neu = composerDraftKey("story-1", {
       kind: "new",
       path: PATH,
       side: "new",
       line: 94,
     });
-    const reply = composerDraftKey({ kind: "reply", threadId: "current-root" });
-    expect(neu).toBe(
-      threadDraftKey("new", newThreadDraftId({ path: PATH, side: "new", line: 94 })),
-    );
-    expect(reply).toBe(threadDraftKey("reply", "current-root"));
+    const reply = composerDraftKey("story-1", {
+      kind: "reply",
+      threadId: "current-root",
+    });
+    const range = composerDraftKey("story-1", {
+      kind: "new",
+      path: PATH,
+      side: "new",
+      line: 96,
+      startLine: 94,
+    });
+    expect(neu).toBe(`review:story-1:line:${PATH}:new:94`);
+    expect(reply).toBe("review:story-1:reply:current-root");
+    expect(range).toBe(`review:story-1:line:${PATH}:new:94-96`);
     expect(neu).not.toBe(reply);
   });
 

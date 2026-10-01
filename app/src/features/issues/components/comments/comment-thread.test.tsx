@@ -445,10 +445,12 @@ describe("CommentThread", () => {
     expect(thread?.textContent).toContain("Question");
     expect(thread?.querySelector('[data-testid="thread-linked-task"]')).toBeNull();
     expect(thread?.querySelector('[data-testid="thread-resolve"]')).toBeNull();
+    const dismiss = thread?.querySelector('[data-testid="thread-dismiss"]');
+    expect(dismiss?.textContent).toBe("Dismiss question");
+    expect(dismiss?.closest('[data-testid="question-card-footer"]')).not.toBeNull();
 
     act(() => {
-      thread
-        ?.querySelector('[data-testid="thread-dismiss"]')
+      dismiss
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onDismiss).toHaveBeenCalledOnce();

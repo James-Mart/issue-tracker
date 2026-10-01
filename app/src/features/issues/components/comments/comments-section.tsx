@@ -10,9 +10,18 @@ import { questionKindFields } from "@server/question-kind";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { ReviewComposer } from "@/features/reviews/components/review-composer";
+import {
+  conversationDraftKey,
+  replyDraftKey,
+} from "@/features/reviews/lib/review-draft-key";
 import { useCommentsQuery, useIssuesQuery } from "../../api/queries";
 import { usePostComment, usePostThreadEvent } from "../../api/mutations";
 import { supportsAttachments } from "../../lib/attachments";
+import {
+  postCommentWhenIdle,
+  postHumanComment,
+} from "../../lib/post-comment-when-idle";
 import {
   groupCommentThreads,
   isPlainNote,
@@ -27,27 +36,11 @@ import { writeDiffThreadSearchParam } from "../../lib/issue-detail-tabs";
 import { SettingsCard } from "../detail-section";
 import { Markdown } from "../markdown";
 import { CommentThread } from "./comment-thread";
-import { StoryComposerActions } from "./story-composer-actions";
 import { Marker, commentDayKey, commentDayLabel } from "./marker";
 import { Message } from "./message";
 import { Shimmer } from "./shimmer";
 
 const COMPOSER_ROLE = "human";
-
-function StandaloneComment({
-  message,
-  attachmentsIssueId,
-}: {
-  message: CommentMessage;
-  attachmentsIssueId?: string;
-}) {
-  const author = message.name ?? message.role;
-  return (
-    <Message author={author} role={message.role} at={message.at}>
-      <Markdown issueId={attachmentsIssueId}>{message.body}</Markdown>
-    </Message>
-  );
-}
 
 function ThreadReplyComposer({
   threadId,
@@ -96,6 +89,21 @@ function ThreadReplyComposer({
         <Send className="h-4 w-4" />
       </Button>
     </div>
+  );
+}
+
+function StandaloneComment({
+  message,
+  attachmentsIssueId,
+}: {
+  message: CommentMessage;
+  attachmentsIssueId?: string;
+}) {
+  const author = message.name ?? message.role;
+  return (
+    <Message author={author} role={message.role} at={message.at}>
+      <Markdown issueId={attachmentsIssueId}>{message.body}</Markdown>
+    </Message>
   );
 }
 
@@ -220,7 +228,10 @@ function CommentsPanel({
     return isInFlight(issue, list?.derived[id]);
   }, [id, list?.derived, list?.issues]);
 
-  const send = (kind?: "question") => {
+  const sendStory = (body: string, kind?: "question") =>
+    postHumanComment(post, body, kind);
+
+  const sendIssue = (kind?: "question") => {
     const body = draft.trim();
     if (!body || post.isPending) return;
     post.mutate(
@@ -233,7 +244,19 @@ function CommentsPanel({
     );
   };
 
-  const sendReply = (threadId: string) => {
+  const closeReply = (threadId: string) =>
+    setOpenReplyId((open) => (open === threadId ? null : open));
+
+  const sendStoryReply = (threadId: string, body: string) =>
+    postCommentWhenIdle(post, {
+      role: COMPOSER_ROLE,
+      body,
+      replyTo: threadId,
+    }).then(() => {
+      closeReply(threadId);
+    });
+
+  const sendIssueReply = (threadId: string) => {
     const body = (replyDrafts[threadId] ?? "").trim();
     if (!body || post.isPending) return;
     post.mutate(
@@ -245,32 +268,49 @@ function CommentsPanel({
             delete next[threadId];
             return next;
           });
-          setOpenReplyId(null);
+          closeReply(threadId);
         },
       },
     );
   };
 
-  const replySlotFor = (threadId: string) => {
-    if (openReplyId !== threadId) return undefined;
-    return (
-      <ThreadReplyComposer
-        threadId={threadId}
-        draft={replyDrafts[threadId] ?? ""}
-        onDraftChange={(value) =>
-          setReplyDrafts((prev) => ({ ...prev, [threadId]: value }))
-        }
-        onSend={() => sendReply(threadId)}
-        pending={post.isPending}
-      />
-    );
+  const onIssueKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendIssue();
+    }
   };
 
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
+  const replySlotFor = (threadId: string) => {
+    if (openReplyId !== threadId) return undefined;
+    if (!storyComposer) {
+      return (
+        <ThreadReplyComposer
+          threadId={threadId}
+          draft={replyDrafts[threadId] ?? ""}
+          onDraftChange={(value) =>
+            setReplyDrafts((prev) => ({ ...prev, [threadId]: value }))
+          }
+          onSend={() => sendIssueReply(threadId)}
+          pending={post.isPending}
+        />
+      );
     }
+    return (
+      <div
+        data-testid="comment-log-reply-composer"
+        data-thread-id={threadId}
+      >
+        <ReviewComposer
+          draftKey={replyDraftKey(id, threadId)}
+          placeholder="Reply"
+          submitLabel="Send"
+          pending={post.isPending}
+          onSubmit={(body) => sendStoryReply(threadId, body)}
+          onCancel={() => setOpenReplyId(null)}
+        />
+      </div>
+    );
   };
 
   return (
@@ -338,43 +378,42 @@ function CommentsPanel({
           <Shimmer />
         ) : null}
 
-        <div
-          className={
-            storyComposer
-              ? "flex min-w-0 shrink-0 flex-col gap-2 border-t border-border pt-3"
-              : "flex min-w-0 shrink-0 items-end gap-2 border-t border-border pt-3"
-          }
-        >
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={storyComposer ? STORY_COMPOSER_LABEL : "Add a comment"}
-            title="Enter to send, Shift+Enter for a newline"
-            aria-label={storyComposer ? STORY_COMPOSER_LABEL : "Add a comment"}
-            className="min-h-[40px] min-w-0 flex-1 resize-none touch:min-h-[44px]"
-          />
-          {storyComposer ? (
-            <StoryComposerActions
+        {storyComposer ? (
+          <div className="flex min-w-0 shrink-0 flex-col gap-2 border-t border-border pt-3">
+            <ReviewComposer
+              draftKey={conversationDraftKey(id)}
+              placeholder={STORY_COMPOSER_LABEL}
+              submitLabel="Send"
               pending={post.isPending}
-              canSend={draft.trim().length > 0}
-              onComment={() => send()}
-              onQuestion={() => send("question")}
+              persistent
+              onSubmit={(body) => sendStory(body)}
+              onQuestion={(body) => sendStory(body, "question")}
             />
-          ) : (
+          </div>
+        ) : (
+          <div className="flex min-w-0 shrink-0 items-end gap-2 border-t border-border pt-3">
+            <Textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={onIssueKeyDown}
+              placeholder="Add a comment"
+              title="Enter to send, Shift+Enter for a newline"
+              aria-label="Add a comment"
+              className="min-h-[40px] min-w-0 flex-1 resize-none touch:min-h-[44px]"
+            />
             <Button
               size="icon"
               variant="primary"
               className="h-11 w-11 shrink-0"
-              onClick={() => send()}
+              onClick={() => sendIssue()}
               disabled={post.isPending || !draft.trim()}
               title="Send"
               aria-label="Send"
             >
               <Send className="h-4 w-4" />
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </SettingsCard>
   );

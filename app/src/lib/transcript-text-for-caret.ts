@@ -4,10 +4,7 @@ export function transcriptTextForCaret(
   caretStart: number,
   transcript: string,
 ): string {
-  if (
-    caretStart > 0 &&
-    !/\s/.test(draft.charAt(caretStart - 1))
-  ) {
+  if (caretStart > 0 && !/\s/.test(draft.charAt(caretStart - 1))) {
     return ` ${transcript}`;
   }
   return transcript;
