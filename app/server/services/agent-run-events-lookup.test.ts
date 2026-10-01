@@ -14,6 +14,14 @@ import {
 
 const ISSUE_ID = "linked-task";
 
+function nestedSteps(
+  events: { type: string; step?: unknown }[] | undefined,
+) {
+  return events?.flatMap((event) =>
+    event.type === "subagent_update" ? [event.step] : [],
+  );
+}
+
 function conversationsDir(): string {
   return fixtureConversationsDir();
 }
@@ -225,7 +233,7 @@ describe("run event log", () => {
 
     const { listAgentRunEvents } = await import("./agent-runs.js");
     const events = listAgentRunEvents(ISSUE_ID, "del-a");
-    expect(events?.map((event) => event.step)).toEqual([
+    expect(nestedSteps(events)).toEqual([
       { kind: "tool_call", callId: "first", name: "delegate", status: "completed" },
       { kind: "tool_call", callId: "second", name: "delegate", status: "completed" },
     ]);
@@ -238,7 +246,7 @@ describe("run event log", () => {
 
     writeFileSync(join(conversationsDir(), "conv-owner", "transcript.jsonl"), "");
     const again = listAgentRunEvents(ISSUE_ID, "del-a");
-    expect(again?.map((event) => event.step)).toEqual([
+    expect(nestedSteps(again)).toEqual([
       { kind: "tool_call", callId: "first", name: "delegate", status: "completed" },
       { kind: "tool_call", callId: "second", name: "delegate", status: "completed" },
     ]);
@@ -301,7 +309,7 @@ describe("run event log", () => {
     });
 
     const events = listAgentRunEvents(ISSUE_ID, "del-live");
-    expect(events?.map((event) => event.step)).toEqual([
+    expect(nestedSteps(events)).toEqual([
       { kind: "text", text: "one" },
       { kind: "text", text: "two" },
     ]);
@@ -336,7 +344,7 @@ describe("run event log", () => {
       parentCallId: "call-a",
       step: { kind: "text", text: "live" },
     });
-    expect(listAgentRunEvents(ISSUE_ID, "del-a")?.map((event) => event.step)).toEqual([
+    expect(nestedSteps(listAgentRunEvents(ISSUE_ID, "del-a"))).toEqual([
       { kind: "tool_call", callId: "legacy", name: "delegate", status: "completed" },
       { kind: "text", text: "live" },
     ]);

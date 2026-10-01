@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -115,25 +116,45 @@ async function thread(rootId: string): Promise<CommentThreadView> {
   return view;
 }
 
-/** The thread once the launch that follows a comment response has settled. */
-type ResearcherStatus = NonNullable<CommentThreadView["researcherRun"]>["status"];
+const runningRun = { status: "running" as const, startedAt: expect.any(String) };
 
-async function threadPast(
-  rootId: string,
-  pending: ResearcherStatus[],
-): Promise<CommentThreadView> {
+function failedRun(error: string) {
+  return { status: "failed" as const, startedAt: expect.any(String), error };
+}
+
+function conversationIsLive(conversationId: string): boolean {
+  return existsSync(
+    join(dirname(issuesRoot), "conversations", conversationId, "run-live.json"),
+  );
+}
+
+/**
+ * The thread once its launch has a live run, or has failed before one exists.
+ * A follow-up still shows `running` from the launch overlay while the previous
+ * conversation id is on the thread, so a live marker is what shows the run started.
+ */
+async function launchedThread(rootId: string): Promise<CommentThreadView> {
   return vi.waitFor(async () => {
     const view = await thread(rootId);
     const status = view.researcherRun?.status;
-    if (status && pending.includes(status)) {
+    if (status === "failed") return view;
+    const id = view.researcherConversationId;
+    if (id && status === "running" && conversationIsLive(id)) return view;
+    throw new Error(`researcher launch still ${status ?? "unset"}`);
+  });
+}
+
+/** The thread once a live or posting run has settled. */
+async function settledThread(rootId: string): Promise<CommentThreadView> {
+  return vi.waitFor(async () => {
+    const view = await thread(rootId);
+    const status = view.researcherRun?.status;
+    if (status === "running" || status === "finishing") {
       throw new Error(`researcher still ${status}`);
     }
     return view;
   });
 }
-
-const launchedThread = (rootId: string) => threadPast(rootId, ["starting"]);
-const settledThread = (rootId: string) => threadPast(rootId, ["starting", "running"]);
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "issue-tracker-question-researcher-"));
@@ -191,7 +212,7 @@ afterEach(async () => {
 });
 
 describe("question researcher", () => {
-  it("responds with the client id before the researcher launch, which shows as starting", async () => {
+  it("responds with the client id before the researcher launch, which shows as running", async () => {
     let release!: () => void;
     let finish!: () => void;
     await startApp({
@@ -214,7 +235,7 @@ describe("question researcher", () => {
     expect(created.clientId).toBe("client-1");
 
     const starting = await thread(created.id);
-    expect(starting.researcherRun).toEqual({ status: "starting" });
+    expect(starting.researcherRun).toEqual(runningRun);
     expect(starting.researcherConversationId).toBeUndefined();
     const comments = (await fetch(`${baseUrl}/api/issues/s/comments`).then((r) =>
       r.json(),
@@ -224,9 +245,7 @@ describe("question researcher", () => {
     );
 
     release();
-    expect((await launchedThread(created.id)).researcherRun).toEqual({
-      status: "running",
-    });
+    expect((await launchedThread(created.id)).researcherRun).toEqual(runningRun);
     finish();
   });
 
@@ -249,15 +268,14 @@ describe("question researcher", () => {
       await startApp({ hold: new Promise<void>((r) => (release = r)) });
       const rootId = await askQuestion({ body: "Why?" });
 
-      expect((await launchedThread(rootId)).researcherRun).toEqual({
-        status: "failed",
-        error: "conversation store is read-only",
-      });
+      expect((await launchedThread(rootId)).researcherRun).toEqual(
+        failedRun("conversation store is read-only"),
+      );
       expect(conversationIds()).toEqual([]);
 
       const retried = await post(`/api/issues/s/threads/${rootId}/researcher/retry`);
       expect(retried.status).toBe(204);
-      expect((await thread(rootId)).researcherRun).toEqual({ status: "running" });
+      expect((await thread(rootId)).researcherRun).toEqual(runningRun);
       release();
     } finally {
       vi.doUnmock("../services/conversations.js");
@@ -274,7 +292,7 @@ describe("question researcher", () => {
     });
 
     const live = await launchedThread(rootId);
-    expect(live.researcherRun).toEqual({ status: "running" });
+    expect(live.researcherRun).toEqual(runningRun);
     const conversationId = live.researcherConversationId!;
     expect(conversationMeta(conversationId)).toMatchObject({
       issueId: "s",
@@ -308,10 +326,28 @@ describe("question researcher", () => {
     ]);
 
     release();
-    expect((await settledThread(rootId)).researcherRun).toEqual({
-      status: "failed",
-      error: "the run ended without a reply.",
+    expect((await settledThread(rootId)).researcherRun).toEqual(
+      failedRun("the run ended without a reply."),
+    );
+  });
+
+  it("stays posting until the run-end marker, then fails when no reply landed", async () => {
+    let release!: () => void;
+    await startApp({ hold: new Promise<void>((r) => (release = r)) });
+    const rootId = await askQuestion({ body: "Why?" });
+    const live = await launchedThread(rootId);
+    const conversationId = live.researcherConversationId!;
+    rmSync(join(dirname(issuesRoot), "conversations", conversationId, "run-live.json"));
+
+    expect((await thread(rootId)).researcherRun).toEqual({
+      status: "finishing",
+      startedAt: expect.any(String),
     });
+
+    release();
+    expect((await settledThread(rootId)).researcherRun).toEqual(
+      failedRun("the run ended without a reply."),
+    );
   });
 
   it("gives a general question the Story's diff range", async () => {
@@ -348,15 +384,12 @@ describe("question researcher", () => {
     const rootId = await askQuestion({ body: "Why?" });
 
     const failed = await settledThread(rootId);
-    expect(failed.researcherRun).toEqual({
-      status: "failed",
-      error: "the run timed out",
-    });
+    expect(failed.researcherRun).toEqual(failedRun("the run timed out"));
 
     const retried = await post(`/api/issues/s/threads/${rootId}/researcher/retry`);
     expect(retried.status).toBe(204);
     const live = await thread(rootId);
-    expect(live.researcherRun).toEqual({ status: "running" });
+    expect(live.researcherRun).toEqual(runningRun);
     expect(live.researcherConversationId).not.toBe(failed.researcherConversationId);
     expect(sentPrompt(1)).toContain("Question:\nWhy?");
 
@@ -383,10 +416,9 @@ describe("question researcher", () => {
     await startApp();
     const rootId = await askQuestion({ body: "What changed overall?" });
 
-    expect((await settledThread(rootId)).researcherRun).toEqual({
-      status: "failed",
-      error: 'story "s" has no merge base',
-    });
+    expect((await settledThread(rootId)).researcherRun).toEqual(
+      failedRun('story "s" has no merge base'),
+    );
     expect(fake.handles).toEqual([]);
   });
 
@@ -433,22 +465,21 @@ describe("question researcher", () => {
     expect(reply.status).toBe(201);
     const live = await launchedThread(rootId);
     expect(live.researcherConversationId).toBe(before);
-    expect(live.researcherRun).toEqual({ status: "running" });
+    expect(live.researcherRun).toEqual(runningRun);
     expect(sentPrompt(1)).toBe("And the tests?");
     expect(fake.handles).toHaveLength(1);
 
     release();
-    expect((await settledThread(rootId)).researcherRun).toEqual({
-      status: "failed",
-      error: "the run ended without a reply.",
-    });
+    expect((await settledThread(rootId)).researcherRun).toEqual(
+      failedRun("the run ended without a reply."),
+    );
   });
 
   it("delivers a reply into the live researcher run", async () => {
     let release!: () => void;
     await startApp({ hold: new Promise<void>((resolve) => (release = resolve)) });
     const rootId = await askQuestion({ body: "Why?" });
-    expect((await launchedThread(rootId)).researcherRun).toEqual({ status: "running" });
+    expect((await launchedThread(rootId)).researcherRun).toEqual(runningRun);
 
     const reply = await post("/api/issues/s/comments", {
       role: "human",
@@ -522,7 +553,7 @@ describe("question researcher", () => {
     expect(reply.status).toBe(201);
     const live = await launchedThread(rootId);
     expect(live.researcherConversationId).not.toBe(first);
-    expect(live.researcherRun).toEqual({ status: "running" });
+    expect(live.researcherRun).toEqual(runningRun);
     const prompt = sentPrompt(1);
     expect(prompt).toContain(
       "The previous researcher conversation for this thread is gone. This is a new session.",

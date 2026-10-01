@@ -248,12 +248,11 @@ export interface ThreadView {
 
 /**
  * Read-time researcher state on an open question thread still awaiting its answer.
- * `starting` covers a launch that has not yet put a live run on the thread.
+ * `finishing` is not live, has no run-end marker yet, and has no reply.
  */
 export type ResearcherRun =
-  | { status: "starting" }
-  | { status: "running" }
-  | { status: "failed"; error: string };
+  | { status: "running" | "finishing"; startedAt: string }
+  | { status: "failed"; startedAt: string; error: string };
 
 /** Thread view plus read-time `researcherRun`, served by the comments route. */
 export type CommentThreadView = ThreadView & { researcherRun?: ResearcherRun };
