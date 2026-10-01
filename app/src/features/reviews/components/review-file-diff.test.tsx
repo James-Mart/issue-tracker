@@ -2,8 +2,8 @@
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { DiffComposerProvider } from "@/features/issues/components/comments/diff-thread-composer";
+import { fileDiffsFromPatch } from "@/features/issues/lib/issue-change-file-diffs";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import type { ReviewFileRow } from "../lib/review-files";
 import { ReviewFileDiff } from "./review-file-diff";
@@ -37,9 +37,25 @@ vi.mock("@/features/issues/api/mutations", () => ({
   usePostThreadEvent: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+const PATH = "src/long.ts";
+
+const PATCH = [
+  `diff --git a/${PATH} b/${PATH}`,
+  "index 1111111..2222222 100644",
+  `--- a/${PATH}`,
+  `+++ b/${PATH}`,
+  "@@ -1,3 +1,3 @@",
+  " line1",
+  "-old",
+  "+new",
+  " line3",
+].join("\n");
+
+const FILE_DIFF = fileDiffsFromPatch(PATCH)[0]!;
+
 const ROW: ReviewFileRow = {
   file: {
-    path: "src/long.ts",
+    path: PATH,
     status: "modified",
     additions: 400,
     deletions: 12,
@@ -56,7 +72,7 @@ function Harness() {
   return (
     <ReviewFileDiff
       row={{ ...ROW, reviewed }}
-      fileDiff={{ name: ROW.file.path } as FileDiffMetadata}
+      fileDiff={FILE_DIFF}
       collapsed={collapsed}
       readOnly={false}
       diffLayout="unified"
@@ -122,7 +138,7 @@ describe("ReviewFileDiff pinned header", () => {
     expect(section.className).not.toMatch(/\boverflow-hidden\b/);
     expect(header.querySelector('[data-testid="review-file-toggle"]')).not.toBeNull();
     expect(header.querySelector('[data-testid="review-file-reviewed"]')).not.toBeNull();
-    expect(header.textContent).toContain("src/long.ts");
+    expect(header.textContent).toContain(PATH);
   });
 
   it("uses a compact single-row phone header with a dot and no line counts", () => {
@@ -197,7 +213,7 @@ const FILE_THREAD: CommentThread = {
     at: "2026-09-28T16:40:00.000Z",
     role: "human",
     body: "Whole file.",
-    anchor: { path: "src/long.ts", commitSha: "tip" },
+    anchor: { path: PATH, commitSha: "tip" },
   },
   replies: [],
 };
@@ -211,7 +227,7 @@ const MISSING_LINE: CommentThread = {
     at: "2026-09-28T16:41:00.000Z",
     role: "human",
     body: "Lost line.",
-    anchor: { path: "src/long.ts", side: "new", line: 400, commitSha: "tip" },
+    anchor: { path: PATH, side: "new", line: 400, commitSha: "tip" },
   },
   replies: [],
 };
@@ -225,7 +241,7 @@ function mountThreads(): HTMLDivElement {
       <DiffComposerProvider issueId="story-1" commitSha="tip" allowQuestion>
         <ReviewFileDiff
           row={ROW}
-          fileDiff={{ name: ROW.file.path, hunks: [] } as FileDiffMetadata}
+          fileDiff={FILE_DIFF}
           collapsed={false}
           readOnly={false}
           diffLayout="unified"
