@@ -4,6 +4,7 @@ import type {
   Issue,
   TranscriptEvent,
 } from "../schemas.js";
+import { conversationExists, readConversation } from "./conversations.js";
 import {
   activeImplementingConversationId,
   listConversationIds,
@@ -109,11 +110,15 @@ export function listAgentRunsForIssue(issueId: string): AgentRun[] {
   return runs;
 }
 
-/** Persisted nested-run events for one linked agent run, in `seq` order. */
+/**
+ * Persisted events for one linked agent run, in `seq` order.
+ * Nested runs are `subagent_update` steps. A question-researcher run is that
+ * conversation's transcript (messages and tool calls live there).
+ */
 export function listAgentRunEvents(
   issueId: string,
   delegationId: string,
-): SubagentUpdateEvent[] | undefined {
+): TranscriptEvent[] | undefined {
   const taskerConversationId =
     conversationIdFromReviewTaskerDelegation(delegationId);
   if (taskerConversationId) {
@@ -125,9 +130,13 @@ export function listAgentRunEvents(
   const researcherConversationId =
     conversationIdFromResearcherDelegation(delegationId);
   if (researcherConversationId) {
-    return researcherConversationIds(issueId).includes(researcherConversationId)
-      ? []
-      : undefined;
+    if (!researcherConversationIds(issueId).includes(researcherConversationId)) {
+      return undefined;
+    }
+    // The session event can outlive a deleted conversation. An empty body
+    // keeps the run known; reading the missing transcript would throw.
+    if (!conversationExists(researcherConversationId)) return [];
+    return readConversation(researcherConversationId).transcript;
   }
 
   const located = resolveDelegation(delegationId);

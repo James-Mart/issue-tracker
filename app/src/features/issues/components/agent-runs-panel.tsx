@@ -28,12 +28,22 @@ import {
   useIssueAgentRunEventsQuery,
   useIssueAgentRunsQuery,
 } from "../api/queries";
+import { useResearcherTranscriptLive } from "../hooks/use-researcher-transcript-live";
 import { useWorkRootAgentRuns } from "../hooks/use-work-root-agent-runs";
+import { researcherTranscriptDisplaySteps } from "../lib/researcher-transcript-steps";
 import {
   type IssueBackLocationState,
   issueBackNavigateState,
 } from "../lib/issue-back";
-import { issueChannelPath } from "../lib/links";
+import { writeDiffThreadSearchParam } from "../lib/issue-detail-tabs";
+import { issueChannelPath, issuePath } from "../lib/links";
+
+/** Role recorded on a question-researcher conversation. */
+const QUESTION_RESEARCHER_ROLE = "issue-tracker-review-question";
+
+function isQuestionResearcherRun(run: AgentRun): boolean {
+  return run.role === QUESTION_RESEARCHER_ROLE;
+}
 
 type SubagentUpdateEvent = Extract<TranscriptEvent, { type: "subagent_update" }>;
 
@@ -127,32 +137,22 @@ function AgentRunStepRow({
 }
 
 const EMPTY_LIVE_EVENTS: SubagentUpdateEvent[] = [];
+const EMPTY_TRANSCRIPT: TranscriptEvent[] = [];
 
-function AgentRunBody({
-  issueId,
-  delegationId,
+function AgentRunTranscript({
+  isLoading,
+  error,
+  eventCount,
+  steps,
   running,
-  liveEvents,
 }: {
-  issueId: string;
-  delegationId: string;
+  isLoading: boolean;
+  error: Error | null;
+  eventCount: number;
+  steps: NestedStep[];
   running: boolean;
-  liveEvents: SubagentUpdateEvent[];
 }) {
-  const { data, isLoading, error } = useIssueAgentRunEventsQuery(
-    issueId,
-    delegationId,
-    true,
-  );
-
-  const events = mergeTranscriptDeltas(
-    data?.events ?? [],
-    liveEvents,
-  ).filter((event): event is SubagentUpdateEvent =>
-    event.type === "subagent_update",
-  );
-
-  if (isLoading && events.length === 0) {
+  if (isLoading && eventCount === 0) {
     return (
       <div
         className="space-y-2 border-t border-border px-3 py-3"
@@ -167,7 +167,7 @@ function AgentRunBody({
     );
   }
 
-  if (error && events.length === 0) {
+  if (error && eventCount === 0) {
     return (
       <div
         className="border-t border-border px-3 py-3"
@@ -182,7 +182,6 @@ function AgentRunBody({
     );
   }
 
-  const steps = nestedStepsFromEvents(events);
   const segments = groupOrdinaryNestedToolCalls(steps, new Map());
 
   return (
@@ -221,6 +220,74 @@ function AgentRunBody({
   );
 }
 
+function NestedAgentRunBody({
+  issueId,
+  delegationId,
+  running,
+  liveEvents,
+}: {
+  issueId: string;
+  delegationId: string;
+  running: boolean;
+  liveEvents: SubagentUpdateEvent[];
+}) {
+  const { data, isLoading, error } = useIssueAgentRunEventsQuery(
+    issueId,
+    delegationId,
+    true,
+  );
+  const events = mergeTranscriptDeltas(data?.events ?? [], liveEvents).filter(
+    (event): event is SubagentUpdateEvent => event.type === "subagent_update",
+  );
+  return (
+    <AgentRunTranscript
+      isLoading={isLoading}
+      error={error}
+      eventCount={events.length}
+      steps={nestedStepsFromEvents(events)}
+      running={running}
+    />
+  );
+}
+
+function ResearcherAgentRunBody({
+  issueId,
+  delegationId,
+  conversationId,
+  running,
+}: {
+  issueId: string;
+  delegationId: string;
+  conversationId: string;
+  running: boolean;
+}) {
+  const { data, isLoading, error } = useIssueAgentRunEventsQuery(
+    issueId,
+    delegationId,
+    true,
+  );
+  const liveTranscript = useResearcherTranscriptLive(
+    issueId,
+    delegationId,
+    conversationId,
+    data !== undefined,
+    data?.events,
+  );
+  const events = mergeTranscriptDeltas(
+    data?.events ?? EMPTY_TRANSCRIPT,
+    liveTranscript,
+  );
+  return (
+    <AgentRunTranscript
+      isLoading={isLoading}
+      error={error}
+      eventCount={events.length}
+      steps={researcherTranscriptDisplaySteps(events)}
+      running={running}
+    />
+  );
+}
+
 function AgentRunsCoordinatorLink({
   projectId,
   workRoot,
@@ -252,10 +319,12 @@ function AgentRunsCoordinatorLink({
 export function AgentRunCard({
   run,
   issueId,
+  projectId,
   liveEvents = EMPTY_LIVE_EVENTS,
 }: {
   run: AgentRun;
   issueId: string;
+  projectId: string;
   liveEvents?: SubagentUpdateEvent[];
 }) {
   const running = run.status === "running";
@@ -319,6 +388,16 @@ export function AgentRunCard({
             </span>
           ) : null}
         </button>
+        {run.threadId ? (
+          <Link
+            to={`${issuePath(projectId, issueId)}?${writeDiffThreadSearchParam(new URLSearchParams(), run.threadId)}`}
+            className="flex min-h-11 shrink-0 items-center px-3 text-[11px] font-medium text-[hsl(var(--current))] no-underline hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="agent-run-thread-link"
+            aria-label="Answered thread"
+          >
+            Thread
+          </Link>
+        ) : null}
         <Link
           to={pipelineRunPath(run.conversationId)}
           className="flex min-h-11 shrink-0 items-center px-3 text-[11px] font-medium text-[hsl(var(--current))] no-underline hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -328,12 +407,21 @@ export function AgentRunCard({
         </Link>
       </div>
       {expanded ? (
-        <AgentRunBody
-          issueId={issueId}
-          delegationId={run.delegationId}
-          running={running}
-          liveEvents={liveEvents}
-        />
+        isQuestionResearcherRun(run) ? (
+          <ResearcherAgentRunBody
+            issueId={issueId}
+            delegationId={run.delegationId}
+            conversationId={run.conversationId}
+            running={running}
+          />
+        ) : (
+          <NestedAgentRunBody
+            issueId={issueId}
+            delegationId={run.delegationId}
+            running={running}
+            liveEvents={liveEvents}
+          />
+        )
       ) : null}
     </div>
   );
@@ -395,6 +483,7 @@ export function AgentRunsPanel({
           key={run.delegationId}
           run={run}
           issueId={issueId}
+          projectId={projectId}
           liveEvents={
             liveEventsByParentCallId[run.parentCallId] ?? EMPTY_LIVE_EVENTS
           }

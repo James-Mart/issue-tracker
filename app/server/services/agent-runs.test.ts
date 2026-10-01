@@ -17,6 +17,12 @@ let root: string;
 let conversationsDir: string;
 let issuesRoot: string;
 
+function nestedSteps(events: TranscriptEvent[] | undefined) {
+  return events?.flatMap((event) =>
+    event.type === "subagent_update" ? [event.step] : [],
+  );
+}
+
 function writeIssue(id: string, body: Record<string, unknown>): void {
   mkdirSync(join(issuesRoot, id), { recursive: true });
   writeFileSync(join(issuesRoot, id, "issue.json"), JSON.stringify({ id, ...body }));
@@ -522,7 +528,7 @@ describe("listAgentRunEvents", () => {
 
     const eventsA = listAgentRunEvents(ISSUE_ID, "del-a");
     expect(eventsA).toHaveLength(2);
-    expect(eventsA!.map((e) => e.step)).toEqual([
+    expect(nestedSteps(eventsA)).toEqual([
       { kind: "text", text: "first run step 1" },
       { kind: "text", text: "first run step 2" },
     ]);
@@ -530,7 +536,7 @@ describe("listAgentRunEvents", () => {
 
     const eventsB = listAgentRunEvents(ISSUE_ID, "del-b");
     expect(eventsB).toHaveLength(2);
-    expect(eventsB!.map((e) => e.step)).toEqual([
+    expect(nestedSteps(eventsB)).toEqual([
       { kind: "text", text: "sibling run step" },
       { kind: "text", text: "sibling run step 2" },
     ]);
@@ -559,10 +565,9 @@ describe("listAgentRunEvents", () => {
     const events = listAgentRunEvents(ISSUE_ID, "del-untracked");
 
     expect(events).toHaveLength(1);
-    expect(events![0]!.step).toEqual({
-      kind: "text",
-      text: "legacy nested step",
-    });
+    expect(nestedSteps(events)).toEqual([
+      { kind: "text", text: "legacy nested step" },
+    ]);
   });
 
   it("returns undefined for an unknown delegationId", async () => {
@@ -584,5 +589,77 @@ describe("listAgentRunEvents", () => {
 
     const { listAgentRunEvents } = await loadAgentRunsService();
     expect(listAgentRunEvents(ISSUE_ID, "del-missing")).toBeUndefined();
+  });
+
+  it("returns the researcher conversation transcript and the answered thread", async () => {
+    const storyId = "story-r";
+    mkdirSync(join(issuesRoot, storyId), { recursive: true });
+    writeFileSync(
+      join(issuesRoot, storyId, "comments.jsonl"),
+      `${JSON.stringify({
+        type: "thread-event",
+        threadId: "q-1",
+        event: "researcher-session",
+        conversationId: "conv-r",
+        by: { role: "agent", name: "Researcher" },
+        at: AT,
+      })}\n`,
+    );
+    writeConversation("conv-r", {
+      delegations: [],
+      transcript: [
+        {
+          type: "prompt",
+          text: "ROLE BODY\nQuestion:\nWhy?",
+          at: AT,
+          seq: 1,
+        },
+        {
+          type: "assistant",
+          text: "The anchor is stable.",
+          at: AT,
+          seq: 2,
+        },
+        {
+          type: "usage",
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            totalTokens: 2,
+          },
+          at: AT,
+          seq: 3,
+        },
+        {
+          type: "tool_call",
+          callId: "tool-1",
+          name: "Read",
+          status: "completed",
+          args: { path: "a.ts" },
+          at: AT,
+          seq: 4,
+        },
+      ],
+    });
+
+    const { listAgentRunEvents, listAgentRunsForIssue } = await loadAgentRunsService();
+    const runs = listAgentRunsForIssue(storyId);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      delegationId: "review-question:conv-r",
+      role: "issue-tracker-review-question",
+      conversationId: "conv-r",
+      threadId: "q-1",
+      status: "completed",
+    });
+    expect(listAgentRunEvents(storyId, "review-question:conv-r")?.map((event) => event.type)).toEqual([
+      "prompt",
+      "assistant",
+      "usage",
+      "tool_call",
+    ]);
+    expect(listAgentRunEvents(storyId, "review-question:other")).toBeUndefined();
   });
 });

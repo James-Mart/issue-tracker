@@ -321,6 +321,8 @@ export const agentRunSchema = z.object({
   status: z.enum(["running", "completed", "error", "unknown"]),
   endedAt: nonEmpty.optional(),
   isResume: z.boolean(),
+  /** Review thread this run answered. Set on question-researcher runs. */
+  threadId: nonEmpty.optional(),
 });
 
 export type AgentRun = z.infer<typeof agentRunSchema>;

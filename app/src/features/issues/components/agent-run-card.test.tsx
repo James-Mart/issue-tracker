@@ -16,6 +16,7 @@ describe("AgentRunCard", () => {
         <MemoryRouter>
           <AgentRunCard
             issueId="task-1"
+            projectId="platform"
             run={sampleRun({
               startedAt: AT,
               endedAt: "2026-07-09T14:00:12.000Z",

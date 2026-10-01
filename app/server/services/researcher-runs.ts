@@ -333,16 +333,30 @@ export function researcherRunForThread(
   return thread ? researcherRunFor(thread, response.messages) : undefined;
 }
 
+/** Researcher sessions recorded on the Story, oldest first, one per conversation. */
+function researcherSessions(
+  issueId: string,
+): { conversationId: string; threadId: string }[] {
+  const seen = new Set<string>();
+  const sessions: { conversationId: string; threadId: string }[] = [];
+  for (const event of researcherSessionEvents(readCommentLog(issueId).events)) {
+    const conversationId = event.conversationId;
+    if (!conversationId || seen.has(conversationId)) continue;
+    seen.add(conversationId);
+    sessions.push({ conversationId, threadId: event.threadId });
+  }
+  return sessions;
+}
+
 /** Every researcher conversation recorded on the Story, oldest first. */
 export function researcherConversationIds(storyId: string): string[] {
-  return researcherSessionEvents(readCommentLog(storyId).events).flatMap(
-    (event) => [event.conversationId!],
-  );
+  return researcherSessions(storyId).map((session) => session.conversationId);
 }
 
 function researcherAgentRun(
   { meta, transcript }: ConversationDetail,
   issueId: string,
+  threadId: string,
 ): AgentRun {
   const running = isRunLive(meta.id);
   const failed = !running && latestTranscriptError(transcript) !== undefined;
@@ -358,14 +372,22 @@ function researcherAgentRun(
     status: running ? "running" : failed ? "error" : "completed",
     ...(running ? {} : { endedAt: meta.updatedAt }),
     isResume: false,
+    threadId,
   };
 }
 
 /** One agent run per researcher conversation started on the Story. */
 export function researcherRunsForIssue(issueId: string): AgentRun[] {
-  return researcherConversationIds(issueId)
-    .filter(conversationExists)
-    .map((id) => researcherAgentRun(readConversation(id), issueId));
+  return researcherSessions(issueId).flatMap((session) => {
+    if (!conversationExists(session.conversationId)) return [];
+    return [
+      researcherAgentRun(
+        readConversation(session.conversationId),
+        issueId,
+        session.threadId,
+      ),
+    ];
+  });
 }
 
 /** Conversation id behind a researcher agent run's delegation id, if it is one. */
