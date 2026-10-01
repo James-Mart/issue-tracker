@@ -7,7 +7,6 @@ import {
   REVIEW_COMPOSER_MAX_LINES,
   REVIEW_COMPOSER_MIN_LINES,
   ReviewComposer,
-  ReviewDraftProvider,
   reviewComposerFieldHeight,
 } from "./review-composer";
 
@@ -27,16 +26,14 @@ function mount(
   const root = createRoot(container);
   act(() => {
     root.render(
-      <ReviewDraftProvider>
-        <ReviewComposer
-          draftKey="review:story-1:conversation"
-          placeholder="Add a comment"
-          submitLabel="Send"
-          onSubmit={vi.fn()}
-          onCancel={vi.fn()}
-          {...props}
-        />
-      </ReviewDraftProvider>,
+      <ReviewComposer
+        draftKey="review:story-1:conversation"
+        placeholder="Add a comment"
+        submitLabel="Send"
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        {...props}
+      />,
     );
   });
   return { container, root };
@@ -55,6 +52,7 @@ function setDraft(input: HTMLTextAreaElement, value: string) {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  localStorage.clear();
 });
 
 describe("reviewComposerFieldHeight", () => {
@@ -176,15 +174,13 @@ describe("ReviewComposer", () => {
     const render = (key: string) => {
       act(() => {
         root.render(
-          <ReviewDraftProvider>
-            <ReviewComposer
-              draftKey={key}
-              placeholder="Reply"
-              submitLabel="Send"
-              onSubmit={vi.fn()}
-              onCancel={vi.fn()}
-            />
-          </ReviewDraftProvider>,
+          <ReviewComposer
+            draftKey={key}
+            placeholder="Reply"
+            submitLabel="Send"
+            onSubmit={vi.fn()}
+            onCancel={vi.fn()}
+          />,
         );
       });
     };
@@ -194,5 +190,60 @@ describe("ReviewComposer", () => {
     expect(container.querySelector("textarea")?.value).toBe("");
     render("review:story-1:reply:a");
     expect(container.querySelector("textarea")?.value).toBe("draft-a");
+  });
+
+  it("stores the draft in this browser under its key and restores it after a reload", () => {
+    const { container, root } = mount();
+    setDraft(container.querySelector("textarea")!, "Survives reload");
+    expect(localStorage.getItem("review:story-1:conversation")).toBe("Survives reload");
+
+    act(() => root.unmount());
+    document.body.innerHTML = "";
+    const reloaded = mount();
+    expect(reloaded.container.querySelector("textarea")?.value).toBe("Survives reload");
+  });
+
+  it("clears the stored draft once the send lands and keeps it when the send fails", async () => {
+    let settle: { resolve: () => void; reject: () => void } | undefined;
+    const onSubmit = vi.fn(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          settle = { resolve, reject: () => reject(new Error("not posted")) };
+        }),
+    );
+    const { container } = mount({ onSubmit });
+    setDraft(container.querySelector("textarea")!, "Try once");
+    act(() => {
+      container
+        .querySelector('button[aria-label="Send"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => settle!.reject());
+    expect(localStorage.getItem("review:story-1:conversation")).toBe("Try once");
+
+    act(() => {
+      container
+        .querySelector('button[aria-label="Send"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => settle!.resolve());
+    expect(localStorage.getItem("review:story-1:conversation")).toBeNull();
+    expect(container.querySelector("textarea")?.value).toBe("");
+  });
+
+  it("clears the stored draft on a confirmed discard", () => {
+    const { container } = mount();
+    setDraft(container.querySelector("textarea")!, "Throw away");
+    act(() => {
+      container
+        .querySelector('[aria-label="Cancel"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    act(() => {
+      document.body
+        .querySelector('[data-testid="review-composer-discard"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(localStorage.getItem("review:story-1:conversation")).toBeNull();
   });
 });

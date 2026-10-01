@@ -9,7 +9,7 @@ import {
   reviewVoiceOwner,
   tryAcquire,
 } from "@/features/agents/lib/voice-session-lock";
-import { ReviewComposer, ReviewDraftProvider } from "./review-composer";
+import { ReviewComposer } from "./review-composer";
 
 const voiceRecording = vi.hoisted(() => ({
   state: "idle" as VoiceRecordingState,
@@ -94,16 +94,14 @@ function mount(props: Partial<ComponentProps<typeof ReviewComposer>> = {}): {
   const rerender = () => {
     act(() => {
       root.render(
-        <ReviewDraftProvider>
-          <ReviewComposer
-            draftKey="review:story-1:conversation"
-            placeholder="Add a comment"
-            submitLabel="Send"
-            onSubmit={vi.fn()}
-            onCancel={vi.fn()}
-            {...props}
-          />
-        </ReviewDraftProvider>,
+        <ReviewComposer
+          draftKey="review:story-1:conversation"
+          placeholder="Add a comment"
+          submitLabel="Send"
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+          {...props}
+        />,
       );
     });
   };
@@ -155,6 +153,7 @@ describe("ReviewComposer voice dictation", () => {
     root = undefined;
     rerender = undefined;
     resetVoiceMocks();
+    localStorage.clear();
   });
 
   it("places the mic at the trailing edge of the action row", () => {

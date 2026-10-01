@@ -4,6 +4,7 @@ import type { CommentMessage } from "@server/schemas";
 import { groupCommentThreads } from "./comment-threads";
 import { fileDiffsFromPatch } from "./issue-change-file-diffs";
 import {
+  keepAnnotationOrder,
   mergeComposerAnnotation,
   placeThreadsInFile,
 } from "./issue-change-inline-threads";
@@ -134,6 +135,40 @@ describe("placeThreadsInFile", () => {
     ).toEqual([
       ...located,
       { side: "additions", lineNumber: 92, metadata: [] },
+    ]);
+  });
+});
+
+describe("keepAnnotationOrder", () => {
+  const line = (side: "additions" | "deletions", lineNumber: number, metadata: string[] = []) => ({
+    side,
+    lineNumber,
+    metadata,
+  });
+
+  it("returns the next list unchanged when its order already matches", () => {
+    const next = [line("deletions", 90), line("additions", 94)];
+    expect(keepAnnotationOrder([line("deletions", 90)], next)).toBe(next);
+  });
+
+  it("keeps earlier lines at their indices and appends new ones", () => {
+    const previous = [line("additions", 94), line("additions", 92)];
+    const next = [
+      line("deletions", 90, ["new-thread"]),
+      line("additions", 92, ["sent"]),
+      line("additions", 94, ["reply"]),
+    ];
+    expect(keepAnnotationOrder(previous, next)).toEqual([
+      line("additions", 94, ["reply"]),
+      line("additions", 92, ["sent"]),
+      line("deletions", 90, ["new-thread"]),
+    ]);
+  });
+
+  it("drops lines that are gone", () => {
+    const previous = [line("additions", 92), line("additions", 94)];
+    expect(keepAnnotationOrder(previous, [line("additions", 94)])).toEqual([
+      line("additions", 94),
     ]);
   });
 });

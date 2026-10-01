@@ -1,14 +1,10 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
-  type ReactNode,
 } from "react";
 import { Mic, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +33,7 @@ import {
 } from "@/features/agents/lib/voice-session-lock";
 import { insertTextAtCaret } from "@/lib/insert-text-at-caret";
 import { transcriptTextForCaret } from "@/lib/transcript-text-for-caret";
+import { useReviewDraft } from "../lib/review-draft-storage";
 
 export const REVIEW_COMPOSER_MIN_LINES = 3;
 export const REVIEW_COMPOSER_MAX_LINES = 12;
@@ -48,53 +45,6 @@ const FIELD_PADDING_PX = 16;
 const FIELD_BORDER_PX = 2;
 
 const COMPOSER_HINT = "Enter to send, Shift+Enter for a newline";
-
-type ReviewDraftContextValue = {
-  drafts: Record<string, string>;
-  setDraft: (key: string, value: string) => void;
-};
-
-const ReviewDraftContext = createContext<ReviewDraftContextValue | null>(null);
-
-/** Keeps review drafts while a composer unmounts and the same spot reopens. */
-export function ReviewDraftProvider({ children }: { children: ReactNode }) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const setDraft = useCallback((key: string, value: string) => {
-    setDrafts((prev) => {
-      if (value) {
-        if (prev[key] === value) return prev;
-        return { ...prev, [key]: value };
-      }
-      if (!(key in prev)) return prev;
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  }, []);
-  const value = useMemo(() => ({ drafts, setDraft }), [drafts, setDraft]);
-  return (
-    <ReviewDraftContext.Provider value={value}>
-      {children}
-    </ReviewDraftContext.Provider>
-  );
-}
-
-/** Uses the surrounding draft store, or starts one when this subtree is the root. */
-export function ReviewDraftScope({ children }: { children: ReactNode }) {
-  const parent = useContext(ReviewDraftContext);
-  if (parent) return children;
-  return <ReviewDraftProvider>{children}</ReviewDraftProvider>;
-}
-
-function useReviewDraft(draftKey: string): [string, (value: string) => void] {
-  const store = useContext(ReviewDraftContext);
-  if (!store) {
-    throw new Error("ReviewComposer must be used under ReviewDraftProvider");
-  }
-  const draft = store.drafts[draftKey] ?? "";
-  const setDraft = (value: string) => store.setDraft(draftKey, value);
-  return [draft, setDraft];
-}
 
 /**
  * Field height for a review composer: at least 3 lines, at most 12, then

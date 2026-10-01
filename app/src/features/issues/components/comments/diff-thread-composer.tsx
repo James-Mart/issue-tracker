@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { CommentInput } from "@server/schemas";
-import { ReviewComposer, ReviewDraftScope } from "@/features/reviews/components/review-composer";
+import { ReviewComposer } from "@/features/reviews/components/review-composer";
 import { usePostComment } from "../../api/mutations";
 import { postCommentWhenIdle } from "../../lib/post-comment-when-idle";
 import {
@@ -73,11 +73,14 @@ export function DiffComposerProvider({
         commitSha,
         kind,
       );
+      const sentKey = composerDraftKey(issueId, target);
       return postCommentWhenIdle(post, input).then(() => {
-        setOpen(null);
+        setOpen((current) =>
+          current && composerDraftKey(issueId, current) === sentKey ? null : current,
+        );
       });
     },
-    [commitSha, post],
+    [commitSha, issueId, post],
   );
 
   const value = useMemo(
@@ -107,7 +110,7 @@ export function DiffComposerProvider({
 
   return (
     <DiffComposerContext.Provider value={value}>
-      <ReviewDraftScope>{children}</ReviewDraftScope>
+      {children}
     </DiffComposerContext.Provider>
   );
 }

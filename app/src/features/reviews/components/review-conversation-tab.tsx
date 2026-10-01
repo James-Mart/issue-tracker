@@ -24,7 +24,7 @@ import {
   reviewSubmittedLabel,
   type ConversationTimelineItem,
 } from "../lib/review-submission-ui";
-import { ReviewComposer, ReviewDraftScope } from "./review-composer";
+import { ReviewComposer } from "./review-composer";
 import { ReviewThread } from "./review-thread";
 
 function StandaloneComment({
@@ -139,11 +139,10 @@ export function ReviewConversationTab({
   const commentsReady = !comments.error && !comments.isLoading;
 
   return (
-    <ReviewDraftScope>
-      <div
-        className="flex min-h-0 min-w-0 flex-1 flex-col"
-        data-testid="review-conversation-tab"
-      >
+    <div
+      className="flex min-h-0 min-w-0 flex-1 flex-col"
+      data-testid="review-conversation-tab"
+    >
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-3">
         {comments.error ? (
           <ShellState
@@ -201,7 +200,6 @@ export function ReviewConversationTab({
           onQuestion={(body) => send(body, "question")}
         />
       </div>
-      </div>
-    </ReviewDraftScope>
+    </div>
   );
 }

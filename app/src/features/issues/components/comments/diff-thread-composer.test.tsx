@@ -27,18 +27,18 @@ vi.mock("../../api/mutations", () => ({
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
 
-function OpenNew() {
+function OpenNew({ testId, line }: { testId: string; line: number }) {
   const { openNew } = useDiffComposer();
   return (
     <button
       type="button"
-      data-testid="open-new"
+      data-testid={testId}
       onClick={() =>
         openNew({
           kind: "new",
           path: "app/foo.ts",
           side: "new",
-          line: 94,
+          line,
         })
       }
     >
@@ -51,10 +51,19 @@ function Host() {
   const { open } = useDiffComposer();
   return (
     <>
-      <OpenNew />
+      <OpenNew testId="open-new" line={94} />
+      <OpenNew testId="open-other" line={12} />
       {open ? <DiffThreadComposer target={open} /> : null}
     </>
   );
+}
+
+function click(container: HTMLElement, testId: string) {
+  act(() => {
+    container
+      .querySelector(`[data-testid="${testId}"]`)
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
 }
 
 function mount(allowQuestion = false): HTMLDivElement {
@@ -88,6 +97,7 @@ function setDraft(input: HTMLTextAreaElement, value: string) {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  localStorage.clear();
   postComment.mutate.mockReset();
   postComment.isPending = false;
 });
@@ -169,6 +179,36 @@ describe("DiffThreadComposer", () => {
         },
       },
       expect.any(Object),
+    );
+  });
+
+  it("closes only the sending composer when its post lands after another opens", async () => {
+    const container = mount();
+    click(container, "open-new");
+    setDraft(container.querySelector("textarea")!, "First thread");
+    act(() => {
+      container
+        .querySelector('button[aria-label="Send"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(postComment.mutate).toHaveBeenCalledOnce();
+    const [, options] = postComment.mutate.mock.calls[0]!;
+
+    click(container, "open-other");
+    setDraft(container.querySelector("textarea")!, "Second thread");
+
+    await act(async () => {
+      options.onSuccess();
+    });
+
+    const composer = container.querySelector('[data-testid="diff-thread-composer"]');
+    expect(composer?.getAttribute("data-draft-key")).toBe(
+      "review:task-threads:line:app/foo.ts:new:12",
+    );
+    expect(container.querySelector("textarea")?.value).toBe("Second thread");
+    expect(localStorage.getItem("review:task-threads:line:app/foo.ts:new:94")).toBeNull();
+    expect(localStorage.getItem("review:task-threads:line:app/foo.ts:new:12")).toBe(
+      "Second thread",
     );
   });
 });

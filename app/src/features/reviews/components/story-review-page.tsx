@@ -23,7 +23,6 @@ import { ALL_CHANGES_SCOPE } from "../lib/review-scope";
 import { REVIEW_WORKBENCH_TABS } from "../lib/workbench-tabs";
 import { ReviewCommitsPanel } from "./review-commits-tab";
 import { ReviewConversationTab } from "./review-conversation-tab";
-import { ReviewDraftProvider } from "./review-composer";
 import { ReviewDiffTab } from "./review-diff-tab";
 import { ReviewNoCommits } from "./review-no-commits";
 import { StoryReviewHeader } from "./story-review-header";
@@ -168,7 +167,6 @@ function StoryReviewWorkbench({
         ))}
       </div>
       <div role="tabpanel" className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <ReviewDraftProvider>
         {active === "conversation" ? (
           <ReviewConversationTab
             storyId={storyId}
@@ -198,7 +196,6 @@ function StoryReviewWorkbench({
             onFocusFileMissing={() => retargetThreadScope(ALL_CHANGES_SCOPE)}
           />
         )}
-        </ReviewDraftProvider>
       </div>
     </>
   );

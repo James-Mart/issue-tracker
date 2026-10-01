@@ -10,7 +10,7 @@ import { questionKindFields } from "@server/question-kind";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ReviewComposer, ReviewDraftProvider } from "@/features/reviews/components/review-composer";
+import { ReviewComposer } from "@/features/reviews/components/review-composer";
 import {
   conversationDraftKey,
   replyDraftKey,
@@ -244,13 +244,16 @@ function CommentsPanel({
     );
   };
 
+  const closeReply = (threadId: string) =>
+    setOpenReplyId((open) => (open === threadId ? null : open));
+
   const sendStoryReply = (threadId: string, body: string) =>
     postCommentWhenIdle(post, {
       role: COMPOSER_ROLE,
       body,
       replyTo: threadId,
     }).then(() => {
-      setOpenReplyId(null);
+      closeReply(threadId);
     });
 
   const sendIssueReply = (threadId: string) => {
@@ -265,7 +268,7 @@ function CommentsPanel({
             delete next[threadId];
             return next;
           });
-          setOpenReplyId(null);
+          closeReply(threadId);
         },
       },
     );
@@ -311,8 +314,7 @@ function CommentsPanel({
   };
 
   return (
-    <ReviewDraftProvider>
-      <SettingsCard title="Comments">
+    <SettingsCard title="Comments">
       <div className="flex flex-col gap-3">
         {error ? (
           <ShellState
@@ -413,7 +415,6 @@ function CommentsPanel({
           </div>
         )}
       </div>
-      </SettingsCard>
-    </ReviewDraftProvider>
+    </SettingsCard>
   );
 }
