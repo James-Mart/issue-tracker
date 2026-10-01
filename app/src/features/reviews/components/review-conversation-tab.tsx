@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { Check, RotateCcw } from "lucide-react";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import {
   commentDayKey,
   commentDayLabel,
 } from "@/features/issues/components/comments/marker";
+import { scrollThreadNodeInPanel } from "@/features/issues/lib/issue-change-focus-thread";
 import { cn } from "@/lib/utils/cn";
 import type { ReviewSubmission } from "@server/schemas";
 import {
@@ -176,10 +178,13 @@ export function ReviewConversationTab({
   storyId,
   submissions = [],
   onOpenInDiff,
+  focusThreadId = null,
 }: {
   storyId: string;
   submissions?: ReviewSubmission[];
   onOpenInDiff: (threadId: string, commitSha: string) => void;
+  /** Story comment selected from the header disclosure. */
+  focusThreadId?: string | null;
 }) {
   const comments = useCommentsQuery(storyId);
   const { threads, problems } = useCommentThreads(storyId);
@@ -192,6 +197,14 @@ export function ReviewConversationTab({
   const timeline = conversationTimelineItems(threads, submissions);
   const visible = filterConversationTimeline(timeline, filter);
   const commentsReady = !comments.error && !comments.isLoading;
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!focusThreadId || !commentsReady) return;
+    const panel = scrollerRef.current;
+    if (!panel) return;
+    return scrollThreadNodeInPanel(panel, focusThreadId, { block: "center" });
+  }, [commentsReady, focusThreadId, threads]);
 
   return (
     <div
@@ -207,7 +220,7 @@ export function ReviewConversationTab({
           onReset={reset}
         />
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto px-1 py-3">
+      <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-1 py-3">
         {comments.error ? (
           <ShellState
             tone="blocked"

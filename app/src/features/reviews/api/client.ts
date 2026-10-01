@@ -115,15 +115,14 @@ export function postSubmitReview(
   });
 }
 
-export function postRetryReviewSubmission(
+export function postRetryOpenReviewSubmissions(
   projectId: string,
   reviewId: string,
-  submissionId: string,
 ): Promise<ReviewView> {
-  return request<ReviewView>(
-    `${reviewUrl(projectId, reviewId)}/submissions/${encodeURIComponent(submissionId)}/retry`,
-    { method: "POST", body: {} },
-  );
+  return request<ReviewView>(`${reviewUrl(projectId, reviewId)}/submissions/retry`, {
+    method: "POST",
+    body: {},
+  });
 }
 
 export function putReviewMark(

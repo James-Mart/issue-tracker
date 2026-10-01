@@ -48,6 +48,8 @@ export const NO_READY_THREADS_ERROR = "no threads are ready to task";
 
 export const SUBMISSION_TASKING_ERROR = "a submission is already tasking";
 
+export const NO_RETRYABLE_SUBMISSION_ERROR = "no submission to retry";
+
 const REVIEW_TASKER_DELEGATION_PREFIX = "review-tasker:";
 
 export function mergedStoryTaskingError(storyId: string): string {
@@ -503,29 +505,88 @@ export async function retryReviewSubmission(
     );
   }
   const split = submissionThreads(storyId, submission, readAll().issues);
-  if (
-    await completeWhenSettled(
-      project,
-      reviewId,
-      storyId,
-      submission,
-      split,
-      sessions,
-    )
-  ) {
+  const next = nextRetrySubmission(submission, split, sessions);
+  if (next.status === "done") {
+    replaceSubmission(project, reviewId, submissionId, next);
+    if (next.taskIds.length > 0) {
+      await bringCoordinatorForDone(reviewId, storyId, next.taskIds, sessions);
+    }
     return readReviewView(project, reviewId);
   }
-  const { taskIds } = split;
-  if (
-    submission.conversationId &&
-    sessions.getActiveRun(submission.conversationId)
-  ) {
-    throw new IssueError("conflict", "a tasking run is already active");
-  }
   requireProjectWorkspace(project);
-
-  const next = taskingSubmission(submission, taskIds);
   replaceSubmission(project, reviewId, submissionId, next);
+  return readReviewView(project, reviewId);
+}
+
+/**
+ * Handled threads become done. Leftovers return to tasking unless that
+ * submission's tasker run is already active.
+ */
+function nextRetrySubmission(
+  submission: Extract<ReviewSubmission, { status: "incomplete" | "failed" }>,
+  split: { taskIds: string[]; openThreadIds: string[] },
+  sessions: AgentSessions,
+): ReviewSubmission {
+  return settledSubmission(submission, split, (taskIds) => {
+    if (
+      submission.conversationId &&
+      sessions.getActiveRun(submission.conversationId)
+    ) {
+      throw new IssueError("conflict", "a tasking run is already active");
+    }
+    return taskingSubmission(submission, taskIds);
+  });
+}
+
+/**
+ * Retry every incomplete or failed submission. Threads already handled
+ * become done; every leftover returns to tasking in one write.
+ */
+export async function retryOpenReviewSubmissions(
+  projectId: string,
+  reviewId: string,
+  body: unknown,
+  sessions: AgentSessions,
+): Promise<ReviewRecordView> {
+  const parsed = parseRetryReviewSubmissionBody(body);
+  if (!parsed.ok) throw new IssueError("validation", parsed.message);
+  const project = requireProject(projectId);
+  const review = readReviewView(project, reviewId);
+  const storyId = review.target.storyId;
+  assertStoryOpenForTasking(storyId);
+
+  let finished: Extract<ReviewSubmission, { status: "done" }>[] = [];
+  updateStoredReview(project, reviewId, (current) => {
+    assertStoryOpenForTasking(storyId);
+    assertNoTasking(current.submissions);
+    const issues = readAll().issues;
+    const done: Extract<ReviewSubmission, { status: "done" }>[] = [];
+    let any = false;
+    let needsLaunch = false;
+    const submissions = current.submissions.map((submission) => {
+      if (!isRetryableSubmission(submission)) return submission;
+      any = true;
+      const split = submissionThreads(storyId, submission, issues);
+      const next = nextRetrySubmission(submission, split, sessions);
+      if (next.status === "done") done.push(next);
+      if (next.status === "tasking") needsLaunch = true;
+      return next;
+    });
+    if (!any) throw new IssueError("validation", NO_RETRYABLE_SUBMISSION_ERROR);
+    if (needsLaunch) requireProjectWorkspace(project);
+    finished = done;
+    return {
+      ...current,
+      updatedAt: new Date().toISOString(),
+      submissions,
+    };
+  });
+
+  for (const done of finished) {
+    if (done.taskIds.length > 0) {
+      await bringCoordinatorForDone(reviewId, storyId, done.taskIds, sessions);
+    }
+  }
   return readReviewView(project, reviewId);
 }
 

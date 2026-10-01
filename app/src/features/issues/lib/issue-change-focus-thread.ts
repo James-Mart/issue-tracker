@@ -22,6 +22,25 @@ export function threadNodeInPanel(
   return node instanceof HTMLElement ? node : null;
 }
 
+/** Scroll the thread card into view, retrying once if it is not mounted yet. */
+export function scrollThreadNodeInPanel(
+  panel: ParentNode,
+  threadId: string,
+  options: ScrollIntoViewOptions,
+): () => void {
+  const scrollToThread = () => {
+    const node = threadNodeInPanel(panel, threadId);
+    if (!node) return false;
+    node.scrollIntoView(options);
+    return true;
+  };
+  if (scrollToThread()) return () => undefined;
+  const frame = requestAnimationFrame(() => {
+    scrollToThread();
+  });
+  return () => cancelAnimationFrame(frame);
+}
+
 /** Select the thread's file and scroll its inline block into view. */
 export function useFocusDiffThread(args: {
   files: Pick<FileDiffMetadata, "name" | "prevName">[];
@@ -48,17 +67,10 @@ export function useFocusDiffThread(args: {
     if (threadId == null) return;
     const panel = args.panelRef.current;
     if (panel == null) return;
-    const scrollToThread = () => {
-      const node = threadNodeInPanel(panel, threadId);
-      if (node == null) return false;
-      node.scrollIntoView({ block: "nearest", inline: "nearest" });
-      return true;
-    };
-    if (scrollToThread()) return;
-    const frame = requestAnimationFrame(() => {
-      scrollToThread();
+    return scrollThreadNodeInPanel(panel, threadId, {
+      block: "nearest",
+      inline: "nearest",
     });
-    return () => cancelAnimationFrame(frame);
   }, [args.files, args.panelRef, args.threads, threadId]);
 
   return threadId;

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { ReviewSubmission } from "@server/schemas";
-import { TASKING_INCOMPLETE_REASON } from "@server/review-submission-status";
+import type { ReviewSubmission, ReviewSubmissionOpen, ReviewSubmissionView } from "@server/schemas";
 import {
   MERGED_STORY_SUBMIT_REASON,
   REVIEW_SUBMISSION_POLL_MS,
   acknowledgedSubmissions,
   conversationTimelineItems,
+  openThreadsHeadline,
   reviewSubmitHeader,
   reviewSubmittedLabel,
   submissionPollInterval,
@@ -15,30 +15,42 @@ import {
 
 function submission(
   status: ReviewSubmission["status"],
-  overrides: Partial<ReviewSubmission> = {},
-): ReviewSubmission {
-  const base = {
-    id: "sub-1",
-    at: "2026-09-29T12:00:00.000Z",
-    threadIds: ["thread-a", "thread-b"],
-    conversationId: "conv-1",
-    ...overrides,
-    status,
+  overrides: Partial<ReviewSubmission> & Partial<ReviewSubmissionOpen> = {},
+): ReviewSubmissionView {
+  const threadIds = overrides.threadIds ?? ["thread-a", "thread-b"];
+  const identity = {
+    id: overrides.id ?? "sub-1",
+    at: overrides.at ?? "2026-09-29T12:00:00.000Z",
+    threadIds,
+    ...("conversationId" in overrides
+      ? overrides.conversationId
+        ? { conversationId: overrides.conversationId }
+        : {}
+      : { conversationId: "conv-1" }),
+    ...(overrides.summaryCommentId
+      ? { summaryCommentId: overrides.summaryCommentId }
+      : {}),
   };
   if (status === "done") {
-    return { ...base, status, taskIds: ["task-a", "task-b"] };
+    return {
+      ...identity,
+      status,
+      taskIds: overrides.taskIds ?? ["task-a", "task-b"],
+    };
   }
+  const open = {
+    round: overrides.round ?? 1,
+    openThreadIds: overrides.openThreadIds ?? [...threadIds],
+  };
+  const tasks = overrides.taskIds ? { taskIds: overrides.taskIds } : {};
   if (status === "failed") {
     const error =
       "error" in overrides && typeof overrides.error === "string"
         ? overrides.error
         : "Tasking agent stopped.";
-    return { ...base, status, error };
+    return { ...identity, ...open, ...tasks, status, error };
   }
-  if (status === "incomplete") {
-    return { ...base, status: "incomplete" };
-  }
-  return { ...base, status };
+  return { ...identity, ...open, ...tasks, status };
 }
 
 describe("reviewSubmitHeader", () => {
@@ -46,19 +58,24 @@ describe("reviewSubmitHeader", () => {
     expect(
       reviewSubmitHeader({ merged: false, readyCount: 0, submissions: [] }),
     ).toEqual({
-      mode: "submit",
-      label: "Submit review (0)",
-      disabled: true,
-      readyCount: 0,
+      submit: {
+        label: "Submit review (0)",
+        disabled: true,
+        readyCount: 0,
+      },
+      failures: [],
+      openRounds: [],
     });
   });
 
   it("enables submit with the ready count", () => {
     const header = reviewSubmitHeader({ merged: false, readyCount: 2, submissions: [] });
-    expect(header.mode).toBe("submit");
-    if (header.mode !== "submit") return;
-    expect(header.label).toBe("Submit review (2)");
-    expect(header.disabled).toBe(false);
+    expect(header.submit).toMatchObject({
+      label: "Submit review (2)",
+      disabled: false,
+    });
+    expect(header.taskingLabel).toBeUndefined();
+    expect(header.retry).toBeUndefined();
   });
 
   it("disables submit on a merged Story and names why", () => {
@@ -67,8 +84,7 @@ describe("reviewSubmitHeader", () => {
       readyCount: 3,
       submissions: [],
     });
-    expect(header).toMatchObject({
-      mode: "submit",
+    expect(header.submit).toMatchObject({
       disabled: true,
       label: "Submit review (3)",
       reason: MERGED_STORY_SUBMIT_REASON,
@@ -79,72 +95,117 @@ describe("reviewSubmitHeader", () => {
     const header = reviewSubmitHeader({
       merged: false,
       readyCount: 0,
-      submissions: [submission("tasking", { conversationId: undefined })],
+      submissions: [
+        submission("tasking", {
+          conversationId: undefined,
+          round: 1,
+          openThreadIds: ["thread-a", "thread-b"],
+        }),
+      ],
     });
-    expect(header).toEqual({
-      mode: "tasking",
-      label: taskingLabel(2),
-    });
-    expect(header).toMatchObject({ label: "Tasking 2 threads…" });
+    expect(header.taskingLabel).toBe(taskingLabel(2));
+    expect(header.submit).toBeUndefined();
+    expect(header.openRounds).toEqual([
+      { submissionId: "sub-1", round: 1, threadIds: ["thread-a", "thread-b"] },
+    ]);
   });
 
-  it("shows the latest failure and blocks retry once the Story is merged", () => {
+  it("keeps every failed error and still offers submit", () => {
     const older = submission("failed", {
       id: "older",
       at: "2026-09-29T11:00:00.000Z",
       error: "older",
+      round: 1,
+      openThreadIds: ["thread-a"],
     });
     const newer = submission("failed", {
       id: "newer",
       at: "2026-09-29T13:00:00.000Z",
       error: "newer",
+      round: 2,
+      openThreadIds: ["thread-b"],
     });
-    expect(
-      reviewSubmitHeader({
-        merged: false,
-        readyCount: 1,
-        submissions: [older, newer],
-      }),
-    ).toMatchObject({
-      mode: "failed",
-      submissionId: "newer",
-      error: "newer",
-      retryDisabled: false,
+    const header = reviewSubmitHeader({
+      merged: false,
+      readyCount: 1,
+      submissions: [older, newer],
     });
+    expect(header.submit).toMatchObject({ disabled: false, label: "Submit review (1)" });
+    expect(header.failures).toEqual([
+      { submissionId: "older", message: "older" },
+      { submissionId: "newer", message: "newer" },
+    ]);
+    expect(header.retry).toEqual({
+      submissionIds: ["older", "newer"],
+      disabled: false,
+    });
+    expect(header.openRounds.map((round) => round.round)).toEqual([1, 2]);
+    expect(openThreadsHeadline(2)).toBe("2 submitted threads still open");
+  });
+
+  it("blocks retry once the Story is merged", () => {
+    const failed = submission("failed", { round: 1, openThreadIds: ["thread-a"] });
     expect(
       reviewSubmitHeader({
         merged: true,
         readyCount: 1,
-        submissions: [newer],
+        submissions: [failed],
       }),
     ).toMatchObject({
-      retryDisabled: true,
-      reason: MERGED_STORY_SUBMIT_REASON,
+      submit: { disabled: true, reason: MERGED_STORY_SUBMIT_REASON },
+      retry: { disabled: true, reason: MERGED_STORY_SUBMIT_REASON, submissionIds: ["sub-1"] },
     });
   });
 
-  it("shows an incomplete submission on the failure line", () => {
+  it("keeps submit beside an incomplete submission and does not call it a failure", () => {
     const incomplete = submission("incomplete", {
       id: "open",
       at: "2026-09-29T13:00:00.000Z",
+      round: 2,
+      openThreadIds: ["thread-a"],
     });
     const olderFailure = submission("failed", {
       id: "older",
       at: "2026-09-29T11:00:00.000Z",
       error: "older",
+      round: 1,
+      openThreadIds: ["thread-b"],
     });
-    expect(
-      reviewSubmitHeader({
-        merged: false,
-        readyCount: 1,
-        submissions: [olderFailure, incomplete],
-      }),
-    ).toMatchObject({
-      mode: "failed",
-      submissionId: "open",
-      error: TASKING_INCOMPLETE_REASON,
-      retryDisabled: false,
+    const header = reviewSubmitHeader({
+      merged: false,
+      readyCount: 1,
+      submissions: [olderFailure, incomplete],
     });
+    expect(header.submit).toMatchObject({ disabled: false, label: "Submit review (1)" });
+    expect(header.failures).toEqual([{ submissionId: "older", message: "older" }]);
+    expect(header.retry).toEqual({
+      submissionIds: ["older", "open"],
+      disabled: false,
+    });
+    expect(header.openRounds).toEqual([
+      { submissionId: "older", round: 1, threadIds: ["thread-b"] },
+      { submissionId: "open", round: 2, threadIds: ["thread-a"] },
+    ]);
+    expect(openThreadsHeadline(1)).toBe("1 submitted thread still open");
+  });
+
+  it("disables retry while another submission is tasking", () => {
+    const header = reviewSubmitHeader({
+      merged: false,
+      readyCount: 0,
+      submissions: [
+        submission("incomplete", { id: "open", round: 1, openThreadIds: ["thread-a"] }),
+        submission("tasking", {
+          id: "run",
+          threadIds: ["thread-b", "thread-c"],
+          round: 2,
+          openThreadIds: ["thread-b"],
+        }),
+      ],
+    });
+    expect(header.submit).toBeUndefined();
+    expect(header.taskingLabel).toBe("Tasking 2 threads…");
+    expect(header.retry).toMatchObject({ submissionIds: ["open"], disabled: true });
   });
 });
 
@@ -173,19 +234,27 @@ describe("acknowledgedSubmissions", () => {
     expect(acknowledgedSubmissions([server], ["thread-a"], undefined)).toEqual([server]);
   });
 
-  it("shows a retry as tasking until the request settles", () => {
-    const failed = submission("failed");
-    const marked = acknowledgedSubmissions([failed], undefined, failed.id);
-    expect(marked[0]).toMatchObject({
-      id: failed.id,
-      status: "tasking",
-      threadIds: failed.threadIds,
+  it("shows every retried submission as tasking until the request settles", () => {
+    const failed = submission("failed", {
+      id: "bad",
+      round: 1,
+      openThreadIds: ["thread-a"],
     });
+    const incomplete = submission("incomplete", {
+      id: "open",
+      round: 2,
+      openThreadIds: ["thread-b"],
+    });
+    const marked = acknowledgedSubmissions([failed, incomplete], undefined, ["bad", "open"]);
+    expect(marked.map((item) => item.status)).toEqual(["tasking", "tasking"]);
     expect(marked[0]).not.toHaveProperty("error");
-
-    const incomplete = submission("incomplete");
-    const retried = acknowledgedSubmissions([incomplete], undefined, incomplete.id);
-    expect(retried[0]).toMatchObject({ id: incomplete.id, status: "tasking" });
+    expect(marked[0]).toMatchObject({
+      id: "bad",
+      threadIds: failed.threadIds,
+      round: 1,
+      openThreadIds: ["thread-a"],
+    });
+    expect(marked[1]).toMatchObject({ round: 2, openThreadIds: ["thread-b"] });
   });
 });
 

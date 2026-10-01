@@ -137,6 +137,7 @@ function StoryReviewWorkbench({
     setScope,
     threadId,
     openThreadInDiff,
+    openThread,
     retargetThreadScope,
   } = useReviewWorkbenchLocation(knownShas);
   const [markOverrides, setMarkOverrides] = useState<ReviewMarkOverrides>({});
@@ -150,6 +151,7 @@ function StoryReviewWorkbench({
         review={review}
         commits={commits.data}
         merged={merged}
+        onOpenThread={openThread}
       />
       <div
         role="tablist"
@@ -172,6 +174,7 @@ function StoryReviewWorkbench({
             storyId={storyId}
             submissions={review.submissions}
             onOpenInDiff={openThreadInDiff}
+            focusThreadId={threadId}
           />
         ) : active === "commits" ? (
           <ReviewCommitsPanel

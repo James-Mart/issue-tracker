@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
-import { CircleAlert, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import type { ReviewView } from "@server/schemas";
-import { submittableCommentThreads } from "../lib/review-submittable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,16 +14,13 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useCommentThreads } from "@/features/issues/api/queries";
 import {
   useArchiveReview,
   useReopenReview,
-  useRetryReviewSubmission,
+  useRetryOpenReviewSubmissions,
   useSubmitReview,
 } from "../api/mutations";
 import {
-  acknowledgedSubmissions,
-  reviewSubmitHeader,
   submitReviewDialogDetail,
   type ReviewSubmitHeader,
 } from "../lib/review-submission-ui";
@@ -113,69 +109,77 @@ function SubmitReviewDialog({
   );
 }
 
+function TaskingStatus({ label }: { label: string }) {
+  return (
+    <Badge
+      variant="inProgress"
+      className="h-8 gap-1.5 px-3 touch:h-11"
+      data-testid="review-tasking-status"
+      role="status"
+      aria-live="polite"
+    >
+      <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden />
+      {label}
+    </Badge>
+  );
+}
+
+function RetryAction({
+  disabled,
+  describedBy,
+  onRetry,
+}: {
+  disabled: boolean;
+  describedBy: string | undefined;
+  onRetry: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      className="shrink-0"
+      disabled={disabled}
+      aria-describedby={describedBy}
+      data-testid="review-submission-retry"
+      onClick={onRetry}
+    >
+      <RefreshCw aria-hidden />
+      Retry
+    </Button>
+  );
+}
+
 function SubmitAction({
   header,
   submitPending,
-  retryPending,
-  onRetry,
+  describedBy,
   onOpen,
 }: {
   header: ReviewSubmitHeader;
   submitPending: boolean;
-  retryPending: boolean;
-  onRetry: (submissionId: string) => void;
+  describedBy: string | undefined;
   onOpen: () => void;
 }) {
-  switch (header.mode) {
-    case "tasking":
-      return (
-        <Badge
-          variant="inProgress"
-          className="h-8 gap-1.5 px-3 touch:h-11"
-          data-testid="review-tasking-status"
-          role="status"
-          aria-live="polite"
-        >
-          <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden />
-          {header.label}
-        </Badge>
-      );
-    case "failed":
-      return (
-        <Button
-          type="button"
-          size="sm"
-          variant="current"
-          className="shrink-0"
-          disabled={header.retryDisabled || retryPending}
-          aria-describedby={header.reason ? "review-submit-merged-reason" : undefined}
-          data-testid="review-submission-retry"
-          onClick={() => onRetry(header.submissionId)}
-        >
-          <RefreshCw aria-hidden />
-          Retry
-        </Button>
-      );
-    case "submit":
-      return (
-        <Button
-          type="button"
-          size="sm"
-          variant="primary"
-          className="shrink-0"
-          disabled={header.disabled || submitPending}
-          aria-describedby={header.reason ? "review-submit-merged-reason" : undefined}
-          data-testid="submit-review"
-          data-ready-count={header.readyCount ?? ""}
-          onClick={onOpen}
-        >
-          {header.label}
-        </Button>
-      );
-  }
+  const submit = header.submit;
+  if (!submit) return null;
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="primary"
+      className="shrink-0"
+      disabled={submit.disabled || submitPending}
+      aria-describedby={describedBy}
+      data-testid="submit-review"
+      data-ready-count={submit.readyCount ?? ""}
+      onClick={onOpen}
+    >
+      {submit.label}
+    </Button>
+  );
 }
 
-function ReviewSubmitActions({
+export function ReviewSubmitActions({
   projectId,
   review,
   header,
@@ -189,11 +193,11 @@ function ReviewSubmitActions({
   header: ReviewSubmitHeader;
   onAcknowledge: () => void;
   onAcknowledgeEnd: () => void;
-  onRetryStart: (submissionId: string) => void;
+  onRetryStart: (submissionIds: readonly string[]) => void;
   onRetryEnd: () => void;
 }) {
   const submit = useSubmitReview(projectId);
-  const retry = useRetryReviewSubmission(projectId);
+  const retry = useRetryOpenReviewSubmissions(projectId);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [summary, setSummary] = useState("");
   const keepSummary = useRef(false);
@@ -204,31 +208,42 @@ function ReviewSubmitActions({
     setDialogOpen(next);
   };
 
+  const reason = header.submit?.reason ?? header.retry?.reason;
+  const describedBy = reason ? "review-submit-merged-reason" : undefined;
+  const retryAction = header.retry;
+
   return (
-    <div className="flex max-w-full flex-col items-end gap-1">
+    <div
+      data-testid="review-header-actions"
+      className="ml-auto flex max-w-full flex-col items-end gap-1"
+    >
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {retryAction ? (
+          <RetryAction
+            disabled={retryAction.disabled || retry.isPending}
+            describedBy={describedBy}
+            onRetry={() => {
+              onRetryStart(retryAction.submissionIds);
+              retry.mutate(review.id, {
+                onSuccess: () => onRetryEnd(),
+                onError: () => onRetryEnd(),
+              });
+            }}
+          />
+        ) : null}
+        {header.taskingLabel ? <TaskingStatus label={header.taskingLabel} /> : null}
         <SubmitAction
           header={header}
           submitPending={submit.isPending}
-          retryPending={retry.isPending}
-          onRetry={(submissionId) => {
-            onRetryStart(submissionId);
-            retry.mutate(
-              { reviewId: review.id, submissionId },
-              {
-                onSuccess: () => onRetryEnd(),
-                onError: () => onRetryEnd(),
-              },
-            );
-          }}
+          describedBy={describedBy}
           onOpen={() => setDialogOpen(true)}
         />
         <ReviewStatusAction projectId={projectId} review={review} />
       </div>
-      {header.mode === "submit" && header.readyCount !== undefined ? (
+      {header.submit && header.submit.readyCount !== undefined ? (
         <SubmitReviewDialog
           open={dialogOpen}
-          readyCount={header.readyCount}
+          readyCount={header.submit.readyCount}
           summary={summary}
           onSummaryChange={setSummary}
           onOpenChange={closeDialog}
@@ -255,82 +270,15 @@ function ReviewSubmitActions({
           }}
         />
       ) : null}
-      {header.mode !== "tasking" && header.reason ? (
+      {reason ? (
         <p
           id="review-submit-merged-reason"
           data-testid="review-submit-merged"
           className="max-w-64 text-right text-xs text-muted-foreground"
         >
-          {header.reason}
+          {reason}
         </p>
       ) : null}
     </div>
-  );
-}
-
-/** Title column and submit cluster, from one header-state value. */
-export function ReviewSubmitColumns({
-  projectId,
-  storyId,
-  storyTitle,
-  review,
-  merged,
-}: {
-  projectId: string;
-  storyId: string;
-  storyTitle: string;
-  review?: ReviewView;
-  merged: boolean;
-}) {
-  const { threads, loaded } = useCommentThreads(storyId);
-  const readyThreads = loaded
-    ? submittableCommentThreads(threads, review?.submissions ?? [])
-    : undefined;
-  const readyCount = readyThreads?.length;
-  const [pendingThreadIds, setPendingThreadIds] = useState<string[] | undefined>();
-  const [retryingId, setRetryingId] = useState<string | undefined>();
-  const header = review
-    ? reviewSubmitHeader({
-        merged,
-        readyCount,
-        submissions: acknowledgedSubmissions(
-          review.submissions,
-          pendingThreadIds,
-          retryingId,
-        ),
-      })
-    : undefined;
-
-  return (
-    <>
-      <div className="min-w-0">
-        <h1 className="min-w-0 text-xl font-semibold leading-snug tracking-tight text-foreground">
-          {storyTitle}
-        </h1>
-        {header?.mode === "failed" ? (
-          <p
-            className="mt-1 flex items-start gap-1.5 text-sm text-destructive"
-            data-testid="review-tasking-error"
-            role="status"
-          >
-            <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span>{header.error}</span>
-          </p>
-        ) : null}
-      </div>
-      {review && header ? (
-        <ReviewSubmitActions
-          projectId={projectId}
-          review={review}
-          header={header}
-          onAcknowledge={() =>
-            setPendingThreadIds(readyThreads?.map((thread) => thread.root.id))
-          }
-          onAcknowledgeEnd={() => setPendingThreadIds(undefined)}
-          onRetryStart={setRetryingId}
-          onRetryEnd={() => setRetryingId(undefined)}
-        />
-      ) : null}
-    </>
   );
 }

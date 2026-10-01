@@ -133,7 +133,7 @@ vi.mock("../api/mutations", () => ({
   useReopenReview: () => ({ mutate: state.reopen, isPending: false }),
   useOpenReview: () => ({ mutate: state.open, isPending: false }),
   useSubmitReview: () => ({ mutate: state.submitReview, isPending: false }),
-  useRetryReviewSubmission: () => ({ mutate: state.retrySubmission, isPending: false }),
+  useRetryOpenReviewSubmissions: () => ({ mutate: state.retrySubmission, isPending: false }),
 }));
 
 const FILES: ReviewDiffFile[] = [
