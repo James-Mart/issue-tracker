@@ -1,7 +1,3 @@
-#!/usr/bin/env -S npx tsx
-// One-time setup: npm link in this plugin's app/ directory, then invoke as
-// `issue <verb>` — see SPEC CLI invariants
-// (/root/.cursor/plugins/local/issue-tracker/app).
 import { runIssueCli } from "./cli-program.js";
 import { assertGuestBoot } from "./server/services/guest-boot.js";
 

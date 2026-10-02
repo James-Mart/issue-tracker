@@ -18,7 +18,7 @@ selects one Project and scopes the tree and Ready view to it.
 
 - `app/` — Vite + React frontend (default `:8060`, override `VITE_DEV_PORT`),
   Express + WebSocket backend (default `:8061`, override `PORT`), and
-  a CLI (`app/cli.ts`, exposed as a `bin`).
+  a CLI (`app/cli.ts`, exposed as the `issue` bin via `app/bin/issue.mjs`).
   - `app/server/schemas.ts` — the kind-discriminated zod schema (single source
     of truth for validation).
   - `app/server/services/issues.ts` — the service layer: the only sanctioned

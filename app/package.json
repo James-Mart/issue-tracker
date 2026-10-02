@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "bin": {
-    "issue": "./cli.ts"
+    "issue": "./bin/issue.mjs"
   },
   "scripts": {
     "dev": "concurrently \"vite\" \"tsx watch server/index.ts\"",

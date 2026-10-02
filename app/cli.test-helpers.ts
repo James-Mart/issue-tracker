@@ -6,10 +6,10 @@ import { fileURLToPath } from "url";
 import { afterEach, beforeEach } from "vitest";
 
 // Drive the CLI against a throwaway ISSUES_DIR. In-process cases use
-// runIssueCli; EPIPE and the --help cold-boot spawn the thin cli.ts shell.
+// runIssueCli; EPIPE and the --help cold-boot spawn the real `issue` bin from
+// outside app/, the way agents invoke it from Story worktrees.
 const appDir = dirname(fileURLToPath(import.meta.url));
-const tsx = join(appDir, "node_modules", ".bin", "tsx");
-const cliPath = join(appDir, "cli.ts");
+const binPath = join(appDir, "bin", "issue.mjs");
 
 export let dir: string;
 let clock = 0;
@@ -71,8 +71,8 @@ export function seedPlanningSession(
 export function spawnCliColdBoot(
   args: string[],
 ): { stdout: string; stderr: string; status: number | null } {
-  const result = spawnSync(tsx, [cliPath, ...args], {
-    cwd: appDir,
+  const result = spawnSync(process.execPath, [binPath, ...args], {
+    cwd: dir,
     env: {
       ...process.env,
       ISSUES_DIR: dir,
@@ -93,8 +93,8 @@ export function runCliWithEarlyStdoutClose(
   args: string[],
 ): Promise<{ status: number | null; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(tsx, [cliPath, ...args], {
-      cwd: appDir,
+    const child = spawn(process.execPath, [binPath, ...args], {
+      cwd: dir,
       env: {
         ...process.env,
         ISSUES_DIR: dir,
