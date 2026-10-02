@@ -19,9 +19,9 @@ Nothing is posted to GitHub. The work merges to trunk.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-**Read** `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-authoring/SKILL.md`
-— apply ## Compression target when deciding what to keep and drop in export
-bodies.
+**Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-body.md`
+and follow it except **Grain** and **Task shape**.
 
 Use the default issues dir (do not set `ISSUES_DIR`).
 
@@ -75,24 +75,22 @@ A failed PUT is a failure: report the response and stop. Do not call
 
 ## Publishing prose
 
-The prose uses the names that reader already uses for the areas in the change
-and for the operations those areas perform. The YAML `title` is a short name
-of the outcome.
+A Story draft uses the Story shape below. An Epic draft uses the Epic shape
+below. The YAML `title` is a short name of the outcome.
+
+### Story
 
 A Story body opens with `# Background`, then `# Implementation`. Do not add
-a top-level heading that repeats the YAML `title`. `# Background` restates
-the Story's situation and any named invariants from the tracker description.
-Leave data model, actions, queries, and UI work to `# Implementation`.
+a top-level heading that repeats the YAML `title`. `# Background` follows
+plan body **Describe the work** and carries cross-cutting contracts named
+in the tracker description. Leave data model, actions, queries, and UI work
+to `# Implementation`.
 
 Under `# Implementation`, break the work into `##` area headings. Each
 heading is the name the reader already uses for that area, as the tracker
 names it, not a procedural task title. Prefer the tracker's own section and
 task area names over invented labels. A table appears only when behavior is
 a matrix.
-
-What to keep and drop in the body follows the compression target in
-issue-tracker-authoring (Read above) — apply that target when rewriting export
-bodies; do not restate it here.
 
 When a Story has to land after another, its prose names the piece it follows
 in ordinary language. A Story whose `stackedOn` is set lands after that
@@ -102,10 +100,13 @@ this export's file set, the name is the published title being written for it.
 When that piece is outside the file set, the name is that issue's tracker
 title.
 
-An Epic body is that Epic's own situation in the same voice, then a checklist
-of the rewritten Story titles in landing order (`- [ ] <published title>`).
-Landing order is the script's file order. Each Story stays its own file. The
-Epic body does not repeat the Stories' implementation.
+### Epic
+
+An Epic body follows plan body **Work root shape** and **Epic contracts**,
+then a checklist of the rewritten Story titles in landing order
+(`- [ ] <published title>`). Landing order is the script's file order in
+[First run](#first-run). Each Story stays its own file. The Epic body does
+not repeat the Stories' implementation.
 
 ## Later updates
 
