@@ -10,7 +10,7 @@ Absolute path for this file (Read this exact path):
 ## Describe the work
 
 Plan prose states work context, outcomes it lands, and seams and contracts it
-builds or must honor.
+builds or must honor. Out-of-scope lists and plan invariants are omitted.
 
 ## Compression target
 
