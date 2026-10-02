@@ -54,7 +54,7 @@ After all five return:
 
    > Issue: `<issueId>`. Draft description: `<markdown>`. Parent: `<parentTitle>`. Siblings: `<sibling titles>`.
    >
-   > Return only JSON per `agents/issue-tracker-plan-concise.md` (same content in fewer words; every detail kept; no prose wrapper).
+   > Return only JSON per `agents/issue-tracker-plan-concise.md` (per that file's **What you change**; every detail kept; no prose wrapper).
 
 5. **Formatting.** For each description in the draft, delegate
    `issue-tracker-plan-format` with the stub below. Keep at most six of them
