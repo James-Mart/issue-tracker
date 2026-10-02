@@ -19,6 +19,19 @@ the Story can carry.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
+## Plan body
+
+**Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-body.md`
+and follow it.
+
+### Review-appended Tasks
+
+Review-appended Tasks follow plan body **Compression target** and plan prose;
+work-root shape, grain, and Epic contracts do not apply. Per linked review
+thread, include the anchor file, line, and feedback; that location is the
+feedback's work context.
+
 ## Inputs
 
 The prompt ends with:
@@ -38,8 +51,8 @@ The prompt ends with:
    `issue story append <storyId> <file>`. `issue summary` names the Project
    and, when the Story sits under an Epic, the Epic. Include `epic` only
    when that Epic line is present. Restate the Story id and title. Each new
-   Task id is kebab-case and unused. Its description states the outcome,
-   the code location, and how to verify.
+   Task id is kebab-case and unused. Its description follows **Plan body**
+   above.
 4. Link every named thread to the Task that covers it:
 
    issue story comment <storyId> --role issue-tracker-review-tasker --reply-to <threadId> --link-task <taskId>
