@@ -76,6 +76,18 @@ export function ancestorChain(id: string, issues: Issue[]): Issue[] {
 }
 
 /**
+ * The Story a Project → … → target chain belongs to: the target itself when it
+ * is a Story, its parent when it is a Task, otherwise undefined.
+ */
+export function owningStory(
+  chain: Issue[],
+): Extract<Issue, { kind: "story" }> | undefined {
+  const target = chain.at(-1);
+  const story = target?.kind === "task" ? chain.at(-2) : target;
+  return story?.kind === "story" ? story : undefined;
+}
+
+/**
  * Nearest Epic on a Project → … → target chain, or the project-level Story
  * when the chain has no Epic.
  */

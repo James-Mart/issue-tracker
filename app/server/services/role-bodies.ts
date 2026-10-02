@@ -53,6 +53,17 @@ export function loadRoleModelPin(
   return frontmatter.model as string;
 }
 
+/**
+ * Whether the role writes into a Story worktree and so must hold it alone
+ * (`worktree: exclusive`). Read-only roles such as reviewers omit it.
+ */
+export function loadRoleWorktreeExclusive(
+  name: string,
+  agentsDir: string = defaultAgentsDir(),
+): boolean {
+  return readRoleFile(name, agentsDir).frontmatter.worktree === "exclusive";
+}
+
 /** Fail fast when a spawnable role is missing required frontmatter. */
 export function validateRoleBodies(
   agentsDir: string = defaultAgentsDir(),
@@ -75,12 +86,15 @@ export function validateRoleBodies(
       throw new Error(`${entry}: failed to parse frontmatter`);
     }
 
-    const { name, model } = parsed.frontmatter;
+    const { name, model, worktree } = parsed.frontmatter;
     if (typeof name !== "string" || name.length === 0) {
       throw new Error(`${entry}: missing name`);
     }
     if (!hasModelPin(model)) {
       throw new Error(`${entry}: missing model pin`);
+    }
+    if (worktree !== undefined && worktree !== "exclusive") {
+      throw new Error(`${entry}: worktree must be "exclusive" when set`);
     }
   }
 }

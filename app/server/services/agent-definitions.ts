@@ -8,6 +8,7 @@ export interface AgentFrontmatter {
   name?: unknown;
   description?: unknown;
   model?: unknown;
+  worktree?: unknown;
 }
 
 export function splitFrontmatter(

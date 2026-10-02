@@ -16,7 +16,7 @@ import { join, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { z } from "zod";
 import { conversationsDir } from "../config.js";
-import type { Issue, Runtime } from "../schemas.js";
+import type { Runtime } from "../schemas.js";
 import { isSlugSafe } from "../slug.js";
 import { collectAgentStackMemoryLimitFailures } from "./agent-stack-heap-reports.js";
 import {
@@ -28,7 +28,7 @@ export { agentStackMemoryLimitMessage } from "./agent-stack-heap-reports.js";
 import { appendOutputTail, killProcessGroup } from "./bounded-process.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
 import { readAll } from "./issues.js";
-import { ancestorChain } from "./subtree.js";
+import { ancestorChain, owningStory } from "./subtree.js";
 
 /**
  * One conversation's verification stack, on ports picked free at start time.
@@ -407,8 +407,6 @@ async function spawnChild(
   return { child, record: { role, pid, startTime: info.startTime } };
 }
 
-type StoryIssue = Extract<Issue, { kind: "story" }>;
-
 interface ResolvedBoot {
   issueId: string;
   projectId: string;
@@ -450,20 +448,14 @@ function expandBaseUrl(template: string, env: Record<string, string>): string {
 function resolveBootTarget(issueId: string): ResolvedBoot {
   const { issues } = readAll();
   const chain = ancestorChain(issueId, issues);
-  const target = chain[chain.length - 1]!;
   const project = chain[0];
   if (project?.kind !== "project") {
     throw new Error(`issue "${issueId}" is not under a project`);
   }
-  const story = target.kind === "story"
-    ? target
-    : target.kind === "task"
-      ? chain[chain.length - 2]
-      : undefined;
-  if (story?.kind !== "story") {
+  const storyIssue = owningStory(chain);
+  if (!storyIssue) {
     throw new Error(`issue "${issueId}" has no Story`);
   }
-  const storyIssue: StoryIssue = story;
   const recorded = storyIssue.worktreePath;
   if (!recorded || !existsSync(recorded) || !statSync(recorded).isDirectory()) {
     throw new Error(`Story "${storyIssue.id}" has no live worktree`);

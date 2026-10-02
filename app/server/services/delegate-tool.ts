@@ -40,6 +40,10 @@ import { createAgentStackTools } from "./agent-stack-tools.js";
 import { coalesceCustomTools } from "./custom-tool-coalesce.js";
 import { runCostRecorder } from "./run-cost-recorder.js";
 import { createSdkBugReportTools } from "./sdk-bug-report.js";
+import {
+  claimDelegationWorktree,
+  resetWorktreeLeasesForTests,
+} from "./worktree-lease.js";
 
 /** Interval for live-only nested-run liveness frames. */
 export const NESTED_RUN_HEARTBEAT_MS = 5000;
@@ -232,6 +236,7 @@ export function resetDelegationConcurrencyForTests(): void {
   globalGate.waiters.length = 0;
   conversationGates.clear();
   nestedRunsByConversation.clear();
+  resetWorktreeLeasesForTests();
 }
 
 function outstandingDelegations(
@@ -430,8 +435,9 @@ function assistantTextFromEvent(event: AgentStreamEvent): string {
 }
 
 type ParentFrame = {
-  delegationId: string;
   depth: number;
+  /** Delegation ids from the outermost delegation down to this one (last). */
+  lineage: readonly string[];
 };
 
 /**
@@ -522,7 +528,7 @@ export function createDelegateCustomTools(
 
     customTools.delegate = {
       description:
-        "Delegate work to a named role. The app selects the role's pinned model. Returns ok: true with agentId and reply on success; ok: false with failureClass (auth | agent-failed | cancelled | host-process-died | stalled-before-first-token | transport-exhausted), isRetryable, message, and agentId on a runtime failure. Caller errors throw.",
+        "Delegate work to a named role. The app selects the role's pinned model. Returns ok: true with agentId and reply on success; ok: false with failureClass (auth | agent-failed | cancelled | host-process-died | stalled-before-first-token | transport-exhausted), isRetryable, message, and agentId on a runtime failure. Caller errors throw — including a `worktree: exclusive` role (implementor, git) delegated without a Task/Story issueId, or while an unrelated delegation holds that Story's worktree; the holder's own nested delegations may share it.",
       annotations: DELEGATE_TOOL_ANNOTATIONS,
       outputSchema: toolOutputSchema(delegateResultSchema),
       inputSchema: {
@@ -576,7 +582,23 @@ export function createDelegateCustomTools(
             ? `${loadRoleBody(role, agentsDir)}\n\n${prompt}`
             : prompt;
 
-        const release = await acquireConcurrencySlot(concurrencyKey);
+        const delegationId = randomUUID();
+        const ancestorDelegationIds = parent?.lineage ?? [];
+        const lineage = [...ancestorDelegationIds, delegationId];
+        const releaseWorktree = claimDelegationWorktree({
+          role,
+          issueId,
+          delegationId,
+          ancestorDelegationIds,
+          agentsDir,
+        });
+        let release: () => void;
+        try {
+          release = await acquireConcurrencySlot(concurrencyKey);
+        } catch (err) {
+          releaseWorktree();
+          throw err;
+        }
         const tracked: NestedRunTracker = {
           cancelled: false,
           stalledBeforeFirstContent: false,
@@ -595,8 +617,7 @@ export function createDelegateCustomTools(
             throw new Error("delegate: conversation cancelled");
           }
 
-          const delegationId = randomUUID();
-          const parentDelegationId = parent?.delegationId;
+          const parentDelegationId = ancestorDelegationIds.at(-1);
           parentCallId =
             typeof context.toolCallId === "string" &&
             context.toolCallId.length > 0
@@ -626,10 +647,7 @@ export function createDelegateCustomTools(
             }
             // Local SDK sessionId === agentId; hooks see it as conversation_id.
             const nestedCustomTools = buildCustomTools(
-              {
-                delegationId,
-                depth: attemptedDepth,
-              },
+              { depth: attemptedDepth, lineage },
               () => resumeId,
             );
             try {
@@ -666,10 +684,7 @@ export function createDelegateCustomTools(
             mkdirSync(nestedStoreDir, { recursive: true });
 
             const nestedCustomTools = buildCustomTools(
-              {
-                delegationId,
-                depth: attemptedDepth,
-              },
+              { depth: attemptedDepth, lineage },
               () => agentId,
             );
             handle = await options.sdk.createAgent({
@@ -846,6 +861,7 @@ export function createDelegateCustomTools(
           }
           untrackNested(concurrencyKey, tracked);
           release();
+          releaseWorktree();
           if (handle) {
             try {
               await handle[Symbol.asyncDispose]();

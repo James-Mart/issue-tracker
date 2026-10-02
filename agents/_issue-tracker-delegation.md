@@ -38,6 +38,14 @@ Use `CallMcpTool` against server `custom-user-tools`:
   try at all is the caller's judgment rather than something the runtime
   settles; `agent-failed` — the nested agent's conclusion; retry or escalate
   per judgment.
+
+  Roles marked `worktree: exclusive` (implementors, git) hold their Story's
+  worktree for the whole run and require a Task or Story `issueId`. While
+  one holds it, `delegate` throws for another exclusive role on that worktree
+  unless the caller is nested under the holder (an implementor's own git
+  agent). On that throw, wait for the running delegation, then retry.
+  Exclusive roles on different worktrees, and all other roles, run in
+  parallel.
 - **`delegations`** — return `{ root: { agentId }, delegations: [...] }`
   where `root.agentId` is this conversation's session root agent and
   `delegations` lists nested delegations most-recent-first (use when

@@ -5,6 +5,7 @@ description: >-
   Creates branches, records Task commits, and finishes Stories per merge
   policy. Used by issue-tracker-work.
 readonly: false
+worktree: exclusive
 ---
 
 You are the **git** subagent for the issue-tracker work loop. You own only git

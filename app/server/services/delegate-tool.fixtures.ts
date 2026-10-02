@@ -149,6 +149,23 @@ export function setupNestedRunPublishTest(): void {
   );
 }
 
+/** Write a raw `issue.json` into the nested-run issues root. */
+export function writeNestedRunIssue(
+  id: string,
+  body: Record<string, unknown>,
+): void {
+  mkdirSync(join(nestedRunIssuesRoot, id), { recursive: true });
+  writeFileSync(
+    join(nestedRunIssuesRoot, id, "issue.json"),
+    JSON.stringify({
+      id,
+      createdAt: NESTED_RUN_PUBLISH_AT,
+      updatedAt: NESTED_RUN_PUBLISH_AT,
+      ...body,
+    }),
+  );
+}
+
 export function teardownNestedRunPublishTest(): void {
   resetDelegationConcurrencyForTests();
   vi.unstubAllEnvs();

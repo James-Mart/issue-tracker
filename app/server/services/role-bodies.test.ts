@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   loadRoleBody,
   loadRoleModelPin,
+  loadRoleWorktreeExclusive,
   validateRoleBodies,
 } from "./role-bodies.js";
 
@@ -101,5 +102,52 @@ Body without a pin.`,
 
     expect(() => validateRoleBodies(agentsDir)).toThrow(/missing-pin\.md/);
     expect(() => validateRoleBodies(agentsDir)).toThrow(/missing model pin/);
+  });
+
+  it("throws naming the file when worktree is set to anything but exclusive", () => {
+    writeAgent(
+      "shared-writer.md",
+      `---
+name: shared-writer
+model: composer-2.5
+description: Misspelled worktree mode.
+worktree: exclusve
+---
+
+Body.`,
+    );
+
+    expect(() => validateRoleBodies(agentsDir)).toThrow(
+      'shared-writer.md: worktree must be "exclusive" when set',
+    );
+  });
+});
+
+describe("loadRoleWorktreeExclusive", () => {
+  it("is true only for roles marked worktree: exclusive", () => {
+    writeAgent(
+      "writer.md",
+      `---
+name: writer
+model: composer-2.5
+description: Writes the worktree.
+worktree: exclusive
+---
+
+Body.`,
+    );
+    writeAgent(
+      "reader.md",
+      `---
+name: reader
+model: composer-2.5
+description: Read-only.
+---
+
+Body.`,
+    );
+
+    expect(loadRoleWorktreeExclusive("writer", agentsDir)).toBe(true);
+    expect(loadRoleWorktreeExclusive("reader", agentsDir)).toBe(false);
   });
 });

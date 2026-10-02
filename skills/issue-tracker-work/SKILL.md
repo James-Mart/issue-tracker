@@ -250,6 +250,13 @@ cross-reference this. Status transitions during this cycle are owned by
 subagents — see **Field ownership**. Do not set Task `status` or `commits`
 yourself.
 
+Implementor and git prompts carry only their spawn-stub fields; the git agent
+records the sha of each commit it creates.
+
+Tasks of one Story share its worktree: issue one implementor `delegate` call
+per turn and wait for it to return before starting the next Task. The worktree
+lease in the Delegation include enforces this.
+
 0. **Entry gate.** On every entry to this cycle for `<task>` (including skill
    re-run and Close-Story not-done), read via `issue task get` — in order —
    `needsAttention`, then `status`. First match wins; jump to that step and
@@ -259,8 +266,8 @@ yourself.
    - otherwise → step 1.
 
    **Cold-restart limit.** A Task whose implementor is still in flight reads
-   `in-progress`, so a skill re-run in that window falls through to step 1
-   and may spawn a second implementor. Accept that window.
+   `in-progress`, so a skill re-run in that window falls through to step 1,
+   where the worktree lease refuses the second implementor.
 
 1. **Assign model.** Delegate `issue-tracker-model-discriminator` with the
    model-discriminator spawn stub. Wait until it finishes (or raises
