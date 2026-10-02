@@ -20,65 +20,13 @@ Work the resulting tree with `issue-tracker-work`. **Read**
 and follow it.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
-Localize prose to the tier where it belongs — don't dump the whole spec in the
-Epic and leave children title-only, and don't enumerate in a parent the specific
-work its children each cover
+**Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-body.md`
+and follow it.
+
+Localize prose to the tier where it belongs. Put each unit's prose on that
+unit, and leave the enumeration of children to the child list
 ([SPEC.md](../../SPEC.md#parent-prose-must-not-restate-descendant-lists)).
-
-## Compression target
-
-A plan is a **lossy compression** of the design conversation behind it. It
-keeps the **shape**, the **critical seams**, the **main dependencies**, and the
-**critical contracts**; nuance within those bounds is settled during
-implementation. The target fails in two directions:
-
-- **Too much** — detail neither the shape nor a critical contract needs:
-  construction steps, file layout, procedure, how to test.
-- **Too little** — a gap that would make the implementor invent architecture:
-  a missing seam, dependency, or contract.
-
-Each Story and Task states the outcomes it lands. The work loop checks the
-work against those outcomes; the implementor chooses how to verify them.
-
-### Examples
-
-**Too much** — a Task in a payments service:
-
-> In `src/billing/refunds.ts`, add a `computeRemainder` helper, call it from
-> `RefundController.create`, add cases to `refunds.test.ts`, and run the
-> suite. Verify: refunding a partial capture returns the remainder.
-
-Compressed:
-
-> A refund on a partially captured charge returns at most the captured
-> amount. Seam: `refund(chargeId, amountCents?) -> { refundId, amountCents,
-> status }`; omitting `amountCents` refunds everything captured.
-
-**Too little** — a Task in a notes app:
-
-> Notes can be edited offline.
-
-Compressed:
-
-> Notes edit offline and sync on reconnect. The server wins conflicts: the
-> client queues `{ noteId, body, baseVersion }`, and a stale `baseVersion` gets
-> `409` with the current note, which replaces the local edit.
-
-## Plan prose
-
-- **Background.** Each work root (Epic or project-level Story) opens with a
-  concise `# Background` giving the context that justifies the work.
-- **Vocabulary.** Prose uses the names the Project's own readers already use
-  for its areas and operations. Tracker vocabulary (work loop, polish, story
-  review) appears only when the Project being planned is the tracker.
-- **Names and paths.** Prose names no file paths. A name internal to a module
-  appears only when the shape or a critical contract needs it.
-- **Seams.** A Task that introduces or wires an interface gives an example
-  function shape and field names. The implementor may deviate when
-  implementation forces it.
-- **One answer on important choices.** Every choice about shape, seams,
-  dependencies, or contracts has one definitive answer. Detail deliberately
-  left to implementation is not an open choice.
 
 ## Author declaratively: one YAML doc, then `apply`
 
@@ -145,8 +93,8 @@ on that Story only (no new Epic or root Story; see
   **single Story plus its Tasks**. Author with Project `children:`
   `kind: story`, or story-form apply (`project:` + `story:`, no `epic:`).
 - **Epic** — you need **sibling root Stories**, **stacking**, or Epic
-  **`blockedBy`**. Background + cross-cutting invariants only (not the full
-  spec).
+  **`blockedBy`**. The body opens with `# Background` and `# Proposal`, and
+  may add Epic contracts (plan body include).
 
 Stacking under a Project is integrity-legal (same-container rule), but
 **authoring prefers an Epic whenever any stacking exists** — soft policy, not
@@ -174,62 +122,6 @@ signal** to split.
 
 For each resulting root, still choose Epic vs project-level Story by
 [Epic grain](#epic-grain-project-level-story-vs-epic) above.
-
-## Grain: Story vs Task
-
-- **Project** — the top-level container that groups related Epics, Ideas, and
-  project-level Stories. Organizational only (no status); its `description.md`
-  is a short overview of the whole product area.
-- **Epic** — `# Background` + cross-cutting design principles/invariants only
-  (what governs every phase). Not the full spec. When to choose an Epic vs a
-  project-level Story: see
-  [Epic grain](#epic-grain-project-level-story-vs-epic).
-- **Story** = one shippable unit: scope, approach, and the data-model or
-  interface contracts specific to it. May be `partOf` an Epic or the Project
-  (project-level Story). Normally several tasks; one task's worth of work is a
-  Task, not a Story. Phrase how the Story lands per
-  [Merge-policy delivery prose](#merge-policy-delivery-prose).
-- **Task** = one git commit: the outcome it lands, plus the seams and contracts
-  it introduces ([Compression target](#compression-target)). Must be a
-  standalone vertical slice that leaves the tip buildable/testable
-  ([SPEC.md](../../SPEC.md#kinds)). Tree nesting supplies context, so linking
-  task → epic is unnecessary. **Tasks run in the order they appear in the doc**
-  (top-to-bottom); authors never specify `order` — array position is
-  implementation order.
-
-**Each Story must be independently mergeable into its derived `mergeBase`.**
-Stories merge into their merge base (stacked children after their fork-point
-Story, in stack order), and only Stories merge — Tasks are internal steps that
-ship together as one Story. So never split one cohesive change across Stories
-such that merging one leaves the merge base broken (e.g. a schema change in one
-Story and the code that consumes it in another): keep it in a single Story as
-multiple Tasks. See the stacked merge model in
-[SPEC.md](../../SPEC.md#the-stacked-pr-merge-model). To target an existing
-non-trunk branch, set a merge-base override after `apply` (see
-[Merge-base override](#merge-base-override)).
-
-### Task shape: vertical slices, not horizontal layers
-
-Normative rule lives in [SPEC.md](../../SPEC.md#kinds) (Task kind + stacked
-merge model): each Task must leave the Story tip **buildable and testable**.
-
-**Prefer** vertical slices — one thin end-to-end cut of a capability (types +
-implementation + a focused test) that stands alone.
-
-**Avoid** horizontal layering that does not stand alone:
-
-- **Bad:** Task 1 adds types/interfaces only; Task 2 "wires them up"; Task 3
-  adds tests — or a half-migration Task that does not compile. Early Tasks do
-  not prove anything on their own.
-- **Good:** Task 1 adds one complete capability (types, implementation, and a
-  focused test) that builds; Task 2 adds the next capability the same way.
-
-A plan's *phases* are the Story grain, its *todos/steps* the Task grain. Group
-related todos into one Story and land them as tasks; when mapping todos to
-Tasks, reshape horizontal layering into vertical slices (split or merge until
-each Task stands alone as above). Split only a genuinely oversized phase. One
-todo → one Story (a stack of one-task Stories with an empty Task tier) means
-you split at the wrong tier.
 
 ## Task footprint
 
@@ -359,10 +251,9 @@ Full migrate procedure:
 
 Before done:
 
-- **Compression target** — the tree fails in neither direction (see
-  [Compression target](#compression-target)).
-- **Plan prose** — every rule holds across the tree (see
-  [Plan prose](#plan-prose)).
+- **Plan body** — rules in
+  `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-body.md`
+  hold across the tree.
 - Companion material follows [SPEC.md § Attachments](../../SPEC.md#attachments).
 - **Epic grain** — single-Story plans use a project-level Story; Epics are for
   sibling roots, stacking, or `blockedBy` (see
@@ -370,8 +261,6 @@ Before done:
 - **Multi-Epic split** — decide single root vs multiple top-level roots by
   diamond/`blockedBy` and independent-topics criteria; size alone does not
   force a split (see [Multi-Epic split](#multi-epic-split)).
-- No Story/Task is title-only; no Story holds just one task and the
-  Story count isn't merely the bullet count.
 - **Parent/child prose boundaries** — follow the localize guidance above
   ([SPEC.md](../../SPEC.md#parent-prose-must-not-restate-descendant-lists)):
   Epic holds no phase- or task-level detail that belongs in children; no

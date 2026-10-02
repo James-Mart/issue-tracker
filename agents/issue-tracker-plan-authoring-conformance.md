@@ -2,8 +2,8 @@
 name: issue-tracker-plan-authoring-conformance
 model: composer-2.5
 description: >-
-  Read-only plan polish check for authoring compression and structure. Used by
-  issue-tracker-plan-polish.
+  Read-only plan polish check for plan-body rules, compression, and structure.
+  Used by issue-tracker-plan-polish.
 readonly: true
 ---
 
@@ -21,42 +21,52 @@ structure would fail the implementor who has to build it.
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-polish-check-base.md`
 and follow it. Below is only what you uniquely flag.
 
-## Normative checklist files
+## Normative checklist
 
-After loading the shared contract, **Read** each of:
+After loading the shared contract, **Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-body.md`.
+That include is the checklist. Flag the findings in **What you flag**. Each
+finding names the plan-body rule it enforces, or the authoring or SPEC rule
+when that rule lives there.
+
+Also **Read**:
 
 - `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-authoring/SKILL.md`
-- `/root/.cursor/plugins/local/issue-tracker/SPEC.md` — follow anchors linked
-  from the skill (e.g. `#parent-prose-must-not-restate-descendant-lists`,
-  `#attachments`).
+  — **Epic grain**, **Merge-policy delivery prose**, and **Promoted mockup
+  artifacts**.
+- `/root/.cursor/plugins/local/issue-tracker/SPEC.md` — anchors
+  `#parent-prose-must-not-restate-descendant-lists` and `#attachments`.
 
 ## What you flag
 
-Violations of issue-tracker-authoring:
+### Describe the work
+
+- **Plan-facing prose** — plan body **Describe the work**. The `problem` names
+  the plan-facing content and states that it is deleted. Emit `error`.
+  A cross-cutting contract in concrete shape (names, fields, behavior) is
+  plan body **Epic contracts**, not this finding.
 
 ### Compression target
 
-- **Too much detail** — construction, file layout, procedure, how to test, or
-  a module-internal name that neither the shape nor a critical contract needs
-  (authoring **Compression target**, **Names and paths**).
-- **Too little** — a missing seam, dependency, or contract. A Task that
-  introduces or wires an interface without an example function shape and field
-  names is this finding (authoring **Compression target**, **Seams**).
+- **Too much detail** — plan body **Compression target** and **Names and
+  paths**.
+- **Too little** — plan body **Compression target** and **Seams**.
+
+### Work root shape
+
+- **Missing background** — plan body **Work root shape**. Flag a work root
+  whose description lacks one or both required headings (`# Background`,
+  `# Proposal`). The `problem` names each missing heading.
 
 ### Plan prose
 
-- **Missing background** — the work root is an Epic or a project-level Story
-  and its description has no `# Background` (authoring **Background**).
-- **Tracker jargon** — tracker vocabulary (work loop, polish, story review)
-  when the Project being planned is not the tracker (authoring **Vocabulary**).
-- **File path** — plan prose names a file path. An external workspace path
-  that belongs as an attachment is this same finding (authoring **Names and
-  paths**, **Attachments**).
+- **Tracker jargon** — plan body **Vocabulary**.
+- **File path** — plan body **Names and paths**. An external workspace path
+  that belongs as an attachment is this same finding
+  (`/root/.cursor/plugins/local/issue-tracker/SPEC.md#attachments`).
   - A Story names the filenames **Promoted mockup artifacts** requires; that
     naming satisfies **File path**.
-- **Open choice** — an important choice about shape, seams, dependencies, or
-  contracts has no single definitive answer (authoring **One answer on
-  important choices**).
+- **Open choice** — plan body **One answer on important choices**.
   - "Either X or Y", "TBD", "decide later", and parallel options still
     presented as open are this finding.
   - Detail deliberately left to implementation is settled latitude.
@@ -65,12 +75,10 @@ Violations of issue-tracker-authoring:
 
 ### Grain and delivery
 
-- **Parent enumeration** — Project/Epic/Story restates the per-unit child
-  list (enumerates what each child covers)
-  ([SPEC.md](../SPEC.md#parent-prose-must-not-restate-descendant-lists)).
-- **Grain problems** — title-only Story/Task; Story that is one Task's worth
-  of work with an empty Task tier misuse; horizontal layering that leaves an
-  intermediate tip unbuildable (authoring **Task shape**).
+- **Parent enumeration** — a Project, Epic, or Story restates the per-unit
+  child list
+  (`/root/.cursor/plugins/local/issue-tracker/SPEC.md#parent-prose-must-not-restate-descendant-lists`).
+- **Grain problems** — plan body **Grain: Story vs Task**.
 - **Epic grain (soft)** — authoring **Epic grain: project-level Story vs
   Epic**. Emit `warning` findings (never `error`) for these shapes only;
   scope each rule by work-root kind (`<rootKind>` from the shared check-base):
@@ -124,8 +132,8 @@ project-level Story with no stack edges.
 Do **not** flag near-verbatim duplicated blocks across nodes — that is
 `issue-tracker-plan-dry`.
 
-Omit nits that are already clearly conforming. Prefer `error` for **Too much
-detail**, **Too little**, **Missing background**, **Tracker jargon**, **File
-path**, **Open choice**, and **Parent enumeration**. Prefer `warning` for
-**Grain problems** and **Epic grain (soft)**. **Merge-policy delivery prose**
-is `error`.
+Omit nits that are already clearly conforming. Prefer `error` for **Plan-facing
+prose**, **Too much detail**, **Too little**, **Missing background**, **Tracker
+jargon**, **File path**, **Open choice**, and **Parent enumeration**. Prefer
+`warning` for **Grain problems** and **Epic grain (soft)**. **Merge-policy
+delivery prose** is `error`.

@@ -37,7 +37,9 @@ Every issue has a `kind`, one of:
   see [Project trunk](#project-trunk)), and an optional closed `labels` catalog
   (see [Project labels](#project-labels)). Has no `partOf`.
 - **Epic** — a body of work (replaces a giant plan/spec). Contains Stories; its
-  `description.md` holds the spec. Carries `blockedBy` (a list of other Epic ids
+  `description.md` follows work root shape and Epic contracts in
+  `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-body.md`.
+  Carries `blockedBy` (a list of other Epic ids
   in the same Project that must finish first), an optional `mergeBaseOverride`
   (redirects first-layer Stories' derived `mergeBase` away from `trunk` — see
   [stacked-PR merge model](#the-stacked-pr-merge-model)), an optional
@@ -1760,7 +1762,10 @@ project:
       id: my-epic
       title: My Epic
       description: |
-        Cross-cutting invariants.
+        # Background
+        Current state and what is wrong.
+        # Proposal
+        The improvement, in one or a few sentences.
       blockedBy: [other-epic]  # other Epics (same Project) that must finish first
       children:
         - kind: story
@@ -2153,19 +2158,20 @@ may dangle — see [Attachments](#attachments).
 
 **The plan lives distributed across tiers.** The Epic replaces a giant
 plan/spec only when the plan's shape, seams, dependencies, and contracts are
-captured in the tree: background and cross-cutting invariants in the Epic,
-standalone unit prose in each Story, and each Task's outcome, seams, and
-contracts per the
-[compression target](skills/issue-tracker-authoring/SKILL.md#compression-target)
-in issue-tracker-authoring.
+captured in the tree per
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-body.md`:
+`# Background` and `# Proposal` on every work root, Epic contracts as concrete
+shape (names, fields, behavior) when more than one child Story builds against
+them, standalone unit prose in each Story, and each Task's outcome, seams, and
+contracts (that include's compression target).
 Companion material belongs **with
 the issue that uses it** — inlined in `description.md` or attached beside it
 (link rules in [Attachments](#attachments)). Verbatim copy into the Epic with
 empty children is not sufficient — distribution and a completeness pass are
 what make the tracker a standalone basis for a future implementor. A parent's
 `description.md` MUST NOT enumerate or restate the specific work its children
-individually cover. Parent prose carries scope, approach, cross-cutting
-invariants, and context; the *enumeration of units* is the child list itself
+individually cover. Parent prose carries scope, approach, and context; the
+*enumeration of units* is the child list itself
 (Project → its Epics, Ideas, and project-level Stories; Epic → its Stories;
 Story → its Tasks) — not a mirrored per-child checklist in the parent. Children
 get pruned or reshaped during plan cleanup, so a parent that mirrors them
