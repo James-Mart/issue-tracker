@@ -31,6 +31,8 @@ const reviewSubmissionIdentity = {
   at: nonEmpty,
   summaryCommentId: nonEmpty.optional(),
   threadIds: z.array(nonEmpty).min(1),
+  // Set when bring-in accepts the resume prompt. Absent means it was not accepted.
+  coordinatorResumed: z.literal(true).optional(),
 };
 
 export const reviewSubmissionSchema = z.discriminatedUnion("status", [

@@ -363,6 +363,7 @@ describe("review tasking", () => {
     expect(done).toMatchObject({
       status: "done",
       taskIds: ["fix-kept"],
+      coordinatorResumed: true,
     });
     expect(done).not.toHaveProperty("error");
     expect(listAgentRunsForIssue("s")[0]?.status).toBe("completed");
@@ -477,6 +478,7 @@ describe("review tasking", () => {
     expect(prompts[1]).toBe(
       `${implementingSessionMessage("s")}\n\n${implementingResumePrompt()}`,
     );
+    expect(submission(readReviewView("p", REVIEW_ID)).coordinatorResumed).toBe(true);
     const { listConversations } = await import("./conversations.js");
     expect(
       listConversations()
@@ -537,7 +539,9 @@ describe("review tasking", () => {
     await expect(
       classifyReviewTaskingRun(conversationId, { status: "finished" }, sessions),
     ).resolves.toBe(true);
-    expect(submission(readReviewView("p", REVIEW_ID)).status).toBe("done");
+    const done = submission(readReviewView("p", REVIEW_ID));
+    expect(done.status).toBe("done");
+    expect(done).not.toHaveProperty("coordinatorResumed");
   });
 
   it("finishes a failed submission when its last thread is resolved", async () => {
@@ -716,6 +720,7 @@ describe("review tasking", () => {
     const done = submission(readReviewView("p", REVIEW_ID));
     expect(done).toMatchObject({ status: "done", taskIds: [] });
     expect(done).not.toHaveProperty("error");
+    expect(done).not.toHaveProperty("coordinatorResumed");
     const legacyThread = await appendComment("s", { role: "human", body: "Legacy open" });
     const storedPath = join(reviewTaskingIssuesDir(), "p", "reviews", `${REVIEW_ID}.json`);
     const stored = JSON.parse(readFileSync(storedPath, "utf8"));

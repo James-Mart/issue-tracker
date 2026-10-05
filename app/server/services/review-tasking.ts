@@ -105,6 +105,7 @@ function submissionBase(
     ...(submission.conversationId
       ? { conversationId: submission.conversationId }
       : {}),
+    ...(submission.coordinatorResumed ? { coordinatorResumed: true as const } : {}),
   };
 }
 
@@ -180,9 +181,7 @@ async function completeWhenSettled(
   const next = settledSubmission(submission, split, () => submission);
   if (next.status !== "done") return false;
   replaceSubmission(projectId, reviewId, submission.id, next);
-  if (next.taskIds.length > 0) {
-    await bringCoordinatorForDone(reviewId, storyId, sessions);
-  }
+  await bringCoordinatorForDone(projectId, reviewId, storyId, next, sessions);
   return true;
 }
 
@@ -347,11 +346,25 @@ async function launchTasking(
   }
 }
 
+function submissionNeedsCoordinator(
+  submission: ReviewSubmission | undefined,
+): submission is Extract<ReviewSubmission, { status: "done" }> {
+  return (
+    submission !== undefined &&
+    submission.status === "done" &&
+    submission.taskIds.length > 0 &&
+    submission.coordinatorResumed !== true
+  );
+}
+
 async function bringCoordinatorForDone(
+  projectId: string,
   reviewId: string,
   storyId: string,
+  submission: ReviewSubmission,
   sessions: ConversationMessageSessions,
 ): Promise<void> {
+  if (!submissionNeedsCoordinator(submission)) return;
   try {
     const workRootId = nearestImplementingWorkRootId(
       ancestorChain(storyId, readAll().issues),
@@ -367,7 +380,12 @@ async function bringCoordinatorForDone(
       `coordinator was not brought in after review ${reviewId} on story ${storyId}`,
       err,
     );
+    return;
   }
+  replaceSubmission(projectId, reviewId, submission.id, {
+    ...submission,
+    coordinatorResumed: true,
+  });
 }
 
 /**
@@ -500,9 +518,7 @@ export async function retryReviewSubmission(
   const next = nextRetrySubmission(submission, split, sessions);
   if (next.status === "done") {
     replaceSubmission(project, reviewId, submissionId, next);
-    if (next.taskIds.length > 0) {
-      await bringCoordinatorForDone(reviewId, storyId, sessions);
-    }
+    await bringCoordinatorForDone(project, reviewId, storyId, next, sessions);
     return readReviewView(project, reviewId);
   }
   requireProjectWorkspace(project);
@@ -574,8 +590,8 @@ export async function retryOpenReviewSubmissions(
     };
   });
 
-  if (finished.some((done) => done.taskIds.length > 0)) {
-    await bringCoordinatorForDone(reviewId, storyId, sessions);
+  for (const done of finished) {
+    await bringCoordinatorForDone(project, reviewId, storyId, done, sessions);
   }
   return readReviewView(project, reviewId);
 }
@@ -638,8 +654,8 @@ export async function classifyReviewTaskingRun(
   });
   if (!saved) return false;
 
-  if (saved.status === "done" && saved.taskIds.length > 0) {
-    await bringCoordinatorForDone(review.id, storyId, sessions);
+  if (saved.status === "done") {
+    await bringCoordinatorForDone(projectId, review.id, storyId, saved, sessions);
   }
   return true;
 }
