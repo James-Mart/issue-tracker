@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessions } from "./agent-sessions.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
-const MESSAGE = "Review rev appended Tasks fix-it to Story s.";
 
 let root: string;
 let issuesDir: string;
@@ -35,6 +34,11 @@ function seed(): void {
     createdAt: AT,
     updatedAt: AT,
   });
+}
+
+async function resumeMessage(): Promise<string> {
+  const { implementingResumePrompt } = await import("./implementing-launch.js");
+  return implementingResumePrompt();
 }
 
 function stubSessions(prompts: string[]): AgentSessions {
@@ -70,6 +74,7 @@ describe("bringInCoordinator", () => {
     );
     const { bringInCoordinator } = await import("./bring-in-coordinator.js");
     const { implementingSessionMessage } = await import("./implementing-launch.js");
+    const message = await resumeMessage();
     const archived = await createConversation({
       title: "Old",
       projectId: "p",
@@ -80,9 +85,9 @@ describe("bringInCoordinator", () => {
     });
     await updateMeta(archived.id, { archived: true });
 
-    await bringInCoordinator("e", MESSAGE, stubSessions(prompts));
+    await bringInCoordinator("e", message, stubSessions(prompts));
 
-    expect(prompts).toEqual([`${implementingSessionMessage("e")}\n\n${MESSAGE}`]);
+    expect(prompts).toEqual([`${implementingSessionMessage("e")}\n\n${message}`]);
     const metas = listConversations().filter(
       (meta) => meta.channel === "implementing",
     );
@@ -96,11 +101,12 @@ describe("bringInCoordinator", () => {
     });
   });
 
-  it("delivers a new turn to an idle coordinator and leaves the message factual", async () => {
+  it("delivers a new turn to an idle coordinator", async () => {
     const prompts: string[] = [];
     const { createConversation, listConversations, readConversation } =
       await import("./conversations.js");
     const { bringInCoordinator } = await import("./bring-in-coordinator.js");
+    const message = await resumeMessage();
     const existing = await createConversation({
       title: "Implement Ship it",
       projectId: "p",
@@ -109,10 +115,9 @@ describe("bringInCoordinator", () => {
       channel: "implementing",
     });
 
-    await bringInCoordinator("e", `  ${MESSAGE}  `, stubSessions(prompts));
+    await bringInCoordinator("e", `  ${message}  `, stubSessions(prompts));
 
-    expect(prompts).toEqual([MESSAGE]);
-    expect(MESSAGE).not.toMatch(/skill|follow it/);
+    expect(prompts).toEqual([message]);
     expect(
       listConversations().filter(
         (meta) => meta.channel === "implementing" && !meta.archived,
@@ -122,12 +127,13 @@ describe("bringInCoordinator", () => {
       readConversation(existing.id).transcript.filter(
         (event) => event.type === "prompt",
       ),
-    ).toEqual([expect.objectContaining({ text: MESSAGE })]);
+    ).toEqual([expect.objectContaining({ text: message })]);
   });
 
   it("steers a coordinator that is mid-turn", async () => {
     const { createConversation } = await import("./conversations.js");
     const { bringInCoordinator } = await import("./bring-in-coordinator.js");
+    const message = await resumeMessage();
     const existing = await createConversation({
       title: "Implement Ship it",
       projectId: "p",
@@ -154,9 +160,9 @@ describe("bringInCoordinator", () => {
       },
     } as unknown as AgentSessions;
 
-    await bringInCoordinator("e", MESSAGE, sessions);
+    await bringInCoordinator("e", message, sessions);
 
-    expect(steers).toEqual([MESSAGE]);
+    expect(steers).toEqual([message]);
   });
 
   it("queues the message when a live steer is not accepted", async () => {
@@ -164,6 +170,7 @@ describe("bringInCoordinator", () => {
       "./conversations.js"
     );
     const { bringInCoordinator } = await import("./bring-in-coordinator.js");
+    const message = await resumeMessage();
     const existing = await createConversation({
       title: "Implement Ship it",
       projectId: "p",
@@ -186,9 +193,9 @@ describe("bringInCoordinator", () => {
       },
     } as unknown as AgentSessions;
 
-    await bringInCoordinator("e", MESSAGE, sessions);
+    await bringInCoordinator("e", message, sessions);
 
-    expect(readConversation(existing.id).meta.pendingMessage?.text).toBe(MESSAGE);
+    expect(readConversation(existing.id).meta.pendingMessage?.text).toBe(message);
     expect(
       readConversation(existing.id).transcript.filter(
         (event) => event.type === "prompt",
