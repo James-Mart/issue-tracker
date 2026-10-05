@@ -10,10 +10,7 @@ import {
 } from "../schemas/review.js";
 import type { AgentRunStatus } from "./agent-sdk.js";
 import type { AgentSessions } from "./agent-sessions.js";
-import {
-  bringInCoordinator,
-  reviewAppendedTasksMessage,
-} from "./bring-in-coordinator.js";
+import { resumeCoordinator } from "./bring-in-coordinator.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
 import {
   createConversation,
@@ -108,6 +105,7 @@ function submissionBase(
     ...(submission.conversationId
       ? { conversationId: submission.conversationId }
       : {}),
+    ...(submission.coordinatorResumed ? { coordinatorResumed: true as const } : {}),
   };
 }
 
@@ -183,9 +181,7 @@ async function completeWhenSettled(
   const next = settledSubmission(submission, split, () => submission);
   if (next.status !== "done") return false;
   replaceSubmission(projectId, reviewId, submission.id, next);
-  if (next.taskIds.length > 0) {
-    await bringCoordinatorForDone(reviewId, storyId, next.taskIds, sessions);
-  }
+  await bringCoordinatorForDone(projectId, reviewId, storyId, next, sessions);
   return true;
 }
 
@@ -350,12 +346,25 @@ async function launchTasking(
   }
 }
 
+function submissionNeedsCoordinator(
+  submission: ReviewSubmission | undefined,
+): submission is Extract<ReviewSubmission, { status: "done" }> {
+  return (
+    submission !== undefined &&
+    submission.status === "done" &&
+    submission.taskIds.length > 0 &&
+    submission.coordinatorResumed !== true
+  );
+}
+
 async function bringCoordinatorForDone(
+  projectId: string,
   reviewId: string,
   storyId: string,
-  taskIds: string[],
+  submission: ReviewSubmission,
   sessions: ConversationMessageSessions,
 ): Promise<void> {
+  if (!submissionNeedsCoordinator(submission)) return;
   try {
     const workRootId = nearestImplementingWorkRootId(
       ancestorChain(storyId, readAll().issues),
@@ -363,11 +372,7 @@ async function bringCoordinatorForDone(
     if (workRootId === undefined) {
       throw new Error(`story "${storyId}" has no implementing work root`);
     }
-    await bringInCoordinator(
-      workRootId,
-      reviewAppendedTasksMessage(reviewId, storyId, taskIds),
-      sessions,
-    );
+    await resumeCoordinator(workRootId, sessions);
   } catch (err) {
     // Tasking already recorded done. A coordinator delivery failure must
     // not roll that back; the error is logged for follow-up.
@@ -375,7 +380,12 @@ async function bringCoordinatorForDone(
       `coordinator was not brought in after review ${reviewId} on story ${storyId}`,
       err,
     );
+    return;
   }
+  replaceSubmission(projectId, reviewId, submission.id, {
+    ...submission,
+    coordinatorResumed: true,
+  });
 }
 
 /**
@@ -508,9 +518,7 @@ export async function retryReviewSubmission(
   const next = nextRetrySubmission(submission, split, sessions);
   if (next.status === "done") {
     replaceSubmission(project, reviewId, submissionId, next);
-    if (next.taskIds.length > 0) {
-      await bringCoordinatorForDone(reviewId, storyId, next.taskIds, sessions);
-    }
+    await bringCoordinatorForDone(project, reviewId, storyId, next, sessions);
     return readReviewView(project, reviewId);
   }
   requireProjectWorkspace(project);
@@ -583,9 +591,7 @@ export async function retryOpenReviewSubmissions(
   });
 
   for (const done of finished) {
-    if (done.taskIds.length > 0) {
-      await bringCoordinatorForDone(reviewId, storyId, done.taskIds, sessions);
-    }
+    await bringCoordinatorForDone(project, reviewId, storyId, done, sessions);
   }
   return readReviewView(project, reviewId);
 }
@@ -648,8 +654,8 @@ export async function classifyReviewTaskingRun(
   });
   if (!saved) return false;
 
-  if (saved.status === "done" && saved.taskIds.length > 0) {
-    await bringCoordinatorForDone(review.id, storyId, saved.taskIds, sessions);
+  if (saved.status === "done") {
+    await bringCoordinatorForDone(projectId, review.id, storyId, saved, sessions);
   }
   return true;
 }

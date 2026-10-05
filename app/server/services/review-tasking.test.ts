@@ -1,72 +1,17 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
-import type { Server } from "http";
-import { tmpdir } from "os";
+import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentSessions } from "./agent-sessions.js";
 import type { ReviewSubmission } from "../schemas/review.js";
 import { TASKING_INCOMPLETE_REASON } from "../review-submission-status.js";
-
-const AT = "2026-07-09T14:00:00.000Z";
-const REVIEW_ID = "11111111-1111-4111-8111-111111111111";
-
-let root: string;
-let issuesDir: string;
-
-function writeIssue(id: string, body: Record<string, unknown>): void {
-  mkdirSync(join(issuesDir, id), { recursive: true });
-  writeFileSync(
-    join(issuesDir, id, "issue.json"),
-    JSON.stringify({ id, ...body }),
-  );
-}
-
-function seed(
-  story: Record<string, unknown> = {},
-  parent: { partOf: string } = { partOf: "e" },
-): void {
-  writeIssue("p", {
-    kind: "project",
-    title: "P",
-    workspace: root,
-    order: 0,
-    createdAt: AT,
-    updatedAt: AT,
-  });
-  if (parent.partOf === "e") {
-    writeIssue("e", {
-      kind: "epic",
-      title: "E",
-      partOf: "p",
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-  }
-  writeIssue("s", {
-    kind: "story",
-    title: "S",
-    partOf: parent.partOf,
-    order: 0,
-    createdAt: AT,
-    updatedAt: AT,
-    ...story,
-  });
-  mkdirSync(join(issuesDir, "p", "reviews"), { recursive: true });
-  writeFileSync(
-    join(issuesDir, "p", "reviews", `${REVIEW_ID}.json`),
-    `${JSON.stringify({
-      id: REVIEW_ID,
-      projectId: "p",
-      target: { kind: "story", storyId: "s" },
-      status: "open",
-      postMortem: false,
-      createdAt: AT,
-      updatedAt: AT,
-      marks: { all: {}, commits: {} },
-    })}\n`,
-  );
-}
+import {
+  AT,
+  REVIEW_ID,
+  reviewTaskingIssuesDir,
+  seedReviewTasking as seed,
+  useReviewTaskingStore,
+  writeReviewTaskingIssue as writeIssue,
+} from "./review-tasking.test-fixtures.js";
 
 function stubSessions(prompts: string[], failMessage?: string): AgentSessions {
   return {
@@ -132,19 +77,7 @@ async function load() {
 }
 
 describe("review tasking", () => {
-  beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "issue-tracker-review-tasking-"));
-    issuesDir = join(root, "issues");
-    mkdirSync(issuesDir, { recursive: true });
-    vi.resetModules();
-    vi.stubEnv("ISSUES_DIR", issuesDir);
-    vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", "");
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    rmSync(root, { recursive: true, force: true });
-  });
+  useReviewTaskingStore("issue-tracker-review-tasking-");
 
   it("posts a summary, records a tasking submission, and starts the tasker", async () => {
     seed();
@@ -259,7 +192,7 @@ describe("review tasking", () => {
     );
 
     writeFileSync(
-      join(issuesDir, "s", "issue.json"),
+      join(reviewTaskingIssuesDir(), "s", "issue.json"),
       JSON.stringify({
         id: "s",
         kind: "story",
@@ -271,11 +204,11 @@ describe("review tasking", () => {
         updatedAt: AT,
       }),
     );
-    writeFileSync(join(issuesDir, "s", "comments.jsonl"), "");
+    writeFileSync(join(reviewTaskingIssuesDir(), "s", "comments.jsonl"), "");
     await expect(submitReview("p", REVIEW_ID, { summary: "   " })).rejects.toThrow(
       NO_READY_THREADS_ERROR,
     );
-    expect(readFileSync(join(issuesDir, "s", "comments.jsonl"), "utf8")).toBe("");
+    expect(readFileSync(join(reviewTaskingIssuesDir(), "s", "comments.jsonl"), "utf8")).toBe("");
   });
 
   it("records a failed submission when the tasker does not start", async () => {
@@ -430,12 +363,16 @@ describe("review tasking", () => {
     expect(done).toMatchObject({
       status: "done",
       taskIds: ["fix-kept"],
+      coordinatorResumed: true,
     });
     expect(done).not.toHaveProperty("error");
     expect(listAgentRunsForIssue("s")[0]?.status).toBe("completed");
-    const factual = `Review ${REVIEW_ID} appended Tasks fix-kept to Story s.`;
-    const { implementingSessionMessage } = await import("./implementing-launch.js");
-    expect(prompts[2]).toBe(`${implementingSessionMessage("e")}\n\n${factual}`);
+    const { implementingResumePrompt, implementingSessionMessage } = await import(
+      "./implementing-launch.js"
+    );
+    expect(prompts[2]).toBe(
+      `${implementingSessionMessage("e")}\n\n${implementingResumePrompt()}`,
+    );
     const { listConversations } = await import("./conversations.js");
     expect(
       listConversations()
@@ -535,9 +472,13 @@ describe("review tasking", () => {
       { status: "finished" },
       sessions,
     );
-    const factual = `Review ${REVIEW_ID} appended Tasks fix-it to Story s.`;
-    const { implementingSessionMessage } = await import("./implementing-launch.js");
-    expect(prompts[1]).toBe(`${implementingSessionMessage("s")}\n\n${factual}`);
+    const { implementingResumePrompt, implementingSessionMessage } = await import(
+      "./implementing-launch.js"
+    );
+    expect(prompts[1]).toBe(
+      `${implementingSessionMessage("s")}\n\n${implementingResumePrompt()}`,
+    );
+    expect(submission(readReviewView("p", REVIEW_ID)).coordinatorResumed).toBe(true);
     const { listConversations } = await import("./conversations.js");
     expect(
       listConversations()
@@ -598,7 +539,9 @@ describe("review tasking", () => {
     await expect(
       classifyReviewTaskingRun(conversationId, { status: "finished" }, sessions),
     ).resolves.toBe(true);
-    expect(submission(readReviewView("p", REVIEW_ID)).status).toBe("done");
+    const done = submission(readReviewView("p", REVIEW_ID));
+    expect(done.status).toBe("done");
+    expect(done).not.toHaveProperty("coordinatorResumed");
   });
 
   it("finishes a failed submission when its last thread is resolved", async () => {
@@ -777,8 +720,9 @@ describe("review tasking", () => {
     const done = submission(readReviewView("p", REVIEW_ID));
     expect(done).toMatchObject({ status: "done", taskIds: [] });
     expect(done).not.toHaveProperty("error");
+    expect(done).not.toHaveProperty("coordinatorResumed");
     const legacyThread = await appendComment("s", { role: "human", body: "Legacy open" });
-    const storedPath = join(issuesDir, "p", "reviews", `${REVIEW_ID}.json`);
+    const storedPath = join(reviewTaskingIssuesDir(), "p", "reviews", `${REVIEW_ID}.json`);
     const stored = JSON.parse(readFileSync(storedPath, "utf8"));
     stored.submissions = [{
       id: recorded.id,
@@ -896,105 +840,5 @@ describe("review tasking", () => {
       status: "tasking",
       threadIds: [rootComment.id],
     });
-  });
-});
-
-describe("review submission routes", () => {
-  let server: Server;
-  let baseUrl: string;
-
-  beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "issue-tracker-review-tasking-http-"));
-    issuesDir = join(root, "issues");
-    mkdirSync(issuesDir, { recursive: true });
-    vi.resetModules();
-    vi.stubEnv("ISSUES_DIR", issuesDir);
-    vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", "");
-    seed();
-  });
-
-  afterEach(async () => {
-    vi.unstubAllEnvs();
-    if (server) {
-      await new Promise<void>((resolve, reject) => {
-        server.close((err) => (err ? reject(err) : resolve()));
-      });
-    }
-    rmSync(root, { recursive: true, force: true });
-  });
-
-  it("mounts submit and refuses when nothing is ready", async () => {
-    const { createApp } = await import("../app.js");
-    const { NO_READY_THREADS_ERROR } = await import("./review-tasking.js");
-    const app = createApp();
-    await new Promise<void>((resolve) => {
-      server = app.listen(0, "127.0.0.1", () => resolve());
-    });
-    const addr = server.address();
-    if (!addr || typeof addr === "string") throw new Error("expected TCP listen address");
-    baseUrl = `http://127.0.0.1:${addr.port}`;
-
-    const res = await fetch(
-      `${baseUrl}/api/projects/p/reviews/${REVIEW_ID}/submissions`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      },
-    );
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      code: "validation",
-      error: NO_READY_THREADS_ERROR,
-    });
-  });
-
-  it("responds with a tasking submission before the tasker starts", async () => {
-    let started = false;
-    let release: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const sessions = {
-      getActiveRun: () => undefined,
-      sendPrompt: async () => {
-        started = true;
-        await gate;
-        return { ok: true as const, run: { id: "run-1" } as never };
-      },
-    } as unknown as AgentSessions;
-    const { appendComment } = await import("./issues.js");
-    const { createApp } = await import("../app.js");
-    const comment = await appendComment("s", { role: "human", body: "Fix it" });
-    const app = createApp(sessions);
-    await new Promise<void>((resolve) => {
-      server = app.listen(0, "127.0.0.1", () => resolve());
-    });
-    const addr = server.address();
-    if (!addr || typeof addr === "string") throw new Error("expected TCP listen address");
-    baseUrl = `http://127.0.0.1:${addr.port}`;
-
-    try {
-      const res = await fetch(
-        `${baseUrl}/api/projects/p/reviews/${REVIEW_ID}/submissions`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ summary: "Ship it" }),
-        },
-      );
-      expect(res.status).toBe(201);
-      const body = (await res.json()) as {
-        submissions: { status: string; threadIds: string[]; conversationId?: string }[];
-      };
-      expect(body.submissions[0]).toMatchObject({
-        status: "tasking",
-        threadIds: [comment.id],
-      });
-      expect(body.submissions[0]?.conversationId).toBeUndefined();
-      await vi.waitFor(() => expect(started).toBe(true));
-    } finally {
-      release();
-    }
   });
 });

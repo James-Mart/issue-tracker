@@ -5,20 +5,12 @@ import {
 import { activeImplementingConversationId } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import {
+  implementingResumePrompt,
   implementingSessionMessage,
   implementingSessionTitle,
 } from "./implementing-launch.js";
 import { startImplementingChannelSession } from "./implementing-session.js";
 import { readIssueOrThrow } from "./issues.js";
-
-/** Factual note of Tasks a review appended. No instructions. */
-export function reviewAppendedTasksMessage(
-  reviewId: string,
-  storyId: string,
-  taskIds: readonly string[],
-): string {
-  return `Review ${reviewId} appended Tasks ${taskIds.join(", ")} to Story ${storyId}.`;
-}
 
 async function deliverToCoordinator(
   conversationId: string,
@@ -48,7 +40,7 @@ async function startImplementingSession(
     );
   }
   const projectId = root.partOf;
-  // A new session still opens on the implementing skill. The factual message follows.
+  // A new session still opens on the implementing skill. The resume prompt follows.
   await startImplementingChannelSession(
     {
       projectId,
@@ -60,8 +52,16 @@ async function startImplementingSession(
   );
 }
 
+/** Resume the work root's implementing coordinator. */
+export async function resumeCoordinator(
+  workRootId: string,
+  sessions: ConversationMessageSessions,
+): Promise<void> {
+  await bringInCoordinator(workRootId, implementingResumePrompt(), sessions);
+}
+
 /**
- * Bring the work root's coordinator in with a factual message.
+ * Bring the work root's coordinator in with a message.
  * Archived implementing conversations do not count. An idle coordinator gets
  * a new turn. A coordinator mid-turn is steered or queued the same way a
  * conversation message is.
