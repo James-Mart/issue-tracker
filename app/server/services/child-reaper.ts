@@ -7,8 +7,13 @@ import { fileURLToPath } from "node:url";
  * One collector for this process. It subreaps orphaned descendants and
  * waitpids them when they exit. Node `ChildProcess` handles stay in
  * `trackedPids` so their exit status is left for Node.
+ *
+ * `SIGCHLD` schedules one `/proc` scan 250ms out. Signals that arrive while
+ * that scan is already waiting share it. `reapExitedChildren` itself stays
+ * immediate for callers that just signaled a group.
  */
 const REAPER_KEY = "issueTrackerChildReaper";
+export const REAP_COALESCE_MS = 250;
 
 interface ReaperGlobal {
   installed: boolean;
@@ -103,6 +108,19 @@ export function reapExitedChildren(): void {
   }
 }
 
+/** Pending trailing scan. While set, further SIGCHLDs join this window. */
+let reapTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleCoalescedReap(): void {
+  if (reapTimer) return;
+  reapTimer = setTimeout(() => {
+    reapTimer = null;
+    reapExitedChildren();
+  }, REAP_COALESCE_MS);
+  // Other handles keep the process alive. This timer must not be the one that does.
+  reapTimer.unref();
+}
+
 /**
  * Idempotent. Sets `PR_SET_CHILD_SUBREAPER` and installs one collector for
  * the life of this process.
@@ -112,7 +130,7 @@ export function ensureChildReaper(): void {
   if (state.installed) return;
   native.setChildSubreaper();
   installNodeChildTracker();
-  process.on("SIGCHLD", reapExitedChildren);
+  process.on("SIGCHLD", scheduleCoalescedReap);
   state.installed = true;
   reapExitedChildren();
 }
