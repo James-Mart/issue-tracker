@@ -156,21 +156,32 @@ async function assertCommitsContiguous(
   shas: string[],
   workspace: string,
 ): Promise<void> {
-  for (let i = 0; i < shas.length - 1; i++) {
-    const from = shas[i]!;
-    const to = shas[i + 1]!;
-    const count = (
-      await runGitOrCommitUnreachable(
-        ["rev-list", "--count", "--first-parent", `${from}..${to}`],
-        workspace,
-      )
-    ).trim();
-    if (count !== "1") {
+  if (shas.length <= 1) return;
+
+  const first = shas[0]!;
+  const last = shas.at(-1)!;
+  const between = (
+    await runGitOrCommitUnreachable(
+      ["rev-list", "--first-parent", "--reverse", `${first}..${last}`],
+      workspace,
+    )
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  for (let i = 1; i < shas.length; i++) {
+    if (between[i - 1] !== shas[i]) {
       throw new IssueError(
         "commits-not-contiguous",
-        `commits are not contiguous in history between ${from} and ${to}`,
+        `commits are not contiguous in history between ${shas[i - 1]!} and ${shas[i]!}`,
       );
     }
+  }
+  if (between.length !== shas.length - 1) {
+    throw new IssueError(
+      "commits-not-contiguous",
+      `commits are not contiguous in history between ${shas.at(-2)!} and ${shas.at(-1)!}`,
+    );
   }
 }
 

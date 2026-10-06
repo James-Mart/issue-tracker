@@ -172,6 +172,26 @@ function stubTaskRangeGit(opts: {
   });
 }
 
+function mockFirstParentHistory(tip: string, ...foreign: string[]): string {
+  return [...foreign, tip].join("\n") + "\n";
+}
+
+function firstParentHistoryForRange(
+  range: string,
+  contiguityShas: string[],
+  custom?: (range: string) => string,
+): string {
+  if (custom) return custom(range);
+  const [from, to] = range.split("..");
+  const fromIdx = contiguityShas.indexOf(from!);
+  const toIdx = contiguityShas.indexOf(to!);
+  if (toIdx === -1 || (fromIdx !== -1 && toIdx <= fromIdx)) {
+    throw new Error(`bad contiguity range ${range} for shas ${contiguityShas.join(",")}`);
+  }
+  const start = fromIdx === -1 ? 0 : fromIdx + 1;
+  return `${contiguityShas.slice(start, toIdx + 1).join("\n")}\n`;
+}
+
 function stubStorySymdiffGit(opts: {
   last: string;
   mergeBase?: string;
@@ -181,12 +201,14 @@ function stubStorySymdiffGit(opts: {
   patch: string;
   shortstat: string;
   subjects: Record<string, string>;
-  firstParentCount?: (range: string) => string;
+  contiguityShas?: string[];
+  firstParentHistory?: (range: string) => string;
   calls?: string[][];
 }): Promise<void> {
   const mergeBase = opts.mergeBase ?? "main";
   const mergeBaseRef = opts.mergeBaseRef ?? mergeBase;
   const range = `${mergeBaseRef}...${opts.last}`;
+  const contiguityShas = opts.contiguityShas ?? [opts.last];
   const readStub = stubGitSpawner((args) => {
     opts.calls?.push([...args]);
     if (args[0] === "remote" && args[1] === "get-url" && args[2] === "origin") {
@@ -195,13 +217,17 @@ function stubStorySymdiffGit(opts: {
       }
       return mockGitChild({ code: 2, stderr: "No such remote 'origin'\n" });
     }
+    if (args[0] === "rev-list" && args.includes("--first-parent")) {
+      const revRange = args[args.length - 1]!;
+      const history = firstParentHistoryForRange(
+        revRange,
+        contiguityShas,
+        opts.firstParentHistory,
+      );
+      return mockGitChild({ stdout: history });
+    }
     if (args[0] === "rev-list" && args.includes("--count")) {
-      if (!args.includes("--first-parent")) {
-        return mockGitChild({ stdout: "5\n" });
-      }
-      const pair = args[args.length - 1]!;
-      const count = opts.firstParentCount?.(pair) ?? "1";
-      return mockGitChild({ stdout: `${count}\n` });
+      return mockGitChild({ stdout: "5\n" });
     }
     if (args[0] === "diff" && args.includes("--shortstat")) {
       if (!args.includes(range)) {
@@ -302,6 +328,7 @@ describe("readIssueChange rollup", () => {
 
     await stubStorySymdiffGit({
       last: c3,
+      contiguityShas: [c1, c2, c3],
       patch: "diff --git a/net.ts b/net.ts\n+rollup\n",
       shortstat: " 3 files changed, 10 insertions(+), 2 deletions(-)\n",
       subjects: { [c1]: "First", [c2]: "Second", [c3]: "Third" },
@@ -368,10 +395,10 @@ describe("readIssueChange rollup", () => {
 
     await stubStorySymdiffGit({
       last: c2,
+      contiguityShas: [c1, c2],
       patch: "diff --git a/own.ts b/own.ts\n+own\n",
       shortstat: " 2 files changed, 4 insertions(+), 1 deletion(-)\n",
       subjects: { [c1]: "First", [c2]: "Second" },
-      firstParentCount: (range) => (range === `${c1}..${c2}` ? "1" : "3"),
     });
 
     const { readIssueChange } = await loadChange();
@@ -399,7 +426,7 @@ describe("readIssueChange rollup", () => {
       patch: "unused",
       shortstat: "unused",
       subjects: {},
-      firstParentCount: () => "3",
+      firstParentHistory: () => mockFirstParentHistory(c2, sha(99), sha(100)),
     });
 
     const { readIssueChange } = await loadChange();
@@ -420,6 +447,7 @@ describe("readIssueChange rollup", () => {
 
     await stubStorySymdiffGit({
       last: mergeOfTrunk,
+      contiguityShas: [waypoint, mergeOfTrunk],
       calls,
       patch: "diff --git a/merged.ts b/merged.ts\n+landed\n",
       shortstat: " 1 file changed, 1 insertion(+)\n",
@@ -438,8 +466,8 @@ describe("readIssueChange rollup", () => {
     });
     expect(calls).toContainEqual([
       "rev-list",
-      "--count",
       "--first-parent",
+      "--reverse",
       `${waypoint}..${mergeOfTrunk}`,
     ]);
     expect(calls).toContainEqual([
@@ -464,7 +492,7 @@ describe("readIssueChange rollup", () => {
       patch: "unused",
       shortstat: "unused",
       subjects: {},
-      firstParentCount: (range) => (range === `${c1}..${c2}` ? "2" : "1"),
+      firstParentHistory: () => mockFirstParentHistory(c2, sha(99)),
     });
 
     const { readIssueChange } = await loadChange();
@@ -577,6 +605,7 @@ describe("prepareStoryChange", () => {
       patch: "unused",
       shortstat: "unused",
       subjects: {},
+      firstParentHistory: (range) => `${range.split("..")[1]}\n`,
     });
 
     const { prepareStoryChange } = await loadChange();
@@ -663,7 +692,8 @@ describe("prepareStoryChange", () => {
       patch: "unused",
       shortstat: "unused",
       subjects: {},
-      firstParentCount: () => (contiguous ? "1" : "3"),
+      firstParentHistory: () =>
+        contiguous ? `${c2}\n` : mockFirstParentHistory(c2, sha(99), sha(100)),
     });
 
     const { prepareStoryChange } = await loadChange();
