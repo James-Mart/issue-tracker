@@ -40,16 +40,21 @@ function reviewFilePath(projectId: string, reviewId: string): string {
   return join(reviewsDir(projectId), `${reviewId}.json`);
 }
 
-export function requireStoryInProject(projectId: string, storyId: string): Story {
-  const story = readIssueOrThrow(storyId);
+export function requireStoryInProject(
+  projectId: string,
+  storyId: string,
+  issues?: Issue[],
+): Story {
+  const graph = issues ?? readAll().issues;
+  const found = graph.find((issue) => issue.id === storyId);
+  const story = found ?? readIssueOrThrow(storyId);
   if (story.kind !== "story") {
     throw new IssueError(
       "validation",
       `target "${storyId}" is not a story`,
     );
   }
-  const { issues } = readAll();
-  const project = ancestorChain(storyId, issues)[0]!;
+  const project = ancestorChain(storyId, graph)[0]!;
   if (project.id !== projectId) {
     throw new IssueError(
       "validation",
@@ -193,6 +198,7 @@ function withReviewWrite<T>(projectId: string, fn: (projectId: string) => T): T 
 export function listReviewViews(
   projectId: string,
   storyId?: string,
+  issues?: Issue[],
 ): { reviews: ReviewRecordView[] } {
   const id = requireProject(projectId);
   const reviews = listStoredReviews(id);
@@ -200,11 +206,11 @@ export function listReviewViews(
     storyId === undefined
       ? reviews
       : reviews.filter((review) => review.target.storyId === storyId);
-  const issues = readAll().issues;
-  const byId = new Map(issues.map((issue) => [issue.id, issue]));
+  const graph = issues ?? readAll().issues;
+  const byId = new Map(graph.map((issue) => [issue.id, issue]));
   return {
     reviews: matched.map((review) =>
-      toView(review, storyForReview(review, byId), issues),
+      toView(review, storyForReview(review, byId), graph),
     ),
   };
 }
@@ -216,10 +222,16 @@ export function storedReviewsForStory(projectId: string, storyId: string): Revie
   );
 }
 
-export function readReviewView(projectId: string, reviewId: string): ReviewRecordView {
+export function readReviewView(
+  projectId: string,
+  reviewId: string,
+  issues?: Issue[],
+): ReviewRecordView {
   const id = requireProject(projectId);
   const review = readStoredReview(id, reviewId);
-  return toView(review, storyForReview(review));
+  const graph = issues ?? readAll().issues;
+  const byId = new Map(graph.map((issue) => [issue.id, issue]));
+  return toView(review, storyForReview(review, byId), graph);
 }
 
 export function openOrCreateReview(
@@ -294,13 +306,16 @@ export function updateStoredReview(
   projectId: string,
   reviewId: string,
   mutate: (current: Review, view: ReviewRecordView) => Review,
+  issues?: Issue[],
 ): ReviewRecordView {
   return withReviewWrite(projectId, (id) => {
     const review = readStoredReview(id, reviewId);
-    const story = storyForReview(review);
-    const view = toView(review, story);
+    const graph = issues ?? readAll().issues;
+    const byId = new Map(graph.map((issue) => [issue.id, issue]));
+    const story = storyForReview(review, byId);
+    const view = toView(review, story, graph);
     const next = mutate(review, view);
     if (next !== review) writeReview(next);
-    return toView(next === review ? review : next, story);
+    return toView(next === review ? review : next, story, graph);
   });
 }

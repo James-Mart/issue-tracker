@@ -1,6 +1,8 @@
 import { Router, type RequestHandler, type Response } from "express";
+import type { Issue } from "../schemas.js";
 import type { ReviewRecordView } from "../schemas/review.js";
 import { IssueError } from "../services/errors.js";
+import { readAll } from "../services/issues.js";
 import { readReviewCommits, readReviewDiff } from "../services/review-diff.js";
 import {
   setReviewMark,
@@ -47,16 +49,18 @@ async function sendReview(
   projectId: string,
   view: ReviewRecordView,
   status = 200,
+  issues?: Issue[],
 ): Promise<void> {
-  res.status(status).json(await withReviewProgress(projectId, view));
+  res.status(status).json(await withReviewProgress(projectId, view, issues));
 }
 
 async function sendReviewList(
   res: Response,
   projectId: string,
   views: ReviewRecordView[],
+  issues?: Issue[],
 ): Promise<void> {
-  res.json({ reviews: await withReviewProgressList(projectId, views) });
+  res.json({ reviews: await withReviewProgressList(projectId, views, issues) });
 }
 
 /**
@@ -98,18 +102,26 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
   reviewsRouter.get(
     "/",
     asyncRoute(async (req, res) => {
-      const listed = listReviewViews(req.params.projectId, storyIdQuery(req.query.storyId));
-      await sendReviewList(res, req.params.projectId, listed.reviews);
+      const { issues } = readAll();
+      const listed = listReviewViews(
+        req.params.projectId,
+        storyIdQuery(req.query.storyId),
+        issues,
+      );
+      await sendReviewList(res, req.params.projectId, listed.reviews, issues);
     }),
   );
 
   reviewsRouter.get(
     "/:reviewId",
     asyncRoute(async (req, res) => {
+      const { issues } = readAll();
       await sendReview(
         res,
         req.params.projectId,
-        readReviewView(req.params.projectId, req.params.reviewId),
+        readReviewView(req.params.projectId, req.params.reviewId, issues),
+        200,
+        issues,
       );
     }),
   );

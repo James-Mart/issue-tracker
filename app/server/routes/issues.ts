@@ -153,11 +153,11 @@ export function createIssuesRouter(
     "/:id/agent-runs",
     asyncRoute((req, res) => {
       const issueId = req.params.id;
-      readIssueOrThrow(issueId);
       const { issues } = readAll();
+      if (!issues.some((item) => item.id === issueId)) readIssueOrThrow(issueId);
       const workRoot = findAgentRunsWorkRoot(issueId, issues);
       res.json({
-        runs: listAgentRunsForIssue(issueId),
+        runs: listAgentRunsForIssue(issueId, issues),
         ...(workRoot ? { workRoot } : {}),
       });
     }),
