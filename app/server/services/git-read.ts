@@ -11,6 +11,7 @@ const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   "show",
   "diff",
   "cat-file",
+  "log",
   "rev-list",
   "rev-parse",
   "merge-base",
