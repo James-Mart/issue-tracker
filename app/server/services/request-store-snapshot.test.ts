@@ -45,6 +45,7 @@ function writeConversation(id: string, createdAt: string): void {
 function gitResult(args: string[]): { code: number; stdout: string } {
   if (args[0] === "remote") return { code: 1, stdout: "" };
   if (args[0] === "rev-parse") return { code: 0, stdout: `${PARENT}\n` };
+  if (args[0] === "merge-base") return { code: 0, stdout: `${PARENT}\n` };
   if (args[0] === "rev-list") return { code: 0, stdout: "1\n" };
   if (args[0] === "show") {
     const format = args.find((arg) => arg.startsWith("--format=")) ?? "";

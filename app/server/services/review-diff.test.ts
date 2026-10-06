@@ -1,4 +1,5 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn, type ChildProcessByStdio } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
@@ -306,5 +307,55 @@ describe("review diff API", () => {
     expect(tiny).toMatchObject({ tooLarge: false, status: "added" });
     expect(body.patch).not.toContain("diff --git a/src/huge.txt");
     expect(body.patch).toContain("diff --git a/src/tiny.txt");
+  });
+
+  it("reuses the mark index raw diff when the diff endpoint loads the same ranges", async () => {
+    const { setGitSpawnerForTests } = await import("./git-read.js");
+    const { clearRawDiffCacheForTests } = await import("./review-diff.js");
+    clearRawDiffCacheForTests();
+    const commands: string[][] = [];
+    setGitSpawnerForTests((command, args, options) => {
+      commands.push(args);
+      return spawn(command, args, {
+        cwd: options.cwd,
+        env: options.env,
+        stdio: options.stdio ?? ["ignore", "pipe", "pipe"],
+      }) as ChildProcessByStdio<Writable | null, Readable, Readable>;
+    });
+    const rawCount = () => commands.filter((args) => args.includes("--raw")).length;
+    try {
+      const indexed = await fetch(`${baseUrl}/api/projects/p/reviews/${reviewId}`);
+      expect(indexed.status).toBe(200);
+      const rawAfterIndex = rawCount();
+      expect(rawAfterIndex).toBeGreaterThan(0);
+
+      const allRes = await fetch(
+        `${baseUrl}/api/projects/p/reviews/${reviewId}/diff?scope=all`,
+      );
+      const commitRes = await fetch(
+        `${baseUrl}/api/projects/p/reviews/${reviewId}/diff?scope=${firstSha}`,
+      );
+      expect(allRes.status).toBe(200);
+      expect(commitRes.status).toBe(200);
+      const allBody = (await allRes.json()) as ReviewDiff;
+      const commitBody = (await commitRes.json()) as ReviewDiff;
+      expect(allBody.files.length).toBeGreaterThan(0);
+      expect(commitBody.files).toEqual([
+        {
+          path: "src/a.txt",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          blobSha: git(["rev-parse", `${firstSha}:src/a.txt`]).trim(),
+          tooLarge: false,
+        },
+      ]);
+      expect(commands.some((args) => args[0] === "diff" && !args.includes("--raw"))).toBe(
+        true,
+      );
+      expect(rawCount()).toBe(rawAfterIndex);
+    } finally {
+      setGitSpawnerForTests(null);
+    }
   });
 });

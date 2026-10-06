@@ -1,3 +1,4 @@
+import { cachedPromise } from "@/lib/cached-promise";
 import type { Issue } from "../schemas.js";
 import type {
   ReviewCommitSummary,
@@ -149,12 +150,72 @@ function parseNumstat(text: string): Numstat[] {
   return stats;
 }
 
+const rawDiffByWorkspace = new Map<string, Map<string, Promise<RawFile[]>>>();
+
+function rawDiffCache(workspace: string): Map<string, Promise<RawFile[]>> {
+  const existing = rawDiffByWorkspace.get(workspace);
+  if (existing) return existing;
+  const created = new Map<string, Promise<RawFile[]>>();
+  rawDiffByWorkspace.set(workspace, created);
+  return created;
+}
+
+function splitDiffRange(range: string): { left: string; right: string; triple: boolean } {
+  const tripleAt = range.indexOf("...");
+  if (tripleAt !== -1) {
+    return {
+      left: range.slice(0, tripleAt),
+      right: range.slice(tripleAt + 3),
+      triple: true,
+    };
+  }
+  const dotsAt = range.indexOf("..");
+  return {
+    left: range.slice(0, dotsAt),
+    right: range.slice(dotsAt + 2),
+    triple: false,
+  };
+}
+
+/**
+ * Two-dot ends are already commit ids (`parentRange`). Three-dot's left side
+ * is a branch name, so the base is its merge base with the tip.
+ */
+async function resolveDiffEnds(
+  workspace: string,
+  range: string,
+): Promise<{ base: string; tip: string }> {
+  const { left, right, triple } = splitDiffRange(range);
+  if (!triple) return { base: left, tip: right };
+  const base = (
+    await runGitOrCommitUnreachable(["merge-base", left, right], workspace)
+  ).trim();
+  return { base, tip: right };
+}
+
+/** One `git diff --raw` per workspace and `(baseSha, tipSha)`. */
+async function readParsedRawForEnds(
+  workspace: string,
+  base: string,
+  tip: string,
+): Promise<RawFile[]> {
+  return cachedPromise(rawDiffCache(workspace), `${base}\0${tip}`, async () => {
+    const rawText = await runGitOrCommitUnreachable(
+      ["diff", "--raw", "--abbrev=40", "-z", `${base}..${tip}`],
+      workspace,
+    );
+    return parseRaw(rawText);
+  });
+}
+
 async function readParsedRaw(workspace: string, range: string): Promise<RawFile[]> {
-  const rawText = await runGitOrCommitUnreachable(
-    ["diff", "--raw", "--abbrev=40", "-z", range],
-    workspace,
-  );
-  return parseRaw(rawText);
+  const { base, tip } = await resolveDiffEnds(workspace, range);
+  return readParsedRawForEnds(workspace, base, tip);
+}
+
+/** @internal Drop cached raw diffs so tests do not share commits across cases. */
+export function clearRawDiffCacheForTests(): void {
+  rawDiffByWorkspace.clear();
 }
 
 function listDiffFiles(raw: RawFile[], numstatText: string): Array<RawFile & Numstat> {
@@ -217,10 +278,12 @@ async function readRangeDiff(
   range: string,
   scope: string,
 ): Promise<ReviewDiff> {
+  const { base, tip } = await resolveDiffEnds(workspace, range);
+  const normalized = `${base}..${tip}`;
   const [raw, numstatText, patch] = await Promise.all([
-    readParsedRaw(workspace, range),
-    runGitOrCommitUnreachable(["diff", "--numstat", "-z", range], workspace),
-    runGitOrCommitUnreachable(["diff", range], workspace),
+    readParsedRawForEnds(workspace, base, tip),
+    runGitOrCommitUnreachable(["diff", "--numstat", "-z", normalized], workspace),
+    runGitOrCommitUnreachable(["diff", normalized], workspace),
   ]);
   const applied = applyPatchCeiling(listDiffFiles(raw, numstatText), patch);
   return { scope, files: applied.files, patch: applied.patch };
