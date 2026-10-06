@@ -1,10 +1,11 @@
+import { cachedPromise } from "@/lib/cached-promise";
 import { bySequence } from "../order.js";
 import type { ChangeCommit, ChangeStats, Issue, IssueChange } from "../schemas.js";
 import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
 import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
-import { readAll, readIssueOrThrow } from "./issues.js";
+import { readAll, readIssueOrThrow, readSnapshot } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { ancestorChain } from "./subtree.js";
 
@@ -155,21 +156,32 @@ async function assertCommitsContiguous(
   shas: string[],
   workspace: string,
 ): Promise<void> {
-  for (let i = 0; i < shas.length - 1; i++) {
-    const from = shas[i]!;
-    const to = shas[i + 1]!;
-    const count = (
-      await runGitOrCommitUnreachable(
-        ["rev-list", "--count", "--first-parent", `${from}..${to}`],
-        workspace,
-      )
-    ).trim();
-    if (count !== "1") {
+  if (shas.length <= 1) return;
+
+  const first = shas[0]!;
+  const last = shas.at(-1)!;
+  const between = (
+    await runGitOrCommitUnreachable(
+      ["rev-list", "--first-parent", "--reverse", `${first}..${last}`],
+      workspace,
+    )
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  for (let i = 1; i < shas.length; i++) {
+    if (between[i - 1] !== shas[i]) {
       throw new IssueError(
         "commits-not-contiguous",
-        `commits are not contiguous in history between ${from} and ${to}`,
+        `commits are not contiguous in history between ${shas[i - 1]!} and ${shas[i]!}`,
       );
     }
+  }
+  if (between.length !== shas.length - 1) {
+    throw new IssueError(
+      "commits-not-contiguous",
+      `commits are not contiguous in history between ${shas.at(-2)!} and ${shas.at(-1)!}`,
+    );
   }
 }
 
@@ -185,26 +197,48 @@ export type StoryChangePreparation =
       range: string;
     };
 
-/** Merge base through the tip of the Story's Task commits, same span as `readIssueChange`. */
-export async function prepareStoryChange(
+const storyChangeCache = new Map<string, Promise<StoryChangePreparation>>();
+let storyChangeCacheVersion = -1;
+
+function storyChangeCacheFor(version: number): Map<string, Promise<StoryChangePreparation>> {
+  if (storyChangeCacheVersion !== version) {
+    storyChangeCache.clear();
+    storyChangeCacheVersion = version;
+  }
+  return storyChangeCache;
+}
+
+// readAll() copies the snapshot array and keeps the same frozen issue objects.
+function sharesSnapshotIssues(graph: readonly Issue[], live: readonly Issue[]): boolean {
+  if (graph.length !== live.length) return false;
+  for (let i = 0; i < graph.length; i++) {
+    if (graph[i] !== live[i]) return false;
+  }
+  return true;
+}
+
+function storyCommitShas(storyId: string, graph: readonly Issue[]): string[] {
+  const story = graph.find((item) => item.id === storyId);
+  if (!story) return [];
+  return issueChangeCommitShas(story, graph as Issue[]);
+}
+
+async function computeStoryChange(
   storyId: string,
   workspace: string,
-  issues?: Issue[],
+  graph: readonly Issue[],
+  shas: string[],
 ): Promise<StoryChangePreparation> {
-  const graph = issues ?? readAll().issues;
-  const mergeBase = derive(graph).byId[storyId]?.mergeBase;
+  const mergeBase = derive(graph as Issue[]).byId[storyId]?.mergeBase;
   if (!mergeBase) {
     return { state: "empty", reason: "no-merge-base" };
   }
-
-  const story = graph.find((item) => item.id === storyId) ?? readIssueOrThrow(storyId);
-  const shas = issueChangeCommitShas(story, graph);
   if (shas.length === 0) {
     return { state: "empty", reason: "no-descendant-commits", mergeBase };
   }
 
   await assertCommitsContiguous(shas, workspace);
-  const tip = shas[shas.length - 1]!;
+  const tip = shas.at(-1)!;
   const mergeBaseRef = await resolveMergeBaseRef(workspace, mergeBase);
   return {
     state: "ready",
@@ -214,6 +248,35 @@ export async function prepareStoryChange(
     tip,
     range: `${mergeBaseRef}...${tip}`,
   };
+}
+
+/**
+ * Merge base through the tip of the Story's Task commits, same span as `readIssueChange`.
+ * Memoized on story, that tip, and the store snapshot version. A repeat call resolves
+ * the tip from the story's commits and reuses the preparation.
+ */
+export async function prepareStoryChange(
+  storyId: string,
+  workspace: string,
+  issues?: Issue[],
+): Promise<StoryChangePreparation> {
+  const snapshot = readSnapshot();
+  // A list from an earlier snapshot must not be stored under the current version.
+  if (issues !== undefined && !sharesSnapshotIssues(issues, snapshot.issues)) {
+    return computeStoryChange(
+      storyId,
+      workspace,
+      issues,
+      storyCommitShas(storyId, issues),
+    );
+  }
+
+  const graph = issues ?? snapshot.issues;
+  const shas = storyCommitShas(storyId, graph);
+  const cache = storyChangeCacheFor(snapshot.version);
+  return cachedPromise(cache, `${storyId}\0${shas.at(-1) ?? ""}`, () =>
+    computeStoryChange(storyId, workspace, graph, shas),
+  );
 }
 
 export function requireMergeBase(

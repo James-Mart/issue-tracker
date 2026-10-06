@@ -45,12 +45,19 @@ function writeConversation(id: string, createdAt: string): void {
 function gitResult(args: string[]): { code: number; stdout: string } {
   if (args[0] === "remote") return { code: 1, stdout: "" };
   if (args[0] === "rev-parse") return { code: 0, stdout: `${PARENT}\n` };
+  if (args[0] === "merge-base") return { code: 0, stdout: `${PARENT}\n` };
   if (args[0] === "rev-list") return { code: 0, stdout: "1\n" };
   if (args[0] === "show") {
     const format = args.find((arg) => arg.startsWith("--format=")) ?? "";
     if (format.includes("%an")) return { code: 0, stdout: `Tester\0${AT}\0subject\n` };
     if (format.includes("%s")) return { code: 0, stdout: "subject\n" };
     return { code: 0, stdout: "hello\n" };
+  }
+  if (args[0] === "log") {
+    return {
+      code: 0,
+      stdout: `${SHA}\0Tester\0${AT}\0subject\n 1 file changed, 1 insertion(+)\n`,
+    };
   }
   if (args[0] === "diff") {
     if (args.includes("--shortstat")) {

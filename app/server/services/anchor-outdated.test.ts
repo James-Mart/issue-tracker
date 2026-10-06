@@ -1,7 +1,13 @@
-import { execFileSync } from "node:child_process";
+import {
+  execFileSync,
+  spawn,
+  type ChildProcess,
+  type ChildProcessByStdio,
+} from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import type { Readable, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Comment } from "../schemas.js";
 
@@ -139,7 +145,11 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  const { closeGitBlobSessionsForTests } = await import("./git-blob-batch.js");
+  closeGitBlobSessionsForTests();
+  const { setGitSpawnerForTests } = await import("./git-read.js");
+  setGitSpawnerForTests(null);
   vi.unstubAllEnvs();
   rmSync(issuesDir, { recursive: true, force: true });
   rmSync(workspace, { recursive: true, force: true });
@@ -251,5 +261,100 @@ describe("deriveAnchoredOutdated", () => {
     ]);
     expect(results[0]).not.toHaveProperty("outdated");
     expect(results[1]?.outdated).toBe(true);
+  });
+
+  it("reads every anchored blob through one cat-file and caches (sha, path)", async () => {
+    const { deriveAnchoredOutdated } = await load();
+    const { setGitSpawnerForTests } = await import("./git-read.js");
+    const catFiles: ChildProcess[] = [];
+    let shows = 0;
+    setGitSpawnerForTests((command, args, options) => {
+      if (args[0] === "show") shows += 1;
+      const child = spawn(command, args, {
+        cwd: options.cwd,
+        env: options.env,
+        stdio: options.stdio ?? ["ignore", "pipe", "pipe"],
+      });
+      if (args[0] === "cat-file") catFiles.push(child);
+      return child as ChildProcessByStdio<Writable | null, Readable, Readable>;
+    });
+
+    const comments = [
+      anchored("kept", {
+        path: "src/lines.ts",
+        side: "new",
+        line: 1,
+        commitSha: shaInitial,
+      }),
+      anchored("changed", {
+        path: "src/lines.ts",
+        side: "new",
+        line: 2,
+        commitSha: shaInitial,
+      }),
+      anchored("gone", {
+        path: "src/doomed.ts",
+        side: "new",
+        line: 1,
+        commitSha: shaInitial,
+      }),
+    ];
+    const first = await deriveAnchoredOutdated("t-series", comments);
+    expect(first.map((comment) => comment.outdated ?? false)).toEqual([
+      false,
+      true,
+      true,
+    ]);
+    expect(catFiles).toHaveLength(1);
+    expect(shows).toBe(0);
+
+    catFiles[0]!.kill();
+    await new Promise<void>((resolve) => {
+      catFiles[0]!.once("close", () => resolve());
+    });
+    const second = await deriveAnchoredOutdated("t-series", comments);
+    expect(second.map((comment) => comment.outdated ?? false)).toEqual([
+      false,
+      true,
+      true,
+    ]);
+    expect(catFiles).toHaveLength(1);
+    expect(shows).toBe(0);
+  });
+
+  it("keeps git show's outcome when the anchor commit is not in the repo", async () => {
+    const { deriveAnchoredOutdated } = await load();
+    const missing = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+    const [absentPath] = await deriveAnchoredOutdated("t-series", [
+      anchored("absent-path", {
+        path: "not/on/disk.ts",
+        side: "new",
+        line: 1,
+        commitSha: missing,
+      }),
+    ]);
+    expect(absentPath?.outdated).toBe(true);
+
+    await expect(
+      deriveAnchoredOutdated("t-series", [
+        anchored("on-disk", {
+          path: "src/lines.ts",
+          side: "new",
+          line: 1,
+          commitSha: missing,
+        }),
+      ]),
+    ).rejects.toMatchObject({ code: "git-failed" });
+
+    await expect(
+      deriveAnchoredOutdated("t-series", [
+        anchored("bad-name", {
+          path: "not/on/disk.ts",
+          side: "new",
+          line: 1,
+          commitSha: "not-a-rev",
+        }),
+      ]),
+    ).rejects.toMatchObject({ code: "commit-unreachable" });
   });
 });

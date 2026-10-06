@@ -11,6 +11,7 @@ const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   "show",
   "diff",
   "cat-file",
+  "log",
   "rev-list",
   "rev-parse",
   "merge-base",
@@ -20,18 +21,29 @@ const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   "worktree",
 ]);
 
+export type GitSpawnStdio = ["ignore", "pipe", "pipe"] | ["pipe", "pipe", "pipe"];
+
 /** @internal Test seam for stubbing git spawn. */
 export type GitSpawner = (
   command: string,
   args: string[],
-  options: { cwd: string; env: NodeJS.ProcessEnv },
+  options: { cwd: string; env: NodeJS.ProcessEnv; stdio?: GitSpawnStdio },
 ) => ChildProcessByStdio<Writable | null, Readable, Readable>;
 
-const defaultGitSpawner: GitSpawner = (command, args, options) =>
-  spawn(command, args, {
-    ...options,
+const defaultGitSpawner: GitSpawner = (command, args, options) => {
+  if (options.stdio?.[0] === "pipe") {
+    return spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  }
+  return spawn(command, args, {
+    cwd: options.cwd,
+    env: options.env,
     stdio: ["ignore", "pipe", "pipe"],
   });
+};
 
 let gitSpawner: GitSpawner = defaultGitSpawner;
 
@@ -60,6 +72,20 @@ function assertReadOnlyGitSubcommand(args: string[]): void {
       `git subcommand "worktree ${args[1] ?? ""}" is not allowed; only worktree list is permitted`,
     );
   }
+}
+
+/** Spawn one long-lived read-only git process with stdin, stdout, and stderr piped. */
+export function spawnReadOnlyGit(
+  args: string[],
+  workspace: string,
+): ChildProcessByStdio<Writable, Readable, Readable> {
+  assertReadOnlyGitSubcommand(args);
+  const child = gitSpawner("git", args, {
+    cwd: workspace,
+    env: process.env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  return child as ChildProcessByStdio<Writable, Readable, Readable>;
 }
 
 export async function runGit(

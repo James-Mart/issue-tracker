@@ -1,3 +1,4 @@
+import { cachedPromise } from "@/lib/cached-promise";
 import type { Issue } from "../schemas.js";
 import type {
   ReviewCommitSummary,
@@ -20,7 +21,7 @@ import { requireProjectWorkspace } from "./project-workspace.js";
 import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { readReviewView, requireStoryInProject } from "./reviews.js";
 
-const COMMIT_META_FORMAT = "%an%x00%aI%x00%s";
+const COMMIT_LOG_FORMAT = "%H%x00%an%x00%aI%x00%s";
 
 type RawFile = {
   path: string;
@@ -149,12 +150,72 @@ function parseNumstat(text: string): Numstat[] {
   return stats;
 }
 
+const rawDiffByWorkspace = new Map<string, Map<string, Promise<RawFile[]>>>();
+
+function rawDiffCache(workspace: string): Map<string, Promise<RawFile[]>> {
+  const existing = rawDiffByWorkspace.get(workspace);
+  if (existing) return existing;
+  const created = new Map<string, Promise<RawFile[]>>();
+  rawDiffByWorkspace.set(workspace, created);
+  return created;
+}
+
+function splitDiffRange(range: string): { left: string; right: string; triple: boolean } {
+  const tripleAt = range.indexOf("...");
+  if (tripleAt !== -1) {
+    return {
+      left: range.slice(0, tripleAt),
+      right: range.slice(tripleAt + 3),
+      triple: true,
+    };
+  }
+  const dotsAt = range.indexOf("..");
+  return {
+    left: range.slice(0, dotsAt),
+    right: range.slice(dotsAt + 2),
+    triple: false,
+  };
+}
+
+/**
+ * Two-dot ends are already commit ids (`parentRange`). Three-dot's left side
+ * is a branch name, so the base is its merge base with the tip.
+ */
+async function resolveDiffEnds(
+  workspace: string,
+  range: string,
+): Promise<{ base: string; tip: string }> {
+  const { left, right, triple } = splitDiffRange(range);
+  if (!triple) return { base: left, tip: right };
+  const base = (
+    await runGitOrCommitUnreachable(["merge-base", left, right], workspace)
+  ).trim();
+  return { base, tip: right };
+}
+
+/** One `git diff --raw` per workspace and `(baseSha, tipSha)`. */
+async function readParsedRawForEnds(
+  workspace: string,
+  base: string,
+  tip: string,
+): Promise<RawFile[]> {
+  return cachedPromise(rawDiffCache(workspace), `${base}\0${tip}`, async () => {
+    const rawText = await runGitOrCommitUnreachable(
+      ["diff", "--raw", "--abbrev=40", "-z", `${base}..${tip}`],
+      workspace,
+    );
+    return parseRaw(rawText);
+  });
+}
+
 async function readParsedRaw(workspace: string, range: string): Promise<RawFile[]> {
-  const rawText = await runGitOrCommitUnreachable(
-    ["diff", "--raw", "--abbrev=40", "-z", range],
-    workspace,
-  );
-  return parseRaw(rawText);
+  const { base, tip } = await resolveDiffEnds(workspace, range);
+  return readParsedRawForEnds(workspace, base, tip);
+}
+
+/** @internal Drop cached raw diffs so tests do not share commits across cases. */
+export function clearRawDiffCacheForTests(): void {
+  rawDiffByWorkspace.clear();
 }
 
 function listDiffFiles(raw: RawFile[], numstatText: string): Array<RawFile & Numstat> {
@@ -217,44 +278,80 @@ async function readRangeDiff(
   range: string,
   scope: string,
 ): Promise<ReviewDiff> {
+  const { base, tip } = await resolveDiffEnds(workspace, range);
+  const normalized = `${base}..${tip}`;
   const [raw, numstatText, patch] = await Promise.all([
-    readParsedRaw(workspace, range),
-    runGitOrCommitUnreachable(["diff", "--numstat", "-z", range], workspace),
-    runGitOrCommitUnreachable(["diff", range], workspace),
+    readParsedRawForEnds(workspace, base, tip),
+    runGitOrCommitUnreachable(["diff", "--numstat", "-z", normalized], workspace),
+    runGitOrCommitUnreachable(["diff", normalized], workspace),
   ]);
   const applied = applyPatchCeiling(listDiffFiles(raw, numstatText), patch);
   return { scope, files: applied.files, patch: applied.patch };
 }
 
-async function readOneCommit(
-  sha: string,
-  workspace: string,
-): Promise<ReviewCommitSummary> {
-  const [meta, statOut] = await Promise.all([
-    runGitOrCommitUnreachable(
-      ["show", "-s", `--format=${COMMIT_META_FORMAT}`, sha],
-      workspace,
-    ),
-    runGitOrCommitUnreachable(
-      ["diff", "--shortstat", `${sha}^..${sha}`],
-      workspace,
-    ),
-  ]);
-  const text = meta.endsWith("\n") ? meta.slice(0, -1) : meta;
-  const parts = text.split("\0");
-  if (parts.length !== 3 || parts[0] === "" || parts[1] === "") {
-    throw new IssueError("git-failed", `unexpected commit metadata for ${sha}`);
+function skipBlankLines(lines: string[], index: number): number {
+  while (index < lines.length && lines[index] === "") index++;
+  return index;
+}
+
+function parseCommitLog(text: string): ReviewCommitSummary[] {
+  const commits: ReviewCommitSummary[] = [];
+  const lines = text.split("\n");
+  let index = 0;
+  while (index < lines.length) {
+    index = skipBlankLines(lines, index);
+    if (index >= lines.length) break;
+
+    const meta = lines[index]!;
+    index++;
+    const parts = meta.split("\0");
+    if (parts.length !== 4 || !parts[0] || !parts[1] || !parts[2]) {
+      throw new IssueError("git-failed", `unexpected commit log record "${meta}"`);
+    }
+
+    index = skipBlankLines(lines, index);
+    // Empty commits omit the shortstat line; zeros match `git diff --shortstat sha^..sha`.
+    let stats = parseShortstat("");
+    if (index < lines.length && /^\s+\d/.test(lines[index]!)) {
+      stats = parseShortstat(lines[index]!);
+      index++;
+    }
+
+    commits.push({
+      sha: parts[0],
+      author: parts[1],
+      authoredAt: parts[2],
+      subject: parts[3]!,
+      files: stats.filesChanged,
+      additions: stats.insertions,
+      deletions: stats.deletions,
+    });
   }
-  const stats = parseShortstat(statOut);
-  return {
-    sha,
-    subject: parts[2]!,
-    author: parts[0],
-    authoredAt: parts[1],
-    files: stats.filesChanged,
-    additions: stats.insertions,
-    deletions: stats.deletions,
-  };
+  return commits;
+}
+
+async function readCommitSummariesFromLog(
+  workspace: string,
+  shas: string[],
+): Promise<ReviewCommitSummary[]> {
+  const text = await runGitOrCommitUnreachable(
+    [
+      "log",
+      "--no-walk=unsorted",
+      `--format=${COMMIT_LOG_FORMAT}`,
+      "--shortstat",
+      ...shas,
+    ],
+    workspace,
+  );
+  const commits = parseCommitLog(text);
+  if (commits.length !== shas.length) {
+    throw new IssueError(
+      "git-failed",
+      `commit log mismatch: expected ${shas.length} commits, got ${commits.length}`,
+    );
+  }
+  return commits;
 }
 
 export function refuseForeignSha(scope: string): never {
@@ -280,9 +377,7 @@ export async function readReviewCommits(
       commits: [],
     };
   }
-  const commits = await Promise.all(
-    prepared.shas.map((sha) => readOneCommit(sha, workspace)),
-  );
+  const commits = await readCommitSummariesFromLog(workspace, prepared.shas);
   return {
     mergeBase: prepared.mergeBase,
     mergeBaseRef: prepared.mergeBaseRef,
