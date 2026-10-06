@@ -12,6 +12,10 @@ export function issueJsonPath(id: string): string {
   return join(issuesDir, id, "issue.json");
 }
 
+export function commentsJsonPath(id: string): string {
+  return join(issuesDir, id, "comments.jsonl");
+}
+
 export function missingIssueJson(id: string): Problem {
   return { id, message: "missing issue.json" };
 }

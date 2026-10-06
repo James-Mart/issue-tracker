@@ -306,6 +306,19 @@ describe("readComments", () => {
   });
 });
 
+describe("list comment problems", () => {
+  it("reports a malformed comments.jsonl line", async () => {
+    writeComments("e", "{ not json\n");
+    const { list } = await loadService();
+    const messages = list()
+      .problems.filter((problem) => problem.id === "e")
+      .map((problem) => problem.message);
+    expect(messages.some((message) => message.includes("comments.jsonl line 1"))).toBe(
+      true,
+    );
+  });
+});
+
 describe("list legacy chat.jsonl", () => {
   it("reports a surviving chat.jsonl beside an issue as a problem", async () => {
     writeFileSync(join(dir, "e", "chat.jsonl"), '{"role":"agent","body":"x","at":"t"}\n');

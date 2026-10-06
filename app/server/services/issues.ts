@@ -18,7 +18,6 @@ import {
   type Problem,
   type TaskStatus,
 } from "../schemas.js";
-import { readComments } from "./comment-append.js";
 import { IssueError } from "./errors.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
@@ -84,6 +83,7 @@ import {
 import { issueJsonPath, readIssueFile } from "./issues-file.js";
 import { readSnapshot } from "./issues-snapshot.js";
 
+export { commentsJsonPath as commentsPathOf } from "./issues-file.js";
 export { onDiskHasUnknownKeys, readDescription, versionOf } from "./issues-detail.js";
 export { readSnapshot, type IssueSnapshot } from "./issues-snapshot.js";
 export {
@@ -123,10 +123,6 @@ function dirOf(id: string): string {
   return join(issuesDir, id);
 }
 
-export function commentsPathOf(id: string): string {
-  return join(dirOf(id), "comments.jsonl");
-}
-
 function legacyChatPathOf(id: string): string {
   return join(dirOf(id), "chat.jsonl");
 }
@@ -137,9 +133,17 @@ function toRecord(issue: Issue): IssueRecord {
 
 // Fresh arrays so callers keep owning what they sort or push; the issues inside
 // are the snapshot's shared, frozen objects.
-export function readAll(): { issues: Issue[]; problems: Problem[] } {
-  const { issues, problems } = readSnapshot();
-  return { issues: [...issues], problems: [...problems] };
+export function readAll(): {
+  issues: Issue[];
+  problems: Problem[];
+  commentProblems: Problem[];
+} {
+  const snapshot = readSnapshot();
+  return {
+    issues: [...snapshot.issues],
+    problems: [...snapshot.problems],
+    commentProblems: [...snapshot.commentProblems],
+  };
 }
 
 // One-time mergeBase strip. Safe to call from list/create/apply; no-ops
@@ -183,7 +187,7 @@ export function list(): IssuesResponse {
       ensureMigrations();
     });
   }
-  const { issues, problems } = readAll();
+  const { issues, problems, commentProblems } = readAll();
   const derived = derive(issues);
   for (const [id, ideaStatus] of Object.entries(planningStatusById(issues))) {
     const existing = derived.byId[id];
@@ -192,12 +196,9 @@ export function list(): IssuesResponse {
   }
   mergeImplementingOverlay(issues, derived.byId);
   attachWorktreeDerived(issues, derived.byId);
-  // Parse each comments.jsonl so out-of-band corruption surfaces in the tree/CLI,
-  // not just the comments panel. Comments are small local files, so the extra reads
-  // are cheap; list() is not invalidated on every comment append (see events).
-  const commentProblems = issues.flatMap((issue) =>
-    readComments(issue.id, issues).problems,
-  );
+  // Malformed comments.jsonl lines stay on the list. The snapshot revalidates
+  // each file's stats and re-parses only files that changed, so an append from
+  // any process shows up on the next list.
   const legacyChatProblems = issues.flatMap((issue) => {
     if (!existsSync(legacyChatPathOf(issue.id))) return [];
     return [{ id: issue.id, message: "chat.jsonl" }];
