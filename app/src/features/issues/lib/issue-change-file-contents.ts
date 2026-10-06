@@ -2,6 +2,7 @@ import type {
   FileDiffLoadedFiles,
   FileDiffMetadata,
 } from "@pierre/diffs/react";
+import { cachedPromise } from "@/lib/cached-promise";
 import { fetchIssueChangeFile } from "../api/queries";
 
 /** Same split as `@pierre/diffs` `splitFileContents` — keeps trailing newlines. */
@@ -96,15 +97,7 @@ export function cachedFileContents(
   key: string,
   load: () => Promise<string>,
 ): Promise<string> {
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const pending = load().catch((error: unknown) => {
-    // A superseded in-flight fetch can reject after a replacement was stored.
-    if (cache.get(key) === pending) cache.delete(key);
-    throw error;
-  });
-  cache.set(key, pending);
-  return pending;
+  return cachedPromise(cache, key, load);
 }
 
 export function changeFileCacheKey(sha: string, path: string): string {
