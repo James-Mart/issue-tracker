@@ -1,3 +1,4 @@
+import type { Issue } from "../schemas.js";
 import type {
   ReviewCommitSummary,
   ReviewCommits,
@@ -14,6 +15,7 @@ import {
   type StoryChangePreparation,
 } from "./change.js";
 import { IssueError } from "./errors.js";
+import { readAll } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { readReviewView, requireStoryInProject } from "./reviews.js";
@@ -35,19 +37,21 @@ type Numstat = {
 async function loadPrepared(
   projectId: string,
   storyId: string,
+  issues: Issue[],
 ): Promise<{ storyId: string; workspace: string; prepared: StoryChangePreparation }> {
-  requireStoryInProject(projectId, storyId);
+  requireStoryInProject(projectId, storyId, issues);
   const workspace = requireProjectWorkspace(projectId);
-  const prepared = await prepareStoryChange(storyId, workspace);
+  const prepared = await prepareStoryChange(storyId, workspace, issues);
   return { storyId, workspace, prepared };
 }
 
 async function loadSpan(
   projectId: string,
   reviewId: string,
+  issues: Issue[],
 ): Promise<{ storyId: string; workspace: string; prepared: StoryChangePreparation }> {
-  const review = readReviewView(projectId, reviewId);
-  return loadPrepared(projectId, review.target.storyId);
+  const review = readReviewView(projectId, reviewId, issues);
+  return loadPrepared(projectId, review.target.storyId, issues);
 }
 
 function nulRecords(text: string): string[] {
@@ -264,7 +268,7 @@ export async function readReviewCommits(
   projectId: string,
   reviewId: string,
 ): Promise<ReviewCommits> {
-  const loaded = await loadSpan(projectId, reviewId);
+  const loaded = await loadSpan(projectId, reviewId, readAll().issues);
   const { storyId, workspace } = loaded;
   const prepared = requireMergeBase(storyId, loaded.prepared);
   if (prepared.state === "empty") {
@@ -292,7 +296,7 @@ export async function readReviewDiff(
   reviewId: string,
   scope: string,
 ): Promise<ReviewDiff> {
-  const loaded = await loadSpan(projectId, reviewId);
+  const loaded = await loadSpan(projectId, reviewId, readAll().issues);
   const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
   if (prepared.state === "empty") {
     if (scope !== "all") refuseForeignSha(scope);
@@ -337,8 +341,9 @@ export type ReviewChangeSpan =
 export async function loadReviewChangeSpan(
   projectId: string,
   storyId: string,
+  issues?: Issue[],
 ): Promise<ReviewChangeSpan> {
-  const loaded = await loadPrepared(projectId, storyId);
+  const loaded = await loadPrepared(projectId, storyId, issues ?? readAll().issues);
   const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
   if (prepared.state === "empty") return { state: "empty" };
   const commits = await Promise.all(

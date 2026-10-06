@@ -189,13 +189,16 @@ export type StoryChangePreparation =
 export async function prepareStoryChange(
   storyId: string,
   workspace: string,
+  issues?: Issue[],
 ): Promise<StoryChangePreparation> {
-  const mergeBase = derive(readAll().issues).byId[storyId]?.mergeBase;
+  const graph = issues ?? readAll().issues;
+  const mergeBase = derive(graph).byId[storyId]?.mergeBase;
   if (!mergeBase) {
     return { state: "empty", reason: "no-merge-base" };
   }
 
-  const shas = issueChangeCommitShas(readIssueOrThrow(storyId));
+  const story = graph.find((item) => item.id === storyId) ?? readIssueOrThrow(storyId);
+  const shas = issueChangeCommitShas(story, graph);
   if (shas.length === 0) {
     return { state: "empty", reason: "no-descendant-commits", mergeBase };
   }
@@ -226,8 +229,9 @@ export function requireMergeBase(
 async function readStoryChange(
   issueId: string,
   workspace: string,
+  issues: Issue[],
 ): Promise<IssueChange> {
-  const prepared = await prepareStoryChange(issueId, workspace);
+  const prepared = await prepareStoryChange(issueId, workspace, issues);
   if (prepared.state === "empty") {
     return { state: "empty", reason: prepared.reason };
   }
@@ -332,9 +336,9 @@ export function issueChangeCommitShas(issue: Issue, issues?: Issue[]): string[] 
   return [];
 }
 
-function allowedCommitShas(issue: Issue): string[] {
+function allowedCommitShas(issue: Issue, issues: Issue[]): string[] {
   assertChangeSupported(issue);
-  const shas = issueChangeCommitShas(issue);
+  const shas = issueChangeCommitShas(issue, issues);
   if (issue.kind === "task") {
     const sha = shas.at(-1);
     return sha ? [sha] : [];
@@ -357,12 +361,13 @@ export async function readIssueChangeFile(
   sha: string,
   path: string,
 ): Promise<{ contents: string }> {
-  const issue = readIssueOrThrow(issueId);
-  const chain = ancestorChain(issueId, readAll().issues);
+  const issues = readAll().issues;
+  const issue = issues.find((item) => item.id === issueId) ?? readIssueOrThrow(issueId);
+  const chain = ancestorChain(issueId, issues);
   const project = chain[0]!;
   const workspace = requireProjectWorkspace(project.id);
 
-  const allowed = allowedCommitShas(issue);
+  const allowed = allowedCommitShas(issue, issues);
   if (!allowed.includes(sha)) {
     throw new IssueError(
       "validation",
@@ -387,9 +392,10 @@ export async function readIssueChangeFile(
 }
 
 export async function readIssueChange(issueId: string): Promise<IssueChange> {
-  const issue = readIssueOrThrow(issueId);
+  const issues = readAll().issues;
+  const issue = issues.find((item) => item.id === issueId) ?? readIssueOrThrow(issueId);
   assertChangeSupported(issue);
-  const chain = ancestorChain(issueId, readAll().issues);
+  const chain = ancestorChain(issueId, issues);
   const project = chain[0]!;
   const workspace = requireProjectWorkspace(project.id);
 
@@ -397,7 +403,7 @@ export async function readIssueChange(issueId: string): Promise<IssueChange> {
     return readTaskChange(issue, workspace);
   }
   if (issue.kind === "story") {
-    return readStoryChange(issueId, workspace);
+    return readStoryChange(issueId, workspace, issues);
   }
 
   throw new IssueError(

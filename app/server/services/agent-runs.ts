@@ -90,7 +90,7 @@ export function findAgentRunsWorkRoot(
 }
 
 /** List agent runs linked to an issue, oldest spawn first. */
-export function listAgentRunsForIssue(issueId: string): AgentRun[] {
+export function listAgentRunsForIssue(issueId: string, issues?: Issue[]): AgentRun[] {
   const runs: AgentRun[] = [];
 
   for (const conversationId of listConversationIds()) {
@@ -104,7 +104,7 @@ export function listAgentRunsForIssue(issueId: string): AgentRun[] {
     runs.push(...runsForConversation(conversationId, issueId, delegations));
   }
 
-  runs.push(...reviewTaskerRunsForIssue(issueId));
+  runs.push(...reviewTaskerRunsForIssue(issueId, issues));
   runs.push(...researcherRunsForIssue(issueId));
   runs.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   return runs;

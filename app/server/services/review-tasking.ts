@@ -1,8 +1,9 @@
 import { randomUUID } from "crypto";
-import type { AgentRun, ConversationMeta } from "../schemas.js";
+import type { AgentRun, ConversationMeta, Issue } from "../schemas.js";
 import type {
   ReviewRecordView,
   ReviewSubmission,
+  ReviewSubmissionView,
 } from "../schemas/review.js";
 import {
   parseRetryReviewSubmissionBody,
@@ -188,18 +189,9 @@ async function completeWhenSettled(
 function reviewForStory(
   projectId: string,
   storyId: string,
+  issues: Issue[],
 ): ReviewRecordView | undefined {
-  return listReviewViews(projectId, storyId).reviews[0];
-}
-
-function submissionOnStory(
-  projectId: string,
-  storyId: string,
-  conversationId: string,
-): ReviewSubmission | undefined {
-  return reviewForStory(projectId, storyId)?.submissions.find(
-    (item) => item.conversationId === conversationId,
-  );
+  return listReviewViews(projectId, storyId, issues).reviews[0];
 }
 
 function assertStoryOpenForTasking(storyId: string) {
@@ -606,7 +598,7 @@ function findTaskingSubmission(conversationId: string):
   | undefined {
   const { meta } = readConversation(conversationId);
   if (meta.channel !== "review" || meta.issueId === undefined) return undefined;
-  const review = reviewForStory(meta.projectId, meta.issueId);
+  const review = reviewForStory(meta.projectId, meta.issueId, readAll().issues);
   if (!review) return undefined;
   const submission = review.submissions.find(
     (item) => item.conversationId === conversationId && item.status === "tasking",
@@ -763,24 +755,35 @@ function reviewTaskerAgentRun(
 /** Story conversations named by a review submission, with that submission. */
 function taskerConversations(
   storyId: string,
-): { meta: ConversationMeta; submission: ReviewSubmission }[] {
-  const found: { meta: ConversationMeta; submission: ReviewSubmission }[] = [];
+  issues?: Issue[],
+): { meta: ConversationMeta; submission: ReviewSubmissionView }[] {
+  const graph = issues ?? readAll().issues;
+  const submissionsByProject = new Map<string, ReviewSubmissionView[]>();
+  const found: { meta: ConversationMeta; submission: ReviewSubmissionView }[] = [];
   for (const meta of listConversations()) {
     if (meta.issueId !== storyId || meta.channel !== "review") continue;
-    const submission = submissionOnStory(meta.projectId, storyId, meta.id);
+    let submissions = submissionsByProject.get(meta.projectId);
+    if (submissions === undefined) {
+      submissions = reviewForStory(meta.projectId, storyId, graph)?.submissions ?? [];
+      submissionsByProject.set(meta.projectId, submissions);
+    }
+    const submission = submissions.find((item) => item.conversationId === meta.id);
     if (submission) found.push({ meta, submission });
   }
   return found;
 }
 
 /** Every tasker conversation a review submission started on the Story. */
-export function reviewTaskerConversationIds(storyId: string): string[] {
-  return taskerConversations(storyId).map(({ meta }) => meta.id);
+export function reviewTaskerConversationIds(
+  storyId: string,
+  issues?: Issue[],
+): string[] {
+  return taskerConversations(storyId, issues).map(({ meta }) => meta.id);
 }
 
 /** One agent run per tasker conversation a review submission started on the Story. */
-export function reviewTaskerRunsForIssue(issueId: string): AgentRun[] {
-  return taskerConversations(issueId).map(({ meta, submission }) =>
+export function reviewTaskerRunsForIssue(issueId: string, issues?: Issue[]): AgentRun[] {
+  return taskerConversations(issueId, issues).map(({ meta, submission }) =>
     reviewTaskerAgentRun(meta, issueId, submission),
   );
 }
