@@ -52,6 +52,12 @@ function gitResult(args: string[]): { code: number; stdout: string } {
     if (format.includes("%s")) return { code: 0, stdout: "subject\n" };
     return { code: 0, stdout: "hello\n" };
   }
+  if (args[0] === "log") {
+    return {
+      code: 0,
+      stdout: `${SHA}\0Tester\0${AT}\0subject\n 1 file changed, 1 insertion(+)\n`,
+    };
+  }
   if (args[0] === "diff") {
     if (args.includes("--shortstat")) {
       return { code: 0, stdout: " 1 file changed, 1 insertion(+)\n" };

@@ -85,6 +85,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  const { closeGitBlobSessionsForTests } = await import(
+    "../services/git-blob-batch.js"
+  );
+  closeGitBlobSessionsForTests();
   vi.unstubAllEnvs();
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));

@@ -1,41 +1,9 @@
 import { isLineAnchor, type Comment, type CommentMessage } from "../schemas.js";
 import { issueChangeCommitShas } from "./change.js";
-import { IssueError } from "./errors.js";
-import { runGit } from "./git-read.js";
+import { readPathAtCommit } from "./git-blob-batch.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { ancestorChain } from "./subtree.js";
-
-function isCommitUnreachableMessage(message: string): boolean {
-  const lower = message.toLowerCase();
-  return (
-    lower.includes("bad object") ||
-    lower.includes("unknown revision") ||
-    lower.includes("invalid object name")
-  );
-}
-
-function isPathMissingAtCommitMessage(message: string): boolean {
-  return message.toLowerCase().includes("does not exist in");
-}
-
-async function showPathAtCommit(
-  workspace: string,
-  sha: string,
-  path: string,
-): Promise<string | null> {
-  try {
-    return await runGit(["show", `${sha}:${path}`], workspace);
-  } catch (err) {
-    if (err instanceof IssueError && err.code === "git-failed") {
-      if (isPathMissingAtCommitMessage(err.message)) return null;
-      if (isCommitUnreachableMessage(err.message)) {
-        throw new IssueError("commit-unreachable", err.message);
-      }
-    }
-    throw err;
-  }
-}
 
 function linesOf(contents: string): string[] {
   if (contents === "") return [];
@@ -89,15 +57,15 @@ export async function deriveAnchoredOutdated(
       if (!comment.anchor) return comment;
       const { path, commitSha } = comment.anchor;
       if (!isLineAnchor(comment.anchor)) {
-        const atHead = await showPathAtCommit(workspace, head, path);
+        const atHead = await readPathAtCommit(workspace, head, path);
         if (atHead === null) return { ...comment, outdated: true };
         return comment;
       }
       const { line, startLine } = comment.anchor;
       const start = startLine ?? line;
       const [atAnchor, atHead] = await Promise.all([
-        showPathAtCommit(workspace, commitSha, path),
-        showPathAtCommit(workspace, head, path),
+        readPathAtCommit(workspace, commitSha, path),
+        readPathAtCommit(workspace, head, path),
       ]);
       if (!rangeOutdated(atAnchor, atHead, start, line)) return comment;
       return { ...comment, outdated: true };
