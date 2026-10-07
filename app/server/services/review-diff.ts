@@ -13,10 +13,12 @@ import {
   prepareStoryChange,
   requireMergeBase,
   runGitOrCommitUnreachable,
+  storyCommitsEtag,
+  storyTipSha,
   type StoryChangePreparation,
 } from "./change.js";
 import { IssueError } from "./errors.js";
-import { readAll } from "./issues.js";
+import { readAll, readSnapshot } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { readReviewView, requireStoryInProject } from "./reviews.js";
@@ -398,6 +400,16 @@ async function reviewDiffFor(
   const range =
     scope === "all" ? prepared.range : await parentRange(scope, loaded.workspace);
   return readRangeDiff(loaded.workspace, range, scope);
+}
+
+/**
+ * ETag for the commits poll. Resolves the story tip and snapshot version
+ * only — does not prepare the story change.
+ */
+export function storyReviewCommitsEtag(projectId: string, storyId: string): string {
+  const snapshot = readSnapshot();
+  requireStoryInProject(projectId, storyId, snapshot.issues as Issue[]);
+  return storyCommitsEtag(snapshot.version, storyTipSha(storyId, snapshot.issues));
 }
 
 /** Story commits. Does not read or create a review. */

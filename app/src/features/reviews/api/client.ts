@@ -1,4 +1,5 @@
-import { request } from "@/lib/api/client";
+import { request, requestConditional } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
 import type {
   ReviewCandidates,
   ReviewCommits,
@@ -75,11 +76,20 @@ export function reviewDiffUrl(
   return `${reviewsUrl(projectId)}/diff?${params}`;
 }
 
-export function fetchReviewCommits(
+const commitsPollCache = new Map<string, { etag: string; body: ReviewCommits }>();
+
+export async function fetchReviewCommits(
   projectId: string,
   storyId: string,
 ): Promise<ReviewCommits> {
-  return request<ReviewCommits>(reviewCommitsUrl(projectId, storyId));
+  const url = reviewCommitsUrl(projectId, storyId);
+  const prior = commitsPollCache.get(url);
+  const { body, etag } = await requestConditional<ReviewCommits>(url, prior);
+  if (!etag) {
+    throw new ApiError("commits poll response missing ETag", 200);
+  }
+  commitsPollCache.set(url, { etag, body });
+  return body;
 }
 
 export function fetchReviewDiff(

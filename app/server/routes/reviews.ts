@@ -8,6 +8,7 @@ import {
   readReviewDiff,
   readStoryReviewCommits,
   readStoryReviewDiff,
+  storyReviewCommitsEtag,
 } from "../services/review-diff.js";
 import {
   readReviewProgress,
@@ -48,6 +49,14 @@ function requireStoryIdQuery(raw: unknown): string {
     throw new IssueError("validation", "storyId must be a non-empty string");
   }
   return storyId;
+}
+
+function ifNoneMatchHits(header: string | undefined, etag: string): boolean {
+  if (header === undefined || header.length === 0) return false;
+  for (const part of header.split(",")) {
+    if (part.trim() === etag) return true;
+  }
+  return false;
 }
 
 function scopeQuery(raw: unknown): string {
@@ -119,12 +128,15 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
   reviewsRouter.get(
     "/commits",
     asyncRoute(async (req, res) => {
-      res.json(
-        await readStoryReviewCommits(
-          req.params.projectId,
-          requireStoryIdQuery(req.query.storyId),
-        ),
-      );
+      const projectId = req.params.projectId;
+      const storyId = requireStoryIdQuery(req.query.storyId);
+      const etag = storyReviewCommitsEtag(projectId, storyId);
+      res.set("ETag", etag);
+      if (ifNoneMatchHits(req.get("If-None-Match"), etag)) {
+        res.status(304).end();
+        return;
+      }
+      res.json(await readStoryReviewCommits(projectId, storyId));
     }),
   );
 

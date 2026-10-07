@@ -57,6 +57,34 @@ export async function request<T>(
   return parsed as T;
 }
 
+/**
+ * GET that sends `If-None-Match` when a prior validator is known.
+ * A 304 returns that prior body and does not parse a payload.
+ */
+export async function requestConditional<T>(
+  input: string,
+  prior: { etag: string; body: T } | undefined,
+): Promise<{ body: T; etag: string | null }> {
+  const res = await fetch(input, {
+    headers: prior ? { "If-None-Match": prior.etag } : {},
+  });
+  if (res.status === 304) {
+    if (!prior) {
+      throw new ApiError("conditional request returned 304 without a cached body", 304);
+    }
+    return { body: prior.body, etag: res.headers.get("ETag") ?? prior.etag };
+  }
+  const parsed = await readJson(res);
+  if (!res.ok) {
+    throw new ApiError(
+      extractError(parsed, `Request failed with status ${res.status}`),
+      res.status,
+      parsed,
+    );
+  }
+  return { body: parsed as T, etag: res.headers.get("ETag") };
+}
+
 /** Fetch a plain-text (or other non-JSON) response body. */
 export async function requestText(
   input: string,

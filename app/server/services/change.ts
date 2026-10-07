@@ -223,6 +223,16 @@ function storyCommitShas(storyId: string, graph: readonly Issue[]): string[] {
   return issueChangeCommitShas(story, graph as Issue[]);
 }
 
+/** Last task-commit sha for the story, or "" when it has none. */
+export function storyTipSha(storyId: string, issues: readonly Issue[]): string {
+  return storyCommitShas(storyId, issues).at(-1) ?? "";
+}
+
+/** Strong ETag for GET /commits: store snapshot version and the story tip. */
+export function storyCommitsEtag(version: number, tip: string): string {
+  return `"${version}:${tip}"`;
+}
+
 async function computeStoryChange(
   storyId: string,
   workspace: string,
