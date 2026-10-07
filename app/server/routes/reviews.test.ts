@@ -284,12 +284,23 @@ describe("review record API", () => {
     expect(await again.json()).toMatchObject({ id: review.id, status: "archived" });
 
     const listed = await fetch(`${baseUrl}/api/projects/p/reviews?storyId=s`);
-    const body = (await listed.json()) as { reviews: { id: string }[] };
+    const body = (await listed.json()) as { reviews: { id: string; progress?: unknown }[] };
     expect(body.reviews.map((entry) => entry.id)).toEqual([review.id]);
 
     const all = await fetch(`${baseUrl}/api/projects/p/reviews`);
-    const allBody = (await all.json()) as { reviews: { id: string }[] };
+    const allBody = (await all.json()) as { reviews: { id: string; progress?: unknown }[] };
     expect(allBody.reviews.map((entry) => entry.id)).toEqual([review.id]);
+    expect(allBody.reviews[0]).not.toHaveProperty("progress");
+    expect(body.reviews[0]).not.toHaveProperty("progress");
+
+    const progress = await fetch(
+      `${baseUrl}/api/projects/p/reviews/${review.id}/progress`,
+    );
+    expect(progress.status).toBe(200);
+    expect(await progress.json()).toMatchObject({
+      all: { reviewed: 0, total: 1, changedSinceReviewed: [] },
+      commits: { [commitSha]: { reviewed: 0, total: 1 } },
+    });
   });
 
   it("refuses a story outside the project and a story with no task commits", async () => {
@@ -309,6 +320,8 @@ describe("review record API", () => {
 
     const missing = await fetch(`${baseUrl}/api/projects/p/reviews/missing`);
     expect(missing.status).toBe(404);
+    const missingProgress = await fetch(`${baseUrl}/api/projects/p/reviews/missing/progress`);
+    expect(missingProgress.status).toBe(404);
 
     const notProject = await openReview("s", "s");
     expect(notProject.status).toBe(404);

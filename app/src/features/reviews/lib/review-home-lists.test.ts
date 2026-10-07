@@ -206,7 +206,7 @@ function metaText(clauses: { text: string }[][]): string {
 describe("openReviewMeta", () => {
   it("includes the changed-since-reviewed count only when it is non-zero", () => {
     const quiet = review({ id: "quiet" });
-    expect(metaText(openReviewMeta(quiet, NOW))).toBe(
+    expect(metaText(openReviewMeta(quiet, quiet.progress, NOW))).toBe(
       "7 / 12 files reviewed · Updated 12h ago",
     );
 
@@ -221,10 +221,10 @@ describe("openReviewMeta", () => {
         commits: {},
       },
     });
-    expect(metaText(openReviewMeta(changed, NOW))).toBe(
+    expect(metaText(openReviewMeta(changed, changed.progress, NOW))).toBe(
       "7 / 12 files reviewed · 3 changed since reviewed · Updated 12h ago",
     );
-    const changedClause = openReviewMeta(changed, NOW)[1] ?? [];
+    const changedClause = openReviewMeta(changed, changed.progress, NOW)[1] ?? [];
     expect(changedClause.every((part) => part.tone === "warn")).toBe(true);
   });
 });

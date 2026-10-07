@@ -4,6 +4,8 @@ import type {
   ReviewCandidates,
   ReviewCommits,
   ReviewDiff,
+  ReviewProgress,
+  ReviewRecordView,
   ReviewView,
 } from "@server/schemas";
 import {
@@ -11,6 +13,7 @@ import {
   fetchReviewCandidates,
   fetchReviewCommits,
   fetchReviewDiff,
+  fetchReviewProgress,
   fetchReviews,
 } from "./client";
 import { reviewKeys } from "./keys";
@@ -31,16 +34,29 @@ export function useReviewsQuery(
       | number
       | false
       | ((
-          query: Query<{ reviews: ReviewView[] }, Error>,
+          query: Query<{ reviews: ReviewRecordView[] }, Error>,
         ) => number | false | undefined);
   } = {},
-): UseQueryResult<{ reviews: ReviewView[] }, Error> {
+): UseQueryResult<{ reviews: ReviewRecordView[] }, Error> {
   return useQuery({
     queryKey: reviewKeys.list(projectId, storyId),
     queryFn: () => fetchReviews(projectId, storyId),
     enabled: (options.enabled ?? true) && Boolean(projectId),
     retry: retryRead,
     refetchInterval: options.refetchInterval,
+  });
+}
+
+export function useReviewProgressQuery(
+  projectId: string,
+  reviewId: string,
+  options: { enabled?: boolean } = {},
+): UseQueryResult<ReviewProgress, Error> {
+  return useQuery({
+    queryKey: reviewKeys.progress(projectId, reviewId),
+    queryFn: () => fetchReviewProgress(projectId, reviewId),
+    enabled: (options.enabled ?? true) && Boolean(projectId) && Boolean(reviewId),
+    retry: retryRead,
   });
 }
 

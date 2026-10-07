@@ -73,6 +73,7 @@ describe("useReviewLiveRefresh", () => {
       reviewKeys.diffs("proj", "rev-1"),
       reviewKeys.lists("proj"),
       reviewKeys.detail("proj", "rev-1"),
+      reviewKeys.progress("proj", "rev-1"),
     ]);
   });
 });

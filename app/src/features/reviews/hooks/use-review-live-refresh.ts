@@ -7,8 +7,8 @@ import { useReviewCommitsQuery } from "../api/queries";
 export const REVIEW_COMMITS_POLL_MS = 10_000;
 
 /**
- * Poll the review's commits; when the tip moves, refetch every scope's diff
- * and the review records so progress and changed-since marks follow.
+ * Poll the review's commits; when the tip moves, refetch every scope's diff,
+ * the review records, and progress so changed-since marks follow.
  */
 export function useReviewLiveRefresh(
   projectId: string,
@@ -29,6 +29,7 @@ export function useReviewLiveRefresh(
     void qc.invalidateQueries({ queryKey: reviewKeys.diffs(projectId, reviewId) });
     void qc.invalidateQueries({ queryKey: reviewKeys.lists(projectId) });
     void qc.invalidateQueries({ queryKey: reviewKeys.detail(projectId, reviewId) });
+    void qc.invalidateQueries({ queryKey: reviewKeys.progress(projectId, reviewId) });
   }, [projectId, qc, reviewId, tip]);
 
   return commits;

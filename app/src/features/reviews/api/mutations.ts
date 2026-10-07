@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { ReviewView, SetReviewMarkBody } from "@server/schemas";
+import type { ReviewRecordView, ReviewView, SetReviewMarkBody } from "@server/schemas";
 import {
   postArchiveReview,
   postOpenReview,
@@ -24,22 +24,27 @@ function useReviewMutation<TVariables>(
     mutationFn,
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (review) => {
+      const { progress, ...record } = review;
       qc.setQueryData(reviewKeys.detail(projectId, review.id), review);
+      qc.setQueryData(reviewKeys.progress(projectId, review.id), progress);
       // A list that was never fetched stays uncached; the onSettled invalidation fills it.
-      qc.setQueriesData<{ reviews: ReviewView[] }>(
+      qc.setQueriesData<{ reviews: ReviewRecordView[] }>(
         { queryKey: reviewKeys.lists(projectId) },
         (list) =>
           list && {
             reviews: list.reviews.map((entry) =>
-              entry.id === review.id ? review : entry,
+              entry.id === review.id ? record : entry,
             ),
           },
       );
     },
     // Review writes never change a diff or the commit list, so only records refetch.
-    onSettled: () => {
+    onSettled: (review) => {
       qc.invalidateQueries({ queryKey: reviewKeys.lists(projectId) });
       qc.invalidateQueries({ queryKey: reviewKeys.details() });
+      if (review) {
+        qc.invalidateQueries({ queryKey: reviewKeys.progress(projectId, review.id) });
+      }
     },
   });
 }

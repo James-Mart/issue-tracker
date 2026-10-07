@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { useParams } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { ReviewCommits, ReviewView } from "@server/schemas";
+import type { ReviewCommits, ReviewRecordView, ReviewView } from "@server/schemas";
 import {
   ShellFaultDetail,
   ShellInlineFault,
@@ -14,7 +14,11 @@ import { TabButton } from "@/components/ui/tab-button";
 import { ApiError } from "@/lib/api/errors";
 import { useIssueDetailQuery } from "@/features/issues/api/queries";
 import { useOpenReview } from "../api/mutations";
-import { useReviewDiffQuery } from "../api/queries";
+import { useReviewDiffQuery, useReviewProgressQuery } from "../api/queries";
+import {
+  REVIEW_PROGRESS_FAULT_HINT,
+  REVIEW_PROGRESS_FAULT_MESSAGE,
+} from "./review-progress-fault";
 import { useStoryReviewList } from "../hooks/use-review-submission-sync";
 import type { ReviewMarkOverrides } from "../lib/review-scope";
 import { useReviewLiveRefresh } from "../hooks/use-review-live-refresh";
@@ -217,6 +221,42 @@ function StoryReviewWorkbench({
   );
 }
 
+function StoryReviewWithProgress({
+  projectId,
+  storyId,
+  storyTitle,
+  record,
+  merged,
+}: {
+  projectId: string;
+  storyId: string;
+  storyTitle: string;
+  record: ReviewRecordView;
+  merged: boolean;
+}) {
+  const progress = useReviewProgressQuery(projectId, record.id);
+  if (progress.error) {
+    return (
+      <ShellInlineFault
+        message={REVIEW_PROGRESS_FAULT_MESSAGE}
+        hint={REVIEW_PROGRESS_FAULT_HINT}
+      />
+    );
+  }
+  if (!progress.data) {
+    return <ShellLoadingState label="Loading review…" />;
+  }
+  return (
+    <StoryReviewWorkbench
+      projectId={projectId}
+      storyId={storyId}
+      storyTitle={storyTitle}
+      review={{ ...record, progress: progress.data }}
+      merged={merged}
+    />
+  );
+}
+
 function StoryReviewBody({
   projectId,
   storyId,
@@ -226,6 +266,7 @@ function StoryReviewBody({
 }) {
   const story = useIssueDetailQuery(storyId);
   const reviews = useStoryReviewList(projectId, storyId);
+  const record = reviews.data?.reviews[0];
   const error = story.error ?? reviews.error;
   const missing = story.error instanceof ApiError && story.error.status === 404;
 
@@ -252,8 +293,7 @@ function StoryReviewBody({
   if (!story.data || !reviews.data) {
     return <ShellLoadingState label="Loading review…" />;
   }
-  const review = reviews.data.reviews[0];
-  if (!review) {
+  if (!record) {
     return (
       <>
         <StoryReviewHeader
@@ -267,11 +307,11 @@ function StoryReviewBody({
     );
   }
   return (
-    <StoryReviewWorkbench
+    <StoryReviewWithProgress
       projectId={projectId}
       storyId={storyId}
       storyTitle={story.data.title}
-      review={review}
+      record={record}
       merged={story.data.kind === "story" && story.data.merged}
     />
   );

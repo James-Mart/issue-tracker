@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
-import type { IssueRecord, ReviewView } from "@server/schemas";
+import type { IssueRecord, ReviewProgress, ReviewRecordView } from "@server/schemas";
 import {
   IssuesQueryShell,
   ShellFaultDetail,
@@ -12,13 +12,16 @@ import { Button } from "@/components/ui/button";
 import { ProjectLensSwitcher } from "@/features/issues/components/project-lens-switcher";
 import { useIssuesQuery } from "@/features/issues/api/queries";
 import { useOpenReview, useReopenReview } from "../api/mutations";
-import { useReviewsQuery } from "../api/queries";
+import { useReviewProgressQuery, useReviewsQuery } from "../api/queries";
 import { storyReviewPath } from "../lib/links";
 import { NewReviewPicker } from "./new-review-picker";
 import { ReviewIdentity } from "./review-identity";
+import { ReviewProgressFault } from "./review-progress-fault";
 import {
   archivedReviewMeta,
+  archivedReviewPendingMeta,
   openReviewMeta,
+  openReviewPendingMeta,
   readyReviewMeta,
   reviewHomeLists,
   type ReviewHomeArchived,
@@ -77,6 +80,19 @@ function MetaLine({ clauses }: { clauses: ReviewMetaPart[][] }) {
   );
 }
 
+function useReviewHomeProgress(
+  projectId: string,
+  review: ReviewRecordView,
+  pending: ReviewMetaPart[][],
+  loaded: (progress: ReviewProgress) => ReviewMetaPart[][],
+) {
+  const progress = useReviewProgressQuery(projectId, review.id);
+  return {
+    clauses: progress.data ? loaded(progress.data) : pending,
+    error: progress.error,
+  };
+}
+
 function OpenReviewRow({
   projectId,
   item,
@@ -85,20 +101,31 @@ function OpenReviewRow({
   item: ReviewHomeReview;
 }) {
   const storyId = item.review.target.storyId;
+  const { clauses, error } = useReviewHomeProgress(
+    projectId,
+    item.review,
+    openReviewPendingMeta(item.review.updatedAt),
+    (progress) => openReviewMeta(item.review, progress),
+  );
   return (
-    <li>
+    <li className="rounded-lg border border-border bg-card hover:border-[hsl(var(--rail-lit))]">
       <Link
         to={storyReviewPath(projectId, storyId)}
         data-testid="review-home-open-row"
-        className="block rounded-lg border border-border bg-card px-3 py-2.5 hover:border-[hsl(var(--rail-lit))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="block rounded-lg px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ReviewIdentity
           title={item.story?.title ?? "Story missing"}
           id={storyId}
           missing={!item.story}
         />
-        <MetaLine clauses={openReviewMeta(item.review)} />
+        <MetaLine clauses={clauses} />
       </Link>
+      {error ? (
+        <div className="px-3 pb-2.5">
+          <ReviewProgressFault />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -149,7 +176,12 @@ function ArchivedReviewRow({
   onReopen: () => void;
 }) {
   const storyId = item.review.target.storyId;
-  const review = item.review;
+  const { clauses, error } = useReviewHomeProgress(
+    projectId,
+    item.review,
+    archivedReviewPendingMeta(item.review),
+    (progress) => archivedReviewMeta(item.review, progress),
+  );
 
   return (
     <li
@@ -167,7 +199,8 @@ function ArchivedReviewRow({
             missing={!item.story}
           />
         </Link>
-        <MetaLine clauses={archivedReviewMeta(review)} />
+        <MetaLine clauses={clauses} />
+        {error ? <ReviewProgressFault /> : null}
       </div>
       <Button
         type="button"
@@ -190,7 +223,7 @@ function ReviewHomeLists({
 }: {
   projectId: string;
   issues: IssueRecord[];
-  reviews: ReviewView[];
+  reviews: ReviewRecordView[];
 }) {
   const open = useOpenReview(projectId);
   const reopen = useReopenReview(projectId);

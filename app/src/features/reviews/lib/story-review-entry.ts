@@ -1,4 +1,4 @@
-import type { IssueRecord, ReviewView } from "@server/schemas";
+import type { IssueRecord, ReviewProgress, ReviewRecordView } from "@server/schemas";
 import { storyTasksForRail } from "@/features/issues/lib/story-task-rail";
 
 /**
@@ -15,22 +15,15 @@ export function storyHasTaskCommits(
 }
 
 export type StoryCodeReviewLink =
-  | { kind: "start"; text: "Start review" | "Start post-mortem review" }
   | { kind: "open"; reviewed: number; total: number }
   | { kind: "archived"; reviewed: number; total: number };
 
-/** Which Code review link the Story detail row shows. */
+/** Count label for a review whose progress has loaded. */
 export function storyCodeReviewLink(
-  merged: boolean,
-  review: ReviewView | undefined,
+  review: ReviewRecordView,
+  progress: ReviewProgress,
 ): StoryCodeReviewLink {
-  if (!review) {
-    return {
-      kind: "start",
-      text: merged ? "Start post-mortem review" : "Start review",
-    };
-  }
-  const { reviewed, total } = review.progress.all;
+  const { reviewed, total } = progress.all;
   if (review.effectiveStatus === "archived") {
     return { kind: "archived", reviewed, total };
   }

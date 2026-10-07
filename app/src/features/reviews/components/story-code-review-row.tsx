@@ -1,27 +1,35 @@
 import type { MouseEvent, ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { IssueDetail, ReviewView } from "@server/schemas";
+import type { IssueDetail, ReviewProgress, ReviewRecordView } from "@server/schemas";
 import { CompactMetaItem } from "@/features/issues/components/compact-meta";
 import { useIssuesQuery } from "@/features/issues/api/queries";
 import { useOpenReview } from "../api/mutations";
-import { useReviewsQuery } from "../api/queries";
+import { useReviewProgressQuery, useReviewsQuery } from "../api/queries";
 import { storyReviewPath } from "../lib/links";
 import {
   storyCodeReviewLink,
   storyHasTaskCommits,
 } from "../lib/story-review-entry";
+import { ReviewProgressFault } from "./review-progress-fault";
 
 type StoryDetail = Extract<IssueDetail, { kind: "story" }>;
 
 function StoryCodeReviewLinkText({
   merged,
   review,
+  progress,
 }: {
   merged: boolean;
-  review: ReviewView | undefined;
+  review: ReviewRecordView | undefined;
+  progress: ReviewProgress | undefined;
 }) {
-  const link = storyCodeReviewLink(merged, review);
-  if (link.kind === "start") return link.text;
+  if (!review) {
+    return merged ? "Start post-mortem review" : "Start review";
+  }
+  if (!progress) {
+    return review.effectiveStatus === "archived" ? <>Archived · Open</> : "Open";
+  }
+  const link = storyCodeReviewLink(review, progress);
   const count = (
     <span className="whitespace-nowrap font-mono text-[13px] tabular-nums">
       {link.reviewed} / {link.total}
@@ -42,6 +50,42 @@ function StoryCodeReviewLinkText({
   );
 }
 
+function StoryCodeReviewReady({
+  projectId,
+  merged,
+  review,
+  href,
+  pending,
+  onClick,
+}: {
+  projectId: string;
+  merged: boolean;
+  review: ReviewRecordView;
+  href: string;
+  pending: boolean;
+  onClick: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  const progress = useReviewProgressQuery(projectId, review.id);
+  return (
+    <>
+      <Link
+        to={href}
+        className="text-primary hover:underline"
+        data-testid="story-code-review-link"
+        aria-busy={pending || undefined}
+        onClick={onClick}
+      >
+        <StoryCodeReviewLinkText
+          merged={merged}
+          review={review}
+          progress={progress.data}
+        />
+      </Link>
+      {progress.error ? <ReviewProgressFault /> : null}
+    </>
+  );
+}
+
 export function StoryCodeReviewRow({
   projectId,
   story,
@@ -52,6 +96,7 @@ export function StoryCodeReviewRow({
   const { data: issues } = useIssuesQuery();
   const hasCommits = storyHasTaskCommits(story.id, issues?.issues ?? []);
   const reviews = useReviewsQuery(projectId, story.id, { enabled: hasCommits });
+  const review = reviews.data?.reviews[0];
   const open = useOpenReview(projectId);
   const navigate = useNavigate();
 
@@ -82,7 +127,6 @@ export function StoryCodeReviewRow({
     );
   };
 
-  const review = reviews.data?.reviews[0];
   let value: ReactNode;
   if (reviews.error) {
     value = (
@@ -93,7 +137,16 @@ export function StoryCodeReviewRow({
   } else if (reviews.isPending) {
     value = <span className="text-muted-foreground">Loading review…</span>;
   } else {
-    value = (
+    value = review ? (
+      <StoryCodeReviewReady
+        projectId={projectId}
+        merged={story.merged}
+        review={review}
+        href={href}
+        pending={open.isPending}
+        onClick={onClick}
+      />
+    ) : (
       <Link
         to={href}
         className="text-primary hover:underline"
@@ -101,7 +154,7 @@ export function StoryCodeReviewRow({
         aria-busy={open.isPending || undefined}
         onClick={onClick}
       >
-        <StoryCodeReviewLinkText merged={story.merged} review={review} />
+        <StoryCodeReviewLinkText merged={story.merged} review={undefined} progress={undefined} />
       </Link>
     );
   }

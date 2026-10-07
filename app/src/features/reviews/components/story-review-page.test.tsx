@@ -116,15 +116,15 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
 
 vi.mock("../api/queries", () => ({
   useReviewsQuery: () => ({ data: { reviews: state.reviews }, error: null }),
+  useReviewProgressQuery: () => ({
+    data: (state.reviews[0] as ReviewView | undefined)?.progress,
+    error: null,
+  }),
   useReviewDiffQuery: (_projectId: string, _reviewId: string, scope: string) => {
     state.diffScope = scope;
     return { data: state.byScope[scope] ?? state.diff, error: null };
   },
-  useReviewCommitsQuery: () => ({
-    data: state.commits,
-    error: null,
-    isLoading: false,
-  }),
+  useReviewCommitsQuery: () => ({ data: state.commits, error: null, isLoading: false }),
 }));
 
 vi.mock("../api/mutations", () => ({

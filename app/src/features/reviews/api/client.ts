@@ -3,6 +3,8 @@ import type {
   ReviewCandidates,
   ReviewCommits,
   ReviewDiff,
+  ReviewProgress,
+  ReviewRecordView,
   ReviewView,
   SetReviewMarkBody,
 } from "@server/schemas";
@@ -37,8 +39,19 @@ export function fetchReviewCandidates(
 export function fetchReviews(
   projectId: string,
   storyId?: string,
-): Promise<{ reviews: ReviewView[] }> {
-  return request<{ reviews: ReviewView[] }>(reviewsUrl(projectId, storyId));
+): Promise<{ reviews: ReviewRecordView[] }> {
+  return request<{ reviews: ReviewRecordView[] }>(reviewsUrl(projectId, storyId));
+}
+
+export function reviewProgressUrl(projectId: string, reviewId: string): string {
+  return `${reviewUrl(projectId, reviewId)}/progress`;
+}
+
+export function fetchReviewProgress(
+  projectId: string,
+  reviewId: string,
+): Promise<ReviewProgress> {
+  return request<ReviewProgress>(reviewProgressUrl(projectId, reviewId));
 }
 
 export function fetchReview(

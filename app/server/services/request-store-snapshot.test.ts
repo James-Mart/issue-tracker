@@ -218,11 +218,18 @@ describe("one store snapshot per review and change request", () => {
     expect(body).toEqual({ contents: "hello\n" });
   });
 
-  it("loads the store once for the reviews list, including each mark index", async () => {
+  it("loads the store once for the reviews list, without progress", async () => {
     const body = await expectOneSnapshot("/api/projects/p/reviews");
     expect(body).toMatchObject({
-      reviews: [{ id: REVIEW_ID, progress: { all: { total: 0 } } }],
+      reviews: [{ id: REVIEW_ID }],
     });
+    const reviews = body.reviews as Record<string, unknown>[];
+    expect(reviews[0]).not.toHaveProperty("progress");
+  });
+
+  it("loads the store once for one review's progress", async () => {
+    const body = await expectOneSnapshot(`/api/projects/p/reviews/${REVIEW_ID}/progress`);
+    expect(body).toMatchObject({ all: { reviewed: 0, total: 0, changedSinceReviewed: [] } });
   });
 
   it("loads the store once for review commits", async () => {
