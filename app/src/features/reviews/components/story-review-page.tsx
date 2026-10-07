@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { useParams } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { ReviewCommits, ReviewView } from "@server/schemas";
+import type { ReviewCommits, ReviewRecordView, ReviewView } from "@server/schemas";
 import {
   ShellFaultDetail,
   ShellInlineFault,
@@ -14,10 +14,13 @@ import { TabButton } from "@/components/ui/tab-button";
 import { ApiError } from "@/lib/api/errors";
 import { useIssueDetailQuery } from "@/features/issues/api/queries";
 import { useOpenReview } from "../api/mutations";
-import { useReviewDiffQuery } from "../api/queries";
-import { useStoryReviewList } from "../hooks/use-review-submission-sync";
+import { useReviewDiffQuery, useReviewProgressQuery } from "../api/queries";
+import {
+  REVIEW_PROGRESS_FAULT_HINT,
+  REVIEW_PROGRESS_FAULT_MESSAGE,
+} from "./review-progress-fault";
 import type { ReviewMarkOverrides } from "../lib/review-scope";
-import { useReviewLiveRefresh } from "../hooks/use-review-live-refresh";
+import { useStoryReviewFirstWave } from "../hooks/use-story-review-first-wave";
 import {
   useReviewWorkbenchLocation,
   type DiffThreadReveal,
@@ -89,7 +92,7 @@ function DiffTabPanel({
   onFocusFileMissing: () => void;
 }) {
   const diffReady = scope === ALL_CHANGES_SCOPE || commits.data !== undefined;
-  const diff = useReviewDiffQuery(projectId, review.id, scope, { enabled: diffReady });
+  const diff = useReviewDiffQuery(projectId, storyId, scope, { enabled: diffReady });
   const error = commits.error ?? diff.error;
   if (error) {
     return (
@@ -129,15 +132,16 @@ function StoryReviewWorkbench({
   storyId,
   storyTitle,
   review,
+  commits,
   merged,
 }: {
   projectId: string;
   storyId: string;
   storyTitle: string;
   review: ReviewView;
+  commits: UseQueryResult<ReviewCommits, Error>;
   merged: boolean;
 }) {
-  const commits = useReviewLiveRefresh(projectId, review.id);
   const knownShas = commits.data?.commits.map((commit) => commit.sha);
   const {
     active,
@@ -190,6 +194,7 @@ function StoryReviewWorkbench({
         ) : active === "commits" ? (
           <ReviewCommitsPanel
             projectId={projectId}
+            storyId={storyId}
             review={review}
             commits={commits}
             scope={scope}
@@ -217,6 +222,45 @@ function StoryReviewWorkbench({
   );
 }
 
+function StoryReviewWithProgress({
+  projectId,
+  storyId,
+  storyTitle,
+  record,
+  commits,
+  merged,
+}: {
+  projectId: string;
+  storyId: string;
+  storyTitle: string;
+  record: ReviewRecordView;
+  commits: UseQueryResult<ReviewCommits, Error>;
+  merged: boolean;
+}) {
+  const progress = useReviewProgressQuery(projectId, record.id);
+  if (progress.error) {
+    return (
+      <ShellInlineFault
+        message={REVIEW_PROGRESS_FAULT_MESSAGE}
+        hint={REVIEW_PROGRESS_FAULT_HINT}
+      />
+    );
+  }
+  if (!progress.data) {
+    return <ShellLoadingState label="Loading review…" />;
+  }
+  return (
+    <StoryReviewWorkbench
+      projectId={projectId}
+      storyId={storyId}
+      storyTitle={storyTitle}
+      review={{ ...record, progress: progress.data }}
+      commits={commits}
+      merged={merged}
+    />
+  );
+}
+
 function StoryReviewBody({
   projectId,
   storyId,
@@ -225,7 +269,8 @@ function StoryReviewBody({
   storyId: string;
 }) {
   const story = useIssueDetailQuery(storyId);
-  const reviews = useStoryReviewList(projectId, storyId);
+  const { reviews, commits } = useStoryReviewFirstWave(projectId, storyId);
+  const record = reviews.data?.reviews[0];
   const error = story.error ?? reviews.error;
   const missing = story.error instanceof ApiError && story.error.status === 404;
 
@@ -252,8 +297,7 @@ function StoryReviewBody({
   if (!story.data || !reviews.data) {
     return <ShellLoadingState label="Loading review…" />;
   }
-  const review = reviews.data.reviews[0];
-  if (!review) {
+  if (!record) {
     return (
       <>
         <StoryReviewHeader
@@ -267,11 +311,12 @@ function StoryReviewBody({
     );
   }
   return (
-    <StoryReviewWorkbench
+    <StoryReviewWithProgress
       projectId={projectId}
       storyId={storyId}
       storyTitle={story.data.title}
-      review={review}
+      record={record}
+      commits={commits}
       merged={story.data.kind === "story" && story.data.merged}
     />
   );

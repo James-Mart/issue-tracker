@@ -17,13 +17,17 @@ const state = vi.hoisted(() => ({
   retryPending: false,
 }));
 
-vi.mock("@/features/issues/api/queries", () => ({
-  useCommentThreads: () => ({
-    threads: state.threads,
-    problems: [],
-    loaded: state.commentsLoaded,
-  }),
-}));
+vi.mock("@/features/issues/api/queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/issues/api/queries")>();
+  return {
+    ...actual,
+    useReuseCommentThreads: () => ({
+      threads: state.threads,
+      problems: [],
+      loaded: state.commentsLoaded,
+    }),
+  };
+});
 
 vi.mock("../api/mutations", () => ({
   useArchiveReview: () => ({ mutate: vi.fn(), isPending: false }),

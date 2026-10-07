@@ -1,8 +1,11 @@
-import { request } from "@/lib/api/client";
+import { request, requestConditional } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
 import type {
   ReviewCandidates,
   ReviewCommits,
   ReviewDiff,
+  ReviewProgress,
+  ReviewRecordView,
   ReviewView,
   SetReviewMarkBody,
 } from "@server/schemas";
@@ -37,8 +40,19 @@ export function fetchReviewCandidates(
 export function fetchReviews(
   projectId: string,
   storyId?: string,
-): Promise<{ reviews: ReviewView[] }> {
-  return request<{ reviews: ReviewView[] }>(reviewsUrl(projectId, storyId));
+): Promise<{ reviews: ReviewRecordView[] }> {
+  return request<{ reviews: ReviewRecordView[] }>(reviewsUrl(projectId, storyId));
+}
+
+export function reviewProgressUrl(projectId: string, reviewId: string): string {
+  return `${reviewUrl(projectId, reviewId)}/progress`;
+}
+
+export function fetchReviewProgress(
+  projectId: string,
+  reviewId: string,
+): Promise<ReviewProgress> {
+  return request<ReviewProgress>(reviewProgressUrl(projectId, reviewId));
 }
 
 export function fetchReview(
@@ -48,32 +62,42 @@ export function fetchReview(
   return request<ReviewView>(reviewUrl(projectId, reviewId));
 }
 
-export function reviewCommitsUrl(projectId: string, reviewId: string): string {
-  return `${reviewUrl(projectId, reviewId)}/commits`;
+export function reviewCommitsUrl(projectId: string, storyId: string): string {
+  const params = new URLSearchParams({ storyId });
+  return `${reviewsUrl(projectId)}/commits?${params}`;
 }
 
 export function reviewDiffUrl(
   projectId: string,
-  reviewId: string,
+  storyId: string,
   scope: string,
 ): string {
-  const params = new URLSearchParams({ scope });
-  return `${reviewUrl(projectId, reviewId)}/diff?${params}`;
+  const params = new URLSearchParams({ storyId, scope });
+  return `${reviewsUrl(projectId)}/diff?${params}`;
 }
 
-export function fetchReviewCommits(
+const commitsPollCache = new Map<string, { etag: string; body: ReviewCommits }>();
+
+export async function fetchReviewCommits(
   projectId: string,
-  reviewId: string,
+  storyId: string,
 ): Promise<ReviewCommits> {
-  return request<ReviewCommits>(reviewCommitsUrl(projectId, reviewId));
+  const url = reviewCommitsUrl(projectId, storyId);
+  const prior = commitsPollCache.get(url);
+  const { body, etag } = await requestConditional<ReviewCommits>(url, prior);
+  if (!etag) {
+    throw new ApiError("commits poll response missing ETag", 200);
+  }
+  commitsPollCache.set(url, { etag, body });
+  return body;
 }
 
 export function fetchReviewDiff(
   projectId: string,
-  reviewId: string,
+  storyId: string,
   scope: string,
 ): Promise<ReviewDiff> {
-  return request<ReviewDiff>(reviewDiffUrl(projectId, reviewId, scope));
+  return request<ReviewDiff>(reviewDiffUrl(projectId, storyId, scope));
 }
 
 export function postOpenReview(

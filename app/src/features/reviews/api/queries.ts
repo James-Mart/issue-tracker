@@ -1,9 +1,11 @@
-import { useQuery, type Query, type UseQueryResult } from "@tanstack/react-query";
+import { skipToken, useQuery, type Query, type UseQueryResult } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/errors";
 import type {
   ReviewCandidates,
   ReviewCommits,
   ReviewDiff,
+  ReviewProgress,
+  ReviewRecordView,
   ReviewView,
 } from "@server/schemas";
 import {
@@ -11,6 +13,7 @@ import {
   fetchReviewCandidates,
   fetchReviewCommits,
   fetchReviewDiff,
+  fetchReviewProgress,
   fetchReviews,
 } from "./client";
 import { reviewKeys } from "./keys";
@@ -31,16 +34,29 @@ export function useReviewsQuery(
       | number
       | false
       | ((
-          query: Query<{ reviews: ReviewView[] }, Error>,
+          query: Query<{ reviews: ReviewRecordView[] }, Error>,
         ) => number | false | undefined);
   } = {},
-): UseQueryResult<{ reviews: ReviewView[] }, Error> {
+): UseQueryResult<{ reviews: ReviewRecordView[] }, Error> {
   return useQuery({
     queryKey: reviewKeys.list(projectId, storyId),
     queryFn: () => fetchReviews(projectId, storyId),
     enabled: (options.enabled ?? true) && Boolean(projectId),
     retry: retryRead,
     refetchInterval: options.refetchInterval,
+  });
+}
+
+export function useReviewProgressQuery(
+  projectId: string,
+  reviewId: string,
+  options: { enabled?: boolean } = {},
+): UseQueryResult<ReviewProgress, Error> {
+  return useQuery({
+    queryKey: reviewKeys.progress(projectId, reviewId),
+    queryFn: () => fetchReviewProgress(projectId, reviewId),
+    enabled: (options.enabled ?? true) && Boolean(projectId) && Boolean(reviewId),
+    retry: retryRead,
   });
 }
 
@@ -71,13 +87,13 @@ export function useReviewQuery(
 
 export function useReviewCommitsQuery(
   projectId: string,
-  reviewId: string,
-  options: { refetchInterval?: number } = {},
+  storyId: string,
+  options: { refetchInterval?: number | false } = {},
 ): UseQueryResult<ReviewCommits, Error> {
   return useQuery({
-    queryKey: reviewKeys.commits(projectId, reviewId),
-    queryFn: () => fetchReviewCommits(projectId, reviewId),
-    enabled: Boolean(projectId) && Boolean(reviewId),
+    queryKey: reviewKeys.commits(projectId, storyId),
+    queryFn: () => fetchReviewCommits(projectId, storyId),
+    enabled: Boolean(projectId) && Boolean(storyId),
     retry: retryRead,
     refetchInterval: options.refetchInterval,
   });
@@ -85,18 +101,22 @@ export function useReviewCommitsQuery(
 
 export function useReviewDiffQuery(
   projectId: string,
-  reviewId: string,
-  scope: string,
+  storyId: string,
+  scope: string | null,
   options: { enabled?: boolean } = {},
 ): UseQueryResult<ReviewDiff, Error> {
   return useQuery({
-    queryKey: reviewKeys.diff(projectId, reviewId, scope),
-    queryFn: () => fetchReviewDiff(projectId, reviewId, scope),
-    enabled:
+    queryKey: reviewKeys.diff(projectId, storyId, scope ?? ""),
+    queryFn:
+      scope !== null &&
       (options.enabled ?? true) &&
-      Boolean(projectId) &&
-      Boolean(reviewId) &&
-      Boolean(scope),
+      projectId &&
+      storyId
+        ? () => fetchReviewDiff(projectId, storyId, scope)
+        : skipToken,
+    // The page starts this read before the diff panel mounts. A later subscriber
+    // reuses the result; a moved tip invalidates the query.
+    refetchOnMount: false,
     retry: retryRead,
   });
 }

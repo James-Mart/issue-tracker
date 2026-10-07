@@ -223,7 +223,7 @@ vi.mock("../api/queries", () => ({
     isFetching: changeQueryState.isFetching,
     refetch: changeQueryState.refetch,
   }),
-  useCommentThreads: () => ({
+  useReuseCommentThreads: () => ({
     threads: threadsState.threads,
     problems: [],
   }),

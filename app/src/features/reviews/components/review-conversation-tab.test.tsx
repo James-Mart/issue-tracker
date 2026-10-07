@@ -33,30 +33,34 @@ vi.mock("@/features/agents/api/queries", () => ({
   }),
 }));
 
-vi.mock("@/features/issues/api/queries", () => ({
-  useCommentsQuery: () => ({
-    data: { messages: [], threads: [], problems: state.problems },
-    isLoading: state.isLoading,
-    error: state.error,
-  }),
-  useCommentThreads: () => ({ threads: state.threads, problems: state.problems }),
-  useIssueChangeFileQuery: () => ({
-    data: Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n"),
-  }),
-  useIssuesQuery: () => ({
-    data: {
-      issues: [
-        {
-          id: "task-a",
-          kind: "task",
-          title: "Tighten review API errors",
-          partOf: "story-1",
-          status: "todo",
-        },
-      ],
-    },
-  }),
-}));
+vi.mock("@/features/issues/api/queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/issues/api/queries")>();
+  return {
+    ...actual,
+    useCommentsQuery: () => ({
+      data: { messages: [], threads: [], problems: state.problems },
+      isLoading: state.isLoading,
+      error: state.error,
+    }),
+    useReuseCommentThreads: () => ({ threads: state.threads, problems: state.problems }),
+    useIssueChangeFileQuery: () => ({
+      data: Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n"),
+    }),
+    useIssuesQuery: () => ({
+      data: {
+        issues: [
+          {
+            id: "task-a",
+            kind: "task",
+            title: "Tighten review API errors",
+            partOf: "story-1",
+            status: "todo",
+          },
+        ],
+      },
+    }),
+  };
+});
 
 vi.mock("@/features/issues/api/mutations", () => ({
   usePostComment: () => post,

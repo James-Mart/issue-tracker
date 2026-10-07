@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import type { ReviewView } from "@server/schemas";
+import type { ReviewRecordView } from "@server/schemas";
 import { issuesKeys } from "@/features/issues/api/keys";
 import { useReviewsQuery } from "../api/queries";
 import { submissionPollInterval } from "../lib/review-submission-ui";
@@ -38,7 +38,7 @@ function useReviewSubmissionFollowUp(
 export function useStoryReviewList(
   projectId: string,
   storyId: string,
-): UseQueryResult<{ reviews: ReviewView[] }, Error> {
+): UseQueryResult<{ reviews: ReviewRecordView[] }, Error> {
   const reviews = useReviewsQuery(projectId, storyId, {
     refetchInterval: (query) =>
       submissionPollInterval(query.state.data?.reviews[0]?.submissions),

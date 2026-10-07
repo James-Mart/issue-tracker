@@ -132,6 +132,15 @@ function attachProgress(view: ReviewRecordView, index: ReviewMarkIndex): ReviewV
   return { ...view, progress: reviewProgress(view, index) };
 }
 
+export async function readReviewProgress(
+  projectId: string,
+  view: ReviewRecordView,
+  issues?: Issue[],
+): Promise<ReviewProgress> {
+  const index = await readReviewMarkIndex(projectId, view.target.storyId, issues);
+  return reviewProgress(view, index);
+}
+
 export async function withReviewProgress(
   projectId: string,
   view: ReviewRecordView,
@@ -139,17 +148,6 @@ export async function withReviewProgress(
 ): Promise<ReviewView> {
   const index = await readReviewMarkIndex(projectId, view.target.storyId, issues);
   return attachProgress(view, index);
-}
-
-export async function withReviewProgressList(
-  projectId: string,
-  views: ReviewRecordView[],
-  issues?: Issue[],
-): Promise<ReviewView[]> {
-  const graph = issues ?? readAll().issues;
-  return Promise.all(
-    views.map((view) => withReviewProgress(projectId, view, graph)),
-  );
 }
 
 function archivedError(reviewId: string): IssueError {

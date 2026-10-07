@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
   open: vi.fn(),
   mutateAsync: vi.fn(),
   enabled: true as boolean | undefined,
+  progressEnabled: false as boolean | undefined,
+  progressMode: "ready" as "ready" | "pending",
 }));
 
 vi.mock("@/features/issues/api/queries", () => ({
@@ -37,6 +39,13 @@ vi.mock("../api/queries", () => ({
       error: state.error,
       isPending: !state.dataReady && state.error === null,
     };
+  },
+  useReviewProgressQuery: () => {
+    state.progressEnabled = true;
+    if (state.progressMode === "pending") {
+      return { data: undefined, error: null };
+    }
+    return { data: state.reviews[0]?.progress, error: null };
   },
 }));
 
@@ -170,6 +179,8 @@ afterEach(() => {
   state.dataReady = true;
   state.pending = false;
   state.enabled = true;
+  state.progressEnabled = false;
+  state.progressMode = "ready";
   state.open.mockReset();
   state.mutateAsync.mockReset();
   lastLocation = "";
@@ -188,6 +199,26 @@ describe("StoryCodeReviewRow", () => {
     state.reviews = [review()];
     const container = mount([task()], { merged: true });
     expect(link(container).textContent).toBe("7 / 12 files reviewed · Open");
+    expect(state.progressEnabled).toBe(true);
+  });
+
+  it("shows the review link before progress loads, then fills the count", () => {
+    state.progressMode = "pending";
+    state.reviews = [review()];
+    const pending = mount([task()]);
+    expect(link(pending).textContent).toBe("Open");
+    expect(link(pending).textContent).not.toContain("files reviewed");
+    act(() => root?.unmount());
+    root = undefined;
+    state.progressMode = "ready";
+    const loaded = mount([task()]);
+    expect(link(loaded).textContent).toBe("7 / 12 files reviewed · Open");
+  });
+
+  it("does not request progress when the Story has no review", () => {
+    const container = mount([task()]);
+    expect(link(container).textContent).toBe("Start review");
+    expect(state.progressEnabled).toBe(false);
   });
 
   it("links archived progress when the review is effectively archived", () => {

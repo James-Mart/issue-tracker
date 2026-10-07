@@ -3,7 +3,7 @@ import { CircleAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ReviewCommits, ReviewView } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
-import { useCommentThreads } from "@/features/issues/api/queries";
+import { useStoryReviewCommentThreads } from "../hooks/use-story-review-comments";
 import { issuePath } from "@/features/issues/lib/links";
 import { shortSha } from "@/lib/utils/short-sha";
 import { submittableCommentThreads } from "../lib/review-submittable";
@@ -54,7 +54,7 @@ export function ReviewHeaderBody({
   merged: boolean;
   onOpenThread?: (thread: CommentThread) => void;
 }) {
-  const { threads, loaded } = useCommentThreads(storyId);
+  const { threads, loaded } = useStoryReviewCommentThreads(storyId);
   const readyThreads = loaded
     ? submittableCommentThreads(threads, review?.submissions ?? [])
     : undefined;

@@ -1,13 +1,13 @@
-import type { IssueRecord, ReviewView } from "@server/schemas";
+import type { IssueRecord, ReviewProgress, ReviewRecordView } from "@server/schemas";
 import { filterToProject } from "@/features/issues/lib/build-tree";
 import { formatRelativeUpdatedAt } from "@/features/issues/lib/format-relative-updated-at";
 import { storyTasksForRail } from "@/features/issues/lib/story-task-rail";
 
 type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
-type ArchivedReview = Extract<ReviewView, { effectiveStatus: "archived" }>;
+type ArchivedReview = Extract<ReviewRecordView, { effectiveStatus: "archived" }>;
 
 export type ReviewHomeReview = {
-  review: ReviewView;
+  review: ReviewRecordView;
   story: StoryRecord | undefined;
 };
 
@@ -66,7 +66,7 @@ function readyTaskCount(
 export function reviewHomeLists(
   projectId: string,
   issues: readonly IssueRecord[],
-  reviews: readonly ReviewView[],
+  reviews: readonly ReviewRecordView[],
 ): ReviewHomeLists {
   const projectIssues = filterToProject(issues, projectId);
   const stories = storiesInProject(projectIssues);
@@ -74,7 +74,7 @@ export function reviewHomeLists(
   const reviewedStoryIds = new Set(
     reviews.map((review) => review.target.storyId),
   );
-  const withStory = (review: ReviewView): ReviewHomeReview => ({
+  const withStory = (review: ReviewRecordView): ReviewHomeReview => ({
     review,
     story: storyById.get(review.target.storyId),
   });
@@ -114,11 +114,32 @@ function progressClause(reviewed: number, total: number): ReviewMetaPart[] {
   ];
 }
 
-export function openReviewMeta(
-  review: ReviewView,
+/** Updated time alone, until a progress request fills the count. */
+export function openReviewPendingMeta(
+  updatedAt: string,
   nowMs: number = Date.now(),
 ): ReviewMetaPart[][] {
-  const { reviewed, total, changedSinceReviewed } = review.progress.all;
+  return [updatedClause(updatedAt, nowMs)];
+}
+
+function archiveReason(review: ArchivedReview): string {
+  return review.archivedReason === "merged" ? "Story merged" : "Archived";
+}
+
+/** Archive reason and updated time, until a progress request fills the count. */
+export function archivedReviewPendingMeta(
+  review: ArchivedReview,
+  nowMs: number = Date.now(),
+): ReviewMetaPart[][] {
+  return [[{ text: archiveReason(review) }], updatedClause(review.updatedAt, nowMs)];
+}
+
+export function openReviewMeta(
+  review: ReviewRecordView,
+  progress: ReviewProgress,
+  nowMs: number = Date.now(),
+): ReviewMetaPart[][] {
+  const { reviewed, total, changedSinceReviewed } = progress.all;
   const clauses = [progressClause(reviewed, total)];
   if (changedSinceReviewed.length > 0) {
     clauses.push([
@@ -126,8 +147,7 @@ export function openReviewMeta(
       { text: " changed since reviewed", tone: "warn" },
     ]);
   }
-  clauses.push(updatedClause(review.updatedAt, nowMs));
-  return clauses;
+  return [...clauses, ...openReviewPendingMeta(review.updatedAt, nowMs)];
 }
 
 export function readyReviewMeta(
@@ -146,9 +166,9 @@ export function readyReviewMeta(
 
 export function archivedReviewMeta(
   review: ArchivedReview,
+  progress: ReviewProgress,
   nowMs: number = Date.now(),
 ): ReviewMetaPart[][] {
-  const { reviewed, total } = review.progress.all;
-  const reason = review.archivedReason === "merged" ? "Story merged" : "Archived";
-  return [progressClause(reviewed, total), [{ text: reason }], updatedClause(review.updatedAt, nowMs)];
+  const { reviewed, total } = progress.all;
+  return [progressClause(reviewed, total), ...archivedReviewPendingMeta(review, nowMs)];
 }

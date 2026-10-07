@@ -3,11 +3,17 @@ import type { Issue } from "../schemas.js";
 import type { ReviewRecordView } from "../schemas/review.js";
 import { IssueError } from "../services/errors.js";
 import { readAll } from "../services/issues.js";
-import { readReviewCommits, readReviewDiff } from "../services/review-diff.js";
 import {
+  readReviewCommits,
+  readReviewDiff,
+  readStoryReviewCommits,
+  readStoryReviewDiff,
+  storyReviewCommitsEtag,
+} from "../services/review-diff.js";
+import {
+  readReviewProgress,
   setReviewMark,
   withReviewProgress,
-  withReviewProgressList,
 } from "../services/review-marks.js";
 import type { AgentSessions } from "../services/agent-sessions.js";
 import {
@@ -37,6 +43,22 @@ function storyIdQuery(raw: unknown): string | undefined {
   return raw;
 }
 
+function requireStoryIdQuery(raw: unknown): string {
+  const storyId = storyIdQuery(raw);
+  if (storyId === undefined) {
+    throw new IssueError("validation", "storyId must be a non-empty string");
+  }
+  return storyId;
+}
+
+function ifNoneMatchHits(header: string | undefined, etag: string): boolean {
+  if (header === undefined || header.length === 0) return false;
+  for (const part of header.split(",")) {
+    if (part.trim() === etag) return true;
+  }
+  return false;
+}
+
 function scopeQuery(raw: unknown): string {
   if (typeof raw !== "string" || raw.length === 0) {
     throw new IssueError("validation", "scope must be a non-empty string");
@@ -52,15 +74,6 @@ async function sendReview(
   issues?: Issue[],
 ): Promise<void> {
   res.status(status).json(await withReviewProgress(projectId, view, issues));
-}
-
-async function sendReviewList(
-  res: Response,
-  projectId: string,
-  views: ReviewRecordView[],
-  issues?: Issue[],
-): Promise<void> {
-  res.json({ reviews: await withReviewProgressList(projectId, views, issues) });
 }
 
 /**
@@ -108,7 +121,35 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
         storyIdQuery(req.query.storyId),
         issues,
       );
-      await sendReviewList(res, req.params.projectId, listed.reviews, issues);
+      res.json({ reviews: listed.reviews });
+    }),
+  );
+
+  reviewsRouter.get(
+    "/commits",
+    asyncRoute(async (req, res) => {
+      const projectId = req.params.projectId;
+      const storyId = requireStoryIdQuery(req.query.storyId);
+      const etag = storyReviewCommitsEtag(projectId, storyId);
+      res.set("ETag", etag);
+      if (ifNoneMatchHits(req.get("If-None-Match"), etag)) {
+        res.status(304).end();
+        return;
+      }
+      res.json(await readStoryReviewCommits(projectId, storyId));
+    }),
+  );
+
+  reviewsRouter.get(
+    "/diff",
+    asyncRoute(async (req, res) => {
+      res.json(
+        await readStoryReviewDiff(
+          req.params.projectId,
+          requireStoryIdQuery(req.query.storyId),
+          scopeQuery(req.query.scope),
+        ),
+      );
     }),
   );
 
@@ -122,6 +163,17 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
         readReviewView(req.params.projectId, req.params.reviewId, issues),
         200,
         issues,
+      );
+    }),
+  );
+
+  reviewsRouter.get(
+    "/:reviewId/progress",
+    asyncRoute(async (req, res) => {
+      const { issues } = readAll();
+      const view = readReviewView(req.params.projectId, req.params.reviewId, issues);
+      res.json(
+        await readReviewProgress(req.params.projectId, view, issues),
       );
     }),
   );

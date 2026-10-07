@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   reviewsLoading: false,
   issuesError: null as Error | null,
   reviewsError: null as Error | null,
+  progressMode: "ready" as "ready" | "pending" | "error",
   mutateAsync: vi.fn(),
   reopen: vi.fn(),
   candidates: [] as ReviewCandidate[],
@@ -42,6 +43,16 @@ vi.mock("../api/queries", () => ({
     error: state.reviewsError,
     refetch: vi.fn(),
   }),
+  useReviewProgressQuery: (_projectId: string, reviewId: string) => {
+    const review = state.reviews.find((item) => item.id === reviewId);
+    if (state.progressMode === "pending") {
+      return { data: undefined, error: null, isPending: true };
+    }
+    if (state.progressMode === "error") {
+      return { data: undefined, error: new Error("progress failed"), isPending: false };
+    }
+    return { data: review?.progress, error: null, isPending: false };
+  },
   useReviewCandidatesQuery: (_projectId: string, query: string) => {
     state.candidateQuery = query;
     return {
@@ -209,6 +220,7 @@ afterEach(() => {
   state.reviewsLoading = false;
   state.issuesError = null;
   state.reviewsError = null;
+  state.progressMode = "ready";
   state.mutateAsync.mockReset();
   state.reopen.mockReset();
   state.candidates = [];
@@ -277,6 +289,37 @@ describe("ReviewHomePage", () => {
     const archived = container.querySelector("details");
     expect(archived?.open).toBe(false);
     expect(container.textContent).toContain("Archived");
+  });
+
+  it("shows review rows before progress loads, then fills the progress line", () => {
+    state.progressMode = "pending";
+    state.issues = [
+      project(),
+      story("open-story", { title: "Code review surface" }),
+    ];
+    state.reviews = [
+      review({ id: "rev-open", target: { kind: "story", storyId: "open-story" } }),
+    ];
+    const container = mount();
+    const openRow = () => container.querySelector('[data-testid="review-home-open-row"]');
+    expect(openRow()?.textContent).toContain("Code review surface");
+    expect(openRow()?.textContent).toContain("open-story");
+    expect(openRow()?.textContent).not.toContain("files reviewed");
+    expect(openRow()?.textContent).not.toContain("changed since reviewed");
+
+    state.progressMode = "ready";
+    act(() => {
+      root!.render(
+        <MemoryRouter initialEntries={[`/projects/${PROJECT}/review`]}>
+          <LocationProbe />
+          <Routes>
+            <Route path="/projects/:projectId/review" element={<ReviewHomePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+    expect(openRow()?.textContent).toContain("7 / 12 files reviewed");
+    expect(openRow()?.textContent).toContain("3 changed since reviewed");
   });
 
   it("shows an empty state for each list, including an expanded empty archive", () => {

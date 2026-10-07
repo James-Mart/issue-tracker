@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -186,6 +186,119 @@ describe("review record API", () => {
     expect(first.archivedReason).toBeUndefined();
   });
 
+  it("reads commits and diff by story id without creating a review", async () => {
+    const byStoryRes = await fetch(`${baseUrl}/api/projects/p/reviews/commits?storyId=s`);
+    expect(byStoryRes.status).toBe(200);
+    const byStory = (await byStoryRes.json()) as {
+      tip: string;
+      commits: { sha: string; subject: string }[];
+    };
+    expect(byStory).toMatchObject({
+      tip: commitSha,
+      commits: [{ sha: commitSha, subject: "change" }],
+    });
+
+    const diffRes = await fetch(
+      `${baseUrl}/api/projects/p/reviews/diff?storyId=s&scope=all`,
+    );
+    expect(diffRes.status).toBe(200);
+    const diff = (await diffRes.json()) as {
+      scope: string;
+      files: { path: string }[];
+      patch: string;
+    };
+    expect(diff.scope).toBe("all");
+    expect(diff.files.map((file) => file.path)).toContain("file.txt");
+    expect(diff.patch).toContain("changed");
+    expect(existsSync(join(dir, "p", "reviews"))).toBe(false);
+
+    const commitDiff = await fetch(
+      `${baseUrl}/api/projects/p/reviews/diff?storyId=s&scope=${commitSha}`,
+    );
+    expect(commitDiff.status).toBe(200);
+    expect(await commitDiff.json()).toMatchObject({ scope: commitSha });
+
+    expect((await fetch(`${baseUrl}/api/projects/p/reviews/commits`)).status).toBe(400);
+    expect((await fetch(`${baseUrl}/api/projects/p/reviews/diff?storyId=s`)).status).toBe(400);
+    expect(
+      (await fetch(`${baseUrl}/api/projects/p/reviews/commits?storyId=other`)).status,
+    ).toBe(400);
+    expect(
+      (await fetch(`${baseUrl}/api/projects/p/reviews/diff?storyId=s&scope=deadbeef`)).status,
+    ).toBe(400);
+
+    const created = await openReview("p", "s");
+    expect(created.status).toBe(201);
+    const review = (await created.json()) as { id: string };
+    const byReviewRes = await fetch(
+      `${baseUrl}/api/projects/p/reviews/${review.id}/commits`,
+    );
+    expect(byReviewRes.status).toBe(200);
+    expect(await byReviewRes.json()).toEqual(byStory);
+  });
+
+  it("answers an unchanged commits poll with 304 and does not prepare the story change", async () => {
+    const url = `${baseUrl}/api/projects/p/reviews/commits?storyId=s`;
+    const first = await fetch(url);
+    expect(first.status).toBe(200);
+    const etag = first.headers.get("etag");
+    expect(etag).toMatch(/^"[0-9]+:[0-9a-f]{40}"$/);
+    const listed = await first.json();
+
+    const change = await import("../services/change.js");
+    const prepare = vi.spyOn(change, "prepareStoryChange");
+    try {
+      const again = await fetch(url, { headers: { "If-None-Match": etag! } });
+      expect(again.status).toBe(304);
+      expect(again.headers.get("etag")).toBe(etag);
+      expect(await again.text()).toBe("");
+      expect(prepare).not.toHaveBeenCalled();
+
+      const missed = await fetch(url, { headers: { "If-None-Match": '"0:deadbeef"' } });
+      expect(missed.status).toBe(200);
+      expect(await missed.json()).toEqual(listed);
+      expect(missed.headers.get("etag")).toBe(etag);
+      expect(prepare).toHaveBeenCalled();
+    } finally {
+      prepare.mockRestore();
+    }
+  });
+
+  it("returns the commits list when the store snapshot version changes", async () => {
+    const url = `${baseUrl}/api/projects/p/reviews/commits?storyId=s`;
+    const first = await fetch(url);
+    const etag = first.headers.get("etag");
+    const listed = await first.json();
+    const { update } = await import("../services/issues.js");
+    await update("s", { title: "Renamed" });
+
+    const changed = await fetch(url, { headers: { "If-None-Match": etag! } });
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get("etag")).not.toBe(etag);
+    expect(await changed.json()).toEqual(listed);
+  });
+
+  it("returns the commits list when the story tip moves", async () => {
+    const url = `${baseUrl}/api/projects/p/reviews/commits?storyId=s`;
+    const first = await fetch(url);
+    const etag = first.headers.get("etag");
+
+    writeFileSync(join(repo, "file.txt"), "again\n");
+    git(["add", "file.txt"]);
+    git(["commit", "-m", "again"]);
+    const second = git(["rev-parse", "HEAD"]).trim();
+    const { update } = await import("../services/issues.js");
+    await update("t", { commits: [commitSha, second] });
+
+    const moved = await fetch(url, { headers: { "If-None-Match": etag! } });
+    expect(moved.status).toBe(200);
+    const body = (await moved.json()) as { tip: string; commits: { sha: string }[] };
+    expect(body.tip).toBe(second);
+    expect(body.commits.map((commit) => commit.sha)).toEqual([commitSha, second]);
+    expect(moved.headers.get("etag")).toMatch(new RegExp(`^"[0-9]+:${second}"$`));
+    expect(moved.headers.get("etag")).not.toBe(etag);
+  });
+
   it("does not create a review when listing one story", async () => {
     const listed = await fetch(`${baseUrl}/api/projects/p/reviews?storyId=s`);
     expect(listed.status).toBe(200);
@@ -284,12 +397,23 @@ describe("review record API", () => {
     expect(await again.json()).toMatchObject({ id: review.id, status: "archived" });
 
     const listed = await fetch(`${baseUrl}/api/projects/p/reviews?storyId=s`);
-    const body = (await listed.json()) as { reviews: { id: string }[] };
+    const body = (await listed.json()) as { reviews: { id: string; progress?: unknown }[] };
     expect(body.reviews.map((entry) => entry.id)).toEqual([review.id]);
 
     const all = await fetch(`${baseUrl}/api/projects/p/reviews`);
-    const allBody = (await all.json()) as { reviews: { id: string }[] };
+    const allBody = (await all.json()) as { reviews: { id: string; progress?: unknown }[] };
     expect(allBody.reviews.map((entry) => entry.id)).toEqual([review.id]);
+    expect(allBody.reviews[0]).not.toHaveProperty("progress");
+    expect(body.reviews[0]).not.toHaveProperty("progress");
+
+    const progress = await fetch(
+      `${baseUrl}/api/projects/p/reviews/${review.id}/progress`,
+    );
+    expect(progress.status).toBe(200);
+    expect(await progress.json()).toMatchObject({
+      all: { reviewed: 0, total: 1, changedSinceReviewed: [] },
+      commits: { [commitSha]: { reviewed: 0, total: 1 } },
+    });
   });
 
   it("refuses a story outside the project and a story with no task commits", async () => {
@@ -309,6 +433,8 @@ describe("review record API", () => {
 
     const missing = await fetch(`${baseUrl}/api/projects/p/reviews/missing`);
     expect(missing.status).toBe(404);
+    const missingProgress = await fetch(`${baseUrl}/api/projects/p/reviews/missing/progress`);
+    expect(missingProgress.status).toBe(404);
 
     const notProject = await openReview("s", "s");
     expect(notProject.status).toBe(404);
