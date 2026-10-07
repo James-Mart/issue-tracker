@@ -3,7 +3,12 @@ import type { Issue } from "../schemas.js";
 import type { ReviewRecordView } from "../schemas/review.js";
 import { IssueError } from "../services/errors.js";
 import { readAll } from "../services/issues.js";
-import { readReviewCommits, readReviewDiff } from "../services/review-diff.js";
+import {
+  readReviewCommits,
+  readReviewDiff,
+  readStoryReviewCommits,
+  readStoryReviewDiff,
+} from "../services/review-diff.js";
 import {
   readReviewProgress,
   setReviewMark,
@@ -35,6 +40,14 @@ function storyIdQuery(raw: unknown): string | undefined {
     throw new IssueError("validation", "storyId must be a non-empty string");
   }
   return raw;
+}
+
+function requireStoryIdQuery(raw: unknown): string {
+  const storyId = storyIdQuery(raw);
+  if (storyId === undefined) {
+    throw new IssueError("validation", "storyId must be a non-empty string");
+  }
+  return storyId;
 }
 
 function scopeQuery(raw: unknown): string {
@@ -100,6 +113,31 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
         issues,
       );
       res.json({ reviews: listed.reviews });
+    }),
+  );
+
+  reviewsRouter.get(
+    "/commits",
+    asyncRoute(async (req, res) => {
+      res.json(
+        await readStoryReviewCommits(
+          req.params.projectId,
+          requireStoryIdQuery(req.query.storyId),
+        ),
+      );
+    }),
+  );
+
+  reviewsRouter.get(
+    "/diff",
+    asyncRoute(async (req, res) => {
+      res.json(
+        await readStoryReviewDiff(
+          req.params.projectId,
+          requireStoryIdQuery(req.query.storyId),
+          scopeQuery(req.query.scope),
+        ),
+      );
     }),
   );
 

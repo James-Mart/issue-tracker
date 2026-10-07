@@ -18,11 +18,11 @@ vi.mock("../api/client", () => ({
   }),
 }));
 
-const COMMITS_KEY = reviewKeys.commits("proj", "rev-1");
+const COMMITS_KEY = reviewKeys.commits("proj", "story-1");
 let root: Root | undefined;
 
 function Probe() {
-  useReviewLiveRefresh("proj", "rev-1");
+  useReviewLiveRefresh("proj", "story-1", "rev-1");
   return null;
 }
 
@@ -70,7 +70,7 @@ describe("useReviewLiveRefresh", () => {
     await refetchCommits(client);
 
     expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
-      reviewKeys.diffs("proj", "rev-1"),
+      reviewKeys.diffs("proj", "story-1"),
       reviewKeys.lists("proj"),
       reviewKeys.detail("proj", "rev-1"),
       reviewKeys.progress("proj", "rev-1"),

@@ -361,15 +361,12 @@ export function refuseForeignSha(scope: string): never {
   );
 }
 
-export async function readReviewCommits(
-  projectId: string,
-  reviewId: string,
-): Promise<ReviewCommits> {
-  const loaded = await loadSpan(projectId, reviewId, readAll().issues);
-  const { storyId, workspace } = loaded;
-  const prepared = requireMergeBase(storyId, loaded.prepared);
+type LoadedStoryChange = Awaited<ReturnType<typeof loadPrepared>>;
+
+async function reviewCommitsFor(loaded: LoadedStoryChange): Promise<ReviewCommits> {
+  const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
   if (prepared.state === "empty") {
-    const mergeBaseRef = await resolveMergeBaseRef(workspace, prepared.mergeBase);
+    const mergeBaseRef = await resolveMergeBaseRef(loaded.workspace, prepared.mergeBase);
     return {
       mergeBase: prepared.mergeBase,
       mergeBaseRef,
@@ -377,7 +374,7 @@ export async function readReviewCommits(
       commits: [],
     };
   }
-  const commits = await readCommitSummariesFromLog(workspace, prepared.shas);
+  const commits = await readCommitSummariesFromLog(loaded.workspace, prepared.shas);
   return {
     mergeBase: prepared.mergeBase,
     mergeBaseRef: prepared.mergeBaseRef,
@@ -386,12 +383,10 @@ export async function readReviewCommits(
   };
 }
 
-export async function readReviewDiff(
-  projectId: string,
-  reviewId: string,
+async function reviewDiffFor(
+  loaded: LoadedStoryChange,
   scope: string,
 ): Promise<ReviewDiff> {
-  const loaded = await loadSpan(projectId, reviewId, readAll().issues);
   const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
   if (prepared.state === "empty") {
     if (scope !== "all") refuseForeignSha(scope);
@@ -403,6 +398,41 @@ export async function readReviewDiff(
   const range =
     scope === "all" ? prepared.range : await parentRange(scope, loaded.workspace);
   return readRangeDiff(loaded.workspace, range, scope);
+}
+
+/** Story commits. Does not read or create a review. */
+export async function readStoryReviewCommits(
+  projectId: string,
+  storyId: string,
+): Promise<ReviewCommits> {
+  return reviewCommitsFor(await loadPrepared(projectId, storyId, readAll().issues));
+}
+
+export async function readReviewCommits(
+  projectId: string,
+  reviewId: string,
+): Promise<ReviewCommits> {
+  return reviewCommitsFor(await loadSpan(projectId, reviewId, readAll().issues));
+}
+
+/** Story diff at `scope` (`all` or one commit sha). Does not read or create a review. */
+export async function readStoryReviewDiff(
+  projectId: string,
+  storyId: string,
+  scope: string,
+): Promise<ReviewDiff> {
+  return reviewDiffFor(
+    await loadPrepared(projectId, storyId, readAll().issues),
+    scope,
+  );
+}
+
+export async function readReviewDiff(
+  projectId: string,
+  reviewId: string,
+  scope: string,
+): Promise<ReviewDiff> {
+  return reviewDiffFor(await loadSpan(projectId, reviewId, readAll().issues), scope);
 }
 
 async function parentRange(sha: string, workspace: string): Promise<string> {

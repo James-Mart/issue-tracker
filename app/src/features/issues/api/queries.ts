@@ -69,19 +69,26 @@ export function useIssueDetailQuery(
   });
 }
 
-export function useCommentsQuery(id: string): UseQueryResult<CommentsResponse, Error> {
+export function useCommentsQuery(
+  id: string,
+  options: { refetchOnMount?: boolean | "always" } = {},
+): UseQueryResult<CommentsResponse, Error> {
   return useQuery({
     queryKey: issuesKeys.comments(id),
     queryFn: () => request<CommentsResponse>(`/api/issues/${id}/comments`),
     enabled: Boolean(id),
+    ...options,
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 2,
   });
 }
 
 /** Stored threads plus comments this browser posted that the list does not carry yet. */
-export function useCommentThreads(issueId: string): CommentThreadsResult {
-  const { data } = useCommentsQuery(issueId);
+export function useCommentThreads(
+  issueId: string,
+  options: { refetchOnMount?: boolean | "always" } = {},
+): CommentThreadsResult {
+  const { data } = useCommentsQuery(issueId, options);
   const outbox = useIssueCommentOutbox(issueId);
   const messages = data?.messages;
   useEffect(() => {

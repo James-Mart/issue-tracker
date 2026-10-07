@@ -246,6 +246,20 @@ describe("one store snapshot per review and change request", () => {
     expect(body).toMatchObject({ scope: "all", files: [] });
   });
 
+  it("loads the store once for story commits", async () => {
+    const body = await expectOneSnapshot("/api/projects/p/reviews/commits?storyId=s");
+    expect(body).toMatchObject({
+      commits: [{ sha: SHA, subject: "subject" }],
+    });
+  });
+
+  it("loads the store once for a story diff", async () => {
+    const body = await expectOneSnapshot(
+      "/api/projects/p/reviews/diff?storyId=s&scope=all",
+    );
+    expect(body).toMatchObject({ scope: "all", files: [] });
+  });
+
   it("loads the store once for a review and its mark index", async () => {
     const body = await expectOneSnapshot(`/api/projects/p/reviews/${REVIEW_ID}`);
     expect(body).toMatchObject({

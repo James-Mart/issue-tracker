@@ -100,6 +100,7 @@ function ScopeRadio({
 
 export function ReviewCommitsPanel({
   projectId,
+  storyId,
   review,
   commits,
   scope,
@@ -107,6 +108,7 @@ export function ReviewCommitsPanel({
   onScopeChange,
 }: {
   projectId: string;
+  storyId: string;
   review: ReviewView;
   commits: UseQueryResult<ReviewCommits>;
   scope: string;
@@ -114,7 +116,7 @@ export function ReviewCommitsPanel({
   onScopeChange: (scope: string) => void;
 }) {
   const hasCommits = (commits.data?.commits.length ?? 0) > 0;
-  const allDiff = useReviewDiffQuery(projectId, review.id, ALL_CHANGES_SCOPE, {
+  const allDiff = useReviewDiffQuery(projectId, storyId, ALL_CHANGES_SCOPE, {
     enabled: hasCommits,
   });
   const error = commits.error ?? (hasCommits ? allDiff.error : null);

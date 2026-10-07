@@ -19,9 +19,8 @@ import {
   REVIEW_PROGRESS_FAULT_HINT,
   REVIEW_PROGRESS_FAULT_MESSAGE,
 } from "./review-progress-fault";
-import { useStoryReviewList } from "../hooks/use-review-submission-sync";
 import type { ReviewMarkOverrides } from "../lib/review-scope";
-import { useReviewLiveRefresh } from "../hooks/use-review-live-refresh";
+import { useStoryReviewFirstWave } from "../hooks/use-story-review-first-wave";
 import {
   useReviewWorkbenchLocation,
   type DiffThreadReveal,
@@ -93,7 +92,7 @@ function DiffTabPanel({
   onFocusFileMissing: () => void;
 }) {
   const diffReady = scope === ALL_CHANGES_SCOPE || commits.data !== undefined;
-  const diff = useReviewDiffQuery(projectId, review.id, scope, { enabled: diffReady });
+  const diff = useReviewDiffQuery(projectId, storyId, scope, { enabled: diffReady });
   const error = commits.error ?? diff.error;
   if (error) {
     return (
@@ -133,15 +132,16 @@ function StoryReviewWorkbench({
   storyId,
   storyTitle,
   review,
+  commits,
   merged,
 }: {
   projectId: string;
   storyId: string;
   storyTitle: string;
   review: ReviewView;
+  commits: UseQueryResult<ReviewCommits, Error>;
   merged: boolean;
 }) {
-  const commits = useReviewLiveRefresh(projectId, review.id);
   const knownShas = commits.data?.commits.map((commit) => commit.sha);
   const {
     active,
@@ -194,6 +194,7 @@ function StoryReviewWorkbench({
         ) : active === "commits" ? (
           <ReviewCommitsPanel
             projectId={projectId}
+            storyId={storyId}
             review={review}
             commits={commits}
             scope={scope}
@@ -226,12 +227,14 @@ function StoryReviewWithProgress({
   storyId,
   storyTitle,
   record,
+  commits,
   merged,
 }: {
   projectId: string;
   storyId: string;
   storyTitle: string;
   record: ReviewRecordView;
+  commits: UseQueryResult<ReviewCommits, Error>;
   merged: boolean;
 }) {
   const progress = useReviewProgressQuery(projectId, record.id);
@@ -252,6 +255,7 @@ function StoryReviewWithProgress({
       storyId={storyId}
       storyTitle={storyTitle}
       review={{ ...record, progress: progress.data }}
+      commits={commits}
       merged={merged}
     />
   );
@@ -265,7 +269,7 @@ function StoryReviewBody({
   storyId: string;
 }) {
   const story = useIssueDetailQuery(storyId);
-  const reviews = useStoryReviewList(projectId, storyId);
+  const { reviews, commits } = useStoryReviewFirstWave(projectId, storyId);
   const record = reviews.data?.reviews[0];
   const error = story.error ?? reviews.error;
   const missing = story.error instanceof ApiError && story.error.status === 404;
@@ -312,6 +316,7 @@ function StoryReviewBody({
       storyId={storyId}
       storyTitle={story.data.title}
       record={record}
+      commits={commits}
       merged={story.data.kind === "story" && story.data.merged}
     />
   );

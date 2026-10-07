@@ -61,32 +61,33 @@ export function fetchReview(
   return request<ReviewView>(reviewUrl(projectId, reviewId));
 }
 
-export function reviewCommitsUrl(projectId: string, reviewId: string): string {
-  return `${reviewUrl(projectId, reviewId)}/commits`;
+export function reviewCommitsUrl(projectId: string, storyId: string): string {
+  const params = new URLSearchParams({ storyId });
+  return `${reviewsUrl(projectId)}/commits?${params}`;
 }
 
 export function reviewDiffUrl(
   projectId: string,
-  reviewId: string,
+  storyId: string,
   scope: string,
 ): string {
-  const params = new URLSearchParams({ scope });
-  return `${reviewUrl(projectId, reviewId)}/diff?${params}`;
+  const params = new URLSearchParams({ storyId, scope });
+  return `${reviewsUrl(projectId)}/diff?${params}`;
 }
 
 export function fetchReviewCommits(
   projectId: string,
-  reviewId: string,
+  storyId: string,
 ): Promise<ReviewCommits> {
-  return request<ReviewCommits>(reviewCommitsUrl(projectId, reviewId));
+  return request<ReviewCommits>(reviewCommitsUrl(projectId, storyId));
 }
 
 export function fetchReviewDiff(
   projectId: string,
-  reviewId: string,
+  storyId: string,
   scope: string,
 ): Promise<ReviewDiff> {
-  return request<ReviewDiff>(reviewDiffUrl(projectId, reviewId, scope));
+  return request<ReviewDiff>(reviewDiffUrl(projectId, storyId, scope));
 }
 
 export function postOpenReview(

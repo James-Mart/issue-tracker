@@ -11,7 +11,7 @@ import { useDiffContentsCache } from "@/features/issues/hooks/use-diff-contents-
 import { useDiffLayoutPreference } from "@/features/issues/hooks/use-diff-layout-preference";
 import { useVirtualizedFileScroll } from "@/features/issues/hooks/use-virtualized-file-scroll";
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
-import { useCommentThreads } from "@/features/issues/api/queries";
+import { useStoryReviewCommentThreads } from "../hooks/use-story-review-comments";
 import { fileDiffsFromPatch } from "@/features/issues/lib/issue-change-file-diffs";
 import { useDiffScrollAnchor } from "../hooks/use-diff-scroll-anchor";
 import { useReviewDiffSearch } from "../hooks/use-review-diff-search";
@@ -284,7 +284,7 @@ export function ReviewDiffTab({
       searchDiffs: new Map(files.map((file) => [file.name, snapshotSearchableDiff(file)])),
     };
   }, [diff.patch]);
-  const { threads } = useCommentThreads(storyId);
+  const { threads } = useStoryReviewCommentThreads(storyId);
   const threadsByFile = useMemo(
     () => reviewDiffThreadsByFile(threads, diff.files, scope),
     [diff.files, scope, threads],

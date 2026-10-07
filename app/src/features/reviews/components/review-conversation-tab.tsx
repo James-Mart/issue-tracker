@@ -3,7 +3,10 @@ import { Check, RotateCcw } from "lucide-react";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { usePostComment } from "@/features/issues/api/mutations";
-import { useCommentThreads, useCommentsQuery } from "@/features/issues/api/queries";
+import {
+  useStoryReviewCommentsQuery,
+  useStoryReviewCommentThreads,
+} from "../hooks/use-story-review-comments";
 import { humanComment } from "@/features/issues/lib/comments";
 import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
 import {
@@ -186,8 +189,8 @@ export function ReviewConversationTab({
   /** Story comment selected from the header disclosure. */
   focusThreadId?: string | null;
 }) {
-  const comments = useCommentsQuery(storyId);
-  const { threads, problems } = useCommentThreads(storyId);
+  const comments = useStoryReviewCommentsQuery(storyId);
+  const { threads, problems } = useStoryReviewCommentThreads(storyId);
   const post = usePostComment(storyId);
 
   const send = (body: string, kind?: "question") =>

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -184,6 +184,57 @@ describe("review record API", () => {
     expect(readdirSync(join(dir, "p", "reviews"))).toEqual([`${first.id}.json`]);
     expect(first.effectiveStatus).toBe("open");
     expect(first.archivedReason).toBeUndefined();
+  });
+
+  it("reads commits and diff by story id without creating a review", async () => {
+    const byStoryRes = await fetch(`${baseUrl}/api/projects/p/reviews/commits?storyId=s`);
+    expect(byStoryRes.status).toBe(200);
+    const byStory = (await byStoryRes.json()) as {
+      tip: string;
+      commits: { sha: string; subject: string }[];
+    };
+    expect(byStory).toMatchObject({
+      tip: commitSha,
+      commits: [{ sha: commitSha, subject: "change" }],
+    });
+
+    const diffRes = await fetch(
+      `${baseUrl}/api/projects/p/reviews/diff?storyId=s&scope=all`,
+    );
+    expect(diffRes.status).toBe(200);
+    const diff = (await diffRes.json()) as {
+      scope: string;
+      files: { path: string }[];
+      patch: string;
+    };
+    expect(diff.scope).toBe("all");
+    expect(diff.files.map((file) => file.path)).toContain("file.txt");
+    expect(diff.patch).toContain("changed");
+    expect(existsSync(join(dir, "p", "reviews"))).toBe(false);
+
+    const commitDiff = await fetch(
+      `${baseUrl}/api/projects/p/reviews/diff?storyId=s&scope=${commitSha}`,
+    );
+    expect(commitDiff.status).toBe(200);
+    expect(await commitDiff.json()).toMatchObject({ scope: commitSha });
+
+    expect((await fetch(`${baseUrl}/api/projects/p/reviews/commits`)).status).toBe(400);
+    expect((await fetch(`${baseUrl}/api/projects/p/reviews/diff?storyId=s`)).status).toBe(400);
+    expect(
+      (await fetch(`${baseUrl}/api/projects/p/reviews/commits?storyId=other`)).status,
+    ).toBe(400);
+    expect(
+      (await fetch(`${baseUrl}/api/projects/p/reviews/diff?storyId=s&scope=deadbeef`)).status,
+    ).toBe(400);
+
+    const created = await openReview("p", "s");
+    expect(created.status).toBe(201);
+    const review = (await created.json()) as { id: string };
+    const byReviewRes = await fetch(
+      `${baseUrl}/api/projects/p/reviews/${review.id}/commits`,
+    );
+    expect(byReviewRes.status).toBe(200);
+    expect(await byReviewRes.json()).toEqual(byStory);
   });
 
   it("does not create a review when listing one story", async () => {
