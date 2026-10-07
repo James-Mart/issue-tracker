@@ -106,7 +106,7 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
     isLoading: false,
     error: null,
   }),
-  useCommentThreads: () => ({
+  useReuseCommentThreads: () => ({
     threads: state.commentThreads,
     problems: [],
     loaded: true,

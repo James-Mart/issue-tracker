@@ -50,10 +50,23 @@ export function useHealthQuery(): UseQueryResult<HealthResponse, Error> {
   });
 }
 
+type ReuseMountedReadOptions = {
+  refetchOnMount?: boolean | "always";
+};
+
+/**
+ * A later subscriber reuses a read that is already in flight or cached.
+ * An edit still invalidates the query, and an active observer refetches.
+ */
+export const reuseMountedRead = {
+  refetchOnMount: false,
+} as const satisfies ReuseMountedReadOptions;
+
 export function useIssuesQuery(): UseQueryResult<IssuesResponse, Error> {
   return useQuery({
     queryKey: issuesKeys.list(),
     queryFn: () => request<IssuesResponse>("/api/issues"),
+    ...reuseMountedRead,
   });
 }
 
@@ -71,7 +84,7 @@ export function useIssueDetailQuery(
 
 export function useCommentsQuery(
   id: string,
-  options: { refetchOnMount?: boolean | "always" } = {},
+  options: ReuseMountedReadOptions = {},
 ): UseQueryResult<CommentsResponse, Error> {
   return useQuery({
     queryKey: issuesKeys.comments(id),
@@ -86,7 +99,7 @@ export function useCommentsQuery(
 /** Stored threads plus comments this browser posted that the list does not carry yet. */
 export function useCommentThreads(
   issueId: string,
-  options: { refetchOnMount?: boolean | "always" } = {},
+  options: ReuseMountedReadOptions = {},
 ): CommentThreadsResult {
   const { data } = useCommentsQuery(issueId, options);
   const outbox = useIssueCommentOutbox(issueId);
@@ -110,6 +123,11 @@ export function useCommentThreads(
     problems: data?.problems ?? [],
     loaded: data !== undefined,
   };
+}
+
+/** Diff and review panels reuse the comments read the page already started. */
+export function useReuseCommentThreads(issueId: string): CommentThreadsResult {
+  return useCommentThreads(issueId, reuseMountedRead);
 }
 
 export function useIssueAgentRunsQuery(
