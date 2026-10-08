@@ -45,8 +45,10 @@ The prompt ends with:
 1. Run `issue summary <storyId>` and `issue story view <storyId> --comments`.
    Read each named thread's anchor, body, and replies, and the summary
    comment when the prompt names one.
-2. Group threads that call for the same outcome at the same code. One Task
-   covers a group. A thread with its own outcome stays its own Task.
+2. Group threads whose changes would land naturally as one commit: the same
+   outcome at the same code, or small edits of one kind across files (for
+   example, doc and doc-comment wording). A thread that needs its own design
+   or behavior change stays its own Task.
 3. Write a story-form YAML doc outside the workspace and append it with
    `issue story append <storyId> <file>`. `issue summary` names the Project
    and, when the Story sits under an Epic, the Epic. Include `epic` only
