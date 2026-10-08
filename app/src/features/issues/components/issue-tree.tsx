@@ -9,7 +9,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { assigneeOf } from "@server/assignee";
 import { isProjectBoardChild } from "@server/order";
@@ -52,21 +52,25 @@ import {
   STORY_STATUS_LABEL,
   TASK_STATUS_LABEL,
 } from "../lib/derived";
+import {
+  buildTreeRowIndexes,
+  type TreeRowIndexes,
+} from "../lib/tree-row-indexes";
 import { issuePath } from "../lib/links";
 import {
   isLabelAssignableIssue,
   resolveAssignedLabels,
 } from "../lib/project-labels";
 import { issueRailNodeState } from "../lib/rail-state";
+import { RowPrStoreProvider, useRowPrData } from "../lib/row-pr-store";
 import { isRowDraggable } from "../lib/story-tree-dnd-logic";
 import { ArchiveIssueButton } from "./archive-issue-button";
 import { EpicAxisChips, StoryAxisChips } from "./axis-chips";
 import { IssueArchiveDeleteMenuItems } from "./issue-archive-delete-menu-items";
 import {
   PrChip,
-  storyPrChipModel,
+  storyPrChipModelFromRow,
   type PrChipModel,
-  type ProjectPrQuery,
 } from "./pr-chip";
 import { ProjectLabelChips } from "./project-label-chips";
 import { TaskStatusChips } from "./task-status-chips";
@@ -83,6 +87,15 @@ const KIND_ICON: Record<IssueKind, typeof Layers> = {
 const TREE_INDENT = 24;
 /** Port center relative to a row's own box: `Rail` pads 26px and the 12px port sits at -24. */
 const PORT_CENTER_X = -18;
+const EMPTY_GUIDES: boolean[] = [];
+const EMPTY_CHILD_GUIDES: boolean[][] = [];
+
+function treeRowFallbackExpanded(
+  issue: IssueRecord,
+  indexes: TreeRowIndexes,
+): boolean {
+  return isProjectBoardChild(issue, indexes.byId) ? false : true;
+}
 
 const guideLine = "pointer-events-none absolute w-px bg-[hsl(var(--rail-lit))]";
 
@@ -426,29 +439,39 @@ function TreeRowTouchMenu({
 
 type DerivedMap = Record<string, DerivedState>;
 
-function TreeRow({
-  node,
-  derived,
-  catalog,
-  issues,
-  byId,
-  prQuery,
-  guides = [],
-}: {
+type TreeRowProps = {
   node: IssueNode;
   derived: DerivedMap;
   catalog: ProjectLabel[];
-  issues: IssueRecord[];
-  byId: ReadonlyMap<string, IssueRecord>;
-  prQuery: ProjectPrQuery;
+  indexes: TreeRowIndexes;
   guides?: boolean[];
-}) {
+  expanded: boolean;
+};
+
+/** Skip a row when its own props are unchanged. PR data is not a prop. */
+function treeRowPropsAreEqual(prev: TreeRowProps, next: TreeRowProps): boolean {
+  return (
+    prev.node === next.node &&
+    prev.derived === next.derived &&
+    prev.catalog === next.catalog &&
+    prev.indexes === next.indexes &&
+    prev.expanded === next.expanded &&
+    prev.guides === next.guides
+  );
+}
+
+const TreeRow = memo(function TreeRow({
+  node,
+  derived,
+  catalog,
+  indexes,
+  guides = EMPTY_GUIDES,
+  expanded,
+}: TreeRowProps) {
   const { projectId = "" } = useParams();
   const { issue } = node;
-  const fallbackExpanded = isProjectBoardChild(issue, byId) ? false : true;
-  const expanded = useIssueUiStore((s) =>
-    resolveExpanded(s.expanded, issue.id, fallbackExpanded),
-  );
+  const rowPr = useRowPrData(issue);
+  const fallbackExpanded = treeRowFallbackExpanded(issue, indexes);
   const toggle = useIssueUiStore((s) => s.toggle);
   const { getRowDnDProps, consumeDragGesture } = useStoryTreeDnDContext();
   const hasChildren = node.children.length > 0;
@@ -458,17 +481,16 @@ function TreeRow({
   const container = CHILD_KIND[issue.kind] !== null;
   const state = derived[issue.id];
   const blocked = Boolean(state?.blocked);
-  const rowDraggable = isRowDraggable(issue, issues);
+  const rowDraggable = isRowDraggable(issue, indexes);
   const { isDragging, isDropTarget, ...rowDnDHandlers } = getRowDnDProps(issue);
   const assignee = assigneeOf(issue);
   const attention = hasAttention(issue) && issue.needsAttention;
-  const count = leafTaskProgressCount(issue, issues);
-  const railState = issueRailNodeState(issue, state, issues);
+  const count = leafTaskProgressCount(issue, indexes);
+  const railState = issueRailNodeState(issue, state, indexes);
   const live = isInFlight(issue, state);
-  const prChip = storyPrChipModel(issue, prQuery);
+  const prChip = storyPrChipModelFromRow(issue, rowPr);
 
   return (
-    <>
       <RailNode
         state={railState}
         // A nested row's incoming edge is its own elbow; only a root row hangs
@@ -573,17 +595,50 @@ function TreeRow({
           </OverviewRow>
         </div>
       </RailNode>
+  );
+}, treeRowPropsAreEqual);
+
+/** Renders one row and, when it is expanded, its children. The row itself is memoized. */
+function TreeRowBranch({
+  node,
+  derived,
+  catalog,
+  indexes,
+  guides,
+}: Omit<TreeRowProps, "expanded">) {
+  const { issue } = node;
+  const fallbackExpanded = treeRowFallbackExpanded(issue, indexes);
+  const expanded = useIssueUiStore((s) =>
+    resolveExpanded(s.expanded, issue.id, fallbackExpanded),
+  );
+  const hasChildren = node.children.length > 0;
+  const parentGuides = guides ?? EMPTY_GUIDES;
+  const childGuides = useMemo(() => {
+    if (!expanded || node.children.length === 0) return EMPTY_CHILD_GUIDES;
+    return node.children.map((_, index) => [
+      ...parentGuides,
+      index < node.children.length - 1,
+    ]);
+  }, [expanded, node.children, parentGuides]);
+  return (
+    <>
+      <TreeRow
+        node={node}
+        derived={derived}
+        catalog={catalog}
+        indexes={indexes}
+        guides={parentGuides}
+        expanded={expanded}
+      />
       {hasChildren && expanded
         ? node.children.map((child, index) => (
-            <TreeRow
+            <TreeRowBranch
               key={child.issue.id}
               node={child}
               derived={derived}
               catalog={catalog}
-              issues={issues}
-              byId={byId}
-              prQuery={prQuery}
-              guides={[...guides, index < node.children.length - 1]}
+              indexes={indexes}
+              guides={childGuides[index]}
             />
           ))
         : null}
@@ -593,15 +648,13 @@ function TreeRow({
 
 function ProjectUnstackDropZone({
   projectId,
-  issues,
+  indexes,
 }: {
   projectId: string;
-  issues: IssueRecord[];
+  indexes: TreeRowIndexes;
 }) {
   const { getProjectDnDProps, draggingId } = useStoryTreeDnDContext();
-  const dragging = draggingId
-    ? issues.find((issue) => issue.id === draggingId)
-    : undefined;
+  const dragging = draggingId ? indexes.byId.get(draggingId) : undefined;
   if (!dragging || dragging.kind !== "story") return null;
   const { isDragging: _ignored, isDropTarget, ...handlers } =
     getProjectDnDProps(projectId);
@@ -625,9 +678,7 @@ function CollapsibleStructureGroup({
   nodes,
   derived,
   catalog,
-  issues,
-  byId,
-  prQuery,
+  indexes,
 }: {
   testId: string;
   headingId: string;
@@ -635,15 +686,18 @@ function CollapsibleStructureGroup({
   nodes: IssueNode[];
   derived: DerivedMap;
   catalog: ProjectLabel[];
-  issues: IssueRecord[];
-  byId: ReadonlyMap<string, IssueRecord>;
-  prQuery: ProjectPrQuery;
+  indexes: TreeRowIndexes;
 }) {
+  const [open, setOpen] = useState(false);
   if (nodes.length === 0) return null;
 
   return (
     <section aria-labelledby={headingId} data-testid={testId}>
-      <details className="group">
+      <details
+        className="group"
+        open={open}
+        onToggle={(e) => setOpen(e.currentTarget.open)}
+      >
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
           <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
           <h2
@@ -656,21 +710,21 @@ function CollapsibleStructureGroup({
             </span>
           </h2>
         </summary>
-        <div className="mt-1.5">
-          <Rail>
-            {nodes.map((node) => (
-              <TreeRow
-                key={node.issue.id}
-                node={node}
-                derived={derived}
-                catalog={catalog}
-                issues={issues}
-                byId={byId}
-                prQuery={prQuery}
-              />
-            ))}
-          </Rail>
-        </div>
+        {open ? (
+          <div className="mt-1.5">
+            <Rail>
+              {nodes.map((node) => (
+                <TreeRowBranch
+                  key={node.issue.id}
+                  node={node}
+                  derived={derived}
+                  catalog={catalog}
+                  indexes={indexes}
+                />
+              ))}
+            </Rail>
+          </div>
+        ) : null}
       </details>
     </section>
   );
@@ -693,51 +747,37 @@ export function IssueTree({
   catalog: ProjectLabel[];
   projectId: string;
 }) {
-  const dnd = useStoryTreeDnD(issues);
-  const prQueryResult = useProjectPullRequestsQuery(projectId);
-  const prQuery: ProjectPrQuery = {
-    data: prQueryResult.data,
-    error: prQueryResult.error,
-  };
-  const byId = useMemo(
-    () => new Map(issues.map((row) => [row.id, row])),
-    [issues],
-  );
+  const indexes = useMemo(() => buildTreeRowIndexes(issues), [issues]);
+  const dnd = useStoryTreeDnD(issues, indexes);
+  const prQuery = useProjectPullRequestsQuery(projectId);
   const hasHierarchy = nodes.length > 0;
   const hasIdeas = ideaNodes.length > 0;
   const hasDone = doneNodes.length > 0;
 
-  if (!hasHierarchy && !hasIdeas && !hasDone) {
-    return (
-      <StoryTreeDnDProvider value={dnd}>
-        <div className="flex flex-col gap-1.5">
-          {projectId ? (
-            <ProjectUnstackDropZone projectId={projectId} issues={issues} />
-          ) : null}
-          <p className="px-2 py-8 text-center text-sm text-muted-foreground">
-            No issues yet. Use New to add an Epic, Story, or Idea.
-          </p>
-        </div>
-      </StoryTreeDnDProvider>
-    );
-  }
-  return (
-    <StoryTreeDnDProvider value={dnd}>
+  const body =
+    !hasHierarchy && !hasIdeas && !hasDone ? (
       <div className="flex flex-col gap-1.5">
         {projectId ? (
-          <ProjectUnstackDropZone projectId={projectId} issues={issues} />
+          <ProjectUnstackDropZone projectId={projectId} indexes={indexes} />
+        ) : null}
+        <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+          No issues yet. Use New to add an Epic, Story, or Idea.
+        </p>
+      </div>
+    ) : (
+      <div className="flex flex-col gap-1.5">
+        {projectId ? (
+          <ProjectUnstackDropZone projectId={projectId} indexes={indexes} />
         ) : null}
         {hasHierarchy ? (
           <Rail data-testid="structure-tree-rail">
             {nodes.map((node) => (
-              <TreeRow
+              <TreeRowBranch
                 key={node.issue.id}
                 node={node}
                 derived={derived}
                 catalog={catalog}
-                issues={issues}
-                byId={byId}
-                prQuery={prQuery}
+                indexes={indexes}
               />
             ))}
           </Rail>
@@ -749,9 +789,7 @@ export function IssueTree({
           nodes={ideaNodes}
           derived={derived}
           catalog={catalog}
-          issues={issues}
-          byId={byId}
-          prQuery={prQuery}
+          indexes={indexes}
         />
         <CollapsibleStructureGroup
           testId="structure-done-group"
@@ -760,11 +798,16 @@ export function IssueTree({
           nodes={doneNodes}
           derived={derived}
           catalog={catalog}
-          issues={issues}
-          byId={byId}
-          prQuery={prQuery}
+          indexes={indexes}
         />
       </div>
+    );
+
+  return (
+    <StoryTreeDnDProvider value={dnd}>
+      <RowPrStoreProvider data={prQuery.data} error={prQuery.error}>
+        {body}
+      </RowPrStoreProvider>
     </StoryTreeDnDProvider>
   );
 }

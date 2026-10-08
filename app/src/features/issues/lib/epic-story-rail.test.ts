@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IssueRecord } from "@server/schemas";
 import { epicStoriesForRail, storyRailNodeState } from "./epic-story-rail";
+import { buildTreeRowIndexes } from "./tree-row-indexes";
 
 const t0 = "2026-07-01T00:00:00.000Z";
 
@@ -49,18 +50,28 @@ function task(
 }
 
 describe("storyRailNodeState", () => {
+  const emptyIndexes = buildTreeRowIndexes([]);
+
   it("delegates to shared issue rail state", () => {
     expect(
-      storyRailNodeState(story("s", "e", { merged: true }), {
-        blocked: false,
-        storyStatus: "merged",
-      }),
+      storyRailNodeState(
+        story("s", "e", { merged: true }),
+        {
+          blocked: false,
+          storyStatus: "merged",
+        },
+        emptyIndexes,
+      ),
     ).toBe("merged");
     expect(
-      storyRailNodeState(story("s", "e"), {
-        blocked: true,
-        storyStatus: "not-started",
-      }),
+      storyRailNodeState(
+        story("s", "e"),
+        {
+          blocked: true,
+          storyStatus: "not-started",
+        },
+        emptyIndexes,
+      ),
     ).toBe("blocked");
   });
 
@@ -70,10 +81,14 @@ describe("storyRailNodeState", () => {
       task("t", "s", "in-progress"),
     ];
     expect(
-      storyRailNodeState(story("s", "e"), {
-        blocked: false,
-        storyStatus: "not-started",
-      }, issues),
+      storyRailNodeState(
+        story("s", "e"),
+        {
+          blocked: false,
+          storyStatus: "not-started",
+        },
+        buildTreeRowIndexes(issues),
+      ),
     ).toBe("in-flight");
   });
 });

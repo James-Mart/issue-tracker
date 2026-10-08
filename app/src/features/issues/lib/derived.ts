@@ -8,6 +8,12 @@ import {
   type DerivedState,
 } from "@server/schemas";
 import type { BadgeProps } from "@/components/ui/badge";
+import {
+  leafTaskProgressOf,
+  progressOfTasks,
+  type LeafTaskProgress,
+  type TreeRowIndexes,
+} from "./tree-row-indexes";
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   todo: "todo",
@@ -150,19 +156,52 @@ export function leafTasksOf(
 /**
  * True when a Story is implementation-complete and waiting on merge:
  * `pr-open`, or manual policy with no `prUrl` and every leaf task done.
+ * `progress` is that story's precomputed leaf-task count; omit it when none.
  */
-export function isReadyToLandStory(
+function isReadyToLandWithProgress(
   issue: IssueRecord,
   state: DerivedState | undefined,
-  issues: IssueRecord[],
+  progress: LeafTaskProgress | undefined,
 ): boolean {
   if (issue.kind !== "story") return false;
   if (issue.merged || state?.storyStatus === "merged") return false;
   if (state?.storyStatus === "pr-open") return true;
   const mergePolicy = state?.mergePolicy ?? issue.mergePolicy;
   if (mergePolicy !== "manual" || issue.prUrl) return false;
-  const tasks = leafTasksOf(issue, issues);
-  return tasks.length > 0 && tasks.every((task) => task.status === "done");
+  return (
+    progress !== undefined &&
+    progress.total > 0 &&
+    progress.done === progress.total
+  );
+}
+
+/**
+ * True when a Story is implementation-complete and waiting on merge:
+ * `pr-open`, or manual policy with no `prUrl` and every leaf task done.
+ */
+export function isReadyToLandStory(
+  issue: IssueRecord,
+  state: DerivedState | undefined,
+  issues: IssueRecord[],
+): boolean {
+  return isReadyToLandWithProgress(
+    issue,
+    state,
+    progressOfTasks(leafTasksOf(issue, issues), (task) => task.status),
+  );
+}
+
+/** Indexed form of {@link isReadyToLandStory}. */
+export function isReadyToLandFromIndexes(
+  issue: IssueRecord,
+  state: DerivedState | undefined,
+  indexes: TreeRowIndexes,
+): boolean {
+  return isReadyToLandWithProgress(
+    issue,
+    state,
+    leafTaskProgressOf(issue, indexes),
+  );
 }
 
 /** True when a Story is in progress and not Ready to land. */
@@ -180,10 +219,9 @@ export function storyIsActivelyImplementing(
 /** Tabular leaf-task progress (`done/total`) for row count slots; undefined when none. */
 export function leafTaskProgressCount(
   issue: IssueRecord,
-  issues: IssueRecord[],
+  indexes: TreeRowIndexes,
 ): string | undefined {
-  const tasks = leafTasksOf(issue, issues);
-  if (tasks.length === 0) return undefined;
-  const done = tasks.filter((task) => task.status === "done").length;
-  return `${done}/${tasks.length}`;
+  const progress = leafTaskProgressOf(issue, indexes);
+  if (!progress || progress.total === 0) return undefined;
+  return `${progress.done}/${progress.total}`;
 }

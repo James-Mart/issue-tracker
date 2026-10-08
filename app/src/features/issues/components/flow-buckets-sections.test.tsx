@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import type { FlowBuckets, FlowItem } from "../lib/flow";
 import { projectLensPath } from "../lib/links";
+import { buildTreeRowIndexes } from "../lib/tree-row-indexes";
 import { RailNode } from "@/components/ui/rail";
 import {
   AWAITING_PLANNING_PREVIEW_LIMIT,
@@ -771,6 +772,7 @@ describe("FlowPreviewedItems", () => {
       archived: false,
     };
     const issues = [manual, done];
+    const indexes = buildTreeRowIndexes(issues);
     const items = [
       row(manual, {
         blocked: false,
@@ -786,9 +788,9 @@ describe("FlowPreviewedItems", () => {
         <MemoryRouter>
           <FlowPreviewedItems
             items={items}
-            issues={issues}
+            indexes={indexes}
             asRail
-            renderItem={(item) => <FlowRow item={item} issues={issues} />}
+            renderItem={(item) => <FlowRow item={item} indexes={indexes} />}
           />
         </MemoryRouter>,
       );

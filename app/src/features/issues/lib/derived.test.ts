@@ -20,6 +20,7 @@ import {
   leafTasksOf,
   storyIsActivelyImplementing,
 } from "./derived";
+import { buildTreeRowIndexes } from "./tree-row-indexes";
 
 const timestamps = {
   createdAt: "2026-07-09T14:00:00.000Z",
@@ -196,7 +197,7 @@ describe("leafTaskProgressCount", () => {
       { ...task("t3", "done"), partOf: "s1" },
     ];
     expect(leafTasksOf(s, issues)).toHaveLength(3);
-    expect(leafTaskProgressCount(s, issues)).toBe("2/3");
+    expect(leafTaskProgressCount(s, buildTreeRowIndexes(issues))).toBe("2/3");
   });
 
   it("aggregates tasks across stories under an epic", () => {
@@ -209,14 +210,19 @@ describe("leafTaskProgressCount", () => {
       { ...task("t2", "done"), partOf: "s1" },
       { ...task("t3", "todo"), partOf: "s2" },
     ];
-    expect(leafTaskProgressCount(e, issues)).toBe("2/3");
+    expect(leafTaskProgressCount(e, buildTreeRowIndexes(issues))).toBe("2/3");
   });
 
   it("returns undefined when there are no leaf tasks", () => {
-    expect(leafTaskProgressCount(task("t", "todo"), [task("t", "todo")])).toBe(
-      undefined,
-    );
-    expect(leafTaskProgressCount(epic("e"), [epic("e")])).toBe(undefined);
+    expect(
+      leafTaskProgressCount(
+        task("t", "todo"),
+        buildTreeRowIndexes([task("t", "todo")]),
+      ),
+    ).toBe(undefined);
+    expect(
+      leafTaskProgressCount(epic("e"), buildTreeRowIndexes([epic("e")])),
+    ).toBe(undefined);
   });
 });
 

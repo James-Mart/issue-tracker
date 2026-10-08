@@ -1,10 +1,13 @@
 import { isProjectBoardChild } from "@server/order";
 import type { IssueRecord } from "@server/schemas";
+import type { TreeRowIndexes } from "./tree-row-indexes";
 
 /** Board-root rows (Epic / Idea / root project-level Story) are draggable. */
-export function isBoardRootDraggable(issue: IssueRecord, issues: IssueRecord[]): boolean {
-  const byId = new Map(issues.map((row) => [row.id, row]));
-  return isProjectBoardChild(issue, byId);
+export function isBoardRootDraggable(
+  issue: IssueRecord,
+  indexes: TreeRowIndexes,
+): boolean {
+  return isProjectBoardChild(issue, indexes.byId);
 }
 
 /**
@@ -12,12 +15,12 @@ export function isBoardRootDraggable(issue: IssueRecord, issues: IssueRecord[]):
  * (story→story) and not reparent an epic-child story onto an epic.
  */
 export function canReorderBoardRoot(
-  issues: IssueRecord[],
+  indexes: TreeRowIndexes,
   sourceId: string,
   targetId: string,
 ): boolean {
   if (sourceId === targetId) return false;
-  const byId = new Map(issues.map((row) => [row.id, row]));
+  const { byId } = indexes;
   const source = byId.get(sourceId);
   const target = byId.get(targetId);
   if (!source || !target) return false;

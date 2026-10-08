@@ -10,6 +10,7 @@ import {
   storyIsActivelyImplementing,
 } from "./derived";
 import { issueRailNodeState, type RailNodeState } from "./rail-state";
+import { buildTreeRowIndexes } from "./tree-row-indexes";
 
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
 
@@ -373,11 +374,12 @@ export function depGraphModel(
     (issue): issue is IssueRecord & { kind: "epic" } => issue.kind === "epic",
   );
   const epicIds = new Set(epicRecords.map((issue) => issue.id));
+  const indexes = buildTreeRowIndexes(epicRecords);
 
   const nodes: DepGraphNode[] = epicRecords.map((issue) => ({
     id: issue.id,
     label: issue.title,
-    state: issueRailNodeState(issue, derived[issue.id]),
+    state: issueRailNodeState(issue, derived[issue.id], indexes),
   }));
 
   const edgeKeys = new Set<string>();

@@ -85,7 +85,7 @@ describe("applyArchivedListQuery", () => {
   });
 
   it("returns the full payload unchanged when nothing is archived", () => {
-    const liveOnly = {
+    const liveOnly: IssuesResponse = {
       issues: [project("p"), story("live", false)],
       problems: [{ id: "live", message: "live" }],
       derived: { live: { blocked: false, storyStatus: "not-started" } },
