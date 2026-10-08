@@ -62,7 +62,15 @@ function stubGh(
   ghCalls = [];
   const spawner: GhSpawner = (_command, args, options) => {
     ghCalls.push({ args, cwd: options.cwd });
-    return (handler ?? (() => mockGhChild({})))(args, options.cwd);
+    return (
+      handler ??
+      ((next: string[]) =>
+        mockGhChild(
+          next[0] === "api" && next[1] === "graphql"
+            ? { stdout: JSON.stringify({ data: { repository: null } }) }
+            : {},
+        ))
+    )(args, options.cwd);
   };
   setGhSpawnerForTests(spawner);
 }
@@ -171,12 +179,12 @@ describe("mergeStory", () => {
   it("invokes gh pr merge --merge with repo from prUrl and project workspace cwd", async () => {
     stubGh();
     await mergeStory("a");
-    expect(ghCalls).toEqual([
-      {
-        args: ["pr", "merge", "42", "--merge", "-R", "acme/widgets"],
-        cwd: workspace,
-      },
-    ]);
+    expect(ghCalls[0]).toEqual({
+      args: ["pr", "merge", "42", "--merge", "-R", "acme/widgets"],
+      cwd: workspace,
+    });
+    expect(ghCalls).toHaveLength(2);
+    expect(ghCalls[1]?.args.slice(0, 2)).toEqual(["api", "graphql"]);
   });
 
   it("forwards --auto and --match-head-commit", async () => {
@@ -270,12 +278,12 @@ describe("issue merge CLI", () => {
     stubGh();
     const result = await runIssueCli(["merge", "a"], { env: env() });
     expect(result.status).toBe(0);
-    expect(ghCalls).toEqual([
-      {
-        args: ["pr", "merge", "42", "--merge", "-R", "acme/widgets"],
-        cwd: workspace,
-      },
-    ]);
+    expect(ghCalls[0]).toEqual({
+      args: ["pr", "merge", "42", "--merge", "-R", "acme/widgets"],
+      cwd: workspace,
+    });
+    expect(ghCalls).toHaveLength(2);
+    expect(ghCalls[1]?.args.slice(0, 2)).toEqual(["api", "graphql"]);
   });
 
   it("forwards flags on bare issue merge", async () => {
@@ -300,8 +308,8 @@ describe("issue merge CLI", () => {
     const scoped = await runIssueCli(["story", "merge", "a"], { env: env() });
     expect(bare.status).toBe(0);
     expect(scoped.status).toBe(0);
-    expect(ghCalls).toHaveLength(2);
-    expect(ghCalls[0]).toEqual(ghCalls[1]);
+    expect(ghCalls).toHaveLength(4);
+    expect(ghCalls[0]).toEqual(ghCalls[2]);
   });
 
   it("refuses merge on an Epic with a message naming the valid form", async () => {

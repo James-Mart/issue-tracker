@@ -1,7 +1,46 @@
-import type { Issue } from "../schemas.js";
+import type { Issue, IssuePatch } from "../schemas.js";
 import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
 import { ancestorChain, subtreeIds } from "./subtree.js";
+
+/** Story `merged` flipped from false to true in this update. */
+export function isStoryMergeFlip(
+  before: Issue,
+  after: Issue,
+): after is Extract<Issue, { kind: "story" }> {
+  return (
+    before.kind === "story" &&
+    after.kind === "story" &&
+    !before.merged &&
+    after.merged
+  );
+}
+
+export function assertMergedAtPatchAllowed(
+  patch: IssuePatch,
+  mergeFlip: boolean,
+): void {
+  if (patch.mergedAt !== undefined && !mergeFlip) {
+    throw new IssueError(
+      "validation",
+      "mergedAt is system-written; supply it only when setting merged true",
+    );
+  }
+  if (
+    patch.mergedAt !== undefined &&
+    Number.isNaN(Date.parse(patch.mergedAt))
+  ) {
+    throw new IssueError("validation", "mergedAt must be an ISO timestamp");
+  }
+}
+
+export function stampMergedAtOnStoryMergeFlip(
+  story: Issue & { kind: "story" },
+  patch: IssuePatch,
+  now: string,
+): void {
+  story.mergedAt = patch.mergedAt ?? now;
+}
 
 /** Derived mergeBase of `finisherId` before the merged write. */
 export function landedBaseForMerge(

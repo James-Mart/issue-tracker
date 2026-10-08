@@ -64,6 +64,7 @@ describe("apply — update preserves imperative progress state", () => {
     expect(b2.mergeBase).toBeUndefined();
     expect(b2.prUrl).toBe("https://example.test/pr/2");
     expect(b2.merged).toBe(true);
+    expect(b2.kind === "story" && typeof b2.mergedAt).toBe("string");
     expect(b2.review).toBe("failed");
     expect(b2.retro).toBe("in-progress");
     expect("assignee" in b2).toBe(false);

@@ -1,6 +1,9 @@
 import { Router, type RequestHandler } from "express";
 import type { AgentSessions } from "../services/agent-sessions.js";
-import { readProjectPrs } from "../services/delivery.js";
+import {
+  cachedProjectPrs,
+  refreshProjectPrFacts,
+} from "../services/pr-facts-read.js";
 import { projectWorktrees } from "../services/project-worktrees.js";
 import { IssueError } from "../services/errors.js";
 import { getWorkspaceFile } from "../services/project-workspace.js";
@@ -60,7 +63,11 @@ export function createProjectsRouter(sessions: AgentSessions): Router {
   projectsRouter.get(
     "/:projectId/prs",
     asyncRoute(async (req, res) => {
-      const body = await readProjectPrs(req.params.projectId);
+      const projectId = req.params.projectId;
+      const body =
+        req.query.live === "1"
+          ? await refreshProjectPrFacts(projectId)
+          : cachedProjectPrs(projectId);
       res.json(body);
     }),
   );

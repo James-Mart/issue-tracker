@@ -33,6 +33,7 @@ import {
   remove,
   update,
 } from "./server/services/issues.js";
+import { refreshRecordedPrFacts } from "./server/services/pr-facts-read.js";
 import {
   attachmentPath,
   listAttachments,
@@ -100,6 +101,7 @@ export async function mergeStory(
 
   await runGh(args, workspace);
   await update(id, { merged: true });
+  await refreshRecordedPrFacts(projectId);
 }
 
 type ViewOptions = {

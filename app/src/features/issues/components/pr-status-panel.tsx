@@ -10,10 +10,13 @@ import type {
   PrFacts,
   PrUnavailable,
   ProjectPrsResponse,
+  ProjectPrSyncStatus,
 } from "@server/services/delivery";
 import { issuesKeys } from "../api/keys";
 import { useMergeStory } from "../api/mutations";
+import { refreshProjectPullRequestsLive } from "../api/pr-sync-live";
 import { useProjectPullRequestsQuery } from "../api/queries";
+import { formatRelativeUpdatedAt } from "../lib/format-relative-updated-at";
 import { mergeControlFor } from "../lib/merge-control";
 import { CompactMetaItem } from "./compact-meta";
 import { MergePrDialog } from "./merge-pr-dialog";
@@ -57,6 +60,26 @@ function isPrUnavailable(
   value: PrFacts | PrUnavailable,
 ): value is PrUnavailable {
   return "reason" in value;
+}
+
+/** Muted sync line: last error, otherwise when the cache was written. */
+function prSyncStatusLine(
+  sync: ProjectPrSyncStatus | undefined,
+  nowMs: number = Date.now(),
+): string | null {
+  if (sync?.lastError) return sync.lastError.message;
+  if (!sync?.lastSyncedAt) return null;
+  return `Synced with GitHub ${formatRelativeUpdatedAt(sync.lastSyncedAt, nowMs)}`;
+}
+
+function PrSyncLine({ sync }: { sync: ProjectPrSyncStatus | undefined }) {
+  const text = prSyncStatusLine(sync);
+  if (!text) return null;
+  return (
+    <p className="text-[13px] text-muted-foreground" data-testid="pr-sync-line">
+      {text}
+    </p>
+  );
 }
 
 function isUnknownMergeable(
@@ -414,9 +437,7 @@ export function PrStatusPanel({
   useEffect(() => {
     if (!pollUnknown) return;
     const id = window.setInterval(() => {
-      void qc.invalidateQueries({
-        queryKey: issuesKeys.projectPullRequests(projectId),
-      });
+      void refreshProjectPullRequestsLive(qc, projectId);
     }, UNKNOWN_MERGEABLE_REFETCH_MS);
     return () => window.clearInterval(id);
   }, [pollUnknown, projectId, qc]);
@@ -452,6 +473,7 @@ export function PrStatusPanel({
       >
         <PanelHeader projectId={projectId} busy={isFetching} />
         <ShellInlineFault message={copy.title} hint={copy.hint} />
+        <PrSyncLine sync={data?.sync} />
       </div>
     );
   }
@@ -461,9 +483,10 @@ export function PrStatusPanel({
       <div data-testid="pr-status-panel" data-state="missing">
         <PanelHeader projectId={projectId} busy={isFetching} />
         <ShellInlineFault
-          message="No live pull request data for this Story."
-          hint="Refresh to fetch the current GitHub state."
+          message="No cached pull request facts for this Story."
+          hint="Facts appear when a sync pass matches this pull request."
         />
+        <PrSyncLine sync={data?.sync} />
       </div>
     );
   }
@@ -482,6 +505,7 @@ export function PrStatusPanel({
           message="The recorded pull request URL no longer resolves on GitHub."
           hint="Confirm the PR still exists, or update the Story pull request URL."
         />
+        <PrSyncLine sync={data?.sync} />
       </div>
     );
   }
@@ -508,6 +532,7 @@ export function PrStatusPanel({
         projectId={projectId}
         storyMerged={story.merged}
       />
+      <PrSyncLine sync={data?.sync} />
     </div>
   );
 }

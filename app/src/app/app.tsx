@@ -13,6 +13,7 @@ import { DeleteIssueDialog } from "@/features/issues/components/delete-issue-dia
 import { ProjectSidebar } from "@/features/issues/components/project-sidebar";
 import { ProjectDialog } from "@/features/issues/components/project-dialog";
 import { TopBar } from "@/features/issues/components/top-bar";
+import { useProjectPrSync } from "@/features/issues/api/pr-sync-live";
 import { useIssueEvents } from "@/features/issues/hooks/use-issue-events";
 
 const CockpitPage = lazy(() =>
@@ -60,6 +61,7 @@ const LEGACY_SELECTED_PROJECT_KEY = "issue-tracker.selectedProject";
 
 export function App() {
   useIssueEvents();
+  useProjectPrSync();
   useEffect(() => {
     localStorage.removeItem(LEGACY_SELECTED_PROJECT_KEY);
   }, []);

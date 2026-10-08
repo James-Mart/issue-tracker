@@ -7,6 +7,7 @@ import {
   type PipelineRunsEvent,
 } from "../schemas.js";
 import { PIPELINE_RUNS_TOPIC } from "./pipeline-runs-events.js";
+import { PR_SYNC_TOPIC } from "./pr-sync-topic.js";
 
 /** Non-conversation multiplex topic — frames are IssueEvent, not stream events. */
 const ISSUES_TOPIC = "issues";
@@ -116,9 +117,13 @@ function frameSeq(frame: ConversationFrame): number {
   return seq;
 }
 
-/** Conversation streams persist a transcript. Issue and pipeline topics do not. */
+/** Conversation streams persist a transcript. Issue, pipeline, and pr-sync topics do not. */
 function isConversationStream(streamKey: string): boolean {
-  return streamKey !== ISSUES_TOPIC && streamKey !== PIPELINE_RUNS_TOPIC;
+  return (
+    streamKey !== ISSUES_TOPIC &&
+    streamKey !== PIPELINE_RUNS_TOPIC &&
+    streamKey !== PR_SYNC_TOPIC
+  );
 }
 
 /**

@@ -1143,6 +1143,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get — this is what `finish-branch` reads (see [Project merge policy](#project-merge-policy)) |
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
+| `mergedAt` | ISO string? | absent until set; stamped when `merged` flips false→true (`issue merge`, local merge / fast-forward delivery, or `issue story set <id> merged true`) with the current time unless the caller supplies one; re-setting `merged` true on an already merged Story leaves it unchanged; readable via kind [`get`](#kind-scoped-get--set); not settable except on that flip; `apply` preserves |
 | `needsRebase` | string? | optional; branch to rebase onto when a base advanced under this Story; set by the finisher Story's `merged` write (via finish-branch, `issue merge`, or any path that flips `merged` false→true) on started, not-yet-merged Stories whose derived `mergeBase` matches the advanced base (see [Project merge policy](#project-merge-policy)); clear with `--clear`; tree chip `needsRebase=<branch>` when set |
 | `review` | `"passed"` \| `"failed"` \| `"awaiting-human"`? | absent until set; `passed` / `failed` are the spec-review verdict; `awaiting-human` pauses for a human (`request-human` sets it, `human-done` clears it) |
 | `reviewedTasks` | string[] | Task ids the stored review covered; defaults `[]`; same array patch surface as Epic `blockedBy`; never rendered as a tree chip |
@@ -1943,7 +1944,7 @@ preserves everything else from the existing same-kind issue.
 | `id`, `createdAt` | set on create; `apply` preserves them, never rewrites |
 | `status`, `commits`, `noDiff`, `sourceIdea` (Task) | imperative only (kind [`set`](#kind-scoped-get--set) / `issue task add-commit`); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
 | `appended` (Task) | append path only (`issue story append`, `issue story update-from-merge-base`); readable via kind [`get`](#kind-scoped-get--set); not settable; `apply` preserves |
-| `branchName`, `worktreePath`, `worktreeBlockedReason`, `worktreeSetupFailed`, `prUrl`, `merged`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
+| `branchName`, `worktreePath`, `worktreeBlockedReason`, `worktreeSetupFailed`, `prUrl`, `merged`, `mergedAt`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `mergedAt` is system-written on the `merged` false→true flip (optional caller timestamp); `apply` preserves |
 | `mergeBaseOverride` (Epic / Story) | imperative only via kind [`set`](#kind-scoped-get--set) field `mergeBase` (stores as `mergeBaseOverride`); `apply` preserves |
 | `sourceIdea` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
 | `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
@@ -2204,8 +2205,10 @@ commands outside the read-only allow-list enforced in
 `app/server/services/git-read.ts` (`show`, `diff`, `cat-file`, `rev-list`,
 `rev-parse`, `merge-base`), always with `cwd` set to the Project `workspace`
 via `requireProjectWorkspace`. It reads external delivery state by shelling out
-to `gh` with ambient auth and owns no credentials; PR facts are read live and
-never stored. Agents run git themselves for writes and record durable git facts
+to `gh` with ambient auth and owns no credentials. Stored pull-request
+facts are `prUrl`, `merged`, and `mergedAt`. Checks, mergeability, and review
+state are cached from the last sync pass; ordinary page loads read that cache.
+Agents run git themselves for writes and record durable git facts
 — `branchName`, `prUrl`, `commits`, `merged` — through the CLI. The tracker's
 job is to model the stacked-PR *plan* and its progress, not to drive git writes.
 This keeps it safe to run anywhere and impossible for the server to corrupt a

@@ -60,7 +60,15 @@ function stubGh(
   ghCalls = [];
   const spawner: GhSpawner = (_command, args, options) => {
     ghCalls.push({ args, cwd: options.cwd });
-    return (handler ?? (() => mockGhChild({})))(args, options.cwd);
+    return (
+      handler ??
+      ((next: string[]) =>
+        mockGhChild(
+          next[0] === "api" && next[1] === "graphql"
+            ? { stdout: JSON.stringify({ data: { repository: null } }) }
+            : {},
+        ))
+    )(args, options.cwd);
   };
   setGhSpawnerForTests(spawner);
 }
@@ -155,12 +163,12 @@ describe("POST /api/issues/:id/merge", () => {
     const { status, json } = await postMerge("a", {});
     expect(status).toBe(204);
     expect(json).toBeNull();
-    expect(ghCalls).toEqual([
-      {
-        args: ["pr", "merge", "42", "--merge", "-R", "acme/widgets"],
-        cwd: workspace,
-      },
-    ]);
+    expect(ghCalls[0]).toEqual({
+      args: ["pr", "merge", "42", "--merge", "-R", "acme/widgets"],
+      cwd: workspace,
+    });
+    expect(ghCalls).toHaveLength(2);
+    expect(ghCalls[1]?.args.slice(0, 2)).toEqual(["api", "graphql"]);
     expect(readStoryJson("a").merged).toBe(true);
   });
 

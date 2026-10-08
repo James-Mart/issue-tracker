@@ -243,6 +243,7 @@ export const STORY_GET_FIELDS = {
   sourceIdea: STORED,
   prUrl: STORED,
   merged: STORED,
+  mergedAt: STORED,
   review: STORED,
   reviewedTasks: STORED,
   needsRebase: STORED,
