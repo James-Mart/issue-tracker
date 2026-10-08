@@ -1255,7 +1255,7 @@ Resolution is a thread event, not a flag on the comment.
 | field | type | notes |
 | --- | --- | --- |
 | `id` | string | non-empty; server-stamped UUID on append (absent from caller input) |
-| `role` | string | non-empty; the author role (e.g. `agent`, `human`) |
+| `role` | string | non-empty; the author role (e.g. `agent`, `human`, `github-bot`) |
 | `name` | string? | optional author display name |
 | `body` | string | Markdown, may contain `issue:` links; non-empty, except a `human-response` with no note stores `""` |
 | `at` | ISO string | server-stamped on append (not supplied by the caller) |
@@ -1263,6 +1263,37 @@ Resolution is a thread event, not a flag on the comment.
 | `type` | `"human-request"` \| `"human-response"`? | absent on ordinary comments; `request-human` writes `human-request` on a thread root, `human-done` writes `human-response` on the reply |
 | `anchor` | object? | optional line or file anchor on a root comment only (see below) |
 | `kind` | `"review"` \| `"question"`? | thread root only; absent means review. Refused on a reply and on a non-Story |
+| `source` | object? | optional GitHub mirror provenance (see below) |
+
+**Source (`source`).** Set on a comment mirrored from a GitHub pull request.
+Members are `kind` `"github"`, `id` (the GitHub node id), and `url` (the
+comment's page on GitHub). Append refuses a second comment with the same
+`source.id` on the same issue. The server stamps that comment's `at` from
+the GitHub comment's created time. A review summary uses its submitted time.
+
+A GitHub `User` is `role` `human`. A GitHub `Bot` is `role` `github-bot`.
+`name` is the login. A deleted account, an organization, or any other actor
+is not mirrored. A blank body is not mirrored.
+
+The sync pass maps three GitHub surfaces onto tracker comments:
+
+- A pull request conversation comment becomes a root comment with no anchor.
+- A pull request review summary becomes a root comment with no anchor. A
+  pending review is not mirrored.
+- An inline review thread becomes an anchored root (a line or a file) plus
+  replies. `replyTo` names that tracker root. A reply whose parent was not
+  mirrored is not stored.
+
+A GitHub edit of a mirrored comment appends a `comment-edit` when the fetched
+body differs from the tracker copy's current body. The edit's `at` is the
+GitHub updated time. Its `role` and `name` are copied from the tracker
+comment. The original comment line stays, and reads show the edited body.
+The first import of a comment stores the current body on that comment and
+does not also append a `comment-edit`. The append follows the fetched body,
+including a comment the editability rule below would refuse.
+
+A comment GitHub no longer returns stays on the tracker. A delete does not
+remove the tracker copy or append a record.
 
 **Threading (`replyTo`).** A thread is one root plus an ordered list of
 replies. Threads are exactly **one level deep**: `replyTo` must name a comment

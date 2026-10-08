@@ -101,6 +101,17 @@ export const commentAnchorSchema = z.union([
   fileCommentAnchorSchema,
 ]);
 
+export const commentSourceSchema = z
+  .object({
+    kind: z.literal("github"),
+    /** GitHub node id. Unique on one issue; append refuses a second copy. */
+    id: nonEmpty,
+    url: nonEmpty,
+  })
+  .strict();
+
+export type CommentSource = z.infer<typeof commentSourceSchema>;
+
 export const THREAD_KINDS = ["review", "question"] as const;
 
 const commentFields = {
@@ -111,6 +122,7 @@ const commentFields = {
   at: nonEmpty,
   replyTo: nonEmpty.optional(),
   anchor: commentAnchorSchema.optional(),
+  source: commentSourceSchema.optional(),
   type: z.enum(COMMENT_TYPES).optional(),
   /** Thread root only. Absent means review. */
   kind: z.enum(THREAD_KINDS).optional(),

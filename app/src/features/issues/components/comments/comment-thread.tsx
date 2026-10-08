@@ -19,6 +19,7 @@ import {
 import { EditableCommentBody } from "./comment-edit";
 import { CommentSendingMark } from "./comment-delivery";
 import {
+  CommentBotIcon,
   CommentHeader,
   commentHeaderLabels,
   formatCommentTime,
@@ -464,6 +465,12 @@ function statusBadgePlacement({
   return "root";
 }
 
+function commentLeading(role: string): ReactNode {
+  if (role === "github-bot") return <CommentBotIcon />;
+  if (isHumanRole(role)) return undefined;
+  return <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />;
+}
+
 function ThreadComment({
   comment,
   issueId,
@@ -486,11 +493,8 @@ function ThreadComment({
         author={author}
         roleBadge={roleBadge}
         at={comment.at}
-        leading={
-          isHumanRole(comment.role) ? undefined : (
-            <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          )
-        }
+        source={comment.source}
+        leading={commentLeading(comment.role)}
         extra={
           <>
             {badges}
