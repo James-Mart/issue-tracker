@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
   type DragEvent,
@@ -16,6 +17,7 @@ import {
   processStoryDrop,
   resolveDropAction,
 } from "../lib/story-tree-dnd-logic";
+import type { TreeRowIndexes } from "../lib/tree-row-indexes";
 
 export type RowDnDProps = Pick<
   HTMLAttributes<HTMLDivElement>,
@@ -46,7 +48,10 @@ const INERT_ROW_DND: RowDnDProps = {
   isDropTarget: false,
 };
 
-export function useStoryTreeDnD(issues: IssueRecord[]): StoryTreeDnD {
+export function useStoryTreeDnD(
+  issues: IssueRecord[],
+  indexes: TreeRowIndexes,
+): StoryTreeDnD {
   const moveStory = useMoveStory();
   const reorderBoard = useReorderBoardChild();
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -62,7 +67,7 @@ export function useStoryTreeDnD(issues: IssueRecord[]): StoryTreeDnD {
 
   const runDrop = useCallback(
     (sourceId: string, targetId: string) => {
-      const action = resolveDropAction(issues, sourceId, targetId);
+      const action = resolveDropAction(issues, sourceId, targetId, indexes);
       if (action === "restack" || action === "reparent") {
         moveStory.mutate({ id: sourceId, target: targetId });
         return;
@@ -71,7 +76,10 @@ export function useStoryTreeDnD(issues: IssueRecord[]): StoryTreeDnD {
         reorderBoard.mutate({ id: sourceId, before: targetId });
       }
     },
-    [issues, moveStory, reorderBoard],
+    // `mutate` is stable. The mutation result object is a new object every
+    // render; depending on it would rebuild this context on every parent
+    // render and force every memoized TreeRow to render again.
+    [indexes, issues, moveStory.mutate, reorderBoard.mutate],
   );
 
   const dropTargetHandlers = useCallback(
@@ -137,12 +145,12 @@ export function useStoryTreeDnD(issues: IssueRecord[]): StoryTreeDnD {
       const id = issue.id;
       const isDropTarget = dropTargetId === id;
 
-      if (!isRowDraggable(issue, issues)) {
+      if (!isRowDraggable(issue, indexes)) {
         return INERT_ROW_DND;
       }
 
       const canDrop = (sourceId: string) =>
-        resolveDropAction(issues, sourceId, id) !== null;
+        resolveDropAction(issues, sourceId, id, indexes) !== null;
       return {
         ...dropTargetHandlers(id, canDrop),
         ...dragSourceHandlers(id),
@@ -155,6 +163,7 @@ export function useStoryTreeDnD(issues: IssueRecord[]): StoryTreeDnD {
       draggingId,
       dropTargetHandlers,
       dropTargetId,
+      indexes,
       issues,
     ],
   );
@@ -164,13 +173,13 @@ export function useStoryTreeDnD(issues: IssueRecord[]): StoryTreeDnD {
       const isDropTarget = dropTargetId === projectId;
       return {
         ...dropTargetHandlers(projectId, (sourceId) =>
-          canDropStoryOntoProject(issues, sourceId, projectId),
+          canDropStoryOntoProject(issues, sourceId, projectId, indexes.byId),
         ),
         isDragging: false,
         isDropTarget,
       };
     },
-    [dropTargetHandlers, dropTargetId, issues],
+    [dropTargetHandlers, dropTargetId, indexes, issues],
   );
 
   const consumeDragGesture = useCallback(() => {
@@ -179,12 +188,15 @@ export function useStoryTreeDnD(issues: IssueRecord[]): StoryTreeDnD {
     return true;
   }, []);
 
-  return {
-    getRowDnDProps,
-    getProjectDnDProps,
-    draggingId,
-    consumeDragGesture,
-  };
+  return useMemo(
+    () => ({
+      getRowDnDProps,
+      getProjectDnDProps,
+      draggingId,
+      consumeDragGesture,
+    }),
+    [consumeDragGesture, draggingId, getProjectDnDProps, getRowDnDProps],
+  );
 }
 
 export function StoryTreeDnDProvider({

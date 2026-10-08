@@ -3,6 +3,7 @@ import {
   canReorderBoardRoot,
   isBoardRootDraggable,
 } from "./board-root-dnd";
+import type { TreeRowIndexes } from "./tree-row-indexes";
 import {
   canDropStoryOntoEpic,
   canDropStoryOntoProject,
@@ -17,9 +18,9 @@ export function isStoryTreeDraggable(issue: IssueRecord): boolean {
 /** Grab-cursor / `draggable` eligibility for a tree row. */
 export function isRowDraggable(
   issue: IssueRecord,
-  issues: IssueRecord[],
+  indexes: TreeRowIndexes,
 ): boolean {
-  return isStoryTreeDraggable(issue) || isBoardRootDraggable(issue, issues);
+  return isStoryTreeDraggable(issue) || isBoardRootDraggable(issue, indexes);
 }
 
 export type StoryDropAction = "restack" | "reparent" | "reorder";
@@ -32,8 +33,9 @@ export function resolveDropAction(
   issues: IssueRecord[],
   sourceId: string,
   targetId: string,
+  indexes: TreeRowIndexes,
 ): StoryDropAction | null {
-  const target = issues.find((issue) => issue.id === targetId);
+  const target = indexes.byId.get(targetId);
   if (!target) return null;
 
   if (target.kind === "story") {
@@ -43,19 +45,21 @@ export function resolveDropAction(
   }
 
   if (target.kind === "project") {
-    return canDropStoryOntoProject(issues, sourceId, targetId)
+    return canDropStoryOntoProject(issues, sourceId, targetId, indexes.byId)
       ? "reparent"
       : null;
   }
 
   if (target.kind === "epic") {
-    if (canReorderBoardRoot(issues, sourceId, targetId)) return "reorder";
-    if (canDropStoryOntoEpic(issues, sourceId, targetId)) return "reparent";
+    if (canReorderBoardRoot(indexes, sourceId, targetId)) return "reorder";
+    if (canDropStoryOntoEpic(issues, sourceId, targetId, indexes.byId)) {
+      return "reparent";
+    }
     return null;
   }
 
   if (target.kind === "idea") {
-    return canReorderBoardRoot(issues, sourceId, targetId) ? "reorder" : null;
+    return canReorderBoardRoot(indexes, sourceId, targetId) ? "reorder" : null;
   }
 
   return null;

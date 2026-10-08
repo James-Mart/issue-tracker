@@ -10,6 +10,7 @@ import {
   processStoryDrop,
   resolveDropAction,
 } from "./story-tree-dnd-logic";
+import { buildTreeRowIndexes } from "./tree-row-indexes";
 
 function project(id = "p"): IssueRecord {
   return {
@@ -103,6 +104,8 @@ const issues: IssueRecord[] = [
   task("c1", "b"),
 ];
 
+const indexes = buildTreeRowIndexes(issues);
+
 describe("isStoryTreeDraggable", () => {
   it("allows branches only", () => {
     expect(isStoryTreeDraggable(story("a", "e1"))).toBe(true);
@@ -113,46 +116,46 @@ describe("isStoryTreeDraggable", () => {
 
 describe("isRowDraggable", () => {
   it("allows stories and board-root epics/ideas", () => {
-    expect(isRowDraggable(story("a", "e1"), issues)).toBe(true);
-    expect(isRowDraggable(story("solo", "p"), issues)).toBe(true);
-    expect(isRowDraggable(epic("e1"), issues)).toBe(true);
-    expect(isRowDraggable(idea("i1", 2), issues)).toBe(true);
+    expect(isRowDraggable(story("a", "e1"), indexes)).toBe(true);
+    expect(isRowDraggable(story("solo", "p"), indexes)).toBe(true);
+    expect(isRowDraggable(epic("e1"), indexes)).toBe(true);
+    expect(isRowDraggable(idea("i1", 2), indexes)).toBe(true);
   });
 
   it("refuses tasks", () => {
-    expect(isRowDraggable(task("c1", "b"), issues)).toBe(false);
+    expect(isRowDraggable(task("c1", "b"), indexes)).toBe(false);
   });
 });
 
 describe("resolveDropAction", () => {
   it("restacks story→story", () => {
-    expect(resolveDropAction(issues, "b", "peer")).toBe("restack");
-    expect(resolveDropAction(issues, "solo", "x")).toBe("restack");
+    expect(resolveDropAction(issues, "b", "peer", indexes)).toBe("restack");
+    expect(resolveDropAction(issues, "solo", "x", indexes)).toBe("restack");
   });
 
   it("reorders a board-root story onto epic/idea", () => {
-    expect(resolveDropAction(issues, "solo", "e1")).toBe("reorder");
-    expect(resolveDropAction(issues, "solo", "i1")).toBe("reorder");
+    expect(resolveDropAction(issues, "solo", "e1", indexes)).toBe("reorder");
+    expect(resolveDropAction(issues, "solo", "i1", indexes)).toBe("reorder");
   });
 
   it("reparents an epic-child story onto an epic", () => {
-    expect(resolveDropAction(issues, "b", "e2")).toBe("reparent");
-    expect(resolveDropAction(issues, "b", "e1")).toBe("reparent");
+    expect(resolveDropAction(issues, "b", "e2", indexes)).toBe("reparent");
+    expect(resolveDropAction(issues, "b", "e1", indexes)).toBe("reparent");
   });
 
   it("prefers epic reorder over reparent for board-root sources", () => {
-    expect(resolveDropAction(issues, "e2", "e1")).toBe("reorder");
+    expect(resolveDropAction(issues, "e2", "e1", indexes)).toBe("reorder");
     expect(canDropStoryOntoEpic(issues, "e2", "e1")).toBe(false);
   });
 
   it("reparents onto the project", () => {
-    expect(resolveDropAction(issues, "b", "p")).toBe("reparent");
+    expect(resolveDropAction(issues, "b", "p", indexes)).toBe("reparent");
   });
 
   it("refuses illegal targets", () => {
-    expect(resolveDropAction(issues, "b", "b")).toBeNull();
-    expect(resolveDropAction(issues, "a", "b")).toBeNull();
-    expect(resolveDropAction(issues, "b", "c1")).toBeNull();
+    expect(resolveDropAction(issues, "b", "b", indexes)).toBeNull();
+    expect(resolveDropAction(issues, "a", "b", indexes)).toBeNull();
+    expect(resolveDropAction(issues, "b", "c1", indexes)).toBeNull();
   });
 });
 
@@ -199,7 +202,7 @@ describe("processStoryDrop", () => {
     processStoryDrop({
       sourceId: "b",
       targetId: "c1",
-      canDrop: (sourceId) => resolveDropAction(issues, sourceId, "c1") !== null,
+      canDrop: (sourceId) => resolveDropAction(issues, sourceId, "c1", indexes) !== null,
       onMove,
     });
     expect(onMove).not.toHaveBeenCalled();

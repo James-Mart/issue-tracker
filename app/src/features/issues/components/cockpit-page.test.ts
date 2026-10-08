@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import type { FlowItem } from "../lib/flow";
+import { buildTreeRowIndexes } from "../lib/tree-row-indexes";
 import {
   groupFlowItemsByProject,
   readyToLandEpicCaption,
@@ -106,7 +107,7 @@ describe("readyToLandEpicCaption", () => {
     childB,
     root,
   ];
-  const byId = new Map(issues.map((issue) => [issue.id, issue]));
+  const indexes = buildTreeRowIndexes(issues);
   const prOpen: DerivedState = { blocked: false, storyStatus: "pr-open" };
 
   it("emits one Epic caption at the start of an adjacent sibling run", () => {
@@ -115,12 +116,12 @@ describe("readyToLandEpicCaption", () => {
       flowRow(childA2, prOpen),
       flowRow(childB, prOpen),
     ];
-    expect(readyToLandEpicCaption(items, 0, byId, issues)).toEqual({
+    expect(readyToLandEpicCaption(items, 0, indexes)).toEqual({
       id: "epic-a",
       title: "epic-a",
     });
-    expect(readyToLandEpicCaption(items, 1, byId, issues)).toBeNull();
-    expect(readyToLandEpicCaption(items, 2, byId, issues)).toEqual({
+    expect(readyToLandEpicCaption(items, 1, indexes)).toBeNull();
+    expect(readyToLandEpicCaption(items, 2, indexes)).toEqual({
       id: "epic-b",
       title: "epic-b",
     });
@@ -128,8 +129,8 @@ describe("readyToLandEpicCaption", () => {
 
   it("does not caption a project-level Story", () => {
     const items = [flowRow(root, prOpen), flowRow(childA1, prOpen)];
-    expect(readyToLandEpicCaption(items, 0, byId, issues)).toBeNull();
-    expect(readyToLandEpicCaption(items, 1, byId, issues)).toEqual({
+    expect(readyToLandEpicCaption(items, 0, indexes)).toBeNull();
+    expect(readyToLandEpicCaption(items, 1, indexes)).toEqual({
       id: "epic-a",
       title: "epic-a",
     });
@@ -141,12 +142,12 @@ describe("readyToLandEpicCaption", () => {
       flowRow(root, prOpen),
       flowRow(childA2, prOpen),
     ];
-    expect(readyToLandEpicCaption(items, 0, byId, issues)).toEqual({
+    expect(readyToLandEpicCaption(items, 0, indexes)).toEqual({
       id: "epic-a",
       title: "epic-a",
     });
-    expect(readyToLandEpicCaption(items, 1, byId, issues)).toBeNull();
-    expect(readyToLandEpicCaption(items, 2, byId, issues)).toEqual({
+    expect(readyToLandEpicCaption(items, 1, indexes)).toBeNull();
+    expect(readyToLandEpicCaption(items, 2, indexes)).toEqual({
       id: "epic-a",
       title: "epic-a",
     });

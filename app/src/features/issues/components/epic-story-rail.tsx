@@ -12,6 +12,7 @@ import {
   epicStoriesForRail,
   storyRailNodeState,
 } from "../lib/epic-story-rail";
+import { buildTreeRowIndexes } from "../lib/tree-row-indexes";
 
 /** Same step as `TREE_INDENT` in `issue-tree.tsx`. */
 const RAIL_INDENT = 24;
@@ -51,15 +52,16 @@ function EpicStoryRailView({
   derived: Record<string, DerivedState>;
 }) {
   const { projectId = "" } = useParams();
+  const indexes = useMemo(() => buildTreeRowIndexes(issues), [issues]);
   const stories = useMemo(
-    () => epicStoriesForRail(issue.id, issues),
-    [issue.id, issues],
+    () => epicStoriesForRail(issue.id, issues, indexes.byId),
+    [indexes, issue.id, issues],
   );
   if (stories.length === 0) return null;
 
   const live = stories.some(
     ({ story }) =>
-      storyRailNodeState(story, derived[story.id], issues) === "in-flight",
+      storyRailNodeState(story, derived[story.id], indexes) === "in-flight",
   );
 
   return (
@@ -67,7 +69,7 @@ function EpicStoryRailView({
       {stories.map(({ story, depth }) => (
         <RailNode
           key={story.id}
-          state={storyRailNodeState(story, derived[story.id], issues)}
+          state={storyRailNodeState(story, derived[story.id], indexes)}
           edge="solid"
           label={
             <span

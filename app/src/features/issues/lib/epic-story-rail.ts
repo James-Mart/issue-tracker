@@ -2,11 +2,11 @@ import type { DerivedState, IssueRecord } from "@server/schemas";
 import { issuesById, nestParentOf, orderSiblings } from "./build-tree";
 import { isInFlight } from "./derived";
 import { issueRailNodeState, type RailNodeState } from "./rail-state";
+import type { TreeRowIndexes } from "./tree-row-indexes";
 
 export type { RailNodeState };
 
 type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
-type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
 
 export type EpicRailStory = {
   story: StoryRecord;
@@ -21,13 +21,9 @@ export type EpicRailStory = {
 export function storyRailNodeState(
   story: StoryRecord,
   derived: DerivedState | undefined,
-  issues?: readonly IssueRecord[],
+  indexes: TreeRowIndexes,
 ): RailNodeState {
-  const base = issueRailNodeState(
-    story,
-    derived,
-    issues ? [...issues] : [],
-  );
+  const base = issueRailNodeState(story, derived, indexes);
   if (
     base === "merged" ||
     base === "ready-to-land" ||
@@ -36,12 +32,13 @@ export function storyRailNodeState(
   ) {
     return base;
   }
-  if (issues) {
-    const tasks = issues.filter(
-      (issue): issue is TaskRecord =>
-        issue.kind === "task" && issue.partOf === story.id,
-    );
-    if (tasks.some((task) => isInFlight(task, undefined))) return "in-flight";
+  const children = indexes.childrenByParent.get(story.id);
+  if (
+    children?.some(
+      (issue) => issue.kind === "task" && isInFlight(issue, undefined),
+    )
+  ) {
+    return "in-flight";
   }
   return base;
 }
@@ -53,12 +50,12 @@ export function storyRailNodeState(
 export function epicStoriesForRail(
   epicId: string,
   issues: readonly IssueRecord[],
+  byId: Map<string, IssueRecord> = issuesById(issues),
 ): EpicRailStory[] {
   const stories = issues.filter(
     (issue): issue is StoryRecord =>
       issue.kind === "story" && issue.partOf === epicId,
   );
-  const byId = issuesById([...issues]);
   const storyIds = new Set(stories.map((story) => story.id));
   const childrenOf = new Map<string, StoryRecord[]>();
   const roots: StoryRecord[] = [];

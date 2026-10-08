@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IssueRecord } from "@server/schemas";
 import { canReorderBoardRoot, isBoardRootDraggable } from "./board-root-dnd";
+import { buildTreeRowIndexes } from "./tree-row-indexes";
 
 function project(id = "p"): IssueRecord {
   return {
@@ -80,34 +81,38 @@ const issues: IssueRecord[] = [
 ];
 
 describe("isBoardRootDraggable", () => {
+  const indexes = buildTreeRowIndexes(issues);
+
   it("allows epic, idea, and root project-level story", () => {
-    expect(isBoardRootDraggable(epic("e1"), issues)).toBe(true);
-    expect(isBoardRootDraggable(idea("i1", 1), issues)).toBe(true);
-    expect(isBoardRootDraggable(story("solo", "p", 2), issues)).toBe(true);
+    expect(isBoardRootDraggable(epic("e1"), indexes)).toBe(true);
+    expect(isBoardRootDraggable(idea("i1", 1), indexes)).toBe(true);
+    expect(isBoardRootDraggable(story("solo", "p", 2), indexes)).toBe(true);
   });
 
   it("refuses stacked project-level and epic-child stories", () => {
-    expect(isBoardRootDraggable(story("child", "p", 0, "solo"), issues)).toBe(
-      false,
-    );
-    expect(isBoardRootDraggable(story("nested", "e1"), issues)).toBe(false);
+    expect(
+      isBoardRootDraggable(story("child", "p", 0, "solo"), indexes),
+    ).toBe(false);
+    expect(isBoardRootDraggable(story("nested", "e1"), indexes)).toBe(false);
   });
 });
 
 describe("canReorderBoardRoot", () => {
+  const indexes = buildTreeRowIndexes(issues);
+
   it("allows epic/idea/story board-root pairs that are not story→story", () => {
-    expect(canReorderBoardRoot(issues, "solo", "e1")).toBe(true);
-    expect(canReorderBoardRoot(issues, "e1", "solo")).toBe(true);
-    expect(canReorderBoardRoot(issues, "e1", "i1")).toBe(true);
-    expect(canReorderBoardRoot(issues, "i1", "solo")).toBe(true);
+    expect(canReorderBoardRoot(indexes, "solo", "e1")).toBe(true);
+    expect(canReorderBoardRoot(indexes, "e1", "solo")).toBe(true);
+    expect(canReorderBoardRoot(indexes, "e1", "i1")).toBe(true);
+    expect(canReorderBoardRoot(indexes, "i1", "solo")).toBe(true);
   });
 
   it("refuses story→story (restack owns that gesture)", () => {
-    expect(canReorderBoardRoot(issues, "solo", "peer")).toBe(false);
+    expect(canReorderBoardRoot(indexes, "solo", "peer")).toBe(false);
   });
 
   it("refuses epic-child sources and self", () => {
-    expect(canReorderBoardRoot(issues, "nested", "e1")).toBe(false);
-    expect(canReorderBoardRoot(issues, "e1", "e1")).toBe(false);
+    expect(canReorderBoardRoot(indexes, "nested", "e1")).toBe(false);
+    expect(canReorderBoardRoot(indexes, "e1", "e1")).toBe(false);
   });
 });

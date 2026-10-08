@@ -1,6 +1,7 @@
 import { hasAttention } from "@server/kind";
 import type { DerivedState, IssueRecord } from "@server/schemas";
-import { isInFlight, isIssueComplete, isReadyToLandStory } from "./derived";
+import { isInFlight, isIssueComplete, isReadyToLandFromIndexes } from "./derived";
+import type { TreeRowIndexes } from "./tree-row-indexes";
 
 /**
  * Single-item work state for Rail ports and row-level StateIcon.
@@ -24,7 +25,7 @@ export type RailNodeState =
 export function issueRailNodeState(
   issue: IssueRecord,
   state: DerivedState | undefined,
-  issues: IssueRecord[] = [],
+  indexes: TreeRowIndexes,
 ): RailNodeState {
   if (hasAttention(issue) && issue.needsAttention) return "needs-attention";
   if (
@@ -36,7 +37,7 @@ export function issueRailNodeState(
     return "needs-attention";
   }
   if (state?.blocked) return "blocked";
-  if (isReadyToLandStory(issue, state, issues)) return "ready-to-land";
+  if (isReadyToLandFromIndexes(issue, state, indexes)) return "ready-to-land";
   if (isInFlight(issue, state)) return "in-flight";
   if (issue.kind === "story" && state?.storyStatus === "in-progress") {
     return "in-flight";

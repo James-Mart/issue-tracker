@@ -27,12 +27,15 @@ import {
   writeCockpitHiddenProjectIds,
 } from "../lib/cockpit-hidden-projects";
 import {
-  issuesById,
   listProjects,
   projectIdOf,
   type ProjectRecord,
 } from "../lib/build-tree";
-import { isReadyToLandStory } from "../lib/derived";
+import { isReadyToLandFromIndexes } from "../lib/derived";
+import {
+  buildTreeRowIndexes,
+  type TreeRowIndexes,
+} from "../lib/tree-row-indexes";
 import { flowBuckets, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
 import {
@@ -131,19 +134,18 @@ type ProjectFlowGroup = {
 export function readyToLandEpicCaption(
   items: readonly FlowItem[],
   index: number,
-  byId: Map<string, IssueRecord>,
-  issues: IssueRecord[],
+  indexes: TreeRowIndexes,
 ): { id: string; title: string } | null {
   const item = items[index];
   if (!item || item.issue.kind !== "story") return null;
-  if (!isReadyToLandStory(item.issue, item.state, issues)) return null;
-  const parent = byId.get(item.issue.partOf);
+  if (!isReadyToLandFromIndexes(item.issue, item.state, indexes)) return null;
+  const parent = indexes.byId.get(item.issue.partOf);
   if (parent?.kind !== "epic") return null;
   const prev = items[index - 1];
   if (
     prev?.issue.kind === "story" &&
     prev.issue.partOf === parent.id &&
-    isReadyToLandStory(prev.issue, prev.state, issues)
+    isReadyToLandFromIndexes(prev.issue, prev.state, indexes)
   ) {
     return null;
   }
@@ -249,7 +251,8 @@ export function CockpitPage() {
     () => (ack ? overlayCockpitLaunchAck(derived, issues, ack) : derived),
     [ack, derived, issues],
   );
-  const byId = useMemo(() => issuesById(issues), [issues]);
+  const indexes = useMemo(() => buildTreeRowIndexes(issues), [issues]);
+  const byId = indexes.byId;
   const projects = useMemo(() => listProjects(issues), [issues]);
   const projectOrder = useMemo(() => projects.map((project) => project.id), [projects]);
   const buckets = useMemo(() => {
@@ -281,7 +284,7 @@ export function CockpitPage() {
               />
               <FlowPreviewedItems
                 items={group.items}
-                issues={issues}
+                indexes={indexes}
                 previewLimit={previewLimit}
                 asRail
                 listClassName={compact ? "mt-1 gap-1" : "mt-1.5 gap-1"}
@@ -289,8 +292,7 @@ export function CockpitPage() {
                   const caption = readyToLandEpicCaption(
                     visible,
                     index,
-                    byId,
-                    issues,
+                    indexes,
                   );
                   if (!caption) return null;
                   return (
@@ -303,7 +305,7 @@ export function CockpitPage() {
                 renderItem={(item) => (
                   <FlowRow
                     item={item}
-                    issues={issues}
+                    indexes={indexes}
                     launchFault={
                       fault?.issueId === item.issue.id
                         ? cockpitLaunchFaultMessage(
@@ -331,7 +333,7 @@ export function CockpitPage() {
         </div>
       );
     },
-    [byId, derivedForBuckets, fault, issues, projectOrder],
+    [derivedForBuckets, fault, indexes, issues, projectOrder],
   );
 
   return (
