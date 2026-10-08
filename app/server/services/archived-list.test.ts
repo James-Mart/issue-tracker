@@ -54,7 +54,7 @@ function response(): IssuesResponse {
 }
 
 describe("parseArchivedListQuery", () => {
-  it("treats an omitted flag as the current full list", () => {
+  it("treats an omitted flag as the default non-archived list", () => {
     expect(parseArchivedListQuery(undefined)).toBeUndefined();
   });
 
@@ -71,10 +71,26 @@ describe("parseArchivedListQuery", () => {
 });
 
 describe("applyArchivedListQuery", () => {
-  it("keeps the full payload for the default and include", () => {
+  it("keeps the full payload for include", () => {
     const full = response();
-    expect(applyArchivedListQuery(full, undefined)).toBe(full);
     expect(applyArchivedListQuery(full, "include")).toBe(full);
+  });
+
+  it("drops archived issues from the default list", () => {
+    expect(applyArchivedListQuery(response(), undefined)).toEqual({
+      issues: [project("p"), story("live", false)],
+      problems: [{ id: "live", message: "live" }],
+      derived: { live: { blocked: false, storyStatus: "not-started" } },
+    });
+  });
+
+  it("returns the full payload unchanged when nothing is archived", () => {
+    const liveOnly = {
+      issues: [project("p"), story("live", false)],
+      problems: [{ id: "live", message: "live" }],
+      derived: { live: { blocked: false, storyStatus: "not-started" } },
+    };
+    expect(applyArchivedListQuery(liveOnly, undefined)).toBe(liveOnly);
   });
 
   it("returns archived issues only", () => {

@@ -73,8 +73,11 @@ async function ids(path: string): Promise<string[]> {
 }
 
 describe("GET /api/issues archived", () => {
-  it("returns the full list when the flag is omitted or include", async () => {
-    expect(await ids("/api/issues")).toEqual(["live", "old", "p"]);
+  it("returns non-archived issues when the flag is omitted", async () => {
+    expect(await ids("/api/issues")).toEqual(["live", "p"]);
+  });
+
+  it("returns the full list for archived=include", async () => {
     expect(await ids("/api/issues?archived=include")).toEqual([
       "live",
       "old",

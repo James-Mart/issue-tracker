@@ -3,8 +3,8 @@ import { useIssuesQuery } from "../api/queries";
 import { mergeLiveWithArchivedOnly } from "../lib/archived-issue-list";
 
 /**
- * Default issue list, switching to `GET /api/issues?archived=include` once
- * that read arrives. Until then the default list is still the full payload.
+ * Default issue list (`GET /api/issues`), switching to
+ * `GET /api/issues?archived=include` once that read arrives.
  */
 export function useIssuesIncludingArchived(includeArchived: boolean) {
   const live = useIssuesQuery();

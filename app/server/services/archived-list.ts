@@ -1,8 +1,8 @@
 import type { IssuesResponse } from "../schemas.js";
 import { IssueError } from "./errors.js";
-import { isArchived } from "./archived-visibility.js";
+import { isArchived, visibleIssues } from "./archived-visibility.js";
 
-/** `GET /api/issues?archived=` values. Omitted stays the current full list. */
+/** `GET /api/issues?archived=` values. Omitted is non-archived issues only. */
 export type ArchivedListQuery = "include" | "only";
 
 export function parseArchivedListQuery(
@@ -13,17 +13,10 @@ export function parseArchivedListQuery(
   throw new IssueError("validation", "archived must be include or only");
 }
 
-/**
- * `include` is the current full list (live and archived). `only` is archived
- * issues. The no-flag list stays that full payload until a later task drops
- * archived issues from the default.
- */
-export function applyArchivedListQuery(
+function sliceIssuesResponse(
   response: IssuesResponse,
-  archived: ArchivedListQuery | undefined,
+  issues: IssuesResponse["issues"],
 ): IssuesResponse {
-  if (archived !== "only") return response;
-  const issues = response.issues.filter((issue) => isArchived(issue));
   const ids = new Set(issues.map((issue) => issue.id));
   const derived: IssuesResponse["derived"] = {};
   for (const issue of issues) {
@@ -35,4 +28,23 @@ export function applyArchivedListQuery(
     derived,
     problems: response.problems.filter((problem) => ids.has(problem.id)),
   };
+}
+
+/**
+ * Omitted query: non-archived issues. `include` is live and archived. `only` is
+ * archived issues.
+ */
+export function applyArchivedListQuery(
+  response: IssuesResponse,
+  archived: ArchivedListQuery | undefined,
+): IssuesResponse {
+  if (archived === "include") return response;
+  if (archived === undefined) {
+    if (!response.issues.some(isArchived)) return response;
+    return sliceIssuesResponse(
+      response,
+      visibleIssues(response.issues, false),
+    );
+  }
+  return sliceIssuesResponse(response, response.issues.filter(isArchived));
 }
