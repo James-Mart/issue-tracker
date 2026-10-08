@@ -21,7 +21,6 @@ import {
 import { IssueError } from "./errors.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
-import { attachWorktreeDerived } from "./derive-worktree.js";
 import { mergeImplementingOverlay } from "./implementing-status.js";
 import { planningStatusById } from "./planning-status.js";
 import { checkIntegrity, problemsFor } from "./integrity.js";
@@ -195,7 +194,6 @@ export function list(): IssuesResponse {
     else derived.byId[id] = { blocked: false, ideaStatus };
   }
   mergeImplementingOverlay(issues, derived.byId);
-  attachWorktreeDerived(issues, derived.byId);
   // Malformed comments.jsonl lines stay on the list. The snapshot revalidates
   // each file's stats and re-parses only files that changed, so an append from
   // any process shows up on the next list.

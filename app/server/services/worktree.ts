@@ -443,7 +443,7 @@ export async function removeStoryWorktree(
   options: { discard?: boolean; allowActiveRun?: boolean } = {},
 ): Promise<string> {
   assertGuestAllowsOutwardEffect(GUEST_REFUSED_WORKTREE_REMOVE);
-  const { issues, derived } = list();
+  const { issues } = list();
   const story = requireStory(storyId);
   const projectId = projectIdFor(story, issues);
   const workspace = requireProjectWorkspace(projectId);
@@ -463,8 +463,7 @@ export async function removeStoryWorktree(
     throw new IssueError("conflict", REMOVE_ACTIVE_IMPLEMENTING_ERROR(storyId));
   }
 
-  const worktree =
-    derived[storyId]?.worktree ?? deriveStoryWorktree(story, issues);
+  const worktree = await deriveStoryWorktree(story, issues);
   if (worktree.locked) {
     throw new IssueError("conflict", REMOVE_LOCKED_ERROR(storyId));
   }

@@ -39,6 +39,7 @@ vi.mock("../api/queries", () => ({
     refetch: vi.fn(),
     isFetching: false,
   }),
+  useProjectWorktreesQuery: () => ({ data: undefined }),
   useChannelSessionsQuery: () => ({
     data: mockState.sessions,
     isLoading: false,

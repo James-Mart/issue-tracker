@@ -9,7 +9,7 @@ import {
   useRemoveStoryWorktree,
   useSetupStoryWorktree,
 } from "../api/mutations";
-import { useIssuesQuery } from "../api/queries";
+import { useIssuesQuery, useProjectWorktreesQuery } from "../api/queries";
 import {
   WORKTREE_PARENT_BRANCH_SUFFIX,
   WORKTREE_REMOVE_ACTIVE_CONFIRM,
@@ -336,9 +336,44 @@ function StoryWorktreeCardInner({
   );
 }
 
-export function StoryWorktreeCard({ issue }: { issue: StoryDetail }) {
+export function StoryWorktreeCard({
+  issue,
+  projectId,
+}: {
+  issue: StoryDetail;
+  projectId: string;
+}) {
   const { data } = useIssuesQuery();
-  const model = worktreeCardModel(data?.derived[issue.id]?.worktree);
+  const { data: worktrees, isError } = useProjectWorktreesQuery(projectId);
+  const storyHasCheckout =
+    issue.worktreePath !== undefined ||
+    issue.worktreeSetupFailed === true ||
+    issue.worktreeBlockedReason !== undefined;
+  if (isError && storyHasCheckout) {
+    return (
+      <section
+        data-region="worktree"
+        data-testid="story-worktree-card"
+        className="flex min-w-0 flex-col rounded-lg border border-border bg-card px-4 py-3.5"
+      >
+        <div className="flex min-h-8 items-center gap-2">
+          <FolderGit2
+            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          <DetailEyebrow>Worktree</DetailEyebrow>
+        </div>
+        <p
+          role="alert"
+          data-testid="story-worktree-error"
+          className="mt-3 text-sm text-destructive"
+        >
+          Could not load worktree state. Reload the page.
+        </p>
+      </section>
+    );
+  }
+  const model = worktreeCardModel(worktrees?.worktrees[issue.id]);
   if (!data || !model) return null;
 
   return (

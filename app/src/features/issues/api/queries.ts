@@ -12,6 +12,7 @@ import type {
   IssueChange,
   IssueDetail,
   IssuesResponse,
+  ProjectWorktreesResponse,
 } from "@server/schemas";
 import type { PlanningWorkRoot } from "@server/services/planning-work-root";
 import type { Attachment } from "@server/services/attachments";
@@ -66,6 +67,21 @@ export function useIssuesQuery(): UseQueryResult<IssuesResponse, Error> {
   return useQuery({
     queryKey: issuesKeys.list(),
     queryFn: () => request<IssuesResponse>("/api/issues"),
+    ...reuseMountedRead,
+  });
+}
+
+/** Git worktree facts for a Project. May resolve after the issue list. */
+export function useProjectWorktreesQuery(
+  projectId: string,
+): UseQueryResult<ProjectWorktreesResponse, Error> {
+  return useQuery({
+    queryKey: issuesKeys.projectWorktrees(projectId),
+    queryFn: () =>
+      request<ProjectWorktreesResponse>(
+        `/api/projects/${encodeURIComponent(projectId)}/worktrees`,
+      ),
+    enabled: Boolean(projectId),
     ...reuseMountedRead,
   });
 }

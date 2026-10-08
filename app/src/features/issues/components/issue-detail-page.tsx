@@ -107,6 +107,7 @@ function IssueOverviewPanel({
   issue,
   upload,
   catalog,
+  projectId,
   parentKind,
   showExportLaunch,
   onExportTabVisible,
@@ -114,6 +115,7 @@ function IssueOverviewPanel({
   issue: IssueDetail;
   upload?: UploadAttachmentMutation;
   catalog: ProjectLabel[];
+  projectId: string;
   parentKind?: IssueKind;
   showExportLaunch?: boolean;
   onExportTabVisible?: (visible: boolean) => void;
@@ -131,7 +133,9 @@ function IssueOverviewPanel({
     <div className="flex flex-col gap-4">
       <IssueMetaPanel issue={issue} catalog={catalog} />
       {issue.kind === "story" ? <StoryHumanRequestCard issue={issue} /> : null}
-      {issue.kind === "story" ? <StoryWorktreeCard issue={issue} /> : null}
+      {issue.kind === "story" ? (
+        <StoryWorktreeCard issue={issue} projectId={projectId} />
+      ) : null}
       <IssueOverviewLaunch issue={issue} parentKind={parentKind} />
       {awaitingDirection ? (
         <DeletePartialPlanDetailAction issue={issue} />
@@ -219,6 +223,7 @@ function IssueDetailBody({
             issue={issue}
             upload={upload}
             catalog={catalog}
+            projectId={projectId}
             parentKind={parentKind}
             showExportLaunch={showExportLaunch}
             onExportTabVisible={onExportTabVisible}

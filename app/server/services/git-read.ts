@@ -248,12 +248,10 @@ export function listedWorktrees(porcelain: string): ListedWorktree[] {
   return entries;
 }
 
-/** True when porcelain marks `path` locked. */
-export function worktreePathLocked(cwd: string, path: string): boolean {
-  const porcelain = runGitSync(["worktree", "list", "--porcelain"], cwd);
-  return listedWorktrees(porcelain).some(
-    (item) => item.path === path && item.locked,
-  );
+/** `git worktree list --porcelain` for `cwd`. */
+export async function readListedWorktrees(cwd: string): Promise<ListedWorktree[]> {
+  const porcelain = await runGit(["worktree", "list", "--porcelain"], cwd);
+  return listedWorktrees(porcelain);
 }
 
 function porcelainLinePath(line: string): string {
@@ -262,57 +260,100 @@ function porcelainLinePath(line: string): string {
   return arrow >= 0 ? body.slice(arrow + 4) : body;
 }
 
-function isGitlink(workspace: string, relPath: string): boolean {
-  const output = runGitSync(["ls-files", "-s", "--", relPath], workspace).trim();
+async function isGitlink(workspace: string, relPath: string): Promise<boolean> {
+  const output = (await runGit(["ls-files", "-s", "--", relPath], workspace)).trim();
   if (output.length === 0) return false;
   return output.split(/\s+/)[0] === "160000";
 }
 
 /**
- * Lines from `git status --porcelain` (ignored paths are omitted), counting
- * each change once. Submodule paths with inner porcelain use that inner count
- * instead of the parent line; when inner porcelain is empty the parent line
- * counts once. The same rule applies at every nested level.
+ * Paths from `git status --porcelain` (ignored paths are omitted), one entry
+ * per counted change. Submodule paths with inner porcelain expand to those
+ * inner paths; when inner porcelain is empty the parent path counts once.
+ * The same rule applies at every nested level. `prefix` is the parent
+ * submodule path, with a trailing slash, for nested expansion.
  */
-export function porcelainStatusCount(workspace: string): number {
-  const output = runGitSync(["status", "--porcelain"], workspace);
-  if (output.length === 0) return 0;
-  let count = 0;
-  for (const line of output.split("\n")) {
-    if (line.length === 0) continue;
-    const relPath = porcelainLinePath(line);
-    if (isGitlink(workspace, relPath)) {
-      const inner = porcelainStatusCount(join(workspace, relPath));
-      count += inner > 0 ? inner : 1;
-    } else {
-      count += 1;
+export async function porcelainDirtyPaths(
+  workspace: string,
+  prefix = "",
+): Promise<string[]> {
+  const output = await runGit(["status", "--porcelain"], workspace);
+  if (output.length === 0) return [];
+  const lines = output.split("\n").filter((line) => line.length > 0);
+  const parts = await Promise.all(
+    lines.map(async (line) => {
+      const relPath = porcelainLinePath(line);
+      if (await isGitlink(workspace, relPath)) {
+        const inner = await porcelainDirtyPaths(
+          join(workspace, relPath),
+          `${prefix}${relPath}/`,
+        );
+        return inner.length > 0 ? inner : [`${prefix}${relPath}`];
+      }
+      return [`${prefix}${relPath}`];
+    }),
+  );
+  return parts.flat();
+}
+
+/** Abbrev `branch@{upstream}`, or undefined when none is configured. */
+export async function branchUpstream(
+  workspace: string,
+  branchName: string,
+): Promise<string | undefined> {
+  try {
+    const ref = (
+      await runGit(
+        ["rev-parse", "--abbrev-ref", `${branchName}@{upstream}`],
+        workspace,
+      )
+    ).trim();
+    return ref.length > 0 ? ref : undefined;
+  } catch (err) {
+    if (
+      err instanceof IssueError &&
+      err.message.includes("no upstream configured")
+    ) {
+      return undefined;
     }
+    throw err;
   }
-  return count;
 }
 
 /**
- * Commits on `branchName` reachable from neither `trunk` nor the branch's
- * upstream, when one exists.
+ * Commits on `branchName` not reachable from `base`, and the reverse.
+ * `left-right` counts match `rev-list --count branch --not base` and
+ * `rev-list --count base --not branch`.
  */
-export function atRiskCommitCount(
+export async function revListAheadBehind(
   workspace: string,
+  base: string,
   branchName: string,
-  trunk: string,
-): number {
-  let upstream: string | undefined;
-  try {
-    const ref = runGitSync(
-      ["rev-parse", "--abbrev-ref", `${branchName}@{upstream}`],
+): Promise<{ ahead: number; behind: number }> {
+  const output = (
+    await runGit(
+      ["rev-list", "--left-right", "--count", `${base}...${branchName}`],
       workspace,
-    ).trim();
-    if (ref.length > 0) upstream = ref;
-  } catch {
-    // No upstream configured — exclude only trunk.
+    )
+  ).trim();
+  const [left, right] = output.split(/\s+/);
+  const behind = Number.parseInt(left ?? "", 10);
+  const ahead = Number.parseInt(right ?? "", 10);
+  if (!Number.isFinite(behind) || !Number.isFinite(ahead)) {
+    throw new IssueError(
+      "git-failed",
+      `git rev-list --left-right --count returned ${JSON.stringify(output)}`,
+    );
   }
-  const args = ["rev-list", "--count", branchName, "--not", trunk];
-  if (upstream) args.push(upstream);
-  const output = runGitSync(args, workspace).trim();
+  return { ahead, behind };
+}
+
+/** `git rev-list --count` for `revs` (for example `branch --not trunk`). */
+export async function revListCount(
+  workspace: string,
+  revs: string[],
+): Promise<number> {
+  const output = (await runGit(["rev-list", "--count", ...revs], workspace)).trim();
   const count = Number.parseInt(output, 10);
   if (!Number.isFinite(count)) {
     throw new IssueError(

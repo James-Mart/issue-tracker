@@ -46,6 +46,7 @@ export function useIssueEvents(): void {
         listInvalidateTimer = null;
         if (!disposed) {
           qc.invalidateQueries({ queryKey: issuesKeys.list() });
+          qc.invalidateQueries({ queryKey: issuesKeys.projectWorktreesAll() });
         }
       }, LIST_INVALIDATE_DEBOUNCE_MS);
     };

@@ -512,6 +512,7 @@ export function useRemoveStoryWorktree(storyId: string) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.projectWorktreesAll() });
       qc.invalidateQueries({ queryKey: issuesKeys.detail(storyId) });
     },
   });
@@ -531,6 +532,7 @@ export function useSetupStoryWorktree(storyId: string) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.projectWorktreesAll() });
       qc.invalidateQueries({ queryKey: issuesKeys.detail(storyId) });
     },
   });

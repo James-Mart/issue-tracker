@@ -15,6 +15,10 @@ export const issuesKeys = {
     [...issuesKeys.all, "planningWorkRoot", ideaId] as const,
   projectPullRequests: (projectId: string) =>
     [...issuesKeys.all, "projectPullRequests", projectId] as const,
+  projectWorktrees: (projectId: string) =>
+    [...issuesKeys.all, "projectWorktrees", projectId] as const,
+  projectWorktreesAll: () =>
+    [...issuesKeys.all, "projectWorktrees"] as const,
   projectSecrets: (projectId: string) =>
     [...issuesKeys.all, "projectSecrets", projectId] as const,
   change: (issueId: string) => [...issuesKeys.all, "change", issueId] as const,
