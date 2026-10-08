@@ -15,6 +15,10 @@ const state = vi.hoisted(() => ({
   problems: [] as { id: string; message: string }[],
   isLoading: false,
   error: null as Error | null,
+  fileText: null as string | null,
+  defaultFileText: Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join(
+    "\n",
+  ),
 }));
 
 const post = vi.hoisted(() => vi.fn());
@@ -44,7 +48,7 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => {
     }),
     useReuseCommentThreads: () => ({ threads: state.threads, problems: state.problems }),
     useIssueChangeFileQuery: () => ({
-      data: Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n"),
+      data: state.fileText ?? state.defaultFileText,
     }),
     useIssuesQuery: () => ({
       data: {
@@ -137,6 +141,7 @@ beforeEach(() => {
   state.problems = [];
   state.isLoading = false;
   state.error = null;
+  state.fileText = null;
   events.isPending = false;
   localStorage.clear();
 });
@@ -695,5 +700,46 @@ describe("ReviewConversationTab", () => {
     expect(container.querySelector('[data-testid="review-submitted-event"]')).not.toBeNull();
     expect(container.textContent).not.toContain("Nothing matches these filters.");
     expect(container.querySelector('[data-thread-root="dropped"]')).toBeNull();
+  });
+
+  it("keeps a wide code block, link, and anchor snippet inside Comments", () => {
+    const wide = "w".repeat(240);
+    state.fileText = ["context", wide, "context"].join("\n");
+    state.threads = [
+      thread({
+        root: {
+          id: "wide",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          name: "Ada",
+          body: `See [${wide}](https://example.com/${wide})\n\n\`\`\`\n${wide}\n\`\`\``,
+          anchor: {
+            path: "src/wide.ts",
+            side: "new",
+            line: 2,
+            commitSha: SHA,
+          },
+        },
+      }),
+    ];
+    const container = mount();
+
+    const comments = container.querySelector(
+      '[data-testid="conversation-filter-comments"]',
+    );
+    expect(comments?.getAttribute("aria-pressed")).toBe("true");
+
+    const tab = container.querySelector('[data-testid="review-conversation-tab"]');
+    expect(tab?.className).toContain("review-conversation");
+
+    const pre = tab?.querySelector("pre");
+    expect(pre?.textContent).toContain(wide);
+
+    const link = tab?.querySelector(".prose-issue a");
+    expect(link?.textContent).toBe(wide);
+    expect(link?.getAttribute("href")).toBe(`https://example.com/${wide}`);
+
+    const snippet = tab?.querySelector('[data-testid="comment-anchor-snippet"]');
+    expect(snippet?.textContent).toContain(wide);
   });
 });
