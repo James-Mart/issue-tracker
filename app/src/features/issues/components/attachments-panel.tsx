@@ -15,6 +15,7 @@ import { useAttachmentsQuery } from "../api/queries";
 import { useDeleteAttachment } from "../api/mutations";
 import type { UploadAttachmentMutation } from "../hooks/use-issue-detail-file-upload";
 import {
+  attachmentApiImageProps,
   attachmentsApiPath,
   formatAttachmentSize,
   isImageMime,
@@ -107,7 +108,12 @@ function FilmstripThumb({
         aria-label={`View ${item.name}`}
         aria-current={isActive ? "true" : undefined}
       >
-        <img src={href} alt="" className="h-full w-full object-cover" />
+        <img
+          src={href}
+          alt=""
+          {...attachmentApiImageProps(href)}
+          className="h-full w-full object-cover"
+        />
       </button>
       <div className="min-w-0">
         <p

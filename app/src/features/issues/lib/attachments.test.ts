@@ -3,6 +3,7 @@ import {
   attachmentDownloadName,
   attachmentLinkHref,
   attachmentsApiPath,
+  isAttachmentApiSrc,
   formatAttachmentSize,
   isImageMime,
   isSafeAttachmentName,
@@ -101,6 +102,27 @@ describe("attachmentLinkHref", () => {
     expect(attachmentLinkHref("#section", "c1")).toBeNull();
     expect(attachmentLinkHref("//cdn.example/x", "c1")).toBeNull();
     expect(attachmentLinkHref("mailto:a@b.c", "c1")).toBeNull();
+  });
+});
+
+describe("isAttachmentApiSrc", () => {
+  it("matches issue and conversation attachment API paths", () => {
+    expect(isAttachmentApiSrc("/api/issues/c1/attachments/foo.png")).toBe(true);
+    expect(
+      isAttachmentApiSrc("/api/conversations/conv-1/attachments/a%20b.png"),
+    ).toBe(true);
+    expect(isAttachmentApiSrc("/api/issues/c1/attachments/foo.png?v=1")).toBe(
+      true,
+    );
+  });
+
+  it("rejects non-attachment and external URLs", () => {
+    expect(isAttachmentApiSrc("https://example.com/x.png")).toBe(false);
+    expect(isAttachmentApiSrc("/api/issues/c1/attachments/nested/x.png")).toBe(
+      false,
+    );
+    expect(isAttachmentApiSrc("/projects/p/issues/c1")).toBe(false);
+    expect(isAttachmentApiSrc(undefined)).toBe(false);
   });
 });
 

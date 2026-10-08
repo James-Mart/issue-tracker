@@ -33,6 +33,7 @@ describe("ConversationThread attachment images", () => {
 
     const img = container!.querySelector(`img[src="${src}"]`);
     expect(img).toBeTruthy();
+    expect(img!.getAttribute("loading")).toBe("lazy");
 
     act(() => {
       (
@@ -75,6 +76,7 @@ describe("ConversationThread attachment images", () => {
     expect(captions).toEqual([...states]);
     for (const img of gallery!.querySelectorAll("img")) {
       expect(img.classList.contains("issue-md-image")).toBe(true);
+      expect(img.getAttribute("loading")).toBe("lazy");
     }
     expect(container!.scrollWidth).toBeLessThanOrEqual(390);
   });

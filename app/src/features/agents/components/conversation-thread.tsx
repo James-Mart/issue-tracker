@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import { cn } from "@/lib/utils/cn";
 import {
+  attachmentApiImageProps,
   formatAttachmentSize,
   isImageMime,
 } from "@/features/issues/lib/attachments";
@@ -131,7 +132,12 @@ function PromptAttachmentImage({
         title={name}
         aria-label={name}
       >
-        <img src={src} alt="" className="h-full w-full object-cover" />
+        <img
+          src={src}
+          alt=""
+          {...attachmentApiImageProps(src)}
+          className="h-full w-full object-cover"
+        />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="w-auto max-w-[min(96vw,80rem)] p-3">

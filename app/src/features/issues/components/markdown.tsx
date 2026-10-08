@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils/cn";
 import {
+  attachmentApiImageProps,
   attachmentDownloadName,
   attachmentLinkHref,
 } from "../lib/attachments";
@@ -166,6 +167,8 @@ function MarkdownImage({
   src,
   alt,
   className,
+  loading,
+  decoding,
   node: _node,
   ...props
 }: ComponentPropsWithoutRef<"img"> & { node?: unknown }) {
@@ -174,6 +177,7 @@ function MarkdownImage({
 
   const caption = alt?.trim() ?? "";
   const label = caption || "Image";
+  const fetchProps = attachmentApiImageProps(src);
 
   return (
     <figure className="issue-md-figure">
@@ -189,6 +193,8 @@ function MarkdownImage({
           alt={alt ?? ""}
           className={cn("issue-md-image", className)}
           {...props}
+          decoding={decoding ?? fetchProps.decoding}
+          loading={fetchProps.loading ?? loading}
         />
       </button>
       {caption ? (
