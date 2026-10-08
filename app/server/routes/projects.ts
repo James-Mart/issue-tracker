@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from "express";
 import type { AgentSessions } from "../services/agent-sessions.js";
 import { readProjectPrs } from "../services/delivery.js";
+import { projectWorktrees } from "../services/project-worktrees.js";
 import { IssueError } from "../services/errors.js";
 import { getWorkspaceFile } from "../services/project-workspace.js";
 import { requireProject } from "../services/require-project.js";
@@ -47,6 +48,14 @@ function callSecretStore(fn: () => void): void {
 
 export function createProjectsRouter(sessions: AgentSessions): Router {
   const projectsRouter = Router();
+
+  projectsRouter.get(
+    "/:projectId/worktrees",
+    asyncRoute(async (req, res) => {
+      const body = await projectWorktrees(req.params.projectId);
+      res.json(body);
+    }),
+  );
 
   projectsRouter.get(
     "/:projectId/prs",

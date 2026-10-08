@@ -20,6 +20,9 @@ import { StoryWorktreeCard } from "./story-worktree-card";
 const queryState = vi.hoisted(() => ({
   issues: [] as IssueRecord[],
   derived: {} as Record<string, DerivedState>,
+  worktrees: {} as Record<string, DerivedWorktree>,
+  worktreesLoaded: true,
+  worktreesError: undefined as Error | undefined,
 }));
 
 const removeMutate = vi.fn();
@@ -28,6 +31,13 @@ const setupMutate = vi.fn();
 vi.mock("../api/queries", () => ({
   useIssuesQuery: () => ({
     data: { issues: queryState.issues, derived: queryState.derived },
+  }),
+  useProjectWorktreesQuery: () => ({
+    data: queryState.worktreesLoaded
+      ? { worktrees: queryState.worktrees }
+      : undefined,
+    isError: queryState.worktreesError !== undefined,
+    error: queryState.worktreesError,
   }),
 }));
 
@@ -107,9 +117,11 @@ function seed(
     [issue.id]: {
       blocked: false,
       liveRun,
-      ...(wt ? { worktree: wt } : {}),
     },
   };
+  queryState.worktreesLoaded = true;
+  queryState.worktreesError = undefined;
+  queryState.worktrees = wt ? { [issue.id]: wt } : {};
 }
 
 function actionButton(
@@ -134,7 +146,9 @@ function mountCard(issue: Extract<IssueDetail, { kind: "story" }>): {
         <Routes>
           <Route
             path="/projects/:projectId/issues/:id"
-            element={<StoryWorktreeCard issue={issue} />}
+            element={
+              <StoryWorktreeCard issue={issue} projectId="issue-tracker" />
+            }
           />
         </Routes>
       </MemoryRouter>,
@@ -147,6 +161,9 @@ afterEach(() => {
   document.body.innerHTML = "";
   queryState.issues = [];
   queryState.derived = {};
+  queryState.worktrees = {};
+  queryState.worktreesLoaded = true;
+  queryState.worktreesError = undefined;
   removeMutate.mockReset();
   setupMutate.mockReset();
   vi.unstubAllGlobals();
@@ -162,9 +179,38 @@ describe("StoryWorktreeCard", () => {
     ).toBeNull();
   });
 
-  it("renders nothing when derived worktree is absent", () => {
+  it("renders nothing when the worktrees payload omits the Story", () => {
     const issue = story();
     seed(issue, undefined);
+    const { container } = mountCard(issue);
+    expect(
+      container.querySelector('[data-testid="story-worktree-card"]'),
+    ).toBeNull();
+  });
+
+  it("shows the worktrees request error when the Story has a checkout", () => {
+    const issue = story({ worktreePath: PATH });
+    seed(issue, worktree({ exists: true, path: PATH }));
+    queryState.worktreesError = new Error("git failed");
+    const { container } = mountCard(issue);
+    expect(container.querySelector('[data-testid="story-worktree-error"]')?.textContent).toBe(
+      "Could not load worktree state. Reload the page.",
+    );
+    expect(container.querySelector('[data-testid="story-worktree-card"]')).not.toBeNull();
+  });
+
+  it("stays quiet on a worktrees error when the Story has no checkout", () => {
+    const issue = story();
+    seed(issue, undefined);
+    queryState.worktreesError = new Error("git failed");
+    const { container } = mountCard(issue);
+    expect(container.querySelector('[data-testid="story-worktree-card"]')).toBeNull();
+  });
+
+  it("renders nothing until the worktrees endpoint resolves", () => {
+    const issue = story();
+    seed(issue, worktree({ exists: true, path: PATH }));
+    queryState.worktreesLoaded = false;
     const { container } = mountCard(issue);
     expect(
       container.querySelector('[data-testid="story-worktree-card"]'),
@@ -423,7 +469,9 @@ describe("StoryWorktreeCard", () => {
           <Routes>
             <Route
               path="/projects/:projectId/issues/:id"
-              element={<StoryWorktreeCard issue={issue} />}
+              element={
+              <StoryWorktreeCard issue={issue} projectId="issue-tracker" />
+            }
             />
           </Routes>
         </MemoryRouter>,

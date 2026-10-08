@@ -11,7 +11,7 @@ import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runIssueCli } from "../../cli-program.js";
 import { setupLogPathFor, WORKTREE_ROOT } from "../worktree-constants.js";
-import type { DerivedWorktree } from "../schemas.js";
+import type { ProjectStoryWorktree } from "../schemas.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const GIT = [
@@ -115,17 +115,24 @@ function writeStory(id: string, extra: Record<string, unknown> = {}): void {
   });
 }
 
-async function loadList() {
-  const mod = await import("./issues.js");
-  return mod.list;
+async function loadWorktrees() {
+  const mod = await import("./derive-worktree.js");
+  return mod.loadProjectWorktrees(PROJECT_ID);
 }
 
+const QUIET_GIT = {
+  dirty: false,
+  dirtyPaths: [],
+  ahead: 0,
+  behind: 0,
+};
+
 function worktreeOf(
-  derived: Record<string, { worktree?: DerivedWorktree }>,
+  worktrees: Record<string, ProjectStoryWorktree>,
   id: string,
-): DerivedWorktree {
-  const worktree = derived[id]?.worktree;
-  if (!worktree) throw new Error(`expected derived[${id}].worktree`);
+): ProjectStoryWorktree {
+  const worktree = worktrees[id];
+  if (!worktree) throw new Error(`expected worktrees[${id}]`);
   return worktree;
 }
 
@@ -157,15 +164,15 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("derived worktree on list()", () => {
+describe("derived worktree", () => {
   it("reports a clean worktree", async () => {
     const workspace = initRepo();
     const path = addWorktree(workspace, "feat-clean");
     seedProject();
     writeStory("s", { branchName: "feat-clean", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s")).toEqual({
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s")).toEqual({
+      ...QUIET_GIT,
       path,
       exists: true,
       uncommittedCount: 0,
@@ -182,8 +189,7 @@ describe("derived worktree on list()", () => {
     seedProject({ workspace });
     writeStory("s", { branchName: "feat-locked", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").locked).toBe(true);
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s").locked).toBe(true);
     git(workspace, ["worktree", "unlock", path]);
   });
 
@@ -195,8 +201,7 @@ describe("derived worktree on list()", () => {
     seedProject({ workspace });
     writeStory("s", { branchName: "feat-locked-gone", worktreePath: path });
 
-    const list = await loadList();
-    const worktree = worktreeOf(list().derived, "s");
+    const worktree = worktreeOf((await loadWorktrees()).worktrees, "s");
     expect(worktree.exists).toBe(false);
     expect(worktree.locked).toBe(true);
   });
@@ -208,8 +213,10 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-mod", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(1);
+    const worktree = worktreeOf((await loadWorktrees()).worktrees, "s");
+    expect(worktree.uncommittedCount).toBe(1);
+    expect(worktree.dirty).toBe(true);
+    expect(worktree.dirtyPaths).toEqual(["README"]);
   });
 
   it("counts an untracked non-ignored file", async () => {
@@ -219,8 +226,7 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-untracked", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(1);
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s").uncommittedCount).toBe(1);
   });
 
   it("does not count gitignored files", async () => {
@@ -230,8 +236,7 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-ignored", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(0);
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s").uncommittedCount).toBe(0);
   });
 
   it("counts at-risk commits that are not on trunk", async () => {
@@ -243,8 +248,12 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-risk", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").atRiskCommitCount).toBe(1);
+    const worktree = worktreeOf((await loadWorktrees()).worktrees, "s");
+    expect(worktree.atRiskCommitCount).toBe(1);
+    expect(worktree.ahead).toBe(1);
+    expect(worktree.behind).toBe(0);
+    expect(worktree.dirty).toBe(false);
+    expect(worktree.upstream).toBeUndefined();
   });
 
   it("counts zero at-risk commits after the branch is merged to trunk", async () => {
@@ -257,8 +266,7 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-merged", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").atRiskCommitCount).toBe(0);
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s").atRiskCommitCount).toBe(0);
   });
 
   it("marks a merged Story whose checkout still exists as retained", async () => {
@@ -271,8 +279,7 @@ describe("derived worktree on list()", () => {
       merged: true,
     });
 
-    const list = await loadList();
-    const worktree = worktreeOf(list().derived, "s");
+    const worktree = worktreeOf((await loadWorktrees()).worktrees, "s");
     expect(worktree.exists).toBe(true);
     expect(worktree.retained).toBe(true);
   });
@@ -281,8 +288,8 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s");
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s")).toEqual({
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s")).toEqual({
+      ...QUIET_GIT,
       exists: false,
       uncommittedCount: 0,
       atRiskCommitCount: 0,
@@ -296,8 +303,8 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "nongit", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s")).toEqual({
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s")).toEqual({
+      ...QUIET_GIT,
       path,
       exists: true,
       uncommittedCount: 0,
@@ -316,8 +323,7 @@ describe("derived worktree on list()", () => {
       worktreePath: missing,
     });
 
-    const list = await loadList();
-    const worktree = worktreeOf(list().derived, "s");
+    const worktree = worktreeOf((await loadWorktrees()).worktrees, "s");
     expect(worktree.exists).toBe(false);
     expect(worktree.path).toBe(missing);
     expect(worktree.uncommittedCount).toBe(0);
@@ -336,8 +342,8 @@ describe("derived worktree on list()", () => {
       worktreeBlockedReason: "parent-branch",
     });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s")).toEqual({
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s")).toEqual({
+      ...QUIET_GIT,
       exists: false,
       uncommittedCount: 0,
       atRiskCommitCount: 0,
@@ -363,8 +369,11 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-upstream", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").atRiskCommitCount).toBe(0);
+    const worktree = worktreeOf((await loadWorktrees()).worktrees, "s");
+    expect(worktree.atRiskCommitCount).toBe(0);
+    expect(worktree.upstream).toBe("origin/feat-upstream");
+    expect(worktree.ahead).toBe(0);
+    expect(worktree.behind).toBe(0);
     rmSync(remote, { recursive: true, force: true });
   });
 
@@ -378,8 +387,7 @@ describe("derived worktree on list()", () => {
       archived: true,
     });
 
-    const list = await loadList();
-    const worktree = worktreeOf(list().derived, "s");
+    const worktree = worktreeOf((await loadWorktrees()).worktrees, "s");
     expect(worktree.exists).toBe(true);
     expect(worktree.retained).toBe(true);
   });
@@ -395,8 +403,7 @@ describe("derived worktree on list()", () => {
     seedProject({ trunk: "develop" });
     writeStory("s", { branchName: "feat-trunk", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").atRiskCommitCount).toBe(1);
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s").atRiskCommitCount).toBe(1);
   });
 
   it("does not surface a leftover setup log after a successful setup", async () => {
@@ -406,8 +413,8 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s");
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s")).toEqual({
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s")).toEqual({
+      ...QUIET_GIT,
       exists: false,
       uncommittedCount: 0,
       atRiskCommitCount: 0,
@@ -425,6 +432,7 @@ describe("derived worktree on list()", () => {
     });
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
+      ...QUIET_GIT,
       exists: false,
       uncommittedCount: 0,
       atRiskCommitCount: 0,
@@ -440,8 +448,12 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-parent-file", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(2);
+    const worktree = worktreeOf((await loadWorktrees()).worktrees, "s");
+    expect(worktree.uncommittedCount).toBe(2);
+    expect(worktree.dirtyPaths).toEqual(
+      expect.arrayContaining(["README", "libs/foo/bar.txt"]),
+    );
+    expect(worktree.dirtyPaths).toHaveLength(2);
   });
 
   it("uses submodule inner porcelain instead of the parent submodule line", async () => {
@@ -451,8 +463,7 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-sub-inner", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(2);
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s").uncommittedCount).toBe(2);
   });
 
   it("counts the parent submodule line once when inner porcelain is empty", async () => {
@@ -463,8 +474,7 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-sub-pointer", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(1);
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s").uncommittedCount).toBe(1);
   });
 
   it("applies the once-per-change rule at nested submodule levels", async () => {
@@ -491,8 +501,7 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-nested-sub", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(2);
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s").uncommittedCount).toBe(2);
   });
 
   it("does not count gitignored files inside a submodule", async () => {
@@ -501,7 +510,6 @@ describe("derived worktree on list()", () => {
     seedProject();
     writeStory("s", { branchName: "feat-sub-ignored", worktreePath: path });
 
-    const list = await loadList();
-    expect(worktreeOf(list().derived, "s").uncommittedCount).toBe(0);
+    expect(worktreeOf((await loadWorktrees()).worktrees, "s").uncommittedCount).toBe(0);
   });
 });

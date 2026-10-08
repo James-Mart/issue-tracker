@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Send } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import type { IssueDetail, ThreadEventRequest } from "@server/schemas";
@@ -10,11 +10,7 @@ import {
   conversationDraftKey,
   replyDraftKey,
 } from "@/features/reviews/lib/review-draft-key";
-import {
-  useCommentThreads,
-  useCommentsQuery,
-  useIssuesQuery,
-} from "../../api/queries";
+import { useCommentThreads, useCommentsQuery } from "../../api/queries";
 import { usePostComment, usePostThreadEvent } from "../../api/mutations";
 import { supportsAttachments } from "../../lib/attachments";
 import {
@@ -165,7 +161,7 @@ export function IssueCommentsSection({ issue }: { issue: IssueDetail }) {
   return (
     <div data-region="comments" id="comments" className="scroll-mt-8">
       <CommentsPanel
-        id={issue.id}
+        issue={issue}
         attachmentsIssueId={attachmentsIssueId}
         storyComposer={issue.kind === "story"}
       />
@@ -174,17 +170,17 @@ export function IssueCommentsSection({ issue }: { issue: IssueDetail }) {
 }
 
 function CommentsPanel({
-  id,
+  issue,
   attachmentsIssueId,
   storyComposer,
 }: {
-  id: string;
+  issue: IssueDetail;
   attachmentsIssueId?: string;
   storyComposer: boolean;
 }) {
+  const id = issue.id;
   const { isLoading, error } = useCommentsQuery(id);
   const { threads, problems } = useCommentThreads(id);
-  const { data: list } = useIssuesQuery();
   const post = usePostComment(id);
   const events = usePostThreadEvent(id);
   const [, setSearchParams] = useSearchParams();
@@ -192,11 +188,7 @@ function CommentsPanel({
   const [openReplyId, setOpenReplyId] = useState<string | null>(null);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
 
-  const agentLive = useMemo(() => {
-    const issue = list?.issues.find((item) => item.id === id);
-    if (!issue) return false;
-    return isInFlight(issue, list?.derived[id]);
-  }, [id, list?.derived, list?.issues]);
+  const agentLive = isInFlight(issue);
 
   const sendStory = (body: string, kind?: "question") =>
     post(humanComment(body, kind));

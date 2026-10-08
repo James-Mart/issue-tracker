@@ -21,7 +21,6 @@ import {
 import { IssueError } from "./errors.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
-import { attachWorktreeDerived } from "./derive-worktree.js";
 import { mergeImplementingOverlay } from "./implementing-status.js";
 import { planningStatusById } from "./planning-status.js";
 import { checkIntegrity, problemsFor } from "./integrity.js";
@@ -39,6 +38,10 @@ import { ensureKindRenamed } from "./kind-rename.js";
 import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
+import {
+  applyArchivedListQuery,
+  type ArchivedListQuery,
+} from "./archived-list.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
   attemptStoryWorktreeRemoval,
@@ -181,7 +184,7 @@ export function ensureMigrations(): void {
   ensureSourceIdeaMigration();
 }
 
-export function list(): IssuesResponse {
+export function list(archived?: ArchivedListQuery): IssuesResponse {
   if (!refusesStoreWrites() && existsSync(issuesDir)) {
     withIssuesStoreLock(() => {
       ensureMigrations();
@@ -195,7 +198,6 @@ export function list(): IssuesResponse {
     else derived.byId[id] = { blocked: false, ideaStatus };
   }
   mergeImplementingOverlay(issues, derived.byId);
-  attachWorktreeDerived(issues, derived.byId);
   // Malformed comments.jsonl lines stay on the list. The snapshot revalidates
   // each file's stats and re-parses only files that changed, so an append from
   // any process shows up on the next list.
@@ -203,11 +205,19 @@ export function list(): IssuesResponse {
     if (!existsSync(legacyChatPathOf(issue.id))) return [];
     return [{ id: issue.id, message: "chat.jsonl" }];
   });
-  return {
-    issues: issues.map(toRecord),
-    problems: [...problems, ...commentProblems, ...legacyChatProblems, ...derived.problems],
-    derived: derived.byId,
-  };
+  return applyArchivedListQuery(
+    {
+      issues: issues.map(toRecord),
+      problems: [
+        ...problems,
+        ...commentProblems,
+        ...legacyChatProblems,
+        ...derived.problems,
+      ],
+      derived: derived.byId,
+    },
+    archived,
+  );
 }
 
 export function read(id: string): IssueDetail {

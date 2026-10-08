@@ -264,15 +264,11 @@ These are computed by `derive()` and never written to disk (see
   story-review append and reopen-cap contract: [Derived state](#derived-state).
 - **mergeBaseRef** — derived Story ref, not stored. Read with
   `issue story get <storyId> mergeBaseRef`. Resolution contract: [Derived state](#derived-state).
-- **worktree** — derived Story object on `list()` / `issue list` /
-  `issue story get … worktree`: recorded `path`, whether that directory
-  `exists`, porcelain `uncommittedCount` (ignored paths omitted),
-  `atRiskCommitCount` (Story-branch commits reachable from neither trunk nor
-  upstream), `retained` (`exists` while merged or archived), `locked`
-  (`git worktree list --porcelain` marks the stored path `locked`), last-setup
-  `setupFailed` / `setupLogPath` / `setupOutput`, and `blockedReason`. A
-  missing `worktreePath` or vanished directory is absent (`exists: false`,
-  counts 0) rather than an error. See [Derived state](#derived-state).
+- **worktree** — derived Story checkout. Not on `list()` / `GET /api/issues`.
+  `GET /api/projects/:projectId/worktrees` returns
+  `{ worktrees: { [storyId]: state } }` for Stories in that Project, and
+  `issue story get <storyId> worktree` returns the same state for one Story.
+  Field names and the git reads are in [Derived state](#derived-state).
 - **noDiff** — a Task-only signal that the implementor intentionally landed no
   source-controlled file changes (`true`; absent until set via kind
   [`set`](#kind-scoped-get--set)). Edits that only touch non-source-controlled
@@ -2054,11 +2050,15 @@ so cannot drift:
   under a blocked Epic.
 - **Story `worktree`** — checkout state for a Story: `path` (stored
   `worktreePath`, omitted when unset), `exists`, `uncommittedCount` (lines from
-  `git status --porcelain` in the worktree, without `--ignored`),
-  `atRiskCommitCount` (commits on `branchName` reachable from neither the
-  Project `trunk` nor the branch's upstream when one exists), `retained`
-  (`exists` while the Story is merged or archived), `locked` (`git worktree
-  list --porcelain` marks the stored path `locked`), `setupFailed` /
+  `git status --porcelain` in the worktree, without `--ignored`), `dirty`
+  (`uncommittedCount > 0`), `dirtyPaths` (one path per counted change,
+  submodule paths expanded to their inner paths), `atRiskCommitCount` (commits
+  on `branchName` reachable from neither the Project `trunk` nor the branch's
+  upstream when one exists), `upstream` (abbrev `branch@{upstream}` when
+  configured), `ahead` / `behind` (commits on the branch not on that upstream,
+  or trunk when none is configured, and the reverse), `retained` (`exists`
+  while the Story is merged or archived), `locked` (`git worktree list
+  --porcelain` marks the stored path `locked`), `setupFailed` /
   `setupLogPath` / `setupOutput` (last setup attempt; output is the log text),
   and `blockedReason` (`worktreeBlockedReason`). Merge, archive, and delete
   each attempt safe worktree removal automatically (no `--discard`); an
@@ -2066,11 +2066,14 @@ so cannot drift:
   the same way. `retained` is how a leftover checkout
   is reported while the Story record still exists.
   Other removal failures still fail the caller. Counts are read through
-  `app/server/services/git-read.ts` with the worktree as cwd. A Story with no
-  `worktreePath`, or whose recorded directory is gone, derives as absent
-  (`exists: false`, counts 0) rather than erroring. Computed by
-  `attachWorktreeDerived()` (filesystem + git I/O) and merged into `derived` by
-  `list()` — not by the pure `derive()` pass.
+  `app/server/services/git-read.ts` with the worktree as cwd, using
+  non-blocking git. A Story with no `worktreePath`, or whose recorded
+  directory is gone, derives as absent (`exists: false`, counts 0) rather
+  than erroring. Served by `GET /api/projects/:projectId/worktrees` as
+  `{ worktrees: { [storyId]: state } }` and by `issue story get <storyId>
+  worktree`. Concurrent requests for one Project share one in-flight
+  computation; the next request after it settles reads git again. Not
+  attached by `list()` or the pure `derive()` pass.
 - **Idea status** — ranked highest first: `planning` when a planning-session
   run is live; `planned` when an Epic or root project-level Story in the same
   Project stores `sourceIdea` pointing at the Idea; `awaiting-approval` when

@@ -12,6 +12,7 @@ import type {
   IssueChange,
   IssueDetail,
   IssuesResponse,
+  ProjectWorktreesResponse,
 } from "@server/schemas";
 import type { PlanningWorkRoot } from "@server/services/planning-work-root";
 import type { Attachment } from "@server/services/attachments";
@@ -29,7 +30,7 @@ import {
 } from "../store/use-comment-outbox-store";
 import { fetchIssueAgentRunEvents, fetchIssueAgentRuns } from "./agent-runs";
 import { listChannelSessions } from "./channel-sessions";
-import { healthKeys, issuesKeys } from "./keys";
+import { healthKeys, issuesKeys, type ArchivedListParam } from "./keys";
 
 export {
   selectAnchoredThreads,
@@ -62,10 +63,36 @@ export const reuseMountedRead = {
   refetchOnMount: false,
 } as const satisfies ReuseMountedReadOptions;
 
-export function useIssuesQuery(): UseQueryResult<IssuesResponse, Error> {
+export type { ArchivedListParam };
+
+export function issuesListPath(archived?: ArchivedListParam): string {
+  if (!archived) return "/api/issues";
+  return `/api/issues?${new URLSearchParams({ archived }).toString()}`;
+}
+
+export function useIssuesQuery(
+  archived?: ArchivedListParam,
+  options?: { enabled?: boolean },
+): UseQueryResult<IssuesResponse, Error> {
   return useQuery({
-    queryKey: issuesKeys.list(),
-    queryFn: () => request<IssuesResponse>("/api/issues"),
+    queryKey: issuesKeys.list(archived),
+    queryFn: () => request<IssuesResponse>(issuesListPath(archived)),
+    enabled: options?.enabled ?? true,
+    ...reuseMountedRead,
+  });
+}
+
+/** Git worktree facts for a Project. May resolve after the issue list. */
+export function useProjectWorktreesQuery(
+  projectId: string,
+): UseQueryResult<ProjectWorktreesResponse, Error> {
+  return useQuery({
+    queryKey: issuesKeys.projectWorktrees(projectId),
+    queryFn: () =>
+      request<ProjectWorktreesResponse>(
+        `/api/projects/${encodeURIComponent(projectId)}/worktrees`,
+      ),
+    enabled: Boolean(projectId),
     ...reuseMountedRead,
   });
 }

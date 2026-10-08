@@ -94,6 +94,21 @@ vi.mock("./issue-link", () => ({
   useIssueLinkNavigate: () => ({
     go,
     hrefFor: (id: string) => `#${id}`,
+    missingIds: [],
+    failedIds: new Set<string>(),
+    accept: () => {},
+    reject: () => {},
+  }),
+  useBoundNavigate: () => ({
+    go,
+    hrefFor: (id: string) => `#${id}`,
+    byId: new Map(),
+    missingIds: [],
+    failedIds: new Set<string>(),
+    accept: () => {},
+    reject: () => {},
+    listReady: true,
+    messageFor: () => undefined,
   }),
 }));
 

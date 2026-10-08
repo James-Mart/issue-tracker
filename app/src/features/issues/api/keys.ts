@@ -1,6 +1,11 @@
+export type ArchivedListParam = "include" | "only";
+
 export const issuesKeys = {
   all: ["issues"] as const,
-  list: () => [...issuesKeys.all, "list"] as const,
+  list: (archived?: ArchivedListParam) =>
+    archived
+      ? ([...issuesKeys.all, "list", archived] as const)
+      : ([...issuesKeys.all, "list"] as const),
   detail: (id: string) => [...issuesKeys.all, "detail", id] as const,
   comments: (id: string) => [...issuesKeys.all, "comments", id] as const,
   agentRuns: (issueId: string) =>
@@ -15,6 +20,10 @@ export const issuesKeys = {
     [...issuesKeys.all, "planningWorkRoot", ideaId] as const,
   projectPullRequests: (projectId: string) =>
     [...issuesKeys.all, "projectPullRequests", projectId] as const,
+  projectWorktrees: (projectId: string) =>
+    [...issuesKeys.all, "projectWorktrees", projectId] as const,
+  projectWorktreesAll: () =>
+    [...issuesKeys.all, "projectWorktrees"] as const,
   projectSecrets: (projectId: string) =>
     [...issuesKeys.all, "projectSecrets", projectId] as const,
   change: (issueId: string) => [...issuesKeys.all, "change", issueId] as const,

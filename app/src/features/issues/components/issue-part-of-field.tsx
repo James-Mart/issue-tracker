@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Pencil } from "lucide-react";
-import type { IssueDetail, IssueRecord } from "@server/schemas";
+import type { IssueDetail } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMoveStory, useUpdateIssue } from "../api/mutations";
-import { useIssuesQuery } from "../api/queries";
 import { useInlineEditSession } from "../hooks/use-inline-edit-session";
-import { issuesById } from "../lib/build-tree";
+import {
+  IssueLinkResolution,
+  type IssueSupplement,
+  useSupplementedById,
+} from "../hooks/use-supplemented-by-id";
 import { storyPartOfOptions } from "../lib/story-partof-options";
 import { ExternalEditConflictBanner } from "./external-edit-conflict-banner";
 import type { InlineFieldEditContext } from "./inline-field";
@@ -14,23 +17,23 @@ import { IssueLink } from "./issue-link";
 import { MetaFieldActions } from "./meta-row";
 import { PartOfTargetSelect } from "./part-of-target-select";
 
-function parentDisplayTitle(partOf: string, issues: IssueRecord[]): string {
-  return issuesById(issues).get(partOf)?.title ?? partOf;
-}
-
-function ParentIssueEditor({
+function ParentIssueEditorView({
   issue,
   onSave,
   validate,
   renderEdit,
+  supplement,
+  resolve,
 }: {
   issue: Extract<IssueDetail, { kind: "epic" | "story" | "task" }>;
   onSave: (next: string) => Promise<void>;
   validate?: (next: string) => string | null;
   renderEdit?: (ctx: InlineFieldEditContext) => ReactNode;
+  supplement: IssueSupplement;
+  resolve: boolean;
 }) {
-  const { data } = useIssuesQuery();
-  const title = parentDisplayTitle(issue.partOf, data?.issues ?? []);
+  const { byId } = supplement;
+  const title = byId.get(issue.partOf)?.title ?? issue.partOf;
   const inputRef = useRef<HTMLInputElement>(null);
   const {
     editing,
@@ -64,7 +67,18 @@ function ParentIssueEditor({
   if (!editing) {
     return (
       <MetaFieldActions>
-        <IssueLink id={issue.partOf} className="text-primary hover:underline">
+        {resolve ? (
+          <IssueLinkResolution
+            missingIds={supplement.missingIds}
+            accept={supplement.accept}
+            reject={supplement.reject}
+          />
+        ) : null}
+        <IssueLink
+          id={issue.partOf}
+          className="text-primary hover:underline"
+          supplement={supplement}
+        >
           {title}
         </IssueLink>
         <Button
@@ -118,21 +132,70 @@ function ParentIssueEditor({
   );
 }
 
+function ParentIssueEditorOwned(
+  props: Omit<
+    Parameters<typeof ParentIssueEditorView>[0],
+    "supplement" | "resolve"
+  >,
+) {
+  const supplement = useSupplementedById(
+    [props.issue.partOf],
+    undefined,
+    undefined,
+    true,
+  );
+  return (
+    <ParentIssueEditorView {...props} supplement={supplement} resolve />
+  );
+}
+
+function ParentIssueEditor({
+  supplement,
+  ...props
+}: Omit<
+  Parameters<typeof ParentIssueEditorView>[0],
+  "supplement" | "resolve"
+> & { supplement?: IssueSupplement }) {
+  if (supplement) {
+    return (
+      <ParentIssueEditorView
+        {...props}
+        supplement={supplement}
+        resolve={false}
+      />
+    );
+  }
+  return <ParentIssueEditorOwned {...props} />;
+}
+
 function StoryPartOfField({
   issue,
 }: {
   issue: Extract<IssueDetail, { kind: "story" }>;
 }) {
   const moveStory = useMoveStory();
-  const { data } = useIssuesQuery();
+  const supplement = useSupplementedById(
+    [issue.id, issue.partOf],
+    issue,
+    undefined,
+    true,
+  );
+  const { byId, missingIds, accept, reject } = supplement;
   const options = useMemo(
-    () => storyPartOfOptions(issue, data?.issues ?? []),
-    [issue, data?.issues],
+    () => storyPartOfOptions(issue, [...byId.values()]),
+    [issue, byId],
   );
 
   return (
+    <>
+    <IssueLinkResolution
+      missingIds={missingIds}
+      accept={accept}
+      reject={reject}
+    />
     <ParentIssueEditor
       issue={issue}
+      supplement={supplement}
       onSave={async (next) => {
         const trimmed = next.trim();
         if (!trimmed || trimmed === issue.partOf) return;
@@ -161,6 +224,7 @@ function StoryPartOfField({
         </>
       )}
     />
+    </>
   );
 }
 

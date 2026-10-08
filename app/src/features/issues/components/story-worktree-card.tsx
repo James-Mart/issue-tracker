@@ -9,7 +9,12 @@ import {
   useRemoveStoryWorktree,
   useSetupStoryWorktree,
 } from "../api/mutations";
-import { useIssuesQuery } from "../api/queries";
+import { useIssuesQuery, useProjectWorktreesQuery } from "../api/queries";
+import {
+  IssueLinkResolution,
+  type IssueSupplement,
+  useSupplementedById,
+} from "../hooks/use-supplemented-by-id";
 import {
   WORKTREE_PARENT_BRANCH_SUFFIX,
   WORKTREE_REMOVE_ACTIVE_CONFIRM,
@@ -113,10 +118,12 @@ function CardBody({
   model,
   issue,
   issues,
+  supplement,
 }: {
   model: WorktreeCardModel;
   issue: StoryDetail;
   issues: IssueRecord[];
+  supplement: IssueSupplement;
 }) {
   if (model.kind === "parent-branch") {
     const title = parentStoryTitle(issue.stackedOn, issues);
@@ -129,6 +136,7 @@ function CardBody({
           <IssueLink
             id={issue.stackedOn}
             className="font-medium text-foreground hover:underline"
+            supplement={supplement}
           >
             {title}
           </IssueLink>
@@ -198,11 +206,13 @@ function StoryWorktreeCardInner({
   model,
   issues,
   liveRun,
+  supplement,
 }: {
   issue: StoryDetail;
   model: WorktreeCardModel;
   issues: IssueRecord[];
   liveRun: boolean;
+  supplement: IssueSupplement;
 }) {
   const remove = useRemoveStoryWorktree(issue.id);
   const setup = useSetupStoryWorktree(issue.id);
@@ -296,7 +306,12 @@ function StoryWorktreeCardInner({
           </div>
         ) : null}
         <div className="order-2 min-w-0 sm:col-start-1">
-          <CardBody model={model} issue={issue} issues={issues} />
+          <CardBody
+            model={model}
+            issue={issue}
+            issues={issues}
+            supplement={supplement}
+          />
         </div>
       </div>
       {model.kind === "setup-failed" ? (
@@ -336,17 +351,64 @@ function StoryWorktreeCardInner({
   );
 }
 
-export function StoryWorktreeCard({ issue }: { issue: StoryDetail }) {
+export function StoryWorktreeCard({
+  issue,
+  projectId,
+}: {
+  issue: StoryDetail;
+  projectId: string;
+}) {
   const { data } = useIssuesQuery();
-  const model = worktreeCardModel(data?.derived[issue.id]?.worktree);
+  const supplement = useSupplementedById(
+    issue.stackedOn ? [issue.stackedOn] : [],
+  );
+  const { byId, missingIds, accept, reject } = supplement;
+  const { data: worktrees, isError } = useProjectWorktreesQuery(projectId);
+  const storyHasCheckout =
+    issue.worktreePath !== undefined ||
+    issue.worktreeSetupFailed === true ||
+    issue.worktreeBlockedReason !== undefined;
+  if (isError && storyHasCheckout) {
+    return (
+      <section
+        data-region="worktree"
+        data-testid="story-worktree-card"
+        className="flex min-w-0 flex-col rounded-lg border border-border bg-card px-4 py-3.5"
+      >
+        <div className="flex min-h-8 items-center gap-2">
+          <FolderGit2
+            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          <DetailEyebrow>Worktree</DetailEyebrow>
+        </div>
+        <p
+          role="alert"
+          data-testid="story-worktree-error"
+          className="mt-3 text-sm text-destructive"
+        >
+          Could not load worktree state. Reload the page.
+        </p>
+      </section>
+    );
+  }
+  const model = worktreeCardModel(worktrees?.worktrees[issue.id]);
   if (!data || !model) return null;
 
   return (
-    <StoryWorktreeCardInner
-      issue={issue}
-      model={model}
-      issues={data.issues}
-      liveRun={data.derived[issue.id]?.liveRun === true}
-    />
+    <>
+      <IssueLinkResolution
+        missingIds={missingIds}
+        accept={accept}
+        reject={reject}
+      />
+      <StoryWorktreeCardInner
+        issue={issue}
+        model={model}
+        issues={[...byId.values()]}
+        liveRun={data.derived[issue.id]?.liveRun === true}
+        supplement={supplement}
+      />
+    </>
   );
 }

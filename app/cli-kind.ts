@@ -15,11 +15,13 @@ import {
 import {
   list,
   read,
+  readAll,
   readComments,
   renameProjectLabel,
   update,
 } from "./server/services/issues.js";
 import { openLinkedThreadRootIds } from "./server/services/thread-state.js";
+import { deriveStoryWorktree } from "./server/services/derive-worktree.js";
 import { storyBehindMergeBase } from "./server/services/merge-base-task.js";
 import { storyMergeBaseRef } from "./server/services/resolve-merge-base-ref.js";
 import { validateFullCommitSha } from "./server/services/commit-sha.js";
@@ -740,6 +742,12 @@ export async function kindGetValue(
   }
 
   if (spec.source === "derived") {
+    if (kind === "story" && field === "worktree") {
+      const { issues } = readAll();
+      const story = issues.find((issue) => issue.id === id);
+      if (!story || story.kind !== "story") return null;
+      return formatGetValue(await deriveStoryWorktree(story, issues));
+    }
     if (kind === "story" && field === "behindMergeBase") {
       return formatGetValue(await storyBehindMergeBase(id));
     }

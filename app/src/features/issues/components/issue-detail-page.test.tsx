@@ -78,6 +78,7 @@ vi.mock("../api/queries", () => ({
   useIssuesQuery: () => ({
     data: {
       issues: [project, idea, epic],
+      problems: [],
       derived: {
         capture: { blocked: false, ideaStatus: derivedState.ideaStatus },
       },

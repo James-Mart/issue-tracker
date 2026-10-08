@@ -1,16 +1,14 @@
-import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { useIssuesQuery } from "../../api/queries";
-import { issuesById } from "../../lib/build-tree";
+import {
+  IssueLinkResolution,
+  useSupplementedById,
+} from "../../hooks/use-supplemented-by-id";
 import { IssueLink } from "../issue-link";
 
 /** Task chip for a Story diff thread linked to the Task that addresses it. */
 export function ThreadLinkedTaskChip({ taskId }: { taskId: string }) {
-  const { data } = useIssuesQuery();
-  const byId = useMemo(
-    () => issuesById(data?.issues ?? []),
-    [data?.issues],
-  );
+  const supplement = useSupplementedById([taskId]);
+  const { byId, missingIds, accept, reject } = supplement;
   const task = byId.get(taskId);
   const title = task?.kind === "task" ? task.title : taskId;
 
@@ -19,9 +17,15 @@ export function ThreadLinkedTaskChip({ taskId }: { taskId: string }) {
       className="inline-flex max-w-full min-w-0 shrink-0"
       data-testid="thread-linked-task"
     >
+      <IssueLinkResolution
+        missingIds={missingIds}
+        accept={accept}
+        reject={reject}
+      />
       <IssueLink
         id={taskId}
         className="inline-flex max-w-full min-w-0 hover:underline"
+        supplement={supplement}
       >
         <Badge
           variant="secondary"

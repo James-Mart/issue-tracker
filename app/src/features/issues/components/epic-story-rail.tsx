@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import type { DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
 import { Rail, RailNode } from "@/components/ui/rail";
-import { useIssuesQuery } from "../api/queries";
+import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import {
   type IssueBackLocationState,
   issueBackNavigateState,
@@ -90,7 +90,7 @@ export function EpicStoryRail({
 }: {
   issue: Extract<IssueDetail, { kind: "epic" }>;
 }) {
-  const { data } = useIssuesQuery();
+  const { data } = useIssuesWithArchived(true);
   const issues = useMemo(() => data?.issues ?? [], [data?.issues]);
   if (!data) return null;
   return (

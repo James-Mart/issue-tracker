@@ -691,6 +691,24 @@ export interface DerivedWorktree {
   blockedReason?: "parent-branch";
 }
 
+/** Git facts served with each Story on `GET /api/projects/:projectId/worktrees`. */
+export interface StoryWorktreeGitState {
+  dirty: boolean;
+  dirtyPaths: string[];
+  /** Abbrev `branch@{upstream}` when one is configured. */
+  upstream?: string;
+  ahead: number;
+  behind: number;
+}
+
+export interface ProjectStoryWorktree
+  extends DerivedWorktree,
+    StoryWorktreeGitState {}
+
+export interface ProjectWorktreesResponse {
+  worktrees: Record<string, ProjectStoryWorktree>;
+}
+
 export interface DerivedState {
   blocked: boolean;
   storyStatus?: StoryStatus;
@@ -708,8 +726,6 @@ export interface DerivedState {
   planRoots?: string[];
   /** True when sourceIdea names an Idea present in the set and not archived. */
   planNotFinal?: boolean;
-  /** Per-Story worktree checkout; attached by list() (git + filesystem). */
-  worktree?: DerivedWorktree;
 }
 
 export interface IssuesResponse {

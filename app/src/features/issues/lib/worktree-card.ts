@@ -29,7 +29,7 @@ export const WORKTREE_PARENT_BRANCH_SUFFIX =
 export const WORKTREE_SETUP_FAILED_COPY =
   "Project setup failed after checkout. Read the output below.";
 
-/** Choose the card state from `derived[storyId].worktree` alone. */
+/** Choose the card state from one Story's worktree checkout alone. */
 export function worktreeCardModel(
   worktree: DerivedWorktree | undefined,
 ): WorktreeCardModel | null {

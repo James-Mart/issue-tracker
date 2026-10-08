@@ -3,7 +3,7 @@ import { FIELD_LABELS } from "@server/fields";
 import type { IssueDetail, IssueRecord } from "@server/schemas";
 import { taskHeadCommit } from "@server/services/commit-sha";
 import { Rail, RailNode } from "@/components/ui/rail";
-import { useIssuesQuery } from "../api/queries";
+import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import { issuesById } from "../lib/build-tree";
 import {
   ideaAppendedTasksForRail,
@@ -48,7 +48,7 @@ function AppendedTasksRail({ tasks }: { tasks: TaskRecord[] }) {
 }
 
 export function IssueGeneratedIssuesField({ issue }: { issue: IdeaDetail }) {
-  const { data } = useIssuesQuery();
+  const { data } = useIssuesWithArchived(true);
   const planRoots = data?.derived?.[issue.id]?.planRoots ?? [];
   const issues = data?.issues ?? [];
   const byId = useMemo(() => issuesById(issues), [issues]);

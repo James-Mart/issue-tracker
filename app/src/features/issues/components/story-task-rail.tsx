@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import type { IssueDetail, IssueRecord } from "@server/schemas";
 import { taskHeadCommit } from "@server/services/commit-sha";
 import { Rail, RailNode } from "@/components/ui/rail";
-import { useIssuesQuery } from "../api/queries";
+import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import { issuesById } from "../lib/build-tree";
 import {
   type IssueBackLocationState,
@@ -129,7 +129,7 @@ export function StoryTaskRail({
 }: {
   issue: Extract<IssueDetail, { kind: "story" }>;
 }) {
-  const { data } = useIssuesQuery();
+  const { data } = useIssuesWithArchived(true);
   const issues = useMemo(() => data?.issues ?? [], [data?.issues]);
   if (!data) return null;
   return (

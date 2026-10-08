@@ -1,10 +1,6 @@
 import { useLayoutEffect, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import type {
-  DerivedState,
-  IssueRecord,
-  ProjectLabel,
-} from "@server/schemas";
+import type { ProjectLabel } from "@server/schemas";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +12,7 @@ import {
 } from "@/app/shell-state";
 import { useUploadAttachment } from "../api/mutations";
 import { useIssueDetailQuery, useIssuesQuery } from "../api/queries";
+import { useIssuesIncludingArchived } from "../hooks/use-issues-with-archived";
 import {
   type FlowFilters,
   flowFiltersActive,
@@ -75,13 +72,9 @@ function OverviewProjectLens({ projectId }: { projectId: string }) {
 /** Project-scoped Structure lens content (shared toolbar lives on OverviewPage). */
 function OverviewStructureLens({
   projectId,
-  issues,
-  derived,
   catalog,
 }: {
   projectId: string;
-  issues: IssueRecord[];
-  derived: Record<string, DerivedState>;
   catalog: ProjectLabel[];
 }) {
   const search = useIssueUiStore((s) => s.search);
@@ -91,6 +84,9 @@ function OverviewStructureLens({
   const boardKindFilter = useIssueUiStore((s) => s.boardKindFilter);
   const setBoardKindFilter = useIssueUiStore((s) => s.setBoardKindFilter);
   const showArchived = useIssueUiStore((s) => s.showArchived);
+  const listed = useIssuesIncludingArchived(showArchived);
+  const viewIssues = listed.data?.issues ?? [];
+  const viewDerived = listed.data?.derived ?? {};
 
   const filters: FlowFilters = useMemo(
     () => ({
@@ -103,20 +99,20 @@ function OverviewStructureLens({
   const filtersOn = flowFiltersActive(filters);
 
   const scoped = useMemo(
-    () => structureScopedIssues(issues, projectId, showArchived),
-    [issues, projectId, showArchived],
+    () => structureScopedIssues(viewIssues, projectId, showArchived),
+    [viewIssues, projectId, showArchived],
   );
   const nodes = useMemo(
-    () => structureTreeNodes(scoped, filters, derived),
-    [derived, filters, scoped],
+    () => structureTreeNodes(scoped, filters, viewDerived),
+    [viewDerived, filters, scoped],
   );
   const ideaNodes = useMemo(
     () => structureIdeaNodes(scoped, filters),
     [filters, scoped],
   );
   const doneNodes = useMemo(
-    () => structureDoneNodes(scoped, filters, derived),
-    [derived, filters, scoped],
+    () => structureDoneNodes(scoped, filters, viewDerived),
+    [viewDerived, filters, scoped],
   );
   const boardRootIds = useMemo(
     () => projectBoardRoots(scoped, []).map((issue) => issue.id),
@@ -155,7 +151,7 @@ function OverviewStructureLens({
           nodes={nodes}
           ideaNodes={ideaNodes}
           doneNodes={doneNodes}
-          derived={derived}
+          derived={viewDerived}
           issues={scoped}
           catalog={catalog}
           projectId={projectId}
@@ -173,7 +169,6 @@ export function OverviewPage() {
   const { data, isLoading, error, refetch, isFetching } = useIssuesQuery();
 
   const issues = data?.issues ?? [];
-  const derived = data?.derived ?? {};
   const project = useMemo(
     () =>
       issues.find(
@@ -221,12 +216,7 @@ export function OverviewPage() {
           ) : null}
 
           {lens === "structure" ? (
-            <OverviewStructureLens
-              projectId={projectId}
-              issues={issues}
-              derived={derived}
-              catalog={catalog}
-            />
+            <OverviewStructureLens projectId={projectId} catalog={catalog} />
           ) : null}
 
           {lens === "overview" ? (

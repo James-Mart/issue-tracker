@@ -30,6 +30,10 @@ vi.mock("./issue-link", () => ({
   useIssueLinkNavigate: () => ({
     go,
     hrefFor: (id: string) => `#${id}`,
+    missingIds: [],
+    failedIds: new Set<string>(),
+    accept: () => {},
+    reject: () => {},
   }),
 }));
 
@@ -72,6 +76,7 @@ vi.mock("../api/queries", () => ({
       issues: [project, epicRecord],
     },
   }),
+  useIssueDetailQuery: () => ({ data: undefined, error: null }),
 }));
 
 function epicIssue(): Extract<IssueDetail, { kind: "epic" }> {

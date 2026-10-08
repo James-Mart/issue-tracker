@@ -11,7 +11,8 @@ import { useSendConversationMessage } from "@/features/agents/api/mutations";
 import { useMemo } from "react";
 import { ApiError } from "@/lib/api/errors";
 import { useCreateChannelSession } from "../api/mutations";
-import { useChannelSessionsQuery, useIssuesQuery } from "../api/queries";
+import { useChannelSessionsQuery } from "../api/queries";
+import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import { currentChannelSession } from "../api/channel-sessions";
 import { useConfirmChannelLiveRun } from "../hooks/use-confirm-channel-live-run";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
@@ -215,7 +216,7 @@ export function ImplementingOverviewLaunch({
   issue: ImplementingWorkRoot;
   parentKind?: IssueKind;
 }) {
-  const { data: list } = useIssuesQuery();
+  const { data: list } = useIssuesWithArchived(true);
   const { data: sessions, isLoading: sessionsLoading } = useChannelSessionsQuery(
     issue.id,
     "implementing",

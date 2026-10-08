@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useDeleteIssue } from "../api/mutations";
-import { useIssuesQuery } from "../api/queries";
+import { useIssuesIncludingArchived } from "../hooks/use-issues-with-archived";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 
 function deleteButtonLabel(deleteCount: number): string {
@@ -21,7 +21,8 @@ export function DeleteIssueDialog() {
   const targetId = useIssueUiStore((s) => s.deleteTarget);
   const clearDelete = useIssueUiStore((s) => s.clearDelete);
   const deleteIssue = useDeleteIssue();
-  const { data } = useIssuesQuery();
+  const open = Boolean(targetId);
+  const { data } = useIssuesIncludingArchived(open);
 
   const target =
     targetId && data
