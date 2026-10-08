@@ -77,7 +77,7 @@ function ScopeRadio({
     >
       <label
         className={cn(
-          "flex w-full cursor-pointer items-start gap-2.5",
+          "flex min-w-0 w-full cursor-pointer items-start gap-2.5",
           changedFileRowClass(selected),
           "px-3 py-2.5 font-sans focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
         )}
@@ -91,7 +91,9 @@ function ScopeRadio({
           className="mt-0.5 size-4 shrink-0 accent-[hsl(var(--current))] focus-visible:outline-none"
           onChange={() => onSelect(scopeId)}
         />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">{children}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 break-words [&>*]:min-w-0">
+          {children}
+        </span>
       </label>
       {/* The selected row's item is where a later card expands. Nothing renders there yet. */}
     </li>
@@ -148,7 +150,7 @@ export function ReviewCommitsPanel({
 
   return (
     <div
-      className="min-h-0 flex-1 overflow-y-auto"
+      className="min-h-0 min-w-0 flex-1 overflow-y-auto"
       data-testid="review-commits-tab"
     >
       <div role="radiogroup" aria-label="Review scope">
