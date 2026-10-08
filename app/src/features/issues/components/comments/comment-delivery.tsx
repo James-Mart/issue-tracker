@@ -20,6 +20,7 @@ export function DeliverableMessage({
       author={author}
       roleBadge={roleBadge}
       at={message.at}
+      source={message.source}
       status={<CommentSendingMark message={message} />}
     >
       <Markdown issueId={attachmentsIssueId}>{message.body}</Markdown>

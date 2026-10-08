@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parseCommentInput } from "../schemas.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const COMMIT_SHA = "deadbeef00000000000000000000000000000000";
@@ -271,6 +272,57 @@ describe("appendComment", () => {
         },
       }),
     ).rejects.toThrow(/startLine.*greater than.*line/i);
+  });
+
+  it("stores a GitHub source and refuses a second comment with that source id", async () => {
+    const { appendComment, readComments } = await loadService();
+    const source = {
+      kind: "github" as const,
+      id: "IC_1",
+      url: "https://github.com/acme/widgets/pull/7#issuecomment-1",
+    };
+    const message = await appendComment("e", {
+      role: "human",
+      name: "ada",
+      body: "ship it",
+      source,
+    });
+    expect(readComments("e").messages[0]?.source).toEqual(source);
+    await expect(
+      appendComment("e", { role: "human", body: "again", source }),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: 'comment source "IC_1" is already on this issue',
+    });
+    expect(message.source).toEqual(source);
+
+    writeIssue("f", { kind: "project", title: "F", createdAt: AT, updatedAt: AT });
+    const other = await appendComment("f", {
+      role: "human",
+      body: "same github comment, other issue",
+      source,
+    });
+    expect(other.source?.id).toBe("IC_1");
+  });
+
+  it("stamps at from the caller when a mirror supplies the GitHub created time", async () => {
+    const { appendComment } = await loadService();
+    const message = await appendComment(
+      "e",
+      { role: "human", body: "earlier" },
+      { at: "2024-03-01T12:00:00.000Z" },
+    );
+    expect(message.at).toBe("2024-03-01T12:00:00.000Z");
+  });
+
+  it("rejects a source that is not a GitHub node", () => {
+    const result = parseCommentInput({
+      role: "human",
+      body: "x",
+      source: { kind: "gitlab", id: "1", url: "https://example.com" },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain("source");
   });
 });
 

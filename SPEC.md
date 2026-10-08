@@ -1263,6 +1263,13 @@ Resolution is a thread event, not a flag on the comment.
 | `type` | `"human-request"` \| `"human-response"`? | absent on ordinary comments; `request-human` writes `human-request` on a thread root, `human-done` writes `human-response` on the reply |
 | `anchor` | object? | optional line or file anchor on a root comment only (see below) |
 | `kind` | `"review"` \| `"question"`? | thread root only; absent means review. Refused on a reply and on a non-Story |
+| `source` | object? | optional GitHub mirror provenance (see below) |
+
+**Source (`source`).** Set on a comment mirrored from a GitHub pull request.
+Members are `kind` `"github"`, `id` (the GitHub node id), and `url` (the
+comment's page on GitHub). Append refuses a second comment with the same
+`source.id` on the same issue. The server stamps that comment's `at` from
+the GitHub comment's created time.
 
 **Threading (`replyTo`).** A thread is one root plus an ordered list of
 replies. Threads are exactly **one level deep**: `replyTo` must name a comment

@@ -38,6 +38,7 @@ export function buildStoredComment(
   issueId: string,
   input: CommentInput,
   messages?: Comment[],
+  at?: string,
 ): Comment {
   const parsed = parseCommentInput(input);
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
@@ -45,7 +46,7 @@ export function buildStoredComment(
   return {
     ...parsed.input,
     id: randomUUID(),
-    at: new Date().toISOString(),
+    at: at ?? new Date().toISOString(),
   };
 }
 
@@ -80,6 +81,21 @@ function validateCommentAppend(
     }
   }
 
+  const known =
+    input.replyTo !== undefined || input.source !== undefined
+      ? (messages ?? readComments(issueId).messages)
+      : [];
+
+  if (input.source) {
+    const sourceId = input.source.id;
+    if (known.some((message) => message.source?.id === sourceId)) {
+      throw new IssueError(
+        "validation",
+        `comment source "${sourceId}" is already on this issue`,
+      );
+    }
+  }
+
   if (!input.replyTo) return;
 
   if (input.anchor) {
@@ -89,7 +105,6 @@ function validateCommentAppend(
     );
   }
 
-  const known = messages ?? readComments(issueId).messages;
   const root = known.find((message) => message.id === input.replyTo);
   if (!root) {
     throw new IssueError(
@@ -108,11 +123,23 @@ function validateCommentAppend(
 export function appendComment(
   id: string,
   input: CommentInput,
+  options?: { at?: string; messages?: Comment[] },
 ): Promise<Comment> {
   return serialize(() => {
     assertStoreWritable();
     requireKindCapability(id, "comments");
-    const message = buildStoredComment(id, input);
+    if (options?.at !== undefined && Number.isNaN(Date.parse(options.at))) {
+      throw new IssueError(
+        "validation",
+        `comment at is not a timestamp: ${options.at}`,
+      );
+    }
+    const message = buildStoredComment(
+      id,
+      input,
+      options?.messages,
+      options?.at,
+    );
     appendCommentLogRecords(id, [message]);
     return message;
   });

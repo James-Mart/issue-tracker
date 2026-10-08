@@ -486,6 +486,7 @@ function ThreadComment({
         author={author}
         roleBadge={roleBadge}
         at={comment.at}
+        source={comment.source}
         leading={
           isHumanRole(comment.role) ? undefined : (
             <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />
