@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { maxSeqFromTranscriptFile } from "./conversation-transcript-seq.js";
+import { maxSeqFromTranscriptTail } from "./conversation-transcript-seq.js";
 import {
   parseConversationFrame,
   type ConversationFrameInput,
@@ -43,17 +43,19 @@ export type FramesSinceResult =
   | { resetRequired: true }
   | { resetRequired: false; frames: readonly ConversationFrame[] };
 
-/** Highest seq assigned or read for each conversation this process. */
+/**
+ * Write-through cache of the highest seq for each conversation. Appends
+ * advance it. Absence means this process has not read that conversation yet,
+ * including after {@link releaseConversationStream}.
+ */
 const seqByConversation = new Map<string, number>();
-const seqInitialized = new Set<string>();
 
-function ensureSeqInitialized(conversationId: string): void {
-  if (seqInitialized.has(conversationId)) return;
-  seqInitialized.add(conversationId);
-  seqByConversation.set(
-    conversationId,
-    maxSeqFromTranscriptFile(conversationId),
-  );
+function ensureSeqInitialized(conversationId: string): number {
+  const cached = seqByConversation.get(conversationId);
+  if (cached !== undefined) return cached;
+  const seq = maxSeqFromTranscriptTail(conversationId);
+  seqByConversation.set(conversationId, seq);
+  return seq;
 }
 
 /**
@@ -65,15 +67,14 @@ export function nextConversationSeq(
   conversationId: string,
   existing?: number,
 ): number {
-  ensureSeqInitialized(conversationId);
+  const floor = ensureSeqInitialized(conversationId);
   if (existing !== undefined) {
-    const floor = seqByConversation.get(conversationId) ?? 0;
     if (existing > floor) {
       seqByConversation.set(conversationId, existing);
     }
     return existing;
   }
-  const next = (seqByConversation.get(conversationId) ?? 0) + 1;
+  const next = floor + 1;
   seqByConversation.set(conversationId, next);
   return next;
 }
@@ -121,20 +122,10 @@ function isConversationStream(streamKey: string): boolean {
 }
 
 /**
- * Last persisted seq for a conversation stream, or `undefined` for multiplex
- * topics that are not conversation transcripts.
- */
-function persistedSeqFloor(streamKey: string): number | undefined {
-  if (!isConversationStream(streamKey)) return undefined;
-  return maxSeqFromTranscriptFile(streamKey);
-}
-
-/**
  * Frames after `sinceSeq` still held in the catch-up window, in order.
- * Returns `resetRequired` when the gap cannot be served, or when `sinceSeq`
- * is ahead of both the buffer and the persisted transcript — the next frame
- * continues from the last persisted seq and would otherwise duplicate or
- * move backwards.
+ * An exact match replays from the buffer. A gap, or a `sinceSeq` that is
+ * not the cached seq when the buffer is empty, sends `reset`. The first
+ * empty-window check reads the transcript tail; later checks reuse the cache.
  */
 export function getFramesSince(
   conversationId: string,
@@ -142,8 +133,10 @@ export function getFramesSince(
 ): FramesSinceResult {
   const buffer = catchupBuffers.get(conversationId);
   if (!buffer || buffer.length === 0) {
-    const persisted = persistedSeqFloor(conversationId);
-    if (persisted !== undefined && sinceSeq !== persisted) {
+    if (
+      isConversationStream(conversationId) &&
+      sinceSeq !== ensureSeqInitialized(conversationId)
+    ) {
       return { resetRequired: true };
     }
     return { resetRequired: false, frames: [] };
@@ -164,7 +157,6 @@ export function getFramesSince(
 export function releaseConversationStream(conversationId: string): void {
   catchupBuffers.delete(conversationId);
   seqByConversation.delete(conversationId);
-  seqInitialized.delete(conversationId);
 }
 
 export function publishFrame(

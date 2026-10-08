@@ -204,12 +204,16 @@ describe("guest agent launch refusals", () => {
       expect.objectContaining({ type: "prompt", text: "copied prompt" }),
     ]);
 
-    const sessions = await fetch(
-      `${baseUrl}/api/issues/ship/channels/implementing/sessions`,
-    );
+    const sessions = await fetch(`${baseUrl}/api/channel-sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        pairs: [{ issueId: "ship", channel: "implementing" }],
+      }),
+    });
     expect(sessions.status).toBe(200);
     const sessionsBody = await sessions.json();
-    expect(sessionsBody).toEqual([
+    expect(sessionsBody.sessions["ship:implementing"]).toEqual([
       expect.objectContaining({ id: "channel-copied", title: "Copied implementing" }),
     ]);
 

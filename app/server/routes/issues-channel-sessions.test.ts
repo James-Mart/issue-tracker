@@ -13,7 +13,9 @@ import {
   buildScriptedStreamWithAgentIdHint,
   createFakeAgentSdk,
 } from "../services/agent-sdk.fake.js";
+import type { ConversationChannel } from "../schemas.js";
 import type { AgentSessions } from "../services/agent-sessions.js";
+import { channelSessionPairKey } from "../services/channel-session-list.js";
 
 const AT = "2026-08-10T12:00:00.000Z";
 
@@ -38,6 +40,40 @@ let issuesRoot: string;
 let workspaceDir: string;
 let server: Server;
 let baseUrl: string;
+
+async function listSessions(issueId: string, channel: ConversationChannel) {
+  const res = await fetch(`${baseUrl}/api/channel-sessions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pairs: [{ issueId, channel }] }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `list channel sessions failed: ${res.status} ${await res.text()}`,
+    );
+  }
+  const body = (await res.json()) as {
+    sessions: Record<string, ListedSession[]>;
+  };
+  const sessions = body.sessions[channelSessionPairKey(issueId, channel)];
+  if (!sessions) {
+    throw new Error(
+      `channel-sessions response missing ${channelSessionPairKey(issueId, channel)}`,
+    );
+  }
+  return sessions;
+}
+
+type ListedSession = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  archived: boolean;
+  activeRun: boolean;
+  awaitingHuman: boolean;
+};
+
 let sessions: AgentSessions | undefined;
 let releaseHold: (() => void) | undefined;
 
@@ -172,9 +208,7 @@ describe("channel sessions HTTP API", () => {
     const body = await created.json();
     expect(body).toEqual({ id: expect.any(String) });
 
-    const listed = await fetch(
-      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
-    ).then((r) => r.json());
+    const listed = await listSessions("capture", "planning");
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({
       id: body.id,
@@ -216,9 +250,7 @@ describe("channel sessions HTTP API", () => {
       code: "conflict",
     });
 
-    const listed = await fetch(
-      `${baseUrl}/api/issues/gate-me/channels/planning/sessions`,
-    ).then((r) => r.json());
+    const listed = await listSessions("gate-me", "planning");
     expect(listed).toEqual([]);
   });
 
@@ -304,9 +336,7 @@ describe("channel sessions HTTP API", () => {
     });
 
     // Refused POSTs must not archive or otherwise mutate existing sessions.
-    const stillActive = await fetch(
-      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
-    ).then((r) => r.json());
+    const stillActive = await listSessions("capture", "planning");
     expect(stillActive).toEqual([
       expect.objectContaining({ id: prior.id, archived: false }),
     ]);
@@ -351,9 +381,7 @@ describe("channel sessions HTTP API", () => {
     });
     expect(bumped.status).toBe(200);
 
-    const listed = await fetch(
-      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
-    ).then((r) => r.json());
+    const listed = await listSessions("capture", "planning");
     expect(listed.map((s: { id: string }) => s.id)).toEqual([
       first.id,
       second.id,
@@ -381,10 +409,7 @@ describe("channel sessions HTTP API", () => {
       },
     ).then((r) => r.json());
 
-    const listed = await fetch(
-      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
-    ).then((r) => r.json());
-    type ListedSession = { id: string; archived: boolean; title: string };
+    const listed = await listSessions("ship-it", "implementing");
     const byId = new Map<string, ListedSession>(
       listed.map((s: ListedSession) => [s.id, s]),
     );
@@ -415,9 +440,7 @@ describe("channel sessions HTTP API", () => {
 
     expect(sessions!.getActiveRun(id)).toBeTruthy();
 
-    const listed = await fetch(
-      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
-    ).then((r) => r.json());
+    const listed = await listSessions("capture", "planning");
     expect(listed).toEqual([
       expect.objectContaining({
         id,
@@ -429,38 +452,39 @@ describe("channel sessions HTTP API", () => {
   });
 
   it("lists awaitingHuman from metadata, backfilling a legacy transcript once", async () => {
-    await startApp();
-
-    const created = await fetch(
-      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: "composer-2.5", title: "Turn states" }),
-      },
+    const id = "legacy-turn";
+    const dir = join(conversationsDir(), id);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "meta.json"),
+      `${JSON.stringify({
+        id,
+        title: "Turn states",
+        projectId: "platform",
+        model: "composer-2.5",
+        issueId: "capture",
+        channel: "planning",
+        createdAt: AT,
+        updatedAt: AT,
+      })}\n`,
     );
-    expect(created.status).toBe(201);
-    const { id } = await created.json();
-
-    const metaPath = join(conversationsDir(), id, "meta.json");
-    const meta = JSON.parse(readFileSync(metaPath, "utf8")) as Record<
-      string,
-      unknown
-    >;
-    delete meta.awaitingHuman;
-    writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
     writeTranscript(id, [
       { type: "prompt", text: "go", seq: 1 },
       { type: "assistant", text: "done", seq: 2 },
     ]);
-    const awaiting = await fetch(
-      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
-    ).then((r) => r.json());
+
+    await startApp();
+
+    const awaiting = await listSessions("capture", "planning");
     expect(awaiting[0]).toMatchObject({
       id,
       activeRun: false,
       awaitingHuman: true,
     });
+    const stored = JSON.parse(
+      readFileSync(join(dir, "meta.json"), "utf8"),
+    ) as { awaitingHuman?: boolean };
+    expect(stored.awaitingHuman).toBe(true);
   });
 
   it("allows implementing sessions on different work roots in one Project", async () => {
@@ -508,16 +532,12 @@ describe("channel sessions HTTP API", () => {
     const { id: otherEpicId } = await second.json();
     expect(sessions!.getActiveRun(otherEpicId)).toBeTruthy();
 
-    const shipItListed = await fetch(
-      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
-    ).then((r) => r.json());
+    const shipItListed = await listSessions("ship-it", "implementing");
     expect(shipItListed).toEqual([
       expect.objectContaining({ id: shipItId, archived: false, activeRun: true }),
     ]);
 
-    const otherListed = await fetch(
-      `${baseUrl}/api/issues/other-epic/channels/implementing/sessions`,
-    ).then((r) => r.json());
+    const otherListed = await listSessions("other-epic", "implementing");
     expect(otherListed).toEqual([
       expect.objectContaining({ id: otherEpicId, archived: false, activeRun: true }),
     ]);
@@ -558,9 +578,7 @@ describe("channel sessions HTTP API", () => {
       holderIssueTitle: "Ship it",
     });
 
-    const listed = await fetch(
-      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
-    ).then((r) => r.json());
+    const listed = await listSessions("ship-it", "implementing");
     expect(listed).toEqual([
       expect.objectContaining({ id: holderId, archived: false, activeRun: true }),
     ]);
@@ -610,9 +628,7 @@ describe("channel sessions HTTP API", () => {
     expect(second.status).toBe(201);
     const { id: nextId } = await second.json();
 
-    const listed = await fetch(
-      `${baseUrl}/api/issues/other-epic/channels/implementing/sessions`,
-    ).then((r) => r.json());
+    const listed = await listSessions("other-epic", "implementing");
     expect(listed).toEqual([
       expect.objectContaining({ id: nextId, archived: false, activeRun: false }),
     ]);
@@ -654,9 +670,7 @@ describe("channel sessions HTTP API", () => {
     expect(cancelled.status).toBe(200);
     expect(sessions!.getActiveRun(holderId)).toBeUndefined();
 
-    const listed = await fetch(
-      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
-    ).then((r) => r.json());
+    const listed = await listSessions("ship-it", "implementing");
     expect(listed).toEqual([
       expect.objectContaining({ id: holderId, archived: false, activeRun: false }),
     ]);
@@ -736,9 +750,7 @@ describe("export channel sessions", () => {
     const body = await created.json();
     expect(body).toEqual({ id: expect.any(String) });
 
-    const listed = await fetch(
-      `${baseUrl}/api/issues/ship-it/channels/export/sessions`,
-    ).then((r) => r.json());
+    const listed = await listSessions("ship-it", "export");
     expect(listed).toEqual([
       expect.objectContaining({
         id: body.id,
@@ -749,9 +761,7 @@ describe("export channel sessions", () => {
       }),
     ]);
 
-    const implementing = await fetch(
-      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
-    ).then((r) => r.json());
+    const implementing = await listSessions("ship-it", "implementing");
     expect(implementing).toEqual([]);
   });
 
@@ -786,9 +796,7 @@ describe("export channel sessions", () => {
     );
     expect(second.status).toBe(201);
 
-    const exportSessions = await fetch(
-      `${baseUrl}/api/issues/ship-it/channels/export/sessions`,
-    ).then((r) => r.json());
+    const exportSessions = await listSessions("ship-it", "export");
     expect(exportSessions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: first.id, archived: true }),
@@ -796,9 +804,7 @@ describe("export channel sessions", () => {
       ]),
     );
 
-    const implementingSessions = await fetch(
-      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
-    ).then((r) => r.json());
+    const implementingSessions = await listSessions("ship-it", "implementing");
     expect(implementingSessions).toEqual([
       expect.objectContaining({ id: implementing.id, archived: false }),
     ]);

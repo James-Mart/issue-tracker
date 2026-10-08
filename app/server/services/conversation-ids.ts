@@ -1,7 +1,7 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
-import { parseConversationMeta } from "../schemas.js";
+import { parseConversationMeta, type ConversationMeta } from "../schemas.js";
 
 function dirOf(id: string): string {
   return join(conversationsDir, id);
@@ -22,23 +22,39 @@ export function conversationExists(id: string): boolean {
  */
 export function listConversationIds(): string[] {
   if (!existsSync(conversationsDir)) return [];
-  return readdirSync(conversationsDir).filter(
-    (entry) => statSync(dirOf(entry)).isDirectory() && existsSync(metaPathOf(entry)),
-  );
+  const ids: string[] = [];
+  for (const entry of readdirSync(conversationsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (existsSync(metaPathOf(entry.name))) ids.push(entry.name);
+  }
+  return ids;
+}
+
+/**
+ * Readable conversation metadata on disk. Unreadable and mismatched
+ * `meta.json` files are skipped so one bad directory cannot hide the rest.
+ */
+export function storedConversationMetas(): ConversationMeta[] {
+  if (!existsSync(conversationsDir)) return [];
+  const metas: ConversationMeta[] = [];
+  for (const entry of readdirSync(conversationsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const path = metaPathOf(entry.name);
+    if (!existsSync(path)) continue;
+    try {
+      const parsed = parseConversationMeta(
+        JSON.parse(readFileSync(path, "utf8")),
+      );
+      if (!parsed.ok || parsed.meta.id !== entry.name) continue;
+      metas.push(parsed.meta);
+    } catch {
+      // One unreadable conversation must not hide the rest.
+    }
+  }
+  return metas;
 }
 
 /** Ids whose `meta.json` parses and names the directory. */
 export function readableConversationIds(): string[] {
-  const ids: string[] = [];
-  for (const id of listConversationIds()) {
-    try {
-      const parsed = parseConversationMeta(
-        JSON.parse(readFileSync(metaPathOf(id), "utf8")),
-      );
-      if (parsed.ok && parsed.meta.id === id) ids.push(id);
-    } catch {
-      // One unreadable conversation must not hide every other delegation.
-    }
-  }
-  return ids;
+  return storedConversationMetas().map((meta) => meta.id);
 }

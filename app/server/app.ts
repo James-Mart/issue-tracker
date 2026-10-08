@@ -12,6 +12,7 @@ import { MAX_ATTACHMENT_BYTES } from "./services/attachments.js";
 import { agentModelsRouter } from "./routes/agent-models.js";
 import { createBackupRouter } from "./routes/backup.js";
 import { createConversationsRouter } from "./routes/conversations.js";
+import { createChannelSessionsRouter } from "./routes/channel-sessions.js";
 import { createIssuesRouter } from "./routes/issues.js";
 import { createHealthRouter } from "./routes/health.js";
 import { pipelineRouter } from "./routes/pipeline.js";
@@ -92,6 +93,7 @@ export function createApp(
   }
 
   app.use("/api/issues", createIssuesRouter(sessions));
+  app.use("/api/channel-sessions", createChannelSessionsRouter(sessions));
   app.use("/api/stories", storiesRouter);
   app.use("/api/pipeline", pipelineRouter);
   app.use("/api/projects", createProjectsRouter(sessions));

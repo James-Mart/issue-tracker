@@ -29,7 +29,7 @@ import {
   useIssueCommentOutbox,
 } from "../store/use-comment-outbox-store";
 import { fetchIssueAgentRunEvents, fetchIssueAgentRuns } from "./agent-runs";
-import { listChannelSessions } from "./channel-sessions";
+import { loadChannelSessions } from "./channel-sessions-loader";
 import { healthKeys, issuesKeys, type ArchivedListParam } from "./keys";
 
 export {
@@ -231,7 +231,7 @@ export function useChannelSessionsQuery(
 ): UseQueryResult<ChannelSessionListItem[], Error> {
   return useQuery({
     queryKey: issuesKeys.channelSessions(issueId, channel),
-    queryFn: () => listChannelSessions(issueId, channel),
+    queryFn: () => loadChannelSessions(issueId, channel),
     enabled: Boolean(issueId) && Boolean(channel),
     refetchOnWindowFocus: true,
     refetchInterval: CHANNEL_SESSIONS_REFETCH_INTERVAL_MS,

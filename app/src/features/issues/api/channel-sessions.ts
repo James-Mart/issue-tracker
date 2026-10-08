@@ -1,6 +1,7 @@
 import { request } from "@/lib/api/client";
 import type {
   ChannelSessionListItem,
+  ChannelSessionPair,
   ConversationChannel,
 } from "@server/schemas";
 
@@ -26,14 +27,46 @@ export function createChannelSession(
   );
 }
 
+export type ChannelSessionsBatchResponse = {
+  sessions: Record<string, ChannelSessionListItem[]>;
+};
+
+export function channelSessionPairKey(
+  issueId: string,
+  channel: ConversationChannel,
+): string {
+  return `${issueId}:${channel}`;
+}
+
+export function sessionsForPair(
+  body: ChannelSessionsBatchResponse,
+  issueId: string,
+  channel: ConversationChannel,
+): ChannelSessionListItem[] {
+  const key = channelSessionPairKey(issueId, channel);
+  const sessions = body.sessions[key];
+  if (!Array.isArray(sessions)) {
+    throw new Error(`channel-sessions response missing "${key}"`);
+  }
+  return sessions;
+}
+
+export function fetchChannelSessions(
+  pairs: readonly ChannelSessionPair[],
+): Promise<ChannelSessionsBatchResponse> {
+  return request<ChannelSessionsBatchResponse>("/api/channel-sessions", {
+    method: "POST",
+    body: { pairs },
+  });
+}
+
 /** List sessions anchored to an issue channel (updatedAt desc). */
-export function listChannelSessions(
+export async function listChannelSessions(
   issueId: string,
   channel: ConversationChannel,
 ): Promise<ChannelSessionListItem[]> {
-  return request<ChannelSessionListItem[]>(
-    `/api/issues/${encodeURIComponent(issueId)}/channels/${encodeURIComponent(channel)}/sessions`,
-  );
+  const body = await fetchChannelSessions([{ issueId, channel }]);
+  return sessionsForPair(body, issueId, channel);
 }
 
 /** Most recent non-archived session, or undefined when the channel is idle. */

@@ -17,7 +17,7 @@ import {
   createConversation,
   deleteConversation,
   listConversations,
-  readConversation,
+  readConversationMeta,
   startConversationPrompt,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
@@ -596,7 +596,7 @@ function findTaskingSubmission(conversationId: string):
       submission: ReviewSubmission;
     }
   | undefined {
-  const { meta } = readConversation(conversationId);
+  const meta = readConversationMeta(conversationId);
   if (meta.channel !== "review" || meta.issueId === undefined) return undefined;
   const review = reviewForStory(meta.projectId, meta.issueId, readAll().issues);
   if (!review) return undefined;

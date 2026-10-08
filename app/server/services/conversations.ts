@@ -44,6 +44,11 @@ import {
   forgetConversationDelegations,
   recordDelegation,
 } from "./delegation-index.js";
+import {
+  forgetConversationMeta,
+  listIndexedConversationMetas,
+  persistConversationMeta,
+} from "./conversation-meta-index.js";
 import { recordSubagentUpdate } from "./run-event-log.js";
 import { readAllTranscriptEvents } from "./conversation-transcript-seq.js";
 import { awaitingHumanAfterTurnBoundary } from "./awaiting-human.js";
@@ -169,7 +174,7 @@ function readMetaRaw(id: string): ConversationMeta {
 }
 
 function writeMeta(meta: ConversationMeta): void {
-  writeFileSync(metaPathOf(meta.id), `${JSON.stringify(meta, null, 2)}\n`);
+  persistConversationMeta(meta);
 }
 
 /**
@@ -333,18 +338,12 @@ function refuseIfImplementingWorkRootLocked(
 ): void {
   if (channel !== "implementing") return;
 
-  for (const id of scanIds()) {
-    let existing: ConversationMeta;
-    try {
-      existing = readMetaRaw(id);
-    } catch {
-      continue;
-    }
+  for (const existing of listIndexedConversationMetas()) {
     if (
       existing.channel !== "implementing" ||
       existing.archived ||
       existing.issueId !== issueId ||
-      sessions.getActiveRun(id) === undefined
+      sessions.getActiveRun(existing.id) === undefined
     ) {
       continue;
     }
@@ -396,13 +395,7 @@ export async function createIssueChannelSession(
     refuseIfImplementingWorkRootLocked(issueId, input.channel, sessions);
 
     const now = new Date().toISOString();
-    for (const id of scanIds()) {
-      let existing: ConversationMeta;
-      try {
-        existing = readMetaRaw(id);
-      } catch {
-        continue;
-      }
+    for (const existing of listIndexedConversationMetas()) {
       if (
         existing.issueId === issueId &&
         existing.channel === input.channel &&
@@ -436,16 +429,9 @@ export function conversationHasTranscript(conversationId: string): boolean {
 }
 
 export function listConversations(): ConversationMeta[] {
-  const metas: ConversationMeta[] = [];
-  for (const id of scanIds()) {
-    try {
-      metas.push(readMetaRaw(id));
-    } catch {
-      // Skip unreadable / malformed conversation dirs.
-    }
-  }
-  metas.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  return metas;
+  return listIndexedConversationMetas().sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt),
+  );
 }
 
 /** Newest non-archived implementing conversation on a work root, if any. */
@@ -844,5 +830,6 @@ export function deleteConversation(id: string): Promise<void> {
     }
     rmSync(dirOf(id), { recursive: true, force: true });
     forgetConversationDelegations(id);
+    forgetConversationMeta(id);
   });
 }

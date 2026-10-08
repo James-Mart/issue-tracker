@@ -18,6 +18,7 @@ const LINT_SCRIPTS = [
   "lint:pipeline-shape",
   "lint:transport",
   "lint:file-length",
+  "lint:conversation-writer",
   "typecheck",
 ];
 

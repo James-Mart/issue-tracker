@@ -21,7 +21,7 @@ import {
   appendDelegationEnd,
   appendEvent,
   conversationExists,
-  readConversation,
+  readConversationMeta,
   readDelegations,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
@@ -491,7 +491,7 @@ export function createDelegateCustomTools(
         ) {
           return { delegations: [] };
         }
-        const { meta } = readConversation(options.conversationId);
+        const meta = readConversationMeta(options.conversationId);
         if (!meta.agentId) {
           return { delegations: [] };
         }

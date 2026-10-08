@@ -94,8 +94,8 @@ export const conversationListItemSchema = conversationMetaSchema.extend({
 export type ConversationListItem = z.infer<typeof conversationListItemSchema>;
 
 /**
- * GET /api/issues/:id/channels/:channel/sessions item — roster fields for an
- * issue-anchored session (narrower than ConversationListItem).
+ * `POST /api/channel-sessions` item — roster fields for an issue-anchored
+ * session (narrower than ConversationListItem).
  */
 export const channelSessionListItemSchema = z.object({
   id: nonEmpty,
@@ -111,6 +111,22 @@ export const channelSessionListItemSchema = z.object({
 export type ChannelSessionListItem = z.infer<
   typeof channelSessionListItemSchema
 >;
+
+/** `POST /api/channel-sessions` body. */
+export const channelSessionsBatchBodySchema = z.object({
+  pairs: z.array(
+    z.object({
+      issueId: nonEmpty,
+      channel: z.enum(CONVERSATION_CHANNELS),
+    }),
+  ),
+});
+
+export type ChannelSessionsBatchBody = z.infer<
+  typeof channelSessionsBatchBodySchema
+>;
+
+export type ChannelSessionPair = ChannelSessionsBatchBody["pairs"][number];
 
 /** GET /api/conversations/:id/run response. */
 export const conversationActiveRunSchema = z.object({

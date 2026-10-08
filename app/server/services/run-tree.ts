@@ -1,5 +1,5 @@
 import type { ConversationMeta, DelegationRecord } from "../schemas.js";
-import { readConversation, readDelegations } from "./conversations.js";
+import { readConversationMeta, readDelegations } from "./conversations.js";
 import { IssueError } from "./errors.js";
 
 export type NestedRun = {
@@ -68,7 +68,7 @@ function nestDelegations(
 export function runTreeForConversation(
   conversationId: string,
 ): ConversationRunTree {
-  const { meta } = readConversation(conversationId);
+  const meta = readConversationMeta(conversationId);
   return {
     conversationId: meta.id,
     coordinatorLabel: coordinatorLabel(meta),

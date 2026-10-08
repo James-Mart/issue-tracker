@@ -152,7 +152,13 @@ describe("visible transcript load against large hidden channel sessions", () => 
     });
 
     const [hiddenList, pageRes] = await Promise.all([
-      fetch(`${baseUrl}/api/issues/ship-it/channels/implementing/sessions`),
+      fetch(`${baseUrl}/api/channel-sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          pairs: [{ issueId: "ship-it", channel: "implementing" }],
+        }),
+      }),
       fetch(`${baseUrl}/api/conversations/${visibleId}/transcript`),
     ]);
     expect(hiddenList.ok).toBe(true);

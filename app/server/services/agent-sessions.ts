@@ -25,7 +25,7 @@ import {
   appendEvent,
   assembleAgentPrompt,
   listConversationIds,
-  readConversation,
+  readConversationMeta,
   setPendingMessage,
   updateMeta,
 } from "./conversations.js";
@@ -200,7 +200,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     // cache eviction and leave two live handles on one agent-state store.
     await teardowns.get(conversationId);
 
-    const { meta } = readConversation(conversationId);
+    const meta = readConversationMeta(conversationId);
     const cwd = requireProjectWorkspace(meta.projectId);
     const model = resolveConversationModel(meta.model);
     const storeDir = conversationStoreDir(conversationId);
@@ -455,7 +455,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const { prompt, model, images } = options;
 
     // A missing conversation is not a scrub failure; surface that error as-is.
-    readConversation(conversationId);
+    readConversationMeta(conversationId);
     try {
       await reconcileOrphanedConversation(conversationId);
     } catch (err) {
@@ -520,7 +520,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       event: { type: "run", status: "started", runId: agentRun.id },
       persist: false,
     });
-    const { meta: runMeta } = readConversation(conversationId);
+    const runMeta = readConversationMeta(conversationId);
     if (isQuestionResearcherConversation(runMeta)) {
       noteResearcherRunStarted(conversationId, activeRun.startedAt);
     }
@@ -591,7 +591,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
       let handedOff = false;
       if (result.status === "finished") {
-        const { meta } = readConversation(conversationId);
+        const meta = readConversationMeta(conversationId);
         const pending = meta.pendingMessage;
         if (pending) {
           await setPendingMessage(conversationId, null);
