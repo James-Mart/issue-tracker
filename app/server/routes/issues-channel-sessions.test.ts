@@ -429,30 +429,29 @@ describe("channel sessions HTTP API", () => {
   });
 
   it("lists awaitingHuman from metadata, backfilling a legacy transcript once", async () => {
-    await startApp();
-
-    const created = await fetch(
-      `${baseUrl}/api/issues/capture/channels/planning/sessions`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: "composer-2.5", title: "Turn states" }),
-      },
+    const id = "legacy-turn";
+    const dir = join(conversationsDir(), id);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "meta.json"),
+      `${JSON.stringify({
+        id,
+        title: "Turn states",
+        projectId: "platform",
+        model: "composer-2.5",
+        issueId: "capture",
+        channel: "planning",
+        createdAt: AT,
+        updatedAt: AT,
+      })}\n`,
     );
-    expect(created.status).toBe(201);
-    const { id } = await created.json();
-
-    const metaPath = join(conversationsDir(), id, "meta.json");
-    const meta = JSON.parse(readFileSync(metaPath, "utf8")) as Record<
-      string,
-      unknown
-    >;
-    delete meta.awaitingHuman;
-    writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
     writeTranscript(id, [
       { type: "prompt", text: "go", seq: 1 },
       { type: "assistant", text: "done", seq: 2 },
     ]);
+
+    await startApp();
+
     const awaiting = await fetch(
       `${baseUrl}/api/issues/capture/channels/planning/sessions`,
     ).then((r) => r.json());
@@ -461,6 +460,10 @@ describe("channel sessions HTTP API", () => {
       activeRun: false,
       awaitingHuman: true,
     });
+    const stored = JSON.parse(
+      readFileSync(join(dir, "meta.json"), "utf8"),
+    ) as { awaitingHuman?: boolean };
+    expect(stored.awaitingHuman).toBe(true);
   });
 
   it("allows implementing sessions on different work roots in one Project", async () => {
