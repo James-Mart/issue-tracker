@@ -1,4 +1,11 @@
-import { existsSync, readFileSync } from "fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+} from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
 import {
@@ -80,6 +87,99 @@ export function readAllTranscriptEvents(
     if (parsed) events.push(parsed.event);
   }
   return events;
+}
+
+const TAIL_CHUNK_BYTES = 4096;
+
+/**
+ * Open a transcript, or return `empty` when the file is missing or zero
+ * length. The descriptor is closed before this returns, including when
+ * `read` throws.
+ */
+export function withOpenTranscript<T>(
+  conversationId: string,
+  empty: T,
+  read: (fd: number, size: number) => T,
+): T {
+  const path = transcriptPathOf(conversationId);
+  if (!existsSync(path)) return empty;
+  const fd = openSync(path, "r");
+  try {
+    const size = fstatSync(fd).size;
+    if (size === 0) return empty;
+    return read(fd, size);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Newest line first. `onLine` returns true to stop. */
+export function forEachLineBackward(
+  fd: number,
+  endExclusive: number,
+  onLine: (line: string) => boolean,
+): void {
+  let position = endExclusive;
+  let pending = Buffer.alloc(0);
+  while (position > 0) {
+    const length = Math.min(TAIL_CHUNK_BYTES, position);
+    position -= length;
+    const buf = Buffer.alloc(length);
+    const n = readSync(fd, buf, 0, length, position);
+    const combined = Buffer.concat([buf.subarray(0, n), pending]);
+    let cursor = combined.length;
+    for (let i = combined.length - 1; i >= 0; i -= 1) {
+      if (combined[i] !== 0x0a) continue;
+      const line = combined.subarray(i + 1, cursor);
+      cursor = i;
+      if (onLine(line.toString("utf8"))) return;
+    }
+    if (position === 0) {
+      const line = combined.subarray(0, cursor);
+      if (line.length > 0) onLine(line.toString("utf8"));
+      return;
+    }
+    pending = Buffer.from(combined.subarray(0, cursor));
+  }
+}
+
+/**
+ * Stored seq of the last transcript event. `"unstamped"` when that line has
+ * no seq. Skips a torn or non-event tail. `undefined` when the file has no
+ * transcript event.
+ */
+export function lastEventStoredSeq(
+  fd: number,
+  endExclusive: number,
+): number | "unstamped" | undefined {
+  let found: number | "unstamped" | undefined;
+  forEachLineBackward(fd, endExclusive, (line) => {
+    if (!line.trim()) return false;
+    const parsed = parseStampedTranscriptLine(line);
+    if (!parsed) return false;
+    found = parsed.stamped ? parsed.event.seq : "unstamped";
+    return true;
+  });
+  return found;
+}
+
+/**
+ * Highest seq in a transcript. The last event's stored seq is that maximum
+ * for a stamped file, including a fork prefix. A last event with no stored
+ * seq is a legacy transcript: scan the file.
+ */
+export function maxSeqFromTranscriptTail(conversationId: string): number {
+  const seq = withOpenTranscript<number | "unstamped">(
+    conversationId,
+    0,
+    (fd, size) => {
+      const stored = lastEventStoredSeq(fd, size);
+      if (stored === "unstamped") return "unstamped";
+      return stored ?? 0;
+    },
+  );
+  if (seq === "unstamped") return maxSeqFromTranscriptFile(conversationId);
+  return seq;
 }
 
 /** Highest seq in a conversation transcript, including legacy line-order fallback. */

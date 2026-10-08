@@ -5,9 +5,11 @@ import {
   awaitingHumanFromTranscript,
 } from "./awaiting-human.js";
 import {
+  forEachLineBackward,
+  lastEventStoredSeq,
   parseStampedTranscriptLine,
   readAllTranscriptEvents,
-  transcriptPathOf,
+  withOpenTranscript,
 } from "./conversation-transcript-seq.js";
 
 export const DEFAULT_TRANSCRIPT_PAGE_LIMIT = 100;
@@ -32,19 +34,12 @@ export function readTranscriptPage(
   conversationId: string,
   options: { before?: number; limit: number },
 ): TranscriptHistoryPage {
-  const path = transcriptPathOf(conversationId);
-  if (!fs.existsSync(path)) {
-    return { events: [], latestSeq: 0, hasMore: false };
-  }
-  const fd = fs.openSync(path, "r");
-  try {
-    const size = fs.fstatSync(fd).size;
-    if (size === 0) return { events: [], latestSeq: 0, hasMore: false };
-    const tailed = readTailPage(fd, size, options);
-    return tailed === "full" ? pageFromAll(conversationId, options) : tailed;
-  } finally {
-    fs.closeSync(fd);
-  }
+  const tailed = withOpenTranscript<TranscriptHistoryPage | "full">(
+    conversationId,
+    { events: [], latestSeq: 0, hasMore: false },
+    (fd, size) => readTailPage(fd, size, options),
+  );
+  return tailed === "full" ? pageFromAll(conversationId, options) : tailed;
 }
 
 function readTailPage(
@@ -124,18 +119,8 @@ function collectPage(
 
 /** Seq of the newest valid event, or a full read when that event has no stored seq. */
 function newestSeq(fd: number, size: number): number | "full" {
-  let seq: number | "full" | undefined;
-  forEachLineBackward(fd, size, (line) => {
-    if (!line.trim()) return false;
-    const parsed = parseStampedTranscriptLine(line);
-    if (!parsed) return false;
-    if (!parsed.stamped) {
-      seq = "full";
-      return true;
-    }
-    seq = parsed.event.seq;
-    return true;
-  });
+  const seq = lastEventStoredSeq(fd, size);
+  if (seq === "unstamped") return "full";
   return seq ?? 0;
 }
 
@@ -254,59 +239,26 @@ export function awaitingHumanFromTranscriptFile(
 function scanAwaitingHumanTailEvents(
   conversationId: string,
 ): readonly TranscriptEvent[] | "full" {
-  const path = transcriptPathOf(conversationId);
-  if (!fs.existsSync(path)) return [];
-  const fd = fs.openSync(path, "r");
-  try {
-    const size = fs.fstatSync(fd).size;
-    if (size === 0) return [];
-    const tailEvents: TranscriptEvent[] = [];
-    let full = false;
-    forEachLineBackward(fd, size, (line) => {
-      if (!line.trim()) return false;
-      const parsed = parseStampedTranscriptLine(line);
-      if (!parsed) return false;
-      if (!parsed.stamped) {
-        full = true;
-        return true;
-      }
-      tailEvents.push(parsed.event);
-      return awaitingHumanAfterTurnBoundary(parsed.event.type) !== undefined;
-    });
-    if (full) return "full";
-    tailEvents.reverse();
-    return tailEvents;
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
-/** Newest line first. `onLine` returns true to stop. */
-function forEachLineBackward(
-  fd: number,
-  endExclusive: number,
-  onLine: (line: string) => boolean,
-): void {
-  let position = endExclusive;
-  let pending = Buffer.alloc(0);
-  while (position > 0) {
-    const length = Math.min(CHUNK_BYTES, position);
-    position -= length;
-    const buf = Buffer.alloc(length);
-    const n = fs.readSync(fd, buf, 0, length, position);
-    const combined = Buffer.concat([buf.subarray(0, n), pending]);
-    let cursor = combined.length;
-    for (let i = combined.length - 1; i >= 0; i -= 1) {
-      if (combined[i] !== 0x0a) continue;
-      const line = combined.subarray(i + 1, cursor);
-      cursor = i;
-      if (onLine(line.toString("utf8"))) return;
-    }
-    if (position === 0) {
-      const line = combined.subarray(0, cursor);
-      if (line.length > 0) onLine(line.toString("utf8"));
-      return;
-    }
-    pending = Buffer.from(combined.subarray(0, cursor));
-  }
+  return withOpenTranscript<readonly TranscriptEvent[] | "full">(
+    conversationId,
+    [],
+    (fd, size) => {
+      const tailEvents: TranscriptEvent[] = [];
+      let full = false;
+      forEachLineBackward(fd, size, (line) => {
+        if (!line.trim()) return false;
+        const parsed = parseStampedTranscriptLine(line);
+        if (!parsed) return false;
+        if (!parsed.stamped) {
+          full = true;
+          return true;
+        }
+        tailEvents.push(parsed.event);
+        return awaitingHumanAfterTurnBoundary(parsed.event.type) !== undefined;
+      });
+      if (full) return "full";
+      tailEvents.reverse();
+      return tailEvents;
+    },
+  );
 }

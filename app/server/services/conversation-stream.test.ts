@@ -475,4 +475,115 @@ describe("conversation-stream sequence numbers", () => {
     expect(caughtUp.frames.map((frame) => frame.event.seq)).toEqual([3]);
     expect(getFramesSince(meta.id, 4)).toEqual({ resetRequired: true });
   });
+
+  async function importStreamWithTailSpy() {
+    const seq = await import("./conversation-transcript-seq.js");
+    const tail = vi.spyOn(seq, "maxSeqFromTranscriptTail");
+    const stream = await import("./conversation-stream.js");
+    return { tail, ...stream };
+  }
+
+  async function expectCatchUpFromCache(
+    conversationId: string,
+    persistedSeq: number,
+  ) {
+    vi.resetModules();
+    vi.stubEnv("ISSUES_DIR", issuesDir);
+    const { tail, getFramesSince } = await importStreamWithTailSpy();
+    expect(getFramesSince(conversationId, persistedSeq)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
+    expect(tail).toHaveBeenCalledTimes(1);
+    tail.mockClear();
+    expect(getFramesSince(conversationId, persistedSeq)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
+    expect(getFramesSince(conversationId, persistedSeq - 1)).toEqual({
+      resetRequired: true,
+    });
+    expect(getFramesSince(conversationId, persistedSeq + 1)).toEqual({
+      resetRequired: true,
+    });
+    expect(tail).not.toHaveBeenCalled();
+    return { tail, getFramesSince };
+  }
+
+  it("compares an empty catch-up window to the cached seq without rereading", async () => {
+    const { createConversation, appendEvent } = await loadConversations();
+    const meta = await createConversation({
+      title: "Cached seq",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    await appendEvent(meta.id, { type: "prompt", text: "one" });
+    await appendEvent(meta.id, { type: "assistant", text: "two" });
+
+    const { tail, getFramesSince } = await expectCatchUpFromCache(meta.id, 2);
+    const { appendEvent: appendAfter } = await import("./conversations.js");
+
+    const third = await appendAfter(meta.id, {
+      type: "assistant",
+      text: "three",
+    });
+    expect(third.seq).toBe(3);
+    expect(tail).not.toHaveBeenCalled();
+    expect(getFramesSince(meta.id, 3)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
+    expect(getFramesSince(meta.id, 2)).toEqual({ resetRequired: true });
+    tail.mockRestore();
+  });
+
+  it("full-scans a legacy transcript once, then serves catch-up from memory", async () => {
+    const { conversationsDir } = await loadConfig();
+    const { createConversation } = await loadConversations();
+    const meta = await createConversation({
+      title: "Legacy cache",
+      projectId: "platform",
+      model: "composer-2.5",
+    });
+    writeFileSync(
+      join(conversationsDir, meta.id, "transcript.jsonl"),
+      [
+        JSON.stringify({ type: "prompt", text: "one", at: AT }),
+        JSON.stringify({ type: "assistant", text: "two", at: AT }),
+      ].join("\n") + "\n",
+    );
+
+    const { tail } = await expectCatchUpFromCache(meta.id, 2);
+    tail.mockRestore();
+  });
+
+  it("replays an exact buffer match and resets on a mismatch without another tail read", async () => {
+    const { tail, publishFrame, getFramesSince } = await importStreamWithTailSpy();
+
+    publishFrame("conv-live", {
+      event: { type: "assistant" as const, text: "one" },
+      persist: false,
+    });
+    publishFrame("conv-live", {
+      event: { type: "assistant" as const, text: "two" },
+      persist: false,
+    });
+    expect(tail).toHaveBeenCalledTimes(1);
+    tail.mockClear();
+
+    expect(getFramesSince("conv-live", 2)).toEqual({
+      resetRequired: false,
+      frames: [],
+    });
+    const replay = getFramesSince("conv-live", 1);
+    expect(replay.resetRequired).toBe(false);
+    if (!replay.resetRequired) {
+      expect(replay.frames.map((frame) => frame.event)).toMatchObject([
+        { text: "two", seq: 2 },
+      ]);
+    }
+    expect(getFramesSince("conv-live", 3)).toEqual({ resetRequired: true });
+    expect(tail).not.toHaveBeenCalled();
+    tail.mockRestore();
+  });
 });
