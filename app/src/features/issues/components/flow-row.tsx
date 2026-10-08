@@ -3,12 +3,12 @@ import { AlertCircle, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { RailNode } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
-import type { IssueRecord } from "@server/schemas";
 import { AxisChips } from "./axis-chips";
 import { PlanningFlowRowGates } from "./planning-launch-control";
-import { isReadyToLandStory, leafTaskProgressCount } from "../lib/derived";
-import { issuesById, projectIdOf } from "../lib/build-tree";
+import { isReadyToLandFromIndexes, leafTaskProgressCount } from "../lib/derived";
+import { projectIdOf } from "../lib/build-tree";
 import type { FlowItem } from "../lib/flow";
+import type { TreeRowIndexes } from "../lib/tree-row-indexes";
 import {
   flowItemNeedsAttention,
   isCapturedIdeaFlowItem,
@@ -19,7 +19,7 @@ import { issueRailNodeState } from "../lib/rail-state";
 
 function flowRowStatusChips(
   item: FlowItem,
-  issues: IssueRecord[],
+  indexes: TreeRowIndexes,
 ): ReactNode | undefined {
   const chips: Array<{ variant: "todo" | "warn" | "inProgress"; label: string }> =
     [];
@@ -27,7 +27,7 @@ function flowRowStatusChips(
   if (item.issue.kind === "story") {
     if (
       !item.issue.prUrl &&
-      isReadyToLandStory(item.issue, item.state, issues)
+      isReadyToLandFromIndexes(item.issue, item.state, indexes)
     ) {
       chips.push({ variant: "todo", label: "awaiting PR" });
     }
@@ -50,7 +50,7 @@ function flowRowStatusChips(
 
 function flowRowDrillInTo(
   item: FlowItem,
-  issues: IssueRecord[],
+  indexes: TreeRowIndexes,
   to: string | undefined,
 ): string | undefined {
   if (to == null) return undefined;
@@ -58,7 +58,7 @@ function flowRowDrillInTo(
     item.issue.kind === "idea" &&
     item.state?.ideaStatus === "awaiting-approval"
   ) {
-    const projectId = projectIdOf(item.issue.id, issuesById(issues));
+    const projectId = projectIdOf(item.issue.id, indexes.byId);
     if (projectId) {
       return issueChannelPath(projectId, item.issue.id, "planning");
     }
@@ -78,7 +78,7 @@ function flowRowShowsAttentionTriangle(item: FlowItem): boolean {
 
 export interface FlowRowProps {
   item: FlowItem;
-  issues: IssueRecord[];
+  indexes: TreeRowIndexes;
   avatar?: ReactNode;
   actions?: ReactNode;
   /** Row-attached launch fault; retry is the restored Play control. */
@@ -94,18 +94,18 @@ export interface FlowRowProps {
  */
 export function FlowRow({
   item,
-  issues,
+  indexes,
   avatar,
   actions,
   launchFault,
   to,
   drillInState,
 }: FlowRowProps) {
-  const railState = issueRailNodeState(item.issue, item.state, issues);
+  const railState = issueRailNodeState(item.issue, item.state, indexes);
   const live = railState === "in-flight" && !isWorkQueuedRoot(item.issue);
-  const count = leafTaskProgressCount(item.issue, issues);
-  const drillInTo = flowRowDrillInTo(item, issues, to);
-  const chips = flowRowStatusChips(item, issues);
+  const count = leafTaskProgressCount(item.issue, indexes);
+  const drillInTo = flowRowDrillInTo(item, indexes, to);
+  const chips = flowRowStatusChips(item, indexes);
   const attention = flowRowShowsAttentionTriangle(item);
   const blocked = Boolean(item.state?.blocked);
   const gates =

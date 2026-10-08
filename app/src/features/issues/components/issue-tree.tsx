@@ -52,6 +52,10 @@ import {
   STORY_STATUS_LABEL,
   TASK_STATUS_LABEL,
 } from "../lib/derived";
+import {
+  buildTreeRowIndexes,
+  type TreeRowIndexes,
+} from "../lib/tree-row-indexes";
 import { issuePath } from "../lib/links";
 import {
   isLabelAssignableIssue,
@@ -430,22 +434,22 @@ function TreeRow({
   node,
   derived,
   catalog,
-  issues,
-  byId,
+  indexes,
   prQuery,
   guides = [],
 }: {
   node: IssueNode;
   derived: DerivedMap;
   catalog: ProjectLabel[];
-  issues: IssueRecord[];
-  byId: ReadonlyMap<string, IssueRecord>;
+  indexes: TreeRowIndexes;
   prQuery: ProjectPrQuery;
   guides?: boolean[];
 }) {
   const { projectId = "" } = useParams();
   const { issue } = node;
-  const fallbackExpanded = isProjectBoardChild(issue, byId) ? false : true;
+  const fallbackExpanded = isProjectBoardChild(issue, indexes.byId)
+    ? false
+    : true;
   const expanded = useIssueUiStore((s) =>
     resolveExpanded(s.expanded, issue.id, fallbackExpanded),
   );
@@ -458,12 +462,12 @@ function TreeRow({
   const container = CHILD_KIND[issue.kind] !== null;
   const state = derived[issue.id];
   const blocked = Boolean(state?.blocked);
-  const rowDraggable = isRowDraggable(issue, issues);
+  const rowDraggable = isRowDraggable(issue, indexes);
   const { isDragging, isDropTarget, ...rowDnDHandlers } = getRowDnDProps(issue);
   const assignee = assigneeOf(issue);
   const attention = hasAttention(issue) && issue.needsAttention;
-  const count = leafTaskProgressCount(issue, issues);
-  const railState = issueRailNodeState(issue, state, issues);
+  const count = leafTaskProgressCount(issue, indexes);
+  const railState = issueRailNodeState(issue, state, indexes);
   const live = isInFlight(issue, state);
   const prChip = storyPrChipModel(issue, prQuery);
 
@@ -580,8 +584,7 @@ function TreeRow({
               node={child}
               derived={derived}
               catalog={catalog}
-              issues={issues}
-              byId={byId}
+              indexes={indexes}
               prQuery={prQuery}
               guides={[...guides, index < node.children.length - 1]}
             />
@@ -593,15 +596,13 @@ function TreeRow({
 
 function ProjectUnstackDropZone({
   projectId,
-  issues,
+  indexes,
 }: {
   projectId: string;
-  issues: IssueRecord[];
+  indexes: TreeRowIndexes;
 }) {
   const { getProjectDnDProps, draggingId } = useStoryTreeDnDContext();
-  const dragging = draggingId
-    ? issues.find((issue) => issue.id === draggingId)
-    : undefined;
+  const dragging = draggingId ? indexes.byId.get(draggingId) : undefined;
   if (!dragging || dragging.kind !== "story") return null;
   const { isDragging: _ignored, isDropTarget, ...handlers } =
     getProjectDnDProps(projectId);
@@ -625,8 +626,7 @@ function CollapsibleStructureGroup({
   nodes,
   derived,
   catalog,
-  issues,
-  byId,
+  indexes,
   prQuery,
 }: {
   testId: string;
@@ -635,8 +635,7 @@ function CollapsibleStructureGroup({
   nodes: IssueNode[];
   derived: DerivedMap;
   catalog: ProjectLabel[];
-  issues: IssueRecord[];
-  byId: ReadonlyMap<string, IssueRecord>;
+  indexes: TreeRowIndexes;
   prQuery: ProjectPrQuery;
 }) {
   if (nodes.length === 0) return null;
@@ -664,8 +663,7 @@ function CollapsibleStructureGroup({
                 node={node}
                 derived={derived}
                 catalog={catalog}
-                issues={issues}
-                byId={byId}
+                indexes={indexes}
                 prQuery={prQuery}
               />
             ))}
@@ -693,16 +691,13 @@ export function IssueTree({
   catalog: ProjectLabel[];
   projectId: string;
 }) {
-  const dnd = useStoryTreeDnD(issues);
+  const indexes = useMemo(() => buildTreeRowIndexes(issues), [issues]);
+  const dnd = useStoryTreeDnD(issues, indexes);
   const prQueryResult = useProjectPullRequestsQuery(projectId);
   const prQuery: ProjectPrQuery = {
     data: prQueryResult.data,
     error: prQueryResult.error,
   };
-  const byId = useMemo(
-    () => new Map(issues.map((row) => [row.id, row])),
-    [issues],
-  );
   const hasHierarchy = nodes.length > 0;
   const hasIdeas = ideaNodes.length > 0;
   const hasDone = doneNodes.length > 0;
@@ -712,7 +707,7 @@ export function IssueTree({
       <StoryTreeDnDProvider value={dnd}>
         <div className="flex flex-col gap-1.5">
           {projectId ? (
-            <ProjectUnstackDropZone projectId={projectId} issues={issues} />
+            <ProjectUnstackDropZone projectId={projectId} indexes={indexes} />
           ) : null}
           <p className="px-2 py-8 text-center text-sm text-muted-foreground">
             No issues yet. Use New to add an Epic, Story, or Idea.
@@ -725,7 +720,7 @@ export function IssueTree({
     <StoryTreeDnDProvider value={dnd}>
       <div className="flex flex-col gap-1.5">
         {projectId ? (
-          <ProjectUnstackDropZone projectId={projectId} issues={issues} />
+          <ProjectUnstackDropZone projectId={projectId} indexes={indexes} />
         ) : null}
         {hasHierarchy ? (
           <Rail data-testid="structure-tree-rail">
@@ -735,8 +730,7 @@ export function IssueTree({
                 node={node}
                 derived={derived}
                 catalog={catalog}
-                issues={issues}
-                byId={byId}
+                indexes={indexes}
                 prQuery={prQuery}
               />
             ))}
@@ -749,8 +743,7 @@ export function IssueTree({
           nodes={ideaNodes}
           derived={derived}
           catalog={catalog}
-          issues={issues}
-          byId={byId}
+          indexes={indexes}
           prQuery={prQuery}
         />
         <CollapsibleStructureGroup
@@ -760,8 +753,7 @@ export function IssueTree({
           nodes={doneNodes}
           derived={derived}
           catalog={catalog}
-          issues={issues}
-          byId={byId}
+          indexes={indexes}
           prQuery={prQuery}
         />
       </div>

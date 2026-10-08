@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { IssueRecord } from "@server/schemas";
@@ -7,6 +7,10 @@ import { Rail } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
 import { issueRailNodeState } from "../lib/rail-state";
 import { parentOf } from "../lib/build-tree";
+import {
+  buildTreeRowIndexes,
+  type TreeRowIndexes,
+} from "../lib/tree-row-indexes";
 import {
   flowItemNeedsAttention,
   type FlowBuckets,
@@ -261,6 +265,7 @@ function BucketList({
 export function FlowPreviewedItems({
   items,
   issues = [],
+  indexes,
   previewLimit,
   listClassName,
   renderItem,
@@ -268,8 +273,10 @@ export function FlowPreviewedItems({
   asRail,
 }: {
   items: FlowItem[];
-  /** Needed so manual-complete Ready-to-land Stories do not count as live. */
+  /** Snapshot used to build row indexes when `indexes` is omitted. */
   issues?: IssueRecord[];
+  /** Prebuilt row indexes. When set, `issues` is not read. */
+  indexes?: TreeRowIndexes;
   previewLimit?: number;
   listClassName?: string;
   renderItem: (item: FlowItem) => ReactNode;
@@ -283,12 +290,16 @@ export function FlowPreviewedItems({
   asRail?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const rowIndexes = useMemo(
+    () => indexes ?? buildTreeRowIndexes(issues),
+    [indexes, issues],
+  );
   const capped =
     previewLimit != null && !showAll && items.length > previewLimit;
   const visible = capped ? items.slice(0, previewLimit) : items;
   const live = visible.some(
     (item) =>
-      issueRailNodeState(item.issue, item.state, issues) === "in-flight",
+      issueRailNodeState(item.issue, item.state, rowIndexes) === "in-flight",
   );
 
   const rows = visible.flatMap((item, index) => {

@@ -11,7 +11,7 @@ export function parentOf(issue: IssueRecord): string | undefined {
 }
 
 export function issuesById(
-  issues: IssueRecord[],
+  issues: readonly IssueRecord[],
 ): Map<string, IssueRecord> {
   return new Map(issues.map((issue) => [issue.id, issue]));
 }

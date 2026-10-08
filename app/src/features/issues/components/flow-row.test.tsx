@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { issueChannelPath, issuePath } from "../lib/links";
+import { buildTreeRowIndexes } from "../lib/tree-row-indexes";
 import { FlowRow } from "./flow-row";
 
 type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
@@ -74,7 +75,7 @@ function mountRow(
       <MemoryRouter>
         <FlowRow
           item={{ issue, state }}
-          issues={rowIssues}
+          indexes={buildTreeRowIndexes(rowIssues)}
           actions={actions}
           launchFault={launchFault}
           to={to}

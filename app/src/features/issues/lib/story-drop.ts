@@ -29,16 +29,24 @@ export function canRestackStoryOntoStory(
   return !stack.some((b) => b.id === targetId);
 }
 
+function recordById(
+  issues: IssueRecord[],
+  id: string,
+  byId?: ReadonlyMap<string, IssueRecord>,
+): IssueRecord | undefined {
+  return byId ? byId.get(id) : issues.find((issue) => issue.id === id);
+}
+
 /** True when dropping `sourceId` onto epic `epicId` is a legal reparent/unstack. */
 export function canDropStoryOntoEpic(
   issues: IssueRecord[],
   sourceId: string,
   epicId: string,
+  byId?: ReadonlyMap<string, IssueRecord>,
 ): boolean {
   const stack = storyDragStack(issues, sourceId);
   if (stack.length === 0) return false;
-  const epic = issues.find((i) => i.id === epicId);
-  return epic?.kind === "epic";
+  return recordById(issues, epicId, byId)?.kind === "epic";
 }
 
 /** True when dropping `sourceId` onto project `projectId` is a legal reparent/unstack. */
@@ -46,11 +54,11 @@ export function canDropStoryOntoProject(
   issues: IssueRecord[],
   sourceId: string,
   projectId: string,
+  byId?: ReadonlyMap<string, IssueRecord>,
 ): boolean {
   const stack = storyDragStack(issues, sourceId);
   if (stack.length === 0) return false;
-  const project = issues.find((i) => i.id === projectId);
-  return project?.kind === "project";
+  return recordById(issues, projectId, byId)?.kind === "project";
 }
 
 export function readStoryDragId(dataTransfer: DataTransfer): string | null {
