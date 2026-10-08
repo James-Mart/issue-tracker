@@ -73,6 +73,9 @@ const { startWorkQueueLauncher } = await import(
 );
 startWorkQueueLauncher(agentSessions);
 
+const { startPrSyncDriver } = await import("./services/pr-sync-driver.js");
+startPrSyncDriver();
+
 const { dropUnownedAgentStackRecords } = await import(
   "./services/agent-stack.js"
 );
