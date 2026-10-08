@@ -74,7 +74,12 @@ import {
   type LabelCascadePatch,
 } from "./labels.js";
 import { assertAllowedAgentModelSlug } from "../agent-model-slugs.js";
-import { mergeCascade } from "./merge-consequences.js";
+import {
+  assertMergedAtPatchAllowed,
+  isStoryMergeFlip,
+  mergeCascade,
+  stampMergedAtOnStoryMergeFlip,
+} from "./merge-consequences.js";
 import { assertStoreWritable, refusesStoreWrites } from "./store-read-only.js";
 import { replaceFileAtomically, withIssuesStoreLock } from "./issues-store-lock.js";
 import {
@@ -590,6 +595,9 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
       );
     }
 
+    const storyMergeFlip = isStoryMergeFlip(existing, parsed.issue);
+    assertMergedAtPatchAllowed(jsonPatch, storyMergeFlip);
+
     // Moving a node to a new sibling group (a reparent via `partOf`, or a Branch
     // restack/unstack via `stackedOn`) can leave its old `order` colliding in the
     // new group; re-append there unless the caller set `order` explicitly. Keyed
@@ -639,6 +647,9 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     }
 
     const now = new Date().toISOString();
+    if (isStoryMergeFlip(existing, parsed.issue)) {
+      stampMergedAtOnStoryMergeFlip(parsed.issue, jsonPatch, now);
+    }
     const cascaded = applyCascadePatches(
       archivedCascadePatches,
       labelCascadePatches,
@@ -647,12 +658,7 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     );
 
     const mergeSiblingWrites: Issue[] = [];
-    if (
-      existing.kind === "story" &&
-      parsed.issue.kind === "story" &&
-      !existing.merged &&
-      parsed.issue.merged
-    ) {
+    if (storyMergeFlip) {
       const { landedBase, staleIds } = mergeCascade(issues, id);
       for (const siblingId of staleIds) {
         const sibling = issues.find((issue) => issue.id === siblingId);

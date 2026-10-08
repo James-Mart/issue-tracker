@@ -286,6 +286,11 @@ describe("story get/set", () => {
     expect(mergeBaseOf("b")).toBeUndefined();
     expect((await runIssueCli(["story", "get", "b", "mergeBase"], { env: env() })).stdout).toBe("main\n");
     expect((await runIssueCli(["story", "get", "a", "merged"], { env: env() })).stdout).toBe("true\n");
+    const mergedAt = (
+      await runIssueCli(["story", "get", "a", "mergedAt"], { env: env() })
+    ).stdout.trim();
+    expect(mergedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(issueJsonField("a", "mergedAt")).toBe(mergedAt);
   });
 
   it("refuses kind mismatch and unknown fields; mergeBase sets override", async () => {

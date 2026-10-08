@@ -346,3 +346,68 @@ describe("update merged flip cascade", () => {
     expect(list().derived.child?.mergeBase).toBe("main");
   });
 });
+
+describe("story mergedAt stamp", () => {
+  function writeUnmergedFinisher(): void {
+    writeIssue("finisher", {
+      kind: "story",
+      title: "Finisher",
+      partOf: "e",
+      order: 0,
+      branchName: "feat/finisher",
+      merged: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-01T12:00:00.000Z"));
+    writeUnmergedFinisher();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("stamps mergedAt on the merged false→true flip", async () => {
+    const { update } = await loadModules();
+    await update("finisher", { merged: true });
+    expect(readStoryJson("finisher").mergedAt).toBe("2026-08-01T12:00:00.000Z");
+  });
+
+  it("accepts a caller-supplied mergedAt on the flip", async () => {
+    const { update } = await loadModules();
+    await update("finisher", {
+      merged: true,
+      mergedAt: "2026-01-15T09:30:00.000Z",
+    });
+    expect(readStoryJson("finisher").mergedAt).toBe("2026-01-15T09:30:00.000Z");
+  });
+
+  it("leaves mergedAt unchanged when merged is set true again", async () => {
+    const { update } = await loadModules();
+    await update("finisher", {
+      merged: true,
+      mergedAt: "2026-01-15T09:30:00.000Z",
+    });
+    vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+    await update("finisher", { merged: true });
+    expect(readStoryJson("finisher").mergedAt).toBe("2026-01-15T09:30:00.000Z");
+  });
+
+  it("refuses mergedAt outside a merge flip", async () => {
+    const { update } = await loadModules();
+    await expect(
+      update("finisher", { mergedAt: "2026-01-15T09:30:00.000Z" }),
+    ).rejects.toThrow(/mergedAt is system-written/);
+  });
+
+  it("refuses a non-ISO mergedAt on the flip", async () => {
+    const { update } = await loadModules();
+    await expect(
+      update("finisher", { merged: true, mergedAt: "not-a-date" }),
+    ).rejects.toThrow(/mergedAt must be an ISO timestamp/);
+  });
+});

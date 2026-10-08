@@ -522,6 +522,7 @@ export const storySchema = z.object({
   mergePolicy: z.enum(MERGE_POLICIES).optional(),
   prUrl: z.string().optional(),
   merged: z.boolean().default(false),
+  mergedAt: z.string().optional(),
   review: z.enum(REVIEW_STATUSES).optional(),
   reviewedTasks: z.array(z.string()).default([]),
   needsRebase: z.string().optional(),
