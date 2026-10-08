@@ -457,7 +457,6 @@ function IssueChangeFileDiff({
       ) : null}
       <FileDiff
         fileDiff={fileDiff}
-        disableWorkerPool
         options={{
           loadDiffFiles,
           diffStyle: diffLayout,
