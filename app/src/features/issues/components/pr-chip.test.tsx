@@ -9,7 +9,7 @@ import {
   PrChip,
   prFactsChipLabel,
   resolvePrChip,
-  storyPrChipModel,
+  storyPrChipModelFromRow,
   type PrChipModel,
 } from "./pr-chip";
 
@@ -215,12 +215,13 @@ describe("resolvePrChip / PrChip", () => {
   });
 });
 
-describe("storyPrChipModel", () => {
+describe("storyPrChipModelFromRow", () => {
   it("delegates Story rows to resolvePrChip", () => {
     const facts = prFacts();
-    const model = storyPrChipModel(story({ id: "s1", prUrl: facts.url }), {
-      data: { prs: { s1: facts } },
-      error: null,
+    const model = storyPrChipModelFromRow(story({ id: "s1", prUrl: facts.url }), {
+      entry: facts,
+      queryFailed: false,
+      hasData: true,
     });
     expect(model.kind).toBe("chip");
     if (model.kind === "chip") {
@@ -243,15 +244,19 @@ describe("storyPrChipModel", () => {
       updatedAt: t0,
     };
     expect(
-      storyPrChipModel(epic, { data: { prs: {} }, error: null }),
+      storyPrChipModelFromRow(epic, {
+        entry: undefined,
+        queryFailed: false,
+        hasData: true,
+      }),
     ).toEqual({ kind: "hidden" });
   });
 
   it("passes tracker merged into the chip label", () => {
     const facts = prFacts();
-    const model = storyPrChipModel(
+    const model = storyPrChipModelFromRow(
       story({ id: "s1", prUrl: facts.url, merged: true }),
-      { data: { prs: { s1: facts } }, error: null },
+      { entry: facts, queryFailed: false, hasData: true },
     );
     expect(model.kind).toBe("chip");
     if (model.kind === "chip") {

@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
   type DragEvent,
@@ -75,7 +76,10 @@ export function useStoryTreeDnD(
         reorderBoard.mutate({ id: sourceId, before: targetId });
       }
     },
-    [indexes, issues, moveStory, reorderBoard],
+    // `mutate` is stable. The mutation result object is a new object every
+    // render; depending on it would rebuild this context on every parent
+    // render and force every memoized TreeRow to render again.
+    [indexes, issues, moveStory.mutate, reorderBoard.mutate],
   );
 
   const dropTargetHandlers = useCallback(
@@ -184,12 +188,15 @@ export function useStoryTreeDnD(
     return true;
   }, []);
 
-  return {
-    getRowDnDProps,
-    getProjectDnDProps,
-    draggingId,
-    consumeDragGesture,
-  };
+  return useMemo(
+    () => ({
+      getRowDnDProps,
+      getProjectDnDProps,
+      draggingId,
+      consumeDragGesture,
+    }),
+    [consumeDragGesture, draggingId, getProjectDnDProps, getRowDnDProps],
+  );
 }
 
 export function StoryTreeDnDProvider({
