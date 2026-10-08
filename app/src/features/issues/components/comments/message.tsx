@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Bot } from "lucide-react";
 import type { Comment } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
@@ -18,6 +19,9 @@ export function commentHeaderLabels(
   if (isHumanRole(role)) {
     return { author: name ?? role, roleBadge: "Human" };
   }
+  if (role === "github-bot") {
+    return { author: name ? name : "Bot", roleBadge: "Bot" };
+  }
   const caption = roleFamilyCaption(role).caption;
   return { author: name ?? caption, roleBadge: caption };
 }
@@ -31,6 +35,17 @@ export function formatCommentTime(at: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Bot mark for a comment authored by a GitHub bot. The login is the author. */
+export function CommentBotIcon() {
+  return (
+    <Bot
+      className="h-3.5 w-3.5 shrink-0"
+      aria-hidden
+      data-testid="comment-bot-icon"
+    />
+  );
 }
 
 /** "on GitHub" link. Same classes as the pull-request comment link. */
@@ -95,6 +110,7 @@ export function Message({
   roleBadge,
   at,
   source,
+  leading,
   status,
   children,
 }: {
@@ -102,6 +118,7 @@ export function Message({
   roleBadge: string;
   at: string;
   source?: Comment["source"];
+  leading?: ReactNode;
   /** Trails the time in the header. */
   status?: ReactNode;
   children: ReactNode;
@@ -112,6 +129,7 @@ export function Message({
         author={author}
         roleBadge={roleBadge}
         at={at}
+        leading={leading}
         source={source}
         status={status}
       />

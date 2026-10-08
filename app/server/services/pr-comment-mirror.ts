@@ -1,5 +1,11 @@
-import type { CommentInput, CommentSource } from "../schemas.js";
+import type {
+  Comment,
+  CommentAnchor,
+  CommentInput,
+  CommentSource,
+} from "../schemas.js";
 import { appendComment, readComments } from "./comment-append.js";
+import { isFullCommitSha } from "./commit-sha.js";
 import { parseGhGraphqlRepository, parsePrUrl, runGh } from "./delivery.js";
 import { IssueError } from "./errors.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
@@ -7,11 +13,41 @@ import type { PrSyncStepResult } from "./pr-sync-driver.js";
 
 const PAGE_SIZE = 100;
 
+const ACTOR_FIELDS = "author { __typename login }";
+
+const COMMENT_FIELDS = `
+          id
+          url
+          body
+          createdAt
+          updatedAt
+          ${ACTOR_FIELDS}`;
+
+const REVIEW_FIELDS = `
+          id
+          url
+          body
+          state
+          submittedAt
+          updatedAt
+          ${ACTOR_FIELDS}`;
+
+const REVIEW_COMMENT_FIELDS = `
+              id
+              url
+              body
+              createdAt
+              updatedAt
+              state
+              ${ACTOR_FIELDS}
+              commit { oid }
+              originalCommit { oid }
+              replyTo { id }`;
+
 /**
  * A comment input mirrored from GitHub. `replyToSourceId` names the parent
- * GitHub node id for a reply; conversation comments leave it unset.
- * `createdAt` is the GitHub created time, stamped onto the tracker comment
- * as `at`.
+ * GitHub node id for a review reply. `createdAt` is the GitHub time stamped
+ * onto the tracker comment as `at` — a review summary uses `submittedAt`.
  */
 export type MirroredComment = CommentInput & {
   source: CommentSource;
@@ -71,9 +107,9 @@ function sinceMs(since: string): number {
 }
 
 /**
- * Human authors are GitHub users. Bots stay in the result for the review
- * step; other actors (a deleted account, an organization) have no role here.
- * A blank body is not a tracker comment.
+ * Human authors are GitHub users. Bots land as `github-bot`. Other actors
+ * (a deleted account, an organization) have no role here. A blank body is
+ * not a tracker comment.
  */
 function mapAuthor(
   author: unknown,
@@ -86,11 +122,49 @@ function mapAuthor(
   return null;
 }
 
-function mapComment(node: unknown, cutoffMs: number | undefined): MirroredComment | "stop" | null {
+function replyToSourceIdOf(record: Record<string, unknown>): string | undefined {
+  if (!("replyTo" in record) || record.replyTo == null) return undefined;
+  const reply = asRecord(record.replyTo, "review comment reply");
+  if (typeof reply.id !== "string" || reply.id.length === 0) {
+    throw new IssueError(
+      "gh-failed",
+      "gh graphql returned a review comment reply without an id",
+    );
+  }
+  return reply.id;
+}
+
+/**
+ * `onOld` is `stop` for conversation comments, which GitHub can order by
+ * updated time. Reviews and review threads have no such order, so an old
+ * row is skipped and paging continues.
+ * Review summaries pass `submittedAt` — that is when the summary was published.
+ */
+function mapComment(
+  node: unknown,
+  cutoffMs: number | undefined,
+  onOld: "stop",
+  createdField?: "createdAt",
+): MirroredComment | "stop" | null;
+function mapComment(
+  node: unknown,
+  cutoffMs: number | undefined,
+  onOld: "skip",
+  createdField?: "createdAt" | "submittedAt",
+): MirroredComment | null;
+function mapComment(
+  node: unknown,
+  cutoffMs: number | undefined,
+  onOld: "stop" | "skip",
+  createdField: "createdAt" | "submittedAt" = "createdAt",
+): MirroredComment | "stop" | null {
   if (node == null) return null;
   const record = asRecord(node, "comment");
+  if (record.state === "PENDING") return null;
   const updated = githubTime(record.updatedAt, "updatedAt");
-  if (cutoffMs !== undefined && updated.ms < cutoffMs) return "stop";
+  if (cutoffMs !== undefined && updated.ms < cutoffMs) {
+    return onOld === "stop" ? "stop" : null;
+  }
   const author = mapAuthor(record.author);
   if (!author) return null;
   if (typeof record.body !== "string") {
@@ -103,13 +177,15 @@ function mapComment(node: unknown, cutoffMs: number | undefined): MirroredCommen
   if (typeof record.url !== "string" || record.url.length === 0) {
     throw new IssueError("gh-failed", "gh graphql returned a comment without a url");
   }
-  const created = githubTime(record.createdAt, "createdAt");
+  const created = githubTime(record[createdField], createdField);
+  const replyToSourceId = replyToSourceIdOf(record);
   return {
     role: author.role,
     name: author.name,
     body: record.body,
     createdAt: created.iso,
     source: { kind: "github", id: record.id, url: record.url },
+    ...(replyToSourceId ? { replyToSourceId } : {}),
   };
 }
 
@@ -128,13 +204,7 @@ function commentsQuery(
     pullRequest(number: ${number}) {
       comments(first: ${PAGE_SIZE}, orderBy: {field: ${field}, direction: ${direction}}${after}) {
         pageInfo { hasNextPage endCursor }
-        nodes {
-          id
-          url
-          body
-          createdAt
-          updatedAt
-          author { __typename login }
+        nodes {${COMMENT_FIELDS}
         }
       }
     }
@@ -142,14 +212,101 @@ function commentsQuery(
 }`;
 }
 
-type CommentPage = {
-  comments: MirroredComment[];
-  stop: boolean;
+function reviewsQuery(
+  owner: string,
+  repo: string,
+  number: number,
+  cursor: string | null,
+): string {
+  const after = cursor ? `, after: ${JSON.stringify(cursor)}` : "";
+  return `query {
+  repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(repo)}) {
+    pullRequest(number: ${number}) {
+      reviews(first: ${PAGE_SIZE}${after}) {
+        pageInfo { hasNextPage endCursor }
+        nodes {${REVIEW_FIELDS}
+        }
+      }
+    }
+  }
+}`;
+}
+
+function reviewThreadsQuery(
+  owner: string,
+  repo: string,
+  number: number,
+  cursor: string | null,
+): string {
+  const after = cursor ? `, after: ${JSON.stringify(cursor)}` : "";
+  return `query {
+  repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(repo)}) {
+    pullRequest(number: ${number}) {
+      reviewThreads(first: ${PAGE_SIZE}${after}) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          path
+          line
+          originalLine
+          startLine
+          originalStartLine
+          diffSide
+          subjectType
+          comments(first: ${PAGE_SIZE}) {
+            pageInfo { hasNextPage endCursor }
+            nodes {${REVIEW_COMMENT_FIELDS}
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+}
+
+function threadCommentsQuery(threadId: string, cursor: string): string {
+  return `query {
+  node(id: ${JSON.stringify(threadId)}) {
+    ... on PullRequestReviewThread {
+      comments(first: ${PAGE_SIZE}, after: ${JSON.stringify(cursor)}) {
+        pageInfo { hasNextPage endCursor }
+        nodes {${REVIEW_COMMENT_FIELDS}
+        }
+      }
+    }
+  }
+}`;
+}
+
+type ConnectionPage = {
+  nodes: unknown[];
   hasNextPage: boolean;
   endCursor: string | null;
 };
 
-function readPage(stdout: string, cutoffMs: number | undefined): CommentPage {
+function readConnection(connection: unknown, label: string): ConnectionPage {
+  const record = asRecord(connection, label);
+  const nodes = record.nodes;
+  if (!Array.isArray(nodes)) {
+    throw new IssueError("gh-failed", `gh graphql returned an unexpected ${label}`);
+  }
+  const pageInfo = asRecord(record.pageInfo, label);
+  if (typeof pageInfo.hasNextPage !== "boolean") {
+    throw new IssueError("gh-failed", `gh graphql returned an unexpected ${label}`);
+  }
+  const endCursor = pageInfo.endCursor;
+  if (endCursor != null && typeof endCursor !== "string") {
+    throw new IssueError("gh-failed", `gh graphql returned an unexpected ${label}`);
+  }
+  return {
+    nodes,
+    hasNextPage: pageInfo.hasNextPage,
+    endCursor: endCursor ?? null,
+  };
+}
+
+function pullRequestOf(stdout: string): Record<string, unknown> {
   const repository = parseGhGraphqlRepository(stdout);
   if (!repository) {
     throw new IssueError("gh-failed", "gh graphql returned no repository");
@@ -158,69 +315,31 @@ function readPage(stdout: string, cutoffMs: number | undefined): CommentPage {
   if (pullRequest == null) {
     throw new IssueError("gh-failed", "gh graphql returned no pull request");
   }
-  const pr = asRecord(pullRequest, "pull request");
-  const connection = asRecord(pr.comments, "comment page");
-  const nodes = connection.nodes;
-  if (!Array.isArray(nodes)) {
-    throw new IssueError("gh-failed", "gh graphql returned an unexpected comment page");
-  }
-  const pageInfo = asRecord(connection.pageInfo, "comment page");
-  if (typeof pageInfo.hasNextPage !== "boolean") {
-    throw new IssueError("gh-failed", "gh graphql returned an unexpected comment page");
-  }
-  const endCursor = pageInfo.endCursor;
-  if (endCursor != null && typeof endCursor !== "string") {
-    throw new IssueError("gh-failed", "gh graphql returned an unexpected comment page");
-  }
-
-  const comments: MirroredComment[] = [];
-  let stop = false;
-  for (const node of nodes) {
-    const mapped = mapComment(node, cutoffMs);
-    if (mapped === "stop") {
-      stop = true;
-      break;
-    }
-    if (mapped) comments.push(mapped);
-  }
-  return {
-    comments,
-    stop,
-    hasNextPage: pageInfo.hasNextPage,
-    endCursor: endCursor ?? null,
-  };
+  return asRecord(pullRequest, "pull request");
 }
 
-/**
- * Conversation comments on a pull request. Omit `since` for full history.
- * With `since` (an ISO timestamp), return comments created or updated at or
- * after that time. `edits` stays empty until comment edits are mirrored.
- */
-export async function fetchPrComments(
-  prUrl: string,
-  since: string | undefined,
-  workspace: string,
-): Promise<PrCommentFetch> {
-  const { owner, repo, number } = parsePrUrl(prUrl);
-  const cutoffMs = since === undefined ? undefined : sinceMs(since);
-  const comments: MirroredComment[] = [];
-  let cursor: string | null = null;
-  const seenCursors = new Set<string>();
+async function ghGraphql(workspace: string, query: string): Promise<string> {
+  return runGh(["api", "graphql", "-f", `query=${query}`], workspace);
+}
 
+async function collectPages<T>(
+  workspace: string,
+  queryFor: (cursor: string | null) => string,
+  read: (stdout: string) => {
+    items: T[];
+    stop: boolean;
+    hasNextPage: boolean;
+    endCursor: string | null;
+  },
+  startCursor: string | null = null,
+): Promise<T[]> {
+  const items: T[] = [];
+  let cursor: string | null = startCursor;
+  const seenCursors = new Set<string>();
+  if (startCursor) seenCursors.add(startCursor);
   for (;;) {
-    const query = commentsQuery(
-      owner,
-      repo,
-      number,
-      cursor,
-      since !== undefined,
-    );
-    const stdout = await runGh(
-      ["api", "graphql", "-f", `query=${query}`],
-      workspace,
-    );
-    const page = readPage(stdout, cutoffMs);
-    comments.push(...page.comments);
+    const page = read(await ghGraphql(workspace, queryFor(cursor)));
+    items.push(...page.items);
     if (page.stop || !page.hasNextPage) break;
     if (!page.endCursor || seenCursors.has(page.endCursor)) {
       throw new IssueError(
@@ -231,7 +350,265 @@ export async function fetchPrComments(
     seenCursors.add(page.endCursor);
     cursor = page.endCursor;
   }
+  return items;
+}
 
+function positiveLine(value: unknown, label: string): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new IssueError(
+      "gh-failed",
+      `gh graphql returned a review thread with an unreadable ${label}`,
+    );
+  }
+  return value;
+}
+
+function commitOid(value: unknown, label: string): string {
+  if (value == null) {
+    throw new IssueError(
+      "gh-failed",
+      `gh graphql returned a review comment without ${label}`,
+    );
+  }
+  const record = asRecord(value, label);
+  if (typeof record.oid !== "string" || !isFullCommitSha(record.oid)) {
+    throw new IssueError(
+      "gh-failed",
+      `gh graphql returned a review comment without ${label}`,
+    );
+  }
+  return record.oid;
+}
+
+function anchorFromThread(
+  thread: Record<string, unknown>,
+  root: Record<string, unknown>,
+): CommentAnchor {
+  if (typeof thread.path !== "string" || thread.path.length === 0) {
+    throw new IssueError(
+      "gh-failed",
+      "gh graphql returned a review thread without a path",
+    );
+  }
+  if (thread.subjectType !== "LINE" && thread.subjectType !== "FILE") {
+    throw new IssueError(
+      "gh-failed",
+      "gh graphql returned a review thread with an unreadable subject",
+    );
+  }
+  const line = positiveLine(thread.line, "line");
+  const useCurrent = line !== undefined;
+  if (thread.subjectType === "FILE") {
+    const commit = root.commit != null ? root.commit : root.originalCommit;
+    return {
+      path: thread.path,
+      commitSha: commitOid(commit, root.commit != null ? "commit" : "originalCommit"),
+    };
+  }
+  const anchoredLine = line ?? positiveLine(thread.originalLine, "originalLine");
+  if (anchoredLine === undefined) {
+    throw new IssueError(
+      "gh-failed",
+      "gh graphql returned a review thread without a line",
+    );
+  }
+  if (thread.diffSide !== "LEFT" && thread.diffSide !== "RIGHT") {
+    throw new IssueError(
+      "gh-failed",
+      "gh graphql returned a review thread without a diff side",
+    );
+  }
+  const start = positiveLine(
+    useCurrent ? thread.startLine : thread.originalStartLine,
+    useCurrent ? "startLine" : "originalStartLine",
+  );
+  return {
+    path: thread.path,
+    side: thread.diffSide === "LEFT" ? "old" : "new",
+    line: anchoredLine,
+    ...(start !== undefined && start !== anchoredLine ? { startLine: start } : {}),
+    commitSha: commitOid(
+      useCurrent ? root.commit : root.originalCommit,
+      useCurrent ? "commit" : "originalCommit",
+    ),
+  };
+}
+
+type RawThread = {
+  thread: Record<string, unknown>;
+  comments: unknown[];
+  commentCursor: string | null;
+};
+
+function mapReviewThread(
+  thread: Record<string, unknown>,
+  nodes: unknown[],
+  cutoffMs: number | undefined,
+): MirroredComment[] {
+  const mapped: { comment: MirroredComment; node: Record<string, unknown> }[] = [];
+  for (const node of nodes) {
+    const comment = mapComment(node, cutoffMs, "skip");
+    if (comment === null) continue;
+    mapped.push({ comment, node: asRecord(node, "comment") });
+  }
+  const root = mapped.find((entry) => entry.comment.replyToSourceId === undefined);
+  if (!root) return mapped.map((entry) => entry.comment);
+  const anchor = anchorFromThread(thread, root.node);
+  return mapped.map((entry) =>
+    entry.comment.source.id === root.comment.source.id
+      ? { ...entry.comment, anchor }
+      : entry.comment,
+  );
+}
+
+function readThreadCommentPage(stdout: string): ConnectionPage {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new IssueError("gh-failed", "gh graphql returned non-JSON stdout");
+  }
+  const data = asRecord(
+    asRecord(parsed, "review thread comments").data,
+    "review thread comments",
+  );
+  if (data.node == null) {
+    throw new IssueError("gh-failed", "gh graphql returned no review thread");
+  }
+  const thread = asRecord(data.node, "review thread");
+  return readConnection(thread.comments, "review thread comments");
+}
+
+async function remainingThreadComments(
+  threadId: string,
+  cursor: string,
+  workspace: string,
+): Promise<unknown[]> {
+  return collectPages(
+    workspace,
+    (after) => threadCommentsQuery(threadId, after ?? cursor),
+    (stdout) => {
+      const connection = readThreadCommentPage(stdout);
+      return { items: connection.nodes, stop: false, ...connection };
+    },
+    cursor,
+  );
+}
+
+async function fetchConversation(
+  owner: string,
+  repo: string,
+  number: number,
+  cutoffMs: number | undefined,
+  since: boolean,
+  workspace: string,
+): Promise<MirroredComment[]> {
+  return collectPages(workspace, (cursor) => commentsQuery(owner, repo, number, cursor, since), (stdout) => {
+    const connection = readConnection(pullRequestOf(stdout).comments, "comment page");
+    const comments: MirroredComment[] = [];
+    let stop = false;
+    for (const node of connection.nodes) {
+      const mapped = mapComment(node, cutoffMs, "stop");
+      if (mapped === "stop") {
+        stop = true;
+        break;
+      }
+      if (mapped) comments.push(mapped);
+    }
+    return { items: comments, stop, ...connection };
+  });
+}
+
+async function fetchReviews(
+  owner: string,
+  repo: string,
+  number: number,
+  cutoffMs: number | undefined,
+  workspace: string,
+): Promise<MirroredComment[]> {
+  return collectPages(workspace, (cursor) => reviewsQuery(owner, repo, number, cursor), (stdout) => {
+    const connection = readConnection(pullRequestOf(stdout).reviews, "review page");
+    const comments: MirroredComment[] = [];
+    for (const node of connection.nodes) {
+      const mapped = mapComment(node, cutoffMs, "skip", "submittedAt");
+      if (mapped) comments.push(mapped);
+    }
+    return { items: comments, stop: false, ...connection };
+  });
+}
+
+async function fetchReviewThreads(
+  owner: string,
+  repo: string,
+  number: number,
+  cutoffMs: number | undefined,
+  workspace: string,
+): Promise<MirroredComment[]> {
+  const threads = await collectPages(
+    workspace,
+    (cursor) => reviewThreadsQuery(owner, repo, number, cursor),
+    (stdout) => {
+      const connection = readConnection(
+        pullRequestOf(stdout).reviewThreads,
+        "review thread page",
+      );
+      const items: RawThread[] = [];
+      for (const node of connection.nodes) {
+        if (node == null) continue;
+        const thread = asRecord(node, "review thread");
+        if (typeof thread.id !== "string" || thread.id.length === 0) {
+          throw new IssueError(
+            "gh-failed",
+            "gh graphql returned a review thread without an id",
+          );
+        }
+        const comments = readConnection(thread.comments, "review thread comments");
+        items.push({
+          thread,
+          comments: comments.nodes,
+          commentCursor: comments.hasNextPage ? comments.endCursor : null,
+        });
+      }
+      return { items, stop: false, ...connection };
+    },
+  );
+
+  const comments: MirroredComment[] = [];
+  for (const raw of threads) {
+    const id = raw.thread.id;
+    const nodes = raw.commentCursor
+      ? raw.comments.concat(
+          await remainingThreadComments(String(id), raw.commentCursor, workspace),
+        )
+      : raw.comments;
+    comments.push(...mapReviewThread(raw.thread, nodes, cutoffMs));
+  }
+  return comments;
+}
+
+/**
+ * Conversation comments, review summaries, and inline review threads on a
+ * pull request. Omit `since` for full history. With `since` (an ISO
+ * timestamp), return items created or updated at or after that time.
+ * Conversation comments stop once a page is older than `since`. Review
+ * summaries and threads have no updated-at order, so those connections are
+ * paged in full and filtered. `edits` stays empty until comment edits are
+ * mirrored.
+ */
+export async function fetchPrComments(
+  prUrl: string,
+  since: string | undefined,
+  workspace: string,
+): Promise<PrCommentFetch> {
+  const { owner, repo, number } = parsePrUrl(prUrl);
+  const cutoffMs = since === undefined ? undefined : sinceMs(since);
+  const sinceSet = since !== undefined;
+  const comments = [
+    ...(await fetchConversation(owner, repo, number, cutoffMs, sinceSet, workspace)),
+    ...(await fetchReviews(owner, repo, number, cutoffMs, workspace)),
+    ...(await fetchReviewThreads(owner, repo, number, cutoffMs, workspace)),
+  ];
   comments.sort(
     (a, b) =>
       a.createdAt.localeCompare(b.createdAt) ||
@@ -249,6 +626,60 @@ function commentInputOf(comment: MirroredComment): CommentInput {
   return input;
 }
 
+/**
+ * Walk `replyToSourceId` to the thread root and return that root's tracker
+ * comment id. Undefined when the parent was not mirrored (blank body, deleted
+ * actor, or a pending draft) — that reply has no thread to join.
+ */
+function resolveReplyTo(
+  sourceId: string,
+  bySource: Map<string, MirroredComment>,
+  storedBySource: Map<string, string>,
+  messages: Comment[],
+): string | undefined {
+  const seen = new Set<string>();
+  let current = sourceId;
+  for (;;) {
+    if (seen.has(current)) {
+      throw new IssueError(
+        "gh-failed",
+        `gh graphql returned a review reply cycle at ${current}`,
+      );
+    }
+    seen.add(current);
+    const parent = bySource.get(current);
+    if (parent?.replyToSourceId) {
+      current = parent.replyToSourceId;
+      continue;
+    }
+    const storedId = storedBySource.get(current);
+    if (!storedId) return undefined;
+    const stored = messages.find((message) => message.id === storedId);
+    if (stored?.replyTo) return stored.replyTo;
+    return storedId;
+  }
+}
+
+async function landComment(
+  storyId: string,
+  comment: MirroredComment,
+  replyTo: string | undefined,
+  messages: Comment[],
+  seen: Set<string>,
+  storedBySource: Map<string, string>,
+): Promise<void> {
+  if (seen.has(comment.source.id)) return;
+  const input = commentInputOf(comment);
+  const stored = await appendComment(
+    storyId,
+    replyTo ? { ...input, replyTo } : input,
+    { at: comment.createdAt, messages },
+  );
+  messages.push(stored);
+  seen.add(comment.source.id);
+  storedBySource.set(comment.source.id, stored.id);
+}
+
 async function mirrorStoryComments(
   storyId: string,
   prUrl: string,
@@ -261,25 +692,40 @@ async function mirrorStoryComments(
   const seen = new Set(
     messages.flatMap((message) => (message.source ? [message.source.id] : [])),
   );
-  for (const comment of comments) {
-    if (comment.role !== "human") continue;
-    if (seen.has(comment.source.id)) continue;
-    const stored = await appendComment(storyId, commentInputOf(comment), {
-      at: comment.createdAt,
+  const bySource = new Map(comments.map((comment) => [comment.source.id, comment]));
+  const storedBySource = new Map(
+    messages.flatMap((message) =>
+      message.source ? [[message.source.id, message.id] as const] : [],
+    ),
+  );
+  const roots = comments.filter((comment) => comment.replyToSourceId === undefined);
+  const replies = comments.filter(
+    (comment): comment is MirroredComment & { replyToSourceId: string } =>
+      comment.replyToSourceId !== undefined,
+  );
+  for (const comment of roots) {
+    await landComment(storyId, comment, undefined, messages, seen, storedBySource);
+  }
+  for (const comment of replies) {
+    const replyTo = resolveReplyTo(
+      comment.replyToSourceId,
+      bySource,
+      storedBySource,
       messages,
-    });
-    messages.push(stored);
-    seen.add(comment.source.id);
+    );
+    if (!replyTo) continue;
+    await landComment(storyId, comment, replyTo, messages, seen, storedBySource);
   }
   cursors.set(prUrl, startedAt);
 }
 
 /**
- * Sync-pass step after PR reconcile. Lands human conversation comments on
- * each matched Story. The first pass for a PR in this process fetches full
- * history; later passes fetch comments updated since that pass.
+ * Sync-pass step after PR reconcile. Lands conversation comments, review
+ * summaries, and inline review threads on each matched Story, including bot
+ * authors. The first pass for a PR in this process fetches full history;
+ * later passes fetch items updated since that pass.
  */
-export async function mirrorConversationComments(
+export async function mirrorPrComments(
   projectId: string,
   previous: PrSyncStepResult,
 ): Promise<PrSyncStepResult> {

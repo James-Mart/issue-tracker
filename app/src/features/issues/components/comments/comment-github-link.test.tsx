@@ -6,6 +6,7 @@ import type { CommentMessage } from "@server/schemas";
 import type { CommentThread as CommentThreadData } from "../../lib/comment-threads";
 import { CommentThread } from "./comment-thread";
 import { DeliverableMessage } from "./comment-delivery";
+import { commentHeaderLabels } from "./message";
 
 vi.mock("../../api/queries", () => ({
   useIssueChangeFileQuery: () => ({ data: "" }),
@@ -77,5 +78,48 @@ describe("GitHub source link", () => {
   it("omits the link when the comment has no GitHub source", () => {
     const container = mount(<DeliverableMessage message={message()} />);
     expect(container.querySelector('[data-testid="comment-github-link"]')).toBeNull();
+  });
+
+  it("shows a GitHub bot as the Bot icon and the login", () => {
+    const source = { kind: "github" as const, id: "IC_bot", url: URL };
+    const bot = {
+      ...message(source),
+      role: "github-bot",
+      name: "dependabot[bot]",
+      body: "coverage dropped",
+    };
+    expect(commentHeaderLabels(bot.role, bot.name)).toEqual({
+      author: "dependabot[bot]",
+      roleBadge: "Bot",
+    });
+
+    const note = mount(<DeliverableMessage message={bot} />);
+    expect(note.querySelector('[data-testid="comment-bot-icon"]')).not.toBeNull();
+    expect(note.textContent).toContain("dependabot[bot]");
+    expect(note.querySelector('[data-testid="comment-role-badge"]')?.textContent).toBe("Bot");
+    expectGitHubLink(note);
+
+    const thread: CommentThreadData = {
+      kind: "review",
+      state: "open",
+      readyToTask: true,
+      root: {
+        ...bot,
+        id: "thread-bot",
+        anchor: {
+          path: "src/app.ts",
+          side: "new",
+          line: 12,
+          commitSha: "a".repeat(40),
+        },
+      },
+      replies: [],
+    };
+    const threaded = mount(<CommentThread thread={thread} issueId="ship" />);
+    expect(threaded.querySelector('[data-testid="comment-bot-icon"]')).not.toBeNull();
+    expect(threaded.textContent).toContain("dependabot[bot]");
+    expect(threaded.querySelector('[data-testid="comment-role-badge"]')?.textContent).toBe(
+      "Bot",
+    );
   });
 });

@@ -76,10 +76,10 @@ startWorkQueueLauncher(agentSessions);
 const { registerPrSyncStep, startPrSyncDriver } = await import(
   "./services/pr-sync-driver.js"
 );
-const { mirrorConversationComments } = await import(
+const { mirrorPrComments } = await import(
   "./services/pr-comment-mirror.js"
 );
-registerPrSyncStep(mirrorConversationComments);
+registerPrSyncStep(mirrorPrComments);
 startPrSyncDriver();
 
 const { dropUnownedAgentStackRecords } = await import(

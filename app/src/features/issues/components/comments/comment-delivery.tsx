@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useResendComment } from "../../api/mutations";
 import type { ThreadMessage } from "../../lib/comment-outbox";
 import { Markdown } from "../markdown";
-import { commentHeaderLabels, Message } from "./message";
+import { CommentBotIcon, commentHeaderLabels, Message } from "./message";
 
 /** A comment outside any thread, with its delivery state when it is this browser's post. */
 export function DeliverableMessage({
@@ -21,6 +21,7 @@ export function DeliverableMessage({
       roleBadge={roleBadge}
       at={message.at}
       source={message.source}
+      leading={message.role === "github-bot" ? <CommentBotIcon /> : undefined}
       status={<CommentSendingMark message={message} />}
     >
       <Markdown issueId={attachmentsIssueId}>{message.body}</Markdown>
