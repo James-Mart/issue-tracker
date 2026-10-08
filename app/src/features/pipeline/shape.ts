@@ -172,20 +172,11 @@ const planning: Pipeline = {
         "skills/issue-tracker-plan-polish/references/aggregate-apply-summary.md",
     },
     {
-      id: "concise",
-      name: "Conciseness",
-      shortLabel: "Concise",
+      id: "copyedit",
+      name: "Copyedit",
       kind: "step",
       pipeline: "planning",
-      source: "agents/issue-tracker-plan-concise.md",
-    },
-    {
-      id: "format",
-      name: "Formatting",
-      shortLabel: "Format",
-      kind: "step",
-      pipeline: "planning",
-      source: "agents/issue-tracker-plan-format.md",
+      source: "agents/issue-tracker-plan-copyedit.md",
     },
     {
       id: "work-handoff",
@@ -214,13 +205,11 @@ const planning: Pipeline = {
     { from: "check-dependency-order", to: "polish-apply", kind: "flow" },
     { from: "check-internal-consistency", to: "polish-apply", kind: "flow" },
     { from: "check-footprint", to: "polish-apply", kind: "flow" },
-    // Per-description passes after the draft is composed, before the single apply.
-    { from: "polish-apply", to: "concise", kind: "spawn" },
-    { from: "polish-apply", to: "format", kind: "spawn" },
-    { from: "concise", to: "format", kind: "flow" },
     // Re-check round: an apply re-enters every check agent that had findings.
     { from: "polish-apply", to: "polish", kind: "loop" },
-    { from: "polish-apply", to: "work-handoff", kind: "flow" },
+    // Copyedit runs once after the loop exits (aggregate-apply-summary step 6).
+    { from: "polish-apply", to: "copyedit", kind: "spawn" },
+    { from: "copyedit", to: "work-handoff", kind: "flow" },
   ],
 };
 

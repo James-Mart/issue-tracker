@@ -3,8 +3,8 @@ name: issue-tracker-plan-polish
 disable-model-invocation: true
 description: >-
   Polish an existing Epic, project-level Story, or append-target Story
-  with parallel checks, conciseness and formatting passes, then auto-apply
-  when safe.
+  with parallel checks, auto-apply of check fixes when safe, then one
+  copyedit pass.
 ---
 
 # Issue Tracker — Plan Polish
@@ -12,11 +12,12 @@ description: >-
 Polish one **work root** already in the tracker: an **Epic**, a
 **project-level Story**, or an **append-target Story**. You are the
 **coordinator**: spawn read-only check agents, compose a full apply doc
-from their findings (keep it internal), run the conciseness and formatting
-passes on each description in that draft, auto-apply when safe, then show
-a short findings + changes summary in chat. Checkers advise; the planner
-may stop continued polish (veto) when returns diminish — leftover
-findings still appear in the summary. Behavioral contract: Epic
+from their findings (keep it internal), and auto-apply check fixes when
+safe. After that re-check loop exits, run one copyedit pass on each
+description and apply accepted suggestions. Then show a short findings
++ changes summary in chat. Checkers advise; the planner may stop
+continued polish (veto) when returns diminish — leftover findings still
+appear in the summary. Behavioral contract: Epic
 **auto-plan-polish-confirm** invariants (auto-apply + post-summary;
 escalate only when unsafe) — do not restate that list here.
 
@@ -142,8 +143,8 @@ Idea unarchived.
 ## Rules
 
 - Only this coordinator writes the tracker, and only when auto-apply is safe
-  (or after the user resolves an escalate). Check agents and the conciseness
-  and formatting passes return suggestions.
+  (or after the user resolves an escalate). Check agents and the copyedit
+  pass return suggestions.
 - Do not ask the user to approve before auto-apply when fixes are clear.
 - Do not auto-chain into `issue-tracker-work` or other skills.
 - Do not edit workspace source files as part of polish (tracker plan only).
