@@ -27,6 +27,7 @@ import {
   deleteConversation,
   listConversations,
   readConversation,
+  readConversationMeta,
   readConversationTranscriptPage,
   setPendingMessage,
   startConversationPrompt,
@@ -339,7 +340,7 @@ export function createConversationsRouter(
   router.get(
     "/:id/run",
     asyncRoute(async (req, res) => {
-      readConversation(req.params.id);
+      readConversationMeta(req.params.id);
       res.json(
         assertConversationActiveRun(activeRunState(sessions, req.params.id)),
       );

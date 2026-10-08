@@ -13,7 +13,7 @@ import {
   conversationExists,
   createConversation,
   deliverLivePrompt,
-  readConversation,
+  readConversationMeta,
   startConversationPrompt,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
@@ -134,7 +134,7 @@ function usableResearcherConversation(
 ): ConversationMeta | undefined {
   if (!conversationExists(conversationId)) return undefined;
   try {
-    const { meta } = readConversation(conversationId);
+    const meta = readConversationMeta(conversationId);
     return meta.archived ? undefined : meta;
   } catch (err) {
     // The task's recovery path: a conversation that cannot be read is replaced.
