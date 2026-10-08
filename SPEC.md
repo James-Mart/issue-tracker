@@ -1648,8 +1648,11 @@ basename. Any other name is refused; those stay create-only on `POST`.
 | `DELETE` | `/api/issues/:id/attachments/:name` | remove one file |
 | `PUT` | `/api/issues/:id/export-drafts` | JSON `{ files: { name, content }[] }` replaces the reserved set; `200` `Attachment[]` |
 
-**Export channel.** `export` sits beside `planning` and `implementing` on
-`GET` and `POST /api/issues/:id/channels/:channel/sessions`. POST body stays
+**Export channel.** `export` sits beside `planning` and `implementing`.
+Session lists are `POST /api/channel-sessions` with
+`{ pairs: [{ issueId, channel }] }`, returning
+`{ sessions: { "<issueId>:<channel>": ChannelSessionListItem[] } }`.
+Create stays `POST /api/issues/:id/channels/:channel/sessions`. POST body stays
 `{ model, title?, message? }` and still archives prior non-archived sessions
 on the same issue and channel before creating the new one. `export` is
 offered on an unarchived Epic or project-level Story, in addition to that

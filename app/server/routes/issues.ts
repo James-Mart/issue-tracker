@@ -2,7 +2,6 @@ import { Router, type RequestHandler } from "express";
 import { basename } from "path";
 import { mergeStory } from "../../cli-ops.js";
 import {
-  assertChannelSessionListItem,
   CONVERSATION_CHANNELS,
   type CommentInput,
   type ConversationChannel,
@@ -53,8 +52,6 @@ import { editComment } from "../services/comment-edit.js";
 import { enrichCommentsForRead } from "../services/researcher-runs.js";
 import {
   createIssueChannelSession,
-  listConversations,
-  resolveAwaitingHuman,
   startConversationPrompt,
 } from "../services/conversations.js";
 import {
@@ -96,13 +93,6 @@ function parseChannelParam(raw: string): ConversationChannel {
 function projectIdForIssue(issueId: string): string {
   const { issues } = readAll();
   return ancestorChain(issueId, issues)[0]!.id;
-}
-
-function activeRunFlag(
-  sessions: AgentSessions,
-  conversationId: string,
-): boolean {
-  return sessions.getActiveRun(conversationId) !== undefined;
 }
 
 export function createIssuesRouter(
@@ -197,43 +187,6 @@ export function createIssuesRouter(
       }
       const { issues } = readAll();
       res.json({ workRoot: findPlanningWorkRoot(issueId, issues) });
-    }),
-  );
-
-  router.get(
-    "/:id/channels/:channel/sessions",
-    asyncRoute(async (req, res) => {
-      const issueId = req.params.id;
-      readIssueOrThrow(issueId);
-      const channel = parseChannelParam(req.params.channel);
-      const metas = listConversations().filter(
-        (meta) => meta.issueId === issueId && meta.channel === channel,
-      );
-      const toSessionItem = (meta: (typeof metas)[number], awaitingHuman: boolean) =>
-        assertChannelSessionListItem({
-          id: meta.id,
-          title: meta.title,
-          model: meta.model,
-          createdAt: meta.createdAt,
-          updatedAt: meta.updatedAt,
-          archived: meta.archived,
-          activeRun: activeRunFlag(sessions, meta.id),
-          awaitingHuman,
-        });
-      if (metas.every((meta) => meta.awaitingHuman !== undefined)) {
-        res.json(metas.map((meta) => toSessionItem(meta, meta.awaitingHuman!)));
-        return;
-      }
-      res.json(
-        await Promise.all(
-          metas.map(async (meta) =>
-            toSessionItem(
-              meta,
-              meta.awaitingHuman ?? (await resolveAwaitingHuman(meta)),
-            ),
-          ),
-        ),
-      );
     }),
   );
 
