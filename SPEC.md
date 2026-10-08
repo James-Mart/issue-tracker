@@ -2205,8 +2205,10 @@ commands outside the read-only allow-list enforced in
 `app/server/services/git-read.ts` (`show`, `diff`, `cat-file`, `rev-list`,
 `rev-parse`, `merge-base`), always with `cwd` set to the Project `workspace`
 via `requireProjectWorkspace`. It reads external delivery state by shelling out
-to `gh` with ambient auth and owns no credentials; PR facts are read live and
-never stored. Agents run git themselves for writes and record durable git facts
+to `gh` with ambient auth and owns no credentials. Stored pull-request
+facts are `prUrl`, `merged`, and `mergedAt`. Checks, mergeability, and review
+state are cached from the last sync pass; ordinary page loads read that cache.
+Agents run git themselves for writes and record durable git facts
 — `branchName`, `prUrl`, `commits`, `merged` — through the CLI. The tracker's
 job is to model the stacked-PR *plan* and its progress, not to drive git writes.
 This keeps it safe to run anywhere and impossible for the server to corrupt a

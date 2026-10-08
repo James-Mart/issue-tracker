@@ -48,6 +48,7 @@ import {
   storyIdsForLifecycleRemoval,
 } from "./worktree.js";
 import { uniqueSlug } from "./slug.js";
+import { ancestorChain } from "./subtree.js";
 import {
   EXECUTION_GATE_STAKEHOLDER_ERROR,
   validateAppendToPatch,
@@ -533,7 +534,12 @@ export function renameProjectLabel(
   });
 }
 
-export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
+export function update(
+  id: string,
+  patch: IssuePatch,
+  options?: { refreshPrFacts?: boolean },
+): Promise<IssueDetail> {
+  const refreshPrFacts = options?.refreshPrFacts !== false;
   return serialize(() => {
     const existing = readIssueOrThrow(id);
     const { issues } = readAll();
@@ -643,7 +649,11 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
       labelCascadePatches.length === 0 &&
       description === undefined
     ) {
-      return { detail: read(id), attemptIds: [] as string[] };
+      return {
+        detail: read(id),
+        attemptIds: [] as string[],
+        recordedPrProjectId: undefined,
+      };
     }
 
     const now = new Date().toISOString();
@@ -742,6 +752,14 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
     const jsonText = serializeIssue(parsed.issue);
     const finalDescription =
       description !== undefined ? description : readDescription(id);
+    const recordedPrProjectId =
+      refreshPrFacts &&
+      existing.kind === "story" &&
+      parsed.issue.kind === "story" &&
+      parsed.issue.prUrl !== undefined &&
+      parsed.issue.prUrl !== existing.prUrl
+        ? ancestorChain(id, issues)[0]!.id
+        : undefined;
     return {
       detail: toIssueDetail(parsed.issue, jsonText, finalDescription),
       attemptIds: storyIdsForLifecycleRemoval(
@@ -750,8 +768,13 @@ export function update(id: string, patch: IssuePatch): Promise<IssueDetail> {
         archivedCascadePatches,
         issues,
       ),
+      recordedPrProjectId,
     };
-  }).then(async ({ detail, attemptIds }) => {
+  }).then(async ({ detail, attemptIds, recordedPrProjectId }) => {
+    if (recordedPrProjectId) {
+      const { refreshRecordedPrFacts } = await import("./pr-facts-read.js");
+      await refreshRecordedPrFacts(recordedPrProjectId);
+    }
     if (attemptIds.length === 0) return detail;
     for (const storyId of attemptIds) {
       await attemptStoryWorktreeRemoval(storyId);

@@ -298,7 +298,7 @@ export async function reconcileProjectPrs(
       tasks.get(candidate.story.id) ?? [],
     );
     if (!fields) continue;
-    await update(candidate.story.id, fields);
+    await update(candidate.story.id, fields, { refreshPrFacts: false });
     writes.push({ storyId: candidate.story.id, fields });
   }
 

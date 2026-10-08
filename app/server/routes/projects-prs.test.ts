@@ -25,6 +25,18 @@ let workspaceDir: string;
 let server: Server;
 let baseUrl: string;
 let setGhSpawnerForTests: (next: GhSpawner | null) => void;
+let replacePrFactsCache: (
+  projectId: string,
+  prs: Record<string, unknown>,
+) => void;
+let clearPrFactsCache: () => void;
+let setPrSyncStatusForTests: (
+  projectId: string,
+  status: {
+    lastSyncedAt?: string;
+    lastError?: { message: string; at: string };
+  },
+) => void;
 
 function fakeChildProcess(): ChildProcessWithoutNullStreams {
   const stdin = new PassThrough();
@@ -120,6 +132,10 @@ beforeEach(async () => {
 
   ({ setGhSpawnerForTests } = await import("../services/delivery.js"));
   setGhSpawnerForTests(null);
+  ({ replacePrFactsCache, clearPrFactsCache } = await import(
+    "../services/pr-facts-cache.js"
+  ));
+  ({ setPrSyncStatusForTests } = await import("../services/pr-sync-driver.js"));
 
   writeIssue("p", {
     kind: "project",
@@ -181,6 +197,9 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (setGhSpawnerForTests) setGhSpawnerForTests(null);
+  clearPrFactsCache?.();
+  const driver = await import("../services/pr-sync-driver.js");
+  await driver.resetPrSyncDriverForTests();
   vi.unstubAllEnvs();
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));
@@ -189,12 +208,53 @@ afterEach(async () => {
   rmSync(workspaceDir, { recursive: true, force: true });
 });
 
-async function getProjectPrs(projectId: string): Promise<Response> {
-  return fetch(`${baseUrl}/api/projects/${projectId}/prs`);
+async function getProjectPrs(projectId: string, query = ""): Promise<Response> {
+  return fetch(`${baseUrl}/api/projects/${projectId}/prs${query}`);
 }
 
 describe("project PRs HTTP API", () => {
-  it("returns live PR facts keyed by story id", async () => {
+  it("returns last-pass cached facts and sync status without calling gh", async () => {
+    let ghCalled = false;
+    stubGhSpawner(() => {
+      ghCalled = true;
+      return mockGhChild({ stdout: "{}" });
+    });
+    replacePrFactsCache("p", {
+      s1: {
+        number: 1,
+        url: "https://github.com/acme/widgets/pull/1",
+        state: "open",
+        isDraft: false,
+        mergeable: "mergeable",
+        mergeStateStatus: "CLEAN",
+        reviewDecision: null,
+        checks: { state: "success", failing: 0, pending: 0, total: 0 },
+        commentCount: 0,
+        comments: [],
+        headRefOid: "abc123",
+        baseRefName: "main",
+        updatedAt: "2026-08-01T00:00:00Z",
+      },
+    });
+    setPrSyncStatusForTests("p", {
+      lastSyncedAt: "2026-08-01T00:00:00.000Z",
+    });
+
+    const res = await getProjectPrs("p");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(ghCalled).toBe(false);
+    expect(body.sync).toEqual({ lastSyncedAt: "2026-08-01T00:00:00.000Z" });
+    expect(body.prs.s1).toMatchObject({
+      number: 1,
+      url: "https://github.com/acme/widgets/pull/1",
+      state: "open",
+    });
+    expect(body.prs).not.toHaveProperty("s-no-pr");
+    expect(body.prs).not.toHaveProperty("s2");
+  });
+
+  it("reads GitHub when live=1 and stores the result in the cache", async () => {
     const calls: string[][] = [];
     stubGhSpawner((args) => {
       calls.push(args);
@@ -217,25 +277,20 @@ describe("project PRs HTTP API", () => {
       });
     });
 
-    const res = await getProjectPrs("p");
+    const res = await getProjectPrs("p", "?live=1");
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(calls).toHaveLength(1);
-    expect(body).toEqual({
-      prs: {
-        s1: expect.objectContaining({
-          number: 1,
-          url: "https://github.com/acme/widgets/pull/1",
-          state: "open",
-        }),
-        s2: expect.objectContaining({
-          number: 2,
-          url: "https://github.com/acme/widgets/pull/2",
-          isDraft: true,
-        }),
-      },
-    });
+    expect(body.prs.s1).toMatchObject({ number: 1, state: "open" });
+    expect(body.prs.s2).toMatchObject({ number: 2, isDraft: true });
+    expect(body.sync.lastSyncedAt).toEqual(expect.any(String));
     expect(body.prs).not.toHaveProperty("s-no-pr");
+
+    const cached = await getProjectPrs("p");
+    expect(cached.status).toBe(200);
+    const cachedBody = await cached.json();
+    expect(cachedBody.prs.s1).toMatchObject({ number: 1, state: "open" });
+    expect(calls).toHaveLength(1);
   });
 
   it("returns an empty map without calling gh when no story has a prUrl", async () => {
@@ -265,7 +320,7 @@ describe("project PRs HTTP API", () => {
 
     const res = await getProjectPrs("empty");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ prs: {} });
+    expect(await res.json()).toEqual({ prs: {}, sync: {} });
     expect(ghCalled).toBe(false);
   });
 
@@ -287,7 +342,7 @@ describe("project PRs HTTP API", () => {
       }),
     );
 
-    const res = await getProjectPrs("p");
+    const res = await getProjectPrs("p", "?live=1");
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({
       error:

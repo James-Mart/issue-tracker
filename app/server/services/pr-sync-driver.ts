@@ -5,13 +5,19 @@ import {
   subscribeFrames,
   type ConversationFrame,
 } from "./conversation-stream.js";
+import type { ProjectPrSyncStatus } from "./delivery.js";
 import { derive, type DeriveResult } from "./derive.js";
 import { ISSUES_TOPIC, startIssueEventsWatcher } from "./issue-events.js";
 import { readAll } from "./issues.js";
 import {
+  replacePrFactsCacheFromMap,
+  clearPrFactsCache,
+} from "./pr-facts-cache.js";
+import {
   reconcileProjectPrs,
   type PrReconcileResult,
 } from "./pr-reconcile.js";
+import { publishPrSyncFinished } from "./pr-sync-events.js";
 import { projectContaining, subtreeIds } from "./subtree.js";
 
 /** Epic cadence: one pass at boot, then every five minutes. */
@@ -23,13 +29,10 @@ export const PR_SYNC_CADENCE_MS = 5 * 60 * 1000;
  */
 export const PR_SYNC_STORE_DEBOUNCE_MS = 500;
 
-export type PrSyncStatus = {
-  lastSyncedAt?: string;
-  lastError?: { message: string; at: string };
+/** Result a pass step returns. `error` ends the pass. `facts` is cached on success. */
+export type PrSyncStepResult = Pick<PrReconcileResult, "error" | "matches"> & {
+  facts?: PrReconcileResult["facts"];
 };
-
-/** Result a pass step returns. `error` ends the pass. */
-export type PrSyncStepResult = Pick<PrReconcileResult, "error" | "matches">;
 
 /**
  * A step after `reconcileProjectPrs`. `previous` is that reconcile result
@@ -46,7 +49,7 @@ type StorySignal = {
 };
 
 const steps: PrSyncStep[] = [];
-const statuses = new Map<string, PrSyncStatus>();
+const statuses = new Map<string, ProjectPrSyncStatus>();
 const baselines = new Map<string, Map<string, StorySignal>>();
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const tails = new Map<string, Promise<PrSyncStepResult>>();
@@ -59,13 +62,10 @@ export function registerPrSyncStep(step: PrSyncStep): void {
   steps.push(step);
 }
 
-export function prSyncStatus(projectId: string): PrSyncStatus {
+export function prSyncStatus(projectId: string): ProjectPrSyncStatus {
   const status = statuses.get(projectId);
   if (!status) return {};
-  return {
-    ...(status.lastSyncedAt ? { lastSyncedAt: status.lastSyncedAt } : {}),
-    ...(status.lastError ? { lastError: { ...status.lastError } } : {}),
-  };
+  return clonePrSyncStatus(status);
 }
 
 /**
@@ -109,7 +109,44 @@ export async function resetPrSyncDriverForTests(): Promise<void> {
   tails.clear();
   baselines.clear();
   statuses.clear();
+  clearPrFactsCache();
   steps.length = 0;
+}
+
+/** @internal Seed sync status without running a pass. */
+export function setPrSyncStatusForTests(
+  projectId: string,
+  status: ProjectPrSyncStatus,
+): void {
+  statuses.set(projectId, clonePrSyncStatus(status));
+}
+
+/** A live read succeeded. The sync line follows this time until the next pass or error. */
+export function notePrSyncSuccess(projectId: string): void {
+  recordSuccess(projectId, new Date().toISOString());
+  publishPrSyncFinished(projectId);
+}
+
+/** Record a live-read failure and tell subscribers. The previous cache stays. */
+export function notePrSyncError(projectId: string, message: string): void {
+  recordError(projectId, message, new Date().toISOString());
+  logPrSyncFailure(projectId, message);
+  publishPrSyncFinished(projectId);
+}
+
+function clonePrSyncStatus(status: ProjectPrSyncStatus): ProjectPrSyncStatus {
+  return {
+    ...(status.lastSyncedAt ? { lastSyncedAt: status.lastSyncedAt } : {}),
+    ...(status.lastError ? { lastError: { ...status.lastError } } : {}),
+  };
+}
+
+function logPrSyncFailure(projectId: string, detail: unknown): void {
+  if (detail instanceof Error) {
+    console.error(`pr sync failed for ${projectId}:`, detail);
+    return;
+  }
+  console.error(`pr sync failed for ${projectId}: ${String(detail)}`);
 }
 
 function syncPassesRunHere(): boolean {
@@ -131,16 +168,19 @@ async function executeSyncPass(projectId: string): Promise<PrSyncStepResult> {
     }
     if (result.error) {
       recordError(projectId, result.error, at);
-      console.error(`pr sync failed for ${projectId}: ${result.error}`);
+      logPrSyncFailure(projectId, result.error);
       return result;
     }
     recordSuccess(projectId, at);
+    if (result.facts) replacePrFactsCacheFromMap(projectId, result.facts);
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     recordError(projectId, message, at);
-    console.error(`pr sync failed for ${projectId}:`, err);
+    logPrSyncFailure(projectId, err);
     return { error: message };
+  } finally {
+    publishPrSyncFinished(projectId);
   }
 }
 

@@ -29,6 +29,8 @@ const queryState = vi.hoisted(() => ({
   isFetching: false,
 }));
 
+const refreshLive = vi.hoisted(() => vi.fn(async () => {}));
+
 const mergeMutate = vi.hoisted(() =>
   vi.fn(
     (
@@ -39,6 +41,11 @@ const mergeMutate = vi.hoisted(() =>
     },
   ),
 );
+
+vi.mock("../api/pr-sync-live", () => ({
+  refreshProjectPullRequestsLive: (qc: unknown, projectId: string) =>
+    refreshLive(qc, projectId),
+}));
 
 vi.mock("../api/queries", () => ({
   useProjectPullRequestsQuery: () => ({
@@ -362,6 +369,36 @@ describe("PrStatusPanel", () => {
     expect(mounted.invalidateSpy).toHaveBeenCalledWith({
       queryKey: issuesKeys.projectPullRequests("platform"),
     });
+    expect(refreshLive).not.toHaveBeenCalled();
+    unmount(mounted);
+  });
+
+  it("shows when the cache was synced with GitHub", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-01T00:02:00.000Z"));
+    queryState.data = {
+      prs: { "ship-pr": prFacts() },
+      sync: { lastSyncedAt: "2026-08-01T00:00:00.000Z" },
+    };
+    const mounted = mountPanel();
+    expect(mounted.container.querySelector('[data-testid="pr-sync-line"]')?.textContent).toBe(
+      "Synced with GitHub 2m ago",
+    );
+    unmount(mounted);
+  });
+
+  it("shows the last sync error instead of the synced time", () => {
+    queryState.data = {
+      prs: { "ship-pr": prFacts() },
+      sync: {
+        lastSyncedAt: "2026-08-01T00:00:00.000Z",
+        lastError: { message: "gh down", at: "2026-08-01T00:05:00.000Z" },
+      },
+    };
+    const mounted = mountPanel();
+    const line = mounted.container.querySelector('[data-testid="pr-sync-line"]');
+    expect(line?.textContent).toBe("gh down");
+    expect(line?.className).toContain("text-muted-foreground");
     unmount(mounted);
   });
 });
@@ -502,19 +539,17 @@ describe("PrStatusPanel merge control", () => {
     expect(mounted.container.textContent).not.toContain(
       "Mergeability is still unknown",
     );
-    expect(mounted.invalidateSpy).not.toHaveBeenCalled();
+    expect(refreshLive).not.toHaveBeenCalled();
     act(() => {
       vi.advanceTimersByTime(UNKNOWN_MERGEABLE_REFETCH_MS);
     });
-    expect(mounted.invalidateSpy).toHaveBeenCalledWith({
-      queryKey: issuesKeys.projectPullRequests("platform"),
-    });
-    const calls = mounted.invalidateSpy.mock.calls.length;
+    expect(refreshLive).toHaveBeenCalledWith(mounted.client, "platform");
+    const calls = refreshLive.mock.calls.length;
     unmount(mounted);
     act(() => {
       vi.advanceTimersByTime(UNKNOWN_MERGEABLE_REFETCH_MS * 2);
     });
-    expect(mounted.invalidateSpy.mock.calls.length).toBe(calls);
+    expect(refreshLive.mock.calls.length).toBe(calls);
   });
 
   it("does not poll when mergeability is known", () => {
@@ -524,7 +559,7 @@ describe("PrStatusPanel merge control", () => {
     act(() => {
       vi.advanceTimersByTime(UNKNOWN_MERGEABLE_REFETCH_MS * 3);
     });
-    expect(mounted.invalidateSpy).not.toHaveBeenCalled();
+    expect(refreshLive).not.toHaveBeenCalled();
     unmount(mounted);
   });
 

@@ -125,6 +125,61 @@ describe("runSyncPass", () => {
     expect(prSyncStatus("p")).toEqual({ lastSyncedAt: "2026-08-01T00:00:00.000Z" });
   });
 
+  it("caches the pass facts and publishes a pr-sync frame", async () => {
+    const facts = new Map([
+      [
+        "ship",
+        {
+          number: 7,
+          url: "https://github.com/acme/widgets/pull/7",
+          state: "open" as const,
+          isDraft: false,
+          mergeable: "mergeable" as const,
+          mergeStateStatus: "CLEAN",
+          reviewDecision: null,
+          checks: { state: "success" as const, failing: 0, pending: 0, total: 1 },
+          commentCount: 0,
+          comments: [],
+          headRefOid: "abc",
+          baseRefName: "main",
+          updatedAt: "2026-08-01T00:00:00Z",
+        },
+      ],
+    ]);
+    reconcileProjectPrs.mockResolvedValue({ ...okResult(), facts });
+    const { runSyncPass } = await load();
+    const stream = await import("./conversation-stream.js");
+    const { PR_SYNC_TOPIC } = await import("./pr-sync-events.js");
+    const cache = await import("./pr-facts-cache.js");
+    const frames: unknown[] = [];
+    const unsubscribe = stream.subscribeFrames(PR_SYNC_TOPIC, (frame) => {
+      frames.push(frame.event);
+    });
+
+    await runSyncPass("p");
+
+    expect(cache.readPrFactsCache("p")).toMatchObject({
+      ship: { number: 7, url: "https://github.com/acme/widgets/pull/7" },
+    });
+    expect(frames).toContainEqual(expect.objectContaining({ type: "pr-sync", projectId: "p" }));
+    unsubscribe();
+  });
+
+  it("keeps cached facts when a later pass fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const facts = new Map([["ship", { number: 7 }]]);
+    reconcileProjectPrs.mockResolvedValue({ ...okResult(), facts });
+    const { runSyncPass } = await load();
+    const cache = await import("./pr-facts-cache.js");
+    await runSyncPass("p");
+    reconcileProjectPrs.mockResolvedValue({ ...okResult(), error: "gh down" });
+
+    await runSyncPass("p");
+
+    expect(cache.readPrFactsCache("p")).toMatchObject({ ship: { number: 7 } });
+    expect(error).toHaveBeenCalled();
+  });
+
   it("stops the pass when a step returns error and keeps the prior success time", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { registerPrSyncStep, runSyncPass, prSyncStatus } = await load();

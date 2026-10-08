@@ -256,7 +256,10 @@ export function useProjectSecretKeys(
   });
 }
 
-/** Live PR facts for a Project — mount + explicit invalidation only. */
+/**
+ * Cached PR facts for a Project. The first observer loads the cache.
+ * Later refetches come from a finished sync pass, not from remounting.
+ */
 export function useProjectPullRequestsQuery(
   projectId: string,
 ): UseQueryResult<ProjectPrsResponse, Error> {
@@ -265,7 +268,8 @@ export function useProjectPullRequestsQuery(
     queryFn: () =>
       request<ProjectPrsResponse>(`/api/projects/${projectId}/prs`),
     enabled: Boolean(projectId),
-    staleTime: 60_000,
+    staleTime: Infinity,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

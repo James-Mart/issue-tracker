@@ -224,12 +224,8 @@ describe("guest outward-effect refusals", () => {
 
     const prs = await send("GET", "/api/projects/platform/prs");
     expect(prs.status).toBe(200);
-    expect(await prs.json()).toEqual({
-      prs: { story: { reason: "not-found" } },
-    });
-    expect(ghCalls.map((args) => args.slice(0, 2))).toEqual([
-      ["api", "graphql"],
-    ]);
+    expect(await prs.json()).toEqual({ prs: {}, sync: {} });
+    expect(ghCalls).toEqual([]);
   });
 
   it("refuses backup config writes and allows the backup read", async () => {

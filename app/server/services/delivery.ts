@@ -537,8 +537,15 @@ export async function readPullRequests(
   return out;
 }
 
+export type ProjectPrSyncStatus = {
+  lastSyncedAt?: string;
+  lastError?: { message: string; at: string };
+};
+
 export type ProjectPrsResponse = {
   prs: Record<string, PrFacts | PrUnavailable>;
+  /** Present on the project PRs endpoint. Absent on the live reader. */
+  sync?: ProjectPrSyncStatus;
 };
 
 /**
