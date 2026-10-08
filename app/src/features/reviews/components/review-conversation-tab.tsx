@@ -211,7 +211,7 @@ export function ReviewConversationTab({
 
   return (
     <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col"
+      className="review-conversation flex min-h-0 min-w-0 flex-1 flex-col"
       data-testid="review-conversation-tab"
     >
       {commentsReady ? (

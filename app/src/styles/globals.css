@@ -286,18 +286,26 @@
     text-decoration: underline;
     text-underline-offset: 3px;
   }
-  /* issue: links — mono id treatment within prose */
-  .prose-issue .issue-md-link {
+  /* issue: links — mono id treatment within prose.
+     Conversation external links share the scroll, without the mono face. */
+  .prose-issue .issue-md-link,
+  .review-conversation .prose-issue a {
     display: inline-block;
     max-width: 100%;
     overflow-x: auto;
     vertical-align: baseline;
-    font-family: var(--font-mono);
-    font-size: 0.93em;
-    font-variant-numeric: tabular-nums;
     overflow-wrap: normal;
     word-break: keep-all;
     white-space: nowrap;
+  }
+  .prose-issue .issue-md-link {
+    font-family: var(--font-mono);
+    font-size: 0.93em;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Keeps wide comment content from widening the page beside the sidebar. */
+  .review-conversation {
+    contain: inline-size;
   }
   .prose-issue :not(pre) > code,
   .prose-issue .issue-md-inline-code {
