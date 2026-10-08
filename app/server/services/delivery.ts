@@ -179,6 +179,7 @@ const ghPullRequestSchema = z.object({
   headRefOid: z.string(),
   baseRefName: z.string(),
   updatedAt: z.string(),
+  mergedAt: z.string().nullable().optional(),
   comments: z.object({
     totalCount: z.number().int(),
     nodes: z.array(
@@ -285,8 +286,12 @@ function mapReviewDecision(
   return null;
 }
 
-function mapPullRequest(raw: unknown): PrFacts {
-  const pr = ghPullRequestSchema.parse(raw);
+export type MappedPullRequest = {
+  facts: PrFacts;
+  mergedAt?: string;
+};
+
+function toPrFacts(pr: GhPullRequest): PrFacts {
   const state: PrFacts["state"] =
     pr.state === "OPEN" ? "open" : pr.state === "MERGED" ? "merged" : "closed";
   const mergeable: PrFacts["mergeable"] =
@@ -317,7 +322,90 @@ function mapPullRequest(raw: unknown): PrFacts {
   });
 }
 
-const PR_SELECTION = `{
+export function mapPullRequest(raw: unknown): PrFacts {
+  return toPrFacts(ghPullRequestSchema.parse(raw));
+}
+
+/** One parse of a GraphQL pull request, including GitHub `mergedAt` for reconcile. */
+export function mapReconcilePullRequest(raw: unknown): MappedPullRequest {
+  let pr: GhPullRequest;
+  try {
+    pr = ghPullRequestSchema.parse(raw);
+  } catch {
+    throw new IssueError(
+      "gh-failed",
+      "gh graphql returned an unexpected pull request",
+    );
+  }
+  const mergedAt =
+    typeof pr.mergedAt === "string" && pr.mergedAt.length > 0
+      ? pr.mergedAt
+      : undefined;
+  if (mergedAt !== undefined && Number.isNaN(Date.parse(mergedAt))) {
+    throw new IssueError(
+      "gh-failed",
+      "gh graphql returned an unexpected pull request",
+    );
+  }
+  return {
+    facts: toPrFacts(pr),
+    ...(mergedAt !== undefined ? { mergedAt } : {}),
+  };
+}
+
+/**
+ * `data.repository` from `gh` GraphQL stdout.
+ * Null when the repository field is absent or null.
+ */
+export function parseGhGraphqlRepository(
+  stdout: string,
+): Record<string, unknown> | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new IssueError("gh-failed", "gh graphql returned non-JSON stdout");
+  }
+  if (typeof parsed !== "object" || parsed === null || !("data" in parsed)) {
+    return null;
+  }
+  const data = (parsed as { data: unknown }).data;
+  if (typeof data !== "object" || data === null || !("repository" in data)) {
+    return null;
+  }
+  const repository = (data as { repository: unknown }).repository;
+  if (repository == null) return null;
+  if (typeof repository !== "object" || Array.isArray(repository)) {
+    throw new IssueError("gh-failed", "gh graphql returned no repository");
+  }
+  return repository as Record<string, unknown>;
+}
+
+/** Owner and repo from a GitHub `origin` URL. */
+export function parseGitHubOrigin(
+  remoteUrl: string,
+): { owner: string; repo: string } | undefined {
+  const trimmed = remoteUrl.trim();
+  const ssh = /^(?:ssh:\/\/)?git@github\.com[:/]([^/]+)\/(.+?)(?:\.git)?\/?$/.exec(
+    trimmed,
+  );
+  if (ssh?.[1] && ssh[2]) return { owner: ssh[1], repo: ssh[2] };
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return undefined;
+  }
+  if (url.hostname !== "github.com") return undefined;
+  const [owner, repo] = url.pathname.split("/").filter(Boolean);
+  if (!owner || !repo) return undefined;
+  const name = repo.endsWith(".git") ? repo.slice(0, -".git".length) : repo;
+  if (!name) return undefined;
+  return { owner, repo: name };
+}
+
+export const PR_SELECTION = `{
   number
   url
   state
@@ -328,6 +416,7 @@ const PR_SELECTION = `{
   headRefOid
   baseRefName
   updatedAt
+  mergedAt
   comments(last: 10) {
     totalCount
     nodes {
@@ -391,17 +480,7 @@ async function fetchRepoGroup(
     ["api", "graphql", "-f", `query=${query}`],
     workspace,
   );
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    throw new IssueError("gh-failed", "gh graphql returned non-JSON stdout");
-  }
-  const repository = (
-    parsed as {
-      data?: { repository?: Record<string, unknown> | null };
-    }
-  ).data?.repository;
+  const repository = parseGhGraphqlRepository(stdout);
 
   const out = new Map<string, PrFacts | PrUnavailable>();
   for (const entry of entries) {
