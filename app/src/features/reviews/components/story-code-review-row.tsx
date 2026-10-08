@@ -2,7 +2,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { IssueDetail, ReviewProgress, ReviewRecordView } from "@server/schemas";
 import { CompactMetaItem } from "@/features/issues/components/compact-meta";
-import { useIssuesQuery } from "@/features/issues/api/queries";
+import { useIssuesWithArchived } from "@/features/issues/hooks/use-issues-with-archived";
 import { useOpenReview } from "../api/mutations";
 import { useReviewProgressQuery, useReviewsQuery } from "../api/queries";
 import { storyReviewPath } from "../lib/links";
@@ -93,7 +93,7 @@ export function StoryCodeReviewRow({
   projectId: string;
   story: StoryDetail;
 }) {
-  const { data: issues } = useIssuesQuery();
+  const { data: issues } = useIssuesWithArchived(true);
   const hasCommits = storyHasTaskCommits(story.id, issues?.issues ?? []);
   const reviews = useReviewsQuery(projectId, story.id, { enabled: hasCommits });
   const review = reviews.data?.reviews[0];

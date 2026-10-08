@@ -38,6 +38,10 @@ import { ensureKindRenamed } from "./kind-rename.js";
 import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
+import {
+  applyArchivedListQuery,
+  type ArchivedListQuery,
+} from "./archived-list.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
   attemptStoryWorktreeRemoval,
@@ -180,7 +184,7 @@ export function ensureMigrations(): void {
   ensureSourceIdeaMigration();
 }
 
-export function list(): IssuesResponse {
+export function list(archived?: ArchivedListQuery): IssuesResponse {
   if (!refusesStoreWrites() && existsSync(issuesDir)) {
     withIssuesStoreLock(() => {
       ensureMigrations();
@@ -201,11 +205,19 @@ export function list(): IssuesResponse {
     if (!existsSync(legacyChatPathOf(issue.id))) return [];
     return [{ id: issue.id, message: "chat.jsonl" }];
   });
-  return {
-    issues: issues.map(toRecord),
-    problems: [...problems, ...commentProblems, ...legacyChatProblems, ...derived.problems],
-    derived: derived.byId,
-  };
+  return applyArchivedListQuery(
+    {
+      issues: issues.map(toRecord),
+      problems: [
+        ...problems,
+        ...commentProblems,
+        ...legacyChatProblems,
+        ...derived.problems,
+      ],
+      derived: derived.byId,
+    },
+    archived,
+  );
 }
 
 export function read(id: string): IssueDetail {

@@ -11,6 +11,11 @@ import {
 } from "../api/mutations";
 import { useIssuesQuery, useProjectWorktreesQuery } from "../api/queries";
 import {
+  IssueLinkResolution,
+  type IssueSupplement,
+  useSupplementedById,
+} from "../hooks/use-supplemented-by-id";
+import {
   WORKTREE_PARENT_BRANCH_SUFFIX,
   WORKTREE_REMOVE_ACTIVE_CONFIRM,
   WORKTREE_REMOVE_DISABLED_REASON,
@@ -113,10 +118,12 @@ function CardBody({
   model,
   issue,
   issues,
+  supplement,
 }: {
   model: WorktreeCardModel;
   issue: StoryDetail;
   issues: IssueRecord[];
+  supplement: IssueSupplement;
 }) {
   if (model.kind === "parent-branch") {
     const title = parentStoryTitle(issue.stackedOn, issues);
@@ -129,6 +136,7 @@ function CardBody({
           <IssueLink
             id={issue.stackedOn}
             className="font-medium text-foreground hover:underline"
+            supplement={supplement}
           >
             {title}
           </IssueLink>
@@ -198,11 +206,13 @@ function StoryWorktreeCardInner({
   model,
   issues,
   liveRun,
+  supplement,
 }: {
   issue: StoryDetail;
   model: WorktreeCardModel;
   issues: IssueRecord[];
   liveRun: boolean;
+  supplement: IssueSupplement;
 }) {
   const remove = useRemoveStoryWorktree(issue.id);
   const setup = useSetupStoryWorktree(issue.id);
@@ -296,7 +306,12 @@ function StoryWorktreeCardInner({
           </div>
         ) : null}
         <div className="order-2 min-w-0 sm:col-start-1">
-          <CardBody model={model} issue={issue} issues={issues} />
+          <CardBody
+            model={model}
+            issue={issue}
+            issues={issues}
+            supplement={supplement}
+          />
         </div>
       </div>
       {model.kind === "setup-failed" ? (
@@ -344,6 +359,10 @@ export function StoryWorktreeCard({
   projectId: string;
 }) {
   const { data } = useIssuesQuery();
+  const supplement = useSupplementedById(
+    issue.stackedOn ? [issue.stackedOn] : [],
+  );
+  const { byId, missingIds, accept, reject } = supplement;
   const { data: worktrees, isError } = useProjectWorktreesQuery(projectId);
   const storyHasCheckout =
     issue.worktreePath !== undefined ||
@@ -377,11 +396,19 @@ export function StoryWorktreeCard({
   if (!data || !model) return null;
 
   return (
-    <StoryWorktreeCardInner
-      issue={issue}
-      model={model}
-      issues={data.issues}
-      liveRun={data.derived[issue.id]?.liveRun === true}
-    />
+    <>
+      <IssueLinkResolution
+        missingIds={missingIds}
+        accept={accept}
+        reject={reject}
+      />
+      <StoryWorktreeCardInner
+        issue={issue}
+        model={model}
+        issues={[...byId.values()]}
+        liveRun={data.derived[issue.id]?.liveRun === true}
+        supplement={supplement}
+      />
+    </>
   );
 }

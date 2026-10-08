@@ -1,41 +1,50 @@
 import type { ReactNode } from "react";
-import { useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { useIssuesQuery } from "../api/queries";
-import { issuesById, projectIdOf } from "../lib/build-tree";
+import { projectIdOf } from "../lib/build-tree";
 import {
   type IssueBackLocationState,
   issueBackNavigateState,
 } from "../lib/issue-back";
 import { issuePath, linkNotFoundMessage } from "../lib/links";
+import {
+  IssueLinkResolution,
+  type IssueSupplement,
+  useSupplementedById,
+} from "../hooks/use-supplemented-by-id";
 
-export function useIssueLinkNavigate(): {
-  go: (id: string) => void;
-  hrefFor: (id: string) => string;
-} {
+export type { IssueSupplement };
+
+export function useBoundNavigate(supplement: IssueSupplement): {
+  go: (targetId: string) => void;
+  hrefFor: (targetId: string) => string;
+} & IssueSupplement {
   const navigate = useNavigate();
   const location = useLocation();
   const { projectId: routeProjectId } = useParams();
-  const { data } = useIssuesQuery();
-  const byId = useMemo(
-    () => issuesById(data?.issues ?? []),
-    [data?.issues],
-  );
 
-  const hrefFor = (id: string): string => {
-    const projectId = projectIdOf(id, byId) ?? routeProjectId;
-    return projectId ? issuePath(projectId, id) : "#";
+  const hrefFor = (targetId: string): string => {
+    const projectId = projectIdOf(targetId, supplement.byId) ?? routeProjectId;
+    return projectId ? issuePath(projectId, targetId) : "#";
   };
 
-  const go = (id: string) => {
-    if (data && !byId.has(id)) {
-      toast.error(linkNotFoundMessage(id));
+  const go = (targetId: string) => {
+    if (supplement.listReady && !supplement.byId.has(targetId)) {
+      // The per-issue read is still in flight. Stay quiet until it settles.
+      if (
+        supplement.missingIds.includes(targetId) &&
+        !supplement.failedIds.has(targetId)
+      ) {
+        return;
+      }
+      toast.error(
+        supplement.messageFor(targetId) ?? linkNotFoundMessage(targetId),
+      );
       return;
     }
-    const projectId = projectIdOf(id, byId) ?? routeProjectId;
+    const projectId = projectIdOf(targetId, supplement.byId) ?? routeProjectId;
     if (!projectId) {
-      toast.error(linkNotFoundMessage(id));
+      toast.error(linkNotFoundMessage(targetId));
       return;
     }
     const navigateState = issueBackNavigateState(
@@ -44,15 +53,56 @@ export function useIssueLinkNavigate(): {
       (location.state as IssueBackLocationState | null)?.issueBackStack,
     );
     navigate(
-      issuePath(projectId, id),
+      issuePath(projectId, targetId),
       navigateState ? { state: navigateState } : undefined,
     );
   };
 
-  return { go, hrefFor };
+  return { go, hrefFor, ...supplement };
 }
 
-export function IssueLink({
+export function useIssueLinkNavigate(id: string) {
+  const supplement = useSupplementedById(id ? [id] : []);
+  return useBoundNavigate(supplement);
+}
+
+function IssueAnchor({
+  id,
+  children,
+  className,
+  nav,
+  resolve,
+}: {
+  id: string;
+  children: ReactNode;
+  className?: string;
+  nav: ReturnType<typeof useBoundNavigate>;
+  resolve: boolean;
+}) {
+  return (
+    <>
+      {resolve ? (
+        <IssueLinkResolution
+          missingIds={nav.missingIds}
+          accept={nav.accept}
+          reject={nav.reject}
+        />
+      ) : null}
+      <a
+        href={nav.hrefFor(id)}
+        className={className}
+        onClick={(e) => {
+          e.preventDefault();
+          nav.go(id);
+        }}
+      >
+        {children}
+      </a>
+    </>
+  );
+}
+
+function IssueLinkOwned({
   id,
   children,
   className,
@@ -61,18 +111,63 @@ export function IssueLink({
   children: ReactNode;
   className?: string;
 }) {
-  const { go, hrefFor } = useIssueLinkNavigate();
-
+  const nav = useIssueLinkNavigate(id);
   return (
-    <a
-      href={hrefFor(id)}
+    <IssueAnchor
+      id={id}
       className={className}
-      onClick={(e) => {
-        e.preventDefault();
-        go(id);
-      }}
+      nav={nav}
+      resolve
     >
       {children}
-    </a>
+    </IssueAnchor>
+  );
+}
+
+function IssueLinkShared({
+  id,
+  children,
+  className,
+  supplement,
+}: {
+  id: string;
+  children: ReactNode;
+  className?: string;
+  supplement: IssueSupplement;
+}) {
+  const nav = useBoundNavigate(supplement);
+  return (
+    <IssueAnchor id={id} className={className} nav={nav} resolve={false}>
+      {children}
+    </IssueAnchor>
+  );
+}
+
+export function IssueLink({
+  id,
+  children,
+  className,
+  supplement,
+}: {
+  id: string;
+  children: ReactNode;
+  className?: string;
+  supplement?: IssueSupplement;
+}) {
+  if (supplement) {
+    return (
+      <IssueLinkShared
+        id={id}
+        className={className}
+        supplement={supplement}
+      >
+        {children}
+      </IssueLinkShared>
+    );
+  }
+  return (
+    <IssueLinkOwned id={id} className={className}>
+      {children}
+    </IssueLinkOwned>
   );
 }

@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Pencil, X } from "lucide-react";
 import type { IssueDetail } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUpdateIssue } from "../api/mutations";
-import { useIssuesQuery } from "../api/queries";
 import { useInlineEditSession } from "../hooks/use-inline-edit-session";
+import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
+import {
+  IssueLinkResolution,
+  useSupplementedById,
+} from "../hooks/use-supplemented-by-id";
+import { isArchived } from "@server/services/archived-visibility";
 import { Badge } from "@/components/ui/badge";
 import {
   APPEND_TARGET_EMPTY_LABEL,
@@ -13,10 +18,9 @@ import {
   appendTargetCommitError,
   appendTargetFieldIsReadOnly,
 } from "../lib/append-target";
-import { issuesById } from "../lib/build-tree";
+import { IssueLink } from "./issue-link";
 import { useAppendTargetDraftStore } from "../store/use-append-target-draft-store";
 import { ExternalEditConflictBanner } from "./external-edit-conflict-banner";
-import { IssueLink } from "./issue-link";
 import { IssueNavigateButton } from "./issue-navigate-button";
 import { MetaFieldActions } from "./meta-row";
 
@@ -24,9 +28,12 @@ type IdeaDetail = Extract<IssueDetail, { kind: "idea" }>;
 
 export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
   const update = useUpdateIssue();
-  const { data } = useIssuesQuery();
-  const issues = data?.issues ?? [];
-  const byId = useMemo(() => issuesById(issues), [issues]);
+  const supplement = useSupplementedById(
+    issue.appendTo ? [issue.appendTo] : [],
+    issue,
+  );
+  const { byId, missingIds, accept, reject } = supplement;
+  const { data } = useIssuesWithArchived(isArchived(issue));
   const inputRef = useRef<HTMLInputElement>(null);
   const setRejected = useAppendTargetDraftStore((s) => s.setRejected);
   const derived = data?.derived?.[issue.id];
@@ -99,11 +106,17 @@ export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
   if (!editing) {
     return (
       <div className="flex min-w-0 flex-col gap-1">
+        <IssueLinkResolution
+          missingIds={missingIds}
+          accept={accept}
+          reject={reject}
+        />
         <MetaFieldActions>
           {issue.appendTo ? (
             <IssueLink
               id={issue.appendTo}
               className="text-primary hover:underline"
+              supplement={supplement}
             >
               {title}
             </IssueLink>
@@ -125,7 +138,9 @@ export function IssueAppendToField({ issue }: { issue: IdeaDetail }) {
               merged
             </Badge>
           ) : null}
-          {issue.appendTo ? <IssueNavigateButton id={issue.appendTo} /> : null}
+          {issue.appendTo ? (
+            <IssueNavigateButton id={issue.appendTo} supplement={supplement} />
+          ) : null}
           {readOnly ? null : (
             <>
               <Button

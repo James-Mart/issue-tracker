@@ -5,7 +5,9 @@ import { RosterActiveRunIndicator } from "@/features/agents/components/conversat
 import { TabButton } from "@/components/ui/tab-button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
-import { useIssueAgentRunsQuery, useIssuesQuery } from "../api/queries";
+import { isArchived } from "@server/services/archived-visibility";
+import { useIssueAgentRunsQuery } from "../api/queries";
+import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import { useChannelTabIndicator } from "../hooks/use-channel-tab-indicator";
 import {
   cockpitLaunchOverlayForIssue,
@@ -83,7 +85,7 @@ export function IssueDetailTabs({
     () => tabsForIssueDetail(issue, parentKind, { includeExport }),
     [includeExport, issue, parentKind],
   );
-  const { data: list } = useIssuesQuery();
+  const { data: list } = useIssuesWithArchived(isArchived(issue));
   const pending = useCockpitLaunchStore((s) => s.pending);
   const ack = useCockpitLaunchStore((s) => s.ack);
   const overlay = cockpitLaunchOverlayForIssue(issue.id, pending, ack);

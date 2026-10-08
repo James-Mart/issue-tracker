@@ -1,5 +1,6 @@
+import { isArchived } from "@server/services/archived-visibility";
 import type { IssueDetail } from "@server/schemas";
-import { useIssuesQuery } from "../api/queries";
+import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import {
   cockpitLaunchOverlayForIssue,
   overlayCockpitLaunchAck,
@@ -22,7 +23,7 @@ export function IssueDetailStatusChips({
   issue: IssueDetail;
   className?: string;
 }) {
-  const { data } = useIssuesQuery();
+  const { data } = useIssuesWithArchived(isArchived(issue));
   const pending = useCockpitLaunchStore((s) => s.pending);
   const ack = useCockpitLaunchStore((s) => s.ack);
   const overlay = cockpitLaunchOverlayForIssue(issue.id, pending, ack);

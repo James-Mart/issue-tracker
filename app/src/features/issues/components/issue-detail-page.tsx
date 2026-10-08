@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { offersExportChannel } from "@server/kind";
+import { isArchived } from "@server/services/archived-visibility";
 import type { IssueDetail, IssueKind, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
 import {
@@ -13,11 +14,12 @@ import {
 import { PageShell } from "@/components/page-shell";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
+import { useChannelSessionsQuery, useIssueDetailQuery } from "../api/queries";
+import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import {
-  useChannelSessionsQuery,
-  useIssueDetailQuery,
-  useIssuesQuery,
-} from "../api/queries";
+  MissingIssueRecords,
+  useSupplementedById,
+} from "../hooks/use-supplemented-by-id";
 import { useUploadAttachment } from "../api/mutations";
 import {
   useIssueDetailFileUpload,
@@ -27,7 +29,7 @@ import { exportTabIncluded, projectWorkspaceSet } from "../lib/export-tab";
 import { isImplementingWorkRoot } from "@server/services/implementing-launch";
 import type { ImplementingWorkRoot } from "@server/services/implementing-launch";
 import { kindHasOwnFlow } from "../lib/own-flow";
-import { issueBelongsToProject, issuesById } from "../lib/build-tree";
+import { issueBelongsToProject } from "../lib/build-tree";
 import {
   channelTabForIssue,
   issueDetailTabNeedsBoundedShell,
@@ -120,7 +122,7 @@ function IssueOverviewPanel({
   showExportLaunch?: boolean;
   onExportTabVisible?: (visible: boolean) => void;
 }) {
-  const { data: list } = useIssuesQuery();
+  const { data: list } = useIssuesWithArchived(isArchived(issue));
   const awaitingDirection =
     issue.kind === "idea" &&
     list?.derived?.[issue.id]?.ideaStatus === "awaiting-direction";
@@ -332,11 +334,14 @@ export function IssueDetailPage() {
   const location = useLocation();
 
   const { data: issue, isLoading, error } = useIssueDetailQuery(id);
-  const { data: list } = useIssuesQuery();
-
-  const byId = useMemo(
-    () => issuesById(list?.issues ?? []),
-    [list?.issues],
+  const { data: list } = useIssuesWithArchived(
+    Boolean(issue && isArchived(issue)),
+  );
+  const { byId, missingIds, accept, reject } = useSupplementedById(
+    issue ? [issue.id] : [],
+    issue,
+    list?.issues,
+    true,
   );
 
   const catalog = useMemo(
@@ -407,8 +412,19 @@ export function IssueDetailPage() {
     </Link>
   );
 
+  const ancestorReads =
+    missingIds.length > 0 ? (
+      <MissingIssueRecords
+        ids={missingIds}
+        onRecord={accept}
+        onMissing={reject}
+      />
+    ) : null;
+
   if (issue && !showScopeError && supportsAttachments(issue.kind)) {
     return (
+      <>
+      {ancestorReads}
       <IssueDetailAttachable
         issue={issue}
         projectId={projectId}
@@ -423,10 +439,13 @@ export function IssueDetailPage() {
         exportDraftReaderOpen={exportDraftReaderOpen}
         onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
       />
+      </>
     );
   }
 
   return (
+    <>
+    {ancestorReads}
     <PageShell
       className={cn(
         boundShell && BOUNDED_DETAIL_SHELL_CLASS,
@@ -484,5 +503,6 @@ export function IssueDetailPage() {
         />
       ) : null}
     </PageShell>
+    </>
   );
 }

@@ -1,9 +1,10 @@
-import { useMemo } from "react";
 import { FIELD_LABELS } from "@server/fields";
 import { isProjectBoardChild } from "@server/order";
 import type { IssueDetail } from "@server/schemas";
-import { useIssuesQuery } from "../api/queries";
-import { issuesById } from "../lib/build-tree";
+import {
+  IssueLinkResolution,
+  useSupplementedById,
+} from "../hooks/use-supplemented-by-id";
 import { IssueLink } from "./issue-link";
 import { MetaRow } from "./meta-row";
 
@@ -15,8 +16,11 @@ export function IssueSourceIdeaField({
   issue: PlanRootDetail;
 }) {
   const sourceIdeaId = issue.sourceIdea;
-  const { data } = useIssuesQuery();
-  const byId = useMemo(() => issuesById(data?.issues ?? []), [data?.issues]);
+  const supplement = useSupplementedById(
+    sourceIdeaId ? [sourceIdeaId] : [],
+    issue,
+  );
+  const { byId, missingIds, accept, reject } = supplement;
 
   if (!sourceIdeaId) return null;
 
@@ -30,7 +34,18 @@ export function IssueSourceIdeaField({
   return (
     <MetaRow
       label={FIELD_LABELS.sourceIdea}
-      value={<IssueLink id={sourceIdeaId}>{title}</IssueLink>}
+      value={
+        <>
+          <IssueLinkResolution
+            missingIds={missingIds}
+            accept={accept}
+            reject={reject}
+          />
+          <IssueLink id={sourceIdeaId} supplement={supplement}>
+            {title}
+          </IssueLink>
+        </>
+      }
     />
   );
 }
