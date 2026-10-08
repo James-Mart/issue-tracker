@@ -63,12 +63,17 @@ function facts(number: number, commentCount: number): PrFacts {
   };
 }
 
-function story(id: string, title: string, prUrl: string): IssueRecord {
+function story(
+  id: string,
+  title: string,
+  prUrl: string,
+  partOf = "epic-1",
+): IssueRecord {
   return {
     id,
     kind: "story",
     title,
-    partOf: "epic-1",
+    partOf,
     order: 0,
     branchName: id,
     merged: false,
@@ -131,17 +136,60 @@ const nodes: IssueNode[] = [
   },
 ];
 
+const doneEpic: IssueRecord = { ...epicIssue, id: "epic-done", title: "Done Epic" };
+const doneStory = story(
+  "story-done",
+  "Done Story",
+  "https://github.com/acme/widgets/pull/3",
+  "epic-done",
+);
+const doneTask = task("task-done", "Done Task", "story-done");
+const doneNodes: IssueNode[] = [
+  {
+    issue: doneEpic,
+    children: [
+      { issue: doneStory, children: [{ issue: doneTask, children: [] }] },
+    ],
+  },
+];
+
 function takeTitles(): string[] {
   const titles = [...rowRenders.titles];
   rowRenders.titles.length = 0;
   return titles;
 }
 
-describe("IssueTree /prs render scope", () => {
+describe("IssueTree", () => {
   let container: HTMLDivElement;
   let root: Root;
   let client: QueryClient;
   const expanded = useIssueUiStore.getState().expanded;
+
+  function renderTree(treeIssues: IssueRecord[], treeDoneNodes?: IssueNode[]) {
+    act(() => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <MemoryRouter initialEntries={["/proj"]}>
+            <Routes>
+              <Route
+                path="/:projectId"
+                element={
+                  <IssueTree
+                    nodes={nodes}
+                    doneNodes={treeDoneNodes}
+                    derived={{}}
+                    issues={treeIssues}
+                    catalog={[]}
+                    projectId="proj"
+                  />
+                }
+              />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    });
+  }
 
   beforeEach(() => {
     (
@@ -171,28 +219,7 @@ describe("IssueTree /prs render scope", () => {
   });
 
   it("re-renders only story rows whose PR data changed", async () => {
-    act(() => {
-      root.render(
-        <QueryClientProvider client={client}>
-          <MemoryRouter initialEntries={["/proj"]}>
-            <Routes>
-              <Route
-                path="/:projectId"
-                element={
-                  <IssueTree
-                    nodes={nodes}
-                    derived={{}}
-                    issues={issues}
-                    catalog={[]}
-                    projectId="proj"
-                  />
-                }
-              />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>,
-      );
-    });
+    renderTree(issues);
     takeTitles();
 
     const entryB = facts(2, 1);
@@ -223,5 +250,39 @@ describe("IssueTree /prs render scope", () => {
     expect(takeTitles()).toEqual(["Story A"]);
     expect(container.textContent).toContain("4 comments");
     expect(container.textContent).toContain("1 comment");
+  });
+
+  it("mounts Done group rows only while the group is open, keeping their expand state", () => {
+    useIssueUiStore.setState({
+      expanded: { "epic-1": true, "epic-done": true, "story-done": false },
+    });
+    renderTree([...issues, doneEpic, doneStory, doneTask], doneNodes);
+    const summary = container.querySelector<HTMLElement>(
+      '[data-testid="structure-done-group"] summary',
+    );
+    if (!summary) throw new Error("no Done group summary");
+    const doneTitles = () =>
+      [
+        ...container.querySelectorAll(
+          '[data-testid="structure-done-group"] a[href*="/issues/"]',
+        ),
+      ].map((a) => a.textContent);
+
+    expect(doneTitles()).toEqual([]);
+
+    act(() => {
+      summary.click();
+    });
+    expect(doneTitles()).toEqual(["Done Epic", "Done Story"]);
+
+    act(() => {
+      summary.click();
+    });
+    expect(doneTitles()).toEqual([]);
+
+    act(() => {
+      summary.click();
+    });
+    expect(doneTitles()).toEqual(["Done Epic", "Done Story"]);
   });
 });

@@ -9,7 +9,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { assigneeOf } from "@server/assignee";
 import { isProjectBoardChild } from "@server/order";
@@ -688,11 +688,16 @@ function CollapsibleStructureGroup({
   catalog: ProjectLabel[];
   indexes: TreeRowIndexes;
 }) {
+  const [open, setOpen] = useState(false);
   if (nodes.length === 0) return null;
 
   return (
     <section aria-labelledby={headingId} data-testid={testId}>
-      <details className="group">
+      <details
+        className="group"
+        open={open}
+        onToggle={(e) => setOpen(e.currentTarget.open)}
+      >
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
           <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
           <h2
@@ -705,19 +710,21 @@ function CollapsibleStructureGroup({
             </span>
           </h2>
         </summary>
-        <div className="mt-1.5">
-          <Rail>
-            {nodes.map((node) => (
-              <TreeRowBranch
-                key={node.issue.id}
-                node={node}
-                derived={derived}
-                catalog={catalog}
-                indexes={indexes}
-              />
-            ))}
-          </Rail>
-        </div>
+        {open ? (
+          <div className="mt-1.5">
+            <Rail>
+              {nodes.map((node) => (
+                <TreeRowBranch
+                  key={node.issue.id}
+                  node={node}
+                  derived={derived}
+                  catalog={catalog}
+                  indexes={indexes}
+                />
+              ))}
+            </Rail>
+          </div>
+        ) : null}
       </details>
     </section>
   );
