@@ -178,7 +178,6 @@ function RenderedFileDiff({
       ) : null}
       <FileDiff
         fileDiff={fileDiff}
-        disableWorkerPool
         options={{
           loadDiffFiles,
           diffStyle: diffLayout,

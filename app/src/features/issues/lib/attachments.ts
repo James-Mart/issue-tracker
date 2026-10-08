@@ -88,14 +88,39 @@ export function attachmentLinkHref(
   return attachmentsApiPath(issueId, name);
 }
 
+const attachmentApiPathRe =
+  /^\/api\/(?:issues|conversations)\/[^/]+\/attachments\/[^/]+$/;
+
+/** Encoded attachment basename from an API href, or null when the shape is invalid. */
+function attachmentBasenameFromApiHref(href: string): string | null {
+  const path = stripQueryAndFragment(href);
+  if (!attachmentApiPathRe.test(path)) return null;
+  const marker = "/attachments/";
+  const encoded = path.slice(path.indexOf(marker) + marker.length);
+  return encoded.length > 0 ? encoded : null;
+}
+
+/** True when `src` is served from an issue or conversation attachment API path. */
+export function isAttachmentApiSrc(src: string | undefined): boolean {
+  if (!src?.startsWith("/api/")) return false;
+  return attachmentBasenameFromApiHref(src) !== null;
+}
+
+/** Native fetch hints for inline attachment images (thumbnails and markdown previews). */
+export function attachmentApiImageProps(src: string | undefined): {
+  decoding: "async";
+  loading?: "lazy";
+} {
+  return isAttachmentApiSrc(src)
+    ? { decoding: "async", loading: "lazy" }
+    : { decoding: "async" };
+}
+
 /** Basename for `download=` when `href` is an attachments API URL. */
 export function attachmentDownloadName(href: string | undefined): string | null {
-  if (!href || !href.startsWith("/api/issues/")) return null;
-  const marker = "/attachments/";
-  const i = href.indexOf(marker);
-  if (i === -1) return null;
-  const encoded = href.slice(i + marker.length);
-  if (!encoded || encoded.includes("/")) return null;
+  if (!href?.startsWith("/api/issues/")) return null;
+  const encoded = attachmentBasenameFromApiHref(href);
+  if (!encoded) return null;
   try {
     const name = decodeURIComponent(encoded);
     return isSafeAttachmentName(name) ? name : null;
