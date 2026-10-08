@@ -1,13 +1,17 @@
-import type {
-  Comment,
-  CommentAnchor,
-  CommentInput,
-  CommentSource,
+import {
+  commentEditSchema,
+  formatZodError,
+  type Comment,
+  type CommentAnchor,
+  type CommentEdit,
+  type CommentInput,
+  type CommentSource,
 } from "../schemas.js";
-import { appendComment, readComments } from "./comment-append.js";
+import { appendComment, appendCommentLogRecords, readComments } from "./comment-append.js";
 import { isFullCommitSha } from "./commit-sha.js";
 import { parseGhGraphqlRepository, parsePrUrl, runGh } from "./delivery.js";
 import { IssueError } from "./errors.js";
+import { requireKindCapability, serialize } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import type { PrSyncStepResult } from "./pr-sync-driver.js";
 
@@ -55,11 +59,20 @@ export type MirroredComment = CommentInput & {
   createdAt: string;
 };
 
-/** A later edit of a mirrored comment. This task always returns an empty list. */
+/**
+ * A GitHub comment whose updated time is after its created time (submitted
+ * time for a review summary). The mirror step writes a `comment-edit` only
+ * when `body` differs from the tracker copy's current body.
+ */
 export type MirroredEdit = {
   sourceId: string;
   body: string;
   editedAt: string;
+};
+
+type MappedComment = {
+  comment: MirroredComment;
+  edit?: MirroredEdit;
 };
 
 export type PrCommentFetch = {
@@ -145,19 +158,19 @@ function mapComment(
   cutoffMs: number | undefined,
   onOld: "stop",
   createdField?: "createdAt",
-): MirroredComment | "stop" | null;
+): MappedComment | "stop" | null;
 function mapComment(
   node: unknown,
   cutoffMs: number | undefined,
   onOld: "skip",
   createdField?: "createdAt" | "submittedAt",
-): MirroredComment | null;
+): MappedComment | null;
 function mapComment(
   node: unknown,
   cutoffMs: number | undefined,
   onOld: "stop" | "skip",
   createdField: "createdAt" | "submittedAt" = "createdAt",
-): MirroredComment | "stop" | null {
+): MappedComment | "stop" | null {
   if (node == null) return null;
   const record = asRecord(node, "comment");
   if (record.state === "PENDING") return null;
@@ -179,14 +192,31 @@ function mapComment(
   }
   const created = githubTime(record[createdField], createdField);
   const replyToSourceId = replyToSourceIdOf(record);
+  const edit =
+    updated.ms > created.ms
+      ? { sourceId: record.id, body: record.body, editedAt: updated.iso }
+      : undefined;
   return {
-    role: author.role,
-    name: author.name,
-    body: record.body,
-    createdAt: created.iso,
-    source: { kind: "github", id: record.id, url: record.url },
-    ...(replyToSourceId ? { replyToSourceId } : {}),
+    comment: {
+      role: author.role,
+      name: author.name,
+      body: record.body,
+      createdAt: created.iso,
+      source: { kind: "github", id: record.id, url: record.url },
+      ...(replyToSourceId ? { replyToSourceId } : {}),
+    },
+    ...(edit ? { edit } : {}),
   };
+}
+
+function collectMapped(
+  mapped: MappedComment | null,
+  comments: MirroredComment[],
+  edits: MirroredEdit[],
+): void {
+  if (!mapped) return;
+  comments.push(mapped.comment);
+  if (mapped.edit) edits.push(mapped.edit);
 }
 
 function commentsQuery(
@@ -327,19 +357,22 @@ async function collectPages<T>(
   queryFor: (cursor: string | null) => string,
   read: (stdout: string) => {
     items: T[];
+    edits?: MirroredEdit[];
     stop: boolean;
     hasNextPage: boolean;
     endCursor: string | null;
   },
   startCursor: string | null = null,
-): Promise<T[]> {
+): Promise<{ items: T[]; edits: MirroredEdit[] }> {
   const items: T[] = [];
+  const edits: MirroredEdit[] = [];
   let cursor: string | null = startCursor;
   const seenCursors = new Set<string>();
   if (startCursor) seenCursors.add(startCursor);
   for (;;) {
     const page = read(await ghGraphql(workspace, queryFor(cursor)));
     items.push(...page.items);
+    if (page.edits) edits.push(...page.edits);
     if (page.stop || !page.hasNextPage) break;
     if (!page.endCursor || seenCursors.has(page.endCursor)) {
       throw new IssueError(
@@ -350,7 +383,7 @@ async function collectPages<T>(
     seenCursors.add(page.endCursor);
     cursor = page.endCursor;
   }
-  return items;
+  return { items, edits };
 }
 
 function positiveLine(value: unknown, label: string): number | undefined {
@@ -445,21 +478,33 @@ function mapReviewThread(
   thread: Record<string, unknown>,
   nodes: unknown[],
   cutoffMs: number | undefined,
-): MirroredComment[] {
-  const mapped: { comment: MirroredComment; node: Record<string, unknown> }[] = [];
+): PrCommentFetch {
+  const mapped: {
+    comment: MirroredComment;
+    edit?: MirroredEdit;
+    node: Record<string, unknown>;
+  }[] = [];
   for (const node of nodes) {
-    const comment = mapComment(node, cutoffMs, "skip");
-    if (comment === null) continue;
-    mapped.push({ comment, node: asRecord(node, "comment") });
+    const result = mapComment(node, cutoffMs, "skip");
+    if (result === null) continue;
+    mapped.push({
+      comment: result.comment,
+      edit: result.edit,
+      node: asRecord(node, "comment"),
+    });
   }
   const root = mapped.find((entry) => entry.comment.replyToSourceId === undefined);
-  if (!root) return mapped.map((entry) => entry.comment);
-  const anchor = anchorFromThread(thread, root.node);
-  return mapped.map((entry) =>
-    entry.comment.source.id === root.comment.source.id
-      ? { ...entry.comment, anchor }
-      : entry.comment,
-  );
+  const comments = root
+    ? mapped.map((entry) =>
+        entry.comment.source.id === root.comment.source.id
+          ? { ...entry.comment, anchor: anchorFromThread(thread, root.node) }
+          : entry.comment,
+      )
+    : mapped.map((entry) => entry.comment);
+  return {
+    comments,
+    edits: mapped.flatMap((entry) => (entry.edit ? [entry.edit] : [])),
+  };
 }
 
 function readThreadCommentPage(stdout: string): ConnectionPage {
@@ -485,7 +530,7 @@ async function remainingThreadComments(
   cursor: string,
   workspace: string,
 ): Promise<unknown[]> {
-  return collectPages(
+  const collected = await collectPages(
     workspace,
     (after) => threadCommentsQuery(threadId, after ?? cursor),
     (stdout) => {
@@ -494,6 +539,41 @@ async function remainingThreadComments(
     },
     cursor,
   );
+  return collected.items;
+}
+
+function mapConnectionNodes(
+  nodes: unknown[],
+  mapNode: (node: unknown) => MappedComment | "stop" | null,
+): { comments: MirroredComment[]; edits: MirroredEdit[]; stop: boolean } {
+  const comments: MirroredComment[] = [];
+  const edits: MirroredEdit[] = [];
+  for (const node of nodes) {
+    const mapped = mapNode(node);
+    if (mapped === "stop") return { comments, edits, stop: true };
+    collectMapped(mapped, comments, edits);
+  }
+  return { comments, edits, stop: false };
+}
+
+async function fetchCommentConnection(
+  workspace: string,
+  queryFor: (cursor: string | null) => string,
+  read: (stdout: string) => ConnectionPage,
+  mapNode: (node: unknown) => MappedComment | "stop" | null,
+): Promise<PrCommentFetch> {
+  const collected = await collectPages(workspace, queryFor, (stdout) => {
+    const connection = read(stdout);
+    const mapped = mapConnectionNodes(connection.nodes, mapNode);
+    return {
+      items: mapped.comments,
+      edits: mapped.edits,
+      stop: mapped.stop,
+      hasNextPage: connection.hasNextPage,
+      endCursor: connection.endCursor,
+    };
+  });
+  return { comments: collected.items, edits: collected.edits };
 }
 
 async function fetchConversation(
@@ -503,21 +583,13 @@ async function fetchConversation(
   cutoffMs: number | undefined,
   since: boolean,
   workspace: string,
-): Promise<MirroredComment[]> {
-  return collectPages(workspace, (cursor) => commentsQuery(owner, repo, number, cursor, since), (stdout) => {
-    const connection = readConnection(pullRequestOf(stdout).comments, "comment page");
-    const comments: MirroredComment[] = [];
-    let stop = false;
-    for (const node of connection.nodes) {
-      const mapped = mapComment(node, cutoffMs, "stop");
-      if (mapped === "stop") {
-        stop = true;
-        break;
-      }
-      if (mapped) comments.push(mapped);
-    }
-    return { items: comments, stop, ...connection };
-  });
+): Promise<PrCommentFetch> {
+  return fetchCommentConnection(
+    workspace,
+    (cursor) => commentsQuery(owner, repo, number, cursor, since),
+    (stdout) => readConnection(pullRequestOf(stdout).comments, "comment page"),
+    (node) => mapComment(node, cutoffMs, "stop"),
+  );
 }
 
 async function fetchReviews(
@@ -526,16 +598,13 @@ async function fetchReviews(
   number: number,
   cutoffMs: number | undefined,
   workspace: string,
-): Promise<MirroredComment[]> {
-  return collectPages(workspace, (cursor) => reviewsQuery(owner, repo, number, cursor), (stdout) => {
-    const connection = readConnection(pullRequestOf(stdout).reviews, "review page");
-    const comments: MirroredComment[] = [];
-    for (const node of connection.nodes) {
-      const mapped = mapComment(node, cutoffMs, "skip", "submittedAt");
-      if (mapped) comments.push(mapped);
-    }
-    return { items: comments, stop: false, ...connection };
-  });
+): Promise<PrCommentFetch> {
+  return fetchCommentConnection(
+    workspace,
+    (cursor) => reviewsQuery(owner, repo, number, cursor),
+    (stdout) => readConnection(pullRequestOf(stdout).reviews, "review page"),
+    (node) => mapComment(node, cutoffMs, "skip", "submittedAt"),
+  );
 }
 
 async function fetchReviewThreads(
@@ -544,37 +613,40 @@ async function fetchReviewThreads(
   number: number,
   cutoffMs: number | undefined,
   workspace: string,
-): Promise<MirroredComment[]> {
-  const threads = await collectPages(
-    workspace,
-    (cursor) => reviewThreadsQuery(owner, repo, number, cursor),
-    (stdout) => {
-      const connection = readConnection(
-        pullRequestOf(stdout).reviewThreads,
-        "review thread page",
-      );
-      const items: RawThread[] = [];
-      for (const node of connection.nodes) {
-        if (node == null) continue;
-        const thread = asRecord(node, "review thread");
-        if (typeof thread.id !== "string" || thread.id.length === 0) {
-          throw new IssueError(
-            "gh-failed",
-            "gh graphql returned a review thread without an id",
-          );
+): Promise<PrCommentFetch> {
+  const threads = (
+    await collectPages(
+      workspace,
+      (cursor) => reviewThreadsQuery(owner, repo, number, cursor),
+      (stdout) => {
+        const connection = readConnection(
+          pullRequestOf(stdout).reviewThreads,
+          "review thread page",
+        );
+        const items: RawThread[] = [];
+        for (const node of connection.nodes) {
+          if (node == null) continue;
+          const thread = asRecord(node, "review thread");
+          if (typeof thread.id !== "string" || thread.id.length === 0) {
+            throw new IssueError(
+              "gh-failed",
+              "gh graphql returned a review thread without an id",
+            );
+          }
+          const comments = readConnection(thread.comments, "review thread comments");
+          items.push({
+            thread,
+            comments: comments.nodes,
+            commentCursor: comments.hasNextPage ? comments.endCursor : null,
+          });
         }
-        const comments = readConnection(thread.comments, "review thread comments");
-        items.push({
-          thread,
-          comments: comments.nodes,
-          commentCursor: comments.hasNextPage ? comments.endCursor : null,
-        });
-      }
-      return { items, stop: false, ...connection };
-    },
-  );
+        return { items, stop: false, ...connection };
+      },
+    )
+  ).items;
 
   const comments: MirroredComment[] = [];
+  const edits: MirroredEdit[] = [];
   for (const raw of threads) {
     const id = raw.thread.id;
     const nodes = raw.commentCursor
@@ -582,9 +654,11 @@ async function fetchReviewThreads(
           await remainingThreadComments(String(id), raw.commentCursor, workspace),
         )
       : raw.comments;
-    comments.push(...mapReviewThread(raw.thread, nodes, cutoffMs));
+    const mapped = mapReviewThread(raw.thread, nodes, cutoffMs);
+    comments.push(...mapped.comments);
+    edits.push(...mapped.edits);
   }
-  return comments;
+  return { comments, edits };
 }
 
 /**
@@ -593,8 +667,8 @@ async function fetchReviewThreads(
  * timestamp), return items created or updated at or after that time.
  * Conversation comments stop once a page is older than `since`. Review
  * summaries and threads have no updated-at order, so those connections are
- * paged in full and filtered. `edits` stays empty until comment edits are
- * mirrored.
+ * paged in full and filtered. `edits` are comments whose GitHub updated time
+ * is after the created time, or the submitted time for a review summary.
  */
 export async function fetchPrComments(
   prUrl: string,
@@ -604,17 +678,32 @@ export async function fetchPrComments(
   const { owner, repo, number } = parsePrUrl(prUrl);
   const cutoffMs = since === undefined ? undefined : sinceMs(since);
   const sinceSet = since !== undefined;
+  const conversation = await fetchConversation(
+    owner,
+    repo,
+    number,
+    cutoffMs,
+    sinceSet,
+    workspace,
+  );
+  const reviews = await fetchReviews(owner, repo, number, cutoffMs, workspace);
+  const threads = await fetchReviewThreads(owner, repo, number, cutoffMs, workspace);
   const comments = [
-    ...(await fetchConversation(owner, repo, number, cutoffMs, sinceSet, workspace)),
-    ...(await fetchReviews(owner, repo, number, cutoffMs, workspace)),
-    ...(await fetchReviewThreads(owner, repo, number, cutoffMs, workspace)),
+    ...conversation.comments,
+    ...reviews.comments,
+    ...threads.comments,
   ];
   comments.sort(
     (a, b) =>
       a.createdAt.localeCompare(b.createdAt) ||
       a.source.id.localeCompare(b.source.id),
   );
-  return { comments, edits: [] };
+  const edits = [...conversation.edits, ...reviews.edits, ...threads.edits];
+  edits.sort(
+    (a, b) =>
+      a.editedAt.localeCompare(b.editedAt) || a.sourceId.localeCompare(b.sourceId),
+  );
+  return { comments, edits };
 }
 
 function commentInputOf(comment: MirroredComment): CommentInput {
@@ -680,6 +769,57 @@ async function landComment(
   storedBySource.set(comment.source.id, stored.id);
 }
 
+/**
+ * Append `comment-edit` records for GitHub bodies that differ from the
+ * tracker copy. A source id with no tracker copy is left alone — the comment
+ * lands, when it lands, with the current body. A comment GitHub no longer
+ * returns is not in `edits`, so the tracker copy stays.
+ */
+async function applyMirroredEdits(
+  storyId: string,
+  edits: MirroredEdit[],
+): Promise<void> {
+  if (edits.length === 0) return;
+  await serialize(() => {
+    requireKindCapability(storyId, "comments");
+    const current = new Map<
+      string,
+      { id: string; body: string; role: string; name?: string }
+    >();
+    for (const message of readComments(storyId).messages) {
+      if (!message.source) continue;
+      current.set(message.source.id, {
+        id: message.id,
+        body: message.body,
+        role: message.role,
+        name: message.name,
+      });
+    }
+    const records: CommentEdit[] = [];
+    for (const edit of edits) {
+      const stored = current.get(edit.sourceId);
+      if (!stored || stored.body === edit.body) continue;
+      const parsed = commentEditSchema.safeParse({
+        type: "comment-edit",
+        commentId: stored.id,
+        body: edit.body,
+        at: edit.editedAt,
+        role: stored.role,
+        ...(stored.name !== undefined ? { name: stored.name } : {}),
+      });
+      if (!parsed.success) {
+        throw new IssueError(
+          "validation",
+          formatZodError(parsed.error, "invalid mirrored comment edit"),
+        );
+      }
+      records.push(parsed.data);
+      stored.body = edit.body;
+    }
+    if (records.length > 0) appendCommentLogRecords(storyId, records);
+  });
+}
+
 async function mirrorStoryComments(
   storyId: string,
   prUrl: string,
@@ -687,7 +827,7 @@ async function mirrorStoryComments(
 ): Promise<void> {
   const startedAt = new Date().toISOString();
   const since = cursors.get(prUrl);
-  const { comments } = await fetchPrComments(prUrl, since, workspace);
+  const { comments, edits } = await fetchPrComments(prUrl, since, workspace);
   const messages = readComments(storyId).messages;
   const seen = new Set(
     messages.flatMap((message) => (message.source ? [message.source.id] : [])),
@@ -716,14 +856,17 @@ async function mirrorStoryComments(
     if (!replyTo) continue;
     await landComment(storyId, comment, replyTo, messages, seen, storedBySource);
   }
+  await applyMirroredEdits(storyId, edits);
   cursors.set(prUrl, startedAt);
 }
 
 /**
  * Sync-pass step after PR reconcile. Lands conversation comments, review
  * summaries, and inline review threads on each matched Story, including bot
- * authors. The first pass for a PR in this process fetches full history;
- * later passes fetch items updated since that pass.
+ * authors, then appends a `comment-edit` when a fetched body differs from
+ * the tracker copy. A comment GitHub no longer returns stays. The first pass
+ * for a PR in this process fetches full history; later passes fetch items
+ * updated since that pass.
  */
 export async function mirrorPrComments(
   projectId: string,
