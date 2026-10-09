@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { format } from "util";
 import { Command, CommanderError } from "commander";
 import { parse as parseYaml } from "yaml";
-import { list, update } from "./server/services/issues.js";
+import { list, readAll, update } from "./server/services/issues.js";
 import { KINDS } from "./server/issue-constants.js";
 import {
   type DerivedState,
@@ -43,7 +43,8 @@ import { bindCliStdin, readCliFileArg } from "./cli-io.js";
 import { humanDone, requestHuman } from "./server/services/human-handoff.js";
 import { assertKind, registerKindGetSet } from "./cli-kind.js";
 import { registerBareIdOps, registerKindOps } from "./cli-ops.js";
-import { appendTaskCommit, taskHeadCommit } from "./server/services/commit-sha.js";
+import { taskHeadCommit } from "./server/services/commit-sha.js";
+import { recordTaskCommit } from "./server/services/task-commit-record.js";
 import { refreshAgentModelSlugCatalog } from "./server/agent-model-slugs-sync.js";
 import { refreshStorePathsFromEnv } from "./server/config.js";
 import { DELETED_FIELD_VERBS } from "./deleted-field-verbs.js";
@@ -344,10 +345,14 @@ function createIssueProgram(run: Run): Command {
         .command("add-commit")
         .argument("<taskId>", "task id")
         .argument("<sha>", "full commit sha")
+        .description(
+          "record a commit on the task; an amend of the head commit (same parents) replaces it",
+        )
         .action((taskId: string, sha: string) =>
           run(async () => {
             const detail = assertKind("task", taskId);
-            await update(taskId, { commits: appendTaskCommit(detail, sha) });
+            const commits = await recordTaskCommit(detail, sha, readAll().issues);
+            await update(taskId, { commits });
           }),
         );
     }
