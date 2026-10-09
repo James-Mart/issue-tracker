@@ -206,9 +206,7 @@ describe("ReviewConversationTab", () => {
     const noteCard = container.querySelector('[data-thread-root="note"]');
     expect(noteCard?.className).toContain("rounded-md");
     expect(noteCard?.className).toContain("bg-card");
-    expect(noteCard?.querySelector('[data-testid="comment-role-badge"]')?.textContent).toBe(
-      "Human",
-    );
+    expect(noteCard?.querySelector('[data-testid="comment-role-badge"]')).toBeNull();
     expect(noteCard?.querySelector("header")?.textContent).toContain("Jared");
     expect(noteCard?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
     expect(

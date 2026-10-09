@@ -40,12 +40,13 @@ function expectGitHubLink(container: HTMLElement): HTMLAnchorElement {
   const link = container.querySelector('[data-testid="comment-github-link"]');
   expect(link).toBeInstanceOf(HTMLAnchorElement);
   const anchor = link as HTMLAnchorElement;
-  expect(anchor.textContent).toBe("on GitHub");
+  expect(anchor.textContent?.trim()).toBe("");
+  expect(anchor.getAttribute("aria-label")).toBe("View on GitHub");
   expect(anchor.getAttribute("href")).toBe(URL);
   expect(anchor.target).toBe("_blank");
   expect(anchor.rel).toBe("noreferrer");
   expect(anchor.className).toContain("text-primary");
-  expect(anchor.className).toContain("hover:underline");
+  expect(anchor.querySelector('[data-testid="comment-github-icon"]')).not.toBeNull();
   return anchor;
 }
 
@@ -54,7 +55,13 @@ afterEach(() => {
 });
 
 describe("GitHub source link", () => {
-  it("shows on GitHub in a plain note header", () => {
+  it("omits the Human role badge on tracker human comments", () => {
+    const container = mount(<DeliverableMessage message={message()} />);
+    expect(container.textContent).toContain("ada");
+    expect(container.querySelector('[data-testid="comment-role-badge"]')).toBeNull();
+  });
+
+  it("shows a GitHub icon link in a plain note header", () => {
     const container = mount(
       <DeliverableMessage
         message={message({ kind: "github", id: "IC_1", url: URL })}
@@ -63,7 +70,7 @@ describe("GitHub source link", () => {
     expectGitHubLink(container);
   });
 
-  it("shows on GitHub in a thread header", () => {
+  it("shows a GitHub icon link in a thread header", () => {
     const thread: CommentThreadData = {
       kind: "review",
       state: "open",

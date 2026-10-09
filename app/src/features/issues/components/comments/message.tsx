@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Bot } from "lucide-react";
 import type { Comment } from "@server/schemas";
+import { CommentGitHubIcon } from "./comment-github-icon";
 import { Badge } from "@/components/ui/badge";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { roleFamilyCaption } from "@/features/pipeline/role-family";
@@ -15,15 +16,17 @@ export function isHumanRole(role: string): boolean {
 export function commentHeaderLabels(
   role: string,
   name?: string,
-): { author: string; roleBadge: string } {
+): { author: string; roleBadge?: string } {
   if (isHumanRole(role)) {
-    return { author: name ?? role, roleBadge: "Human" };
+    // Unnamed human comments show "Human" on the author line (no role badge).
+    const author = name?.trim() || "Human";
+    return { author };
   }
   if (role === "github-bot") {
-    return { author: name ? name : "Bot", roleBadge: "Bot" };
+    return { author: name?.trim() || "Bot", roleBadge: "Bot" };
   }
   const caption = roleFamilyCaption(role).caption;
-  return { author: name ?? caption, roleBadge: caption };
+  return { author: name?.trim() || caption, roleBadge: caption };
 }
 
 export function formatCommentTime(at: string): string {
@@ -48,17 +51,21 @@ export function CommentBotIcon() {
   );
 }
 
-/** "on GitHub" link. Same classes as the pull-request comment link. */
+const VIEW_ON_GITHUB = "View on GitHub";
+
+/** GitHub mirror provenance. Icon-only link to the source comment on GitHub. */
 export function GitHubCommentLink({ url }: { url: string }) {
   return (
     <a
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="text-primary hover:underline"
+      className="inline-flex shrink-0 rounded-sm text-primary hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       data-testid="comment-github-link"
+      aria-label={VIEW_ON_GITHUB}
+      title={VIEW_ON_GITHUB}
     >
-      on GitHub
+      <CommentGitHubIcon />
     </a>
   );
 }
@@ -74,12 +81,12 @@ export function CommentHeader({
   status,
 }: {
   author: string;
-  roleBadge: string;
+  roleBadge?: string;
   at: string;
   leading?: ReactNode;
   /** Sits in the header row after the role badge (status chips, session marks). */
   extra?: ReactNode;
-  /** GitHub mirror provenance. Renders the "on GitHub" link after the role badge. */
+  /** GitHub mirror provenance. Renders the GitHub icon link after the role badge. */
   source?: Comment["source"];
   /** Trails the time. */
   status?: ReactNode;
@@ -90,13 +97,15 @@ export function CommentHeader({
     <header className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
       {leading}
       <span className="font-medium text-foreground/80">{author}</span>
-      <Badge
-        variant="secondary"
-        data-testid="comment-role-badge"
-        className="uppercase tracking-[0.08em]"
-      >
-        {roleBadge}
-      </Badge>
+      {roleBadge ? (
+        <Badge
+          variant="secondary"
+          data-testid="comment-role-badge"
+          className="uppercase tracking-[0.08em]"
+        >
+          {roleBadge}
+        </Badge>
+      ) : null}
       {extra}
       {githubUrl ? <GitHubCommentLink url={githubUrl} /> : null}
       {time ? <time dateTime={at}>{time}</time> : null}
@@ -115,7 +124,7 @@ export function Message({
   children,
 }: {
   author: string;
-  roleBadge: string;
+  roleBadge?: string;
   at: string;
   source?: Comment["source"];
   leading?: ReactNode;
