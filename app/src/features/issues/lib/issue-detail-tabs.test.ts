@@ -6,6 +6,7 @@ import {
   channelTabIndicatorFromIdeaStatus,
   DEFAULT_ISSUE_DETAIL_TAB,
   issueDetailTabNeedsBoundedShell,
+  issueDetailTabTitleSuffix,
   mergeChannelTabIndicators,
   resolveChannelTabIndicator,
   resolveIssueDetailTab,
@@ -303,5 +304,47 @@ describe("hashCommentTarget", () => {
     expect(hashCommentTarget("#a-reply")).toBe("a-reply");
     expect(hashCommentTarget("#a%20b")).toBe("a b");
     expect(hashCommentTarget("#%")).toBeNull();
+  });
+});
+
+describe("issueDetailTabTitleSuffix", () => {
+  it("omits a suffix on Overview and uses the tab label otherwise", () => {
+    const ideaTabs = tabsForIssueDetail(idea);
+    expect(issueDetailTabTitleSuffix(null, ideaTabs)).toBeUndefined();
+    expect(issueDetailTabTitleSuffix("overview", ideaTabs)).toBeUndefined();
+    expect(issueDetailTabTitleSuffix("planning", ideaTabs)).toBe("Planning");
+    expect(issueDetailTabTitleSuffix("diff", ideaTabs)).toBeUndefined();
+
+    const taskTabs = tabsForIssueDetail(task);
+    expect(issueDetailTabTitleSuffix("agents", taskTabs)).toBe("Agents");
+    expect(issueDetailTabTitleSuffix("diff", taskTabs)).toBe("Diff");
+  });
+
+  it("uses Doc for every supporting-doc preview tab", () => {
+    const tabs = tabsForIssueDetail(projectWithDocs);
+    expect(issueDetailTabTitleSuffix("vision", tabs)).toBe("Doc");
+    expect(issueDetailTabTitleSuffix("codingStandards", tabs)).toBe("Doc");
+    expect(issueDetailTabTitleSuffix("designSystem", tabs)).toBe("Doc");
+    expect(issueDetailTabTitleSuffix("overview", tabs)).toBeUndefined();
+  });
+
+  it("keeps Export while that tab is still loading into the set", () => {
+    const tabs = tabsForIssueDetail(projectStory, "project", {
+      includeExport: true,
+    });
+    expect(issueDetailTabTitleSuffix("export", tabs)).toBe("Export");
+  });
+});
+
+describe("issueDetailTabTitleSuffix before tabs load", () => {
+  it("stands in for a known tab key and ignores unknown keys", () => {
+    expect(issueDetailTabTitleSuffix(null)).toBeUndefined();
+    expect(issueDetailTabTitleSuffix("overview")).toBeUndefined();
+    expect(issueDetailTabTitleSuffix("planning")).toBe("Planning");
+    expect(issueDetailTabTitleSuffix("diff")).toBe("Diff");
+    expect(issueDetailTabTitleSuffix("vision")).toBe("Doc");
+    expect(issueDetailTabTitleSuffix("gateRubric")).toBe("Doc");
+    expect(issueDetailTabTitleSuffix("thread")).toBeUndefined();
+    expect(issueDetailTabTitleSuffix("other")).toBeUndefined();
   });
 });

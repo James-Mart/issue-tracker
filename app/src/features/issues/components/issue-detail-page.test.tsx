@@ -17,6 +17,8 @@ const derivedState = vi.hoisted(() => ({
 
 const readerState = vi.hoisted(() => ({
   simulateOpen: false,
+  override: null as IssueDetail | null,
+  loading: false,
 }));
 
 const t0 = "2026-08-01T00:00:00.000Z";
@@ -71,8 +73,10 @@ vi.mock("@/hooks/use-mobile", () => ({
 
 vi.mock("../api/queries", () => ({
   useIssueDetailQuery: () => ({
-    data: readerState.simulateOpen ? epic : idea,
-    isLoading: false,
+    data: readerState.loading
+      ? undefined
+      : (readerState.override ?? (readerState.simulateOpen ? epic : idea)),
+    isLoading: readerState.loading,
     error: null,
   }),
   useIssuesQuery: () => ({
@@ -133,6 +137,10 @@ vi.mock("./issue-meta-panel", () => ({
   IssueMetaPanel: () => null,
 }));
 
+vi.mock("./project-settings-overview", () => ({
+  ProjectSettingsOverview: () => null,
+}));
+
 vi.mock("./implementing-launch-control", () => ({
   ImplementingOverviewLaunch: () => null,
 }));
@@ -188,6 +196,9 @@ afterEach(() => {
   mobileState.value = false;
   derivedState.ideaStatus = undefined;
   readerState.simulateOpen = false;
+  readerState.override = null;
+  readerState.loading = false;
+  document.title = "Issue Tracker";
 });
 
 describe("IssueDetailPage back navigation", () => {
@@ -308,5 +319,81 @@ describe("IssueDetailPage delete partial plan", () => {
         '[data-testid="idea-detail-delete-partial-plan"]',
       ),
     ).toBeNull();
+  });
+});
+
+describe("IssueDetailPage tab title", () => {
+  const projectDetail: IssueDetail = {
+    ...project,
+    description: "",
+    version: "1",
+    trunk: "main",
+    mergePolicy: "manual",
+    maxImplementingRuns: 1,
+    supportingDocs: {
+      vision: { type: "attachment", name: "vision.md" },
+      designSystem: { type: "attachment", name: "design-system.html" },
+    },
+  };
+
+  function mountTitle(entry: string) {
+    document.title = "Issue Tracker";
+    return mountPage(entry);
+  }
+
+  it("uses the issue title on Overview and the tab label on other tabs", () => {
+    const overview = mountTitle("/projects/issue-tracker/issues/capture");
+    expect(document.title).toBe("IT: Capture");
+    act(() => overview.root.unmount());
+
+    const planning = mountTitle(
+      "/projects/issue-tracker/issues/capture?tab=planning",
+    );
+    expect(document.title).toBe("IT: Capture·Planning");
+    act(() => planning.root.unmount());
+  });
+
+  it("ignores comment anchors and ineligible tabs", () => {
+    const anchored = mountTitle(
+      "/projects/issue-tracker/issues/capture?thread=t-1#comment-9",
+    );
+    expect(document.title).toBe("IT: Capture");
+    act(() => anchored.root.unmount());
+
+    const agents = mountTitle(
+      "/projects/issue-tracker/issues/capture?tab=agents",
+    );
+    expect(document.title).toBe("IT: Capture");
+    act(() => agents.root.unmount());
+  });
+
+  it("uses Doc for a supporting-doc preview tab", () => {
+    readerState.override = projectDetail;
+    const { root } = mountTitle(
+      "/projects/issue-tracker/issues/issue-tracker?tab=vision",
+    );
+    expect(document.title).toBe("IT: issue-tracker·Doc");
+    act(() => root.unmount());
+
+    const design = mountTitle(
+      "/projects/issue-tracker/issues/issue-tracker?tab=designSystem",
+    );
+    expect(document.title).toBe("IT: issue-tracker·Doc");
+    act(() => design.root.unmount());
+  });
+
+  it("stands in with the URL id until the issue name loads", () => {
+    readerState.loading = true;
+    const pending = mountTitle(
+      "/projects/issue-tracker/issues/capture?tab=diff",
+    );
+    expect(document.title).toBe("IT: capture·Diff");
+    act(() => pending.root.unmount());
+
+    const doc = mountTitle(
+      "/projects/issue-tracker/issues/capture?tab=vision",
+    );
+    expect(document.title).toBe("IT: capture·Doc");
+    act(() => doc.root.unmount());
   });
 });

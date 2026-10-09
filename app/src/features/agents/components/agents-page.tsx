@@ -1,4 +1,8 @@
 import { useEffect } from "react";
+import {
+  tabTitleEntityName,
+  useTabTitle,
+} from "@/lib/tab-title/use-tab-title";
 import { useNavigate, useParams } from "react-router-dom";
 import { PageShell } from "@/components/page-shell";
 import { ShellState } from "@/app/shell-state";
@@ -71,6 +75,15 @@ export function AgentsPage() {
   const resolved = resolveAgentsConversationParam(conversationId, conversations);
   const selectedConversationId =
     conversations === undefined ? (conversationId ?? null) : resolved.selectedId;
+  useTabTitle(
+    selectedConversationId
+      ? tabTitleEntityName(
+          resolved.selectedConversation?.title,
+          selectedConversationId,
+        )
+      : "Agents",
+    selectedConversationId ? "Agent" : undefined,
+  );
 
   useEffect(() => {
     if (resolved.replaceWithRoster) {

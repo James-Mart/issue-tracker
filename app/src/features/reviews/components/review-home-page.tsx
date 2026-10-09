@@ -8,6 +8,7 @@ import {
   ShellState,
 } from "@/app/shell-state";
 import { PageShell } from "@/components/page-shell";
+import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Button } from "@/components/ui/button";
 import { ProjectLensSwitcher } from "@/features/issues/components/project-lens-switcher";
 import { useIssuesQuery } from "@/features/issues/api/queries";
@@ -344,6 +345,7 @@ export function ReviewHomePage() {
   const loading =
     (issuesQuery.isLoading && !issuesQuery.data) ||
     (reviewsQuery.isLoading && !reviewsQuery.data);
+  useTabTitle(tabTitleEntityName(project?.title, projectId), "Reviews");
 
   return (
     <IssuesQueryShell

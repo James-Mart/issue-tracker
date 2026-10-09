@@ -256,6 +256,7 @@ describe("ReviewHomePage", () => {
     const container = mount();
 
     expect(container.querySelector('[data-testid="review-home-page"]')).not.toBeNull();
+    expect(document.title).toBe("IT: issue-tracker\u00B7Reviews");
     expect(container.textContent).not.toContain("Review home");
     expect(container.textContent).not.toContain("Track file-level");
     expect(container.textContent).not.toContain("in progress");
@@ -289,6 +290,18 @@ describe("ReviewHomePage", () => {
     const archived = container.querySelector("details");
     expect(archived?.open).toBe(false);
     expect(container.textContent).toContain("Archived");
+  });
+
+  it("uses the project id until the project name loads", () => {
+    state.issuesLoading = true;
+    mount();
+    expect(document.title).toBe("IT: proj\u00B7Reviews");
+
+    act(() => root?.unmount());
+    state.issuesLoading = false;
+    state.issues = [];
+    mount();
+    expect(document.title).toBe("IT: proj\u00B7Reviews");
   });
 
   it("shows review rows before progress loads, then fills the progress line", () => {

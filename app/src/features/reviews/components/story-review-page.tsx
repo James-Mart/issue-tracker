@@ -9,6 +9,7 @@ import {
   ShellState,
 } from "@/app/shell-state";
 import { PageShell } from "@/components/page-shell";
+import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Button } from "@/components/ui/button";
 import { TabButton } from "@/components/ui/tab-button";
 import { ApiError } from "@/lib/api/errors";
@@ -269,6 +270,8 @@ function StoryReviewBody({
   storyId: string;
 }) {
   const story = useIssueDetailQuery(storyId);
+  const storyName = story.data?.kind === "story" ? story.data.title : undefined;
+  useTabTitle(tabTitleEntityName(storyName, storyId), "Review");
   const { reviews, commits } = useStoryReviewFirstWave(projectId, storyId);
   const record = reviews.data?.reviews[0];
   const error = story.error ?? reviews.error;

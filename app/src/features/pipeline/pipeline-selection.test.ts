@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PIPELINE_ID,
+  explicitPipelineId,
   parsePipelineId,
   parseStepId,
   pipelineById,
@@ -8,6 +9,20 @@ import {
   writeStepParam,
 } from "./pipeline-selection";
 import { pipelines } from "./shape";
+
+describe("explicitPipelineId", () => {
+  it("returns undefined for absent and unknown values", () => {
+    expect(explicitPipelineId(null)).toBeUndefined();
+    expect(explicitPipelineId("")).toBeUndefined();
+    expect(explicitPipelineId("other")).toBeUndefined();
+  });
+
+  it("accepts every declared pipeline id", () => {
+    for (const pipeline of pipelines) {
+      expect(explicitPipelineId(pipeline.id)).toBe(pipeline.id);
+    }
+  });
+});
 
 describe("parsePipelineId", () => {
   it("defaults absent and unknown values to planning", () => {
