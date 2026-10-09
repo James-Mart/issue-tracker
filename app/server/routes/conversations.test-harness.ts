@@ -4,9 +4,11 @@ import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { afterEach, beforeEach, vi } from "vitest";
 import express from "express";
+import type { AgentSdk } from "../services/agent-sdk.js";
 import {
   buildScriptedStreamWithAgentIdHint,
   createFakeAgentSdk,
+  type FakeAgentSdkOptions,
 } from "../services/agent-sdk.fake.js";
 import type { AgentSessions } from "../services/agent-sessions.js";
 
@@ -27,15 +29,20 @@ export function conversationsDir(): string {
   return join(dirname(issuesRoot), "conversations");
 }
 
-export type HeldConversationRouter = {
+export type ConversationRouter = {
   server: Server;
   baseUrl: string;
   sessions: AgentSessions;
+};
+
+export type HeldConversationRouter = ConversationRouter & {
   releaseHold: () => void;
 };
 
 /** Router + sessions with a held in-flight run (shared by cancel and run-state tests). */
-export async function startHeldConversationRouter(): Promise<HeldConversationRouter> {
+export async function startHeldConversationRouter(
+  options: FakeAgentSdkOptions = {},
+): Promise<HeldConversationRouter> {
   let release!: () => void;
   const hold = new Promise<void>((resolve) => {
     release = resolve;
@@ -43,35 +50,40 @@ export async function startHeldConversationRouter(): Promise<HeldConversationRou
 
   const fake = createFakeAgentSdk({
     stream: buildScriptedStreamWithAgentIdHint(),
+    ...options,
     hold,
   });
+  return { ...(await startConversationRouter(fake)), releaseHold: release };
+}
+
+export async function startConversationRouter(sdk: AgentSdk): Promise<ConversationRouter> {
   const { createAgentSessions } = await import("../services/agent-sessions.js");
   const { createConversationsRouter } = await import("./conversations.js");
   const { errorHandler } = await import("../errors.js");
-  const sessions = createAgentSessions(fake);
+  const sessions = createAgentSessions(sdk);
   const app = express();
   app.use(express.json());
   app.use("/api/conversations", createConversationsRouter(sessions));
   app.use(errorHandler);
 
-  let heldServer: Server;
+  let routerServer: Server;
   await new Promise<void>((resolve) => {
-    heldServer = app.listen(0, "127.0.0.1", () => resolve());
+    routerServer = app.listen(0, "127.0.0.1", () => resolve());
   });
-  const addr = heldServer!.address();
+  const addr = routerServer!.address();
   if (!addr || typeof addr === "string") {
     throw new Error("expected TCP listen address");
   }
 
   return {
-    server: heldServer!,
+    server: routerServer!,
     baseUrl: `http://127.0.0.1:${addr.port}`,
     sessions,
-    releaseHold: release,
   };
 }
 
-export function useConversationsTestFixtures(): void {
+/** Pass `listen: false` when the file only drives its own router, leaving `baseUrl` unset. */
+export function useConversationsTestFixtures({ listen = true }: { listen?: boolean } = {}): void {
   beforeEach(async () => {
     // Nest issues/ under a unique root so conversations/ stays per-test. Using a
     // mkdtemp as ISSUES_DIR directly shared tmpdir()/conversations across workers
@@ -91,22 +103,8 @@ export function useConversationsTestFixtures(): void {
       createdAt: AT,
       updatedAt: AT,
     });
-    writeIssue("no-ws", {
-      kind: "project",
-      title: "No workspace",
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    writeIssue("capture", {
-      kind: "idea",
-      title: "Capture",
-      partOf: "platform",
-      order: 0,
-      archived: false,
-      createdAt: AT,
-      updatedAt: AT,
-    });
 
+    if (!listen) return;
     const { createApp } = await import("../app.js");
     const app = createApp();
     await new Promise<void>((resolve) => {
@@ -120,12 +118,16 @@ export function useConversationsTestFixtures(): void {
   });
 
   afterEach(async () => {
-    const { agentSessions } = await import("../services/agent-sessions.js");
-    await agentSessions.disposeAll();
+    if (listen) {
+      const { agentSessions } = await import("../services/agent-sessions.js");
+      await agentSessions.disposeAll();
+    }
     vi.unstubAllEnvs();
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
-    });
+    if (listen) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
     rmSync(root, { recursive: true, force: true });
     rmSync(workspaceDir, { recursive: true, force: true });
   });

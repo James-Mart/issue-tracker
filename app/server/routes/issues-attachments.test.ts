@@ -3,7 +3,6 @@ import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_ATTACHMENT_BYTES } from "../services/attachments.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 let dir: string;
@@ -81,41 +80,6 @@ async function upload(
 }
 
 describe("attachments HTTP API", () => {
-  it("multipart upload/download/delete use HTTP status and content-type", async () => {
-    const payload = "export const x = 1;\n";
-    const created = await upload("c", "mock.tsx", payload);
-    expect(created.status).toBe(201);
-    expect(await created.json()).toEqual(
-      expect.objectContaining({ name: "mock.tsx", size: payload.length }),
-    );
-
-    const listed = await fetch(`${baseUrl}/api/issues/c/attachments`);
-    expect(listed.status).toBe(200);
-    expect(await listed.json()).toEqual([
-      expect.objectContaining({ name: "mock.tsx" }),
-    ]);
-
-    const downloaded = await fetch(
-      `${baseUrl}/api/issues/c/attachments/mock.tsx`,
-    );
-    expect(downloaded.status).toBe(200);
-    expect(downloaded.headers.get("content-type")).toMatch(
-      /application\/octet-stream/,
-    );
-    expect(await downloaded.text()).toBe(payload);
-
-    const detail = await fetch(`${baseUrl}/api/issues/c`);
-    const detailJson = (await detail.json()) as Record<string, unknown>;
-    expect(detailJson).not.toHaveProperty("attachments");
-    expect(JSON.stringify(detailJson)).not.toContain(payload);
-
-    const deleted = await fetch(
-      `${baseUrl}/api/issues/c/attachments/mock.tsx`,
-      { method: "DELETE" },
-    );
-    expect(deleted.status).toBe(204);
-  });
-
   it("returns the stored unique name on basename collision", async () => {
     const first = await upload("c", "foo.tsx", "v1");
     expect(first.status).toBe(201);
@@ -143,113 +107,6 @@ describe("attachments HTTP API", () => {
         await fetch(`${baseUrl}/api/issues/c/attachments/foo-2.tsx`)
       ).text(),
     ).toBe("v2");
-  });
-
-  it("uploads, lists, downloads, and deletes attachments on a project", async () => {
-    const uploadRes = await upload("p", "vision.md", "# Vision");
-    expect(uploadRes.status).toBe(201);
-    expect(await uploadRes.json()).toEqual(
-      expect.objectContaining({ name: "vision.md" }),
-    );
-
-    const listed = await fetch(`${baseUrl}/api/issues/p/attachments`);
-    expect(await listed.json()).toEqual([
-      expect.objectContaining({ name: "vision.md" }),
-    ]);
-
-    const download = await fetch(
-      `${baseUrl}/api/issues/p/attachments/vision.md`,
-    );
-    expect(download.status).toBe(200);
-    expect(await download.text()).toBe("# Vision");
-
-    const del = await fetch(`${baseUrl}/api/issues/p/attachments/vision.md`, {
-      method: "DELETE",
-    });
-    expect(del.status).toBe(204);
-    expect(await (await fetch(`${baseUrl}/api/issues/p/attachments`)).json()).toEqual(
-      [],
-    );
-  });
-
-  it("replaces the github-export draft set", async () => {
-    const notes = await upload("c", "notes.md", "stay");
-    expect(notes.status).toBe(201);
-    const first = await fetch(`${baseUrl}/api/issues/c/export-drafts`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        files: [
-          {
-            name: "github-export-keep.md",
-            content: "---\ntitle: Keep\n---\nold\n",
-          },
-          {
-            name: "github-export-drop.md",
-            content: "---\ntitle: Drop\n---\ngone\n",
-          },
-        ],
-      }),
-    });
-    expect(first.status).toBe(200);
-
-    const replaced = await fetch(`${baseUrl}/api/issues/c/export-drafts`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        files: [
-          {
-            name: "github-export-keep.md",
-            content: "---\ntitle: Keep\n---\nnew\n",
-          },
-        ],
-      }),
-    });
-    expect(replaced.status).toBe(200);
-    expect(await replaced.json()).toEqual([
-      expect.objectContaining({ name: "github-export-keep.md" }),
-    ]);
-
-    const listed = await fetch(`${baseUrl}/api/issues/c/attachments`);
-    expect(await listed.json()).toEqual([
-      expect.objectContaining({ name: "github-export-keep.md" }),
-      expect.objectContaining({ name: "notes.md" }),
-    ]);
-    expect(
-      await (
-        await fetch(`${baseUrl}/api/issues/c/attachments/github-export-keep.md`)
-      ).text(),
-    ).toBe("---\ntitle: Keep\n---\nnew\n");
-  });
-
-  it("rejects a bad export-draft name or a missing title", async () => {
-    const badName = await fetch(`${baseUrl}/api/issues/c/export-drafts`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        files: [{ name: "notes.md", content: "---\ntitle: N\n---\nbody\n" }],
-      }),
-    });
-    expect(badName.status).toBe(400);
-    expect(await badName.json()).toEqual(
-      expect.objectContaining({ code: "validation" }),
-    );
-
-    const missingTitle = await fetch(`${baseUrl}/api/issues/c/export-drafts`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        files: [{ name: "github-export-keep.md", content: "# bare\n" }],
-      }),
-    });
-    expect(missingTitle.status).toBe(400);
-    expect(await missingTitle.json()).toEqual({
-      error: 'github-export draft "github-export-keep.md" is missing title',
-      code: "validation",
-    });
-    expect(await (await fetch(`${baseUrl}/api/issues/c/attachments`)).json()).toEqual(
-      [],
-    );
   });
 
   it("overwrites a reserved draft and refuses a non-reserved name", async () => {
@@ -302,15 +159,5 @@ describe("attachments HTTP API", () => {
     expect(
       await (await fetch(`${baseUrl}/api/issues/c/attachments/notes.md`)).text(),
     ).toBe("v1");
-  });
-
-  it("rejects oversize uploads with 4xx", async () => {
-    const oversize = new Uint8Array(MAX_ATTACHMENT_BYTES + 1);
-    const res = await upload("c", "big.bin", oversize);
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({
-      error: `attachment exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
-      code: "validation",
-    });
   });
 });

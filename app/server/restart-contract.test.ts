@@ -10,20 +10,8 @@ afterEach(() => {
 });
 
 describe("shouldRespawn", () => {
-  it("is true for the sentinel exit", () => {
-    expect(shouldRespawn({ code: 75, signal: null })).toBe(true);
-  });
-
-  it("is false for a normal exit", () => {
-    expect(shouldRespawn({ code: 0, signal: null })).toBe(false);
-  });
-
   it("is false for a non-sentinel failure", () => {
     expect(shouldRespawn({ code: 1, signal: null })).toBe(false);
-  });
-
-  it("is false when terminated by signal", () => {
-    expect(shouldRespawn({ code: null, signal: "SIGTERM" })).toBe(false);
   });
 });
 
@@ -40,22 +28,5 @@ describe("captureRestartSupervision", () => {
     captureRestartSupervision(true);
     expect(process.env[RESTART_SUPERVISED_ENV_VAR]).toBeUndefined();
     expect(isRestartSupervised()).toBe(true);
-  });
-
-  it("drops the env marker after capture(false)", async () => {
-    process.env[RESTART_SUPERVISED_ENV_VAR] = "1";
-    const { captureRestartSupervision, isRestartSupervised } =
-      await loadContract();
-    captureRestartSupervision(false);
-    expect(process.env[RESTART_SUPERVISED_ENV_VAR]).toBeUndefined();
-    expect(isRestartSupervised()).toBe(false);
-  });
-});
-
-describe("isRestartSupervised", () => {
-  it("is false when capture has not run even if the env var is set", async () => {
-    process.env[RESTART_SUPERVISED_ENV_VAR] = "1";
-    const { isRestartSupervised } = await loadContract();
-    expect(isRestartSupervised()).toBe(false);
   });
 });

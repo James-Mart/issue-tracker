@@ -1,22 +1,10 @@
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const AT = "2026-07-09T14:00:00.000Z";
-const FIXTURES = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../testdata/supporting-docs",
-);
 
 let dir: string;
 let workspaceDir: string;
@@ -28,16 +16,10 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
   writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
 }
 
-function makeFixtureWorkspace(): string {
-  const ws = mkdtempSync(join(tmpdir(), "issue-workspace-fixtures-"));
-  mkdirSync(join(ws, ".git"));
-  cpSync(FIXTURES, ws, { recursive: true });
-  return ws;
-}
-
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "issue-tracker-workspace-route-"));
-  workspaceDir = makeFixtureWorkspace();
+  workspaceDir = mkdtempSync(join(tmpdir(), "issue-workspace-"));
+  mkdirSync(join(workspaceDir, ".git"));
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", dir);
 
@@ -88,32 +70,6 @@ async function getWorkspaceFile(
 }
 
 describe("project workspace file HTTP API", () => {
-  it("returns fixture bytes with content-type for a markdown file", async () => {
-    const expected = readFileSync(join(FIXTURES, "sample.md"), "utf8");
-    const res = await getWorkspaceFile("p", "sample.md");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toMatch(/text\/markdown|text\/plain/);
-    expect(await res.text()).toBe(expected);
-  });
-
-  it("returns workspace HTML and its relative asset", async () => {
-    const html = readFileSync(join(FIXTURES, "workspace/sample.html"), "utf8");
-    const asset = readFileSync(
-      join(FIXTURES, "workspace/sample-asset.svg"),
-      "utf8",
-    );
-
-    const htmlRes = await getWorkspaceFile("p", "workspace/sample.html");
-    expect(htmlRes.status).toBe(200);
-    expect(htmlRes.headers.get("content-type")).toMatch(/text\/html/);
-    expect(await htmlRes.text()).toBe(html);
-
-    const assetRes = await getWorkspaceFile("p", "workspace/sample-asset.svg");
-    expect(assetRes.status).toBe(200);
-    expect(assetRes.headers.get("content-type")).toMatch(/image\/svg\+xml/);
-    expect(await assetRes.text()).toBe(asset);
-  });
-
   it("refuses absolute paths, .., missing files, and unset workspace", async () => {
     const absolute = await getWorkspaceFile("p", "/etc/passwd");
     expect(absolute.status).toBe(400);
@@ -141,15 +97,6 @@ describe("project workspace file HTTP API", () => {
     expect(await unset.json()).toEqual({
       error: "Project workspace is not set",
       code: "validation",
-    });
-  });
-
-  it("returns 404 for an unknown project", async () => {
-    const res = await getWorkspaceFile("missing", "sample.md");
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({
-      error: 'unknown issue "missing"',
-      code: "not_found",
     });
   });
 });

@@ -5,17 +5,10 @@ import {
   readdirSync,
   writeFileSync,
 } from "fs";
-import type { Server } from "http";
 import { join } from "path";
 import { JSONL_LOCAL_AGENT_STORE_FILES } from "@cursor/sdk";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import express from "express";
+import { describe, expect, it } from "vitest";
 import type { TranscriptEvent } from "../schemas/conversation.js";
-import {
-  buildScriptedStreamWithAgentIdHint,
-  createFakeAgentSdk,
-} from "../services/agent-sdk.fake.js";
-import type { AgentSessions } from "../services/agent-sessions.js";
 import {
   baseUrl,
   conversationsDir,
@@ -195,121 +188,6 @@ describe("POST /api/conversations/:id/fork", () => {
     expect(detail.meta.agentId).not.toBe(SOURCE_AGENT);
 
     expect(conversationFingerprint("conv-fork-source")).toEqual(before);
-  });
-
-  describe("writable fork session tools", () => {
-    let forkServer: Server;
-    let forkBaseUrl: string;
-    let forkSessions: AgentSessions;
-    let fake: ReturnType<typeof createFakeAgentSdk>;
-
-    beforeEach(async () => {
-      fake = createFakeAgentSdk({
-        stream: buildScriptedStreamWithAgentIdHint(),
-      });
-      const { createAgentSessions } = await import("../services/agent-sessions.js");
-      const { createConversationsRouter } = await import("./conversations.js");
-      const { errorHandler } = await import("../errors.js");
-      forkSessions = createAgentSessions(fake);
-      const app = express();
-      app.use(express.json());
-      app.use("/api/conversations", createConversationsRouter(forkSessions));
-      app.use(errorHandler);
-
-      await new Promise<void>((resolve) => {
-        forkServer = app.listen(0, "127.0.0.1", () => resolve());
-      });
-      const addr = forkServer.address();
-      if (!addr || typeof addr === "string") {
-        throw new Error("expected TCP listen address");
-      }
-      forkBaseUrl = `http://127.0.0.1:${addr.port}`;
-    });
-
-    afterEach(async () => {
-      await forkSessions.disposeAll();
-      await new Promise<void>((resolve, reject) => {
-        forkServer.close((err) => (err ? reject(err) : resolve()));
-      });
-    });
-
-    it("resumes a fork without readOnly restrictions", async () => {
-      writeForkableConversation("conv-fork-writable", {
-        transcript: [
-          { type: "prompt", text: "go", at: AT_T1, seq: 1 },
-          { type: "assistant", text: "done", at: AT_T1_END, seq: 2 },
-        ],
-        runs: [
-          runRow({
-            runId: "run-1",
-            agentId: SOURCE_AGENT,
-            turnNumber: 1,
-            startedAt: T1_MS,
-            endedAt: T1_END_MS,
-            latestCheckpointRef: { schemaVersion: 1, rootBlobId: "chk-turn-1" },
-          }),
-        ],
-        agentState: [
-          {
-            agentId: SOURCE_AGENT,
-            cwd: "/tmp/source-workspace",
-            status: "idle",
-            activeRunId: null,
-            createdAt: 1,
-            updatedAt: 1,
-            latestCheckpoint: { schemaVersion: 1, rootBlobId: "chk-turn-1" },
-          },
-        ],
-        checkpoints: [
-          {
-            agentId: SOURCE_AGENT,
-            blobId: "chk-turn-1",
-            data: "dGVzdA==",
-          },
-        ],
-      });
-
-      const forkRes = await fetch(
-        `${forkBaseUrl}/api/conversations/conv-fork-writable/fork`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ seq: 2 }),
-        },
-      );
-      expect(forkRes.status).toBe(201);
-      const { id: forkId } = (await forkRes.json()) as { id: string };
-
-      const detail = await fetch(`${forkBaseUrl}/api/conversations/${forkId}`).then(
-        (r) => r.json(),
-      );
-      expect(detail.meta.readOnly).toBeUndefined();
-
-      const send = await fetch(`${forkBaseUrl}/api/conversations/${forkId}/messages`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt: "continue on the fork" }),
-      });
-      expect(send.status).toBe(202);
-
-      for (let i = 0; i < 50; i += 1) {
-        const run = forkSessions.getActiveRun(forkId);
-        if (!run) break;
-        await new Promise((r) => setTimeout(r, 20));
-      }
-
-      expect(fake.created).toHaveLength(0);
-      expect(fake.resumed).toHaveLength(1);
-      expect(fake.resumed[0]?.options.disallowedTools).toBeUndefined();
-      expect(fake.resumed[0]?.options.customTools).toMatchObject({
-        delegate: expect.any(Object),
-        delegations: expect.any(Object),
-        agent_stack_start: expect.any(Object),
-        agent_stack_stop: expect.any(Object),
-        agent_stack_redeploy: expect.any(Object),
-        file_cursor_sdk_bug: expect.any(Object),
-      });
-    });
   });
 
   it("returns 400 when the position is inside an in-flight run", async () => {

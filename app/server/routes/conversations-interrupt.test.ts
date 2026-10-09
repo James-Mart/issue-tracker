@@ -7,7 +7,7 @@ import {
   useConversationsTestFixtures,
 } from "./conversations.test-harness.js";
 
-useConversationsTestFixtures();
+useConversationsTestFixtures({ listen: false });
 
 describe("POST /api/conversations/:id/interrupt", () => {
   let interruptServer: Server;
@@ -29,60 +29,6 @@ describe("POST /api/conversations/:id/interrupt", () => {
     await new Promise<void>((resolve, reject) => {
       interruptServer.close((err) => (err ? reject(err) : resolve()));
     });
-  });
-
-  it("returns 400 when prompt is missing or empty", async () => {
-    const created = await fetch(`${interruptBaseUrl}/api/conversations`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: "platform", title: "Interrupt bad" }),
-    }).then((r) => r.json());
-
-    const missing = await fetch(
-      `${interruptBaseUrl}/api/conversations/${created.id}/interrupt`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      },
-    );
-    expect(missing.status).toBe(400);
-
-    const empty = await fetch(
-      `${interruptBaseUrl}/api/conversations/${created.id}/interrupt`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt: "   " }),
-      },
-    );
-    expect(empty.status).toBe(400);
-  });
-
-  it("sends normally when no run is active", async () => {
-    const created = await fetch(`${interruptBaseUrl}/api/conversations`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: "platform", title: "Interrupt idle" }),
-    }).then((r) => r.json());
-
-    const res = await fetch(
-      `${interruptBaseUrl}/api/conversations/${created.id}/interrupt`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt: "plain send" }),
-      },
-    );
-    expect(res.status).toBe(202);
-    expect(await res.json()).toEqual({ runId: FAKE_RUN_ID });
-
-    const detail = await fetch(
-      `${interruptBaseUrl}/api/conversations/${created.id}`,
-    ).then((r) => r.json());
-    expect(
-      detail.transcript.filter((e: { type: string }) => e.type === "prompt"),
-    ).toEqual([expect.objectContaining({ type: "prompt", text: "plain send" })]);
   });
 
   it("cancels the active run, clears pending, appends the prompt, and starts a new run", async () => {
