@@ -25,6 +25,7 @@ describe("resolveAgentsConversationParam", () => {
   it("opens an id that is present without revealing archived or replacing", () => {
     expect(resolveAgentsConversationParam("conv-1", roster)).toEqual({
       selectedId: "conv-1",
+      selectedConversation: present,
       revealArchived: false,
       replaceWithRoster: false,
     });
@@ -41,6 +42,7 @@ describe("resolveAgentsConversationParam", () => {
   it("opens an archived id and asks the roster to reveal archived rows", () => {
     expect(resolveAgentsConversationParam("conv-archived", roster)).toEqual({
       selectedId: "conv-archived",
+      selectedConversation: archived,
       revealArchived: true,
       replaceWithRoster: false,
     });

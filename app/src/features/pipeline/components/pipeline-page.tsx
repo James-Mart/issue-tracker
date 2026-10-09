@@ -23,6 +23,7 @@ import {
 import { issuePath } from "@/features/issues/lib/links";
 import { PipelineDiagram } from "../pipeline-diagram";
 import {
+  explicitPipelineId,
   parsePipelineId,
   parseStepId,
   pipelineById,
@@ -299,8 +300,14 @@ function PipelineSwitcher({
 function PipelineDesignView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
-  const activeId = parsePipelineId(searchParams.get("pipeline"));
+  const pipelineQuery = searchParams.get("pipeline");
+  const explicitId = explicitPipelineId(pipelineQuery);
+  const activeId = parsePipelineId(pipelineQuery);
   const pipeline = pipelineById(activeId);
+  useTabTitle(
+    explicitId ? pipeline.title : "Pipelines",
+    explicitId ? "Pipeline" : undefined,
+  );
   const selectedStepId = parseStepId(searchParams.get("step"), pipeline);
   const selectedNode = pipeline.nodes.find((node) => node.id === selectedStepId);
   const selectedStep =
@@ -380,7 +387,6 @@ export function PipelinePage() {
   const isRunsView =
     pathname === "/runs" || pathname.startsWith("/runs/");
   const viewLabel = isRunsView ? "Runs" : "Pipelines";
-  useTabTitle(viewLabel);
 
   return (
     <PageShell>

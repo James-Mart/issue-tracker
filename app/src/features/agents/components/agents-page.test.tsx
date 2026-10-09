@@ -94,6 +94,7 @@ function mountAgentsPage(initialEntry: string): {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  document.title = "Issue Tracker";
   queryState.data = undefined;
   useAgentsUiStore.setState({ showArchived: false });
 });
@@ -158,5 +159,26 @@ describe("AgentsPage route selection", () => {
     act(() => {
       root.unmount();
     });
+  });
+});
+
+describe("AgentsPage tab title", () => {
+  it("uses the fixed roster title on /agents", () => {
+    const { root } = mountAgentsPage("/agents");
+    expect(document.title).toBe("IT: Agents");
+    act(() => root.unmount());
+  });
+
+  it("uses the conversation title and Agent suffix when a thread is open", () => {
+    queryState.data = [conversation({ id: "conv-1", title: "Release plan" })];
+    const { root } = mountAgentsPage("/agents/conv-1");
+    expect(document.title).toBe("IT: Release plan\u00B7Agent");
+    act(() => root.unmount());
+  });
+
+  it("uses the conversation id until the roster loads", () => {
+    const { root } = mountAgentsPage("/agents/conv-1");
+    expect(document.title).toBe("IT: conv-1\u00B7Agent");
+    act(() => root.unmount());
   });
 });

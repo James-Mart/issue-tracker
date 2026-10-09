@@ -19,6 +19,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { usePipelineRunsLive } from "../api/live";
 import { usePipelineRunsQuery } from "../api/queries";
+import { usePipelineRunTabTitle } from "../use-pipeline-run-tab-title";
 import { pipelineRunPath } from "../paths";
 import {
   conditionBadgeLabel,
@@ -229,6 +230,7 @@ export function PipelineRunsView({
     isFetchingNextPage,
   } = usePipelineRunsQuery();
   const runs = data?.pages.flatMap((page) => page.runs) ?? [];
+  usePipelineRunTabTitle(conversationId, runs);
 
   return (
     <div className="space-y-4">

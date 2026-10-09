@@ -35,10 +35,17 @@ export function isPipelineId(value: string): value is PipelineId {
   return pipelines.some((pipeline) => pipeline.id === value);
 }
 
+/** Parse `pipeline` query value when present and valid; otherwise undefined. */
+export function explicitPipelineId(
+  value: string | null,
+): PipelineId | undefined {
+  if (value != null && isPipelineId(value)) return value;
+  return undefined;
+}
+
 /** Parse `pipeline` query value; unknown or absent → planning. */
 export function parsePipelineId(value: string | null): PipelineId {
-  if (value != null && isPipelineId(value)) return value;
-  return DEFAULT_PIPELINE_ID;
+  return explicitPipelineId(value) ?? DEFAULT_PIPELINE_ID;
 }
 
 /**

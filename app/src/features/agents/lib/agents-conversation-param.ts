@@ -2,6 +2,8 @@ import type { ConversationListItem } from "@server/schemas";
 
 export type AgentsConversationParamResolution = {
   selectedId: string | null;
+  /** Set when the roster is loaded and the param id matches a conversation. */
+  selectedConversation?: ConversationListItem;
   revealArchived: boolean;
   replaceWithRoster: boolean;
 };
@@ -34,6 +36,7 @@ export function resolveAgentsConversationParam(
   }
   return {
     selectedId: found.id,
+    selectedConversation: found,
     revealArchived: found.archived,
     replaceWithRoster: false,
   };
