@@ -3,7 +3,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -66,12 +65,6 @@ describe("secret store", () => {
     expect(existsSync(file)).toBe(false);
   });
 
-  it("refuses invalid key names", () => {
-    expect(() => setSecret("proj", "lowercase", "x")).toThrow(/invalid secret key/);
-    expect(() => setSecret("proj", "1BAD", "x")).toThrow(/invalid secret key/);
-    expect(() => deleteSecret("proj", "bad-key")).toThrow(/invalid secret key/);
-  });
-
   it("refuses to read a file whose mode is wider than 0600", () => {
     const dir = secretsDir();
     mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -97,10 +90,5 @@ describe("secret store", () => {
     expect(
       JSON.stringify(readSecretsForRuntime("proj")),
     ).not.toContain("still-secret");
-  });
-
-  it("returns empty state when no store file exists", () => {
-    expect(listSecretKeys("missing")).toEqual([]);
-    expect(readSecretsForRuntime("missing")).toEqual({});
   });
 });

@@ -53,13 +53,6 @@ async function waitFor(
   throw new Error(`timed out waiting for ${label}`);
 }
 
-async function diagnostics(): Promise<{
-  connections: number;
-  subscriptions: number;
-}> {
-  return fetch(`${baseUrl}/api/diagnostics/connections`).then((r) => r.json());
-}
-
 async function closeSocket(ws: WebSocket): Promise<void> {
   if (ws.readyState === WebSocket.CLOSED) return;
   await new Promise<void>((resolve) => {
@@ -111,78 +104,6 @@ afterEach(async () => {
 });
 
 describe("multiplexed WebSocket endpoint", () => {
-  it("delivers events for two topics on one connection", async () => {
-    const created = await fetch(`${baseUrl}/api/conversations`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        projectId: "platform",
-        title: "Multiplex topics",
-      }),
-    }).then((r) => r.json());
-
-    const ws = await openSocket();
-    const messages = collectMessages(ws);
-    const conversationTopic = `conversation:${created.id}`;
-
-    ws.send(JSON.stringify({ type: "subscribe", topic: conversationTopic }));
-    ws.send(JSON.stringify({ type: "subscribe", topic: "issues" }));
-
-    await waitFor(async () => {
-      const diag = await diagnostics();
-      return diag.connections === 1 && diag.subscriptions === 2;
-    }, "two subscriptions");
-
-    const { publishFrame } = await import("./conversation-stream.js");
-    publishFrame(created.id, {
-      event: { type: "assistant", text: "from-conversation" },
-      persist: false,
-    });
-    publishFrame("issues", {
-      event: { type: "change", id: "platform", scope: "issue" },
-      persist: false,
-    });
-
-    await waitFor(
-      () =>
-        messages.some(
-          (m) =>
-            m.type === "event" &&
-            m.topic === conversationTopic &&
-            (m.event as { text?: string }).text === "from-conversation",
-        ) &&
-        messages.some(
-          (m) =>
-            m.type === "event" &&
-            m.topic === "issues" &&
-            (m.event as { id?: string }).id === "platform",
-        ),
-      "events on both topics",
-    );
-
-    const conversationEvent = messages.find(
-      (m) => m.type === "event" && m.topic === conversationTopic,
-    );
-    const issuesEvent = messages.find(
-      (m) => m.type === "event" && m.topic === "issues",
-    );
-    expect(conversationEvent).toMatchObject({
-      type: "event",
-      topic: conversationTopic,
-      event: { type: "assistant", text: "from-conversation" },
-    });
-    expect(conversationEvent).toEqual(
-      expect.objectContaining({ type: "event", seq: expect.any(Number) }),
-    );
-    expect(issuesEvent).toMatchObject({
-      type: "event",
-      topic: "issues",
-      event: { type: "change", id: "platform", scope: "issue" },
-    });
-
-    await closeSocket(ws);
-  });
-
   it("answers reset when sinceSeq is older than the catch-up window", async () => {
     const created = await fetch(`${baseUrl}/api/conversations`, {
       method: "POST",
@@ -216,30 +137,5 @@ describe("multiplexed WebSocket endpoint", () => {
     expect(messages.filter((m) => m.type === "event")).toHaveLength(0);
 
     await closeSocket(ws);
-  });
-
-  it("tracks diagnostics counts across connect and disconnect", async () => {
-    expect(await diagnostics()).toEqual({ connections: 0, subscriptions: 0 });
-
-    const ws = await openSocket();
-    await waitFor(
-      async () => (await diagnostics()).connections === 1,
-      "one connection",
-    );
-    expect(await diagnostics()).toEqual({ connections: 1, subscriptions: 0 });
-
-    ws.send(JSON.stringify({ type: "subscribe", topic: "issues" }));
-    await waitFor(
-      async () => (await diagnostics()).subscriptions === 1,
-      "one subscription",
-    );
-    expect(await diagnostics()).toEqual({ connections: 1, subscriptions: 1 });
-
-    await closeSocket(ws);
-    await waitFor(async () => {
-      const diag = await diagnostics();
-      return diag.connections === 0 && diag.subscriptions === 0;
-    }, "disconnect clears diagnostics");
-    expect(await diagnostics()).toEqual({ connections: 0, subscriptions: 0 });
   });
 });

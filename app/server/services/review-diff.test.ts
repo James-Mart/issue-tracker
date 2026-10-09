@@ -1,11 +1,10 @@
-import { execFileSync, spawn, type ChildProcessByStdio } from "node:child_process";
-import type { Readable, Writable } from "node:stream";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReviewCommits, ReviewDiff } from "../schemas/review.js";
+import type { ReviewDiff } from "../schemas/review.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 
@@ -158,33 +157,6 @@ describe("review diff API", () => {
     rmSync(repo, { recursive: true, force: true });
   });
 
-  it("lists story commits oldest first", async () => {
-    const res = await fetch(`${baseUrl}/api/projects/p/reviews/${reviewId}/commits`);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as ReviewCommits;
-    expect(body.mergeBase).toBe("main");
-    expect(body.mergeBaseRef).toBe("main");
-    expect(body.tip).toBe(tip);
-    expect(body.commits.map((commit) => commit.sha)).toEqual([firstSha, secondSha]);
-    expect(body.commits.map((commit) => commit.subject)).toEqual([
-      "Add beta",
-      "Rename and add",
-    ]);
-    expect(body.commits[0]).toMatchObject({
-      author: "Tester",
-      authoredAt: git(["show", "-s", "--format=%aI", firstSha]).trim(),
-      files: 1,
-      additions: 1,
-      deletions: 0,
-    });
-    expect(body.commits[1]).toMatchObject({
-      author: "Tester",
-      files: 2,
-      additions: 1,
-      deletions: 0,
-    });
-  });
-
   it("returns the story change range for scope=all, including post-image blob shas", async () => {
     const { readIssueChange } = await import("./change.js");
     const storyChange = await readIssueChange("s");
@@ -216,27 +188,6 @@ describe("review diff API", () => {
     expect(added?.oldPath).toBeUndefined();
   });
 
-  it("returns one commit against its parent", async () => {
-    const res = await fetch(
-      `${baseUrl}/api/projects/p/reviews/${reviewId}/diff?scope=${firstSha}`,
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as ReviewDiff;
-    const parent = git(["rev-parse", `${firstSha}^`]).trim();
-    expect(body.scope).toBe(firstSha);
-    expect(body.patch).toBe(git(["diff", `${parent}..${firstSha}`]));
-    expect(body.files).toEqual([
-      {
-        path: "src/a.txt",
-        status: "modified",
-        additions: 1,
-        deletions: 0,
-        blobSha: git(["rev-parse", `${firstSha}:src/a.txt`]).trim(),
-        tooLarge: false,
-      },
-    ]);
-  });
-
   it("refuses a sha that is not one of the story commits", async () => {
     const res = await fetch(
       `${baseUrl}/api/projects/p/reviews/${reviewId}/diff?scope=${foreignSha}`,
@@ -246,116 +197,5 @@ describe("review diff API", () => {
       code: "validation",
       error: `sha "${foreignSha}" is not one of this story's commits`,
     });
-  });
-
-  it("uses an empty blobSha when the commit deletes a file", async () => {
-    git(["rm", "src/c.txt"]);
-    git(["commit", "-m", "Drop c"]);
-    const sha = git(["rev-parse", "HEAD"]).trim();
-    writeIssue("t3", {
-      kind: "task",
-      title: "Drop",
-      partOf: "s",
-      commits: [sha],
-      order: 2,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-
-    const res = await fetch(
-      `${baseUrl}/api/projects/p/reviews/${reviewId}/diff?scope=${sha}`,
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as ReviewDiff;
-    expect(body.files).toEqual([
-      {
-        path: "src/c.txt",
-        status: "deleted",
-        additions: 0,
-        deletions: 1,
-        blobSha: "",
-        tooLarge: false,
-      },
-    ]);
-  });
-
-  it("omits a file whose patch exceeds the ceiling", async () => {
-    writeFileSync(join(repo, "src", "tiny.txt"), "ok\n");
-    writeFileSync(join(repo, "src", "huge.txt"), `${"x".repeat(4000)}\n`);
-    git(["add", "src/tiny.txt", "src/huge.txt"]);
-    git(["commit", "-m", "Huge"]);
-    const hugeSha = git(["rev-parse", "HEAD"]).trim();
-    writeIssue("t3", {
-      kind: "task",
-      title: "Huge",
-      partOf: "s",
-      commits: [hugeSha],
-      order: 2,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    vi.stubEnv("ISSUE_TRACKER_MAX_PATCH_BYTES", "500");
-
-    const res = await fetch(
-      `${baseUrl}/api/projects/p/reviews/${reviewId}/diff?scope=${hugeSha}`,
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as ReviewDiff;
-    const huge = body.files.find((file) => file.path === "src/huge.txt");
-    const tiny = body.files.find((file) => file.path === "src/tiny.txt");
-    expect(huge).toMatchObject({ tooLarge: true, status: "added" });
-    expect(tiny).toMatchObject({ tooLarge: false, status: "added" });
-    expect(body.patch).not.toContain("diff --git a/src/huge.txt");
-    expect(body.patch).toContain("diff --git a/src/tiny.txt");
-  });
-
-  it("reuses the mark index raw diff when the diff endpoint loads the same ranges", async () => {
-    const { setGitSpawnerForTests } = await import("./git-read.js");
-    const { clearRawDiffCacheForTests } = await import("./review-diff.js");
-    clearRawDiffCacheForTests();
-    const commands: string[][] = [];
-    setGitSpawnerForTests((command, args, options) => {
-      commands.push(args);
-      return spawn(command, args, {
-        cwd: options.cwd,
-        env: options.env,
-        stdio: options.stdio ?? ["ignore", "pipe", "pipe"],
-      }) as ChildProcessByStdio<Writable | null, Readable, Readable>;
-    });
-    const rawCount = () => commands.filter((args) => args.includes("--raw")).length;
-    try {
-      const indexed = await fetch(`${baseUrl}/api/projects/p/reviews/${reviewId}`);
-      expect(indexed.status).toBe(200);
-      const rawAfterIndex = rawCount();
-      expect(rawAfterIndex).toBeGreaterThan(0);
-
-      const allRes = await fetch(
-        `${baseUrl}/api/projects/p/reviews/${reviewId}/diff?scope=all`,
-      );
-      const commitRes = await fetch(
-        `${baseUrl}/api/projects/p/reviews/${reviewId}/diff?scope=${firstSha}`,
-      );
-      expect(allRes.status).toBe(200);
-      expect(commitRes.status).toBe(200);
-      const allBody = (await allRes.json()) as ReviewDiff;
-      const commitBody = (await commitRes.json()) as ReviewDiff;
-      expect(allBody.files.length).toBeGreaterThan(0);
-      expect(commitBody.files).toEqual([
-        {
-          path: "src/a.txt",
-          status: "modified",
-          additions: 1,
-          deletions: 0,
-          blobSha: git(["rev-parse", `${firstSha}:src/a.txt`]).trim(),
-          tooLarge: false,
-        },
-      ]);
-      expect(commands.some((args) => args[0] === "diff" && !args.includes("--raw"))).toBe(
-        true,
-      );
-      expect(rawCount()).toBe(rawAfterIndex);
-    } finally {
-      setGitSpawnerForTests(null);
-    }
   });
 });

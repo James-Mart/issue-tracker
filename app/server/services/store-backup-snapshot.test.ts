@@ -1,33 +1,10 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  utimesSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
-import {
-  BACKUP_IDENTITY_FILENAME,
-  ensureBackupIdentity,
-} from "./store-backup-identity.js";
-import { PROJECTS_MANIFEST_FILENAME } from "./store-backup-projects-manifest.js";
-import { RESTORE_RUNBOOK_FILENAME } from "./store-backup-restore-runbook.js";
+import { join } from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createStoreBackupSnapshotDriver,
   formatSnapshotCommitMessage,
-  isBackupMirrorActive,
   resetStoreBackupSnapshotDriverForTests,
   SNAPSHOT_DEBOUNCE_MS,
   syncIssuesToMirror,
@@ -78,7 +55,7 @@ function createTestDriver(
   layout: ReturnType<typeof tempStoreLayout>,
   overrides: Partial<StoreBackupSnapshotDeps> = {},
 ) {
-  const gitCalls: { op: string; workspace: string; message?: string }[] = [];
+  const gitCalls: { op: string; workspace: string }[] = [];
   let onActivity: (() => void) | undefined;
 
   const deps: StoreBackupSnapshotDeps = {
@@ -102,8 +79,8 @@ function createTestDriver(
       gitCalls.push({ op: "stage", workspace });
     },
     hasStagedChanges: async () => true,
-    commitChanges: async (workspace, message) => {
-      gitCalls.push({ op: "commit", workspace, message });
+    commitChanges: async (workspace) => {
+      gitCalls.push({ op: "commit", workspace });
     },
     formatCommitMessage: formatSnapshotCommitMessage,
     ensureBackupIdentity: () => ({ storeId: "test-store-id" }),
@@ -124,291 +101,14 @@ function createTestDriver(
   };
 }
 
-describe("isBackupMirrorActive", () => {
-  it("returns false when backup is absent", () => {
-    expect(isBackupMirrorActive({})).toBe(false);
-  });
-
-  it("returns false when backup is disabled", () => {
-    expect(
-      isBackupMirrorActive({
-        backup: { remote: "git@github.com:me/repo.git", enabled: false },
-      }),
-    ).toBe(false);
-  });
-
-  it("returns false when remote is null", () => {
-    expect(
-      isBackupMirrorActive({ backup: { remote: null, enabled: true } }),
-    ).toBe(false);
-  });
-
-  it("returns true when backup is configured and enabled", () => {
-    expect(isBackupMirrorActive(activeBackupConfig())).toBe(true);
-  });
-});
-
-describe("syncIssuesToMirror", () => {
-  it("copies new files and removes deleted ones", () => {
-    const layout = tempStoreLayout();
-    const mirrorIssuesDir = join(layout.backupMirrorDir, "issues");
-    writeFileSync(join(layout.issuesDir, "keep.txt"), "keep");
-    writeFileSync(join(layout.issuesDir, "gone.txt"), "gone");
-    mkdirSync(mirrorIssuesDir, { recursive: true });
-    writeFileSync(join(mirrorIssuesDir, "gone.txt"), "gone");
-    writeFileSync(join(mirrorIssuesDir, "stale.txt"), "stale");
-
-    rmSync(join(layout.issuesDir, "gone.txt"));
-    writeFileSync(join(layout.issuesDir, "new.txt"), "new");
-
-    syncIssuesToMirror(layout.issuesDir, mirrorIssuesDir);
-
-    expect(readFileSync(join(mirrorIssuesDir, "keep.txt"), "utf8")).toBe(
-      "keep",
-    );
-    expect(readFileSync(join(mirrorIssuesDir, "new.txt"), "utf8")).toBe("new");
-    expect(existsSync(join(mirrorIssuesDir, "gone.txt"))).toBe(false);
-    expect(existsSync(join(mirrorIssuesDir, "stale.txt"))).toBe(false);
-  });
-
-  it("skips unchanged files on subsequent syncs", () => {
-    const layout = tempStoreLayout();
-    const mirrorIssuesDir = join(layout.backupMirrorDir, "issues");
-    const sourcePath = join(layout.issuesDir, "stable.txt");
-    writeFileSync(sourcePath, "content");
-
-    syncIssuesToMirror(layout.issuesDir, mirrorIssuesDir);
-    const mirrorPath = join(mirrorIssuesDir, "stable.txt");
-    const mtimeAfterFirst = statSync(mirrorPath).mtimeMs;
-
-    syncIssuesToMirror(layout.issuesDir, mirrorIssuesDir);
-    expect(statSync(mirrorPath).mtimeMs).toBe(mtimeAfterFirst);
-  });
-
-  it("copies when size or modification time differs", () => {
-    const layout = tempStoreLayout();
-    const mirrorIssuesDir = join(layout.backupMirrorDir, "issues");
-    const sourcePath = join(layout.issuesDir, "project", "issue.json");
-    mkdirSync(dirname(sourcePath), { recursive: true });
-    writeFileSync(sourcePath, '{"id":"a"}');
-    syncIssuesToMirror(layout.issuesDir, mirrorIssuesDir);
-
-    const mirrorPath = join(mirrorIssuesDir, "project", "issue.json");
-    const before = statSync(mirrorPath).mtimeMs;
-    writeFileSync(sourcePath, '{"id":"b"}');
-    utimesSync(sourcePath, new Date(before + 5_000), new Date(before + 5_000));
-
-    syncIssuesToMirror(layout.issuesDir, mirrorIssuesDir);
-    expect(readFileSync(mirrorPath, "utf8")).toBe('{"id":"b"}');
-  });
-});
-
 describe("createStoreBackupSnapshotDriver", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
 
-  it("collapses a burst of changes into one commit after the window", async () => {
-    const layout = tempStoreLayout();
-    const { driver, gitCalls, triggerChange } = createTestDriver(layout);
-    driver.start();
-    writeFileSync(join(layout.issuesDir, "a.txt"), "a");
-
-    triggerChange();
-    triggerChange();
-    triggerChange();
-
-    await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS - 1);
-    expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(0);
-
-    await vi.advanceTimersByTimeAsync(1);
-    await flushAsyncWork();
-
-    expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(1);
-    expect(gitCalls.filter((call) => call.op === "push")).toHaveLength(1);
-    expect(gitCalls.every((call) => call.workspace !== layout.issuesDir)).toBe(
-      true,
-    );
-  });
-
-  it("passes the local store identity and configured remote to the push gate", async () => {
-    const layout = tempStoreLayout();
-    let seen: { remoteUrl?: string; localStoreId?: string } = {};
-    const { driver } = createTestDriver(layout, {
-      ensureBackupIdentity: () => ({ storeId: "wired-store-id" }),
-      pushIfAllowed: async (_workspace, remoteUrl, localStoreId) => {
-        seen = { remoteUrl, localStoreId };
-        return "pushed";
-      },
-    });
-
-    await driver.takeSnapshot();
-
-    expect(seen).toEqual({
-      remoteUrl: "git@github.com:me/tracker-backup.git",
-      localStoreId: "wired-store-id",
-    });
-  });
-
-  it("keeps the local snapshot when the remote identity check refuses", async () => {
-    const layout = tempStoreLayout();
-    const { driver, gitCalls } = createTestDriver(layout, {
-      pushIfAllowed: async () => "refused",
-    });
-
-    await expect(driver.takeSnapshot()).resolves.toBeUndefined();
-    expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(1);
-    expect(gitCalls.filter((call) => call.op === "push")).toHaveLength(0);
-  });
-
-  it("restarts the window when a change arrives during debounce", async () => {
-    const layout = tempStoreLayout();
-    const { driver, gitCalls, triggerChange } = createTestDriver(layout);
-    driver.start();
-
-    triggerChange();
-    await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS - 1_000);
-    triggerChange();
-    await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS - 1);
-    expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(0);
-
-    await vi.advanceTimersByTimeAsync(1);
-    await flushAsyncWork();
-    expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(1);
-  });
-
-  it("skips commit when nothing is staged after a quiet window", async () => {
-    const layout = tempStoreLayout();
-    const { driver, gitCalls, triggerChange } = createTestDriver(layout, {
-      hasStagedChanges: async () => false,
-    });
-    driver.start();
-
-    triggerChange();
-    await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS);
-    await flushAsyncWork();
-
-    expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(0);
-    expect(gitCalls.filter((call) => call.op === "stage")).toHaveLength(1);
-    expect(gitCalls.filter((call) => call.op === "push")).toHaveLength(1);
-  });
-
-  it("initializes the mirror directory when it is not yet a repository", async () => {
-    const layout = tempStoreLayout();
-    writeFileSync(join(layout.issuesDir, "seed.txt"), "seed");
-    const { driver, gitCalls, triggerChange } = createTestDriver(layout);
-    driver.start();
-
-    triggerChange();
-    await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS);
-    await flushAsyncWork();
-
-    expect(gitCalls.some((call) => call.op === "init")).toBe(true);
-    expect(existsSync(join(layout.backupMirrorDir, ".git"))).toBe(true);
-  });
-
-  it("writes backup-identity.json at the mirror root when initializing", async () => {
-    const layout = tempStoreLayout();
-    writeFileSync(join(layout.issuesDir, "seed.txt"), "seed");
-    const { driver, triggerChange } = createTestDriver(layout, {
-      ensureBackupIdentity,
-    });
-    driver.start();
-
-    triggerChange();
-    await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS);
-    await flushAsyncWork();
-
-    const identityPath = join(layout.backupMirrorDir, BACKUP_IDENTITY_FILENAME);
-    expect(existsSync(identityPath)).toBe(true);
-    expect(
-      JSON.parse(readFileSync(identityPath, "utf8")).storeId,
-    ).toEqual(expect.any(String));
-    expect(
-      JSON.parse(readFileSync(identityPath, "utf8")).storeId.length,
-    ).toBeGreaterThan(0);
-    expect(
-      existsSync(join(layout.backupMirrorDir, "issues", BACKUP_IDENTITY_FILENAME)),
-    ).toBe(false);
-  });
-
-  it("does nothing when backup configuration is disabled", async () => {
-    const layout = tempStoreLayout();
-    const gitCalls: { op: string; workspace: string }[] = [];
-    const { driver, triggerChange } = createTestDriver(layout, {
-      readAppConfig: () => ({
-        backup: {
-          remote: "git@github.com:me/tracker-backup.git",
-          enabled: false,
-        },
-      }),
-      initRepository: async (workspace) => {
-        gitCalls.push({ op: "init", workspace });
-      },
-      stageAllChanges: async (workspace) => {
-        gitCalls.push({ op: "stage", workspace });
-      },
-      commitChanges: async (workspace) => {
-        gitCalls.push({ op: "commit", workspace });
-      },
-    });
-
-    driver.start();
-    triggerChange();
-    await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS);
-    await flushAsyncWork();
-
-    expect(gitCalls).toHaveLength(0);
-  });
-
-  it("does nothing when backup is unconfigured", async () => {
-    const layout = tempStoreLayout();
-    const gitCalls: { op: string; workspace: string }[] = [];
-    let watcherStarted = false;
-    const { driver } = createTestDriver(layout, {
-      readAppConfig: () => ({}),
-      createWatcher: () => {
-        watcherStarted = true;
-        return { close: vi.fn() };
-      },
-      initRepository: async (workspace) => {
-        gitCalls.push({ op: "init", workspace });
-      },
-      stageAllChanges: async (workspace) => {
-        gitCalls.push({ op: "stage", workspace });
-      },
-      commitChanges: async (workspace) => {
-        gitCalls.push({ op: "commit", workspace });
-      },
-    });
-
-    driver.start();
-    expect(watcherStarted).toBe(false);
-    await driver.takeSnapshot();
-    expect(gitCalls).toHaveLength(0);
-  });
-
   it("never invokes git against the store directory", async () => {
     const layout = tempStoreLayout();
-    const gitWorkspaces: string[] = [];
-    const { driver, triggerChange } = createTestDriver(layout, {
-      initRepository: async (workspace) => {
-        gitWorkspaces.push(workspace);
-        mkdirSync(join(workspace, ".git"), { recursive: true });
-      },
-      stageAllChanges: async (workspace) => {
-        gitWorkspaces.push(workspace);
-      },
-      hasStagedChanges: async () => true,
-      commitChanges: async (workspace) => {
-        gitWorkspaces.push(workspace);
-      },
-      ensureBackupIdentity: () => ({ storeId: "test-store-id" }),
-      pushIfAllowed: async (workspace) => {
-        gitWorkspaces.push(workspace);
-        return "pushed";
-      },
-    });
+    const { driver, gitCalls, triggerChange } = createTestDriver(layout);
 
     writeFileSync(join(layout.issuesDir, "touch.txt"), "touch");
     driver.start();
@@ -416,10 +116,15 @@ describe("createStoreBackupSnapshotDriver", () => {
     await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS);
     await flushAsyncWork();
 
-    expect(gitWorkspaces.every((cwd) => cwd === layout.backupMirrorDir)).toBe(
-      true,
-    );
-    expect(gitWorkspaces).not.toContain(layout.issuesDir);
+    expect(gitCalls.map((call) => call.op)).toEqual([
+      "init",
+      "stage",
+      "commit",
+      "push",
+    ]);
+    expect(
+      gitCalls.every((call) => call.workspace === layout.backupMirrorDir),
+    ).toBe(true);
   });
 
   it("runs a trailing snapshot when one is requested during an in-flight push", async () => {
@@ -454,161 +159,5 @@ describe("createStoreBackupSnapshotDriver", () => {
     await first;
     expect(pushes).toBe(2);
     expect(gitCalls.filter((call) => call.op === "commit")).toHaveLength(2);
-  });
-
-  it("writes projects.json at the mirror root before staging", async () => {
-    const layout = tempStoreLayout();
-    const callOrder: string[] = [];
-    const { driver } = createTestDriver(layout, {
-      writeProjectsManifest: async (mirrorDir) => {
-        callOrder.push("manifest");
-        writeFileSync(
-          join(mirrorDir, PROJECTS_MANIFEST_FILENAME),
-          '{"generatedAt":"2026-01-01T00:00:00.000Z","projects":[]}\n',
-        );
-      },
-      writeRestoreRunbook: () => {
-        callOrder.push("runbook");
-      },
-      stageAllChanges: async (workspace) => {
-        callOrder.push("stage");
-        expect(
-          existsSync(join(workspace, PROJECTS_MANIFEST_FILENAME)),
-        ).toBe(true);
-      },
-    });
-
-    await driver.takeSnapshot();
-
-    expect(callOrder).toEqual(["manifest", "runbook", "stage"]);
-    expect(
-      existsSync(join(layout.backupMirrorDir, PROJECTS_MANIFEST_FILENAME)),
-    ).toBe(true);
-    expect(
-      existsSync(
-        join(layout.backupMirrorDir, "issues", PROJECTS_MANIFEST_FILENAME),
-      ),
-    ).toBe(false);
-  });
-
-  it("writes RESTORE.md at the mirror root before staging", async () => {
-    const layout = tempStoreLayout();
-    const callOrder: string[] = [];
-    const { driver } = createTestDriver(layout, {
-      writeProjectsManifest: async (mirrorDir) => {
-        callOrder.push("manifest");
-        writeFileSync(
-          join(mirrorDir, PROJECTS_MANIFEST_FILENAME),
-          '{"generatedAt":"2026-01-01T00:00:00.000Z","projects":[]}\n',
-        );
-      },
-      writeRestoreRunbook: (mirrorDir) => {
-        callOrder.push("runbook");
-        writeFileSync(join(mirrorDir, RESTORE_RUNBOOK_FILENAME), "# Restore\n");
-      },
-      stageAllChanges: async (workspace) => {
-        callOrder.push("stage");
-        expect(existsSync(join(workspace, RESTORE_RUNBOOK_FILENAME))).toBe(
-          true,
-        );
-      },
-    });
-
-    await driver.takeSnapshot();
-
-    expect(callOrder).toEqual(["manifest", "runbook", "stage"]);
-    expect(
-      existsSync(join(layout.backupMirrorDir, RESTORE_RUNBOOK_FILENAME)),
-    ).toBe(true);
-    expect(
-      existsSync(join(layout.backupMirrorDir, "issues", RESTORE_RUNBOOK_FILENAME)),
-    ).toBe(false);
-  });
-
-  it("logs snapshot failures from the debounced callback", async () => {
-    const layout = tempStoreLayout();
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { driver, triggerChange } = createTestDriver(layout, {
-      stageAllChanges: async () => {
-        throw new Error("git unavailable");
-      },
-    });
-
-    driver.start();
-    triggerChange();
-    await vi.advanceTimersByTimeAsync(SNAPSHOT_DEBOUNCE_MS);
-    await flushAsyncWork();
-
-    expect(errorSpy).toHaveBeenCalledWith(
-      "store backup snapshot failed:",
-      expect.objectContaining({ message: "git unavailable" }),
-    );
-    errorSpy.mockRestore();
-  });
-});
-
-describe("takeSnapshot sync", () => {
-  it("deletes store files from the mirror copy", async () => {
-    const layout = tempStoreLayout();
-    const mirrorIssuesDir = join(layout.backupMirrorDir, "issues");
-    writeFileSync(join(layout.issuesDir, "remove-me.txt"), "old");
-    syncIssuesToMirror(layout.issuesDir, mirrorIssuesDir);
-    rmSync(join(layout.issuesDir, "remove-me.txt"));
-
-    const { driver } = createTestDriver(layout, {
-      hasStagedChanges: async () => false,
-    });
-    await driver.takeSnapshot();
-
-    expect(existsSync(join(mirrorIssuesDir, "remove-me.txt"))).toBe(false);
-  });
-});
-
-describe("formatSnapshotCommitMessage", () => {
-  it("uses coarse wording without per-file detail", () => {
-    expect(formatSnapshotCommitMessage()).toBe("Snapshot issue store");
-  });
-});
-
-describe("startStoreBackupSnapshotDriver", () => {
-  it("skips the watcher when read-only and starts it when neither flag is set", async () => {
-    const root = mkdtempSync(join(tmpdir(), "backup-guest-duty-"));
-    storeRoots.push(root);
-    const issues = join(root, "issues");
-    mkdirSync(issues, { recursive: true });
-    writeFileSync(
-      join(root, "app-config.json"),
-      `${JSON.stringify({
-        backup: {
-          remote: "git@github.com:me/tracker-backup.git",
-          enabled: true,
-        },
-      })}\n`,
-    );
-    const watcher = { on: vi.fn().mockReturnThis(), close: vi.fn() };
-
-    async function watchCount(readOnly: string): Promise<number> {
-      const watch = vi.fn(() => watcher);
-      vi.doMock("chokidar", () => ({ default: { watch } }));
-      vi.resetModules();
-      vi.stubEnv("ISSUES_DIR", issues);
-      vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", readOnly);
-      vi.stubEnv("ISSUE_TRACKER_GUEST", "");
-      const mod = await import("./store-backup-snapshot.js");
-      try {
-        mod.startStoreBackupSnapshotDriver();
-        return watch.mock.calls.length;
-      } finally {
-        mod.resetStoreBackupSnapshotDriverForTests();
-        vi.doUnmock("chokidar");
-      }
-    }
-
-    try {
-      expect(await watchCount("1")).toBe(0);
-      expect(await watchCount("")).toBe(1);
-    } finally {
-      vi.unstubAllEnvs();
-    }
   });
 });

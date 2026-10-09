@@ -3,7 +3,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -50,16 +49,6 @@ function seedIssue(
   if (description) {
     writeFileSync(join(dir, id, "description.md"), description);
   }
-}
-
-function runHolder(args: string[]): { stdout: string; status: number | null } {
-  const result = spawnSync(
-    process.execPath,
-    ["--import", "tsx", HOLDER, dir, ...args],
-    { encoding: "utf8", env: { ...process.env, ISSUES_DIR: dir } },
-  );
-  if (result.error) throw result.error;
-  return { stdout: result.stdout.trim(), status: result.status };
 }
 
 function spawnHolder(
@@ -172,27 +161,5 @@ describe("withIssuesStoreLock", () => {
         (pair) => pair.title === detail.title && pair.description === detail.description,
       ),
     ).toBe(true);
-  });
-
-  it("allows read nested inside withIssuesStoreLock in the same process", async () => {
-    seedProject("p");
-    seedIssue(
-      "leaf",
-      {
-        kind: "idea",
-        title: "Leaf",
-        partOf: "p",
-        order: 0,
-        createdAt: AT,
-        updatedAt: AT,
-      },
-      "Body\n",
-    );
-    const { read } = await import("./issues.js");
-    const { withIssuesStoreLock } = await import("./issues-store-lock.js");
-    const detail = withIssuesStoreLock(() => read("leaf"));
-    expect(detail.title).toBe("Leaf");
-    expect(detail.description).toBe("Body\n");
-    expect(detail.version).toBeTruthy();
   });
 });

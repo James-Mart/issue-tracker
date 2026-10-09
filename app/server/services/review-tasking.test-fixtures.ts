@@ -2,16 +2,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, vi } from "vitest";
+import type { AgentSessions } from "./agent-sessions.js";
 
 export const AT = "2026-07-09T14:00:00.000Z";
 export const REVIEW_ID = "11111111-1111-4111-8111-111111111111";
 
 let root: string;
 let issuesDir: string;
-
-export function reviewTaskingIssuesDir(): string {
-  return issuesDir;
-}
 
 export function writeReviewTaskingIssue(
   id: string,
@@ -24,10 +21,7 @@ export function writeReviewTaskingIssue(
   );
 }
 
-export function seedReviewTasking(
-  story: Record<string, unknown> = {},
-  parent: { partOf: string } = { partOf: "e" },
-): void {
+export function seedReviewTasking(): void {
   writeReviewTaskingIssue("p", {
     kind: "project",
     title: "P",
@@ -36,24 +30,21 @@ export function seedReviewTasking(
     createdAt: AT,
     updatedAt: AT,
   });
-  if (parent.partOf === "e") {
-    writeReviewTaskingIssue("e", {
-      kind: "epic",
-      title: "E",
-      partOf: "p",
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-  }
-  writeReviewTaskingIssue("s", {
-    kind: "story",
-    title: "S",
-    partOf: parent.partOf,
+  writeReviewTaskingIssue("e", {
+    kind: "epic",
+    title: "E",
+    partOf: "p",
     order: 0,
     createdAt: AT,
     updatedAt: AT,
-    ...story,
+  });
+  writeReviewTaskingIssue("s", {
+    kind: "story",
+    title: "S",
+    partOf: "e",
+    order: 0,
+    createdAt: AT,
+    updatedAt: AT,
   });
   mkdirSync(join(issuesDir, "p", "reviews"), { recursive: true });
   writeFileSync(
@@ -92,4 +83,15 @@ export function useReviewTaskingStore(tempPrefix: string): void {
     vi.unstubAllEnvs();
     rmSync(root, { recursive: true, force: true });
   });
+}
+
+/** Records each prompt sent and reports every launch as started. */
+export function stubReviewTaskingSessions(prompts: string[]): AgentSessions {
+  return {
+    getActiveRun: () => undefined,
+    sendPrompt: async (_id: string, options: { prompt: string }) => {
+      prompts.push(options.prompt);
+      return { ok: true as const, run: { id: "run-1" } as never };
+    },
+  } as unknown as AgentSessions;
 }
