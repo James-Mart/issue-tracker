@@ -79,6 +79,7 @@ export function CommentHeader({
   extra,
   source,
   status,
+  actions,
 }: {
   author: string;
   roleBadge?: string;
@@ -90,6 +91,8 @@ export function CommentHeader({
   source?: Comment["source"];
   /** Trails the time. */
   status?: ReactNode;
+  /** Right-aligned author-line controls (Edit, Quote). */
+  actions?: ReactNode;
 }) {
   const time = formatCommentTime(at);
   const githubUrl = source?.kind === "github" ? source.url : undefined;
@@ -110,6 +113,7 @@ export function CommentHeader({
       {githubUrl ? <GitHubCommentLink url={githubUrl} /> : null}
       {time ? <time dateTime={at}>{time}</time> : null}
       {status}
+      {actions}
     </header>
   );
 }
@@ -121,6 +125,8 @@ export function Message({
   source,
   leading,
   status,
+  actions,
+  footer,
   children,
 }: {
   author: string;
@@ -130,6 +136,10 @@ export function Message({
   leading?: ReactNode;
   /** Trails the time in the header. */
   status?: ReactNode;
+  /** Right-aligned author-line controls. */
+  actions?: ReactNode;
+  /** Sits under the body, still inside the message. */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -141,8 +151,10 @@ export function Message({
         leading={leading}
         source={source}
         status={status}
+        actions={actions}
       />
       <div className={cn("min-w-0", READING_MEASURE_CLASS)}>{children}</div>
+      {footer}
     </article>
   );
 }

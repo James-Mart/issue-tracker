@@ -139,6 +139,51 @@ describe("draft keys and write payloads", () => {
       body: "reply body",
       replyTo: "current-root",
     });
+    const stored = "b".repeat(40);
+    expect(
+      commentInputForComposer(
+        {
+          kind: "quote",
+          threadId: "outdated-root",
+          commentId: "outdated-root",
+          body: "Run assertCommitReachable before git show.",
+          anchor: {
+            path: PATH,
+            side: "old",
+            line: 90,
+            startLine: 88,
+            commitSha: stored,
+          },
+        },
+        "Edited quote.",
+        SHA,
+      ),
+    ).toEqual({
+      role: "human",
+      body: "Edited quote.",
+      anchor: {
+        path: PATH,
+        side: "old",
+        line: 90,
+        startLine: 88,
+        commitSha: stored,
+      },
+    });
+    expect(
+      commentInputForComposer(
+        {
+          kind: "quote",
+          threadId: "note",
+          commentId: "note",
+          body: "A general note.",
+        },
+        "A general note.",
+        SHA,
+      ),
+    ).toEqual({
+      role: "human",
+      body: "A general note.",
+    });
     expect(
       commentInputForComposer({ kind: "new", path: PATH }, "whole file", SHA),
     ).toEqual({

@@ -37,8 +37,10 @@ import type { CommentThread as CommentThreadData } from "../lib/comment-threads"
 import {
   annotationSideToAnchorSide,
   newComposerOnLine,
+  quoteDiffComposer,
   type AnchorSide,
 } from "../lib/diff-thread-anchor";
+import { quoteSource } from "../lib/quote-comment";
 import { CommentThread } from "./comments/comment-thread";
 import {
   ResolveThreadsProvider,
@@ -378,6 +380,11 @@ function FileLineThreads({
         const replying =
           composer.open?.kind === "reply" &&
           composer.open.threadId === thread.root.id;
+        const quoting =
+          composer.open?.kind === "quote" &&
+          composer.open.threadId === thread.root.id
+            ? composer.open
+            : null;
         const replySlot = replying ? (
           <DiffThreadComposer
             target={{ kind: "reply", threadId: thread.root.id }}
@@ -391,6 +398,15 @@ function FileLineThreads({
             issueId={issueId}
             onReply={() => composer.openReply(thread.root.id)}
             replySlot={replySlot}
+            onQuote={(comment) =>
+              composer.openQuote(
+                quoteDiffComposer(
+                  quoteSource(thread.root.id, comment, thread.root.anchor),
+                ),
+              )
+            }
+            quoteSlot={quoting ? <DiffThreadComposer target={quoting} /> : undefined}
+            quoteCommentId={quoting?.commentId}
           />
         );
       })}

@@ -115,6 +115,60 @@ function postBody(
   );
 }
 
+/** Confirm before a reply or quote draft with unsent text is replaced or closed. */
+export function ReviewComposerDiscardDialog({
+  open,
+  onKeep,
+  onDiscard,
+}: {
+  open: boolean;
+  onKeep: () => void;
+  onDiscard: () => void;
+}) {
+  const keepRef = useRef<HTMLButtonElement>(null);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onKeep();
+      }}
+    >
+      <DialogContent
+        data-testid="review-composer-discard-dialog"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          keepRef.current?.focus();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Discard this draft?</DialogTitle>
+          <DialogDescription>
+            Your text will be lost. This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            ref={keepRef}
+            type="button"
+            variant="ghost"
+            onClick={onKeep}
+          >
+            Keep editing
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={onDiscard}
+            data-testid="review-composer-discard"
+          >
+            Discard
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type ReviewComposerFields = {
   draftKey: string;
   placeholder: string;
@@ -161,7 +215,6 @@ export function ReviewComposer({
   const [confirming, setConfirming] = useState(false);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const keepRef = useRef<HTMLButtonElement>(null);
   const draftRef = useRef(draft);
   const selectionRef = useRef<{ start: number; end: number } | null>(null);
   const pendingCaretRef = useRef<number | null>(null);
@@ -417,40 +470,11 @@ export function ReviewComposer({
           </div>
         </>
       )}
-      <Dialog open={confirming} onOpenChange={setConfirming}>
-        <DialogContent
-          data-testid="review-composer-discard-dialog"
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            keepRef.current?.focus();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Discard this draft?</DialogTitle>
-            <DialogDescription>
-              Your text will be lost. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              ref={keepRef}
-              type="button"
-              variant="ghost"
-              onClick={() => setConfirming(false)}
-            >
-              Keep editing
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={discard}
-              data-testid="review-composer-discard"
-            >
-              Discard
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ReviewComposerDiscardDialog
+        open={confirming}
+        onKeep={() => setConfirming(false)}
+        onDiscard={discard}
+      />
     </div>
   );
 }

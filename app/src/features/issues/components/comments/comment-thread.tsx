@@ -16,7 +16,13 @@ import {
   CommentAnchorMeta,
   CommentAnchorSnippet,
 } from "./comment-anchor-context";
-import { EditableCommentBody } from "./comment-edit";
+import {
+  CommentEditAction,
+  CommentEditBody,
+  CommentEditScope,
+  useCommentEditOffer,
+} from "./comment-edit";
+import { AuthorActionRow, QuoteButton } from "./quote-button";
 import { CommentSendingMark } from "./comment-delivery";
 import {
   CommentBotIcon,
@@ -47,6 +53,9 @@ export function CommentThread({
   onConvert,
   resolvePending = false,
   onEdit,
+  onQuote,
+  quoteSlot,
+  quoteCommentId,
 }: {
   thread: CommentThreadData;
   /** Absent on a flat Story note: no Reply control. */
@@ -69,6 +78,11 @@ export function CommentThread({
   onConvert?: () => void;
   resolvePending?: boolean;
   onEdit?: (commentId: string, body: string) => Promise<void>;
+  /** Quote on each stored comment, and on a collapsed bar. */
+  onQuote?: (comment: ThreadMessage) => void;
+  /** Composer open beside `quoteCommentId`, or under the bar while collapsed. */
+  quoteSlot?: ReactNode;
+  quoteCommentId?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const outdated = thread.root.outdated === true;
@@ -79,6 +93,7 @@ export function CommentThread({
   // The server has no thread to reply to or act on until the root is stored.
   const stored = thread.root.delivery === undefined;
   const reply = stored && replySlot == null ? onReply : undefined;
+  const quote = stored ? onQuote : undefined;
   const showResolveButton = stored && !question && onResolve != null && !resolved;
   const outdatedBar = collapse === "outdated" && outdated;
   const collapses =
@@ -141,6 +156,8 @@ export function CommentThread({
             comment={thread.root}
             issueId={issueId}
             onEdit={onEdit}
+            onQuote={quote}
+            quoteSlot={quoteCommentId === thread.root.id ? quoteSlot : undefined}
             badges={
               statusBadgeHost === "root" ? (
                 <ThreadStatusBadges
@@ -156,6 +173,8 @@ export function CommentThread({
               comment={comment}
               issueId={issueId}
               onEdit={onEdit}
+              onQuote={quote}
+              quoteSlot={quoteCommentId === comment.id ? quoteSlot : undefined}
             />
           ))}
 
@@ -223,8 +242,10 @@ export function CommentThread({
           onToggle={() => setExpanded((open) => !open)}
           onUnresolve={onUnresolve}
           onReopen={onReopen}
+          onQuote={quote && !expanded ? () => quote(thread.root) : undefined}
         />
       ) : null}
+      {collapsed && quoteSlot ? <div className="pt-2">{quoteSlot}</div> : null}
     </article>
   );
 }
@@ -330,6 +351,7 @@ function CollapsedThreadBar({
   onToggle,
   onUnresolve,
   onReopen,
+  onQuote,
 }: {
   count: number;
   lineLabel?: string;
@@ -342,6 +364,7 @@ function CollapsedThreadBar({
   onToggle: () => void;
   onUnresolve?: () => void;
   onReopen?: () => void;
+  onQuote?: () => void;
 }) {
   const toggleLabel = expanded ? "Collapse thread" : "Expand thread";
   return (
@@ -375,43 +398,45 @@ function CollapsedThreadBar({
           <ThreadStatusBadges question={false} dismissed />
         ) : null}
       </Button>
-      {resolved ? (
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {resolved ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onUnresolve}
+            disabled={pending || !onUnresolve}
+            data-testid="thread-unresolve"
+          >
+            Unresolve
+          </Button>
+        ) : null}
+        {dismissed ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onReopen}
+            disabled={pending || !onReopen}
+            data-testid="thread-reopen"
+          >
+            Reopen
+          </Button>
+        ) : null}
+        {onQuote ? <QuoteButton onClick={onQuote} compact={false} /> : null}
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          onClick={onUnresolve}
-          disabled={pending || !onUnresolve}
-          data-testid="thread-unresolve"
+          size="icon-sm"
+          aria-label={toggleLabel}
+          onClick={onToggle}
         >
-          Unresolve
+          <ChevronRight
+            className={cn("transition-transform", expanded && "rotate-90")}
+            aria-hidden
+          />
         </Button>
-      ) : null}
-      {dismissed ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onReopen}
-          disabled={pending || !onReopen}
-          data-testid="thread-reopen"
-        >
-          Reopen
-        </Button>
-      ) : null}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="ml-auto"
-        aria-label={toggleLabel}
-        onClick={onToggle}
-      >
-        <ChevronRight
-          className={cn("transition-transform", expanded && "rotate-90")}
-          aria-hidden
-        />
-      </Button>
+      </div>
     </div>
   );
 }
@@ -475,43 +500,62 @@ function ThreadComment({
   comment,
   issueId,
   onEdit,
+  onQuote,
+  quoteSlot,
   badges,
 }: {
   comment: ThreadMessage;
   issueId?: string;
   onEdit?: (commentId: string, body: string) => Promise<void>;
+  onQuote?: (comment: ThreadMessage) => void;
+  quoteSlot?: ReactNode;
   badges?: ReactNode;
 }) {
   const { author, roleBadge } = commentHeaderLabels(comment.role, comment.name);
   return (
-    <section
-      data-comment-id={comment.id}
-      data-delivery={comment.delivery?.status}
-      className="flex flex-col gap-1 border-b border-border py-2 last:border-b-0"
-    >
-      <CommentHeader
-        author={author}
-        roleBadge={roleBadge}
-        at={comment.at}
-        source={comment.source}
-        leading={commentLeading(comment.role)}
-        extra={
-          <>
-            {badges}
-            {comment.newSession ? (
-              <Badge
-                variant="current"
-                data-testid="researcher-new-session"
-                className="uppercase tracking-[0.08em]"
-              >
-                New session
-              </Badge>
-            ) : null}
-          </>
-        }
-        status={<CommentSendingMark message={comment} />}
-      />
-      <EditableCommentBody comment={comment} issueId={issueId} onEdit={onEdit} />
-    </section>
+    <CommentEditScope comment={comment} issueId={issueId} onEdit={onEdit}>
+      <section
+        data-comment-id={comment.id}
+        data-delivery={comment.delivery?.status}
+        className="flex flex-col gap-1 border-b border-border py-2 last:border-b-0"
+      >
+        <CommentHeader
+          author={author}
+          roleBadge={roleBadge}
+          at={comment.at}
+          source={comment.source}
+          leading={commentLeading(comment.role)}
+          extra={
+            <>
+              {badges}
+              {comment.newSession ? (
+                <Badge
+                  variant="current"
+                  data-testid="researcher-new-session"
+                  className="uppercase tracking-[0.08em]"
+                >
+                  New session
+                </Badge>
+              ) : null}
+            </>
+          }
+          status={<CommentSendingMark message={comment} />}
+          actions={<CommentAuthorActions onQuote={onQuote ? () => onQuote(comment) : undefined} />}
+        />
+        <CommentEditBody />
+        {quoteSlot}
+      </section>
+    </CommentEditScope>
+  );
+}
+
+function CommentAuthorActions({ onQuote }: { onQuote?: () => void }) {
+  const showEdit = useCommentEditOffer();
+  if (!showEdit && !onQuote) return null;
+  return (
+    <AuthorActionRow>
+      {showEdit ? <CommentEditAction /> : null}
+      {onQuote ? <QuoteButton onClick={onQuote} /> : null}
+    </AuthorActionRow>
   );
 }

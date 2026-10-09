@@ -13,6 +13,16 @@ function readReviewDraft(draftKey: string): string {
   return localStorage.getItem(draftKey) ?? "";
 }
 
+/** Synchronous read for discard and switch, which decide before the composer re-renders. */
+export function reviewDraft(draftKey: string): string {
+  return readReviewDraft(draftKey);
+}
+
+/** Whitespace-only text is an empty draft and can be replaced without asking. */
+export function reviewDraftHasText(draft: string): boolean {
+  return draft.trim().length > 0;
+}
+
 function writeReviewDraft(draftKey: string, draft: string): void {
   if (draft === "") {
     localStorage.removeItem(draftKey);
@@ -30,6 +40,11 @@ export function clearReviewDraft(draftKey: string): void {
 /** Store `draft` only when this key has no draft yet. */
 export function seedReviewDraftIfAbsent(draftKey: string, draft: string): void {
   if (localStorage.getItem(draftKey) !== null) return;
+  writeReviewDraft(draftKey, draft);
+}
+
+/** Replace whatever this key holds, including clearing it when `draft` is empty. */
+export function replaceReviewDraft(draftKey: string, draft: string): void {
   writeReviewDraft(draftKey, draft);
 }
 

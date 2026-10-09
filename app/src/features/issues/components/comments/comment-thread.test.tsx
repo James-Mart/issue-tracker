@@ -372,6 +372,7 @@ describe("CommentThread", () => {
     expect(thread?.hasAttribute("data-collapsed")).toBe(true);
     expect(thread?.className).not.toContain("opacity-70");
     expect(bar?.textContent).toBe("lines 88-90 · 1 comment");
+    expect(bar?.querySelector('[data-testid="comment-quote"]')).toBeNull();
     expect(thread?.querySelector('[data-testid="thread-unresolve"]')).toBeNull();
     expect(thread?.querySelector('[data-testid="comment-anchor-meta"]')).toBeNull();
     expect(thread?.textContent).not.toContain("Run assertCommitReachable before git show.");
@@ -385,6 +386,50 @@ describe("CommentThread", () => {
     expect(thread?.querySelector('[data-testid="comment-anchor-snippet"]')).not.toBeNull();
     expect(thread?.textContent).toContain("Run assertCommitReachable before git show.");
     expect(thread?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
+  });
+
+  it("offers Quote on a collapsed bar and on each author line when open", () => {
+    const onQuote = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const resolved: CommentThreadData = { ...currentThread, state: "resolved" };
+    act(() => {
+      root.render(
+        <CommentThread
+          thread={resolved}
+          collapse="resolved"
+          onQuote={onQuote}
+          onUnresolve={vi.fn()}
+        />,
+      );
+    });
+    const thread = container.querySelector('[data-thread-root="current-root"]');
+    const bar = thread?.querySelector('[data-testid="thread-collapsed-bar"]');
+    const barQuote = bar?.querySelector('[data-testid="comment-quote"]');
+    expect(barQuote).not.toBeNull();
+    act(() => {
+      barQuote?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "current-root", body: currentThread.root.body }),
+    );
+
+    act(() => {
+      thread
+        ?.querySelector('[aria-label="Expand thread"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(
+      thread?.querySelector('[data-testid="thread-collapsed-bar"]')?.querySelector(
+        '[data-testid="comment-quote"]',
+      ),
+    ).toBeNull();
+    const quotes = [
+      ...(thread?.querySelectorAll('[data-comment-id]') ?? []),
+    ].map((comment) => comment.querySelector("header")?.querySelector('[data-testid="comment-quote"]'));
+    expect(quotes).toHaveLength(2);
+    expect(quotes.every((quote) => quote != null)).toBe(true);
   });
 
   it("renders a linked Task chip on inline threads", () => {

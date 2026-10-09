@@ -154,6 +154,129 @@ afterEach(() => {
 });
 
 describe("ReviewConversationTab", () => {
+  it("quotes a comment into a new thread beside it and leaves the footer composer empty", () => {
+    state.threads = [
+      thread({
+        root: {
+          id: "anchored",
+          at: "2026-09-29T14:05:00.000Z",
+          role: "human",
+          name: "Jared",
+          body: "Run the reachability check.",
+          anchor: {
+            path: "app/server/services/diff-fetch.ts",
+            side: "new",
+            line: 88,
+            commitSha: SHA,
+          },
+        },
+        replies: [
+          {
+            id: "reply",
+            at: "2026-09-29T15:22:00.000Z",
+            role: "human",
+            name: "Jared",
+            replyTo: "anchored",
+            body: "Agreed.",
+          },
+        ],
+      }),
+    ];
+    const container = mount();
+    const card = container.querySelector('[data-thread-root="anchored"]');
+    const reply = card?.querySelector('[data-comment-id="reply"]');
+    expect(reply?.querySelector("header")?.querySelector('[data-testid="comment-quote"]')).not.toBeNull();
+    click(reply?.querySelector('[data-testid="comment-quote"]') ?? null);
+
+    const composer = card?.querySelector('[data-testid="comment-quote-composer"]');
+    expect(composer?.querySelector('[data-testid="comment-quote-label"]')?.textContent).toBe(
+      "New thread on app/server/services/diff-fetch.ts · line 88",
+    );
+    expect(composer?.closest("[data-comment-id]")?.getAttribute("data-comment-id")).toBe(
+      "reply",
+    );
+    const field = composer?.querySelector("textarea");
+    expect(field).toBeInstanceOf(HTMLTextAreaElement);
+    expect((field as HTMLTextAreaElement).value).toBe("Agreed.");
+    const footer = container.querySelector(
+      '[data-testid="review-conversation-composer"] textarea',
+    );
+    expect(footer).toBeInstanceOf(HTMLTextAreaElement);
+    expect((footer as HTMLTextAreaElement).value).toBe("");
+
+    setTextarea(field as HTMLTextAreaElement, "Agreed. Shipping it.");
+    click(composer?.querySelector('button[aria-label="Send"]') ?? null);
+    expect(post).toHaveBeenCalledWith({
+      role: "human",
+      body: "Agreed. Shipping it.",
+      anchor: {
+        path: "app/server/services/diff-fetch.ts",
+        side: "new",
+        line: 88,
+        commitSha: SHA,
+      },
+    });
+    expect(card?.querySelector('[data-testid="comment-quote-composer"]')).toBeNull();
+  });
+
+  it("asks before a quote replaces an unsent reply, and keeps the reply when asked", () => {
+    state.threads = [
+      thread({
+        root: {
+          id: "note",
+          at: "2026-09-28T16:40:00.000Z",
+          role: "story-review",
+          body: "Name the refusal.",
+          anchor: {
+            path: "src/header.tsx",
+            side: "new",
+            line: 12,
+            commitSha: SHA,
+          },
+        },
+      }),
+    ];
+    const container = mount();
+    const card = container.querySelector('[data-thread-root="note"]');
+    click(
+      [...(card?.querySelectorAll("button") ?? [])].find((button) =>
+        button.textContent?.includes("Reply"),
+      ) ?? null,
+    );
+    const replyField = card?.querySelector(
+      '[data-testid="comment-log-reply-composer"] textarea',
+    ) as HTMLTextAreaElement;
+    setTextarea(replyField, "Not yet.");
+    click(card?.querySelector('[data-testid="comment-quote"]') ?? null);
+    const dialog = document.body.querySelector(
+      '[data-testid="review-composer-discard-dialog"]',
+    );
+    expect(dialog?.textContent).toContain("Discard this draft?");
+    click(
+      [...(dialog?.querySelectorAll("button") ?? [])].find((button) =>
+        button.textContent?.includes("Keep editing"),
+      ) ?? null,
+    );
+    expect(
+      (
+        card?.querySelector(
+          '[data-testid="comment-log-reply-composer"] textarea',
+        ) as HTMLTextAreaElement | null
+      )?.value,
+    ).toBe("Not yet.");
+    expect(card?.querySelector('[data-testid="comment-quote-composer"]')).toBeNull();
+
+    click(card?.querySelector('[data-testid="comment-quote"]') ?? null);
+    click(document.body.querySelector('[data-testid="review-composer-discard"]'));
+    const quoteField = card?.querySelector(
+      '[data-testid="comment-quote-composer"] textarea',
+    ) as HTMLTextAreaElement | null;
+    expect(quoteField?.value).toBe("Name the refusal.");
+    expect(
+      card?.querySelector('[data-testid="comment-quote-label"]')?.textContent,
+    ).toBe("New thread on src/header.tsx · line 12");
+  });
+
   it("lists comments and threads in time order with anchor, excerpt, and replies", () => {
     state.threads = [
       thread({
@@ -213,7 +336,7 @@ describe("ReviewConversationTab", () => {
       [...(noteCard?.querySelectorAll("button") ?? [])].map((button) =>
         button.textContent?.trim(),
       ),
-    ).toEqual(["Resolve"]);
+    ).toEqual(["Quote", "Resolve"]);
     expect(roots.length).toBeGreaterThan(0);
 
     const card = container.querySelector('[data-thread-root="anchored"]');

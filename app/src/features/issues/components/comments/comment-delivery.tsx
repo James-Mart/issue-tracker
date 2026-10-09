@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -5,14 +6,19 @@ import { useResendComment } from "../../api/mutations";
 import type { ThreadMessage } from "../../lib/comment-outbox";
 import { Markdown } from "../markdown";
 import { CommentBotIcon, commentHeaderLabels, Message } from "./message";
+import { AuthorActionRow, QuoteButton } from "./quote-button";
 
 /** A comment outside any thread, with its delivery state when it is this browser's post. */
 export function DeliverableMessage({
   message,
   attachmentsIssueId,
+  onQuote,
+  footer,
 }: {
   message: ThreadMessage;
   attachmentsIssueId?: string;
+  onQuote?: () => void;
+  footer?: ReactNode;
 }) {
   const { author, roleBadge } = commentHeaderLabels(message.role, message.name);
   return (
@@ -23,6 +29,14 @@ export function DeliverableMessage({
       source={message.source}
       leading={message.role === "github-bot" ? <CommentBotIcon /> : undefined}
       status={<CommentSendingMark message={message} />}
+      actions={
+        onQuote ? (
+          <AuthorActionRow>
+            <QuoteButton onClick={onQuote} />
+          </AuthorActionRow>
+        ) : undefined
+      }
+      footer={footer}
     >
       <Markdown issueId={attachmentsIssueId}>{message.body}</Markdown>
       <CommentSendFailure message={message} />

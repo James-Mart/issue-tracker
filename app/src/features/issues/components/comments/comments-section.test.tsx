@@ -206,6 +206,7 @@ afterEach(() => {
   commentsState.error = null;
   postComment.mockReset();
   useCommentsQuery.mockClear();
+  localStorage.clear();
 });
 
 describe("IssueCommentsSection", () => {
@@ -375,5 +376,39 @@ describe("IssueCommentsSection", () => {
     );
     expect(card?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
     expect(card?.querySelector('[data-testid="thread-convert"]')).toBeNull();
+  });
+
+  it("quotes an unanchored note as a new comment with its body and no anchor", () => {
+    commentsState.messages = [standaloneEarly];
+    const container = mount(undefined, story());
+    const note = container.querySelector('[data-log-root="standalone-early"]');
+    const quote = note?.querySelector("header")?.querySelector(
+      '[data-testid="comment-quote"]',
+    );
+    expect(quote).not.toBeNull();
+    act(() => {
+      quote?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const composer = note?.querySelector('[data-testid="comment-quote-composer"]');
+    expect(composer?.querySelector('[data-testid="comment-quote-label"]')?.textContent).toBe(
+      "New comment",
+    );
+    expect(composer?.querySelector("textarea")?.value).toBe(
+      "Keep ordinary notes visually lighter than threads.",
+    );
+    setDraft(
+      composer?.querySelector("textarea") as HTMLTextAreaElement,
+      "Lighter, and its own comment.",
+    );
+    act(() => {
+      composer
+        ?.querySelector('button[aria-label="Send"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(postComment).toHaveBeenCalledWith({
+      role: "human",
+      body: "Lighter, and its own comment.",
+    });
+    expect(postComment.mock.calls[0]?.[0].anchor).toBeUndefined();
   });
 });

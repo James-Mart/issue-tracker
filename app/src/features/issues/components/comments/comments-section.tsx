@@ -6,10 +6,7 @@ import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ReviewComposer } from "@/features/reviews/components/review-composer";
-import {
-  conversationDraftKey,
-  replyDraftKey,
-} from "@/features/reviews/lib/review-draft-key";
+import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
 import { useCommentThreads, useCommentsQuery } from "../../api/queries";
 import { usePostComment, usePostThreadEvent } from "../../api/mutations";
 import { supportsAttachments } from "../../lib/attachments";
@@ -21,11 +18,19 @@ import {
   type CommentThread as CommentThreadData,
 } from "../../lib/comment-threads";
 import { humanComment, supportsComments } from "../../lib/comments";
+import { quoteSource } from "../../lib/quote-comment";
 import { isInFlight } from "../../lib/derived";
 import { writeDiffThreadSearchParam } from "../../lib/issue-detail-tabs";
 import { SettingsCard } from "../detail-section";
 import { DeliverableMessage } from "./comment-delivery";
 import { CommentThread } from "./comment-thread";
+import {
+  ThreadComposerDiscard,
+  ThreadComposerFields,
+  threadComposerCommentInput,
+  useThreadComposers,
+  type ThreadComposerIntent,
+} from "./thread-composer";
 import { Marker, commentDayKey, commentDayLabel } from "./marker";
 import { Shimmer } from "./shimmer";
 
@@ -84,7 +89,9 @@ function CommentList({
   issueId,
   attachmentsIssueId,
   replySlotFor,
+  quoteSlotFor,
   onReply,
+  onQuote,
   onSeeInDiff,
   storyComposer,
   onThreadEvent,
@@ -94,7 +101,12 @@ function CommentList({
   issueId: string;
   attachmentsIssueId?: string;
   replySlotFor: (threadId: string) => ReactNode;
+  quoteSlotFor: (thread: CommentThreadData) => {
+    commentId: string;
+    node: ReactNode;
+  } | undefined;
   onReply: (threadId: string) => void;
+  onQuote?: (thread: CommentThreadData, commentId: string, body: string) => void;
   onSeeInDiff: (threadId: string) => void;
   storyComposer: boolean;
   onThreadEvent: (
@@ -110,6 +122,7 @@ function CommentList({
         const key = commentDayKey(thread.root.at);
         const showMarker = key !== lastDay;
         lastDay = key;
+        const quoteSlot = quoteSlotFor(thread);
         return (
           <div
             key={thread.root.id}
@@ -121,6 +134,14 @@ function CommentList({
               <DeliverableMessage
                 message={thread.root}
                 attachmentsIssueId={attachmentsIssueId}
+                onQuote={
+                  onQuote && thread.root.delivery === undefined
+                    ? () => onQuote(thread, thread.root.id, thread.root.body)
+                    : undefined
+                }
+                footer={
+                  quoteSlot?.commentId === thread.root.id ? quoteSlot.node : undefined
+                }
               />
             ) : (
               <CommentThread
@@ -134,7 +155,14 @@ function CommentList({
                     : undefined
                 }
                 onReply={() => onReply(thread.root.id)}
+                onQuote={
+                  onQuote
+                    ? (comment) => onQuote(thread, comment.id, comment.body)
+                    : undefined
+                }
                 replySlot={replySlotFor(thread.root.id)}
+                quoteSlot={quoteSlot?.node}
+                quoteCommentId={quoteSlot?.commentId}
                 {...(storyComposer &&
                 (isQuestionThread(thread) || thread.converted)
                   ? threadStateActions(thread, (event) =>
@@ -187,6 +215,7 @@ function CommentsPanel({
   const [draft, setDraft] = useState("");
   const [openReplyId, setOpenReplyId] = useState<string | null>(null);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const composers = useThreadComposers(id);
 
   const agentLive = isInFlight(issue);
 
@@ -202,11 +231,6 @@ function CommentsPanel({
 
   const closeReply = (threadId: string) =>
     setOpenReplyId((open) => (open === threadId ? null : open));
-
-  const sendStoryReply = (threadId: string, body: string) => {
-    post({ role: COMPOSER_ROLE, body, replyTo: threadId });
-    closeReply(threadId);
-  };
 
   const sendIssueReply = (threadId: string) => {
     const body = (replyDrafts[threadId] ?? "").trim();
@@ -227,34 +251,52 @@ function CommentsPanel({
     }
   };
 
+  const submitStoryComposer = (intent: ThreadComposerIntent, body: string) => {
+    post(threadComposerCommentInput(intent, body));
+    composers.close(intent.threadId);
+  };
+
   const replySlotFor = (threadId: string) => {
-    if (openReplyId !== threadId) return undefined;
-    if (!storyComposer) {
+    if (storyComposer) {
+      const slot = composers.slots[threadId];
+      if (slot?.intent.mode !== "reply") return undefined;
       return (
-        <ThreadReplyComposer
-          threadId={threadId}
-          draft={replyDrafts[threadId] ?? ""}
-          onDraftChange={(value) =>
-            setReplyDrafts((prev) => ({ ...prev, [threadId]: value }))
-          }
-          onSend={() => sendIssueReply(threadId)}
+        <ThreadComposerFields
+          issueId={id}
+          intent={slot.intent}
+          onSubmit={(body) => submitStoryComposer(slot.intent, body)}
+          onCancel={() => composers.close(threadId)}
         />
       );
     }
+    if (openReplyId !== threadId) return undefined;
     return (
-      <div
-        data-testid="comment-log-reply-composer"
-        data-thread-id={threadId}
-      >
-        <ReviewComposer
-          draftKey={replyDraftKey(id, threadId)}
-          placeholder="Reply"
-          submitLabel="Send"
-          onSubmit={(body) => sendStoryReply(threadId, body)}
-          onCancel={() => setOpenReplyId(null)}
-        />
-      </div>
+      <ThreadReplyComposer
+        threadId={threadId}
+        draft={replyDrafts[threadId] ?? ""}
+        onDraftChange={(value) =>
+          setReplyDrafts((prev) => ({ ...prev, [threadId]: value }))
+        }
+        onSend={() => sendIssueReply(threadId)}
+      />
     );
+  };
+
+  const quoteSlotFor = (thread: CommentThreadData) => {
+    if (!storyComposer) return undefined;
+    const slot = composers.slots[thread.root.id];
+    if (slot?.intent.mode !== "quote") return undefined;
+    return {
+      commentId: slot.intent.commentId,
+      node: (
+        <ThreadComposerFields
+          issueId={id}
+          intent={slot.intent}
+          onSubmit={(body) => submitStoryComposer(slot.intent, body)}
+          onCancel={() => composers.close(thread.root.id)}
+        />
+      ),
+    };
   };
 
   return (
@@ -302,7 +344,27 @@ function CommentsPanel({
             issueId={id}
             attachmentsIssueId={attachmentsIssueId}
             replySlotFor={replySlotFor}
-            onReply={setOpenReplyId}
+            quoteSlotFor={quoteSlotFor}
+            onReply={(threadId) => {
+              if (storyComposer) {
+                composers.request({ mode: "reply", threadId });
+                return;
+              }
+              setOpenReplyId(threadId);
+            }}
+            onQuote={
+              storyComposer
+                ? (thread, commentId, body) =>
+                    composers.request({
+                      mode: "quote",
+                      ...quoteSource(
+                        thread.root.id,
+                        { id: commentId, body },
+                        thread.root.anchor,
+                      ),
+                    })
+                : undefined
+            }
             storyComposer={storyComposer}
             eventPending={events.isPending}
             onThreadEvent={(threadId, event) =>
@@ -315,6 +377,14 @@ function CommentsPanel({
             }
           />
         )}
+
+        {storyComposer ? (
+          <ThreadComposerDiscard
+            threadId={composers.pendingThreadId}
+            onKeep={composers.keep}
+            onDiscard={composers.discard}
+          />
+        ) : null}
 
         {agentLive ? <Shimmer /> : null}
 
