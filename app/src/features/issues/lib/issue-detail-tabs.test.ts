@@ -10,6 +10,7 @@ import {
   resolveChannelTabIndicator,
   resolveIssueDetailTab,
   tabsForIssueDetail,
+  hashCommentTarget,
   writeDiffThreadSearchParam,
   writeIssueDetailTabParam,
 } from "./issue-detail-tabs";
@@ -292,5 +293,15 @@ describe("resolveChannelTabIndicator", () => {
     expect(
       resolveChannelTabIndicator(idea, "planning", "awaiting-approval", "active-run"),
     ).toBe("active-run");
+  });
+});
+
+describe("hashCommentTarget", () => {
+  it("reads a comment fragment and skips the comments section", () => {
+    expect(hashCommentTarget("#comments")).toBeNull();
+    expect(hashCommentTarget("")).toBeNull();
+    expect(hashCommentTarget("#a-reply")).toBe("a-reply");
+    expect(hashCommentTarget("#a%20b")).toBe("a b");
+    expect(hashCommentTarget("#%")).toBeNull();
   });
 });

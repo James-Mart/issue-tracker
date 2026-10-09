@@ -1,6 +1,6 @@
-import { useState, type KeyboardEvent, type ReactNode } from "react";
-import { Send } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { ChevronRight, Send } from "lucide-react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import type { IssueDetail, ThreadEventRequest } from "@server/schemas";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,19 @@ import {
 import { humanComment, supportsComments } from "../../lib/comments";
 import { quoteSource } from "../../lib/quote-comment";
 import { isInFlight } from "../../lib/derived";
-import { writeDiffThreadSearchParam } from "../../lib/issue-detail-tabs";
+import { scrollCommentInPanel } from "../../lib/issue-change-focus-thread";
+import {
+  hashCommentTarget,
+  readDiffThreadSearchParam,
+  writeDiffThreadSearchParam,
+} from "../../lib/issue-detail-tabs";
+import {
+  commentInThreads,
+  commentListEntries,
+  runIdContaining,
+  type CommentListEntry,
+} from "../../lib/settled-comment-runs";
+import { cn } from "@/lib/utils/cn";
 import { SettingsCard } from "../detail-section";
 import { DeliverableMessage } from "./comment-delivery";
 import { CommentThread } from "./comment-thread";
@@ -84,6 +96,12 @@ function ThreadReplyComposer({
   );
 }
 
+function useCommentNavigationTarget(): string | null {
+  const [params] = useSearchParams();
+  const { hash } = useLocation();
+  return hashCommentTarget(hash) ?? readDiffThreadSearchParam(params);
+}
+
 function CommentList({
   threads,
   issueId,
@@ -115,62 +133,173 @@ function CommentList({
   ) => void;
   eventPending: boolean;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [params] = useSearchParams();
+  const tab = params.get("tab");
+  const navigationId = useCommentNavigationTarget();
+  const located =
+    storyComposer && navigationId ? commentInThreads(threads, navigationId) : null;
+  const entries = storyComposer
+    ? commentListEntries(threads)
+    : threads.map((thread): CommentListEntry => ({ kind: "thread", thread }));
+  const targetRunId = located ? runIdContaining(entries, located.thread.root.id) : null;
+  const targetCommentId = located?.commentId ?? null;
+  const targetThreadId = located?.thread.root.id ?? null;
+  const revealThreadId =
+    targetRunId &&
+    located &&
+    isQuestionThread(located.thread) &&
+    located.thread.state === "dismissed"
+      ? located.thread.root.id
+      : null;
+  const [openRuns, setOpenRuns] = useState<ReadonlySet<string>>(() => new Set());
+  const scrolledTarget = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (!targetRunId || !targetCommentId || !targetThreadId) return;
+    const list = listRef.current;
+    if (!list || list.closest("[inert]")) return;
+    const token = `${targetRunId}:${targetCommentId}`;
+    if (!openRuns.has(targetRunId)) {
+      // The user closed this run after it was opened for the target. Leave it closed.
+      if (scrolledTarget.current === token) return;
+      setOpenRuns((prev) => {
+        if (prev.has(targetRunId)) return prev;
+        const next = new Set(prev);
+        next.add(targetRunId);
+        return next;
+      });
+      return;
+    }
+    if (scrolledTarget.current === token) return;
+    scrolledTarget.current = token;
+    return scrollCommentInPanel(list, targetCommentId, targetThreadId, {
+      block: "nearest",
+    });
+  }, [openRuns, tab, targetCommentId, targetRunId, targetThreadId]);
+
+  const toggleRun = (runId: string) => {
+    setOpenRuns((prev) => {
+      const next = new Set(prev);
+      if (next.has(runId)) next.delete(runId);
+      else next.add(runId);
+      return next;
+    });
+  };
+
+  const renderThread = (thread: CommentThreadData) => {
+    const quoteSlot = quoteSlotFor(thread);
+    if (isPlainNote(thread)) {
+      return (
+        <DeliverableMessage
+          message={thread.root}
+          attachmentsIssueId={attachmentsIssueId}
+          onQuote={
+            onQuote && thread.root.delivery === undefined
+              ? () => onQuote(thread, thread.root.id, thread.root.body)
+              : undefined
+          }
+          footer={quoteSlot?.commentId === thread.root.id ? quoteSlot.node : undefined}
+        />
+      );
+    }
+    return (
+      <CommentThread
+        thread={thread}
+        issueId={issueId}
+        showAnchorContext
+        resolvePending={eventPending}
+        reveal={revealThreadId === thread.root.id}
+        onSeeInDiff={
+          thread.root.anchor ? () => onSeeInDiff(thread.root.id) : undefined
+        }
+        onReply={() => onReply(thread.root.id)}
+        onQuote={
+          onQuote ? (comment) => onQuote(thread, comment.id, comment.body) : undefined
+        }
+        replySlot={replySlotFor(thread.root.id)}
+        quoteSlot={quoteSlot?.node}
+        quoteCommentId={quoteSlot?.commentId}
+        {...(storyComposer && (isQuestionThread(thread) || thread.converted)
+          ? threadStateActions(thread, (event) => onThreadEvent(thread.root.id, event))
+          : {})}
+      />
+    );
+  };
+
   let lastDay = "";
+  const markerFor = (at: string) => {
+    const key = commentDayKey(at);
+    const show = key !== lastDay;
+    lastDay = key;
+    return show ? <Marker>{commentDayLabel(at)}</Marker> : null;
+  };
+
   return (
-    <div className="flex flex-col gap-3">
-      {threads.map((thread) => {
-        const key = commentDayKey(thread.root.at);
-        const showMarker = key !== lastDay;
-        lastDay = key;
-        const quoteSlot = quoteSlotFor(thread);
+    <div ref={listRef} className="flex flex-col gap-3">
+      {entries.map((entry) => {
+        if (entry.kind === "thread") {
+          return (
+            <div
+              key={entry.thread.root.id}
+              data-log-root={entry.thread.root.id}
+              className="flex flex-col"
+            >
+              {markerFor(entry.thread.root.at)}
+              {renderThread(entry.thread)}
+            </div>
+          );
+        }
+        const first = entry.threads[0];
+        const lead = markerFor(first.root.at);
+        const open = openRuns.has(entry.id);
+        const rest = entry.threads.slice(1).map((thread) => ({
+          thread,
+          marker: open ? markerFor(thread.root.at) : null,
+        }));
         return (
-          <div
-            key={thread.root.id}
-            data-log-root={thread.root.id}
-            className="flex flex-col"
-          >
-            {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
-            {isPlainNote(thread) ? (
-              <DeliverableMessage
-                message={thread.root}
-                attachmentsIssueId={attachmentsIssueId}
-                onQuote={
-                  onQuote && thread.root.delivery === undefined
-                    ? () => onQuote(thread, thread.root.id, thread.root.body)
-                    : undefined
-                }
-                footer={
-                  quoteSlot?.commentId === thread.root.id ? quoteSlot.node : undefined
-                }
-              />
-            ) : (
-              <CommentThread
-                thread={thread}
-                issueId={issueId}
-                showAnchorContext
-                resolvePending={eventPending}
-                onSeeInDiff={
-                  thread.root.anchor
-                    ? () => onSeeInDiff(thread.root.id)
-                    : undefined
-                }
-                onReply={() => onReply(thread.root.id)}
-                onQuote={
-                  onQuote
-                    ? (comment) => onQuote(thread, comment.id, comment.body)
-                    : undefined
-                }
-                replySlot={replySlotFor(thread.root.id)}
-                quoteSlot={quoteSlot?.node}
-                quoteCommentId={quoteSlot?.commentId}
-                {...(storyComposer &&
-                (isQuestionThread(thread) || thread.converted)
-                  ? threadStateActions(thread, (event) =>
-                      onThreadEvent(thread.root.id, event),
-                    )
-                  : {})}
-              />
-            )}
+          <div key={entry.id} className="flex flex-col">
+            {lead}
+            <section
+              data-testid="settled-comment-run"
+              data-run-id={entry.id}
+              data-expanded={open ? "" : undefined}
+              className="rounded-md border border-border bg-card"
+            >
+              <button
+                type="button"
+                aria-expanded={open}
+                data-testid="settled-comment-run-toggle"
+                onClick={() => toggleRun(entry.id)}
+                className="flex w-full items-center gap-1.5 rounded-md px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-11"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 text-muted-foreground motion-safe:transition-transform",
+                    open && "rotate-90",
+                  )}
+                  aria-hidden
+                />
+                <span>{entry.title}</span>
+              </button>
+              {open ? (
+                <div className="flex flex-col gap-3 px-3 pb-3">
+                  <div data-log-root={first.root.id} className="flex flex-col">
+                    {renderThread(first)}
+                  </div>
+                  {rest.map(({ thread, marker }) => (
+                    <div
+                      key={thread.root.id}
+                      data-log-root={thread.root.id}
+                      className="flex flex-col"
+                    >
+                      {marker}
+                      {renderThread(thread)}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
           </div>
         );
       })}

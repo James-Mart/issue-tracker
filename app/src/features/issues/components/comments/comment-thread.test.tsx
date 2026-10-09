@@ -576,8 +576,26 @@ describe("CommentThread", () => {
     expect(collapsed?.hasAttribute("data-collapsed")).toBe(true);
     expect(collapsed?.textContent).toContain("Dismissed");
     expect(collapsed?.textContent).not.toContain("Question");
+
     act(() => {
-      collapsed
+      root.render(
+        <CommentThread
+          thread={{ ...question, state: "dismissed" }}
+          inline
+          reveal
+          onReply={vi.fn()}
+          onDismiss={onDismiss}
+          onReopen={onReopen}
+        />,
+      );
+    });
+    const revealed = container.querySelector('[data-thread-root="current-root"]');
+    expect(revealed?.hasAttribute("data-collapsed")).toBe(false);
+    expect(revealed?.textContent).toContain(
+      "Scope drafts per thread so Diff and Overview stay isolated.",
+    );
+    act(() => {
+      revealed
         ?.querySelector('[data-testid="thread-reopen"]')
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });

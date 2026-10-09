@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bot, ChevronRight, Circle, HelpCircle, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { isLineAnchor } from "../../lib/comment-anchor";
@@ -56,6 +56,7 @@ export function CommentThread({
   onQuote,
   quoteSlot,
   quoteCommentId,
+  reveal = false,
 }: {
   thread: CommentThreadData;
   /** Absent on a flat Story note: no Reply control. */
@@ -83,8 +84,13 @@ export function CommentThread({
   /** Composer open beside `quoteCommentId`, or under the bar while collapsed. */
   quoteSlot?: ReactNode;
   quoteCommentId?: string;
+  /** Open a collapsed bar so a targeted comment's body is in the list. */
+  reveal?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(reveal);
+  useEffect(() => {
+    if (reveal) setExpanded(true);
+  }, [reveal]);
   const outdated = thread.root.outdated === true;
   const anchor = thread.root.anchor;
   const question = isQuestionThread(thread);

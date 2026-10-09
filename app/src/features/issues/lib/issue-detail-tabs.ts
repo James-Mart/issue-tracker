@@ -152,6 +152,21 @@ export function readDiffThreadSearchParam(
 }
 
 /**
+ * Hash of a comment or thread already used as an in-page target.
+ * `#comments` is the section, not a comment. A hand-edited fragment can be
+ * invalid percent-encoding.
+ */
+export function hashCommentTarget(hash: string): string | null {
+  if (!hash.startsWith("#") || hash === "#comments") return null;
+  try {
+    const id = decodeURIComponent(hash.slice(1));
+    return id.length > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Channel tabs need the Agents-style bounded page shell so the transcript
  * scrolls internally and the composer stays pinned. Overview (and other
  * document tabs) keep unbounded page scroll.
