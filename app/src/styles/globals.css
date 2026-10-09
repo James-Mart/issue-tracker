@@ -307,8 +307,7 @@
   .review-conversation {
     contain: inline-size;
   }
-  .prose-issue :not(pre) > code,
-  .prose-issue .issue-md-inline-code {
+  .prose-issue :not(pre) > code {
     display: inline-block;
     max-width: 100%;
     overflow-x: auto;
