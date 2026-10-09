@@ -98,6 +98,19 @@ describe("renderMergeBaseTaskDescription", () => {
     );
   });
 
+  it("restarts a live stack once nothing is unmerged", () => {
+    const body = renderMergeBaseTaskDescription({
+      storyId: "catch-up-story",
+      branchName: "feat/story-branch",
+      mergeBase: "main",
+    });
+    const normalized = body.replace(/\s+/g, " ");
+
+    expect(normalized).toContain(
+      "When nothing is unmerged, call `agent_stack_stop`. When it returns `stopped: true`, call `agent_stack_start` with `issueId` set to `catch-up-story`.",
+    );
+  });
+
   it("reads the template relative to the module, not process.cwd()", () => {
     previousCwd = process.cwd();
     const otherDir = mkdtempSync(join(tmpdir(), "issue-tracker-merge-base-cwd-"));
