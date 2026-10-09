@@ -23,7 +23,10 @@ Absolute path for this file (Read this exact path):
    suite. For build, runtime, and browser checks, **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
    and consult `verification` per that file using the bootstrap summary
-   output. A `### Verify` section in the Task is context for choosing checks.
+   output. When a tool a check needs is missing from the workspace, run the
+   `build` command from `issue project get <projectId> runtime` there before
+   running the check. A `### Verify` section in the Task is context for
+   choosing checks.
    When this Task builds on a prior Task's tests, keep the self-check focused
    on this Task's surface — do not re-run the prior Task's full matrix by
    default.
