@@ -55,25 +55,6 @@ function IssueAwareLink({
   );
 }
 
-function MarkdownCode({
-  className,
-  children,
-  node: _node,
-  ...props
-}: ComponentPropsWithoutRef<"code"> & { node?: unknown }) {
-  const languageClass =
-    typeof className === "string" &&
-    className.split(/\s+/).some((part) => part.startsWith("language-"));
-  return (
-    <code
-      className={cn(!languageClass && "issue-md-inline-code", className)}
-      {...props}
-    >
-      {children}
-    </code>
-  );
-}
-
 function nodeText(children: ReactNode): string {
   if (typeof children === "string" || typeof children === "number") {
     return String(children);
@@ -240,7 +221,6 @@ function markdownComponents(
 ) {
   return {
     a: IssueAwareLink,
-    code: MarkdownCode,
     pre: (props: ComponentPropsWithoutRef<"pre"> & { node?: unknown }) => (
       <MarkdownPre
         {...props}
