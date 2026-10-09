@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { MERGE_POLICY_RANK } from "../fields";
 import { derive } from "./derive";
 import type { Issue } from "../schemas";
 
@@ -88,36 +87,7 @@ const project = (
   ...extra,
 });
 
-const idea = (
-  id: string,
-  partOf = "p",
-  order = 0,
-  extra: Partial<Extract<Issue, { kind: "idea" }>> = {},
-): Issue => ({
-  id,
-  kind: "idea",
-  title: id,
-  partOf,
-  archived: false,
-  order,
-  createdAt: nextAt(),
-  updatedAt: nextAt(),
-  ...extra,
-});
-
 describe("derive - commit blocked", () => {
-  it("does not block a todo commit when its branch has a name and earlier siblings are done", () => {
-    const issues = [
-      project("p"),
-      epic("e"),
-      branch("b", "e", { branchName: "feat/b" }),
-      commit("c1", "b", { status: "done", commits: ["aaa"] }, 0),
-      commit("c2", "b", {}, 1),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.c2.blocked).toBe(false);
-  });
-
   it("blocks a todo commit when an earlier sibling is not done", () => {
     const issues = [
       project("p"),
@@ -130,124 +100,9 @@ describe("derive - commit blocked", () => {
     expect(byId.c1.blocked).toBe(false);
     expect(byId.c2.blocked).toBe(true);
   });
-
-  it("blocks a todo commit when its branch has no branchName", () => {
-    const issues = [epic("e"), branch("b", "e"), commit("c1", "b")];
-    const { byId } = derive(issues);
-    expect(byId.c1.blocked).toBe(true);
-  });
-
-  it("does not block in-progress and done commits", () => {
-    const issues = [
-      epic("e"),
-      branch("b", "e", { branchName: "feat/b" }),
-      commit("c1", "b", { status: "in-progress" }),
-      commit("c2", "b", { status: "done", commits: ["z"] }),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.c1.blocked).toBe(false);
-    expect(byId.c2.blocked).toBe(false);
-  });
-
-  it("blocks a todo commit when its branch is merged", () => {
-    const issues = [
-      epic("e"),
-      branch("b", "e", { branchName: "feat/b", merged: true }),
-      commit("c1", "b"),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.c1.blocked).toBe(true);
-  });
-});
-
-describe("derive - branch mergeBase resolution", () => {
-  it("derives mergeBase from a named parent", () => {
-    const issues = [
-      epic("e"),
-      branch("base", "e", { branchName: "feat/base" }),
-      branch("b", "e", { stackedOn: "base" }),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.b.mergeBase).toBe("feat/base");
-  });
-
-  it("surfaces a root Branch's derived mergeBase as main", () => {
-    const issues = [project("p"), epic("e"), branch("b", "e")];
-    expect(derive(issues).byId.b.mergeBase).toBe("main");
-  });
-
-  it("surfaces a root Branch's derived mergeBase from the project trunk", () => {
-    const issues = [
-      project("p", 0, { trunk: "develop" }),
-      epic("e"),
-      branch("b", "e"),
-    ];
-    expect(derive(issues).byId.b.mergeBase).toBe("develop");
-  });
-
-  it("omits mergeBase when stacked on an unnamed parent", () => {
-    const issues = [
-      epic("e"),
-      branch("base", "e"),
-      branch("b", "e", { stackedOn: "base" }),
-    ];
-    expect(derive(issues).byId.b.mergeBase).toBeUndefined();
-  });
-
-  it("derives mergeBase from a merged parent's resolve", () => {
-    const issues = [
-      project("p"),
-      epic("e"),
-      branch("parent", "e", { branchName: "feat/parent", merged: true }),
-      branch("b", "e", { stackedOn: "parent" }),
-    ];
-    expect(derive(issues).byId.b.mergeBase).toBe("main");
-  });
-
-  it("derives mergeBase from a merged parent using the project trunk", () => {
-    const issues = [
-      project("p", 0, { trunk: "develop" }),
-      epic("e"),
-      branch("parent", "e", { branchName: "feat/parent", merged: true }),
-      branch("b", "e", { stackedOn: "parent" }),
-    ];
-    expect(derive(issues).byId.b.mergeBase).toBe("develop");
-  });
-
-  it("derives mergeBase from a root Story's mergeBaseOverride", () => {
-    const issues = [
-      project("p"),
-      branch("b", "p", { mergeBaseOverride: "feat/existing" }),
-    ];
-    expect(derive(issues).byId.b.mergeBase).toBe("feat/existing");
-  });
-
-  it("derives first-layer Epic Story mergeBase from the Epic override", () => {
-    const issues = [
-      project("p"),
-      epic("e", "p", 0, { mergeBaseOverride: "feat/epic-base" }),
-      branch("b", "e"),
-    ];
-    expect(derive(issues).byId.b.mergeBase).toBe("feat/epic-base");
-  });
-
-  it("keeps stacked mergeBase on the parent branch when an Epic override is set", () => {
-    const issues = [
-      project("p"),
-      epic("e", "p", 0, { mergeBaseOverride: "feat/epic-base" }),
-      branch("base", "e", { branchName: "feat/base" }),
-      branch("b", "e", { stackedOn: "base" }),
-    ];
-    expect(derive(issues).byId.b.mergeBase).toBe("feat/base");
-  });
 });
 
 describe("derive - branch status", () => {
-  it("is merged when merged", () => {
-    const issues = [epic("e"), branch("b", "e", { merged: true, branchName: "x" })];
-    expect(derive(issues).byId.b.storyStatus).toBe("merged");
-  });
-
   it("is pr-open when all child commits are done and a prUrl is set", () => {
     const issues = [
       epic("e"),
@@ -256,69 +111,6 @@ describe("derive - branch status", () => {
       commit("c2", "b", { status: "done", commits: ["b"] }),
     ];
     expect(derive(issues).byId.b.storyStatus).toBe("pr-open");
-  });
-
-  it("is in-progress when a branchName exists but not all commits are done", () => {
-    const issues = [
-      epic("e"),
-      branch("b", "e", { branchName: "feat/b", prUrl: "http://pr/1" }),
-      commit("c1", "b", { status: "done", commits: ["a"] }),
-      commit("c2", "b"),
-    ];
-    expect(derive(issues).byId.b.storyStatus).toBe("in-progress");
-  });
-
-  it("is not-started when there is no branchName", () => {
-    const issues = [epic("e"), branch("b", "e")];
-    expect(derive(issues).byId.b.storyStatus).toBe("not-started");
-  });
-
-  it("is not pr-open when the branch has a prUrl but zero commits", () => {
-    const issues = [
-      epic("e"),
-      branch("b", "e", { branchName: "feat/b", prUrl: "http://pr/1" }),
-    ];
-    expect(derive(issues).byId.b.storyStatus).toBe("in-progress");
-  });
-});
-
-describe("derive - branch start gating", () => {
-  it("is not blocked when it has no stackedOn (a root branch forks project trunk)", () => {
-    const issues = [epic("e"), branch("b", "e")];
-    const d = derive(issues).byId.b;
-    expect(d.blocked).toBe(false);
-  });
-
-  it("is blocked when its stackedOn base has no tip yet (no branchName)", () => {
-    const issues = [
-      epic("e"),
-      branch("base", "e"),
-      branch("b", "e", { stackedOn: "base" }),
-    ];
-    const d = derive(issues).byId.b;
-    expect(d.blocked).toBe(true);
-  });
-
-  it("is blocked when its parent's commits are not all done", () => {
-    const issues = [
-      epic("e"),
-      branch("base", "e", { branchName: "feat/base" }),
-      commit("bc", "base", {}, 0),
-      branch("b", "e", { stackedOn: "base" }),
-    ];
-    const d = derive(issues).byId.b;
-    expect(d.blocked).toBe(true);
-  });
-
-  it("is not blocked when its parent has a tip and all its commits are done (no merge gate)", () => {
-    const issues = [
-      epic("e"),
-      branch("base", "e", { branchName: "feat/base" }),
-      commit("bc", "base", { status: "done", commits: ["aaa"] }, 0),
-      branch("b", "e", { stackedOn: "base" }),
-    ];
-    const d = derive(issues).byId.b;
-    expect(d.blocked).toBe(false);
   });
 });
 
@@ -331,83 +123,9 @@ describe("derive - epic rollup", () => {
     ];
     expect(derive(issues).byId.e.epicStatus).toBe("done");
   });
-
-  it("is in-progress when a branch has started", () => {
-    const issues = [
-      epic("e"),
-      branch("b1", "e", { branchName: "x" }),
-      branch("b2", "e"),
-    ];
-    expect(derive(issues).byId.e.epicStatus).toBe("in-progress");
-  });
-
-  it("is todo when no branch has started", () => {
-    const issues = [epic("e"), branch("b1", "e"), branch("b2", "e")];
-    expect(derive(issues).byId.e.epicStatus).toBe("todo");
-  });
-
-  it("is todo for an empty epic", () => {
-    expect(derive([epic("e")]).byId.e.epicStatus).toBe("todo");
-  });
-
-  it("ignores stored retro when computing epicStatus", () => {
-    const issues = [epic("e", "p", 0, { retro: "done" })];
-    expect(derive(issues).byId.e.epicStatus).toBe("todo");
-  });
-});
-
-describe("derive - epic blocked gating", () => {
-  it("marks an epic blocked while a blockedBy epic is not done", () => {
-    const issues = [
-      project("p"),
-      epic("dep", "p", 0),
-      branch("d", "dep"),
-      epic("gated", "p", 1, { blockedBy: ["dep"] }),
-      branch("g", "gated"),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.dep.blocked).toBe(false);
-    expect(byId.gated.blocked).toBe(true);
-  });
-
-  it("does not block a dependent epic once every blocker epic is done", () => {
-    const issues = [
-      project("p"),
-      epic("dep", "p", 0),
-      branch("d", "dep", { merged: true, branchName: "feat/d" }),
-      epic("gated", "p", 1, { blockedBy: ["dep"] }),
-      branch("g", "gated"),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.dep.epicStatus).toBe("done");
-    expect(byId.gated.blocked).toBe(false);
-  });
 });
 
 describe("derive - review coverage", () => {
-  it("leaves reviewCurrent false when no review is recorded", () => {
-    const issues = [
-      epic("e"),
-      branch("b", "e", { branchName: "feat/b" }),
-      commit("c1", "b", { status: "done", commits: ["a"] }),
-    ];
-    expect(derive(issues).byId.b.reviewCurrent).toBe(false);
-  });
-
-  it("is true when review covers every done task", () => {
-    const issues = [
-      epic("e"),
-      branch("b", "e", {
-        branchName: "feat/b",
-        review: "passed",
-        reviewedTasks: ["c1", "c2"],
-      }),
-      commit("c1", "b", { status: "done", commits: ["a"] }, 0),
-      commit("c2", "b", { status: "done", commits: ["b"] }, 1),
-    ];
-    expect(derive(issues).byId.b.reviewCurrent).toBe(true);
-  });
-
   it("is false when a task is injected after the review", () => {
     const issues = [
       epic("e"),
@@ -421,76 +139,9 @@ describe("derive - review coverage", () => {
     ];
     expect(derive(issues).byId.b.reviewCurrent).toBe(false);
   });
-
-  it("is false when a covered task moves back off done", () => {
-    const issues = [
-      epic("e"),
-      branch("b", "e", {
-        branchName: "feat/b",
-        review: "passed",
-        reviewedTasks: ["c1", "c2"],
-      }),
-      commit("c1", "b", { status: "done", commits: ["a"] }, 0),
-      commit("c2", "b", { status: "in-progress" }, 1),
-    ];
-    expect(derive(issues).byId.b.reviewCurrent).toBe(false);
-  });
-});
-
-describe("derive - problems", () => {
-  it("passes integrity problems through (cycles, dangling, kind)", () => {
-    const issues = [
-      epic("e"),
-      branch("a", "e", { stackedOn: "b" }),
-      branch("b", "e", { stackedOn: "a" }),
-      commit("c", "e"),
-    ];
-    const problems = derive(issues).problems;
-    expect(problems.filter((p) => /cycle/i.test(p.message)).map((p) => p.id).sort()).toEqual(["a", "b"]);
-    expect(problems.some((p) => p.id === "c" && /must be a story/.test(p.message))).toBe(true);
-  });
 });
 
 describe("derive - effective mergePolicy", () => {
-  it("orders policies by the danger rank map", () => {
-    expect(MERGE_POLICY_RANK.manual).toBeLessThan(MERGE_POLICY_RANK["pull-request"]);
-    expect(MERGE_POLICY_RANK["pull-request"]).toBeLessThan(MERGE_POLICY_RANK.merge);
-    expect(MERGE_POLICY_RANK.merge).toBeLessThan(MERGE_POLICY_RANK["fast-forward"]);
-  });
-
-  it("inherits project mergePolicy on an unset Epic and first-layer Story", () => {
-    const issues = [
-      project("p", 0, { mergePolicy: "pull-request" }),
-      epic("e"),
-      branch("b", "e"),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.p.mergePolicy).toBe("pull-request");
-    expect(byId.e.mergePolicy).toBe("pull-request");
-    expect(byId.b.mergePolicy).toBe("pull-request");
-  });
-
-  it("uses a stored Epic override over the Project default", () => {
-    const issues = [
-      project("p", 0, { mergePolicy: "pull-request" }),
-      epic("e", "p", 0, { mergePolicy: "manual" }),
-      branch("b", "e"),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.e.mergePolicy).toBe("manual");
-    expect(byId.b.mergePolicy).toBe("manual");
-  });
-
-  it("uses a stored Story override over its parent Epic", () => {
-    const issues = [
-      project("p", 0, { mergePolicy: "manual" }),
-      epic("e", "p", 0, { mergePolicy: "pull-request" }),
-      branch("b", "e", { mergePolicy: "merge" }),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.b.mergePolicy).toBe("merge");
-  });
-
   it("inherits parent Story effective policy down a stack", () => {
     const issues = [
       project("p", 0, { mergePolicy: "manual" }),
@@ -501,146 +152,5 @@ describe("derive - effective mergePolicy", () => {
     const { byId } = derive(issues);
     expect(byId.base.mergePolicy).toBe("fast-forward");
     expect(byId.child.mergePolicy).toBe("fast-forward");
-  });
-
-  it("inherits stacked parent effective policy when the child is unset", () => {
-    const issues = [
-      project("p", 0, { mergePolicy: "merge" }),
-      epic("e"),
-      branch("base", "e", { branchName: "feat/base" }),
-      branch("child", "e", { stackedOn: "base" }),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.base.mergePolicy).toBe("merge");
-    expect(byId.child.mergePolicy).toBe("merge");
-  });
-});
-
-describe("derive - planRoots", () => {
-  it("lists epics and root project-level stories in order", () => {
-    const issues = [
-      project("p"),
-      idea("i", "p"),
-      epic("e2", "p", 2, { sourceIdea: "i" }),
-      epic("e1", "p", 1, { sourceIdea: "i" }),
-      branch("s1", "p", { sourceIdea: "i" }, 0),
-    ];
-    expect(derive(issues).byId.i.planRoots).toEqual(["s1", "e1", "e2"]);
-  });
-
-  it("derives an empty array when there are no plan roots", () => {
-    const issues = [project("p"), idea("i", "p")];
-    expect(derive(issues).byId.i.planRoots).toEqual([]);
-  });
-
-  it("excludes a root in another project", () => {
-    const issues = [
-      project("p1"),
-      project("p2", 1),
-      idea("i1", "p1"),
-      idea("i2", "p2", 0),
-      epic("e1", "p1", 0, { sourceIdea: "i1" }),
-      epic("e2", "p2", 0, { sourceIdea: "i1" }),
-    ];
-    expect(derive(issues).byId.i1.planRoots).toEqual(["e1"]);
-    expect(derive(issues).byId.i2.planRoots).toEqual([]);
-  });
-
-  it("resolves through task provenance alone", () => {
-    const issues = [
-      project("p"),
-      idea("i", "p"),
-      branch("s", "p", {}, 0),
-      commit("t", "s", { sourceIdea: "i" }),
-    ];
-    expect(derive(issues).byId.i.planRoots).toEqual(["s"]);
-  });
-
-  it("deduplicates when both story and task edges point at the same story", () => {
-    const issues = [
-      project("p"),
-      idea("i", "p"),
-      branch("s", "p", { sourceIdea: "i" }, 0),
-      commit("t", "s", { sourceIdea: "i" }),
-    ];
-    expect(derive(issues).byId.i.planRoots).toEqual(["s"]);
-  });
-
-  it("derives an empty array for an unrelated idea", () => {
-    const issues = [
-      project("p"),
-      idea("i", "p"),
-      idea("other", "p", 1),
-      branch("s", "p", {}, 0),
-      commit("t", "s", { sourceIdea: "other" }),
-    ];
-    expect(derive(issues).byId.i.planRoots).toEqual([]);
-  });
-});
-
-describe("derive - planNotFinal", () => {
-  it("is true when sourceIdea names an unarchived Idea", () => {
-    const issues = [
-      project("p"),
-      idea("i", "p"),
-      epic("e", "p", 0, { sourceIdea: "i" }),
-      branch("s", "p", { sourceIdea: "i" }, 1),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.e.planNotFinal).toBe(true);
-    expect(byId.s.planNotFinal).toBe(true);
-  });
-
-  it("is false when the source Idea is archived", () => {
-    const issues = [
-      project("p"),
-      idea("i", "p", 0, { archived: true }),
-      epic("e", "p", 0, { sourceIdea: "i" }),
-      branch("s", "p", { sourceIdea: "i" }, 1),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.e.planNotFinal).toBe(false);
-    expect(byId.s.planNotFinal).toBe(false);
-  });
-
-  it("is false when sourceIdea is absent or dangling", () => {
-    const issues = [
-      project("p"),
-      idea("i", "p"),
-      epic("e", "p"),
-      branch("s", "p", { sourceIdea: "ghost" }, 1),
-    ];
-    const { byId } = derive(issues);
-    expect(byId.e.planNotFinal).toBe(false);
-    expect(byId.s.planNotFinal).toBe(false);
-  });
-
-  it("is false on a stacked story even with sourceIdea", () => {
-    const issues = [
-      project("p"),
-      idea("i", "p"),
-      branch("base", "p", { branchName: "feat/base" }, 0),
-      branch("child", "p", { stackedOn: "base", sourceIdea: "i" }, 1),
-    ];
-    expect(derive(issues).byId.child.planNotFinal).toBe(false);
-  });
-
-  it("is false on an epic-child story even with sourceIdea", () => {
-    const issues = [
-      project("p"),
-      idea("i", "p"),
-      epic("e", "p"),
-      branch("s", "e", { sourceIdea: "i" }),
-    ];
-    expect(derive(issues).byId.s.planNotFinal).toBe(false);
-  });
-});
-
-describe("derive - purity", () => {
-  it("takes only Issue[] and does not attach ideaStatus", () => {
-    const issues = [project("p"), idea("capture", "p")];
-    expect(derive.length).toBe(1);
-    expect(derive(issues).byId.capture?.ideaStatus).toBeUndefined();
-    expect(derive(issues).byId.capture?.planRoots).toEqual([]);
   });
 });

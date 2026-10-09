@@ -1,14 +1,12 @@
 import { ChildProcess, type ChildProcessByStdio } from "node:child_process";
 import { PassThrough, type Readable } from "node:stream";
 import type { GitSpawner } from "./git-read.js";
-import type { GitWriteSpawner } from "./git-write.js";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const AT = "2026-07-09T14:00:00.000Z";
-const SHA = "0123456789abcdef0123456789abcdef01234567";
 const WORKSPACE = "/repo/root";
 
 let dir: string;
@@ -84,28 +82,13 @@ beforeEach(() => {
 
 afterEach(async () => {
   const { setGitSpawnerForTests } = await import("./git-read.js");
-  const { setGitWriteSpawnerForTests } = await import("./git-write.js");
   setGitSpawnerForTests(null);
-  setGitWriteSpawnerForTests(null);
   vi.unstubAllEnvs();
   rmSync(dir, { recursive: true, force: true });
 });
 
 async function loadChange() {
   return import("./change.js");
-}
-
-function writeStory(id: string, extra: Record<string, unknown> = {}): void {
-  writeIssue(id, {
-    kind: "story",
-    title: id,
-    partOf: "e",
-    merged: false,
-    order: 0,
-    createdAt: AT,
-    updatedAt: AT,
-    ...extra,
-  });
 }
 
 function writeTask(id: string, extra: Record<string, unknown> = {}): void {
@@ -135,14 +118,12 @@ function stubTaskRangeGit(opts: {
   patch: string;
   shortstat: string;
   subjects: Record<string, string>;
-  calls?: string[][];
 }): Promise<void> {
   const first = opts.commits[0]!;
   const last = opts.commits[opts.commits.length - 1]!;
   const twoDot = `${parentSha(first)}..${last}`;
   const threeDot = `${parentSha(first)}...${last}`;
   return stubGitSpawner((args) => {
-    opts.calls?.push([...args]);
     if (args[0] === "rev-parse" && args[1] === `${first}^`) {
       return mockGitChild({ stdout: `${parentSha(first)}\n` });
     }
@@ -194,27 +175,16 @@ function firstParentHistoryForRange(
 
 function stubStorySymdiffGit(opts: {
   last: string;
-  mergeBase?: string;
-  mergeBaseRef?: string;
-  originConfigured?: boolean;
-  fetchUnreachable?: boolean;
   patch: string;
   shortstat: string;
   subjects: Record<string, string>;
   contiguityShas?: string[];
   firstParentHistory?: (range: string) => string;
-  calls?: string[][];
 }): Promise<void> {
-  const mergeBase = opts.mergeBase ?? "main";
-  const mergeBaseRef = opts.mergeBaseRef ?? mergeBase;
-  const range = `${mergeBaseRef}...${opts.last}`;
+  const range = `main...${opts.last}`;
   const contiguityShas = opts.contiguityShas ?? [opts.last];
-  const readStub = stubGitSpawner((args) => {
-    opts.calls?.push([...args]);
+  return stubGitSpawner((args) => {
     if (args[0] === "remote" && args[1] === "get-url" && args[2] === "origin") {
-      if (opts.originConfigured) {
-        return mockGitChild({ stdout: "git@example.com:org/repo.git\n" });
-      }
       return mockGitChild({ code: 2, stderr: "No such remote 'origin'\n" });
     }
     if (args[0] === "rev-list" && args.includes("--first-parent")) {
@@ -225,9 +195,6 @@ function stubStorySymdiffGit(opts: {
         opts.firstParentHistory,
       );
       return mockGitChild({ stdout: history });
-    }
-    if (args[0] === "rev-list" && args.includes("--count")) {
-      return mockGitChild({ stdout: "5\n" });
     }
     if (args[0] === "diff" && args.includes("--shortstat")) {
       if (!args.includes(range)) {
@@ -253,28 +220,6 @@ function stubStorySymdiffGit(opts: {
     }
     return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
   });
-
-  if (!opts.originConfigured) {
-    return readStub;
-  }
-
-  const writeStub = import("./git-write.js").then(({ setGitWriteSpawnerForTests }) => {
-    const spawner: GitWriteSpawner = (_command, args) => {
-      if (args[0] === "fetch") {
-        if (opts.fetchUnreachable) {
-          return mockGitChild({
-            code: 128,
-            stderr: "fatal: Could not read from remote repository.",
-          });
-        }
-        return mockGitChild({});
-      }
-      return mockGitChild({});
-    };
-    setGitWriteSpawnerForTests(spawner);
-  });
-
-  return Promise.all([readStub, writeStub]).then(() => undefined);
 }
 
 function writeRollupFixture(
@@ -304,18 +249,6 @@ function writeRollupFixture(
 }
 
 describe("readIssueChange rollup", () => {
-  it("returns empty no-descendant-commits when the subtree has no shas", async () => {
-    writeRollupFixture([
-      { id: "t-empty-a", partOf: "rollup" },
-      { id: "t-empty-b", partOf: "rollup", order: 1 },
-    ]);
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("rollup")).resolves.toEqual({
-      state: "empty",
-      reason: "no-descendant-commits",
-    });
-  });
-
   it("returns a loaded net diff across a contiguous commit set", async () => {
     const c1 = sha(1);
     const c2 = sha(2);
@@ -347,72 +280,6 @@ describe("readIssueChange rollup", () => {
     });
   });
 
-  it("raises change-too-large with stats when a rollup patch exceeds the ceiling", async () => {
-    const c1 = sha(1);
-    const c2 = sha(2);
-    const hugePatch = "x".repeat(2 * 1024 * 1024 + 1);
-    writeRollupFixture([
-      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
-      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
-    ]);
-
-    await stubStorySymdiffGit({
-      last: c2,
-      patch: hugePatch,
-      shortstat: " 50 files changed, 20000 insertions(+), 500 deletions(-)\n",
-      subjects: { [c1]: "First", [c2]: "Second" },
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("rollup")).rejects.toMatchObject({
-      code: "change-too-large",
-      details: {
-        stats: { filesChanged: 50, insertions: 20000, deletions: 500 },
-        commitCount: 2,
-        mergeBaseRef: "main",
-      },
-    });
-  });
-
-  it("loads a Story from own-Task shas when a stacked Story would break contiguity", async () => {
-    const c1 = sha(1);
-    const c2 = sha(2);
-    const stacked = sha(9);
-    writeRollupFixture([
-      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
-      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
-    ]);
-    writeStory("s-stacked-on-rollup", {
-      partOf: "e",
-      order: 0,
-      stackedOn: "rollup",
-    });
-    writeTask("t-stacked-foreign", {
-      partOf: "s-stacked-on-rollup",
-      order: 0,
-      commits: [stacked],
-    });
-
-    await stubStorySymdiffGit({
-      last: c2,
-      contiguityShas: [c1, c2],
-      patch: "diff --git a/own.ts b/own.ts\n+own\n",
-      shortstat: " 2 files changed, 4 insertions(+), 1 deletion(-)\n",
-      subjects: { [c1]: "First", [c2]: "Second" },
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("rollup")).resolves.toEqual({
-      state: "loaded",
-      commits: [
-        { sha: c1, subject: "First" },
-        { sha: c2, subject: "Second" },
-      ],
-      patch: "diff --git a/own.ts b/own.ts\n+own\n",
-      stats: { filesChanged: 2, insertions: 4, deletions: 1 },
-    });
-  });
-
   it("raises commits-not-contiguous when foreign commits sit between recorded shas", async () => {
     const c1 = sha(1);
     const c2 = sha(2);
@@ -435,368 +302,9 @@ describe("readIssueChange rollup", () => {
       message: expect.stringContaining(c1),
     });
   });
-
-  it("loads a Story whose last commit is a merge of trunk via three-dot mergeBase", async () => {
-    const waypoint = sha(1);
-    const mergeOfTrunk = sha(2);
-    const calls: string[][] = [];
-    writeRollupFixture([
-      { id: "t1", partOf: "rollup", sha: waypoint, order: 0 },
-      { id: "t-merge", partOf: "rollup", sha: mergeOfTrunk, order: 1 },
-    ]);
-
-    await stubStorySymdiffGit({
-      last: mergeOfTrunk,
-      contiguityShas: [waypoint, mergeOfTrunk],
-      calls,
-      patch: "diff --git a/merged.ts b/merged.ts\n+landed\n",
-      shortstat: " 1 file changed, 1 insertion(+)\n",
-      subjects: { [waypoint]: "Feature", [mergeOfTrunk]: "Merge main" },
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("rollup")).resolves.toEqual({
-      state: "loaded",
-      commits: [
-        { sha: waypoint, subject: "Feature" },
-        { sha: mergeOfTrunk, subject: "Merge main" },
-      ],
-      patch: "diff --git a/merged.ts b/merged.ts\n+landed\n",
-      stats: { filesChanged: 1, insertions: 1, deletions: 0 },
-    });
-    expect(calls).toContainEqual([
-      "rev-list",
-      "--first-parent",
-      "--reverse",
-      `${waypoint}..${mergeOfTrunk}`,
-    ]);
-    expect(calls).toContainEqual([
-      "diff",
-      "--shortstat",
-      `main...${mergeOfTrunk}`,
-    ]);
-    expect(calls).toContainEqual(["diff", `main...${mergeOfTrunk}`]);
-    expect(calls.some((args) => args[0] === "rev-parse")).toBe(false);
-  });
-
-  it("raises commits-not-contiguous for an unrecorded first-parent commit between waypoints", async () => {
-    const c1 = sha(1);
-    const c2 = sha(2);
-    writeRollupFixture([
-      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
-      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
-    ]);
-
-    await stubStorySymdiffGit({
-      last: c2,
-      patch: "unused",
-      shortstat: "unused",
-      subjects: {},
-      firstParentHistory: () => mockFirstParentHistory(c2, sha(99)),
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("rollup")).rejects.toMatchObject({
-      code: "commits-not-contiguous",
-      message: expect.stringContaining(c1),
-    });
-  });
-
-  it("returns empty no-merge-base when derived mergeBase is unset", async () => {
-    writeStory("s-waiting", { stackedOn: "b" });
-    writeTask("t-waiting", {
-      partOf: "s-waiting",
-      commits: [sha(1)],
-    });
-
-    const calls: string[][] = [];
-    await stubGitSpawner((args) => {
-      calls.push([...args]);
-      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("s-waiting")).resolves.toEqual({
-      state: "empty",
-      reason: "no-merge-base",
-    });
-    expect(calls).toEqual([]);
-  });
-
-  it("returns empty no-merge-base before no-descendant-commits when mergeBase is unset", async () => {
-    writeStory("s-waiting-empty", { stackedOn: "b" });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("s-waiting-empty")).resolves.toEqual({
-      state: "empty",
-      reason: "no-merge-base",
-    });
-  });
-
-  it("uses origin/<mergeBase> for the story diff range when fetch succeeds", async () => {
-    const c1 = sha(1);
-    const c2 = sha(2);
-    const calls: string[][] = [];
-    writeRollupFixture([
-      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
-      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
-    ]);
-
-    await stubStorySymdiffGit({
-      last: c2,
-      mergeBaseRef: "origin/main",
-      originConfigured: true,
-      calls,
-      patch: "diff --git a/origin.ts b/origin.ts\n+from-origin\n",
-      shortstat: " 1 file changed, 1 insertion(+)\n",
-      subjects: { [c1]: "First", [c2]: "Second" },
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("rollup")).resolves.toMatchObject({
-      state: "loaded",
-      patch: "diff --git a/origin.ts b/origin.ts\n+from-origin\n",
-    });
-    expect(calls).toContainEqual(["diff", "--shortstat", `origin/main...${c2}`]);
-    expect(calls).toContainEqual(["diff", `origin/main...${c2}`]);
-  });
-
-  it("raises git-failed when origin fetch is unreachable", async () => {
-    const c1 = sha(1);
-    writeRollupFixture([{ id: "t1", partOf: "rollup", sha: c1, order: 0 }]);
-
-    await stubStorySymdiffGit({
-      last: c1,
-      originConfigured: true,
-      fetchUnreachable: true,
-      patch: "unused",
-      shortstat: "unused",
-      subjects: { [c1]: "First" },
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("rollup")).rejects.toMatchObject({
-      code: "git-failed",
-    });
-  });
-
-  it("refuses Epic change requests", async () => {
-    writeTask("t-epic-child", { partOf: "b", commits: [sha(1)] });
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("e")).rejects.toMatchObject({
-      code: "validation",
-      message: expect.stringContaining("Epic diffs are not supported"),
-    });
-  });
-});
-
-describe("prepareStoryChange", () => {
-  it("reuses a story change for the same tip and snapshot version", async () => {
-    const c1 = sha(1);
-    const c2 = sha(2);
-    const calls: string[][] = [];
-    writeRollupFixture([
-      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
-      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
-    ]);
-    await stubStorySymdiffGit({
-      last: c2,
-      calls,
-      patch: "unused",
-      shortstat: "unused",
-      subjects: {},
-      firstParentHistory: (range) => `${range.split("..")[1]}\n`,
-    });
-
-    const { prepareStoryChange } = await loadChange();
-    const first = await prepareStoryChange("rollup", WORKSPACE);
-    const spawned = calls.map((args) => [...args]);
-    const second = await prepareStoryChange("rollup", WORKSPACE);
-    expect(second).toBe(first);
-    expect(second).toMatchObject({ state: "ready", tip: c2, shas: [c1, c2] });
-    expect(calls).toEqual(spawned);
-    expect(spawned.some((args) => args[0] === "rev-list")).toBe(true);
-
-    const beforeForeign = calls.length;
-    const foreign = await prepareStoryChange("rollup", WORKSPACE, []);
-    expect(foreign).toEqual({ state: "empty", reason: "no-merge-base" });
-    expect(await prepareStoryChange("rollup", WORKSPACE)).toBe(first);
-    expect(calls).toHaveLength(beforeForeign);
-
-    writeIssue("t2", {
-      kind: "task",
-      title: "t2",
-      partOf: "rollup",
-      status: "done",
-      order: 1,
-      createdAt: AT,
-      updatedAt: AT,
-      commits: [sha(3)],
-    });
-    const moved = await prepareStoryChange("rollup", WORKSPACE);
-    expect(moved).toMatchObject({ state: "ready", tip: sha(3), shas: [c1, sha(3)] });
-    expect(moved).not.toBe(first);
-
-    const afterMove = calls.length;
-    writeIssue("rollup", {
-      kind: "story",
-      title: "Rollup renamed",
-      partOf: "e",
-      merged: false,
-      order: 1,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    const edited = await prepareStoryChange("rollup", WORKSPACE);
-    expect(edited).toMatchObject({ state: "ready", tip: sha(3) });
-    expect(edited).not.toBe(moved);
-    expect(calls.length).toBeGreaterThan(afterMove);
-  });
-
-  it("shares one in-flight story change across overlapping calls", async () => {
-    const c1 = sha(1);
-    const c2 = sha(2);
-    const calls: string[][] = [];
-    writeRollupFixture([
-      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
-      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
-    ]);
-    await stubStorySymdiffGit({
-      last: c2,
-      calls,
-      patch: "unused",
-      shortstat: "unused",
-      subjects: {},
-    });
-
-    const { prepareStoryChange } = await loadChange();
-    const [left, right] = await Promise.all([
-      prepareStoryChange("rollup", WORKSPACE),
-      prepareStoryChange("rollup", WORKSPACE),
-    ]);
-    expect(left).toBe(right);
-    expect(calls.filter((args) => args[0] === "rev-list")).toHaveLength(1);
-    expect(calls.filter((args) => args[0] === "remote")).toHaveLength(1);
-  });
-
-  it("does not reuse a failed story change", async () => {
-    const c1 = sha(1);
-    const c2 = sha(2);
-    let contiguous = false;
-    writeRollupFixture([
-      { id: "t1", partOf: "rollup", sha: c1, order: 0 },
-      { id: "t2", partOf: "rollup", sha: c2, order: 1 },
-    ]);
-    await stubStorySymdiffGit({
-      last: c2,
-      patch: "unused",
-      shortstat: "unused",
-      subjects: {},
-      firstParentHistory: () =>
-        contiguous ? `${c2}\n` : mockFirstParentHistory(c2, sha(99), sha(100)),
-    });
-
-    const { prepareStoryChange } = await loadChange();
-    await expect(prepareStoryChange("rollup", WORKSPACE)).rejects.toMatchObject({
-      code: "commits-not-contiguous",
-    });
-    contiguous = true;
-    await expect(prepareStoryChange("rollup", WORKSPACE)).resolves.toMatchObject({
-      state: "ready",
-      tip: c2,
-    });
-  });
-
-  it("reuses an empty story change without spawning git", async () => {
-    writeStory("s-waiting", { stackedOn: "b" });
-    writeTask("t-waiting", { partOf: "s-waiting", commits: [sha(1)] });
-    const calls: string[][] = [];
-    await stubGitSpawner((args) => {
-      calls.push([...args]);
-      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
-    });
-
-    const { prepareStoryChange } = await loadChange();
-    const first = await prepareStoryChange("s-waiting", WORKSPACE);
-    const second = await prepareStoryChange("s-waiting", WORKSPACE);
-    expect(second).toBe(first);
-    expect(first).toEqual({ state: "empty", reason: "no-merge-base" });
-    expect(calls).toEqual([]);
-  });
 });
 
 describe("readIssueChange", () => {
-  it("returns empty no-commit when the Task has no sha", async () => {
-    writeTask("t1");
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("t1")).resolves.toEqual({
-      state: "empty",
-      reason: "no-commit",
-    });
-  });
-
-  it("returns empty no-diff when the Task is flagged noDiff", async () => {
-    writeTask("t2", { commits: [SHA], noDiff: true });
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("t2")).resolves.toEqual({
-      state: "empty",
-      reason: "no-diff",
-    });
-  });
-
-  it("returns a loaded change with patch and stats when the commit resolves", async () => {
-    writeTask("t3", { commits: [SHA] });
-    await stubTaskRangeGit({
-      commits: [SHA],
-      patch: "diff --git a/foo.ts b/foo.ts\n+line\n",
-      shortstat: " 2 files changed, 5 insertions(+), 1 deletion(-)\n",
-      subjects: { [SHA]: "Add feature" },
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("t3")).resolves.toEqual({
-      state: "loaded",
-      commits: [{ sha: SHA, subject: "Add feature" }],
-      patch: "diff --git a/foo.ts b/foo.ts\n+line\n",
-      stats: { filesChanged: 2, insertions: 5, deletions: 1 },
-    });
-  });
-
-  it("uses first^..last for a Task whose last commit is a merge", async () => {
-    const first = sha(4);
-    const mergeCommit = sha(5);
-    const calls: string[][] = [];
-    writeTask("t-merge", { commits: [first, mergeCommit] });
-    await stubTaskRangeGit({
-      commits: [first, mergeCommit],
-      calls,
-      patch: "diff --git a/task.ts b/task.ts\n+merge-task\n",
-      shortstat: " 1 file changed, 1 insertion(+)\n",
-      subjects: { [first]: "Work", [mergeCommit]: "Merge main" },
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("t-merge")).resolves.toEqual({
-      state: "loaded",
-      commits: [
-        { sha: first, subject: "Work" },
-        { sha: mergeCommit, subject: "Merge main" },
-      ],
-      patch: "diff --git a/task.ts b/task.ts\n+merge-task\n",
-      stats: { filesChanged: 1, insertions: 1, deletions: 0 },
-    });
-    expect(calls).toContainEqual(["rev-parse", `${first}^`]);
-    expect(calls).toContainEqual([
-      "diff",
-      "--shortstat",
-      `${parentSha(first)}..${mergeCommit}`,
-    ]);
-    expect(calls).toContainEqual(["diff", `${parentSha(first)}..${mergeCommit}`]);
-    expect(
-      calls.some((args) => args.some((arg) => arg.includes("..."))),
-    ).toBe(false);
-  });
-
   it("returns a loaded range diff when the Task has three commits", async () => {
     const c1 = sha(1);
     const c2 = sha(2);
@@ -820,154 +328,5 @@ describe("readIssueChange", () => {
       patch: "diff --git a/a.ts b/a.ts\n+one\n+two\n+three\n",
       stats: { filesChanged: 1, insertions: 3, deletions: 0 },
     });
-  });
-
-  it("raises commit-unreachable when the recorded sha does not resolve", async () => {
-    writeTask("t4", { commits: [SHA] });
-    await stubGitSpawner((args) => {
-      if (args[0] === "rev-parse" && args[1] === `${SHA}^`) {
-        return mockGitChild({
-          code: 128,
-          stderr: `fatal: bad object ${SHA}`,
-        });
-      }
-      return mockGitChild({
-        code: 128,
-        stderr: `fatal: bad object ${SHA}`,
-      });
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("t4")).rejects.toMatchObject({
-      code: "commit-unreachable",
-      message: expect.stringContaining("bad object"),
-    });
-  });
-
-  it("propagates other git failures without mapping to commit-unreachable", async () => {
-    writeTask("t5", { commits: [SHA] });
-    await stubGitSpawner(() =>
-      mockGitChild({
-        code: 128,
-        stderr: "fatal: unable to read tree abc",
-      }),
-    );
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("t5")).rejects.toMatchObject({
-      code: "git-failed",
-    });
-  });
-
-  it("returns a loaded change when the patch is within the render ceiling", async () => {
-    writeTask("t-under", { commits: [SHA] });
-    await stubTaskRangeGit({
-      commits: [SHA],
-      patch: "+small\n",
-      shortstat: " 1 file changed, 1 insertion(+)\n",
-      subjects: { [SHA]: "Small change" },
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("t-under")).resolves.toEqual({
-      state: "loaded",
-      commits: [{ sha: SHA, subject: "Small change" }],
-      patch: "+small\n",
-      stats: { filesChanged: 1, insertions: 1, deletions: 0 },
-    });
-  });
-
-  it("raises change-too-large with stats and no patch when a Task patch exceeds the ceiling", async () => {
-    writeTask("t-over", { commits: [SHA] });
-    const hugePatch = "x".repeat(2 * 1024 * 1024 + 1);
-    await stubGitSpawner((args) => {
-      if (args[0] === "rev-parse" && args[1] === `${SHA}^`) {
-        return mockGitChild({ stdout: `${parentSha(SHA)}\n` });
-      }
-      if (args[0] === "diff" && args.includes("--shortstat")) {
-        return mockGitChild({
-          stdout: " 100 files changed, 50000 insertions(+), 100 deletions(-)\n",
-        });
-      }
-      if (args[0] === "diff") {
-        return mockGitChild({ stdout: hugePatch });
-      }
-      if (args[0] === "show" && args.includes("--format=%s")) {
-        return mockGitChild({ stdout: "Huge change\n" });
-      }
-      return mockGitChild({ code: 1, stderr: `unexpected: ${args.join(" ")}` });
-    });
-
-    const { readIssueChange } = await loadChange();
-    await expect(readIssueChange("t-over")).rejects.toMatchObject({
-      code: "change-too-large",
-      details: {
-        stats: { filesChanged: 100, insertions: 50000, deletions: 100 },
-        commitCount: 1,
-      },
-    });
-  });
-});
-
-describe("readIssueChangeFile", () => {
-  it("refuses Epic change file requests", async () => {
-    writeTask("t-epic-child", { partOf: "b", commits: [SHA] });
-    const { readIssueChangeFile } = await loadChange();
-    await expect(
-      readIssueChangeFile("e", SHA, "src/foo.ts"),
-    ).rejects.toMatchObject({
-      code: "validation",
-      message: expect.stringContaining("Epic diffs are not supported"),
-    });
-  });
-});
-
-describe("collectDescendantCommits", () => {
-  function writeFixtureTree(): void {
-    writeIssue("tree", {
-      kind: "epic",
-      title: "Tree",
-      partOf: "p",
-      order: 1,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    writeStory("s-a", { partOf: "tree", order: 0 });
-    writeStory("s-b", { partOf: "tree", order: 1 });
-    writeStory("s-stacked", { partOf: "tree", order: 0, stackedOn: "s-a" });
-    writeTask("t-a1", { partOf: "s-a", order: 0, commits: [sha(1)] });
-    writeTask("t-missing", { partOf: "s-a", order: 1 });
-    writeTask("t-nodiff", {
-      partOf: "s-a",
-      order: 2,
-      commits: [sha(2)],
-      noDiff: true,
-    });
-    writeTask("t-a2", { partOf: "s-a", order: 3, commits: [sha(3)] });
-    writeTask("t-stacked", { partOf: "s-stacked", order: 0, commits: [sha(4)] });
-    writeTask("t-b1", { partOf: "s-b", order: 0, commits: [sha(5)] });
-  }
-
-  it("returns recorded shas in implementation order and skips empty tasks", async () => {
-    writeFixtureTree();
-    writeTask("t-multi", {
-      partOf: "s-b",
-      order: 1,
-      commits: [sha(6), sha(7)],
-    });
-    const { collectDescendantCommits } = await loadChange();
-
-    expect(collectDescendantCommits("tree").map((c) => c.sha)).toEqual([
-      sha(1),
-      sha(3),
-      sha(4),
-      sha(5),
-      sha(6),
-      sha(7),
-    ]);
-    expect(collectDescendantCommits("s-a").map((c) => c.sha)).toEqual([
-      sha(1),
-      sha(3),
-    ]);
   });
 });

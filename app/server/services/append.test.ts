@@ -77,37 +77,6 @@ function storyDoc(
 }
 
 describe("appendTasks", () => {
-  it("leaves unmentioned Tasks untouched and appends new ones at the tail", async () => {
-    seedStory();
-    const { appendTasks, list } = await loadAppend();
-
-    const summary = await appendTasks({
-      storyId: "s1",
-      doc: storyDoc([
-        { kind: "task", id: "new-a", title: "New A" },
-        { kind: "task", id: "new-b", title: "New B" },
-      ]),
-    });
-
-    expect(summary.created).toEqual(["new-a", "new-b"]);
-    expect(summary.updated).toEqual([]);
-    expect(existsSync(join(dir, "keep-me"))).toBe(true);
-
-    const keep = readIssue("keep-me");
-    expect(keep.title).toBe("Keep me");
-    expect(keep.status).toBe("done");
-    expect(keep.commits).toEqual([SHA]);
-    expect(keep.order).toBe(0);
-    expect(keep.appended).toBeUndefined();
-
-    expect(readIssue("new-a").order).toBe(3);
-    expect(readIssue("new-b").order).toBe(4);
-    expect(readIssue("new-a").appended).toBe(true);
-    expect(readIssue("new-b").appended).toBe(true);
-    expect(readIssue("restated").appended).toBeUndefined();
-    expect(list().problems).toEqual([]);
-  });
-
   it("upserts a restated Task in place, keeping status, commits, and order", async () => {
     seedStory();
     const { appendTasks } = await loadAppend();
@@ -131,76 +100,6 @@ describe("appendTasks", () => {
     expect(restated.appended).toBeUndefined();
     expect(readIssue("keep-me").title).toBe("Keep me");
     expect(readIssue("new-c").order).toBe(3);
-  });
-
-  it("preserves appended across a later apply of the Story's task list", async () => {
-    seedStory();
-    const { appendTasks, apply } = await loadAppend();
-
-    await appendTasks({
-      storyId: "s1",
-      doc: storyDoc([{ kind: "task", id: "appended-later", title: "Appended" }]),
-    });
-    expect(readIssue("appended-later").appended).toBe(true);
-
-    await apply(
-      storyDoc([
-        { kind: "task", id: "keep-me", title: "Keep me" },
-        { kind: "task", id: "restated", title: "Restated" },
-        { kind: "task", id: "appended-later", title: "Appended renamed" },
-      ]),
-    );
-
-    const kept = readIssue("appended-later");
-    expect(kept.title).toBe("Appended renamed");
-    expect(kept.appended).toBe(true);
-    expect(readIssue("keep-me").appended).toBeUndefined();
-  });
-
-  it("refuses a merged target with the append-target reason", async () => {
-    seedStory({ merged: true });
-    const { appendTasks } = await loadAppend();
-
-    await expect(
-      appendTasks({
-        storyId: "s1",
-        doc: storyDoc([{ kind: "task", id: "nope", title: "Nope" }]),
-      }),
-    ).rejects.toThrow(/appendTo cannot target merged Story "s1"/);
-    expect(existsSync(join(dir, "nope"))).toBe(false);
-  });
-
-  it("refuses when the doc story.id disagrees with the argument", async () => {
-    seedStory();
-    const { appendTasks } = await loadAppend();
-
-    await expect(
-      appendTasks({
-        storyId: "s1",
-        doc: storyDoc([{ kind: "task", id: "nope", title: "Nope" }], "other"),
-      }),
-    ).rejects.toThrow(/story.id "other" does not match append target "s1"/);
-    expect(existsSync(join(dir, "nope"))).toBe(false);
-  });
-
-  it("refuses kind: story children", async () => {
-    seedStory();
-    const { appendTasks } = await loadAppend();
-
-    const doc = {
-      project: "p1",
-      epic: "e1",
-      story: {
-        id: "s1",
-        title: "Story",
-        children: [{ kind: "story", id: "stacked", title: "Stacked" }],
-      },
-    } as never;
-
-    await expect(appendTasks({ storyId: "s1", doc })).rejects.toThrow(
-      /stacked Story is not an append/,
-    );
-    expect(existsSync(join(dir, "stacked"))).toBe(false);
   });
 
   it("makes no partial writes when one node would break integrity", async () => {

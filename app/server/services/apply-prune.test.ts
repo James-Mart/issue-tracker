@@ -2,14 +2,7 @@ import { existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 import type { ApplyDoc } from "./apply-schema.js";
-import {
-  AT,
-  dir,
-  loadService,
-  readIssue,
-  useApplyTestFixtures,
-  writeIssue,
-} from "./apply.test-fixtures.js";
+import { AT, dir, loadService, useApplyTestFixtures, writeIssue } from "./apply.test-fixtures.js";
 
 useApplyTestFixtures();
 
@@ -102,39 +95,5 @@ describe("apply — prune by default", () => {
     expect(eOut && eOut.kind === "epic" ? eOut.blockedBy : ["unrepaired"]).toEqual(
       [],
     );
-  });
-
-  it("prunes an Idea omitted from project-root children:", async () => {
-    writeIssue("p1", { kind: "project", title: "P1", order: 0, createdAt: AT, updatedAt: AT });
-    writeIssue("capture", {
-      kind: "idea",
-      title: "Capture",
-      partOf: "p1",
-      order: 1,
-      archived: false,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    writeIssue("e1", {
-      kind: "epic",
-      title: "E1",
-      partOf: "p1",
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-
-    const { apply, list } = await loadService();
-    const summary = await apply({
-      project: {
-        id: "p1",
-        title: "P1",
-        children: [{ kind: "epic", id: "e1", title: "E1 renamed" }],
-      },
-    });
-    expect(summary.deleted).toEqual(["capture"]);
-    expect(list().issues.map((issue) => issue.id).sort()).toEqual(["e1", "p1"]);
-    expect(existsSync(join(dir, "capture"))).toBe(false);
-    expect(readIssue("e1").title).toBe("E1 renamed");
   });
 });

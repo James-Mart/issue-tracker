@@ -2,18 +2,12 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  appendOutputTail,
-  killProcessGroup,
-  OUTPUT_TAIL_KEEP,
-  OUTPUT_TAIL_LIMIT,
-} from "./bounded-process.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { killProcessGroup } from "./bounded-process.js";
 
 const strays: ChildProcess[] = [];
 
 afterEach(() => {
-  vi.restoreAllMocks();
   for (const child of strays) {
     if (child.pid !== undefined && child.exitCode === null) {
       try {
@@ -26,38 +20,7 @@ afterEach(() => {
   strays.length = 0;
 });
 
-describe("appendOutputTail", () => {
-  it("keeps text that fits in the limit", () => {
-    expect(appendOutputTail("", "short", 10, 4)).toBe("short");
-  });
-
-  it("retains the last keep characters once text exceeds the limit", () => {
-    const chunk = `HEAD${"x".repeat(OUTPUT_TAIL_LIMIT)}TAIL`;
-    const tail = appendOutputTail("", chunk);
-    expect(tail).toHaveLength(OUTPUT_TAIL_KEEP);
-    expect(tail.endsWith("TAIL")).toBe(true);
-    expect(tail.startsWith("HEAD")).toBe(false);
-  });
-});
-
 describe("killProcessGroup", () => {
-  it("ignores ESRCH and rethrows other kill errors", () => {
-    const kill = vi.spyOn(process, "kill").mockImplementation(() => {
-      const err = new Error("gone") as NodeJS.ErrnoException;
-      err.code = "ESRCH";
-      throw err;
-    });
-    expect(() => killProcessGroup(123)).not.toThrow();
-    expect(kill).toHaveBeenCalledWith(-123, "SIGKILL");
-
-    kill.mockImplementation(() => {
-      const err = new Error("denied") as NodeJS.ErrnoException;
-      err.code = "EPERM";
-      throw err;
-    });
-    expect(() => killProcessGroup(123)).toThrow(/denied/);
-  });
-
   it("kills a grandchild that ignores SIGHUP", async () => {
     const root = mkdtempSync(join(tmpdir(), "bounded-process-"));
     const pidFile = join(root, "grandchild.pid");

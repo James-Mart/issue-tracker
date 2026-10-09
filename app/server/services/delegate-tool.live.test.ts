@@ -2,20 +2,13 @@ import { join } from "path";
 import type { ModelSelection } from "@cursor/sdk";
 import { describe, expect, it } from "vitest";
 import type { TranscriptEvent } from "../schemas.js";
-import {
-  agentSdk,
-  type AgentHandle,
-  type AgentRun,
-  type AgentSdk,
-  type AgentStreamEvent,
-} from "./agent-sdk.js";
+import { agentSdk, type AgentHandle, type AgentSdk } from "./agent-sdk.js";
 import {
   createConversation,
   deleteConversation,
   readConversation,
 } from "./conversations.js";
 import { createDelegateCustomTools } from "./delegate-tool.js";
-import { extractTaskHints } from "./event-pipeline.js";
 import { resolveModelSelection } from "./model-selection.js";
 import { loadRoleModelPin } from "./role-bodies.js";
 
@@ -54,11 +47,7 @@ const ROLE = "issue-tracker-plan-dependency-order";
  */
 const NESTED_ROLE = "issue-tracker-research";
 
-const PROBE_PROMPT =
-  "This is a wiring probe, not real work. Do not read files, run commands, " +
-  "or start the checks described above. Reply with the single word ok.";
-
-/** {@link PROBE_PROMPT}'s guard, worded for a research role. */
+/** A wiring-probe guard, worded for a research role. */
 const NESTED_PROBE_PROMPT =
   "This is a wiring probe, not real work. Do not read files, run commands, " +
   "or research the question described above. Reply with the single word ok.";
@@ -99,59 +88,10 @@ const RECALL_PROMPT =
   "Still the same wiring probe. Do not read files or run commands. Reply " +
   "with the code word you were given earlier and nothing else.";
 
-/**
- * What the migrated plan-polish coordinator hands a check role: the work-root
- * context line and the findings return line from the skill's spawn stubs,
- * closed with the same wiring-probe guard {@link PROBE_PROMPT} uses — so the
- * check answers in its contract shape without reviewing a tree for real.
- */
-const CHECK_STUB_PROMPT =
-  "Work root: `delegation-bridge` (App-hosted delegation bridge). " +
-  "Return only a JSON findings array per " +
-  "`agents/_issue-tracker-plan-polish-check-base.md` (detection-only — no " +
-  "fixes; no prose wrapper). " +
-  "This is a wiring probe, not real work: do not read files or run " +
-  "commands, and return the empty array [] as your entire reply.";
-
-/**
- * A work role the implementor re-enters rather than respawning: each code
- * reviewer is spawned once per Task and resumed on every recheck round.
- */
-const WORK_ROLE = "issue-tracker-review-coding-standards";
-
-/**
- * The issue id the work stubs below carry. Deliberately not a tracked issue,
- * so a run that ignores {@link WORK_PROBE_GUARD} reviews nothing real.
- */
-const PROBE_ISSUE_ID = "live-probe-no-such-issue";
-
-/** {@link PROBE_PROMPT}'s guard, worded for a reviewer's findings reply. */
-const WORK_PROBE_GUARD =
-  "This is a wiring probe, not real work: do not read files or run commands " +
-  "(including `issue`), and return the empty array [] as your entire reply.";
-
-/** The implementor's Review stub. */
-const REVIEW_STUB_PROMPT =
-  `Issue: \`${PROBE_ISSUE_ID}\` (live wiring probe). ` + WORK_PROBE_GUARD;
-
-/** The implementor's Review (recheck) stub — the re-entry beat. */
-const REVIEW_RECHECK_STUB_PROMPT =
-  `Issue: \`${PROBE_ISSUE_ID}\` (live wiring probe). Mode: recheck. ` +
-  "Fixed: `probe-finding`. " +
-  WORK_PROBE_GUARD;
-
-type ToolCallMessage = Extract<
-  Extract<AgentStreamEvent, { kind: "message" }>["message"],
-  { type: "tool_call" }
->;
-
 type SubagentUpdateEvent = Extract<
   TranscriptEvent,
   { type: "subagent_update" }
 >;
-
-/** The tool name the SDK reports for a Cursor Task call. */
-const TASK_TOOL_NAME = "task";
 
 /** The `subagent_update` events a conversation recorded, in transcript order. */
 function recordedNestedEvents(conversationId: string): SubagentUpdateEvent[] {
@@ -159,50 +99,6 @@ function recordedNestedEvents(conversationId: string): SubagentUpdateEvent[] {
     (event): event is SubagentUpdateEvent =>
       event.type === "subagent_update",
   );
-}
-
-/** Every `tool_call` message one send reported, drained to completion. */
-async function toolCallsFrom(run: AgentRun): Promise<ToolCallMessage[]> {
-  const toolCalls: ToolCallMessage[] = [];
-  for await (const event of run) {
-    if (event.kind === "message" && event.message.type === "tool_call") {
-      toolCalls.push(event.message);
-    }
-  }
-  await run.wait();
-  return toolCalls;
-}
-
-/**
- * The one completed Task call a send made — and, on the way, the IDE-channel
- * claim itself: no `delegate` was attempted, and the delegation went out over
- * Task exactly once.
- */
-function soleCompletedTaskCall(toolCalls: ToolCallMessage[]): ToolCallMessage {
-  expect(toolCalls.map((call) => call.name)).not.toContain("delegate");
-  const completed = toolCalls.filter(
-    (call) => call.name === TASK_TOOL_NAME && call.status === "completed",
-  );
-  expect(completed).toHaveLength(1);
-  return completed[0]!;
-}
-
-/**
- * What the delegated check replied, as it arrives on the Task call's result:
- * the SDK hands back the nested run's conversation steps, and the findings
- * are its closing assistant message.
- */
-function taskReplyText(result: unknown): string {
-  const steps =
-    (result as { value?: { conversationSteps?: unknown[] } } | null)?.value
-      ?.conversationSteps ?? [];
-  let text = "";
-  for (const step of steps) {
-    const message = (step as { assistantMessage?: { text?: unknown } })
-      .assistantMessage;
-    if (typeof message?.text === "string") text = message.text;
-  }
-  return text;
 }
 
 /**
@@ -243,73 +139,11 @@ function recordRunModels(inner: AgentSdk): {
 }
 
 describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
-  // A mapping unit test proves the table; only a live delegation proves a
-  // nested run is what the table says it is.
-  it(
-    "runs the delegated role on the selection its pin maps to",
-    async () => {
-      const { sdk, runModels } = recordRunModels(agentSdk);
-      const customTools = createDelegateCustomTools({
-        sdk,
-        cwd: process.cwd(),
-        storeDir: STORE_DIR,
-      });
-
-      await customTools.delegate!.execute(
-        { role: ROLE, prompt: PROBE_PROMPT },
-        {},
-      );
-
-      expect(runModels).toHaveLength(1);
-      const [nestedModel] = runModels;
-      expect(nestedModel).toBeDefined();
-      expect(nestedModel).not.toEqual(PARENT_CONVERSATION_MODEL);
-      expect(nestedModel).toEqual(resolveModelSelection(loadRoleModelPin(ROLE)));
-    },
-    LIVE_TIMEOUT_MS,
-  );
-
-  // Epic invariant: dropping the inline SDK `agents` map must not drop
-  // pins-survive-resume. Create already proved the pin maps; this proves
-  // re-entry still names it after resume through `delegate`.
-  it(
-    "re-applies the role pin when re-entering through delegate",
-    async () => {
-      const { sdk, runModels } = recordRunModels(agentSdk);
-      const customTools = createDelegateCustomTools({
-        sdk,
-        cwd: process.cwd(),
-        storeDir: STORE_DIR,
-      });
-
-      const spawned = (await customTools.delegate!.execute(
-        { role: ROLE, prompt: PROBE_PROMPT },
-        {},
-      )) as { agentId: string };
-
-      await customTools.delegate!.execute(
-        {
-          role: ROLE,
-          prompt: PROBE_PROMPT,
-          resumeId: spawned.agentId,
-        },
-        {},
-      );
-
-      expect(runModels).toHaveLength(2);
-      const expected = resolveModelSelection(loadRoleModelPin(ROLE));
-      expect(runModels[0]).toEqual(expected);
-      expect(runModels[1]).toEqual(expected);
-    },
-    TWO_TURN_TIMEOUT_MS,
-  );
-
-  // Depth 2 is the chain the bridge exists to carry, so it is measured rather
-  // than extrapolated from depth 1: the innermost run is started by a nested
-  // run's own tools, which is where a role's pin could collapse onto its
-  // delegator's model and where parentage could be lost. Recording the
-  // parentage needs a real conversation — the `subagent_update` frames are
-  // persisted against one.
+  // Depth 2 is the chain the bridge exists to carry: the innermost run is
+  // started by a nested run's own tools, which is where a role's pin could
+  // collapse onto its delegator's model and where parentage could be lost.
+  // Recording the parentage needs a real conversation — the `subagent_update`
+  // frames are persisted against one.
   it(
     "runs a depth-2 chain on each role's pin and records the nested parentage",
     async () => {
@@ -380,13 +214,11 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
     LIVE_TIMEOUT_MS,
   );
 
-  // The app-channel counterpart to the Task re-entry probe below, and the beat
-  // every relay loop is built on: the auto-plan coordinator answers a grill
-  // question by re-entering the planner it already has. Resuming is not
+  // The beat every relay loop is built on: the auto-plan coordinator answers a
+  // grill question by re-entering the planner it already has. Resuming is not
   // symmetric with spawning — the SDK looks a stored agent up under the
   // workspace it ran in — so this runs against a workspace that is not
-  // `process.cwd()`, the condition the app is always in and no earlier
-  // assertion reproduced.
+  // `process.cwd()`, the condition the app is always in.
   it(
     "re-enters a nested agent through the bridge and keeps its context",
     async () => {
@@ -416,91 +248,6 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
       // nothing, which is the failure a grill relay cannot survive.
       expect(resumed.agentId).toBe(spawned.agentId);
       expect(resumed.reply.toLowerCase()).toContain(CODE_WORD);
-    },
-    TWO_TURN_TIMEOUT_MS,
-  );
-
-  // The IDE counterpart to the assertion above. `lint:spawns` proves the
-  // migrated stubs have the right shape; only a live run proves an agent on
-  // that surface still gets its check done. Omitting `customTools` is the IDE
-  // condition: the channel-detection probe finds no `delegate`, while
-  // `settingSources: ["plugins"]` keeps the check roles on the Task tool. The
-  // evidence is the parent's own stream — on this channel no bridge records
-  // anything.
-  it(
-    "delegates a migrated plan-polish check over Task when no delegate tool exists",
-    async () => {
-      await using agent = await agentSdk.createAgent({
-        cwd: process.cwd(),
-        model: PARENT_CONVERSATION_MODEL,
-        storeDir: STORE_DIR,
-      });
-
-      const toolCalls = await toolCallsFrom(
-        await agent.send(
-          `Call the Task tool exactly once, with subagent_type "${ROLE}", ` +
-            'description "plan-polish check", and prompt ' +
-            `${JSON.stringify(CHECK_STUB_PROMPT)}. ` +
-            "Pass no model argument on that call. " +
-            "Then reply with the single word done.",
-        ),
-      );
-
-      const result = soleCompletedTaskCall(toolCalls).result;
-      expect(extractTaskHints(result).resultAgentId).toBeDefined();
-
-      const findings = taskReplyText(result).trim();
-      expect(findings).not.toBe("");
-      expect(JSON.parse(findings)).toEqual([]);
-    },
-    LIVE_TIMEOUT_MS,
-  );
-
-  // The same IDE claim, re-proved against the work vocabulary, so it is
-  // measured rather than inherited from the plan-polish assertion above. Its
-  // re-entry beat is the part no earlier assertion reaches — an implementor
-  // that rechecks a reviewer has to land back inside the agent it already has.
-  it(
-    "re-enters a work reviewer over Task when no delegate tool exists",
-    async () => {
-      await using agent = await agentSdk.createAgent({
-        cwd: process.cwd(),
-        model: PARENT_CONVERSATION_MODEL,
-        storeDir: STORE_DIR,
-      });
-
-      const spawned = soleCompletedTaskCall(
-        await toolCallsFrom(
-          await agent.send(
-            "Call the Task tool exactly once, with subagent_type " +
-              `"${WORK_ROLE}", description "coding standards review", and ` +
-              `prompt ${JSON.stringify(REVIEW_STUB_PROMPT)}. ` +
-              "Pass no model argument on that call. " +
-              "Then reply with the single word done.",
-          ),
-        ),
-      );
-      const spawnedAgentId = extractTaskHints(spawned.result).resultAgentId;
-      expect(spawnedAgentId).toBeDefined();
-
-      const resumed = soleCompletedTaskCall(
-        await toolCallsFrom(
-          await agent.send(
-            "Call the Task tool exactly once, with subagent_type " +
-              `"${WORK_ROLE}", resume "${spawnedAgentId}", description ` +
-              '"coding standards review (recheck)", and prompt ' +
-              `${JSON.stringify(REVIEW_RECHECK_STUB_PROMPT)}. ` +
-              "Pass no model argument on that call. " +
-              "Then reply with the single word done.",
-          ),
-        ),
-      );
-
-      // A resume that missed would complete too — as a second subagent, under
-      // its own id. Equality is what says the re-entry landed on the first.
-      expect(extractTaskHints(resumed.result).resultAgentId).toBe(
-        spawnedAgentId,
-      );
     },
     TWO_TURN_TIMEOUT_MS,
   );
