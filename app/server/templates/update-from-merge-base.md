@@ -30,3 +30,6 @@ resolutions. Leave `MERGE_HEAD` set and continue the ordinary cycle, which
 commits the merge.
 
 When every conflicted path was discernable, do not raise attention.
+
+When nothing is unmerged, call `agent_stack_stop`. When it returns
+`stopped: true`, call `agent_stack_start` with `issueId` set to `{{storyId}}`.
