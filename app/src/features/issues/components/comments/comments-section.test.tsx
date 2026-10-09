@@ -59,6 +59,7 @@ vi.mock("../../api/queries", async () => {
 vi.mock("../../api/mutations", () => ({
   usePostComment: () => postComment,
   usePostThreadEvent: () => ({ mutate: vi.fn(), isPending: false }),
+  useEditComment: () => ({ mutateAsync: vi.fn(async () => undefined) }),
 }));
 
 function comment(
@@ -381,6 +382,29 @@ describe("IssueCommentsSection", () => {
     );
     expect(card?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
     expect(card?.querySelector('[data-testid="thread-convert"]')).toBeNull();
+  });
+
+  it("offers Edit beside Quote on an editable anchored review comment on a story", () => {
+    commentsState.messages = [
+      comment({
+        id: "editable-anchored",
+        at: "2026-08-30T14:00:00.000Z",
+        role: "human",
+        name: "Jared",
+        body: "Editable anchored review comment",
+        editable: true,
+        anchor: {
+          path: "app/server/services/comment-edit.ts",
+          side: "new",
+          line: 1,
+          commitSha: SHA,
+        },
+      }),
+    ];
+    const container = mount(undefined, story());
+    const thread = container.querySelector('[data-thread-root="editable-anchored"]');
+    expect(thread?.querySelector('[data-testid="comment-edit"]')).not.toBeNull();
+    expect(thread?.querySelector('[data-testid="comment-quote"]')).not.toBeNull();
   });
 
   it("quotes an unanchored note as a new comment with its body and no anchor", () => {

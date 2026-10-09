@@ -8,7 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { ReviewComposer } from "@/features/reviews/components/review-composer";
 import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
 import { useCommentThreads, useCommentsQuery } from "../../api/queries";
-import { usePostComment, usePostThreadEvent } from "../../api/mutations";
+import {
+  useEditComment,
+  usePostComment,
+  usePostThreadEvent,
+} from "../../api/mutations";
 import { supportsAttachments } from "../../lib/attachments";
 import {
   isPlainNote,
@@ -110,6 +114,7 @@ function CommentList({
   quoteSlotFor,
   onReply,
   onQuote,
+  onEdit,
   onSeeInDiff,
   storyComposer,
   onThreadEvent,
@@ -125,6 +130,7 @@ function CommentList({
   } | undefined;
   onReply: (threadId: string) => void;
   onQuote?: (thread: CommentThreadData, commentId: string, body: string) => void;
+  onEdit?: (commentId: string, body: string) => Promise<void>;
   onSeeInDiff: (threadId: string) => void;
   storyComposer: boolean;
   onThreadEvent: (
@@ -214,6 +220,7 @@ function CommentList({
           thread.root.anchor ? () => onSeeInDiff(thread.root.id) : undefined
         }
         onReply={() => onReply(thread.root.id)}
+        onEdit={onEdit}
         onQuote={
           onQuote ? (comment) => onQuote(thread, comment.id, comment.body) : undefined
         }
@@ -339,6 +346,7 @@ function CommentsPanel({
   const { isLoading, error } = useCommentsQuery(id);
   const { threads, problems } = useCommentThreads(id);
   const post = usePostComment(id);
+  const edit = useEditComment(id);
   const events = usePostThreadEvent(id);
   const [, setSearchParams] = useSearchParams();
   const [draft, setDraft] = useState("");
@@ -383,6 +391,10 @@ function CommentsPanel({
   const submitStoryComposer = (intent: ThreadComposerIntent, body: string) => {
     post(threadComposerCommentInput(intent, body));
     composers.close(intent.threadId);
+  };
+
+  const submitCommentEdit = async (commentId: string, body: string) => {
+    await edit.mutateAsync({ commentId, body });
   };
 
   const replySlotFor = (threadId: string) => {
@@ -494,6 +506,7 @@ function CommentsPanel({
                     })
                 : undefined
             }
+            onEdit={submitCommentEdit}
             storyComposer={storyComposer}
             eventPending={events.isPending}
             onThreadEvent={(threadId, event) =>
