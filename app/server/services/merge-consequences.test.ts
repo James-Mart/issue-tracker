@@ -410,4 +410,82 @@ describe("story mergedAt stamp", () => {
       update("finisher", { merged: true, mergedAt: "not-a-date" }),
     ).rejects.toThrow(/mergedAt must be an ISO timestamp/);
   });
+
+  it("leaves mergedAt unchanged when another field edits a merged Story", async () => {
+    const { update } = await loadModules();
+    await update("finisher", {
+      merged: true,
+      mergedAt: "2026-01-15T09:30:00.000Z",
+    });
+    vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+    await update("finisher", { title: "Renamed finisher" });
+    expect(readStoryJson("finisher").mergedAt).toBe("2026-01-15T09:30:00.000Z");
+  });
+
+  it("stamps a new mergedAt after merged is cleared and set true again", async () => {
+    const { update } = await loadModules();
+    await update("finisher", {
+      merged: true,
+      mergedAt: "2026-01-15T09:30:00.000Z",
+    });
+    await update("finisher", { merged: false });
+    vi.setSystemTime(new Date("2026-10-01T08:00:00.000Z"));
+    await update("finisher", { merged: true });
+    expect(readStoryJson("finisher").mergedAt).toBe("2026-10-01T08:00:00.000Z");
+  });
+});
+
+describe("ensureMergedAtBackfilled (via list)", () => {
+  const LANDED_AT = "2025-03-01T18:22:00.000Z";
+
+  it("backfills mergedAt from updatedAt once and skips Stories that already have it", async () => {
+    writeIssue("landed", {
+      kind: "story",
+      title: "Landed",
+      partOf: "e",
+      merged: true,
+      order: 0,
+      createdAt: AT,
+      updatedAt: LANDED_AT,
+    });
+    writeIssue("stamped", {
+      kind: "story",
+      title: "Stamped",
+      partOf: "e",
+      merged: true,
+      mergedAt: "2024-01-01T00:00:00.000Z",
+      order: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("open", {
+      kind: "story",
+      title: "Open",
+      partOf: "e",
+      merged: false,
+      order: 2,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const { list } = await import("./issues.js");
+    list();
+
+    expect(readStoryJson("landed").mergedAt).toBe(LANDED_AT);
+    expect(readStoryJson("stamped").mergedAt).toBe("2024-01-01T00:00:00.000Z");
+    expect(readStoryJson("open").mergedAt).toBeUndefined();
+
+    writeIssue("new-landed", {
+      kind: "story",
+      title: "New landed",
+      partOf: "e",
+      merged: true,
+      order: 3,
+      createdAt: AT,
+      updatedAt: LANDED_AT,
+    });
+
+    list();
+    expect(readStoryJson("new-landed").mergedAt).toBeUndefined();
+  });
 });
