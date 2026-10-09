@@ -96,4 +96,44 @@ describe("useChannelSessionsQuery", () => {
       }),
     );
   });
+
+  it("uses a caller interval when a launch is polling for its session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          sessions: {
+            "alpha:planning": [channelSessionListItem({ id: "alpha-planning" })],
+          },
+        }),
+      ),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    function FastProbe() {
+      useChannelSessionsQuery("alpha", "planning", { awaitingLaunchSession: true });
+      return null;
+    }
+
+    await act(async () => {
+      root!.render(
+        <QueryClientProvider client={client}>
+          <FastProbe />
+        </QueryClientProvider>,
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        client.getQueryCache().find({
+          queryKey: issuesKeys.channelSessions("alpha", "planning"),
+        })?.options,
+      ).toEqual(expect.objectContaining({ refetchInterval: 1_000 }));
+    });
+  });
 });

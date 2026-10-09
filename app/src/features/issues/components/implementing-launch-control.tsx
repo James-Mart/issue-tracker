@@ -312,7 +312,7 @@ export function ImplementingOverviewLaunch({
       return;
     }
     const { resumeSession } = workLoopAction;
-    beginLaunch(issue.id, "work");
+    beginLaunch(issue.id, "work", { resumeSession });
     sendMessage.mutate(
       {
         id: resumeSession.id,

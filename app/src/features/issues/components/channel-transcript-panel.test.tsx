@@ -3,13 +3,21 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelSessionListItem, IssueDetail } from "@server/schemas";
-import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
+import {
+  resetCockpitLaunchStore,
+  useCockpitLaunchStore,
+} from "../store/use-cockpit-launch-store";
+import { channelSessionListItem } from "../test/channel-session-list-item";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 
 const queryState = vi.hoisted(() => ({
   data: undefined as ChannelSessionListItem[] | undefined,
   isLoading: false,
   error: null as Error | null,
+}));
+
+const queryArgs = vi.hoisted(() => ({
+  awaitingLaunchSession: undefined as boolean | undefined,
 }));
 
 const attachmentState = vi.hoisted(() => ({
@@ -26,11 +34,18 @@ const threadProps = vi.hoisted(() => ({
 const deleteMutate = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/queries", () => ({
-  useChannelSessionsQuery: () => ({
-    data: queryState.data,
-    isLoading: queryState.isLoading,
-    error: queryState.error,
-  }),
+  useChannelSessionsQuery: (
+    _issueId: string,
+    _channel: string,
+    options?: { awaitingLaunchSession?: boolean },
+  ) => {
+    queryArgs.awaitingLaunchSession = options?.awaitingLaunchSession;
+    return {
+      data: queryState.data,
+      isLoading: queryState.isLoading,
+      error: queryState.error,
+    };
+  },
   useAttachmentsQuery: () => ({
     data: attachmentState.data,
     isLoading: attachmentState.isLoading,
@@ -257,27 +272,32 @@ function mountPanel(
 ): {
   container: HTMLDivElement;
   root: Root;
+  rerender: () => void;
 } {
   const channel = options?.channel ?? "planning";
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  act(() => {
-    root.render(
-      <ChannelTranscriptPanel
-        issueId={issue?.id ?? "capture"}
-        issue={issue}
-        channel={channel}
-        label={label}
-        projectId={options?.projectId}
-        parentKind={options?.parentKind}
-        mobileFullViewport={options?.mobileFullViewport}
-        onBackToOverview={options?.onBackToOverview}
-      />,
-    );
-  });
-  return { container, root };
+  const rerender = () => {
+    act(() => {
+      root.render(
+        <ChannelTranscriptPanel
+          issueId={issue?.id ?? "capture"}
+          issue={issue}
+          channel={channel}
+          label={label}
+          projectId={options?.projectId}
+          parentKind={options?.parentKind}
+          mobileFullViewport={options?.mobileFullViewport}
+          onBackToOverview={options?.onBackToOverview}
+        />,
+      );
+    });
+  };
+  rerender();
+  return { container, root, rerender };
 }
+
 
 const idea: IssueDetail = {
   kind: "idea",
@@ -313,6 +333,7 @@ afterEach(() => {
   queryState.data = undefined;
   queryState.isLoading = false;
   queryState.error = null;
+  queryArgs.awaitingLaunchSession = undefined;
   attachmentState.data = [];
   attachmentState.isLoading = false;
   threadProps.hideComposer = false;
@@ -367,6 +388,85 @@ describe("ChannelTranscriptPanel", () => {
     expect(
       container.querySelector('[data-testid="planning-channel-empty-state"]'),
     ).toBeNull();
+  });
+
+  it("keeps the waiting panel until the launch session appears, then shows that transcript", () => {
+    queryState.data = [
+      channelSessionListItem({ id: "older", createdAt: "2020-01-01T00:00:00.000Z" }),
+    ];
+    const { container, rerender } = mountPanel("Planning", idea);
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
+    });
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]')
+        ?.textContent,
+    ).toContain("The transcript opens here as soon as the session appears.");
+    expect(
+      container.querySelector('[data-testid="conversation-thread"]'),
+    ).toBeNull();
+    expect(queryArgs.awaitingLaunchSession).toBe(true);
+
+    const startedAt = useCockpitLaunchStore.getState().pending?.startedAt ?? "";
+    queryState.data = [
+      channelSessionListItem({ id: "older", createdAt: "2020-01-01T00:00:00.000Z" }),
+      channelSessionListItem({
+        id: "live-1",
+        title: "Plan Capture",
+        createdAt: startedAt,
+        activeRun: true,
+      }),
+    ];
+    rerender();
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="conversation-thread"]')
+        ?.getAttribute("data-conversation-id"),
+    ).toBe("live-1");
+    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
+      issueId: "capture",
+      kind: "planning",
+    });
+  });
+
+  it("keeps the resumed session's transcript up while the resume request is pending", () => {
+    queryState.data = [
+      channelSessionListItem({
+        id: "sess-1",
+        title: "Implement Ship it",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+    ];
+    const { container } = mountPanel("Implementing", epic, {
+      channel: "implementing",
+      projectId: "platform",
+    });
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("ship-it", "work", {
+        resumeSession: {
+          id: "sess-1",
+          title: "Implement Ship it",
+          model: "composer-2.5",
+        },
+      });
+    });
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="conversation-thread"]')
+        ?.getAttribute("data-conversation-id"),
+    ).toBe("sess-1");
+    expect(queryArgs.awaitingLaunchSession).toBe(false);
   });
 
   it("hosts ConversationThread for the most recent non-archived session", () => {

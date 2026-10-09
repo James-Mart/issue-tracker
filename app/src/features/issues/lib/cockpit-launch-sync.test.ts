@@ -140,21 +140,26 @@ describe("overlayCockpitLaunchAck", () => {
 });
 
 describe("cockpitLaunchOverlayForIssue", () => {
+  const pending = {
+    issueId: "auth",
+    kind: "work" as const,
+    startedAt: "2026-08-01T00:00:00.000Z",
+  };
+
   it("prefers pending over ack for the same issue", () => {
     expect(
-      cockpitLaunchOverlayForIssue(
-        "auth",
-        { issueId: "auth", kind: "work" },
-        { issueId: "auth", kind: "work" },
-      ),
-    ).toEqual({ issueId: "auth", kind: "work" });
+      cockpitLaunchOverlayForIssue("auth", pending, {
+        issueId: "auth",
+        kind: "work",
+      }),
+    ).toEqual(pending);
   });
 
   it("returns ack when pending is for another issue", () => {
     expect(
       cockpitLaunchOverlayForIssue(
         "auth",
-        { issueId: "other", kind: "work" },
+        { ...pending, issueId: "other" },
         { issueId: "auth", kind: "work" },
       ),
     ).toEqual({ issueId: "auth", kind: "work" });

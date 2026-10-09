@@ -4,6 +4,7 @@ import {
   detailLaunchFaultCopy,
   detailLaunchPendingCopy,
   launchOverlaysChannel,
+  launchTranscriptSession,
 } from "./detail-launch-sync";
 
 describe("channelForLaunchKind", () => {
@@ -37,21 +38,88 @@ describe("launchOverlaysChannel", () => {
   });
 });
 
+const waitingLine =
+  "The transcript opens here as soon as the session appears.";
+
 describe("detailLaunchPendingCopy", () => {
   it("names the in-flight work loop", () => {
     expect(detailLaunchPendingCopy("work")).toEqual({
       title: "Starting the work loop…",
-      detail:
-        "Session create is in flight. The coordinator transcript will open here once the run is acknowledged.",
+      detail: waitingLine,
     });
   });
 
   it("names the in-flight planning session", () => {
     expect(detailLaunchPendingCopy("planning")).toEqual({
       title: "Starting the planning session…",
-      detail:
-        "Session create is in flight. The planning transcript will open here once the run is acknowledged.",
+      detail: waitingLine,
     });
+  });
+});
+
+describe("launchTranscriptSession", () => {
+  const older = {
+    id: "older",
+    createdAt: "2026-08-01T00:00:00.000Z",
+    archived: false,
+  };
+  const opened = {
+    id: "opened",
+    createdAt: "2026-08-02T00:00:00.000Z",
+    archived: false,
+  };
+
+  it("returns the resume row even when it predates the launch", () => {
+    expect(
+      launchTranscriptSession(
+        {
+          startedAt: "2026-08-03T00:00:00.000Z",
+          resumeSession: {
+            id: "older",
+            title: "Implement",
+            model: "composer-2.5",
+          },
+        },
+        [older],
+      ),
+    ).toBe(older);
+  });
+
+  it("returns nothing when the resume id is not in the list yet", () => {
+    expect(
+      launchTranscriptSession(
+        {
+          startedAt: "2026-08-03T00:00:00.000Z",
+          resumeSession: {
+            id: "missing",
+            title: "Implement",
+            model: "composer-2.5",
+          },
+        },
+        [older],
+      ),
+    ).toBeUndefined();
+  });
+
+  it("returns the newest session created at or after the launch began", () => {
+    expect(
+      launchTranscriptSession(
+        { startedAt: "2026-08-02T00:00:00.000Z" },
+        [older, opened],
+      ),
+    ).toBe(opened);
+    expect(
+      launchTranscriptSession({ startedAt: opened.createdAt }, [older, opened]),
+    ).toBe(opened);
+  });
+
+  it("ignores an archived session and a session from before the launch", () => {
+    expect(
+      launchTranscriptSession({ startedAt: "2026-08-02T00:00:00.000Z" }, [
+        older,
+        { ...opened, archived: true },
+      ]),
+    ).toBeUndefined();
   });
 });
 

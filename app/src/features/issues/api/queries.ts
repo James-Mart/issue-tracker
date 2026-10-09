@@ -212,6 +212,9 @@ export function useExportDraftTexts(
 /** Poll so closed-tab runs clear without an open SSE subscription. */
 const CHANNEL_SESSIONS_REFETCH_INTERVAL_MS = 15_000;
 
+/** Poll while a new launch is waiting for its session to appear on the channel. */
+const LAUNCH_SESSION_POLL_MS = 1_000;
+
 export function usePlanningWorkRootQuery(
   ideaId: string | undefined,
 ): UseQueryResult<{ workRoot: PlanningWorkRoot | null }, Error> {
@@ -228,13 +231,16 @@ export function usePlanningWorkRootQuery(
 export function useChannelSessionsQuery(
   issueId: string,
   channel: ConversationChannel,
+  options?: { awaitingLaunchSession?: boolean },
 ): UseQueryResult<ChannelSessionListItem[], Error> {
   return useQuery({
     queryKey: issuesKeys.channelSessions(issueId, channel),
     queryFn: () => loadChannelSessions(issueId, channel),
     enabled: Boolean(issueId) && Boolean(channel),
     refetchOnWindowFocus: true,
-    refetchInterval: CHANNEL_SESSIONS_REFETCH_INTERVAL_MS,
+    refetchInterval: options?.awaitingLaunchSession
+      ? LAUNCH_SESSION_POLL_MS
+      : CHANNEL_SESSIONS_REFETCH_INTERVAL_MS,
   });
 }
 
