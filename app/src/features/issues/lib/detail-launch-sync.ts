@@ -2,6 +2,7 @@ import type { ConversationChannel } from "@server/schemas";
 import type {
   CockpitLaunchFault,
   CockpitLaunchKind,
+  CockpitLaunchPending,
 } from "./cockpit-launch-sync";
 
 /** Channel tab the Issue detail launch instrument drives for a launch kind. */
@@ -21,7 +22,11 @@ export function launchOverlaysChannel(
   return channelForLaunchKind(overlay.kind) === channel;
 }
 
-/** Pending body copy while session-create is in flight. */
+/** Waiting line on both channel tabs while the launch's session does not exist yet. */
+const LAUNCH_WAITING_LINE =
+  "The transcript opens here as soon as the session appears.";
+
+/** Pending body copy while a new launch's session does not exist yet. */
 export function detailLaunchPendingCopy(kind: CockpitLaunchKind): {
   title: string;
   detail: string;
@@ -29,15 +34,55 @@ export function detailLaunchPendingCopy(kind: CockpitLaunchKind): {
   if (kind === "work") {
     return {
       title: "Starting the work loop…",
-      detail:
-        "Session create is in flight. The coordinator transcript will open here once the run is acknowledged.",
+      detail: LAUNCH_WAITING_LINE,
     };
   }
   return {
     title: "Starting the planning session…",
-    detail:
-      "Session create is in flight. The planning transcript will open here once the run is acknowledged.",
+    detail: LAUNCH_WAITING_LINE,
   };
+}
+
+type LaunchSessionCandidate = {
+  id: string;
+  createdAt: string;
+  archived: boolean;
+};
+
+function createdBeforeLaunch(createdAt: string, startedAt: string): boolean {
+  return createdAt.localeCompare(startedAt) < 0;
+}
+
+/**
+ * List row for the session this launch should show.
+ * A resume is that id when the list already has it. A new launch is the
+ * newest non-archived session created at or after the launch began.
+ * Undefined means the row is not in the list yet: a new launch still waits,
+ * and a resume uses its stored id until the list catches up.
+ */
+export function launchTranscriptSession<T extends LaunchSessionCandidate>(
+  pending: Pick<CockpitLaunchPending, "startedAt" | "resumeSession">,
+  sessions: readonly T[],
+): T | undefined {
+  if (pending.resumeSession) {
+    return sessions.find((session) => session.id === pending.resumeSession?.id);
+  }
+  let match: T | undefined;
+  for (const session of sessions) {
+    if (
+      session.archived ||
+      createdBeforeLaunch(session.createdAt, pending.startedAt)
+    ) {
+      continue;
+    }
+    if (
+      !match ||
+      session.createdAt.localeCompare(match.createdAt) > 0
+    ) {
+      match = session;
+    }
+  }
+  return match;
 }
 
 /** Channel-attached fault after a rejected session-create. */

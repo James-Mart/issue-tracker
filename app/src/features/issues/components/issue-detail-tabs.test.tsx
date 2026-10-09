@@ -301,7 +301,7 @@ describe("IssueDetailTabs once-only launch channel open", () => {
     });
 
     expect(selectedTab(container)).toContain("Planning");
-    expect(useCockpitLaunchStore.getState().pending).toEqual({
+    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
       issueId: "capture",
       kind: "planning",
     });
@@ -331,7 +331,7 @@ describe("IssueDetailTabs once-only launch channel open", () => {
     });
 
     expect(selectedTab(container)).toContain("Overview");
-    expect(useCockpitLaunchStore.getState().pending).toEqual({
+    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
       issueId: "capture",
       kind: "planning",
     });
@@ -409,7 +409,7 @@ describe("IssueDetailTabs keep later choice while pending", () => {
     expect(selectedTab(container)).toContain("Overview");
     expect(container.querySelector('[role="tablist"]')).toBeTruthy();
     expect(container.textContent).toContain("Overview body");
-    expect(useCockpitLaunchStore.getState().pending).toEqual({
+    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
       issueId: "capture",
       kind: "planning",
     });
@@ -435,7 +435,7 @@ describe("IssueDetailTabs keep later choice while pending", () => {
     expect(selectedTab(container)).toContain("Overview");
     expect(container.querySelector('[role="tablist"]')).toBeTruthy();
     expect(container.textContent).toContain("Overview body");
-    expect(useCockpitLaunchStore.getState().pending).toEqual({
+    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
       issueId: "auth",
       kind: "work",
     });
@@ -458,7 +458,7 @@ describe("IssueDetailTabs keep later choice while pending", () => {
     });
 
     expect(selectedTab(container)).toContain("Overview");
-    expect(useCockpitLaunchStore.getState().pending).toEqual({
+    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
       issueId: "auth",
       kind: "work",
     });

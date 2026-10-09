@@ -5,6 +5,10 @@ export type CockpitLaunchKind = "work" | "planning";
 export type CockpitLaunchPending = {
   issueId: string;
   kind: CockpitLaunchKind;
+  /** Client time when this launch began. A new session created at or after this is the one to show. */
+  startedAt: string;
+  /** Set when resuming an existing session. Absent for a new session create. */
+  resumeSession?: CockpitLaunchAckSession;
 };
 
 export type CockpitLaunchFault = {

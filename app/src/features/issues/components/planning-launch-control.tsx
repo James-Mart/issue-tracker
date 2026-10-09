@@ -288,8 +288,13 @@ function PlanningLaunchButton({
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const models = modelsData?.models ?? [];
+  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
   const createSession = useCreateChannelSession(issue.id, channel, {
     suppressToast: optimistic ? () => true : undefined,
+    onError: (err) => {
+      if (!optimistic) return;
+      failLaunch(issue.id, "planning", { errorMessage: err.message });
+    },
   });
   const {
     confirmIfLiveRun,
@@ -299,7 +304,6 @@ function PlanningLaunchButton({
   } = useConfirmChannelLiveRun(issue.id, channel);
   const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
   const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
-  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
   const pending = useCockpitLaunchStore((s) => s.pending);
   const launching = Boolean(optimistic) && pending?.issueId === issue.id;
   const copy = planningLaunchCopy(stakeholder, models);
@@ -344,13 +348,6 @@ function PlanningLaunchButton({
               ackLaunch(issue.id, "planning", { id, title, model });
             }
             onStarted({ id, title, model });
-          },
-          onError: (err) => {
-            if (optimistic) {
-              failLaunch(issue.id, "planning", {
-                errorMessage: err instanceof Error ? err.message : undefined,
-              });
-            }
           },
         },
       );
@@ -629,6 +626,7 @@ export function PlanningNewRunControl({
         stakeholder={stakeholder}
         fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
         variant="secondary"
+        optimistic
         onStarted={onStarted}
       />
     </div>

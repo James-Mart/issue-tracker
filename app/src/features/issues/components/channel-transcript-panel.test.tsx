@@ -1,326 +1,18 @@
 // @vitest-environment happy-dom
-import { act, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ChannelSessionListItem, IssueDetail } from "@server/schemas";
-import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
-import { ChannelTranscriptPanel } from "./channel-transcript-panel";
-
-const queryState = vi.hoisted(() => ({
-  data: undefined as ChannelSessionListItem[] | undefined,
-  isLoading: false,
-  error: null as Error | null,
-}));
-
-const attachmentState = vi.hoisted(() => ({
-  data: [] as { name: string }[],
-  isLoading: false,
-}));
-
-const threadProps = vi.hoisted(() => ({
-  hideComposer: false,
-  onBack: undefined as (() => void) | undefined,
-  headerActions: false,
-}));
-
-const deleteMutate = vi.hoisted(() => vi.fn());
-
-vi.mock("../api/queries", () => ({
-  useChannelSessionsQuery: () => ({
-    data: queryState.data,
-    isLoading: queryState.isLoading,
-    error: queryState.error,
-  }),
-  useAttachmentsQuery: () => ({
-    data: attachmentState.data,
-    isLoading: attachmentState.isLoading,
-    isError: false,
-    error: null,
-  }),
-}));
-
-vi.mock("./export-review-workbench", () => ({
-  ExportReviewWorkbench: () => <div data-testid="export-review-workbench" />,
-}));
-
-vi.mock("./planning-launch-control", () => ({
-  PlanningChannelEmptyState: ({
-    onStarted,
-  }: {
-    onStarted: (session: {
-      id: string;
-      title: string;
-      model: string;
-    }) => void;
-  }) => (
-    <div data-testid="planning-channel-empty-state">
-      <button
-        type="button"
-        onClick={() =>
-          onStarted({
-            id: "new-session",
-            title: "Plan Capture",
-            model: "composer-2.5",
-          })
-        }
-      >
-        Start planning
-      </button>
-    </div>
-  ),
-  PlanningNewRunControl: () => (
-    <button type="button" data-testid="planning-new-run">
-      New run
-    </button>
-  ),
-}));
-
-vi.mock("./implementing-launch-control", () => ({
-  ImplementingChannelEmptyState: ({
-    onStarted,
-  }: {
-    onStarted: (session: {
-      id: string;
-      title: string;
-      model: string;
-    }) => void;
-  }) => (
-    <div data-testid="implementing-channel-empty-state">
-      <button
-        type="button"
-        data-testid="implementing-start-session"
-        onClick={() =>
-          onStarted({
-            id: "impl-session",
-            title: "Implement Ship it",
-            model: "composer-2.5",
-          })
-        }
-      >
-        Start work loop
-      </button>
-    </div>
-  ),
-  ImplementingNewRunControl: () => (
-    <button type="button" data-testid="implementing-new-run">
-      New run
-    </button>
-  ),
-}));
-
-vi.mock("./export-transcript-chrome", () => ({
-  useExportTranscriptChrome: () => ({
-    composerDisabled: true,
-    composerDisabledPlaceholder: "Message disabled while rewrite runs...",
-    retry: null,
-  }),
-}));
-
-vi.mock("./channel-retro-control", () => ({
-  ChannelRetroControl: () => (
-    <button type="button" data-testid="channel-retro">
-      Retro
-    </button>
-  ),
-}));
-
-vi.mock("./channel-session-switcher", () => ({
-  ChannelSessionSwitcher: ({
-    sessions,
-    selectedId,
-    onSelectedIdChange,
-    showSelect = true,
-    trailing,
-  }: {
-    sessions: readonly ChannelSessionListItem[];
-    selectedId: string;
-    onSelectedIdChange: (id: string) => void;
-    showSelect?: boolean;
-    trailing?: ReactNode;
-  }) => (
-    <div data-testid="channel-session-switcher">
-      {showSelect
-        ? sessions.map((session) => (
-            <button
-              key={session.id}
-              type="button"
-              data-testid={`pick-session-${session.id}`}
-              aria-pressed={session.id === selectedId}
-              onClick={() => onSelectedIdChange(session.id)}
-            >
-              {session.id}
-            </button>
-          ))
-        : null}
-      <button
-        type="button"
-        data-testid="channel-session-delete"
-        onClick={() =>
-          deleteMutate(selectedId, {
-            onSuccess: () => {
-              const remaining = sessions.filter(
-                (session) => session.id !== selectedId,
-              );
-              const next = remaining[0];
-              if (next) onSelectedIdChange(next.id);
-            },
-          })
-        }
-      >
-        Delete session
-      </button>
-      {trailing}
-    </div>
-  ),
-}));
-
-vi.mock("./channel-session-overflow-menu", () => ({
-  ChannelSessionOverflowMenu: ({
-    children,
-  }: {
-    children: ReactNode;
-  }) => (
-    <div data-testid="channel-session-overflow-menu">
-      <div data-testid="channel-session-overflow-content">{children}</div>
-    </div>
-  ),
-}));
-
-vi.mock("@/features/agents/components/conversation-thread", () => ({
-  OpenThreadChrome: ({
-    title,
-    onBack,
-    actions,
-  }: {
-    title: string;
-    onBack?: () => void;
-    actions?: ReactNode;
-  }) => (
-    <div data-testid="open-thread-chrome" data-title={title}>
-      {onBack ? (
-        <button type="button" aria-label="Back to overview" onClick={onBack}>
-          Back
-        </button>
-      ) : null}
-      <span data-testid="thread-status-strip">idle</span>
-      {actions}
-    </div>
-  ),
-  ConversationThread: ({
-    conversationId,
-    meta,
-    hideComposer,
-    composerDisabled,
-    onBack,
-    headerActions,
-  }: {
-    conversationId: string;
-    meta?: { title: string; model: string };
-    hideComposer?: boolean;
-    composerDisabled?: boolean;
-    onBack?: () => void;
-    headerActions?: ReactNode;
-  }) => {
-    threadProps.hideComposer = hideComposer ?? false;
-    threadProps.onBack = onBack;
-    threadProps.headerActions = Boolean(headerActions);
-    return (
-      <div
-        data-testid="conversation-thread"
-        data-conversation-id={conversationId}
-        data-model={meta?.model ?? ""}
-        data-hide-composer={hideComposer ? "true" : "false"}
-        data-composer-disabled={composerDisabled ? "true" : "false"}
-      >
-        {onBack ? (
-          <button type="button" aria-label="Back to overview" onClick={onBack}>
-            Back
-          </button>
-        ) : null}
-        <span data-testid="thread-status-strip">idle</span>
-        {headerActions}
-      </div>
-    );
-  },
-}));
-
-function mountPanel(
-  label = "Planning",
-  issue?: IssueDetail,
-  options?: {
-    channel?: "planning" | "implementing" | "export";
-    projectId?: string;
-    parentKind?: "project" | "epic";
-    mobileFullViewport?: boolean;
-    onBackToOverview?: () => void;
-  },
-): {
-  container: HTMLDivElement;
-  root: Root;
-} {
-  const channel = options?.channel ?? "planning";
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  act(() => {
-    root.render(
-      <ChannelTranscriptPanel
-        issueId={issue?.id ?? "capture"}
-        issue={issue}
-        channel={channel}
-        label={label}
-        projectId={options?.projectId}
-        parentKind={options?.parentKind}
-        mobileFullViewport={options?.mobileFullViewport}
-        onBackToOverview={options?.onBackToOverview}
-      />,
-    );
-  });
-  return { container, root };
-}
-
-const idea: IssueDetail = {
-  kind: "idea",
-  id: "capture",
-  title: "Capture",
-  partOf: "platform",
-  order: 0,
-  archived: false,
-  createdAt: "2026-08-01T00:00:00.000Z",
-  updatedAt: "2026-08-01T00:00:00.000Z",
-  description: "",
-  version: "1",
-};
-
-const epic: IssueDetail = {
-  kind: "epic",
-  id: "ship-it",
-  title: "Ship it",
-  partOf: "platform",
-  blockedBy: [],
-  needsAttention: false,
-  attentionReason: null,
-  order: 0,
-  archived: false,
-  createdAt: "2026-08-01T00:00:00.000Z",
-  updatedAt: "2026-08-01T00:00:00.000Z",
-  description: "",
-  version: "1",
-};
-
-afterEach(() => {
-  document.body.innerHTML = "";
-  queryState.data = undefined;
-  queryState.isLoading = false;
-  queryState.error = null;
-  attachmentState.data = [];
-  attachmentState.isLoading = false;
-  threadProps.hideComposer = false;
-  threadProps.onBack = undefined;
-  threadProps.headerActions = false;
-  deleteMutate.mockReset();
-  resetCockpitLaunchStore();
-});
+import { act } from "react";
+import { describe, expect, it, vi } from "vitest";
+import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
+import { channelSessionListItem } from "../test/channel-session-list-item";
+import {
+  attachmentState,
+  deleteMutate,
+  epic,
+  idea,
+  mountPanel,
+  queryArgs,
+  queryState,
+  threadProps,
+} from "./channel-transcript-panel.test-helpers";
 
 describe("ChannelTranscriptPanel", () => {
   it("shows the planning launch empty state for an Idea with no session", () => {
@@ -367,6 +59,255 @@ describe("ChannelTranscriptPanel", () => {
     expect(
       container.querySelector('[data-testid="planning-channel-empty-state"]'),
     ).toBeNull();
+  });
+
+  it("keeps the waiting panel until the launch session appears, then shows that transcript", () => {
+    queryState.data = [
+      channelSessionListItem({ id: "older", createdAt: "2020-01-01T00:00:00.000Z" }),
+    ];
+    const { container, rerender } = mountPanel("Planning", idea);
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
+    });
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]')
+        ?.textContent,
+    ).toContain("The transcript opens here as soon as the session appears.");
+    expect(
+      container.querySelector('[data-testid="conversation-thread"]'),
+    ).toBeNull();
+    expect(queryArgs.awaitingLaunchSession).toBe(true);
+
+    const startedAt = useCockpitLaunchStore.getState().pending?.startedAt ?? "";
+    queryState.data = [
+      channelSessionListItem({ id: "older", createdAt: "2020-01-01T00:00:00.000Z" }),
+      channelSessionListItem({
+        id: "live-1",
+        title: "Plan Capture",
+        createdAt: startedAt,
+        activeRun: true,
+      }),
+    ];
+    rerender();
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="conversation-thread"]')
+        ?.getAttribute("data-conversation-id"),
+    ).toBe("live-1");
+    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
+      issueId: "capture",
+      kind: "planning",
+    });
+  });
+
+  it("keeps the resumed session's transcript up while the resume request is pending", () => {
+    queryState.data = [
+      channelSessionListItem({
+        id: "sess-1",
+        title: "Implement Ship it",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+    ];
+    const { container } = mountPanel("Implementing", epic, {
+      channel: "implementing",
+      projectId: "platform",
+    });
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("ship-it", "work", {
+        resumeSession: {
+          id: "sess-1",
+          title: "Implement Ship it",
+          model: "composer-2.5",
+        },
+      });
+    });
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="conversation-thread"]')
+        ?.getAttribute("data-conversation-id"),
+    ).toBe("sess-1");
+    expect(queryArgs.awaitingLaunchSession).toBe(false);
+  });
+
+  it("shows the launch error with the live transcript when that launch then fails", () => {
+    queryState.data = [
+      channelSessionListItem({
+        id: "older",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+    ];
+    const { container, rerender } = mountPanel("Planning", idea);
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
+    });
+    const startedAt = useCockpitLaunchStore.getState().pending?.startedAt ?? "";
+    queryState.data = [
+      channelSessionListItem({
+        id: "older",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+      channelSessionListItem({
+        id: "live-1",
+        title: "Plan Capture",
+        createdAt: startedAt,
+        activeRun: true,
+      }),
+    ];
+    rerender();
+
+    expect(
+      container
+        .querySelector('[data-testid="conversation-thread"]')
+        ?.getAttribute("data-conversation-id"),
+    ).toBe("live-1");
+    expect(
+      container.querySelector('[data-testid="channel-launch-fault"]'),
+    ).toBeNull();
+
+    act(() => {
+      useCockpitLaunchStore.getState().failLaunch("capture", "planning", {
+        errorMessage: "upstream refused",
+      });
+    });
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="conversation-thread"]')
+        ?.getAttribute("data-conversation-id"),
+    ).toBe("live-1");
+    const fault = container.querySelector('[data-testid="channel-launch-fault"]');
+    expect(fault?.textContent).toContain(
+      "Session create rejected — upstream refused.",
+    );
+    expect(fault?.textContent).toContain("Start the planning session again.");
+  });
+
+  it("shows the launch error with the resumed transcript when the resume request fails", () => {
+    queryState.data = [
+      channelSessionListItem({
+        id: "sess-1",
+        title: "Implement Ship it",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+    ];
+    const { container } = mountPanel("Implementing", epic, {
+      channel: "implementing",
+      projectId: "platform",
+    });
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("ship-it", "work", {
+        resumeSession: {
+          id: "sess-1",
+          title: "Implement Ship it",
+          model: "composer-2.5",
+        },
+      });
+    });
+    act(() => {
+      useCockpitLaunchStore.getState().failLaunch("ship-it", "work", {
+        errorMessage: "upstream refused",
+      });
+    });
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="conversation-thread"]')
+        ?.getAttribute("data-conversation-id"),
+    ).toBe("sess-1");
+    expect(
+      container.querySelector('[data-testid="channel-launch-fault"]')?.textContent,
+    ).toContain("Start the work loop again.");
+  });
+
+  it("shows the launch error with the older transcript when the new session never appears", () => {
+    queryState.data = [
+      channelSessionListItem({
+        id: "older",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+    ];
+    const { container } = mountPanel("Planning", idea);
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
+    });
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="conversation-thread"]'),
+    ).toBeNull();
+
+    act(() => {
+      useCockpitLaunchStore.getState().failLaunch("capture", "planning", {
+        errorMessage: "upstream refused",
+      });
+    });
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="conversation-thread"]')
+        ?.getAttribute("data-conversation-id"),
+    ).toBe("older");
+    expect(
+      container.querySelector('[data-testid="channel-launch-fault"]')?.textContent,
+    ).toContain("Start the planning session again.");
+  });
+
+  it("shows the launch error on the empty channel when the launch fails", () => {
+    queryState.data = [];
+    const { container } = mountPanel("Implementing", epic, {
+      channel: "implementing",
+      projectId: "platform",
+    });
+
+    act(() => {
+      useCockpitLaunchStore.getState().beginLaunch("ship-it", "work");
+    });
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeTruthy();
+
+    act(() => {
+      useCockpitLaunchStore.getState().failLaunch("ship-it", "work", {
+        errorMessage: "upstream refused",
+      });
+    });
+
+    expect(
+      container.querySelector('[data-testid="channel-launch-pending"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="conversation-thread"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="implementing-channel-empty-state"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="channel-launch-fault"]')?.textContent,
+    ).toContain("Start the work loop again.");
   });
 
   it("hosts ConversationThread for the most recent non-archived session", () => {
@@ -653,21 +594,12 @@ describe("ChannelTranscriptPanel", () => {
       awaitingHuman: false,
     };
     queryState.data = [soloSession];
-    const { container, root } = mountPanel("Planning", idea);
+    const { container, rerender } = mountPanel("Planning", idea);
 
     deleteMutate.mockImplementation((_id, options) => {
       queryState.data = [];
       options?.onSuccess?.();
-      act(() => {
-        root.render(
-          <ChannelTranscriptPanel
-            issueId={idea.id}
-            issue={idea}
-            channel="planning"
-            label="Planning"
-          />,
-        );
-      });
+      rerender();
     });
 
     act(() => {

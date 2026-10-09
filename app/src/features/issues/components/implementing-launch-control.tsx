@@ -53,6 +53,23 @@ function isImplementingLockConflict(err: unknown): boolean {
   return implementingLockHolderTitle(err) !== undefined;
 }
 
+function implementingLaunchFault(err: Error): {
+  lockHolderTitle?: string;
+  status?: number;
+  errorMessage: string;
+} {
+  const lockHolderTitle = implementingLockHolderTitle(err);
+  return {
+    lockHolderTitle,
+    status: lockHolderTitle
+      ? 409
+      : err instanceof ApiError
+        ? err.status
+        : undefined,
+    errorMessage: err.message,
+  };
+}
+
 function ImplementingLaunchButton({
   issue,
   channel,
@@ -70,9 +87,14 @@ function ImplementingLaunchButton({
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const models = modelsData?.models ?? [];
+  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
   const createSession = useCreateChannelSession(issue.id, channel, {
     suppressToast: (err) =>
       Boolean(optimistic) || isImplementingLockConflict(err),
+    onError: (err) => {
+      if (!optimistic) return;
+      failLaunch(issue.id, "work", implementingLaunchFault(err));
+    },
   });
   const {
     confirmIfLiveRun,
@@ -82,7 +104,6 @@ function ImplementingLaunchButton({
   } = useConfirmChannelLiveRun(issue.id, channel);
   const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
   const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
-  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
   const pending = useCockpitLaunchStore((s) => s.pending);
   const launching = Boolean(optimistic) && pending?.issueId === issue.id;
   const copy = implementingLaunchCopy();
@@ -121,16 +142,6 @@ function ImplementingLaunchButton({
               ackLaunch(issue.id, "work", { id, title, model });
             }
             onStarted({ id, title, model });
-          },
-          onError: (err) => {
-            const lockHolderTitle = implementingLockHolderTitle(err);
-            if (optimistic) {
-              failLaunch(issue.id, "work", {
-                lockHolderTitle,
-                status: lockHolderTitle ? 409 : undefined,
-                errorMessage: err instanceof Error ? err.message : undefined,
-              });
-            }
           },
         },
       );
@@ -223,13 +234,16 @@ export function ImplementingOverviewLaunch({
   );
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const models = modelsData?.models ?? [];
+  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
   const createSession = useCreateChannelSession(issue.id, "implementing", {
     suppressToast: (err) => isImplementingLockConflict(err),
+    onError: (err) => {
+      failLaunch(issue.id, "work", implementingLaunchFault(err));
+    },
   });
   const sendMessage = useSendConversationMessage();
   const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
   const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
-  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
   const pending = useCockpitLaunchStore((s) => s.pending);
   const launching = pending?.issueId === issue.id;
 
@@ -287,18 +301,6 @@ export function ImplementingOverviewLaunch({
         onSuccess: ({ id }) => {
           ackLaunch(issue.id, "work", { id, title, model });
         },
-        onError: (err) => {
-          const lockHolderTitle = implementingLockHolderTitle(err);
-          failLaunch(issue.id, "work", {
-            lockHolderTitle,
-            status: lockHolderTitle
-              ? 409
-              : err instanceof ApiError
-                ? err.status
-                : undefined,
-            errorMessage: err instanceof Error ? err.message : undefined,
-          });
-        },
       },
     );
   };
@@ -312,7 +314,7 @@ export function ImplementingOverviewLaunch({
       return;
     }
     const { resumeSession } = workLoopAction;
-    beginLaunch(issue.id, "work");
+    beginLaunch(issue.id, "work", { resumeSession });
     sendMessage.mutate(
       {
         id: resumeSession.id,
@@ -327,10 +329,7 @@ export function ImplementingOverviewLaunch({
           });
         },
         onError: (err) => {
-          failLaunch(issue.id, "work", {
-            status: err instanceof ApiError ? err.status : undefined,
-            errorMessage: err instanceof Error ? err.message : undefined,
-          });
+          failLaunch(issue.id, "work", implementingLaunchFault(err));
         },
       },
     );
@@ -406,6 +405,7 @@ export function ImplementingNewRunControl({
       issue={issue}
       channel={channel}
       variant="secondary"
+      optimistic
       onStarted={onStarted}
     />
   );

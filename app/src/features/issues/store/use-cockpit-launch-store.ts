@@ -14,7 +14,11 @@ type CockpitLaunchState = {
   fault: CockpitLaunchFault | null;
   ack: CockpitLaunchAck | null;
   seenDerived: Record<string, DerivedState> | undefined;
-  beginLaunch: (issueId: string, kind: CockpitLaunchKind) => void;
+  beginLaunch: (
+    issueId: string,
+    kind: CockpitLaunchKind,
+    options?: { resumeSession?: CockpitLaunchAck["session"] },
+  ) => void;
   ackLaunch: (
     issueId: string,
     kind: CockpitLaunchKind,
@@ -41,10 +45,17 @@ const initialState = {
 
 export const useCockpitLaunchStore = create<CockpitLaunchState>((set, get) => ({
   ...initialState,
-  beginLaunch: (issueId, kind) => {
+  beginLaunch: (issueId, kind, options) => {
     const { fault, ack } = get();
     set({
-      pending: { issueId, kind },
+      pending: {
+        issueId,
+        kind,
+        startedAt: new Date().toISOString(),
+        ...(options?.resumeSession
+          ? { resumeSession: options.resumeSession }
+          : {}),
+      },
       fault: fault?.issueId === issueId ? null : fault,
       ack: ack?.issueId === issueId ? null : ack,
     });

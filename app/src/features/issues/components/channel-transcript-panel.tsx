@@ -21,11 +21,15 @@ import {
   defaultChannelSession,
 } from "../api/channel-sessions";
 import { useAttachmentsQuery, useChannelSessionsQuery } from "../api/queries";
-import { cockpitLaunchOverlayForIssue } from "../lib/cockpit-launch-sync";
+import {
+  cockpitLaunchOverlayForIssue,
+  type CockpitLaunchFault,
+} from "../lib/cockpit-launch-sync";
 import {
   detailLaunchFaultCopy,
   detailLaunchPendingCopy,
   launchOverlaysChannel,
+  launchTranscriptSession,
 } from "../lib/detail-launch-sync";
 import { exportDraftCount } from "../lib/export-tab";
 import { isImplementingWorkRoot } from "@server/services/implementing-launch";
@@ -71,6 +75,14 @@ function pendingChannelSession(started: StartedSession): ChannelSessionListItem 
     activeRun: true,
     awaitingHuman: false,
   };
+}
+
+function ChannelLaunchFaultBanner({ fault }: { fault: CockpitLaunchFault }) {
+  return (
+    <div className="px-4 pt-4" data-testid="channel-launch-fault">
+      <ShellInlineFault {...detailLaunchFaultCopy(fault)} />
+    </div>
+  );
 }
 
 function ChannelPanelFrame({
@@ -126,7 +138,6 @@ function ChannelTranscriptBody({
   extraHeaderActions?: ReactNode;
   preferredSessionId?: string;
 }) {
-  const { data, isLoading, error } = useChannelSessionsQuery(issueId, channel);
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [pendingStart, setPendingStart] = useState<StartedSession | undefined>();
   const pending = useCockpitLaunchStore((s) => s.pending);
@@ -134,22 +145,41 @@ function ChannelTranscriptBody({
   const fault = useCockpitLaunchStore((s) => s.fault);
   const overlay = cockpitLaunchOverlayForIssue(issueId, pending, ack);
   const launchingThis = launchOverlaysChannel(issueId, channel, overlay);
-  const pendingLaunch = launchingThis && pending?.issueId === issueId ? pending : null;
+  const pendingLaunch =
+    launchingThis && pending?.issueId === issueId ? pending : null;
+  const { data, isLoading, error } = useChannelSessionsQuery(issueId, channel, {
+    awaitingLaunchSession: Boolean(pendingLaunch && !pendingLaunch.resumeSession),
+  });
   const thisFault =
     fault?.issueId === issueId &&
     launchOverlaysChannel(issueId, channel, fault)
       ? fault
       : null;
+  const launchFaultBanner = thisFault ? (
+    <ChannelLaunchFaultBanner fault={thisFault} />
+  ) : null;
   const planningIdea = isPlanningIdea(channel, issue) ? issue : undefined;
   const implementingWorkRoot = isImplementingWorkRoot(channel, issue, parentKind)
     ? issue
     : undefined;
+
+  const sessions = data ?? [];
+  const launchFromList = pendingLaunch
+    ? launchTranscriptSession(pendingLaunch, sessions)
+    : undefined;
+  // Resume keeps this id even before the sessions query returns the row.
+  const launchId = launchFromList?.id ?? pendingLaunch?.resumeSession?.id;
 
   const sawLaunchOverlay = useRef(false);
   useEffect(() => {
     if (!preferredSessionId) return;
     setSelectedId(preferredSessionId);
   }, [preferredSessionId]);
+
+  useEffect(() => {
+    if (!launchId) return;
+    setSelectedId(launchId);
+  }, [launchId]);
 
   useEffect(() => {
     if (pending?.issueId === issueId || ack?.issueId === issueId) {
@@ -223,7 +253,12 @@ function ChannelTranscriptBody({
     return fault;
   }
 
-  const sessions = data ?? [];
+  // The sessions query can lag the resume click. Keep the thread on the
+  // resumed id with a placeholder row until that fetch includes it.
+  const resumeStandIn =
+    pendingLaunch?.resumeSession && !launchFromList
+      ? pendingChannelSession(pendingLaunch.resumeSession)
+      : undefined;
   const defaultSession = defaultChannelSession(sessions);
   const selectedFromList = selectedId
     ? sessions.find((session) => session.id === selectedId)
@@ -235,16 +270,21 @@ function ChannelTranscriptBody({
     (selectedId === undefined || selectedId === started.id)
       ? pendingChannelSession(started)
       : undefined;
-  // Keep the thread mounted after create even before list invalidation lands.
+  // The launch's session wins over an older selection. After create, keep the
+  // thread mounted even before list invalidation lands.
   const selectedSession =
-    selectedFromList ?? pendingSession ?? defaultSession;
+    launchFromList ??
+    resumeStandIn ??
+    selectedFromList ??
+    pendingSession ??
+    defaultSession;
 
   const onSessionStarted = (session: StartedSession) => {
     setSelectedId(session.id);
     setPendingStart(session);
   };
 
-  if (pendingLaunch) {
+  if (pendingLaunch && !launchId) {
     const copy = detailLaunchPendingCopy(pendingLaunch.kind);
     const pendingBody = (
       <ShellState
@@ -294,14 +334,9 @@ function ChannelTranscriptBody({
         detail={`This channel is for ${label.toLowerCase()} work on this issue.`}
       />
     );
-    const faultBanner = thisFault ? (
-      <div className="px-4 pt-4" data-testid="channel-launch-fault">
-        <ShellInlineFault {...detailLaunchFaultCopy(thisFault)} />
-      </div>
-    ) : null;
     const emptyBody = (
       <>
-        {faultBanner}
+        {launchFaultBanner}
         {emptyAction}
       </>
     );
@@ -414,6 +449,7 @@ function ChannelTranscriptBody({
         onBack={mobileBack?.onBack}
         backAriaLabel={mobileBack?.backAriaLabel}
         headerActions={mobileFullViewport ? overflowActions : undefined}
+        banner={launchFaultBanner ?? undefined}
       />
     </ChannelPanelFrame>
   );
