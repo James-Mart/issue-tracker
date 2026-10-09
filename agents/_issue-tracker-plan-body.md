@@ -96,8 +96,8 @@ against, as concrete shape (names, fields, behavior).
   count. Phrase how the Story lands per **Merge-policy delivery prose** in
   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-authoring/SKILL.md`.
 - **Task** = one git commit: the outcome it lands, plus the seams and contracts
-  it introduces ([Compression target](#compression-target)). Must be a
-  standalone vertical slice that leaves the tip buildable and testable
+  it introduces ([Compression target](#compression-target)). Must be a vertical
+  slice — a standalone, buildable, testable cut of one capability
   (`/root/.cursor/plugins/local/issue-tracker/SPEC.md#kinds`). Tree nesting
   supplies context, so a link from task to epic is unnecessary. **Tasks run
   in the order they appear in the doc** (top-to-bottom); array position is
@@ -119,19 +119,17 @@ To target an existing non-trunk branch, set a merge-base override after
 
 Normative rule:
 `/root/.cursor/plugins/local/issue-tracker/SPEC.md#kinds`
-(Task kind + stacked merge model). Each Task leaves the Story tip **buildable
-and testable**.
+(Task kind + stacked merge model).
 
-**Prefer** vertical slices — one thin end-to-end cut of a capability (types +
-implementation + a focused test) that stands alone.
+**Prefer** vertical slices — one thin end-to-end cut of one capability.
 
 Horizontal layering that does not stand alone fails that rule:
 
-- **Bad:** Task 1 adds types or interfaces only; Task 2 wires them up; Task 3
-  adds tests — or a half-migration Task that does not compile. Early Tasks do
-  not prove anything on their own.
-- **Good:** Task 1 adds one complete capability (types, implementation, and a
-  focused test) that builds; Task 2 adds the next capability the same way.
+- **Bad:** Task 1 adds types or interfaces only; Task 2 wires them up, or a
+  half-migration Task that does not compile. Early Tasks do not prove anything
+  on their own.
+- **Good:** Task 1 lands one thin end-to-end cut; Task 2 adds the next
+  capability the same way.
 
 A plan's *phases* are the Story grain, its *todos/steps* the Task grain. Group
 related todos into one Story and land them as tasks; when mapping todos to
