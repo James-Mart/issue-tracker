@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { ArrowLeft } from "lucide-react";
 import { offersExportChannel } from "@server/kind";
 import { isArchived } from "@server/services/archived-visibility";
@@ -33,9 +34,11 @@ import { issueBelongsToProject } from "../lib/build-tree";
 import {
   channelTabForIssue,
   issueDetailTabNeedsBoundedShell,
+  issueDetailTabTitleSuffix,
   mobileChannelChromeForTab,
   resolveIssueDetailTab,
   tabsForIssueDetail,
+  type IssueDetailTab,
 } from "../lib/issue-detail-tabs";
 import { projectPath } from "../lib/links";
 import {
@@ -300,12 +303,10 @@ function IssueDetailAttachable({
 
 function useIssueDetailShellFlags(
   issue: IssueDetail | undefined,
-  parentKind: IssueKind | undefined,
-  exportTab: boolean | "loading",
+  tabs: readonly IssueDetailTab[],
+  tabParam: string | null,
   exportDraftReaderOpen: boolean,
 ): { boundShell: boolean; compactChannelChrome: boolean } {
-  const [searchParams] = useSearchParams();
-  const tabParam = searchParams.get("tab");
   const isMobile = useIsMobile();
   return useMemo(() => {
     if (!issue) return { boundShell: false, compactChannelChrome: false };
@@ -314,9 +315,6 @@ function useIssueDetailShellFlags(
     if (issue.kind === "project") {
       return { boundShell: true, compactChannelChrome: false };
     }
-    const tabs = tabsForIssueDetail(issue, parentKind, {
-      includeExport: exportTabIncluded(exportTab, tabParam),
-    });
     const active = resolveIssueDetailTab(tabParam, tabs);
     const boundShell = issueDetailTabNeedsBoundedShell(active, tabs);
     const channelChrome = mobileChannelChromeForTab(isMobile, active, tabs);
@@ -326,7 +324,7 @@ function useIssueDetailShellFlags(
         channelChrome ||
         (isMobile && active === "export" && exportDraftReaderOpen),
     };
-  }, [exportDraftReaderOpen, exportTab, issue, parentKind, tabParam, isMobile]);
+  }, [exportDraftReaderOpen, issue, isMobile, tabParam, tabs]);
 }
 
 export function IssueDetailPage() {
@@ -381,11 +379,26 @@ export function IssueDetailPage() {
         ? exportReport.visible
         : false;
 
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const detailTabs = useMemo(
+    () =>
+      issue
+        ? tabsForIssueDetail(issue, parentKind, {
+            includeExport: exportTabIncluded(exportTab, tabParam),
+          })
+        : [],
+    [exportTab, issue, parentKind, tabParam],
+  );
   const { boundShell, compactChannelChrome } = useIssueDetailShellFlags(
     issue,
-    parentKind,
-    exportTab,
+    detailTabs,
+    tabParam,
     exportDraftReaderOpen,
+  );
+  useTabTitle(
+    tabTitleEntityName(issue?.title, id),
+    issueDetailTabTitleSuffix(tabParam, issue ? detailTabs : undefined),
   );
 
   const missing = error instanceof ApiError && error.status === 404;

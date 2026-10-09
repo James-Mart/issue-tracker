@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { ProjectLabel } from "@server/schemas";
 import { PageShell } from "@/components/page-shell";
+import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Button } from "@/components/ui/button";
 import {
   IssuesQueryShell,
@@ -17,7 +18,7 @@ import {
   type FlowFilters,
   flowFiltersActive,
 } from "../lib/flow";
-import { parseOverviewLens } from "../lib/overview-lens";
+import { overviewLensTabSuffix, parseOverviewLens } from "../lib/overview-lens";
 import { projectBoardRoots } from "../lib/project-board-roots";
 import {
   structureDoneNodes,
@@ -177,6 +178,10 @@ export function OverviewPage() {
     [issues, projectId],
   );
   const catalog = project?.kind === "project" ? (project.labels ?? []) : [];
+  useTabTitle(
+    tabTitleEntityName(project?.title, projectId),
+    overviewLensTabSuffix(lens),
+  );
 
   return (
     <IssuesQueryShell

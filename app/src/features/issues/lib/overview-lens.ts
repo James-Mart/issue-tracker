@@ -29,3 +29,9 @@ export function parseOverviewLens(value: string | null): OverviewLens {
   return DEFAULT_OVERVIEW_LENS;
 }
 
+/** Non-default lenses add their label; Structure (the default) has none. */
+export function overviewLensTabSuffix(lens: OverviewLens): string | undefined {
+  if (lens === DEFAULT_OVERVIEW_LENS) return undefined;
+  return OVERVIEW_LENS_LABELS[lens];
+}
+
