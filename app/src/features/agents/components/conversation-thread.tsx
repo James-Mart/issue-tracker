@@ -848,6 +848,7 @@ export function ConversationThread({
   hideComposer,
   composerDisabled = false,
   composerDisabledPlaceholder,
+  banner,
 }: {
   conversationId: string;
   onBack?: () => void;
@@ -868,6 +869,8 @@ export function ConversationThread({
   /** First export rewrite — the composer stays visible and does not send. */
   composerDisabled?: boolean;
   composerDisabledPlaceholder?: string;
+  /** Sits under the thread chrome, above the transcript. */
+  banner?: ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const {
@@ -929,6 +932,7 @@ export function ConversationThread({
             : undefined
         }
       />
+      {banner}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ThreadBody
           events={events}

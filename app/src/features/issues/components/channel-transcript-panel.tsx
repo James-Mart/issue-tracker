@@ -21,7 +21,10 @@ import {
   defaultChannelSession,
 } from "../api/channel-sessions";
 import { useAttachmentsQuery, useChannelSessionsQuery } from "../api/queries";
-import { cockpitLaunchOverlayForIssue } from "../lib/cockpit-launch-sync";
+import {
+  cockpitLaunchOverlayForIssue,
+  type CockpitLaunchFault,
+} from "../lib/cockpit-launch-sync";
 import {
   detailLaunchFaultCopy,
   detailLaunchPendingCopy,
@@ -72,6 +75,14 @@ function pendingChannelSession(started: StartedSession): ChannelSessionListItem 
     activeRun: true,
     awaitingHuman: false,
   };
+}
+
+function ChannelLaunchFaultBanner({ fault }: { fault: CockpitLaunchFault }) {
+  return (
+    <div className="px-4 pt-4" data-testid="channel-launch-fault">
+      <ShellInlineFault {...detailLaunchFaultCopy(fault)} />
+    </div>
+  );
 }
 
 function ChannelPanelFrame({
@@ -144,6 +155,9 @@ function ChannelTranscriptBody({
     launchOverlaysChannel(issueId, channel, fault)
       ? fault
       : null;
+  const launchFaultBanner = thisFault ? (
+    <ChannelLaunchFaultBanner fault={thisFault} />
+  ) : null;
   const planningIdea = isPlanningIdea(channel, issue) ? issue : undefined;
   const implementingWorkRoot = isImplementingWorkRoot(channel, issue, parentKind)
     ? issue
@@ -320,14 +334,9 @@ function ChannelTranscriptBody({
         detail={`This channel is for ${label.toLowerCase()} work on this issue.`}
       />
     );
-    const faultBanner = thisFault ? (
-      <div className="px-4 pt-4" data-testid="channel-launch-fault">
-        <ShellInlineFault {...detailLaunchFaultCopy(thisFault)} />
-      </div>
-    ) : null;
     const emptyBody = (
       <>
-        {faultBanner}
+        {launchFaultBanner}
         {emptyAction}
       </>
     );
@@ -440,6 +449,7 @@ function ChannelTranscriptBody({
         onBack={mobileBack?.onBack}
         backAriaLabel={mobileBack?.backAriaLabel}
         headerActions={mobileFullViewport ? overflowActions : undefined}
+        banner={launchFaultBanner ?? undefined}
       />
     </ChannelPanelFrame>
   );

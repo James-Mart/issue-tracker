@@ -11,6 +11,7 @@ import { TopBar } from "./top-bar";
 const holders = vi.hoisted(() => ({
   mutate: vi.fn(),
   sendMessageMutate: vi.fn(),
+  hookOnError: undefined as ((err: Error) => void) | undefined,
   mockState: {
     issue: null as IssueDetail | null,
     issues: [] as IssueRecord[],
@@ -60,8 +61,13 @@ vi.mock("@/features/agents/api/queries", () => ({
 }));
 
 vi.mock("../api/mutations", () => ({
-  useCreateChannelSession: (issueId: string, channel: string) => ({
+  useCreateChannelSession: (
+    issueId: string,
+    channel: string,
+    options?: { onError?: (err: Error) => void },
+  ) => ({
     mutate: (...args: unknown[]) => {
+      holders.hookOnError = options?.onError;
       holders.mutate(issueId, channel, ...args);
     },
     isPending: false,
@@ -281,9 +287,15 @@ export function mutateOptions(): {
   onSuccess?: (result: { id: string }) => void;
   onError?: (err: Error) => void;
 } {
-  return mutate.mock.calls[0]?.[3] as {
-    onSuccess?: (result: { id: string }) => void;
-    onError?: (err: Error) => void;
+  const passed = mutate.mock.calls[0]?.[3] as
+    | {
+        onSuccess?: (result: { id: string }) => void;
+        onError?: (err: Error) => void;
+      }
+    | undefined;
+  return {
+    onSuccess: passed?.onSuccess,
+    onError: holders.hookOnError,
   };
 }
 
@@ -365,6 +377,7 @@ export function selectedTab(container: ParentNode): string | undefined {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  holders.hookOnError = undefined;
   mutate.mockReset();
   sendMessageMutate.mockReset();
   mockState.issue = null;

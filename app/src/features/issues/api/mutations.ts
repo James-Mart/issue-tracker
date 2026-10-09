@@ -427,7 +427,14 @@ export function useReorderBoardChild() {
 export function useCreateChannelSession(
   issueId: string,
   channel: ConversationChannel,
-  options?: { suppressToast?: (err: Error) => boolean },
+  options?: {
+    suppressToast?: (err: Error) => boolean;
+    /**
+     * Mutation-level handler. It still runs after the caller unmounts,
+     * which the launch button does when the waiting panel replaces it.
+     */
+    onError?: (err: Error) => void;
+  },
 ) {
   const qc = useQueryClient();
   return useMutation<
@@ -437,6 +444,7 @@ export function useCreateChannelSession(
   >({
     mutationFn: (body) => createChannelSession(issueId, channel, body),
     onError: (err) => {
+      options?.onError?.(err);
       if (options?.suppressToast?.(err)) return;
       toast.error(messageOf(err));
     },
