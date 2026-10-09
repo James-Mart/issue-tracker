@@ -1,9 +1,9 @@
 # Global coding standards
 
-Not a spawnable agent (no frontmatter). Plugin-level rules every implementor
-reads from `## Global coding standards` in `_issue-tracker-implementor.md`
-before completing bootstrap steps 1–4, regardless of Project. Callers **Read**
-this file from disk — a markdown link alone is not enough.
+Not a spawnable agent (no frontmatter). Plugin-level rules that every
+implementor (`## Global coding standards` in `_issue-tracker-implementor.md`)
+and `issue-tracker-review-coding-standards` read regardless of Project.
+Callers **Read** this file from disk — a markdown link alone is not enough.
 
 Absolute path for this file (Read this exact path):
 
