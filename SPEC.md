@@ -83,9 +83,15 @@ Every issue has a `kind`, one of:
   [stacked-PR merge model](#the-stacked-pr-merge-model)).
 - **Task** — an atomic, story-point-sized unit under a Story. Each Task is a
   **small but standalone cross-section** of the work: after it lands on the
-  Story tip, the package must still **build** and tests must remain
-  **meaningful** (vertical slices, not horizontal layers such as types-only,
-  wire-up-later, or half-migrations that do not compile). The only kind with a
+  Story tip, the package must still **build**, and the Task stays a
+  **testable** cut of one capability (not a horizontal layer such as
+  types-only, wire-up-later, or a half-migration that does not compile).
+
+  When committing automated tests, **Read**
+  `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-committed-tests.md`
+  and follow it.
+
+  The only kind with a
   **stored** `status` (`todo` / `in-progress` / `done`), an optional
   `assignee` (Task-only ownership; in the work loop, overloaded as the
   implementor model family key — `composer`, `grok`, or `opus`), `commits` (ordered oldest-first full shas;
