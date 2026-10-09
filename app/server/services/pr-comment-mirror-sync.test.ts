@@ -130,8 +130,8 @@ describe("mirrorPrComments", () => {
     await mirrorPrComments("p", input);
 
     const conversation = ghCalls.map(queryOf).filter((query) => query.includes("orderBy"));
-    expect(conversation[0]).toContain("CREATED_AT");
-    expect(conversation[1]).toContain("UPDATED_AT");
+    expect(conversation[0]).toContain("direction: ASC");
+    expect(conversation[1]).toContain("direction: DESC");
     expect(storedLines("ship")).toHaveLength(1);
   });
 
@@ -161,7 +161,7 @@ describe("mirrorPrComments", () => {
     stubGh(commentPages([page([commentNode()])]));
     const retried = await mirrorPrComments("p", input);
     expect(retried.error).toBeUndefined();
-    expect(queryOf(ghCalls[1]!)).toContain("CREATED_AT");
+    expect(queryOf(ghCalls[1]!)).toContain("direction: ASC");
     expect(storedLines("ship")).toHaveLength(1);
   });
 

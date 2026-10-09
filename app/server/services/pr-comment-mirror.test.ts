@@ -59,8 +59,8 @@ describe("fetchPrComments", () => {
     const result = await fetchPrComments(PR_URL, undefined, WORKSPACE);
 
     expect(ghCalls).toHaveLength(4);
-    expect(queryOf(ghCalls[0]!)).toContain("CREATED_AT");
-    expect(queryOf(ghCalls[0]!)).not.toContain("UPDATED_AT");
+    expect(queryOf(ghCalls[0]!)).toContain("field: UPDATED_AT, direction: ASC");
+    expect(queryOf(ghCalls[0]!)).not.toContain("CREATED_AT");
     expect(queryOf(ghCalls[1]!)).toContain('after: "cursor-1"');
     expect(result.edits).toEqual([]);
     expect(result.comments.map((comment) => comment.source.id)).toEqual([
@@ -116,7 +116,7 @@ describe("fetchPrComments", () => {
     );
 
     expect(ghCalls).toHaveLength(3);
-    expect(queryOf(ghCalls[0]!)).toContain("UPDATED_AT");
+    expect(queryOf(ghCalls[0]!)).toContain("field: UPDATED_AT, direction: DESC");
     expect(result.comments.map((comment) => comment.source.id)).toEqual(["IC_new"]);
     expect(result.edits).toEqual([]);
   });

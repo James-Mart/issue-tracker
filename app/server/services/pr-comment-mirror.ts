@@ -226,13 +226,13 @@ function commentsQuery(
   cursor: string | null,
   since: boolean,
 ): string {
-  const field = since ? "UPDATED_AT" : "CREATED_AT";
+  // GitHub's IssueCommentOrderField has only UPDATED_AT.
   const direction = since ? "DESC" : "ASC";
   const after = cursor ? `, after: ${JSON.stringify(cursor)}` : "";
   return `query {
   repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(repo)}) {
     pullRequest(number: ${number}) {
-      comments(first: ${PAGE_SIZE}, orderBy: {field: ${field}, direction: ${direction}}${after}) {
+      comments(first: ${PAGE_SIZE}, orderBy: {field: UPDATED_AT, direction: ${direction}}${after}) {
         pageInfo { hasNextPage endCursor }
         nodes {${COMMENT_FIELDS}
         }
