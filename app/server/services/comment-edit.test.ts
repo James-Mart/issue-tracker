@@ -186,6 +186,44 @@ describe("editComment", () => {
     );
   });
 
+  it("refuses GitHub-sourced comments and marks them not editable on read", async () => {
+    const { appendComment, editComment, enrichCommentsForRead } = await load();
+    const source = {
+      kind: "github" as const,
+      id: "IC_1",
+      url: "https://github.com/acme/widgets/pull/7#issuecomment-1",
+    };
+    const root = await appendComment("s", {
+      role: "human",
+      name: "ada",
+      body: "from github",
+      anchor: LINE_ANCHOR,
+      source,
+    });
+    const reply = await appendComment("s", {
+      role: "human",
+      body: "tracker reply",
+      replyTo: root.id,
+    });
+    await expect(
+      editComment("s", root.id, { body: "changed" }, { role: "human" }),
+    ).rejects.toThrow(/github/);
+    const editedReply = await editComment(
+      "s",
+      reply.id,
+      { body: "edited reply" },
+      { role: "human" },
+    );
+    expect(editedReply.body).toBe("edited reply");
+    const view = await enrichCommentsForRead("s");
+    expect(view.messages.find((message) => message.id === root.id)?.editable).toBe(
+      false,
+    );
+    expect(view.messages.find((message) => message.id === reply.id)?.editable).toBe(
+      true,
+    );
+  });
+
   it("refuses story notes, linked threads, submissions, and resolved threads", async () => {
     const { appendComment, appendThreadEvent, editComment } = await load();
     const note = await appendComment("s", { role: "human", body: "note" });
