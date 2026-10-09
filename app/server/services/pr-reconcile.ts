@@ -61,6 +61,14 @@ function inCandidateWindow(story: Story, now: number): boolean {
   return now - mergedAtMs <= THREE_DAYS_MS;
 }
 
+/**
+ * A merge base override may name the remote-tracking ref (`origin/main`).
+ * GitHub's `baseRefName` is the bare branch name.
+ */
+function githubBranchName(mergeBase: string): string {
+  return mergeBase.replace(/^(refs\/remotes\/)?origin\//, "");
+}
+
 function selectCandidates(
   projectId: string,
   issues: Issue[],
@@ -77,7 +85,11 @@ function selectCandidates(
     if (!inCandidateWindow(issue, now)) continue;
     const mergeBase = byId[issue.id]?.mergeBase;
     if (!mergeBase) continue;
-    candidates.push({ story: issue, head: issue.branchName, mergeBase });
+    candidates.push({
+      story: issue,
+      head: issue.branchName,
+      mergeBase: githubBranchName(mergeBase),
+    });
   }
   candidates.sort((a, b) => a.story.id.localeCompare(b.story.id));
   return candidates;

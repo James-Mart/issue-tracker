@@ -266,6 +266,25 @@ describe("reconcileProjectPrs candidates", () => {
     expect(query).not.toContain("feat/parent");
     expect(gitCalls).toEqual([["remote", "get-url", "origin"]]);
   });
+
+  it("queries the bare branch when the merge base override names origin/", async () => {
+    project();
+    story("ship", { branchName: "feat/ship", mergeBaseOverride: "origin/main" });
+    let query = "";
+    stubGh((args) => {
+      query = queryOf(args);
+      return graphql({
+        c_0_live: { nodes: [ghPullRequest()] },
+        c_0_closed: { nodes: [] },
+      });
+    });
+
+    const result = await reconcileProjectPrs("p");
+
+    expect(query).toContain('baseRefName: "main"');
+    expect(query).not.toContain("origin/main");
+    expect(result.matches.get("ship")).toBeDefined();
+  });
 });
 
 describe("reconcileProjectPrs outcomes", () => {
