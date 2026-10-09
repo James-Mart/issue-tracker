@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { useNavigate, useParams } from "react-router-dom";
 import { PageShell } from "@/components/page-shell";
 import { ShellState } from "@/app/shell-state";
@@ -61,6 +62,7 @@ function AgentsPane({
 
 /** Glass-style two-pane agents surface: conversation list + thread. */
 export function AgentsPage() {
+  useTabTitle("Agents");
   const { conversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
   const isMobile = useIsMobile();

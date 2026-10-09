@@ -1,4 +1,5 @@
 import { PageShell, READING_MEASURE_CLASS } from "@/components/page-shell";
+import { useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Button } from "@/components/ui/button";
 import {
   ShellFaultDetail,
@@ -27,6 +28,7 @@ function SettingsHeader() {
 }
 
 export function AppSettingsPage() {
+  useTabTitle("Settings");
   const { data, isLoading, error, isFetching, refetch } = useBackupQuery();
 
   if (error) {

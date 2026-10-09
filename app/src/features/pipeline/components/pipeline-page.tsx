@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useTabTitle } from "@/lib/tab-title/use-tab-title";
 import type { IssueKind } from "@server/schemas";
 import { PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
@@ -378,10 +379,12 @@ export function PipelinePage() {
   const { conversationId } = useParams<{ conversationId?: string }>();
   const isRunsView =
     pathname === "/runs" || pathname.startsWith("/runs/");
+  const viewLabel = isRunsView ? "Runs" : "Pipelines";
+  useTabTitle(viewLabel);
 
   return (
     <PageShell>
-      <PageEyebrow label={isRunsView ? "Runs" : "Pipelines"} />
+      <PageEyebrow label={viewLabel} />
       {isRunsView ? (
         <PipelineRunsView
           conversationId={conversationId}

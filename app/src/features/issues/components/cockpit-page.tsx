@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
@@ -231,6 +232,7 @@ function CockpitProjectSubheader({
 }
 
 export function CockpitPage() {
+  useTabTitle("Cockpit");
   const { data, isLoading, error, refetch, isFetching } = useIssuesQuery();
   const openProjectDialog = useIssueUiStore((s) => s.openProjectDialog);
   const [hiddenIds, setHiddenIds] = useState(() => readCockpitHiddenProjectIds());
