@@ -13,6 +13,11 @@ fits the codebase it lands in.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`.
 
+## Global coding standards
+
+**Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-global-coding-standards.md`.
+
 ## Bootstrap
 
 1. Before any other step: `issue task set <id> status in-progress`.
