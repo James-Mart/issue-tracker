@@ -4,11 +4,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { Markdown } from "./markdown";
 
-function mount(node: ReactElement): {
+function mount(
+  node: ReactElement,
+  widthPx?: number,
+): {
   container: HTMLDivElement;
   root: Root;
 } {
   const container = document.createElement("div");
+  if (widthPx !== undefined) {
+    container.style.width = `${widthPx}px`;
+  }
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
@@ -29,8 +35,8 @@ afterEach(() => {
   }
 });
 
-function renderMarkdown(text: string): HTMLDivElement {
-  const { container, root } = mount(<Markdown>{text}</Markdown>);
+function renderMarkdown(text: string, widthPx?: number): HTMLDivElement {
+  const { container, root } = mount(<Markdown>{text}</Markdown>, widthPx);
   mounted.push({ root, container });
   return container;
 }
@@ -51,5 +57,34 @@ describe("Markdown", () => {
     const container = renderMarkdown("Use `npm test` here.");
     expect(container.querySelector("p > code")?.textContent).toBe("npm test");
     expect(container.querySelector("pre")).toBeNull();
+  });
+
+  describe("fenced code blocks", () => {
+    const wide = "w".repeat(400);
+
+    it.each([
+      ["bare", ["```", wide, "```"].join("\n"), null] as const,
+      [
+        "language-tagged",
+        ["```typescript", wide, "```"].join("\n"),
+        "language-typescript",
+      ] as const,
+    ])(
+      "keeps a long %s fence line inside a 390px column",
+      (_label, markdown, languageClass) => {
+        const shell = renderMarkdown(markdown, 390);
+        expect(shell.scrollWidth).toBeLessThanOrEqual(390);
+        const pre = shell.querySelector("pre.issue-md-pre");
+        expect(pre?.textContent).toContain(wide);
+        const code = pre?.querySelector("code");
+        expect(code).not.toBeNull();
+        if (languageClass === null) {
+          expect(code!.classList.length).toBe(0);
+        } else {
+          expect(code!.classList.contains(languageClass)).toBe(true);
+          expect(code!.classList.length).toBe(1);
+        }
+      },
+    );
   });
 });

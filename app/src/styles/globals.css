@@ -286,12 +286,17 @@
     text-decoration: underline;
     text-underline-offset: 3px;
   }
+  .prose-issue .issue-md-link,
+  .review-conversation .prose-issue a,
+  .prose-issue :not(pre) > code,
+  .prose-issue pre {
+    max-width: 100%;
+  }
   /* issue: links — mono id treatment within prose.
      Conversation external links share the scroll, without the mono face. */
   .prose-issue .issue-md-link,
   .review-conversation .prose-issue a {
     display: inline-block;
-    max-width: 100%;
     overflow-x: auto;
     vertical-align: baseline;
     overflow-wrap: normal;
@@ -309,7 +314,6 @@
   }
   .prose-issue :not(pre) > code {
     display: inline-block;
-    max-width: 100%;
     overflow-x: auto;
     vertical-align: baseline;
     font-family: var(--font-mono);
@@ -323,8 +327,9 @@
     word-break: keep-all;
     white-space: nowrap;
   }
-  .prose-issue pre,
-  .prose-issue .issue-md-pre {
+  /* Fence scrollport: shrink in flex columns; inner `code` sets scroll width. */
+  .prose-issue pre {
+    min-width: 0;
     font-family: var(--font-mono);
     font-size: 12.5px;
     line-height: 1.6;
