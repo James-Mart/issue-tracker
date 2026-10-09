@@ -2,6 +2,7 @@ import type { FileDiffMetadata, SelectedLineRange } from "@pierre/diffs/react";
 import type { CommentInput } from "@server/schemas";
 import { questionKindFields } from "@server/question-kind";
 import { replyDraftKey, reviewDraftKey } from "@/features/reviews/lib/review-draft-key";
+import { quoteCommentInput, type QuoteSource } from "./quote-comment";
 
 export type AnchorSide = "old" | "new";
 
@@ -22,7 +23,18 @@ export type NewFileComposer = {
 
 export type NewDiffComposer = NewLineComposer | NewFileComposer;
 
-export type OpenDiffComposer = NewDiffComposer | { kind: "reply"; threadId: string };
+export type QuoteDiffComposer = { kind: "quote" } & QuoteSource;
+
+export type OpenDiffComposer =
+  | NewDiffComposer
+  | { kind: "reply"; threadId: string }
+  | QuoteDiffComposer;
+
+export function quoteDiffComposer(
+  source: QuoteSource,
+): QuoteDiffComposer {
+  return { kind: "quote", ...source };
+}
 
 export function isLineComposer(open: NewDiffComposer): open is NewLineComposer {
   return "line" in open;
@@ -102,7 +114,7 @@ export function composerDraftKey(
   reviewId: string,
   open: OpenDiffComposer,
 ): string {
-  if (open.kind === "reply") {
+  if (open.kind === "reply" || open.kind === "quote") {
     return replyDraftKey(reviewId, open.threadId);
   }
   if (!isLineComposer(open)) {
@@ -123,6 +135,9 @@ export function commentInputForComposer(
 ): CommentInput {
   if (open.kind === "reply") {
     return { role: "human", body, replyTo: open.threadId };
+  }
+  if (open.kind === "quote") {
+    return quoteCommentInput(body, open.anchor);
   }
   if (!isLineComposer(open)) {
     return {

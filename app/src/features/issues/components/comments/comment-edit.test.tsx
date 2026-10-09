@@ -89,9 +89,9 @@ afterEach(() => {
 describe("pending comment edit", () => {
   it("shows Edit on an editable comment and hides it otherwise", () => {
     const editable = mount(thread(), vi.fn(async () => undefined));
-    expect(editable.querySelector('[data-testid="comment-edit"]')?.textContent).toContain(
-      "Edit",
-    );
+    const edit = editable.querySelector('[data-testid="comment-edit"]');
+    expect(edit?.textContent).toContain("Edit");
+    expect(edit?.closest("header")).not.toBeNull();
 
     const frozen = mount(thread({ editable: false }));
     expect(frozen.querySelector('[data-testid="comment-edit"]')).toBeNull();

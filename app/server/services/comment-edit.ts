@@ -32,7 +32,8 @@ export type CommentEditRefusal =
   | "researcher reply"
   | "Story note"
   | "resolved"
-  | "dismissed";
+  | "dismissed"
+  | "github";
 
 const RESEARCHER_ROLE = "agent";
 const RESEARCHER_NAME = "Researcher";
@@ -54,11 +55,12 @@ export function isResearcherReply(
  */
 export function commentEditReason(
   issueKind: Issue["kind"],
-  message: Pick<Comment, "replyTo" | "role" | "name">,
+  message: Pick<Comment, "replyTo" | "role" | "name" | "source">,
   thread: ThreadView | undefined,
   root: Pick<Comment, "anchor"> | undefined,
   submittedRootIds: ReadonlySet<string>,
 ): CommentEditRefusal | null {
+  if (message.source) return "github";
   if (isResearcherReply(message)) return "researcher reply";
   if (thread?.kind === "question") return "question";
   if (
@@ -95,7 +97,7 @@ function submittedRootIds(issue: Issue): Set<string> {
 
 function editRefusalFor(
   issue: Issue,
-  message: Pick<Comment, "id" | "replyTo" | "role" | "name">,
+  message: Pick<Comment, "id" | "replyTo" | "role" | "name" | "source">,
   threadsByRoot: Map<string, ThreadView>,
   messagesById: Map<string, Pick<Comment, "anchor">>,
   submitted: ReadonlySet<string>,

@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, useSearchParams } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommentMessage, CommentThreadView, IssueDetail } from "@server/schemas";
+import { commentDayLabel } from "./marker";
 import { IssueCommentsSection } from "./comments-section";
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
@@ -58,6 +59,7 @@ vi.mock("../../api/queries", async () => {
 vi.mock("../../api/mutations", () => ({
   usePostComment: () => postComment,
   usePostThreadEvent: () => ({ mutate: vi.fn(), isPending: false }),
+  useEditComment: () => ({ mutateAsync: vi.fn(async () => undefined) }),
 }));
 
 function comment(
@@ -172,15 +174,19 @@ function story(): IssueDetail {
 function mount(
   onSearch?: (search: string) => void,
   issue: IssueDetail = task(),
+  entry = "/",
+  inert = false,
 ): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const section = <IssueCommentsSection issue={issue} />;
+  const hidden = inert ? { inert: "" } : {};
   act(() => {
     root.render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[entry]}>
         {onSearch ? <SearchProbe onSearch={onSearch} /> : null}
-        <IssueCommentsSection issue={issue} />
+        {inert ? <div {...hidden}>{section}</div> : section}
       </MemoryRouter>,
     );
   });
@@ -206,6 +212,7 @@ afterEach(() => {
   commentsState.error = null;
   postComment.mockReset();
   useCommentsQuery.mockClear();
+  localStorage.clear();
 });
 
 describe("IssueCommentsSection", () => {
@@ -376,4 +383,236 @@ describe("IssueCommentsSection", () => {
     expect(card?.querySelector('[data-testid="thread-resolve"]')).not.toBeNull();
     expect(card?.querySelector('[data-testid="thread-convert"]')).toBeNull();
   });
+
+  it("offers Edit beside Quote on an editable anchored review comment on a story", () => {
+    commentsState.messages = [
+      comment({
+        id: "editable-anchored",
+        at: "2026-08-30T14:00:00.000Z",
+        role: "human",
+        name: "Jared",
+        body: "Editable anchored review comment",
+        editable: true,
+        anchor: {
+          path: "app/server/services/comment-edit.ts",
+          side: "new",
+          line: 1,
+          commitSha: SHA,
+        },
+      }),
+    ];
+    const container = mount(undefined, story());
+    const thread = container.querySelector('[data-thread-root="editable-anchored"]');
+    expect(thread?.querySelector('[data-testid="comment-edit"]')).not.toBeNull();
+    expect(thread?.querySelector('[data-testid="comment-quote"]')).not.toBeNull();
+  });
+
+  it("quotes an unanchored note as a new comment with its body and no anchor", () => {
+    commentsState.messages = [standaloneEarly];
+    const container = mount(undefined, story());
+    const note = container.querySelector('[data-log-root="standalone-early"]');
+    const quote = note?.querySelector("header")?.querySelector(
+      '[data-testid="comment-quote"]',
+    );
+    expect(quote).not.toBeNull();
+    act(() => {
+      quote?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const composer = note?.querySelector('[data-testid="comment-quote-composer"]');
+    expect(composer?.querySelector('[data-testid="comment-quote-label"]')?.textContent).toBe(
+      "New comment",
+    );
+    expect(composer?.querySelector("textarea")?.value).toBe(
+      "Keep ordinary notes visually lighter than threads.",
+    );
+    setDraft(
+      composer?.querySelector("textarea") as HTMLTextAreaElement,
+      "Lighter, and its own comment.",
+    );
+    act(() => {
+      composer
+        ?.querySelector('button[aria-label="Send"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(postComment).toHaveBeenCalledWith({
+      role: "human",
+      body: "Lighter, and its own comment.",
+    });
+    expect(postComment.mock.calls[0]?.[0].anchor).toBeUndefined();
+  });
+
+  it("keeps a task comment list from folding settled threads", () => {
+    commentsState.messages = [
+      anchored("one", "2026-08-01T12:00:00.000Z", "First resolved review."),
+      anchored("two", "2026-08-01T13:00:00.000Z", "Second resolved review."),
+    ];
+    commentsState.threads = [view("one", "resolved"), view("two", "resolved")];
+    const container = mount();
+    expect(container.querySelector('[data-testid="settled-comment-run"]')).toBeNull();
+    expect(container.textContent).toContain("First resolved review.");
+    expect(container.textContent).toContain("Second resolved review.");
+  });
+
+  it("folds a story run of settled threads and keeps a single settled thread open", () => {
+    commentsState.messages = [
+      anchored("one", "2026-08-01T12:00:00.000Z", "First resolved review."),
+      anchored("two", "2026-08-01T13:00:00.000Z", "Second resolved review."),
+      note("between", "2026-08-01T14:00:00.000Z", "A note splits the run."),
+      question("only", "2026-08-01T15:00:00.000Z", "One dismissed question stays put."),
+      note("after", "2026-08-01T16:00:00.000Z", "Another note before the next run."),
+      anchored("later", "2026-08-03T12:00:00.000Z", "Later resolved review."),
+      question("gone", "2026-08-03T13:00:00.000Z", "Dismissed after the later review."),
+    ];
+    commentsState.threads = [
+      view("one", "resolved"),
+      view("two", "resolved"),
+      view("only", "dismissed", "question"),
+      view("later", "resolved"),
+      view("gone", "dismissed", "question"),
+    ];
+    const container = mount(undefined, story());
+    const runs = [...container.querySelectorAll('[data-testid="settled-comment-run"]')];
+    expect(runs.map((run) => run.querySelector("button")?.textContent)).toEqual([
+      "2 resolved comments",
+      "2 closed comments",
+    ]);
+    expect(runs.every((run) => !run.hasAttribute("data-expanded"))).toBe(true);
+    expect(container.textContent).not.toContain("First resolved review.");
+    expect(container.textContent).toContain("A note splits the run.");
+    const single = container.querySelector('[data-thread-root="only"]');
+    expect(single?.closest('[data-testid="settled-comment-run"]')).toBeNull();
+    expect(single?.hasAttribute("data-collapsed")).toBe(true);
+    expect(container.textContent).not.toContain("One dismissed question stays put.");
+    expect(container.textContent).not.toContain("Later resolved review.");
+
+    act(() => {
+      runs[0]?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const opened = container.querySelector('[data-run-id="one"]');
+    expect(opened?.hasAttribute("data-expanded")).toBe(true);
+    expect(opened?.textContent).toContain("First resolved review.");
+    expect(opened?.textContent).toContain("Second resolved review.");
+    expect(opened?.querySelector("[data-collapsed]")).toBeNull();
+    expect(container.querySelector('[data-run-id="later"]')?.hasAttribute("data-expanded")).toBe(
+      false,
+    );
+  });
+
+  it("hides a day marker inside a run until the section opens", () => {
+    const early = "2026-08-01T12:00:00.000Z";
+    const later = "2026-08-03T12:00:00.000Z";
+    commentsState.messages = [
+      anchored("one", early, "Same week, earlier day."),
+      anchored("two", later, "Same week, later day."),
+      note("after", later, "Visible after the fold."),
+    ];
+    commentsState.threads = [view("one", "resolved"), view("two", "resolved")];
+    const container = mount(undefined, story());
+    const laterLabel = commentDayLabel(later);
+    const run = container.querySelector('[data-testid="settled-comment-run"]');
+    expect(container.textContent).toContain(commentDayLabel(early));
+    expect(run?.textContent).not.toContain(laterLabel);
+    expect(container.querySelector('[data-log-root="after"]')?.textContent).toContain(
+      laterLabel,
+    );
+    act(() => {
+      container
+        .querySelector('[data-testid="settled-comment-run-toggle"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(run?.textContent).toContain(laterLabel);
+    expect(run?.textContent).toContain("Same week, later day.");
+    expect(container.querySelector('[data-log-root="after"]')?.textContent).not.toContain(
+      laterLabel,
+    );
+  });
+
+  it("opens the targeted run, expands a dismissed question, and leaves the other run collapsed", () => {
+    commentsState.messages = [
+      anchored("keep", "2026-08-01T12:00:00.000Z", "Stay folded."),
+      anchored("closed", "2026-08-01T13:00:00.000Z", "Also stay folded."),
+      note("gap", "2026-08-01T14:00:00.000Z", "Open note between runs."),
+      question("ask", "2026-08-02T12:00:00.000Z", "Why fold this question?"),
+      question("other", "2026-08-02T13:00:00.000Z", "Leave this bar collapsed."),
+    ];
+    commentsState.threads = [
+      view("keep", "resolved"),
+      view("closed", "resolved"),
+      view("ask", "dismissed", "question"),
+      view("other", "dismissed", "question"),
+    ];
+    const intoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    const container = mount(undefined, story(), "/?thread=ask");
+    const targeted = container.querySelector('[data-thread-root="ask"]');
+    expect(container.querySelector('[data-run-id="ask"]')?.hasAttribute("data-expanded")).toBe(
+      true,
+    );
+    expect(container.querySelector('[data-run-id="keep"]')?.hasAttribute("data-expanded")).toBe(
+      false,
+    );
+    expect(targeted?.hasAttribute("data-collapsed")).toBe(false);
+    expect(targeted?.textContent).toContain("Why fold this question?");
+    const other = container.querySelector('[data-thread-root="other"]');
+    expect(other?.hasAttribute("data-collapsed")).toBe(true);
+    expect(
+      other?.querySelector('[data-testid="thread-collapsed-bar"] [data-testid="thread-dismissed-label"]'),
+    ).not.toBeNull();
+    expect(intoView).toHaveBeenCalled();
+
+    act(() => {
+      container
+        .querySelector('[data-run-id="ask"] [data-testid="settled-comment-run-toggle"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.querySelector('[data-run-id="ask"]')?.hasAttribute("data-expanded")).toBe(
+      false,
+    );
+    intoView.mockRestore();
+  });
+
+  it("does not open a run while the comments list is inert", () => {
+    commentsState.messages = [
+      anchored("one", "2026-08-01T12:00:00.000Z", "Hidden on the diff tab."),
+      anchored("two", "2026-08-01T13:00:00.000Z", "Still hidden."),
+    ];
+    commentsState.threads = [view("one", "resolved"), view("two", "resolved")];
+    const intoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    const container = mount(undefined, story(), "/?tab=diff&thread=one", true);
+    expect(container.querySelector('[data-testid="settled-comment-run"]')?.hasAttribute("data-expanded")).toBe(
+      false,
+    );
+    expect(container.textContent).not.toContain("Hidden on the diff tab.");
+    expect(intoView).not.toHaveBeenCalled();
+    intoView.mockRestore();
+  });
 });
+
+function anchored(id: string, at: string, body: string): CommentMessage {
+  return comment({
+    id,
+    at,
+    role: "story-review",
+    body,
+    anchor: { path: "app/notes.ts", side: "new", line: 4, commitSha: SHA },
+  });
+}
+
+function note(id: string, at: string, body: string): CommentMessage {
+  return comment({ id, at, role: "human", name: "Jared", body });
+}
+
+function question(id: string, at: string, body: string): CommentMessage {
+  return comment({ id, at, role: "human", name: "Alex", kind: "question", body });
+}
+
+function view(
+  rootId: string,
+  state: "resolved" | "dismissed" | "open",
+  kind: "review" | "question" = "review",
+): CommentThreadView {
+  return { rootId, kind, state, readyToTask: kind === "review" && state === "open" };
+}

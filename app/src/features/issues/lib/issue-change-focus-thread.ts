@@ -22,23 +22,47 @@ export function threadNodeInPanel(
   return node instanceof HTMLElement ? node : null;
 }
 
+function scrollWhenMounted(
+  find: () => HTMLElement | null,
+  options: ScrollIntoViewOptions,
+): () => void {
+  const scroll = () => {
+    const node = find();
+    if (!node) return false;
+    node.scrollIntoView(options);
+    return true;
+  };
+  if (scroll()) return () => undefined;
+  const frame = requestAnimationFrame(() => {
+    scroll();
+  });
+  return () => cancelAnimationFrame(frame);
+}
+
 /** Scroll the thread card into view, retrying once if it is not mounted yet. */
 export function scrollThreadNodeInPanel(
   panel: ParentNode,
   threadId: string,
   options: ScrollIntoViewOptions,
 ): () => void {
-  const scrollToThread = () => {
-    const node = threadNodeInPanel(panel, threadId);
-    if (!node) return false;
-    node.scrollIntoView(options);
-    return true;
-  };
-  if (scrollToThread()) return () => undefined;
-  const frame = requestAnimationFrame(() => {
-    scrollToThread();
-  });
-  return () => cancelAnimationFrame(frame);
+  return scrollWhenMounted(() => threadNodeInPanel(panel, threadId), options);
+}
+
+/** Scroll a comment, falling back to its thread card, retrying once if it is not mounted yet. */
+export function scrollCommentInPanel(
+  panel: ParentNode,
+  commentId: string,
+  threadId: string,
+  options: ScrollIntoViewOptions,
+): () => void {
+  return scrollWhenMounted(() => {
+    const comment = panel.querySelector(
+      `[data-comment-id="${CSS.escape(commentId)}"]`,
+    );
+    return comment instanceof HTMLElement
+      ? comment
+      : threadNodeInPanel(panel, threadId);
+  }, options);
 }
 
 /** Select the thread's file and scroll its inline block into view. */

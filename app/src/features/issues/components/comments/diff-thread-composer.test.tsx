@@ -57,6 +57,33 @@ function OpenFile() {
   );
 }
 
+function OpenQuote() {
+  const { openQuote } = useDiffComposer();
+  return (
+    <button
+      type="button"
+      data-testid="open-quote"
+      onClick={() =>
+        openQuote({
+          kind: "quote",
+          threadId: "outdated",
+          commentId: "outdated",
+          body: "Run assertCommitReachable before git show.",
+          anchor: {
+            path: "app/foo.ts",
+            side: "old",
+            line: 90,
+            startLine: 88,
+            commitSha: "b".repeat(40),
+          },
+        })
+      }
+    >
+      quote
+    </button>
+  );
+}
+
 function Host() {
   const { open } = useDiffComposer();
   return (
@@ -64,6 +91,7 @@ function Host() {
       <OpenNew testId="open-new" line={94} />
       <OpenNew testId="open-other" line={12} />
       <OpenFile />
+      <OpenQuote />
       {open ? <DiffThreadComposer target={open} /> : null}
     </>
   );
@@ -222,6 +250,79 @@ describe("DiffThreadComposer", () => {
       body: "Move this module.",
       kind: "question",
       anchor: { path: "app/foo.ts", commitSha: SHA },
+    });
+  });
+
+  it("quotes onto the stored anchor and confirms before replacing a line draft", () => {
+    const container = mount();
+    click(container, "open-new");
+    setDraft(container.querySelector("textarea")!, "   ");
+    click(container, "open-quote");
+    const quote = container.querySelector('[data-testid="diff-thread-composer"]');
+    expect(quote?.getAttribute("data-composer-kind")).toBe("quote");
+    expect(quote?.querySelector('[data-testid="comment-quote-label"]')?.textContent).toBe(
+      "New thread on app/foo.ts · line 90",
+    );
+    expect(quote?.querySelector("textarea")?.value).toBe(
+      "Run assertCommitReachable before git show.",
+    );
+    expect(document.body.querySelector('[data-testid="review-composer-discard-dialog"]')).toBeNull();
+
+    setDraft(quote!.querySelector("textarea")!, "Keep this draft");
+    click(container, "open-other");
+    const dialog = document.body.querySelector(
+      '[data-testid="review-composer-discard-dialog"]',
+    );
+    expect(dialog?.textContent).toContain("Discard this draft?");
+    act(() => {
+      [...(dialog?.querySelectorAll("button") ?? [])]
+        .find((button) => button.textContent?.includes("Keep editing"))
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.querySelector("textarea")?.value).toBe("Keep this draft");
+    expect(container.querySelector('[data-composer-kind="quote"]')).not.toBeNull();
+
+    click(container, "open-other");
+    act(() => {
+      document.body
+        .querySelector('[data-testid="review-composer-discard"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.querySelector('[data-composer-kind="new"]')).not.toBeNull();
+    setDraft(container.querySelector("textarea")!, "On the other line");
+    act(() => {
+      container
+        .querySelector('button[aria-label="Send"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(postComment).toHaveBeenCalledWith({
+      role: "human",
+      body: "On the other line",
+      anchor: {
+        path: "app/foo.ts",
+        side: "new",
+        line: 12,
+        commitSha: SHA,
+      },
+    });
+
+    click(container, "open-quote");
+    setDraft(container.querySelector("textarea")!, "Still about the old line");
+    act(() => {
+      container
+        .querySelector('button[aria-label="Send"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(postComment).toHaveBeenLastCalledWith({
+      role: "human",
+      body: "Still about the old line",
+      anchor: {
+        path: "app/foo.ts",
+        side: "old",
+        line: 90,
+        startLine: 88,
+        commitSha: "b".repeat(40),
+      },
     });
   });
 });

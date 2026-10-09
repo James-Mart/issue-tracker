@@ -4,6 +4,7 @@ import {
   threadStateActions,
   type CommentThread as CommentThreadData,
 } from "../../lib/comment-threads";
+import type { ThreadMessage } from "../../lib/comment-outbox";
 import { CommentThread } from "./comment-thread";
 
 const ResolveThreadsContext = createContext(false);
@@ -32,11 +33,17 @@ export function StoryDiffThread({
   issueId,
   onReply,
   replySlot,
+  onQuote,
+  quoteSlot,
+  quoteCommentId,
 }: {
   thread: CommentThreadData;
   issueId: string;
   onReply: () => void;
   replySlot?: ReactNode;
+  onQuote?: (comment: ThreadMessage) => void;
+  quoteSlot?: ReactNode;
+  quoteCommentId?: string;
 }) {
   const post = usePostThreadEvent(issueId);
   return (
@@ -45,6 +52,9 @@ export function StoryDiffThread({
       issueId={issueId}
       onReply={onReply}
       replySlot={replySlot}
+      onQuote={onQuote}
+      quoteSlot={quoteSlot}
+      quoteCommentId={quoteCommentId}
       inline
       resolvePending={post.isPending}
       {...threadStateActions(thread, (event) =>

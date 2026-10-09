@@ -1,19 +1,27 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { CommentThread as CommentThreadData } from "@/features/issues/lib/comment-threads";
 import {
   useEditComment,
   usePostComment,
   usePostThreadEvent,
 } from "@/features/issues/api/mutations";
-import { replyDraftKey } from "@/features/reviews/lib/review-draft-key";
 import { CommentThread } from "@/features/issues/components/comments/comment-thread";
+import {
+  DiffThreadComposer,
+  useOptionalDiffComposer,
+} from "@/features/issues/components/comments/diff-thread-composer";
+import {
+  ThreadComposerDiscard,
+  ThreadComposerFields,
+  threadComposerCommentInput,
+  useThreadComposers,
+} from "@/features/issues/components/comments/thread-composer";
 import { isPlainNote, threadStateActions } from "@/features/issues/lib/comment-threads";
+import { quoteDiffComposer } from "@/features/issues/lib/diff-thread-anchor";
+import { quoteSource } from "@/features/issues/lib/quote-comment";
 import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
-import { ReviewComposer } from "./review-composer";
 
-const COMPOSER_ROLE = "human";
-
-/** Story thread on the review workbench: reply, resolve, and unresolve. */
+/** Story thread on the review workbench: reply, quote, resolve, and unresolve. */
 export function ReviewThread({
   thread,
   storyId,
@@ -32,43 +40,85 @@ export function ReviewThread({
   const post = usePostComment(storyId);
   const edit = useEditComment(storyId);
   const events = usePostThreadEvent(storyId);
-  const [replying, setReplying] = useState(false);
+  const diff = useOptionalDiffComposer();
+  const composers = useThreadComposers(storyId);
+  const slot = composers.slots[thread.root.id];
+  const threadId = thread.root.id;
 
-  const sendReply = (body: string) => {
-    post({ role: COMPOSER_ROLE, body, replyTo: thread.root.id });
-    setReplying(false);
+  const sendLocal = (body: string) => {
+    if (!slot) return;
+    post(threadComposerCommentInput(slot.intent, body));
+    composers.close(threadId);
   };
 
+  const diffReply = diff?.open?.kind === "reply" && diff.open.threadId === threadId;
+  const diffQuote =
+    diff?.open?.kind === "quote" && diff.open.threadId === threadId ? diff.open : null;
+  const localQuote = !diff && slot?.intent.mode === "quote" ? slot.intent : null;
+
   return (
-    <CommentThread
-      thread={thread}
-      issueId={storyId}
-      inline={inline}
-      showAnchorContext={showAnchorContext}
-      collapse={collapse}
-      onSeeInDiff={onSeeInDiff}
-      onReply={isPlainNote(thread) ? undefined : () => setReplying(true)}
-      replySlot={
-        replying ? (
-          <div data-testid="review-thread-reply" data-thread-id={thread.root.id}>
-            <ReviewComposer
-              draftKey={replyDraftKey(storyId, thread.root.id)}
-              placeholder="Reply"
-              submitLabel="Send"
-              onSubmit={sendReply}
-              onCancel={() => setReplying(false)}
+    <>
+      <CommentThread
+        thread={thread}
+        issueId={storyId}
+        inline={inline}
+        showAnchorContext={showAnchorContext}
+        collapse={collapse}
+        onSeeInDiff={onSeeInDiff}
+        onReply={
+          isPlainNote(thread)
+            ? undefined
+            : () => {
+                if (diff) diff.openReply(threadId);
+                else composers.request({ mode: "reply", threadId });
+              }
+        }
+        onQuote={(comment) => {
+          const source = quoteSource(threadId, comment, thread.root.anchor);
+          if (diff) diff.openQuote(quoteDiffComposer(source));
+          else composers.request({ mode: "quote", ...source });
+        }}
+        replySlot={
+          diffReply ? (
+            <DiffThreadComposer target={{ kind: "reply", threadId }} />
+          ) : !diff && slot?.intent.mode === "reply" ? (
+            <ThreadComposerFields
+              issueId={storyId}
+              intent={slot.intent}
+              onSubmit={sendLocal}
+              onCancel={() => composers.close(threadId)}
             />
-          </div>
-        ) : undefined
-      }
-      resolvePending={events.isPending}
-      onEdit={async (commentId, body) => {
-        await edit.mutateAsync({ commentId, body });
-      }}
-      {...threadStateActions(thread, (event) =>
-        events.mutate({ threadId: thread.root.id, event }),
+          ) : undefined
+        }
+        quoteSlot={
+          diffQuote ? (
+            <DiffThreadComposer target={diffQuote} />
+          ) : localQuote ? (
+            <ThreadComposerFields
+              issueId={storyId}
+              intent={localQuote}
+              onSubmit={sendLocal}
+              onCancel={() => composers.close(threadId)}
+            />
+          ) : undefined
+        }
+        quoteCommentId={diffQuote?.commentId ?? localQuote?.commentId}
+        resolvePending={events.isPending}
+        onEdit={async (commentId, body) => {
+          await edit.mutateAsync({ commentId, body });
+        }}
+        {...threadStateActions(thread, (event) =>
+          events.mutate({ threadId, event }),
+        )}
+      />
+      {diff ? null : (
+        <ThreadComposerDiscard
+          threadId={composers.pendingThreadId}
+          onKeep={composers.keep}
+          onDiscard={composers.discard}
+        />
       )}
-    />
+    </>
   );
 }
 
