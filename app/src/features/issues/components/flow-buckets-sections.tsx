@@ -225,6 +225,12 @@ function BucketHeadingToggle({
   );
 }
 
+type FlowBucketItemsRenderer = (
+  items: FlowItem[],
+  compact?: boolean,
+  previewLimit?: number,
+) => ReactNode;
+
 function BucketList({
   items,
   renderRow,
@@ -235,11 +241,7 @@ function BucketList({
   items: FlowItem[];
   renderRow?: (item: FlowItem) => ReactNode;
   /** When set, renders the whole bucket body (e.g. cockpit project groups). */
-  renderItems?: (
-    items: FlowItem[],
-    compact?: boolean,
-    previewLimit?: number,
-  ) => ReactNode;
+  renderItems?: FlowBucketItemsRenderer;
   compact?: boolean;
   previewLimit?: number;
 }) {
@@ -357,6 +359,7 @@ function FlowBucketSection({
   idPrefix,
   renderRow,
   renderItems,
+  renderRecentlyMergedItems,
   collapsed,
   onToggle,
 }: {
@@ -365,11 +368,8 @@ function FlowBucketSection({
   blocked: FlowItem[];
   idPrefix: string;
   renderRow?: (item: FlowItem) => ReactNode;
-  renderItems?: (
-    items: FlowItem[],
-    compact?: boolean,
-    previewLimit?: number,
-  ) => ReactNode;
+  renderItems?: FlowBucketItemsRenderer;
+  renderRecentlyMergedItems?: FlowBucketItemsRenderer;
   collapsed: boolean;
   onToggle: () => void;
 }) {
@@ -391,7 +391,11 @@ function FlowBucketSection({
       <BucketList
         items={items}
         renderRow={renderRow}
-        renderItems={renderItems}
+        renderItems={
+          def.key === "recentlyMerged" && renderRecentlyMergedItems
+            ? renderRecentlyMergedItems
+            : renderItems
+        }
         compact={compact}
         previewLimit={def.previewLimit}
       />
@@ -421,6 +425,7 @@ export function FlowBucketsSections({
   idPrefix,
   renderRow,
   renderItems,
+  renderRecentlyMergedItems,
   collapsedSectionKeys: controlledCollapsed,
   onToggleSection: controlledOnToggle,
 }: {
@@ -428,11 +433,9 @@ export function FlowBucketsSections({
   idPrefix: string;
   renderRow?: (item: FlowItem) => ReactNode;
   /** Optional bucket body renderer; cockpit uses this for project grouping. */
-  renderItems?: (
-    items: FlowItem[],
-    compact?: boolean,
-    previewLimit?: number,
-  ) => ReactNode;
+  renderItems?: FlowBucketItemsRenderer;
+  /** Flat Recently merged body. Other buckets keep `renderItems`. */
+  renderRecentlyMergedItems?: FlowBucketItemsRenderer;
   collapsedSectionKeys?: ReadonlySet<FlowBucketKey>;
   onToggleSection?: (key: FlowBucketKey) => void;
 }) {
@@ -466,6 +469,7 @@ export function FlowBucketsSections({
           idPrefix={idPrefix}
           renderRow={renderRow}
           renderItems={renderItems}
+          renderRecentlyMergedItems={renderRecentlyMergedItems}
           collapsed={collapsedSectionKeys.has(def.key)}
           onToggle={() => onToggleSection(def.key)}
         />

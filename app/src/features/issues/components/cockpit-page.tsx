@@ -172,6 +172,15 @@ function CockpitEpicCaption({
   );
 }
 
+/** Display name for a cockpit project id. */
+export function cockpitProjectTitle(
+  projectId: string,
+  byId: Map<string, IssueRecord>,
+): string {
+  const project = byId.get(projectId);
+  return project?.kind === "project" ? project.title : projectId;
+}
+
 /** Group bucket rows by project; project order follows the global project list. */
 export function groupFlowItemsByProject(
   items: FlowItem[],
@@ -194,12 +203,11 @@ export function groupFlowItemsByProject(
         (orderIndex.get(leftId) ?? Number.MAX_SAFE_INTEGER) -
         (orderIndex.get(rightId) ?? Number.MAX_SAFE_INTEGER),
     )
-    .map(([projectId, groupItems]) => {
-      const project = byId.get(projectId);
-      const projectTitle =
-        project?.kind === "project" ? project.title : projectId;
-      return { projectId, projectTitle, items: groupItems };
-    });
+    .map(([projectId, groupItems]) => ({
+      projectId,
+      projectTitle: cockpitProjectTitle(projectId, byId),
+      items: groupItems,
+    }));
 }
 
 function CockpitProjectSubheader({
@@ -271,7 +279,34 @@ export function CockpitPage() {
     projects.length > 0 &&
     projects.every((project) => hiddenIds.includes(project.id));
 
-  const renderBucketItems = useCallback(
+  const flowRow = useCallback(
+    (item: FlowItem, projectId: string, projectTitle?: string) => (
+      <FlowRow
+        item={item}
+        indexes={indexes}
+        projectTitle={projectTitle}
+        launchFault={
+          fault?.issueId === item.issue.id
+            ? cockpitLaunchFaultMessage(item.issue.title, fault.kind)
+            : undefined
+        }
+        to={issuePath(projectId, item.issue.id)}
+        drillInState={{
+          issueBackStack: [{ kind: "cockpit" }],
+        }}
+        actions={
+          <FlowRowActions
+            item={item}
+            issues={issues}
+            derived={derivedForBuckets}
+          />
+        }
+      />
+    ),
+    [derivedForBuckets, fault, indexes, issues],
+  );
+
+  const renderGroupedBucketItems = useCallback(
     (items: FlowItem[], compact?: boolean, previewLimit?: number) => {
       const groups = groupFlowItemsByProject(items, byId, projectOrder);
       return (
@@ -302,38 +337,36 @@ export function CockpitPage() {
                     />
                   );
                 }}
-                renderItem={(item) => (
-                  <FlowRow
-                    item={item}
-                    indexes={indexes}
-                    launchFault={
-                      fault?.issueId === item.issue.id
-                        ? cockpitLaunchFaultMessage(
-                            item.issue.title,
-                            fault.kind,
-                          )
-                        : undefined
-                    }
-                    to={issuePath(group.projectId, item.issue.id)}
-                    drillInState={{
-                      issueBackStack: [{ kind: "cockpit" }],
-                    }}
-                    actions={
-                      <FlowRowActions
-                        item={item}
-                        issues={issues}
-                        derived={derivedForBuckets}
-                      />
-                    }
-                  />
-                )}
+                renderItem={(item) => flowRow(item, group.projectId)}
               />
             </div>
           ))}
         </div>
       );
     },
-    [derivedForBuckets, fault, indexes, issues, projectOrder],
+    [byId, flowRow, indexes, projectOrder],
+  );
+
+  const renderRecentlyMergedItems = useCallback(
+    (items: FlowItem[], _compact?: boolean, previewLimit?: number) => (
+      <FlowPreviewedItems
+        items={items}
+        indexes={indexes}
+        previewLimit={previewLimit}
+        asRail
+        listClassName="gap-1.5"
+        renderItem={(item) => {
+          const projectId = projectIdOf(item.issue.id, byId);
+          if (!projectId) return null;
+          return flowRow(
+            item,
+            projectId,
+            cockpitProjectTitle(projectId, byId),
+          );
+        }}
+      />
+    ),
+    [byId, flowRow, indexes],
   );
 
   return (
@@ -388,7 +421,8 @@ export function CockpitPage() {
             <FlowBucketsSections
               buckets={buckets}
               idPrefix="cockpit"
-              renderItems={renderBucketItems}
+              renderItems={renderGroupedBucketItems}
+              renderRecentlyMergedItems={renderRecentlyMergedItems}
               collapsedSectionKeys={collapsedSectionKeys}
               onToggleSection={onToggleSection}
             />

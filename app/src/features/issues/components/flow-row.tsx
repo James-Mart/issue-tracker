@@ -86,6 +86,8 @@ export interface FlowRowProps {
   /** When set, the full row drills in here; actions stay outside the link. */
   to?: string;
   drillInState?: unknown;
+  /** Project name shown on the row. Recently merged names each row's project. */
+  projectTitle?: string;
 }
 
 /**
@@ -100,6 +102,7 @@ export function FlowRow({
   launchFault,
   to,
   drillInState,
+  projectTitle,
 }: FlowRowProps) {
   const railState = issueRailNodeState(item.issue, item.state, indexes);
   const live = railState === "in-flight" && !isWorkQueuedRoot(item.issue);
@@ -153,7 +156,11 @@ export function FlowRow({
             <Link
               to={drillInTo}
               state={drillInState}
-              aria-label={item.issue.title}
+              aria-label={
+                projectTitle
+                  ? `${item.issue.title}, ${projectTitle}`
+                  : item.issue.title
+              }
               className="absolute inset-0 z-0 rounded-lg"
             />
           ) : null}
@@ -188,6 +195,15 @@ export function FlowRow({
             </span>
             <div className="cockpit-row-pack">
               <div className="cockpit-row-cluster">
+                {projectTitle ? (
+                  <span
+                    data-testid="cockpit-row-project"
+                    className="max-w-[11rem] shrink-0 truncate font-mono text-[11px] font-normal text-muted-foreground"
+                    title={projectTitle}
+                  >
+                    {projectTitle}
+                  </span>
+                ) : null}
                 <span className="cockpit-row-title font-medium text-foreground" title={item.issue.title}>
                   {item.issue.title}
                 </span>
