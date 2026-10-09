@@ -180,6 +180,19 @@ describe("runSyncPass", () => {
     expect(error).toHaveBeenCalled();
   });
 
+  it("caches reconcile facts when a later step returns error", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const facts = new Map([["ship", { number: 7 }]]);
+    reconcileProjectPrs.mockResolvedValue({ ...okResult(), facts });
+    const { registerPrSyncStep, runSyncPass } = await load();
+    const cache = await import("./pr-facts-cache.js");
+    registerPrSyncStep(async () => ({ matches: new Map(), error: "mirror down" }));
+
+    await runSyncPass("p");
+
+    expect(cache.readPrFactsCache("p")).toMatchObject({ ship: { number: 7 } });
+  });
+
   it("stops the pass when a step returns error and keeps the prior success time", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { registerPrSyncStep, runSyncPass, prSyncStatus } = await load();

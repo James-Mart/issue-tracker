@@ -866,7 +866,8 @@ async function mirrorStoryComments(
  * authors, then appends a `comment-edit` when a fetched body differs from
  * the tracker copy. A comment GitHub no longer returns stays. The first pass
  * for a PR in this process fetches full history; later passes fetch items
- * updated since that pass.
+ * updated since that pass. A failing Story does not stop the others; every
+ * failure is named in `error`.
  */
 export async function mirrorPrComments(
   projectId: string,
@@ -880,13 +881,14 @@ export async function mirrorPrComments(
     const message = err instanceof Error ? err.message : String(err);
     return { ...previous, error: message };
   }
+  const failures: string[] = [];
   for (const [storyId, prUrl] of previous.matches) {
     try {
       await mirrorStoryComments(storyId, prUrl, workspace);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { ...previous, error: `${storyId}: ${message}` };
+      failures.push(`${storyId}: ${message}`);
     }
   }
-  return previous;
+  return failures.length > 0 ? { ...previous, error: failures.join("; ") } : previous;
 }

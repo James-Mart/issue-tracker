@@ -153,16 +153,46 @@ describe("mirrorPrComments", () => {
     } as PrSyncStepResult;
 
     const failed = await mirrorPrComments("p", input);
-    expect(failed.error).toBe("ship: gh exploded");
+    expect(failed.error).toBe("ship: gh exploded; other: gh exploded");
     expect(failed.facts).toBe(input.facts);
     expect(storedLines("ship")).toHaveLength(0);
-    expect(ghCalls).toHaveLength(1);
+    expect(ghCalls).toHaveLength(2);
 
     stubGh(commentPages([page([commentNode()])]));
     const retried = await mirrorPrComments("p", input);
     expect(retried.error).toBeUndefined();
-    expect(queryOf(ghCalls[1]!)).toContain("direction: ASC");
+    expect(queryOf(ghCalls[2]!)).toContain("direction: ASC");
     expect(storedLines("ship")).toHaveLength(1);
+  });
+
+  it("keeps mirroring later stories after one story fails", async () => {
+    project();
+    story("ship");
+    story("other");
+    const respond = commentPages([page([commentNode()])]);
+    const spawner: GhSpawner = (_command, args) => {
+      ghCalls.push(args);
+      const query = queryOf(args);
+      if (query.includes("pullRequest(number: 7)")) {
+        return mockChild({ code: 1, stderr: "gh exploded" });
+      }
+      return mockChild({ stdout: respond(query) });
+    };
+    setGhSpawnerForTests(spawner);
+
+    const result = await mirrorPrComments(
+      "p",
+      previous(
+        new Map([
+          ["ship", PR_URL],
+          ["other", "https://github.com/acme/widgets/pull/8"],
+        ]),
+      ),
+    );
+
+    expect(result.error).toBe("ship: gh exploded");
+    expect(storedLines("ship")).toHaveLength(0);
+    expect(storedLines("other")).toHaveLength(1);
   });
 
   it("lands review summaries, inline threads, and bot authors", async () => {

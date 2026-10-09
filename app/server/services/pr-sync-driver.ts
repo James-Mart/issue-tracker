@@ -29,7 +29,10 @@ export const PR_SYNC_CADENCE_MS = 5 * 60 * 1000;
  */
 export const PR_SYNC_STORE_DEBOUNCE_MS = 500;
 
-/** Result a pass step returns. `error` ends the pass. `facts` is cached on success. */
+/**
+ * Result a pass step returns. `error` ends the pass. `facts` is cached
+ * whenever reconcile succeeded, even if a later step errors.
+ */
 export type PrSyncStepResult = Pick<PrReconcileResult, "error" | "matches"> & {
   facts?: PrReconcileResult["facts"];
 };
@@ -159,12 +162,14 @@ function syncPassesRunHere(): boolean {
 async function executeSyncPass(projectId: string): Promise<PrSyncStepResult> {
   const at = new Date().toISOString();
   try {
-    let result: PrSyncStepResult = await reconcileProjectPrs(projectId);
-    if (!result.error) {
+    const reconciled = await reconcileProjectPrs(projectId);
+    let result: PrSyncStepResult = reconciled;
+    if (!reconciled.error) {
       for (const step of [...steps]) {
         result = await step(projectId, result);
         if (result.error) break;
       }
+      replacePrFactsCacheFromMap(projectId, result.facts ?? reconciled.facts);
     }
     if (result.error) {
       recordError(projectId, result.error, at);
@@ -172,7 +177,6 @@ async function executeSyncPass(projectId: string): Promise<PrSyncStepResult> {
       return result;
     }
     recordSuccess(projectId, at);
-    if (result.facts) replacePrFactsCacheFromMap(projectId, result.facts);
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
