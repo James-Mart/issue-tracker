@@ -20,7 +20,9 @@ Absolute path for this file (Read this exact path):
    Other tasks still hand off with no unmerged paths.
 3. **Self-check.** Choose the checks that show the outcomes the Task states
    hold, and run them. Unit-suite runs follow `codingStandards` § Unit
-   suite. For build, runtime, and browser checks, **Read**
+   suite. Self-check may write whatever automated tests validation needs
+   (unit, e2e, and lint-script). For build,
+   runtime, and browser checks, **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
    and consult `verification` per that file using the bootstrap summary
    output. When a tool a check needs is missing from the workspace, run the
@@ -67,7 +69,9 @@ Absolute path for this file (Read this exact path):
       is UI-related and the review fixes changed at least one of the paths
       that made it so; that look's three evidence fields go in the step 8
       comment.
-7. **Read**
+7. **Committed tests, then record commit.** **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-committed-tests.md`
+   and follow it. Then **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-record-commit-beat.md`
    and follow it.
 8. Post one summary comment:
