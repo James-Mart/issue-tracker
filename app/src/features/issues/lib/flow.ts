@@ -262,6 +262,40 @@ function isRecentlyMerged(
   return isIssueComplete(issue, state);
 }
 
+/** Epoch millis for a merge stamp. Anything else is not a merge time. */
+function mergedAtMs(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) return undefined;
+  return ms;
+}
+
+/**
+ * Instant that orders a Recently merged row.
+ * A Story uses its own `mergedAt`. An Epic uses the latest `mergedAt` among
+ * its direct child Stories and does not store one of its own. An unparseable
+ * stamp is not a merge time; the row is omitted instead of sorting by
+ * `updatedAt`.
+ */
+function recentlyMergedInstant(
+  issue: IssueRecord,
+  issues: IssueRecord[],
+): number | undefined {
+  if (issue.kind === "story") return mergedAtMs(issue.mergedAt);
+  if (issue.kind !== "epic") return undefined;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  let found = false;
+  for (const child of epicChildStories(issue.id, issues)) {
+    const ms = mergedAtMs(child.mergedAt);
+    if (ms === undefined) continue;
+    if (ms > latestMs) {
+      latestMs = ms;
+      found = true;
+    }
+  }
+  return found ? latestMs : undefined;
+}
+
 /**
  * Bucket Stories, Epics, and Ideas into awaitingPlanning / readyToLand /
  * ready / inFlight / blocked / recentlyMerged. Pure view-model — no I/O.
@@ -269,7 +303,9 @@ function isRecentlyMerged(
  * Stories that `storyIsActivelyImplementing`, and Epics with an actively
  * implementing child or a live implementing run. Ready-to-land Stories
  * (including epic-children) go to `readyToLand`. Captured Ideas go to
- * `awaitingPlanning`.
+ * `awaitingPlanning`. `recentlyMerged` keeps project-level merged Stories
+ * and done Epics that have a merge instant, newest first; equal instants
+ * tie-break on issue id, smaller id first.
  */
 export function flowBuckets(
   issues: IssueRecord[],
@@ -298,7 +334,7 @@ export function flowBuckets(
   const ready: FlowItem[] = [];
   const inFlight: FlowItem[] = [];
   const blocked: FlowItem[] = [];
-  const recentlyMerged: FlowItem[] = [];
+  const recentlyMergedRanked: { item: FlowItem; at: number }[] = [];
 
   for (const issue of candidates) {
     const state = derived[issue.id];
@@ -314,7 +350,12 @@ export function flowBuckets(
     } else if (issue.kind === "epic" && shouldOmitEpic(issue.id, issues, derived)) {
       continue;
     } else if (isRecentlyMerged(issue, state)) {
-      recentlyMerged.push(item);
+      const at = recentlyMergedInstant(issue, issues);
+      // No merge instant: leave the row out of every bucket. Recently merged
+      // excludes it, and it is not ready or in flight.
+      if (at !== undefined) {
+        recentlyMergedRanked.push({ item, at });
+      }
     } else if (isWorkQueuedRoot(issue)) {
       inFlight.push(item);
     } else {
@@ -322,9 +363,11 @@ export function flowBuckets(
     }
   }
 
-  recentlyMerged.sort((a, b) =>
-    b.issue.updatedAt.localeCompare(a.issue.updatedAt),
-  );
+  recentlyMergedRanked.sort((a, b) => {
+    if (a.at !== b.at) return b.at - a.at;
+    return a.item.issue.id.localeCompare(b.item.issue.id);
+  });
+  const recentlyMerged = recentlyMergedRanked.map((entry) => entry.item);
 
   return {
     awaitingPlanning,

@@ -80,6 +80,7 @@ import {
   isStoryMergeFlip,
   mergeCascade,
   stampMergedAtOnStoryMergeFlip,
+  ensureMergedAtBackfilled,
 } from "./merge-consequences.js";
 import { assertStoreWritable, refusesStoreWrites } from "./store-read-only.js";
 import { replaceFileAtomically, withIssuesStoreLock } from "./issues-store-lock.js";
@@ -171,6 +172,14 @@ export function ensureArchivedMigrated(): void {
   });
 }
 
+// One-time mergedAt backfill. Safe to call from list/create/apply; no-ops
+// after the marker file exists.
+export function ensureMergedAtMigrated(): void {
+  ensureMergedAtBackfilled((story) => {
+    persist(story, serializeIssue(story));
+  });
+}
+
 export function ensureSpecReviewMigrated(): void {
   ensureSpecReviewRenamed();
 }
@@ -186,6 +195,7 @@ export function ensureMigrations(): void {
   ensureKindRenamed();
   ensureMergeBasesMigrated();
   ensureArchivedMigrated();
+  ensureMergedAtMigrated();
   ensureSpecReviewMigrated();
   ensureSourceIdeaMigration();
 }

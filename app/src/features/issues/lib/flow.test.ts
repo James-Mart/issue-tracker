@@ -152,7 +152,7 @@ describe("flowBuckets", () => {
       story("flight-story", "flight-epic"),
       story("pr-story", "flight-epic"),
       epic("done-epic", "p"),
-      story("merged-story", "done-epic"),
+      { ...story("merged-story", "done-epic"), mergedAt: t0 },
       epic("ready-epic", "p"),
       story("ready-story", "ready-epic"),
     ];
@@ -200,22 +200,30 @@ describe("flowBuckets", () => {
     expect(buckets.ready).toEqual([]);
   });
 
-  it("orders recentlyMerged by updatedAt descending", () => {
+  it("orders recentlyMerged by merge time, not updatedAt", () => {
     const issues = [
       project("p"),
-      epic("old-epic", "p", t0),
-      epic("mid-epic", "p", t1),
-      story("new-story", "mid-epic", t2),
+      epic("old-epic", "p", t2),
+      { ...story("old-child", "old-epic"), mergedAt: t0 },
+      epic("new-epic", "p", t0),
+      { ...story("new-child", "new-epic"), mergedAt: t1 },
+      { ...story("root", "p", t0), merged: true, mergedAt: t2 },
     ];
     const derived: Record<string, DerivedState> = {
       "old-epic": { blocked: false, epicStatus: "done" },
-      "mid-epic": { blocked: false, epicStatus: "done" },
-      "new-story": { blocked: false, storyStatus: "merged" },
+      "old-child": { blocked: false, storyStatus: "merged" },
+      "new-epic": { blocked: false, epicStatus: "done" },
+      "new-child": { blocked: false, storyStatus: "merged" },
+      root: { blocked: false, storyStatus: "merged" },
     };
 
     const buckets = flowBuckets(issues, derived, { projectId: "p" });
 
-    expect(ids(buckets.recentlyMerged)).toEqual(["mid-epic", "old-epic"]);
+    expect(ids(buckets.recentlyMerged)).toEqual([
+      "root",
+      "new-epic",
+      "old-epic",
+    ]);
   });
 
   it("excludes Epic-child Stories, Tasks, Projects, and archived planned Ideas", () => {
@@ -499,6 +507,7 @@ describe("flowBuckets", () => {
       epic("flight-epic", "p"),
       story("flight-story", "flight-epic"),
       epic("done-epic", "p", t1),
+      { ...story("done-child", "done-epic"), mergedAt: t0 },
       epic("ready-epic", "p"),
     ];
     const derived: Record<string, DerivedState> = {
@@ -506,6 +515,7 @@ describe("flowBuckets", () => {
       "flight-epic": { blocked: false, epicStatus: "in-progress" },
       "flight-story": { blocked: false, storyStatus: "in-progress" },
       "done-epic": { blocked: false, epicStatus: "done" },
+      "done-child": { blocked: false, storyStatus: "merged" },
       "ready-epic": { blocked: false, epicStatus: "todo" },
     };
 

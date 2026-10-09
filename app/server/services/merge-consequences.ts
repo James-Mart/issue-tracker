@@ -1,7 +1,28 @@
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
+import { issuesDir } from "../config.js";
 import type { Issue, IssuePatch } from "../schemas.js";
 import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
+import { forEachOnDiskIssue } from "./scan-disk.js";
 import { ancestorChain, subtreeIds } from "./subtree.js";
+
+const MERGED_AT_BACKFILL_FLAG = ".merged-at-backfilled";
+
+type Story = Extract<Issue, { kind: "story" }>;
+
+function mergedAtBackfillFlagPath(): string {
+  return join(issuesDir, MERGED_AT_BACKFILL_FLAG);
+}
+
+function mergedAtBackfillDone(): boolean {
+  return existsSync(mergedAtBackfillFlagPath());
+}
+
+function markMergedAtBackfilled(): void {
+  mkdirSync(issuesDir, { recursive: true });
+  writeFileSync(mergedAtBackfillFlagPath(), "");
+}
 
 /** Story `merged` flipped from false to true in this update. */
 export function isStoryMergeFlip(
@@ -125,4 +146,30 @@ export function mergeCascade(
     landedBase,
     staleIds: staleSiblingIds(issues, finisherId, landedBase),
   };
+}
+
+export interface MergedAtBackfillResult {
+  updated: string[];
+  skipped: boolean;
+}
+
+// One-time: set `mergedAt` to `updatedAt` on merged Stories whose issue.json
+// lacks it. Subsequent calls no-op once the marker file exists.
+export function ensureMergedAtBackfilled(
+  persistStory: (issue: Story) => void,
+): MergedAtBackfillResult {
+  if (mergedAtBackfillDone()) return { updated: [], skipped: true };
+
+  const updated: string[] = [];
+  for (const { id, issue } of forEachOnDiskIssue()) {
+    if (issue.kind !== "story") continue;
+    if (!issue.merged) continue;
+    if (issue.mergedAt !== undefined) continue;
+    if (issue.id !== id) continue;
+    persistStory({ ...issue, mergedAt: issue.updatedAt });
+    updated.push(id);
+  }
+
+  markMergedAtBackfilled();
+  return { updated, skipped: false };
 }
