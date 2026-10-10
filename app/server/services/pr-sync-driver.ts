@@ -182,7 +182,7 @@ async function executeSyncPass(projectId: string): Promise<PrSyncStepResult> {
     const message = err instanceof Error ? err.message : String(err);
     recordError(projectId, message, at);
     logPrSyncFailure(projectId, err);
-    return { error: message };
+    return { error: message, matches: new Map() };
   } finally {
     publishPrSyncFinished(projectId);
   }

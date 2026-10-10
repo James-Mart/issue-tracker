@@ -12,6 +12,14 @@ export const pipelineRunsEventSchema = z.object({
 
 export type PipelineRunsEvent = z.infer<typeof pipelineRunsEventSchema>;
 
+/** Live-only PR sync completion signalling on the `pr-sync` multiplex topic. */
+export const prSyncEventSchema = z.object({
+  type: z.literal("pr-sync"),
+  projectId: nonEmpty,
+});
+
+export type PrSyncEvent = z.infer<typeof prSyncEventSchema>;
+
 // --- Conversations (durable agent transcript store; peer of issues/) ---
 
 export const CONVERSATION_CHANNELS = [

@@ -5,6 +5,7 @@ import {
   type ConversationFrameInput,
   type IssueEvent,
   type PipelineRunsEvent,
+  type PrSyncEvent,
 } from "../schemas.js";
 import { PIPELINE_RUNS_TOPIC } from "./pipeline-runs-events.js";
 import { PR_SYNC_TOPIC } from "./pr-sync-topic.js";
@@ -19,7 +20,7 @@ const ISSUES_TOPIC = "issues";
  * incremental deltas from finalized events that also land on disk.
  */
 export type ConversationFrame = {
-  event: (ConversationFrameInput | IssueEvent | PipelineRunsEvent) & {
+  event: (ConversationFrameInput | IssueEvent | PipelineRunsEvent | PrSyncEvent) & {
     seq?: number;
   };
   persist: boolean;
