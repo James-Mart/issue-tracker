@@ -19,18 +19,33 @@ the Story can carry.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
-## Plan body
+## Task description
 
-**Read**
-`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-body.md`
-and follow it.
+Each Task's description is this prefix, with `<taskId>` replaced by that
+Task's id:
 
-### Review-appended Tasks
+```markdown
+Implement the changes from the code review comments below. Line numbers point into the commit named on the thread.
 
-Review-appended Tasks follow plan body **Compression target** and plan prose;
-work-root shape, grain, and Epic contracts do not apply. Per linked review
-thread, include the anchor file, line, and feedback; that location is the
-feedback's work context.
+When you can't tell what change a thread asks for, run `issue task set <taskId> needsAttention true --reason "<threadId>: <your question>"` and stop.
+```
+
+Then one section per thread the Task covers:
+
+```markdown
+### Thread `<rootId>` at `<location>`
+
+**<author>:**
+<body>
+
+**<author>:**
+<body>
+```
+
+`<location>`, `<author>`, and `<body>` are copied verbatim from that thread's
+lines in `issue story view <storyId> --comments`. A thread with no location
+ends its heading after the root id. The messages are the root, then each
+reply, in the order the CLI prints them.
 
 ## Inputs
 
@@ -38,13 +53,11 @@ The prompt ends with:
 
 - `Story: <storyId>`
 - `Threads: <id>, <id>` — the threads this run tasks
-- `Summary comment: <commentId>` — present only when the human wrote a summary
 
 ## Procedure
 
 1. Run `issue summary <storyId>` and `issue story view <storyId> --comments`.
-   Read each named thread's anchor, body, and replies, and the summary
-   comment when the prompt names one.
+   Read each named thread's anchor, body, and replies.
 2. Group threads whose changes would land naturally as one commit: the same
    outcome at the same code, or small edits of one kind across files (for
    example, doc and doc-comment wording). A thread that needs its own design
@@ -53,8 +66,8 @@ The prompt ends with:
    `issue story append <storyId> <file>`. `issue summary` names the Project
    and, when the Story sits under an Epic, the Epic. Include `epic` only
    when that Epic line is present. Restate the Story id and title. Each new
-   Task id is kebab-case and unused. Its description follows **Plan body**
-   above.
+   Task id is kebab-case and unused. Its description follows **Task
+   description** above, written as a YAML block scalar (`|`).
 4. Link every named thread to the Task that covers it:
 
    issue story comment <storyId> --role issue-tracker-review-tasker --reply-to <threadId> --link-task <taskId>

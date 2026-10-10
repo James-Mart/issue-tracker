@@ -78,19 +78,13 @@ function submittableThreadIds(
   return submittableRootIds(readComments(storyId).threads, submissions);
 }
 
-function taskingPrompt(
-  storyId: string,
-  threadIds: string[],
-  summaryCommentId: string | undefined,
-): string {
-  const lines = [
+function taskingPrompt(storyId: string, threadIds: string[]): string {
+  return [
     loadRoleBody(REVIEW_TASKER_ROLE),
     "",
     `Story: ${storyId}`,
     `Threads: ${threadIds.join(", ")}`,
-  ];
-  if (summaryCommentId) lines.push(`Summary comment: ${summaryCommentId}`);
-  return lines.join("\n");
+  ].join("\n");
 }
 
 function submissionBase(
@@ -417,7 +411,7 @@ export async function launchRecordedSubmission(
     }
 
     const threadIds = linked.openThreadIds;
-    const prompt = taskingPrompt(storyId, threadIds, submission.summaryCommentId);
+    const prompt = taskingPrompt(storyId, threadIds);
     const model = loadRoleModelPin(REVIEW_TASKER_ROLE);
     let current: ReviewSubmission = submission;
     const persisted = submission.conversationId !== undefined;
