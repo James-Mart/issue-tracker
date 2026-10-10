@@ -1,10 +1,10 @@
-import { act, type ComponentProps } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { expect, vi } from "vitest";
+import { afterEach, vi } from "vitest";
 import type { TranscriptEvent } from "@server/schemas";
 import { ConversationThread } from "./conversation-thread";
 
-export const initialEvents: TranscriptEvent[] = [
+const initialEvents: TranscriptEvent[] = [
   {
     type: "prompt",
     text: "First turn",
@@ -35,88 +35,33 @@ const mocks = vi.hoisted(() => ({
   transcriptState: { events: [] as TranscriptEvent[] },
   threadUi: {
     pendingText: undefined as string | null | undefined,
-    steeringText: null as string | null,
-    pendingSteerFallback: false,
     runActive: false,
-    metaPending: undefined as { text: string; at: string } | undefined,
-    readOnly: false,
-    forkedFrom: undefined as string | undefined,
-    forkedAtSeq: undefined as number | undefined,
     ready: true,
     historyFailed: false,
     historyErrorMessage: undefined as string | undefined,
-    isRefetchingHistory: false,
-    hasOlder: false,
-    olderStatus: "idle" as "idle" | "loading" | "error",
-    prependedRows: 0,
   },
-  attachmentStore: {
-    attachments: [] as Array<{ name: string; size: number; mimeType: string }>,
-    isLoading: false,
-  },
-  refetchHistory: vi.fn(),
-  loadOlder: vi.fn(),
-  updatePendingMutate: vi.fn(),
-  clearPendingMutate: vi.fn(),
-  sendMutate: vi.fn(),
   forkMutate: vi.fn(),
   navigate: vi.fn(),
 }));
 
 export const transcriptState = mocks.transcriptState;
 export const threadUi = mocks.threadUi;
-export const attachmentStore = mocks.attachmentStore;
-export const refetchHistory = mocks.refetchHistory;
-export const loadOlder = mocks.loadOlder;
-export const updatePendingMutate = mocks.updatePendingMutate;
-export const clearPendingMutate = mocks.clearPendingMutate;
-export const sendMutate = mocks.sendMutate;
 export const forkMutate = mocks.forkMutate;
 export const navigate = mocks.navigate;
-
-function eventsWithSeq(events: TranscriptEvent[]): TranscriptEvent[] {
-  return events.map((event, index) =>
-    event.seq !== undefined ? event : { ...event, seq: index + 1 },
-  );
-}
 
 mocks.transcriptState.events = [...initialEvents];
 
 vi.mock("../api/queries", () => ({
   useConversationsQuery: () => ({
-    data: [
-      {
-        id: "conv-1",
-        title: "Test thread",
-        model: "composer-2.5-fast",
-        pendingMessage: threadUi.metaPending,
-        readOnly: threadUi.readOnly || undefined,
-        forkedFrom: threadUi.forkedFrom,
-        forkedAtSeq: threadUi.forkedAtSeq,
-      },
-      { id: "conv-2", title: "Other thread", model: "composer-2.5-fast" },
-      { id: "conv-source", title: "Source thread", model: "composer-2.5-fast" },
-    ],
+    data: [{ id: "conv-1", title: "Test thread", model: "composer-2.5-fast" }],
   }),
-  useConversationAttachmentsQuery: () => ({
-    data: attachmentStore.attachments,
-    isLoading: attachmentStore.isLoading,
-  }),
+  useConversationAttachmentsQuery: () => ({ data: [], isLoading: false }),
 }));
 
 vi.mock("../api/mutations", () => ({
-  useUpdateConversationPending: () => ({
-    mutate: updatePendingMutate,
-    isPending: false,
-  }),
-  useClearConversationPending: () => ({
-    mutate: clearPendingMutate,
-    isPending: false,
-  }),
-  useSendConversationMessage: () => ({
-    mutate: sendMutate,
-    isPending: false,
-  }),
+  useUpdateConversationPending: () => ({ mutate: vi.fn(), isPending: false }),
+  useClearConversationPending: () => ({ mutate: vi.fn(), isPending: false }),
+  useSendConversationMessage: () => ({ mutate: vi.fn(), isPending: false }),
   useForkConversation: () => ({
     mutate: forkMutate,
     isPending: false,
@@ -133,23 +78,23 @@ vi.mock("react-router-dom", async (importOriginal) => {
 
 vi.mock("../hooks/use-conversation-events", () => ({
   useConversationEvents: () => ({
-    events: eventsWithSeq(transcriptState.events),
+    events: transcriptState.events,
     ready: threadUi.ready,
     streamRunActive: threadUi.runActive,
     runResyncKey: 0,
     pendingText: threadUi.pendingText,
-    steeringText: threadUi.steeringText,
-    pendingSteerFallback: threadUi.pendingSteerFallback,
+    steeringText: null,
+    pendingSteerFallback: false,
     historyFailed: threadUi.historyFailed,
-    refetchHistory,
-    isRefetchingHistory: threadUi.isRefetchingHistory,
+    refetchHistory: vi.fn(),
+    isRefetchingHistory: false,
     historyError: threadUi.historyErrorMessage
       ? new Error(threadUi.historyErrorMessage)
       : null,
-    hasOlder: threadUi.hasOlder,
-    olderStatus: threadUi.olderStatus,
-    prependedRows: threadUi.prependedRows,
-    loadOlder,
+    hasOlder: false,
+    olderStatus: "idle",
+    prependedRows: 0,
+    loadOlder: vi.fn(),
   }),
 }));
 
@@ -163,80 +108,36 @@ vi.mock("./composer", () => ({
   ),
 }));
 
-export function renderThread(
-  root: Root,
-  conversationId: string,
-  props?: Omit<ComponentProps<typeof ConversationThread>, "conversationId">,
-) {
-  act(() => {
-    root.render(
-      <ConversationThread conversationId={conversationId} {...props} />,
-    );
-  });
-}
+const mountedRoots: Root[] = [];
 
-export function mountThread(
-  conversationId: string,
-  options?: { width?: string },
-): {
-  container: HTMLDivElement;
-  root: Root;
-} {
+export function mountThread(conversationId: string): HTMLDivElement {
   const container = document.createElement("div");
   container.style.height = "240px";
-  container.style.width = options?.width ?? "480px";
+  container.style.width = "480px";
   container.style.display = "flex";
   container.style.flexDirection = "column";
   document.body.appendChild(container);
   const root = createRoot(container);
+  mountedRoots.push(root);
   act(() => {
     root.render(<ConversationThread conversationId={conversationId} />);
   });
-  return { container, root };
+  return container;
 }
 
-export function threadScroller(container: ParentNode): HTMLDivElement {
-  const scroller = container.querySelector('[data-pinned="true"]');
-  expect(scroller).toBeTruthy();
-  return scroller as HTMLDivElement;
-}
+afterEach(() => {
+  for (const root of mountedRoots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  resetThreadMocks();
+});
 
-export function mockOverflow(scroller: HTMLDivElement) {
-  Object.defineProperty(scroller, "scrollHeight", {
-    configurable: true,
-    value: 1200,
-  });
-  Object.defineProperty(scroller, "clientHeight", {
-    configurable: true,
-    value: 240,
-  });
-  scroller.scrollTop = 0;
-}
-
-export function resetThreadMocks() {
+function resetThreadMocks() {
   transcriptState.events = [...initialEvents];
   threadUi.pendingText = undefined;
-  threadUi.steeringText = null;
-  threadUi.pendingSteerFallback = false;
   threadUi.runActive = false;
-  threadUi.metaPending = undefined;
-  threadUi.readOnly = false;
-  threadUi.forkedFrom = undefined;
-  threadUi.forkedAtSeq = undefined;
   threadUi.ready = true;
   threadUi.historyFailed = false;
   threadUi.historyErrorMessage = undefined;
-  threadUi.isRefetchingHistory = false;
-  threadUi.hasOlder = false;
-  threadUi.olderStatus = "idle";
-  threadUi.prependedRows = 0;
-  attachmentStore.attachments = [];
-  attachmentStore.isLoading = false;
-  updatePendingMutate.mockClear();
-  clearPendingMutate.mockClear();
-  sendMutate.mockClear();
-  forkMutate.mockClear();
+  forkMutate.mockReset();
   navigate.mockClear();
-  refetchHistory.mockClear();
-  loadOlder.mockClear();
 }

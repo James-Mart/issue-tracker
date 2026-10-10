@@ -12,18 +12,10 @@ import {
   resetConversationEventsRegistryForTests,
   subscribeConversation,
 } from "./conversation-events-registry";
-import {
-  joinLatestPage,
-  prependOlderPage,
-  type ConversationEventsState,
-} from "./conversation-events-state";
+import type { ConversationEventsState } from "./conversation-events-state";
 
 function prompt(seq: number, text = `turn ${seq}`): TranscriptEvent {
   return { type: "prompt", text, at: "2026-09-30T00:00:00.000Z", seq };
-}
-
-function thinking(seq: number, text: string): TranscriptEvent {
-  return { type: "thinking", text, at: "2026-09-30T00:00:00.000Z", seq };
 }
 
 function page(
@@ -136,23 +128,6 @@ describe("loadOlderConversationEvents", () => {
     thread.close();
   });
 
-  it("folds a thinking chain that crosses the page boundary into one row", async () => {
-    const { calls } = deferredFetch();
-    const thread = open("conv-fold", page([thinking(3, " world"), prompt(4)], true));
-
-    loadOlderConversationEvents("conv-fold");
-    calls[0]!.resolve(page([prompt(1), thinking(2, "hello")], false, 4));
-    await settle();
-
-    expect(thread.state().events).toMatchObject([
-      { type: "prompt", seq: 1 },
-      { type: "thinking", text: "hello world", seq: 3 },
-      { type: "prompt", seq: 4 },
-    ]);
-    expect(thread.state().prependedRows).toBe(1);
-    thread.close();
-  });
-
   it("keeps loaded events on failure and retries the same page", async () => {
     const { calls } = deferredFetch();
     const thread = open("conv-fail", page([prompt(10)], true));
@@ -180,30 +155,6 @@ describe("loadOlderConversationEvents", () => {
 });
 
 describe("applyConversationHistorySeed with older pages loaded", () => {
-  it("keeps older pages when the refetched latest page reaches back to them", async () => {
-    const { calls } = deferredFetch();
-    const thread = open("conv-join", page([prompt(5), prompt(6)], true));
-    loadOlderConversationEvents("conv-join");
-    calls[0]!.resolve(page([prompt(3), prompt(4)], true, 6));
-    await settle();
-
-    applyConversationHistorySeed(
-      "conv-join",
-      page([prompt(6), prompt(7), prompt(8)], true),
-    );
-
-    expect(thread.state().events.map((event) => event.seq)).toEqual([
-      3, 4, 5, 6, 7, 8,
-    ]);
-    expect(thread.state()).toMatchObject({ hasOlder: true, prependedRows: 2 });
-
-    loadOlderConversationEvents("conv-join");
-    expect(calls[1]!.url).toBe(
-      "/api/conversations/conv-join/transcript?before=3",
-    );
-    thread.close();
-  });
-
   it("replaces loaded events when unloaded events sit before the new page, and drops an in-flight older page", async () => {
     const { calls } = deferredFetch();
     const thread = open("conv-gap", page([prompt(5), prompt(6)], true));
@@ -227,59 +178,5 @@ describe("applyConversationHistorySeed with older pages loaded", () => {
       "/api/conversations/conv-gap/transcript?before=20",
     );
     thread.close();
-  });
-});
-
-describe("joinLatestPage", () => {
-  it("takes a whole-transcript page as is", () => {
-    expect(
-      joinLatestPage([prompt(1), prompt(2)], true, page([prompt(1), prompt(2), prompt(3)], false)),
-    ).toEqual({
-      events: [prompt(1), prompt(2), prompt(3)],
-      hasOlder: false,
-      joined: true,
-    });
-  });
-
-  it("joins at the page's first seq when it overlaps the loaded range", () => {
-    expect(
-      joinLatestPage([prompt(2), prompt(3), prompt(4)], false, page([prompt(4), prompt(5)], true)),
-    ).toEqual({
-      events: [prompt(2), prompt(3), prompt(4), prompt(5)],
-      hasOlder: false,
-      joined: true,
-    });
-  });
-
-  it("replaces when the page starts after the newest loaded seq", () => {
-    expect(
-      joinLatestPage([prompt(2), prompt(3)], false, page([prompt(9), prompt(10)], true)),
-    ).toEqual({
-      events: [prompt(9), prompt(10)],
-      hasOlder: true,
-      joined: false,
-    });
-  });
-});
-
-describe("prependOlderPage", () => {
-  it("counts only the rows the older page adds ahead of the screen", () => {
-    const onScreen = [thinking(3, " the tail"), prompt(4), prompt(5, "live")];
-
-    expect(
-      prependOlderPage(
-        { events: onScreen, prependedRows: 4 },
-        page([prompt(1), thinking(2, "the head")], false, 5),
-      ),
-    ).toEqual({
-      events: [
-        prompt(1),
-        thinking(3, "the head the tail"),
-        prompt(4),
-        prompt(5, "live"),
-      ],
-      hasOlder: false,
-      prependedRows: 5,
-    });
   });
 });

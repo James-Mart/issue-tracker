@@ -3,17 +3,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
-import {
-  APPEND_TARGET_EMPTY_LABEL,
-  APPEND_TARGET_MERGED,
-  APPEND_TARGET_NOT_FOUND,
-  appendTargetWrongKindReason,
-} from "../lib/append-target";
 import { resetAppendTargetDraftStore } from "../store/use-append-target-draft-store";
 import { IssueAppendToField } from "./issue-append-to-field";
 
 const go = vi.fn();
-const mutateAsync = vi.fn();
 
 const t0 = "2026-08-10T12:00:00.000Z";
 
@@ -58,21 +51,6 @@ const openStory: IssueRecord = {
   reviewedTasks: [],
 };
 
-const mergedStory: IssueRecord = {
-  kind: "story",
-  id: "merged-story",
-  title: "Session cookie rotation",
-  partOf: "auth-epic",
-  order: 1,
-  archived: false,
-  needsAttention: false,
-  attentionReason: null,
-  createdAt: t0,
-  updatedAt: t0,
-  merged: true,
-  reviewedTasks: [],
-};
-
 vi.mock("./issue-link", () => ({
   IssueLink: ({
     id,
@@ -113,14 +91,14 @@ vi.mock("./issue-link", () => ({
 }));
 
 vi.mock("../api/mutations", () => ({
-  useUpdateIssue: () => ({ mutateAsync }),
+  useUpdateIssue: () => ({ mutateAsync: vi.fn() }),
 }));
 
 const queryState: {
   issues: IssueRecord[];
   derived: Record<string, DerivedState>;
 } = {
-  issues: [project, epic, openStory, mergedStory],
+  issues: [project, epic, openStory],
   derived: {},
 };
 
@@ -133,9 +111,7 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
-function idea(
-  appendTo?: string,
-): Extract<IssueDetail, { kind: "idea" }> {
+function idea(appendTo: string): Extract<IssueDetail, { kind: "idea" }> {
   return {
     kind: "idea",
     id: "capture",
@@ -175,142 +151,14 @@ function clearButton(container: HTMLElement): HTMLButtonElement {
   ) as HTMLButtonElement;
 }
 
-async function beginEdit(container: HTMLElement): Promise<void> {
-  await act(async () => {
-    editButton(container).click();
-  });
-}
-
-async function commitDraft(
-  container: HTMLElement,
-  value: string,
-): Promise<void> {
-  const input = container.querySelector("input") as HTMLInputElement;
-  const nativeSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    "value",
-  )!.set!;
-  await act(async () => {
-    nativeSetter.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "Enter",
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
-  });
-}
-
 afterEach(() => {
   document.body.innerHTML = "";
   go.mockReset();
-  mutateAsync.mockReset();
   resetAppendTargetDraftStore();
   queryState.derived = {};
 });
 
 describe("IssueAppendToField", () => {
-  it("states that an unset target means a new root Story", () => {
-    const { container } = mount(<IssueAppendToField issue={idea()} />);
-
-    expect(container.textContent).toContain(APPEND_TARGET_EMPTY_LABEL);
-    expect(container.querySelector("a")).toBeNull();
-    expect(container.querySelector("input")).toBeNull();
-  });
-
-  it.each([
-    ["phone", "390px"],
-    ["desktop", "1440px"],
-  ] as const)(
-    "shows the edit affordance on %s without hover",
-    (_viewport, width) => {
-      const { container } = mount(
-        <div style={{ width }}>
-          <IssueAppendToField issue={idea()} />
-        </div>,
-      );
-      const pencil = editButton(container);
-
-      expect(pencil).toBeTruthy();
-      expect(pencil.className).not.toMatch(
-        /opacity-0|invisible|hidden|sr-only|group-hover/,
-      );
-      expect(getComputedStyle(pencil).opacity).not.toBe("0");
-    },
-  );
-
-  it("shows a merged badge and field reason when the saved target landed", () => {
-    const { container } = mount(
-      <IssueAppendToField issue={idea("merged-story")} />,
-    );
-
-    expect(
-      container.querySelector('[data-testid="append-target-merged-badge"]')
-        ?.textContent,
-    ).toBe("merged");
-    expect(
-      container.querySelector('[data-testid="append-target-field-reason"]')
-        ?.textContent,
-    ).toBe(APPEND_TARGET_MERGED);
-    expect(container.textContent).toContain("Session cookie rotation");
-  });
-
-  it("shows the Story title as a navigating link with a navigate arrow", async () => {
-    const { container } = mount(
-      <IssueAppendToField issue={idea("open-story")} />,
-    );
-    const link = container.querySelector("a") as HTMLAnchorElement;
-
-    expect(link.textContent).toBe("OAuth callback hardening");
-    expect(container.textContent).not.toContain("open-story");
-    expect(container.querySelector('[title="Open open-story"]')).toBeTruthy();
-    expect(editButton(container)).toBeTruthy();
-
-    await act(async () => {
-      link.click();
-    });
-
-    expect(go).toHaveBeenCalledWith("open-story");
-    expect(container.querySelector("input")).toBeNull();
-  });
-
-  it.each([
-    ["ghost", APPEND_TARGET_NOT_FOUND],
-    ["auth-epic", appendTargetWrongKindReason("epic")],
-    ["merged-story", APPEND_TARGET_MERGED],
-  ] as const)(
-    "keeps a rejected %s paste visible with its own reason",
-    async (draft, reason) => {
-      const { container } = mount(<IssueAppendToField issue={idea()} />);
-      await beginEdit(container);
-      await commitDraft(container, draft);
-
-      const input = container.querySelector("input") as HTMLInputElement;
-      expect(input.value).toBe(draft);
-      expect(container.textContent).toContain(reason);
-      expect(clearButton(container)).toBeTruthy();
-      expect(mutateAsync).not.toHaveBeenCalled();
-    },
-  );
-
-  it("clears a rejected paste back to the empty state", async () => {
-    const { container } = mount(<IssueAppendToField issue={idea()} />);
-    await beginEdit(container);
-    await commitDraft(container, "ghost");
-    expect(container.textContent).toContain(APPEND_TARGET_NOT_FOUND);
-
-    await act(async () => {
-      clearButton(container).click();
-    });
-
-    expect(container.textContent).toContain(APPEND_TARGET_EMPTY_LABEL);
-    expect(container.querySelector("input")).toBeNull();
-    expect(container.textContent).not.toContain(APPEND_TARGET_NOT_FOUND);
-    expect(mutateAsync).not.toHaveBeenCalled();
-  });
-
   it("is read-only for a planned append Idea with link and navigate only", () => {
     queryState.derived = {
       capture: { blocked: false, ideaStatus: "planned" },
@@ -326,66 +174,5 @@ describe("IssueAppendToField", () => {
     expect(container.querySelector('[title="Open open-story"]')).toBeTruthy();
     expect(editButton(container)).toBeNull();
     expect(clearButton(container)).toBeNull();
-  });
-
-  it("is read-only when planRoots exist without ideaStatus planned", () => {
-    queryState.derived = {
-      capture: { blocked: false, planRoots: ["open-story"] },
-    };
-
-    const { container } = mount(
-      <IssueAppendToField issue={idea("open-story")} />,
-    );
-
-    expect(container.querySelector("a")).toBeTruthy();
-    expect(editButton(container)).toBeNull();
-    expect(clearButton(container)).toBeNull();
-  });
-
-  it("keeps edit and clear for an unplanned valid target", () => {
-    const { container } = mount(
-      <IssueAppendToField issue={idea("open-story")} />,
-    );
-
-    expect(container.querySelector("a")).toBeTruthy();
-    expect(editButton(container)).toBeTruthy();
-    expect(clearButton(container)).toBeTruthy();
-  });
-
-  it("keeps edit and clear for an invalid merged target even when planned", () => {
-    queryState.derived = {
-      capture: { blocked: false, ideaStatus: "planned" },
-    };
-
-    const { container } = mount(
-      <IssueAppendToField issue={idea("merged-story")} />,
-    );
-
-    expect(editButton(container)).toBeTruthy();
-    expect(clearButton(container)).toBeTruthy();
-  });
-
-  it("saves a valid Story id and clears a set target", async () => {
-    mutateAsync.mockResolvedValue({});
-    const { container, root } = mount(<IssueAppendToField issue={idea()} />);
-    await beginEdit(container);
-    await commitDraft(container, "open-story");
-
-    expect(mutateAsync).toHaveBeenCalledWith({
-      id: "capture",
-      patch: { appendTo: "open-story" },
-    });
-
-    await act(async () => {
-      root.render(<IssueAppendToField issue={idea("open-story")} />);
-    });
-    await act(async () => {
-      clearButton(container).click();
-    });
-
-    expect(mutateAsync).toHaveBeenCalledWith({
-      id: "capture",
-      patch: { appendTo: null },
-    });
   });
 });

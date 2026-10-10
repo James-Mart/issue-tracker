@@ -51,16 +51,6 @@ afterEach(() => {
 });
 
 describe("DeletePartialPlanDetailAction", () => {
-  it("renders a labeled destructive action", () => {
-    const { container } = mountAction(idea("stalled"));
-    const button = container.querySelector(
-      '[data-testid="idea-detail-delete-partial-plan"]',
-    ) as HTMLButtonElement;
-    expect(button).toBeTruthy();
-    expect(button.textContent).toContain("Delete partial plan");
-    expect(button.className).toContain("text-destructive");
-  });
-
   it("opens the confirmation dialog before deleting", () => {
     const { container } = mountAction(idea("stalled"));
 

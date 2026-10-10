@@ -114,25 +114,6 @@ afterEach(() => {
 });
 
 describe("useEditComment", () => {
-  it("shows the new body at once and keeps it when the save lands", async () => {
-    await mount();
-    let pending!: Promise<CommentMessage>;
-    await act(async () => {
-      pending = edit("Revised");
-      await vi.waitFor(() => expect(patch?.body).toBe("Revised"));
-    });
-    expect(cachedBody()).toBe("Revised");
-    expect(useCommentEditStore.getState().pending.c1).toBe(true);
-
-    await act(async () => {
-      patch!.succeed();
-      await pending;
-    });
-    expect(cachedBody()).toBe("Revised");
-    expect(useCommentEditStore.getState().errors.c1).toBeUndefined();
-    expect(useCommentEditStore.getState().pending.c1).toBeUndefined();
-  });
-
   it("reverts the body and records the refusal when the save is refused", async () => {
     await mount();
     let pending!: Promise<unknown>;

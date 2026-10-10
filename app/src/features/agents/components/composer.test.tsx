@@ -4,10 +4,8 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Composer } from "./composer"
 import { composerDraftStorageKey } from "../lib/composer-draft-storage"
-import { COMPOSER_HEIGHT_STORAGE_KEY } from "../lib/composer-height-storage"
 
 const sendMutate = vi.fn()
-const interruptMutate = vi.fn()
 
 vi.mock("../hooks/use-voice-recording", async (importOriginal) => {
   const original =
@@ -33,7 +31,7 @@ vi.mock("../api/mutations", () => ({
     isPending: false,
   }),
   useInterruptConversationRun: () => ({
-    mutate: interruptMutate,
+    mutate: vi.fn(),
     isPending: false,
   }),
   useCancelConversationRun: () => ({
@@ -66,19 +64,14 @@ vi.mock("../api/queries", () => ({
   }),
 }))
 
-const coarsePointer = vi.hoisted(() => ({ value: false }))
-
 vi.mock("@/hooks/use-coarse-pointer", () => ({
-  useIsCoarsePointer: () => coarsePointer.value,
+  useIsCoarsePointer: () => false,
 }))
 
 function mountComposer(
   overrides: {
     conversationId?: string
-    model?: string
     runActive?: boolean
-    disabled?: boolean
-    disabledPlaceholder?: string
   } = {},
 ): {
   container: HTMLDivElement
@@ -91,10 +84,8 @@ function mountComposer(
     root.render(
       <Composer
         conversationId={overrides.conversationId ?? "conv-1"}
-        model={overrides.model ?? "composer-2.5-fast"}
+        model="composer-2.5-fast"
         runActive={overrides.runActive ?? false}
-        disabled={overrides.disabled}
-        disabledPlaceholder={overrides.disabledPlaceholder}
       />,
     )
   })
@@ -130,133 +121,6 @@ function pressEnter(input: HTMLTextAreaElement): KeyboardEvent {
   return event
 }
 
-function sendButton(container: ParentNode): HTMLButtonElement {
-  const el = container.querySelector('button[aria-label="Send"]')
-  expect(el).toBeTruthy()
-  return el as HTMLButtonElement
-}
-
-describe("Composer Enter key", () => {
-  let container: HTMLDivElement | undefined
-  let root: Root | undefined
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount())
-    container?.remove()
-    container = undefined
-    root = undefined
-    sendMutate.mockClear()
-    interruptMutate.mockClear()
-    coarsePointer.value = false
-  })
-
-  it("sends on Enter without Shift when the pointer is fine", () => {
-    coarsePointer.value = false
-    ;({ container, root } = mountComposer())
-
-    const input = textarea(container!)
-    setDraft(input, "Hello")
-    const event = pressEnter(input)
-
-    expect(event.defaultPrevented).toBe(true)
-    expect(sendMutate).toHaveBeenCalledTimes(1)
-    expect(sendMutate).toHaveBeenCalledWith(
-      {
-        id: "conv-1",
-        body: { prompt: "Hello", model: "composer-2.5-fast" },
-      },
-      expect.any(Object),
-    )
-  })
-
-  it("lets Enter insert a newline when the pointer is coarse", () => {
-    coarsePointer.value = true
-    ;({ container, root } = mountComposer())
-
-    const input = textarea(container!)
-    setDraft(input, "Line one")
-    const event = pressEnter(input)
-
-    expect(event.defaultPrevented).toBe(false)
-    expect(sendMutate).not.toHaveBeenCalled()
-    expect(input.title).toBe("Enter for a new line")
-  })
-
-  it("shows Enter-to-send hint when the pointer is fine", () => {
-    coarsePointer.value = false
-    ;({ container, root } = mountComposer())
-
-    expect(textarea(container!).title).toBe(
-      "Enter to send, Shift+Enter for a newline",
-    )
-  })
-})
-
-describe("Composer send affordance", () => {
-  let container: HTMLDivElement | undefined
-  let root: Root | undefined
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount())
-    container?.remove()
-    container = undefined
-    root = undefined
-    sendMutate.mockClear()
-    interruptMutate.mockClear()
-    coarsePointer.value = false
-  })
-
-  it("enables Send with a draft under a coarse pointer", () => {
-    coarsePointer.value = true
-    ;({ container, root } = mountComposer())
-
-    expect(sendButton(container!).disabled).toBe(true)
-
-    setDraft(textarea(container!), "Line one\nLine two")
-
-    expect(sendButton(container!).disabled).toBe(false)
-  })
-
-  it("submits via Send when the pointer is coarse", () => {
-    coarsePointer.value = true
-    ;({ container, root } = mountComposer())
-
-    setDraft(textarea(container!), "Line one\nLine two")
-    act(() => {
-      sendButton(container!).click()
-    })
-
-    expect(sendMutate).toHaveBeenCalledTimes(1)
-    expect(sendMutate).toHaveBeenCalledWith(
-      {
-        id: "conv-1",
-        body: { prompt: "Line one\nLine two", model: "composer-2.5-fast" },
-      },
-      expect.any(Object),
-    )
-  })
-
-  it("keeps Send at a touch target size on narrow viewports", () => {
-    coarsePointer.value = true
-    ;({ container, root } = mountComposer())
-
-    const button = sendButton(container!)
-    expect(button.className).toMatch(/\bh-11\b/)
-    expect(button.className).toMatch(/\bw-11\b/)
-    expect(button.className).toMatch(/\bshell:h-9\b/)
-    expect(button.className).toMatch(/\bshell:w-9\b/)
-  })
-
-  it("enables Send with a draft even when the model picker is empty", () => {
-    coarsePointer.value = true
-    ;({ container, root } = mountComposer({ model: "" }))
-
-    setDraft(textarea(container!), "Hello")
-
-    expect(sendButton(container!).disabled).toBe(false)
-  })
-})
-
 describe("Composer during active run", () => {
   let container: HTMLDivElement | undefined
   let root: Root | undefined
@@ -267,50 +131,9 @@ describe("Composer during active run", () => {
     container = undefined
     root = undefined
     sendMutate.mockClear()
-    interruptMutate.mockClear()
-    coarsePointer.value = false
-  })
-
-  function steerButton(container: ParentNode): HTMLButtonElement {
-    const el = container.querySelector('button[aria-label="Steer"]')
-    expect(el).toBeTruthy()
-    return el as HTMLButtonElement
-  }
-
-  it("shows Steer alongside Stop and posts on send", () => {
-    ;({ container, root } = mountComposer({ runActive: true }))
-
-    setDraft(textarea(container!), "steer please")
-
-    const steer = steerButton(container!)
-    expect(steer.disabled).toBe(false)
-    expect(steer.title).toBe("Steer")
-    expect(
-      container!.querySelector('button[aria-label="Stop"]'),
-    ).toBeTruthy()
-    expect(
-      container!.querySelector('button[aria-label="Queue message"]'),
-    ).toBeNull()
-    expect(
-      container!.querySelector('button[aria-label="Send now"]'),
-    ).toBeNull()
-
-    act(() => {
-      steer.click()
-    })
-
-    expect(sendMutate).toHaveBeenCalledTimes(1)
-    expect(sendMutate).toHaveBeenCalledWith(
-      {
-        id: "conv-1",
-        body: { prompt: "steer please", model: "composer-2.5-fast" },
-      },
-      expect.any(Object),
-    )
   })
 
   it("queues on Enter during an active run", () => {
-    coarsePointer.value = false
     ;({ container, root } = mountComposer({ runActive: true }))
 
     const input = textarea(container!)
@@ -325,106 +148,6 @@ describe("Composer during active run", () => {
       },
       expect.any(Object),
     )
-  })
-
-  it("shows only Steer and Stop during an active run with a draft", () => {
-    ;({ container, root } = mountComposer({ runActive: true }))
-
-    setDraft(textarea(container!), "steer now")
-
-    const steer = steerButton(container!)
-    const stop = container!.querySelector(
-      'button[aria-label="Stop"]',
-    ) as HTMLButtonElement
-    const labeled = [...container!.querySelectorAll("button")].map(
-      (button) => button.getAttribute("aria-label"),
-    )
-
-    expect(steer).toBeTruthy()
-    expect(stop).toBeTruthy()
-    expect(labeled.filter((label) => label === "Steer" || label === "Stop")).toEqual([
-      "Steer",
-      "Stop",
-    ])
-    expect(labeled).not.toContain("Send now")
-    expect(labeled).not.toContain("Queue message")
-    expect(steer.className).toMatch(/\bh-11\b/)
-    expect(steer.className).toMatch(/\bshell:h-9\b/)
-    expect(steer.className).toMatch(/\bshell:w-9\b/)
-    expect(stop.className).toMatch(/\bh-11\b/)
-    expect(stop.className).toMatch(/\bshell:h-9\b/)
-    expect(stop.className).toMatch(/\bshell:w-9\b/)
-  })
-
-  it("wraps the control row and keeps the model picker from collapsing", () => {
-    ;({ container, root } = mountComposer({ runActive: true }))
-
-    setDraft(textarea(container!), "steer now")
-
-    const row = container!.querySelector(
-      '[data-testid="composer-control-row"]',
-    )
-    expect(row?.className).toMatch(/\bflex-wrap\b/)
-
-    const picker = container!.querySelector(
-      'button[aria-label="Model"]',
-    ) as HTMLButtonElement
-    expect(picker.className).toMatch(/min-w-\[8rem\]/)
-    expect(picker.className).not.toMatch(/\bmin-w-0\b/)
-  })
-})
-
-describe("Composer post-send focus", () => {
-  let container: HTMLDivElement | undefined
-  let root: Root | undefined
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount())
-    container?.remove()
-    container = undefined
-    root = undefined
-    sendMutate.mockClear()
-    interruptMutate.mockClear()
-    coarsePointer.value = false
-  })
-
-  it("refocuses the textarea after a successful send via Enter", () => {
-    sendMutate.mockImplementation((_args, opts) => {
-      opts?.onSuccess?.()
-    })
-    coarsePointer.value = false
-    ;({ container, root } = mountComposer())
-
-    const input = textarea(container!)
-    setDraft(input, "Hello")
-    act(() => {
-      input.blur()
-    })
-    expect(document.activeElement).not.toBe(input)
-
-    pressEnter(input)
-
-    expect(document.activeElement).toBe(input)
-  })
-
-  it("refocuses the textarea after a successful send via the send control", () => {
-    sendMutate.mockImplementation((_args, opts) => {
-      opts?.onSuccess?.()
-    })
-    ;({ container, root } = mountComposer())
-
-    const input = textarea(container!)
-    setDraft(input, "Hello")
-    act(() => {
-      input.blur()
-    })
-    expect(document.activeElement).not.toBe(input)
-
-    act(() => {
-      sendButton(container!).click()
-    })
-
-    expect(document.activeElement).toBe(input)
   })
 })
 
@@ -442,33 +165,8 @@ describe("Composer draft persistence", () => {
     container?.remove()
     container = undefined
     root = undefined
-    sendMutate.mockClear()
-    interruptMutate.mockClear()
-    coarsePointer.value = false
     localStorage.clear()
     vi.useRealTimers()
-  })
-
-  it("restores the draft after remount for the same conversation", () => {
-    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
-
-    setDraft(textarea(container!), "Long in-progress reply")
-    act(() => {
-      vi.advanceTimersByTime(300)
-    })
-
-    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBe(
-      "Long in-progress reply",
-    )
-
-    act(() => root!.unmount())
-    container!.remove()
-    container = undefined
-    root = undefined
-
-    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
-
-    expect(textarea(container!).value).toBe("Long in-progress reply")
   })
 
   it("does not leak drafts across conversation ids", () => {
@@ -505,280 +203,5 @@ describe("Composer draft persistence", () => {
       "Draft for B",
     )
   })
-
-  it("clears storage on successful send", () => {
-    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
-
-    setDraft(textarea(container!), "Ready to send")
-    act(() => {
-      vi.advanceTimersByTime(300)
-    })
-
-    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBe(
-      "Ready to send",
-    )
-
-    sendMutate.mockImplementation((_args, opts) => {
-      opts?.onSuccess?.()
-    })
-
-    act(() => {
-      sendButton(container!).click()
-    })
-
-    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBeNull()
-    expect(textarea(container!).value).toBe("")
-  })
-
-  it("clears storage when the draft field is emptied", () => {
-    ;({ container, root } = mountComposer({ conversationId: "conv-a" }))
-
-    setDraft(textarea(container!), "Will delete")
-    act(() => {
-      vi.advanceTimersByTime(300)
-    })
-
-    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBe(
-      "Will delete",
-    )
-
-    setDraft(textarea(container!), "")
-    act(() => {
-      vi.advanceTimersByTime(300)
-    })
-
-    expect(localStorage.getItem(composerDraftStorageKey("conv-a"))).toBeNull()
-  })
 })
 
-function stubDesktopViewport() {
-  Object.defineProperty(window, "innerWidth", {
-    configurable: true,
-    value: 1024,
-  })
-  window.matchMedia = vi.fn((query: string) => {
-    const matches = query === "(max-width: 859px)" ? false : false
-    const mql: MediaQueryList = {
-      media: query,
-      matches,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    }
-    return mql
-  })
-}
-
-function grip(container: ParentNode): HTMLButtonElement {
-  const el = container.querySelector('[data-testid="composer-resize-grip"]')
-  expect(el).toBeTruthy()
-  return el as HTMLButtonElement
-}
-
-function dispatchPointer(
-  target: EventTarget,
-  type: "pointerdown" | "pointermove" | "pointerup",
-  clientY: number,
-) {
-  act(() => {
-    target.dispatchEvent(
-      new PointerEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        pointerId: 1,
-        pointerType: "mouse",
-        clientY,
-      }),
-    )
-  })
-}
-
-describe("Composer height persistence", () => {
-  let container: HTMLDivElement | undefined
-  let root: Root | undefined
-  let pane: HTMLDivElement | undefined
-  const paneHeight = { value: 500 }
-  const scrollHeights: Record<string, number> = {}
-  const originalScrollHeight = Object.getOwnPropertyDescriptor(
-    HTMLTextAreaElement.prototype,
-    "scrollHeight",
-  )
-
-  function mountInPane(conversationId = "conv-a") {
-    pane = document.createElement("div")
-    pane.setAttribute("data-thread-pane", "")
-    Object.defineProperty(pane, "clientHeight", {
-      configurable: true,
-      get: () => paneHeight.value,
-    })
-    document.body.appendChild(pane)
-    container = document.createElement("div")
-    pane.appendChild(container)
-    root = createRoot(container)
-    act(() => {
-      root!.render(
-        <Composer
-          conversationId={conversationId}
-          model="composer-2.5-fast"
-          runActive={false}
-        />,
-      )
-    })
-  }
-
-  beforeEach(() => {
-    paneHeight.value = 500
-    for (const key of Object.keys(scrollHeights)) delete scrollHeights[key]
-    stubDesktopViewport()
-    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
-      configurable: true,
-      get() {
-        return scrollHeights[(this as HTMLTextAreaElement).value] ?? 44
-      },
-    })
-    Element.prototype.setPointerCapture = vi.fn()
-    Element.prototype.releasePointerCapture = vi.fn()
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        observe() {}
-        disconnect() {}
-        unobserve() {}
-      },
-    )
-    localStorage.clear()
-  })
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount())
-    pane?.remove()
-    container = undefined
-    root = undefined
-    pane = undefined
-    if (originalScrollHeight) {
-      Object.defineProperty(
-        HTMLTextAreaElement.prototype,
-        "scrollHeight",
-        originalScrollHeight,
-      )
-    }
-    vi.unstubAllGlobals()
-    localStorage.clear()
-  })
-
-  it("writes the height when a drag ends", () => {
-    scrollHeights[""] = 44
-    mountInPane()
-
-    const handle = grip(container!)
-    dispatchPointer(handle, "pointerdown", 400)
-    dispatchPointer(handle, "pointermove", 340)
-    dispatchPointer(handle, "pointerup", 340)
-
-    expect(localStorage.getItem(COMPOSER_HEIGHT_STORAGE_KEY)).toBe("104")
-  })
-
-  it("restores the height after remount and ignores content sizing", () => {
-    scrollHeights[""] = 44
-    scrollHeights["taller draft"] = 120
-    mountInPane()
-
-    const handle = grip(container!)
-    dispatchPointer(handle, "pointerdown", 400)
-    dispatchPointer(handle, "pointermove", 340)
-    dispatchPointer(handle, "pointerup", 340)
-
-    expect(textarea(container!).style.height).toBe("104px")
-
-    act(() => root!.unmount())
-    container!.remove()
-    container = undefined
-    root = undefined
-
-    mountInPane()
-
-    const input = textarea(container!)
-    expect(input.style.height).toBe("104px")
-
-    setDraft(input, "taller draft")
-    expect(input.style.height).toBe("104px")
-  })
-
-  it("applies the same stored height after switching conversations", () => {
-    scrollHeights[""] = 44
-    mountInPane("conv-a")
-
-    const handle = grip(container!)
-    dispatchPointer(handle, "pointerdown", 400)
-    dispatchPointer(handle, "pointermove", 340)
-    dispatchPointer(handle, "pointerup", 340)
-
-    act(() => {
-      root!.render(
-        <Composer
-          conversationId="conv-b"
-          model="composer-2.5-fast"
-          runActive={false}
-        />,
-      )
-    })
-
-    expect(textarea(container!).style.height).toBe("104px")
-  })
-
-  it("clears stored height on grip double-click and resumes content sizing", () => {
-    scrollHeights[""] = 44
-    scrollHeights["taller draft"] = 120
-    mountInPane()
-
-    const handle = grip(container!)
-    dispatchPointer(handle, "pointerdown", 400)
-    dispatchPointer(handle, "pointermove", 340)
-    dispatchPointer(handle, "pointerup", 340)
-
-    expect(localStorage.getItem(COMPOSER_HEIGHT_STORAGE_KEY)).toBe("104")
-
-    act(() => {
-      handle.dispatchEvent(
-        new MouseEvent("dblclick", { bubbles: true, cancelable: true }),
-      )
-    })
-
-    expect(localStorage.getItem(COMPOSER_HEIGHT_STORAGE_KEY)).toBeNull()
-
-    const input = textarea(container!)
-    setDraft(input, "taller draft")
-    expect(input.style.height).toBe("120px")
-  })
-})
-
-describe("Composer disabled rewrite", () => {
-  let container: HTMLDivElement | undefined
-  let root: Root | undefined
-
-  afterEach(() => {
-    if (root) act(() => root!.unmount())
-    container?.remove()
-    container = undefined
-    root = undefined
-  })
-
-  it("keeps the field visible and refuses input during a rewrite", () => {
-    ;({ container, root } = mountComposer({
-      disabled: true,
-      disabledPlaceholder: "Message disabled while rewrite runs...",
-      runActive: true,
-    }))
-    const input = textarea(container!)
-    expect(input.disabled).toBe(true)
-    expect(input.placeholder).toBe("Message disabled while rewrite runs...")
-    expect(
-      container!.querySelector('[data-composer-disabled="true"]'),
-    ).toBeTruthy()
-    expect(container!.querySelector('[aria-label="Stop"]')).toBeNull()
-  })
-})

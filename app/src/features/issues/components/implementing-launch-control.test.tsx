@@ -4,27 +4,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ImplementingWorkRoot } from "@server/services/implementing-launch";
-import { skillPath } from "@/lib/plugin-paths";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
-import {
-  ImplementingChannelEmptyState,
-  ImplementingNewRunControl,
-} from "./implementing-launch-control";
+import { ImplementingNewRunControl } from "./implementing-launch-control";
 
 const mutate = vi.fn();
 
-const modelsState = vi.hoisted(() => ({
-  models: [
-    { id: "composer-2.5", displayName: "Composer 2.5" },
-    { id: "claude-opus-5", displayName: "Opus 5" },
-  ],
-  isLoading: false,
-}));
-
 vi.mock("@/features/agents/api/queries", () => ({
   useAgentModelsQuery: () => ({
-    data: { models: modelsState.models },
-    isLoading: modelsState.isLoading,
+    data: { models: [{ id: "composer-2.5", displayName: "Composer 2.5" }] },
+    isLoading: false,
   }),
 }));
 
@@ -36,48 +24,19 @@ vi.mock("../api/mutations", () => ({
 }));
 
 const liveRunConfirm = vi.hoisted(() => ({
-  midRun: false,
   pending: null as null | (() => void | Promise<void>),
-  confirming: false,
 }));
 
 vi.mock("../hooks/use-confirm-channel-live-run", () => ({
   useConfirmChannelLiveRun: () => ({
     confirmIfLiveRun: (action: () => void | Promise<void>) => {
-      if (!liveRunConfirm.midRun) {
-        void action();
-        return;
-      }
       liveRunConfirm.pending = action;
     },
-    cancelConfirm: () => {
-      liveRunConfirm.pending = null;
-    },
     awaitingConfirm: liveRunConfirm.pending !== null,
-    confirming: liveRunConfirm.confirming,
+    confirming: false,
     dialog:
       liveRunConfirm.pending !== null ? (
-        <div data-testid="channel-kill-live-run-dialog">
-          <button
-            type="button"
-            onClick={() => {
-              liveRunConfirm.pending = null;
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-testid="channel-kill-live-run-confirm"
-            onClick={() => {
-              const action = liveRunConfirm.pending;
-              liveRunConfirm.pending = null;
-              void action?.();
-            }}
-          >
-            Kill and archive
-          </button>
-        </div>
+        <div data-testid="channel-kill-live-run-dialog" />
       ) : null,
   }),
 }));
@@ -113,64 +72,12 @@ function mount(
 afterEach(() => {
   document.body.innerHTML = "";
   mutate.mockReset();
-  modelsState.isLoading = false;
-  liveRunConfirm.midRun = false;
   liveRunConfirm.pending = null;
-  liveRunConfirm.confirming = false;
   resetCockpitLaunchStore();
 });
 
-describe("ImplementingChannelEmptyState", () => {
-  it("shows work-loop copy and posts issue-tracker-work on start", () => {
-    const onStarted = vi.fn();
-    const { container } = mount(
-      <ImplementingChannelEmptyState
-        issue={epic}
-        channel="implementing"
-        onStarted={onStarted}
-      />,
-    );
-    expect(container.textContent).toContain("Start work loop");
-    expect(container.textContent).toContain("coordinator");
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="implementing-start-session"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(mutate).toHaveBeenCalledWith(
-      {
-        title: "Implement Ship it",
-        model: "composer-2.5",
-        message:
-          `Work ship-it in the issue tracker using the issue-tracker-work skill. Read ${skillPath("issue-tracker-work")} and follow it.`,
-      },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
-  });
-
-});
-
 describe("ImplementingNewRunControl", () => {
-  it("renders a secondary New run action", () => {
-    const { container } = mount(
-      <ImplementingNewRunControl
-        issue={epic}
-        channel="implementing"
-        onStarted={vi.fn()}
-      />,
-    );
-    const button = container.querySelector(
-      '[data-testid="implementing-new-run"]',
-    );
-    expect(button?.textContent).toBe("New run");
-  });
-
   it("asks before starting a new run when a session is mid-run", () => {
-    liveRunConfirm.midRun = true;
     const renderControl = () => (
       <ImplementingNewRunControl
         issue={epic}

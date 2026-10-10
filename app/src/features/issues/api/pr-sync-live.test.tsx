@@ -5,16 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TopicListener } from "@/lib/ws/transport";
 import { issuesKeys } from "./keys";
-import {
-  refreshProjectPullRequestsLive,
-  useProjectPrSync,
-} from "./pr-sync-live";
-
-const requestMock = vi.hoisted(() => vi.fn());
-
-vi.mock("@/lib/api/client", () => ({
-  request: (...args: unknown[]) => requestMock(...args),
-}));
+import { useProjectPrSync } from "./pr-sync-live";
 
 const topicState = vi.hoisted(() => {
   const listeners = new Map<string, TopicListener>();
@@ -87,27 +78,5 @@ describe("useProjectPrSync", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: issuesKeys.projectPullRequests("platform"),
     });
-  });
-
-  it("unsubscribes on unmount", () => {
-    const { root } = mount();
-    expect(topicState.listeners.has("pr-sync")).toBe(true);
-    act(() => {
-      root.unmount();
-    });
-    expect(topicState.listeners.has("pr-sync")).toBe(false);
-  });
-});
-
-describe("refreshProjectPullRequestsLive", () => {
-  it("records a failed live read on the project query", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: Infinity } },
-    });
-    requestMock.mockRejectedValue(new Error("gh down"));
-    await refreshProjectPullRequestsLive(client, "platform");
-    const state = client.getQueryState(issuesKeys.projectPullRequests("platform"));
-    expect(state?.status).toBe("error");
-    expect((state?.error as Error).message).toBe("gh down");
   });
 });

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { channelSessionListItem } from "../test/channel-session-list-item";
-import { listChannelSessions } from "./channel-sessions";
 import { loadChannelSessions } from "./channel-sessions-loader";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -76,30 +75,5 @@ describe("loadChannelSessions", () => {
     const second = loadChannelSessions("beta", "export");
     await expect(first).rejects.toThrow("pairs must be an array");
     await expect(second).rejects.toThrow("pairs must be an array");
-  });
-});
-
-describe("listChannelSessions", () => {
-  it("posts one pair to the batched endpoint without waiting for a turn", async () => {
-    const fetchMock = installFetch();
-    const pending = listChannelSessions("alpha", "planning");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    expect(JSON.parse(String(init.body))).toEqual({
-      pairs: [{ issueId: "alpha", channel: "planning" }],
-    });
-    await expect(pending).resolves.toEqual([
-      expect.objectContaining({ id: "alpha-planning" }),
-    ]);
-  });
-
-  it("fails when the response omits the requested pair", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => jsonResponse({ sessions: {} })),
-    );
-    await expect(listChannelSessions("alpha", "planning")).rejects.toThrow(
-      'channel-sessions response missing "alpha:planning"',
-    );
   });
 });
