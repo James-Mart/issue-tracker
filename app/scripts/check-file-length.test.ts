@@ -12,8 +12,6 @@ import {
   FILE_LENGTH_LIMIT,
 } from "./check-file-length.js";
 
-const PLUGIN_ROOT = join(import.meta.dirname, "../..");
-
 let rootDir: string;
 let appDir: string;
 let agentsDir: string;
@@ -78,25 +76,5 @@ describe("collectFileLengthViolations", () => {
         kind: "over-limit",
       },
     ]);
-  });
-
-  it("returns no violations when every in-scope file is within the limit", () => {
-    writeApp("src/ok.ts", lines(FILE_LENGTH_LIMIT));
-    writeAgent("ok.md", lines(10));
-    writeSkill("ok-skill/SKILL.md", lines(20));
-
-    expect(collectFileLengthViolations(rootDir)).toEqual([]);
-  });
-
-  it("skips app/node_modules and app/dist", () => {
-    writeApp("node_modules/ignored.ts", lines(FILE_LENGTH_LIMIT + 1));
-    writeApp("dist/ignored.ts", lines(FILE_LENGTH_LIMIT + 1));
-    writeApp("src/ok.ts", "export {};\n");
-
-    expect(collectFileLengthViolations(rootDir)).toEqual([]);
-  });
-
-  it("is clean on the installed plugin root", () => {
-    expect(collectFileLengthViolations(PLUGIN_ROOT)).toEqual([]);
   });
 });

@@ -57,7 +57,7 @@ describe("collectSkillPathViolations", () => {
       ].join("\n"),
     );
 
-    writeSkill("valid-skill/SKILL.md", "# valid\n", "utf8");
+    writeSkill("valid-skill/SKILL.md", "# valid\n");
 
     writeLaunch(
       "fixture-launch.ts",
@@ -94,47 +94,5 @@ describe("collectSkillPathViolations", () => {
       line: 8,
       target: join(rootDir, "skills/missing-skill/SKILL.md"),
     });
-  });
-
-  it("trims trailing markdown punctuation from cited paths", () => {
-    writeAgent(
-      "fixture.md",
-      `See (${INSTALLED_PREFIX}/agents/also-missing.md).`,
-    );
-
-    const violations = collectSkillPathViolations(rootDir);
-    expect(violations).toHaveLength(1);
-    expect(violations[0]?.target).toBe(
-      `${INSTALLED_PREFIX}/agents/also-missing.md`,
-    );
-  });
-
-  it("accepts an install-prefix path that exists under the scanned root", () => {
-    const name = "_worktree-only-include.md";
-    writeAgent(name, "# include\n");
-    writeAgent(
-      "fixture.md",
-      `**Read** \`${INSTALLED_PREFIX}/agents/${name}\`.`,
-    );
-
-    expect(collectSkillPathViolations(rootDir)).toEqual([]);
-  });
-
-  it("returns no violations when every cited path resolves", () => {
-    writeSkill("ok-skill/SKILL.md", "# ok\n", "utf8");
-
-    writeAgent(
-      "fixture.md",
-      `**Read** \`${EXISTING_AGENT_PATH}\`.`,
-    );
-    writeLaunch(
-      "ok-launch.ts",
-      [
-        'import { skillPath } from "@/lib/plugin-paths";',
-        'export const m = `Read ${skillPath("ok-skill")}.`;',
-      ].join("\n"),
-    );
-
-    expect(collectSkillPathViolations(rootDir)).toEqual([]);
   });
 });

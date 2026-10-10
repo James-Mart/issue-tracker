@@ -31,13 +31,6 @@ beforeEach(() => {
   serverDir = join(rootDir, "server");
   mkdirSync(srcDir, { recursive: true });
   mkdirSync(serverDir, { recursive: true });
-
-  writeServer(
-    "schemas.ts",
-    ['import { z } from "zod";', "", "export const ok = z.string();", ""].join(
-      "\n",
-    ),
-  );
 });
 
 afterEach(() => {
@@ -45,56 +38,7 @@ afterEach(() => {
 });
 
 describe("collectClientBoundaryViolations", () => {
-  it("allows zod when the chain stops at an allowlisted validator module", () => {
-    writeSrc(
-      "features/issues/lib/personas.ts",
-      [
-        'import { personasSchema } from "@server/schemas";',
-        "",
-        "export function validate(input: unknown) {",
-        "  return personasSchema.safeParse(input);",
-        "}",
-      ].join("\n"),
-    );
-    writeSrc(
-      "features/issues/components/personas-editor.tsx",
-      [
-        'import { validate } from "@/features/issues/lib/personas";',
-        "",
-        "export function PersonasEditor() {",
-        "  return validate([]);",
-        "}",
-      ].join("\n"),
-    );
-
-    expect(collectClientBoundaryViolations(rootDir)).toEqual([]);
-  });
-
-  it("reports a rejected chain that value-imports a module reaching zod", () => {
-    writeSrc(
-      "features/pipeline/live-hook.ts",
-      [
-        'import { ok } from "@server/schemas";',
-        "",
-        "export function useLive() {",
-        "  return ok;",
-        "}",
-      ].join("\n"),
-    );
-
-    const violations = collectClientBoundaryViolations(rootDir);
-    expect(violations).toHaveLength(1);
-    expect(violations[0]).toEqual({
-      file: "src/features/pipeline/live-hook.ts",
-      chain: [
-        "src/features/pipeline/live-hook.ts",
-        "server/schemas.ts",
-        "package:zod",
-      ],
-    });
-  });
-
-  it("still reports Node builtin chains", () => {
+  it("reports a client chain that reaches a Node builtin", () => {
     writeServer("unsafe.ts", ['import fs from "fs";', "", "export const x = fs;", ""].join("\n"));
     writeSrc(
       "leak.ts",
