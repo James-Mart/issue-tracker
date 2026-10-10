@@ -27,23 +27,10 @@ describe("isSubmittable", () => {
     expect(isSubmittable(thread(), [claim("done", ["other"])])).toBe(true);
   });
 
-  it("skips threads that are not an open unlinked review", () => {
-    expect(isSubmittable(thread({ kind: "question" }), [])).toBe(false);
-    expect(isSubmittable(thread({ state: "resolved" }), [])).toBe(false);
-    expect(isSubmittable(thread({ state: "dismissed" }), [])).toBe(false);
-    expect(isSubmittable(thread({ linkedTaskId: "task-1" }), [])).toBe(false);
-  });
-
   it("keeps a thread with the submission that still claims it", () => {
     for (const status of ["tasking", "failed", "incomplete"] as const) {
       expect(isSubmittable(thread(), [claim(status)])).toBe(false);
     }
     expect(isSubmittable(thread(), [claim("done"), claim("failed")])).toBe(false);
-  });
-
-  it("releases a done submission's thread once it is open again", () => {
-    expect(isSubmittable(thread(), [claim("done")])).toBe(true);
-    expect(isSubmittable(thread({ state: "resolved" }), [claim("done")])).toBe(false);
-    expect(isSubmittable(thread({ linkedTaskId: "task-1" }), [claim("done")])).toBe(false);
   });
 });

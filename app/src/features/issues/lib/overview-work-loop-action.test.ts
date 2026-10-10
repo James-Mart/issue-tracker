@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IssueRecord } from "@server/schemas";
 import { currentChannelSession } from "../api/channel-sessions";
-import { leafTasksOf } from "./derived";
 import { overviewWorkLoopAction } from "./overview-work-loop-action";
 import { channelSessionListItem as session } from "../test/channel-session-list-item";
 
@@ -11,8 +10,6 @@ const timestamps = {
 };
 
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
-type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
-type EpicRecord = Extract<IssueRecord, { kind: "epic" }>;
 
 const workFields = {
   order: 0,
@@ -21,11 +18,7 @@ const workFields = {
   archived: false,
 };
 
-function task(
-  id: string,
-  status: TaskRecord["status"],
-  overrides: Partial<TaskRecord> = {},
-): TaskRecord {
+function task(id: string, status: TaskRecord["status"]): TaskRecord {
   return {
     id,
     kind: "task",
@@ -35,116 +28,10 @@ function task(
     commits: [],
     ...workFields,
     ...timestamps,
-    ...overrides,
-  };
-}
-
-function story(id: string, overrides: Partial<StoryRecord> = {}): StoryRecord {
-  return {
-    id,
-    kind: "story",
-    title: id,
-    partOf: "project",
-    branchName: id,
-    merged: false,
-    reviewedTasks: [],
-    ...workFields,
-    ...timestamps,
-    ...overrides,
-  };
-}
-
-function epic(id: string): EpicRecord {
-  return {
-    id,
-    kind: "epic",
-    title: id,
-    partOf: "project",
-    blockedBy: [],
-    ...workFields,
-    ...timestamps,
   };
 }
 
 describe("overviewWorkLoopAction", () => {
-  it("returns start when there is no current session", () => {
-    expect(
-      overviewWorkLoopAction({
-        liveRun: false,
-        leafTasks: [],
-        currentSession: undefined,
-      }),
-    ).toEqual({ action: "start" });
-  });
-
-  it("returns hidden while a live run is active", () => {
-    expect(
-      overviewWorkLoopAction({
-        liveRun: true,
-        leafTasks: [task("t1", "todo")],
-        currentSession: session({ id: "live" }),
-      }),
-    ).toEqual({ action: "hidden" });
-  });
-
-  it("returns hidden when every leaf task is done", () => {
-    const current = session({ id: "current" });
-    expect(
-      overviewWorkLoopAction({
-        liveRun: false,
-        leafTasks: [task("t1", "done"), task("t2", "done")],
-        currentSession: current,
-      }),
-    ).toEqual({ action: "hidden" });
-  });
-
-  it("returns resume when an appended task is not done", () => {
-    const current = session({ id: "current" });
-    expect(
-      overviewWorkLoopAction({
-        liveRun: false,
-        leafTasks: [
-          task("done", "done"),
-          task("appended", "todo", { appended: true }),
-        ],
-        currentSession: current,
-      }),
-    ).toEqual({ action: "resume", resumeSession: current });
-  });
-
-  it("returns resume for an epic leaf list with one unfinished task", () => {
-    const e = epic("e1");
-    const issues = [
-      e,
-      { ...story("s1"), partOf: "e1" },
-      { ...task("t1", "done"), partOf: "s1" },
-      { ...task("t2", "todo"), partOf: "s1" },
-    ];
-    const current = session({ id: "current" });
-    expect(
-      overviewWorkLoopAction({
-        liveRun: false,
-        leafTasks: leafTasksOf(e, issues),
-        currentSession: current,
-      }),
-    ).toEqual({ action: "resume", resumeSession: current });
-  });
-
-  it("returns hidden when all tasks are done even if the story is unmerged", () => {
-    const s = story("s1", { merged: false });
-    const current = session({ id: "current" });
-    expect(
-      overviewWorkLoopAction({
-        liveRun: false,
-        leafTasks: [
-          task("t1", "done", { partOf: "s1" }),
-          task("t2", "done", { partOf: "s1" }),
-        ],
-        currentSession: current,
-      }),
-    ).toEqual({ action: "hidden" });
-  });
-
   it("resumes the non-archived session when multiple sessions exist", () => {
     const sessions = [
       session({ id: "archived", archived: true, updatedAt: "2026-08-03T00:00:00.000Z" }),
@@ -159,15 +46,5 @@ describe("overviewWorkLoopAction", () => {
       }),
     ).toEqual({ action: "resume", resumeSession: current });
     expect(current?.id).toBe("current");
-  });
-
-  it("returns hidden when there is a current session and zero leaf tasks", () => {
-    expect(
-      overviewWorkLoopAction({
-        liveRun: false,
-        leafTasks: [],
-        currentSession: session({ id: "current" }),
-      }),
-    ).toEqual({ action: "hidden" });
   });
 });

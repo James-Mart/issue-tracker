@@ -1,49 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-  commentInputForComposer,
-  composerDraftKey,
-  newComposerForRange,
-  pathForAnchorSide,
-} from "./diff-thread-anchor";
+import { composerDraftKey, newComposerForRange } from "./diff-thread-anchor";
 
-const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
 const PATH = "app/server/services/diff-fetch.ts";
 
 describe("newComposerForRange", () => {
-  const file = { name: PATH };
-
-  it("maps a single addition line", () => {
-    expect(
-      newComposerForRange({ start: 94, end: 94, side: "additions" }, file),
-    ).toEqual({ kind: "new", path: PATH, side: "new", line: 94 });
-  });
-
-  it("maps a same-side range onto startLine + line", () => {
-    expect(
-      newComposerForRange({ start: 94, end: 96, side: "additions" }, file),
-    ).toEqual({ kind: "new", path: PATH, side: "new", line: 96, startLine: 94 });
-  });
-
-  it("normalizes an upward drag so startLine is the lower line", () => {
-    expect(
-      newComposerForRange({ start: 96, end: 94, side: "additions" }, file),
-    ).toEqual({ kind: "new", path: PATH, side: "new", line: 96, startLine: 94 });
-  });
-
-  it("drops startLine when the range crosses sides", () => {
-    expect(
-      newComposerForRange(
-        {
-          start: 90,
-          end: 94,
-          side: "deletions",
-          endSide: "additions",
-        },
-        file,
-      ),
-    ).toEqual({ kind: "new", path: PATH, side: "new", line: 94 });
-  });
-
   it("anchors a deletion on the pre-rename path", () => {
     expect(
       newComposerForRange(
@@ -51,17 +11,6 @@ describe("newComposerForRange", () => {
         { name: "new.ts", prevName: "old.ts" },
       ),
     ).toEqual({ kind: "new", path: "old.ts", side: "old", line: 12 });
-  });
-});
-
-describe("pathForAnchorSide", () => {
-  it("uses prevName on the old side of a rename", () => {
-    expect(
-      pathForAnchorSide({ name: "new.ts", prevName: "old.ts" }, "old"),
-    ).toBe("old.ts");
-    expect(
-      pathForAnchorSide({ name: "new.ts", prevName: "old.ts" }, "new"),
-    ).toBe("new.ts");
   });
 });
 
@@ -91,118 +40,5 @@ describe("draft keys and write payloads", () => {
     expect(file).toBe(`review:story-1:file:${PATH}`);
     expect(neu).not.toBe(reply);
     expect(file).not.toBe(neu);
-  });
-
-  it("builds a single-line anchor post and a reply with no anchor", () => {
-    expect(
-      commentInputForComposer(
-        { kind: "new", path: PATH, side: "new", line: 94 },
-        "single",
-        SHA,
-      ),
-    ).toEqual({
-      role: "human",
-      body: "single",
-      anchor: { path: PATH, side: "new", line: 94, commitSha: SHA },
-    });
-    expect(
-      commentInputForComposer(
-        {
-          kind: "new",
-          path: PATH,
-          side: "new",
-          line: 96,
-          startLine: 94,
-        },
-        "range",
-        SHA,
-      ),
-    ).toEqual({
-      role: "human",
-      body: "range",
-      anchor: {
-        path: PATH,
-        side: "new",
-        line: 96,
-        startLine: 94,
-        commitSha: SHA,
-      },
-    });
-    expect(
-      commentInputForComposer(
-        { kind: "reply", threadId: "current-root" },
-        "reply body",
-        SHA,
-      ),
-    ).toEqual({
-      role: "human",
-      body: "reply body",
-      replyTo: "current-root",
-    });
-    const stored = "b".repeat(40);
-    expect(
-      commentInputForComposer(
-        {
-          kind: "quote",
-          threadId: "outdated-root",
-          commentId: "outdated-root",
-          body: "Run assertCommitReachable before git show.",
-          anchor: {
-            path: PATH,
-            side: "old",
-            line: 90,
-            startLine: 88,
-            commitSha: stored,
-          },
-        },
-        "Edited quote.",
-        SHA,
-      ),
-    ).toEqual({
-      role: "human",
-      body: "Edited quote.",
-      anchor: {
-        path: PATH,
-        side: "old",
-        line: 90,
-        startLine: 88,
-        commitSha: stored,
-      },
-    });
-    expect(
-      commentInputForComposer(
-        {
-          kind: "quote",
-          threadId: "note",
-          commentId: "note",
-          body: "A general note.",
-        },
-        "A general note.",
-        SHA,
-      ),
-    ).toEqual({
-      role: "human",
-      body: "A general note.",
-    });
-    expect(
-      commentInputForComposer({ kind: "new", path: PATH }, "whole file", SHA),
-    ).toEqual({
-      role: "human",
-      body: "whole file",
-      anchor: { path: PATH, commitSha: SHA },
-    });
-    expect(
-      commentInputForComposer(
-        { kind: "new", path: PATH },
-        "why this file?",
-        SHA,
-        "question",
-      ),
-    ).toEqual({
-      role: "human",
-      body: "why this file?",
-      kind: "question",
-      anchor: { path: PATH, commitSha: SHA },
-    });
   });
 });

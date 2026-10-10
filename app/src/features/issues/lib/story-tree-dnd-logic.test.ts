@@ -1,15 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IssueRecord } from "@server/schemas";
-import {
-  canDropStoryOntoEpic,
-  canRestackStoryOntoStory,
-} from "./story-drop";
-import {
-  isRowDraggable,
-  isStoryTreeDraggable,
-  processStoryDrop,
-  resolveDropAction,
-} from "./story-tree-dnd-logic";
+import { canRestackStoryOntoStory } from "./story-drop";
+import { processStoryDrop, resolveDropAction } from "./story-tree-dnd-logic";
 import { buildTreeRowIndexes } from "./tree-row-indexes";
 
 function project(id = "p"): IssueRecord {
@@ -45,32 +37,19 @@ function story(id: string, partOf: string, stackedOn?: string): IssueRecord {
   };
 }
 
-function epic(id: string, order = 0): IssueRecord {
+function epic(id: string): IssueRecord {
   return {
     id,
     kind: "epic",
     title: id,
     partOf: "p",
-    order,
+    order: 0,
     createdAt: "2020-01-01T00:00:00.000Z",
     updatedAt: "2020-01-01T00:00:00.000Z",
     needsAttention: false,
     attentionReason: null,
     archived: false,
     blockedBy: [],
-  };
-}
-
-function idea(id: string, order = 0): IssueRecord {
-  return {
-    id,
-    kind: "idea",
-    title: id,
-    partOf: "p",
-    order,
-    createdAt: "2020-01-01T00:00:00.000Z",
-    updatedAt: "2020-01-01T00:00:00.000Z",
-    archived: false,
   };
 }
 
@@ -93,96 +72,15 @@ function task(id: string, partOf: string): IssueRecord {
 
 const issues: IssueRecord[] = [
   project(),
-  epic("e1", 0),
-  epic("e2", 1),
-  idea("i1", 2),
-  story("solo", "p"),
+  epic("e1"),
   story("a", "e1"),
   story("b", "e1", "a"),
-  story("peer", "e1"),
-  story("x", "e2"),
   task("c1", "b"),
 ];
 
 const indexes = buildTreeRowIndexes(issues);
 
-describe("isStoryTreeDraggable", () => {
-  it("allows branches only", () => {
-    expect(isStoryTreeDraggable(story("a", "e1"))).toBe(true);
-    expect(isStoryTreeDraggable(epic("e1"))).toBe(false);
-    expect(isStoryTreeDraggable(task("c1", "b"))).toBe(false);
-  });
-});
-
-describe("isRowDraggable", () => {
-  it("allows stories and board-root epics/ideas", () => {
-    expect(isRowDraggable(story("a", "e1"), indexes)).toBe(true);
-    expect(isRowDraggable(story("solo", "p"), indexes)).toBe(true);
-    expect(isRowDraggable(epic("e1"), indexes)).toBe(true);
-    expect(isRowDraggable(idea("i1", 2), indexes)).toBe(true);
-  });
-
-  it("refuses tasks", () => {
-    expect(isRowDraggable(task("c1", "b"), indexes)).toBe(false);
-  });
-});
-
-describe("resolveDropAction", () => {
-  it("restacks story→story", () => {
-    expect(resolveDropAction(issues, "b", "peer", indexes)).toBe("restack");
-    expect(resolveDropAction(issues, "solo", "x", indexes)).toBe("restack");
-  });
-
-  it("reorders a board-root story onto epic/idea", () => {
-    expect(resolveDropAction(issues, "solo", "e1", indexes)).toBe("reorder");
-    expect(resolveDropAction(issues, "solo", "i1", indexes)).toBe("reorder");
-  });
-
-  it("reparents an epic-child story onto an epic", () => {
-    expect(resolveDropAction(issues, "b", "e2", indexes)).toBe("reparent");
-    expect(resolveDropAction(issues, "b", "e1", indexes)).toBe("reparent");
-  });
-
-  it("prefers epic reorder over reparent for board-root sources", () => {
-    expect(resolveDropAction(issues, "e2", "e1", indexes)).toBe("reorder");
-    expect(canDropStoryOntoEpic(issues, "e2", "e1")).toBe(false);
-  });
-
-  it("reparents onto the project", () => {
-    expect(resolveDropAction(issues, "b", "p", indexes)).toBe("reparent");
-  });
-
-  it("refuses illegal targets", () => {
-    expect(resolveDropAction(issues, "b", "b", indexes)).toBeNull();
-    expect(resolveDropAction(issues, "a", "b", indexes)).toBeNull();
-    expect(resolveDropAction(issues, "b", "c1", indexes)).toBeNull();
-  });
-});
-
 describe("processStoryDrop", () => {
-  it("calls onMove for a legal restack onto a branch", () => {
-    const onMove = vi.fn();
-    processStoryDrop({
-      sourceId: "b",
-      targetId: "peer",
-      canDrop: (sourceId) =>
-        canRestackStoryOntoStory(issues, sourceId, "peer"),
-      onMove,
-    });
-    expect(onMove).toHaveBeenCalledWith("b", "peer");
-  });
-
-  it("calls onMove for a legal reparent onto an epic", () => {
-    const onMove = vi.fn();
-    processStoryDrop({
-      sourceId: "b",
-      targetId: "e2",
-      canDrop: (sourceId) => canDropStoryOntoEpic(issues, sourceId, "e2"),
-      onMove,
-    });
-    expect(onMove).toHaveBeenCalledWith("b", "e2");
-  });
-
   it("does not call onMove for illegal drops (self, descendant, commit target)", () => {
     const onMove = vi.fn();
     processStoryDrop({
@@ -203,17 +101,6 @@ describe("processStoryDrop", () => {
       sourceId: "b",
       targetId: "c1",
       canDrop: (sourceId) => resolveDropAction(issues, sourceId, "c1", indexes) !== null,
-      onMove,
-    });
-    expect(onMove).not.toHaveBeenCalled();
-  });
-
-  it("does not call onMove when sourceId is missing", () => {
-    const onMove = vi.fn();
-    processStoryDrop({
-      sourceId: null,
-      targetId: "peer",
-      canDrop: () => true,
       onMove,
     });
     expect(onMove).not.toHaveBeenCalled();

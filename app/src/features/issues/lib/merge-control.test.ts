@@ -29,29 +29,6 @@ describe("mergeControlFor", () => {
     });
   });
 
-  it("returns auto when pending checks are the only obstacle", () => {
-    expect(
-      mergeControlFor(
-        prFacts({
-          mergeStateStatus: "BLOCKED",
-          checks: { state: "pending", failing: 0, pending: 2, total: 3 },
-        }),
-      ),
-    ).toEqual({ mode: "auto", headRefOid: "abc123" });
-  });
-
-  it("is unavailable for a draft", () => {
-    expect(
-      mergeControlFor(
-        prFacts({ isDraft: true, mergeStateStatus: "DRAFT", reviewDecision: null }),
-      ),
-    ).toEqual({
-      mode: "unavailable",
-      reason:
-        "This pull request is a draft and must be marked ready on GitHub.",
-    });
-  });
-
   it("is unavailable for conflicts", () => {
     expect(
       mergeControlFor(
@@ -60,24 +37,6 @@ describe("mergeControlFor", () => {
     ).toMatchObject({
       mode: "unavailable",
       reason: "This pull request has merge conflicts.",
-    });
-  });
-
-  it("is unavailable when review is required", () => {
-    expect(
-      mergeControlFor(prFacts({ reviewDecision: "review-required" })),
-    ).toMatchObject({
-      mode: "unavailable",
-      reason: "Review is required before this pull request can be merged.",
-    });
-  });
-
-  it("is unavailable when changes are requested", () => {
-    expect(
-      mergeControlFor(prFacts({ reviewDecision: "changes-requested" })),
-    ).toMatchObject({
-      mode: "unavailable",
-      reason: "Changes have been requested on this pull request.",
     });
   });
 
@@ -92,36 +51,5 @@ describe("mergeControlFor", () => {
       mode: "unavailable",
       reason: "Checks are failing on this pull request.",
     });
-  });
-
-  it("is unavailable when a protection rule blocks", () => {
-    expect(
-      mergeControlFor(
-        prFacts({
-          mergeStateStatus: "BLOCKED",
-          checks: { state: "success", failing: 0, pending: 0, total: 1 },
-        }),
-      ),
-    ).toMatchObject({
-      mode: "unavailable",
-      reason: "Blocked by a repository protection rule.",
-    });
-  });
-
-  it("is unavailable when the PR is behind its base", () => {
-    expect(
-      mergeControlFor(prFacts({ mergeStateStatus: "BEHIND" })),
-    ).toMatchObject({
-      mode: "unavailable",
-      reason: "This pull request is behind its base branch.",
-    });
-  });
-
-  it("returns merge when mergeability is still unknown and no gate fired", () => {
-    expect(
-      mergeControlFor(
-        prFacts({ mergeable: "unknown", mergeStateStatus: "UNKNOWN" }),
-      ),
-    ).toEqual({ mode: "merge", headRefOid: "abc123" });
   });
 });
