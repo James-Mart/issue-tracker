@@ -50,8 +50,8 @@ requires `{ issueId }`: the Story, or an issue under it, whose live worktree
 to boot. It boots that Project's runtime declaration and returns
 `AGENT_STACK_PORT`, `AGENT_STACK_AUX_PORT`, `AGENT_STACK_DATA_DIR`, and
 `AGENT_STACK_BASE_URL`. Reuse the live stack only when its recorded worktree
-matches. Export `AGENT_STACK_BASE_URL` into the shell before screenshots,
-Playwright e2e, or other probes. Do not stop or restart the human's stack on
+matches. Export `AGENT_STACK_BASE_URL` into the shell before screenshots or
+other probes. Do not stop or restart the human's stack on
 8060/8061 to test a lifecycle path. Call `agent_stack_stop` when finished.
 `agent_stack_redeploy` takes no arguments.
 It runs the live stack's Project `redeploy` phase in that stack's worktree
@@ -110,12 +110,10 @@ cd app && npm run screenshots -- --driver /tmp/reach.mjs
 
 ## Playwright e2e
 
-`npm run test:e2e` runs Playwright specs under `app/e2e/`. Call
-`agent_stack_start` when needed and export `AGENT_STACK_BASE_URL` into the
-shell first; smoke specs use that env as `baseURL` and Playwright will not
-start `npm run dev` on the human default ports. Seeded specs boot their own
-ephemeral Express server and ignore the config `baseURL`. With env unset,
-smoke keeps today's behavior (`http://localhost:8060` plus `webServer`).
+`npm run test:e2e` runs Playwright specs under `app/e2e/`. Each spec boots
+its own seeded API server; most serve the built client from it, so run
+`npm run build` first. `vite-dev-transport.spec.ts` serves the client from a
+Vite dev server instead.
 
 ```bash
 cd app && npm run test:e2e

@@ -148,6 +148,9 @@ export default defineConfig({
   define: {
     __TRANSPORT_VERSION__: JSON.stringify(transportVersion),
   },
+  // The diffs highlighter worker code-splits its language grammars, which the
+  // default `iife` worker format cannot do.
+  worker: { format: "es" },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

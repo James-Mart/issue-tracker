@@ -4,50 +4,21 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentSessions } from "../server/services/agent-sessions.js";
 import type { GhSpawner } from "../server/services/delivery.js";
 import type { CreateInput, IssueRecord, IssuePatch } from "../server/schemas.js";
 
-// Deterministic seed tree with stable ids/titles so Flow/DAG assertions stay
-// stable across runs: project `seed-proj`, epics A–D wired into a diamond
-// (`seed-epic-d` blockedBy B and C; B and C blockedBy A), and under
-// `seed-epic-b` a story in flight (one in-progress task) plus a merged story.
-// Structure and Epic `blockedBy` are declared here; the task's `in-progress`
-// status and the story's `merged` flag are runtime state, set after `apply`.
+// Deterministic seed tree with stable ids/titles: project `seed-proj` holding
+// `seed-epic-a`, which holds `seed-story`.
 const seedDoc = {
   project: {
     id: "seed-proj",
     title: "Seed Project",
     children: [
-      { kind: "epic", id: "seed-epic-a", title: "Epic A" },
       {
         kind: "epic",
-        id: "seed-epic-b",
-        title: "Epic B",
-        blockedBy: ["seed-epic-a"],
-        children: [
-          {
-            kind: "story",
-            id: "seed-story-flight",
-            title: "Story in flight",
-            children: [
-              { kind: "task", id: "seed-task-flight", title: "Task in flight" },
-            ],
-          },
-          { kind: "story", id: "seed-story-merged", title: "Merged story" },
-        ],
-      },
-      {
-        kind: "epic",
-        id: "seed-epic-c",
-        title: "Epic C",
-        blockedBy: ["seed-epic-a"],
-      },
-      {
-        kind: "epic",
-        id: "seed-epic-d",
-        title: "Epic D",
-        blockedBy: ["seed-epic-b", "seed-epic-c"],
+        id: "seed-epic-a",
+        title: "Epic A",
+        children: [{ kind: "story", id: "seed-story", title: "Seed story" }],
       },
     ],
   },
@@ -59,11 +30,9 @@ export type SeededApp = {
 };
 
 export type BootSeededAppOptions = {
-  /** Override the default in-process agent sessions (e.g. a held fake SDK). */
-  sessions?: AgentSessions;
   /** Stub `gh` before the server module loads. */
   ghSpawner?: GhSpawner;
-  /** Run after the seed doc is applied and default runtime patches are set. */
+  /** Run after the seed doc is applied. */
   afterApply?: (ctx: {
     update: (id: string, patch: IssuePatch) => Promise<IssueRecord>;
     create: (input: CreateInput) => Promise<IssueRecord>;
@@ -111,8 +80,6 @@ export async function bootSeededApp(
   const parsed = parseApplyDoc(seedDoc);
   if (!parsed.ok) throw new Error(`invalid seed doc: ${parsed.message}`);
   await apply(parsed.doc);
-  await update("seed-task-flight", { status: "in-progress" });
-  await update("seed-story-merged", { merged: true });
   if (options.afterApply) {
     await options.afterApply({ update, create });
   }
@@ -120,15 +87,11 @@ export async function bootSeededApp(
   const { attachMultiplexedWebSocket, createApp } = await import(
     "../server/app.js"
   );
-  const { attachMockupStackProxy } = await import("../server/routes/mockups.js");
 
   const server: Server = await new Promise((resolve) => {
-    const s = createApp(options.sessions).listen(0, "127.0.0.1", () =>
-      resolve(s),
-    );
+    const s = createApp().listen(0, "127.0.0.1", () => resolve(s));
   });
   attachMultiplexedWebSocket(server);
-  attachMockupStackProxy(server);
   const { port } = server.address() as AddressInfo;
 
   return {
