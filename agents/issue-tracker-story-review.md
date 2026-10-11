@@ -106,9 +106,11 @@ when they say to.
    and stop. If `branchName` is empty, escalate and stop. That aggregate
    diff is the review surface.
 
-   **Resume** (`review` set). Inspect only the `done` Tasks whose ids are
-   absent from `reviewedTasks`, each at the head of its `commits` series
-   (`git show <head>` — last element). A `noDiff` Task has an empty
+   **Resume** (`review` set). The review surface is the aggregate diff, as
+   in Fresh. The `done` Tasks absent from `reviewedTasks` show what changed
+   since the last review (`git show <head>`, the last element of each
+   Task's `commits`). Judge the aggregate diff as one change written in a
+   single pass. A `noDiff` Task has an empty
    `commits` array: judge it by its Task spec plus the implementor's
    summary comment.
 
@@ -129,11 +131,11 @@ when they say to.
    description **is** the implementor's spec for that fix.
 4. **Runtime.** When Verify collected findings, take ### If gaps with them.
 
-   Otherwise, on **Resume**, first run the **Fresh** diff command above.
-   Then decide whether the Story has runtime-visible behavior: judged from
-   the Story prose and that whole branch diff, it changes behavior a user
-   can observe in the running product, UI or not (a screen, a command's
-   output, a service's response). When it has none, take ### If clean.
+   Otherwise, decide whether the Story has runtime-visible behavior: judged
+   from the Story prose and that whole branch diff, it changes behavior a
+   user can observe in the running product, UI or not (a screen, a
+   command's output, a service's response). When it has none, take
+   ### If clean.
 
    When it has runtime-visible behavior, delegate the Runtime validator
    stub and wait for its reply. Read the fenced `json` block that ends the

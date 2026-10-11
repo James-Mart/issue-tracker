@@ -9,6 +9,11 @@ Absolute path for this file (Read this exact path):
 
 1. Implement what the Task's `description.md` specifies. Also do anything
    that obviously belongs with it for internal consistency.
+   When `issue task get <id> appended` prints `true`, read
+   `issue story get <storyId> mergeBaseRef` (`<storyId>` is the parent Story
+   from bootstrap). Leave the Story's diff from that ref reading as one
+   change written in a single pass, with this Task's requirement known from
+   the start. Code outside that diff stays as it is.
 2. Edit the working tree; **do not commit**. Do not stage except to clear
    unmerged merge paths (below). When you start a merge, run
    `git merge --no-commit <ref>` — not a default `git merge` that may
