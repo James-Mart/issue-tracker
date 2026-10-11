@@ -72,6 +72,18 @@ function sentPrompt(sendIndex: number): string {
   return typeof send.message === "string" ? send.message : send.message.text;
 }
 
+function followUp(threadId: string, body: string): string {
+  return [
+    `The reviewer replied in thread ${threadId}:`,
+    "",
+    body,
+    "",
+    "Answer by running:",
+    `issue comment s --reply-to ${threadId} --role agent --name Researcher --body "<answer>"`,
+    "Text you write in chat is not shown to the reviewer.",
+  ].join("\n");
+}
+
 async function startApp(options: FakeAgentSdkOptions = {}): Promise<void> {
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", issuesRoot);
@@ -528,7 +540,7 @@ describe("question researcher", () => {
     const live = await launchedThread(rootId);
     expect(live.researcherConversationId).toBe(before);
     expect(live.researcherRun).toEqual(runningRun);
-    expect(sentPrompt(1)).toBe("And the tests?");
+    expect(sentPrompt(1)).toBe(followUp(rootId, "And the tests?"));
     expect(fake.handles).toHaveLength(1);
 
     release();
@@ -551,7 +563,7 @@ describe("question researcher", () => {
     expect(reply.status).toBe(201);
     await launchedThread(rootId);
     expect(fake.handles.flatMap((handle) => handle.steers)).toEqual([
-      "And the tests?",
+      followUp(rootId, "And the tests?"),
     ]);
     expect(fake.handles.flatMap((handle) => handle.sends)).toHaveLength(1);
     release();
@@ -574,7 +586,7 @@ describe("question researcher", () => {
     expect(reply.status).toBe(201);
     await launchedThread(rootId);
     expect(conversationMeta(conversationId).pendingMessage).toMatchObject({
-      text: "And the tests?",
+      text: followUp(rootId, "And the tests?"),
     });
     release();
   });
