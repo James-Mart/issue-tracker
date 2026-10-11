@@ -12,6 +12,15 @@ plans/
 # Durable SDK model catalog (peer of issues/ / conversations/)
 /model-slug-catalog.json
 
+# Delegation index runtime store (peer of conversations/)
+/delegation-index.json
+
+# Playwright MCP console logs and page snapshots
+app/.playwright-mcp/
+
+# Ad-hoc agent screenshots (committed e2e snapshots live in subfolders)
+/app/*.png
+
 # Vitest/Vite local cache (not source)
 .vite/
 
