@@ -37,6 +37,11 @@ export type PrSyncStepResult = Pick<PrReconcileResult, "error" | "matches"> & {
   facts?: PrReconcileResult["facts"];
 };
 
+/** A pass ends with a step result, or with only `error` when a step fails before it has one. */
+export type PrSyncPassResult =
+  | PrSyncStepResult
+  | { error: string; facts?: PrReconcileResult["facts"] };
+
 /**
  * A step after `reconcileProjectPrs`. `previous` is that reconcile result
  * for the first registered step, and the prior step's result after that.
@@ -44,7 +49,7 @@ export type PrSyncStepResult = Pick<PrReconcileResult, "error" | "matches"> & {
 export type PrSyncStep = (
   projectId: string,
   previous: PrSyncStepResult,
-) => Promise<PrSyncStepResult>;
+) => Promise<PrSyncPassResult>;
 
 type StorySignal = {
   readyToLand: boolean;
@@ -55,7 +60,7 @@ const steps: PrSyncStep[] = [];
 const statuses = new Map<string, ProjectPrSyncStatus>();
 const baselines = new Map<string, Map<string, StorySignal>>();
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const tails = new Map<string, Promise<PrSyncStepResult>>();
+const tails = new Map<string, Promise<PrSyncPassResult>>();
 
 let unsubscribe: (() => void) | null = null;
 let cadenceTimer: ReturnType<typeof setInterval> | null = null;
@@ -76,7 +81,7 @@ export function prSyncStatus(projectId: string): ProjectPrSyncStatus {
  * order, each handed the previous result. A returned `error` or a throw
  * stops the pass. Passes for one Project queue behind the one already running.
  */
-export function runSyncPass(projectId: string): Promise<PrSyncStepResult> {
+export function runSyncPass(projectId: string): Promise<PrSyncPassResult> {
   const previous = tails.get(projectId) ?? Promise.resolve();
   // Failures resolve as `{ error }`, so the next pass stays on this chain.
   const run = previous.then(() => executeSyncPass(projectId));
@@ -159,15 +164,17 @@ function syncPassesRunHere(): boolean {
   return port === undefined || port === "";
 }
 
-async function executeSyncPass(projectId: string): Promise<PrSyncStepResult> {
+async function executeSyncPass(projectId: string): Promise<PrSyncPassResult> {
   const at = new Date().toISOString();
   try {
     const reconciled = await reconcileProjectPrs(projectId);
-    let result: PrSyncStepResult = reconciled;
+    let result: PrSyncPassResult = reconciled;
     if (!reconciled.error) {
+      let previous: PrSyncStepResult = reconciled;
       for (const step of [...steps]) {
-        result = await step(projectId, result);
-        if (result.error) break;
+        result = await step(projectId, previous);
+        if (result.error || !("matches" in result)) break;
+        previous = result;
       }
       replacePrFactsCacheFromMap(projectId, result.facts ?? reconciled.facts);
     }

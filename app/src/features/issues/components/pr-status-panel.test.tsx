@@ -29,7 +29,9 @@ const queryState = vi.hoisted(() => ({
   isFetching: false,
 }));
 
-const refreshLive = vi.hoisted(() => vi.fn(async () => {}));
+const refreshLive = vi.hoisted(() =>
+  vi.fn(async (_qc: unknown, _projectId: string) => {}),
+);
 
 const mergeMutate = vi.hoisted(() =>
   vi.fn(

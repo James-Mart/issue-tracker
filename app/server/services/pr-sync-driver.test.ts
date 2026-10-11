@@ -121,7 +121,7 @@ describe("runSyncPass", () => {
 
     expect(reconcileProjectPrs).toHaveBeenCalledWith("p");
     expect(seen).toEqual(["p:https://github.com/acme/widgets/pull/7"]);
-    expect(result.matches).toBe(matches);
+    expect("matches" in result ? result.matches : undefined).toBe(matches);
     expect(prSyncStatus("p")).toEqual({ lastSyncedAt: "2026-08-01T00:00:00.000Z" });
   });
 
@@ -203,7 +203,7 @@ describe("runSyncPass", () => {
     registerPrSyncStep(async () => ({ error: "mirror down" }));
     registerPrSyncStep(async () => {
       ran.push("later");
-      return {};
+      return { matches: new Map() };
     });
     vi.setSystemTime(new Date("2026-08-01T00:05:00.000Z"));
     reconcileProjectPrs.mockResolvedValue(okResult(new Map([["ship", "u"]])));
@@ -226,7 +226,7 @@ describe("runSyncPass", () => {
     const ran: string[] = [];
     registerPrSyncStep(async () => {
       ran.push("later");
-      return {};
+      return { matches: new Map() };
     });
     vi.setSystemTime(new Date("2026-08-01T00:00:00.000Z"));
 
@@ -248,7 +248,7 @@ describe("runSyncPass", () => {
     const later: string[] = [];
     registerPrSyncStep(async () => {
       later.push("skipped");
-      return {};
+      return { matches: new Map() };
     });
     vi.setSystemTime(new Date("2026-08-01T00:00:00.000Z"));
 

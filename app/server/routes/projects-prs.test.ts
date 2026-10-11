@@ -13,6 +13,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GhSpawner } from "../services/delivery.js";
+import type { CachedPrFacts } from "../services/pr-facts-cache.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const FIXTURES = join(
@@ -25,10 +26,7 @@ let workspaceDir: string;
 let server: Server;
 let baseUrl: string;
 let setGhSpawnerForTests: (next: GhSpawner | null) => void;
-let replacePrFactsCache: (
-  projectId: string,
-  prs: Record<string, unknown>,
-) => void;
+let replacePrFactsCache: (projectId: string, prs: CachedPrFacts) => void;
 let clearPrFactsCache: () => void;
 let setPrSyncStatusForTests: (
   projectId: string,

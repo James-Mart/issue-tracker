@@ -7,7 +7,7 @@ import {
   type PipelineRunsEvent,
 } from "../schemas.js";
 import { PIPELINE_RUNS_TOPIC } from "./pipeline-runs-events.js";
-import { PR_SYNC_TOPIC } from "./pr-sync-topic.js";
+import { PR_SYNC_TOPIC, type PrSyncEvent } from "./pr-sync-topic.js";
 
 /** Non-conversation multiplex topic — frames are IssueEvent, not stream events. */
 const ISSUES_TOPIC = "issues";
@@ -19,7 +19,7 @@ const ISSUES_TOPIC = "issues";
  * incremental deltas from finalized events that also land on disk.
  */
 export type ConversationFrame = {
-  event: (ConversationFrameInput | IssueEvent | PipelineRunsEvent) & {
+  event: (ConversationFrameInput | IssueEvent | PipelineRunsEvent | PrSyncEvent) & {
     seq?: number;
   };
   persist: boolean;

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import type { UseQueryResult } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -80,7 +81,13 @@ function mountPanel(subject: string, width = "390px"): HTMLDivElement {
         projectId={PROJECT}
         storyId={STORY}
         review={reviewFixture()}
-        commits={{ data: commitsFixture(subject), error: null, isLoading: false }}
+        commits={
+          {
+            data: commitsFixture(subject),
+            error: null,
+            isLoading: false,
+          } as UseQueryResult<ReviewCommits>
+        }
         scope="all"
         overrides={{}}
         onScopeChange={() => {}}
