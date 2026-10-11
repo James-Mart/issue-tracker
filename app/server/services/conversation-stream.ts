@@ -5,10 +5,9 @@ import {
   type ConversationFrameInput,
   type IssueEvent,
   type PipelineRunsEvent,
-  type PrSyncEvent,
 } from "../schemas.js";
 import { PIPELINE_RUNS_TOPIC } from "./pipeline-runs-events.js";
-import { PR_SYNC_TOPIC } from "./pr-sync-topic.js";
+import { PR_SYNC_TOPIC, type PrSyncEvent } from "./pr-sync-topic.js";
 
 /** Non-conversation multiplex topic — frames are IssueEvent, not stream events. */
 const ISSUES_TOPIC = "issues";

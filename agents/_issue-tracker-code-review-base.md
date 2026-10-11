@@ -45,9 +45,15 @@ change when one line holds the finding. A read outside the change is
 context. The duplication reviewer uses that context to search for a
 helper, utility, or pattern the new code re-implements.
 
+When the prompt has a `Merge base:` line, also read `git diff <ref>`: the
+Story so far, this change included. Read it as one change written in a
+single pass. Code in it that a single pass would not have written is a
+finding too.
+
 ## Inputs (from invoking prompt)
 
 - **Issue** — id and title of the Task
+- **Merge base** — optional; the ref for `git diff <ref>` under **## Input**
 - **Mode** — omitted on the first entry. `recheck` includes **Fixed:**
   the finding ids the implementor fixed, comma-separated
 

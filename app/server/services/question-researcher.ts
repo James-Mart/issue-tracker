@@ -94,6 +94,19 @@ async function researcherPrompt(
   ].join("\n");
 }
 
+/** A human reply resumes a conversation whose original instructions are far back. */
+function followUpPrompt(storyId: string, threadId: string, body: string): string {
+  return [
+    `The reviewer replied in thread ${threadId}:`,
+    "",
+    body,
+    "",
+    "Answer by running:",
+    `issue comment ${storyId} --reply-to ${threadId} --role agent --name Researcher --body "<answer>"`,
+    "Text you write in chat is not shown to the reviewer.",
+  ].join("\n");
+}
+
 function threadReplies(messages: Comment[], rootId: string): Comment[] {
   return messages.filter((message) => message.replyTo === rootId);
 }
@@ -298,10 +311,11 @@ async function followUpQuestionResearcher(
     return;
   }
 
+  const prompt = followUpPrompt(storyId, root.id, reply.body);
   const active = sessions.getActiveRun(conversationId);
   try {
     if (active) {
-      await deliverLivePrompt(conversationId, reply.body, (text) =>
+      await deliverLivePrompt(conversationId, prompt, (text) =>
         active.steer(text),
       );
       return;
@@ -309,7 +323,7 @@ async function followUpQuestionResearcher(
     await settleResearcherStart(conversationId, () =>
       startConversationPrompt(
         conversationId,
-        reply.body,
+        prompt,
         meta.model,
         sessions,
       ),

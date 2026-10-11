@@ -1,6 +1,5 @@
-import type { PrSyncEvent } from "../schemas.js";
 import { publishFrame } from "./conversation-stream.js";
-import { PR_SYNC_TOPIC } from "./pr-sync-topic.js";
+import { PR_SYNC_TOPIC, type PrSyncEvent } from "./pr-sync-topic.js";
 
 export { PR_SYNC_TOPIC };
 

@@ -78,6 +78,9 @@ bootstrap.
 
 > Issue: `<id>` (`<title>`).
 
+When implement step 1 read a `mergeBaseRef`, append
+`` Merge base: `<mergeBaseRef>`. `` to this stub and to the recheck stub.
+
 **Review (recheck)** — same `role` and `issueId` as that reviewer's Review
 delegation; `resumeId` is the agent id it returned. `<findingIds>` are the
 ids from that reviewer's findings you fixed, comma-separated.

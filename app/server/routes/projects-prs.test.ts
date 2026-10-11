@@ -6,6 +6,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GhSpawner } from "../services/delivery.js";
+import type { CachedPrFacts } from "../services/pr-facts-cache.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 
@@ -14,7 +15,7 @@ let workspaceDir: string;
 let server: Server;
 let baseUrl: string;
 let setGhSpawnerForTests: (next: GhSpawner | null) => void;
-let replacePrFactsCache: typeof import("../services/pr-facts-cache.js").replacePrFactsCache;
+let replacePrFactsCache: (projectId: string, prs: CachedPrFacts) => void;
 let clearPrFactsCache: () => void;
 let setPrSyncStatusForTests: (
   projectId: string,

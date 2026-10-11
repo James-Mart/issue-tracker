@@ -9,6 +9,11 @@ Absolute path for this file (Read this exact path):
 
 1. Implement what the Task's `description.md` specifies. Also do anything
    that obviously belongs with it for internal consistency.
+   When `issue task get <id> appended` prints `true`, read
+   `issue story get <storyId> mergeBaseRef` (`<storyId>` is the parent Story
+   from bootstrap). Leave the Story's diff from that ref reading as one
+   change written in a single pass, with this Task's requirement known from
+   the start. Code outside that diff stays as it is.
 2. Edit the working tree; **do not commit**. Do not stage except to clear
    unmerged merge paths (below). When you start a merge, run
    `git merge --no-commit <ref>` — not a default `git merge` that may
@@ -18,8 +23,8 @@ Absolute path for this file (Read this exact path):
    task description: discernable paths are staged, undiscernable paths stay
    unmerged, and that state raises attention and stops before record-commit.
    Other tasks still hand off with no unmerged paths.
-3. **Self-check.** Choose the checks that show the outcomes the Task states
-   hold, and run them. Unit-suite runs follow `codingStandards` § Unit
+3. **Self-check.** Choose the checks that would fail if this change were
+   wrong, and run them. Unit-suite runs follow `codingStandards` § Unit
    suite. Self-check may write whatever automated tests validation needs
    (unit, e2e, and lint-script). For build,
    runtime, and browser checks, **Read**
@@ -53,8 +58,9 @@ Absolute path for this file (Read this exact path):
    That structured flag plus the step 8 summary comment is what Story review
    reads — an empty tree on its own is **not** a completion signal, so never
    rely on it alone.
-5. If blocked, raise `issue task set <id> needsAttention true --reason "..."`
-   and stop. This role's status writes are Bootstrap's entry `in-progress`
+5. If blocked, or the work shows a premise the Task rests on is false,
+   raise `issue task set <id> needsAttention true --reason "..."` naming
+   what blocks or what is false, and stop. This role's status writes are Bootstrap's entry `in-progress`
    and step 10's terminal `done`.
 6. **Review.** Reviewers read the uncommitted change and return a JSON array
    of findings. You have final authority over your code.
