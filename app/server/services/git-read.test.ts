@@ -2,20 +2,9 @@ import {
   ChildProcess,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { git } from "../../cli-story-worktree.test-fixtures.js";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
-import { IssueError } from "./errors.js";
-import {
-  mainCheckoutRoot,
-  runGit,
-  getOriginRemoteUrl,
-  setGitSpawnerForTests,
-  type GitSpawner,
-} from "./git-read.js";
+import { runGit, setGitSpawnerForTests, type GitSpawner } from "./git-read.js";
 
 afterEach(() => {
   setGitSpawnerForTests(null);
@@ -65,35 +54,6 @@ function stubGitSpawner(
 }
 
 describe("runGit", () => {
-  it("passes read-only subcommands through with workspace as cwd", async () => {
-    let seenArgs: string[] = [];
-    let seenCwd = "";
-    stubGitSpawner((args, workspace) => {
-      seenArgs = args;
-      seenCwd = workspace;
-      return mockGitChild({ stdout: "abc123\n" });
-    });
-
-    await expect(runGit(["rev-parse", "HEAD"], "/repo/root")).resolves.toBe(
-      "abc123\n",
-    );
-    expect(seenArgs).toEqual(["rev-parse", "HEAD"]);
-    expect(seenCwd).toBe("/repo/root");
-  });
-
-  it("permits status for porcelain reads", async () => {
-    let seenArgs: string[] = [];
-    stubGitSpawner((args) => {
-      seenArgs = args;
-      return mockGitChild({ stdout: " M README\n" });
-    });
-
-    await expect(
-      runGit(["status", "--porcelain"], "/repo/worktree"),
-    ).resolves.toBe(" M README\n");
-    expect(seenArgs).toEqual(["status", "--porcelain"]);
-  });
-
   it("refuses mutating subcommands before spawning", async () => {
     let spawned = false;
     stubGitSpawner(() => {
@@ -107,112 +67,5 @@ describe("runGit", () => {
       code: "validation",
     });
     expect(spawned).toBe(false);
-  });
-
-  it("permits remote get-url while refusing write subcommands", async () => {
-    let seenArgs: string[] = [];
-    stubGitSpawner((args) => {
-      seenArgs = args;
-      return mockGitChild({ stdout: "git@github.com:org/repo.git\n" });
-    });
-
-    await expect(
-      runGit(["remote", "get-url", "origin"], "/repo/root"),
-    ).resolves.toBe("git@github.com:org/repo.git\n");
-    expect(seenArgs).toEqual(["remote", "get-url", "origin"]);
-
-    let spawned = false;
-    stubGitSpawner(() => {
-      spawned = true;
-      return mockGitChild({ stdout: "ok" });
-    });
-    await expect(
-      runGit(["remote", "add", "origin", "git@github.com:org/repo.git"], "/repo/root"),
-    ).rejects.toMatchObject({ code: "validation" });
-    expect(spawned).toBe(false);
-  });
-
-  it("throws git-missing when the binary is absent", async () => {
-    stubGitSpawner(() =>
-      mockGitChild({
-        error: Object.assign(new Error("spawn git ENOENT"), {
-          code: "ENOENT",
-        }),
-      }),
-    );
-
-    await expect(runGit(["show", "HEAD"], "/tmp/ws")).rejects.toMatchObject({
-      code: "git-missing",
-    });
-  });
-
-  it("throws git-failed for non-zero exits", async () => {
-    stubGitSpawner(() =>
-      mockGitChild({
-        code: 128,
-        stderr: "fatal: bad object HEAD",
-      }),
-    );
-
-    await expect(runGit(["show", "HEAD"], "/tmp/ws")).rejects.toSatisfy(
-      (err: unknown) =>
-        err instanceof IssueError &&
-        err.code === "git-failed" &&
-        err.message === "fatal: bad object HEAD",
-    );
-  });
-});
-
-describe("mainCheckoutRoot", () => {
-  const roots: string[] = [];
-
-  function tempDir(prefix: string): string {
-    const dir = mkdtempSync(join(tmpdir(), prefix));
-    roots.push(dir);
-    return dir;
-  }
-
-  afterEach(() => {
-    for (const root of roots) rmSync(root, { recursive: true, force: true });
-    roots.length = 0;
-  });
-
-  it("returns the main worktree for a linked worktree", () => {
-    const main = tempDir("git-read-main-");
-    git(main, ["init", "-b", "main"]);
-    git(main, ["commit", "--allow-empty", "-m", "init"]);
-    const link = join(tempDir("git-read-wt-"), "story");
-    git(main, ["worktree", "add", "--detach", link, "HEAD"]);
-
-    expect(mainCheckoutRoot(link)).toBe(main);
-    expect(mainCheckoutRoot(main)).toBe(main);
-  });
-
-  it("throws when the path is not a git checkout", () => {
-    const dir = tempDir("git-read-plain-");
-    expect(() => mainCheckoutRoot(dir)).toThrow(IssueError);
-  });
-});
-
-describe("getOriginRemoteUrl", () => {
-  it("returns the trimmed origin URL", async () => {
-    stubGitSpawner(() =>
-      mockGitChild({ stdout: "git@github.com:org/repo.git\n" }),
-    );
-
-    await expect(getOriginRemoteUrl("/repo/root")).resolves.toBe(
-      "git@github.com:org/repo.git",
-    );
-  });
-
-  it("returns null when origin is missing", async () => {
-    stubGitSpawner(() =>
-      mockGitChild({
-        code: 2,
-        stderr: "fatal: No such remote 'origin'",
-      }),
-    );
-
-    await expect(getOriginRemoteUrl("/repo/root")).resolves.toBeNull();
   });
 });

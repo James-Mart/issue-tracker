@@ -159,27 +159,6 @@ export function buildScriptedStream(
   ];
 }
 
-/**
- * The in-band shape the SDK uses when the access token behind a session has
- * expired: a `status: "ERROR"` message inside a run that started normally.
- */
-export function buildAuthFailureStream(): AgentStreamEvent[] {
-  return [
-    message({
-      type: "status",
-      ...ids,
-      status: "ERROR",
-      message:
-        "Authentication error. If you are logged in, try logging out and back in.",
-    }),
-  ];
-}
-
-/** Fallback path: a scripted stream with no nested `tool-call-delta` at all. */
-export function buildScriptedStreamWithoutNested(): AgentStreamEvent[] {
-  return buildScriptedStream({ includeNested: false });
-}
-
 /** Variant whose completed Task tool call carries the optional `agentId` hint. */
 export function buildScriptedStreamWithAgentIdHint(): AgentStreamEvent[] {
   return buildScriptedStream({ taskResultAgentId: NESTED_AGENT_ID });

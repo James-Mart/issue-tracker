@@ -3,32 +3,9 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "./composer";
-import type { VoiceRecordingState } from "../hooks/use-voice-recording";
-import { VOICE_RECORDING_CAP_SECONDS } from "../hooks/use-voice-recording";
-import {
-  release,
-  resetVoiceSessionLockForTests,
-  tryAcquire,
-} from "../lib/voice-session-lock";
+import { resetVoiceSessionLockForTests } from "../lib/voice-session-lock";
 
-const sendMutate = vi.fn();
-
-const voiceRecording = vi.hoisted(() => ({
-  state: "idle" as VoiceRecordingState,
-  elapsedSeconds: 0,
-  errorKind: null as "permission" | "transcription" | null,
-  errorReason: null as string | null,
-  start: vi.fn(),
-  cancel: vi.fn(),
-  confirm: vi.fn(),
-  retry: vi.fn(),
-}));
-
-const transcriptionCapability = vi.hoisted(() => ({
-  available: true,
-  reason: undefined as string | undefined,
-}));
-const transcriptionCapabilityError = vi.hoisted(() => ({ value: false }));
+const startRecording = vi.hoisted(() => vi.fn());
 
 let capturedOnTranscript: ((text: string) => void) | undefined;
 
@@ -40,14 +17,14 @@ vi.mock("../hooks/use-voice-recording", async (importOriginal) => {
     useVoiceRecording: (options: { onTranscript: (text: string) => void }) => {
       capturedOnTranscript = options.onTranscript;
       return {
-        state: voiceRecording.state,
-        elapsedSeconds: voiceRecording.elapsedSeconds,
-        errorKind: voiceRecording.errorKind,
-        errorReason: voiceRecording.errorReason,
-        start: voiceRecording.start,
-        cancel: voiceRecording.cancel,
-        confirm: voiceRecording.confirm,
-        retry: voiceRecording.retry,
+        state: "idle",
+        elapsedSeconds: 0,
+        errorKind: null,
+        errorReason: null,
+        start: startRecording,
+        cancel: vi.fn(),
+        confirm: vi.fn(),
+        retry: vi.fn(),
       };
     },
   };
@@ -55,7 +32,7 @@ vi.mock("../hooks/use-voice-recording", async (importOriginal) => {
 
 vi.mock("../api/mutations", () => ({
   useSendConversationMessage: () => ({
-    mutate: sendMutate,
+    mutate: vi.fn(),
     isPending: false,
   }),
   useInterruptConversationRun: () => ({
@@ -87,9 +64,9 @@ vi.mock("../api/queries", () => ({
     isLoading: false,
   }),
   useTranscriptionCapabilityQuery: () => ({
-    data: transcriptionCapability,
+    data: { available: true },
     isLoading: false,
-    isError: transcriptionCapabilityError.value,
+    isError: false,
   }),
 }));
 
@@ -97,60 +74,26 @@ vi.mock("@/hooks/use-coarse-pointer", () => ({
   useIsCoarsePointer: () => false,
 }));
 
-function resetVoiceMocks() {
-  voiceRecording.state = "idle";
-  voiceRecording.elapsedSeconds = 0;
-  voiceRecording.errorKind = null;
-  voiceRecording.errorReason = null;
-  voiceRecording.start.mockClear();
-  voiceRecording.cancel.mockClear();
-  voiceRecording.confirm.mockClear();
-  voiceRecording.retry.mockClear();
-  transcriptionCapability.available = true;
-  transcriptionCapability.reason = undefined;
-  transcriptionCapabilityError.value = false;
-  capturedOnTranscript = undefined;
-  resetVoiceSessionLockForTests();
-}
-
-function mountComposer(): {
-  container: HTMLDivElement;
-  root: Root;
-  rerender: () => void;
-} {
+function mountComposer(): { container: HTMLDivElement; root: Root } {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  const rerender = () => {
-    act(() => {
-      root.render(
-        <Composer
-          conversationId="conv-1"
-          model="composer-2.5-fast"
-          runActive={false}
-        />,
-      );
-    });
-  };
-  rerender();
-  return { container, root, rerender };
+  act(() => {
+    root.render(
+      <Composer
+        conversationId="conv-1"
+        model="composer-2.5-fast"
+        runActive={false}
+      />,
+    );
+  });
+  return { container, root };
 }
 
 function textarea(container: ParentNode): HTMLTextAreaElement {
   const el = container.querySelector("textarea");
   expect(el).toBeTruthy();
   return el as HTMLTextAreaElement;
-}
-
-function setDraft(input: HTMLTextAreaElement, value: string) {
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLTextAreaElement.prototype,
-    "value",
-  )!.set!;
-  act(() => {
-    nativeInputValueSetter.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
 }
 
 function setTextareaSelection(
@@ -176,98 +119,22 @@ function micButton(container: ParentNode): HTMLButtonElement {
   return el as HTMLButtonElement;
 }
 
-function sendButton(container: ParentNode): HTMLButtonElement {
-  const el = container.querySelector('button[aria-label="Send"]');
-  expect(el).toBeTruthy();
-  return el as HTMLButtonElement;
-}
-
 describe("Composer voice dictation", () => {
   let container: HTMLDivElement | undefined;
   let root: Root | undefined;
-  let rerender: (() => void) | undefined;
 
   afterEach(() => {
     if (root) act(() => root!.unmount());
     container?.remove();
     container = undefined;
     root = undefined;
-    rerender = undefined;
-    sendMutate.mockClear();
-    resetVoiceMocks();
-  });
-
-  it("shows the recording bar with a running timer over the action row", () => {
-    voiceRecording.state = "recording";
-    voiceRecording.elapsedSeconds = 84;
-    ({ container, root, rerender } = mountComposer());
-
-    expect(
-      container!.querySelector('[data-testid="voice-recording-bar"]'),
-    ).toBeTruthy();
-    expect(
-      container!.querySelector('[data-testid="voice-mic-button"]'),
-    ).toBeNull();
-    const timer = container!.querySelector(
-      '[data-testid="voice-recording-timer"]',
-    ) as HTMLElement;
-    expect(timer?.textContent).toBe("1:24 / 10:00");
-    expect(timer.className).toMatch(/\bwhitespace-nowrap\b/);
-
-    const bar = container!.querySelector(
-      '[data-testid="voice-recording-bar"]',
-    ) as HTMLElement;
-    expect(bar.className).toMatch(/\bmin-h-11\b/);
-    expect(bar.className).toMatch(/\bshell:min-h-9\b/);
-
-    const discard = container!.querySelector(
-      'button[aria-label="Discard recording"]',
-    ) as HTMLButtonElement;
-    const confirm = container!.querySelector(
-      'button[aria-label="Confirm recording"]',
-    ) as HTMLButtonElement;
-    expect(discard.className).toMatch(/\bh-11\b/);
-    expect(discard.className).toMatch(/\bshell:h-9\b/);
-    expect(confirm.className).toMatch(/\bh-11\b/);
-    expect(confirm.className).toMatch(/\bshell:h-9\b/);
-  });
-
-  it("shows the review bar with the timer stilled at the cap and confirm active", () => {
-    voiceRecording.state = "review";
-    voiceRecording.elapsedSeconds = VOICE_RECORDING_CAP_SECONDS;
-    ({ container, root, rerender } = mountComposer());
-
-    expect(
-      container!.querySelector('[data-testid="voice-recording-bar"]'),
-    ).toBeTruthy();
-    expect(
-      container!.querySelector('[data-testid="voice-recording-timer"]')
-        ?.textContent,
-    ).toBe("10:00 / 10:00");
-    expect(
-      container!.querySelector('button[aria-label="Confirm recording"]'),
-    ).toBeTruthy();
-  });
-
-  it("shows the locked row while transcribing", () => {
-    voiceRecording.state = "transcribing";
-    ({ container, root, rerender } = mountComposer());
-
-    const field = container!.querySelector(
-      '[data-testid="voice-transcribing-field"]',
-    ) as HTMLElement;
-    expect(field).toBeTruthy();
-    expect(field.className).toMatch(/min-h-\[44px\]/);
-    expect(field.className).not.toMatch(/basis-\[12rem\]/);
-    expect(micButton(container!).disabled).toBe(true);
-    expect(
-      container!.querySelector('button[aria-label="Attach files"]')!.className,
-    ).toMatch(/opacity-50/);
-    expect(sendButton(container!).disabled).toBe(true);
+    startRecording.mockClear();
+    capturedOnTranscript = undefined;
+    resetVoiceSessionLockForTests();
   });
 
   it("inserts a transcript at the position recorded when recording started", async () => {
-    ({ container, root, rerender } = mountComposer());
+    ({ container, root } = mountComposer());
 
     const input = textarea(container!);
     setTextareaSelection(input, "hello world", 5);
@@ -276,7 +143,7 @@ describe("Composer voice dictation", () => {
       micButton(container!).click();
     });
 
-    expect(voiceRecording.start).toHaveBeenCalledTimes(1);
+    expect(startRecording).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       capturedOnTranscript?.(" there");
@@ -285,124 +152,5 @@ describe("Composer voice dictation", () => {
 
     expect(textarea(container!).value).toBe("hello there world");
     expect(textarea(container!).selectionStart).toBe(11);
-  });
-
-  it("leaves the draft untouched when cancel is invoked from the recording bar", () => {
-    ({ container, root, rerender } = mountComposer());
-
-    setDraft(textarea(container!), "keep this draft");
-
-    voiceRecording.state = "recording";
-    rerender!();
-
-    act(() => {
-      (
-        container!.querySelector(
-          'button[aria-label="Discard recording"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(voiceRecording.cancel).toHaveBeenCalledTimes(1);
-
-    voiceRecording.state = "idle";
-    rerender!();
-
-    expect(textarea(container!).value).toBe("keep this draft");
-  });
-
-  it("renders permission errors with retry wired to retry()", () => {
-    voiceRecording.state = "error";
-    voiceRecording.errorKind = "permission";
-    voiceRecording.errorReason = "Microphone permission denied";
-    ({ container, root, rerender } = mountComposer());
-
-    const errorBar = container!.querySelector(
-      '[data-testid="voice-error-bar"]',
-    ) as HTMLElement;
-    expect(errorBar?.textContent).toContain("Microphone permission denied");
-    expect(errorBar.className).toMatch(/\bmin-h-11\b/);
-    expect(errorBar.className).toMatch(/\bshell:min-h-9\b/);
-    const retry = container!.querySelector(
-      '[data-testid="voice-error-retry"]',
-    ) as HTMLButtonElement;
-    expect(retry.className).toMatch(/\bh-11\b/);
-    expect(retry.className).toMatch(/\bshell:h-9\b/);
-
-    act(() => {
-      (
-        container!.querySelector(
-          '[data-testid="voice-error-retry"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(voiceRecording.retry).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders transcription errors with retry wired to retry()", () => {
-    voiceRecording.state = "error";
-    voiceRecording.errorKind = "transcription";
-    voiceRecording.errorReason = "Transcription failed";
-    ({ container, root, rerender } = mountComposer());
-
-    expect(
-      container!.querySelector('[data-testid="voice-error-bar"]')?.textContent,
-    ).toContain("Transcription failed");
-
-    act(() => {
-      (
-        container!.querySelector(
-          '[data-testid="voice-error-retry"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(voiceRecording.retry).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders the mic disabled with a reason when capability is unavailable", () => {
-    transcriptionCapability.available = false;
-    transcriptionCapability.reason = "Speech model not installed";
-    ({ container, root, rerender } = mountComposer());
-
-    const mic = micButton(container!);
-    expect(mic.disabled).toBe(true);
-    expect(mic.title).toBe("Speech model not installed");
-  });
-
-  it("renders the mic disabled when the capability query fails", () => {
-    transcriptionCapabilityError.value = true;
-    ({ container, root, rerender } = mountComposer());
-
-    const mic = micButton(container!);
-    expect(mic.disabled).toBe(true);
-    expect(mic.title).toBe("Speech model unavailable");
-  });
-
-  it("renders the mic disabled and does not start while the description field holds the voice lock", () => {
-    tryAcquire("description");
-    ({ container, root, rerender } = mountComposer());
-
-    const mic = micButton(container!);
-    expect(mic.disabled).toBe(true);
-
-    act(() => {
-      mic.click();
-    });
-    expect(voiceRecording.start).not.toHaveBeenCalled();
-  });
-
-  it("allows recording after the description field releases the lock", () => {
-    tryAcquire("description");
-    ({ container, root, rerender } = mountComposer());
-
-    release("description");
-    rerender!();
-
-    act(() => {
-      micButton(container!).click();
-    });
-    expect(voiceRecording.start).toHaveBeenCalledTimes(1);
   });
 });

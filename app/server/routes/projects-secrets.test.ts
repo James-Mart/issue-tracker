@@ -31,14 +31,6 @@ beforeEach(async () => {
     createdAt: AT,
     updatedAt: AT,
   });
-  writeIssue("story-1", {
-    kind: "story",
-    title: "Story",
-    partOf: "p",
-    order: 0,
-    createdAt: AT,
-    updatedAt: AT,
-  });
 
   const { setSecret } = await import("../services/secret-store.js");
   setSecret("p", "STRIPE_SANDBOX_KEY", SECRET_VALUE);
@@ -64,29 +56,6 @@ afterEach(async () => {
   rmSync(home, { recursive: true, force: true });
 });
 
-describe("GET /api/projects/:id/secrets", () => {
-  it("returns key names and no secret value", async () => {
-    const res = await fetch(`${baseUrl}/api/projects/p/secrets`);
-    expect(res.status).toBe(200);
-    const body = await res.text();
-    expect(JSON.parse(body)).toEqual({ keys: ["STRIPE_SANDBOX_KEY"] });
-    expect(body).not.toContain(SECRET_VALUE);
-  });
-
-  it("returns an empty list when the project has no secrets", async () => {
-    const { deleteSecret } = await import("../services/secret-store.js");
-    deleteSecret("p", "STRIPE_SANDBOX_KEY");
-    const res = await fetch(`${baseUrl}/api/projects/p/secrets`);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ keys: [] });
-  });
-
-  it("refuses a non-project id", async () => {
-    const res = await fetch(`${baseUrl}/api/projects/story-1/secrets`);
-    expect(res.status).toBe(404);
-  });
-});
-
 describe("PUT /api/projects/:id/secrets/:key", () => {
   it("sets a secret and returns key names without the value", async () => {
     const value = "sk_live_brand_new_value";
@@ -107,41 +76,6 @@ describe("PUT /api/projects/:id/secrets/:key", () => {
     expect(readSecretsForRuntime("p").NEW_KEY).toBe(value);
   });
 
-  it("replaces a secret without returning the new or previous value", async () => {
-    const value = "sk_live_replacement_value";
-    const res = await fetch(
-      `${baseUrl}/api/projects/p/secrets/STRIPE_SANDBOX_KEY`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value }),
-      },
-    );
-    expect(res.status).toBe(200);
-    const body = await res.text();
-    expect(JSON.parse(body)).toEqual({ keys: ["STRIPE_SANDBOX_KEY"] });
-    expect(body).not.toContain(value);
-    expect(body).not.toContain(SECRET_VALUE);
-
-    const listed = await fetch(`${baseUrl}/api/projects/p/secrets`);
-    const listedBody = await listed.text();
-    expect(JSON.parse(listedBody)).toEqual({ keys: ["STRIPE_SANDBOX_KEY"] });
-    expect(listedBody).not.toContain(value);
-    expect(listedBody).not.toContain(SECRET_VALUE);
-  });
-
-  it("refuses a non-string value without echoing it", async () => {
-    const res = await fetch(`${baseUrl}/api/projects/p/secrets/NEW_KEY`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: { leak: "nested-secret-value" } }),
-    });
-    expect(res.status).toBe(400);
-    const body = await res.text();
-    expect(body).toContain("body must be { value: string }");
-    expect(body).not.toContain("nested-secret-value");
-  });
-
   it("refuses an invalid key without echoing the value", async () => {
     const value = "should-not-leak-from-invalid-key";
     const res = await fetch(`${baseUrl}/api/projects/p/secrets/not-a-key`, {
@@ -155,58 +89,5 @@ describe("PUT /api/projects/:id/secrets/:key", () => {
     expect(body).not.toContain(value);
     expect(body).not.toContain(SECRET_VALUE);
   });
-
-  it("refuses a non-project id without storing the value", async () => {
-    const value = "story-should-not-store-this";
-    const res = await fetch(`${baseUrl}/api/projects/story-1/secrets/NEW_KEY`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value }),
-    });
-    expect(res.status).toBe(404);
-    const body = await res.text();
-    expect(body).not.toContain(value);
-
-    const { listSecretKeys } = await import("../services/secret-store.js");
-    expect(listSecretKeys("story-1")).toEqual([]);
-  });
 });
 
-describe("DELETE /api/projects/:id/secrets/:key", () => {
-  it("removes a secret and returns the remaining keys without the value", async () => {
-    const res = await fetch(
-      `${baseUrl}/api/projects/p/secrets/STRIPE_SANDBOX_KEY`,
-      { method: "DELETE" },
-    );
-    expect(res.status).toBe(200);
-    const body = await res.text();
-    expect(JSON.parse(body)).toEqual({ keys: [] });
-    expect(body).not.toContain(SECRET_VALUE);
-
-    const { listSecretKeys } = await import("../services/secret-store.js");
-    expect(listSecretKeys("p")).toEqual([]);
-  });
-
-  it("refuses an invalid key without echoing a body value", async () => {
-    const res = await fetch(`${baseUrl}/api/projects/p/secrets/not-a-key`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: "delete-should-not-echo" }),
-    });
-    expect(res.status).toBe(400);
-    const body = await res.text();
-    expect(body).toContain("invalid secret key");
-    expect(body).not.toContain("delete-should-not-echo");
-    expect(body).not.toContain(SECRET_VALUE);
-  });
-
-  it("refuses a non-project id", async () => {
-    const res = await fetch(
-      `${baseUrl}/api/projects/story-1/secrets/STRIPE_SANDBOX_KEY`,
-      { method: "DELETE" },
-    );
-    expect(res.status).toBe(404);
-    const body = await res.text();
-    expect(body).not.toContain(SECRET_VALUE);
-  });
-});

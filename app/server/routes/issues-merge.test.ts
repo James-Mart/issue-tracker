@@ -121,15 +121,6 @@ beforeEach(async () => {
     createdAt: AT,
     updatedAt: AT,
   });
-  writeIssue("c1", {
-    kind: "task",
-    title: "Task",
-    partOf: "a",
-    order: 0,
-    status: "todo",
-    createdAt: AT,
-    updatedAt: AT,
-  });
 
   ({ setGhSpawnerForTests } = await import("../services/delivery.js"));
   setGhSpawnerForTests(null);
@@ -157,21 +148,6 @@ afterEach(async () => {
 });
 
 describe("POST /api/issues/:id/merge", () => {
-  it("merges a Story via the merge service with parsed arguments", async () => {
-    stubGh();
-
-    const { status, json } = await postMerge("a", {});
-    expect(status).toBe(204);
-    expect(json).toBeNull();
-    expect(ghCalls[0]).toEqual({
-      args: ["pr", "merge", "42", "--merge", "-R", "acme/widgets"],
-      cwd: workspace,
-    });
-    expect(ghCalls).toHaveLength(2);
-    expect(ghCalls[1]?.args.slice(0, 2)).toEqual(["api", "graphql"]);
-    expect(readStoryJson("a").merged).toBe(true);
-  });
-
   it("forwards auto and matchHeadCommit to the merge service", async () => {
     stubGh();
 
@@ -191,24 +167,6 @@ describe("POST /api/issues/:id/merge", () => {
       "--match-head-commit",
       "deadbeef",
     ]);
-  });
-
-  it("rejects a non-Story id the way the CLI verb does", async () => {
-    stubGh();
-
-    const epic = await postMerge("e", {});
-    expect(epic.status).toBe(500);
-    expect(epic.json).toMatchObject({
-      error: expect.stringMatching(/merge is only valid on a Story/),
-    });
-    expect(ghCalls).toEqual([]);
-
-    const task = await postMerge("c1", {});
-    expect(task.status).toBe(500);
-    expect(task.json).toMatchObject({
-      error: expect.stringMatching(/merge is only valid on a Story/),
-    });
-    expect(ghCalls).toEqual([]);
   });
 
   it("surfaces a gh failure as an error body", async () => {

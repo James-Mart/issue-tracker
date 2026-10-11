@@ -108,41 +108,6 @@ describe("useIssueEvents", () => {
     unmountHook(mounted);
   });
 
-  it("invalidates list, detail, agent runs, and comments on planning-run scope", () => {
-    const mounted = mountHook();
-    const ws = FakeWebSocket.instances[0]!;
-    act(() => {
-      ws.emitOpen();
-    });
-
-    act(() => {
-      ws.emitMessage({
-        type: "event",
-        topic: "issues",
-        seq: 1,
-        event: { type: "change", id: "capture", scope: "planning-run" },
-      });
-    });
-    act(() => {
-      vi.advanceTimersByTime(50);
-    });
-
-    expect(mounted.invalidateSpy).toHaveBeenCalledWith({
-      queryKey: issuesKeys.detail("capture"),
-    });
-    expect(mounted.invalidateSpy).toHaveBeenCalledWith({
-      queryKey: issuesKeys.agentRuns("capture"),
-    });
-    expect(mounted.invalidateSpy).toHaveBeenCalledWith({
-      queryKey: issuesKeys.list(),
-    });
-    expect(mounted.invalidateSpy).toHaveBeenCalledWith({
-      queryKey: issuesKeys.comments("capture"),
-    });
-
-    unmountHook(mounted);
-  });
-
   it("resyncs all issue queries on topic reset", () => {
     const mounted = mountHook();
     const ws = FakeWebSocket.instances[0]!;

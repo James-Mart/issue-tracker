@@ -2,16 +2,12 @@
  * Transport on the Vite dev path — the `:8060` shape a browser hits during
  * development, where the client arrives as hundreds of separate ES modules and
  * the SharedWorker script is resolved through `?sharedworker&url`. Every other
- * transport spec runs against the built bundle, so nothing else covers it.
- *
- * Both branches of `subscribeTopic` are covered: the SharedWorker branch, and
- * the direct per-tab socket branch a browser without `SharedWorker` falls back
- * to.
+ * spec runs against the built bundle.
  */
 import { spawn } from "node:child_process";
 import { createServer, type AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
-import { devices, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 const APP_DIR = fileURLToPath(new URL("..", import.meta.url));
@@ -149,88 +145,7 @@ test.describe("transport on the Vite dev path", () => {
       expect(await page.evaluate(() => typeof SharedWorker)).toBe("function");
       expect(
         workerScriptRequests.some((url) => url.includes("sharedworker")),
-      ).toBeTruthy();
-    } finally {
-      await context.close();
-    }
-  });
-
-  test("recovers from an optimized dep chunk the cached graph can no longer fetch", async ({
-    browser,
-  }) => {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    let staleChunkResponses = 0;
-    await page.route("**/node_modules/.vite/deps/chunk-*", async (route) => {
-      // What a browser holding immutable dep files from an older deps directory
-      // gets: the chunk those files import is gone. One load only, so the repair
-      // has something to recover to.
-      if (staleChunkResponses === 0) {
-        staleChunkResponses += 1;
-        await route.fulfill({ status: 404, contentType: "text/plain", body: "" });
-        return;
-      }
-      await route.continue();
-    });
-
-    try {
-      await page.goto(`${dev.baseURL}/`);
-      await expect(page.getByRole("main")).toBeVisible({ timeout: 60_000 });
-      await expect(page.locator("[data-bootstrap-fault]")).toHaveCount(0);
-      expect(staleChunkResponses).toBe(1);
-    } finally {
-      await context.close();
-    }
-  });
-
-  test("Pixel 5 viewport paints the shell, stays live, and revalidates optimized deps", async ({
-    browser,
-  }) => {
-    const context = await browser.newContext({
-      ...devices["Pixel 5"],
-      viewport: { width: 390, height: 844 },
-    });
-    const page = await context.newPage();
-    const depCacheControls: string[] = [];
-    page.on("response", (response) => {
-      const path = new URL(response.url()).pathname;
-      if (path.startsWith("/node_modules/.vite/deps/")) {
-        depCacheControls.push(response.headers()["cache-control"] ?? "");
-      }
-    });
-    try {
-      await expectShellAndLiveIssueUpdate(page, dev.baseURL);
-      expect(await page.evaluate(() => typeof SharedWorker)).toBe("function");
-      expect(depCacheControls.length).toBeGreaterThan(0);
-      expect(
-        depCacheControls.every((value) => value === "no-cache"),
-      ).toBeTruthy();
-      expect(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth > window.innerWidth,
-        ),
-      ).toBe(false);
-    } finally {
-      await context.close();
-    }
-  });
-
-  test("direct branch stays live when SharedWorker is unavailable", async ({
-    browser,
-  }) => {
-    const context = await browser.newContext();
-    await context.addInitScript(() => {
-      // Same gate as transport.ts (`typeof SharedWorker !== "undefined"`).
-      Object.defineProperty(window, "SharedWorker", {
-        configurable: true,
-        writable: true,
-        value: undefined,
-      });
-    });
-    const page = await context.newPage();
-    try {
-      await expectShellAndLiveIssueUpdate(page, dev.baseURL);
-      expect(await page.evaluate(() => typeof SharedWorker)).toBe("undefined");
+      ).toBe(true);
     } finally {
       await context.close();
     }

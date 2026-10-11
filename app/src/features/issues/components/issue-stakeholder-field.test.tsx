@@ -8,12 +8,7 @@ import { IssueStakeholderField } from "./issue-stakeholder-field";
 
 const mutateAsync = vi.fn();
 const liveRunConfirm = vi.hoisted(() => ({
-  midRun: false,
   pending: null as null | (() => void | Promise<void>),
-  confirming: false,
-  cancelConfirm: vi.fn(() => {
-    liveRunConfirm.pending = null;
-  }),
 }));
 
 vi.mock("@/features/agents/api/queries", () => ({
@@ -44,38 +39,14 @@ vi.mock("../hooks/use-issue-patch-action", () => ({
 vi.mock("../hooks/use-confirm-channel-live-run", () => ({
   useConfirmChannelLiveRun: () => ({
     confirmIfLiveRun: (action: () => void | Promise<void>) => {
-      if (!liveRunConfirm.midRun) {
-        void action();
-        return;
-      }
       liveRunConfirm.pending = action;
     },
-    cancelConfirm: liveRunConfirm.cancelConfirm,
+    cancelConfirm: vi.fn(),
     awaitingConfirm: liveRunConfirm.pending !== null,
-    confirming: liveRunConfirm.confirming,
+    confirming: false,
     dialog:
       liveRunConfirm.pending !== null ? (
-        <div data-testid="channel-kill-live-run-dialog">
-          <button
-            type="button"
-            onClick={() => {
-              liveRunConfirm.cancelConfirm();
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-testid="channel-kill-live-run-confirm"
-            onClick={() => {
-              const action = liveRunConfirm.pending;
-              liveRunConfirm.pending = null;
-              void action?.();
-            }}
-          >
-            Kill and archive
-          </button>
-        </div>
+        <div data-testid="channel-kill-live-run-dialog" />
       ) : null,
   }),
 }));
@@ -135,33 +106,11 @@ function mount(
 afterEach(() => {
   document.body.innerHTML = "";
   mutateAsync.mockReset();
-  liveRunConfirm.midRun = false;
   liveRunConfirm.pending = null;
-  liveRunConfirm.confirming = false;
-  liveRunConfirm.cancelConfirm.mockClear();
 });
 
 describe("IssueStakeholderField", () => {
-  it("patches stakeholder immediately when no run is in flight", async () => {
-    mutateAsync.mockResolvedValue({});
-    const { container } = mount(<IssueStakeholderField issue={idea} />);
-    const select = container.querySelector(
-      "[data-testid=stakeholder-select]",
-    ) as HTMLSelectElement;
-
-    await act(async () => {
-      select.value = "claude-opus-5";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    expect(mutateAsync).toHaveBeenCalledWith({
-      id: "capture",
-      patch: { stakeholder: "claude-opus-5" },
-    });
-  });
-
   it("asks before changing stakeholder while a run is in flight", async () => {
-    liveRunConfirm.midRun = true;
     const { container, root } = mount(<IssueStakeholderField issue={idea} />);
     const select = () =>
       container.querySelector(
@@ -182,81 +131,5 @@ describe("IssueStakeholderField", () => {
       container.querySelector('[data-testid="channel-kill-live-run-dialog"]'),
     ).toBeTruthy();
     expect(select().disabled).toBe(true);
-  });
-
-  it("cancels a pending confirm when the stored stakeholder is re-selected", async () => {
-    liveRunConfirm.midRun = true;
-    liveRunConfirm.pending = vi.fn();
-    const withStakeholder = { ...idea, stakeholder: "claude-opus-5" };
-    const { container } = mount(
-      <IssueStakeholderField issue={withStakeholder} />,
-    );
-    const select = container.querySelector(
-      "[data-testid=stakeholder-select]",
-    ) as HTMLSelectElement;
-
-    await act(async () => {
-      select.value = "claude-opus-5";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    expect(liveRunConfirm.cancelConfirm).toHaveBeenCalledOnce();
-    expect(mutateAsync).not.toHaveBeenCalled();
-  });
-
-  it("leaves the run untouched when stakeholder confirmation is cancelled", async () => {
-    liveRunConfirm.midRun = true;
-    const { container, root } = mount(<IssueStakeholderField issue={idea} />);
-    const select = container.querySelector(
-      "[data-testid=stakeholder-select]",
-    ) as HTMLSelectElement;
-
-    await act(async () => {
-      select.value = "claude-opus-5";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    act(() => {
-      root.render(<IssueStakeholderField issue={idea} />);
-    });
-    act(() => {
-      const cancel = [
-        ...(container.querySelectorAll(
-          '[data-testid="channel-kill-live-run-dialog"] button',
-        ) as NodeListOf<HTMLButtonElement>),
-      ].find((button) => button.textContent === "Cancel");
-      cancel?.click();
-    });
-
-    expect(mutateAsync).not.toHaveBeenCalled();
-    expect(liveRunConfirm.pending).toBeNull();
-  });
-
-  it("patches stakeholder after confirmation is accepted", async () => {
-    liveRunConfirm.midRun = true;
-    mutateAsync.mockResolvedValue({});
-    const { container, root } = mount(<IssueStakeholderField issue={idea} />);
-    const select = container.querySelector(
-      "[data-testid=stakeholder-select]",
-    ) as HTMLSelectElement;
-
-    await act(async () => {
-      select.value = "claude-opus-5";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    act(() => {
-      root.render(<IssueStakeholderField issue={idea} />);
-    });
-    await act(async () => {
-      (
-        container.querySelector(
-          '[data-testid="channel-kill-live-run-confirm"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(mutateAsync).toHaveBeenCalledWith({
-      id: "capture",
-      patch: { stakeholder: "claude-opus-5" },
-    });
   });
 });

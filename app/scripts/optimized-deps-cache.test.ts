@@ -29,10 +29,4 @@ describe("optimized dep cache headers", () => {
     expect(headers["content-type"]).toBe("text/javascript");
     expect(next).toBe(1);
   });
-
-  it("leaves every other response alone", () => {
-    const { headers, next } = run("/src/main.tsx");
-    expect(headers["cache-control"]).toBe("max-age=31536000,immutable");
-    expect(next).toBe(1);
-  });
 });

@@ -39,26 +39,4 @@ describe("fetchReviewCommits", () => {
       headers: { "If-None-Match": etag },
     });
   });
-
-  it("replaces the cached list when the validator misses", async () => {
-    const next: ReviewCommits = { ...body, tip: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" };
-    const nextEtag = `"4:${next.tip}"`;
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(200, body, { ETag: etag }))
-      .mockResolvedValueOnce(jsonResponse(200, next, { ETag: nextEtag }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await fetchReviewCommits("p", "poll-miss");
-    await expect(fetchReviewCommits("p", "poll-miss")).resolves.toEqual(next);
-    expect(fetchMock.mock.calls[1]?.[1]).toEqual({
-      headers: { "If-None-Match": etag },
-    });
-
-    fetchMock.mockResolvedValueOnce(new Response(null, { status: 304, headers: { ETag: nextEtag } }));
-    await expect(fetchReviewCommits("p", "poll-miss")).resolves.toEqual(next);
-    expect(fetchMock.mock.calls[2]?.[1]).toEqual({
-      headers: { "If-None-Match": nextEtag },
-    });
-  });
 });

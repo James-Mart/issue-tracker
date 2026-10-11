@@ -7,13 +7,11 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { refreshStorePathsFromEnv } from "../config.js";
 import { setGhSpawnerForTests, type GhSpawner } from "./delivery.js";
 import { resetPrCommentMirrorForTests } from "./pr-comment-mirror.js";
-import type { PrSyncStepResult } from "./pr-sync-driver.js";
 
-export const AT = "2026-07-09T14:00:00.000Z";
+const AT = "2026-07-09T14:00:00.000Z";
 export const PR_URL = "https://github.com/acme/widgets/pull/7";
 export const WORKSPACE = "/repo/root";
-export const SHA = "a".repeat(40);
-export const OLD_SHA = "b".repeat(40);
+const SHA = "a".repeat(40);
 
 export let dir!: string;
 export let ghCalls: string[][] = [];
@@ -104,19 +102,6 @@ export function page(nodes: unknown[], hasNextPage = false, endCursor: string | 
   return connectionPage("comments", nodes, hasNextPage, endCursor);
 }
 
-export function reviewNode(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "PRR_1",
-    url: "https://github.com/acme/widgets/pull/7#pullrequestreview-1",
-    body: "Looks good overall",
-    state: "COMMENTED",
-    submittedAt: "2024-06-03T00:00:00Z",
-    updatedAt: "2024-06-03T00:00:00Z",
-    author: { __typename: "User", login: "ada" },
-    ...overrides,
-  };
-}
-
 export function reviewCommentNode(overrides: Record<string, unknown> = {}) {
   return {
     id: "PRRC_1",
@@ -159,8 +144,6 @@ export function threadNode(
 }
 
 export function githubParts(parts: {
-  comments?: unknown[];
-  reviews?: unknown[];
   threads?: unknown[];
   threadCommentPages?: Record<string, string>;
 }): (query: string) => string {
@@ -184,13 +167,9 @@ export function githubParts(parts: {
     if (query.includes("reviewThreads(")) {
       return connectionPage("reviewThreads", parts.threads ?? []);
     }
-    if (query.includes("reviews(")) return connectionPage("reviews", parts.reviews ?? []);
-    return connectionPage("comments", parts.comments ?? []);
+    if (query.includes("reviews(")) return connectionPage("reviews", []);
+    return connectionPage("comments", []);
   };
-}
-
-export function previous(matches: Map<string, string> = new Map()): PrSyncStepResult {
-  return { matches, facts: new Map() } as PrSyncStepResult;
 }
 
 export function project(): void {

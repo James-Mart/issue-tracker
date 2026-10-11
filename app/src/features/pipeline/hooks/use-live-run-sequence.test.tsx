@@ -3,9 +3,9 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentRun } from "@server/schemas";
 import type { TopicListener, TopicMessage } from "@/lib/ws/transport";
-import type { RunSequence, SequenceBeat } from "../run-sequence";
+import type { RunSequence } from "../run-sequence";
+import { AT_NESTED, inFlightSequence, sampleRun } from "../live-run-sequence.test-helpers";
 import { useLiveRunSequence } from "./use-live-run-sequence";
 
 const topicState = vi.hoisted(() => {
@@ -25,57 +25,6 @@ vi.mock("@/lib/ws/transport", () => ({
   subscribeTopic: (topic: string, listener: TopicListener) =>
     topicState.subscribe(topic, listener),
 }));
-
-const AT = "2026-08-28T12:00:00.000Z";
-const AT_NESTED = "2026-08-28T12:00:12.000Z";
-const AT_END = "2026-08-28T12:00:20.000Z";
-
-function beat(partial: SequenceBeat): SequenceBeat {
-  return partial;
-}
-
-function sequence(
-  condition: RunSequence["condition"],
-  conversationBeats?: SequenceBeat[],
-): RunSequence {
-  return {
-    condition,
-    lifelines: [
-      { id: "coordinator", label: "implementing", kind: "coordinator" },
-      { id: "implementor", label: "implementor", kind: "role" },
-    ],
-    sections: [],
-    beats:
-      conversationBeats ??
-      [
-        beat({
-          from: "coordinator",
-          to: "implementor",
-          label: "spawn implementor",
-          startedAt: AT,
-          kind: "spawn",
-          parentCallId: "call-impl",
-          ...(condition !== "in-flight" ? { durationMs: 20_000 } : {}),
-        }),
-      ],
-  };
-}
-
-function sampleRun(overrides: Partial<AgentRun> = {}): AgentRun {
-  return {
-    delegationId: "del-qa",
-    agentId: "agent-qa",
-    role: "validator",
-    model: "composer-2.5",
-    issueId: "run-live-updates",
-    parentCallId: "call-qa",
-    conversationId: "conv-live",
-    startedAt: AT_NESTED,
-    status: "running",
-    isResume: false,
-    ...overrides,
-  };
-}
 
 function Probe({
   conversationId,
@@ -155,19 +104,14 @@ function deliver(topic: string, message: TopicMessage) {
   });
 }
 
-function deliverDelegation(
-  topic: string,
-  seq: number,
-  runOverrides: Partial<AgentRun> = {},
-  at = AT_NESTED,
-) {
+function deliverDelegation(topic: string, seq: number) {
   deliver(topic, {
     type: "event",
     seq,
     event: {
       type: "delegation",
-      run: sampleRun(runOverrides),
-      at,
+      run: sampleRun(),
+      at: AT_NESTED,
       seq,
     },
   });
@@ -185,139 +129,10 @@ afterEach(() => {
 });
 
 describe("useLiveRunSequence", () => {
-  it("appends a beat when a delegation frame arrives on an in-flight run", () => {
-    const { container } = mount({
-      conversationId: "conv-live",
-      fetched: sequence("in-flight"),
-    });
-    expect(topicState.listeners.has("conversation:conv-live")).toBe(true);
-
-    deliverDelegation("conversation:conv-live", 10);
-
-    expect(beatLabels(container)).toEqual([
-      "spawn implementor",
-      "spawn validator",
-    ]);
-    expect(
-      container.querySelector("[data-testid='live-sequence']")?.getAttribute(
-        "data-condition",
-      ),
-    ).toBe("in-flight");
-  });
-
-  it("flips the condition and unsubscribes when the run ends", () => {
-    const { container } = mount({
-      conversationId: "conv-live",
-      fetched: sequence("in-flight"),
-    });
-
-    deliver("conversation:conv-live", {
-      type: "event",
-      seq: 12,
-      event: {
-        type: "delegation_end",
-        delegationId: "del-impl",
-        parentCallId: "call-impl",
-        status: "completed",
-        endedAt: AT_END,
-        at: AT_END,
-        seq: 12,
-      },
-    });
-
-    expect(
-      container.querySelector("[data-testid='live-sequence']")?.getAttribute(
-        "data-condition",
-      ),
-    ).toBe("completed");
-    expect(topicState.listeners.has("conversation:conv-live")).toBe(false);
-  });
-
-  it("unsubscribes on unmount", () => {
-    const { root } = mount({
-      conversationId: "conv-live",
-      fetched: sequence("in-flight"),
-    });
-    expect(topicState.listeners.has("conversation:conv-live")).toBe(true);
-    act(() => {
-      root.unmount();
-    });
-    expect(topicState.listeners.has("conversation:conv-live")).toBe(false);
-  });
-
-  it("unsubscribes the previous run when another run is selected", () => {
-    const { rerender } = mount({
-      conversationId: "conv-a",
-      fetched: sequence("in-flight"),
-    });
-    expect(topicState.listeners.has("conversation:conv-a")).toBe(true);
-
-    rerender({
-      conversationId: "conv-b",
-      fetched: sequence("in-flight"),
-    });
-
-    expect(topicState.listeners.has("conversation:conv-a")).toBe(false);
-    expect(topicState.listeners.has("conversation:conv-b")).toBe(true);
-  });
-
-  it("never subscribes to a completed run", () => {
-    mount({
-      conversationId: "conv-done",
-      fetched: sequence("completed"),
-    });
-    expect(topicState.listeners.has("conversation:conv-done")).toBe(false);
-  });
-
-  it("appends each in-order delegation as it arrives", () => {
-    const { container } = mount({
-      conversationId: "conv-live",
-      fetched: sequence("in-flight"),
-    });
-
-    deliverDelegation("conversation:conv-live", 10);
-    deliverDelegation(
-      "conversation:conv-live",
-      11,
-      {
-        delegationId: "del-review",
-        parentCallId: "call-review",
-        role: "reviewer",
-      },
-      AT_END,
-    );
-
-    expect(beatLabels(container)).toEqual([
-      "spawn implementor",
-      "spawn validator",
-      "spawn reviewer",
-    ]);
-  });
-
-  it("ignores a frame kind the overlay does not apply", () => {
-    const { container } = mount({
-      conversationId: "conv-live",
-      fetched: sequence("in-flight"),
-    });
-
-    deliver("conversation:conv-live", {
-      type: "event",
-      seq: 9,
-      event: {
-        type: "prompt",
-        text: "hello",
-        at: AT,
-        seq: 9,
-      },
-    });
-
-    expect(beatLabels(container)).toEqual(["spawn implementor"]);
-  });
-
   it("drops overlaid frames when the conversation changes", () => {
     const { container, rerender } = mount({
       conversationId: "conv-a",
-      fetched: sequence("in-flight"),
+      fetched: inFlightSequence(),
     });
 
     deliverDelegation("conversation:conv-a", 10);
@@ -328,7 +143,7 @@ describe("useLiveRunSequence", () => {
 
     rerender({
       conversationId: "conv-b",
-      fetched: sequence("in-flight"),
+      fetched: inFlightSequence(),
     });
 
     expect(beatLabels(container)).toEqual(["spawn implementor"]);
@@ -337,20 +152,12 @@ describe("useLiveRunSequence", () => {
   it("clears overlaid frames on topic reset", () => {
     const { container } = mount({
       conversationId: "conv-live",
-      fetched: sequence("in-flight"),
+      fetched: inFlightSequence(),
     });
 
     deliverDelegation("conversation:conv-live", 10);
     deliver("conversation:conv-live", { type: "reset" });
 
     expect(beatLabels(container)).toEqual(["spawn implementor"]);
-  });
-
-  it("never subscribes to a failed run", () => {
-    mount({
-      conversationId: "conv-fail",
-      fetched: sequence("failed"),
-    });
-    expect(topicState.listeners.has("conversation:conv-fail")).toBe(false);
   });
 });

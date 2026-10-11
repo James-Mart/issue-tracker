@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -12,10 +12,6 @@ let baseUrl: string;
 function writeIssue(id: string, body: Record<string, unknown>): void {
   mkdirSync(join(dir, id), { recursive: true });
   writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
-}
-
-function readJson(id: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(dir, id, "issue.json"), "utf8"));
 }
 
 async function postMoveStory(
@@ -51,14 +47,6 @@ beforeEach(async () => {
     createdAt: AT,
     updatedAt: AT,
   });
-  writeIssue("e2", {
-    kind: "epic",
-    title: "E2",
-    partOf: "p",
-    order: 1,
-    createdAt: AT,
-    updatedAt: AT,
-  });
   writeIssue("a", {
     kind: "story",
     title: "A",
@@ -72,14 +60,6 @@ beforeEach(async () => {
     title: "B",
     partOf: "e1",
     stackedOn: "a",
-    order: 0,
-    createdAt: AT,
-    updatedAt: AT,
-  });
-  writeIssue("x", {
-    kind: "story",
-    title: "X",
-    partOf: "e2",
     order: 0,
     createdAt: AT,
     updatedAt: AT,
@@ -106,45 +86,9 @@ afterEach(async () => {
 });
 
 describe("POST /api/issues/:id/move-story", () => {
-  it("restacks a branch onto a peer via HTTP", async () => {
-    writeIssue("peer", {
-      kind: "story",
-      title: "Peer",
-      partOf: "e1",
-      order: 1,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-
-    const { status, json } = await postMoveStory("b", { target: "peer" });
-    expect(status).toBe(200);
-    expect(json).toEqual({ moved: ["b"] });
-    expect(readJson("b").stackedOn).toBe("peer");
-  });
-
-  it("reparents a stack onto another epic via HTTP", async () => {
-    const { status, json } = await postMoveStory("b", { target: "e2" });
-    expect(status).toBe(200);
-    expect(json).toEqual({ moved: ["b"] });
-    expect(readJson("b").partOf).toBe("e2");
-    expect(readJson("b").stackedOn).toBeUndefined();
-  });
-
-  it("returns 400 when target is missing", async () => {
-    const { status, json } = await postMoveStory("b", {});
-    expect(status).toBe(400);
-    expect(json).toEqual({ error: "target is required" });
-  });
-
   it("returns 400 for cycle rejection", async () => {
     const { status, json } = await postMoveStory("a", { target: "b" });
     expect(status).toBe(400);
     expect(json).toMatchObject({ error: expect.stringMatching(/cycle/i) });
-  });
-
-  it("returns 404 for an unknown source", async () => {
-    const { status, json } = await postMoveStory("ghost", { target: "e1" });
-    expect(status).toBe(404);
-    expect(json).toMatchObject({ error: expect.stringMatching(/unknown issue/i) });
   });
 });

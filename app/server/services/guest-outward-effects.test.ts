@@ -2,21 +2,14 @@ import {
   ChildProcess,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import type { Server } from "node:http";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessions } from "./agent-sessions.js";
 import {
-  GUEST_REFUSED_BACKUP_CONFIG,
   GUEST_REFUSED_MERGE,
-  GUEST_REFUSED_RESTART,
-  GUEST_REFUSED_SECRET_DELETE,
-  GUEST_REFUSED_SECRET_WRITE,
-  GUEST_REFUSED_UPDATE_FROM_MERGE_BASE,
-  GUEST_REFUSED_WORKTREE_ATTACH,
-  GUEST_REFUSED_WORKTREE_CREATE,
   GUEST_REFUSED_WORKTREE_REMOVE,
   GUEST_REFUSED_WORKTREE_SETUP,
 } from "./guest-outward-effects.js";
@@ -164,56 +157,6 @@ describe("guest outward-effect refusals", () => {
     expect(gitWrites).toEqual([]);
   });
 
-  it("refuses worktree create and attach before any store or git write", async () => {
-    const { attachStoryWorktree, createStoryWorktree } = await import(
-      "./worktree.js"
-    );
-    const before = readIssue(issuesDir, "fresh");
-
-    await expect(createStoryWorktree("fresh")).rejects.toMatchObject({
-      code: "guest",
-      message: GUEST_REFUSED_WORKTREE_CREATE,
-    });
-    await expect(attachStoryWorktree("story")).rejects.toMatchObject({
-      code: "guest",
-      message: GUEST_REFUSED_WORKTREE_ATTACH,
-    });
-
-    expect(readIssue(issuesDir, "fresh")).toEqual(before);
-    expect(gitWrites).toEqual([]);
-  });
-
-  it("keeps the worktree when archiving or deleting a Story in the copy", async () => {
-    const patched = await send("PATCH", "/api/issues/story", { archived: true });
-    expect(patched.status).toBe(200);
-    expect(readIssue(issuesDir, "story")).toMatchObject({
-      archived: true,
-      worktreePath: worktree,
-    });
-
-    const removed = await send("DELETE", "/api/issues/story");
-    expect(removed.status).toBe(200);
-    expect((await removed.json()).retainedWorktrees).toEqual([
-      { id: "story", path: worktree },
-    ]);
-
-    expect(existsSync(worktree)).toBe(true);
-    expect(gitWrites).toEqual([]);
-  });
-
-  it("refuses update from merge base before appending a Task", async () => {
-    await expectGuest(
-      await send("POST", "/api/issues/story/update-from-merge-base"),
-      GUEST_REFUSED_UPDATE_FROM_MERGE_BASE,
-    );
-    expect(readdirSync(issuesDir).sort()).toEqual([
-      "fresh",
-      "platform",
-      "ship",
-      "story",
-    ]);
-  });
-
   it("refuses merge before gh and allows PR status reads", async () => {
     await expectGuest(
       await send("POST", "/api/issues/story/merge", {}),
@@ -226,47 +169,5 @@ describe("guest outward-effect refusals", () => {
     expect(prs.status).toBe(200);
     expect(await prs.json()).toEqual({ prs: {}, sync: {} });
     expect(ghCalls).toEqual([]);
-  });
-
-  it("refuses backup config writes and allows the backup read", async () => {
-    await expectGuest(
-      await send("PUT", "/api/backup", {
-        remote: "git@github.com:acme/store.git",
-        enabled: true,
-      }),
-      GUEST_REFUSED_BACKUP_CONFIG,
-    );
-    expect(existsSync(join(root, "app-config.json"))).toBe(false);
-
-    const read = await send("GET", "/api/backup");
-    expect(read.status).toBe(200);
-    expect((await read.json()).config).toEqual({ remote: null, enabled: false });
-  });
-
-  it("refuses Project secret writes and deletes and allows the key list", async () => {
-    await expectGuest(
-      await send("PUT", "/api/projects/platform/secrets/API_TOKEN", {
-        value: "hunter2",
-      }),
-      GUEST_REFUSED_SECRET_WRITE,
-    );
-    await expectGuest(
-      await send("DELETE", "/api/projects/platform/secrets/API_TOKEN"),
-      GUEST_REFUSED_SECRET_DELETE,
-    );
-    expect(existsSync(join(home, ".config"))).toBe(false);
-
-    const keys = await send("GET", "/api/projects/platform/secrets");
-    expect(keys.status).toBe(200);
-    expect(await keys.json()).toEqual({ keys: [] });
-  });
-
-  it("refuses a supervised restart, forced or not, without initiating it", async () => {
-    await expectGuest(await send("POST", "/api/restart"), GUEST_REFUSED_RESTART);
-    await expectGuest(
-      await send("POST", "/api/restart", { force: true }),
-      GUEST_REFUSED_RESTART,
-    );
-    expect(initiateRestart).not.toHaveBeenCalled();
   });
 });

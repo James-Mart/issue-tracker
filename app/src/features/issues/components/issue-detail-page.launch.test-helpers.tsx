@@ -18,16 +18,11 @@ const holders = vi.hoisted(() => ({
     derived: {} as Record<string, DerivedState>,
     sessions: [] as ChannelSessionListItem[],
   },
-  liveRunConfirm: {
-    midRun: false,
-    pending: null as null | (() => void | Promise<void>),
-  },
 }));
 
 export const mutate = holders.mutate;
 export const sendMessageMutate = holders.sendMessageMutate;
 export const mockState = holders.mockState;
-export const liveRunConfirm = holders.liveRunConfirm;
 
 vi.mock("../api/queries", () => ({
   useIssueDetailQuery: () => ({
@@ -106,14 +101,8 @@ vi.mock("@/features/agents/api/mutations", () => ({
 
 vi.mock("../hooks/use-confirm-channel-live-run", () => ({
   useConfirmChannelLiveRun: () => ({
-    confirmIfLiveRun: (action: () => void) => {
-      if (!holders.liveRunConfirm.midRun) {
-        action();
-        return;
-      }
-      holders.liveRunConfirm.pending = action;
-    },
-    awaitingConfirm: holders.liveRunConfirm.pending !== null,
+    confirmIfLiveRun: (action: () => void) => action(),
+    awaitingConfirm: false,
     confirming: false,
     dialog: null,
   }),
@@ -208,35 +197,12 @@ export function epicRecord(id: string, partOf: string, title: string): RecordOf<
   };
 }
 
-export function ideaRecord(id: string, partOf: string, title: string): RecordOf<"idea"> {
-  return {
-    id,
-    kind: "idea",
-    title,
-    partOf,
-    order: 0,
-    createdAt: t0,
-    updatedAt: t0,
-    archived: false,
-  };
-}
-
 export function epicDetail(id: string, partOf: string, title: string): IssueDetail {
   return {
     ...epicRecord(id, partOf, title),
     description: "",
     version: "1",
     labels: [],
-  };
-}
-
-export function ideaDetail(id: string, partOf: string, title: string): IssueDetail {
-  return {
-    ...ideaRecord(id, partOf, title),
-    description: "",
-    version: "1",
-    labels: [],
-    stakeholder: "composer-2.5",
   };
 }
 
@@ -262,27 +228,6 @@ export function mountDetail(entry: string): { container: HTMLDivElement; root: R
   return { container, root };
 }
 
-export function remount(
-  root: Root,
-  entry: string,
-): void {
-  act(() => {
-    root.render(
-      <MemoryRouter initialEntries={[entry]}>
-        <SidebarProvider>
-          <TopBar />
-          <Routes>
-            <Route
-              path="/projects/:projectId/issues/:id"
-              element={<IssueDetailPage />}
-            />
-          </Routes>
-        </SidebarProvider>
-      </MemoryRouter>,
-    );
-  });
-}
-
 export function mutateOptions(): {
   onSuccess?: (result: { id: string }) => void;
   onError?: (err: Error) => void;
@@ -296,16 +241,6 @@ export function mutateOptions(): {
   return {
     onSuccess: passed?.onSuccess,
     onError: holders.hookOnError,
-  };
-}
-
-export function sendMessageOptions(): {
-  onSuccess?: () => void;
-  onError?: (err: Error) => void;
-} {
-  return sendMessageMutate.mock.calls[0]?.[1] as {
-    onSuccess?: () => void;
-    onError?: (err: Error) => void;
   };
 }
 
@@ -324,15 +259,6 @@ export function storyRecord(id: string, partOf: string, title: string): RecordOf
     needsAttention: false,
     attentionReason: null,
     archived: false,
-  };
-}
-
-export function storyDetail(id: string, partOf: string, title: string): IssueDetail {
-  return {
-    ...storyRecord(id, partOf, title),
-    description: "",
-    version: "1",
-    labels: [],
   };
 }
 
@@ -357,24 +283,6 @@ export function taskRecord(
   };
 }
 
-export function workLoopControlIndex(container: ParentNode): number {
-  const nodes = Array.from(container.querySelectorAll("*"));
-  return nodes.findIndex((node) =>
-    node.matches('[data-testid="post-rail-work-loop"]'),
-  );
-}
-
-export function ownFlowIndex(container: ParentNode): number {
-  const nodes = Array.from(container.querySelectorAll("*"));
-  return nodes.findIndex((node) => node.matches('[data-region="own-flow"]'));
-}
-
-export function selectedTab(container: ParentNode): string | undefined {
-  return Array.from(container.querySelectorAll('[role="tab"]'))
-    .find((tab) => tab.getAttribute("aria-selected") === "true")
-    ?.textContent?.trim();
-}
-
 afterEach(() => {
   document.body.innerHTML = "";
   holders.hookOnError = undefined;
@@ -384,7 +292,5 @@ afterEach(() => {
   mockState.issues = [];
   mockState.derived = {};
   mockState.sessions = [];
-  liveRunConfirm.midRun = false;
-  liveRunConfirm.pending = null;
   resetCockpitLaunchStore();
 });

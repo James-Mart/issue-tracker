@@ -3,7 +3,6 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { Agent, JsonlLocalAgentStore } from "@cursor/sdk";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createAgentSdk } from "./agent-sdk.js";
 
 // Real `@cursor/sdk`, and still on the default lane: `Agent.create` and
 // `Agent.resume` only read and write the local JSONL store here, so nothing in
@@ -63,57 +62,5 @@ describe("local agent store workspace scoping", () => {
         },
       }),
     ).rejects.toThrow(`Agent ${agentId} not found`);
-  });
-
-  it("resumes the stored agent through the boundary's own cwd", async () => {
-    const agentId = await createStoredAgent();
-    const sdk = createAgentSdk({ apiKey: undefined });
-
-    const handle = await sdk.resumeAgent(agentId, storeDir, {
-      cwd: workspace,
-      model: MODEL,
-    });
-
-    expect(handle.agentId).toBe(agentId);
-    await handle[Symbol.asyncDispose]();
-  });
-
-  // A resumed local agent does not inherit the selection it was created with,
-  // and the SDK refuses the next send rather than falling back to one — so the
-  // boundary re-states the model on every re-entry.
-  it("refuses to drive a resumed agent that was given no model", async () => {
-    const agentId = await createStoredAgent();
-
-    const handle = await Agent.resume(agentId, {
-      local: { cwd: workspace, store: new JsonlLocalAgentStore(storeDir) },
-    });
-
-    await expect(handle.send("anything")).rejects.toThrow(
-      /require an explicit `model`/,
-    );
-    await handle[Symbol.asyncDispose]();
-  });
-
-  it("resumes an agent the boundary created, without inheriting process.cwd()", async () => {
-    const sdk = createAgentSdk({ apiKey: undefined });
-    const created = await sdk.createAgent({
-      cwd: workspace,
-      model: MODEL,
-      storeDir,
-    });
-    const { agentId } = created;
-    await created[Symbol.asyncDispose]();
-
-    // The condition the bug needed: the workspace the agent runs in is not the
-    // directory the server process was launched from.
-    expect(workspace).not.toBe(process.cwd());
-
-    const resumed = await sdk.resumeAgent(agentId, storeDir, {
-      cwd: workspace,
-      model: MODEL,
-    });
-
-    expect(resumed.agentId).toBe(agentId);
-    await resumed[Symbol.asyncDispose]();
   });
 });

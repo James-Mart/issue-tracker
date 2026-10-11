@@ -1,5 +1,4 @@
 import { execFileSync } from "child_process";
-import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -14,11 +13,7 @@ import {
   writeIssue,
 } from "./cli.test-helpers.js";
 import { refreshStorePathsFromEnv } from "./server/config.js";
-import { setGitSpawnerForTests } from "./server/services/git-read.js";
-import {
-  setGitWriteSpawnerForTests,
-  type GitWriteSpawner,
-} from "./server/services/git-write.js";
+import { resetConversationMetaIndexForTests } from "./server/services/conversation-meta-index.js";
 import { WORKTREE_ROOT } from "./server/worktree-constants.js";
 import { worktreePathFor } from "./server/services/worktree.js";
 
@@ -104,6 +99,7 @@ export function seedImplementingSession(
       `${JSON.stringify({ pid: process.pid })}\n`,
     );
   }
+  resetConversationMetaIndexForTests();
 }
 
 export function writeStory(id: string, extra: Record<string, unknown> = {}): void {
@@ -166,23 +162,6 @@ export function seedProject(workspace?: string, setupCommand?: string): void {
   });
 }
 
-export function failGitWorktreeRemove(): void {
-  const spawner: GitWriteSpawner = () => {
-    const child = new EventEmitter() as EventEmitter & {
-      stdout: EventEmitter;
-      stderr: EventEmitter;
-    };
-    child.stdout = new EventEmitter();
-    child.stderr = new EventEmitter();
-    setImmediate(() => {
-      child.stderr.emit("data", "fatal: fake worktree remove failure\n");
-      child.emit("close", 1);
-    });
-    return child as ReturnType<GitWriteSpawner>;
-  };
-  setGitWriteSpawnerForTests(spawner);
-}
-
 export async function withIssuesDir<T>(fn: () => Promise<T>): Promise<T> {
   const saved = process.env.ISSUES_DIR;
   process.env.ISSUES_DIR = dir;
@@ -210,9 +189,8 @@ export async function createCleanWorktree(storyId = "a"): Promise<string> {
 export function useStoryWorktreeCliFixtures(): void {
   useCliTestFixtures();
   afterEach(() => {
-    setGitSpawnerForTests(null);
-    setGitWriteSpawnerForTests(null);
     removeTrackedWorktrees();
     rmSync(conversationsRoot(), { recursive: true, force: true });
+    resetConversationMetaIndexForTests();
   });
 }

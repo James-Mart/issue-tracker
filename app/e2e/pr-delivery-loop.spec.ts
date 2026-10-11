@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test as base, expect } from "@playwright/test";
@@ -49,7 +49,7 @@ const test = base.extend<Record<string, never>, { prLoopApp: PrLoopApp }>({
           const ready = await create({
             kind: "story",
             title: "Ready PR story",
-            partOf: "seed-epic-b",
+            partOf: "seed-epic-a",
           });
           await update(ready.id, {
             prUrl: READY_PR_URL,
@@ -60,7 +60,7 @@ const test = base.extend<Record<string, never>, { prLoopApp: PrLoopApp }>({
           const draft = await create({
             kind: "story",
             title: "Draft PR story",
-            partOf: "seed-epic-b",
+            partOf: "seed-epic-a",
           });
           await update(draft.id, {
             prUrl: DRAFT_PR_URL,
@@ -78,6 +78,7 @@ const test = base.extend<Record<string, never>, { prLoopApp: PrLoopApp }>({
       });
 
       await app.stop();
+      rmSync(workspace, { recursive: true, force: true });
     },
     { scope: "worker" },
   ],

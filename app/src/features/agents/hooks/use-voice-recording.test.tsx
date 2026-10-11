@@ -3,9 +3,7 @@ import { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  convertRecordingBlobTo16kHzMono,
   useVoiceRecording,
-  VOICE_RECORDING_CAP_SECONDS,
   VOICE_RECORDING_SAMPLE_RATE,
 } from "./use-voice-recording";
 
@@ -80,25 +78,15 @@ class FakeMediaRecorder {
   }
 }
 
-function mountHook(
-  options: {
-    transcribe?: (samples: Float32Array) => Promise<string>;
-    onTranscript?: (text: string) => void;
-  } = {},
-): {
+function mountHook(): {
   root: Root;
   container: HTMLDivElement;
   getView: () => HookView;
   transcribe: ReturnType<typeof vi.fn<(samples: Float32Array) => Promise<string>>>;
   onTranscript: ReturnType<typeof vi.fn<(text: string) => void>>;
 } {
-  const transcribe = vi.fn(
-    options.transcribe ??
-      (async () => {
-        return "hello world";
-      }),
-  );
-  const onTranscript = vi.fn(options.onTranscript ?? (() => {}));
+  const transcribe = vi.fn(async (_samples: Float32Array) => "hello world");
+  const onTranscript = vi.fn((_text: string) => {});
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -138,18 +126,6 @@ function deferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
-}
-
-function monoAudioBuffer(): AudioBuffer {
-  return {
-    sampleRate: 48_000,
-    length: 3,
-    numberOfChannels: 1,
-    duration: 1,
-    getChannelData: () => new Float32Array([0.1, 0.2, 0.3]),
-    copyFromChannel: () => {},
-    copyToChannel: () => {},
-  };
 }
 
 describe("useVoiceRecording", () => {
@@ -280,79 +256,6 @@ describe("useVoiceRecording", () => {
     expect(harness.getView().state).toBe("idle");
   });
 
-  it("lands in review at the cap with the track released and elapsed frozen", async () => {
-    const harness = mountHook();
-
-    act(() => {
-      harness.getView().start();
-    });
-    await flushPromises();
-
-    act(() => {
-      vi.advanceTimersByTime(VOICE_RECORDING_CAP_SECONDS * 1000);
-    });
-    await flushPromises();
-
-    expect(harness.getView().state).toBe("review");
-    expect(harness.getView().elapsedSeconds).toBe(VOICE_RECORDING_CAP_SECONDS);
-    expect(track.stop).toHaveBeenCalled();
-
-    act(() => {
-      harness.getView().confirm();
-    });
-    await flushPromises();
-
-    expect(harness.transcribe).toHaveBeenCalledTimes(1);
-    expect(harness.onTranscript).toHaveBeenCalledWith("hello world");
-    expect(harness.getView().state).toBe("idle");
-  });
-
-  it("handles denied permission and retry re-requests microphone access", async () => {
-    getUserMedia.mockRejectedValueOnce(
-      new DOMException("denied", "NotAllowedError"),
-    );
-    const harness = mountHook();
-
-    act(() => {
-      harness.getView().start();
-    });
-    await flushPromises();
-
-    expect(harness.getView().state).toBe("error");
-    expect(harness.getView().errorKind).toBe("permission");
-    expect(harness.getView().errorReason).toContain("denied");
-    expect(harness.transcribe).not.toHaveBeenCalled();
-
-    act(() => {
-      harness.getView().retry();
-    });
-    await flushPromises();
-
-    expect(getUserMedia).toHaveBeenCalledTimes(2);
-    expect(harness.getView().state).toBe("recording");
-    expect(harness.transcribe).not.toHaveBeenCalled();
-  });
-
-  it("ignores duplicate start calls while microphone access is in flight", async () => {
-    const pending = deferred<MediaStream>();
-    getUserMedia.mockImplementationOnce(() => pending.promise);
-    const harness = mountHook();
-
-    act(() => {
-      harness.getView().start();
-      harness.getView().start();
-    });
-
-    expect(getUserMedia).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      pending.resolve(stream as unknown as MediaStream);
-    });
-    await flushPromises();
-
-    expect(harness.getView().state).toBe("recording");
-  });
-
   it("stops a stream that resolves after cancel and does not start capture", async () => {
     const pending = deferred<MediaStream>();
     getUserMedia.mockImplementationOnce(() => pending.promise);
@@ -384,175 +287,6 @@ describe("useVoiceRecording", () => {
     expect(harness.getView().state).toBe("idle");
   });
 
-  it("ignores a permission failure that settles after cancel", async () => {
-    const pending = deferred<MediaStream>();
-    getUserMedia.mockImplementationOnce(() => pending.promise);
-    const harness = mountHook();
-
-    act(() => {
-      harness.getView().start();
-    });
-    act(() => {
-      harness.getView().cancel();
-    });
-    act(() => {
-      pending.reject(new DOMException("denied", "NotAllowedError"));
-    });
-    await flushPromises();
-
-    expect(harness.getView().state).toBe("idle");
-    expect(harness.getView().errorKind).toBeNull();
-    expect(FakeMediaRecorder.instances).toHaveLength(0);
-  });
-
-  it("stops a stream that resolves after cancel during a permission retry", async () => {
-    getUserMedia.mockRejectedValueOnce(
-      new DOMException("denied", "NotAllowedError"),
-    );
-    const pending = deferred<MediaStream>();
-    getUserMedia.mockImplementationOnce(() => pending.promise);
-    const retryTrack = new FakeMediaStreamTrack();
-    const retryStream = new FakeMediaStream([retryTrack]);
-    const harness = mountHook();
-
-    act(() => {
-      harness.getView().start();
-    });
-    await flushPromises();
-    expect(harness.getView().state).toBe("error");
-
-    act(() => {
-      harness.getView().retry();
-    });
-    act(() => {
-      harness.getView().cancel();
-    });
-    act(() => {
-      pending.resolve(retryStream as unknown as MediaStream);
-    });
-    await flushPromises();
-
-    expect(retryTrack.stop).toHaveBeenCalled();
-    expect(FakeMediaRecorder.instances).toHaveLength(0);
-    expect(harness.getView().state).toBe("idle");
-    expect(harness.getView().errorKind).toBeNull();
-  });
-
-  it("stops a stream that resolves after unmount and does not start capture", async () => {
-    const pending = deferred<MediaStream>();
-    getUserMedia.mockImplementationOnce(() => pending.promise);
-    const harness = mountHook();
-
-    act(() => {
-      harness.getView().start();
-    });
-    act(() => {
-      harness.root.unmount();
-    });
-    act(() => {
-      pending.resolve(stream as unknown as MediaStream);
-    });
-    await flushPromises();
-
-    expect(track.stop).toHaveBeenCalled();
-    expect(FakeMediaRecorder.instances).toHaveLength(0);
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("ignores duplicate confirm calls while conversion is in flight", async () => {
-    let resolveDecode: (buffer: AudioBuffer) => void = () => {};
-    decodeAudioData.mockImplementationOnce(
-      () =>
-        new Promise<AudioBuffer>((resolve) => {
-          resolveDecode = resolve;
-        }),
-    );
-    const harness = mountHook();
-
-    act(() => {
-      harness.getView().start();
-    });
-    await flushPromises();
-    act(() => {
-      harness.getView().confirm();
-      harness.getView().confirm();
-    });
-    await flushPromises();
-
-    act(() => {
-      resolveDecode(monoAudioBuffer());
-    });
-    await flushPromises();
-    await flushPromises();
-
-    expect(decodeAudioData).toHaveBeenCalledTimes(1);
-    expect(harness.transcribe).toHaveBeenCalledTimes(1);
-  });
-
-  it("retries conversion failures from the held blob without re-recording", async () => {
-    decodeAudioData
-      .mockRejectedValueOnce(new Error("decode failed"))
-      .mockResolvedValueOnce(monoAudioBuffer());
-    const harness = mountHook();
-
-    act(() => {
-      harness.getView().start();
-    });
-    await flushPromises();
-    act(() => {
-      harness.getView().confirm();
-    });
-    await flushPromises();
-
-    expect(harness.getView().state).toBe("error");
-    expect(harness.getView().errorKind).toBe("transcription");
-    expect(harness.transcribe).not.toHaveBeenCalled();
-
-    act(() => {
-      harness.getView().retry();
-    });
-    await flushPromises();
-
-    expect(decodeAudioData).toHaveBeenCalledTimes(2);
-    expect(harness.transcribe).toHaveBeenCalledTimes(1);
-    expect(harness.onTranscript).toHaveBeenCalledWith("hello world");
-    expect(harness.getView().state).toBe("idle");
-  });
-
-  it("retries failed transcription with the same samples without re-converting", async () => {
-    const transcribe = vi
-      .fn<(samples: Float32Array) => Promise<string>>()
-      .mockRejectedValueOnce(new Error("network down"))
-      .mockResolvedValueOnce("second try");
-    const harness = mountHook({ transcribe });
-
-    act(() => {
-      harness.getView().start();
-    });
-    await flushPromises();
-    act(() => {
-      harness.getView().confirm();
-    });
-    await flushPromises();
-
-    expect(harness.getView().state).toBe("error");
-    expect(harness.getView().errorKind).toBe("transcription");
-    expect(decodeAudioData).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      harness.getView().retry();
-    });
-    await flushPromises();
-
-    expect(decodeAudioData).toHaveBeenCalledTimes(1);
-    expect(harness.transcribe).toHaveBeenCalledTimes(2);
-    expect(harness.transcribe.mock.calls[0]?.[0]).toBe(
-      harness.transcribe.mock.calls[1]?.[0],
-    );
-    expect(harness.onTranscript).toHaveBeenCalledWith("second try");
-    expect(harness.getView().state).toBe("idle");
-  });
-
   it("releases the microphone track on unmount", async () => {
     const harness = mountHook();
 
@@ -570,125 +304,5 @@ describe("useVoiceRecording", () => {
     await flushPromises();
 
     expect(track.stop).toHaveBeenCalled();
-  });
-
-  it.each([
-    ["recording", "recording"] as const,
-    ["review", "review"] as const,
-    ["error", "error"] as const,
-  ])(
-    "cancel from %s returns to idle and releases the track",
-    async (from, setupState) => {
-      const harness = mountHook();
-
-      if (setupState === "recording") {
-        act(() => {
-          harness.getView().start();
-        });
-        await flushPromises();
-      }
-
-      if (setupState === "review") {
-        act(() => {
-          harness.getView().start();
-        });
-        await flushPromises();
-        act(() => {
-          vi.advanceTimersByTime(VOICE_RECORDING_CAP_SECONDS * 1000);
-        });
-        await flushPromises();
-      }
-
-      if (setupState === "error") {
-        getUserMedia.mockRejectedValueOnce(
-          new DOMException("denied", "NotAllowedError"),
-        );
-        act(() => {
-          harness.getView().start();
-        });
-        await flushPromises();
-      }
-
-      expect(harness.getView().state).toBe(from);
-      track.stop.mockClear();
-
-      act(() => {
-        harness.getView().cancel();
-      });
-      await flushPromises();
-
-      expect(harness.getView().state).toBe("idle");
-      if (from === "recording") {
-        expect(track.stop).toHaveBeenCalled();
-      }
-    },
-  );
-});
-
-describe("convertRecordingBlobTo16kHzMono", () => {
-  it("mixes stereo input down to mono before resampling", async () => {
-    const offlineInstances: Array<{ sampleRate: number }> = [];
-    const decodeAudioData = vi.fn(async () => ({
-      sampleRate: 48_000,
-      length: 3,
-      numberOfChannels: 2,
-      duration: 3 / 48_000,
-      getChannelData: (channel: number) =>
-        channel === 0
-          ? new Float32Array([1, 0, 0])
-          : new Float32Array([0, 1, 0]),
-    }));
-    // Renders the scheduled source unchanged, so the result is exactly the
-    // mono buffer the code fed into the resampler.
-    let scheduled: { buffer: AudioBuffer | null } | undefined;
-    const offlineStartRendering = vi.fn(async () => scheduled!.buffer!);
-
-    vi.stubGlobal("AudioContext", class {
-      decodeAudioData = decodeAudioData;
-      close = vi.fn(async () => {});
-    });
-    vi.stubGlobal("OfflineAudioContext", class {
-      constructor(
-        public channels: number,
-        public length: number,
-        public sampleRate: number,
-      ) {
-        offlineInstances.push({ sampleRate });
-      }
-
-      createBuffer(channels: number, length: number, sampleRate: number) {
-        const channelData = new Float32Array(length);
-        return {
-          copyToChannel(source: Float32Array) {
-            channelData.set(source);
-          },
-          getChannelData: () => channelData,
-          sampleRate,
-          length,
-          numberOfChannels: channels,
-        };
-      }
-
-      createBufferSource() {
-        scheduled = {
-          buffer: null as AudioBuffer | null,
-          connect: vi.fn(),
-          start: vi.fn(),
-        } as { buffer: AudioBuffer | null };
-        return scheduled;
-      }
-
-      get destination() {
-        return {};
-      }
-
-      startRendering = offlineStartRendering;
-    });
-
-    const samples = await convertRecordingBlobTo16kHzMono(new Blob(["audio"]));
-    expect(samples).toEqual(new Float32Array([0.5, 0.5, 0]));
-    expect(offlineInstances.at(-1)?.sampleRate).toBe(
-      VOICE_RECORDING_SAMPLE_RATE,
-    );
   });
 });

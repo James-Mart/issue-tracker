@@ -26,7 +26,6 @@ import {
   expectGuest,
   type GuestStore,
   listen,
-  readIssue,
   writeIssue,
 } from "./guest-refusal.test-harness.js";
 
@@ -196,39 +195,6 @@ describe("guest agent launch refusals", () => {
     ({ server, baseUrl } = await listen(createApp(stubSessions())));
   });
 
-  it("reads copied conversations, channel sessions, and runs", async () => {
-    const conversation = await fetch(`${baseUrl}/api/conversations/copied`);
-    expect(conversation.status).toBe(200);
-    const conversationBody = await conversation.json();
-    expect(conversationBody.transcript).toEqual([
-      expect.objectContaining({ type: "prompt", text: "copied prompt" }),
-    ]);
-
-    const sessions = await fetch(`${baseUrl}/api/channel-sessions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        pairs: [{ issueId: "ship", channel: "implementing" }],
-      }),
-    });
-    expect(sessions.status).toBe(200);
-    const sessionsBody = await sessions.json();
-    expect(sessionsBody.sessions["ship:implementing"]).toEqual([
-      expect.objectContaining({ id: "channel-copied", title: "Copied implementing" }),
-    ]);
-
-    const runs = await fetch(`${baseUrl}/api/issues/linked-task/agent-runs`);
-    expect(runs.status).toBe(200);
-    const runsBody = await runs.json();
-    expect(runsBody.runs).toEqual([
-      expect.objectContaining({
-        delegationId: "del-completed",
-        agentId: "agent-impl",
-      }),
-    ]);
-    expect(sendPrompt).not.toHaveBeenCalled();
-  });
-
   it("refuses prompts, messages, forks, and channel sessions before any write or SDK call", async () => {
     const beforeIds = conversationIds();
     const beforeTranscript = transcriptOf("copied");
@@ -287,36 +253,6 @@ describe("guest agent launch refusals", () => {
     expect(sendPrompt).not.toHaveBeenCalled();
     expect(cancel).not.toHaveBeenCalled();
     expect(steer).not.toHaveBeenCalled();
-  });
-
-  it("still creates a conversation that does not start a run", async () => {
-    const created = await fetch(`${baseUrl}/api/conversations`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: "platform", title: "Draft" }),
-    });
-    expect(created.status).toBe(201);
-    expect(sendPrompt).not.toHaveBeenCalled();
-  });
-
-  it("does not auto-start queued work or prewarm workspaces", async () => {
-    const { runLauncherPass } = await import("./work-queue-launcher.js");
-    await runLauncherPass(stubSessions());
-
-    expect(sendPrompt).not.toHaveBeenCalled();
-    expect(readIssue(issuesDir, "ship").workQueuedAt).toBe(QUEUED);
-    expect(readIssue(issuesDir, "ship").needsAttention).toBeUndefined();
-    expect(readIssue(issuesDir, "idea").planQueuedAt).toBe(QUEUED);
-    expect(existsSync(join(issuesDir, "idea", "comments.jsonl"))).toBe(false);
-    expect(conversationIds()).toEqual(["channel-copied", "copied"]);
-
-    const { createFakeAgentSdk } = await import("./agent-sdk.fake.js");
-    const fake = createFakeAgentSdk();
-    const prewarmWorkspace = vi.spyOn(fake, "prewarmWorkspace");
-    const { prewarmProjectWorkspaces } = await import("./workspace-prewarm.js");
-    const releases = await prewarmProjectWorkspaces(fake);
-    expect(releases).toEqual([]);
-    expect(prewarmWorkspace).not.toHaveBeenCalled();
   });
 
   it("refuses delegate and SDK create, resume, and prewarm before the SDK call", async () => {

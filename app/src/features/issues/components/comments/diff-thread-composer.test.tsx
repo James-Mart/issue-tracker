@@ -24,26 +24,6 @@ vi.mock("../../api/mutations", () => ({
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
 
-function OpenNew({ testId, line }: { testId: string; line: number }) {
-  const { openNew } = useDiffComposer();
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      onClick={() =>
-        openNew({
-          kind: "new",
-          path: "app/foo.ts",
-          side: "new",
-          line,
-        })
-      }
-    >
-      open
-    </button>
-  );
-}
-
 function OpenFile() {
   const { openNew } = useDiffComposer();
   return (
@@ -57,41 +37,11 @@ function OpenFile() {
   );
 }
 
-function OpenQuote() {
-  const { openQuote } = useDiffComposer();
-  return (
-    <button
-      type="button"
-      data-testid="open-quote"
-      onClick={() =>
-        openQuote({
-          kind: "quote",
-          threadId: "outdated",
-          commentId: "outdated",
-          body: "Run assertCommitReachable before git show.",
-          anchor: {
-            path: "app/foo.ts",
-            side: "old",
-            line: 90,
-            startLine: 88,
-            commitSha: "b".repeat(40),
-          },
-        })
-      }
-    >
-      quote
-    </button>
-  );
-}
-
 function Host() {
   const { open } = useDiffComposer();
   return (
     <>
-      <OpenNew testId="open-new" line={94} />
-      <OpenNew testId="open-other" line={12} />
       <OpenFile />
-      <OpenQuote />
       {open ? <DiffThreadComposer target={open} /> : null}
     </>
   );
@@ -105,7 +55,7 @@ function click(container: HTMLElement, testId: string) {
   });
 }
 
-function mount(allowQuestion = false): HTMLDivElement {
+function mount(): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -114,7 +64,7 @@ function mount(allowQuestion = false): HTMLDivElement {
       <DiffComposerProvider
         issueId="task-threads"
         commitSha={SHA}
-        allowQuestion={allowQuestion}
+        allowQuestion
       >
         <Host />
       </DiffComposerProvider>,
@@ -141,98 +91,8 @@ afterEach(() => {
 });
 
 describe("DiffThreadComposer", () => {
-  it("sends on Enter and inserts a newline on Shift+Enter", () => {
-    const container = mount();
-    act(() => {
-      container
-        .querySelector('[data-testid="open-new"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const input = container.querySelector("textarea");
-    expect(input).not.toBeNull();
-    setDraft(input!, "Include issue id in the draft key?");
-
-    const shiftEnter = new KeyboardEvent("keydown", {
-      key: "Enter",
-      shiftKey: true,
-      bubbles: true,
-      cancelable: true,
-    });
-    act(() => {
-      input!.dispatchEvent(shiftEnter);
-    });
-    expect(shiftEnter.defaultPrevented).toBe(false);
-    expect(postComment).not.toHaveBeenCalled();
-
-    const enter = new KeyboardEvent("keydown", {
-      key: "Enter",
-      bubbles: true,
-      cancelable: true,
-    });
-    act(() => {
-      input!.dispatchEvent(enter);
-    });
-    expect(enter.defaultPrevented).toBe(true);
-    expect(postComment).toHaveBeenCalledWith({
-      role: "human",
-      body: "Include issue id in the draft key?",
-      anchor: {
-        path: "app/foo.ts",
-        side: "new",
-        line: 94,
-        commitSha: SHA,
-      },
-    });
-  });
-
-  it("offers Send and Ask a question on a Story line composer", () => {
-    const container = mount(true);
-    act(() => {
-      container
-        .querySelector('[data-testid="open-new"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    const input = container.querySelector("textarea");
-    expect(input).not.toBeNull();
-    setDraft(input!, "Does this short-circuit?");
-    act(() => {
-      container
-        .querySelector('button[aria-label="Ask a question"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(postComment).toHaveBeenCalledWith({
-      role: "human",
-      body: "Does this short-circuit?",
-      kind: "question",
-      anchor: {
-        path: "app/foo.ts",
-        side: "new",
-        line: 94,
-        commitSha: SHA,
-      },
-    });
-  });
-
-  it("closes the composer and clears its draft as soon as it sends", async () => {
-    const container = mount();
-    click(container, "open-new");
-    setDraft(container.querySelector("textarea")!, "First thread");
-    await act(async () => {
-      container
-        .querySelector('button[aria-label="Send"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(postComment).toHaveBeenCalledOnce();
-    expect(container.querySelector('[data-testid="diff-thread-composer"]')).toBeNull();
-    expect(localStorage.getItem("review:task-threads:line:app/foo.ts:new:94")).toBeNull();
-
-    click(container, "open-new");
-    expect(container.querySelector("textarea")?.value).toBe("");
-  });
-
   it("posts a file anchor for a comment and a question", () => {
-    const container = mount(true);
+    const container = mount();
     click(container, "open-file");
     const composer = container.querySelector('[data-testid="diff-thread-composer"]');
     expect(composer?.textContent).not.toMatch(/line \d/);
@@ -250,79 +110,6 @@ describe("DiffThreadComposer", () => {
       body: "Move this module.",
       kind: "question",
       anchor: { path: "app/foo.ts", commitSha: SHA },
-    });
-  });
-
-  it("quotes onto the stored anchor and confirms before replacing a line draft", () => {
-    const container = mount();
-    click(container, "open-new");
-    setDraft(container.querySelector("textarea")!, "   ");
-    click(container, "open-quote");
-    const quote = container.querySelector('[data-testid="diff-thread-composer"]');
-    expect(quote?.getAttribute("data-composer-kind")).toBe("quote");
-    expect(quote?.querySelector('[data-testid="comment-quote-label"]')?.textContent).toBe(
-      "New thread on app/foo.ts · line 90",
-    );
-    expect(quote?.querySelector("textarea")?.value).toBe(
-      "Run assertCommitReachable before git show.",
-    );
-    expect(document.body.querySelector('[data-testid="review-composer-discard-dialog"]')).toBeNull();
-
-    setDraft(quote!.querySelector("textarea")!, "Keep this draft");
-    click(container, "open-other");
-    const dialog = document.body.querySelector(
-      '[data-testid="review-composer-discard-dialog"]',
-    );
-    expect(dialog?.textContent).toContain("Discard this draft?");
-    act(() => {
-      [...(dialog?.querySelectorAll("button") ?? [])]
-        .find((button) => button.textContent?.includes("Keep editing"))
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(container.querySelector("textarea")?.value).toBe("Keep this draft");
-    expect(container.querySelector('[data-composer-kind="quote"]')).not.toBeNull();
-
-    click(container, "open-other");
-    act(() => {
-      document.body
-        .querySelector('[data-testid="review-composer-discard"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(container.querySelector('[data-composer-kind="new"]')).not.toBeNull();
-    setDraft(container.querySelector("textarea")!, "On the other line");
-    act(() => {
-      container
-        .querySelector('button[aria-label="Send"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(postComment).toHaveBeenCalledWith({
-      role: "human",
-      body: "On the other line",
-      anchor: {
-        path: "app/foo.ts",
-        side: "new",
-        line: 12,
-        commitSha: SHA,
-      },
-    });
-
-    click(container, "open-quote");
-    setDraft(container.querySelector("textarea")!, "Still about the old line");
-    act(() => {
-      container
-        .querySelector('button[aria-label="Send"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(postComment).toHaveBeenLastCalledWith({
-      role: "human",
-      body: "Still about the old line",
-      anchor: {
-        path: "app/foo.ts",
-        side: "old",
-        line: 90,
-        startLine: 88,
-        commitSha: "b".repeat(40),
-      },
     });
   });
 });

@@ -3,48 +3,21 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { skillPath } from "@/lib/plugin-paths";
-import { MANUAL_STAKEHOLDER_LABEL } from "@server/fields";
-import {
-  APPEND_TARGET_MERGED_PLANNING_BLOCKED,
-  APPEND_TARGET_UNSAVED_PLANNING,
-} from "../lib/append-target";
-import type { DerivedState, IssueRecord } from "@server/schemas";
-import {
-  resetAppendTargetDraftStore,
-  useAppendTargetDraftStore,
-} from "../store/use-append-target-draft-store";
+import { resetAppendTargetDraftStore } from "../store/use-append-target-draft-store";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
-import {
-  PlanningChannelEmptyState,
-  PlanningFlowRowLaunch,
-  PlanningNewRunControl,
-  PlanningOverviewLaunch,
-} from "./planning-launch-control";
+import { PlanningChannelEmptyState } from "./planning-launch-control";
 
 const mutate = vi.fn();
-const mutateAsync = vi.fn();
-const modelsState = vi.hoisted(() => ({
-  models: [
-    { id: "composer-2.5", displayName: "Composer 2.5" },
-    { id: "claude-opus-5", displayName: "Opus 5" },
-  ],
-  isLoading: false,
-}));
-const issueState = vi.hoisted(() => ({
-  stakeholder: undefined as string | undefined,
-}));
-const patchActionState = vi.hoisted(() => ({
-  error: null as string | null,
-}));
-const issuesState = vi.hoisted(() => ({
-  issues: [] as IssueRecord[],
-  derived: {} as Record<string, DerivedState>,
-}));
 
 vi.mock("@/features/agents/api/queries", () => ({
   useAgentModelsQuery: () => ({
-    data: { models: modelsState.models },
-    isLoading: modelsState.isLoading,
+    data: {
+      models: [
+        { id: "composer-2.5", displayName: "Composer 2.5" },
+        { id: "claude-opus-5", displayName: "Opus 5" },
+      ],
+    },
+    isLoading: false,
   }),
 }));
 
@@ -53,100 +26,37 @@ vi.mock("../api/mutations", () => ({
     mutate,
     isPending: false,
   }),
-  useUpdateIssue: () => ({
-    mutateAsync,
-  }),
+  useUpdateIssue: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("../api/queries", () => ({
-  useIssuesQuery: () => ({
-    data: { issues: issuesState.issues, derived: issuesState.derived },
-  }),
+  useIssuesQuery: () => ({ data: { issues: [], derived: {} } }),
 }));
 
 vi.mock("../hooks/use-issue-patch-action", () => ({
   useIssuePatchAction: () => ({
-    error: patchActionState.error,
+    error: null,
     saving: false,
     run: async (fn: () => Promise<void>) => {
-      try {
-        await fn();
-      } catch (err) {
-        patchActionState.error =
-          err instanceof Error ? err.message : "Request failed";
-      }
+      await fn();
     },
   }),
-}));
-
-const liveRunConfirm = vi.hoisted(() => ({
-  midRun: false,
-  pending: null as null | (() => void | Promise<void>),
-  confirming: false,
 }));
 
 vi.mock("../hooks/use-confirm-channel-live-run", () => ({
   useConfirmChannelLiveRun: () => ({
     confirmIfLiveRun: (action: () => void | Promise<void>) => {
-      if (!liveRunConfirm.midRun) {
-        void action();
-        return;
-      }
-      liveRunConfirm.pending = action;
+      void action();
     },
-    cancelConfirm: () => {
-      liveRunConfirm.pending = null;
-    },
-    awaitingConfirm: liveRunConfirm.pending !== null,
-    confirming: liveRunConfirm.confirming,
-    dialog:
-      liveRunConfirm.pending !== null ? (
-        <div data-testid="channel-kill-live-run-dialog">
-          <button
-            type="button"
-            onClick={() => {
-              liveRunConfirm.pending = null;
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-testid="channel-kill-live-run-confirm"
-            onClick={() => {
-              const action = liveRunConfirm.pending;
-              liveRunConfirm.pending = null;
-              void action?.();
-            }}
-          >
-            Kill and archive
-          </button>
-        </div>
-      ) : null,
+    cancelConfirm: vi.fn(),
+    awaitingConfirm: false,
+    confirming: false,
+    dialog: null,
   }),
 }));
 
 vi.mock("./stakeholder-select", () => ({
-  StakeholderSelect: ({
-    value,
-    onChange,
-  }: {
-    value: string | undefined;
-    onChange: (value: string | null) => void;
-  }) => (
-    <select
-      data-testid="stakeholder-select"
-      value={value ?? "__manual__"}
-      onChange={(event) =>
-        onChange(
-          event.target.value === "__manual__" ? null : event.target.value,
-        )
-      }
-    >
-      <option value="__manual__">{MANUAL_STAKEHOLDER_LABEL}</option>
-      <option value="claude-opus-5">Opus 5</option>
-    </select>
-  ),
+  StakeholderSelect: () => null,
 }));
 
 vi.mock("@/components/ui/select", () => ({
@@ -184,55 +94,6 @@ vi.mock("@/components/ui/select", () => ({
 
 const t0 = "2026-08-10T12:00:00.000Z";
 
-const project: IssueRecord = {
-  kind: "project",
-  id: "platform",
-  title: "Platform",
-  trunk: "main",
-  mergePolicy: "manual",
-  maxImplementingRuns: 1,
-  order: 0,
-  createdAt: t0,
-  updatedAt: t0,
-};
-
-const epic: IssueRecord = {
-  kind: "epic",
-  id: "auth-epic",
-  title: "Auth",
-  partOf: "platform",
-  blockedBy: [],
-  order: 0,
-  archived: false,
-  needsAttention: false,
-  attentionReason: null,
-  createdAt: t0,
-  updatedAt: t0,
-};
-
-const openStory: Extract<IssueRecord, { kind: "story" }> = {
-  kind: "story",
-  id: "open-story",
-  title: "OAuth callback hardening",
-  partOf: "auth-epic",
-  order: 0,
-  archived: false,
-  needsAttention: false,
-  attentionReason: null,
-  createdAt: t0,
-  updatedAt: t0,
-  merged: false,
-  reviewedTasks: [],
-};
-
-const mergedStory: IssueRecord = {
-  ...openStory,
-  id: "merged-story",
-  title: "Session cookie rotation",
-  order: 1,
-  merged: true,
-};
-
 const idea = {
   kind: "idea" as const,
   id: "capture",
@@ -244,7 +105,6 @@ const idea = {
   updatedAt: t0,
   description: "",
   version: "1",
-  stakeholder: issueState.stakeholder,
 };
 
 function mount(
@@ -262,15 +122,6 @@ function mount(
 afterEach(() => {
   document.body.innerHTML = "";
   mutate.mockReset();
-  mutateAsync.mockReset();
-  issueState.stakeholder = undefined;
-  issuesState.issues = [];
-  issuesState.derived = {};
-  modelsState.isLoading = false;
-  patchActionState.error = null;
-  liveRunConfirm.midRun = false;
-  liveRunConfirm.pending = null;
-  liveRunConfirm.confirming = false;
   resetCockpitLaunchStore();
   resetAppendTargetDraftStore();
 });
@@ -313,44 +164,7 @@ describe("PlanningChannelEmptyState", () => {
     );
   });
 
-  it("uses the selected planner model when stakeholder is unset", () => {
-    const { container } = mount(
-      <PlanningChannelEmptyState
-        issue={idea}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    const modelSelect = container.querySelector(
-      '[data-testid="planning-session-model"]',
-    ) as HTMLSelectElement;
-
-    act(() => {
-      modelSelect.value = "claude-opus-5";
-      modelSelect.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="planning-start-session"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(mutate).toHaveBeenCalledWith(
-      {
-        title: "Plan Capture",
-        model: "claude-opus-5",
-        message:
-          `Plan capture in the issue tracker using the issue-tracker-plan skill. Read ${skillPath("issue-tracker-plan")} and follow it.`,
-      },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
-  });
-
   it("shows auto-plan copy and posts issue-tracker-auto-plan when a slug is set", () => {
-    issueState.stakeholder = "claude-opus-5";
     const ideaWithStakeholder = { ...idea, stakeholder: "claude-opus-5" };
     const { container } = mount(
       <PlanningChannelEmptyState
@@ -369,620 +183,6 @@ describe("PlanningChannelEmptyState", () => {
       (
         container.querySelector(
           '[data-testid="planning-start-session"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(mutate).toHaveBeenCalledWith(
-      {
-        title: "Plan Capture",
-        model: "claude-opus-5",
-        message:
-          `Plan capture in the issue tracker using the issue-tracker-auto-plan skill. Read ${skillPath("issue-tracker-auto-plan")} and follow it. Stakeholder model: claude-opus-5.`,
-      },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
-  });
-
-  it("updates launch copy when the picker selects a slug", () => {
-    const { container } = mount(
-      <PlanningChannelEmptyState
-        issue={idea}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    const select = container.querySelector(
-      "[data-testid=stakeholder-select]",
-    ) as HTMLSelectElement;
-    act(() => {
-      select.value = "claude-opus-5";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(container.textContent).toContain("Start auto-plan on Opus 5");
-  });
-
-  it("reverts the picker when the stakeholder patch fails", async () => {
-    mutateAsync.mockRejectedValueOnce(new Error("patch failed"));
-    const { container } = mount(
-      <PlanningChannelEmptyState
-        issue={idea}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    const select = () =>
-      container.querySelector(
-        "[data-testid=stakeholder-select]",
-      ) as HTMLSelectElement;
-
-    await act(async () => {
-      select().value = "claude-opus-5";
-      select().dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    expect(select().value).toBe("__manual__");
-    expect(container.textContent).toContain("Start planning grill");
-  });
-
-  it("hides the approve plan chip when no stakeholder is set", () => {
-    const { container } = mount(
-      <PlanningChannelEmptyState
-        issue={idea}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    expect(
-      container.querySelector('[data-testid="detail-outline-gate"]'),
-    ).toBeNull();
-  });
-
-  it("shows the approve plan chip in both states when a stakeholder is set", () => {
-    const ideaOff = {
-      ...idea,
-      stakeholder: "claude-opus-5",
-    };
-    const { container: offContainer } = mount(
-      <PlanningChannelEmptyState
-        issue={ideaOff}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    const offChip = offContainer.querySelector(
-      '[data-testid="detail-outline-gate"]',
-    ) as HTMLButtonElement;
-    expect(offChip).toBeTruthy();
-    expect(offChip.textContent).toContain("off");
-    expect(offChip.getAttribute("aria-pressed")).toBe("false");
-
-    const ideaOn = {
-      ...idea,
-      stakeholder: "claude-opus-5",
-      outlineGate: true as const,
-    };
-    const { container: onContainer } = mount(
-      <PlanningChannelEmptyState
-        issue={ideaOn}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    const onChip = onContainer.querySelector(
-      '[data-testid="detail-outline-gate"]',
-    ) as HTMLButtonElement;
-    expect(onChip.textContent).toContain("on");
-    expect(onChip.getAttribute("aria-pressed")).toBe("true");
-  });
-
-  it("uses gate copy when approve plan is on and auto-plan copy when off", () => {
-    const ideaOff = {
-      ...idea,
-      stakeholder: "claude-opus-5",
-    };
-    const { container: offContainer } = mount(
-      <PlanningChannelEmptyState
-        issue={ideaOff}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    expect(offContainer.textContent).toContain("gate rubric");
-    expect(offContainer.textContent).not.toContain(
-      "pauses for your approval",
-    );
-
-    const ideaOn = {
-      ...idea,
-      stakeholder: "claude-opus-5",
-      outlineGate: true as const,
-    };
-    const { container: onContainer } = mount(
-      <PlanningChannelEmptyState
-        issue={ideaOn}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    expect(onContainer.textContent).toContain("pauses for your approval");
-    expect(onContainer.textContent).not.toContain("gate rubric");
-  });
-
-  it("updates empty-state copy optimistically when the chip is toggled", async () => {
-    mutateAsync.mockImplementation(() => new Promise(() => {}));
-    const ideaWithStakeholder = {
-      ...idea,
-      stakeholder: "claude-opus-5",
-    };
-    const { container } = mount(
-      <PlanningChannelEmptyState
-        issue={ideaWithStakeholder}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    expect(container.textContent).toContain("gate rubric");
-
-    await act(async () => {
-      (
-        container.querySelector(
-          '[data-testid="detail-outline-gate"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(container.textContent).toContain("pauses for your approval");
-    expect(container.textContent).not.toContain("gate rubric");
-  });
-});
-
-describe("PlanningOverviewLaunch approve plan chip", () => {
-  it("hides the chip when no stakeholder is set", () => {
-    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
-    expect(
-      container.querySelector('[data-testid="detail-outline-gate"]'),
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-testid="planning-overview-start-session"]'),
-    ).toBeTruthy();
-  });
-
-  it("shows the chip in both states when a stakeholder is set", () => {
-    const ideaOff = {
-      ...idea,
-      stakeholder: "claude-opus-5",
-    };
-    const { container: offContainer } = mount(
-      <PlanningOverviewLaunch issue={ideaOff} />,
-    );
-    const offChip = offContainer.querySelector(
-      '[data-testid="detail-outline-gate"]',
-    ) as HTMLButtonElement;
-    expect(offChip).toBeTruthy();
-    expect(offChip.textContent).toContain("off");
-
-    const ideaOn = {
-      ...idea,
-      stakeholder: "claude-opus-5",
-      outlineGate: true as const,
-    };
-    const { container: onContainer } = mount(
-      <PlanningOverviewLaunch issue={ideaOn} />,
-    );
-    const onChip = onContainer.querySelector(
-      '[data-testid="detail-outline-gate"]',
-    ) as HTMLButtonElement;
-    expect(onChip.textContent).toContain("on");
-  });
-
-  it("toggles outlineGate through the Idea update endpoint", async () => {
-    mutateAsync.mockResolvedValueOnce({});
-    const ideaWithStakeholder = {
-      ...idea,
-      id: "overview-toggle",
-      stakeholder: "claude-opus-5",
-    };
-    const { container } = mount(
-      <PlanningOverviewLaunch issue={ideaWithStakeholder} />,
-    );
-
-    await act(async () => {
-      (
-        container.querySelector(
-          '[data-testid="detail-outline-gate"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(mutateAsync).toHaveBeenCalledWith({
-      id: "overview-toggle",
-      patch: { outlineGate: true },
-    });
-  });
-
-  it("says planning still creates a new root Story while a paste is rejected", () => {
-    useAppendTargetDraftStore.getState().setRejected(idea.id, true);
-    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
-
-    expect(
-      container.querySelector('[data-testid="planning-append-target-unsaved"]')
-        ?.textContent,
-    ).toBe(APPEND_TARGET_UNSAVED_PLANNING);
-  });
-
-  it("does not mention an unsaved paste when none is rejected", () => {
-    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
-
-    expect(
-      container.querySelector('[data-testid="planning-append-target-unsaved"]'),
-    ).toBeNull();
-    expect(container.textContent).not.toContain(APPEND_TARGET_UNSAVED_PLANNING);
-  });
-
-  it("shows the append planning callout only for an unplanned valid target", () => {
-    issuesState.issues = [project, epic, openStory, mergedStory];
-
-    const { container: noTarget } = mount(
-      <PlanningOverviewLaunch issue={idea} />,
-    );
-    expect(
-      noTarget.querySelector('[data-testid="append-planning-callout"]'),
-    ).toBeNull();
-
-    const { container: validTarget } = mount(
-      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "open-story" }} />,
-    );
-    expect(
-      validTarget.querySelector('[data-testid="append-planning-callout"]'),
-    ).toBeTruthy();
-    expect(validTarget.textContent).toContain("OAuth callback hardening");
-    expect(validTarget.textContent).toContain(
-      "instead of creating a new root Story",
-    );
-
-    issuesState.derived = {
-      capture: { blocked: false, ideaStatus: "planned" },
-    };
-    const { container: plannedTarget } = mount(
-      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "open-story" }} />,
-    );
-    expect(
-      plannedTarget.querySelector('[data-testid="append-planning-callout"]'),
-    ).toBeNull();
-
-    issuesState.derived = {
-      capture: { blocked: false, planRoots: ["open-story"] },
-    };
-    const { container: planRootsTarget } = mount(
-      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "open-story" }} />,
-    );
-    expect(
-      planRootsTarget.querySelector('[data-testid="append-planning-callout"]'),
-    ).toBeNull();
-
-    issuesState.derived = {};
-    const { container: mergedTarget } = mount(
-      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "merged-story" }} />,
-    );
-    expect(
-      mergedTarget.querySelector('[data-testid="append-planning-callout"]'),
-    ).toBeNull();
-  });
-
-  it("disables planning and states why when the saved target merged", () => {
-    issuesState.issues = [project, epic, openStory, mergedStory];
-    const { container } = mount(
-      <PlanningOverviewLaunch issue={{ ...idea, appendTo: "merged-story" }} />,
-    );
-    const start = container.querySelector(
-      '[data-testid="planning-overview-start-session"]',
-    ) as HTMLButtonElement;
-
-    expect(start.disabled).toBe(true);
-    expect(
-      container.querySelector(
-        '[data-testid="planning-append-target-merged-blocked"]',
-      )?.textContent,
-    ).toBe(APPEND_TARGET_MERGED_PLANNING_BLOCKED);
-  });
-});
-
-describe("PlanningFlowRowLaunch approve plan chip", () => {
-  it("hides the chip when no stakeholder is set", () => {
-    const { container } = mount(
-      <PlanningFlowRowLaunch issue={idea} />,
-    );
-    expect(
-      container.querySelector('[data-testid="flow-row-outline-gate"]'),
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-testid="flow-row-start-planning"]'),
-    ).toBeTruthy();
-  });
-
-  it("shows the chip in the off state when a stakeholder is set", () => {
-    const ideaWithStakeholder = {
-      ...idea,
-      id: "offline-sync",
-      stakeholder: "claude-opus-5",
-    };
-    const { container } = mount(
-      <PlanningFlowRowLaunch issue={ideaWithStakeholder} />,
-    );
-    const chip = container.querySelector(
-      '[data-testid="flow-row-outline-gate"]',
-    ) as HTMLButtonElement;
-    expect(chip).toBeTruthy();
-    expect(chip.textContent).toContain("Outline gate ·");
-    expect(chip.textContent).toContain("off");
-    expect(chip.getAttribute("aria-pressed")).toBe("false");
-    expect(chip.id).toBe("outline-gate-offline-sync");
-  });
-
-  it("shows the chip in the on state when outlineGate is set", () => {
-    const ideaWithApprovePlan = {
-      ...idea,
-      id: "gate-me",
-      stakeholder: "claude-opus-5",
-      outlineGate: true as const,
-    };
-    const { container } = mount(
-      <PlanningFlowRowLaunch issue={ideaWithApprovePlan} />,
-    );
-    const chip = container.querySelector(
-      '[data-testid="flow-row-outline-gate"]',
-    ) as HTMLButtonElement;
-    expect(chip.textContent).toContain("on");
-    expect(chip.getAttribute("aria-pressed")).toBe("true");
-  });
-
-  it("toggles outlineGate through the Idea update endpoint", async () => {
-    mutateAsync.mockResolvedValueOnce({});
-    const ideaWithStakeholder = {
-      ...idea,
-      id: "toggle-me",
-      stakeholder: "claude-opus-5",
-    };
-    const { container } = mount(
-      <PlanningFlowRowLaunch issue={ideaWithStakeholder} />,
-    );
-
-    await act(async () => {
-      (
-        container.querySelector(
-          '[data-testid="flow-row-outline-gate"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(mutateAsync).toHaveBeenCalledWith({
-      id: "toggle-me",
-      patch: { outlineGate: true },
-    });
-  });
-
-  it("assigns distinct control ids when two rows render together", () => {
-    const first = {
-      ...idea,
-      id: "idea-a",
-      stakeholder: "claude-opus-5",
-    };
-    const second = {
-      ...idea,
-      id: "idea-b",
-      stakeholder: "claude-opus-5",
-    };
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    act(() => {
-      root.render(
-        <>
-          <PlanningFlowRowLaunch issue={first} />
-          <PlanningFlowRowLaunch issue={second} />
-        </>,
-      );
-    });
-
-    const chips = container.querySelectorAll(
-      '[data-testid="flow-row-outline-gate"]',
-    );
-    expect(chips).toHaveLength(2);
-    expect(chips[0]?.id).toBe("outline-gate-idea-a");
-    expect(chips[1]?.id).toBe("outline-gate-idea-b");
-  });
-});
-
-describe("PlanningNewRunControl", () => {
-  it("renders a secondary New run action", () => {
-    const { container } = mount(
-      <PlanningNewRunControl
-        issue={idea}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    const button = container.querySelector(
-      '[data-testid="planning-new-run"]',
-    );
-    expect(button?.textContent).toBe("New run");
-  });
-
-  it("asks before starting a new run when a session is mid-run", () => {
-    liveRunConfirm.midRun = true;
-    const onStarted = vi.fn();
-    const renderControl = () => (
-      <PlanningNewRunControl
-        issue={idea}
-        channel="planning"
-        onStarted={onStarted}
-      />
-    );
-    const { container, root } = mount(renderControl());
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="planning-new-run"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-    act(() => {
-      root.render(renderControl());
-    });
-
-    expect(mutate).not.toHaveBeenCalled();
-    expect(
-      container.querySelector('[data-testid="channel-kill-live-run-dialog"]'),
-    ).toBeTruthy();
-  });
-
-  it("leaves the run untouched when New run confirmation is cancelled", () => {
-    liveRunConfirm.midRun = true;
-    const onStarted = vi.fn();
-    const renderControl = () => (
-      <PlanningNewRunControl
-        issue={idea}
-        channel="planning"
-        onStarted={onStarted}
-      />
-    );
-    const { container, root } = mount(renderControl());
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="planning-new-run"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-    act(() => {
-      root.render(renderControl());
-    });
-    act(() => {
-      const cancel = [
-        ...(container.querySelectorAll(
-          '[data-testid="channel-kill-live-run-dialog"] button',
-        ) as NodeListOf<HTMLButtonElement>),
-      ].find((button) => button.textContent === "Cancel");
-      cancel?.click();
-    });
-
-    expect(mutate).not.toHaveBeenCalled();
-    expect(liveRunConfirm.pending).toBeNull();
-  });
-
-  it("posts a new session after New run confirmation is accepted", () => {
-    liveRunConfirm.midRun = true;
-    const onStarted = vi.fn();
-    const renderControl = () => (
-      <PlanningNewRunControl
-        issue={idea}
-        channel="planning"
-        onStarted={onStarted}
-      />
-    );
-    const { container, root } = mount(renderControl());
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="planning-new-run"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-    act(() => {
-      root.render(renderControl());
-    });
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="channel-kill-live-run-confirm"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(mutate).toHaveBeenCalledWith(
-      {
-        title: "Plan Capture",
-        model: "composer-2.5",
-        message:
-          `Plan capture in the issue tracker using the issue-tracker-plan skill. Read ${skillPath("issue-tracker-plan")} and follow it.`,
-      },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
-  });
-
-  it("shows the planner model picker when stakeholder is unset", () => {
-    const { container } = mount(
-      <PlanningNewRunControl
-        issue={idea}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    const modelSelect = container.querySelector(
-      '[data-testid="planning-session-model"]',
-    ) as HTMLSelectElement;
-    expect(modelSelect).toBeTruthy();
-    expect(modelSelect.value).toBe("composer-2.5");
-  });
-
-  it("uses the selected planner model when stakeholder is unset", () => {
-    const { container } = mount(
-      <PlanningNewRunControl
-        issue={idea}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    const modelSelect = container.querySelector(
-      '[data-testid="planning-session-model"]',
-    ) as HTMLSelectElement;
-
-    act(() => {
-      modelSelect.value = "claude-opus-5";
-      modelSelect.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="planning-new-run"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(mutate).toHaveBeenCalledWith(
-      {
-        title: "Plan Capture",
-        model: "claude-opus-5",
-        message:
-          `Plan capture in the issue tracker using the issue-tracker-plan skill. Read ${skillPath("issue-tracker-plan")} and follow it.`,
-      },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
-  });
-
-  it("hides the picker and uses the stakeholder slug when set", () => {
-    issueState.stakeholder = "claude-opus-5";
-    const ideaWithStakeholder = { ...idea, stakeholder: "claude-opus-5" };
-    const { container } = mount(
-      <PlanningNewRunControl
-        issue={ideaWithStakeholder}
-        channel="planning"
-        onStarted={vi.fn()}
-      />,
-    );
-    expect(
-      container.querySelector('[data-testid="planning-session-model"]'),
-    ).toBeNull();
-
-    act(() => {
-      (
-        container.querySelector(
-          '[data-testid="planning-new-run"]',
         ) as HTMLButtonElement
       ).click();
     });

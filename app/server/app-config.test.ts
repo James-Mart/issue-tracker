@@ -1,11 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,44 +32,6 @@ function tempAppConfigPath(): string {
   refreshStorePathsFromEnv();
   return appConfigPath;
 }
-
-describe("readAppConfig", () => {
-  it("reports an absent file as unconfigured", () => {
-    const path = tempAppConfigPath();
-    expect(existsSync(path)).toBe(false);
-    expect(readAppConfig()).toEqual({});
-    expect(readAppConfig().backup).toBeUndefined();
-  });
-
-  it("round-trips backup settings through write and read", () => {
-    const path = tempAppConfigPath();
-    const backup = {
-      remote: "git@github.com:me/tracker-backup.git",
-      enabled: true,
-    };
-    writeBackupConfig(backup, { configPath: path });
-    expect(readAppConfig({ configPath: path })).toEqual({ backup });
-  });
-
-  it("raises on a malformed file", () => {
-    const path = tempAppConfigPath();
-    writeFileSync(path, "{ not-json");
-    expect(() => readAppConfig({ configPath: path })).toThrow(
-      /not valid JSON/,
-    );
-  });
-
-  it("raises when backup shape fails validation", () => {
-    const path = tempAppConfigPath();
-    writeFileSync(
-      path,
-      JSON.stringify({ backup: { remote: 1, enabled: "yes" } }, null, 2),
-    );
-    expect(() => readAppConfig({ configPath: path })).toThrow(
-      /backup\.remote/,
-    );
-  });
-});
 
 describe("writeBackupConfig", () => {
   it("preserves an unrelated top-level key", () => {

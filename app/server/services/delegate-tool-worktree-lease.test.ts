@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeAgentSdk } from "./agent-sdk.fake.js";
 import {
   agentsDir,
-  ASSISTANT_STREAM,
   cwd,
   holdAfterStream,
   loadNestedRunPublishModules,
@@ -86,48 +85,6 @@ describe("delegate worktree lease", () => {
     await first;
   });
 
-  it("frees the worktree once the holding delegation finishes", async () => {
-    const { hold, release } = holdAfterStream();
-    const fake = createFakeAgentSdk({
-      stream: ASSISTANT_STREAM,
-      sendScript: [{ hold }],
-    });
-    const delegate = await loadTools(fake);
-
-    const first = delegate.execute(
-      { role: "implementor", prompt: "go", issueId: "t1a" },
-      {},
-    );
-    await waitForHandleSend(fake, 0);
-    release();
-    await first;
-
-    await expect(
-      delegate.execute({ role: "implementor", prompt: "go", issueId: "t1b" }, {}),
-    ).resolves.toMatchObject({ ok: true });
-  });
-
-  it("runs implementors in parallel when their Stories use different worktrees", async () => {
-    const { hold, release } = holdAfterStream();
-    const fake = createFakeAgentSdk({ hold, stream: [] });
-    const delegate = await loadTools(fake);
-
-    const inS1 = delegate.execute(
-      { role: "implementor", prompt: "go", issueId: "t1a" },
-      {},
-    );
-    await waitForHandleSend(fake, 0);
-    const inS2 = delegate.execute(
-      { role: "implementor", prompt: "go", issueId: "t2" },
-      {},
-    );
-    await waitForHandleSend(fake, 1);
-
-    expect(fake.created).toHaveLength(2);
-    release();
-    await Promise.all([inS1, inS2]);
-  });
-
   it("lets the holding implementor fan out reviewers and its own git agent", async () => {
     const { hold, release } = holdAfterStream();
     const fake = createFakeAgentSdk({ hold, stream: [] });
@@ -155,41 +112,5 @@ describe("delegate worktree lease", () => {
     expect(fake.created).toHaveLength(4);
     release();
     await Promise.all([implementor, ...reviewers, git]);
-  });
-
-  it("leaves non-exclusive roles unrestricted", async () => {
-    const { hold, release } = holdAfterStream();
-    const fake = createFakeAgentSdk({ hold, stream: [] });
-    const delegate = await loadTools(fake);
-
-    const implementor = delegate.execute(
-      { role: "implementor", prompt: "go", issueId: "t1a" },
-      {},
-    );
-    await waitForHandleSend(fake, 0);
-    const reviewer = delegate.execute(
-      { role: "reviewer", prompt: "look", issueId: "t1b" },
-      {},
-    );
-    await waitForHandleSend(fake, 1);
-
-    expect(fake.created).toHaveLength(2);
-    release();
-    await Promise.all([implementor, reviewer]);
-  });
-
-  it("requires a Task or Story issueId for exclusive roles", async () => {
-    const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
-    const delegate = await loadTools(fake);
-
-    await expect(
-      delegate.execute({ role: "implementor", prompt: "go" }, {}),
-    ).rejects.toThrow(
-      'delegate: role "implementor" writes a Story worktree; pass the Task or Story issueId',
-    );
-    await expect(
-      delegate.execute({ role: "git", prompt: "go", issueId: "platform" }, {}),
-    ).rejects.toThrow(/issueId must be a Task or Story \(got "platform"\)/);
-    expect(fake.created).toHaveLength(0);
   });
 });

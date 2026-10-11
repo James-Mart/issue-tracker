@@ -66,7 +66,10 @@ import { requireProjectWorkspace } from "../services/project-workspace.js";
 import { findPlanningWorkRoot } from "../services/planning-work-root.js";
 import { readIssueChange, readIssueChangeFile } from "../services/change.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
-import { parseArchivedListQuery } from "../services/archived-list.js";
+import {
+  applyArchivedListQuery,
+  parseArchivedListQuery,
+} from "../services/archived-list.js";
 import { ancestorChain } from "../services/subtree.js";
 import {
   removeStoryWorktree,
@@ -103,7 +106,9 @@ export function createIssuesRouter(
   router.get(
     "/",
     asyncRoute((req, res) => {
-      res.json(list(parseArchivedListQuery(req.query.archived)));
+      res.json(
+        applyArchivedListQuery(list(), parseArchivedListQuery(req.query.archived)),
+      );
     }),
   );
 

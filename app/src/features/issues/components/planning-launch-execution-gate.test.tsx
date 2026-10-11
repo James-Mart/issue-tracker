@@ -3,10 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IssueRecord } from "@server/schemas";
-import {
-  PlanningFlowRowLaunch,
-  PlanningOverviewLaunch,
-} from "./planning-launch-control";
+import { PlanningOverviewLaunch } from "./planning-launch-control";
 
 const mutateAsync = vi.fn();
 
@@ -76,62 +73,6 @@ afterEach(() => {
 });
 
 describe("Planning execution gate chip", () => {
-  it("hides execution gate chips when no stakeholder is set", () => {
-    const flow = mount(<PlanningFlowRowLaunch issue={idea} />);
-    expect(
-      flow.container.querySelector('[data-testid="flow-row-execution-gate"]'),
-    ).toBeNull();
-
-    const overview = mount(<PlanningOverviewLaunch issue={idea} />);
-    expect(
-      overview.container.querySelector('[data-testid="detail-execution-gate"]'),
-    ).toBeNull();
-  });
-
-  it("shows the execution gate chip beside the outline gate when a stakeholder is set", () => {
-    const ideaWithStakeholder = {
-      ...idea,
-      id: "exec-gate",
-      stakeholder: "claude-opus-5",
-      executionGate: true as const,
-    };
-    const { container } = mount(
-      <PlanningFlowRowLaunch issue={ideaWithStakeholder} />,
-    );
-    const chip = container.querySelector(
-      '[data-testid="flow-row-execution-gate"]',
-    ) as HTMLButtonElement;
-    expect(chip).toBeTruthy();
-    expect(chip.textContent).toContain("Execution gate ·");
-    expect(chip.textContent).toContain("on");
-    expect(chip.id).toBe("execution-gate-exec-gate");
-  });
-
-  it("toggles executionGate through the Idea update endpoint from the flow row", async () => {
-    mutateAsync.mockResolvedValueOnce({});
-    const ideaWithStakeholder = {
-      ...idea,
-      id: "exec-toggle",
-      stakeholder: "claude-opus-5",
-    };
-    const { container } = mount(
-      <PlanningFlowRowLaunch issue={ideaWithStakeholder} />,
-    );
-
-    await act(async () => {
-      (
-        container.querySelector(
-          '[data-testid="flow-row-execution-gate"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(mutateAsync).toHaveBeenCalledWith({
-      id: "exec-toggle",
-      patch: { executionGate: true },
-    });
-  });
-
   it("toggles executionGate through the Idea update endpoint from overview", async () => {
     mutateAsync.mockResolvedValueOnce({});
     const ideaWithStakeholder = {

@@ -37,3 +37,8 @@ export function persistConversationMeta(meta: ConversationMeta): void {
 export function forgetConversationMeta(id: string): void {
   indexed?.delete(id);
 }
+
+/** Drop the whole index so the next read reloads every `meta.json` from disk. */
+export function resetConversationMetaIndexForTests(): void {
+  indexed = undefined;
+}

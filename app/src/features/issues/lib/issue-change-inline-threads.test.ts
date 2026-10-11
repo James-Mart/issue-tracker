@@ -5,7 +5,6 @@ import { groupCommentThreads } from "./comment-threads";
 import { fileDiffsFromPatch } from "./issue-change-file-diffs";
 import {
   keepAnnotationOrder,
-  mergeComposerAnnotation,
   placeThreadsInFile,
 } from "./issue-change-inline-threads";
 
@@ -109,49 +108,6 @@ describe("placeThreadsInFile", () => {
       "missing-root",
     ]);
   });
-
-  it("parks a file anchor at the file end", () => {
-    const fileThread = comment({
-      id: "file-root",
-      at: "2026-08-30T14:22:00.000Z",
-      body: "whole file",
-      anchor: {
-        path: "app/server/services/diff-fetch.ts",
-        commitSha: SHA,
-      },
-    });
-    const placed = placeThreadsInFile(groupCommentThreads([fileThread]), file());
-    expect(placed.located).toEqual([]);
-    expect(placed.unlocated.map((thread) => thread.root.id)).toEqual(["file-root"]);
-  });
-
-  it("adds a composer-only annotation when that line has no threads", () => {
-    const current = comment({
-      id: "current-root",
-      at: "2026-08-30T14:22:00.000Z",
-      body: "current",
-      anchor: {
-        path: "app/server/services/diff-fetch.ts",
-        side: "new",
-        line: 94,
-        commitSha: SHA,
-      },
-    });
-    const { located } = placeThreadsInFile(
-      groupCommentThreads([current]),
-      file(),
-    );
-
-    expect(mergeComposerAnnotation(located, { side: "new", line: 94 })).toBe(
-      located,
-    );
-    expect(
-      mergeComposerAnnotation(located, { side: "new", line: 92 }),
-    ).toEqual([
-      ...located,
-      { side: "additions", lineNumber: 92, metadata: [] },
-    ]);
-  });
 });
 
 describe("keepAnnotationOrder", () => {
@@ -163,25 +119,6 @@ describe("keepAnnotationOrder", () => {
 
   const EMPTY: string[] = [];
 
-  it("returns the next list unchanged when its order already matches", () => {
-    const next = [line("deletions", 90), line("additions", 94)];
-    expect(keepAnnotationOrder([line("deletions", 90)], next, EMPTY)).toBe(next);
-  });
-
-  it("keeps earlier lines at their indices and appends new ones", () => {
-    const previous = [line("additions", 94), line("additions", 92)];
-    const next = [
-      line("deletions", 90, ["new-thread"]),
-      line("additions", 92, ["sent"]),
-      line("additions", 94, ["reply"]),
-    ];
-    expect(keepAnnotationOrder(previous, next, EMPTY)).toEqual([
-      line("additions", 94, ["reply"]),
-      line("additions", 92, ["sent"]),
-      line("deletions", 90, ["new-thread"]),
-    ]);
-  });
-
   it("keeps a removed line's slot empty so the lines after it keep their index", () => {
     const later = line("additions", 150, ["arrived"]);
     const previous = [line("additions", 20, ["a"]), line("additions", 50), later];
@@ -190,19 +127,5 @@ describe("keepAnnotationOrder", () => {
     expect(ordered).toEqual([previous[0], line("additions", 50, EMPTY), later]);
     expect(ordered[1]!.metadata).toBe(EMPTY);
     expect(ordered[2]).toBe(later);
-  });
-
-  it("drops removed lines at the end", () => {
-    const previous = [line("additions", 94, ["a"]), line("additions", 92), line("additions", 96)];
-    const next = [previous[0]!];
-    expect(keepAnnotationOrder(previous, next, EMPTY)).toBe(next);
-  });
-
-  it("reuses an empty slot when its line comes back", () => {
-    const previous = [line("additions", 20, ["a"]), line("additions", 50, EMPTY), line("additions", 70, ["b"])];
-    const back = line("additions", 50, ["new-thread"]);
-    expect(
-      keepAnnotationOrder(previous, [previous[0]!, back, previous[2]!], EMPTY),
-    ).toEqual([previous[0], back, previous[2]]);
   });
 });

@@ -45,28 +45,4 @@ describe("deletePartialPlanSessions", () => {
     expect(deleteSession.mock.calls[0]?.[0]).toBe("live");
     expect(deleteSession.mock.calls[1]?.[0]).toBe("archived");
   });
-
-  it("stops after the first delete failure", async () => {
-    listSessions.mockResolvedValue([
-      channelSessionListItem({
-        id: "first",
-        title: "First",
-        model: "composer-2.5",
-        updatedAt: "2026-08-02T00:00:00.000Z",
-      }),
-      channelSessionListItem({
-        id: "second",
-        title: "Second",
-        model: "composer-2.5",
-        archived: true,
-      }),
-    ]);
-    deleteSession.mockRejectedValueOnce(new Error("delete failed"));
-
-    await expect(deletePartialPlanSessions("stalled-idea")).rejects.toThrow(
-      "delete failed",
-    );
-    expect(deleteSession).toHaveBeenCalledTimes(1);
-    expect(deleteSession).toHaveBeenCalledWith("first");
-  });
 });

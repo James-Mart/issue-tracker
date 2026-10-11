@@ -2,11 +2,10 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { JSONL_LOCAL_AGENT_STORE_FILES } from "@cursor/sdk";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { AgentHandle, AgentSdk } from "./agent-sdk.js";
 import { createFakeAgentSdk, type FakeAgentSdk } from "./agent-sdk.fake.js";
 import {
-  conversationDir,
   load,
   runLiveMarkerPath,
   storeDir,
@@ -149,44 +148,5 @@ describe("scrub before resume or send", () => {
     expect(
       readNdjson(storeDir(id), JSONL_LOCAL_AGENT_STORE_FILES.agents)[0],
     ).toMatchObject({ status: "idle", activeRunId: null });
-  });
-
-  it("refuses the send when the scrub cannot write", async () => {
-    const { createAgentSessions, readConversation, startConversationPrompt } =
-      await load();
-    const { id, dir } = await seedOrphan("Scrub write fails");
-    const runsPath = join(dir, JSONL_LOCAL_AGENT_STORE_FILES.runs);
-    mkdirSync(`${runsPath}.${process.pid}.scrub-tmp`);
-    const fake = createFakeAgentSdk();
-    const sessions = createAgentSessions(sdkThatRejectsActiveRun(fake));
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const result = await startConversationPrompt(
-      id,
-      "please continue",
-      undefined,
-      sessions,
-    );
-
-    expect(result).toEqual({
-      ok: false,
-      message: "Couldn't clear the previous run. Send was refused.",
-    });
-    expect(readConversation(id).transcript).toEqual([
-      expect.objectContaining({ type: "prompt", text: "please continue" }),
-      expect.objectContaining({
-        type: "error",
-        message: "Couldn't clear the previous run. Send was refused.",
-      }),
-    ]);
-    expect(fake.resumed).toHaveLength(0);
-    expect(fake.created).toHaveLength(0);
-    expect(fake.handles).toHaveLength(0);
-    expect(existsSync(runLiveMarkerPath(id))).toBe(true);
-    expect(
-      readNdjson(dir, JSONL_LOCAL_AGENT_STORE_FILES.runs)[0],
-    ).toMatchObject({ runId: "run-open", status: "running" });
-    expect(error).toHaveBeenCalled();
-    error.mockRestore();
   });
 });

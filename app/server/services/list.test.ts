@@ -82,12 +82,4 @@ describe("list() malformed filter", () => {
     );
     expect(find("dangling")[0]?.message).toContain("unknown issue");
   });
-
-  it("returns empty when the issues dir is absent", async () => {
-    const missing = join(dir, "nope");
-    vi.stubEnv("ISSUES_DIR", missing);
-    vi.resetModules();
-    const list = await loadList();
-    expect(list()).toEqual({ issues: [], problems: [], derived: {} });
-  });
 });

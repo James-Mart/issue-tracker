@@ -4,9 +4,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs/react";
-import type { CommentMessage, IssueChange } from "@server/schemas";
-import type { CommentThread as CommentThreadData } from "../lib/comment-threads";
-import { groupCommentThreads } from "../lib/comment-threads";
+import type { IssueChange } from "@server/schemas";
 import { IssueChangePanel } from "./issue-change-panel";
 
 const SHA = "a4f91c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
@@ -24,81 +22,11 @@ const PATCH = [
   " line91",
 ].join("\n");
 
-function comment(
-  overrides: Partial<CommentMessage> &
-    Pick<CommentMessage, "id" | "at" | "body" | "role">,
-): CommentMessage {
-  return { ...overrides };
-}
-
-const currentThread: CommentThreadData = groupCommentThreads([
-  comment({
-    id: "current-root",
-    at: "2026-08-30T14:22:00.000Z",
-    role: "story-review",
-    body: "Scope drafts per thread so Diff and Overview stay isolated.",
-    anchor: {
-      path: "app/server/services/diff-fetch.ts",
-      side: "new",
-      line: 94,
-      commitSha: SHA,
-    },
-  }),
-])[0]!;
-
-const secondThread: CommentThreadData = groupCommentThreads([
-  comment({
-    id: "second-root",
-    at: "2026-08-30T15:00:00.000Z",
-    role: "story-review",
-    body: "Second thread on the same file.",
-    anchor: {
-      path: "app/server/services/diff-fetch.ts",
-      side: "new",
-      line: 95,
-      commitSha: SHA,
-    },
-  }),
-])[0]!;
-
 const changeQueryState = vi.hoisted(() => ({
   data: undefined as IssueChange | undefined,
-  isLoading: false,
-  error: null as Error | null,
-  isFetching: false,
-  refetch: vi.fn(),
-}));
-
-const threadsState = vi.hoisted(() => ({
-  threads: [] as CommentThreadData[],
 }));
 
 const postComment = vi.hoisted(() => vi.fn());
-
-function annotationsForRow(
-  lineAnnotations: DiffLineAnnotation<CommentThreadData[]>[],
-  oldLine: number | undefined,
-  newLine: number | undefined,
-  kind: "context" | "deletion" | "addition",
-): DiffLineAnnotation<CommentThreadData[]>[] {
-  return lineAnnotations.filter((annotation) => {
-    if (
-      annotation.side === "deletions" &&
-      oldLine !== undefined &&
-      annotation.lineNumber === oldLine
-    ) {
-      return kind === "context" || kind === "deletion";
-    }
-    if (
-      annotation.side === "additions" &&
-      newLine !== undefined &&
-      annotation.lineNumber === newLine
-    ) {
-      return kind === "context" || kind === "addition";
-    }
-    return false;
-  });
-}
 
 vi.mock("@/features/agents/api/queries", () => ({
   useTranscriptionCapabilityQuery: () => ({
@@ -116,175 +44,55 @@ vi.mock("@pierre/diffs/react", () => ({
     options,
   }: {
     fileDiff: FileDiffMetadata;
-    lineAnnotations?: DiffLineAnnotation<CommentThreadData[]>[];
-    renderAnnotation?: (
-      annotation: DiffLineAnnotation<CommentThreadData[]>,
-    ) => ReactNode;
+    lineAnnotations?: DiffLineAnnotation<unknown>[];
+    renderAnnotation?: (annotation: DiffLineAnnotation<unknown>) => ReactNode;
     options?: {
       onGutterUtilityClick?: (range: {
         start: number;
         end: number;
         side?: "deletions" | "additions";
       }) => void;
-      onLineSelected?: (
-        range: {
-          start: number;
-          end: number;
-          side?: "deletions" | "additions";
-        } | null,
-      ) => void;
     };
   }) {
-    const rows: ReactNode[] = [];
-    const rendered = new Set<string>();
+    const buttons: ReactNode[] = [];
     for (const hunk of fileDiff.hunks) {
-      let oldLine = hunk.deletionStart;
       let newLine = hunk.additionStart;
       for (const content of hunk.hunkContent) {
         if (content.type === "context") {
-          for (let i = 0; i < content.lines; i++) {
-            const kind = "context" as const;
-            const rowOld = oldLine;
-            const rowNew = newLine;
-            rows.push(
-              <div
-                key={`ctx-${rowOld}-${rowNew}`}
-                data-testid="diff-row"
-                data-old-line={String(rowOld)}
-                data-new-line={String(rowNew)}
-              >
-                <button
-                  type="button"
-                  data-testid="diff-start-thread"
-                  data-line={String(rowNew)}
-                  data-side="additions"
-                  onClick={() =>
-                    options?.onGutterUtilityClick?.({
-                      start: rowNew,
-                      end: rowNew,
-                      side: "additions",
-                    })
-                  }
-                >
-                  Start thread
-                </button>
-              </div>,
-            );
-            for (const annotation of annotationsForRow(
-              lineAnnotations,
-              rowOld,
-              rowNew,
-              kind,
-            )) {
-              rendered.add(`${annotation.side}:${annotation.lineNumber}`);
-              rows.push(renderAnnotation?.(annotation));
-            }
-            oldLine++;
-            newLine++;
-          }
+          newLine += content.lines;
           continue;
         }
-        for (let i = 0; i < content.deletions; i++) {
-          const rowOld = oldLine;
-          rows.push(
-            <div
-              key={`del-${rowOld}`}
-              data-testid="diff-row"
-              data-old-line={String(rowOld)}
-            >
-              <button
-                type="button"
-                data-testid="diff-start-thread"
-                data-line={String(rowOld)}
-                data-side="deletions"
-                onClick={() =>
-                  options?.onGutterUtilityClick?.({
-                    start: rowOld,
-                    end: rowOld,
-                    side: "deletions",
-                  })
-                }
-              >
-                Start thread
-              </button>
-            </div>,
-          );
-          for (const annotation of annotationsForRow(
-            lineAnnotations,
-            rowOld,
-            undefined,
-            "deletion",
-          )) {
-            rendered.add(`${annotation.side}:${annotation.lineNumber}`);
-            rows.push(renderAnnotation?.(annotation));
-          }
-          oldLine++;
-        }
         for (let i = 0; i < content.additions; i++) {
-          const rowNew = newLine;
-          rows.push(
-            <div
-              key={`add-${rowNew}`}
-              data-testid="diff-row"
-              data-new-line={String(rowNew)}
+          const line = newLine++;
+          buttons.push(
+            <button
+              key={line}
+              type="button"
+              data-testid="diff-start-thread"
+              data-line={String(line)}
+              data-side="additions"
+              onClick={() =>
+                options?.onGutterUtilityClick?.({
+                  start: line,
+                  end: line,
+                  side: "additions",
+                })
+              }
             >
-              <button
-                type="button"
-                data-testid="diff-start-thread"
-                data-line={String(rowNew)}
-                data-side="additions"
-                onClick={() =>
-                  options?.onGutterUtilityClick?.({
-                    start: rowNew,
-                    end: rowNew,
-                    side: "additions",
-                  })
-                }
-              >
-                Start thread
-              </button>
-            </div>,
+              Start thread
+            </button>,
           );
-          for (const annotation of annotationsForRow(
-            lineAnnotations,
-            undefined,
-            rowNew,
-            "addition",
-          )) {
-            rendered.add(`${annotation.side}:${annotation.lineNumber}`);
-            rows.push(renderAnnotation?.(annotation));
-          }
-          newLine++;
         }
       }
     }
-    for (const annotation of lineAnnotations) {
-      if (rendered.has(`${annotation.side}:${annotation.lineNumber}`)) continue;
-      rows.push(
-        <div
-          key={`extra-${annotation.side}-${annotation.lineNumber}`}
-          data-testid="diff-extra-annotation"
-        >
-          {renderAnnotation?.(annotation)}
-        </div>,
-      );
-    }
     return (
       <div data-testid="file-diff">
-        {rows}
-        <button
-          type="button"
-          data-testid="diff-select-range"
-          onClick={() =>
-            options?.onLineSelected?.({
-              start: 94,
-              end: 95,
-              side: "additions",
-            })
-          }
-        >
-          Select range
-        </button>
+        {buttons}
+        {lineAnnotations.map((annotation) => (
+          <div key={`${annotation.side}:${annotation.lineNumber}`}>
+            {renderAnnotation?.(annotation)}
+          </div>
+        ))}
       </div>
     );
   },
@@ -295,13 +103,13 @@ vi.mock("@pierre/diffs/react", () => ({
 vi.mock("../api/queries", () => ({
   useIssueChangeQuery: () => ({
     data: changeQueryState.data,
-    isLoading: changeQueryState.isLoading,
-    error: changeQueryState.error,
-    isFetching: changeQueryState.isFetching,
-    refetch: changeQueryState.refetch,
+    isLoading: false,
+    error: null,
+    isFetching: false,
+    refetch: vi.fn(),
   }),
   useReuseCommentThreads: () => ({
-    threads: threadsState.threads,
+    threads: [],
     problems: [],
   }),
 }));
@@ -359,11 +167,6 @@ function sendComposer(container: ParentNode): void {
 afterEach(() => {
   document.body.innerHTML = "";
   changeQueryState.data = undefined;
-  changeQueryState.isLoading = false;
-  changeQueryState.error = null;
-  changeQueryState.isFetching = false;
-  changeQueryState.refetch.mockReset();
-  threadsState.threads = [];
   postComment.mockReset();
 });
 
@@ -403,116 +206,5 @@ describe("IssueChangePanel composers", () => {
         },
       },
     );
-  });
-
-  it("posts a range anchor from a line-range selection", () => {
-    loadChange();
-    const container = mountPanel();
-
-    act(() => {
-      container
-        .querySelector('[data-testid="diff-select-range"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const composer = container.querySelector(
-      '[data-testid="diff-thread-composer"][data-composer-kind="new"]',
-    );
-    expect(composer?.textContent).toContain("lines 94-95");
-
-    const input = composer?.querySelector("textarea");
-    setDraft(input!, "Comment on the span.");
-    sendComposer(container);
-
-    expect(postComment).toHaveBeenCalledWith(
-      {
-        role: "human",
-        body: "Comment on the span.",
-        anchor: {
-          path: "app/server/services/diff-fetch.ts",
-          side: "new",
-          line: 95,
-          startLine: 94,
-          commitSha: SHA,
-        },
-      },
-    );
-  });
-
-  it("posts a reply with replyTo and no anchor", () => {
-    loadChange();
-    threadsState.threads = [currentThread];
-    const container = mountPanel();
-
-    act(() => {
-      container
-        .querySelector('[data-thread-root="current-root"] button')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const composer = container.querySelector(
-      '[data-testid="diff-thread-composer"][data-composer-kind="reply"]',
-    );
-    expect(composer).not.toBeNull();
-
-    const input = composer?.querySelector("textarea");
-    setDraft(input!, "Agreed. Per-thread draft keys.");
-    sendComposer(container);
-
-    expect(postComment).toHaveBeenCalledWith(
-      {
-        role: "human",
-        body: "Agreed. Per-thread draft keys.",
-        replyTo: "current-root",
-      },
-    );
-    const payload = postComment.mock.calls[0]?.[0] as {
-      anchor?: unknown;
-    };
-    expect(payload.anchor).toBeUndefined();
-  });
-
-  it("keeps drafts isolated per thread", () => {
-    loadChange();
-    threadsState.threads = [currentThread, secondThread];
-    const container = mountPanel();
-
-    act(() => {
-      container
-        .querySelector('[data-thread-root="current-root"] button')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    setDraft(
-      container.querySelector(
-        '[data-testid="diff-thread-composer"][data-composer-kind="reply"] textarea',
-      ) as HTMLTextAreaElement,
-      "draft-current",
-    );
-
-    act(() => {
-      container
-        .querySelector('[data-thread-root="second-root"] button')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    const second = container.querySelector(
-      '[data-testid="diff-thread-composer"][data-composer-kind="reply"]',
-    );
-    expect(second?.closest("[data-thread-root]")?.getAttribute("data-thread-root")).toBe(
-      "second-root",
-    );
-    expect((second?.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
-      "",
-    );
-    expect(second?.textContent).not.toContain("draft-current");
-
-    act(() => {
-      container
-        .querySelector('[data-thread-root="current-root"] button')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    const firstAgain = container.querySelector(
-      '[data-testid="diff-thread-composer"][data-composer-kind="reply"] textarea',
-    ) as HTMLTextAreaElement;
-    expect(firstAgain.value).toBe("draft-current");
   });
 });

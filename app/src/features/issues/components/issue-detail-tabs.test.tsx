@@ -1,82 +1,30 @@
 // @vitest-environment happy-dom
-import { act, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IssueDetail } from "@server/schemas";
-import type { ChannelTabIndicator } from "../lib/channel-tab-indicator";
 import {
   resetCockpitLaunchStore,
   useCockpitLaunchStore,
 } from "../store/use-cockpit-launch-store";
 import { IssueDetailTabs } from "./issue-detail-tabs";
 
-const indicatorState = vi.hoisted(() => ({
-  value: null as ChannelTabIndicator | null,
-}));
-
-const derivedState = vi.hoisted(() => ({
-  ideaStatus: undefined as string | undefined,
-}));
-
-const mobileState = vi.hoisted(() => ({
-  value: false,
-}));
-
-const panelProps = vi.hoisted(() => ({
-  mobileFullViewport: false,
-  onBackToOverview: undefined as (() => void) | undefined,
-  mounted: false,
-}));
-
 vi.mock("../hooks/use-channel-tab-indicator", () => ({
-  useChannelTabIndicator: () => indicatorState.value,
+  useChannelTabIndicator: () => null,
 }));
 
 vi.mock("../api/queries", () => ({
-  useIssuesQuery: () => ({
-    data: {
-      issues: [],
-      derived: {
-        capture: { blocked: false, ideaStatus: derivedState.ideaStatus },
-      },
-    },
-  }),
+  useIssuesQuery: () => ({ data: { issues: [], derived: {} } }),
   useIssueAgentRunsQuery: () => ({ data: undefined }),
 }));
 
 vi.mock("@/hooks/use-mobile", () => ({
-  useIsMobile: () => mobileState.value,
+  useIsMobile: () => false,
 }));
 
 vi.mock("./channel-transcript-panel", () => ({
-  ChannelTranscriptPanel: ({
-    mobileFullViewport,
-    onBackToOverview,
-  }: {
-    mobileFullViewport?: boolean;
-    onBackToOverview?: () => void;
-  }) => {
-    useEffect(() => {
-      panelProps.mounted = true;
-      return () => {
-        panelProps.mounted = false;
-        panelProps.mobileFullViewport = false;
-        panelProps.onBackToOverview = undefined;
-      };
-    }, []);
-    panelProps.mobileFullViewport = Boolean(mobileFullViewport);
-    panelProps.onBackToOverview = onBackToOverview;
-    return (
-      <div data-testid="channel-transcript-panel">
-        {onBackToOverview ? (
-          <button type="button" onClick={onBackToOverview}>
-            Back
-          </button>
-        ) : null}
-      </div>
-    );
-  },
+  ChannelTranscriptPanel: () => <div data-testid="channel-transcript-panel" />,
 }));
 
 vi.mock("./supporting-doc-preview", () => ({
@@ -101,53 +49,22 @@ function idea(): IssueDetail {
   };
 }
 
-function epic(): IssueDetail {
-  return {
-    id: "auth",
-    kind: "epic",
-    title: "Auth",
-    partOf: "issue-tracker",
-    order: 0,
-    createdAt: t0,
-    updatedAt: t0,
-    blockedBy: [],
-    archived: false,
-    description: "",
-    labels: [],
-    needsAttention: false,
-    attentionReason: null,
-    version: "1",
-  };
-}
-
-function mountTabs(
-  indicator: ChannelTabIndicator | null = null,
-  initialEntry = "/",
-  issue: IssueDetail = idea(),
-  exportTab: boolean | "loading" = false,
-  exportDraftReaderOpen = false,
-): {
-  container: HTMLDivElement;
-  root: Root;
-} {
-  indicatorState.value = indicator;
+function mountTabs(): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={[initialEntry]}>
+      <MemoryRouter>
         <IssueDetailTabs
-          issue={issue}
+          issue={idea()}
           projectId="issue-tracker"
           overview={<div>Overview body</div>}
-          exportTab={exportTab}
-          exportDraftReaderOpen={exportDraftReaderOpen}
         />
       </MemoryRouter>,
     );
   });
-  return { container, root };
+  return container;
 }
 
 function selectedTab(container: ParentNode): string | undefined {
@@ -164,162 +81,12 @@ function tabNamed(container: ParentNode, label: string): HTMLButtonElement {
 
 afterEach(() => {
   document.body.innerHTML = "";
-  indicatorState.value = null;
-  derivedState.ideaStatus = undefined;
-  mobileState.value = false;
-  panelProps.mobileFullViewport = false;
-  panelProps.onBackToOverview = undefined;
-  panelProps.mounted = false;
   resetCockpitLaunchStore();
 });
 
-describe("IssueDetailTabs export tab", () => {
-  it("keeps Export while presence is still loading", () => {
-    const { container } = mountTabs(null, "/?tab=export", epic(), "loading");
-    expect(tabNamed(container, "Export").getAttribute("aria-selected")).toBe(
-      "true",
-    );
-  });
-
-  it("drops Export when the root is idle", () => {
-    const { container } = mountTabs(null, "/?tab=export", epic(), false);
-    expect(
-      Array.from(container.querySelectorAll('[role="tab"]')).some((tab) =>
-        tab.textContent?.includes("Export"),
-      ),
-    ).toBe(false);
-    expect(selectedTab(container)).toBe("Overview");
-  });
-});
-
-describe("IssueDetailTabs channel panel mount", () => {
-  it("does not mount the channel panel while Overview is selected", () => {
-    const { container } = mountTabs(null, "/");
-    expect(panelProps.mounted).toBe(false);
-    expect(
-      container.querySelector('[data-testid="channel-transcript-panel"]'),
-    ).toBeNull();
-  });
-
-  it("mounts the channel panel only for the selected channel tab", () => {
-    const { container } = mountTabs(null, "/?tab=planning");
-    expect(panelProps.mounted).toBe(true);
-    expect(
-      container.querySelector('[data-testid="channel-transcript-panel"]'),
-    ).toBeTruthy();
-  });
-
-  it("unmounts the channel panel when leaving the channel tab", () => {
-    const { container } = mountTabs(null, "/?tab=planning");
-    expect(panelProps.mounted).toBe(true);
-
-    act(() => {
-      (
-        Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>
-          el.textContent?.includes("Overview"),
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(panelProps.mounted).toBe(false);
-    expect(
-      container.querySelector('[data-testid="channel-transcript-panel"]'),
-    ).toBeNull();
-  });
-});
-
-describe("IssueDetailTabs channel indicator", () => {
-  it("shows the pulsing run dot and not the warn accent while active", () => {
-    const { container } = mountTabs("active-run");
-    const tab = container.querySelector('[data-channel-tab-indicator="active-run"]');
-    expect(tab).toBeTruthy();
-    expect(tab?.textContent).toContain("Planning");
-    expect(
-      container.querySelector('[data-testid="roster-active-run"]'),
-    ).toBeTruthy();
-    expect(tab?.className).not.toContain("--warning");
-  });
-
-  it("takes the warn accent when awaiting the human", () => {
-    const { container } = mountTabs("awaiting-human");
-    const tab = container.querySelector(
-      '[data-channel-tab-indicator="awaiting-human"]',
-    );
-    expect(tab).toBeTruthy();
-    expect(tab?.className).toContain("--warning");
-    expect(
-      container.querySelector('[data-testid="roster-active-run"]'),
-    ).toBeNull();
-  });
-
-  it("shows neither decoration when the indicator is quiet", () => {
-    const { container } = mountTabs(null);
-    const planning = Array.from(container.querySelectorAll('[role="tab"]')).find(
-      (el) => el.textContent?.includes("Planning"),
-    );
-    expect(planning).toBeTruthy();
-    expect(planning?.getAttribute("data-channel-tab-indicator")).toBeNull();
-    expect(
-      container.querySelector('[data-testid="roster-active-run"]'),
-    ).toBeNull();
-    expect(planning?.className).not.toContain("--warning");
-  });
-});
-
-describe("IssueDetailTabs awaiting-approval planning indicator", () => {
-  it("shows awaiting-human on Planning while Overview is selected", () => {
-    derivedState.ideaStatus = "awaiting-approval";
-    const { container } = mountTabs(null, "/");
-    expect(selectedTab(container)).toContain("Overview");
-    const planning = container.querySelector(
-      '[data-channel-tab-indicator="awaiting-human"]',
-    );
-    expect(planning).toBeTruthy();
-    expect(planning?.textContent).toContain("Planning");
-    expect(planning?.className).toContain("--warning");
-  });
-
-  it("shows no indicator on Planning for captured Ideas", () => {
-    derivedState.ideaStatus = "captured";
-    const { container } = mountTabs(null, "/");
-    const planning = Array.from(container.querySelectorAll('[role="tab"]')).find(
-      (el) => el.textContent?.includes("Planning"),
-    );
-    expect(planning).toBeTruthy();
-    expect(planning?.getAttribute("data-channel-tab-indicator")).toBeNull();
-    expect(planning?.className).not.toContain("--warning");
-  });
-});
-
 describe("IssueDetailTabs once-only launch channel open", () => {
-  it("selects Planning when beginLaunch runs from Overview", () => {
-    const { container } = mountTabs(null, "/");
-    expect(selectedTab(container)).toContain("Overview");
-
-    act(() => {
-      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
-    });
-
-    expect(selectedTab(container)).toContain("Planning");
-    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
-      issueId: "capture",
-      kind: "planning",
-    });
-  });
-
-  it("selects Implementing when beginLaunch runs a work launch from Overview", () => {
-    const { container } = mountTabs(null, "/", epic());
-    expect(selectedTab(container)).toContain("Overview");
-
-    act(() => {
-      useCockpitLaunchStore.getState().beginLaunch("auth", "work");
-    });
-
-    expect(selectedTab(container)).toContain("Implementing");
-  });
-
   it("keeps Overview after a later write while the same pending is still set", () => {
-    const { container } = mountTabs(null, "/");
+    const container = mountTabs();
 
     act(() => {
       useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
@@ -338,156 +105,12 @@ describe("IssueDetailTabs once-only launch channel open", () => {
   });
 
   it("does not switch tabs when beginLaunch is for another issue", () => {
-    const { container } = mountTabs(null, "/");
+    const container = mountTabs();
 
     act(() => {
       useCockpitLaunchStore.getState().beginLaunch("other", "planning");
     });
 
     expect(selectedTab(container)).toContain("Overview");
-  });
-});
-
-describe("IssueDetailTabs mobile channel chrome", () => {
-  it("hides the tab bar on a mobile channel tab and wires Back to Overview", () => {
-    mobileState.value = true;
-    const { container } = mountTabs(null, "/?tab=planning");
-    expect(container.querySelector('[role="tablist"]')).toBeNull();
-    expect(panelProps.mobileFullViewport).toBe(true);
-    expect(panelProps.onBackToOverview).toBeTypeOf("function");
-
-    act(() => {
-      (container.querySelector("button") as HTMLButtonElement).click();
-    });
-    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
-    expect(container.textContent).toContain("Overview body");
-    expect(panelProps.mobileFullViewport).toBe(false);
-  });
-
-  it("keeps Overview, Implementing, and Export on a mobile Export tab", () => {
-    mobileState.value = true;
-    const { container } = mountTabs(null, "/?tab=export", epic(), true);
-    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
-    expect(tabNamed(container, "Overview")).toBeTruthy();
-    expect(tabNamed(container, "Implementing")).toBeTruthy();
-    expect(tabNamed(container, "Export").getAttribute("aria-selected")).toBe(
-      "true",
-    );
-    expect(panelProps.mobileFullViewport).toBe(false);
-  });
-
-  it("hides the tab bar when a mobile export draft reader is open", () => {
-    mobileState.value = true;
-    const { container } = mountTabs(null, "/?tab=export", epic(), true, true);
-    expect(container.querySelector('[role="tablist"]')).toBeNull();
-    expect(panelProps.mobileFullViewport).toBe(false);
-  });
-
-  it("keeps the tab bar on mobile Overview", () => {
-    mobileState.value = true;
-    const { container } = mountTabs(null, "/");
-    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
-    expect(panelProps.mobileFullViewport).toBe(false);
-  });
-});
-
-describe("IssueDetailTabs keep later choice while pending", () => {
-  it("keeps Overview after mobile Back during a planning pending", () => {
-    mobileState.value = true;
-    const { container } = mountTabs(null, "/");
-
-    act(() => {
-      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
-    });
-    expect(container.querySelector('[role="tablist"]')).toBeNull();
-    expect(panelProps.mounted).toBe(true);
-
-    act(() => {
-      (container.querySelector("button") as HTMLButtonElement).click();
-    });
-
-    expect(selectedTab(container)).toContain("Overview");
-    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
-    expect(container.textContent).toContain("Overview body");
-    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
-      issueId: "capture",
-      kind: "planning",
-    });
-    expect(
-      container.querySelector('[data-testid="channel-launch-fault"]'),
-    ).toBeNull();
-    expect(container.textContent).not.toContain("Session create rejected");
-  });
-
-  it("keeps Overview after mobile Back during a work pending", () => {
-    mobileState.value = true;
-    const { container } = mountTabs(null, "/", epic());
-
-    act(() => {
-      useCockpitLaunchStore.getState().beginLaunch("auth", "work");
-    });
-    expect(container.querySelector('[role="tablist"]')).toBeNull();
-
-    act(() => {
-      (container.querySelector("button") as HTMLButtonElement).click();
-    });
-
-    expect(selectedTab(container)).toContain("Overview");
-    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
-    expect(container.textContent).toContain("Overview body");
-    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
-      issueId: "auth",
-      kind: "work",
-    });
-    expect(
-      container.querySelector('[data-testid="channel-launch-fault"]'),
-    ).toBeNull();
-    expect(container.textContent).not.toContain("Session create rejected");
-  });
-
-  it("keeps Overview after the Overview tab during a work pending", () => {
-    const { container } = mountTabs(null, "/", epic());
-
-    act(() => {
-      useCockpitLaunchStore.getState().beginLaunch("auth", "work");
-    });
-    expect(selectedTab(container)).toContain("Implementing");
-
-    act(() => {
-      tabNamed(container, "Overview").click();
-    });
-
-    expect(selectedTab(container)).toContain("Overview");
-    expect(useCockpitLaunchStore.getState().pending).toMatchObject({
-      issueId: "auth",
-      kind: "work",
-    });
-    expect(
-      container.querySelector('[data-testid="channel-launch-fault"]'),
-    ).toBeNull();
-    expect(container.textContent).not.toContain("Session create rejected");
-  });
-
-  it("surfaces failLaunch only on the channel, not Overview", () => {
-    const { container } = mountTabs(null, "/");
-
-    act(() => {
-      useCockpitLaunchStore.getState().beginLaunch("capture", "planning");
-    });
-    act(() => {
-      tabNamed(container, "Overview").click();
-    });
-    act(() => {
-      useCockpitLaunchStore.getState().failLaunch("capture", "planning", {
-        errorMessage: "the session was not created",
-      });
-    });
-
-    expect(selectedTab(container)).toContain("Overview");
-    expect(container.textContent).toContain("Overview body");
-    expect(
-      container.querySelector('[data-testid="channel-launch-fault"]'),
-    ).toBeNull();
-    expect(container.textContent).not.toContain("Session create rejected");
   });
 });

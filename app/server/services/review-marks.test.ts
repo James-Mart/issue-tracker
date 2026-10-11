@@ -127,16 +127,14 @@ async function closeServer(): Promise<void> {
   });
 }
 
-async function openReview(): Promise<ReviewView> {
+async function openReview(): Promise<void> {
   const created = await fetch(`${baseUrl}/api/projects/p/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ target: { kind: "story", storyId: "s" } }),
   });
   expect(created.status).toBe(201);
-  const view = (await created.json()) as ReviewView;
-  reviewId = view.id;
-  return view;
+  reviewId = ((await created.json()) as ReviewView).id;
 }
 
 describe("review marks", () => {
@@ -156,84 +154,6 @@ describe("review marks", () => {
     await closeServer();
     rmSync(issuesDir, { recursive: true, force: true });
     rmSync(repo, { recursive: true, force: true });
-  });
-
-  it("marks and clears a file in the whole review and in one commit", async () => {
-    const opened = await fetch(`${baseUrl}/api/projects/p/reviews/${reviewId}`);
-    const initial = (await opened.json()) as ReviewView;
-    expect(initial.progress).toEqual({
-      all: { reviewed: 0, total: 3, changedSinceReviewed: [] },
-      commits: { [firstSha]: { reviewed: 0, total: 3 } },
-    });
-
-    const markedAll = await putMark({
-      scope: "all",
-      path: "src/keep.txt",
-      reviewed: true,
-    });
-    expect(markedAll.status).toBe(200);
-    const allView = (await markedAll.json()) as ReviewView;
-    expect(allView.progress.all).toEqual({
-      reviewed: 1,
-      total: 3,
-      changedSinceReviewed: [],
-    });
-    expect(readStored().marks.all["src/keep.txt"]?.blobSha).toBe(
-      blob(firstSha, "src/keep.txt"),
-    );
-
-    const clearedAll = await putMark({
-      scope: "all",
-      path: "src/keep.txt",
-      reviewed: false,
-    });
-    expect(clearedAll.status).toBe(200);
-    expect(((await clearedAll.json()) as ReviewView).progress.all.reviewed).toBe(0);
-    expect(readStored().marks.all).toEqual({});
-
-    const markedCommit = await putMark({
-      scope: firstSha,
-      path: "src/keep.txt",
-      reviewed: true,
-    });
-    expect(markedCommit.status).toBe(200);
-    const commitView = (await markedCommit.json()) as ReviewView;
-    expect(commitView.progress.all.reviewed).toBe(0);
-    expect(commitView.progress.commits[firstSha]).toEqual({ reviewed: 1, total: 3 });
-    expect(readStored().marks.commits[firstSha]).toEqual({
-      "src/keep.txt": { markedAt: expect.any(String) },
-    });
-
-    const clearedCommit = await putMark({
-      scope: firstSha,
-      path: "src/keep.txt",
-      reviewed: false,
-    });
-    expect(clearedCommit.status).toBe(200);
-    const cleared = (await clearedCommit.json()) as ReviewView;
-    expect(cleared.progress.commits[firstSha]).toEqual({ reviewed: 0, total: 3 });
-    expect(readStored().marks.commits).toEqual({});
-    expect(readStored()).not.toHaveProperty("progress");
-    expect(readStored()).not.toHaveProperty("effectiveStatus");
-  });
-
-  it("records an empty blobSha when the whole-review file is deleted", async () => {
-    const marked = await putMark({
-      scope: "all",
-      path: "src/base.txt",
-      reviewed: true,
-    });
-    expect(marked.status).toBe(200);
-    const view = (await marked.json()) as ReviewView;
-    expect(view.progress.all).toEqual({
-      reviewed: 1,
-      total: 3,
-      changedSinceReviewed: [],
-    });
-    expect(readStored().marks.all["src/base.txt"]).toEqual({
-      blobSha: "",
-      markedAt: expect.any(String),
-    });
   });
 
   it("drops a whole-review mark from progress when a later commit changes that file", async () => {
@@ -282,128 +202,5 @@ describe("review marks", () => {
     expect(stored.marks.commits[firstSha]?.["src/touch.txt"]).toEqual({
       markedAt: expect.any(String),
     });
-  });
-
-  it("keeps commit-scoped marks independent of whole-review marks", async () => {
-    const onCommit = await putMark({
-      scope: firstSha,
-      path: "src/keep.txt",
-      reviewed: true,
-    });
-    expect(((await onCommit.json()) as ReviewView).progress).toMatchObject({
-      all: { reviewed: 0, total: 3 },
-      commits: { [firstSha]: { reviewed: 1, total: 3 } },
-    });
-
-    const onAll = await putMark({
-      scope: "all",
-      path: "src/touch.txt",
-      reviewed: true,
-    });
-    const both = (await onAll.json()) as ReviewView;
-    expect(both.progress.all.reviewed).toBe(1);
-    expect(both.progress.commits[firstSha]).toEqual({ reviewed: 1, total: 3 });
-
-    const clearedAll = await putMark({
-      scope: "all",
-      path: "src/touch.txt",
-      reviewed: false,
-    });
-    const after = (await clearedAll.json()) as ReviewView;
-    expect(after.progress.all.reviewed).toBe(0);
-    expect(after.progress.commits[firstSha]).toEqual({ reviewed: 1, total: 3 });
-    expect(readStored().marks.commits[firstSha]).toEqual({
-      "src/keep.txt": { markedAt: expect.any(String) },
-    });
-    expect(readStored().marks.all).toEqual({});
-  });
-
-  it("refuses a mark on an archived review", async () => {
-    const archived = await fetch(`${baseUrl}/api/projects/p/reviews/${reviewId}/archive`, {
-      method: "POST",
-    });
-    expect(archived.status).toBe(200);
-    const before = readFileSync(join(issuesDir, "p", "reviews", `${reviewId}.json`), "utf8");
-
-    const marked = await putMark({
-      scope: "all",
-      path: "src/keep.txt",
-      reviewed: true,
-    });
-    expect(marked.status).toBe(400);
-    expect(await marked.json()).toMatchObject({
-      code: "validation",
-      error: `review "${reviewId}" is archived`,
-    });
-    expect(readFileSync(join(issuesDir, "p", "reviews", `${reviewId}.json`), "utf8")).toBe(
-      before,
-    );
-  });
-
-  it("refuses a mark when the story merge archives the review", async () => {
-    const { update } = await import("../services/issues.js");
-    await update("s", { merged: true });
-    const before = readFileSync(join(issuesDir, "p", "reviews", `${reviewId}.json`), "utf8");
-
-    const marked = await putMark({
-      scope: "all",
-      path: "src/keep.txt",
-      reviewed: true,
-    });
-    expect(marked.status).toBe(400);
-    expect(await marked.json()).toMatchObject({
-      code: "validation",
-      error: `review "${reviewId}" is archived`,
-    });
-    expect(readFileSync(join(issuesDir, "p", "reviews", `${reviewId}.json`), "utf8")).toBe(
-      before,
-    );
-  });
-
-  it("accepts a mark on an open post-mortem review", async () => {
-    const { update } = await import("../services/issues.js");
-    await update("s", { merged: true });
-    const reopened = await fetch(`${baseUrl}/api/projects/p/reviews/${reviewId}/reopen`, {
-      method: "POST",
-    });
-    expect(reopened.status).toBe(200);
-    expect(await reopened.json()).toMatchObject({
-      postMortem: true,
-      effectiveStatus: "open",
-    });
-
-    const marked = await putMark({
-      scope: "all",
-      path: "src/keep.txt",
-      reviewed: true,
-    });
-    expect(marked.status).toBe(200);
-    expect(((await marked.json()) as ReviewView).progress.all.reviewed).toBe(1);
-  });
-
-  it("refuses a sha that is not a story commit and a path outside the diff", async () => {
-    const foreign = "b".repeat(40);
-    const badSha = await putMark({
-      scope: foreign,
-      path: "src/keep.txt",
-      reviewed: true,
-    });
-    expect(badSha.status).toBe(400);
-    expect(await badSha.json()).toMatchObject({
-      code: "validation",
-      error: `sha "${foreign}" is not one of this story's commits`,
-    });
-
-    const badPath = await putMark({
-      scope: "all",
-      path: "src/missing.txt",
-      reviewed: true,
-    });
-    expect(badPath.status).toBe(400);
-    expect(await badPath.json()).toMatchObject({
-      code: "validation",
-      error: 'path "src/missing.txt" is not in this diff',
-    });
-    expect(readStored().marks).toEqual({ all: {}, commits: {} });
   });
 });

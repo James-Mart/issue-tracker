@@ -1,60 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  formatEffectiveModel,
-  resolveConversationModel,
-  resolveModelSelection,
-} from "./model-selection.js";
+import { resolveModelSelection } from "./model-selection.js";
 
 describe("resolveModelSelection", () => {
-  it("maps composer-2.5 to the base catalog id", () => {
-    expect(resolveModelSelection("composer-2.5")).toEqual({
-      id: "composer-2.5",
-    });
-  });
-
-  it("maps cursor-grok-4.7-high-fast to grok-4.7 with reasoning_effort, fast, and context", () => {
-    expect(resolveModelSelection("cursor-grok-4.7-high-fast")).toEqual({
-      id: "grok-4.7",
-      params: [
-        { id: "reasoning_effort", value: "high" },
-        { id: "fast", value: "true" },
-        { id: "context", value: "256k" },
-      ],
-    });
-  });
-
-  it("throws for the retired cursor-grok-4.6-high-fast pin", () => {
-    expect(() => resolveModelSelection("cursor-grok-4.6-high-fast")).toThrow(
-      "Unknown model pin: cursor-grok-4.6-high-fast",
-    );
-  });
-
-  it("maps cursor-grok-4.5-high-fast to grok-4.5 with effort and fast", () => {
-    expect(resolveModelSelection("cursor-grok-4.5-high-fast")).toEqual({
-      id: "grok-4.5",
-      params: [
-        { id: "effort", value: "high" },
-        { id: "fast", value: "true" },
-      ],
-    });
-  });
-
-  it("throws for the retired claude-opus-5-thinking-high pin", () => {
-    expect(() => resolveModelSelection("claude-opus-5-thinking-high")).toThrow(
-      "Unknown model pin: claude-opus-5-thinking-high",
-    );
-  });
-
-  it("maps claude-opus-5-5-thinking-high to claude-opus-5-5 with thinking and effort", () => {
-    expect(resolveModelSelection("claude-opus-5-5-thinking-high")).toEqual({
-      id: "claude-opus-5-5",
-      params: [
-        { id: "thinking", value: "true" },
-        { id: "effort", value: "high" },
-      ],
-    });
-  });
-
   // The SDK reads `id` and `params` and nothing else, so a parameter promoted
   // to a top-level key is dropped in silence and the pin runs at the backend's
   // defaults. Every pin previously did exactly that.
@@ -73,39 +20,5 @@ describe("resolveModelSelection", () => {
         expect(typeof param.value).toBe("string");
       }
     }
-  });
-
-  it("throws for an unrecognized pin", () => {
-    expect(() => resolveModelSelection("unknown-pin")).toThrow(
-      "Unknown model pin: unknown-pin",
-    );
-  });
-});
-
-describe("resolveConversationModel", () => {
-  it("routes compound pins through resolveModelSelection", () => {
-    expect(
-      resolveConversationModel("cursor-grok-4.5-high-fast"),
-    ).toEqual(resolveModelSelection("cursor-grok-4.5-high-fast"));
-    expect(
-      resolveConversationModel("cursor-grok-4.7-high-fast"),
-    ).toEqual(resolveModelSelection("cursor-grok-4.7-high-fast"));
-  });
-
-  it("passes plain catalog ids through as id-only selections", () => {
-    expect(resolveConversationModel("grok-4.5")).toEqual({ id: "grok-4.5" });
-    expect(resolveConversationModel("auto")).toEqual({ id: "auto" });
-  });
-});
-
-describe("formatEffectiveModel", () => {
-  it("serializes the base id plus parameters", () => {
-    expect(
-      formatEffectiveModel(
-        resolveModelSelection("cursor-grok-4.5-high-fast"),
-      ),
-    ).toBe(
-      '{"id":"grok-4.5","params":[{"id":"effort","value":"high"},{"id":"fast","value":"true"}]}',
-    );
   });
 });

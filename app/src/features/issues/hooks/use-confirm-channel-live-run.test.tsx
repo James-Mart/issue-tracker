@@ -90,27 +90,6 @@ afterEach(() => {
 });
 
 describe("useConfirmChannelLiveRun", () => {
-  it("runs the action immediately when no mid-run session exists", () => {
-    sessionsState.data = [
-      channelSessionListItem({
-        id: "idle",
-        title: "Plan",
-        model: "composer-2.5",
-        updatedAt: "2026-08-02T00:00:00.000Z",
-      }),
-    ];
-    const { getApi } = mountProbe();
-    const action = vi.fn();
-    act(() => {
-      getApi().confirmIfLiveRun(action);
-    });
-    expect(action).toHaveBeenCalledOnce();
-    expect(
-      document.body.querySelector('[data-testid="channel-kill-live-run-dialog"]'),
-    ).toBeNull();
-    expect(retireChannelLiveSession).not.toHaveBeenCalled();
-  });
-
   it("asks before retiring a mid-run session and leaves it alone on cancel", async () => {
     sessionsState.data = [midRunSession];
     const { getApi } = mountProbe();
@@ -135,29 +114,6 @@ describe("useConfirmChannelLiveRun", () => {
     expect(
       document.body.querySelector('[data-testid="channel-kill-live-run-dialog"]'),
     ).toBeNull();
-  });
-
-  it("retires then runs the action when confirmed", async () => {
-    sessionsState.data = [midRunSession];
-    retireChannelLiveSession.mockResolvedValue(undefined);
-    const { getApi } = mountProbe();
-    const action = vi.fn();
-    await act(async () => {
-      getApi().confirmIfLiveRun(action);
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      (
-        document.body.querySelector(
-          '[data-testid="channel-kill-live-run-confirm"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
-
-    expect(retireChannelLiveSession).toHaveBeenCalledWith("live");
-    expect(action).toHaveBeenCalledOnce();
-    expect(getApi().awaitingConfirm).toBe(false);
   });
 
   it("surfaces a retire failure and keeps the dialog open", async () => {

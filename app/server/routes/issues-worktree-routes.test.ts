@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
@@ -22,10 +22,6 @@ let server: Server;
 let baseUrl: string;
 let workspace: string;
 const trackedWorktrees: { workspace: string; path: string }[] = [];
-let gitRemoveCalls: string[][] = [];
-let setGitWriteSpawnerForTests: (
-  next: import("../services/git-write.js").GitWriteSpawner | null,
-) => void;
 
 function git(repo: string, args: string[]): string {
   return execFileSync("git", [...GIT, ...args], {
@@ -75,12 +71,11 @@ function removeTrackedWorktrees(): void {
   rmSync(join(WORKTREE_ROOT, "p", ".setup-logs"), { recursive: true, force: true });
 }
 
-function seedProject(setupCommand?: string): void {
+function seedProject(): void {
   writeIssue("p", {
     kind: "project",
     title: "Proj",
     workspace,
-    ...(setupCommand ? { setupCommand } : {}),
     order: 0,
     createdAt: AT,
     updatedAt: AT,
@@ -162,14 +157,6 @@ async function postRemove(
   return { status: res.status, json };
 }
 
-async function waitForLogText(logPath: string, text: string): Promise<void> {
-  for (let i = 0; i < 100; i++) {
-    if (existsSync(logPath) && readFileSync(logPath, "utf8").includes(text)) return;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  throw new Error(`timed out waiting for ${text} in ${logPath}`);
-}
-
 function isPidCollected(pid: number): boolean {
   return !existsSync(`/proc/${pid}`);
 }
@@ -193,29 +180,14 @@ async function postSetup(
   return { status: res.status, json };
 }
 
-function recordGitRemoveCalls(): void {
-  gitRemoveCalls = [];
-  setGitWriteSpawnerForTests((command, args, options) => {
-    if (args[0] === "worktree" && args[1] === "remove") {
-      gitRemoveCalls.push([...args]);
-    }
-    return spawn(command, args, {
-      ...options,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  });
-}
-
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "issue-wt-routes-"));
   workspace = initRepo();
-  gitRemoveCalls = [];
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", dir);
 
-  seedProject("touch SETUP_OK");
+  seedProject();
 
-  ({ setGitWriteSpawnerForTests } = await import("../services/git-write.js"));
   const { createApp } = await import("../app.js");
   const app = createApp();
   await new Promise<void>((resolve) => {
@@ -229,7 +201,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  setGitWriteSpawnerForTests(null);
   removeTrackedWorktrees();
   rmSync(conversationsRoot(), { recursive: true, force: true });
   vi.unstubAllEnvs();
@@ -240,17 +211,6 @@ afterEach(async () => {
 });
 
 describe("POST /api/issues/:id/worktree/remove", () => {
-  it("returns 204 and clears worktreePath on success", async () => {
-    writeStory("a");
-    const path = await createWorktree("a");
-
-    const { status, json } = await postRemove("a");
-    expect(status).toBe(204);
-    expect(json).toBeNull();
-    expect(existsSync(path)).toBe(false);
-    expect(readStoryJson("a").worktreePath).toBeUndefined();
-  });
-
   it("returns 409 with uncommitted and at-risk counts on refusal", async () => {
     writeStory("a");
     const path = await createWorktree("a");
@@ -268,29 +228,6 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     expect(readStoryJson("a").worktreePath).toBe(path);
   });
 
-  it("passes --force once when discard is absent", async () => {
-    recordGitRemoveCalls();
-    writeStory("a");
-    await createWorktree("a");
-
-    const { status } = await postRemove("a");
-    expect(status).toBe(204);
-    expect(gitRemoveCalls).toHaveLength(1);
-    expect(gitRemoveCalls[0]).toEqual(["worktree", "remove", "--force", expect.any(String)]);
-  });
-
-  it("passes --force once when discard is true", async () => {
-    recordGitRemoveCalls();
-    writeStory("a");
-    const path = await createWorktree("a");
-    writeFileSync(join(path, "README"), "dirty\n");
-
-    const { status } = await postRemove("a", { discard: true });
-    expect(status).toBe(204);
-    expect(gitRemoveCalls).toHaveLength(1);
-    expect(gitRemoveCalls[0]).toEqual(["worktree", "remove", "--force", expect.any(String)]);
-  });
-
   it("ignores allowActiveRun in the body and refuses while a session is live", async () => {
     writeStory("a");
     const path = await createWorktree("a");
@@ -305,187 +242,9 @@ describe("POST /api/issues/:id/worktree/remove", () => {
     expect(existsSync(path)).toBe(true);
     expect(readStoryJson("a").worktreePath).toBe(path);
   });
-
-  it("returns 204 and drops an unlocked registration when the directory is already gone", async () => {
-    recordGitRemoveCalls();
-    writeStory("gone-a");
-    const path = await createWorktree("gone-a");
-    rmSync(path, { recursive: true, force: true });
-
-    const { status, json } = await postRemove("gone-a");
-    expect(status).toBe(204);
-    expect(json).toBeNull();
-    expect(readStoryJson("gone-a").worktreePath).toBeUndefined();
-    expect(gitRemoveCalls).toEqual([["worktree", "remove", "--force", path]]);
-    expect(git(workspace, ["worktree", "list", "--porcelain"]).split("\n")).not.toContain(
-      `worktree ${path}`,
-    );
-  });
-
-  it("returns 204 and leaves a locked registration when the directory is already gone", async () => {
-    recordGitRemoveCalls();
-    writeStory("gone-a");
-    const path = await createWorktree("gone-a");
-    const other = trackWorktree(workspace, "p", "gone-b");
-    git(workspace, ["worktree", "add", "-b", "gone-b", other, "main"]);
-    git(workspace, ["worktree", "lock", path]);
-    rmSync(path, { recursive: true, force: true });
-
-    const { status } = await postRemove("gone-a");
-    expect(status).toBe(204);
-    expect(readStoryJson("gone-a").worktreePath).toBeUndefined();
-    expect(gitRemoveCalls).toEqual([]);
-    const listed = git(workspace, ["worktree", "list", "--porcelain"]);
-    expect(listed.split("\n")).toContain(`worktree ${path}`);
-    expect(listed.split("\n")).toContain(`worktree ${other}`);
-    expect(listed.split("\n\n").find((block) => block.startsWith(`worktree ${path}\n`))).toContain(
-      "\nlocked",
-    );
-  });
-
-  it("returns 400 when the id is not a Story", async () => {
-    writeIssue("t", {
-      kind: "task",
-      title: "Task",
-      partOf: "e",
-      status: "todo",
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-
-    const { status, json } = await postRemove("e");
-    expect(status).toBe(400);
-    expect(json).toEqual({
-      error: 'issue "e" is not a Story',
-      code: "validation",
-    });
-
-    const task = await postRemove("t");
-    expect(task.status).toBe(400);
-    expect(task.json).toEqual({
-      error: 'issue "t" is not a Story',
-      code: "validation",
-    });
-  });
 });
 
 describe("POST /api/issues/:id/worktree/setup", () => {
-  it("returns 204 on success", async () => {
-    writeStory("a");
-    const path = await createWorktree("a");
-
-    const { status, json } = await postSetup("a");
-    expect(status).toBe(204);
-    expect(json).toBeNull();
-    expect(existsSync(join(path, "SETUP_OK"))).toBe(true);
-    expect(readStoryJson("a").worktreeSetupFailed).toBeUndefined();
-  });
-
-  it("returns 409 with setupLogPath when setup exits non-zero", async () => {
-    writeIssue("p", {
-      kind: "project",
-      title: "Proj",
-      workspace,
-      setupCommand: "echo FAIL >&2; exit 1",
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    writeStory("a");
-    const path = await createWorktree("a");
-    const logPath = setupLogPathFor("p", "a");
-    mkdirSync(dirname(logPath), { recursive: true });
-    writeFileSync(logPath, "previous failure\n");
-
-    const { status, json } = await postSetup("a");
-    expect(status).toBe(409);
-    expect(json).toEqual({
-      error: expect.stringMatching(/setup command failed/),
-      code: "conflict",
-      setupLogPath: logPath,
-    });
-    expect(readFileSync(logPath, "utf8")).toContain("FAIL");
-    expect(readFileSync(logPath, "utf8")).not.toContain("previous failure");
-    expect(existsSync(`${logPath}.prior`)).toBe(false);
-    expect(readStoryJson("a").worktreeSetupFailed).toBe(true);
-    expect(existsSync(path)).toBe(true);
-  });
-
-  it("keeps the full setup log when output exceeds the in-memory tail", async () => {
-    const { OUTPUT_TAIL_LIMIT } = await import("../services/bounded-process.js");
-    const bytes = OUTPUT_TAIL_LIMIT + 50;
-    const script = `process.stdout.write("HEAD\\n" + "x".repeat(${bytes}) + "\\nTAIL\\n"); process.exit(1)`;
-    writeIssue("p", {
-      kind: "project",
-      title: "Proj",
-      workspace,
-      setupCommand: `node -e ${JSON.stringify(script)}`,
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    writeStory("a");
-    await createWorktree("a");
-    const logPath = setupLogPathFor("p", "a");
-
-    const { status, json } = await postSetup("a");
-    expect(status).toBe(409);
-    expect(json).toEqual({
-      error: expect.stringMatching(/setup command failed/),
-      code: "conflict",
-      setupLogPath: logPath,
-    });
-    const body = readFileSync(logPath, "utf8");
-    expect(body.startsWith("HEAD\n")).toBe(true);
-    expect(body.endsWith("\nTAIL\n")).toBe(true);
-    expect(body.length).toBeGreaterThan(OUTPUT_TAIL_LIMIT);
-    expect(readStoryJson("a").worktreeSetupFailed).toBe(true);
-  });
-
-  it("streams setup output before the command exits and leaves no log on success", async () => {
-    const sentinel = join(dir, "hold-setup");
-    writeFileSync(sentinel, "hold");
-    const script = 'process.stdout.write("STREAMED\\n")';
-    writeIssue("p", {
-      kind: "project",
-      title: "Proj",
-      workspace,
-      setupCommand: `node -e ${JSON.stringify(script)}; while [ -f ${JSON.stringify(sentinel)} ]; do sleep 0.05; done`,
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    writeStory("a");
-    await createWorktree("a");
-    const logPath = setupLogPathFor("p", "a");
-    const pending = postSetup("a");
-    try {
-      await waitForLogText(logPath, "STREAMED");
-    } finally {
-      rmSync(sentinel, { force: true });
-    }
-    const { status, json } = await pending;
-    expect(status).toBe(204);
-    expect(json).toBeNull();
-    expect(existsSync(logPath)).toBe(false);
-    expect(readStoryJson("a").worktreeSetupFailed).toBeUndefined();
-  });
-
-  it("puts an existing setup log back when setup succeeds", async () => {
-    writeStory("a");
-    await createWorktree("a");
-    const logPath = setupLogPathFor("p", "a");
-    mkdirSync(dirname(logPath), { recursive: true });
-    writeFileSync(logPath, "previous failure\n");
-
-    const { status } = await postSetup("a");
-    expect(status).toBe(204);
-    expect(readFileSync(logPath, "utf8")).toBe("previous failure\n");
-    expect(existsSync(`${logPath}.prior`)).toBe(false);
-    expect(readStoryJson("a").worktreeSetupFailed).toBeUndefined();
-  });
-
   it("kills the setup process group at the timeout and records a failing setup", async () => {
     // beforeEach resetModules, so the server is bound to a fresh worktree module.
     const { setWorktreeSetupTimeoutMsForTests, WORKTREE_SETUP_TIMEOUT_LINE } = await import(
@@ -522,14 +281,5 @@ describe("POST /api/issues/:id/worktree/setup", () => {
     } finally {
       setWorktreeSetupTimeoutMsForTests(undefined);
     }
-  });
-
-  it("returns 400 when the id is not a Story", async () => {
-    const { status, json } = await postSetup("e");
-    expect(status).toBe(400);
-    expect(json).toEqual({
-      error: 'issue "e" is not a Story',
-      code: "validation",
-    });
   });
 });

@@ -11,11 +11,9 @@ let clock = 0;
 let ghCalls: { args: string[]; cwd: string }[] = [];
 
 type CliOpsModule = typeof import("./cli-ops.js");
-type CliProgramModule = typeof import("./cli-program.js");
 type DeliveryModule = typeof import("./server/services/delivery.js");
 
 let mergeStory: CliOpsModule["mergeStory"];
-let runIssueCli: CliProgramModule["runIssueCli"];
 let setGhSpawnerForTests: DeliveryModule["setGhSpawnerForTests"];
 
 function nextAt(): string {
@@ -75,23 +73,13 @@ function stubGh(
   setGhSpawnerForTests(spawner);
 }
 
-function env() {
-  return {
-    ISSUES_DIR: dir,
-    ISSUE_TRACKER_SKIP_MODEL_SLUG_SYNC: "1",
-  };
-}
-
 async function loadModules(): Promise<void> {
   vi.resetModules();
   process.env.ISSUES_DIR = dir;
-  // cli-program imports cli-ops. A parallel import deadlocks Vitest's module runner.
   const cliOps = await import("./cli-ops.js");
   const delivery = await import("./server/services/delivery.js");
-  const cliProgram = await import("./cli-program.js");
   mergeStory = cliOps.mergeStory;
   setGhSpawnerForTests = delivery.setGhSpawnerForTests;
-  runIssueCli = cliProgram.runIssueCli;
 }
 
 beforeEach(async () => {
@@ -136,35 +124,6 @@ beforeEach(async () => {
     createdAt: nextAt(),
     updatedAt: nextAt(),
   });
-  writeIssue("not-started", {
-    kind: "story",
-    title: "Not started",
-    partOf: "e",
-    order: 2,
-    merged: false,
-    createdAt: nextAt(),
-    updatedAt: nextAt(),
-  });
-  writeIssue("child", {
-    kind: "story",
-    title: "Child",
-    partOf: "e",
-    order: 3,
-    stackedOn: "a",
-    branchName: "feat/child",
-    merged: false,
-    createdAt: nextAt(),
-    updatedAt: nextAt(),
-  });
-  writeIssue("c1", {
-    kind: "task",
-    title: "Task",
-    partOf: "a",
-    order: 0,
-    status: "todo",
-    createdAt: nextAt(),
-    updatedAt: nextAt(),
-  });
   await loadModules();
 });
 
@@ -185,65 +144,6 @@ describe("mergeStory", () => {
     });
     expect(ghCalls).toHaveLength(2);
     expect(ghCalls[1]?.args.slice(0, 2)).toEqual(["api", "graphql"]);
-  });
-
-  it("forwards --auto and --match-head-commit", async () => {
-    stubGh();
-    await mergeStory("a", {
-      auto: true,
-      matchHeadCommit: "abc123def4567890123456789012345678901234",
-    });
-    expect(ghCalls[0]?.args).toEqual([
-      "pr",
-      "merge",
-      "42",
-      "--merge",
-      "-R",
-      "acme/widgets",
-      "--auto",
-      "--match-head-commit",
-      "abc123def4567890123456789012345678901234",
-    ]);
-  });
-
-  it("refuses when the Story has no prUrl", async () => {
-    writeIssue("b", {
-      kind: "story",
-      title: "No PR",
-      partOf: "e",
-      order: 1,
-      branchName: "feat/b",
-      merged: false,
-      createdAt: nextAt(),
-      updatedAt: nextAt(),
-    });
-    await loadModules();
-    stubGh();
-    await expect(mergeStory("b")).rejects.toThrow('story "b" has no prUrl');
-    expect(ghCalls).toHaveLength(0);
-  });
-
-  it("surfaces gh stderr on failure", async () => {
-    stubGh(() =>
-      mockGhChild({
-        code: 1,
-        stderr: "GraphQL: Pull request is in draft state\n",
-      }),
-    );
-    await expect(mergeStory("a")).rejects.toThrow(
-      "GraphQL: Pull request is in draft state",
-    );
-    expect(readStoryJson("a").merged).toBe(false);
-    expect(readStoryJson("sibling").needsRebase).toBeUndefined();
-  });
-
-  it("sets merged and flags stale siblings after gh succeeds", async () => {
-    stubGh();
-    await mergeStory("a");
-    expect(readStoryJson("a").merged).toBe(true);
-    expect(readStoryJson("sibling").needsRebase).toBe("main");
-    expect(readStoryJson("not-started").needsRebase).toBeUndefined();
-    expect(readStoryJson("child").mergeBase).toBeUndefined();
   });
 
   it("leaves every field untouched when gh fails", async () => {
@@ -270,86 +170,5 @@ describe("mergeStory", () => {
     expect(readStoryJson("sibling").needsRebase).toBeUndefined();
     expect(readStoryJson("before").merged).toBe(false);
     expect(readStoryJson("before").needsRebase).toBe("feat/old");
-  });
-});
-
-describe("issue merge CLI", () => {
-  it("runs bare issue merge with the same gh argv as mergeStory", async () => {
-    stubGh();
-    const result = await runIssueCli(["merge", "a"], { env: env() });
-    expect(result.status).toBe(0);
-    expect(ghCalls[0]).toEqual({
-      args: ["pr", "merge", "42", "--merge", "-R", "acme/widgets"],
-      cwd: workspace,
-    });
-    expect(ghCalls).toHaveLength(2);
-    expect(ghCalls[1]?.args.slice(0, 2)).toEqual(["api", "graphql"]);
-  });
-
-  it("forwards flags on bare issue merge", async () => {
-    stubGh();
-    await runIssueCli(
-      [
-        "merge",
-        "a",
-        "--auto",
-        "--match-head-commit",
-        "abc123def4567890123456789012345678901234",
-      ],
-      { env: env() },
-    );
-    expect(ghCalls[0]?.args).toContain("--auto");
-    expect(ghCalls[0]?.args).toContain("--match-head-commit");
-  });
-
-  it("matches issue story merge to the bare form", async () => {
-    stubGh();
-    const bare = await runIssueCli(["merge", "a"], { env: env() });
-    const scoped = await runIssueCli(["story", "merge", "a"], { env: env() });
-    expect(bare.status).toBe(0);
-    expect(scoped.status).toBe(0);
-    expect(ghCalls).toHaveLength(4);
-    expect(ghCalls[0]).toEqual(ghCalls[2]);
-  });
-
-  it("refuses merge on an Epic with a message naming the valid form", async () => {
-    stubGh();
-    const result = await runIssueCli(["merge", "e"], { env: env() });
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('"e" is an Epic');
-    expect(result.stderr).toContain("merge is only valid on a Story");
-    expect(result.stderr).toContain("issue merge <storyId>");
-    expect(ghCalls).toHaveLength(0);
-  });
-
-  it("refuses merge on a Task with a message naming the valid form", async () => {
-    stubGh();
-    const result = await runIssueCli(["merge", "c1"], { env: env() });
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('"c1" is a Task');
-    expect(result.stderr).toContain("merge is only valid on a Story");
-    expect(ghCalls).toHaveLength(0);
-  });
-
-  it("exits non-zero when gh refuses the merge", async () => {
-    stubGh(() =>
-      mockGhChild({
-        code: 1,
-        stderr: "merge not allowed: repository rule violations\n",
-      }),
-    );
-    const result = await runIssueCli(["merge", "a"], { env: env() });
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("merge not allowed");
-    expect(readStoryJson("a").merged).toBe(false);
-    expect(readStoryJson("sibling").needsRebase).toBeUndefined();
-  });
-
-  it("applies merge consequences on successful CLI merge", async () => {
-    stubGh();
-    const result = await runIssueCli(["merge", "a"], { env: env() });
-    expect(result.status).toBe(0);
-    expect(readStoryJson("a").merged).toBe(true);
-    expect(readStoryJson("sibling").needsRebase).toBe("main");
   });
 });

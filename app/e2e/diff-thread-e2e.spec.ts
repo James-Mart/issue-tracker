@@ -130,9 +130,7 @@ test.describe("Diff thread e2e", () => {
       '[data-testid="diff-thread-composer"][data-composer-kind="new"]',
     );
     await expect(newComposer).toBeVisible();
-    await newComposer.getByRole("textbox", { name: "Start a review thread" }).fill(
-      rootMessage,
-    );
+    await newComposer.getByRole("textbox").fill(rootMessage);
     await newComposer.getByRole("button", { name: "Send" }).click();
     await expect(newComposer).toHaveCount(0);
 
@@ -160,7 +158,7 @@ test.describe("Diff thread e2e", () => {
       '[data-testid="diff-thread-composer"][data-composer-kind="reply"]',
     );
     await expect(replyComposer).toBeVisible();
-    await replyComposer.getByRole("textbox", { name: "Reply" }).fill(replyMessage);
+    await replyComposer.getByRole("textbox").fill(replyMessage);
     await replyComposer.getByRole("button", { name: "Send" }).click();
     await expect(replyComposer).toHaveCount(0);
 

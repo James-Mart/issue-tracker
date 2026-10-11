@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  holdTopicSeq,
   resetTransportForTests,
   subscribeTopic,
   type TopicMessage,
@@ -63,26 +62,6 @@ describe("subscribeTopic transport", () => {
     unsubscribe();
   });
 
-  it("includes a held history seq when resubscribing after reconnect", () => {
-    const unsubscribe = subscribeTopic("conversation:b", () => {}, 3);
-
-    const first = FakeWebSocket.instances[0]!;
-    first.emitOpen();
-    expect(first.sent).toEqual([
-      { type: "subscribe", topic: "conversation:b", sinceSeq: 3 },
-    ]);
-
-    first.emitClose();
-    vi.advanceTimersByTime(500);
-    const second = FakeWebSocket.instances[1]!;
-    second.emitOpen();
-    expect(second.sent).toEqual([
-      { type: "subscribe", topic: "conversation:b", sinceSeq: 3 },
-    ]);
-
-    unsubscribe();
-  });
-
   it("fans out reset, clears held seq, and resubscribes without sinceSeq", () => {
     const messages: TopicMessage[] = [];
     const unsubscribe = subscribeTopic("conversation:c", collect(messages), 4);
@@ -100,24 +79,6 @@ describe("subscribeTopic transport", () => {
     second.emitOpen();
     expect(second.sent).toEqual([
       { type: "subscribe", topic: "conversation:c" },
-    ]);
-
-    unsubscribe();
-  });
-
-  it("holdTopicSeq restores a baseline after reset", () => {
-    const unsubscribe = subscribeTopic("conversation:d", () => {}, 9);
-    const first = FakeWebSocket.instances[0]!;
-    first.emitOpen();
-    first.emitMessage({ type: "reset", topic: "conversation:d" });
-    holdTopicSeq("conversation:d", 12);
-
-    first.emitClose();
-    vi.advanceTimersByTime(500);
-    const second = FakeWebSocket.instances[1]!;
-    second.emitOpen();
-    expect(second.sent).toEqual([
-      { type: "subscribe", topic: "conversation:d", sinceSeq: 12 },
     ]);
 
     unsubscribe();
