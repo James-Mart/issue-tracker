@@ -46,8 +46,9 @@ The prompt ends with:
    Story has no commits yet; answer from the Story and the workspace.
 5. Read only what answering the question needs.
 6. Reply in the thread. Lead with the direct answer in one to three
-   sentences, then at most a few file:line references. That is the
-   whole reply; the reviewer asks a follow-up in the thread for more.
+   sentences, then cite a source for each claim. A claim about a
+   dependency cites the version the lockfile pins. That is the whole
+   reply; the reviewer asks a follow-up in the thread for more.
    When the code does not settle the question, say in those sentences
    what you found and what stays open. When the reviewer writes
    again, answer that reply the same way.

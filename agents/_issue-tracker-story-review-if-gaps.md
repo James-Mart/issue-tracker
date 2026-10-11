@@ -10,16 +10,16 @@ Absolute path for this file (Read this exact path):
 1. `issue story set <storyId> review failed`
 2. `issue story set <storyId> reviewedTasks '<json array of the done Task ids from Verify>'`
    (full replace; the coverage list from Verify step 2)
-3. Create one remediation Task per distinct fix, piping the concrete spec
-   via stdin — do **not** use inline `--description`:
-   ```bash
-   issue task add --part-of <storyId> --file - \
-     "<title from the finding>" <<'EOF'
-   <concrete fix spec>
-   EOF
-   ```
-   A runtime finding supplies its `title` as the title and its `spec` as
-   the fix spec. Capture each Task id printed on stdout.
+3. Write a story-form YAML doc outside the workspace with one remediation
+   Task per distinct fix, and append it with
+   `issue story append <storyId> <file>`. `issue summary` names the Project
+   and, when the Story sits under an Epic, the Epic. Include `epic` only
+   when that Epic line is present. Restate the Story id and title. Each
+   Task is `kind: task` with an unused kebab-case `id`, the finding's
+   title, and a `description` block scalar (`|`) that names the defect and
+   the outcome the fix must reach. A runtime finding supplies its `title`
+   as the title and its `spec` as the description. Capture the created
+   Task ids that append prints.
 4. Story comment that links the new Task(s) only — findings live on the Task
    descriptions, not duplicated in the Story comment body. Use GFM
    `issue:` links so the UI renders an `IssueLink`:

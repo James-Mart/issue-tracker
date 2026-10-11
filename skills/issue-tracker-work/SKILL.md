@@ -196,7 +196,7 @@ not from a spawn-time argument.
 | Git | `issue-tracker-git` | Start a Story; finish a Story | `composer-2.5` | writes |
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
 | Implementor | `issue-tracker-implementor-<family>` | Implement, review, and commit a Task | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7-high-fast`; `opus`→`claude-opus-5-5-thinking-high` | writes (see Field ownership) |
-| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue story request-human`; `issue task add`; `issue story comment`) |
+| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue story request-human`; `issue story append`; `issue story comment`) |
 | Runtime validator | `issue-tracker-runtime-validator` | Spawned by Story review, not by you | `composer-2.5` | writes (`issue attach` on the Story) |
 
 ### Field ownership

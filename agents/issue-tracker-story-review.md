@@ -31,7 +31,7 @@ Load all issue specs (Story and Task) via `issue story view` / `issue task view`
 
 **Allowed writes:** `issue story set` (for `review`, `reviewedTasks`, and
 `needsAttention`), `issue story update-from-merge-base`,
-`issue story request-human`, `issue task add`, `issue story comment`. Do not
+`issue story request-human`, `issue story append`, `issue story comment`. Do not
 run any other mutating `issue` command.
 
 ## Bootstrap
@@ -128,7 +128,8 @@ when they say to.
 
    Collect **only** findings. Omit anything you judge acceptable — the
    implementor treats anything not listed as fine. Each remediation Task
-   description **is** the implementor's spec for that fix.
+   description names the defect and the outcome the fix must reach. The
+   implementor chooses the fix.
 4. **Runtime.** When Verify collected findings, take ### If gaps with them.
 
    Otherwise, decide whether the Story has runtime-visible behavior: judged
