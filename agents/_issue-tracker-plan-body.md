@@ -90,9 +90,10 @@ against, as concrete shape (names, fields, behavior).
 - **Story** = one shippable unit: scope, approach, and the data-model or
   interface contracts specific to it. May be `partOf` an Epic or the Project
   (project-level Story). A project-level Story is a work root
-  ([Work root shape](#work-root-shape)). Normally several Tasks; one Task's
-  worth of work is a Task, not a Story. No Story or Task is title-only. No
-  Story holds just one Task, and the Story count is not merely the bullet
+  ([Work root shape](#work-root-shape)). Several Tasks under that Story when the
+  shippable unit needs more than one commit (each Task is one commit of that
+  unit). A Story may hold one Task when that Task is the whole shippable unit.
+  No Story or Task is title-only, and the Story count is not merely the bullet
   count. Phrase how the Story lands per **Merge-policy delivery prose** in
   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-authoring/SKILL.md`.
 - **Task** = one git commit: the outcome it lands, plus the seams and contracts
@@ -106,8 +107,8 @@ against, as concrete shape (names, fields, behavior).
 **Each Story must be independently mergeable into its derived `mergeBase`.**
 Stories merge into their merge base (stacked children after their fork-point
 Story, in stack order), and only Stories merge — Tasks are internal steps that
-ship together as one Story. Keep one cohesive change in a single Story as
-multiple Tasks so merging one Story leaves the merge base buildable (a schema
+ship together as one Story. Keep one shippable unit in a single Story as one
+or more Tasks so merging one Story leaves the merge base buildable (a schema
 change and the code that consumes it stay together). See the stacked merge
 model in
 `/root/.cursor/plugins/local/issue-tracker/SPEC.md#the-stacked-pr-merge-model`.
@@ -135,5 +136,5 @@ A plan's *phases* are the Story grain, its *todos/steps* the Task grain. Group
 related todos into one Story and land them as tasks; when mapping todos to
 Tasks, reshape horizontal layering into vertical slices (split or merge until
 each Task stands alone as above). Split only a genuinely oversized phase. One
-todo to one Story (a stack of one-task Stories with an empty Task tier) means
-the split is at the wrong tier.
+todo to one Story (a stack of one-task Stories with an empty Task tier for the
+same shippable unit) means the split is at the wrong tier.
