@@ -136,6 +136,7 @@ vi.mock("../api/mutations", () => ({
   useOpenReview: () => ({ mutate: vi.fn(), isPending: false }),
   useSubmitReview: () => ({ mutate: vi.fn(), isPending: false }),
   useRetryOpenReviewSubmissions: () => ({ mutate: vi.fn(), isPending: false }),
+  useSyncReviewWorktree: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const FILES: ReviewDiffFile[] = [

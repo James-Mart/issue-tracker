@@ -13,6 +13,7 @@ const WRITE_GIT_SUBCOMMANDS = new Set([
   "fetch",
   "show",
   "worktree",
+  "checkout",
 ]);
 
 /** @internal Test seam for stubbing git spawn. */
@@ -40,7 +41,7 @@ function assertWriteGitSubcommand(args: string[]): void {
   if (!subcommand || !WRITE_GIT_SUBCOMMANDS.has(subcommand)) {
     throw new IssueError(
       "validation",
-      `git subcommand "${subcommand ?? ""}" is not allowed; only mirror write operations are permitted`,
+      `git subcommand "${subcommand ?? ""}" is not allowed; only listed write operations are permitted`,
     );
   }
 }

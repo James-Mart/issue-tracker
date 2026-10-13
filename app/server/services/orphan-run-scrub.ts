@@ -363,6 +363,10 @@ async function scrubOrphan(conversationId: string): Promise<void> {
     recordResearcherRunEnd(conversationId);
   }
   clearRunLiveMarker(conversationId);
+  if (isQuestionResearcherConversation(meta) && meta.issueId) {
+    const { syncReviewWorktree } = await import("./review-worktree-sync.js");
+    await syncReviewWorktree(meta.issueId, "auto");
+  }
 }
 
 /**

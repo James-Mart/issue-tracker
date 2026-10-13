@@ -12,6 +12,7 @@ import type { PrSyncPassResult, PrSyncStepResult } from "./pr-sync-driver.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { fetchReviewPullHead } from "./review-pr.js";
 import { applyReviewWorktreeTransition } from "./review-worktree.js";
+import { syncReviewWorktree } from "./review-worktree-sync.js";
 import { readReviewView, updateStoredReview } from "./reviews.js";
 import { refusesStoreWrites } from "./store-read-only.js";
 import { subtreeIds } from "./subtree.js";
@@ -107,6 +108,10 @@ async function followStoredReview(
   );
   if (!review.archived && after.archived) {
     await applyReviewWorktreeTransition({ remove: [review.id], ensure: [] });
+    return;
+  }
+  if (review.pr.headSha !== observation.headSha && !after.archived) {
+    await syncReviewWorktree(review.id, "auto");
   }
 }
 

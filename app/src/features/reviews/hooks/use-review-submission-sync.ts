@@ -6,6 +6,16 @@ import { fetchReview } from "../api/client";
 import { useReviewQuery } from "../api/queries";
 import { submissionPollInterval } from "../lib/review-submission-ui";
 
+/** How often to re-read a review while its worktree sync is held. */
+export const REVIEW_TIP_SYNC_POLL_MS = 3_000;
+
+function reviewRecordInterval(
+  data: ReviewView | undefined,
+): number | false {
+  if (data?.worktreeSync) return REVIEW_TIP_SYNC_POLL_MS;
+  return submissionPollInterval(data?.submissions);
+}
+
 function submissionSignature(
   submissions: readonly { id: string; status: string }[],
 ): string {
@@ -56,7 +66,7 @@ export function useReviewRecord(projectId: string, reviewId: string): ReviewReco
     generation.current += 1;
   }
   const review = useReviewQuery(projectId, reviewId, {
-    refetchInterval: (query) => submissionPollInterval(query.state.data?.submissions),
+    refetchInterval: (query) => reviewRecordInterval(query.state.data),
     queryFn: async () => {
       const generationAtStart = generation.current;
       const refresh = consumed.current !== generationAtStart;

@@ -141,6 +141,15 @@ export function postOpenReview(
   });
 }
 
+export function postSyncReviewWorktree(
+  projectId: string,
+  reviewId: string,
+): Promise<ReviewView> {
+  return request<ReviewView>(`${reviewUrl(projectId, reviewId)}/worktree/sync`, {
+    method: "POST",
+  });
+}
+
 export function postArchiveReview(
   projectId: string,
   reviewId: string,

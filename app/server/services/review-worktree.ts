@@ -67,6 +67,18 @@ function requireTip(review: ReviewIssue, issues: readonly Issue[]): string {
   return tip;
 }
 
+/** Open review, its live checkout, and the reviewed tip. */
+export function requireOpenReviewCheckout(reviewId: string): {
+  worktree: string;
+  tip: string;
+} {
+  const review = requireOpenReview(reviewId);
+  return {
+    worktree: liveReviewWorktreePath(review),
+    tip: requireTip(review, readAll().issues),
+  };
+}
+
 /** Absolute checkout recorded on a review. A missing directory fails the caller. */
 export function liveReviewWorktreePath(review: ReviewIssue): string {
   if (!review.worktreePath || !existsSync(review.worktreePath)) {

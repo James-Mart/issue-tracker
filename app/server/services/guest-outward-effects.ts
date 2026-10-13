@@ -11,6 +11,8 @@ export const GUEST_REFUSED_WORKTREE_REMOVE =
   "guest refused to remove a Story worktree";
 export const GUEST_REFUSED_REVIEW_WORKTREE_CREATE =
   "guest refused to create a review worktree";
+export const GUEST_REFUSED_REVIEW_WORKTREE_SYNC =
+  "guest refused to sync a review worktree";
 export const GUEST_REFUSED_UPDATE_FROM_MERGE_BASE =
   "guest refused to update from merge base";
 export const GUEST_REFUSED_MERGE = "guest refused to merge a pull request";

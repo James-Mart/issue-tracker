@@ -43,7 +43,20 @@ export type ReviewLifecycle =
 export type ReviewRecordView = Omit<ReviewIssue, "submissions"> &
   ReviewLifecycle & { submissions: ReviewSubmissionView[] };
 
-export type ReviewView = ReviewRecordView & { progress: ReviewProgress };
+/**
+ * The checkout is behind the reviewed tip and a runtime or researcher still
+ * has the worktree. `ref` is the Story branch, the pull request head, or the
+ * Story id when that Story has no branch name.
+ */
+export type ReviewWorktreeSyncHold = {
+  newCommits: number;
+  ref: string;
+};
+
+export type ReviewView = ReviewRecordView & {
+  progress: ReviewProgress;
+  worktreeSync?: ReviewWorktreeSyncHold;
+};
 
 /** A Story with at least one Task commit, offered when starting a review. */
 export type ReviewCandidate = {

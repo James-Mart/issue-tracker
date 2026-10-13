@@ -561,6 +561,10 @@ export function renameProjectLabel(
   });
 }
 
+function sameCommitShas(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((sha, index) => sha === right[index]);
+}
+
 export function update(
   id: string,
   patch: IssuePatch,
@@ -681,6 +685,7 @@ export function update(
         attemptIds: [] as string[],
         recordedPrProjectId: undefined,
         reviewWorktrees: { remove: [] as string[], ensure: [] as string[] },
+        syncStoryId: undefined as string | undefined,
       };
     }
 
@@ -809,6 +814,12 @@ export function update(
       parsed.issue.prUrl !== existing.prUrl
         ? ancestorChain(id, issues)[0]!.id
         : undefined;
+    const syncStoryId =
+      existing.kind === "task" &&
+      next.kind === "task" &&
+      !sameCommitShas(existing.commits, next.commits)
+        ? existing.partOf
+        : undefined;
     return {
       detail: toIssueDetail(parsed.issue, jsonText, finalDescription),
       attemptIds: storyIdsForLifecycleRemoval(
@@ -819,24 +830,34 @@ export function update(
       ),
       recordedPrProjectId,
       reviewWorktrees,
+      syncStoryId,
     };
-  }).then(async ({ detail, attemptIds, recordedPrProjectId, reviewWorktrees }) => {
+  }).then(async ({ detail, attemptIds, recordedPrProjectId, reviewWorktrees, syncStoryId }) => {
     if (recordedPrProjectId) {
       const { refreshRecordedPrFacts } = await import("./pr-facts-read.js");
       await refreshRecordedPrFacts(recordedPrProjectId);
     }
-    if (
-      attemptIds.length === 0 &&
-      reviewWorktrees.remove.length === 0 &&
-      reviewWorktrees.ensure.length === 0
-    ) {
-      return detail;
+    const followWorktrees =
+      attemptIds.length > 0 ||
+      reviewWorktrees.remove.length > 0 ||
+      reviewWorktrees.ensure.length > 0;
+    if (followWorktrees) {
+      for (const storyId of attemptIds) {
+        await attemptStoryWorktreeRemoval(storyId);
+      }
+      await applyReviewWorktreeTransition(reviewWorktrees);
     }
-    for (const storyId of attemptIds) {
-      await attemptStoryWorktreeRemoval(storyId);
+    if (syncStoryId) {
+      const { syncReviewsAtStoryTip } = await import("./review-worktree-sync.js");
+      // The issue write already landed. A checkout failure must not report
+      // that write as failed; the next sync retries it.
+      try {
+        await syncReviewsAtStoryTip(syncStoryId);
+      } catch (err) {
+        console.error(`review worktree sync failed for story ${syncStoryId}:`, err);
+      }
     }
-    await applyReviewWorktreeTransition(reviewWorktrees);
-    return read(id);
+    return followWorktrees ? read(id) : detail;
   });
 }
 

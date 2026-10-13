@@ -698,6 +698,16 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           );
         }
         if (runMeta.issueId) {
+          try {
+            const { syncReviewWorktree } = await import("./review-worktree-sync.js");
+            await syncReviewWorktree(runMeta.issueId, "auto");
+          } catch (err) {
+            // The run has already ended. A checkout failure must not leave wait() unsettled.
+            console.error(
+              `review worktree sync failed for ${runMeta.issueId}:`,
+              err,
+            );
+          }
           publishPlanningRunIssueFrame(runMeta.issueId);
         }
       }

@@ -827,6 +827,7 @@ export async function startAgentStack(
     await stopAgentStack(conversationId);
   }
 
+  await syncReviewsOnWorktree(boot.worktree);
   const handle = await bootDeclaredRuntime(
     conversationId,
     boot,
@@ -934,7 +935,7 @@ export async function stopAgentStack(
       if (!collectedOnKill) {
         const survivors = owned.filter(isOurRecordedProcess);
         await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
-        releaseStoppedStack(state);
+        await releaseStoppedStackAndSync(state);
         throw new Error(
           `agent stack for ${conversationId} survived SIGKILL: ${
             survivors.map((proc) => `${proc.role}(${proc.pid})`).join(", ") ||
@@ -947,11 +948,29 @@ export async function stopAgentStack(
     await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
   }
 
-  releaseStoppedStack(state);
+  await releaseStoppedStackAndSync(state);
   return { stopped: true, state, memoryLimitFailures };
 }
 
 function releaseStoppedStack(state: AgentStackState): void {
   rmSync(state.dataDir, { recursive: true, force: true });
   releaseAgentStackRecord(state);
+}
+
+/**
+ * The stack record is already gone. A checkout failure must not report the
+ * stop as failed; the next sync retries it.
+ */
+async function releaseStoppedStackAndSync(state: AgentStackState): Promise<void> {
+  releaseStoppedStack(state);
+  try {
+    await syncReviewsOnWorktree(state.worktree);
+  } catch (err) {
+    console.error(`review worktree sync failed for ${state.worktree}:`, err);
+  }
+}
+
+async function syncReviewsOnWorktree(worktree: string): Promise<void> {
+  const { syncReviewsAtWorktree } = await import("./review-worktree-sync.js");
+  await syncReviewsAtWorktree(worktree);
 }
