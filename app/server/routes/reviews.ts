@@ -22,6 +22,7 @@ import {
   retryReviewSubmission,
   submitReview,
 } from "../services/review-tasking.js";
+import { refreshReviewPullRequest } from "../services/review-pr-tracking.js";
 import {
   archiveReview,
   listReviewViews,
@@ -164,6 +165,9 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
   reviewsRouter.get(
     "/:reviewId",
     asyncRoute(async (req, res) => {
+      if (req.query.refreshHead === "1") {
+        await refreshReviewPullRequest(req.params.projectId, req.params.reviewId);
+      }
       const { issues } = readAll();
       await sendReview(
         res,

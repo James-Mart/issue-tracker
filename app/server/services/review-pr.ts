@@ -85,7 +85,8 @@ function isMissingPullRequest(message: string): boolean {
   );
 }
 
-async function fetchPullHead(
+/** Fetch `refs/pull/<N>/head` and require the fetched commit to be `headSha`. */
+export async function fetchReviewPullHead(
   workspace: string,
   number: number,
   headSha: string,
@@ -182,7 +183,7 @@ export async function resolveReviewPr(
     throw wrongRepository(label);
   }
 
-  await fetchPullHead(workspace, view.data.number, view.data.headRefOid);
+  await fetchReviewPullHead(workspace, view.data.number, view.data.headRefOid);
   return {
     title: view.data.title,
     pr: {

@@ -58,8 +58,11 @@ export function fetchReviewProgress(
 export function fetchReview(
   projectId: string,
   reviewId: string,
+  options?: { refreshHead?: boolean },
 ): Promise<ReviewView> {
-  return request<ReviewView>(reviewUrl(projectId, reviewId));
+  const path = reviewUrl(projectId, reviewId);
+  if (!options?.refreshHead) return request<ReviewView>(path);
+  return request<ReviewView>(`${path}?refreshHead=1`);
 }
 
 export function reviewCommitsUrl(projectId: string, storyId: string): string {

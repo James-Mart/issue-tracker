@@ -20,6 +20,7 @@ import {
   useReviewWorkbenchLocation,
   type DiffThreadReveal,
 } from "../hooks/use-review-workbench-location";
+import { isPullRequestOnlyReview, pullRequestHeadSha } from "../lib/pull-request-head";
 import { ALL_CHANGES_SCOPE } from "../lib/review-scope";
 import { REVIEW_WORKBENCH_TABS } from "../lib/workbench-tabs";
 import { ReviewCommitsPanel } from "./review-commits-tab";
@@ -64,6 +65,7 @@ function DiffTabPanel({
   const diff = useReviewDiffQuery(projectId, storyId, scope, {
     enabled: diffReady,
     reviewId: storyId ? undefined : review.id,
+    headSha: pullRequestHeadSha(storyId, review),
   });
   const error = commits.error ?? diff.error;
   if (error) {
@@ -201,9 +203,9 @@ function StoryReviewBody({
   projectId: string;
   reviewId: string;
 }) {
-  const { review, commits } = useReviewWorkbenchReads(projectId, reviewId);
+  const { review, commits, readsReady } = useReviewWorkbenchReads(projectId, reviewId);
   const storyId = review.data?.story ?? "";
-  const prOnly = Boolean(review.data && !review.data.story && review.data.pr);
+  const prOnly = review.data !== undefined && isPullRequestOnlyReview(review.data);
   const story = useIssueDetailQuery(storyId);
   const storyTitle = prOnly
     ? review.data?.title
@@ -250,6 +252,9 @@ function StoryReviewBody({
     return (
       <ShellInlineFault message={error.message} hint="Check the server, then reload." />
     );
+  }
+  if (review.data && !readsReady) {
+    return <ShellLoadingState label="Loading review…" />;
   }
   if (review.data && !review.data.story && !review.data.pr) {
     return (

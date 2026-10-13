@@ -25,7 +25,11 @@ export const reviewMarksSchema = z
 
 export type ReviewMarks = z.infer<typeof reviewMarksSchema>;
 
-/** GitHub pull request a review was loaded from. `baseRef` and `headRef` are branch names. */
+/**
+ * GitHub pull request a review was loaded from. `baseRef` and `headRef` are
+ * branch names. `state` is the last GitHub state followed; it stays absent
+ * while that state is open.
+ */
 export const reviewPrSourceSchema = z
   .object({
     url: nonEmpty,
@@ -34,6 +38,7 @@ export const reviewPrSourceSchema = z
     headRef: nonEmpty,
     headSha: nonEmpty,
     fork: z.boolean(),
+    state: z.enum(["open", "closed", "merged"]).optional(),
   })
   .strict();
 

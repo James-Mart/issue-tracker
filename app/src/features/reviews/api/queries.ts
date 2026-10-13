@@ -20,7 +20,7 @@ import {
 } from "./client";
 import { reviewKeys } from "./keys";
 
-function retryRead(count: number, error: Error): boolean {
+function retryReviewRead(count: number, error: Error): boolean {
   return (
     !(error instanceof ApiError && error.status >= 400 && error.status < 500) &&
     count < 2
@@ -44,7 +44,7 @@ export function useReviewsQuery(
     queryKey: reviewKeys.list(projectId, storyId),
     queryFn: () => fetchReviews(projectId, storyId),
     enabled: (options.enabled ?? true) && Boolean(projectId),
-    retry: retryRead,
+    retry: retryReviewRead,
     refetchInterval: options.refetchInterval,
   });
 }
@@ -58,7 +58,7 @@ export function useReviewProgressQuery(
     queryKey: reviewKeys.progress(projectId, reviewId),
     queryFn: () => fetchReviewProgress(projectId, reviewId),
     enabled: (options.enabled ?? true) && Boolean(projectId) && Boolean(reviewId),
-    retry: retryRead,
+    retry: retryReviewRead,
   });
 }
 
@@ -71,7 +71,7 @@ export function useReviewCandidatesQuery(
     queryKey: reviewKeys.candidates(projectId, query),
     queryFn: () => fetchReviewCandidates(projectId, query),
     enabled: (options.enabled ?? true) && Boolean(projectId),
-    retry: retryRead,
+    retry: retryReviewRead,
   });
 }
 
@@ -80,13 +80,14 @@ export function useReviewQuery(
   reviewId: string,
   options: {
     refetchInterval?: RefetchInterval<ReviewView>;
+    queryFn?: () => Promise<ReviewView>;
   } = {},
 ): UseQueryResult<ReviewView, Error> {
   return useQuery({
     queryKey: reviewKeys.detail(projectId, reviewId),
-    queryFn: () => fetchReview(projectId, reviewId),
+    queryFn: options.queryFn ?? (() => fetchReview(projectId, reviewId)),
     enabled: Boolean(projectId) && Boolean(reviewId),
-    retry: retryRead,
+    retry: retryReviewRead,
     refetchInterval: options.refetchInterval,
   });
 }
@@ -104,20 +105,20 @@ function reviewChangeRead(
 export function useReviewCommitsQuery(
   projectId: string,
   storyId: string,
-  options: { refetchInterval?: number | false; reviewId?: string } = {},
+  options: { refetchInterval?: number | false; reviewId?: string; headSha?: string } = {},
 ): UseQueryResult<ReviewCommits, Error> {
   const read = reviewChangeRead(storyId, options.reviewId);
   return useQuery({
     queryKey:
       read && "reviewId" in read
-        ? reviewKeys.reviewCommits(projectId, read.reviewId)
+        ? reviewKeys.reviewCommits(projectId, read.reviewId, options.headSha)
         : reviewKeys.commits(projectId, storyId),
     queryFn: () =>
       read && "reviewId" in read
         ? fetchReviewRecordCommits(projectId, read.reviewId)
         : fetchReviewCommits(projectId, storyId),
     enabled: Boolean(projectId) && read !== undefined,
-    retry: retryRead,
+    retry: retryReviewRead,
     refetchInterval: options.refetchInterval,
   });
 }
@@ -126,14 +127,14 @@ export function useReviewDiffQuery(
   projectId: string,
   storyId: string,
   scope: string | null,
-  options: { enabled?: boolean; reviewId?: string } = {},
+  options: { enabled?: boolean; reviewId?: string; headSha?: string } = {},
 ): UseQueryResult<ReviewDiff, Error> {
   const read = reviewChangeRead(storyId, options.reviewId);
   const ready = scope !== null && (options.enabled ?? true) && Boolean(projectId) && read !== undefined;
   return useQuery({
     queryKey:
       read && "reviewId" in read
-        ? reviewKeys.reviewDiff(projectId, read.reviewId, scope ?? "")
+        ? reviewKeys.reviewDiff(projectId, read.reviewId, scope ?? "", options.headSha)
         : reviewKeys.diff(projectId, storyId, scope ?? ""),
     queryFn:
       scope !== null && ready && read
@@ -145,6 +146,6 @@ export function useReviewDiffQuery(
     // The page starts this read before the diff panel mounts. A later subscriber
     // reuses the result; a moved tip invalidates the query.
     refetchOnMount: false,
-    retry: retryRead,
+    retry: retryReviewRead,
   });
 }

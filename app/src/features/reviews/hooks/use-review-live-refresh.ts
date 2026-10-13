@@ -15,11 +15,13 @@ export function useReviewLiveRefresh(
   projectId: string,
   storyId: string,
   reviewId: string | undefined,
+  headSha?: string,
 ): UseQueryResult<ReviewCommits, Error> {
   const qc = useQueryClient();
   const commits = useReviewCommitsQuery(projectId, storyId, {
     refetchInterval: reviewId ? REVIEW_COMMITS_POLL_MS : false,
     reviewId,
+    headSha,
   });
   const tip = commits.data?.tip;
   const seenTip = useRef<string | undefined>(undefined);
