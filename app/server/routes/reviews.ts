@@ -107,7 +107,10 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
   reviewsRouter.post(
     "/",
     asyncRoute(async (req, res) => {
-      const { created, review } = openOrCreateReview(req.params.projectId, req.body);
+      const { created, review } = await openOrCreateReview(
+        req.params.projectId,
+        req.body,
+      );
       await sendReview(res, req.params.projectId, review, created ? 201 : 200);
     }),
   );
@@ -204,7 +207,7 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
       await sendReview(
         res,
         req.params.projectId,
-        archiveReview(req.params.projectId, req.params.reviewId),
+        await archiveReview(req.params.projectId, req.params.reviewId),
       );
     }),
   );
@@ -215,7 +218,7 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
       await sendReview(
         res,
         req.params.projectId,
-        reopenReview(req.params.projectId, req.params.reviewId),
+        await reopenReview(req.params.projectId, req.params.reviewId),
       );
     }),
   );

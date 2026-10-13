@@ -54,7 +54,7 @@ async function loadSpan(
   issues: Issue[],
 ): Promise<{ storyId: string; workspace: string; prepared: StoryChangePreparation }> {
   const review = readReviewView(projectId, reviewId, issues);
-  return loadPrepared(projectId, review.target.storyId, issues);
+  return loadPrepared(projectId, review.story, issues);
 }
 
 function nulRecords(text: string): string[] {

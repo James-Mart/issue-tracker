@@ -22,7 +22,8 @@ export interface DropAppendTo {
 }
 
 export interface DeletionPlan {
-  // The target plus everything transitively `partOf` it (the containment closure).
+  // The target plus everything transitively `partOf` it (the containment
+  // closure), plus the reviews of every Story in that closure.
   deleteIds: string[];
   // Surviving branches whose `stackedOn` pointed into the delete set, spliced to
   // the deleted branch's own fork point.
@@ -51,8 +52,21 @@ export interface DeletionResult {
   retainedWorktrees: RetainedWorktree[];
 }
 
+/** A review goes with its source Story. Adds those reviews to `deleteSet`. */
+export function addReviewsOfDeletedStories(
+  issues: readonly Issue[],
+  deleteSet: Set<string>,
+): void {
+  for (const issue of issues) {
+    if (issue.kind === "review" && deleteSet.has(issue.story)) {
+      deleteSet.add(issue.id);
+    }
+  }
+}
+
 // Pure, filesystem-free planner for deleting an issue. It computes the full set
-// of issues to remove (target + transitive `partOf` descendants) and how every
+// of issues to remove (target + transitive `partOf` descendants, plus the
+// reviews of deleted Stories) and how every
 // surviving foreign reference into that set resolves:
 //   - Branch `stackedOn` (always within one Epic): spliced to the deleted
 //     branch's own fork point, walking up until a surviving branch (or
@@ -83,6 +97,7 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
     deleteSet.add(current);
     for (const child of childrenOf.get(current) ?? []) queue.push(child);
   }
+  addReviewsOfDeletedStories(issues, deleteSet);
 
   // Follow `stackedOn` up from a deleted branch until a surviving branch is
   // found (the spliced fork point) or the chain ends (no `stackedOn` → Project trunk).

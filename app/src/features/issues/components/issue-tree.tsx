@@ -1,5 +1,6 @@
 import {
   ChevronRight,
+  FileDiff,
   GitBranch,
   FolderKanban,
   GitCommitHorizontal,
@@ -81,6 +82,7 @@ const KIND_ICON: Record<IssueKind, typeof Layers> = {
   idea: Lightbulb,
   story: GitBranch,
   task: GitCommitHorizontal,
+  review: FileDiff,
 };
 
 /** Horizontal step per nesting level — also the x-step between a parent port and its children's. */

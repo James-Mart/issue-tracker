@@ -539,7 +539,7 @@ function createIssueProgram(run: Run): Command {
     .description("print issues, derived state, and any problems as JSON")
     .argument(
       "[kind]",
-      "filter to issues of this kind (project | epic | idea | story | task)",
+      "filter to issues of this kind (project | epic | idea | story | task | review)",
     )
     .option(
       "--in <containerId>",

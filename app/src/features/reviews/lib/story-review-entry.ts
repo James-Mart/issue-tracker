@@ -24,7 +24,7 @@ export function storyCodeReviewLink(
   progress: ReviewProgress,
 ): StoryCodeReviewLink {
   const { reviewed, total } = progress.all;
-  if (review.effectiveStatus === "archived") {
+  if (review.status === "archived") {
     return { kind: "archived", reviewed, total };
   }
   return { kind: "open", reviewed, total };

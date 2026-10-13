@@ -35,7 +35,7 @@ import { isRunLive } from "./run-live.js";
 import {
   listReviewViews,
   readReviewView,
-  storedReviewsForStory,
+  storedReviewForStory,
   updateStoredReview,
 } from "./reviews.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
@@ -256,7 +256,7 @@ export async function submitReview(
 
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
-  const storyId = review.target.storyId;
+  const storyId = review.story;
   assertStoryOpenForTasking(storyId);
   assertNoTasking(review.submissions);
   const threadIds = submittableThreadIds(storyId, review.submissions);
@@ -393,7 +393,7 @@ export async function launchRecordedSubmission(
   if (!submission || submission.status !== "tasking") return;
   if (kind === "start" && submission.conversationId) return;
 
-  const storyId = review.target.storyId;
+  const storyId = review.story;
   try {
     const story = assertStoryOpenForTasking(storyId);
     const linked = submissionThreads(storyId, submission, readAll().issues);
@@ -487,7 +487,7 @@ export async function retryReviewSubmission(
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
-  const storyId = review.target.storyId;
+  const storyId = review.story;
   assertStoryOpenForTasking(storyId);
   assertNoTasking(review.submissions);
   const submission = review.submissions.find((item) => item.id === submissionId);
@@ -546,7 +546,7 @@ export async function retryOpenReviewSubmissions(
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
-  const storyId = review.target.storyId;
+  const storyId = review.story;
   assertStoryOpenForTasking(storyId);
 
   let finished: Extract<ReviewSubmission, { status: "done" }>[] = [];
@@ -688,39 +688,35 @@ function agentRunStatus(
 export function reevaluateStorySubmissions(storyId: string, threadId: string): void {
   const issues = readAll().issues;
   const projectId = ancestorChain(storyId, issues)[0]!.id;
-  const reviews = storedReviewsForStory(projectId, storyId);
-  const affected = reviews.some((review) =>
-    review.submissions.some(
-      (submission) =>
-        isRetryableSubmission(submission) && submission.threadIds.includes(threadId),
-    ),
+  const review = storedReviewForStory(projectId, storyId, issues);
+  const affected = review?.submissions.some(
+    (submission) =>
+      isRetryableSubmission(submission) && submission.threadIds.includes(threadId),
   );
-  if (!affected) return;
+  if (!review || !affected) return;
   const threads = readComments(storyId, issues).threads;
-  for (const review of reviews) {
-    updateStoredReview(projectId, review.id, (current) => {
-      let changed = false;
-      const submissions = current.submissions.map((submission) => {
-        if (
-          !isRetryableSubmission(submission) ||
-          !submission.threadIds.includes(threadId)
-        ) {
-          return submission;
-        }
-        const split = splitSubmissionThreads(submission, threads, issues, storyId);
-        const next = settledSubmission(submission, split, () => submission);
-        if (next === submission) return submission;
-        changed = true;
-        return next;
-      });
-      if (!changed) return current;
-      return {
-        ...current,
-        updatedAt: new Date().toISOString(),
-        submissions,
-      };
+  updateStoredReview(projectId, review.id, (current) => {
+    let changed = false;
+    const submissions = current.submissions.map((submission) => {
+      if (
+        !isRetryableSubmission(submission) ||
+        !submission.threadIds.includes(threadId)
+      ) {
+        return submission;
+      }
+      const split = splitSubmissionThreads(submission, threads, issues, storyId);
+      const next = settledSubmission(submission, split, () => submission);
+      if (next === submission) return submission;
+      changed = true;
+      return next;
     });
-  }
+    if (!changed) return current;
+    return {
+      ...current,
+      updatedAt: new Date().toISOString(),
+      submissions,
+    };
+  });
 }
 
 function reviewTaskerAgentRun(

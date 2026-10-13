@@ -34,7 +34,7 @@ function ReviewStatusAction({
 }) {
   const archive = useArchiveReview(projectId);
   const reopen = useReopenReview(projectId);
-  if (review.effectiveStatus === "archived") {
+  if (review.status === "archived") {
     return (
       <Button
         type="button"

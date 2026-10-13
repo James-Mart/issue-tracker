@@ -37,6 +37,8 @@ import {
 import { ensureKindRenamed } from "./kind-rename.js";
 import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
+import { ensureReviewRecordsMigrated } from "./review-record-migration.js";
+import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
@@ -194,6 +196,7 @@ export function ensureMigrations(): void {
   ensureMergedAtMigrated();
   ensureSpecReviewMigrated();
   ensureSourceIdeaMigration();
+  ensureReviewRecordsMigrated();
 }
 
 /** Every issue in the store, archived ones included. */
@@ -315,6 +318,9 @@ function assertWritable(target: Issue, all: Issue[]): void {
 export function create(input: CreateInput): Promise<IssueRecord> {
   return serialize(() => {
     ensureMigrations();
+    if (input.kind === "review") {
+      throw new IssueError("validation", "a review is started from its Story");
+    }
     const title = input.title?.trim();
     if (!title) throw new IssueError("validation", "title is required");
 
@@ -717,6 +723,19 @@ export function update(
     }
     for (const root of companionWrites.values()) {
       writes.push({ issue: root });
+    }
+    // Only `archived` changes on these reviews, which integrity does not
+    // constrain, so they stay out of the scoped-check decision below.
+    const reviewArchiveWrites = archiveReviewsOfClosingStories(
+      [
+        { before: existing, after: parsed.issue },
+        ...cascaded.map((child) => ({ before: byId.get(child.id)!, after: child })),
+      ],
+      issues,
+      now,
+    );
+    for (const review of reviewArchiveWrites) {
+      writes.push({ issue: review });
     }
 
     if (

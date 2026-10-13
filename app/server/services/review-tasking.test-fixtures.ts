@@ -46,24 +46,22 @@ export function seedReviewTasking(): void {
     createdAt: AT,
     updatedAt: AT,
   });
-  mkdirSync(join(issuesDir, "p", "reviews"), { recursive: true });
-  writeFileSync(
-    join(issuesDir, "p", "reviews", `${REVIEW_ID}.json`),
-    `${JSON.stringify({
-      id: REVIEW_ID,
-      projectId: "p",
-      target: { kind: "story", storyId: "s" },
-      status: "open",
-      postMortem: false,
-      createdAt: AT,
-      updatedAt: AT,
-      marks: { all: {}, commits: {} },
-    })}\n`,
-  );
+  writeReviewTaskingIssue(REVIEW_ID, {
+    kind: "review",
+    title: "S",
+    partOf: "p",
+    story: "s",
+    archived: false,
+    marks: { all: {}, commits: {} },
+    submissions: [],
+    order: 0,
+    createdAt: AT,
+    updatedAt: AT,
+  });
 }
 
 export function writeReviewSubmissions(submissions: unknown[]): void {
-  const path = join(issuesDir, "p", "reviews", `${REVIEW_ID}.json`);
+  const path = join(issuesDir, REVIEW_ID, "issue.json");
   const current = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
   writeFileSync(path, `${JSON.stringify({ ...current, submissions })}\n`);
 }

@@ -29,6 +29,8 @@ function groupKeyFor(
       return `project:${partOf}`;
     case "task":
       return `task:${partOf}`;
+    case "review":
+      return `review:${partOf}`;
     case "story":
       // Root project-level Stories (no fork point) share the Project board
       // order with Epics/Ideas. Stacked project-level Stories stay in a

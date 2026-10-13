@@ -131,7 +131,7 @@ async function openReview(): Promise<void> {
   const created = await fetch(`${baseUrl}/api/projects/p/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target: { kind: "story", storyId: "s" } }),
+    body: JSON.stringify({ story: "s" }),
   });
   expect(created.status).toBe(201);
   const body = (await created.json()) as { id: string };

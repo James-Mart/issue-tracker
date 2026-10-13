@@ -21,6 +21,7 @@ import {
   update,
 } from "./server/services/issues.js";
 import { openLinkedThreadRootIds } from "./server/services/thread-state.js";
+import { reviewStatus } from "./server/services/review-lifecycle.js";
 import { deriveStoryWorktree } from "./server/services/derive-worktree.js";
 import { storyBehindMergeBase } from "./server/services/merge-base-task.js";
 import { storyMergeBaseRef } from "./server/services/resolve-merge-base-ref.js";
@@ -753,6 +754,9 @@ export async function kindGetValue(
     }
     if (kind === "story" && field === "mergeBaseRef") {
       return formatGetValue(await storyMergeBaseRef(id));
+    }
+    if (kind === "review" && field === "status") {
+      return reviewStatus(detail as DetailOfKind<"review">);
     }
     if (kind === "project" && field === "secrets") {
       const keys = listSecretKeys(id);

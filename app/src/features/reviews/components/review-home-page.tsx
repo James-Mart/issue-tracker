@@ -101,7 +101,7 @@ function OpenReviewRow({
   projectId: string;
   item: ReviewHomeReview;
 }) {
-  const storyId = item.review.target.storyId;
+  const storyId = item.review.story;
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,
@@ -176,7 +176,7 @@ function ArchivedReviewRow({
   reopening: boolean;
   onReopen: () => void;
 }) {
-  const storyId = item.review.target.storyId;
+  const storyId = item.review.story;
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,

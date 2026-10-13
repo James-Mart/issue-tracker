@@ -3,7 +3,7 @@ import { IssueError } from "./errors.js";
 import { readAll } from "./issues.js";
 import {
   parseSetReviewMarkBody,
-  type Review,
+  type ReviewIssue,
   type ReviewProgress,
   type ReviewRecordView,
   type ReviewView,
@@ -58,10 +58,10 @@ function requireFile(files: DiffBlob[], path: string): DiffBlob {
 }
 
 function applyMark(
-  review: Review,
+  review: ReviewIssue,
   body: SetReviewMarkBody,
   blobSha: string,
-): Review {
+): ReviewIssue {
   const now = new Date().toISOString();
   const { scope, path, reviewed } = body;
   if (scope === "all") {
@@ -104,7 +104,7 @@ function applyMark(
   return { ...review, updatedAt: now, marks: { all: review.marks.all, commits } };
 }
 
-function reviewProgress(review: Review, index: ReviewMarkIndex): ReviewProgress {
+function reviewProgress(review: ReviewIssue, index: ReviewMarkIndex): ReviewProgress {
   const changedSinceReviewed: string[] = [];
   let reviewed = 0;
   for (const file of index.all) {
@@ -137,7 +137,7 @@ export async function readReviewProgress(
   view: ReviewRecordView,
   issues?: Issue[],
 ): Promise<ReviewProgress> {
-  const index = await readReviewMarkIndex(projectId, view.target.storyId, issues);
+  const index = await readReviewMarkIndex(projectId, view.story, issues);
   return reviewProgress(view, index);
 }
 
@@ -146,7 +146,7 @@ export async function withReviewProgress(
   view: ReviewRecordView,
   issues?: Issue[],
 ): Promise<ReviewView> {
-  const index = await readReviewMarkIndex(projectId, view.target.storyId, issues);
+  const index = await readReviewMarkIndex(projectId, view.story, issues);
   return attachProgress(view, index);
 }
 
@@ -165,16 +165,16 @@ export async function setReviewMark(
 
   const issues = readAll().issues;
   const current = readReviewView(projectId, reviewId, issues);
-  if (current.effectiveStatus === "archived") throw archivedError(reviewId);
+  if (current.status === "archived") throw archivedError(reviewId);
 
-  const index = await readReviewMarkIndex(projectId, current.target.storyId, issues);
+  const index = await readReviewMarkIndex(projectId, current.story, issues);
   const file = requireFile(scopeFiles(index, parsed.body.scope), parsed.body.path);
 
   const view = updateStoredReview(
     projectId,
     reviewId,
     (review, stored) => {
-      if (stored.effectiveStatus === "archived") throw archivedError(reviewId);
+      if (stored.status === "archived") throw archivedError(reviewId);
       return applyMark(review, parsed.body, file.blobSha);
     },
     issues,

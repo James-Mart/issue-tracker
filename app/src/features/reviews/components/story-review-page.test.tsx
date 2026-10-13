@@ -179,10 +179,13 @@ const PATCH = [
 function reviewFixture(): ReviewView {
   return {
     id: "rev-1",
-    projectId: PROJECT,
-    target: { kind: "story", storyId: STORY },
+    kind: "review",
+    partOf: PROJECT,
+    title: "Story",
+    story: STORY,
+    archived: false,
+    order: 0,
     status: "open",
-    postMortem: false,
     createdAt: "2026-09-29T00:00:00.000Z",
     updatedAt: "2026-09-29T00:00:00.000Z",
     marks: {
@@ -198,7 +201,6 @@ function reviewFixture(): ReviewView {
         [TIP]: { reviewed: 0, total: 3 },
       },
     },
-    effectiveStatus: "open",
     submissions: [],
   } as ReviewView;
 }

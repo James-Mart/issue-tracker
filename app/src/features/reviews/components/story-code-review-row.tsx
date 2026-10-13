@@ -27,7 +27,7 @@ function StoryCodeReviewLinkText({
     return merged ? "Start post-mortem review" : "Start review";
   }
   if (!progress) {
-    return review.effectiveStatus === "archived" ? <>Archived · Open</> : "Open";
+    return review.status === "archived" ? <>Archived · Open</> : "Open";
   }
   const link = storyCodeReviewLink(review, progress);
   const count = (

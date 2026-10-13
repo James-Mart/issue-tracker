@@ -34,6 +34,7 @@ import {
   update,
 } from "./server/services/issues.js";
 import { refreshRecordedPrFacts } from "./server/services/pr-facts-read.js";
+import { reviewStatus } from "./server/services/review-lifecycle.js";
 import {
   attachmentPath,
   listAttachments,
@@ -248,6 +249,10 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     if (detail.stakeholder) lines.push(`stakeholder: ${detail.stakeholder}`);
     if (detail.appendTo) lines.push(`appendTo: ${detail.appendTo}`);
     if (detail.planQueuedAt) lines.push(`planQueuedAt: ${detail.planQueuedAt}`);
+  }
+  if (detail.kind === "review") {
+    lines.push(`story: ${detail.story}`);
+    lines.push(`status: ${reviewStatus(detail)}`);
   }
   if (detail.kind === "task") {
     lines.push(`status: ${detail.status}`);

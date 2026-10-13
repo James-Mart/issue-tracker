@@ -393,7 +393,7 @@ export function ReviewDiffTab({
                     rows={visibleRows}
                     fileDiffs={parsed.fileDiffs}
                     isCollapsed={isCollapsed}
-                    readOnly={review.effectiveStatus === "archived"}
+                    readOnly={review.status === "archived"}
                     diffLayout={diffLayout}
                     source={{ storyId, sha: viewedSha, contentsCache }}
                     mergeBaseRef={commits.mergeBaseRef}

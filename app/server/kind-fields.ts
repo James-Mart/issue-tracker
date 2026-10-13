@@ -142,12 +142,18 @@ export const TASK_SET_FIELDS = {
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
 
+export const REVIEW_SET_FIELDS = {
+  title: { type: "string" },
+  archived: { type: "boolean" },
+} as const satisfies Record<string, SetFieldSpec>;
+
 export const KIND_SET_FIELDS = {
   project: PROJECT_SET_FIELDS,
   epic: EPIC_SET_FIELDS,
   idea: IDEA_SET_FIELDS,
   story: STORY_SET_FIELDS,
   task: TASK_SET_FIELDS,
+  review: REVIEW_SET_FIELDS,
 } as const satisfies Record<IssueKind, Record<string, SetFieldSpec>>;
 
 export type GetFieldSource = "stored" | "description" | "derived";
@@ -286,12 +292,28 @@ export const TASK_GET_FIELDS = {
   openLinkedThreadRoots: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
+export const REVIEW_GET_FIELDS = {
+  id: STORED,
+  kind: STORED,
+  title: STORED,
+  partOf: STORED,
+  story: STORED,
+  archived: STORED,
+  marks: STORED,
+  submissions: STORED,
+  order: STORED,
+  createdAt: STORED,
+  updatedAt: STORED,
+  status: DERIVED,
+} as const satisfies Record<string, GetFieldSpec>;
+
 export const KIND_GET_FIELDS = {
   project: PROJECT_GET_FIELDS,
   epic: EPIC_GET_FIELDS,
   idea: IDEA_GET_FIELDS,
   story: STORY_GET_FIELDS,
   task: TASK_GET_FIELDS,
+  review: REVIEW_GET_FIELDS,
 } as const satisfies Record<IssueKind, Record<string, GetFieldSpec>>;
 
 const clearableSet = new Set<string>(CLEARABLE_KEYS);

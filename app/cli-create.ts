@@ -12,6 +12,7 @@ import {
   type IssueKind,
 } from "./server/schemas.js";
 import { create } from "./server/services/issues.js";
+import { startStoryReview } from "./server/services/reviews.js";
 
 type Run = (action: () => unknown) => Promise<void>;
 
@@ -71,6 +72,16 @@ export function registerKindAdd(
   kind: IssueKind,
   run: Run,
 ): void {
+  if (kind === "review") {
+    kindCmd
+      .command("add")
+      .requiredOption("--story <storyId>", "story to review")
+      .description("start a review of a Story, or print the review it already has")
+      .action((opts: { story: string }) =>
+        run(async () => (await startStoryReview(opts.story)).review),
+      );
+    return;
+  }
   withCreateKindOptions(
     kindCmd.command("add").argument("<title>", `${kind} title`),
     kind,

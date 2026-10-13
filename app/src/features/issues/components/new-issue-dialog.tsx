@@ -36,8 +36,10 @@ import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { KIND_LABEL } from "../lib/kind";
 import { PartOfTargetSelect } from "./part-of-target-select";
 
-// Projects are created from the sidebar, not this dialog.
-const SELECTABLE_KINDS = KINDS.filter((kind) => kind !== "project");
+// Projects are created from the sidebar and reviews from code review, not this dialog.
+const SELECTABLE_KINDS = KINDS.filter(
+  (kind) => kind !== "project" && kind !== "review",
+);
 
 function descriptionFor(kind: IssueKind): string {
   switch (kind) {

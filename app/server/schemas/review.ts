@@ -1,78 +1,17 @@
 import { z } from "zod";
-import { formatZodError } from "./issue.js";
+import { formatZodError, type Issue } from "./issue.js";
+import type { ReviewSubmission } from "./review-state.js";
+
+export {
+  reviewMarksSchema,
+  reviewSubmissionSchema,
+  type ReviewMarks,
+  type ReviewSubmission,
+} from "./review-state.js";
 
 const nonEmpty = z.string().min(1);
 
-const allMarkSchema = z
-  .object({
-    // Empty when the post-image has no blob (a deletion).
-    blobSha: z.string(),
-    markedAt: nonEmpty,
-  })
-  .strict();
-
-const commitMarkSchema = z
-  .object({
-    markedAt: nonEmpty,
-  })
-  .strict();
-
-export const reviewTargetSchema = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("story"),
-      storyId: nonEmpty,
-    })
-    .strict(),
-]);
-
-const reviewSubmissionIdentity = {
-  id: nonEmpty,
-  at: nonEmpty,
-  summaryCommentId: nonEmpty.optional(),
-  threadIds: z.array(nonEmpty).min(1),
-  // Set when bring-in accepts the resume prompt. Absent means it was not accepted.
-  coordinatorResumed: z.literal(true).optional(),
-};
-
-export const reviewSubmissionSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      ...reviewSubmissionIdentity,
-      // Filled once the background launch has created the tasker conversation.
-      conversationId: nonEmpty.optional(),
-      status: z.literal("tasking"),
-      taskIds: z.array(nonEmpty).optional(),
-    })
-    .strict(),
-  z
-    .object({
-      ...reviewSubmissionIdentity,
-      conversationId: nonEmpty.optional(),
-      status: z.literal("incomplete"),
-      taskIds: z.array(nonEmpty).optional(),
-    })
-    .strict(),
-  z
-    .object({
-      ...reviewSubmissionIdentity,
-      conversationId: nonEmpty.optional(),
-      status: z.literal("failed"),
-      taskIds: z.array(nonEmpty).optional(),
-      error: nonEmpty,
-    })
-    .strict(),
-  z
-    .object({
-      ...reviewSubmissionIdentity,
-      conversationId: nonEmpty.optional(),
-      status: z.literal("done"),
-      taskIds: z.array(nonEmpty),
-    })
-    .strict(),
-]);
-
-export type ReviewSubmission = z.infer<typeof reviewSubmissionSchema>;
+export type ReviewIssue = Extract<Issue, { kind: "review" }>;
 
 /** Derived on read for every submission that is not `done`. */
 export type ReviewSubmissionOpen = {
@@ -84,30 +23,6 @@ export type ReviewSubmissionView =
   | Extract<ReviewSubmission, { status: "done" }>
   | (Exclude<ReviewSubmission, { status: "done" }> & ReviewSubmissionOpen);
 
-export const reviewSchema = z
-  .object({
-    id: nonEmpty,
-    projectId: nonEmpty,
-    target: reviewTargetSchema,
-    status: z.enum(["open", "archived"]),
-    postMortem: z.boolean(),
-    createdAt: nonEmpty,
-    updatedAt: nonEmpty,
-    marks: z
-      .object({
-        all: z.record(z.string(), allMarkSchema),
-        commits: z.record(
-          z.string(),
-          z.record(z.string(), commitMarkSchema),
-        ),
-      })
-      .strict(),
-    submissions: z.array(reviewSubmissionSchema).default([]),
-  })
-  .strict();
-
-export type Review = z.infer<typeof reviewSchema>;
-
 export type ReviewScopeProgress = {
   reviewed: number;
   total: number;
@@ -118,13 +33,14 @@ export type ReviewProgress = {
   commits: Record<string, ReviewScopeProgress>;
 };
 
-type ReviewEffective =
-  | { effectiveStatus: "open" }
-  | { effectiveStatus: "archived"; archivedReason: "explicit" | "merged" };
+/** `archivedReason` is `merged` when the archived review's Story is merged. */
+export type ReviewLifecycle =
+  | { status: "open" }
+  | { status: "archived"; archivedReason: "explicit" | "merged" };
 
-/** Stored review plus effective archive, before derived progress is attached. */
-export type ReviewRecordView = Omit<Review, "submissions"> &
-  ReviewEffective & { submissions: ReviewSubmissionView[] };
+/** A review issue plus its status, before derived progress is attached. */
+export type ReviewRecordView = Omit<ReviewIssue, "submissions"> &
+  ReviewLifecycle & { submissions: ReviewSubmissionView[] };
 
 export type ReviewView = ReviewRecordView & { progress: ReviewProgress };
 
@@ -143,7 +59,7 @@ export type ReviewCandidates = {
 
 export const openReviewBodySchema = z
   .object({
-    target: reviewTargetSchema,
+    story: nonEmpty,
   })
   .strict();
 
@@ -217,19 +133,6 @@ export function parseSetReviewMarkBody(raw: unknown): SetReviewMarkBodyParseResu
   return {
     ok: false,
     message: formatZodError(result.error, "invalid review mark"),
-  };
-}
-
-export type ReviewParseResult =
-  | { ok: true; review: Review }
-  | { ok: false; message: string };
-
-export function parseReviewRecord(raw: unknown): ReviewParseResult {
-  const result = reviewSchema.safeParse(raw);
-  if (result.success) return { ok: true, review: result.data };
-  return {
-    ok: false,
-    message: formatZodError(result.error, "invalid review"),
   };
 }
 
