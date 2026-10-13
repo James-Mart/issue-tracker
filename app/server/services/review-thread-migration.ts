@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { issuesDir } from "../config.js";
 import type { ConversationMeta } from "../schemas.js";
@@ -6,60 +6,29 @@ import type { ReviewIssue } from "../schemas/review.js";
 import { storedConversationMetas } from "./conversation-ids.js";
 import { persistConversationMeta } from "./conversation-meta-index.js";
 import { commentsJsonPath } from "./issues-file.js";
-import { replaceFileAtomically } from "./issues-store-lock.js";
 import { buildReviewIssue, storedReviewForStory } from "./reviews.js";
 import { forEachOnDiskIssue } from "./scan-disk.js";
+import {
+  isComment,
+  persistStoryCommentMoves,
+  readLogLines,
+  splitStoryLog,
+  stringField,
+  type LogLine,
+  type StoryMove,
+} from "./story-comment-move.js";
 import { ancestorChain } from "./subtree.js";
 
 const MIGRATION_FLAG = ".review-threads-migrated";
-
-/**
- * One non-blank `comments.jsonl` line. `record` is absent when the line is not
- * a JSON object; such a line stays on the Story, where reads report it.
- */
-type LogLine = { text: string; record?: Record<string, unknown> };
-
-type StoryMove = {
-  storyId: string;
-  reviewId: string;
-  keep: string[];
-  move: string[];
-};
 
 function flagPath(): string {
   return join(issuesDir, MIGRATION_FLAG);
 }
 
-function readLogLines(path: string): LogLine[] {
-  if (!existsSync(path)) return [];
-  return readFileSync(path, "utf8")
-    .split("\n")
-    .filter((text) => text.trim().length > 0)
-    .map((text) => {
-      try {
-        const parsed: unknown = JSON.parse(text);
-        return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-          ? { text, record: parsed as Record<string, unknown> }
-          : { text };
-      } catch {
-        return { text };
-      }
-    });
-}
-
-function isComment(record: Record<string, unknown>): boolean {
-  return record.type !== "thread-event" && record.type !== "comment-edit";
-}
-
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === "string" ? value : undefined;
-}
-
 /**
  * Thread roots code review owns: an anchored root, a root with a thread kind,
  * a root a submission names (its threads or its summary), or a root with a
- * thread event. Human-request threads and GitHub-mirrored threads stay on the Story.
+ * thread event. Human-request threads and comments with `source` stay on the Story.
  */
 function reviewRootIds(lines: readonly LogLine[], review: ReviewIssue | undefined): Set<string> {
   const claimed = new Set(
@@ -91,40 +60,6 @@ function reviewRootIds(lines: readonly LogLine[], review: ReviewIssue | undefine
     }
   }
   return roots;
-}
-
-/** Lines of the review's threads (roots, replies, events, and edits), in log order. */
-function splitStoryLog(
-  lines: readonly LogLine[],
-  roots: ReadonlySet<string>,
-): { keep: string[]; move: string[] } {
-  const isMovedRoot = (id: string | undefined) => id !== undefined && roots.has(id);
-  const movedComments = new Set<string>();
-  for (const { record } of lines) {
-    if (!record || !isComment(record)) continue;
-    const id = stringField(record, "id");
-    if (id && (isMovedRoot(id) || isMovedRoot(stringField(record, "replyTo")))) {
-      movedComments.add(id);
-    }
-  }
-  const isMovedComment = (id: string | undefined) => id !== undefined && movedComments.has(id);
-  const keep: string[] = [];
-  const move: string[] = [];
-  for (const { text, record } of lines) {
-    const moves =
-      record !== undefined &&
-      (record.type === "thread-event"
-        ? isMovedRoot(stringField(record, "threadId"))
-        : record.type === "comment-edit"
-          ? isMovedComment(stringField(record, "commentId"))
-          : isMovedComment(stringField(record, "id")));
-    (moves ? move : keep).push(text);
-  }
-  return { keep, move };
-}
-
-function logText(lines: readonly string[]): string {
-  return lines.map((line) => `${line}\n`).join("");
 }
 
 /**
@@ -169,23 +104,7 @@ export function ensureReviewThreadsMigrated(): void {
     for (const meta of storyConversations) retargets.push({ ...meta, issueId: review.id });
   }
 
-  for (const review of created) {
-    mkdirSync(join(issuesDir, review.id), { recursive: true });
-    replaceFileAtomically(
-      join(issuesDir, review.id, "issue.json"),
-      `${JSON.stringify(review, null, 2)}\n`,
-    );
-  }
-  for (const { storyId, reviewId, keep, move } of moves) {
-    const reviewPath = commentsJsonPath(reviewId);
-    const present = readLogLines(reviewPath).map(({ text }) => text);
-    const known = new Set(present);
-    replaceFileAtomically(
-      reviewPath,
-      logText([...present, ...move.filter((line) => !known.has(line))]),
-    );
-    replaceFileAtomically(commentsJsonPath(storyId), logText(keep));
-  }
+  persistStoryCommentMoves(created, moves);
   for (const meta of retargets) persistConversationMeta(meta);
 
   mkdirSync(issuesDir, { recursive: true });

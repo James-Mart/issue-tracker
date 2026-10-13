@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PassThrough, type Readable } from "node:stream";
 import { afterEach, beforeEach, vi } from "vitest";
 import { refreshStorePathsFromEnv } from "../config.js";
-import { setGhSpawnerForTests, type GhSpawner } from "./delivery.js";
+import { parsePrUrl, setGhSpawnerForTests, type GhSpawner } from "./delivery.js";
 import { resetPrCommentMirrorForTests } from "./pr-comment-mirror.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
@@ -192,6 +192,29 @@ export function story(id: string): void {
     merged: false,
     createdAt: AT,
     updatedAt: AT,
+  });
+}
+
+/** A review in project `p` whose pull request is `prUrl`. */
+export function review(id: string, prUrl = PR_URL): void {
+  writeIssue(id, {
+    kind: "review",
+    title: id,
+    partOf: "p",
+    archived: false,
+    marks: { all: {}, commits: {} },
+    submissions: [],
+    order: 1,
+    createdAt: AT,
+    updatedAt: AT,
+    pr: {
+      url: prUrl,
+      number: parsePrUrl(prUrl).number,
+      baseRef: "main",
+      headRef: "ship",
+      headSha: SHA,
+      fork: false,
+    },
   });
 }
 

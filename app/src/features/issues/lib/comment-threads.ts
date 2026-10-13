@@ -28,13 +28,17 @@ export function isQuestionThread(thread: { kind: ThreadView["kind"] }): boolean 
   return thread.kind === "question";
 }
 
-/** Unanchored review notes with no replies render as a single message. */
+/**
+ * Unanchored local notes with no replies render as a single message.
+ * A GitHub-mirrored root stays a thread so a local reply remains available.
+ */
 export function isPlainNote(thread: CommentThread): boolean {
   return (
     !isQuestionThread(thread) &&
     thread.converted === undefined &&
     thread.root.anchor === undefined &&
-    thread.replies.length === 0
+    thread.replies.length === 0 &&
+    thread.root.source === undefined
   );
 }
 

@@ -12,6 +12,7 @@ import {
   page,
   project,
   queryOf,
+  review,
   storedLines,
   story,
   stubGh,
@@ -23,11 +24,12 @@ import type { PrSyncStepResult } from "./pr-sync-driver.js";
 usePrCommentMirrorHarness();
 
 describe("mirrorPrComments", () => {
-  it("lands conversation comments, including bots, and skips ones already mirrored", async () => {
+  it("lands conversation comments on the review, including bots, and skips ones already mirrored", async () => {
     project();
     story("ship");
+    review("rev");
     writeFileSync(
-      join(dir, "ship", "comments.jsonl"),
+      join(dir, "rev", "comments.jsonl"),
       `${JSON.stringify({
         id: "already",
         role: "human",
@@ -72,7 +74,8 @@ describe("mirrorPrComments", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.facts).toBe(facts);
-    const lines = storedLines("ship");
+    expect(storedLines("ship")).toEqual([]);
+    const lines = storedLines("rev");
     expect(lines.map((line) => line.id)).toEqual([
       "already",
       expect.any(String),
@@ -99,25 +102,22 @@ describe("mirrorPrComments", () => {
     });
   });
 
-  it("does not advance the cursor when the read fails, and names the story", async () => {
+  it("does not advance the cursor when the read fails, and names the review", async () => {
     project();
-    story("ship");
-    story("other");
+    review("other", "https://github.com/acme/widgets/pull/8");
+    review("ship");
     const spawner: GhSpawner = (_command, args) => {
       ghCalls.push(args);
       return mockChild({ code: 1, stderr: "gh exploded" });
     };
     setGhSpawnerForTests(spawner);
     const input = {
-      matches: new Map<string, string>([
-        ["ship", PR_URL],
-        ["other", "https://github.com/acme/widgets/pull/8"],
-      ]),
+      matches: new Map<string, string>([["ignored", PR_URL]]),
       facts: new Map([["ship", { url: PR_URL }]]),
     } as PrSyncStepResult;
 
     const failed = await mirrorPrComments("p", input);
-    expect(failed.error).toBe("ship: gh exploded; other: gh exploded");
+    expect(failed.error).toBe("other: gh exploded; ship: gh exploded");
     expect(failed.facts).toBe(input.facts);
     expect(storedLines("ship")).toHaveLength(0);
     expect(ghCalls).toHaveLength(2);
