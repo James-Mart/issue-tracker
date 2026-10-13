@@ -8,6 +8,7 @@ import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { PlanningChannelEmptyState } from "./planning-launch-control";
 
 const mutate = vi.fn();
+const mutateAsync = vi.fn();
 
 vi.mock("@/features/agents/api/queries", () => ({
   useAgentModelsQuery: () => ({
@@ -26,11 +27,23 @@ vi.mock("../api/mutations", () => ({
     mutate,
     isPending: false,
   }),
-  useUpdateIssue: () => ({ mutateAsync: vi.fn() }),
+  useUpdateIssue: () => ({ mutateAsync, isPending: false }),
 }));
 
 vi.mock("../api/queries", () => ({
-  useIssuesQuery: () => ({ data: { issues: [], derived: {} } }),
+  useIssuesQuery: () => ({
+    data: {
+      issues: [
+        {
+          kind: "project",
+          id: "platform",
+          title: "Platform",
+          trunk: "main",
+        },
+      ],
+      derived: {},
+    },
+  }),
 }));
 
 vi.mock("../hooks/use-issue-patch-action", () => ({
@@ -122,12 +135,13 @@ function mount(
 afterEach(() => {
   document.body.innerHTML = "";
   mutate.mockReset();
+  mutateAsync.mockReset();
   resetCockpitLaunchStore();
   resetAppendTargetDraftStore();
 });
 
 describe("PlanningChannelEmptyState", () => {
-  it("shows manual grill copy and posts issue-tracker-plan when stakeholder is unset", () => {
+  it("shows manual grill copy and posts issue-tracker-plan when stakeholder is unset", async () => {
     const onStarted = vi.fn();
     const { container } = mount(
       <PlanningChannelEmptyState
@@ -144,8 +158,12 @@ describe("PlanningChannelEmptyState", () => {
     ) as HTMLSelectElement;
     expect(modelSelect).toBeTruthy();
     expect(modelSelect.value).toBe("composer-2.5");
+    const mergeBase = container.querySelector(
+      '[data-testid="planning-merge-base"]',
+    ) as HTMLInputElement;
+    expect(mergeBase.value).toBe("main");
 
-    act(() => {
+    await act(async () => {
       (
         container.querySelector(
           '[data-testid="planning-start-session"]',
@@ -153,6 +171,10 @@ describe("PlanningChannelEmptyState", () => {
       ).click();
     });
 
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: "capture",
+      patch: { mergeBase: "main" },
+    });
     expect(mutate).toHaveBeenCalledWith(
       {
         title: "Plan Capture",
@@ -164,7 +186,7 @@ describe("PlanningChannelEmptyState", () => {
     );
   });
 
-  it("shows auto-plan copy and posts issue-tracker-auto-plan when a slug is set", () => {
+  it("shows auto-plan copy and posts issue-tracker-auto-plan when a slug is set", async () => {
     const ideaWithStakeholder = { ...idea, stakeholder: "claude-opus-5" };
     const { container } = mount(
       <PlanningChannelEmptyState
@@ -179,7 +201,15 @@ describe("PlanningChannelEmptyState", () => {
       container.querySelector('[data-testid="planning-session-model"]'),
     ).toBeNull();
 
-    act(() => {
+    const mergeBase = container.querySelector(
+      '[data-testid="planning-merge-base"]',
+    ) as HTMLInputElement;
+    expect(mergeBase.value).toBe("main");
+    expect(
+      container.querySelector('[data-testid="detail-outline-gate"]'),
+    ).toBeTruthy();
+
+    await act(async () => {
       (
         container.querySelector(
           '[data-testid="planning-start-session"]',
@@ -187,6 +217,10 @@ describe("PlanningChannelEmptyState", () => {
       ).click();
     });
 
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: "capture",
+      patch: { mergeBase: "main" },
+    });
     expect(mutate).toHaveBeenCalledWith(
       {
         title: "Plan Capture",
