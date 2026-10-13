@@ -6,6 +6,7 @@ export {
   reviewMarksSchema,
   reviewSubmissionSchema,
   type ReviewMarks,
+  type ReviewPrSource,
   type ReviewSubmission,
 } from "./review-state.js";
 
