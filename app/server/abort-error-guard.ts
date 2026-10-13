@@ -12,6 +12,10 @@
  * - Network `ConnectError`: before every shell command the SDK looks up the
  *   team repo blocklist over RPC and does not catch a transport failure, so a
  *   momentary `ECONNRESET` escapes from that one tool call.
+ * - Unavailable `ConnectError`: the same calls escape a Connect `unavailable`
+ *   (code 14) when Cursor's backend is down. The connection succeeded, so
+ *   there is no errno in the cause chain. The browser is told Cursor is having
+ *   issues.
  *
  * Anything else is fatal, and leaves a crash report in `logsDir`.
  */
@@ -29,6 +33,9 @@ const NETWORK_ERROR_CODES = new Set([
 ]);
 
 const MAX_CAUSE_DEPTH = 8;
+
+/** `Code.Unavailable` from `@connectrpc/connect`. */
+const CONNECT_CODE_UNAVAILABLE = 14;
 
 export function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
@@ -52,11 +59,27 @@ export function isNetworkConnectError(err: unknown): boolean {
   return false;
 }
 
+/** A Connect RPC error the Cursor backend answered with `unavailable`. */
+export function isUnavailableConnectError(err: unknown): boolean {
+  if (!(err instanceof Error) || err.name !== "ConnectError") return false;
+  return (err as { code?: unknown }).code === CONNECT_CODE_UNAVAILABLE;
+}
+
 function survivableLabel(err: unknown): string | null {
   if (isAbortError(err)) return "AbortError";
   if (isSpawnEnoent(err)) return "spawn ENOENT";
   if (isNetworkConnectError(err)) return "network ConnectError";
+  if (isUnavailableConnectError(err)) return "unavailable ConnectError";
   return null;
+}
+
+function noticeSurvived(err: unknown): void {
+  if (!isUnavailableConnectError(err)) return;
+  void import("./services/cursor-service-events.js")
+    .then(({ publishCursorUnavailable }) => publishCursorUnavailable())
+    .catch((publishErr: unknown) => {
+      console.error("[abort-guard] cursor-unavailable notice failed", publishErr);
+    });
 }
 
 function exitFatally(err: unknown, origin: string): never {
@@ -75,6 +98,7 @@ export function installAbortErrorGuard(): void {
     const label = survivableLabel(reason);
     if (label) {
       console.warn(`[abort-guard] ignored unhandled ${label}`, reason);
+      noticeSurvived(reason);
       return;
     }
     exitFatally(reason, "unhandledRejection");
@@ -83,6 +107,7 @@ export function installAbortErrorGuard(): void {
     const label = survivableLabel(err);
     if (label) {
       console.warn(`[abort-guard] ignored uncaught ${label}`, err);
+      noticeSurvived(err);
       return;
     }
     exitFatally(err, origin);
