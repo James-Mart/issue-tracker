@@ -9,7 +9,7 @@ import type {
 import { isLineAnchor } from "./comment-anchor";
 import type { ThreadMessage } from "./comment-outbox";
 
-export const STORY_COMPOSER_LABEL =
+export const REVIEW_COMPOSER_LABEL =
   "Add a comment or ask a question about this change";
 
 export type CommentThread = {

@@ -7,17 +7,16 @@ import {
   type CommentInput,
   type CommentsResponse,
   type Issue,
-  type TaskStatus,
 } from "../schemas.js";
 import { validateFullCommitSha } from "./commit-sha.js";
 import { IssueError } from "./errors.js";
 import {
   commentsPathOf,
+  linkableTaskStatuses,
   readAll,
   readIssueOrThrow,
   requireKindCapability,
   serialize,
-  taskStatusesForStory,
 } from "./issues.js";
 import { assertStoreWritable } from "./store-read-only.js";
 import { parseCommentLog } from "./thread-state.js";
@@ -26,11 +25,11 @@ export function readComments(id: string, issues?: Issue[]): CommentsResponse {
   const issue = readIssueOrThrow(id);
   const path = commentsPathOf(id);
   if (!existsSync(path)) return { messages: [], threads: [], problems: [] };
-  const taskStatusById =
-    issue.kind === "story"
-      ? taskStatusesForStory(id, issues ?? readAll().issues)
-      : new Map<string, TaskStatus>();
-  return parseCommentLog(id, readFileSync(path, "utf8"), taskStatusById);
+  return parseCommentLog(
+    id,
+    readFileSync(path, "utf8"),
+    linkableTaskStatuses(issue, issues ?? readAll().issues),
+  );
 }
 
 /** Validate and stamp one comment. Caller writes it inside `serialize`. */
@@ -63,8 +62,8 @@ function validateCommentAppend(
   input: CommentInput,
   messages?: Comment[],
 ): void {
-  if (input.kind !== undefined && readIssueOrThrow(issueId).kind !== "story") {
-    throw new IssueError("validation", "comment kind is only valid on a Story");
+  if (input.kind !== undefined && readIssueOrThrow(issueId).kind !== "review") {
+    throw new IssueError("validation", "comment kind is only valid on a review");
   }
 
   if (input.anchor) {

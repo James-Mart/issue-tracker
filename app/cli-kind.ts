@@ -22,6 +22,7 @@ import {
 } from "./server/services/issues.js";
 import { openLinkedThreadRootIds } from "./server/services/thread-state.js";
 import { reviewStatus } from "./server/services/review-lifecycle.js";
+import { storedReviewForStory } from "./server/services/reviews.js";
 import { deriveStoryWorktree } from "./server/services/derive-worktree.js";
 import { storyBehindMergeBase } from "./server/services/merge-base-task.js";
 import { storyMergeBaseRef } from "./server/services/resolve-merge-base-ref.js";
@@ -766,11 +767,14 @@ export async function kindGetValue(
       // `kind === "task"` is not a literal, so `assertKind(kind, id)` does not
       // narrow `detail`. The call already proved this issue is a Task.
       const task = detail as DetailOfKind<"task">;
-      const ids = openLinkedThreadRootIds(
-        readComments(task.partOf).threads,
-        id,
-      );
+      const review = storedReviewForStory(task.partOf);
+      const ids = review
+        ? openLinkedThreadRootIds(readComments(review.id).threads, id)
+        : [];
       return ids.length === 0 ? null : ids.join("\n");
+    }
+    if (kind === "story" && field === "reviewId") {
+      return storedReviewForStory(id)?.id ?? null;
     }
     const { derived } = list();
     const state = derived[id];

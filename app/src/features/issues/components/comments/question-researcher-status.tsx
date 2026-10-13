@@ -7,13 +7,13 @@ import { useRetryQuestionResearcher } from "../../api/mutations";
 
 /** Retry sits in the question card footer, ahead of Dismiss and Convert. */
 export function ResearcherRetryButton({
-  storyId,
+  reviewId,
   threadId,
 }: {
-  storyId: string;
+  reviewId: string;
   threadId: string;
 }) {
-  const retry = useRetryQuestionResearcher(storyId);
+  const retry = useRetryQuestionResearcher(reviewId);
   return (
     <Button
       type="button"

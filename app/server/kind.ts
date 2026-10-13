@@ -72,9 +72,8 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: false,
     attachments: false,
-    // Review threads still live on the Story.
-    comments: false,
-    comment: false,
+    comments: true,
+    comment: true,
   },
 } as const satisfies Record<
   IssueKind,
@@ -129,9 +128,9 @@ export function offersExportChannel(
   return false;
 }
 
-/** Review conversations (review taskers, question researchers) anchor to the Story under review. */
+/** Review conversations (review taskers, question researchers) anchor to the review issue. */
 export function offersReviewChannel(issue: Issue): boolean {
-  return issue.kind === "story";
+  return issue.kind === "review";
 }
 
 export type AttentionIssue = Extract<

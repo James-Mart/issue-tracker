@@ -9,13 +9,14 @@ import { IssueError } from "./errors.js";
 import {
   appendCommentLogRecords,
   buildStoredComment,
+  linkableTaskStatuses,
   readAll,
   readIssueOrThrow,
+  readReviewOrThrow,
   serialize,
-  taskStatusesForStory,
 } from "./issues.js";
 import { readCommentLog } from "./comment-log.js";
-import { reevaluateStorySubmissions } from "./review-tasking.js";
+import { reevaluateReviewSubmissions } from "./review-tasking.js";
 import { deriveThreadViews } from "./thread-state.js";
 
 export const AGENT_RESOLVE_REQUIRES_BODY =
@@ -114,39 +115,36 @@ function assertActor(input: AppendThreadEventInput): void {
  * review thread. Any other role may only resolve a review thread, and only
  * with a reply. `researcher-session` is server-recorded when a question
  * thread's researcher conversation starts. A converted thread keeps its
- * comments and follows the review rules.
+ * comments and follows the review rules. Threads with events live on a review.
  */
 export function appendThreadEvent(
-  storyId: string,
+  reviewId: string,
   threadId: string,
   input: AppendThreadEventInput & { body: string },
 ): Promise<AppendThreadEventResult & { reply: Comment }>;
 export function appendThreadEvent(
-  storyId: string,
+  reviewId: string,
   threadId: string,
   input: AppendThreadEventInput,
 ): Promise<AppendThreadEventResult>;
 export function appendThreadEvent(
-  storyId: string,
+  reviewId: string,
   threadId: string,
   input: AppendThreadEventInput,
 ): Promise<AppendThreadEventResult> {
   return serialize(() => {
-    const issue = readIssueOrThrow(storyId);
-    if (issue.kind !== "story") {
-      throw new IssueError("validation", `issue "${storyId}" is not a Story`);
-    }
+    const review = readReviewOrThrow(reviewId);
     assertActor(input);
     if (input.event === "linked") {
-      assertLinkedTask(storyId, input.taskId!);
+      assertLinkedTask(review.story, input.taskId!);
     }
 
     const { issues } = readAll();
-    const taskStatusById = taskStatusesForStory(storyId, issues);
-    const split = readCommentLog(storyId);
+    const taskStatusById = linkableTaskStatuses(review, issues);
+    const split = readCommentLog(reviewId);
     findThreadRoot(split.messages, threadId);
     const prior = deriveThreadViews(
-      storyId,
+      reviewId,
       split.messages,
       split.events,
       taskStatusById,
@@ -180,7 +178,7 @@ export function appendThreadEvent(
     let reply: Comment | undefined;
     if (input.body !== undefined) {
       reply = buildStoredComment(
-        storyId,
+        reviewId,
         {
           ...author(input.by),
           body: input.body,
@@ -206,19 +204,19 @@ export function appendThreadEvent(
       at: new Date().toISOString(),
     };
     records.push(event);
-    appendCommentLogRecords(storyId, records);
+    appendCommentLogRecords(reviewId, records);
     if (
       input.event === "resolved" ||
       input.event === "unresolved" ||
       input.event === "linked"
     ) {
-      reevaluateStorySubmissions(storyId, threadId);
+      reevaluateReviewSubmissions(reviewId, threadId);
     }
 
     const messages = reply ? [...split.messages, reply] : split.messages;
     const events = [...split.events, event];
     const thread = deriveThreadViews(
-      storyId,
+      reviewId,
       messages,
       events,
       taskStatusById,

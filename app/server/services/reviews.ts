@@ -83,10 +83,8 @@ function reviewOfStory(
   storyId: string,
   issues: readonly Issue[],
 ): ReviewIssue | undefined {
-  return issues.find(
-    (issue): issue is ReviewIssue =>
-      issue.kind === "review" && issue.partOf === projectId && issue.story === storyId,
-  );
+  const review = storedReviewForStory(storyId, issues);
+  return review?.partOf === projectId ? review : undefined;
 }
 
 function storyForReview(review: ReviewIssue, byId: ReadonlyMap<string, Issue>): Story {
@@ -108,7 +106,7 @@ function toView(
   return {
     ...review,
     ...reviewLifecycle(review, storyForReview(review, byId)),
-    submissions: presentSubmissions(review.story, review.submissions, issues),
+    submissions: presentSubmissions(review, issues),
   };
 }
 
@@ -130,13 +128,14 @@ export function listReviewViews(
   return { reviews: reviews.map((review) => toView(review, graph, byId)) };
 }
 
-/** The review issue of one Story, without the read-model fields. */
+/** The review issue whose source is this Story, without the read-model fields. */
 export function storedReviewForStory(
-  projectId: string,
   storyId: string,
-  issues?: readonly Issue[],
+  issues: readonly Issue[] = readAll().issues,
 ): ReviewIssue | undefined {
-  return reviewOfStory(requireProject(projectId), storyId, issues ?? readAll().issues);
+  return issues.find(
+    (issue): issue is ReviewIssue => issue.kind === "review" && issue.story === storyId,
+  );
 }
 
 export function readReviewView(
@@ -147,6 +146,34 @@ export function readReviewView(
   const id = requireProject(projectId);
   const graph = issues ?? readAll().issues;
   return toView(requireReview(id, reviewId, graph), graph);
+}
+
+/** A new, unwritten review of a Story, with an id none of `takenIds` uses. */
+export function buildReviewIssue(
+  story: Story,
+  projectId: string,
+  issues: Issue[],
+  takenIds: Iterable<string>,
+  { archived, now }: { archived: boolean; now: string },
+): ReviewIssue {
+  const parsed = parseIssue({
+    id: uniqueSlug(`${story.id}-review`, takenIds),
+    kind: "review",
+    partOf: projectId,
+    title: story.title,
+    story: story.id,
+    archived,
+    marks: { all: {}, commits: {} },
+    submissions: [],
+    order: nextSiblingOrder(issues, "review", projectId, undefined),
+    createdAt: now,
+    updatedAt: now,
+  });
+  if (!parsed.ok) throw new IssueError("validation", parsed.message);
+  if (parsed.issue.kind !== "review") {
+    throw new IssueError("validation", `"${parsed.issue.id}" is not a review`);
+  }
+  return parsed.issue;
 }
 
 function startReview(
@@ -161,28 +188,19 @@ function startReview(
     const existing = reviewOfStory(projectId, storyId, issues);
     if (existing) return { created: false, review: toView(existing, issues) };
     assertStoryHasTaskCommits(storyId);
-    const now = new Date().toISOString();
-    const review: ReviewIssue = {
-      id: uniqueSlug(`${storyId}-review`, issues.map((issue) => issue.id)),
-      kind: "review",
-      partOf: projectId,
-      title: story.title,
-      story: storyId,
-      archived: false,
-      marks: { all: {}, commits: {} },
-      submissions: [],
-      order: nextSiblingOrder(issues, "review", projectId, undefined),
-      createdAt: now,
-      updatedAt: now,
-    };
-    const parsed = parseIssue(review);
-    if (!parsed.ok) throw new IssueError("validation", parsed.message);
+    const review = buildReviewIssue(
+      story,
+      projectId,
+      issues,
+      issues.map((issue) => issue.id),
+      { archived: false, now: new Date().toISOString() },
+    );
     const graph = [...issues, review];
     const problems = problemsFor(review.id, graph);
     if (problems.length > 0) {
       throw new IssueError("validation", problems.map((p) => p.message).join("; "));
     }
-    commitIssueBatch([{ issue: parsed.issue }], []);
+    commitIssueBatch([{ issue: review }], []);
     return { created: true, review: toView(review, graph) };
   });
 }

@@ -2,7 +2,7 @@
 name: issue-tracker-review-question
 model: composer-2.5
 description: >-
-  Read-only researcher that answers a reviewer's question in its Story
+  Read-only researcher that answers a reviewer's question in its review
   thread. Used by question threads.
 readonly: true
 ---
@@ -23,7 +23,8 @@ question plainly and correctly.
 
 The prompt ends with:
 
-- `Story: <storyId> — <title>`
+- `Review: <reviewId>` — the review that holds the question
+- `Story: <storyId> — <title>` — the Story that review covers
 - `Thread: <threadId>` — the question's thread root
 - `Workspace: <path>` — absolute Project workspace
 - `Anchor: <path>, <side> side, <lines>, commit <sha>` — present when the
@@ -58,7 +59,7 @@ The prompt ends with:
    session.
 
    ```bash
-   issue comment <storyId> --reply-to <threadId> --role agent --name Researcher --body "<answer>"
+   issue comment <reviewId> --reply-to <threadId> --role agent --name Researcher --body "<answer>"
    ```
 
 That reply is your only write: the working tree, branches, and tracker issues

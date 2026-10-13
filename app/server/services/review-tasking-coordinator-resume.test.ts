@@ -29,7 +29,7 @@ async function linkTask(commentId: string, taskId: string, at: string): Promise<
     updatedAt: later,
   });
   const { appendThreadEvent } = await load();
-  await appendThreadEvent("s", commentId, {
+  await appendThreadEvent(REVIEW_ID, commentId, {
     event: "linked",
     taskId,
     by: { role: "human" },
@@ -43,7 +43,7 @@ describe("coordinator resume once per submission", () => {
     seed();
     const prompts: string[] = [];
     const { appendComment, retryReviewSubmission } = await load();
-    const handled = await appendComment("s", { role: "human", body: "Handled" });
+    const handled = await appendComment(REVIEW_ID, { role: "human", body: "Handled" });
     await linkTask(handled.id, "task-a", AT);
     writeReviewSubmissions([
       {
@@ -75,8 +75,8 @@ describe("coordinator resume once per submission", () => {
     seed();
     const prompts: string[] = [];
     const { appendComment, retryOpenReviewSubmissions } = await load();
-    const first = await appendComment("s", { role: "human", body: "First" });
-    const second = await appendComment("s", { role: "human", body: "Second" });
+    const first = await appendComment(REVIEW_ID, { role: "human", body: "First" });
+    const second = await appendComment(REVIEW_ID, { role: "human", body: "Second" });
     await linkTask(first.id, "task-a", AT);
     await linkTask(second.id, "task-b", AT);
     writeReviewSubmissions([

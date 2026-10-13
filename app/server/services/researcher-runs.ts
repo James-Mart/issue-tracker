@@ -25,7 +25,7 @@ import { deriveAnchoredOutdated } from "./anchor-outdated.js";
 import { withEditableFlag } from "./comment-edit.js";
 import { findThreadRoot } from "./thread-events.js";
 import { readCommentLog } from "./comment-log.js";
-import { readIssueOrThrow, taskStatusesForStory } from "./issues.js";
+import { linkableTaskStatuses, readIssueOrThrow } from "./issues.js";
 import { isRunLive } from "./run-live.js";
 import { commentsFromLog } from "./thread-state.js";
 
@@ -314,10 +314,8 @@ export async function enrichCommentsForRead(
   issueId: string,
 ): Promise<CommentsResponse> {
   const issue = readIssueOrThrow(issueId);
-  const taskStatusById =
-    issue.kind === "story" ? taskStatusesForStory(issueId) : new Map();
   const log = readCommentLog(issueId);
-  const parsed = commentsFromLog(issueId, log, taskStatusById);
+  const parsed = commentsFromLog(issueId, log, linkableTaskStatuses(issue));
   const response: CommentsResponse = {
     ...parsed,
     messages: await deriveAnchoredOutdated(issueId, parsed.messages),
@@ -337,7 +335,7 @@ export function researcherRunForThread(
   return thread ? researcherRunFor(thread, response.messages) : undefined;
 }
 
-/** Researcher sessions recorded on the Story, oldest first, one per conversation. */
+/** Researcher sessions recorded on the review, oldest first, one per conversation. */
 function researcherSessions(
   issueId: string,
 ): { conversationId: string; threadId: string }[] {
@@ -352,9 +350,9 @@ function researcherSessions(
   return sessions;
 }
 
-/** Every researcher conversation recorded on the Story, oldest first. */
-export function researcherConversationIds(storyId: string): string[] {
-  return researcherSessions(storyId).map((session) => session.conversationId);
+/** Every researcher conversation recorded on the review, oldest first. */
+export function researcherConversationIds(reviewId: string): string[] {
+  return researcherSessions(reviewId).map((session) => session.conversationId);
 }
 
 function researcherAgentRun(
@@ -380,7 +378,7 @@ function researcherAgentRun(
   };
 }
 
-/** One agent run per researcher conversation started on the Story. */
+/** One agent run per researcher conversation started on the review. */
 export function researcherRunsForIssue(issueId: string): AgentRun[] {
   return researcherSessions(issueId).flatMap((session) => {
     if (!conversationExists(session.conversationId)) return [];

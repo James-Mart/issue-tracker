@@ -48,6 +48,29 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+function writeReview(id: string, story: string): void {
+  writeIssue(story, {
+    kind: "story",
+    title: "Story",
+    partOf: "p",
+    order: 0,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue(id, {
+    kind: "review",
+    title: "Story",
+    partOf: "p",
+    story,
+    archived: false,
+    marks: { all: {}, commits: {} },
+    submissions: [],
+    order: 1,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+}
+
 async function postComment(
   issueId: string,
   body: Record<string, unknown>,
@@ -68,23 +91,16 @@ async function getComments(
 }
 
 describe("comments HTTP API", () => {
-  it("resolves and unresolves a Story thread, posting an optional reply in the same write", async () => {
-    writeIssue("story-1", {
-      kind: "story",
-      title: "Story",
-      partOf: "p",
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    const { json: rootJson } = await postComment("story-1", {
+  it("resolves and unresolves a review thread, posting an optional reply in the same write", async () => {
+    writeReview("review-1", "story-1");
+    const { json: rootJson } = await postComment("review-1", {
       role: "story-review",
       body: "please fix",
     });
     const threadId = (rootJson as { id: string }).id;
 
     const resolved = await fetch(
-      `${baseUrl}/api/issues/story-1/threads/${threadId}/events`,
+      `${baseUrl}/api/issues/review-1/threads/${threadId}/events`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -108,7 +124,7 @@ describe("comments HTTP API", () => {
     expect(resolvedJson.reply.body).toBe("fixed it");
     expect(resolvedJson.reply.replyTo).toBe(threadId);
 
-    const { json: afterResolve } = await getComments("story-1");
+    const { json: afterResolve } = await getComments("review-1");
     const resolvedView = afterResolve as {
       messages: unknown[];
       threads: Array<{ state: string }>;
@@ -119,7 +135,7 @@ describe("comments HTTP API", () => {
     ]);
 
     const unresolved = await fetch(
-      `${baseUrl}/api/issues/story-1/threads/${threadId}/events`,
+      `${baseUrl}/api/issues/review-1/threads/${threadId}/events`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -127,7 +143,7 @@ describe("comments HTTP API", () => {
       },
     );
     expect(unresolved.status).toBe(201);
-    const { json: afterOpen } = await getComments("story-1");
+    const { json: afterOpen } = await getComments("review-1");
     const openView = afterOpen as {
       messages: unknown[];
       threads: Array<{ state: string }>;
@@ -136,16 +152,9 @@ describe("comments HTTP API", () => {
     expect(openView.threads[0]?.state).toBe("open");
   });
 
-  it("PATCH edits an anchored review comment and refuses a story note", async () => {
-    writeIssue("story-edit", {
-      kind: "story",
-      title: "Story",
-      partOf: "p",
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
-    const { json: created } = await postComment("story-edit", {
+  it("PATCH edits an anchored review comment and refuses a plain note", async () => {
+    writeReview("review-edit", "story-edit");
+    const { json: created } = await postComment("review-edit", {
       role: "human",
       body: "pending",
       anchor: {
@@ -158,7 +167,7 @@ describe("comments HTTP API", () => {
     const commentId = (created as { id: string }).id;
 
     const extra = await fetch(
-      `${baseUrl}/api/issues/story-edit/comments/${commentId}`,
+      `${baseUrl}/api/issues/review-edit/comments/${commentId}`,
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -168,7 +177,7 @@ describe("comments HTTP API", () => {
     expect(extra.status).toBe(400);
 
     const patched = await fetch(
-      `${baseUrl}/api/issues/story-edit/comments/${commentId}`,
+      `${baseUrl}/api/issues/review-edit/comments/${commentId}`,
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -183,7 +192,7 @@ describe("comments HTTP API", () => {
       role: "human",
     });
 
-    const { json } = await getComments("story-edit");
+    const { json } = await getComments("review-edit");
     const view = json as {
       messages: Array<{ id: string; body: string; editable: boolean }>;
     };
@@ -193,7 +202,7 @@ describe("comments HTTP API", () => {
       editable: true,
     });
 
-    const lines = readFileSync(join(dir, "story-edit", "comments.jsonl"), "utf8")
+    const lines = readFileSync(join(dir, "review-edit", "comments.jsonl"), "utf8")
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line) as { type?: string; body: string; role?: string });
@@ -204,13 +213,13 @@ describe("comments HTTP API", () => {
       role: "human",
     });
 
-    const { json: note } = await postComment("story-edit", {
+    const { json: note } = await postComment("review-edit", {
       role: "human",
       body: "a note",
     });
     const noteId = (note as { id: string }).id;
     const refused = await fetch(
-      `${baseUrl}/api/issues/story-edit/comments/${noteId}`,
+      `${baseUrl}/api/issues/review-edit/comments/${noteId}`,
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -220,11 +229,11 @@ describe("comments HTTP API", () => {
     expect(refused.status).toBe(409);
     expect(await refused.json()).toMatchObject({
       code: "conflict",
-      error: expect.stringContaining("Story note"),
+      error: expect.stringContaining(": note"),
     });
 
     const missing = await fetch(
-      `${baseUrl}/api/issues/story-edit/comments/missing`,
+      `${baseUrl}/api/issues/review-edit/comments/missing`,
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },

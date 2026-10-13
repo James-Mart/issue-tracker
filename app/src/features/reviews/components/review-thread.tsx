@@ -21,27 +21,27 @@ import { quoteDiffComposer } from "@/features/issues/lib/diff-thread-anchor";
 import { quoteSource } from "@/features/issues/lib/quote-comment";
 import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
 
-/** Story thread on the review workbench: reply, quote, resolve, and unresolve. */
+/** Review thread on the review workbench: reply, quote, resolve, and unresolve. */
 export function ReviewThread({
   thread,
-  storyId,
+  reviewId,
   inline = false,
   showAnchorContext = false,
   collapse,
   onSeeInDiff,
 }: {
   thread: CommentThreadData;
-  storyId: string;
+  reviewId: string;
   inline?: boolean;
   showAnchorContext?: boolean;
   collapse?: "resolved" | "outdated";
   onSeeInDiff?: () => void;
 }) {
-  const post = usePostComment(storyId);
-  const edit = useEditComment(storyId);
-  const events = usePostThreadEvent(storyId);
+  const post = usePostComment(reviewId);
+  const edit = useEditComment(reviewId);
+  const events = usePostThreadEvent(reviewId);
   const diff = useOptionalDiffComposer();
-  const composers = useThreadComposers(storyId);
+  const composers = useThreadComposers(reviewId);
   const slot = composers.slots[thread.root.id];
   const threadId = thread.root.id;
 
@@ -60,7 +60,7 @@ export function ReviewThread({
     <>
       <CommentThread
         thread={thread}
-        issueId={storyId}
+        issueId={reviewId}
         inline={inline}
         showAnchorContext={showAnchorContext}
         collapse={collapse}
@@ -83,7 +83,7 @@ export function ReviewThread({
             <DiffThreadComposer target={{ kind: "reply", threadId }} />
           ) : !diff && slot?.intent.mode === "reply" ? (
             <ThreadComposerFields
-              issueId={storyId}
+              issueId={reviewId}
               intent={slot.intent}
               onSubmit={sendLocal}
               onCancel={() => composers.close(threadId)}
@@ -95,7 +95,7 @@ export function ReviewThread({
             <DiffThreadComposer target={diffQuote} />
           ) : localQuote ? (
             <ThreadComposerFields
-              issueId={storyId}
+              issueId={reviewId}
               intent={localQuote}
               onSubmit={sendLocal}
               onCancel={() => composers.close(threadId)}
@@ -124,11 +124,11 @@ export function ReviewThread({
 
 export function ReviewLineThreads({
   threads,
-  storyId,
+  reviewId,
   composer,
 }: {
   threads: CommentThreadData[];
-  storyId: string;
+  reviewId: string;
   /** New-thread composer open on this line. */
   composer?: ReactNode;
 }) {
@@ -140,7 +140,7 @@ export function ReviewLineThreads({
       className="flex flex-col gap-2 px-3 py-2 font-sans"
     >
       {threads.map((thread) => (
-        <ReviewThread key={thread.root.id} thread={thread} storyId={storyId} inline />
+        <ReviewThread key={thread.root.id} thread={thread} reviewId={reviewId} inline />
       ))}
       {composer}
     </div>
@@ -150,10 +150,10 @@ export function ReviewLineThreads({
 /** All changes: threads whose anchor drifted, kept in their file card below the code. */
 export function ReviewOutdatedThreads({
   threads,
-  storyId,
+  reviewId,
 }: {
   threads: CommentThreadData[];
-  storyId: string;
+  reviewId: string;
 }) {
   if (threads.length === 0) return null;
   return (
@@ -167,7 +167,7 @@ export function ReviewOutdatedThreads({
         <ReviewThread
           key={thread.root.id}
           thread={thread}
-          storyId={storyId}
+          reviewId={reviewId}
           inline
           showAnchorContext
           collapse="outdated"

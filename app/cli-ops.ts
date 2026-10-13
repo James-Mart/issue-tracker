@@ -282,7 +282,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     for (const line of formatCommentsForView(messages, threads)) {
       console.log(line);
     }
-    if (detail.kind === "story") {
+    if (detail.kind === "story" || detail.kind === "review") {
       console.log();
       console.log("--- threads ---");
       if (threads.length === 0) console.log("(no threads)");
@@ -486,15 +486,15 @@ function applyCommentOptions(cmd: Command): Command {
     )
     .option(
       "--resolve",
-      "reply and resolve that Story thread; requires --reply-to and --body",
+      "reply and resolve that review thread; requires --reply-to and --body",
     )
     .option(
       "--link-task <taskId>",
-      "record that a Task addresses that Story thread; requires --reply-to",
+      "record that a Task addresses that review thread; requires --reply-to",
     )
     .option(
       "--kind <question>",
-      "start a question thread; new Story thread root only",
+      "start a question thread; new review thread root only",
     )
     .option(
       "--edit <commentId>",

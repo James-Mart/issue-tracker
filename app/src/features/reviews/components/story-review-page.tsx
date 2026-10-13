@@ -187,7 +187,7 @@ function StoryReviewWorkbench({
       <div role="tabpanel" className="flex min-h-0 min-w-0 flex-1 flex-col">
         {active === "conversation" ? (
           <ReviewConversationTab
-            storyId={storyId}
+            reviewId={review.id}
             submissions={review.submissions}
             onOpenInDiff={openThreadInDiff}
             focusThreadId={threadId}

@@ -59,7 +59,7 @@ export function CommentThread({
   reveal = false,
 }: {
   thread: CommentThreadData;
-  /** Absent on a flat Story note: no Reply control. */
+  /** Absent on a flat note: no Reply control. */
   onReply?: () => void;
   issueId?: string;
   replySlot?: ReactNode;
@@ -279,7 +279,7 @@ function QuestionCardFooter({
       className="mt-2 flex flex-wrap items-center gap-1 border-t border-border pt-2"
     >
       {showRetry ? (
-        <ResearcherRetryButton storyId={issueId} threadId={threadId} />
+        <ResearcherRetryButton reviewId={issueId} threadId={threadId} />
       ) : null}
       {onDismiss ? (
         <Button

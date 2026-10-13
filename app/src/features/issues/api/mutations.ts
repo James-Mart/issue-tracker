@@ -141,20 +141,20 @@ export function usePostThreadEvent(issueId: string) {
   });
 }
 
-export function useRetryQuestionResearcher(storyId: string) {
+export function useRetryQuestionResearcher(reviewId: string) {
   const qc = useQueryClient();
   return useMutation<void, Error, string, { previous?: CommentsResponse }>({
     mutationFn: (threadId) =>
-      request(`/api/issues/${storyId}/threads/${threadId}/researcher/retry`, {
+      request(`/api/issues/${reviewId}/threads/${threadId}/researcher/retry`, {
         method: "POST",
       }),
     onMutate: async (threadId) => {
-      await qc.cancelQueries({ queryKey: issuesKeys.comments(storyId) });
+      await qc.cancelQueries({ queryKey: issuesKeys.comments(reviewId) });
       const previous = qc.getQueryData<CommentsResponse>(
-        issuesKeys.comments(storyId),
+        issuesKeys.comments(reviewId),
       );
       const startedAt = new Date().toISOString();
-      qc.setQueryData<CommentsResponse>(issuesKeys.comments(storyId), (current) => {
+      qc.setQueryData<CommentsResponse>(issuesKeys.comments(reviewId), (current) => {
         if (!current) return current;
         return {
           ...current,
@@ -169,13 +169,13 @@ export function useRetryQuestionResearcher(storyId: string) {
     },
     onError: (err, _threadId, context) => {
       if (context?.previous) {
-        qc.setQueryData(issuesKeys.comments(storyId), context.previous);
+        qc.setQueryData(issuesKeys.comments(reviewId), context.previous);
       }
       toast.error(messageOf(err));
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: issuesKeys.comments(storyId) });
-      qc.invalidateQueries({ queryKey: issuesKeys.agentRuns(storyId) });
+      qc.invalidateQueries({ queryKey: issuesKeys.comments(reviewId) });
+      qc.invalidateQueries({ queryKey: issuesKeys.agentRuns(reviewId) });
     },
   });
 }

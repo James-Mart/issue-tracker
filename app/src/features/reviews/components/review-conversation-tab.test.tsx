@@ -71,7 +71,7 @@ function mount(): HTMLDivElement {
             path="/projects/:projectId/review/stories/:storyId"
             element={
               <ReviewConversationTab
-                storyId="story-1"
+                reviewId="story-1-review"
                 submissions={[]}
                 onOpenInDiff={vi.fn()}
               />

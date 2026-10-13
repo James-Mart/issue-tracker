@@ -74,8 +74,8 @@ describe("review tasking", () => {
       listAgentRunsForIssue,
       listAgentRunEvents,
     } = await load();
-    const first = await appendComment("s", { role: "human", body: "Fix the anchor" });
-    const second = await appendComment("s", { role: "human", body: "And the name" });
+    const first = await appendComment(REVIEW_ID, { role: "human", body: "Fix the anchor" });
+    const second = await appendComment(REVIEW_ID, { role: "human", body: "And the name" });
     const sessions = stubReviewTaskingSessions(prompts);
 
     const recordedView = await submitReview("p", REVIEW_ID, { summary: "Ship the wording" });
@@ -95,24 +95,25 @@ describe("review tasking", () => {
     expect(recorded.status).toBe("tasking");
     expect(recorded.summaryCommentId).toBe(submission(recordedView).summaryCommentId);
     expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain(`Review: ${REVIEW_ID}`);
     expect(prompts[0]).toContain(`Story: s`);
     expect(prompts[0]).toContain(`Threads: ${first.id}, ${second.id}`);
     expect(prompts[0]).not.toContain("Summary comment:");
     expect(prompts[0]).toContain("issue-tracker-review-tasker");
 
-    const comments = readComments("s");
+    const comments = readComments(REVIEW_ID);
     expect(comments.messages.map((message) => message.body)).toContain(
       "Ship the wording",
     );
 
     await expect(submitReview("p", REVIEW_ID, {})).rejects.toThrow(SUBMISSION_TASKING_ERROR);
 
-    const runs = listAgentRunsForIssue("s");
+    const runs = listAgentRunsForIssue(REVIEW_ID);
     expect(runs.map((run) => run.role)).toEqual([REVIEW_TASKER_ROLE]);
     expect(runs[0]?.conversationId).toBe(requireConversation(recorded));
     expect(runs[0]?.status).toBe("unknown");
     expect(
-      listAgentRunEvents("s", reviewTaskerDelegationId(requireConversation(recorded))),
+      listAgentRunEvents(REVIEW_ID, reviewTaskerDelegationId(requireConversation(recorded))),
     ).toEqual([]);
   });
 
@@ -129,8 +130,8 @@ describe("review tasking", () => {
       appendThreadEvent,
       listAgentRunsForIssue,
     } = await load();
-    const kept = await appendComment("s", { role: "human", body: "Keep" });
-    const missed = await appendComment("s", { role: "human", body: "Miss" });
+    const kept = await appendComment(REVIEW_ID, { role: "human", body: "Keep" });
+    const missed = await appendComment(REVIEW_ID, { role: "human", body: "Miss" });
     const sessions = stubReviewTaskingSessions(prompts);
     const recordedView = await submitReview("p", REVIEW_ID, {});
     const started = await launchRecorded(
@@ -159,12 +160,12 @@ describe("review tasking", () => {
       createdAt: AT,
       updatedAt: AT,
     });
-    await appendThreadEvent("s", kept.id, {
+    await appendThreadEvent(REVIEW_ID, kept.id, {
       event: "linked",
       taskId: "fix-kept",
       by: { role: "issue-tracker-review-tasker" },
     });
-    await appendThreadEvent("s", missed.id, {
+    await appendThreadEvent(REVIEW_ID, missed.id, {
       event: "linked",
       taskId: "old-task",
       by: { role: "issue-tracker-review-tasker" },
@@ -184,7 +185,7 @@ describe("review tasking", () => {
       openThreadIds: [missed.id],
     });
     expect(incomplete).not.toHaveProperty("error");
-    expect(listAgentRunsForIssue("s")[0]?.status).toBe("completed");
+    expect(listAgentRunsForIssue(REVIEW_ID)[0]?.status).toBe("completed");
 
     const retried = await retryReviewSubmission(
       "p",
@@ -204,7 +205,7 @@ describe("review tasking", () => {
     expect(prompts[1]).toContain(`Threads: ${missed.id}`);
     expect(prompts[1]).not.toContain(kept.id);
 
-    await appendThreadEvent("s", missed.id, {
+    await appendThreadEvent(REVIEW_ID, missed.id, {
       event: "linked",
       taskId: "fix-kept",
       by: { role: "issue-tracker-review-tasker" },
@@ -221,7 +222,7 @@ describe("review tasking", () => {
       coordinatorResumed: true,
     });
     expect(done).not.toHaveProperty("error");
-    expect(listAgentRunsForIssue("s")[0]?.status).toBe("completed");
+    expect(listAgentRunsForIssue(REVIEW_ID)[0]?.status).toBe("completed");
     const { implementingResumePrompt, implementingSessionMessage } = await import(
       "./implementing-launch.js"
     );

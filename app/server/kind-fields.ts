@@ -267,6 +267,7 @@ export const STORY_GET_FIELDS = {
   worktree: DERIVED,
   behindMergeBase: DERIVED,
   mergeBaseRef: DERIVED,
+  reviewId: DERIVED,
   workQueuedAt: STORED,
 } as const satisfies Record<string, GetFieldSpec>;
 

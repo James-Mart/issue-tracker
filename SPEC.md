@@ -270,6 +270,9 @@ These are computed by `derive()` and never written to disk (see
   story-review append and reopen-cap contract: [Derived state](#derived-state).
 - **mergeBaseRef** — derived Story ref, not stored. Read with
   `issue story get <storyId> mergeBaseRef`. Resolution contract: [Derived state](#derived-state).
+- **reviewId** — derived Story field, not stored. Read with
+  `issue story get <storyId> reviewId`: the id of the review whose `story` is
+  this Story. Empty stdout when the Story has no review.
 - **worktree** — derived Story checkout. Not on `list()` / `GET /api/issues`.
   `GET /api/projects/:projectId/worktrees` returns
   `{ worktrees: { [storyId]: state } }` for Stories in that Project, and
@@ -283,9 +286,9 @@ These are computed by `derive()` and never written to disk (see
   set; omitted from the tree outline. An empty working tree alone is **not** a
   completion signal.
 - **openLinkedThreadRoots** — derived Task field, not stored. Read with
-  `issue task get <taskId> openLinkedThreadRoots`. One Story thread root id
-  per line: threads that are open and linked to that Task. Empty stdout when
-  there are none.
+  `issue task get <taskId> openLinkedThreadRoots`. One thread root id per
+  line from the review of the Task's Story: threads that are open and linked
+  to that Task. Empty stdout when there are none or the Story has no review.
 - **archived** — stored visibility flag on Epic / Idea / Story / Task (never
   Project). Explicit; **not** auto-derived from Done. Cascade and CLI/UI
   filtering — see [Archived visibility](#archived-visibility).
@@ -360,7 +363,7 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
 | verb | notes |
 | --- | --- |
 | `view` / `get` / `attach` / `attachments` / `detach` | every kind |
-| `comment` | epic / idea / story / task (not project) |
+| `comment` | epic / idea / story / task / review (not project) |
 | `merge` | story only |
 
 - **`view`** — `issue view <id>` (pass `--comments` for the comment log).
@@ -372,7 +375,7 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   `{startLine}-{line}`; a file anchor is `{path} {sha7}` with no line or side;
   append ` (outdated)` after the location when the anchor
   is outdated). `{author}` is `name` when set, else `role`, followed by
-  ` ({type})` when the comment has a `type`. On a Story, `--comments` also
+  ` ({type})` when the comment has a `type`. On a Story or review, `--comments` also
   appends `--- threads ---`: one line per thread root,
   `{rootId} open|resolved|dismissed`, plus ` question` when the thread is a
   question, plus ` linked={taskId}` when that thread is linked to a Task. A
@@ -394,11 +397,11 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   refuses a Project id. A line anchor is `--path`, `--side`, `--line`, and
   `--commit` together, with optional `--start-line`. A file anchor is
   `--path` and `--commit` with `--side`, `--line`, and `--start-line` all
-  absent. Either shape accepts `--kind question` on a new Story thread root.
+  absent. Either shape accepts `--kind question` on a new review thread root.
   `--reply-to` is mutually exclusive with
-  anchor flags. `--resolve` replies and resolves that Story thread in the
+  anchor flags. `--resolve` replies and resolves that review thread in the
   same write; it requires `--reply-to` and `--body`, and there is no CLI
-  unresolve. `--kind question` starts a question thread on a new Story thread
+  unresolve. `--kind question` starts a question thread on a new review thread
   root (a root with no `kind` is a review thread) and applies only to that
   new root, not a reply. `--edit` appends a `comment-edit` for that comment
   and is exclusive with anchor flags, `--reply-to`, `--kind`, `--resolve`,
@@ -1268,7 +1271,7 @@ Resolution is a thread event, not a flag on the comment.
 | `replyTo` | string? | when set, the `id` of the thread **root** this message replies to |
 | `type` | `"human-request"` \| `"human-response"`? | absent on ordinary comments; `request-human` writes `human-request` on a thread root, `human-done` writes `human-response` on the reply |
 | `anchor` | object? | optional line or file anchor on a root comment only (see below) |
-| `kind` | `"review"` \| `"question"`? | thread root only; absent means review. Refused on a reply and on a non-Story |
+| `kind` | `"review"` \| `"question"`? | thread root only; absent means review. Refused on a reply and on a non-review issue |
 | `source` | object? | optional GitHub mirror provenance (see below) |
 
 **Source (`source`).** Set on a comment mirrored from a GitHub pull request.
@@ -1322,7 +1325,7 @@ optional `startLine`). A file anchor sets `path` and `commitSha` only —
 | `commitSha` | string | full 40- or 64-character hex object name; validated on append; never inferred from the issue |
 
 **Thread event (`type: "thread-event"`).** Records a change to a thread's
-state. Members:
+state. Thread events are recorded only on a review issue's log. Members:
 
 | member | type | notes |
 | --- | --- | --- |
@@ -1347,11 +1350,11 @@ body on read. An edit whose `commentId` is not a comment in the log is
 skipped into `problems`.
 
 A comment is editable when its thread is an anchored review thread (a line
-or file anchor, `kind` review, including a converted question) on a Story,
+or file anchor, `kind` review, including a converted question) on a review,
 that thread is open with no linked Task, and the root id appears in no
-submission of that Story's review. A researcher reply (`replyTo` set, `role`
+submission of that review. A researcher reply (`replyTo` set, `role`
 `agent`, `name` `Researcher`) is never editable. Unconverted questions and
-unanchored Story notes are never editable. A comment that is not on a Story
+unanchored notes are never editable. A comment that is not on a review
 is not editable.
 
 `PATCH /api/issues/:id/comments/:commentId` with `{ body }` appends one
@@ -1361,7 +1364,7 @@ record using `--role` and optional `--name`, and prints the comment id.
 `--edit` is exclusive with anchor flags, `--reply-to`, and `--kind`, and
 also with `--resolve` and `--link-task`. A non-editable comment is refused
 with `cannot edit comment "<id>": <reason>`, where `<reason>` is
-`submitted`, `linked`, `question`, `researcher reply`, `Story note`, or
+`submitted`, `linked`, `question`, `researcher reply`, `note`, or
 `resolved` (the thread is no longer open). The HTTP status is `409`. An
 unknown comment is `404`. The append changes `comments.jsonl`, so the
 issues watcher publishes a comments-scope event.
@@ -1381,18 +1384,18 @@ and follows that rule. `researcherConversationId` is the last
 `researcher-session` event's `conversationId`, omitted once the thread is
 converted. An event whose `threadId` is not a root is skipped into `problems`.
 
-**Question researcher.** Posting a question root on a Story through
+**Question researcher.** Posting a question root on a review through
 `POST /api/issues/:id/comments` starts that question's researcher before the
-route responds: a fresh conversation on the Story's `review` channel (offered
-on every Story) with role
+route responds: a fresh conversation on the review's `review` channel (offered
+on every review) with role
 [`issue-tracker-review-question`](agents/issue-tracker-review-question.md) at
 its model pin. Its prompt is the role body, notice that a reviewer asked about
-the Story's changes, the Story, thread id, and Project workspace, the question,
+the Story's changes, the review, the Story, thread id, and Project workspace, the question,
 and either a line anchor (path, side, lines, commit), a file anchor (path,
 commit), or, for a general question, the Story's diff range. Once the run has started, or has failed to start, the
 server appends `researcher-session` with `by: { role: "agent", name: "Researcher" }`.
 The researcher reads code read-only and replies in the thread with
-`issue comment <storyId> --reply-to <threadId> --role agent --name Researcher`.
+`issue comment <reviewId> --reply-to <threadId> --role agent --name Researcher`.
 A CLI-posted question starts no researcher.
 
 A human reply (`role` `human`) to an open question thread through
@@ -1401,7 +1404,7 @@ conversation, using the reply as the prompt. A live run receives the reply
 directly; a run that does not accept it holds the reply and sends it when
 the run finishes. An archived conversation, or one that cannot be read, is
 replaced: a new review-channel conversation is seeded with the role body,
-Story context, the anchor or diff range, and the thread's messages in order,
+review and Story context, the anchor or diff range, and the thread's messages in order,
 and a `researcher-session` event with `recovered: true` becomes the current
 conversation. The first non-human reply after that event, and before the next
 `researcher-session`, has read-time `newSession: true`. `issue view --comments`
@@ -1427,16 +1430,16 @@ run-end marker after its transcript has fully flushed, and only once that
 run is not continuing into a replay or a held follow-up. A new run clears
 the marker when it becomes live. A launch that fails before a conversation
 exists is `failed` without a marker.
-`POST /api/issues/:storyId/threads/:threadId/researcher/retry` starts a fresh
+`POST /api/issues/:reviewId/threads/:threadId/researcher/retry` starts a fresh
 researcher conversation for that question and returns `204`. It refuses with
 `conflict` unless `researcherRun` is `failed`. Each researcher conversation is
-listed among the Story's agent runs with role `issue-tracker-review-question`.
+listed among the review's agent runs with role `issue-tracker-review-question`.
 
 Humans record `resolved`, `unresolved`, `dismissed`, `reopened`, or
 `converted`, with an optional reply `body`, via
-`POST /api/issues/:storyId/threads/:threadId/events` with
+`POST /api/issues/:reviewId/threads/:threadId/events` with
 `{ event, body?, name? }`. A `body` appends a reply in the same write. The
-route is Story-only and stamps `by.role` as `human`. `dismissed`,
+route is review-only and stamps `by.role` as `human`. `dismissed`,
 `reopened`, and `converted` are human-only; there is no CLI for them. The
 thread keeps its question and answers. Surfaces show the conversion as a
 system event credited to the converting human
@@ -1500,7 +1503,7 @@ no consumer can persist a broken file.
   surviving reference into it (see [Deletion policy](#deletion-policy)). Exposed
   over HTTP as `DELETE /api/issues/:id` and via `issue <kind> delete`.
 - `appendComment(id, CommentInput)` — appends one JSONL line to
-  `comments.jsonl` with server-stamped `id` and `at` (`issue epic|idea|story|task comment`
+  `comments.jsonl` with server-stamped `id` and `at` (`issue epic|idea|story|task|review comment`
   and `POST /api/issues/:id/comments` share this path). `CommentInput` is the
   stored shape minus `id` and `at` — `{role, name?, body, type?}` plus optional
   `replyTo` and/or `anchor`; see [`comments.jsonl` message shape](#commentsjsonl-message-shape).
@@ -1509,15 +1512,15 @@ no consumer can persist a broken file.
   `POST /api/stories/:id/human-done` calls `humanDone`.
   Append-time validation refuses invalid `replyTo`, `anchor`, and `commitSha`
   values.
--   `appendThreadEvent(storyId, threadId, input)` — appends a thread event, and
-  a reply when `body` is set, in one write on a Story. Refuses a non-Story, a
+-   `appendThreadEvent(reviewId, threadId, input)` — appends a thread event, and
+  a reply when `body` is set, in one write on a review. Refuses a non-review, a
   `threadId` that is not a thread root, an agent `unresolved`, an agent
   `resolved` without `body`, dismiss, reopen, or convert from a non-human,
   dismiss or reopen on a review thread (including one already converted),
   convert unless the thread is an open question, resolve or unresolve on a
   question thread, and `researcher-session` without `conversationId` or on a
   review thread.
-  `POST /api/issues/:storyId/threads/:threadId/events`
+  `POST /api/issues/:reviewId/threads/:threadId/events`
   stamps `by.role` `human` and calls this path.
 - `editComment(id, commentId, { body, role, name? })` — appends a
   `comment-edit` when that comment is editable (see

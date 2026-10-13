@@ -87,7 +87,7 @@ export function conversationFilterIsDefault(filter: ConversationFilter): boolean
 
 /**
  * Questions that are not dismissed count as open. Review threads that are
- * not resolved, including Story notes, count as comments.
+ * not resolved, including plain notes, count as comments.
  */
 export function conversationThreadFilterKey(thread: {
   kind: ThreadView["kind"];

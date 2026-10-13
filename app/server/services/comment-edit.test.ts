@@ -26,7 +26,7 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
   writeFileSync(join(dir, id, "issue.json"), JSON.stringify({ id, ...body }));
 }
 
-function seedStory(): void {
+function seedReview(): void {
   writeIssue("p", {
     kind: "project",
     title: "P",
@@ -39,6 +39,18 @@ function seedStory(): void {
     title: "S",
     partOf: "p",
     order: 0,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("r", {
+    kind: "review",
+    title: "S",
+    partOf: "p",
+    story: "s",
+    archived: false,
+    marks: { all: {}, commits: {} },
+    submissions: [],
+    order: 1,
     createdAt: AT,
     updatedAt: AT,
   });
@@ -56,7 +68,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "issue-tracker-comment-edit-"));
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", dir);
-  seedStory();
+  seedReview();
 });
 
 afterEach(() => {
@@ -68,20 +80,20 @@ describe("editComment", () => {
   it("appends a comment-edit and folds the latest body into the view", async () => {
     const { appendComment, editComment, readComments, enrichCommentsForRead } =
       await load();
-    const root = await appendComment("s", {
+    const root = await appendComment("r", {
       role: "human",
       name: "Ada",
       body: "first",
       anchor: LINE_ANCHOR,
     });
-    const reply = await appendComment("s", {
+    const reply = await appendComment("r", {
       role: "human",
       body: "also",
       replyTo: root.id,
     });
 
     const edited = await editComment(
-      "s",
+      "r",
       root.id,
       { body: "second" },
       { role: "human", name: "Ada" },
@@ -90,9 +102,9 @@ describe("editComment", () => {
     expect(edited.editable).toBe(true);
     expect(edited.id).toBe(root.id);
 
-    await editComment("s", root.id, { body: "third" }, { role: "agent" });
+    await editComment("r", root.id, { body: "third" }, { role: "agent" });
 
-    const lines = readFileSync(join(dir, "s", "comments.jsonl"), "utf8")
+    const lines = readFileSync(join(dir, "r", "comments.jsonl"), "utf8")
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line) as { type?: string; body: string; commentId?: string; role?: string; name?: string });
@@ -113,14 +125,14 @@ describe("editComment", () => {
     });
     expect(lines[3]?.name).toBeUndefined();
 
-    const comments = readComments("s");
+    const comments = readComments("r");
     expect(comments.messages.map((message) => message.body)).toEqual([
       "third",
       "also",
     ]);
     expect(comments.problems).toEqual([]);
 
-    const view = await enrichCommentsForRead("s");
+    const view = await enrichCommentsForRead("r");
     expect(view.messages.find((message) => message.id === root.id)?.editable).toBe(
       true,
     );

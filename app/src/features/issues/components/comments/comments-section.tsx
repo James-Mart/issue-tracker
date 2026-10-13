@@ -1,24 +1,18 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Send } from "lucide-react";
 import { useLocation, useSearchParams } from "react-router-dom";
-import type { IssueDetail, ThreadEventRequest } from "@server/schemas";
+import type { IssueDetail } from "@server/schemas";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ReviewComposer } from "@/features/reviews/components/review-composer";
 import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
 import { useCommentThreads, useCommentsQuery } from "../../api/queries";
-import {
-  useEditComment,
-  usePostComment,
-  usePostThreadEvent,
-} from "../../api/mutations";
+import { useEditComment, usePostComment } from "../../api/mutations";
 import { supportsAttachments } from "../../lib/attachments";
 import {
   isPlainNote,
   isQuestionThread,
-  STORY_COMPOSER_LABEL,
-  threadStateActions,
   type CommentThread as CommentThreadData,
 } from "../../lib/comment-threads";
 import { humanComment, supportsComments } from "../../lib/comments";
@@ -117,8 +111,6 @@ function CommentList({
   onEdit,
   onSeeInDiff,
   storyComposer,
-  onThreadEvent,
-  eventPending,
 }: {
   threads: CommentThreadData[];
   issueId: string;
@@ -133,11 +125,6 @@ function CommentList({
   onEdit?: (commentId: string, body: string) => Promise<void>;
   onSeeInDiff: (threadId: string) => void;
   storyComposer: boolean;
-  onThreadEvent: (
-    threadId: string,
-    event: ThreadEventRequest["event"],
-  ) => void;
-  eventPending: boolean;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [params] = useSearchParams();
@@ -214,7 +201,6 @@ function CommentList({
         thread={thread}
         issueId={issueId}
         showAnchorContext
-        resolvePending={eventPending}
         reveal={revealThreadId === thread.root.id}
         onSeeInDiff={
           thread.root.anchor ? () => onSeeInDiff(thread.root.id) : undefined
@@ -227,9 +213,6 @@ function CommentList({
         replySlot={replySlotFor(thread.root.id)}
         quoteSlot={quoteSlot?.node}
         quoteCommentId={quoteSlot?.commentId}
-        {...(storyComposer && (isQuestionThread(thread) || thread.converted)
-          ? threadStateActions(thread, (event) => onThreadEvent(thread.root.id, event))
-          : {})}
       />
     );
   };
@@ -347,7 +330,6 @@ function CommentsPanel({
   const { threads, problems } = useCommentThreads(id);
   const post = usePostComment(id);
   const edit = useEditComment(id);
-  const events = usePostThreadEvent(id);
   const [, setSearchParams] = useSearchParams();
   const [draft, setDraft] = useState("");
   const [openReplyId, setOpenReplyId] = useState<string | null>(null);
@@ -356,8 +338,7 @@ function CommentsPanel({
 
   const agentLive = isInFlight(issue);
 
-  const sendStory = (body: string, kind?: "question") =>
-    post(humanComment(body, kind));
+  const sendStory = (body: string) => post(humanComment(body));
 
   const sendIssue = () => {
     const body = draft.trim();
@@ -508,10 +489,6 @@ function CommentsPanel({
             }
             onEdit={submitCommentEdit}
             storyComposer={storyComposer}
-            eventPending={events.isPending}
-            onThreadEvent={(threadId, event) =>
-              events.mutate({ threadId, event })
-            }
             onSeeInDiff={(threadId) =>
               setSearchParams((prev) => writeDiffThreadSearchParam(prev, threadId), {
                 replace: true,
@@ -534,11 +511,10 @@ function CommentsPanel({
           <div className="flex min-w-0 shrink-0 flex-col gap-2 border-t border-border pt-3">
             <ReviewComposer
               draftKey={conversationDraftKey(id)}
-              placeholder={STORY_COMPOSER_LABEL}
+              placeholder="Add a comment"
               submitLabel="Send"
               persistent
               onSubmit={(body) => sendStory(body)}
-              onQuestion={(body) => sendStory(body, "question")}
             />
           </div>
         ) : (

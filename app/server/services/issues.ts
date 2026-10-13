@@ -16,6 +16,7 @@ import {
   type IssueRecord,
   type IssuesResponse,
   type Problem,
+  type ReviewIssue,
   type TaskStatus,
 } from "../schemas.js";
 import { IssueError } from "./errors.js";
@@ -38,6 +39,7 @@ import { ensureKindRenamed } from "./kind-rename.js";
 import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
 import { ensureReviewRecordsMigrated } from "./review-record-migration.js";
+import { ensureReviewThreadsMigrated } from "./review-thread-migration.js";
 import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
@@ -197,6 +199,7 @@ export function ensureMigrations(): void {
   ensureSpecReviewMigrated();
   ensureSourceIdeaMigration();
   ensureReviewRecordsMigrated();
+  ensureReviewThreadsMigrated();
 }
 
 /** Every issue in the store, archived ones included. */
@@ -250,6 +253,14 @@ export function readIssueOrThrow(id: string): Issue {
   const { issue, problem } = readIssueFile(id);
   if (!issue) {
     throw new IssueError("validation", problem?.message ?? `invalid issue "${id}"`);
+  }
+  return issue;
+}
+
+export function readReviewOrThrow(id: string): ReviewIssue {
+  const issue = readIssueOrThrow(id);
+  if (issue.kind !== "review") {
+    throw new IssueError("validation", `issue "${id}" is not a review`);
   }
   return issue;
 }
@@ -801,13 +812,15 @@ export function update(
   });
 }
 
-export function taskStatusesForStory(
-  storyId: string,
+/** Statuses of the Tasks a comment log's threads can link: a review's Story Tasks. */
+export function linkableTaskStatuses(
+  owner: Issue,
   issues: Issue[] = readAll().issues,
 ): Map<string, TaskStatus> {
   const statuses = new Map<string, TaskStatus>();
+  if (owner.kind !== "review") return statuses;
   for (const issue of issues) {
-    if (issue.kind === "task" && issue.partOf === storyId) {
+    if (issue.kind === "task" && issue.partOf === owner.story) {
       statuses.set(issue.id, issue.status);
     }
   }
