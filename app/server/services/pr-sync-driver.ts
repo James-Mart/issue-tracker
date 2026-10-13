@@ -8,7 +8,8 @@ import {
 import type { ProjectPrSyncStatus } from "./delivery.js";
 import { derive, type DeriveResult } from "./derive.js";
 import { ISSUES_TOPIC, startIssueEventsWatcher } from "./issue-events.js";
-import { readAll } from "./issues.js";
+import { ensureMigrations, readAll } from "./issues.js";
+import { withIssuesStoreLock } from "./issues-store-lock.js";
 import {
   replacePrFactsCacheFromMap,
   clearPrFactsCache,
@@ -167,6 +168,11 @@ function syncPassesRunHere(): boolean {
 async function executeSyncPass(projectId: string): Promise<PrSyncPassResult> {
   const at = new Date().toISOString();
   try {
+    // Story comments already mirrored from GitHub move onto their review
+    // before this pass can land a second copy.
+    withIssuesStoreLock(() => {
+      ensureMigrations();
+    });
     const reconciled = await reconcileProjectPrs(projectId);
     let result: PrSyncPassResult = reconciled;
     if (!reconciled.error) {

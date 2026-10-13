@@ -14,6 +14,7 @@ import { IssueError } from "./errors.js";
 import { requireKindCapability, serialize } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import type { PrSyncStepResult } from "./pr-sync-driver.js";
+import { reviewsWithPullRequests } from "./review-pr-tracking.js";
 
 const PAGE_SIZE = 100;
 
@@ -82,7 +83,7 @@ export type PrCommentFetch = {
 
 const cursors = new Map<string, string>();
 
-/** @internal Drop per-PR fetch cursors between tests. */
+/** @internal Drop per-review fetch cursors between tests. */
 export function resetPrCommentMirrorForTests(): void {
   cursors.clear();
 }
@@ -750,7 +751,7 @@ function resolveReplyTo(
 }
 
 async function landComment(
-  storyId: string,
+  reviewId: string,
   comment: MirroredComment,
   replyTo: string | undefined,
   messages: Comment[],
@@ -760,7 +761,7 @@ async function landComment(
   if (seen.has(comment.source.id)) return;
   const input = commentInputOf(comment);
   const stored = await appendComment(
-    storyId,
+    reviewId,
     replyTo ? { ...input, replyTo } : input,
     { at: comment.createdAt, messages },
   );
@@ -776,17 +777,17 @@ async function landComment(
  * returns is not in `edits`, so the tracker copy stays.
  */
 async function applyMirroredEdits(
-  storyId: string,
+  reviewId: string,
   edits: MirroredEdit[],
 ): Promise<void> {
   if (edits.length === 0) return;
   await serialize(() => {
-    requireKindCapability(storyId, "comments");
+    requireKindCapability(reviewId, "comments");
     const current = new Map<
       string,
       { id: string; body: string; role: string; name?: string }
     >();
-    for (const message of readComments(storyId).messages) {
+    for (const message of readComments(reviewId).messages) {
       if (!message.source) continue;
       current.set(message.source.id, {
         id: message.id,
@@ -816,35 +817,34 @@ async function applyMirroredEdits(
       records.push(parsed.data);
       stored.body = edit.body;
     }
-    if (records.length > 0) appendCommentLogRecords(storyId, records);
+    if (records.length > 0) appendCommentLogRecords(reviewId, records);
   });
 }
 
-async function mirrorStoryComments(
-  storyId: string,
+async function mirrorReviewComments(
+  reviewId: string,
   prUrl: string,
   workspace: string,
 ): Promise<void> {
   const startedAt = new Date().toISOString();
-  const since = cursors.get(prUrl);
+  const since = cursors.get(reviewId);
   const { comments, edits } = await fetchPrComments(prUrl, since, workspace);
-  const messages = readComments(storyId).messages;
-  const seen = new Set(
-    messages.flatMap((message) => (message.source ? [message.source.id] : [])),
-  );
+  const messages = readComments(reviewId).messages;
+  const seen = new Set<string>();
+  const storedBySource = new Map<string, string>();
+  for (const message of messages) {
+    if (!message.source) continue;
+    seen.add(message.source.id);
+    storedBySource.set(message.source.id, message.id);
+  }
   const bySource = new Map(comments.map((comment) => [comment.source.id, comment]));
-  const storedBySource = new Map(
-    messages.flatMap((message) =>
-      message.source ? [[message.source.id, message.id] as const] : [],
-    ),
-  );
   const roots = comments.filter((comment) => comment.replyToSourceId === undefined);
   const replies = comments.filter(
     (comment): comment is MirroredComment & { replyToSourceId: string } =>
       comment.replyToSourceId !== undefined,
   );
   for (const comment of roots) {
-    await landComment(storyId, comment, undefined, messages, seen, storedBySource);
+    await landComment(reviewId, comment, undefined, messages, seen, storedBySource);
   }
   for (const comment of replies) {
     const replyTo = resolveReplyTo(
@@ -854,26 +854,28 @@ async function mirrorStoryComments(
       messages,
     );
     if (!replyTo) continue;
-    await landComment(storyId, comment, replyTo, messages, seen, storedBySource);
+    await landComment(reviewId, comment, replyTo, messages, seen, storedBySource);
   }
-  await applyMirroredEdits(storyId, edits);
-  cursors.set(prUrl, startedAt);
+  await applyMirroredEdits(reviewId, edits);
+  cursors.set(reviewId, startedAt);
 }
 
 /**
  * Sync-pass step after PR reconcile. Lands conversation comments, review
- * summaries, and inline review threads on each matched Story, including bot
- * authors, then appends a `comment-edit` when a fetched body differs from
- * the tracker copy. A comment GitHub no longer returns stays. The first pass
- * for a PR in this process fetches full history; later passes fetch items
- * updated since that pass. A failing Story does not stop the others; every
- * failure is named in `error`.
+ * summaries, and inline review threads on each review that has a pull
+ * request, including bot authors, then appends a `comment-edit` when a
+ * fetched body differs from the tracker copy. Nothing is written to a Story
+ * or posted back to GitHub. A comment GitHub no longer returns stays. The
+ * first pass for a review in this process fetches full history; later passes
+ * fetch items updated since that pass. A failing review does not stop the
+ * others; every failure is named in `error`.
  */
 export async function mirrorPrComments(
   projectId: string,
   previous: PrSyncStepResult,
 ): Promise<PrSyncStepResult> {
-  if (previous.matches.size === 0) return previous;
+  const reviews = reviewsWithPullRequests(projectId);
+  if (reviews.length === 0) return previous;
   let workspace: string;
   try {
     workspace = requireProjectWorkspace(projectId);
@@ -882,12 +884,12 @@ export async function mirrorPrComments(
     return { ...previous, error: message };
   }
   const failures: string[] = [];
-  for (const [storyId, prUrl] of previous.matches) {
+  for (const review of reviews) {
     try {
-      await mirrorStoryComments(storyId, prUrl, workspace);
+      await mirrorReviewComments(review.id, review.pr.url, workspace);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      failures.push(`${storyId}: ${message}`);
+      failures.push(`${review.id}: ${message}`);
     }
   }
   return failures.length > 0 ? { ...previous, error: failures.join("; ") } : previous;

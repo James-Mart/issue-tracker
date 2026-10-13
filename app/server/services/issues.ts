@@ -39,6 +39,7 @@ import { ensureKindRenamed } from "./kind-rename.js";
 import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
 import { ensureReviewRecordsMigrated } from "./review-record-migration.js";
+import { ensureGithubCommentsMigrated } from "./github-comment-migration.js";
 import { ensureReviewThreadsMigrated } from "./review-thread-migration.js";
 import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
@@ -200,6 +201,7 @@ export function ensureMigrations(): void {
   ensureSourceIdeaMigration();
   ensureReviewRecordsMigrated();
   ensureReviewThreadsMigrated();
+  ensureGithubCommentsMigrated();
 }
 
 /** Every issue in the store, archived ones included. */

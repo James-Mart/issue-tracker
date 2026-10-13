@@ -73,7 +73,7 @@ function isReviewWithPr(issue: Issue): issue is ReviewWithPr {
   return issue.kind === "review" && issue.pr !== undefined;
 }
 
-function reviewsWithPullRequests(projectId: string): ReviewWithPr[] {
+export function reviewsWithPullRequests(projectId: string): ReviewWithPr[] {
   const { issues } = readAll();
   const inProject = subtreeIds(issues, projectId);
   return issues

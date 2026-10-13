@@ -1304,6 +1304,16 @@ including a comment the editability rule below would refuse.
 A comment GitHub no longer returns stays on the tracker. A delete does not
 remove the tracker copy or append a record.
 
+The sync pass writes these comments on each review that stores that pull
+request. It does not write them on a Story. A review with no pull request is
+left alone. One review's failure does not stop the others. A reply, a
+question and its researcher, resolve, and dismiss are stored on the review
+and are not posted to GitHub.
+
+Comments already mirrored onto a Story move once onto that Story's review,
+including their replies, edits, and thread events. The review is created when
+the Story has none. Other Story comments stay.
+
 **Threading (`replyTo`).** A thread is one root plus an ordered list of
 replies. Threads are exactly **one level deep**: `replyTo` must name a comment
 that has no `replyTo` of its own. A reply to a reply is **refused** at append
@@ -1353,9 +1363,9 @@ A comment is editable when its thread is an anchored review thread (a line
 or file anchor, `kind` review, including a converted question) on a review,
 that thread is open with no linked Task, and the root id appears in no
 submission of that review. A researcher reply (`replyTo` set, `role`
-`agent`, `name` `Researcher`) is never editable. Unconverted questions and
-unanchored notes are never editable. A comment that is not on a review
-is not editable.
+`agent`, `name` `Researcher`) is never editable. A comment with `source` is
+never editable. Unconverted questions and unanchored notes are never
+editable. A comment that is not on a review is not editable.
 
 `PATCH /api/issues/:id/comments/:commentId` with `{ body }` appends one
 comment-edit, stamps `role` `human`, and returns the updated message.
@@ -1364,8 +1374,8 @@ record using `--role` and optional `--name`, and prints the comment id.
 `--edit` is exclusive with anchor flags, `--reply-to`, and `--kind`, and
 also with `--resolve` and `--link-task`. A non-editable comment is refused
 with `cannot edit comment "<id>": <reason>`, where `<reason>` is
-`submitted`, `linked`, `question`, `researcher reply`, `note`, or
-`resolved` (the thread is no longer open). The HTTP status is `409`. An
+`submitted`, `linked`, `question`, `researcher reply`, `note`,
+`resolved` (the thread is no longer open), or `github`. The HTTP status is `409`. An
 unknown comment is `404`. The append changes `comments.jsonl`, so the
 issues watcher publishes a comments-scope event.
 
