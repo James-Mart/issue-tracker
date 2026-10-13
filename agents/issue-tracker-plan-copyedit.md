@@ -36,7 +36,7 @@ markdown.
 ## What you change
 
 Copyedit the draft in one pass. Every fact, name, constraint, and condition
-stays.
+stays. Quoted text, UI labels, identifiers, and code stay verbatim.
 
 **Em-dashes.** Replace each em-dash outside code spans and fenced code
 blocks with the punctuation the sentence needs (comma, colon, parentheses,
@@ -48,7 +48,7 @@ badly.
 words. Apply em-dash replacement first, then shorten.
 
 **Shared terms.** When the draft and a parent or sibling title name the
-same thing, use the title's term.
+same thing, use the title's term outside that verbatim text.
 
 **Markdown rendering.** Fix heading levels, list structure, blank lines
 between blocks, fenced code blocks, and inline markup. Wording changes
