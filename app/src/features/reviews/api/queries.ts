@@ -6,6 +6,7 @@ import type {
   ReviewDiff,
   ReviewProgress,
   ReviewRecordView,
+  ReviewRuntimeStatus,
   ReviewView,
 } from "@server/schemas";
 import {
@@ -16,6 +17,7 @@ import {
   fetchReviewProgress,
   fetchReviewRecordCommits,
   fetchReviewRecordDiff,
+  fetchReviewRuntime,
   fetchReviews,
 } from "./client";
 import { reviewKeys } from "./keys";
@@ -147,5 +149,25 @@ export function useReviewDiffQuery(
     // reuses the result; a moved tip invalidates the query.
     refetchOnMount: false,
     retry: retryReviewRead,
+  });
+}
+
+const RUNTIME_BOOT_POLL_MS = 400;
+const RUNTIME_POLL_MS = 2_000;
+
+export function useReviewRuntimeQuery(
+  reviewId: string,
+): UseQueryResult<ReviewRuntimeStatus, Error> {
+  return useQuery({
+    queryKey: reviewKeys.runtime(reviewId),
+    queryFn: () => fetchReviewRuntime(reviewId),
+    enabled: Boolean(reviewId),
+    retry: retryReviewRead,
+    refetchInterval: (query) => {
+      const state = query.state.data?.state;
+      if (state === "booting") return RUNTIME_BOOT_POLL_MS;
+      if (state === "running") return RUNTIME_POLL_MS;
+      return false;
+    },
   });
 }

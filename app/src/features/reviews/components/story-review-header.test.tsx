@@ -25,6 +25,10 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => {
   };
 });
 
+vi.mock("./review-runtime-panel", () => ({
+  ReviewRuntimePanel: () => null,
+}));
+
 vi.mock("../api/mutations", () => ({
   useArchiveReview: () => ({ mutate: vi.fn(), isPending: false }),
   useReopenReview: () => ({ mutate: vi.fn(), isPending: false }),

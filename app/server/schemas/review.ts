@@ -71,6 +71,13 @@ export type ReviewCandidates = {
   stories: ReviewCandidate[];
 };
 
+/** `GET/POST/DELETE /api/reviews/:id/runtime`. */
+export type ReviewRuntimeStatus = {
+  state: "stopped" | "booting" | "running" | "failed";
+  baseUrl?: string;
+  error?: string;
+};
+
 export const openReviewBodySchema = z.union([
   z.object({ story: nonEmpty }).strict(),
   z.object({ pr: nonEmpty }).strict(),

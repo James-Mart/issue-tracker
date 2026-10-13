@@ -127,6 +127,8 @@ export async function attemptReviewWorktreeRemoval(
   if (guestRefusesOutwardEffect()) {
     return existsSync(path) ? { outcome: "retained", path } : { outcome: "absent" };
   }
+  const { stopReviewRuntime } = await import("./review-runtime.js");
+  await stopReviewRuntime(reviewId, { syncWorktree: false });
   await removeWorktreeCheckout(reviewId);
   return { outcome: "removed", path };
 }

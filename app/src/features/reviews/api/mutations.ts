@@ -1,12 +1,19 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { ReviewRecordView, ReviewView, SetReviewMarkBody } from "@server/schemas";
+import type {
+  ReviewRecordView,
+  ReviewRuntimeStatus,
+  ReviewView,
+  SetReviewMarkBody,
+} from "@server/schemas";
 import {
+  deleteReviewRuntime,
   postArchiveReview,
   postOpenReview,
   postOpenReviewFromPr,
   postReopenReview,
   postRetryOpenReviewSubmissions,
+  postReviewRuntime,
   postSubmitReview,
   postSyncReviewWorktree,
   putReviewMark,
@@ -97,6 +104,30 @@ export function useRetryOpenReviewSubmissions(projectId: string) {
   return useReviewMutation(projectId, (reviewId: string) =>
     postRetryOpenReviewSubmissions(projectId, reviewId),
   );
+}
+
+function useRuntimeMutation(
+  projectId: string,
+  reviewId: string,
+  mutationFn: () => Promise<ReviewRuntimeStatus>,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: (status) => {
+      qc.setQueryData(reviewKeys.runtime(reviewId), status);
+      qc.invalidateQueries({ queryKey: reviewKeys.detail(projectId, reviewId) });
+    },
+    onError: (err) => toast.error(messageOf(err)),
+  });
+}
+
+export function useStartReviewRuntime(projectId: string, reviewId: string) {
+  return useRuntimeMutation(projectId, reviewId, () => postReviewRuntime(reviewId));
+}
+
+export function useStopReviewRuntime(projectId: string, reviewId: string) {
+  return useRuntimeMutation(projectId, reviewId, () => deleteReviewRuntime(reviewId));
 }
 
 export function useSetReviewMark(projectId: string) {

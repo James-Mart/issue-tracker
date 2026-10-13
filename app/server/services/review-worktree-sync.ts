@@ -5,6 +5,7 @@ import { isSlugSafe } from "../slug.js";
 import type { Issue } from "../schemas.js";
 import type { ReviewIssue, ReviewWorktreeSyncHold } from "../schemas/review.js";
 import { isStackLive, readAgentStackState } from "./agent-stack.js";
+import { reviewRuntimeBusy } from "./review-runtime-occupancy.js";
 import {
   assertGuestAllowsOutwardEffect,
   GUEST_REFUSED_REVIEW_WORKTREE_SYNC,
@@ -44,8 +45,8 @@ function samePath(left: string, right: string): boolean {
   return resolve(left) === resolve(right);
 }
 
-/** A runtime booted from this checkout still has a live process. */
-function runtimeBusy(worktree: string): boolean {
+/** A conversation agent stack booted from this checkout still has a live process. */
+function agentStackBusy(worktree: string): boolean {
   if (!existsSync(conversationsDir)) return false;
   for (const entry of readdirSync(conversationsDir)) {
     if (!isSlugSafe(entry)) continue;
@@ -56,6 +57,11 @@ function runtimeBusy(worktree: string): boolean {
     return true;
   }
   return false;
+}
+
+/** A runtime booted from this checkout still has a live process. */
+function runtimeBusy(worktree: string): boolean {
+  return agentStackBusy(worktree) || reviewRuntimeBusy(worktree);
 }
 
 /** A researcher launch or run on this review is still live. */
