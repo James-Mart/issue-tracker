@@ -504,8 +504,8 @@ export const epicSchema = z.object({
 
 const stakeholderField = z.string().optional();
 
-// An Idea is a Project-level capture item: title/description/archive only —
-// no assignee, needs-attention, or work-status fields.
+// Project-level capture: no assignee, needs-attention, or work-status.
+// mergeBase is the optional branch the plan builds on.
 export const ideaSchema = z.object({
   id: nonEmpty,
   kind: z.literal("idea"),
@@ -514,6 +514,7 @@ export const ideaSchema = z.object({
   archived: z.boolean().default(false),
   outlineGate: z.boolean().optional(),
   executionGate: z.boolean().optional(),
+  mergeBase: nonEmpty.optional(),
   approvalPending: z.boolean().optional(),
   codeApprovalRequired: z.boolean().optional(),
   appendTo: z.string().optional(),

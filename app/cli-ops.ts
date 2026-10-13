@@ -247,6 +247,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   }
   if (detail.kind === "idea") {
     if (detail.stakeholder) lines.push(`stakeholder: ${detail.stakeholder}`);
+    if (detail.mergeBase) lines.push(`mergeBase: ${detail.mergeBase}`);
     if (detail.appendTo) lines.push(`appendTo: ${detail.appendTo}`);
     if (detail.planQueuedAt) lines.push(`planQueuedAt: ${detail.planQueuedAt}`);
   }

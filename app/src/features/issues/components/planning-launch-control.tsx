@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Play } from "lucide-react";
+import { FIELD_LABELS } from "@server/fields";
 import type { ConversationChannel, IssueRecord } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils/cn";
 import {
   Select,
@@ -40,6 +42,69 @@ import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { StakeholderSelect } from "./stakeholder-select";
 
 type IdeaRecord = Extract<IssueRecord, { kind: "idea" }>;
+
+function useIssuesById() {
+  const { data } = useIssuesQuery();
+  const byId = useMemo(() => issuesById(data?.issues ?? []), [data?.issues]);
+  return { data, byId };
+}
+
+function usePlanningMergeBase(issue: IdeaRecord) {
+  const { byId } = useIssuesById();
+  const project = byId.get(issue.partOf);
+  const trunk = project?.kind === "project" ? project.trunk : undefined;
+  const defaultMergeBase = issue.mergeBase ?? trunk ?? "";
+  const [override, setOverride] = useState<string | null>(null);
+  const mergeBase = override ?? defaultMergeBase;
+  const update = useUpdateIssue();
+
+  const writeMergeBase = async () => {
+    if (mergeBase === issue.mergeBase) return;
+    await update.mutateAsync({
+      id: issue.id,
+      patch: { mergeBase },
+    });
+  };
+
+  return {
+    mergeBase,
+    onChange: setOverride,
+    writeMergeBase,
+    pending: update.isPending,
+  };
+}
+
+function PlanningMergeBaseControl({
+  issueId,
+  value,
+  onChange,
+  disabled,
+}: {
+  issueId: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        id={`planning-merge-base-${issueId}`}
+        aria-label={FIELD_LABELS.mergeBase}
+        data-testid="planning-merge-base"
+        value={value}
+        disabled={disabled}
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        onChange={(event) => onChange(event.target.value)}
+        className="h-7 w-44 px-2 font-mono text-[13px] tabular-nums"
+      />
+      <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+        {FIELD_LABELS.mergeBase}
+      </p>
+    </div>
+  );
+}
 
 function usePlanningStakeholder(issue: IdeaRecord) {
   const [stakeholder, setStakeholder] = useState(issue.stakeholder);
@@ -274,6 +339,7 @@ function PlanningLaunchButton({
   disabled,
   optimistic,
   testId,
+  beforeStart,
   onStarted,
 }: {
   issue: IdeaRecord;
@@ -284,6 +350,8 @@ function PlanningLaunchButton({
   disabled?: boolean;
   optimistic?: boolean;
   testId?: string;
+  /** Runs after live-run confirmation and before the session is created. */
+  beforeStart?: () => Promise<void>;
   onStarted: (session: PlanningSessionStarted) => void;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
@@ -334,7 +402,12 @@ function PlanningLaunchButton({
       stakeholder,
       fallbackCatalogId ?? defaultModel!,
     );
-    confirmIfLiveRun(() => {
+    confirmIfLiveRun(async () => {
+      try {
+        if (beforeStart) await beforeStart();
+      } catch {
+        return;
+      }
       if (optimistic) beginLaunch(issue.id, "planning");
       createSession.mutate(
         {
@@ -446,8 +519,7 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaRecord }) {
   const rejectedUnsaved = useAppendTargetDraftStore(
     (s) => s.rejectedById[issue.id] === true,
   );
-  const { data } = useIssuesQuery();
-  const byId = useMemo(() => issuesById(data?.issues ?? []), [data?.issues]);
+  const { data, byId } = useIssuesById();
   const derived = data?.derived?.[issue.id];
   const appendTarget = savedAppendTargetState(issue.appendTo, issue.partOf, byId);
   const planningBlocked = appendTarget.kind === "merged";
@@ -495,7 +567,7 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaRecord }) {
   );
 }
 
-/** Empty-state launch: stakeholder picker beside the primary start action. */
+/** Empty-state launch on the planning tab: stakeholder, merge base, and gates. */
 export function PlanningChannelEmptyState({
   issue,
   channel,
@@ -510,6 +582,7 @@ export function PlanningChannelEmptyState({
   const defaultModel = defaultConversationModel(models);
   const { stakeholder, onChange, saving, error } = usePlanningStakeholder(issue);
   const outlineGateControl = useIdeaGateToggle(issue, "outlineGate");
+  const mergeBaseControl = usePlanningMergeBase(issue);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
   const copy = planningLaunchCopy(
     stakeholder,
@@ -555,6 +628,12 @@ export function PlanningChannelEmptyState({
               onChange={setSelectedCatalogId}
             />
           ) : null}
+          <PlanningMergeBaseControl
+            issueId={issue.id}
+            value={mergeBaseControl.mergeBase}
+            disabled={saving}
+            onChange={mergeBaseControl.onChange}
+          />
           {stakeholder ? (
             <>
               <IdeaGateChipButton
@@ -579,7 +658,12 @@ export function PlanningChannelEmptyState({
             fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
             variant="primary"
             optimistic
-            disabled={saving}
+            disabled={
+              saving ||
+              mergeBaseControl.pending ||
+              !mergeBaseControl.mergeBase.trim()
+            }
+            beforeStart={mergeBaseControl.writeMergeBase}
             onStarted={onStarted}
           />
         </div>

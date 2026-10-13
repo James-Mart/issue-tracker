@@ -56,9 +56,11 @@ Before grilling:
    implementation detail in Task prose).
 3. Kind gate — **Idea** → proceed; any other kind → refuse.
 4. `issue view <id>` — load the full capture (`description.md`).
-5. `issue project get <projectId> trunk` — default merge-base for the
-   mandatory first grill question (`<projectId>` from step 1).
-6. `issue idea get <id> appendTo` — when this prints a Story id, `issue
+5. `issue project get <projectId> trunk` — Project trunk (`<projectId>` from
+   step 1).
+6. `issue idea get <id> mergeBase` — printed branch → merge-base answer
+   for **Merge-base first**; empty output → settle in **Merge-base first**.
+7. `issue idea get <id> appendTo` — when this prints a Story id, `issue
    view` that Story. After the grill (including the mock-or-skip check and
    its rounds), continue at **## Append**.
 
@@ -79,21 +81,24 @@ mid-grill.
 
 **Rules (mandatory):**
 
-- **Merge-base first** — before any other grill question, ask **one**
-  question about which git ref the plan should be built on. Recommend the
-  Project **trunk** from Bootstrap step 5 via `(recommended)` in the answer
-  list. **Trunk** — proceed with the rest of the grill; Focused codebase
-  research uses the workspace working tree only (omit `Ref` in spawn stubs).
-  Carry the chosen merge-base and merge-policy (when non-trunk) through to
-  outline and migrate.
+- **Merge-base first** — settle which git ref the plan is built on before
+  any other grill question. Bootstrap step 6 — printed branch → that branch
+  is the answer. Empty output → ask **one** question about which git ref
+  the plan should be built on. That question recommends the Project
+  **trunk** from Bootstrap step 5 via `(recommended)` in the answer list.
+  An answer equal to that trunk is **trunk**; any other answer is a
+  **non-trunk branch**. **Trunk** — proceed with the rest of the grill;
+  Focused codebase research uses the workspace working tree only (omit
+  `Ref` in spawn stubs). Carry the answer and the merge-policy (when
+  non-trunk) through to outline and migrate.
   - **Non-trunk branch** — ask **one** merge-policy question for the
     resulting root (Epic or project-level Story) next. Recommend
     **`pull-request`** via `(recommended)` in the answer list. Valid values:
     `pull-request`, `merge`, `manual`, `fast-forward`
     ([SPEC.md § Project merge policy](../../SPEC.md#project-merge-policy)).
   - **Non-trunk branch** — for every **Focused codebase research** spawn
-    during the rest of the grill, pass the chosen branch as `Ref` so research
-    reads at that ref (see Spawn stubs).
+    during the rest of the grill, pass the merge-base answer as `Ref` so
+    research reads at that ref (see Spawn stubs).
 - After the merge-base answer and before any other grill question, spawn one
   **Focused codebase research** (Spawn stubs; `role: issue-tracker-research`)
   whose `Research` surveys how the host repository already solves directory

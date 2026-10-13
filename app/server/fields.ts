@@ -98,12 +98,13 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "workQueuedAt",
 ] as const;
 
-// Idea has no mergeable runtime keys besides imperative label assignments.
+// Imperative Idea fields `apply` preserves from disk.
 export const IDEA_RUNTIME_OPTIONAL_KEYS = [
   "labels",
   "stakeholder",
   "outlineGate",
   "executionGate",
+  "mergeBase",
   "approvalPending",
   "codeApprovalRequired",
   "appendTo",
@@ -149,6 +150,7 @@ export const CLEARABLE_KEYS = [
   "review",
   "retro",
   "mergeBaseOverride",
+  "mergeBase",
   "mergePolicy",
   "sourceIdea",
   "appendTo",
