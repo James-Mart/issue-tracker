@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, expect } from "vitest";
@@ -14,8 +14,12 @@ import {
 } from "./cli.test-helpers.js";
 import { refreshStorePathsFromEnv } from "./server/config.js";
 import { resetConversationMetaIndexForTests } from "./server/services/conversation-meta-index.js";
-import { WORKTREE_ROOT } from "./server/worktree-constants.js";
-import { worktreePathFor } from "./server/services/worktree.js";
+import {
+  removeTrackedWorktrees,
+  trackWorktree,
+} from "./server/worktree-test-cleanup.js";
+
+export { removeTrackedWorktrees, trackWorktree };
 
 const GIT = [
   "-c",
@@ -112,35 +116,6 @@ export function writeStory(id: string, extra: Record<string, unknown> = {}): voi
     updatedAt: nextAt(),
     ...extra,
   });
-}
-
-const trackedWorktrees: { workspace: string; path: string }[] = [];
-
-export function trackWorktree(
-  workspace: string,
-  projectId: string,
-  storyId: string,
-): string {
-  const path = worktreePathFor(projectId, storyId);
-  trackedWorktrees.push({ workspace, path });
-  return path;
-}
-
-export function removeTrackedWorktrees(): void {
-  for (const { workspace, path } of trackedWorktrees.splice(0)) {
-    if (!existsSync(path)) continue;
-    try {
-      git(workspace, ["worktree", "remove", "--force", path]);
-    } catch {
-      rmSync(path, { recursive: true, force: true });
-      try {
-        git(workspace, ["worktree", "prune"]);
-      } catch {
-        // best-effort cleanup
-      }
-    }
-  }
-  rmSync(join(WORKTREE_ROOT, "p", ".setup-logs"), { recursive: true, force: true });
 }
 
 export function seedProject(workspace?: string, setupCommand?: string): void {

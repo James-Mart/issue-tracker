@@ -4,6 +4,7 @@ import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { forceRemoveWorktree } from "../worktree-test-cleanup.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 
@@ -103,6 +104,7 @@ async function bootReviewsRoute(
 }
 
 async function teardownReviewsRoute(): Promise<void> {
+  if (repo) forceRemoveWorktree(repo, "p", "s-review");
   vi.unstubAllEnvs();
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));

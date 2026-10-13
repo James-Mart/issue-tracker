@@ -11,6 +11,7 @@ import { readAll } from "./issues.js";
 import type { PrSyncPassResult, PrSyncStepResult } from "./pr-sync-driver.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { fetchReviewPullHead } from "./review-pr.js";
+import { applyReviewWorktreeTransition } from "./review-worktree.js";
 import { readReviewView, updateStoredReview } from "./reviews.js";
 import { refusesStoreWrites } from "./store-read-only.js";
 import { subtreeIds } from "./subtree.js";
@@ -93,7 +94,7 @@ function observationFrom(
 
 async function followStoredReview(
   projectId: string,
-  review: { id: string; pr: ReviewPrSource },
+  review: { id: string; pr: ReviewPrSource; archived: boolean },
   observation: PullRequestObservation,
   workspace: string,
 ): Promise<void> {
@@ -101,9 +102,12 @@ async function followStoredReview(
     await fetchReviewPullHead(workspace, review.pr.number, observation.headSha);
   }
   const now = new Date().toISOString();
-  updateStoredReview(projectId, review.id, (current) =>
+  const after = updateStoredReview(projectId, review.id, (current) =>
     applyReviewPrObservation(current, observation, now),
   );
+  if (!review.archived && after.archived) {
+    await applyReviewWorktreeTransition({ remove: [review.id], ensure: [] });
+  }
 }
 
 /**
@@ -123,7 +127,12 @@ export async function refreshReviewPullRequest(
   if (observation === "not-found") {
     throw new IssueError("pr-not-found", "Pull request not found on GitHub.");
   }
-  await followStoredReview(projectId, { id: view.id, pr: view.pr }, observation, workspace);
+  await followStoredReview(
+    projectId,
+    { id: view.id, pr: view.pr, archived: view.archived },
+    observation,
+    workspace,
+  );
 }
 
 /**

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GhSpawner } from "../services/delivery.js";
 import type { GitSpawner } from "../services/git-read.js";
 import { mockChild } from "../services/pr-comment-mirror-harness.js";
+import { forceRemoveWorktree } from "../worktree-test-cleanup.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const ORIGIN_REPO = "acme/widgets";
@@ -129,6 +130,7 @@ async function boot(story?: Record<string, unknown>): Promise<void> {
 }
 
 async function teardown(): Promise<void> {
+  if (repo) forceRemoveWorktree(repo, "p", "pr-7-review");
   if (setGhSpawnerForTests) setGhSpawnerForTests(null);
   if (setGitSpawnerForTests) setGitSpawnerForTests(null);
   vi.unstubAllEnvs();
@@ -181,6 +183,10 @@ describe("POST /api/projects/:projectId/reviews { pr }", () => {
       },
     });
     expect(stored.story).toBeUndefined();
+    expect(stored.worktreePath).toEqual(expect.any(String));
+    const checkout = stored.worktreePath as string;
+    expect(git(["rev-parse", "HEAD"], checkout)).toBe(headSha);
+    expect(git(["rev-parse", "--abbrev-ref", "HEAD"], checkout)).toBe("HEAD");
 
     const again = await postPr("acme/widgets#7");
     expect(again.status).toBe(200);

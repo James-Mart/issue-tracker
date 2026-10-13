@@ -100,6 +100,11 @@ const { stopSpawnedMockupStacksOnShutdown } = await import(
   "./services/mockup-stack.js"
 );
 
+const { migrateOpenReviewWorktrees } = await import(
+  "./services/review-worktree.js"
+);
+await migrateOpenReviewWorktrees();
+
 const server = app.listen(listenPort, () => {
   console.log(
     `issue-tracker server listening on http://localhost:${listenPort}`,

@@ -31,6 +31,7 @@ const GIT = [
 let root: string;
 let issuesRoot: string;
 let workspace: string;
+let reviewWorktree: string;
 let tip: string;
 let server: Server | undefined;
 let baseUrl: string;
@@ -173,6 +174,8 @@ beforeEach(() => {
   git(["add", "-A"]);
   git(["commit", "-m", "add two"]);
   tip = git(["rev-parse", "HEAD"]);
+  reviewWorktree = join(root, "review-wt");
+  git(["worktree", "add", "--detach", reviewWorktree, tip]);
 
   writeIssue("p", {
     kind: "project",
@@ -199,6 +202,7 @@ beforeEach(() => {
     marks: { all: {}, commits: {} },
     submissions: [],
     order: 1,
+    worktreePath: reviewWorktree,
     createdAt: AT,
     updatedAt: AT,
   });
@@ -291,6 +295,7 @@ describe("question researcher", () => {
     expect(live.researcherRun).toEqual(runningRun);
     expect(sentPrompt(1)).toBe(followUp(rootId, "And the tests?"));
     expect(fake.handles).toHaveLength(1);
+    expect(fake.created[0]?.cwd).toBe(reviewWorktree);
 
     release();
     expect((await settledThread(rootId)).researcherRun).toEqual(

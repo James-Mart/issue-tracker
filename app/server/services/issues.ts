@@ -45,6 +45,15 @@ import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
+  assertGuestAllowsOutwardEffect,
+  GUEST_REFUSED_REVIEW_WORKTREE_CREATE,
+} from "./guest-outward-effects.js";
+import {
+  applyReviewWorktreeTransition,
+  attemptReviewWorktreeRemoval,
+  reviewWorktreeTransitions,
+} from "./review-worktree.js";
+import {
   attemptStoryWorktreeRemoval,
   storyIdsForLifecycleRemoval,
 } from "./worktree.js";
@@ -671,6 +680,7 @@ export function update(
         detail: read(id),
         attemptIds: [] as string[],
         recordedPrProjectId: undefined,
+        reviewWorktrees: { remove: [] as string[], ensure: [] as string[] },
       };
     }
 
@@ -750,6 +760,11 @@ export function update(
     for (const review of reviewArchiveWrites) {
       writes.push({ issue: review });
     }
+    const reviewWorktrees = reviewWorktreeTransitions(
+      existing,
+      parsed.issue,
+      reviewArchiveWrites,
+    );
 
     if (
       cascaded.length === 0 &&
@@ -779,6 +794,9 @@ export function update(
       }
     }
 
+    if (reviewWorktrees.ensure.length > 0) {
+      assertGuestAllowsOutwardEffect(GUEST_REFUSED_REVIEW_WORKTREE_CREATE);
+    }
     commitIssueBatch(writes, []);
     const jsonText = serializeIssue(parsed.issue);
     const finalDescription =
@@ -800,16 +818,24 @@ export function update(
         issues,
       ),
       recordedPrProjectId,
+      reviewWorktrees,
     };
-  }).then(async ({ detail, attemptIds, recordedPrProjectId }) => {
+  }).then(async ({ detail, attemptIds, recordedPrProjectId, reviewWorktrees }) => {
     if (recordedPrProjectId) {
       const { refreshRecordedPrFacts } = await import("./pr-facts-read.js");
       await refreshRecordedPrFacts(recordedPrProjectId);
     }
-    if (attemptIds.length === 0) return detail;
+    if (
+      attemptIds.length === 0 &&
+      reviewWorktrees.remove.length === 0 &&
+      reviewWorktrees.ensure.length === 0
+    ) {
+      return detail;
+    }
     for (const storyId of attemptIds) {
       await attemptStoryWorktreeRemoval(storyId);
     }
+    await applyReviewWorktreeTransition(reviewWorktrees);
     return read(id);
   });
 }
@@ -842,10 +868,15 @@ export async function remove(id: string): Promise<DeletionResult> {
     throw new IssueError("not_found", `unknown issue "${id}"`);
   }
 
-  const preview = planDeletion(readAll().issues, id);
+  const graph = readAll().issues;
+  const preview = planDeletion(graph, id);
+  const kinds = new Map(graph.map((issue) => [issue.id, issue.kind]));
   const retainedWorktrees: DeletionResult["retainedWorktrees"] = [];
   for (const delId of preview.deleteIds) {
-    const result = await attemptStoryWorktreeRemoval(delId);
+    const result =
+      kinds.get(delId) === "review"
+        ? await attemptReviewWorktreeRemoval(delId)
+        : await attemptStoryWorktreeRemoval(delId);
     if (result.outcome === "retained") {
       retainedWorktrees.push({ id: delId, path: result.path });
     }
