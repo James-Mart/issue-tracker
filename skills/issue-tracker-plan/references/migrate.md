@@ -35,11 +35,11 @@ When the grill included mockup rounds with chosen directions, follow
 Never a project-form `apply` for this migration. Use the **story-form** or
 **epic-form** already chosen for the approved outline.
 
-After **each** successful root `apply`, record the merge-base and policy from
-the grill (**Merge-base first** bullet in **Rules (mandatory):** in the parent
+After **each** successful root `apply`, record the merge-base answer and
+policy from **Merge-base first** (**Rules (mandatory):** in the parent
 skill):
 
-| Grill merge-base | Post-apply |
+| Merge-base answer | Post-apply |
 | --- | --- |
 | **Trunk** | (none) |
 | **Non-trunk branch** | `issue <rootKind> set <rootId> mergeBase <branch>` then `issue <rootKind> set <rootId> mergePolicy <policy>` |
