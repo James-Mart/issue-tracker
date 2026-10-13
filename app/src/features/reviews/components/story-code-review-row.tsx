@@ -1,11 +1,13 @@
 import type { MouseEvent, ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import type { IssueDetail, ReviewProgress, ReviewRecordView } from "@server/schemas";
+import { Button } from "@/components/ui/button";
 import { CompactMetaItem } from "@/features/issues/components/compact-meta";
 import { useIssuesWithArchived } from "@/features/issues/hooks/use-issues-with-archived";
 import { useOpenReview } from "../api/mutations";
 import { useReviewProgressQuery, useReviewsQuery } from "../api/queries";
-import { storyReviewPath } from "../lib/links";
+import { useGoToReviewIssue } from "../hooks/use-go-to-review-issue";
+import { reviewIssuePath } from "../lib/links";
 import {
   storyCodeReviewLink,
   storyHasTaskCommits,
@@ -54,33 +56,23 @@ function StoryCodeReviewReady({
   projectId,
   merged,
   review,
-  href,
-  pending,
-  onClick,
 }: {
   projectId: string;
   merged: boolean;
   review: ReviewRecordView;
-  href: string;
-  pending: boolean;
-  onClick: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const progress = useReviewProgressQuery(projectId, review.id);
   return (
     <>
-      <Link
-        to={href}
-        className="text-primary hover:underline"
-        data-testid="story-code-review-link"
-        aria-busy={pending || undefined}
-        onClick={onClick}
-      >
-        <StoryCodeReviewLinkText
-          merged={merged}
-          review={review}
-          progress={progress.data}
-        />
-      </Link>
+      <Button asChild variant="link" size="sm" className="h-auto px-0 py-0 font-normal">
+        <Link to={reviewIssuePath(projectId, review.id)} data-testid="story-code-review-link">
+          <StoryCodeReviewLinkText
+            merged={merged}
+            review={review}
+            progress={progress.data}
+          />
+        </Link>
+      </Button>
       {progress.error ? <ReviewProgressFault /> : null}
     </>
   );
@@ -98,29 +90,17 @@ export function StoryCodeReviewRow({
   const reviews = useReviewsQuery(projectId, story.id, { enabled: hasCommits });
   const review = reviews.data?.reviews[0];
   const open = useOpenReview(projectId);
-  const navigate = useNavigate();
+  const goToReview = useGoToReviewIssue(projectId);
 
   if (!hasCommits) return null;
 
-  const href = storyReviewPath(projectId, story.id);
-  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (open.isPending) {
-      event.preventDefault();
-      return;
-    }
-    const modified =
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey;
-    if (modified) {
-      void open.mutate(story.id);
-      return;
-    }
-    event.preventDefault();
+  const start = (event: MouseEvent<HTMLButtonElement>) => {
+    if (open.isPending) return;
+    const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
     void open.mutateAsync(story.id).then(
-      () => navigate(href),
+      (created) => {
+        goToReview(created.id, modified);
+      },
       () => {
         // useOpenReview already toasts; stay on Story detail.
       },
@@ -136,26 +116,24 @@ export function StoryCodeReviewRow({
     );
   } else if (reviews.isPending) {
     value = <span className="text-muted-foreground">Loading review…</span>;
+  } else if (review) {
+    value = (
+      <StoryCodeReviewReady projectId={projectId} merged={story.merged} review={review} />
+    );
   } else {
-    value = review ? (
-      <StoryCodeReviewReady
-        projectId={projectId}
-        merged={story.merged}
-        review={review}
-        href={href}
-        pending={open.isPending}
-        onClick={onClick}
-      />
-    ) : (
-      <Link
-        to={href}
-        className="text-primary hover:underline"
+    value = (
+      <Button
+        type="button"
+        variant="link"
+        size="sm"
+        className="h-auto px-0 py-0 font-normal"
         data-testid="story-code-review-link"
         aria-busy={open.isPending || undefined}
-        onClick={onClick}
+        disabled={open.isPending}
+        onClick={start}
       >
         <StoryCodeReviewLinkText merged={story.merged} review={undefined} progress={undefined} />
-      </Link>
+      </Button>
     );
   }
 

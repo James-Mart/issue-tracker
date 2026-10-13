@@ -1,5 +1,4 @@
 import { useDeferredValue, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import type { ReviewCandidate } from "@server/schemas";
 import { ShellInlineFault } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useOpenReview } from "../api/mutations";
 import { useReviewCandidatesQuery } from "../api/queries";
-import { storyReviewPath } from "../lib/links";
+import { useGoToReviewIssue } from "../hooks/use-go-to-review-issue";
 import { ReviewIdentity } from "./review-identity";
 
 function CandidateChips({ story }: { story: ReviewCandidate }) {
@@ -36,7 +35,7 @@ export function NewReviewPicker({
   projectId: string;
   projectTitle: string;
 }) {
-  const navigate = useNavigate();
+  const goToReview = useGoToReviewIssue(projectId);
   const openReview = useOpenReview(projectId);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -52,9 +51,9 @@ export function NewReviewPicker({
 
   const choose = (storyId: string) => {
     void openReview.mutateAsync(storyId).then(
-      () => {
+      (review) => {
         setOpen(false);
-        navigate(storyReviewPath(projectId, storyId));
+        goToReview(review.id);
       },
       () => {
         // useOpenReview toasts the failure; the picker stays open.

@@ -3,7 +3,7 @@ import { useReviewDiffQuery } from "../api/queries";
 import { resolveReviewScope } from "../lib/review-scope";
 import { resolveReviewWorkbenchTab } from "../lib/workbench-tabs";
 import { useReviewLiveRefresh } from "./use-review-live-refresh";
-import { useStoryReviewList } from "./use-review-submission-sync";
+import { useReviewRecord } from "./use-review-submission-sync";
 import { useReviewCommentsQuery } from "./use-review-comments";
 
 /** Diff-tab scope from the URL, before the commit list can rewrite a shared link. */
@@ -13,15 +13,17 @@ function diffTabScope(searchParams: URLSearchParams): string | null {
 }
 
 /**
- * Commits and (on the diff tab) the diff, keyed by story id so they start with
- * the reviews list; review comments start once the list names the review.
+ * The review issue, its comments, the Story's commits, and (on the diff tab)
+ * the diff. Commits and the diff wait until the review names its Story.
  */
-export function useStoryReviewFirstWave(projectId: string, storyId: string) {
+export function useReviewWorkbenchReads(projectId: string, reviewId: string) {
   const [searchParams] = useSearchParams();
-  const reviews = useStoryReviewList(projectId, storyId);
-  const reviewId = reviews.data?.reviews[0]?.id;
-  useReviewCommentsQuery(reviewId ?? "");
+  const review = useReviewRecord(projectId, reviewId);
+  const storyId = review.data?.story ?? "";
+  useReviewCommentsQuery(reviewId);
   const commits = useReviewLiveRefresh(projectId, storyId, reviewId);
-  useReviewDiffQuery(projectId, storyId, diffTabScope(searchParams));
-  return { reviews, commits };
+  useReviewDiffQuery(projectId, storyId, diffTabScope(searchParams), {
+    enabled: storyId.length > 0,
+  });
+  return { review, commits };
 }

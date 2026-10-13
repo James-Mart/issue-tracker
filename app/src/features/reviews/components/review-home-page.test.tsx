@@ -3,8 +3,8 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { IssueRecord } from "@server/schemas";
-import { storyReviewPath } from "../lib/links";
+import type { IssueRecord, ReviewRecordView } from "@server/schemas";
+import { reviewIssuePath } from "../lib/links";
 import { ReviewHomePage } from "./review-home-page";
 
 const PROJECT = "proj";
@@ -12,6 +12,7 @@ const t0 = "2026-09-29T00:00:00.000Z";
 
 const state = vi.hoisted(() => ({
   issues: [] as IssueRecord[],
+  reviews: [] as ReviewRecordView[],
   mutateAsync: vi.fn(),
 }));
 
@@ -27,7 +28,7 @@ vi.mock("@/features/issues/api/queries", () => ({
 
 vi.mock("../api/queries", () => ({
   useReviewsQuery: () => ({
-    data: { reviews: [] },
+    data: { reviews: state.reviews },
     isLoading: false,
     isFetching: false,
     error: null,
@@ -127,7 +128,7 @@ function mount(): HTMLDivElement {
         <LocationProbe />
         <Routes>
           <Route path="/projects/:projectId/review" element={<ReviewHomePage />} />
-          <Route path="/projects/:projectId/review/stories/:storyId" element={<Probe />} />
+          <Route path="/projects/:projectId/review/issues/:id" element={<Probe />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -156,6 +157,7 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   state.issues = [];
+  state.reviews = [];
   state.mutateAsync.mockReset();
   lastLocation = "";
 });
@@ -167,12 +169,12 @@ describe("ReviewHomePage", () => {
       story("ready-story", { title: "Work tree cleanup" }),
       task("ready-task", "ready-story"),
     ];
-    state.mutateAsync.mockResolvedValue(undefined);
+    state.mutateAsync.mockResolvedValue({ id: "ready-review" });
     const container = mount();
     const start = container.querySelector('[data-testid="review-home-start"]');
     expect(start).not.toBeNull();
     await click(start!);
     expect(state.mutateAsync).toHaveBeenCalledWith("ready-story");
-    expect(lastLocation).toBe(storyReviewPath(PROJECT, "ready-story"));
+    expect(lastLocation).toBe(reviewIssuePath(PROJECT, "ready-review"));
   });
 });

@@ -3,7 +3,7 @@ import { useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
 import type { IssueRecord } from "@server/schemas";
-import { visibleIssues } from "@server/services/archived-visibility";
+import { outlineIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
 import { COCKPIT_COLUMN_CLASS, PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
@@ -266,7 +266,7 @@ export function CockpitPage() {
   const projects = useMemo(() => listProjects(issues), [issues]);
   const projectOrder = useMemo(() => projects.map((project) => project.id), [projects]);
   const buckets = useMemo(() => {
-    const visible = visibleIssues(issues, false);
+    const visible = outlineIssues(issues, false);
     const hidden = new Set(hiddenIds);
     const filtered =
       hidden.size === 0

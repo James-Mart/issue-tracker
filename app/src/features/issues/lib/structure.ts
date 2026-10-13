@@ -1,4 +1,4 @@
-import { visibleIssues } from "@server/services/archived-visibility";
+import { outlineIssues } from "@server/services/archived-visibility";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { boardKindAllows, type BoardKindFilter } from "./board-kind-filter";
 import { buildTree, filterToProject, type IssueNode } from "./build-tree";
@@ -14,16 +14,13 @@ export type StructureFilters = {
   kind: BoardKindFilter;
 };
 
-/** Visible issues under a project (archive filter applied). */
+/** Outline issues under a project (archive filter applied). */
 export function structureScopedIssues(
   issues: IssueRecord[],
   projectId: string,
   showArchived: boolean,
 ): IssueRecord[] {
-  return visibleIssues(
-    filterToProject(issues, projectId || null),
-    showArchived,
-  );
+  return outlineIssues(filterToProject(issues, projectId || null), showArchived);
 }
 
 function filteredBoardRoots(

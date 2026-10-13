@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { ArrowLeft } from "lucide-react";
 import { offersExportChannel } from "@server/kind";
@@ -41,6 +41,7 @@ import {
   type IssueDetailTab,
 } from "../lib/issue-detail-tabs";
 import { projectPath } from "../lib/links";
+import { reviewIssuePath } from "@/features/reviews/lib/links";
 import {
   issueBackTo,
   peekIssueBack,
@@ -433,6 +434,10 @@ export function IssueDetailPage() {
         onMissing={reject}
       />
     ) : null;
+
+  if (issue?.kind === "review" && !showScopeError) {
+    return <Navigate to={reviewIssuePath(projectId, issue.id)} replace />;
+  }
 
   if (issue && !showScopeError && supportsAttachments(issue.kind)) {
     return (

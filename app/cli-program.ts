@@ -8,7 +8,7 @@ import {
   type DerivedState,
   type IssueRecord,
 } from "./server/schemas.js";
-import { visibleIssues } from "./server/services/archived-visibility.js";
+import { outlineIssues, visibleIssues } from "./server/services/archived-visibility.js";
 import { appendTasks } from "./server/services/append.js";
 import { appendUpdateFromMergeBase } from "./server/services/merge-base-task.js";
 import {
@@ -607,7 +607,7 @@ Output shape:
         // then render only the visible subset (unless --show-archived).
         const scope = resolveBoardScope(id, allIssues, "tree");
         const showArchived = Boolean(opts.showArchived);
-        const issues = visibleIssues(allIssues, showArchived);
+        const issues = outlineIssues(allIssues, showArchived);
         const visibleIds = new Set(issues.map((issue) => issue.id));
         if (!showArchived) assertScopeVisible(scope, visibleIds);
         const visibleDerived = Object.fromEntries(

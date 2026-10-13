@@ -95,4 +95,37 @@ describe("review record migration", () => {
     expect(existsSync(join(dir, "p", "reviews"))).toBe(false);
     expect(existsSync(join(dir, ".review-records-migrated"))).toBe(true);
   });
+
+  it("omits review issues from the default tree and still lists them by kind", async () => {
+    writeIssue("p", {
+      kind: "project",
+      title: "P",
+      order: 0,
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+    seedStory("s1", false);
+    writeIssue("r-open", {
+      kind: "review",
+      title: "Story s1",
+      partOf: "p",
+      story: "s1",
+      archived: false,
+      order: 0,
+      marks: { all: {}, commits: {} },
+      submissions: [],
+      createdAt: nextAt(),
+      updatedAt: nextAt(),
+    });
+
+    const tree = await runIssueCli(["tree"], { env: env() });
+    expect(tree.status).toBe(0);
+    expect(tree.stdout).toContain("story s1");
+    expect(tree.stdout).not.toContain("r-open");
+
+    const listed = await runIssueCli(["list", "review"], { env: env() });
+    expect(listed.status).toBe(0);
+    const ids = JSON.parse(listed.stdout).issues.map((issue: { id: string }) => issue.id);
+    expect(ids).toContain("r-open");
+  });
 });
