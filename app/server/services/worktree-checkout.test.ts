@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -29,6 +30,26 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
   );
 }
 
+function gitHead(dir: string): string {
+  const git = (...args: string[]) =>
+    execFileSync("git", args, {
+      cwd: dir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "Tester",
+        GIT_AUTHOR_EMAIL: "tester@example.com",
+        GIT_COMMITTER_NAME: "Tester",
+        GIT_COMMITTER_EMAIL: "tester@example.com",
+      },
+    });
+  git("init", "-b", "main");
+  writeFileSync(join(dir, "file.txt"), "base\n");
+  git("add", "file.txt");
+  git("commit", "-m", "base");
+  return git("rev-parse", "HEAD").trim();
+}
+
 function buildWritesCwd(marker: string): string {
   const script = join(root, "build.cjs");
   writeFileSync(
@@ -57,6 +78,7 @@ describe("agent-stack worktree resolution", () => {
     const reviewDir = join(root, "review-checkout");
     mkdirSync(storyDir);
     mkdirSync(reviewDir);
+    const headSha = gitHead(reviewDir);
     const marker = join(root, "cwd");
     writeIssue("p", {
       kind: "project",
@@ -86,7 +108,7 @@ describe("agent-stack worktree resolution", () => {
         number: 1,
         baseRef: "main",
         headRef: "feature",
-        headSha: "abc",
+        headSha,
         fork: false,
       },
       worktreePath: reviewDir,

@@ -6,6 +6,7 @@ import type {
   ReviewDiff,
   ReviewProgress,
   ReviewRecordView,
+  ReviewRuntimeStatus,
   ReviewView,
   SetReviewMarkBody,
 } from "@server/schemas";
@@ -198,4 +199,20 @@ export function putReviewMark(
     method: "PUT",
     body,
   });
+}
+
+export function reviewRuntimeUrl(reviewId: string): string {
+  return `/api/reviews/${encodeURIComponent(reviewId)}/runtime`;
+}
+
+export function fetchReviewRuntime(reviewId: string): Promise<ReviewRuntimeStatus> {
+  return request<ReviewRuntimeStatus>(reviewRuntimeUrl(reviewId));
+}
+
+export function postReviewRuntime(reviewId: string): Promise<ReviewRuntimeStatus> {
+  return request<ReviewRuntimeStatus>(reviewRuntimeUrl(reviewId), { method: "POST" });
+}
+
+export function deleteReviewRuntime(reviewId: string): Promise<ReviewRuntimeStatus> {
+  return request<ReviewRuntimeStatus>(reviewRuntimeUrl(reviewId), { method: "DELETE" });
 }

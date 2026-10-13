@@ -127,6 +127,12 @@ vi.mock("../api/queries", () => ({
     error: null,
   }),
   useReviewCommitsQuery: () => ({ data: state.commits, error: null, isLoading: false }),
+  useReviewRuntimeQuery: () => ({
+    data: { state: "stopped" },
+    error: null,
+    isPending: false,
+    isLoading: false,
+  }),
 }));
 
 vi.mock("../api/mutations", () => ({
@@ -137,6 +143,8 @@ vi.mock("../api/mutations", () => ({
   useSubmitReview: () => ({ mutate: vi.fn(), isPending: false }),
   useRetryOpenReviewSubmissions: () => ({ mutate: vi.fn(), isPending: false }),
   useSyncReviewWorktree: () => ({ mutate: vi.fn(), isPending: false }),
+  useStartReviewRuntime: () => ({ mutate: vi.fn(), isPending: false }),
+  useStopReviewRuntime: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const FILES: ReviewDiffFile[] = [

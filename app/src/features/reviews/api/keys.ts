@@ -28,4 +28,5 @@ export const reviewKeys = {
     [...reviewKeys.all, "review-diff", projectId, reviewId] as const,
   reviewDiff: (projectId: string, reviewId: string, scope: string, headSha?: string) =>
     withHeadSha([...reviewKeys.reviewDiffs(projectId, reviewId), scope], headSha),
+  runtime: (reviewId: string) => [...reviewKeys.all, "runtime", reviewId] as const,
 };

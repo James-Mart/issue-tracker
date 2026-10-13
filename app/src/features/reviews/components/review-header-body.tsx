@@ -13,6 +13,7 @@ import {
   reviewSubmitHeader,
 } from "../lib/review-submission-ui";
 import { ReviewOpenThreads } from "./review-open-threads";
+import { ReviewRuntimePanel } from "./review-runtime-panel";
 import { ReviewSubmitActions } from "./review-submit-control";
 import { ReviewTipSyncNotice } from "./review-tip-sync-notice";
 
@@ -137,6 +138,7 @@ export function ReviewHeaderBody({
         {review?.pr ? <ReviewPrSourceLink pr={review.pr} /> : null}
         {commits ? <CommitMeta commits={commits} /> : null}
       </p>
+      {review ? <ReviewRuntimePanel projectId={projectId} reviewId={review.id} /> : null}
       {review?.worktreeSync ? (
         <ReviewTipSyncNotice
           projectId={projectId}

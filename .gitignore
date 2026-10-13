@@ -6,6 +6,9 @@ plans/
 # Conversation runtime store (peer of issues/)
 /conversations/
 
+# Review-owned runtimes (peer of issues/). Conversation agent stacks stay under conversations/.
+/review-runtimes/
+
 # API process logs and crash reports (peer of issues/)
 /logs/
 

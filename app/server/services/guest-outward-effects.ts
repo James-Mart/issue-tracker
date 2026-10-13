@@ -13,6 +13,10 @@ export const GUEST_REFUSED_REVIEW_WORKTREE_CREATE =
   "guest refused to create a review worktree";
 export const GUEST_REFUSED_REVIEW_WORKTREE_SYNC =
   "guest refused to sync a review worktree";
+export const GUEST_REFUSED_REVIEW_RUNTIME_START =
+  "guest refused to start a review runtime";
+export const GUEST_REFUSED_REVIEW_RUNTIME_STOP =
+  "guest refused to stop a review runtime";
 export const GUEST_REFUSED_UPDATE_FROM_MERGE_BASE =
   "guest refused to update from merge base";
 export const GUEST_REFUSED_MERGE = "guest refused to merge a pull request";

@@ -22,6 +22,7 @@ import {
   type InitiateRestart,
 } from "./routes/restart.js";
 import { mockupStackMiddleware } from "./routes/mockups.js";
+import { createReviewRuntimeRouter } from "./routes/review-runtime.js";
 import { storiesRouter } from "./routes/stories.js";
 import { transcriptionsRouter } from "./routes/transcriptions.js";
 import { RESTART_SENTINEL_EXIT_CODE } from "./restart-contract.js";
@@ -97,6 +98,7 @@ export function createApp(
   app.use("/api/stories", storiesRouter);
   app.use("/api/pipeline", pipelineRouter);
   app.use("/api/projects", createProjectsRouter(sessions));
+  app.use("/api/reviews", createReviewRuntimeRouter());
   app.use("/api/conversations", createConversationsRouter(sessions));
   app.use("/api/agent-models", agentModelsRouter);
   app.use("/api/health", createHealthRouter());

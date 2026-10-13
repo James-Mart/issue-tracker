@@ -101,7 +101,7 @@ export function createAgentStackTools(
           issueId: {
             type: "string",
             description:
-              "Issue to boot. The live worktree belongs to that issue when it has the worktree capability, otherwise to the nearest ancestor that does.",
+              "Issue to boot. The live worktree belongs to that issue when it has the worktree capability (a Story or a review), otherwise to the nearest ancestor that does. The stack stays owned by this conversation.",
           },
         },
         required: ["issueId"],
