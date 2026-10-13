@@ -46,8 +46,8 @@ http://localhost:8060).
 When verifying server or UI changes from an in-app agents-chat session, call
 the custom tools `agent_stack_start` and `agent_stack_stop` (no conversation-id
 argument — they are scoped to the current conversation). `agent_stack_start`
-requires `{ issueId }`: the Story, or an issue under it, whose live worktree
-to boot. It boots that Project's runtime declaration and returns
+requires `{ issueId }`: the issue whose nearest worktree-capable ancestor
+(itself, when it has the capability) has the live worktree to boot. It boots that Project's runtime declaration and returns
 `AGENT_STACK_PORT`, `AGENT_STACK_AUX_PORT`, `AGENT_STACK_DATA_DIR`, and
 `AGENT_STACK_BASE_URL`. Reuse the live stack only when its recorded worktree
 matches. Export `AGENT_STACK_BASE_URL` into the shell before screenshots or

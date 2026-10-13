@@ -14,7 +14,8 @@ import {
 function usage(): string {
   return `Usage: npm run agent-stack -- start|stop <conversationId> [<issueId>]
 
-start  Start (or adopt) the conversation's stack for <issueId>'s Story worktree
+start  Start (or adopt) the conversation's stack in the live worktree of
+       <issueId>'s nearest worktree-capable ancestor
        and print AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR,
        and AGENT_STACK_BASE_URL on stdout. Reuses the live stack only when its
        recorded worktree matches.

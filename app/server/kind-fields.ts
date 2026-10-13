@@ -145,6 +145,8 @@ export const TASK_SET_FIELDS = {
 export const REVIEW_SET_FIELDS = {
   title: { type: "string" },
   archived: { type: "boolean" },
+  worktreePath: { type: "string" },
+  worktreeSetupFailed: { type: "boolean" },
 } as const satisfies Record<string, SetFieldSpec>;
 
 export const KIND_SET_FIELDS = {
@@ -300,6 +302,8 @@ export const REVIEW_GET_FIELDS = {
   partOf: STORED,
   story: STORED,
   pr: STORED,
+  worktreePath: STORED,
+  worktreeSetupFailed: STORED,
   archived: STORED,
   marks: STORED,
   submissions: STORED,

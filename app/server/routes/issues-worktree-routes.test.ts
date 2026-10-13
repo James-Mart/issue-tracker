@@ -246,9 +246,9 @@ describe("POST /api/issues/:id/worktree/remove", () => {
 
 describe("POST /api/issues/:id/worktree/setup", () => {
   it("kills the setup process group at the timeout and records a failing setup", async () => {
-    // beforeEach resetModules, so the server is bound to a fresh worktree module.
+    // beforeEach resetModules, so this is the checkout module the server's worktree path uses.
     const { setWorktreeSetupTimeoutMsForTests, WORKTREE_SETUP_TIMEOUT_LINE } = await import(
-      "../services/worktree.js"
+      "../services/worktree-checkout.js"
     );
     setWorktreeSetupTimeoutMsForTests(400);
     const pidFile = join(dir, "grandchild.pid");

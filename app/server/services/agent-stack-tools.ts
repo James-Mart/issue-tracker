@@ -92,7 +92,7 @@ export function createAgentStackTools(
   return {
     agent_stack_start: {
       description:
-        "Start (or reuse) this conversation's verification stack for an issue's Story worktree. Returns AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR, and AGENT_STACK_BASE_URL. Boots the Project runtime declaration in that worktree, injecting each Project secret into every phase's environment under its own key. Secret values in phase output are masked. Refuses when runtime lacks start or baseUrl, or when a secret key collides with an AGENT_STACK_* variable. Reuse the running stack only when its recorded worktree matches. Do not restart the human's stack on 8060/8061.",
+        "Start (or reuse) this conversation's verification stack for the nearest worktree-capable ancestor of an issue. Returns AGENT_STACK_PORT, AGENT_STACK_AUX_PORT, AGENT_STACK_DATA_DIR, and AGENT_STACK_BASE_URL. Boots the Project runtime declaration in that worktree, injecting each Project secret into every phase's environment under its own key. Secret values in phase output are masked. Refuses when runtime lacks start or baseUrl, or when a secret key collides with an AGENT_STACK_* variable. Reuse the running stack only when its recorded worktree matches. Do not restart the human's stack on 8060/8061.",
       annotations: AGENT_STACK_START_ANNOTATIONS,
       outputSchema: toolOutputSchema(agentStackHandleSchema),
       inputSchema: {
@@ -101,7 +101,7 @@ export function createAgentStackTools(
           issueId: {
             type: "string",
             description:
-              "Issue whose Story (itself or its containing Story) has the live worktree to boot.",
+              "Issue to boot. The live worktree belongs to that issue when it has the worktree capability, otherwise to the nearest ancestor that does.",
           },
         },
         required: ["issueId"],
