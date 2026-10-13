@@ -30,6 +30,7 @@ vi.mock("../api/mutations", () => ({
   useReopenReview: () => ({ mutate: vi.fn(), isPending: false }),
   useSubmitReview: () => ({ mutate: state.submit, isPending: false }),
   useRetryOpenReviewSubmissions: () => ({ mutate: state.retry, isPending: false }),
+  useSyncReviewWorktree: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 function review(overrides: Partial<ReviewView> = {}): ReviewView {

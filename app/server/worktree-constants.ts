@@ -12,10 +12,12 @@ export const WORKTREE_BLOCKED_REASONS = ["parent-branch"] as const;
 
 export type WorktreeBlockedReason = (typeof WORKTREE_BLOCKED_REASONS)[number];
 
-export function worktreePathFor(projectId: string, storyId: string): string {
-  return join(WORKTREE_ROOT, projectId, storyId);
+/** Checkout path for an issue with the worktree capability. */
+export function worktreePathFor(projectId: string, issueId: string): string {
+  return join(WORKTREE_ROOT, projectId, issueId);
 }
 
-export function setupLogPathFor(projectId: string, storyId: string): string {
-  return join(WORKTREE_ROOT, projectId, ".setup-logs", `${storyId}.log`);
+/** Log for the Project setup command run in that checkout. */
+export function setupLogPathFor(projectId: string, issueId: string): string {
+  return join(WORKTREE_ROOT, projectId, ".setup-logs", `${issueId}.log`);
 }

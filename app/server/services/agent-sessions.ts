@@ -51,14 +51,17 @@ import {
   type NormalizedStep,
 } from "./event-pipeline.js";
 import { stopAgentStack } from "./agent-stack.js";
+import { IssueError } from "./errors.js";
 import { resolveConversationModel } from "./model-selection.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
+import { requireLiveReviewWorktree } from "./review-worktree.js";
 import { reconcileOrphanedConversation } from "./orphan-run-scrub.js";
 import {
   isQuestionResearcherConversation,
   noteResearcherRunStarted,
   recordResearcherRunEnd,
   recordResearcherRunFailure,
+  REVIEW_QUESTION_ROLE,
 } from "./researcher-runs.js";
 import { runCostRecorder } from "./run-cost-recorder.js";
 export type { NormalizedStep };
@@ -167,6 +170,20 @@ export { isRunLive } from "./run-live.js";
  * Build a session manager. Tests inject a fake {@link AgentSdk}; production
  * uses the real boundary singleton.
  */
+function conversationCwd(meta: {
+  role?: string;
+  issueId?: string;
+  projectId: string;
+}): string {
+  if (meta.role !== REVIEW_QUESTION_ROLE) {
+    return requireProjectWorkspace(meta.projectId);
+  }
+  if (!meta.issueId) {
+    throw new IssueError("validation", "question researcher requires a review");
+  }
+  return requireLiveReviewWorktree(meta.issueId);
+}
+
 export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
   const sessions = new Map<string, SessionEntry>();
   /** Sessions being created or resumed, so concurrent prompts share one handle. */
@@ -201,7 +218,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     await teardowns.get(conversationId);
 
     const meta = readConversationMeta(conversationId);
-    const cwd = requireProjectWorkspace(meta.projectId);
+    const cwd = conversationCwd(meta);
     const model = resolveConversationModel(meta.model);
     const storeDir = conversationStoreDir(conversationId);
     if (!existsSync(storeDir)) {
@@ -681,6 +698,16 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           );
         }
         if (runMeta.issueId) {
+          try {
+            const { syncReviewWorktree } = await import("./review-worktree-sync.js");
+            await syncReviewWorktree(runMeta.issueId, "auto");
+          } catch (err) {
+            // The run has already ended. A checkout failure must not leave wait() unsettled.
+            console.error(
+              `review worktree sync failed for ${runMeta.issueId}:`,
+              err,
+            );
+          }
           publishPlanningRunIssueFrame(runMeta.issueId);
         }
       }

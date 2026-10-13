@@ -573,6 +573,8 @@ export const reviewIssueSchema = z.object({
   title: nonEmpty,
   story: nonEmpty.optional(),
   pr: reviewPrSourceSchema.optional(),
+  worktreePath: z.string().optional(),
+  worktreeSetupFailed: z.boolean().optional(),
   ...archivableFields,
   marks: reviewMarksSchema,
   submissions: z.array(reviewSubmissionSchema),

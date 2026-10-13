@@ -8,6 +8,7 @@ import {
   postReopenReview,
   postRetryOpenReviewSubmissions,
   postSubmitReview,
+  postSyncReviewWorktree,
   putReviewMark,
 } from "./client";
 import { reviewKeys } from "./keys";
@@ -64,6 +65,12 @@ export function useOpenReviewFromPr(projectId: string) {
       qc.invalidateQueries({ queryKey: reviewKeys.lists(projectId) });
     },
   });
+}
+
+export function useSyncReviewWorktree(projectId: string) {
+  return useReviewMutation(projectId, (reviewId: string) =>
+    postSyncReviewWorktree(projectId, reviewId),
+  );
 }
 
 export function useArchiveReview(projectId: string) {

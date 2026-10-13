@@ -9,6 +9,14 @@ import type { ReviewPrSource } from "../schemas/review-state.js";
 import { collectDescendantCommits } from "./change.js";
 import { parsePrUrl } from "./delivery.js";
 import { IssueError } from "./errors.js";
+import {
+  assertGuestAllowsOutwardEffect,
+  GUEST_REFUSED_REVIEW_WORKTREE_CREATE,
+} from "./guest-outward-effects.js";
+import {
+  attemptReviewWorktreeRemoval,
+  ensureReviewWorktree,
+} from "./review-worktree.js";
 import { problemsFor } from "./integrity.js";
 import {
   commitIssueBatch,
@@ -268,6 +276,25 @@ function commitNewReview(
   return { created: true, review: toView(review, graph) };
 }
 
+function commitCreatedReview(
+  review: ReviewIssue,
+  issues: Issue[],
+): { created: true; review: ReviewRecordView } {
+  assertGuestAllowsOutwardEffect(GUEST_REFUSED_REVIEW_WORKTREE_CREATE);
+  return commitNewReview(review, issues);
+}
+
+async function checkoutCreatedReview<T extends { created: boolean; review: ReviewRecordView }>(
+  result: T,
+): Promise<T> {
+  if (!result.created) return result;
+  await ensureReviewWorktree(result.review.id);
+  return {
+    ...result,
+    review: readReviewView(result.review.partOf, result.review.id),
+  };
+}
+
 function attachPrSource(
   review: ReviewIssue,
   pr: ReviewPrSource | undefined,
@@ -315,8 +342,8 @@ function startReview(
       issues.map((issue) => issue.id),
       { archived: false, now: new Date().toISOString(), pr },
     );
-    return commitNewReview(review, issues);
-  });
+    return commitCreatedReview(review, issues);
+  }).then(checkoutCreatedReview);
 }
 
 function openResolvedPullRequest(
@@ -341,13 +368,13 @@ function openResolvedPullRequest(
         issues.map((issue) => issue.id),
         { archived: false, now: new Date().toISOString(), pr: resolved.pr },
       );
-      return commitNewReview(review, issues);
+      return commitCreatedReview(review, issues);
     }
-    return commitNewReview(
+    return commitCreatedReview(
       buildPullRequestReview(resolved, projectId, issues, new Date().toISOString()),
       issues,
     );
-  });
+  }).then(checkoutCreatedReview);
 }
 
 async function openReviewForStory(
@@ -393,12 +420,22 @@ async function setReviewArchived(
   return readReviewView(projectId, reviewId);
 }
 
-export function archiveReview(projectId: string, reviewId: string): Promise<ReviewRecordView> {
-  return setReviewArchived(projectId, reviewId, true);
+export async function archiveReview(
+  projectId: string,
+  reviewId: string,
+): Promise<ReviewRecordView> {
+  await setReviewArchived(projectId, reviewId, true);
+  await attemptReviewWorktreeRemoval(reviewId);
+  return readReviewView(projectId, reviewId);
 }
 
-export function reopenReview(projectId: string, reviewId: string): Promise<ReviewRecordView> {
-  return setReviewArchived(projectId, reviewId, false);
+export async function reopenReview(
+  projectId: string,
+  reviewId: string,
+): Promise<ReviewRecordView> {
+  await setReviewArchived(projectId, reviewId, false);
+  await ensureReviewWorktree(reviewId);
+  return readReviewView(projectId, reviewId);
 }
 
 /**

@@ -4,6 +4,7 @@ import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { forceRemoveWorktree } from "../worktree-test-cleanup.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 
@@ -103,6 +104,7 @@ async function bootReviewsRoute(
 }
 
 async function teardownReviewsRoute(): Promise<void> {
+  if (repo) forceRemoveWorktree(repo, "p", "s-review");
   vi.unstubAllEnvs();
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));
@@ -203,6 +205,54 @@ describe("review record API", () => {
     await update("s", { title: "S renamed" });
     expect((await fetchReview(review.id)).status).toBe("open");
   });
+
+  it("returns the held tip and POST /worktree/sync checks it out immediately", async () => {
+    const { update } = await import("../services/issues.js");
+    const { conversationsDir } = await import("../config.js");
+    await update("s", { branchName: "feat/pr-import-review" });
+    const opened = (await (await openReview("p", "s")).json()) as ReviewBody;
+    const checkout = readStoredReview(opened.id).worktreePath as string;
+    const stackDir = join(conversationsDir, "hold-stack", "agent-stack");
+    mkdirSync(stackDir, { recursive: true });
+    const stat = readFileSync(`/proc/${process.pid}/stat`, "utf8");
+    const startTime = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+    writeFileSync(
+      join(stackDir, "state.json"),
+      JSON.stringify({
+        conversationId: "hold-stack",
+        issueId: "s",
+        worktree: checkout,
+        port: 1,
+        auxPort: 2,
+        dataDir: join(stackDir, "data"),
+        baseUrl: "http://127.0.0.1:1",
+        startedAt: AT,
+        processes: [{ role: "api", pid: process.pid, startTime }],
+        cursorConversationIds: [],
+      }),
+    );
+    const shas = [commitSha];
+    for (const contents of ["one\n", "two\n", "three\n"]) {
+      writeFileSync(join(repo, "file.txt"), contents);
+      git(["add", "file.txt"]);
+      git(["commit", "-m", contents.trim()]);
+      shas.push(git(["rev-parse", "HEAD"]).trim());
+    }
+    await update("t", { commits: shas });
+    const held = await fetchReview(opened.id);
+    expect(held).toMatchObject({
+      worktreeSync: { newCommits: 3, ref: "feat/pr-import-review" },
+    });
+    expect(git(["rev-parse", "HEAD"], checkout).trim()).toBe(commitSha);
+
+    const synced = await fetch(
+      `${baseUrl}/api/projects/p/reviews/${opened.id}/worktree/sync`,
+      { method: "POST" },
+    );
+    expect(synced.status).toBe(200);
+    expect(await synced.json()).not.toHaveProperty("worktreeSync");
+    expect(git(["rev-parse", "HEAD"], checkout).trim()).toBe(shas[shas.length - 1]);
+  });
 });
 
 describe("review record API read-only", () => {
@@ -247,6 +297,13 @@ describe("review record API read-only", () => {
     );
     expect(reopened.status).toBe(403);
     expect(await reopened.json()).toMatchObject({ code: "read_only" });
+
+    const synced = await fetch(
+      `${baseUrl}/api/projects/p/reviews/${reviewId}/worktree/sync`,
+      { method: "POST" },
+    );
+    expect(synced.status).toBe(403);
+    expect(await synced.json()).toMatchObject({ code: "read_only" });
 
     const marked = await fetch(`${baseUrl}/api/projects/p/reviews/${reviewId}/marks`, {
       method: "PUT",

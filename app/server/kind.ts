@@ -23,6 +23,7 @@ export const KIND_CAPABILITIES = {
     // CLI `comment` and detail comments UI are narrower than comments storage
     // (project has comments storage, not comment).
     comment: false,
+    worktree: false,
   },
   idea: {
     partOf: true,
@@ -34,6 +35,7 @@ export const KIND_CAPABILITIES = {
     attachments: true,
     comments: true,
     comment: true,
+    worktree: false,
   },
   epic: {
     partOf: true,
@@ -44,6 +46,7 @@ export const KIND_CAPABILITIES = {
     attachments: true,
     comments: true,
     comment: true,
+    worktree: false,
   },
   story: {
     partOf: true,
@@ -54,6 +57,7 @@ export const KIND_CAPABILITIES = {
     attachments: true,
     comments: true,
     comment: true,
+    worktree: true,
   },
   task: {
     partOf: true,
@@ -64,6 +68,7 @@ export const KIND_CAPABILITIES = {
     attachments: true,
     comments: true,
     comment: true,
+    worktree: false,
   },
   review: {
     partOf: true,
@@ -74,6 +79,7 @@ export const KIND_CAPABILITIES = {
     attachments: false,
     comments: true,
     comment: true,
+    worktree: true,
   },
 } as const satisfies Record<
   IssueKind,
@@ -86,6 +92,7 @@ export const KIND_CAPABILITIES = {
     attachments: boolean;
     comments: boolean;
     comment: boolean;
+    worktree: boolean;
   }
 >;
 
@@ -145,8 +152,18 @@ export type AssigneeIssue = Extract<Issue, { kind: "task" }>;
 
 export type KindCapability = keyof (typeof KIND_CAPABILITIES)[IssueKind];
 
+type KindWithCapability<C extends KindCapability> = {
+  [K in IssueKind]: (typeof KIND_CAPABILITIES)[K][C] extends true ? K : never;
+}[IssueKind];
+
+export type WorktreeIssue = Extract<Issue, { kind: KindWithCapability<"worktree"> }>;
+
+export function hasWorktree(issue: Issue): issue is WorktreeIssue {
+  return KIND_CAPABILITIES[issue.kind].worktree;
+}
+
 /** Capabilities that refuse with a user-facing validation error. */
-export type RefuseableCapability = "attachments" | "comments";
+export type RefuseableCapability = "attachments" | "comments" | "worktree";
 
 export function kindHas(kind: IssueKind, capability: KindCapability): boolean {
   return KIND_CAPABILITIES[kind][capability];
@@ -156,12 +173,22 @@ export function articleForKind(kind: IssueKind): "a" | "an" {
   return kind === "epic" || kind === "idea" ? "an" : "a";
 }
 
+function capabilitySubject(capability: RefuseableCapability): string {
+  switch (capability) {
+    case "attachments":
+      return "attachments are";
+    case "comments":
+      return "comments are";
+    case "worktree":
+      return "worktrees are";
+  }
+}
+
 export function kindCapabilityRefusal(
   kind: IssueKind,
   capability: RefuseableCapability,
 ): string {
-  const subject = capability === "attachments" ? "attachments are" : "comments are";
-  return `${subject} not allowed on ${articleForKind(kind)} ${KIND_LABEL[kind]}`;
+  return `${capabilitySubject(capability)} not allowed on ${articleForKind(kind)} ${KIND_LABEL[kind]}`;
 }
 
 export function hasAttention(issue: Issue): issue is AttentionIssue {

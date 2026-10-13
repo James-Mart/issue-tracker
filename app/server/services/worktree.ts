@@ -1,24 +1,8 @@
-import { spawn } from "node:child_process";
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  renameSync,
-  unlinkSync,
-  writeSync,
-} from "fs";
-import { dirname } from "path";
-import type { Issue, IssuePatch } from "../schemas.js";
-import {
-  setupLogPathFor,
-  worktreePathFor,
-} from "../worktree-constants.js";
-import { appendOutputTail, killProcessGroup } from "./bounded-process.js";
+import { existsSync } from "fs";
+import type { Issue } from "../schemas.js";
 import { deriveStoryWorktree } from "./derive-worktree.js";
 import { IssueError } from "./errors.js";
-import { branchExists, currentBranch, listedWorktrees } from "./git-read.js";
-import { runGitWrite } from "./git-write.js";
+import { branchExists, currentBranch } from "./git-read.js";
 import {
   assertGuestAllowsOutwardEffect,
   GUEST_REFUSED_WORKTREE_ATTACH,
@@ -31,12 +15,17 @@ import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
 import { hasActiveImplementingRun } from "./implementing-status.js";
 import { list, readAll, update } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
-import { projectContaining } from "./subtree.js";
+import {
+  addWorktreeCheckout,
+  assertNoLiveWorktree,
+  projectIdOf,
+  removeWorktreeCheckout,
+  runWorktreeSetup,
+} from "./worktree-checkout.js";
 
 export { setupLogPathFor, worktreePathFor } from "../worktree-constants.js";
 
 type Story = Extract<Issue, { kind: "story" }>;
-type Project = Extract<Issue, { kind: "project" }>;
 
 function requireStory(storyId: string): Story {
   const { issues } = list();
@@ -45,32 +34,6 @@ function requireStory(storyId: string): Story {
     throw new IssueError("not_found", `story "${storyId}" does not exist`);
   }
   return story;
-}
-
-function projectIdFor(story: Story, issues: Issue[]): string {
-  const byId = new Map(issues.map((issue) => [issue.id, issue]));
-  const projectId = projectContaining(story, byId);
-  if (!projectId) {
-    throw new IssueError("not_found", `no project contains story "${story.id}"`);
-  }
-  return projectId;
-}
-
-function projectOf(projectId: string, issues: Issue[]): Project {
-  const project = issues.find((issue) => issue.id === projectId);
-  if (!project || project.kind !== "project") {
-    throw new IssueError("not_found", `project "${projectId}" does not exist`);
-  }
-  return project;
-}
-
-function refuseExistingWorktree(story: Story): void {
-  if (story.worktreePath && existsSync(story.worktreePath)) {
-    throw new IssueError(
-      "validation",
-      `Story "${story.id}" already has a worktree at ${story.worktreePath}`,
-    );
-  }
 }
 
 export const CREATE_HAS_BRANCH_ERROR = (storyId: string) =>
@@ -88,18 +51,6 @@ export const ATTACH_BRANCH_MISSING_ERROR = (storyId: string, branchName: string)
 export const ATTACH_BRANCH_CHECKED_OUT_ERROR = (storyId: string, branchName: string) =>
   `worktree attach refuses Story "${storyId}": branch "${branchName}" is checked out in the Project workspace`;
 
-export const SETUP_NO_COMMAND_ERROR = (storyId: string) =>
-  `worktree setup requires setupCommand on the Project for Story "${storyId}"`;
-
-export const SETUP_NO_WORKTREE_ERROR = (storyId: string) =>
-  `worktree setup requires an existing worktree for Story "${storyId}"`;
-
-export const SETUP_FAILED_ERROR = (storyId: string, code: number, logPath: string) =>
-  `setup command failed for Story "${storyId}" (exit ${code}); see ${logPath}`;
-
-export const REMOVE_NO_WORKTREE_ERROR = (storyId: string) =>
-  `worktree remove requires an existing worktree for Story "${storyId}"`;
-
 export const REMOVE_ACTIVE_IMPLEMENTING_ERROR = (storyId: string) =>
   `worktree remove refuses Story "${storyId}" while an implementing session is active`;
 
@@ -113,214 +64,18 @@ export const REMOVE_UNSAFE_ERROR = (
 export const REMOVE_LOCKED_ERROR = (storyId: string) =>
   `worktree remove refuses Story "${storyId}": worktree is locked`;
 
-async function addWorktree(
-  workspace: string,
-  args: string[],
-): Promise<void> {
-  await runGitWrite(["worktree", "add", ...args], workspace);
-}
-
-/** Drop this path's Git registration when the directory is already gone. A locked registration stays listed, and other registrations are left alone. */
-async function dropUnlockedMissingRegistration(
-  workspace: string,
-  path: string,
-): Promise<void> {
-  const porcelain = await runGitWrite(
-    ["worktree", "list", "--porcelain"],
-    workspace,
-  );
-  const entry = listedWorktrees(porcelain).find((item) => item.path === path);
-  if (!entry || entry.locked) return;
-  await runGitWrite(["worktree", "remove", "--force", entry.path], workspace);
-}
-
-/** Setup is sometimes legitimately slow. Past this, the process group is killed. */
-const WORKTREE_SETUP_TIMEOUT_MINUTES = 10;
-const WORKTREE_SETUP_TIMEOUT_MS = WORKTREE_SETUP_TIMEOUT_MINUTES * 60 * 1000;
-
-export const WORKTREE_SETUP_TIMEOUT_LINE =
-  `command timed out after ${WORKTREE_SETUP_TIMEOUT_MINUTES} minutes`;
-
-let setupTimeoutMsForTests: number | undefined;
-
-/** Test-only. `undefined` restores `WORKTREE_SETUP_TIMEOUT_MS`. */
-export function setWorktreeSetupTimeoutMsForTests(ms: number | undefined): void {
-  setupTimeoutMsForTests = ms;
-}
-
-function setupTimeoutMs(): number {
-  return setupTimeoutMsForTests ?? WORKTREE_SETUP_TIMEOUT_MS;
-}
-
-/** Move an existing log aside so a successful run can put it back. */
-function parkSetupLog(logPath: string): string | undefined {
-  if (!existsSync(logPath)) return undefined;
-  const prior = `${logPath}.prior`;
-  if (existsSync(prior)) {
-    throw new IssueError(
-      "conflict",
-      `setup log "${logPath}" and "${prior}" both exist`,
-    );
-  }
-  renameSync(logPath, prior);
-  return prior;
-}
-
-/** A failed run replaces the parked log with the new one. */
-function commitSetupLog(prior: string | undefined): void {
-  if (prior) unlinkSync(prior);
-}
-
-/** A successful run drops its log and restores the parked one. */
-function discardSetupLog(logPath: string, prior: string | undefined): void {
-  unlinkSync(logPath);
-  if (prior) renameSync(prior, logPath);
-}
-
-/**
- * Stream combined stdout and stderr to `logPath`. Memory keeps only a bounded
- * tail of that text. The child leads its own process group; at the setup
- * timeout the group is killed and the log ends with the timeout line. Exit 0
- * drops this run's log.
- */
-function runSetupCommand(
-  cwd: string,
-  command: string,
-  logPath: string,
-): Promise<{ code: number }> {
-  mkdirSync(dirname(logPath), { recursive: true });
-  const prior = parkSetupLog(logPath);
-  let logFd: number | undefined;
-  try {
-    logFd = openSync(logPath, "w");
-  } catch (err) {
-    if (prior) renameSync(prior, logPath);
-    throw err;
-  }
-  return new Promise((resolve, reject) => {
-    let tail = "";
-    let settled = false;
-    let timedOut = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const closeLog = () => {
-      if (logFd === undefined) return;
-      closeSync(logFd);
-      logFd = undefined;
-    };
-    const beginSettle = (): boolean => {
-      if (settled) return false;
-      settled = true;
-      clearTimeout(timer);
-      return true;
-    };
-    const discardRun = () => {
-      closeLog();
-      discardSetupLog(logPath, prior);
-    };
-    const child = spawn("sh", ["-c", command], {
-      cwd,
-      env: process.env,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    timer = setTimeout(() => {
-      if (settled) return;
-      timedOut = true;
-      if (child.pid !== undefined) killProcessGroup(child.pid);
-    }, setupTimeoutMs());
-    const onData = (chunk: Buffer | string) => {
-      if (settled || logFd === undefined) return;
-      try {
-        if (typeof chunk === "string") writeSync(logFd, chunk);
-        else writeSync(logFd, chunk);
-      } catch (err) {
-        if (!beginSettle()) return;
-        if (child.pid !== undefined) killProcessGroup(child.pid);
-        discardRun();
-        reject(err instanceof Error ? err : new Error(String(err)));
-        return;
-      }
-      const text = typeof chunk === "string" ? chunk : chunk.toString();
-      tail = appendOutputTail(tail, text);
-    };
-    child.stdout?.on("data", onData);
-    child.stderr?.on("data", onData);
-    child.on("error", (err: NodeJS.ErrnoException) => {
-      if (!beginSettle()) return;
-      discardRun();
-      reject(new IssueError("validation", err.message));
-    });
-    child.on("close", (code, signal) => {
-      if (!beginSettle()) return;
-      const killedOnTimeout = timedOut && signal !== null;
-      try {
-        if (killedOnTimeout && logFd !== undefined) {
-          const breakLine = tail.length > 0 && !tail.endsWith("\n") ? "\n" : "";
-          writeSync(logFd, `${breakLine}${WORKTREE_SETUP_TIMEOUT_LINE}\n`);
-        }
-        closeLog();
-        const success = code === 0 && signal === null;
-        if (success) discardSetupLog(logPath, prior);
-        else commitSetupLog(prior);
-        resolve({ code: success ? 0 : (code ?? 1) });
-      } catch (err) {
-        try {
-          discardRun();
-        } catch {
-          // A second cleanup failure must not escape this close handler.
-        }
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
-    });
-  });
-}
-
-async function recordSetupFailure(
-  storyId: string,
-  projectId: string,
-  code: number,
-  extra: IssuePatch,
-): Promise<never> {
-  const logPath = setupLogPathFor(projectId, storyId);
-  await update(storyId, { ...extra, worktreeSetupFailed: true });
-  throw new IssueError("conflict", SETUP_FAILED_ERROR(storyId, code, logPath), {
-    setupLogPath: logPath,
-  });
-}
-
-async function applySetupCommand(
-  storyId: string,
-  projectId: string,
-  worktreePath: string,
-  setupCommand: string | undefined,
-  extra: IssuePatch,
-): Promise<void> {
-  if (!setupCommand) {
-    await update(storyId, { ...extra, worktreeSetupFailed: false });
-    return;
-  }
-  const logPath = setupLogPathFor(projectId, storyId);
-  const { code } = await runSetupCommand(worktreePath, setupCommand, logPath);
-  if (code === 0) {
-    await update(storyId, { ...extra, worktreeSetupFailed: false });
-    return;
-  }
-  await recordSetupFailure(storyId, projectId, code, extra);
-}
-
 export async function createStoryWorktree(storyId: string): Promise<string> {
   assertGuestAllowsOutwardEffect(GUEST_REFUSED_WORKTREE_CREATE);
   const { issues, derived } = list();
   const story = requireStory(storyId);
-  const projectId = projectIdFor(story, issues);
+  const projectId = projectIdOf(story, issues);
   const workspace = requireProjectWorkspace(projectId);
-  const path = worktreePathFor(projectId, storyId);
 
   if (story.branchName) {
     throw new IssueError("validation", CREATE_HAS_BRANCH_ERROR(storyId));
   }
 
-  refuseExistingWorktree(story);
+  assertNoLiveWorktree(story);
 
   const mergeBase = derived[storyId]?.mergeBase;
   if (!mergeBase) {
@@ -339,27 +94,25 @@ export async function createStoryWorktree(storyId: string): Promise<string> {
   }
 
   const startRef = await resolveMergeBaseRef(workspace, mergeBase);
-  await addWorktree(workspace, ["-b", storyId, path, startRef]);
-  await applySetupCommand(storyId, projectId, path, projectOf(projectId, issues).setupCommand, {
-    worktreePath: path,
-    worktreeBlockedReason: null,
-  });
-  return path;
+  return addWorktreeCheckout(
+    storyId,
+    { mode: "new-branch", branch: storyId, startRef },
+    { worktreeBlockedReason: null },
+  );
 }
 
 export async function attachStoryWorktree(storyId: string): Promise<string> {
   assertGuestAllowsOutwardEffect(GUEST_REFUSED_WORKTREE_ATTACH);
   const { issues } = list();
   const story = requireStory(storyId);
-  const projectId = projectIdFor(story, issues);
+  const projectId = projectIdOf(story, issues);
   const workspace = requireProjectWorkspace(projectId);
-  const path = worktreePathFor(projectId, storyId);
 
   if (!story.branchName) {
     throw new IssueError("validation", ATTACH_NO_BRANCH_ERROR(storyId));
   }
 
-  refuseExistingWorktree(story);
+  assertNoLiveWorktree(story);
 
   if (!(await branchExists(workspace, story.branchName))) {
     throw new IssueError(
@@ -376,12 +129,11 @@ export async function attachStoryWorktree(storyId: string): Promise<string> {
     );
   }
 
-  await addWorktree(workspace, [path, story.branchName]);
-  await applySetupCommand(storyId, projectId, path, projectOf(projectId, issues).setupCommand, {
-    worktreePath: path,
-    worktreeBlockedReason: null,
-  });
-  return path;
+  return addWorktreeCheckout(
+    storyId,
+    { mode: "existing-branch", branch: story.branchName },
+    { worktreeBlockedReason: null },
+  );
 }
 
 export type AttemptedWorktreeRemoval =
@@ -445,62 +197,37 @@ export async function removeStoryWorktree(
   assertGuestAllowsOutwardEffect(GUEST_REFUSED_WORKTREE_REMOVE);
   const { issues } = list();
   const story = requireStory(storyId);
-  const projectId = projectIdFor(story, issues);
-  const workspace = requireProjectWorkspace(projectId);
+  const projectId = projectIdOf(story, issues);
+  requireProjectWorkspace(projectId);
   const path = story.worktreePath;
 
-  if (!path) {
-    throw new IssueError("validation", REMOVE_NO_WORKTREE_ERROR(storyId));
+  if (path && existsSync(path)) {
+    if (!options.allowActiveRun && hasActiveImplementingRun(storyId)) {
+      throw new IssueError("conflict", REMOVE_ACTIVE_IMPLEMENTING_ERROR(storyId));
+    }
+
+    const worktree = await deriveStoryWorktree(story, issues);
+    if (worktree.locked) {
+      throw new IssueError("conflict", REMOVE_LOCKED_ERROR(storyId));
+    }
+
+    const uncommittedCount = worktree.uncommittedCount;
+    const atRiskCommitCount = worktree.atRiskCommitCount;
+
+    if (!options.discard && (uncommittedCount > 0 || atRiskCommitCount > 0)) {
+      throw new IssueError(
+        "conflict",
+        REMOVE_UNSAFE_ERROR(storyId, uncommittedCount, atRiskCommitCount),
+        { uncommittedCount, atRiskCommitCount },
+      );
+    }
   }
 
-  if (!existsSync(path)) {
-    await dropUnlockedMissingRegistration(workspace, path);
-    await update(storyId, { worktreePath: null });
-    return path;
-  }
-
-  if (!options.allowActiveRun && hasActiveImplementingRun(storyId)) {
-    throw new IssueError("conflict", REMOVE_ACTIVE_IMPLEMENTING_ERROR(storyId));
-  }
-
-  const worktree = await deriveStoryWorktree(story, issues);
-  if (worktree.locked) {
-    throw new IssueError("conflict", REMOVE_LOCKED_ERROR(storyId));
-  }
-
-  const uncommittedCount = worktree.uncommittedCount;
-  const atRiskCommitCount = worktree.atRiskCommitCount;
-
-  if (
-    !options.discard &&
-    (uncommittedCount > 0 || atRiskCommitCount > 0)
-  ) {
-    throw new IssueError(
-      "conflict",
-      REMOVE_UNSAFE_ERROR(storyId, uncommittedCount, atRiskCommitCount),
-      { uncommittedCount, atRiskCommitCount },
-    );
-  }
-
-  const args = ["worktree", "remove", "--force", path];
-  await runGitWrite(args, workspace);
-  await update(storyId, { worktreePath: null });
-  return path;
+  return removeWorktreeCheckout(storyId);
 }
 
 export async function setupStoryWorktree(storyId: string): Promise<string> {
   assertGuestAllowsOutwardEffect(GUEST_REFUSED_WORKTREE_SETUP);
-  const { issues } = list();
-  const story = requireStory(storyId);
-  const projectId = projectIdFor(story, issues);
-  const setupCommand = projectOf(projectId, issues).setupCommand;
-  if (!setupCommand) {
-    throw new IssueError("validation", SETUP_NO_COMMAND_ERROR(storyId));
-  }
-  const path = story.worktreePath ?? worktreePathFor(projectId, storyId);
-  if (!existsSync(path)) {
-    throw new IssueError("validation", SETUP_NO_WORKTREE_ERROR(storyId));
-  }
-  await applySetupCommand(storyId, projectId, path, setupCommand, {});
-  return path;
+  requireStory(storyId);
+  return runWorktreeSetup(storyId);
 }

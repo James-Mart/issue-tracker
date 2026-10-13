@@ -16,6 +16,7 @@ import { join, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { z } from "zod";
 import { conversationsDir } from "../config.js";
+import { KIND_LABEL } from "../kind.js";
 import type { Runtime } from "../schemas.js";
 import { isSlugSafe } from "../slug.js";
 import { collectAgentStackMemoryLimitFailures } from "./agent-stack-heap-reports.js";
@@ -28,7 +29,7 @@ export { agentStackMemoryLimitMessage } from "./agent-stack-heap-reports.js";
 import { appendOutputTail, killProcessGroup } from "./bounded-process.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
 import { readAll } from "./issues.js";
-import { ancestorChain, owningStory } from "./subtree.js";
+import { ancestorChain, nearestWorktreeIssue } from "./subtree.js";
 
 /**
  * One conversation's verification stack, on ports picked free at start time.
@@ -57,9 +58,9 @@ const agentStackProcessSchema = z.object({
 
 export const agentStackStateSchema = z.object({
   conversationId: z.string().min(1),
-  /** Issue whose Story worktree this stack booted. */
+  /** Issue the stack was asked to boot. */
   issueId: z.string().min(1),
-  /** Absolute Story worktree this stack booted. */
+  /** Absolute worktree this stack booted. */
   worktree: z.string().min(1),
   /** Primary port (`AGENT_STACK_PORT`); the base URL points at it. */
   port: z.number().int().positive(),
@@ -83,8 +84,8 @@ export type AgentStackState = z.infer<typeof agentStackStateSchema>;
 
 export interface AgentStackStartOptions {
   /**
-   * Issue whose Story (itself, or its containing Story) supplies the live
-   * worktree to boot.
+   * Issue whose nearest worktree-capable ancestor (itself, when it has the
+   * capability) supplies the live worktree to boot.
    */
   issueId: string;
   /**
@@ -452,13 +453,15 @@ function resolveBootTarget(issueId: string): ResolvedBoot {
   if (project?.kind !== "project") {
     throw new Error(`issue "${issueId}" is not under a project`);
   }
-  const storyIssue = owningStory(chain);
-  if (!storyIssue) {
-    throw new Error(`issue "${issueId}" has no Story`);
+  const worktreeIssue = nearestWorktreeIssue(chain);
+  if (!worktreeIssue) {
+    throw new Error(`issue "${issueId}" has no worktree`);
   }
-  const recorded = storyIssue.worktreePath;
+  const recorded = worktreeIssue.worktreePath;
   if (!recorded || !existsSync(recorded) || !statSync(recorded).isDirectory()) {
-    throw new Error(`Story "${storyIssue.id}" has no live worktree`);
+    throw new Error(
+      `${KIND_LABEL[worktreeIssue.kind]} "${worktreeIssue.id}" has no live worktree`,
+    );
   }
   const runtime = project.runtime;
   if (!runtime?.start || !runtime.baseUrl) {
@@ -824,6 +827,7 @@ export async function startAgentStack(
     await stopAgentStack(conversationId);
   }
 
+  await syncReviewsOnWorktree(boot.worktree);
   const handle = await bootDeclaredRuntime(
     conversationId,
     boot,
@@ -931,7 +935,7 @@ export async function stopAgentStack(
       if (!collectedOnKill) {
         const survivors = owned.filter(isOurRecordedProcess);
         await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
-        releaseStoppedStack(state);
+        await releaseStoppedStackAndSync(state);
         throw new Error(
           `agent stack for ${conversationId} survived SIGKILL: ${
             survivors.map((proc) => `${proc.role}(${proc.pid})`).join(", ") ||
@@ -944,11 +948,29 @@ export async function stopAgentStack(
     await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
   }
 
-  releaseStoppedStack(state);
+  await releaseStoppedStackAndSync(state);
   return { stopped: true, state, memoryLimitFailures };
 }
 
 function releaseStoppedStack(state: AgentStackState): void {
   rmSync(state.dataDir, { recursive: true, force: true });
   releaseAgentStackRecord(state);
+}
+
+/**
+ * The stack record is already gone. A checkout failure must not report the
+ * stop as failed; the next sync retries it.
+ */
+async function releaseStoppedStackAndSync(state: AgentStackState): Promise<void> {
+  releaseStoppedStack(state);
+  try {
+    await syncReviewsOnWorktree(state.worktree);
+  } catch (err) {
+    console.error(`review worktree sync failed for ${state.worktree}:`, err);
+  }
+}
+
+async function syncReviewsOnWorktree(worktree: string): Promise<void> {
+  const { syncReviewsAtWorktree } = await import("./review-worktree-sync.js");
+  await syncReviewsAtWorktree(worktree);
 }

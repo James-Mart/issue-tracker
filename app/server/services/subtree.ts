@@ -1,4 +1,4 @@
-import { channelForIssue } from "../kind.js";
+import { channelForIssue, hasWorktree, type WorktreeIssue } from "../kind.js";
 import type { Issue } from "../schemas.js";
 import { IssueError } from "./errors.js";
 
@@ -73,6 +73,18 @@ export function ancestorChain(id: string, issues: Issue[]): Issue[] {
     );
   }
   return ascending;
+}
+
+/**
+ * Nearest issue on a Project → … → target chain with the worktree capability,
+ * including the target. Undefined when the chain has none.
+ */
+export function nearestWorktreeIssue(chain: Issue[]): WorktreeIssue | undefined {
+  for (let i = chain.length - 1; i >= 0; i -= 1) {
+    const issue = chain[i]!;
+    if (hasWorktree(issue)) return issue;
+  }
+  return undefined;
 }
 
 /**

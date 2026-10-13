@@ -77,8 +77,8 @@ directory).
 
 Agents verify server/UI changes on their own stack rather than restarting the
 one you are using. In agents-chat, call the custom tools `agent_stack_start`
-(with required `{ issueId }`: the Story, or an issue under it, whose live
-worktree to boot) and `agent_stack_stop` (session-scoped; no conversation-id
+(with required `{ issueId }`: the issue whose nearest worktree-capable ancestor,
+itself included when it has the capability, has the live worktree to boot) and `agent_stack_stop` (session-scoped; no conversation-id
 argument). `agent_stack_redeploy` takes no arguments: it runs the live stack's
 Project `redeploy` phase in that stack's worktree with the stack environment,
 then re-runs `readiness`, and returns each phase's exit status and output tail.
@@ -91,7 +91,7 @@ cd app && npm run agent-stack -- start <conversationId> <issueId>
 cd app && npm run agent-stack -- stop <conversationId>
 ```
 
-`start` boots the Project's runtime declaration in that Story worktree, on
+`start` boots the Project's runtime declaration in that worktree, on
 ports chosen free at start time. A declaration that lacks `start` or `baseUrl`
 is refused. It records the worktree, ports, and pids at
 `conversations/<conversationId>/agent-stack/state.json`, indexes the Cursor

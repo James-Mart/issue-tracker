@@ -1,6 +1,6 @@
 import { Router, type RequestHandler, type Response } from "express";
 import type { Issue } from "../schemas.js";
-import type { ReviewRecordView } from "../schemas/review.js";
+import type { ReviewRecordView, ReviewWorktreeSyncHold } from "../schemas/review.js";
 import { IssueError } from "../services/errors.js";
 import { readAll } from "../services/issues.js";
 import {
@@ -23,6 +23,10 @@ import {
   submitReview,
 } from "../services/review-tasking.js";
 import { refreshReviewPullRequest } from "../services/review-pr-tracking.js";
+import {
+  reviewWorktreeHold,
+  syncReviewWorktree,
+} from "../services/review-worktree-sync.js";
 import {
   archiveReview,
   listReviewViews,
@@ -73,8 +77,11 @@ async function sendReview(
   view: ReviewRecordView,
   status = 200,
   issues?: Issue[],
+  synced?: { worktreeSync: ReviewWorktreeSyncHold | undefined },
 ): Promise<void> {
-  res.status(status).json(await withReviewProgress(projectId, view, issues));
+  const progressed = await withReviewProgress(projectId, view, issues);
+  const worktreeSync = synced ? synced.worktreeSync : await reviewWorktreeHold(view.id);
+  res.status(status).json(worktreeSync ? { ...progressed, worktreeSync } : progressed);
 }
 
 /**
@@ -168,6 +175,7 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
       if (req.query.refreshHead === "1") {
         await refreshReviewPullRequest(req.params.projectId, req.params.reviewId);
       }
+      const worktreeSync = await syncReviewWorktree(req.params.reviewId, "auto");
       const { issues } = readAll();
       await sendReview(
         res,
@@ -175,6 +183,7 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
         readReviewView(req.params.projectId, req.params.reviewId, issues),
         200,
         issues,
+        { worktreeSync },
       );
     }),
   );
@@ -206,6 +215,22 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
           req.params.reviewId,
           scopeQuery(req.query.scope),
         ),
+      );
+    }),
+  );
+
+  reviewsRouter.post(
+    "/:reviewId/worktree/sync",
+    asyncRoute(async (req, res) => {
+      const worktreeSync = await syncReviewWorktree(req.params.reviewId, "now");
+      const { issues } = readAll();
+      await sendReview(
+        res,
+        req.params.projectId,
+        readReviewView(req.params.projectId, req.params.reviewId, issues),
+        200,
+        issues,
+        { worktreeSync },
       );
     }),
   );

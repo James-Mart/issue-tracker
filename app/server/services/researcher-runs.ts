@@ -125,6 +125,38 @@ export function recordResearcherRunEnd(
  * memory only: a restart forgets a launch that never recorded a conversation.
  */
 const researcherLaunches = new Map<string, ResearcherRun>();
+const researcherLaunchOwners = new Map<
+  string,
+  { reviewId: string; run: ResearcherRun }
+>();
+
+/** True while a researcher launch for this review has not finished starting. */
+export function researcherLaunchBusy(reviewId: string): boolean {
+  for (const owner of researcherLaunchOwners.values()) {
+    if (owner.reviewId === reviewId) return true;
+  }
+  return false;
+}
+
+/**
+ * Show `threadId` as running before the first await, so a follow-up does not
+ * still read as the previous run's failure while tip sync is in progress.
+ * Returns the overlay record so a caller can drop it if that sync throws
+ * before `trackResearcherLaunch` takes ownership.
+ */
+export function showResearcherLaunch(threadId: string): ResearcherRun {
+  const launchRun: ResearcherRun = {
+    status: "running",
+    startedAt: new Date().toISOString(),
+  };
+  researcherLaunches.set(threadId, launchRun);
+  return launchRun;
+}
+
+/** Drop a running overlay when this launch still owns it. */
+export function clearResearcherLaunch(threadId: string, launchRun: ResearcherRun): void {
+  if (researcherLaunches.get(threadId) === launchRun) researcherLaunches.delete(threadId);
+}
 
 /**
  * Show `threadId` as running while `launch` runs. The launch is started
@@ -132,6 +164,7 @@ const researcherLaunches = new Map<string, ResearcherRun>();
  */
 export async function trackResearcherLaunch(
   threadId: string,
+  reviewId: string,
   launch: () => Promise<void>,
 ): Promise<void> {
   // A later launch on the same thread owns the entry once it starts.
@@ -140,6 +173,7 @@ export async function trackResearcherLaunch(
     startedAt: new Date().toISOString(),
   };
   researcherLaunches.set(threadId, launchRun);
+  researcherLaunchOwners.set(threadId, { reviewId, run: launchRun });
   try {
     await launch();
     if (researcherLaunches.get(threadId) === launchRun) {
@@ -154,6 +188,9 @@ export async function trackResearcherLaunch(
       });
     }
     throw err;
+  } finally {
+    const owner = researcherLaunchOwners.get(threadId);
+    if (owner?.run === launchRun) researcherLaunchOwners.delete(threadId);
   }
 }
 

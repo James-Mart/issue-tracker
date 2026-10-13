@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewIssue, ReviewView } from "../schemas/review.js";
+import { forceRemoveWorktree } from "../worktree-test-cleanup.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 
@@ -12,7 +13,7 @@ let issuesDir: string;
 let repo: string;
 let server: Server;
 let baseUrl: string;
-let reviewId: string;
+let reviewId = "";
 let firstSha: string;
 
 const gitEnv = {
@@ -150,6 +151,7 @@ describe("review marks", () => {
   });
 
   afterEach(async () => {
+    if (reviewId && repo) forceRemoveWorktree(repo, "p", reviewId);
     vi.unstubAllEnvs();
     await closeServer();
     rmSync(issuesDir, { recursive: true, force: true });

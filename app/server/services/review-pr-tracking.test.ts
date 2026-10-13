@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,13 +8,23 @@ import { setGhSpawnerForTests, type GhSpawner } from "./delivery.js";
 import { setGitSpawnerForTests } from "./git-read.js";
 import { setGitWriteSpawnerForTests } from "./git-write.js";
 import { mockChild } from "./pr-comment-mirror-harness.js";
+import { forceRemoveWorktree } from "../worktree-test-cleanup.js";
 import { trackReviewPullRequests } from "./review-pr-tracking.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const PR_URL = "https://github.com/acme/widgets/pull/7";
-const HEAD = "abc";
 
 let dir: string;
+let repo: string;
+let head: string;
+
+function git(cwd: string, args: string[]): string {
+  return execFileSync(
+    "git",
+    ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args],
+    { cwd, encoding: "utf8" },
+  ).trim();
+}
 
 function writeIssue(id: string, body: Record<string, unknown>): void {
   mkdirSync(join(dir, id), { recursive: true });
@@ -73,6 +84,12 @@ function stubGh(stdout: string): void {
 describe("trackReviewPullRequests", () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "review-pr-tracking-"));
+    repo = mkdtempSync(join(tmpdir(), "review-pr-tracking-repo-"));
+    git(repo, ["init", "-b", "main"]);
+    writeFileSync(join(repo, "file.txt"), "one\n");
+    git(repo, ["add", "file.txt"]);
+    git(repo, ["commit", "-m", "base"]);
+    head = git(repo, ["rev-parse", "HEAD"]);
     vi.stubEnv("ISSUES_DIR", dir);
     vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", "");
     vi.stubEnv("ISSUE_TRACKER_GUEST", "");
@@ -82,7 +99,7 @@ describe("trackReviewPullRequests", () => {
     writeIssue("p", {
       kind: "project",
       title: "P",
-      workspace: dir,
+      workspace: repo,
       order: 0,
       createdAt: AT,
       updatedAt: AT,
@@ -90,10 +107,12 @@ describe("trackReviewPullRequests", () => {
   });
 
   afterEach(() => {
+    if (repo) forceRemoveWorktree(repo, "p", "rev");
     setGhSpawnerForTests(null);
     vi.unstubAllEnvs();
     refreshStorePathsFromEnv();
     rmSync(dir, { recursive: true, force: true });
+    if (repo) rmSync(repo, { recursive: true, force: true });
   });
 
   it("archives a PR-only review when the pull request is merged or closed", async () => {
@@ -107,26 +126,26 @@ describe("trackReviewPullRequests", () => {
       order: 0,
       createdAt: AT,
       updatedAt: AT,
-      pr: prSource(HEAD),
+      pr: prSource(head),
     });
-    stubGh(graphql("MERGED", HEAD));
+    stubGh(graphql("MERGED", head));
     await trackReviewPullRequests("p", { matches: new Map(), facts: new Map() });
     expect(readStored("rev")).toMatchObject({
       archived: true,
-      pr: prSource(HEAD, "merged"),
+      pr: prSource(head, "merged"),
     });
 
     const { reopenReview } = await import("./reviews.js");
     await reopenReview("p", "rev");
-    stubGh(graphql("MERGED", HEAD));
+    stubGh(graphql("MERGED", head));
     await trackReviewPullRequests("p", { matches: new Map(), facts: new Map() });
     expect(readStored("rev").archived).toBe(false);
 
-    stubGh(graphql("CLOSED", HEAD));
+    stubGh(graphql("CLOSED", head));
     await trackReviewPullRequests("p", { matches: new Map(), facts: new Map() });
     expect(readStored("rev")).toMatchObject({
       archived: true,
-      pr: prSource(HEAD, "closed"),
+      pr: prSource(head, "closed"),
     });
   });
 });

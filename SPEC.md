@@ -1400,9 +1400,12 @@ route responds: a fresh conversation on the review's `review` channel (offered
 on every review) with role
 [`issue-tracker-review-question`](agents/issue-tracker-review-question.md) at
 its model pin. Its prompt is the role body, notice that a reviewer asked about
-the Story's changes, the review, the Story, thread id, and Project workspace, the question,
+the Story's changes, the review, the Story, thread id, and review worktree, the question,
 and either a line anchor (path, side, lines, commit), a file anchor (path,
-commit), or, for a general question, the Story's diff range. Once the run has started, or has failed to start, the
+commit), or, for a general question, the Story's diff range. When the anchor
+commit is not the reviewed tip, the prompt says so. The researcher's working
+directory is that worktree: it reads the anchored code with `git show` and
+explores the working tree for what has changed. Once the run has started, or has failed to start, the
 server appends `researcher-session` with `by: { role: "agent", name: "Researcher" }`.
 The researcher reads code read-only and replies in the thread with
 `issue comment <reviewId> --reply-to <threadId> --role agent --name Researcher`.
@@ -1634,7 +1637,8 @@ attempts the same safe removal as `issue story worktree remove` (never
 `--discard`). An unsafe refusal leaves the checkout on disk and does not
 fail the deletion; the CLI names each
 retained path so a human can clear it by hand. Other removal failures
-still fail the caller.
+still fail the caller. A review in the delete set drops its detached
+checkout; a guest keeps a live one and reports that path as retained.
 
 A locked worktree is absorbed the same way. When the directory is still on
 disk and `git worktree list --porcelain` marks that path `locked`, removal

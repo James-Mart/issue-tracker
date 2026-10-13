@@ -19,13 +19,16 @@ import {
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { requireReviewStory } from "./reviews.js";
-import { readComments, readIssueOrThrow, readReviewOrThrow } from "./issues.js";
-import { requireProjectWorkspace } from "./project-workspace.js";
+import { readAll, readComments, readIssueOrThrow, readReviewOrThrow } from "./issues.js";
+import { liveReviewWorktreePath, reviewedTipSha } from "./review-worktree.js";
+import { syncReviewWorktree } from "./review-worktree-sync.js";
 import {
   REVIEW_QUESTION_ROLE,
   activeResearcherConversationId,
+  clearResearcherLaunch,
   recordResearcherRunEnd,
   researcherRunForThread,
+  showResearcherLaunch,
   trackResearcherLaunch,
 } from "./researcher-runs.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
@@ -35,6 +38,29 @@ const TITLE_EXCERPT_LENGTH = 60;
 
 const RETRY_NOT_FAILED =
   "only a question whose researcher failed can be retried";
+
+/** Auto-sync an open review's worktree. Any other issue no-ops. */
+async function syncOpenReviewTip(issueId: string): Promise<void> {
+  if (readIssueOrThrow(issueId).kind !== "review") return;
+  await syncReviewWorktree(issueId, "auto");
+}
+
+/** Sync before the launch, then again once that launch has settled. */
+async function launchOnReview(
+  reviewId: string,
+  threadId: string,
+  launch: () => Promise<void>,
+): Promise<void> {
+  const shown = showResearcherLaunch(threadId);
+  try {
+    await syncOpenReviewTip(reviewId);
+  } catch (err) {
+    clearResearcherLaunch(threadId, shown);
+    throw err;
+  }
+  await trackResearcherLaunch(threadId, reviewId, launch);
+  await syncOpenReviewTip(reviewId);
+}
 
 function titleFor(question: string): string {
   const line = question.trim().split("\n")[0]!;
@@ -75,17 +101,36 @@ function readReviewSource(reviewId: string): ReviewSource {
   return { review, story: readIssueOrThrow(requireReviewStory(review)) };
 }
 
+/** Prompt line when a question is anchored at a commit other than the reviewed tip. */
+function anchoredCommitOffTipLine(commitSha: string, tip: string): string {
+  return `Anchored commit ${commitSha} is not the current tip ${tip}. Read the anchored code with git show. Explore the working tree for what has changed.`;
+}
+
+function offTipLine(
+  root: Comment,
+  review: ReviewIssue,
+  issues: readonly Issue[],
+): string | undefined {
+  if (!root.anchor) return undefined;
+  const tip = reviewedTipSha(review, issues);
+  if (!tip || root.anchor.commitSha === tip) return undefined;
+  return anchoredCommitOffTipLine(root.anchor.commitSha, tip);
+}
+
 async function contextLines(
   { review, story }: ReviewSource,
   root: Comment,
   workspace: string,
+  issues: readonly Issue[],
 ): Promise<string[]> {
+  const offTip = offTipLine(root, review, issues);
   return [
     `Review: ${review.id}`,
     `Story: ${story.id} — ${story.title}`,
     `Thread: ${root.id}`,
     `Workspace: ${workspace}`,
     await scopeLine(story.id, root, workspace),
+    ...(offTip ? [offTip] : []),
   ];
 }
 
@@ -93,13 +138,14 @@ async function researcherPrompt(
   source: ReviewSource,
   root: Comment,
   workspace: string,
+  issues: readonly Issue[],
 ): Promise<string> {
   return [
     loadRoleBody(REVIEW_QUESTION_ROLE).trim(),
     "",
     "A reviewer asked a question about this Story's changes.",
     "",
-    ...(await contextLines(source, root, workspace)),
+    ...(await contextLines(source, root, workspace, issues)),
     "Question:",
     root.body,
   ].join("\n");
@@ -136,6 +182,7 @@ async function recoveredResearcherPrompt(
   root: Comment,
   replies: Comment[],
   workspace: string,
+  issues: readonly Issue[],
 ): Promise<string> {
   return [
     loadRoleBody(REVIEW_QUESTION_ROLE).trim(),
@@ -143,7 +190,7 @@ async function recoveredResearcherPrompt(
     "The previous researcher conversation for this thread is gone. This is a new session.",
     "Answer the latest reply.",
     "",
-    ...(await contextLines(source, root, workspace)),
+    ...(await contextLines(source, root, workspace, issues)),
     "",
     formatThreadHistory(root, replies),
   ].join("\n");
@@ -206,7 +253,8 @@ async function openResearcherConversation(
   root: Comment,
   projectId: string,
   sessions: AgentSessions,
-  promptFor: (workspace: string) => Promise<string>,
+  workspace: string,
+  promptFor: () => Promise<string>,
   recovered?: true,
 ): Promise<void> {
   const conversation = await createConversation({
@@ -218,8 +266,7 @@ async function openResearcherConversation(
     role: REVIEW_QUESTION_ROLE,
   });
   try {
-    const workspace = requireProjectWorkspace(projectId);
-    const prompt = await promptFor(workspace);
+    const prompt = await promptFor();
     await settleResearcherStart(conversation.id, () =>
       startConversationPrompt(
         conversation.id,
@@ -249,12 +296,16 @@ async function startQuestionResearcher(
   projectId: string,
   sessions: AgentSessions,
 ): Promise<void> {
+  const source = readReviewSource(reviewId);
+  const { issues } = readAll();
+  const workspace = liveReviewWorktreePath(source.review);
   await openResearcherConversation(
     reviewId,
     root,
     projectId,
     sessions,
-    (workspace) => researcherPrompt(readReviewSource(reviewId), root, workspace),
+    workspace,
+    () => researcherPrompt(source, root, workspace, issues),
   );
 }
 
@@ -269,12 +320,15 @@ async function replaceResearcherWithRecoveredHistory(
 ): Promise<void> {
   if (conversationId) await sessions.dispose(conversationId);
   const source = readReviewSource(reviewId);
+  const { issues } = readAll();
+  const workspace = liveReviewWorktreePath(source.review);
   await openResearcherConversation(
     reviewId,
     root,
     projectId,
     sessions,
-    (workspace) => recoveredResearcherPrompt(source, root, replies, workspace),
+    workspace,
+    () => recoveredResearcherPrompt(source, root, replies, workspace, issues),
     true,
   );
 }
@@ -355,14 +409,18 @@ export async function onQuestionComment(
   sessions: AgentSessions,
 ): Promise<void> {
   if (message.kind === "question") {
-    await trackResearcherLaunch(message.id, () =>
+    await launchOnReview(issueId, message.id, () =>
       startQuestionResearcher(issueId, message, projectId, sessions),
     );
     return;
   }
   // Review threads and non-human replies do not resume a researcher.
-  if (message.replyTo && message.role === "human") {
-    await trackResearcherLaunch(message.replyTo, () =>
+  if (
+    message.replyTo &&
+    message.role === "human" &&
+    openQuestionFollowUp(readComments(issueId), message)
+  ) {
+    await launchOnReview(issueId, message.replyTo, () =>
       followUpQuestionResearcher(issueId, message, projectId, sessions),
     );
   }
@@ -383,7 +441,8 @@ export async function retryQuestionResearcher(
   const replies = threadReplies(comments.messages, root.id);
   const thread = comments.threads.find((view) => view.rootId === threadId);
   const conversationId = thread && activeResearcherConversationId(thread);
-  await trackResearcherLaunch(
+  await launchOnReview(
+    reviewId,
     threadId,
     replies.length === 0
       ? () => startQuestionResearcher(reviewId, root, projectId, sessions)

@@ -45,6 +45,15 @@ import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
+  assertGuestAllowsOutwardEffect,
+  GUEST_REFUSED_REVIEW_WORKTREE_CREATE,
+} from "./guest-outward-effects.js";
+import {
+  applyReviewWorktreeTransition,
+  attemptReviewWorktreeRemoval,
+  reviewWorktreeTransitions,
+} from "./review-worktree.js";
+import {
   attemptStoryWorktreeRemoval,
   storyIdsForLifecycleRemoval,
 } from "./worktree.js";
@@ -552,6 +561,10 @@ export function renameProjectLabel(
   });
 }
 
+function sameCommitShas(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((sha, index) => sha === right[index]);
+}
+
 export function update(
   id: string,
   patch: IssuePatch,
@@ -671,6 +684,8 @@ export function update(
         detail: read(id),
         attemptIds: [] as string[],
         recordedPrProjectId: undefined,
+        reviewWorktrees: { remove: [] as string[], ensure: [] as string[] },
+        syncStoryId: undefined as string | undefined,
       };
     }
 
@@ -750,6 +765,11 @@ export function update(
     for (const review of reviewArchiveWrites) {
       writes.push({ issue: review });
     }
+    const reviewWorktrees = reviewWorktreeTransitions(
+      existing,
+      parsed.issue,
+      reviewArchiveWrites,
+    );
 
     if (
       cascaded.length === 0 &&
@@ -779,6 +799,9 @@ export function update(
       }
     }
 
+    if (reviewWorktrees.ensure.length > 0) {
+      assertGuestAllowsOutwardEffect(GUEST_REFUSED_REVIEW_WORKTREE_CREATE);
+    }
     commitIssueBatch(writes, []);
     const jsonText = serializeIssue(parsed.issue);
     const finalDescription =
@@ -791,6 +814,12 @@ export function update(
       parsed.issue.prUrl !== existing.prUrl
         ? ancestorChain(id, issues)[0]!.id
         : undefined;
+    const syncStoryId =
+      existing.kind === "task" &&
+      next.kind === "task" &&
+      !sameCommitShas(existing.commits, next.commits)
+        ? existing.partOf
+        : undefined;
     return {
       detail: toIssueDetail(parsed.issue, jsonText, finalDescription),
       attemptIds: storyIdsForLifecycleRemoval(
@@ -800,17 +829,35 @@ export function update(
         issues,
       ),
       recordedPrProjectId,
+      reviewWorktrees,
+      syncStoryId,
     };
-  }).then(async ({ detail, attemptIds, recordedPrProjectId }) => {
+  }).then(async ({ detail, attemptIds, recordedPrProjectId, reviewWorktrees, syncStoryId }) => {
     if (recordedPrProjectId) {
       const { refreshRecordedPrFacts } = await import("./pr-facts-read.js");
       await refreshRecordedPrFacts(recordedPrProjectId);
     }
-    if (attemptIds.length === 0) return detail;
-    for (const storyId of attemptIds) {
-      await attemptStoryWorktreeRemoval(storyId);
+    const followWorktrees =
+      attemptIds.length > 0 ||
+      reviewWorktrees.remove.length > 0 ||
+      reviewWorktrees.ensure.length > 0;
+    if (followWorktrees) {
+      for (const storyId of attemptIds) {
+        await attemptStoryWorktreeRemoval(storyId);
+      }
+      await applyReviewWorktreeTransition(reviewWorktrees);
     }
-    return read(id);
+    if (syncStoryId) {
+      const { syncReviewsAtStoryTip } = await import("./review-worktree-sync.js");
+      // The issue write already landed. A checkout failure must not report
+      // that write as failed; the next sync retries it.
+      try {
+        await syncReviewsAtStoryTip(syncStoryId);
+      } catch (err) {
+        console.error(`review worktree sync failed for story ${syncStoryId}:`, err);
+      }
+    }
+    return followWorktrees ? read(id) : detail;
   });
 }
 
@@ -842,10 +889,15 @@ export async function remove(id: string): Promise<DeletionResult> {
     throw new IssueError("not_found", `unknown issue "${id}"`);
   }
 
-  const preview = planDeletion(readAll().issues, id);
+  const graph = readAll().issues;
+  const preview = planDeletion(graph, id);
+  const kinds = new Map(graph.map((issue) => [issue.id, issue.kind]));
   const retainedWorktrees: DeletionResult["retainedWorktrees"] = [];
   for (const delId of preview.deleteIds) {
-    const result = await attemptStoryWorktreeRemoval(delId);
+    const result =
+      kinds.get(delId) === "review"
+        ? await attemptReviewWorktreeRemoval(delId)
+        : await attemptStoryWorktreeRemoval(delId);
     if (result.outcome === "retained") {
       retainedWorktrees.push({ id: delId, path: result.path });
     }

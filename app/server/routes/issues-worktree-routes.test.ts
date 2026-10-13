@@ -4,8 +4,11 @@ import type { Server } from "http";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WORKTREE_ROOT } from "../worktree-constants.js";
-import { setupLogPathFor, worktreePathFor } from "../services/worktree.js";
+import { setupLogPathFor } from "../services/worktree.js";
+import {
+  removeTrackedWorktrees,
+  trackWorktree,
+} from "../worktree-test-cleanup.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 const GIT = [
@@ -21,7 +24,6 @@ let dir: string;
 let server: Server;
 let baseUrl: string;
 let workspace: string;
-const trackedWorktrees: { workspace: string; path: string }[] = [];
 
 function git(repo: string, args: string[]): string {
   return execFileSync("git", [...GIT, ...args], {
@@ -46,29 +48,6 @@ function writeIssue(id: string, body: Record<string, unknown>): void {
 
 function readStoryJson(id: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(dir, id, "issue.json"), "utf8"));
-}
-
-function trackWorktree(ws: string, projectId: string, storyId: string): string {
-  const path = worktreePathFor(projectId, storyId);
-  trackedWorktrees.push({ workspace: ws, path });
-  return path;
-}
-
-function removeTrackedWorktrees(): void {
-  for (const { workspace: ws, path } of trackedWorktrees.splice(0)) {
-    if (!existsSync(path)) continue;
-    try {
-      git(ws, ["worktree", "remove", "--force", path]);
-    } catch {
-      rmSync(path, { recursive: true, force: true });
-      try {
-        git(ws, ["worktree", "prune"]);
-      } catch {
-        // best-effort cleanup
-      }
-    }
-  }
-  rmSync(join(WORKTREE_ROOT, "p", ".setup-logs"), { recursive: true, force: true });
 }
 
 function seedProject(): void {
@@ -246,9 +225,9 @@ describe("POST /api/issues/:id/worktree/remove", () => {
 
 describe("POST /api/issues/:id/worktree/setup", () => {
   it("kills the setup process group at the timeout and records a failing setup", async () => {
-    // beforeEach resetModules, so the server is bound to a fresh worktree module.
+    // beforeEach resetModules, so this is the checkout module the server's worktree path uses.
     const { setWorktreeSetupTimeoutMsForTests, WORKTREE_SETUP_TIMEOUT_LINE } = await import(
-      "../services/worktree.js"
+      "../services/worktree-checkout.js"
     );
     setWorktreeSetupTimeoutMsForTests(400);
     const pidFile = join(dir, "grandchild.pid");

@@ -14,6 +14,7 @@ import {
 } from "../lib/review-submission-ui";
 import { ReviewOpenThreads } from "./review-open-threads";
 import { ReviewSubmitActions } from "./review-submit-control";
+import { ReviewTipSyncNotice } from "./review-tip-sync-notice";
 
 const sourceLinkClass = "inline-flex items-center gap-1 hover:underline";
 
@@ -71,8 +72,9 @@ function CommitMeta({ commits }: { commits: ReviewCommits }) {
 }
 
 /**
- * Title and actions stay above the branch line. Failures and the open-thread
- * disclosure render after that line, so expanding the list does not move them.
+ * Title and actions stay above the branch line. The held-tip row sits on that
+ * line. Failures and the open-thread disclosure render after it, so expanding
+ * the list does not move them.
  */
 export function ReviewHeaderBody({
   projectId,
@@ -135,6 +137,13 @@ export function ReviewHeaderBody({
         {review?.pr ? <ReviewPrSourceLink pr={review.pr} /> : null}
         {commits ? <CommitMeta commits={commits} /> : null}
       </p>
+      {review?.worktreeSync ? (
+        <ReviewTipSyncNotice
+          projectId={projectId}
+          reviewId={review.id}
+          hold={review.worktreeSync}
+        />
+      ) : null}
       {header && header.failures.length > 0 ? (
         <div className="mt-2 flex flex-col gap-1">
           {header.failures.map((failure) => (
