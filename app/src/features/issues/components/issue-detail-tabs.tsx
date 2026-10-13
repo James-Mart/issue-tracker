@@ -278,7 +278,6 @@ export function IssueDetailTabs({
             <IssueChangePanel
               issueId={issue.id}
               projectId={projectId}
-              resolveThreads={issue.kind === "story"}
               mergeBase={
                 issue.kind === "story"
                   ? derived?.[issue.id]?.mergeBase

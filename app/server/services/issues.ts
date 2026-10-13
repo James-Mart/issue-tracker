@@ -16,6 +16,7 @@ import {
   type IssueRecord,
   type IssuesResponse,
   type Problem,
+  type ReviewIssue,
   type TaskStatus,
 } from "../schemas.js";
 import { IssueError } from "./errors.js";
@@ -37,6 +38,9 @@ import {
 import { ensureKindRenamed } from "./kind-rename.js";
 import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
+import { ensureReviewRecordsMigrated } from "./review-record-migration.js";
+import { ensureReviewThreadsMigrated } from "./review-thread-migration.js";
+import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
@@ -194,6 +198,8 @@ export function ensureMigrations(): void {
   ensureMergedAtMigrated();
   ensureSpecReviewMigrated();
   ensureSourceIdeaMigration();
+  ensureReviewRecordsMigrated();
+  ensureReviewThreadsMigrated();
 }
 
 /** Every issue in the store, archived ones included. */
@@ -247,6 +253,14 @@ export function readIssueOrThrow(id: string): Issue {
   const { issue, problem } = readIssueFile(id);
   if (!issue) {
     throw new IssueError("validation", problem?.message ?? `invalid issue "${id}"`);
+  }
+  return issue;
+}
+
+export function readReviewOrThrow(id: string): ReviewIssue {
+  const issue = readIssueOrThrow(id);
+  if (issue.kind !== "review") {
+    throw new IssueError("validation", `issue "${id}" is not a review`);
   }
   return issue;
 }
@@ -315,6 +329,9 @@ function assertWritable(target: Issue, all: Issue[]): void {
 export function create(input: CreateInput): Promise<IssueRecord> {
   return serialize(() => {
     ensureMigrations();
+    if (input.kind === "review") {
+      throw new IssueError("validation", "a review is started from its Story");
+    }
     const title = input.title?.trim();
     if (!title) throw new IssueError("validation", "title is required");
 
@@ -718,6 +735,19 @@ export function update(
     for (const root of companionWrites.values()) {
       writes.push({ issue: root });
     }
+    // Only `archived` changes on these reviews, which integrity does not
+    // constrain, so they stay out of the scoped-check decision below.
+    const reviewArchiveWrites = archiveReviewsOfClosingStories(
+      [
+        { before: existing, after: parsed.issue },
+        ...cascaded.map((child) => ({ before: byId.get(child.id)!, after: child })),
+      ],
+      issues,
+      now,
+    );
+    for (const review of reviewArchiveWrites) {
+      writes.push({ issue: review });
+    }
 
     if (
       cascaded.length === 0 &&
@@ -782,13 +812,15 @@ export function update(
   });
 }
 
-export function taskStatusesForStory(
-  storyId: string,
+/** Statuses of the Tasks a comment log's threads can link: a review's Story Tasks. */
+export function linkableTaskStatuses(
+  owner: Issue,
   issues: Issue[] = readAll().issues,
 ): Map<string, TaskStatus> {
   const statuses = new Map<string, TaskStatus>();
+  if (owner.kind !== "review") return statuses;
   for (const issue of issues) {
-    if (issue.kind === "task" && issue.partOf === storyId) {
+    if (issue.kind === "task" && issue.partOf === owner.story) {
       statuses.set(issue.id, issue.status);
     }
   }

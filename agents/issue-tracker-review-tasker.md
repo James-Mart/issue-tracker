@@ -43,7 +43,7 @@ Then one section per thread the Task covers:
 ```
 
 `<location>`, `<author>`, and `<body>` are copied verbatim from that thread's
-lines in `issue story view <storyId> --comments`. A thread with no location
+lines in `issue review view <reviewId> --comments`. A thread with no location
 ends its heading after the root id. The messages are the root, then each
 reply, in the order the CLI prints them.
 
@@ -51,12 +51,13 @@ reply, in the order the CLI prints them.
 
 The prompt ends with:
 
-- `Story: <storyId>`
+- `Review: <reviewId>` — the review whose threads this run tasks
+- `Story: <storyId>` — the Story that review covers
 - `Threads: <id>, <id>` — the threads this run tasks
 
 ## Procedure
 
-1. Run `issue summary <storyId>` and `issue story view <storyId> --comments`.
+1. Run `issue summary <storyId>` and `issue review view <reviewId> --comments`.
    Read each named thread's anchor, body, and replies.
 2. Group threads whose changes would land naturally as one commit: the same
    outcome at the same code, or small edits of one kind across files (for
@@ -70,7 +71,7 @@ The prompt ends with:
    description** above, written as a YAML block scalar (`|`).
 4. Link every named thread to the Task that covers it:
 
-   issue story comment <storyId> --role issue-tracker-review-tasker --reply-to <threadId> --link-task <taskId>
+   issue review comment <reviewId> --role issue-tracker-review-tasker --reply-to <threadId> --link-task <taskId>
 
    Leave the thread unresolved.
 5. Leave workspace source files unchanged.

@@ -69,7 +69,7 @@ function followUp(threadId: string, body: string): string {
     body,
     "",
     "Answer by running:",
-    `issue comment s --reply-to ${threadId} --role agent --name Researcher --body "<answer>"`,
+    `issue comment r --reply-to ${threadId} --role agent --name Researcher --body "<answer>"`,
     "Text you write in chat is not shown to the reviewer.",
   ].join("\n");
 }
@@ -100,7 +100,7 @@ async function post(path: string, body?: unknown): Promise<Response> {
 }
 
 async function askQuestion(body: Record<string, unknown>): Promise<string> {
-  const res = await post("/api/issues/s/comments", {
+  const res = await post("/api/issues/r/comments", {
     role: "human",
     name: "Jared",
     kind: "question",
@@ -111,7 +111,7 @@ async function askQuestion(body: Record<string, unknown>): Promise<string> {
 }
 
 async function thread(rootId: string): Promise<CommentThreadView> {
-  const res = await fetch(`${baseUrl}/api/issues/s/comments`);
+  const res = await fetch(`${baseUrl}/api/issues/r/comments`);
   const { threads } = (await res.json()) as { threads: CommentThreadView[] };
   const view = threads.find((t) => t.rootId === rootId);
   if (!view) throw new Error(`no thread ${rootId}`);
@@ -190,6 +190,18 @@ beforeEach(() => {
     createdAt: AT,
     updatedAt: AT,
   });
+  writeIssue("r", {
+    kind: "review",
+    title: "Story",
+    partOf: "p",
+    story: "s",
+    archived: false,
+    marks: { all: {}, commits: {} },
+    submissions: [],
+    order: 1,
+    createdAt: AT,
+    updatedAt: AT,
+  });
   writeIssue("t", {
     kind: "task",
     title: "Task",
@@ -235,13 +247,13 @@ describe("question researcher", () => {
 
   it("starts no researcher for a review comment", async () => {
     await startApp();
-    const res = await post("/api/issues/s/comments", {
+    const res = await post("/api/issues/r/comments", {
       role: "human",
       body: "Rename this.",
     });
     expect(res.status).toBe(201);
     const rootId = ((await res.json()) as { id: string }).id;
-    const reply = await post("/api/issues/s/comments", {
+    const reply = await post("/api/issues/r/comments", {
       role: "human",
       body: "And here.",
       replyTo: rootId,
@@ -259,7 +271,7 @@ describe("question researcher", () => {
     });
     const rootId = await askQuestion({ body: "Why?" });
     await settledThread(rootId);
-    await post("/api/issues/s/comments", {
+    await post("/api/issues/r/comments", {
       role: "agent",
       name: "Researcher",
       body: "Because a.ts needs it.",
@@ -267,7 +279,7 @@ describe("question researcher", () => {
     });
     const before = (await thread(rootId)).researcherConversationId;
 
-    const reply = await post("/api/issues/s/comments", {
+    const reply = await post("/api/issues/r/comments", {
       role: "human",
       name: "Jared",
       body: "And the tests?",

@@ -86,10 +86,11 @@ Absolute path for this file (Read this exact path):
    (reviewer, finding, reason). For a `noDiff` Task, it says what was done,
    what was found, and why no source-controlled change is the right outcome.
 9. **Resolve linked threads.** Run `issue task get <id> openLinkedThreadRoots`.
-   Each stdout line is the root id of a Story thread that is open and linked
-   to this Task. Empty stdout means there are none. For each line `<rootId>`,
-   run `issue story comment <storyId> --role implementor --reply-to <rootId> --resolve --body "<fix>"`
-   (`<storyId>` is the parent Story from bootstrap). `<fix>` names what
+   Each stdout line is the root id of a review thread that is open and linked
+   to this Task. Empty stdout means there are none. Otherwise run
+   `issue story get <storyId> reviewId` (`<storyId>` is the parent Story from
+   bootstrap) for `<reviewId>`, and for each line `<rootId>`, run
+   `issue review comment <reviewId> --role implementor --reply-to <rootId> --resolve --body "<fix>"`. `<fix>` names what
    changed and where. A thread this get omits stays as it is. A resolved
    thread linked to this Task stays resolved; a human unresolve is what opens
    it again.

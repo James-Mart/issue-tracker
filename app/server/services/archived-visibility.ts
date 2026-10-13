@@ -8,9 +8,9 @@ export function isArchived(issue: Issue): boolean {
 }
 
 /**
- * Issues visible in tree/list views. Projects are never archived; Epic /
- * Idea / Branch / Commit rows are omitted unless `showArchived` is true.
- * Shared by CLI and UI so the filter rule cannot fork.
+ * Archive visibility for list and full-graph reads. Projects are never
+ * archived; archived rows are omitted unless `showArchived` is true.
+ * Structure, cockpit, and the default `issue tree` use `outlineIssues`.
  */
 export function visibleIssues<T extends Issue>(
   issues: T[],
@@ -18,6 +18,17 @@ export function visibleIssues<T extends Issue>(
 ): T[] {
   if (showArchived) return issues;
   return issues.filter((issue) => !isArchived(issue));
+}
+
+/**
+ * Planning outlines: the structure lens, the cockpit, and the default
+ * `issue tree`. Review issues stay on the code review lens.
+ */
+export function outlineIssues<T extends Issue>(
+  issues: T[],
+  showArchived: boolean,
+): T[] {
+  return visibleIssues(issues, showArchived).filter((issue) => issue.kind !== "review");
 }
 
 /** True when any partOf ancestor (including the parent itself) is archived. */

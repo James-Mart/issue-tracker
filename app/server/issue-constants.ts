@@ -1,4 +1,4 @@
-export const KINDS = ["project", "epic", "idea", "story", "task"] as const;
+export const KINDS = ["project", "epic", "idea", "story", "task", "review"] as const;
 export type IssueKind = (typeof KINDS)[number];
 
 export const MERGE_POLICIES = [
@@ -38,6 +38,7 @@ export const PARENT_KINDS: Record<IssueKind, readonly IssueKind[]> = {
   idea: ["project"],
   story: ["project", "epic"],
   task: ["story"],
+  review: ["project"],
 };
 
 /** Env-style Project secret key. Values stay in the secret store. */
@@ -52,4 +53,5 @@ export const CHILD_KIND: Record<IssueKind, IssueKind | null> = {
   idea: null,
   story: "task",
   task: null,
+  review: null,
 };

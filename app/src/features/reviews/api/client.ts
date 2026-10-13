@@ -106,7 +106,7 @@ export function postOpenReview(
 ): Promise<ReviewView> {
   return request<ReviewView>(reviewsUrl(projectId), {
     method: "POST",
-    body: { target: { kind: "story", storyId } },
+    body: { story: storyId },
   });
 }
 

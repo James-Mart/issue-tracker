@@ -6,6 +6,7 @@ import {
   type ConversationMeta,
   type Issue,
 } from "../schemas.js";
+import type { ReviewIssue } from "../schemas/review.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { prepareStoryChange, requireMergeBase } from "./change.js";
 import {
@@ -17,7 +18,7 @@ import {
   startConversationPrompt,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
-import { readComments, readIssueOrThrow } from "./issues.js";
+import { readComments, readIssueOrThrow, readReviewOrThrow } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import {
   REVIEW_QUESTION_ROLE,
@@ -65,12 +66,21 @@ async function scopeLine(
   return change.state === "ready" ? `Diff: ${change.range}` : "Diff: none";
 }
 
+/** A review and the Story it reviews. */
+type ReviewSource = { review: ReviewIssue; story: Issue };
+
+function readReviewSource(reviewId: string): ReviewSource {
+  const review = readReviewOrThrow(reviewId);
+  return { review, story: readIssueOrThrow(review.story) };
+}
+
 async function contextLines(
-  story: Issue,
+  { review, story }: ReviewSource,
   root: Comment,
   workspace: string,
 ): Promise<string[]> {
   return [
+    `Review: ${review.id}`,
     `Story: ${story.id} — ${story.title}`,
     `Thread: ${root.id}`,
     `Workspace: ${workspace}`,
@@ -79,7 +89,7 @@ async function contextLines(
 }
 
 async function researcherPrompt(
-  story: Issue,
+  source: ReviewSource,
   root: Comment,
   workspace: string,
 ): Promise<string> {
@@ -88,21 +98,21 @@ async function researcherPrompt(
     "",
     "A reviewer asked a question about this Story's changes.",
     "",
-    ...(await contextLines(story, root, workspace)),
+    ...(await contextLines(source, root, workspace)),
     "Question:",
     root.body,
   ].join("\n");
 }
 
 /** A human reply resumes a conversation whose original instructions are far back. */
-function followUpPrompt(storyId: string, threadId: string, body: string): string {
+function followUpPrompt(reviewId: string, threadId: string, body: string): string {
   return [
     `The reviewer replied in thread ${threadId}:`,
     "",
     body,
     "",
     "Answer by running:",
-    `issue comment ${storyId} --reply-to ${threadId} --role agent --name Researcher --body "<answer>"`,
+    `issue comment ${reviewId} --reply-to ${threadId} --role agent --name Researcher --body "<answer>"`,
     "Text you write in chat is not shown to the reviewer.",
   ].join("\n");
 }
@@ -121,7 +131,7 @@ function formatThreadHistory(root: Comment, replies: Comment[]): string {
 
 /** Prompt for a session that replaces an archived or unreadable conversation. */
 async function recoveredResearcherPrompt(
-  story: Issue,
+  source: ReviewSource,
   root: Comment,
   replies: Comment[],
   workspace: string,
@@ -132,7 +142,7 @@ async function recoveredResearcherPrompt(
     "The previous researcher conversation for this thread is gone. This is a new session.",
     "Answer the latest reply.",
     "",
-    ...(await contextLines(story, root, workspace)),
+    ...(await contextLines(source, root, workspace)),
     "",
     formatThreadHistory(root, replies),
   ].join("\n");
@@ -191,7 +201,7 @@ async function settleResearcherStart(
 }
 
 async function openResearcherConversation(
-  storyId: string,
+  reviewId: string,
   root: Comment,
   projectId: string,
   sessions: AgentSessions,
@@ -202,7 +212,7 @@ async function openResearcherConversation(
     title: titleFor(root.body),
     projectId,
     model: loadRoleModelPin(REVIEW_QUESTION_ROLE),
-    issueId: storyId,
+    issueId: reviewId,
     channel: "review",
     role: REVIEW_QUESTION_ROLE,
   });
@@ -220,7 +230,7 @@ async function openResearcherConversation(
   } catch (err) {
     await recordResearcherStartFailure(conversation.id, err);
   }
-  await appendThreadEvent(storyId, root.id, {
+  await appendThreadEvent(reviewId, root.id, {
     event: "researcher-session",
     conversationId: conversation.id,
     ...(recovered ? { recovered: true } : {}),
@@ -229,28 +239,27 @@ async function openResearcherConversation(
 }
 
 /**
- * Open a fresh researcher conversation for a question root on a Story and
+ * Open a fresh researcher conversation for a question root on a review and
  * start its run.
  */
 async function startQuestionResearcher(
-  storyId: string,
+  reviewId: string,
   root: Comment,
   projectId: string,
   sessions: AgentSessions,
 ): Promise<void> {
   await openResearcherConversation(
-    storyId,
+    reviewId,
     root,
     projectId,
     sessions,
-    (workspace) =>
-      researcherPrompt(readIssueOrThrow(storyId), root, workspace),
+    (workspace) => researcherPrompt(readReviewSource(reviewId), root, workspace),
   );
 }
 
 /** Fresh researcher session with full thread history after a conversation is gone or retry. */
 async function replaceResearcherWithRecoveredHistory(
-  storyId: string,
+  reviewId: string,
   root: Comment,
   replies: Comment[],
   projectId: string,
@@ -258,13 +267,13 @@ async function replaceResearcherWithRecoveredHistory(
   conversationId?: string,
 ): Promise<void> {
   if (conversationId) await sessions.dispose(conversationId);
-  const story = readIssueOrThrow(storyId);
+  const source = readReviewSource(reviewId);
   await openResearcherConversation(
-    storyId,
+    reviewId,
     root,
     projectId,
     sessions,
-    (workspace) => recoveredResearcherPrompt(story, root, replies, workspace),
+    (workspace) => recoveredResearcherPrompt(source, root, replies, workspace),
     true,
   );
 }
@@ -289,19 +298,19 @@ function openQuestionFollowUp(
  * A live run receives the reply; a gone conversation is replaced.
  */
 async function followUpQuestionResearcher(
-  storyId: string,
+  issueId: string,
   reply: Comment,
   projectId: string,
   sessions: AgentSessions,
 ): Promise<void> {
-  const comments = readComments(storyId);
+  const comments = readComments(issueId);
   const target = openQuestionFollowUp(comments, reply);
   if (!target) return;
   const { root, conversationId } = target;
   const meta = usableResearcherConversation(conversationId);
   if (!meta) {
     await replaceResearcherWithRecoveredHistory(
-      storyId,
+      issueId,
       root,
       threadReplies(comments.messages, root.id),
       projectId,
@@ -311,7 +320,7 @@ async function followUpQuestionResearcher(
     return;
   }
 
-  const prompt = followUpPrompt(storyId, root.id, reply.body);
+  const prompt = followUpPrompt(issueId, root.id, reply.body);
   const active = sessions.getActiveRun(conversationId);
   try {
     if (active) {
@@ -336,35 +345,36 @@ async function followUpQuestionResearcher(
 /**
  * Start a researcher for a new question, or resume one for a human reply.
  * The thread reads as running from this call until the launch settles.
+ * Question threads exist only on a review; on any other issue this does nothing.
  */
 export async function onQuestionComment(
-  storyId: string,
+  issueId: string,
   message: Comment,
   projectId: string,
   sessions: AgentSessions,
 ): Promise<void> {
   if (message.kind === "question") {
     await trackResearcherLaunch(message.id, () =>
-      startQuestionResearcher(storyId, message, projectId, sessions),
+      startQuestionResearcher(issueId, message, projectId, sessions),
     );
     return;
   }
   // Review threads and non-human replies do not resume a researcher.
   if (message.replyTo && message.role === "human") {
     await trackResearcherLaunch(message.replyTo, () =>
-      followUpQuestionResearcher(storyId, message, projectId, sessions),
+      followUpQuestionResearcher(issueId, message, projectId, sessions),
     );
   }
 }
 
 /** Start a fresh researcher run for a question whose last researcher failed. */
 export async function retryQuestionResearcher(
-  storyId: string,
+  reviewId: string,
   threadId: string,
   projectId: string,
   sessions: AgentSessions,
 ): Promise<void> {
-  const comments = readComments(storyId);
+  const comments = readComments(reviewId);
   const root = findThreadRoot(comments.messages, threadId);
   if (researcherRunForThread(comments, threadId)?.status !== "failed") {
     throw new IssueError("conflict", RETRY_NOT_FAILED);
@@ -375,10 +385,10 @@ export async function retryQuestionResearcher(
   await trackResearcherLaunch(
     threadId,
     replies.length === 0
-      ? () => startQuestionResearcher(storyId, root, projectId, sessions)
+      ? () => startQuestionResearcher(reviewId, root, projectId, sessions)
       : () =>
           replaceResearcherWithRecoveredHistory(
-            storyId,
+            reviewId,
             root,
             replies,
             projectId,

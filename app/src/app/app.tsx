@@ -110,7 +110,7 @@ export function App() {
               element={<ReviewHomePage />}
             />
             <Route
-              path="/projects/:projectId/review/stories/:storyId"
+              path="/projects/:projectId/review/issues/:id"
               element={<StoryReviewPage />}
             />
           </Routes>

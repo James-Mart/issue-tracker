@@ -8,6 +8,7 @@ import {
   type MergePolicy,
 } from "../issue-constants.js";
 import { SLUG_RE } from "../slug.js";
+import { reviewMarksSchema, reviewSubmissionSchema } from "./review-state.js";
 import type {
   FileCommentAnchor,
   LineCommentAnchor,
@@ -560,12 +561,27 @@ export const taskSchema = z.object({
   ...timestamps,
 });
 
+// A code review of a Story. Lives under the Project; the Story is its source.
+export const reviewIssueSchema = z.object({
+  id: nonEmpty,
+  kind: z.literal("review"),
+  partOf: nonEmpty,
+  title: nonEmpty,
+  story: nonEmpty,
+  ...archivableFields,
+  marks: reviewMarksSchema,
+  submissions: z.array(reviewSubmissionSchema),
+  ...orderField,
+  ...timestamps,
+});
+
 export const issueSchema = z.discriminatedUnion("kind", [
   projectSchema,
   epicSchema,
   ideaSchema,
   storySchema,
   taskSchema,
+  reviewIssueSchema,
 ]);
 
 export type Issue = z.infer<typeof issueSchema>;
@@ -582,7 +598,8 @@ export type IssueFields = Omit<z.infer<typeof projectSchema>, "kind" | "labels">
   Omit<z.infer<typeof epicSchema>, "kind" | "labels"> &
   Omit<z.infer<typeof ideaSchema>, "kind" | "labels"> &
   Omit<z.infer<typeof storySchema>, "kind" | "labels"> &
-  Omit<z.infer<typeof taskSchema>, "kind">;
+  Omit<z.infer<typeof taskSchema>, "kind"> &
+  Omit<z.infer<typeof reviewIssueSchema>, "kind">;
 
 // Project catalog vs Epic/Idea/Story assignment arrays share the key name but
 // not the value shape — keep them out of the IssueFields intersection.

@@ -17,7 +17,7 @@ import type {
 } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { shortSha } from "@/lib/utils/short-sha";
-import { storyReviewPath } from "../lib/links";
+import { reviewIssuePath } from "../lib/links";
 import { StoryReviewPage } from "./story-review-page";
 
 const PROJECT = "proj";
@@ -109,10 +109,10 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
 }));
 
 vi.mock("../api/queries", () => ({
-  useReviewsQuery: () => ({ data: { reviews: state.reviews }, error: null }),
-  useReviewProgressQuery: () => ({
-    data: (state.reviews[0] as ReviewView | undefined)?.progress,
+  useReviewQuery: () => ({
+    data: state.reviews[0],
     error: null,
+    isLoading: false,
   }),
   useReviewDiffQuery: (_projectId: string, _reviewId: string, scope: string) => ({
     data: state.byScope[scope] ?? state.diff,
@@ -179,10 +179,13 @@ const PATCH = [
 function reviewFixture(): ReviewView {
   return {
     id: "rev-1",
-    projectId: PROJECT,
-    target: { kind: "story", storyId: STORY },
+    kind: "review",
+    partOf: PROJECT,
+    title: "Story",
+    story: STORY,
+    archived: false,
+    order: 0,
     status: "open",
-    postMortem: false,
     createdAt: "2026-09-29T00:00:00.000Z",
     updatedAt: "2026-09-29T00:00:00.000Z",
     marks: {
@@ -198,7 +201,6 @@ function reviewFixture(): ReviewView {
         [TIP]: { reviewed: 0, total: 3 },
       },
     },
-    effectiveStatus: "open",
     submissions: [],
   } as ReviewView;
 }
@@ -243,14 +245,14 @@ function mountPage(search?: string): HTMLDivElement {
   document.body.appendChild(container);
   root = createRoot(container);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const path = storyReviewPath(PROJECT, STORY);
+  const path = reviewIssuePath(PROJECT, "rev-1");
   act(() => {
     root!.render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[search ? `${path}?${search}` : path]}>
           <Routes>
             <Route
-              path="/projects/:projectId/review/stories/:storyId"
+              path="/projects/:projectId/review/issues/:id"
               element={<StoryReviewPage />}
             />
           </Routes>

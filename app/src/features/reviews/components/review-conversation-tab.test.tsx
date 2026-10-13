@@ -65,13 +65,13 @@ function mount(): HTMLDivElement {
   root = createRoot(container);
   act(() => {
     root!.render(
-      <MemoryRouter initialEntries={["/projects/proj/review/stories/story-1"]}>
+      <MemoryRouter initialEntries={["/projects/proj/review/issues/story-1-review"]}>
         <Routes>
           <Route
-            path="/projects/:projectId/review/stories/:storyId"
+            path="/projects/:projectId/review/issues/:id"
             element={
               <ReviewConversationTab
-                storyId="story-1"
+                reviewId="story-1-review"
                 submissions={[]}
                 onOpenInDiff={vi.fn()}
               />

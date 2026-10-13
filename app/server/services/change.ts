@@ -409,14 +409,28 @@ export function issueChangeCommitShas(issue: Issue, issues?: Issue[]): string[] 
   return [];
 }
 
+/** The issue whose commits this issue's comment anchors point into: a review's Story. */
+export function anchorChangeIssue(issue: Issue, issues: readonly Issue[]): Issue {
+  if (issue.kind !== "review") return issue;
+  const story = issues.find((item) => item.id === issue.story);
+  if (!story) {
+    throw new IssueError(
+      "not_found",
+      `review "${issue.id}" names unknown story "${issue.story}"`,
+    );
+  }
+  return story;
+}
+
 function allowedCommitShas(issue: Issue, issues: Issue[]): string[] {
-  assertChangeSupported(issue);
-  const shas = issueChangeCommitShas(issue, issues);
-  if (issue.kind === "task") {
+  const subject = anchorChangeIssue(issue, issues);
+  assertChangeSupported(subject);
+  const shas = issueChangeCommitShas(subject, issues);
+  if (subject.kind === "task") {
     const sha = shas.at(-1);
     return sha ? [sha] : [];
   }
-  if (issue.kind === "story") {
+  if (subject.kind === "story") {
     return shas;
   }
   throw new IssueError(

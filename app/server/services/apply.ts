@@ -19,6 +19,7 @@ import {
   type IssueWrite,
 } from "./issues.js";
 import { checkIntegrity } from "./integrity.js";
+import { addReviewsOfDeletedStories } from "./deletion.js";
 import { nextSiblingOrder } from "../order.js";
 import { IssueError } from "./errors.js";
 import { mergeIssue } from "./merge.js";
@@ -343,9 +344,13 @@ export function apply(doc: ApplyDoc): Promise<ApplySummary> {
     // docs declare Epics, Ideas, and project-level Stories under `children:`;
     // omitted ones are pruned. Epic-/story-rooted docs never include Ideas in
     // scope (Ideas are Project children), so those forms leave Ideas untouched.
+    // Docs never declare reviews; a review goes only with its pruned Story.
     const deleteSet = new Set(
-      [...scope].filter((id) => !desiredIds.has(id)),
+      [...scope].filter(
+        (id) => !desiredIds.has(id) && onDiskById.get(id)?.kind !== "review",
+      ),
     );
+    addReviewsOfDeletedStories(issues, deleteSet);
 
     // Fold surviving out-of-scope issues (with blockedBy repair) into the set.
     for (const issue of issues) {

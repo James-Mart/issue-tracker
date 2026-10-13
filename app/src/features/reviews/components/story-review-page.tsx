@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { useParams } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { ReviewCommits, ReviewRecordView, ReviewView } from "@server/schemas";
+import type { ReviewCommits, ReviewView } from "@server/schemas";
 import {
   ShellFaultDetail,
   ShellInlineFault,
@@ -10,18 +10,12 @@ import {
 } from "@/app/shell-state";
 import { PageShell } from "@/components/page-shell";
 import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
-import { Button } from "@/components/ui/button";
 import { TabButton } from "@/components/ui/tab-button";
 import { ApiError } from "@/lib/api/errors";
 import { useIssueDetailQuery } from "@/features/issues/api/queries";
-import { useOpenReview } from "../api/mutations";
-import { useReviewDiffQuery, useReviewProgressQuery } from "../api/queries";
-import {
-  REVIEW_PROGRESS_FAULT_HINT,
-  REVIEW_PROGRESS_FAULT_MESSAGE,
-} from "./review-progress-fault";
+import { useReviewDiffQuery } from "../api/queries";
 import type { ReviewMarkOverrides } from "../lib/review-scope";
-import { useStoryReviewFirstWave } from "../hooks/use-story-review-first-wave";
+import { useReviewWorkbenchReads } from "../hooks/use-review-workbench-reads";
 import {
   useReviewWorkbenchLocation,
   type DiffThreadReveal,
@@ -37,32 +31,6 @@ import { StoryReviewHeader } from "./story-review-header";
 /** Desktop bounds the page so the file tree and diff stack scroll on their own. */
 const BOUNDED_REVIEW_SHELL_CLASS =
   "shell:h-[calc(100svh-3rem)] shell:min-h-0 shell:overflow-hidden";
-
-function StartReviewState({
-  projectId,
-  storyId,
-}: {
-  projectId: string;
-  storyId: string;
-}) {
-  const open = useOpenReview(projectId);
-  return (
-    <ShellState
-      eyebrow="Code review"
-      title="No review for this Story yet."
-      detail="Start a review to work through the Story's changes file by file. Reviewed marks are saved with the review."
-      action={
-        <Button
-          variant="current"
-          disabled={open.isPending}
-          onClick={() => open.mutate(storyId)}
-        >
-          Start review
-        </Button>
-      }
-    />
-  );
-}
 
 /** Gates the Diff tab on its queries so `ReviewDiffTab` only sees loaded data. */
 function DiffTabPanel({
@@ -187,7 +155,7 @@ function StoryReviewWorkbench({
       <div role="tabpanel" className="flex min-h-0 min-w-0 flex-1 flex-col">
         {active === "conversation" ? (
           <ReviewConversationTab
-            storyId={storyId}
+            reviewId={review.id}
             submissions={review.submissions}
             onOpenInDiff={openThreadInDiff}
             focusThreadId={threadId}
@@ -223,61 +191,36 @@ function StoryReviewWorkbench({
   );
 }
 
-function StoryReviewWithProgress({
+function StoryReviewBody({
   projectId,
-  storyId,
-  storyTitle,
-  record,
-  commits,
-  merged,
+  reviewId,
 }: {
   projectId: string;
-  storyId: string;
-  storyTitle: string;
-  record: ReviewRecordView;
-  commits: UseQueryResult<ReviewCommits, Error>;
-  merged: boolean;
+  reviewId: string;
 }) {
-  const progress = useReviewProgressQuery(projectId, record.id);
-  if (progress.error) {
+  const { review, commits } = useReviewWorkbenchReads(projectId, reviewId);
+  const storyId = review.data?.story ?? "";
+  const story = useIssueDetailQuery(storyId);
+  const storyTitle = story.data?.kind === "story" ? story.data.title : review.data?.title;
+  useTabTitle(tabTitleEntityName(storyTitle, reviewId), "Review");
+  const error = review.error ?? (storyId ? story.error : null);
+  const reviewMissing = review.error instanceof ApiError && review.error.status === 404;
+  const storyMissing =
+    storyId.length > 0 && story.error instanceof ApiError && story.error.status === 404;
+
+  if (reviewMissing) {
     return (
-      <ShellInlineFault
-        message={REVIEW_PROGRESS_FAULT_MESSAGE}
-        hint={REVIEW_PROGRESS_FAULT_HINT}
+      <ShellState
+        tone="blocked"
+        eyebrow="Missing"
+        title="No review with that id."
+        detail={
+          <ShellFaultDetail message={reviewId} hint="Open it from code review." />
+        }
       />
     );
   }
-  if (!progress.data) {
-    return <ShellLoadingState label="Loading review…" />;
-  }
-  return (
-    <StoryReviewWorkbench
-      projectId={projectId}
-      storyId={storyId}
-      storyTitle={storyTitle}
-      review={{ ...record, progress: progress.data }}
-      commits={commits}
-      merged={merged}
-    />
-  );
-}
-
-function StoryReviewBody({
-  projectId,
-  storyId,
-}: {
-  projectId: string;
-  storyId: string;
-}) {
-  const story = useIssueDetailQuery(storyId);
-  const storyName = story.data?.kind === "story" ? story.data.title : undefined;
-  useTabTitle(tabTitleEntityName(storyName, storyId), "Review");
-  const { reviews, commits } = useStoryReviewFirstWave(projectId, storyId);
-  const record = reviews.data?.reviews[0];
-  const error = story.error ?? reviews.error;
-  const missing = story.error instanceof ApiError && story.error.status === 404;
-
-  if (missing || (story.data && story.data.kind !== "story")) {
+  if (storyMissing || (story.data && story.data.kind !== "story")) {
     return (
       <ShellState
         tone="blocked"
@@ -297,39 +240,26 @@ function StoryReviewBody({
       <ShellInlineFault message={error.message} hint="Check the server, then reload." />
     );
   }
-  if (!story.data || !reviews.data) {
+  if (!review.data || story.data?.kind !== "story") {
     return <ShellLoadingState label="Loading review…" />;
   }
-  if (!record) {
-    return (
-      <>
-        <StoryReviewHeader
-          projectId={projectId}
-          storyId={storyId}
-          storyTitle={story.data.title}
-          merged={story.data.kind === "story" && story.data.merged}
-        />
-        <StartReviewState projectId={projectId} storyId={storyId} />
-      </>
-    );
-  }
   return (
-    <StoryReviewWithProgress
+    <StoryReviewWorkbench
       projectId={projectId}
-      storyId={storyId}
+      storyId={story.data.id}
       storyTitle={story.data.title}
-      record={record}
+      review={review.data}
       commits={commits}
-      merged={story.data.kind === "story" && story.data.merged}
+      merged={story.data.merged}
     />
   );
 }
 
 export function StoryReviewPage() {
-  const { projectId = "", storyId = "" } = useParams();
+  const { projectId = "", id = "" } = useParams();
   return (
     <PageShell className={BOUNDED_REVIEW_SHELL_CLASS} data-testid="story-review-page">
-      <StoryReviewBody projectId={projectId} storyId={storyId} />
+      <StoryReviewBody projectId={projectId} reviewId={id} />
     </PageShell>
   );
 }

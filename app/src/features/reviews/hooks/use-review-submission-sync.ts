@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import type { ReviewRecordView } from "@server/schemas";
+import type { ReviewView } from "@server/schemas";
 import { issuesKeys } from "@/features/issues/api/keys";
-import { useReviewsQuery } from "../api/queries";
+import { useReviewQuery } from "../api/queries";
 import { submissionPollInterval } from "../lib/review-submission-ui";
 
 function submissionSignature(
@@ -17,7 +17,7 @@ function submissionSignature(
  * loaded record, not a change.
  */
 function useReviewSubmissionFollowUp(
-  storyId: string,
+  reviewId: string | undefined,
   submissions: readonly { id: string; status: string }[] | undefined,
 ): void {
   const qc = useQueryClient();
@@ -28,24 +28,20 @@ function useReviewSubmissionFollowUp(
     if (signature === undefined) return;
     const prior = seen.current;
     seen.current = signature;
-    if (prior === undefined || prior === signature) return;
-    void qc.invalidateQueries({ queryKey: issuesKeys.comments(storyId) });
+    if (prior === undefined || prior === signature || reviewId === undefined) return;
+    void qc.invalidateQueries({ queryKey: issuesKeys.comments(reviewId) });
     void qc.invalidateQueries({ queryKey: issuesKeys.list() });
-  }, [qc, signature, storyId]);
+  }, [qc, reviewId, signature]);
 }
 
-/** Story review list. Polls while a submission is tasking, then refreshes follow-on reads. */
-export function useStoryReviewList(
+/** Review issue. Polls while a submission is tasking, then refreshes follow-on reads. */
+export function useReviewRecord(
   projectId: string,
-  storyId: string,
-): UseQueryResult<{ reviews: ReviewRecordView[] }, Error> {
-  const reviews = useReviewsQuery(projectId, storyId, {
-    refetchInterval: (query) =>
-      submissionPollInterval(query.state.data?.reviews[0]?.submissions),
+  reviewId: string,
+): UseQueryResult<ReviewView, Error> {
+  const review = useReviewQuery(projectId, reviewId, {
+    refetchInterval: (query) => submissionPollInterval(query.state.data?.submissions),
   });
-  useReviewSubmissionFollowUp(
-    storyId,
-    reviews.data ? reviews.data.reviews[0]?.submissions : undefined,
-  );
-  return reviews;
+  useReviewSubmissionFollowUp(reviewId, review.data?.submissions);
+  return review;
 }

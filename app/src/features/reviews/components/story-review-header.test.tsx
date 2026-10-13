@@ -35,15 +35,17 @@ vi.mock("../api/mutations", () => ({
 function review(overrides: Partial<ReviewView> = {}): ReviewView {
   return {
     id: "rev-1",
-    projectId: "proj",
-    target: { kind: "story", storyId: "story-1" },
+    kind: "review",
+    partOf: "proj",
+    title: "Story",
+    story: "story-1",
+    archived: false,
+    order: 0,
     status: "open",
-    postMortem: false,
     createdAt: "2026-09-29T00:00:00.000Z",
     updatedAt: "2026-09-29T00:00:00.000Z",
     marks: { all: {}, commits: {} },
     progress: { all: { reviewed: 0, total: 0, changedSinceReviewed: [] }, commits: {} },
-    effectiveStatus: "open",
     submissions: [],
     ...overrides,
   } as ReviewView;

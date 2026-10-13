@@ -34,6 +34,10 @@ export function resolveBoardScope(
       throw new Error(
         `cannot scope ${verb} to a task; pass story "${issue.partOf}" or its epic instead`,
       );
+    case "review":
+      throw new Error(
+        `cannot scope ${verb} to a review; pass project "${issue.partOf}" instead`,
+      );
   }
 }
 

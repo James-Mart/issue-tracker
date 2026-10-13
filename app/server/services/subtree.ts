@@ -109,7 +109,7 @@ export function nearestImplementingWorkRootId(
 }
 
 /**
- * Project id that contains an Epic/Idea (via `partOf`), a Story (directly via
+ * Project id that contains an Epic/Idea/Review (via `partOf`), a Story (directly via
  * Project or via Epic), a Task (via its Story/Epic chain), or undefined when
  * the chain is broken.
  */
@@ -117,7 +117,9 @@ export function projectContaining(
   issue: Issue,
   byId: Map<string, Issue>,
 ): string | undefined {
-  if (issue.kind === "epic" || issue.kind === "idea") return issue.partOf;
+  if (issue.kind === "epic" || issue.kind === "idea" || issue.kind === "review") {
+    return issue.partOf;
+  }
   if (issue.kind === "story") {
     const parent = byId.get(issue.partOf);
     if (parent?.kind === "project") return parent.id;

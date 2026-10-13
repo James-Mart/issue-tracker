@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import type { IssueRecord, ReviewProgress, ReviewRecordView } from "@server/schemas";
 import {
@@ -14,7 +14,8 @@ import { ProjectLensSwitcher } from "@/features/issues/components/project-lens-s
 import { useIssuesQuery } from "@/features/issues/api/queries";
 import { useOpenReview, useReopenReview } from "../api/mutations";
 import { useReviewProgressQuery, useReviewsQuery } from "../api/queries";
-import { storyReviewPath } from "../lib/links";
+import { useGoToReviewIssue } from "../hooks/use-go-to-review-issue";
+import { reviewIssuePath } from "../lib/links";
 import { NewReviewPicker } from "./new-review-picker";
 import { ReviewIdentity } from "./review-identity";
 import { ReviewProgressFault } from "./review-progress-fault";
@@ -101,7 +102,7 @@ function OpenReviewRow({
   projectId: string;
   item: ReviewHomeReview;
 }) {
-  const storyId = item.review.target.storyId;
+  const storyId = item.review.story;
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,
@@ -111,7 +112,7 @@ function OpenReviewRow({
   return (
     <li className="rounded-lg border border-border bg-card hover:border-[hsl(var(--rail-lit))]">
       <Link
-        to={storyReviewPath(projectId, storyId)}
+        to={reviewIssuePath(projectId, item.review.id)}
         data-testid="review-home-open-row"
         className="block rounded-lg px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -176,7 +177,7 @@ function ArchivedReviewRow({
   reopening: boolean;
   onReopen: () => void;
 }) {
-  const storyId = item.review.target.storyId;
+  const storyId = item.review.story;
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,
@@ -191,7 +192,7 @@ function ArchivedReviewRow({
     >
       <div className="min-w-0 flex-1">
         <Link
-          to={storyReviewPath(projectId, storyId)}
+          to={reviewIssuePath(projectId, item.review.id)}
           className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ReviewIdentity
@@ -228,7 +229,7 @@ function ReviewHomeLists({
 }) {
   const open = useOpenReview(projectId);
   const reopen = useReopenReview(projectId);
-  const navigate = useNavigate();
+  const goToReview = useGoToReviewIssue(projectId);
   const lists = useMemo(
     () => reviewHomeLists(projectId, issues, reviews),
     [issues, projectId, reviews],
@@ -236,7 +237,7 @@ function ReviewHomeLists({
 
   const startReview = (storyId: string) => {
     void open.mutateAsync(storyId).then(
-      () => navigate(storyReviewPath(projectId, storyId)),
+      (review) => goToReview(review.id),
       () => {
         // useOpenReview toasts the failure; stay on the landing page.
       },

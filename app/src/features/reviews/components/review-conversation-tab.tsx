@@ -4,9 +4,9 @@ import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { usePostComment } from "@/features/issues/api/mutations";
 import {
-  useStoryReviewCommentsQuery,
-  useStoryReviewCommentThreads,
-} from "../hooks/use-story-review-comments";
+  useReviewCommentsQuery,
+  useReviewCommentThreads,
+} from "../hooks/use-review-comments";
 import { humanComment } from "@/features/issues/lib/comments";
 import { conversationDraftKey } from "@/features/reviews/lib/review-draft-key";
 import {
@@ -18,7 +18,7 @@ import { scrollThreadNodeInPanel } from "@/features/issues/lib/issue-change-focu
 import { cn } from "@/lib/utils/cn";
 import type { ReviewSubmission } from "@server/schemas";
 import {
-  STORY_COMPOSER_LABEL,
+  REVIEW_COMPOSER_LABEL,
   type CommentThread as CommentThreadData,
 } from "@/features/issues/lib/comment-threads";
 import { ThreadLinkedTaskChip } from "@/features/issues/components/comments/thread-linked-task-chip";
@@ -131,11 +131,11 @@ function ConversationFilterBar({
 
 function ConversationTimeline({
   items,
-  storyId,
+  reviewId,
   onOpenInDiff,
 }: {
   items: ConversationTimelineItem<CommentThreadData>[];
-  storyId: string;
+  reviewId: string;
   onOpenInDiff: (threadId: string, commitSha: string) => void;
 }) {
   let lastDay = "";
@@ -160,7 +160,7 @@ function ConversationTimeline({
             {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
             <ReviewThread
               thread={thread}
-              storyId={storyId}
+              reviewId={reviewId}
               showAnchorContext
               collapse="resolved"
               onSeeInDiff={
@@ -176,22 +176,22 @@ function ConversationTimeline({
   );
 }
 
-/** Chronological Story comments and threads, with a general-comment composer. */
+/** Chronological review comments and threads, with a general-comment composer. */
 export function ReviewConversationTab({
-  storyId,
+  reviewId,
   submissions = [],
   onOpenInDiff,
   focusThreadId = null,
 }: {
-  storyId: string;
+  reviewId: string;
   submissions?: ReviewSubmission[];
   onOpenInDiff: (threadId: string, commitSha: string) => void;
-  /** Story comment selected from the header disclosure. */
+  /** Review thread selected from the header disclosure. */
   focusThreadId?: string | null;
 }) {
-  const comments = useStoryReviewCommentsQuery(storyId);
-  const { threads, problems } = useStoryReviewCommentThreads(storyId);
-  const post = usePostComment(storyId);
+  const comments = useReviewCommentsQuery(reviewId);
+  const { threads, problems } = useReviewCommentThreads(reviewId);
+  const post = usePostComment(reviewId);
 
   const send = (body: string, kind?: "question") =>
     post(humanComment(body, kind));
@@ -254,7 +254,7 @@ export function ReviewConversationTab({
           <ShellState
             className="border-0 bg-transparent px-4 py-8 shadow-none"
             title="No comments yet."
-            detail="Add one below to leave a note on this Story."
+            detail="Add one below to leave a note on this review."
           />
         ) : null}
         {commentsReady && timeline.length > 0 && visible.length === 0 ? (
@@ -268,7 +268,7 @@ export function ReviewConversationTab({
         {commentsReady && visible.length > 0 ? (
           <ConversationTimeline
             items={visible}
-            storyId={storyId}
+            reviewId={reviewId}
             onOpenInDiff={onOpenInDiff}
           />
         ) : null}
@@ -278,8 +278,8 @@ export function ReviewConversationTab({
         data-testid="review-conversation-composer"
       >
         <ReviewComposer
-          draftKey={conversationDraftKey(storyId)}
-          placeholder={STORY_COMPOSER_LABEL}
+          draftKey={conversationDraftKey(reviewId)}
+          placeholder={REVIEW_COMPOSER_LABEL}
           submitLabel="Send"
           persistent
           onSubmit={(body) => send(body)}

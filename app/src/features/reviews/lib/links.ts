@@ -4,11 +4,11 @@ export function projectReviewPath(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}/review`;
 }
 
-export function storyReviewPath(
+export function reviewIssuePath(
   projectId: string,
-  storyId: string,
+  reviewId: string,
   tab?: ReviewWorkbenchTab,
 ): string {
-  const path = `/projects/${encodeURIComponent(projectId)}/review/stories/${encodeURIComponent(storyId)}`;
+  const path = `/projects/${encodeURIComponent(projectId)}/review/issues/${encodeURIComponent(reviewId)}`;
   return tab === undefined ? path : `${path}?tab=${tab}`;
 }

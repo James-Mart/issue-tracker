@@ -12,15 +12,12 @@ import {
 import { IssueError } from "./errors.js";
 import {
   appendCommentLogRecords,
-  readAll,
+  linkableTaskStatuses,
   readIssueOrThrow,
   requireKindCapability,
   serialize,
-  taskStatusesForStory,
 } from "./issues.js";
 import { readCommentLog } from "./comment-log.js";
-import { listReviewViews } from "./reviews.js";
-import { ancestorChain } from "./subtree.js";
 import { findThreadRoot } from "./thread-events.js";
 import { commentsFromLog } from "./thread-state.js";
 
@@ -30,7 +27,7 @@ export type CommentEditRefusal =
   | "linked"
   | "question"
   | "researcher reply"
-  | "Story note"
+  | "note"
   | "resolved"
   | "dismissed"
   | "github";
@@ -64,11 +61,11 @@ export function commentEditReason(
   if (isResearcherReply(message)) return "researcher reply";
   if (thread?.kind === "question") return "question";
   if (
-    issueKind !== "story" ||
+    issueKind !== "review" ||
     thread === undefined ||
     root?.anchor === undefined
   ) {
-    return "Story note";
+    return "note";
   }
   if (submittedRootIds.has(thread.rootId)) return "submitted";
   if (thread.linkedTaskId !== undefined) return "linked";
@@ -84,15 +81,8 @@ export function commentEditRefusalMessage(
 }
 
 function submittedRootIds(issue: Issue): Set<string> {
-  if (issue.kind !== "story") return new Set();
-  const projectId = ancestorChain(issue.id, readAll().issues)[0]!.id;
-  const ids = new Set<string>();
-  for (const review of listReviewViews(projectId, issue.id).reviews) {
-    for (const submission of review.submissions) {
-      for (const threadId of submission.threadIds) ids.add(threadId);
-    }
-  }
-  return ids;
+  if (issue.kind !== "review") return new Set();
+  return new Set(issue.submissions.flatMap((submission) => submission.threadIds));
 }
 
 function editRefusalFor(
@@ -172,9 +162,7 @@ export function editComment(
     }
     const issue = readIssueOrThrow(issueId);
     const log = readCommentLog(issueId);
-    const taskStatusById =
-      issue.kind === "story" ? taskStatusesForStory(issueId) : new Map();
-    const view = commentsFromLog(issueId, log, taskStatusById);
+    const view = commentsFromLog(issueId, log, linkableTaskStatuses(issue));
     const message = view.messages.find((item) => item.id === commentId);
     if (!message) {
       throw new IssueError("not_found", `unknown comment "${commentId}"`);

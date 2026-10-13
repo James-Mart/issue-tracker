@@ -47,6 +47,7 @@ import { ReviewLineThreads, ReviewOutdatedThreads } from "./review-thread";
 
 export type ReviewFileDiffSource = {
   storyId: string;
+  reviewId: string;
   /** Commit whose tree holds the file's post-image. The tip for "All changes". */
   sha: string;
   contentsCache: Map<string, Promise<string>>;
@@ -74,13 +75,13 @@ function FileTooLargeBody({
 
 function AnnotationThreads({
   threads,
-  storyId,
+  reviewId,
   file,
   lineNumber,
   side,
 }: {
   threads: CommentThread[];
-  storyId: string;
+  reviewId: string;
   file: FileDiffMetadata;
   lineNumber: number;
   side: AnchorSide;
@@ -90,7 +91,7 @@ function AnnotationThreads({
   return (
     <ReviewLineThreads
       threads={threads}
-      storyId={storyId}
+      reviewId={reviewId}
       composer={target ? <DiffThreadComposer target={target} /> : undefined}
     />
   );
@@ -100,16 +101,16 @@ function AnnotationThreads({
 function FileEndThreads({
   inline,
   outdated,
-  storyId,
+  reviewId,
 }: {
   inline: CommentThread[];
   outdated: CommentThread[];
-  storyId: string;
+  reviewId: string;
 }) {
   return (
     <>
-      <ReviewLineThreads threads={inline} storyId={storyId} />
-      <ReviewOutdatedThreads threads={outdated} storyId={storyId} />
+      <ReviewLineThreads threads={inline} reviewId={reviewId} />
+      <ReviewOutdatedThreads threads={outdated} reviewId={reviewId} />
     </>
   );
 }
@@ -117,18 +118,18 @@ function FileEndThreads({
 /** File-anchor threads and the new file composer, above the first hunk. */
 function FileCommentSection({
   threads,
-  storyId,
+  reviewId,
   composer,
 }: {
   threads: CommentThread[];
-  storyId: string;
+  reviewId: string;
   composer?: ReactNode;
 }) {
   if (threads.length === 0 && composer == null) return null;
   return (
     <div data-testid="review-file-comments" className="border-b border-border">
       <p className={`${SETTINGS_HEADING_CLASS} px-3 pt-2`}>File comment</p>
-      <ReviewLineThreads threads={threads} storyId={storyId} composer={composer} />
+      <ReviewLineThreads threads={threads} reviewId={reviewId} composer={composer} />
     </div>
   );
 }
@@ -157,13 +158,13 @@ function RenderedFileDiff({
     (annotation: DiffLineAnnotation<CommentThread[]>) => (
       <AnnotationThreads
         threads={annotation.metadata}
-        storyId={source.storyId}
+        reviewId={source.reviewId}
         file={fileDiff}
         lineNumber={annotation.lineNumber}
         side={annotationSideToAnchorSide(annotation.side)}
       />
     ),
-    [fileDiff, source.storyId],
+    [fileDiff, source.reviewId],
   );
 
   return (
@@ -191,7 +192,7 @@ function RenderedFileDiff({
         lineAnnotations={annotations}
         renderAnnotation={renderAnnotation}
       />
-      <FileEndThreads inline={unlocated} outdated={outdated} storyId={source.storyId} />
+      <FileEndThreads inline={unlocated} outdated={outdated} reviewId={source.reviewId} />
     </div>
   );
 }
@@ -239,7 +240,7 @@ export function ReviewFileDiff({
   const fileComments = (
     <FileCommentSection
       threads={threads.file}
-      storyId={source.storyId}
+      reviewId={source.reviewId}
       composer={fileComposer ? <DiffThreadComposer target={fileComposer} /> : undefined}
     />
   );
@@ -380,7 +381,7 @@ export function ReviewFileDiff({
               <FileEndThreads
                 inline={threads.inline}
                 outdated={threads.outdated}
-                storyId={source.storyId}
+                reviewId={source.reviewId}
               />
             </>
           ) : fileDiff ? (

@@ -4,7 +4,7 @@ import { formatRelativeUpdatedAt } from "@/features/issues/lib/format-relative-u
 import { storyTasksForRail } from "@/features/issues/lib/story-task-rail";
 
 type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
-type ArchivedReview = Extract<ReviewRecordView, { effectiveStatus: "archived" }>;
+type ArchivedReview = Extract<ReviewRecordView, { status: "archived" }>;
 
 export type ReviewHomeReview = {
   review: ReviewRecordView;
@@ -59,9 +59,8 @@ function readyTaskCount(
 }
 
 /**
- * Open reviews are effectively open (unmerged Stories, plus post-mortems).
+ * Open and archived reviews split on `status`; a Story's merge archives its review.
  * Ready is unmerged Stories whose Tasks are all done and that have no review.
- * Archived is effectively archived, including a merged Story's non-post-mortem.
  */
 export function reviewHomeLists(
   projectId: string,
@@ -72,16 +71,16 @@ export function reviewHomeLists(
   const stories = storiesInProject(projectIssues);
   const storyById = new Map(stories.map((story) => [story.id, story]));
   const reviewedStoryIds = new Set(
-    reviews.map((review) => review.target.storyId),
+    reviews.map((review) => review.story),
   );
   const withStory = (review: ReviewRecordView): ReviewHomeReview => ({
     review,
-    story: storyById.get(review.target.storyId),
+    story: storyById.get(review.story),
   });
 
   return {
     open: reviews
-      .filter((review) => review.effectiveStatus === "open")
+      .filter((review) => review.status === "open")
       .map(withStory)
       .sort((a, b) => byUpdatedDesc(a.review, b.review)),
     ready: stories
@@ -91,10 +90,10 @@ export function reviewHomeLists(
       })
       .sort((a, b) => byUpdatedDesc(a.story, b.story)),
     archived: reviews
-      .filter((review): review is ArchivedReview => review.effectiveStatus === "archived")
+      .filter((review): review is ArchivedReview => review.status === "archived")
       .map((review) => ({
         review,
-        story: storyById.get(review.target.storyId),
+        story: storyById.get(review.story),
       }))
       .sort((a, b) => byUpdatedDesc(a.review, b.review)),
   };

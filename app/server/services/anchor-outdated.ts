@@ -1,5 +1,5 @@
 import { isLineAnchor, type Comment, type CommentMessage } from "../schemas.js";
-import { issueChangeCommitShas } from "./change.js";
+import { anchorChangeIssue, issueChangeCommitShas } from "./change.js";
 import { readPathAtCommit } from "./git-blob-batch.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
@@ -41,15 +41,16 @@ export async function deriveAnchoredOutdated(
 ): Promise<CommentMessage[]> {
   if (!comments.some((comment) => comment.anchor)) return comments;
 
+  const { issues } = readAll();
   const issue = readIssueOrThrow(issueId);
-  const head = issueChangeCommitShas(issue).at(-1);
+  const head = issueChangeCommitShas(anchorChangeIssue(issue, issues), issues).at(-1);
   if (!head) {
     return comments.map((comment) =>
       comment.anchor ? { ...comment, outdated: true } : comment,
     );
   }
 
-  const chain = ancestorChain(issueId, readAll().issues);
+  const chain = ancestorChain(issueId, issues);
   const workspace = requireProjectWorkspace(chain[0]!.id);
 
   return Promise.all(

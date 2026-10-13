@@ -235,8 +235,37 @@ export function checkIntegrity(issues: Issue[]): Problem[] {
 
   checkDuplicateOrder(issues, byId, problems);
   checkClosedCatalogLabels(issues, byId, problems);
+  checkReviewSources(issues, byId, problems);
 
   return problems;
+}
+
+function checkReviewSources(
+  issues: Issue[],
+  byId: Map<string, Issue>,
+  problems: Problem[],
+): void {
+  const reviewOfStory = new Map<string, string>();
+  for (const issue of issues) {
+    if (issue.kind !== "review") continue;
+    checkReferent(issue, issue.story, ["story"], "story", byId, problems);
+    const story = byId.get(issue.story);
+    if (story?.kind === "story" && projectContaining(story, byId) !== issue.partOf) {
+      problems.push({
+        id: issue.id,
+        message: `story "${issue.story}" must be in the same Project`,
+      });
+    }
+    const prior = reviewOfStory.get(issue.story);
+    if (prior) {
+      problems.push({
+        id: issue.id,
+        message: `story "${issue.story}" already has review "${prior}"`,
+      });
+    } else {
+      reviewOfStory.set(issue.story, issue.id);
+    }
+  }
 }
 
 function checkClosedCatalogLabels(

@@ -1,5 +1,6 @@
 import type { Issue, ThreadView } from "../schemas.js";
 import type {
+  ReviewIssue,
   ReviewSubmission,
   ReviewSubmissionView,
 } from "../schemas/review.js";
@@ -43,15 +44,15 @@ export function splitSubmissionThreads(
 }
 
 export function submissionThreads(
-  storyId: string,
+  review: Pick<ReviewIssue, "id" | "story">,
   submission: { at: string; threadIds: readonly string[] },
   issues: Issue[],
 ): { taskIds: string[]; openThreadIds: string[] } {
   return splitSubmissionThreads(
     submission,
-    readComments(storyId, issues).threads,
+    readComments(review.id, issues).threads,
     issues,
-    storyId,
+    review.story,
   );
 }
 
@@ -64,19 +65,19 @@ function withoutLegacyIncompleteError(
 
 /** Read model: legacy incomplete-tasking failures, plus open threads and round. */
 export function presentSubmissions(
-  storyId: string,
-  submissions: readonly ReviewSubmission[],
+  review: Pick<ReviewIssue, "id" | "story" | "submissions">,
   issues: Issue[],
 ): ReviewSubmissionView[] {
+  const { submissions } = review;
   const needsThreads = submissions.some((submission) => submission.status !== "done");
-  const threads = needsThreads ? readComments(storyId, issues).threads : [];
+  const threads = needsThreads ? readComments(review.id, issues).threads : [];
   return submissions.map((submission, index) => {
     if (submission.status === "done") return submission;
     const { openThreadIds } = splitSubmissionThreads(
       submission,
       threads,
       issues,
-      storyId,
+      review.story,
     );
     const open = { round: index + 1, openThreadIds };
     if (

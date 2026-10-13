@@ -30,6 +30,18 @@ beforeEach(() => {
     createdAt: AT,
     updatedAt: AT,
   });
+  writeIssue("r", {
+    kind: "review",
+    title: "Story",
+    partOf: "p",
+    story: "s",
+    archived: false,
+    marks: { all: {}, commits: {} },
+    submissions: [],
+    order: 1,
+    createdAt: AT,
+    updatedAt: AT,
+  });
 });
 
 afterEach(() => {
@@ -51,26 +63,27 @@ function logLines(id: string): unknown[] {
 }
 
 describe("appendThreadEvent", () => {
+
   it("lets an agent resolve only with a reply, and never unresolve", async () => {
     const { appendComment, appendThreadEvent } = await load();
-    const root = await appendComment("s", { role: "human", body: "root" });
+    const root = await appendComment("r", { role: "human", body: "root" });
 
     await expect(
-      appendThreadEvent("s", root.id, {
+      appendThreadEvent("r", root.id, {
         event: "resolved",
         by: { role: "implementor" },
       }),
     ).rejects.toThrow(/requires a reply body/);
     await expect(
-      appendThreadEvent("s", root.id, {
+      appendThreadEvent("r", root.id, {
         event: "unresolved",
         by: { role: "implementor" },
         body: "nope",
       }),
     ).rejects.toThrow(/cannot unresolve/);
-    expect(logLines("s")).toHaveLength(1);
+    expect(logLines("r")).toHaveLength(1);
 
-    const resolved = await appendThreadEvent("s", root.id, {
+    const resolved = await appendThreadEvent("r", root.id, {
       event: "resolved",
       by: { role: "implementor" },
       body: "guard added in diff-fetch.ts",

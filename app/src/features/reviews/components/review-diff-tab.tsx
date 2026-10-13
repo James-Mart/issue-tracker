@@ -11,7 +11,7 @@ import { useDiffContentsCache } from "@/features/issues/hooks/use-diff-contents-
 import { useDiffLayoutPreference } from "@/features/issues/hooks/use-diff-layout-preference";
 import { useVirtualizedFileScroll } from "@/features/issues/hooks/use-virtualized-file-scroll";
 import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
-import { useStoryReviewCommentThreads } from "../hooks/use-story-review-comments";
+import { useReviewCommentThreads } from "../hooks/use-review-comments";
 import { fileDiffsFromPatch } from "@/features/issues/lib/issue-change-file-diffs";
 import { useDiffScrollAnchor } from "../hooks/use-diff-scroll-anchor";
 import { useReviewDiffSearch } from "../hooks/use-review-diff-search";
@@ -284,7 +284,7 @@ export function ReviewDiffTab({
       searchDiffs: new Map(files.map((file) => [file.name, snapshotSearchableDiff(file)])),
     };
   }, [diff.patch]);
-  const { threads } = useStoryReviewCommentThreads(storyId);
+  const { threads } = useReviewCommentThreads(review.id);
   const threadsByFile = useMemo(
     () => reviewDiffThreadsByFile(threads, diff.files, scope),
     [diff.files, scope, threads],
@@ -385,7 +385,7 @@ export function ReviewDiffTab({
                 {/* New threads anchor to the commit being viewed; the tip for All changes. */}
                 <DiffComposerProvider
                   key={scope}
-                  issueId={storyId}
+                  issueId={review.id}
                   commitSha={viewedSha}
                   allowQuestion
                 >
@@ -393,9 +393,9 @@ export function ReviewDiffTab({
                     rows={visibleRows}
                     fileDiffs={parsed.fileDiffs}
                     isCollapsed={isCollapsed}
-                    readOnly={review.effectiveStatus === "archived"}
+                    readOnly={review.status === "archived"}
                     diffLayout={diffLayout}
-                    source={{ storyId, sha: viewedSha, contentsCache }}
+                    source={{ storyId, reviewId: review.id, sha: viewedSha, contentsCache }}
                     mergeBaseRef={commits.mergeBaseRef}
                     scope={scope}
                     localHint={fileTooLargeHint(scope)}

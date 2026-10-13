@@ -6,6 +6,7 @@ export const KIND_LABEL: Record<IssueKind, string> = {
   idea: "Idea",
   story: "Story",
   task: "Task",
+  review: "Review",
 };
 
 /** Per-kind field/affordance flags. Prefer these over ad-hoc `in` / kind checks. */
@@ -64,6 +65,16 @@ export const KIND_CAPABILITIES = {
     comments: true,
     comment: true,
   },
+  review: {
+    partOf: true,
+    detailPartOf: false,
+    archived: true,
+    assignee: false,
+    attention: false,
+    attachments: false,
+    comments: true,
+    comment: true,
+  },
 } as const satisfies Record<
   IssueKind,
   {
@@ -117,9 +128,9 @@ export function offersExportChannel(
   return false;
 }
 
-/** Review conversations (review taskers, question researchers) anchor to the Story under review. */
+/** Review conversations (review taskers, question researchers) anchor to the review issue. */
 export function offersReviewChannel(issue: Issue): boolean {
-  return issue.kind === "story";
+  return issue.kind === "review";
 }
 
 export type AttentionIssue = Extract<
@@ -128,7 +139,7 @@ export type AttentionIssue = Extract<
 >;
 export type ArchivableIssue = Extract<
   Issue,
-  { kind: "epic" | "idea" | "story" | "task" }
+  { kind: "epic" | "idea" | "story" | "task" | "review" }
 >;
 export type AssigneeIssue = Extract<Issue, { kind: "task" }>;
 

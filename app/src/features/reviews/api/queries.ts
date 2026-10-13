@@ -25,17 +25,17 @@ function retryRead(count: number, error: Error): boolean {
   );
 }
 
+type RefetchInterval<TData> =
+  | number
+  | false
+  | ((query: Query<TData, Error>) => number | false | undefined);
+
 export function useReviewsQuery(
   projectId: string,
   storyId?: string,
   options: {
     enabled?: boolean;
-    refetchInterval?:
-      | number
-      | false
-      | ((
-          query: Query<{ reviews: ReviewRecordView[] }, Error>,
-        ) => number | false | undefined);
+    refetchInterval?: RefetchInterval<{ reviews: ReviewRecordView[] }>;
   } = {},
 ): UseQueryResult<{ reviews: ReviewRecordView[] }, Error> {
   return useQuery({
@@ -76,12 +76,16 @@ export function useReviewCandidatesQuery(
 export function useReviewQuery(
   projectId: string,
   reviewId: string,
+  options: {
+    refetchInterval?: RefetchInterval<ReviewView>;
+  } = {},
 ): UseQueryResult<ReviewView, Error> {
   return useQuery({
     queryKey: reviewKeys.detail(projectId, reviewId),
     queryFn: () => fetchReview(projectId, reviewId),
     enabled: Boolean(projectId) && Boolean(reviewId),
     retry: retryRead,
+    refetchInterval: options.refetchInterval,
   });
 }
 

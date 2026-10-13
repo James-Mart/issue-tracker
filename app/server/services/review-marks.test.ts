@@ -4,7 +4,7 @@ import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Review, ReviewView } from "../schemas/review.js";
+import type { ReviewIssue, ReviewView } from "../schemas/review.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 
@@ -89,10 +89,10 @@ function seedIssues(): void {
   });
 }
 
-function readStored(): Review {
+function readStored(): ReviewIssue {
   return JSON.parse(
-    readFileSync(join(issuesDir, "p", "reviews", `${reviewId}.json`), "utf8"),
-  ) as Review;
+    readFileSync(join(issuesDir, reviewId, "issue.json"), "utf8"),
+  ) as ReviewIssue;
 }
 
 function putMark(body: {
@@ -131,7 +131,7 @@ async function openReview(): Promise<void> {
   const created = await fetch(`${baseUrl}/api/projects/p/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target: { kind: "story", storyId: "s" } }),
+    body: JSON.stringify({ story: "s" }),
   });
   expect(created.status).toBe(201);
   reviewId = ((await created.json()) as ReviewView).id;
