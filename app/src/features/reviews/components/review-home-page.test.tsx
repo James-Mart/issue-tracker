@@ -50,6 +50,13 @@ vi.mock("../api/mutations", () => ({
     isPending: false,
     variables: undefined,
   }),
+  useOpenReviewFromPr: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
   useReopenReview: () => ({
     mutate: vi.fn(),
     isPending: false,

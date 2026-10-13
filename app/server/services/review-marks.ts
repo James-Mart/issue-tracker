@@ -25,10 +25,10 @@ type ReviewMarkIndex = {
 
 async function readReviewMarkIndex(
   projectId: string,
-  storyId: string,
+  reviewId: string,
   issues?: Issue[],
 ): Promise<ReviewMarkIndex> {
-  const span = await loadReviewChangeSpan(projectId, storyId, issues);
+  const span = await loadReviewChangeSpan(projectId, reviewId, issues);
   if (span.state === "empty") return { all: [], commits: {} };
   const [all, pairs] = await Promise.all([
     readDiffBlobs(span.workspace, span.allRange),
@@ -137,7 +137,7 @@ export async function readReviewProgress(
   view: ReviewRecordView,
   issues?: Issue[],
 ): Promise<ReviewProgress> {
-  const index = await readReviewMarkIndex(projectId, view.story, issues);
+  const index = await readReviewMarkIndex(projectId, view.id, issues);
   return reviewProgress(view, index);
 }
 
@@ -146,7 +146,7 @@ export async function withReviewProgress(
   view: ReviewRecordView,
   issues?: Issue[],
 ): Promise<ReviewView> {
-  const index = await readReviewMarkIndex(projectId, view.story, issues);
+  const index = await readReviewMarkIndex(projectId, view.id, issues);
   return attachProgress(view, index);
 }
 
@@ -167,7 +167,7 @@ export async function setReviewMark(
   const current = readReviewView(projectId, reviewId, issues);
   if (current.status === "archived") throw archivedError(reviewId);
 
-  const index = await readReviewMarkIndex(projectId, current.story, issues);
+  const index = await readReviewMarkIndex(projectId, reviewId, issues);
   const file = requireFile(scopeFiles(index, parsed.body.scope), parsed.body.path);
 
   const view = updateStoredReview(

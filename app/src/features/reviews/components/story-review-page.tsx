@@ -61,7 +61,10 @@ function DiffTabPanel({
   onFocusFileMissing: () => void;
 }) {
   const diffReady = scope === ALL_CHANGES_SCOPE || commits.data !== undefined;
-  const diff = useReviewDiffQuery(projectId, storyId, scope, { enabled: diffReady });
+  const diff = useReviewDiffQuery(projectId, storyId, scope, {
+    enabled: diffReady,
+    reviewId: storyId ? undefined : review.id,
+  });
   const error = commits.error ?? diff.error;
   if (error) {
     return (
@@ -200,13 +203,21 @@ function StoryReviewBody({
 }) {
   const { review, commits } = useReviewWorkbenchReads(projectId, reviewId);
   const storyId = review.data?.story ?? "";
+  const prOnly = Boolean(review.data && !review.data.story && review.data.pr);
   const story = useIssueDetailQuery(storyId);
-  const storyTitle = story.data?.kind === "story" ? story.data.title : review.data?.title;
+  const storyTitle = prOnly
+    ? review.data?.title
+    : story.data?.kind === "story"
+      ? story.data.title
+      : review.data?.title;
   useTabTitle(tabTitleEntityName(storyTitle, reviewId), "Review");
   const error = review.error ?? (storyId ? story.error : null);
   const reviewMissing = review.error instanceof ApiError && review.error.status === 404;
   const storyMissing =
-    storyId.length > 0 && story.error instanceof ApiError && story.error.status === 404;
+    !prOnly &&
+    storyId.length > 0 &&
+    story.error instanceof ApiError &&
+    story.error.status === 404;
 
   if (reviewMissing) {
     return (
@@ -240,17 +251,39 @@ function StoryReviewBody({
       <ShellInlineFault message={error.message} hint="Check the server, then reload." />
     );
   }
-  if (!review.data || story.data?.kind !== "story") {
-    return <ShellLoadingState label="Loading review…" />;
+  if (review.data && !review.data.story && !review.data.pr) {
+    return (
+      <ShellInlineFault
+        message="This review has no linked source."
+        hint="This review needs a Story or a pull request."
+      />
+    );
   }
+  const ready =
+    prOnly && review.data
+      ? {
+          storyId: "",
+          storyTitle: review.data.title,
+          review: review.data,
+          merged: false,
+        }
+      : review.data && story.data?.kind === "story"
+        ? {
+            storyId: story.data.id,
+            storyTitle: story.data.title,
+            review: review.data,
+            merged: story.data.merged,
+          }
+        : null;
+  if (!ready) return <ShellLoadingState label="Loading review…" />;
   return (
     <StoryReviewWorkbench
       projectId={projectId}
-      storyId={story.data.id}
-      storyTitle={story.data.title}
-      review={review.data}
+      storyId={ready.storyId}
+      storyTitle={ready.storyTitle}
+      review={ready.review}
       commits={commits}
-      merged={story.data.merged}
+      merged={ready.merged}
     />
   );
 }

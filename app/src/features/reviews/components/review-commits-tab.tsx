@@ -120,6 +120,7 @@ export function ReviewCommitsPanel({
   const hasCommits = (commits.data?.commits.length ?? 0) > 0;
   const allDiff = useReviewDiffQuery(projectId, storyId, ALL_CHANGES_SCOPE, {
     enabled: hasCommits,
+    reviewId: storyId ? undefined : review.id,
   });
   const error = commits.error ?? (hasCommits ? allDiff.error : null);
 

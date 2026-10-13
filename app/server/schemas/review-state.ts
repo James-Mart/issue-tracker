@@ -25,6 +25,20 @@ export const reviewMarksSchema = z
 
 export type ReviewMarks = z.infer<typeof reviewMarksSchema>;
 
+/** GitHub pull request a review was loaded from. `baseRef` and `headRef` are branch names. */
+export const reviewPrSourceSchema = z
+  .object({
+    url: nonEmpty,
+    number: z.number().int().positive(),
+    baseRef: nonEmpty,
+    headRef: nonEmpty,
+    headSha: nonEmpty,
+    fork: z.boolean(),
+  })
+  .strict();
+
+export type ReviewPrSource = z.infer<typeof reviewPrSourceSchema>;
+
 const reviewSubmissionIdentity = {
   id: nonEmpty,
   at: nonEmpty,

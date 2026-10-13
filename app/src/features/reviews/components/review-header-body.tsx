@@ -94,13 +94,15 @@ export function ReviewHeaderBody({
         ) : null}
       </div>
       <p className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 font-mono text-xs tabular-nums text-muted-foreground">
-        <Link
-          to={issuePath(projectId, storyId)}
-          className="text-[hsl(var(--current))] hover:underline"
-          data-testid="review-story-link"
-        >
-          {storyId}
-        </Link>
+        {storyId ? (
+          <Link
+            to={issuePath(projectId, storyId)}
+            className="text-[hsl(var(--current))] hover:underline"
+            data-testid="review-story-link"
+          >
+            {storyId}
+          </Link>
+        ) : null}
         {commits ? <CommitMeta commits={commits} /> : null}
       </p>
       {header && header.failures.length > 0 ? (

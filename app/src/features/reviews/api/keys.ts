@@ -18,4 +18,10 @@ export const reviewKeys = {
     [...reviewKeys.all, "diff", projectId, storyId] as const,
   diff: (projectId: string, storyId: string, scope: string) =>
     [...reviewKeys.diffs(projectId, storyId), scope] as const,
+  reviewCommits: (projectId: string, reviewId: string) =>
+    [...reviewKeys.all, "review-commits", projectId, reviewId] as const,
+  reviewDiffs: (projectId: string, reviewId: string) =>
+    [...reviewKeys.all, "review-diff", projectId, reviewId] as const,
+  reviewDiff: (projectId: string, reviewId: string, scope: string) =>
+    [...reviewKeys.reviewDiffs(projectId, reviewId), scope] as const,
 };

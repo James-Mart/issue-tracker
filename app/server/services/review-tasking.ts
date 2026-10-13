@@ -39,7 +39,7 @@ import {
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { requireProject } from "./require-project.js";
 import { isRunLive } from "./run-live.js";
-import { readReviewView, updateStoredReview } from "./reviews.js";
+import { readReviewView, requireReviewStory, updateStoredReview } from "./reviews.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 
 export const REVIEW_TASKER_ROLE = "issue-tracker-review-tasker";
@@ -85,7 +85,7 @@ function taskingPrompt(review: ReviewRecordView, threadIds: string[]): string {
     loadRoleBody(REVIEW_TASKER_ROLE),
     "",
     `Review: ${review.id}`,
-    `Story: ${review.story}`,
+    `Story: ${requireReviewStory(review)}`,
     `Threads: ${threadIds.join(", ")}`,
   ].join("\n");
 }
@@ -249,7 +249,7 @@ export async function submitReview(
 
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
-  const storyId = review.story;
+  const storyId = requireReviewStory(review);
   assertStoryOpenForTasking(storyId);
   assertNoTasking(review.submissions);
   const threadIds = submittableThreadIds(reviewId, review.submissions);
@@ -336,7 +336,7 @@ async function bringCoordinatorForDone(
   sessions: ConversationMessageSessions,
 ): Promise<void> {
   if (!submissionNeedsCoordinator(submission)) return;
-  const storyId = review.story;
+  const storyId = requireReviewStory(review);
   try {
     const workRootId = nearestImplementingWorkRootId(
       ancestorChain(storyId, readAll().issues),
@@ -380,7 +380,7 @@ export async function launchRecordedSubmission(
   if (kind === "start" && submission.conversationId) return;
 
   try {
-    const story = assertStoryOpenForTasking(review.story);
+    const story = assertStoryOpenForTasking(requireReviewStory(review));
     const linked = submissionThreads(review, submission, readAll().issues);
     if (await completeWhenSettled(projectId, review, submission, linked, sessions)) {
       return;
@@ -462,7 +462,7 @@ export async function retryReviewSubmission(
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
-  const storyId = review.story;
+  const storyId = requireReviewStory(review);
   assertStoryOpenForTasking(storyId);
   assertNoTasking(review.submissions);
   const submission = review.submissions.find((item) => item.id === submissionId);
@@ -521,7 +521,7 @@ export async function retryOpenReviewSubmissions(
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
-  const storyId = review.story;
+  const storyId = requireReviewStory(review);
   assertStoryOpenForTasking(storyId);
 
   let finished: Extract<ReviewSubmission, { status: "done" }>[] = [];

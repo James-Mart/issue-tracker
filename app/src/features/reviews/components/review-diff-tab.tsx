@@ -395,7 +395,12 @@ export function ReviewDiffTab({
                     isCollapsed={isCollapsed}
                     readOnly={review.status === "archived"}
                     diffLayout={diffLayout}
-                    source={{ storyId, reviewId: review.id, sha: viewedSha, contentsCache }}
+                    source={{
+                      issueId: review.story ?? review.id,
+                      reviewId: review.id,
+                      sha: viewedSha,
+                      contentsCache,
+                    }}
                     mergeBaseRef={commits.mergeBaseRef}
                     scope={scope}
                     localHint={fileTooLargeHint(scope)}

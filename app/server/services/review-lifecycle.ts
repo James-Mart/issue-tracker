@@ -37,7 +37,10 @@ export function archiveReviewsOfClosingStories(
   const closing = new Set(transitions.filter(storyCloses).map(({ after }) => after.id));
   if (closing.size === 0) return [];
   return issues.flatMap((issue) =>
-    issue.kind === "review" && !issue.archived && closing.has(issue.story)
+    issue.kind === "review" &&
+    issue.story !== undefined &&
+    !issue.archived &&
+    closing.has(issue.story)
       ? [{ ...issue, archived: true, updatedAt: now }]
       : [],
   );

@@ -13,17 +13,20 @@ function diffTabScope(searchParams: URLSearchParams): string | null {
 }
 
 /**
- * The review issue, its comments, the Story's commits, and (on the diff tab)
- * the diff. Commits and the diff wait until the review names its Story.
+ * The review issue, its comments, commits, and (on the diff tab) the diff.
+ * A Story source reads the Story range. A pull-request-only review reads
+ * `baseRef...headSha` from the review.
  */
 export function useReviewWorkbenchReads(projectId: string, reviewId: string) {
   const [searchParams] = useSearchParams();
   const review = useReviewRecord(projectId, reviewId);
   const storyId = review.data?.story ?? "";
+  const known = review.data !== undefined;
   useReviewCommentsQuery(reviewId);
-  const commits = useReviewLiveRefresh(projectId, storyId, reviewId);
+  const commits = useReviewLiveRefresh(projectId, storyId, known ? reviewId : undefined);
   useReviewDiffQuery(projectId, storyId, diffTabScope(searchParams), {
-    enabled: storyId.length > 0,
+    enabled: known,
+    reviewId: storyId ? undefined : reviewId,
   });
   return { review, commits };
 }

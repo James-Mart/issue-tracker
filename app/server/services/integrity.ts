@@ -248,6 +248,14 @@ function checkReviewSources(
   const reviewOfStory = new Map<string, string>();
   for (const issue of issues) {
     if (issue.kind !== "review") continue;
+    if (!issue.story && !issue.pr) {
+      problems.push({
+        id: issue.id,
+        message: "review needs a story or a pull request",
+      });
+      continue;
+    }
+    if (!issue.story) continue;
     checkReferent(issue, issue.story, ["story"], "story", byId, problems);
     const story = byId.get(issue.story);
     if (story?.kind === "story" && projectContaining(story, byId) !== issue.partOf) {

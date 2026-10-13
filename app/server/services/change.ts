@@ -233,6 +233,24 @@ export function storyCommitsEtag(version: number, tip: string): string {
   return `"${version}:${tip}"`;
 }
 
+/** `git diff` / `git rev-list --right-only` range for a pull-request review. */
+export function pullRequestRange(source: { baseRef: string; headSha: string }): string {
+  return `${source.baseRef}...${source.headSha}`;
+}
+
+/** Commits reachable from the right side of a three-dot range, oldest first. */
+export async function listCommitsInRange(
+  workspace: string,
+  range: string,
+): Promise<string[]> {
+  const text = await runGitOrCommitUnreachable(
+    ["rev-list", "--right-only", "--reverse", range],
+    workspace,
+  );
+  if (text.length === 0) return [];
+  return text.split("\n").filter((line) => line.length > 0);
+}
+
 async function computeStoryChange(
   storyId: string,
   workspace: string,
@@ -412,6 +430,9 @@ export function issueChangeCommitShas(issue: Issue, issues?: Issue[]): string[] 
 /** The issue whose commits this issue's comment anchors point into: a review's Story. */
 export function anchorChangeIssue(issue: Issue, issues: readonly Issue[]): Issue {
   if (issue.kind !== "review") return issue;
+  if (!issue.story) {
+    throw new IssueError("validation", `review "${issue.id}" has no story`);
+  }
   const story = issues.find((item) => item.id === issue.story);
   if (!story) {
     throw new IssueError(
@@ -454,7 +475,15 @@ export async function readIssueChangeFile(
   const project = chain[0]!;
   const workspace = requireProjectWorkspace(project.id);
 
-  const allowed = allowedCommitShas(issue, issues);
+  let allowed: string[];
+  if (issue.kind === "review" && !issue.story) {
+    if (!issue.pr) {
+      throw new IssueError("validation", `review "${issue.id}" has no source`);
+    }
+    allowed = await listCommitsInRange(workspace, pullRequestRange(issue.pr));
+  } else {
+    allowed = allowedCommitShas(issue, issues);
+  }
   if (!allowed.includes(sha)) {
     throw new IssueError(
       "validation",

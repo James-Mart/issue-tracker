@@ -100,6 +100,34 @@ export function fetchReviewDiff(
   return request<ReviewDiff>(reviewDiffUrl(projectId, storyId, scope));
 }
 
+export function fetchReviewRecordCommits(
+  projectId: string,
+  reviewId: string,
+): Promise<ReviewCommits> {
+  return request<ReviewCommits>(`${reviewUrl(projectId, reviewId)}/commits`);
+}
+
+export function fetchReviewRecordDiff(
+  projectId: string,
+  reviewId: string,
+  scope: string,
+): Promise<ReviewDiff> {
+  const params = new URLSearchParams({ scope });
+  return request<ReviewDiff>(`${reviewUrl(projectId, reviewId)}/diff?${params}`);
+}
+
+export type OpenedReview = { reviewId: string; created: boolean };
+
+export function postOpenReviewFromPr(
+  projectId: string,
+  pr: string,
+): Promise<OpenedReview> {
+  return request<OpenedReview>(reviewsUrl(projectId), {
+    method: "POST",
+    body: { pr },
+  });
+}
+
 export function postOpenReview(
   projectId: string,
   storyId: string,

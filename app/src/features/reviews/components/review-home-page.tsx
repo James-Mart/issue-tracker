@@ -82,6 +82,28 @@ function MetaLine({ clauses }: { clauses: ReviewMetaPart[][] }) {
   );
 }
 
+function reviewRowIdentity(item: ReviewHomeReview | ReviewHomeArchived): {
+  title: string;
+  id: string;
+  missing: boolean;
+} {
+  if (item.review.story && item.story) {
+    return { title: item.story.title, id: item.review.story, missing: false };
+  }
+  if (!item.review.story && item.review.pr) {
+    return {
+      title: item.review.title,
+      id: `#${item.review.pr.number}`,
+      missing: false,
+    };
+  }
+  return {
+    title: "Story missing",
+    id: item.review.story ?? item.review.id,
+    missing: true,
+  };
+}
+
 function useReviewHomeProgress(
   projectId: string,
   review: ReviewRecordView,
@@ -102,7 +124,7 @@ function OpenReviewRow({
   projectId: string;
   item: ReviewHomeReview;
 }) {
-  const storyId = item.review.story;
+  const identity = reviewRowIdentity(item);
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,
@@ -117,9 +139,9 @@ function OpenReviewRow({
         className="block rounded-lg px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ReviewIdentity
-          title={item.story?.title ?? "Story missing"}
-          id={storyId}
-          missing={!item.story}
+          title={identity.title}
+          id={identity.id}
+          missing={identity.missing}
         />
         <MetaLine clauses={clauses} />
       </Link>
@@ -177,7 +199,7 @@ function ArchivedReviewRow({
   reopening: boolean;
   onReopen: () => void;
 }) {
-  const storyId = item.review.story;
+  const identity = reviewRowIdentity(item);
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,
@@ -196,9 +218,9 @@ function ArchivedReviewRow({
           className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ReviewIdentity
-            title={item.story?.title ?? "Story missing"}
-            id={storyId}
-            missing={!item.story}
+            title={identity.title}
+            id={identity.id}
+            missing={identity.missing}
           />
         </Link>
         <MetaLine clauses={clauses} />

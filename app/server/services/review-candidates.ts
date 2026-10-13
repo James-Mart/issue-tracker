@@ -111,7 +111,9 @@ export async function listReviewCandidates(
   const { issues } = readAll();
   const inProject = subtreeIds(issues, id);
   const reviewByStory = new Map(
-    listReviewViews(id).reviews.map((review) => [review.story, review.id]),
+    listReviewViews(id).reviews.flatMap((review) =>
+      review.story ? [[review.story, review.id] as const] : [],
+    ),
   );
 
   const withCommits: Array<{ story: Story; shas: string[] }> = [];

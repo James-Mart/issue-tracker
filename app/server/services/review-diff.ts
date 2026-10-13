@@ -10,6 +10,8 @@ import type {
 import {
   maxPatchBytes,
   parseShortstat,
+  listCommitsInRange,
+  pullRequestRange,
   prepareStoryChange,
   requireMergeBase,
   runGitOrCommitUnreachable,
@@ -48,13 +50,43 @@ async function loadPrepared(
   return { storyId, workspace, prepared };
 }
 
+type LoadedPrChange = {
+  kind: "pr";
+  workspace: string;
+  baseRef: string;
+  headSha: string;
+  shas: string[];
+};
+
+type LoadedChange =
+  | ({ kind: "story" } & {
+      storyId: string;
+      workspace: string;
+      prepared: StoryChangePreparation;
+    })
+  | LoadedPrChange;
+
 async function loadSpan(
   projectId: string,
   reviewId: string,
   issues: Issue[],
-): Promise<{ storyId: string; workspace: string; prepared: StoryChangePreparation }> {
+): Promise<LoadedChange> {
   const review = readReviewView(projectId, reviewId, issues);
-  return loadPrepared(projectId, review.story, issues);
+  if (review.story) {
+    return { kind: "story", ...(await loadPrepared(projectId, review.story, issues)) };
+  }
+  if (!review.pr) {
+    throw new IssueError("validation", `review "${reviewId}" has no source`);
+  }
+  const workspace = requireProjectWorkspace(projectId);
+  const shas = await listCommitsInRange(workspace, pullRequestRange(review.pr));
+  return {
+    kind: "pr",
+    workspace,
+    baseRef: review.pr.baseRef,
+    headSha: review.pr.headSha,
+    shas,
+  };
 }
 
 function nulRecords(text: string): string[] {
@@ -356,16 +388,41 @@ async function readCommitSummariesFromLog(
   return commits;
 }
 
-export function refuseForeignSha(scope: string): never {
+export function refuseForeignSha(scope: string, source = "story"): never {
   throw new IssueError(
     "validation",
-    `sha "${scope}" is not one of this story's commits`,
+    `sha "${scope}" is not one of this ${source}'s commits`,
   );
 }
 
-type LoadedStoryChange = Awaited<ReturnType<typeof loadPrepared>>;
+async function prReviewCommits(loaded: LoadedPrChange): Promise<ReviewCommits> {
+  const commits =
+    loaded.shas.length === 0
+      ? []
+      : await readCommitSummariesFromLog(loaded.workspace, loaded.shas);
+  return {
+    mergeBase: loaded.baseRef,
+    mergeBaseRef: loaded.baseRef,
+    tip: loaded.headSha,
+    commits,
+  };
+}
 
-async function reviewCommitsFor(loaded: LoadedStoryChange): Promise<ReviewCommits> {
+async function prReviewDiff(loaded: LoadedPrChange, scope: string): Promise<ReviewDiff> {
+  if (loaded.shas.length === 0) {
+    if (scope !== "all") refuseForeignSha(scope, "review");
+    return { scope: "all", files: [], patch: "" };
+  }
+  if (scope !== "all" && !loaded.shas.includes(scope)) refuseForeignSha(scope, "review");
+  const range =
+    scope === "all"
+      ? pullRequestRange(loaded)
+      : await parentRange(scope, loaded.workspace);
+  return readRangeDiff(loaded.workspace, range, scope);
+}
+
+async function reviewCommitsFor(loaded: LoadedChange): Promise<ReviewCommits> {
+  if (loaded.kind === "pr") return prReviewCommits(loaded);
   const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
   if (prepared.state === "empty") {
     const mergeBaseRef = await resolveMergeBaseRef(loaded.workspace, prepared.mergeBase);
@@ -385,10 +442,8 @@ async function reviewCommitsFor(loaded: LoadedStoryChange): Promise<ReviewCommit
   };
 }
 
-async function reviewDiffFor(
-  loaded: LoadedStoryChange,
-  scope: string,
-): Promise<ReviewDiff> {
+async function reviewDiffFor(loaded: LoadedChange, scope: string): Promise<ReviewDiff> {
+  if (loaded.kind === "pr") return prReviewDiff(loaded, scope);
   const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
   if (prepared.state === "empty") {
     if (scope !== "all") refuseForeignSha(scope);
@@ -417,7 +472,10 @@ export async function readStoryReviewCommits(
   projectId: string,
   storyId: string,
 ): Promise<ReviewCommits> {
-  return reviewCommitsFor(await loadPrepared(projectId, storyId, readAll().issues));
+  return reviewCommitsFor({
+    kind: "story",
+    ...(await loadPrepared(projectId, storyId, readAll().issues)),
+  });
 }
 
 export async function readReviewCommits(
@@ -434,7 +492,10 @@ export async function readStoryReviewDiff(
   scope: string,
 ): Promise<ReviewDiff> {
   return reviewDiffFor(
-    await loadPrepared(projectId, storyId, readAll().issues),
+    {
+      kind: "story",
+      ...(await loadPrepared(projectId, storyId, readAll().issues)),
+    },
     scope,
   );
 }
@@ -474,25 +535,32 @@ export type ReviewChangeSpan =
       commits: Array<{ sha: string; range: string }>;
     };
 
-/** Whole-review range and each Story commit's parent range, without re-reading the review. */
-export async function loadReviewChangeSpan(
-  projectId: string,
-  storyId: string,
-  issues?: Issue[],
+async function readySpan(
+  workspace: string,
+  shas: string[],
+  allRange: string,
 ): Promise<ReviewChangeSpan> {
-  const loaded = await loadPrepared(projectId, storyId, issues ?? readAll().issues);
-  const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
-  if (prepared.state === "empty") return { state: "empty" };
   const commits = await Promise.all(
-    prepared.shas.map(async (sha) => ({
+    shas.map(async (sha) => ({
       sha,
-      range: await parentRange(sha, loaded.workspace),
+      range: await parentRange(sha, workspace),
     })),
   );
-  return {
-    state: "ready",
-    workspace: loaded.workspace,
-    allRange: prepared.range,
-    commits,
-  };
+  return { state: "ready", workspace, allRange, commits };
+}
+
+/** Whole-review range and each commit's parent range. */
+export async function loadReviewChangeSpan(
+  projectId: string,
+  reviewId: string,
+  issues?: Issue[],
+): Promise<ReviewChangeSpan> {
+  const loaded = await loadSpan(projectId, reviewId, issues ?? readAll().issues);
+  if (loaded.kind === "pr") {
+    if (loaded.shas.length === 0) return { state: "empty" };
+    return readySpan(loaded.workspace, loaded.shas, pullRequestRange(loaded));
+  }
+  const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
+  if (prepared.state === "empty") return { state: "empty" };
+  return readySpan(loaded.workspace, prepared.shas, prepared.range);
 }

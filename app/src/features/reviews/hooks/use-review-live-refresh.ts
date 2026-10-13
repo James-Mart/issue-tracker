@@ -19,6 +19,7 @@ export function useReviewLiveRefresh(
   const qc = useQueryClient();
   const commits = useReviewCommitsQuery(projectId, storyId, {
     refetchInterval: reviewId ? REVIEW_COMMITS_POLL_MS : false,
+    reviewId,
   });
   const tip = commits.data?.tip;
   const seenTip = useRef<string | undefined>(undefined);
@@ -28,7 +29,11 @@ export function useReviewLiveRefresh(
     const previous = seenTip.current;
     seenTip.current = tip;
     if (previous === undefined || previous === tip) return;
-    void qc.invalidateQueries({ queryKey: reviewKeys.diffs(projectId, storyId) });
+    void qc.invalidateQueries({
+      queryKey: storyId
+        ? reviewKeys.diffs(projectId, storyId)
+        : reviewKeys.reviewDiffs(projectId, reviewId ?? ""),
+    });
     void qc.invalidateQueries({ queryKey: reviewKeys.lists(projectId) });
     if (!reviewId) return;
     void qc.invalidateQueries({ queryKey: reviewKeys.detail(projectId, reviewId) });

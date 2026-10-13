@@ -17,6 +17,7 @@ import {
 } from "./issues.js";
 import { readCommentLog } from "./comment-log.js";
 import { reevaluateReviewSubmissions } from "./review-tasking.js";
+import { requireReviewStory } from "./reviews.js";
 import { deriveThreadViews } from "./thread-state.js";
 
 export const AGENT_RESOLVE_REQUIRES_BODY =
@@ -136,7 +137,7 @@ export function appendThreadEvent(
     const review = readReviewOrThrow(reviewId);
     assertActor(input);
     if (input.event === "linked") {
-      assertLinkedTask(review.story, input.taskId!);
+      assertLinkedTask(requireReviewStory(review), input.taskId!);
     }
 
     const { issues } = readAll();

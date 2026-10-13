@@ -299,6 +299,7 @@ export const REVIEW_GET_FIELDS = {
   title: STORED,
   partOf: STORED,
   story: STORED,
+  pr: STORED,
   archived: STORED,
   marks: STORED,
   submissions: STORED,

@@ -15,12 +15,12 @@ export function splitSubmissionThreads(
   submission: { at: string; threadIds: readonly string[] },
   threads: readonly ThreadView[],
   issues: readonly Issue[],
-  storyId: string,
+  storyId: string | undefined,
 ): { taskIds: string[]; openThreadIds: string[] } {
   const byRoot = new Map(threads.map((thread) => [thread.rootId, thread]));
   const createdAt = new Map<string, string>();
   for (const issue of issues) {
-    if (issue.kind === "task" && issue.partOf === storyId) {
+    if (storyId !== undefined && issue.kind === "task" && issue.partOf === storyId) {
       createdAt.set(issue.id, issue.createdAt);
     }
   }

@@ -43,7 +43,10 @@ export async function deriveAnchoredOutdated(
 
   const { issues } = readAll();
   const issue = readIssueOrThrow(issueId);
-  const head = issueChangeCommitShas(anchorChangeIssue(issue, issues), issues).at(-1);
+  const head =
+    issue.kind === "review" && !issue.story
+      ? issue.pr?.headSha
+      : issueChangeCommitShas(anchorChangeIssue(issue, issues), issues).at(-1);
   if (!head) {
     return comments.map((comment) =>
       comment.anchor ? { ...comment, outdated: true } : comment,

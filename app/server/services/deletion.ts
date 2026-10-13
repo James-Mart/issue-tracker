@@ -58,7 +58,7 @@ export function addReviewsOfDeletedStories(
   deleteSet: Set<string>,
 ): void {
   for (const issue of issues) {
-    if (issue.kind === "review" && deleteSet.has(issue.story)) {
+    if (issue.kind === "review" && issue.story !== undefined && deleteSet.has(issue.story)) {
       deleteSet.add(issue.id);
     }
   }

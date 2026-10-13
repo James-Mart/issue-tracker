@@ -71,11 +71,11 @@ export function reviewHomeLists(
   const stories = storiesInProject(projectIssues);
   const storyById = new Map(stories.map((story) => [story.id, story]));
   const reviewedStoryIds = new Set(
-    reviews.map((review) => review.story),
+    reviews.flatMap((review) => (review.story ? [review.story] : [])),
   );
   const withStory = (review: ReviewRecordView): ReviewHomeReview => ({
     review,
-    story: storyById.get(review.story),
+    story: review.story ? storyById.get(review.story) : undefined,
   });
 
   return {
@@ -93,7 +93,7 @@ export function reviewHomeLists(
       .filter((review): review is ArchivedReview => review.status === "archived")
       .map((review) => ({
         review,
-        story: storyById.get(review.story),
+        story: review.story ? storyById.get(review.story) : undefined,
       }))
       .sort((a, b) => byUpdatedDesc(a.review, b.review)),
   };

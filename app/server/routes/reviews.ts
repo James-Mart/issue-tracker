@@ -107,10 +107,15 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
   reviewsRouter.post(
     "/",
     asyncRoute(async (req, res) => {
-      const { created, review } = await openOrCreateReview(
-        req.params.projectId,
-        req.body,
-      );
+      const opened = await openOrCreateReview(req.params.projectId, req.body);
+      if (opened.source === "pr") {
+        res.status(opened.created ? 201 : 200).json({
+          reviewId: opened.review.id,
+          created: opened.created,
+        });
+        return;
+      }
+      const { created, review } = opened;
       await sendReview(res, req.params.projectId, review, created ? 201 : 200);
     }),
   );

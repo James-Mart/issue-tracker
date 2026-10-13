@@ -14,6 +14,8 @@ import {
   fetchReviewCommits,
   fetchReviewDiff,
   fetchReviewProgress,
+  fetchReviewRecordCommits,
+  fetchReviewRecordDiff,
   fetchReviews,
 } from "./client";
 import { reviewKeys } from "./keys";
@@ -89,15 +91,32 @@ export function useReviewQuery(
   });
 }
 
+/** Story commits when `storyId` is set; otherwise the review's own range. */
+function reviewChangeRead(
+  storyId: string,
+  reviewId: string | undefined,
+): { reviewId: string } | { storyId: string } | undefined {
+  if (storyId) return { storyId };
+  if (reviewId) return { reviewId };
+  return undefined;
+}
+
 export function useReviewCommitsQuery(
   projectId: string,
   storyId: string,
-  options: { refetchInterval?: number | false } = {},
+  options: { refetchInterval?: number | false; reviewId?: string } = {},
 ): UseQueryResult<ReviewCommits, Error> {
+  const read = reviewChangeRead(storyId, options.reviewId);
   return useQuery({
-    queryKey: reviewKeys.commits(projectId, storyId),
-    queryFn: () => fetchReviewCommits(projectId, storyId),
-    enabled: Boolean(projectId) && Boolean(storyId),
+    queryKey:
+      read && "reviewId" in read
+        ? reviewKeys.reviewCommits(projectId, read.reviewId)
+        : reviewKeys.commits(projectId, storyId),
+    queryFn: () =>
+      read && "reviewId" in read
+        ? fetchReviewRecordCommits(projectId, read.reviewId)
+        : fetchReviewCommits(projectId, storyId),
+    enabled: Boolean(projectId) && read !== undefined,
     retry: retryRead,
     refetchInterval: options.refetchInterval,
   });
@@ -107,16 +126,21 @@ export function useReviewDiffQuery(
   projectId: string,
   storyId: string,
   scope: string | null,
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; reviewId?: string } = {},
 ): UseQueryResult<ReviewDiff, Error> {
+  const read = reviewChangeRead(storyId, options.reviewId);
+  const ready = scope !== null && (options.enabled ?? true) && Boolean(projectId) && read !== undefined;
   return useQuery({
-    queryKey: reviewKeys.diff(projectId, storyId, scope ?? ""),
+    queryKey:
+      read && "reviewId" in read
+        ? reviewKeys.reviewDiff(projectId, read.reviewId, scope ?? "")
+        : reviewKeys.diff(projectId, storyId, scope ?? ""),
     queryFn:
-      scope !== null &&
-      (options.enabled ?? true) &&
-      projectId &&
-      storyId
-        ? () => fetchReviewDiff(projectId, storyId, scope)
+      scope !== null && ready && read
+        ? () =>
+            "reviewId" in read
+              ? fetchReviewRecordDiff(projectId, read.reviewId, scope)
+              : fetchReviewDiff(projectId, read.storyId, scope)
         : skipToken,
     // The page starts this read before the diff panel mounts. A later subscriber
     // reuses the result; a moved tip invalidates the query.

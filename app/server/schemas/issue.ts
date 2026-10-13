@@ -8,7 +8,11 @@ import {
   type MergePolicy,
 } from "../issue-constants.js";
 import { SLUG_RE } from "../slug.js";
-import { reviewMarksSchema, reviewSubmissionSchema } from "./review-state.js";
+import {
+  reviewMarksSchema,
+  reviewPrSourceSchema,
+  reviewSubmissionSchema,
+} from "./review-state.js";
 import type {
   FileCommentAnchor,
   LineCommentAnchor,
@@ -561,13 +565,14 @@ export const taskSchema = z.object({
   ...timestamps,
 });
 
-// A code review of a Story. Lives under the Project; the Story is its source.
+// A code review under the Project. Source is a Story, a pull request, or both.
 export const reviewIssueSchema = z.object({
   id: nonEmpty,
   kind: z.literal("review"),
   partOf: nonEmpty,
   title: nonEmpty,
-  story: nonEmpty,
+  story: nonEmpty.optional(),
+  pr: reviewPrSourceSchema.optional(),
   ...archivableFields,
   marks: reviewMarksSchema,
   submissions: z.array(reviewSubmissionSchema),

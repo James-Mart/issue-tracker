@@ -13,7 +13,9 @@ export type IssueErrorCode =
   | "commits-not-contiguous"
   | "change-too-large"
   | "attachment-too-large"
-  | "not-github-pr-url";
+  | "not-github-pr-url"
+  | "pr-not-found"
+  | "pr-wrong-repository";
 
 const STATUS: Record<IssueErrorCode, number> = {
   not_found: 404,
@@ -31,6 +33,8 @@ const STATUS: Record<IssueErrorCode, number> = {
   "change-too-large": 413,
   "attachment-too-large": 413,
   "not-github-pr-url": 400,
+  "pr-not-found": 404,
+  "pr-wrong-repository": 400,
 };
 
 export class IssueError extends Error {
