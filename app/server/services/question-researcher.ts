@@ -18,6 +18,7 @@ import {
   startConversationPrompt,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
+import { requireReviewStory } from "./reviews.js";
 import { readComments, readIssueOrThrow, readReviewOrThrow } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import {
@@ -71,7 +72,7 @@ type ReviewSource = { review: ReviewIssue; story: Issue };
 
 function readReviewSource(reviewId: string): ReviewSource {
   const review = readReviewOrThrow(reviewId);
-  return { review, story: readIssueOrThrow(review.story) };
+  return { review, story: readIssueOrThrow(requireReviewStory(review)) };
 }
 
 async function contextLines(

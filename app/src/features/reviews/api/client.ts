@@ -58,8 +58,11 @@ export function fetchReviewProgress(
 export function fetchReview(
   projectId: string,
   reviewId: string,
+  options?: { refreshHead?: boolean },
 ): Promise<ReviewView> {
-  return request<ReviewView>(reviewUrl(projectId, reviewId));
+  const path = reviewUrl(projectId, reviewId);
+  if (!options?.refreshHead) return request<ReviewView>(path);
+  return request<ReviewView>(`${path}?refreshHead=1`);
 }
 
 export function reviewCommitsUrl(projectId: string, storyId: string): string {
@@ -98,6 +101,34 @@ export function fetchReviewDiff(
   scope: string,
 ): Promise<ReviewDiff> {
   return request<ReviewDiff>(reviewDiffUrl(projectId, storyId, scope));
+}
+
+export function fetchReviewRecordCommits(
+  projectId: string,
+  reviewId: string,
+): Promise<ReviewCommits> {
+  return request<ReviewCommits>(`${reviewUrl(projectId, reviewId)}/commits`);
+}
+
+export function fetchReviewRecordDiff(
+  projectId: string,
+  reviewId: string,
+  scope: string,
+): Promise<ReviewDiff> {
+  const params = new URLSearchParams({ scope });
+  return request<ReviewDiff>(`${reviewUrl(projectId, reviewId)}/diff?${params}`);
+}
+
+export type OpenedReview = { reviewId: string; created: boolean };
+
+export function postOpenReviewFromPr(
+  projectId: string,
+  pr: string,
+): Promise<OpenedReview> {
+  return request<OpenedReview>(reviewsUrl(projectId), {
+    method: "POST",
+    body: { pr },
+  });
 }
 
 export function postOpenReview(

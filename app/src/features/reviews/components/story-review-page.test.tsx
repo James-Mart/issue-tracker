@@ -108,12 +108,20 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
   useIssueChangeFileQuery: () => ({ data: "new\n" }),
 }));
 
-vi.mock("../api/queries", () => ({
-  useReviewQuery: () => ({
-    data: state.reviews[0],
-    error: null,
-    isLoading: false,
+vi.mock("../hooks/use-review-submission-sync", () => ({
+  useReviewRecord: () => ({
+    review: {
+      data: state.reviews[0],
+      error: null,
+      isLoading: false,
+      isSuccess: true,
+      isFetching: false,
+    },
+    headSynced: true,
   }),
+}));
+
+vi.mock("../api/queries", () => ({
   useReviewDiffQuery: (_projectId: string, _reviewId: string, scope: string) => ({
     data: state.byScope[scope] ?? state.diff,
     error: null,

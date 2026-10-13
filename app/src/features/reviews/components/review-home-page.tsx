@@ -16,8 +16,9 @@ import { useOpenReview, useReopenReview } from "../api/mutations";
 import { useReviewProgressQuery, useReviewsQuery } from "../api/queries";
 import { useGoToReviewIssue } from "../hooks/use-go-to-review-issue";
 import { reviewIssuePath } from "../lib/links";
+import { isPullRequestOnlyReview } from "../lib/pull-request-head";
 import { NewReviewPicker } from "./new-review-picker";
-import { ReviewIdentity } from "./review-identity";
+import { ReviewIdentity, ReviewRowIdentity } from "./review-identity";
 import { ReviewProgressFault } from "./review-progress-fault";
 import {
   archivedReviewMeta,
@@ -82,6 +83,29 @@ function MetaLine({ clauses }: { clauses: ReviewMetaPart[][] }) {
   );
 }
 
+function reviewSourceId(item: ReviewHomeReview | ReviewHomeArchived): string {
+  const id = [item.review.story, item.review.pr ? `#${item.review.pr.number}` : undefined]
+    .filter((part): part is string => Boolean(part))
+    .join(" ");
+  // A persisted review can omit both sources; the row still needs a label.
+  return id || item.review.id;
+}
+
+function reviewHomeIdentity(item: ReviewHomeReview | ReviewHomeArchived): {
+  title: string;
+  id: string;
+  missing: boolean;
+} {
+  const id = reviewSourceId(item);
+  if (item.review.story && item.story) {
+    return { title: item.story.title, id, missing: false };
+  }
+  if (isPullRequestOnlyReview(item.review)) {
+    return { title: item.review.title, id, missing: false };
+  }
+  return { title: "Story missing", id, missing: true };
+}
+
 function useReviewHomeProgress(
   projectId: string,
   review: ReviewRecordView,
@@ -102,7 +126,7 @@ function OpenReviewRow({
   projectId: string;
   item: ReviewHomeReview;
 }) {
-  const storyId = item.review.story;
+  const identity = reviewHomeIdentity(item);
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,
@@ -110,24 +134,22 @@ function OpenReviewRow({
     (progress) => openReviewMeta(item.review, progress),
   );
   return (
-    <li className="rounded-lg border border-border bg-card hover:border-[hsl(var(--rail-lit))]">
-      <Link
-        to={reviewIssuePath(projectId, item.review.id)}
-        data-testid="review-home-open-row"
-        className="block rounded-lg px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ReviewIdentity
-          title={item.story?.title ?? "Story missing"}
-          id={storyId}
-          missing={!item.story}
-        />
-        <MetaLine clauses={clauses} />
-      </Link>
-      {error ? (
-        <div className="px-3 pb-2.5">
-          <ReviewProgressFault />
-        </div>
-      ) : null}
+    <li className="rounded-lg border border-border bg-card px-3 py-2.5 hover:border-[hsl(var(--rail-lit))]">
+      <ReviewRowIdentity projectId={projectId} storyId={item.review.story}>
+        <Link
+          to={reviewIssuePath(projectId, item.review.id)}
+          data-testid="review-home-open-row"
+          className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ReviewIdentity
+            title={identity.title}
+            id={identity.id}
+            missing={identity.missing}
+          />
+          <MetaLine clauses={clauses} />
+        </Link>
+        {error ? <ReviewProgressFault /> : null}
+      </ReviewRowIdentity>
     </li>
   );
 }
@@ -177,7 +199,7 @@ function ArchivedReviewRow({
   reopening: boolean;
   onReopen: () => void;
 }) {
-  const storyId = item.review.story;
+  const identity = reviewHomeIdentity(item);
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,
@@ -190,20 +212,20 @@ function ArchivedReviewRow({
       data-testid="review-home-archived-row"
       className="flex flex-col gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shell:flex-row shell:items-center"
     >
-      <div className="min-w-0 flex-1">
+      <ReviewRowIdentity projectId={projectId} storyId={item.review.story}>
         <Link
           to={reviewIssuePath(projectId, item.review.id)}
           className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ReviewIdentity
-            title={item.story?.title ?? "Story missing"}
-            id={storyId}
-            missing={!item.story}
+            title={identity.title}
+            id={identity.id}
+            missing={identity.missing}
           />
         </Link>
         <MetaLine clauses={clauses} />
         {error ? <ReviewProgressFault /> : null}
-      </div>
+      </ReviewRowIdentity>
       <Button
         type="button"
         size="sm"

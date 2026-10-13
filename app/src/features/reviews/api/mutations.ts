@@ -4,6 +4,7 @@ import type { ReviewRecordView, ReviewView, SetReviewMarkBody } from "@server/sc
 import {
   postArchiveReview,
   postOpenReview,
+  postOpenReviewFromPr,
   postReopenReview,
   postRetryOpenReviewSubmissions,
   postSubmitReview,
@@ -53,6 +54,16 @@ export function useOpenReview(projectId: string) {
   return useReviewMutation(projectId, (storyId: string) =>
     postOpenReview(projectId, storyId),
   );
+}
+
+export function useOpenReviewFromPr(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (pr: string) => postOpenReviewFromPr(projectId, pr),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: reviewKeys.lists(projectId) });
+    },
+  });
 }
 
 export function useArchiveReview(projectId: string) {

@@ -15,6 +15,7 @@ import {
   diffLineTotals,
   fileCountLabel,
 } from "../lib/review-files";
+import { pullRequestHeadSha } from "../lib/pull-request-head";
 import {
   ALL_CHANGES_SCOPE,
   commitReviewedCount,
@@ -120,6 +121,8 @@ export function ReviewCommitsPanel({
   const hasCommits = (commits.data?.commits.length ?? 0) > 0;
   const allDiff = useReviewDiffQuery(projectId, storyId, ALL_CHANGES_SCOPE, {
     enabled: hasCommits,
+    reviewId: storyId ? undefined : review.id,
+    headSha: pullRequestHeadSha(storyId, review),
   });
   const error = commits.error ?? (hasCommits ? allDiff.error : null);
 

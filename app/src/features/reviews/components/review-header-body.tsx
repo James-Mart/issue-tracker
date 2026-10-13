@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, GitBranch } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { ReviewCommits, ReviewView } from "@server/schemas";
+import type { ReviewCommits, ReviewPrSource, ReviewView } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
+import { CommentGitHubIcon } from "@/features/issues/components/comments/comment-github-icon";
 import { useReviewCommentThreads } from "../hooks/use-review-comments";
 import { issuePath } from "@/features/issues/lib/links";
 import { shortSha } from "@/lib/utils/short-sha";
@@ -14,12 +15,48 @@ import {
 import { ReviewOpenThreads } from "./review-open-threads";
 import { ReviewSubmitActions } from "./review-submit-control";
 
+const sourceLinkClass = "inline-flex items-center gap-1 hover:underline";
+
+function ReviewStorySourceLink({
+  projectId,
+  storyId,
+}: {
+  projectId: string;
+  storyId: string;
+}) {
+  return (
+    <Link
+      to={issuePath(projectId, storyId)}
+      className={sourceLinkClass}
+      data-testid="review-story-link"
+    >
+      <GitBranch className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="text-foreground">{storyId}</span>
+    </Link>
+  );
+}
+
+function ReviewPrSourceLink({ pr }: { pr: ReviewPrSource }) {
+  return (
+    <a
+      href={pr.url}
+      target="_blank"
+      rel="noreferrer"
+      className={sourceLinkClass}
+      data-testid="review-pr-link"
+    >
+      <CommentGitHubIcon />
+      <span className="text-foreground">#{pr.number}</span>
+    </a>
+  );
+}
+
 function CommitMeta({ commits }: { commits: ReviewCommits }) {
   const count = commits.commits.length;
   return (
     <>
       <span data-testid="review-merge-base">
-        Merge base <span className="text-foreground">{commits.mergeBaseRef}</span>
+        base <span className="text-foreground">{commits.mergeBaseRef}</span>
       </span>
       {count > 0 ? (
         <>
@@ -93,14 +130,9 @@ export function ReviewHeaderBody({
           />
         ) : null}
       </div>
-      <p className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 font-mono text-xs tabular-nums text-muted-foreground">
-        <Link
-          to={issuePath(projectId, storyId)}
-          className="text-[hsl(var(--current))] hover:underline"
-          data-testid="review-story-link"
-        >
-          {storyId}
-        </Link>
+      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs tabular-nums text-muted-foreground">
+        {storyId ? <ReviewStorySourceLink projectId={projectId} storyId={storyId} /> : null}
+        {review?.pr ? <ReviewPrSourceLink pr={review.pr} /> : null}
         {commits ? <CommitMeta commits={commits} /> : null}
       </p>
       {header && header.failures.length > 0 ? (

@@ -5,7 +5,9 @@ import {
   type ReviewIssue,
   type ReviewRecordView,
 } from "../schemas/review.js";
+import type { ReviewPrSource } from "../schemas/review-state.js";
 import { collectDescendantCommits } from "./change.js";
+import { parsePrUrl } from "./delivery.js";
 import { IssueError } from "./errors.js";
 import { problemsFor } from "./integrity.js";
 import {
@@ -19,10 +21,11 @@ import {
 import { withIssuesStoreLock } from "./issues-store-lock.js";
 import { compareReviewsByCreated, reviewLifecycle } from "./review-lifecycle.js";
 import { presentSubmissions } from "./review-submission-threads.js";
+import { resolveReviewPr, type ResolvedReviewPr } from "./review-pr.js";
 import { requireProject } from "./require-project.js";
 import { uniqueSlug } from "./slug.js";
 import { assertStoreWritable } from "./store-read-only.js";
-import { ancestorChain } from "./subtree.js";
+import { ancestorChain, subtreeIds } from "./subtree.js";
 
 type Story = Extract<Issue, { kind: "story" }>;
 
@@ -88,14 +91,24 @@ function reviewOfStory(
 }
 
 function storyForReview(review: ReviewIssue, byId: ReadonlyMap<string, Issue>): Story {
-  const story = byId.get(review.story);
+  const storyId = requireReviewStory(review);
+  const story = byId.get(storyId);
   if (story?.kind !== "story") {
-    throw new IssueError(
-      "validation",
-      `review story "${review.story}" is not a story`,
-    );
+    throw new IssueError("validation", `review story "${storyId}" is not a story`);
   }
   return story;
+}
+
+function reviewLifecycleFor(
+  review: ReviewIssue,
+  byId: ReadonlyMap<string, Issue>,
+): ReturnType<typeof reviewLifecycle> {
+  if (!review.story) {
+    return review.archived
+      ? { status: "archived", archivedReason: "explicit" }
+      : { status: "open" };
+  }
+  return reviewLifecycle(review, storyForReview(review, byId));
 }
 
 function toView(
@@ -105,9 +118,16 @@ function toView(
 ): ReviewRecordView {
   return {
     ...review,
-    ...reviewLifecycle(review, storyForReview(review, byId)),
+    ...reviewLifecycleFor(review, byId),
     submissions: presentSubmissions(review, issues),
   };
+}
+
+export function requireReviewStory(review: { id: string; story?: string }): string {
+  if (!review.story) {
+    throw new IssueError("validation", `review "${review.id}" has no story`);
+  }
+  return review.story;
 }
 
 export function listReviewViews(
@@ -148,27 +168,8 @@ export function readReviewView(
   return toView(requireReview(id, reviewId, graph), graph);
 }
 
-/** A new, unwritten review of a Story, with an id none of `takenIds` uses. */
-export function buildReviewIssue(
-  story: Story,
-  projectId: string,
-  issues: Issue[],
-  takenIds: Iterable<string>,
-  { archived, now }: { archived: boolean; now: string },
-): ReviewIssue {
-  const parsed = parseIssue({
-    id: uniqueSlug(`${story.id}-review`, takenIds),
-    kind: "review",
-    partOf: projectId,
-    title: story.title,
-    story: story.id,
-    archived,
-    marks: { all: {}, commits: {} },
-    submissions: [],
-    order: nextSiblingOrder(issues, "review", projectId, undefined),
-    createdAt: now,
-    updatedAt: now,
-  });
+function parsedReview(fields: Parameters<typeof parseIssue>[0]): ReviewIssue {
+  const parsed = parseIssue(fields);
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
   if (parsed.issue.kind !== "review") {
     throw new IssueError("validation", `"${parsed.issue.id}" is not a review`);
@@ -176,9 +177,128 @@ export function buildReviewIssue(
   return parsed.issue;
 }
 
+function reviewShell(projectId: string, issues: Issue[], now: string, archived: boolean) {
+  return {
+    kind: "review" as const,
+    partOf: projectId,
+    archived,
+    marks: { all: {}, commits: {} },
+    submissions: [],
+    order: nextSiblingOrder(issues, "review", projectId, undefined),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** A new, unwritten review of a Story, with an id none of `takenIds` uses. */
+export function buildReviewIssue(
+  story: Story,
+  projectId: string,
+  issues: Issue[],
+  takenIds: Iterable<string>,
+  { archived, now, pr }: { archived: boolean; now: string; pr?: ReviewPrSource },
+): ReviewIssue {
+  return parsedReview({
+    id: uniqueSlug(`${story.id}-review`, takenIds),
+    title: story.title,
+    story: story.id,
+    ...(pr ? { pr } : {}),
+    ...reviewShell(projectId, issues, now, archived),
+  });
+}
+
+function pullRequestKey(url: string): string | undefined {
+  try {
+    const parsed = parsePrUrl(url);
+    return `${parsed.owner.toLowerCase()}/${parsed.repo.toLowerCase()}#${parsed.number}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function storyForPullRequest(
+  projectId: string,
+  pr: ReviewPrSource,
+  issues: Issue[],
+): Story | undefined {
+  const key = pullRequestKey(pr.url);
+  if (!key) return undefined;
+  const inProject = subtreeIds(issues, projectId);
+  return issues.find((issue): issue is Story => {
+    if (issue.kind !== "story" || !issue.prUrl || !inProject.has(issue.id)) return false;
+    return pullRequestKey(issue.prUrl) === key;
+  });
+}
+
+function reviewCoversPullRequest(
+  review: ReviewIssue,
+  pr: ReviewPrSource,
+  storyId: string | undefined,
+): boolean {
+  if (storyId && review.story === storyId) return true;
+  const key = pullRequestKey(pr.url);
+  return key !== undefined && review.pr !== undefined && pullRequestKey(review.pr.url) === key;
+}
+
+function openReviewCovering(
+  projectId: string,
+  pr: ReviewPrSource,
+  storyId: string | undefined,
+  issues: readonly Issue[],
+): ReviewIssue | undefined {
+  return issues.find(
+    (issue): issue is ReviewIssue =>
+      issue.kind === "review" &&
+      issue.partOf === projectId &&
+      !issue.archived &&
+      reviewCoversPullRequest(issue, pr, storyId),
+  );
+}
+
+function commitNewReview(
+  review: ReviewIssue,
+  issues: Issue[],
+): { created: true; review: ReviewRecordView } {
+  const graph = [...issues, review];
+  const problems = problemsFor(review.id, graph);
+  if (problems.length > 0) {
+    throw new IssueError("validation", problems.map((p) => p.message).join("; "));
+  }
+  commitIssueBatch([{ issue: review }], []);
+  return { created: true, review: toView(review, graph) };
+}
+
+function attachPrSource(
+  review: ReviewIssue,
+  pr: ReviewPrSource | undefined,
+  issues: Issue[],
+): { created: false; review: ReviewRecordView } {
+  if (!pr || review.pr) return { created: false, review: toView(review, issues) };
+  const next: ReviewIssue = { ...review, pr, updatedAt: new Date().toISOString() };
+  const issue = parsedReview(next);
+  commitIssueBatch([{ issue }], []);
+  const graph = issues.map((item) => (item.id === issue.id ? issue : item));
+  return { created: false, review: toView(issue, graph) };
+}
+
+function buildPullRequestReview(
+  resolved: ResolvedReviewPr,
+  projectId: string,
+  issues: Issue[],
+  now: string,
+): ReviewIssue {
+  return parsedReview({
+    id: uniqueSlug(`pr-${resolved.pr.number}-review`, issues.map((issue) => issue.id)),
+    title: resolved.title,
+    pr: resolved.pr,
+    ...reviewShell(projectId, issues, now, false),
+  });
+}
+
 function startReview(
   projectId: string,
   storyId: string,
+  pr?: ReviewPrSource,
 ): Promise<{ created: boolean; review: ReviewRecordView }> {
   return serialize(() => {
     ensureMigrations();
@@ -186,33 +306,73 @@ function startReview(
     const story = requireStoryInProject(projectId, storyId, issues);
     // A review stays the story's review after its task commits are gone.
     const existing = reviewOfStory(projectId, storyId, issues);
-    if (existing) return { created: false, review: toView(existing, issues) };
+    if (existing) return attachPrSource(existing, pr, issues);
     assertStoryHasTaskCommits(storyId);
     const review = buildReviewIssue(
       story,
       projectId,
       issues,
       issues.map((issue) => issue.id),
-      { archived: false, now: new Date().toISOString() },
+      { archived: false, now: new Date().toISOString(), pr },
     );
-    const graph = [...issues, review];
-    const problems = problemsFor(review.id, graph);
-    if (problems.length > 0) {
-      throw new IssueError("validation", problems.map((p) => p.message).join("; "));
-    }
-    commitIssueBatch([{ issue: review }], []);
-    return { created: true, review: toView(review, graph) };
+    return commitNewReview(review, issues);
   });
 }
 
+function openResolvedPullRequest(
+  projectId: string,
+  resolved: ResolvedReviewPr,
+): Promise<{ created: boolean; review: ReviewRecordView }> {
+  return serialize(() => {
+    ensureMigrations();
+    const { issues } = readAll();
+    const story = storyForPullRequest(projectId, resolved.pr, issues);
+    const open = openReviewCovering(projectId, resolved.pr, story?.id, issues);
+    if (open) return attachPrSource(open, resolved.pr, issues);
+    if (story) {
+      const existing = storedReviewForStory(story.id, issues);
+      if (existing && existing.partOf === projectId) {
+        return attachPrSource(existing, resolved.pr, issues);
+      }
+      const review = buildReviewIssue(
+        story,
+        projectId,
+        issues,
+        issues.map((issue) => issue.id),
+        { archived: false, now: new Date().toISOString(), pr: resolved.pr },
+      );
+      return commitNewReview(review, issues);
+    }
+    return commitNewReview(
+      buildPullRequestReview(resolved, projectId, issues, new Date().toISOString()),
+      issues,
+    );
+  });
+}
+
+async function openReviewForStory(
+  projectId: string,
+  storyId: string,
+): Promise<{ created: boolean; review: ReviewRecordView }> {
+  const story = requireStoryInProject(projectId, storyId);
+  const pr = story.prUrl ? (await resolveReviewPr(projectId, story.prUrl)).pr : undefined;
+  return startReview(projectId, storyId, pr);
+}
+
 /** Start a review of a Story in this Project, or return the one it already has. */
-export function openOrCreateReview(
+export async function openOrCreateReview(
   projectId: string,
   body: unknown,
-): Promise<{ created: boolean; review: ReviewRecordView }> {
+): Promise<{ created: boolean; review: ReviewRecordView; source: "pr" | "story" }> {
   const parsed = parseOpenReviewBody(body);
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
-  return startReview(requireProject(projectId), parsed.body.story);
+  const id = requireProject(projectId);
+  if ("pr" in parsed.body) {
+    const opened = await openResolvedPullRequest(id, await resolveReviewPr(id, parsed.body.pr));
+    return { ...opened, source: "pr" };
+  }
+  const opened = await openReviewForStory(id, parsed.body.story);
+  return { ...opened, source: "story" };
 }
 
 /** Start a review of a Story, or return the one it already has. */
@@ -220,7 +380,7 @@ export function startStoryReview(
   storyId: string,
 ): Promise<{ created: boolean; review: ReviewRecordView }> {
   const projectId = ancestorChain(storyId, readAll().issues)[0]!.id;
-  return startReview(projectId, storyId);
+  return openReviewForStory(projectId, storyId);
 }
 
 async function setReviewArchived(

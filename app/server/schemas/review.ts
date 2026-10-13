@@ -6,6 +6,7 @@ export {
   reviewMarksSchema,
   reviewSubmissionSchema,
   type ReviewMarks,
+  type ReviewPrSource,
   type ReviewSubmission,
 } from "./review-state.js";
 
@@ -57,11 +58,10 @@ export type ReviewCandidates = {
   stories: ReviewCandidate[];
 };
 
-export const openReviewBodySchema = z
-  .object({
-    story: nonEmpty,
-  })
-  .strict();
+export const openReviewBodySchema = z.union([
+  z.object({ story: nonEmpty }).strict(),
+  z.object({ pr: nonEmpty }).strict(),
+]);
 
 export type OpenReviewBody = z.infer<typeof openReviewBodySchema>;
 

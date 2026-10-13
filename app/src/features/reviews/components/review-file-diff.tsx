@@ -46,7 +46,8 @@ import { MarkedPathText } from "./review-search-marked-text";
 import { ReviewLineThreads, ReviewOutdatedThreads } from "./review-thread";
 
 export type ReviewFileDiffSource = {
-  storyId: string;
+  /** Issue whose change file endpoint serves this blob: the Story, or the review when it has no Story. */
+  issueId: string;
   reviewId: string;
   /** Commit whose tree holds the file's post-image. The tip for "All changes". */
   sha: string;
@@ -148,7 +149,7 @@ function RenderedFileDiff({
   outdated: CommentThread[];
 }) {
   const { loading, loadDiffFiles } = useFileDiffContentsLoader({
-    issueId: source.storyId,
+    issueId: source.issueId,
     sha: source.sha,
     cache: source.contentsCache,
   });
