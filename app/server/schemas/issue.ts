@@ -766,6 +766,10 @@ export interface DerivedState {
   ideaStatus?: IdeaStatus;
   /** True when any issue-anchored conversation on this issue is live. */
   liveRun?: boolean;
+  /** Non-archived `implementing` session on this issue. */
+  implementingOpen?: boolean;
+  /** That session has a live run. */
+  implementingLive?: boolean;
   /** True when a stored review still covers every done Task on the Story. */
   reviewCurrent?: boolean;
   /** Derived git fork-point ref (see resolveMergeBase). */

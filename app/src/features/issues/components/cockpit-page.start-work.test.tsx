@@ -184,7 +184,7 @@ describe("CockpitPage start work", () => {
       mutateOptions().onError?.(new ApiError("failed", 500, { error: "nope" }));
     });
 
-    expect(section(container, "inFlight")).toBeNull();
+    expect(section(container, "queue")).toBeNull();
     expect(section(container, "ready")?.textContent).toContain("Auth hardening");
     expect(
       container.querySelector('[data-testid="flow-row-launch-fault"]')
@@ -221,7 +221,7 @@ describe("CockpitPage start work", () => {
     act(() => {
       mutateOptions().onSuccess?.({ id: "sess-1" });
     });
-    expect(section(container, "inFlight")?.textContent).toContain(
+    expect(section(container, "queue")?.textContent).toContain(
       "Auth hardening",
     );
 
@@ -239,7 +239,7 @@ describe("CockpitPage start work", () => {
       );
     });
 
-    expect(section(container, "inFlight")).toBeNull();
+    expect(section(container, "queue")).toBeNull();
     expect(section(container, "ready")?.textContent).toContain("Auth hardening");
     expect(container.querySelector('[data-testid="flow-row-launch-fault"]')).toBeNull();
     expect(container.querySelector('[data-live="false"]')?.textContent).toContain(

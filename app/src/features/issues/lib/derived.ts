@@ -204,6 +204,16 @@ export function isReadyToLandFromIndexes(
   );
 }
 
+export function epicHasActivelyImplementingChild(
+  epicId: string,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): boolean {
+  return epicChildStories(epicId, issues).some((child) =>
+    storyIsActivelyImplementing(child, derived[child.id], issues),
+  );
+}
+
 export function epicChildStories(
   epicId: string,
   issues: IssueRecord[],

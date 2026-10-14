@@ -92,7 +92,7 @@ describe("flowBuckets", () => {
     expect(ids(buckets.blocked).sort()).toEqual(
       ["blocked-epic", "blocked-story"].sort(),
     );
-    expect(ids(buckets.inFlight).sort()).toEqual(["flight-epic"].sort());
+    expect(ids(buckets.queue).sort()).toEqual(["flight-epic"].sort());
     expect(ids(buckets.recentlyMerged).sort()).toEqual(["done-epic"].sort());
     expect(ids(buckets.ready).sort()).toEqual(["ready-epic"].sort());
     expect(ids(buckets.readyToLand)).toEqual(["pr-story"]);
@@ -126,5 +126,66 @@ describe("flowBuckets", () => {
       ).buckets.ready,
     );
     expect(projectAReady).toEqual(["a-live-ready"]);
+  });
+
+  it("merges planning ideas ahead of captured ideas and leaves unqueued blocked roots out of the queue", () => {
+    const issues = [
+      project("p"),
+      {
+        id: "captured",
+        kind: "idea" as const,
+        title: "captured",
+        partOf: "p",
+        order: 0,
+        createdAt: t0,
+        updatedAt: t0,
+        archived: false,
+      },
+      {
+        id: "planning",
+        kind: "idea" as const,
+        title: "planning",
+        partOf: "p",
+        order: 1,
+        createdAt: t0,
+        updatedAt: t0,
+        archived: false,
+      },
+      { ...epic("blocked-queued", "p"), workQueuedAt: t0, workQueuePosition: 2 },
+      epic("blocked-out", "p"),
+      {
+        ...epic("running", "p"),
+        needsAttention: true,
+        attentionReason: "Auto-start failed: down",
+      },
+      { ...epic("paused", "p"), workQueuePosition: 4 },
+      { ...epic("waiting-late", "p"), workQueuedAt: t0, workQueuePosition: 3 },
+      { ...epic("waiting-early", "p"), workQueuedAt: t0, workQueuePosition: 1 },
+    ];
+    const derived: Record<string, DerivedState> = {
+      captured: { blocked: false, ideaStatus: "captured" },
+      planning: { blocked: false, ideaStatus: "planning" },
+      "blocked-queued": { blocked: true, epicStatus: "todo" },
+      "blocked-out": { blocked: true, epicStatus: "todo" },
+      running: { blocked: false, epicStatus: "in-progress", liveRun: true },
+      paused: { blocked: false, epicStatus: "todo", implementingOpen: true },
+      "waiting-late": { blocked: false, epicStatus: "todo" },
+      "waiting-early": { blocked: false, epicStatus: "todo" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(ids(buckets.planning)).toEqual(["planning", "captured"]);
+    expect(ids(buckets.blocked)).toEqual(["blocked-out"]);
+    expect(ids(buckets.queue)).toEqual([
+      "running",
+      "paused",
+      "waiting-early",
+      "blocked-queued",
+      "waiting-late",
+    ]);
+    expect(
+      partitionCockpitBuckets(buckets).needsAttention.map((item) => item.issue.id),
+    ).not.toContain("running");
   });
 });

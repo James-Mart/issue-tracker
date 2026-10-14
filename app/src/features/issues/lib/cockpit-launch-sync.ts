@@ -53,7 +53,7 @@ export function cockpitLaunchFaultMessage(
 }
 
 /**
- * Optimistic In-flight overlay after session-create ack. Applies only to the
+ * Optimistic Queue overlay after session-create ack. Applies only to the
  * launched work-root — nested story rails stay on server-derived status.
  */
 export function overlayCockpitLaunchAck(

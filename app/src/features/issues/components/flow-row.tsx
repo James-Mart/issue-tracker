@@ -12,9 +12,9 @@ import type { TreeRowIndexes } from "../lib/tree-row-indexes";
 import {
   flowItemNeedsAttention,
   isCapturedIdeaFlowItem,
-  isWorkQueuedRoot,
 } from "../lib/flow";
 import { issueChannelPath } from "../lib/links";
+import { formatTimeInQueue, type QueueStage } from "../lib/queue-view";
 import { issueRailNodeState } from "../lib/rail-state";
 
 function flowRowStatusChips(
@@ -40,12 +40,15 @@ function flowRowStatusChips(
     }
   }
 
-  if (isWorkQueuedRoot(item.issue)) {
-    chips.push({ variant: "todo", label: "Queued" });
-  }
-
   if (chips.length === 0) return undefined;
   return <AxisChips chips={chips} />;
+}
+
+function queueWait(
+  item: FlowItem,
+): string | undefined {
+  if (item.issue.kind !== "epic" && item.issue.kind !== "story") return undefined;
+  return item.issue.workQueuedAt;
 }
 
 function flowRowDrillInTo(
@@ -88,6 +91,8 @@ export interface FlowRowProps {
   drillInState?: unknown;
   /** Project name shown on the row. Recently merged names each row's project. */
   projectTitle?: string;
+  /** Queue row treatment. Absent on rows outside the queue. */
+  queueStage?: QueueStage;
 }
 
 /**
@@ -103,10 +108,20 @@ export function FlowRow({
   to,
   drillInState,
   projectTitle,
+  queueStage,
 }: FlowRowProps) {
-  const railState = issueRailNodeState(item.issue, item.state, indexes);
-  const live = railState === "in-flight" && !isWorkQueuedRoot(item.issue);
+  const baseRailState = issueRailNodeState(item.issue, item.state, indexes);
+  const railState =
+    queueStage === "running"
+      ? "in-flight"
+      : queueStage === "waiting"
+        ? "ready"
+        : baseRailState;
+  const live =
+    queueStage === "running" ||
+    (queueStage == null && baseRailState === "in-flight");
   const count = leafTaskProgressCount(item.issue, indexes);
+  const waitingSince = queueStage === "waiting" ? queueWait(item) : undefined;
   const drillInTo = flowRowDrillInTo(item, indexes, to);
   const chips = flowRowStatusChips(item, indexes);
   const attention = flowRowShowsAttentionTriangle(item);
@@ -116,7 +131,15 @@ export function FlowRow({
       <PlanningFlowRowGates issue={item.issue} />
     ) : null;
   const meta =
-    chips != null || attention || blocked || count != null ? (
+    waitingSince ? (
+      <time
+        dateTime={waitingSince}
+        data-testid="queue-time-in-queue"
+        className="font-mono text-xs tabular-nums text-muted-foreground"
+      >
+        {formatTimeInQueue(waitingSince)}
+      </time>
+    ) : chips != null || attention || blocked || count != null ? (
       <span className="cockpit-row-meta inline-flex items-center gap-1.5">
         {chips}
         {attention ? (
@@ -142,7 +165,13 @@ export function FlowRow({
   return (
     <RailNode
       state={railState}
-      edge={item.state?.blocked ? "dashed" : "solid"}
+      edge={
+        queueStage === "waiting"
+          ? "solid"
+          : item.state?.blocked
+            ? "dashed"
+            : "solid"
+      }
       glow={live}
       className="items-start py-1"
     >
