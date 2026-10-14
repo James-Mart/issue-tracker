@@ -76,12 +76,16 @@ startWorkQueueLauncher(agentSessions);
 const { registerPrSyncStep, startPrSyncDriver } = await import(
   "./services/pr-sync-driver.js"
 );
+const { linkReviewPullRequests } = await import(
+  "./services/review-pr-link.js"
+);
 const { trackReviewPullRequests } = await import(
   "./services/review-pr-tracking.js"
 );
 const { mirrorPrComments } = await import(
   "./services/pr-comment-mirror.js"
 );
+registerPrSyncStep(linkReviewPullRequests);
 registerPrSyncStep(trackReviewPullRequests);
 registerPrSyncStep(mirrorPrComments);
 startPrSyncDriver();
