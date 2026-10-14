@@ -48,6 +48,15 @@ export function isWorkQueuedRoot(issue: IssueRecord): boolean {
   );
 }
 
+/** Waiting queue row: epic or project-level Story not holding a slot. */
+export function isWaitingQueueWorkFlowItem(
+  item: FlowItem,
+): item is FlowItem & {
+  issue: Extract<IssueRecord, { kind: "epic" | "story" }>;
+} {
+  return item.queueStage === "waiting";
+}
+
 /** Ready-bucket Epic or project-level Story eligible for cockpit start-work. */
 export function isReadyWorkFlowItem(
   item: FlowItem,

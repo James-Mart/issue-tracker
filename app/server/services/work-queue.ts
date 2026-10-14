@@ -6,7 +6,12 @@ import { isWorkRootFinished } from "../../src/features/issues/lib/derived.js";
 import { derive } from "./derive.js";
 import { forEachOnDiskIssue } from "./scan-disk.js";
 import { projectContaining } from "./subtree.js";
+import { IssueError } from "./errors.js";
 import { slotHoldingRootIds, type WorkRoot } from "./work-slots.js";
+
+export function refuseWorkQueueConflict(reason: string, message: string): never {
+  throw new IssueError("conflict", message, { reason });
+}
 
 const POSITION_BACKFILL_FLAG = ".work-queue-position-backfilled";
 

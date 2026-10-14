@@ -2,9 +2,14 @@ import { GitPullRequest } from "lucide-react";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import type { FlowItem } from "../lib/flow";
-import { isCapturedIdeaFlowItem, isReadyWorkFlowItem } from "../lib/flow";
+import {
+  isCapturedIdeaFlowItem,
+  isReadyWorkFlowItem,
+  isWaitingQueueWorkFlowItem,
+} from "../lib/flow";
 import { ImplementingFlowRowLaunch } from "./implementing-launch-control";
 import { PlanningFlowRowLaunch } from "./planning-launch-control";
+import { QueueDequeueControl } from "./queue-dequeue-control";
 
 /** Inline cockpit row actions scoped to what each flow bucket can perform. */
 export function FlowRowActions({
@@ -22,12 +27,14 @@ export function FlowRowActions({
   const readyWork = isReadyWorkFlowItem(item, issues, derived)
     ? item.issue
     : undefined;
+  const waitingWork = isWaitingQueueWorkFlowItem(item) ? item.issue : undefined;
 
   return (
     <>
       {capturedIdea ? (
         <PlanningFlowRowLaunch issue={capturedIdea} gates={false} />
       ) : null}
+      {waitingWork ? <QueueDequeueControl issue={waitingWork} /> : null}
       {readyWork ? <ImplementingFlowRowLaunch issue={readyWork} /> : null}
       {prUrl ? (
         <Button asChild variant="default" size="icon-sm">

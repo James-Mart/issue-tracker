@@ -2,9 +2,21 @@ import { isWorkRootFinished } from "../../src/features/issues/lib/derived.js";
 import type { ConversationMeta, Issue, IssuesResponse } from "../schemas.js";
 import { listIndexedConversationMetas } from "./conversation-meta-index.js";
 import { IssueError } from "./errors.js";
+import { isImplementingWorkRootIssue } from "./implementing-launch.js";
 import { projectContaining } from "./subtree.js";
 
 export type WorkRoot = Extract<Issue, { kind: "epic" | "story" }>;
+
+/** Epic or project-level Story work root, if `issue` is one. */
+export function implementingWorkRootFromIssue(
+  issue: Issue,
+  byId: Map<string, Issue>,
+): WorkRoot | undefined {
+  const parentKind =
+    issue.kind === "story" ? byId.get(issue.partOf)?.kind : undefined;
+  if (!isImplementingWorkRootIssue(issue.kind, parentKind)) return undefined;
+  return issue as WorkRoot;
+}
 
 export type SlotSnapshot = Pick<IssuesResponse, "issues" | "derived"> & {
   byId: Map<string, Issue>;

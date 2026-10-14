@@ -459,6 +459,25 @@ export function useEnqueueWorkRoot(
   });
 }
 
+export function useDequeueWorkRoot(issueId: string) {
+  const qc = useQueryClient();
+  return useMutation<IssueDetail, Error, void>({
+    mutationFn: () =>
+      request<IssueDetail>(
+        `/api/issues/${encodeURIComponent(issueId)}/queue`,
+        { method: "DELETE" },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      qc.setQueryData(issuesKeys.detail(data.id), data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(issueId) });
+    },
+  });
+}
+
 export function useCreateChannelSession(
   issueId: string,
   channel: ConversationChannel,

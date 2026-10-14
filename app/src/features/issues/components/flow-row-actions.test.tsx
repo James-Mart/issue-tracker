@@ -27,6 +27,10 @@ vi.mock("../api/mutations", () => ({
     },
     isPending: false,
   }),
+  useDequeueWorkRoot: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
   useCreateChannelSession: () => ({
     mutate: vi.fn(),
     isPending: false,
