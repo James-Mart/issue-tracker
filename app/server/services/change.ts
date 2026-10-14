@@ -233,9 +233,14 @@ export function storyCommitsEtag(version: number, tip: string): string {
   return `"${version}:${tip}"`;
 }
 
+/** Remote-tracking ref a PR-only review compares with its head. */
+export function pullRequestRemoteBase(baseRef: string): string {
+  return `origin/${baseRef}`;
+}
+
 /** `git diff` / `git rev-list --right-only` range for a pull-request review. */
 export function pullRequestRange(source: { baseRef: string; headSha: string }): string {
-  return `${source.baseRef}...${source.headSha}`;
+  return `${pullRequestRemoteBase(source.baseRef)}...${source.headSha}`;
 }
 
 /** Commits reachable from the right side of a three-dot range, oldest first. */

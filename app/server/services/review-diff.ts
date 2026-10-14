@@ -12,6 +12,7 @@ import {
   parseShortstat,
   listCommitsInRange,
   pullRequestRange,
+  pullRequestRemoteBase,
   prepareStoryChange,
   requireMergeBase,
   runGitOrCommitUnreachable,
@@ -402,7 +403,7 @@ async function prReviewCommits(loaded: LoadedPrChange): Promise<ReviewCommits> {
       : await readCommitSummariesFromLog(loaded.workspace, loaded.shas);
   return {
     mergeBase: loaded.baseRef,
-    mergeBaseRef: loaded.baseRef,
+    mergeBaseRef: pullRequestRemoteBase(loaded.baseRef),
     tip: loaded.headSha,
     commits,
   };

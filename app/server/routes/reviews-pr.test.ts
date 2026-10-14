@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GhSpawner } from "../services/delivery.js";
 import type { GitSpawner } from "../services/git-read.js";
+import type { GitWriteSpawner } from "../services/git-write.js";
 import { mockChild } from "../services/pr-comment-mirror-harness.js";
 import { forceRemoveWorktree } from "../worktree-test-cleanup.js";
 
@@ -17,10 +18,16 @@ let dir: string;
 let bare: string;
 let repo: string;
 let headSha: string;
+let baseSha = "";
+let upstreamSha = "";
+let firstSha = "";
+let crossRepository = false;
 let server: Server;
 let baseUrl: string;
 let setGhSpawnerForTests: (next: GhSpawner | null) => void;
 let setGitSpawnerForTests: (next: GitSpawner | null) => void;
+let setGitWriteSpawnerForTests: (next: GitWriteSpawner | null) => void;
+const fetches: string[][] = [];
 const gitEnv = {
   ...process.env,
   GIT_AUTHOR_NAME: "Tester",
@@ -45,7 +52,7 @@ function prViewJson(): string {
     baseRefName: "main",
     headRefName: "pr-head",
     headRefOid: headSha,
-    isCrossRepository: false,
+    isCrossRepository: crossRepository,
   });
 }
 
@@ -78,6 +85,39 @@ function seedRepo(): void {
   git(["push", "origin", "main"], repo);
 }
 
+/** Local `main` and `origin/main` sit on the old base; the remote branch is ahead. */
+function seedStaleBase(): void {
+  bare = mkdtempSync(join(tmpdir(), "issue-tracker-pr-bare-"));
+  repo = mkdtempSync(join(tmpdir(), "issue-tracker-pr-repo-"));
+  git(["init", "--bare", "-b", "main"], bare);
+  git(["init", "-b", "main"], repo);
+  writeFileSync(join(repo, "file.txt"), "base\n");
+  git(["add", "file.txt"], repo);
+  git(["commit", "-m", "base"], repo);
+  baseSha = git(["rev-parse", "HEAD"], repo);
+  git(["remote", "add", "origin", bare], repo);
+  git(["push", "-u", "origin", "main"], repo);
+  writeFileSync(join(repo, "upstream.txt"), "up\n");
+  git(["add", "upstream.txt"], repo);
+  git(["commit", "-m", "upstream"], repo);
+  upstreamSha = git(["rev-parse", "HEAD"], repo);
+  git(["push", "origin", "main"], repo);
+  git(["update-ref", "refs/remotes/origin/main", baseSha], repo);
+  git(["reset", "--hard", baseSha], repo);
+  git(["checkout", "-q", "-b", "pr-head", upstreamSha], repo);
+  writeFileSync(join(repo, "file.txt"), "changed\n");
+  git(["add", "file.txt"], repo);
+  git(["commit", "-m", "External change"], repo);
+  firstSha = git(["rev-parse", "HEAD"], repo);
+  writeFileSync(join(repo, "second.txt"), "second\n");
+  git(["add", "second.txt"], repo);
+  git(["commit", "-m", "Second"], repo);
+  headSha = git(["rev-parse", "HEAD"], repo);
+  git(["push", "origin", "pr-head"], repo);
+  git(["--git-dir", bare, "update-ref", "refs/pull/7/head", headSha]);
+  git(["checkout", "-q", "main"], repo);
+}
+
 function seedProject(story: Record<string, unknown> | undefined): void {
   writeIssue("p", {
     kind: "project",
@@ -99,14 +139,31 @@ function seedProject(story: Record<string, unknown> | undefined): void {
   });
 }
 
-async function boot(story?: Record<string, unknown>): Promise<void> {
+function installFetchRecorder(): void {
+  fetches.length = 0;
+  setGitWriteSpawnerForTests((command, args, options) => {
+    if (args[0] === "fetch") fetches.push(args);
+    return spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  });
+}
+
+async function boot(
+  story?: Record<string, unknown>,
+  seed: () => void = seedRepo,
+): Promise<void> {
   dir = mkdtempSync(join(tmpdir(), "issue-tracker-pr-reviews-"));
-  seedRepo();
+  crossRepository = false;
+  seed();
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", dir);
   seedProject(story);
   ({ setGhSpawnerForTests } = await import("../services/delivery.js"));
   ({ setGitSpawnerForTests } = await import("../services/git-read.js"));
+  ({ setGitWriteSpawnerForTests } = await import("../services/git-write.js"));
   setGitSpawnerForTests((command, args, options) => {
     if (args[0] === "remote" && args[1] === "get-url") {
       return mockChild({ stdout: `https://github.com/${ORIGIN_REPO}.git\n` });
@@ -119,6 +176,7 @@ async function boot(story?: Record<string, unknown>): Promise<void> {
   });
   const spawner: GhSpawner = () => mockChild({ stdout: prViewJson() });
   setGhSpawnerForTests(spawner);
+  installFetchRecorder();
   const { createApp } = await import("../app.js");
   const app = createApp();
   await new Promise<void>((resolve) => {
@@ -133,6 +191,7 @@ async function teardown(): Promise<void> {
   if (repo) forceRemoveWorktree(repo, "p", "pr-7-review");
   if (setGhSpawnerForTests) setGhSpawnerForTests(null);
   if (setGitSpawnerForTests) setGitSpawnerForTests(null);
+  if (setGitWriteSpawnerForTests) setGitWriteSpawnerForTests(null);
   vi.unstubAllEnvs();
   if (server) {
     await new Promise<void>((resolve, reject) => {
@@ -196,7 +255,7 @@ describe("POST /api/projects/:projectId/reviews { pr }", () => {
     expect(commits.status).toBe(200);
     expect(await commits.json()).toMatchObject({
       mergeBase: "main",
-      mergeBaseRef: "main",
+      mergeBaseRef: "origin/main",
       tip: headSha,
     });
     const commitBody = (await fetch(
@@ -212,5 +271,77 @@ describe("POST /api/projects/:projectId/reviews { pr }", () => {
     const diffBody = (await diff.json()) as { patch: string };
     expect(diffBody.patch).toContain("file.txt");
     expect(diffBody.patch).toContain("+changed");
+  });
+});
+
+describe("PR-only review against a fetched remote base", () => {
+  beforeEach(() => boot(undefined, seedStaleBase));
+  afterEach(teardown);
+
+  it("diffs origin/<baseRef> when the local base and a fork disagree with GitHub", async () => {
+    crossRepository = true;
+    const created = await postPr("7");
+    expect(created.status).toBe(201);
+    expect(readStored("pr-7-review")).toMatchObject({
+      pr: { baseRef: "main", fork: true, headSha },
+    });
+    expect(git(["rev-parse", "main"], repo)).toBe(baseSha);
+    expect(git(["rev-parse", "origin/main"], repo)).toBe(upstreamSha);
+    expect(fetches).toEqual([
+      ["fetch", "origin", "main"],
+      ["fetch", "origin", "refs/pull/7/head:refs/pull/7/head"],
+    ]);
+
+    const commits = await fetch(`${baseUrl}/api/projects/p/reviews/pr-7-review/commits`);
+    expect(commits.status).toBe(200);
+    const commitBody = (await commits.json()) as {
+      mergeBase: string;
+      mergeBaseRef: string;
+      commits: Array<{ sha: string; subject: string }>;
+    };
+    expect(commitBody.mergeBase).toBe("main");
+    expect(commitBody.mergeBaseRef).toBe("origin/main");
+    expect(commitBody.commits.map((commit) => commit.sha)).toEqual([firstSha, headSha]);
+    expect(commitBody.commits.map((commit) => commit.subject)).toEqual([
+      "External change",
+      "Second",
+    ]);
+
+    const diff = await fetch(
+      `${baseUrl}/api/projects/p/reviews/pr-7-review/diff?scope=all`,
+    );
+    expect(diff.status).toBe(200);
+    const diffBody = (await diff.json()) as { patch: string };
+    expect(diffBody.patch).toContain("file.txt");
+    expect(diffBody.patch).toContain("second.txt");
+    expect(diffBody.patch).not.toContain("upstream.txt");
+
+    const first = await fetch(
+      `${baseUrl}/api/projects/p/reviews/pr-7-review/diff?scope=${firstSha}`,
+    );
+    const firstBody = (await first.json()) as { patch: string };
+    expect(first.status).toBe(200);
+    expect(firstBody.patch).toContain("file.txt");
+    expect(firstBody.patch).not.toContain("second.txt");
+
+    const second = await fetch(
+      `${baseUrl}/api/projects/p/reviews/pr-7-review/diff?scope=${headSha}`,
+    );
+    const secondBody = (await second.json()) as { patch: string };
+    expect(second.status).toBe(200);
+    expect(secondBody.patch).toContain("second.txt");
+    expect(secondBody.patch).not.toContain("file.txt");
+
+    const progress = await fetch(
+      `${baseUrl}/api/projects/p/reviews/pr-7-review/progress`,
+    );
+    expect(progress.status).toBe(200);
+    expect(await progress.json()).toMatchObject({
+      all: { total: 2 },
+      commits: {
+        [firstSha]: { total: 1 },
+        [headSha]: { total: 1 },
+      },
+    });
   });
 });
