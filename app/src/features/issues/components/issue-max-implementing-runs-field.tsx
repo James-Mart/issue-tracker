@@ -4,6 +4,9 @@ import { Input } from "@/components/ui/input";
 import { useUpdateIssue } from "../api/mutations";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
 
+const MAX_IMPLEMENTING_RUNS_CAPTION =
+  "Caps every implementing start, human or automatic.";
+
 export function IssueMaxImplementingRunsField({
   issue,
 }: {
@@ -60,6 +63,9 @@ export function IssueMaxImplementingRunsField({
         }}
       />
       {shown ? <p className="text-sm text-destructive">{shown}</p> : null}
+      <p className="text-xs text-muted-foreground">
+        {MAX_IMPLEMENTING_RUNS_CAPTION}
+      </p>
     </div>
   );
 }

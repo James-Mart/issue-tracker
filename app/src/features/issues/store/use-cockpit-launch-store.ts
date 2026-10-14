@@ -28,11 +28,12 @@ type CockpitLaunchState = {
     issueId: string,
     kind: CockpitLaunchKind,
     options?: {
-      lockHolderTitle?: string;
       status?: number;
       errorMessage?: string;
     },
   ) => void;
+  /** Drop a pending launch that queued without starting a session. */
+  abandonLaunch: (issueId: string) => void;
   reconcileDerived: (derived: Record<string, DerivedState>) => void;
 };
 
@@ -76,11 +77,15 @@ export const useCockpitLaunchStore = create<CockpitLaunchState>((set, get) => ({
       fault: {
         issueId,
         kind,
-        lockHolderTitle: options?.lockHolderTitle,
         status: options?.status,
         errorMessage: options?.errorMessage,
       },
     });
+  },
+  abandonLaunch: (issueId) => {
+    const { pending } = get();
+    if (pending?.issueId !== issueId) return;
+    set({ pending: null });
   },
   reconcileDerived: (derived) => {
     const { seenDerived, ack } = get();

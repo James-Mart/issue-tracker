@@ -232,9 +232,8 @@ describe("review tasking", () => {
     const { implementingResumePrompt, implementingSessionMessage } = await import(
       "./implementing-launch.js"
     );
-    expect(prompts[2]).toBe(
-      `${implementingSessionMessage("e")}\n\n${implementingResumePrompt()}`,
-    );
+    expect(prompts[2]).toBe(implementingSessionMessage("e"));
+    expect(prompts[2]).not.toContain(implementingResumePrompt());
     const { listConversations } = await import("./conversations.js");
     expect(
       listConversations()

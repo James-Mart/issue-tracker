@@ -22,8 +22,9 @@ function failureMessage(err: unknown): string {
 }
 
 function samePullRequest(a: string, b: string): boolean {
-  const key = pullRequestKey(a);
-  return key !== undefined && key === pullRequestKey(b);
+  const keyA = pullRequestKey(a);
+  const keyB = pullRequestKey(b);
+  return keyA !== undefined && keyA === keyB;
 }
 
 /**
@@ -56,11 +57,12 @@ async function adoptStory(
   projectId: string,
   review: ReviewIssue & { pr: ReviewPrSource },
   story: Story,
+  issues: Issue[],
 ): Promise<void> {
   updateStoredReview(projectId, review.id, (current) => {
     if (current.story !== undefined || !current.pr) return current;
     if (!samePullRequest(current.pr.url, review.pr.url)) return current;
-    const other = storedReviewForStory(story.id, readAll().issues);
+    const other = storedReviewForStory(story.id, issues);
     if (other && other.id !== current.id) {
       throw new IssueError(
         "validation",
@@ -115,7 +117,7 @@ async function linkPullRequestReview(
       `pull request ${review.pr.url} belongs to story ${story.id}, which already has review ${other.id}`,
     );
   }
-  await adoptStory(projectId, review, story);
+  await adoptStory(projectId, review, story, issues);
 }
 
 /**

@@ -4,7 +4,7 @@ import {
   planningSessionModel,
   planningSessionTitle,
 } from "../../src/features/issues/lib/planning-launch.js";
-import type { AgentSessions } from "./agent-sessions.js";
+import type { ConversationMessageSessions } from "./conversation-message.js";
 import {
   createIssueChannelSession,
   startConversationPrompt,
@@ -41,7 +41,7 @@ async function noteAutoPlanFailure(
 
 async function startQueuedIdea(
   idea: QueuedIdea,
-  sessions: AgentSessions,
+  sessions: ConversationMessageSessions,
 ): Promise<void> {
   const stakeholder = idea.stakeholder!;
   const title = planningSessionTitle(idea.title);
@@ -72,7 +72,9 @@ async function startQueuedIdea(
 }
 
 /** Drain Ideas carrying planQueuedAt across all Projects, oldest first. */
-export async function drainPlanQueue(sessions: AgentSessions): Promise<void> {
+export async function drainPlanQueue(
+  sessions: ConversationMessageSessions,
+): Promise<void> {
   for (const idea of queuedIdeas()) {
     try {
       await startQueuedIdea(idea, sessions);

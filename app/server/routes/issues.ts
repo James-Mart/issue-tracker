@@ -51,6 +51,7 @@ import {
 import { editComment } from "../services/comment-edit.js";
 import { enrichCommentsForRead } from "../services/researcher-runs.js";
 import {
+  clearWorkQueueFields,
   createIssueChannelSession,
   startConversationPrompt,
 } from "../services/conversations.js";
@@ -75,6 +76,7 @@ import {
   removeStoryWorktree,
   setupStoryWorktree,
 } from "../services/worktree.js";
+import { enqueueWorkRoot } from "../services/enqueue-work-root.js";
 
 const DEFAULT_TITLE = "New conversation";
 
@@ -196,6 +198,13 @@ export function createIssuesRouter(
   );
 
   router.post(
+    "/:id/queue",
+    asyncRoute(async (req, res) => {
+      res.json(await enqueueWorkRoot(req.params.id, sessions));
+    }),
+  );
+
+  router.post(
     "/:id/channels/:channel/sessions",
     asyncRoute(async (req, res) => {
       const issueId = req.params.id;
@@ -244,6 +253,9 @@ export function createIssuesRouter(
         },
         sessions,
       );
+      if (channel === "implementing") {
+        await clearWorkQueueFields(issueId);
+      }
 
       // Run start is outside serialize: sendPrompt → updateMeta(agentId) would
       // deadlock if nested inside the conversations write chain.

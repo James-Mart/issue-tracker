@@ -56,6 +56,16 @@ vi.mock("@/features/agents/api/queries", () => ({
 }));
 
 vi.mock("../api/mutations", () => ({
+  useEnqueueWorkRoot: (
+    issueId: string,
+    options?: { onError?: (err: Error) => void },
+  ) => ({
+    mutate: (...args: unknown[]) => {
+      holders.hookOnError = options?.onError;
+      holders.mutate(issueId, ...args);
+    },
+    isPending: false,
+  }),
   useCreateChannelSession: (
     issueId: string,
     channel: string,
@@ -232,7 +242,7 @@ export function mutateOptions(): {
   onSuccess?: (result: { id: string }) => void;
   onError?: (err: Error) => void;
 } {
-  const passed = mutate.mock.calls[0]?.[3] as
+  const passed = mutate.mock.calls[0]?.[2] as
     | {
         onSuccess?: (result: { id: string }) => void;
         onError?: (err: Error) => void;

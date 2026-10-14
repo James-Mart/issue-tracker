@@ -81,7 +81,7 @@ export interface FlowRowProps {
   indexes: TreeRowIndexes;
   avatar?: ReactNode;
   actions?: ReactNode;
-  /** Row-attached launch fault; retry is the restored Play control. */
+  /** Row-attached launch fault; retry is the restored queue control. */
   launchFault?: string;
   /** When set, the full row drills in here; actions stay outside the link. */
   to?: string;

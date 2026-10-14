@@ -42,17 +42,16 @@ describe("Issue detail launch — Epic implementing", () => {
     act(() => {
       (
         container.querySelector(
-          '[data-testid="implementing-start-session"]',
+          '[data-testid="implementing-queue"]',
         ) as HTMLButtonElement
       ).click();
     });
     act(() => {
       mutateOptions().onError?.(
-        new ApiError("conflict", 409, {
-          error: "locked",
-          holderIssueId: "push",
-          holderIssueTitle: "Push notifications",
-        }),
+        new ApiError(
+          "Blocked by Push notifications, so it must be queued after it",
+          409,
+        ),
       );
     });
 
@@ -68,13 +67,13 @@ describe("Issue detail launch — Epic implementing", () => {
       container.querySelector('[data-testid="channel-launch-pending"]'),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="implementing-start-session"]'),
+      container.querySelector('[data-testid="implementing-queue"]'),
     ).toBeTruthy();
     expect(
       container.querySelector('[data-testid="channel-launch-fault"]')
         ?.textContent,
     ).toContain(
-      "Session create rejected — implementing lock held by Push notifications (409).",
+      "Blocked by Push notifications, so it must be queued after it",
     );
   });
 

@@ -43,6 +43,10 @@ describe("overviewWorkLoopAction", () => {
         liveRun: false,
         leafTasks: [task("t1", "todo")],
         currentSession: current,
+        queued: false,
+        holdsSlot: true,
+        finished: false,
+        archived: false,
       }),
     ).toEqual({ action: "resume", resumeSession: current });
     expect(current?.id).toBe("current");

@@ -204,6 +204,48 @@ export function isReadyToLandFromIndexes(
   );
 }
 
+export function epicChildStories(
+  epicId: string,
+  issues: IssueRecord[],
+): Array<IssueRecord & { kind: "story" }> {
+  return issues.filter(
+    (candidate): candidate is IssueRecord & { kind: "story" } =>
+      candidate.kind === "story" && candidate.partOf === epicId,
+  );
+}
+
+/** True when the Epic has an unmerged child Story and every one is Ready to land. */
+export function epicEveryUnmergedChildReadyToLand(
+  epicId: string,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): boolean {
+  const unmerged = epicChildStories(epicId, issues).filter(
+    (child) => derived[child.id]?.storyStatus !== "merged" && !child.merged,
+  );
+  return (
+    unmerged.length > 0 &&
+    unmerged.every((child) =>
+      isReadyToLandStory(child, derived[child.id], issues),
+    )
+  );
+}
+
+/**
+ * True when a work root's loop is finished: a Story merged or Ready to land,
+ * an Epic done or with every unmerged child Story Ready to land.
+ */
+export function isWorkRootFinished(
+  issue: IssueRecord & { kind: "epic" | "story" },
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): boolean {
+  const state = derived[issue.id];
+  if (isIssueComplete(issue, state)) return true;
+  if (issue.kind === "story") return isReadyToLandStory(issue, state, issues);
+  return epicEveryUnmergedChildReadyToLand(issue.id, issues, derived);
+}
+
 /** True when a Story is in progress and not Ready to land. */
 export function storyIsActivelyImplementing(
   issue: IssueRecord,

@@ -424,6 +424,41 @@ export function useReorderBoardChild() {
   });
 }
 
+export function useEnqueueWorkRoot(
+  issueId: string,
+  options?: {
+    suppressToast?: (err: Error) => boolean;
+    onError?: (err: Error) => void;
+    /** Called after enqueue succeeds, including if the control has unmounted. */
+    onSuccess?: (root: IssueDetail) => void;
+  },
+) {
+  const qc = useQueryClient();
+  return useMutation<IssueDetail, Error, void>({
+    mutationFn: () =>
+      request<IssueDetail>(
+        `/api/issues/${encodeURIComponent(issueId)}/queue`,
+        { method: "POST" },
+      ),
+    onError: (err) => {
+      options?.onError?.(err);
+      if (options?.suppressToast?.(err)) return;
+      toast.error(messageOf(err));
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(issuesKeys.detail(data.id), data);
+      options?.onSuccess?.(data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(issueId) });
+      qc.invalidateQueries({
+        queryKey: issuesKeys.channelSessions(issueId, "implementing"),
+      });
+    },
+  });
+}
+
 export function useCreateChannelSession(
   issueId: string,
   channel: ConversationChannel,

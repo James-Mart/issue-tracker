@@ -549,9 +549,9 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | kind | settable fields |
 | --- | --- |
 | project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `maxImplementingRuns`, `autonomous`, `labels`, `supportingDocs`, `runtime`, `secrets`, `description` |
-| epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `workQueuedAt`, `description` |
+| epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
 | idea | `title`, `archived`, `outlineGate`, `executionGate`, `mergeBase`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
-| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `workQueuedAt`, `description` |
+| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `commits`, `noDiff`, `sourceIdea`, `description` |
 
 `issue task add-commit <taskId> <sha>` appends one full sha to Task `commits`
@@ -671,7 +671,7 @@ Project — the common-to-every-kind fields plus:
 | `setupCommand` | string? | optional shell command line run inside a new worktree after creation |
 | `trunk` | string | default git ref for derived `mergeBase` when no `mergeBaseOverride` applies; defaults `main` (see [Project trunk](#project-trunk)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"` | Project default for derived policy; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
-| `maxImplementingRuns` | int | how many implementing runs this Project may have in flight at once for automatic starts; integer ≥ 1; defaults `1` (see [Work queue](#work-queue)) |
+| `maxImplementingRuns` | int | how many work roots in this Project may hold an implementing slot at once; caps every implementing start, human or automatic; integer ≥ 1; defaults `1` (see [Work queue](#work-queue)) |
 | `autonomous` | boolean? | absent until set; when true, creating an Idea with a `stakeholder` queues auto-plan at creation (see [Auto-plan queue](#auto-plan-queue)); `autonomous` governs only auto-plan at creation — auto-start of implementation applies in every Project |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
 | `supportingDocs` | `{ vision?, codingStandards?, designSystem?, gateRubric?, verification? }`? | optional pointers to vision / coding standards / design system / gate rubric / verification docs (see [Project supporting docs](#project-supporting-docs)) |
@@ -921,15 +921,21 @@ it. Idle (no active run) or archived sessions do not hold the lock.
 
 ### Work queue
 
-`workQueuedAt` (ISO string, optional) on an Epic or a project-level Story records that the work root is waiting to start. It is a system writer: `apply` preserves it, and the only manual write is `issue epic|story set <id> workQueuedAt --clear`, which dequeues the root. `issue epic|story get <id> workQueuedAt` reads it.
+`workQueuedAt` (ISO string, optional) on an Epic or a project-level Story records when the work root joined the queue. `workQueuePosition` (positive integer, optional) is its place among that Project's queued roots. Both are system writers: `apply` preserves them, and kind `set` does not accept them. `issue epic|story get <id> workQueuedAt` and `issue epic|story get <id> workQueuePosition` read them. Roots that already carry `workQueuedAt` and lack `workQueuePosition` receive positions in `workQueuedAt` order, id as the tie-break, per Project, after any position already stored.
 
-`maxImplementingRuns` (integer ≥ 1, default `1`) is the per-Project cap on automatic implementing starts. Set and read it with `issue project get|set <id> maxImplementingRuns <n>`. The Project settings overview shows it as a number field. The cap never refuses a session a human starts; that run still counts toward the cap.
+`maxImplementingRuns` (integer ≥ 1, default `1`) is the per-Project cap on held slots, and it covers every implementing start, human or automatic. Set and read it with `issue project get|set <id> maxImplementingRuns <n>`. The Project settings overview shows it as a number field.
 
-**Enqueue.** In the same batch as the archive flip and any code-gate merge-policy lowering: when an Idea with a `stakeholder` and without `executionGate: true` flips `archived` from false to true, stamp `workQueuedAt` with the current time on the work root of each derived `planRoots` id. The work root is the Epic that contains the plan root, or the project-level Story itself. Roots that already carry `workQueuedAt` are left unchanged.
+**Slots.** A work root holds one of its Project's slots while it has a non-archived `implementing` session, is not archived, and is not finished. A Story is finished when merged or Ready to land; an Epic when done or when every unmerged child Story is Ready to land. A paused root keeps its slot. A queued root carrying `needsAttention` holds a slot even when it has no implementing session, which keeps a failed start among the active slots. `createIssueChannelSession` refuses a new `implementing` session with `409` code `no-free-slot` while the Project's slot-holding roots number `maxImplementingRuns`, unless the work root already holds a slot. Lowering `maxImplementingRuns` below the held count stops nothing; no new start succeeds until the count is under the cap.
 
-Creating an `implementing` session on a work root (`createIssueChannelSession`) clears that root's `workQueuedAt`.
+**Release.** Each launcher pass first archives every non-archived `implementing` session on a finished work root, so the root holds no slot. Work appended later puts the root back in Ready, and its next start opens a fresh coordinator session.
 
-**Launcher.** The server process drains the queue on boot and on each issues watcher frame. For each Project it counts non-archived `implementing` sessions anchored in that Project that have an active run. While that count is below `maxImplementingRuns`, it starts the queued work root with the oldest `workQueuedAt` whose derived `blocked` and `planNotFinal` are both false. The start goes through `createIssueChannelSession` with channel `implementing` and the same title, model, and first prompt the implementing launch control sends. A `409` (that work root already has an active implementing run) only clears `workQueuedAt`. Any other failure clears `workQueuedAt` and sets `needsAttention` on the root with reason `Auto-start failed: <message>`.
+**Enqueue.** In the same batch as the archive flip and any code-gate merge-policy lowering: when an Idea with a `stakeholder` and without `executionGate: true` flips `archived` from false to true, stamp `workQueuedAt` with the current time and append `workQueuePosition` (one past the highest position already in that Project) on the work root of each derived `planRoots` id. The work root is the Epic that contains the plan root, or the project-level Story itself. Roots that already carry `workQueuedAt` are left unchanged. Roots from the same archive are ordered so each sits after the Epics in its `blockedBy`. A root is queued when every blocker is already queued (waiting, holding a slot, or joining in this same enqueue) or finished (done, merged, or ready to land). A root whose blocker is neither is left unchanged — not queued, and not marked `needsAttention` — and so is every root that depends on it.
+
+A successful launcher start clears that root's `workQueuedAt` and `workQueuePosition` after the implementing prompt has started. Creating an implementing session through the channel route clears them when the session is created.
+
+**Manual enqueue.** `POST /api/issues/:id/queue` queues an unarchived, unfinished Epic or project-level Story that is not already queued and does not hold a slot, and returns that root. Every `blockedBy` root must already be queued (waiting or holding a slot) or finished (done, merged, or ready to land). Otherwise the route refuses with `409` and `Blocked by <title>, so it must be queued after it`, naming the first offending blocker. Cockpit Ready, the implementing channel, and issue-detail overview enqueue through this route and do not create `implementing` sessions. When the root is eligible to start (`blocked` and `planNotFinal` both false) and a slot is free, this request runs a launcher pass so the start happens before the response. A root that holds a slot is resumed or messaged on its existing coordinator; that message is not appended to a new start.
+
+**Launcher.** The server process drains the queue on boot and on each issues watcher frame. For each Project, while its slot-holding roots number fewer than `maxImplementingRuns`, it starts the queued work root with the lowest `workQueuePosition` whose derived `blocked` and `planNotFinal` are both false. Blocked roots keep their position and are skipped. The start goes through `createIssueChannelSession` with channel `implementing`, title `Implement <title>`, and only the work-loop start message. A `no-free-slot` refusal (another start took the last slot) leaves the root queued. Any other `409` (that work root already has an active implementing run) only clears `workQueuedAt` and `workQueuePosition`. Any other failure leaves `workQueuedAt` and `workQueuePosition` in place and sets `needsAttention` with reason `Auto-start failed: <message>`. The root holds its slot. The launcher does not retry that start until `needsAttention` is cleared; the next pass then starts it again.
 
 ### Project trunk
 
@@ -1118,7 +1124,8 @@ Epic — the Epic/Story/Task needs-attention common fields plus:
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get (see [Project merge policy](#project-merge-policy)) |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
-| `workQueuedAt` | ISO string? | set when an auto-planned Idea's archive queues this Epic to start; system writer; clear dequeues (see [Work queue](#work-queue)) |
+| `workQueuedAt` | ISO string? | when this Epic joined its Project's queue; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
+| `workQueuePosition` | positive integer? | this Epic's place in its Project's queue; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
 
 Idea — the common-to-every-kind fields plus:
 
@@ -1159,7 +1166,8 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `reviewedTasks` | string[] | Task ids the stored review covered; defaults `[]`; same array patch surface as Epic `blockedBy`; never rendered as a tree chip |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
 | `labels` | string[]? | assignment ids from the containing Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
-| `workQueuedAt` | ISO string? | set when an auto-planned Idea's archive queues this project-level Story to start; system writer; clear dequeues (see [Work queue](#work-queue)) |
+| `workQueuedAt` | ISO string? | when this project-level Story joined its Project's queue; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
+| `workQueuePosition` | positive integer? | this project-level Story's place in its Project's queue; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
 
 Task — the Epic/Story/Task needs-attention common fields plus:
 
@@ -1980,7 +1988,8 @@ preserves everything else from the existing same-kind issue.
 | `mergePolicy` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `maxImplementingRuns` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; defaults `1` |
 | `autonomous` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
-| `workQueuedAt` (Epic / Story) | system writer; kind [`set`](#kind-scoped-get--set) accepts `--clear` only; `apply` preserves |
+| `workQueuedAt` (Epic / Story) | system writer; kind [`get`](#kind-scoped-get--set) only; `apply` preserves |
+| `workQueuePosition` (Epic / Story) | system writer; kind [`get`](#kind-scoped-get--set) only; `apply` preserves |
 | `planQueuedAt` (Idea) | system writer; kind [`set`](#kind-scoped-get--set) accepts `--clear` only; `apply` preserves |
 | `mergePolicy` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; effective value derived on get |
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |

@@ -4,6 +4,8 @@ import type { DerivedState, IssueRecord } from "@server/schemas";
 import { type BoardKindFilter } from "./board-kind-filter";
 import { issuesById, projectIdOf } from "./build-tree";
 import {
+  epicChildStories,
+  epicEveryUnmergedChildReadyToLand,
   isInFlight,
   isIssueComplete,
   isReadyToLandStory,
@@ -178,16 +180,6 @@ export function inFlightTaskOf(
   return tasks[0];
 }
 
-function epicChildStories(
-  epicId: string,
-  issues: IssueRecord[],
-): Array<IssueRecord & { kind: "story" }> {
-  return issues.filter(
-    (candidate): candidate is IssueRecord & { kind: "story" } =>
-      candidate.kind === "story" && candidate.partOf === epicId,
-  );
-}
-
 function epicHasActivelyImplementingChild(
   epicId: string,
   issues: IssueRecord[],
@@ -195,22 +187,6 @@ function epicHasActivelyImplementingChild(
 ): boolean {
   return epicChildStories(epicId, issues).some((child) =>
     storyIsActivelyImplementing(child, derived[child.id], issues),
-  );
-}
-
-function epicEveryUnmergedChildReadyToLand(
-  epicId: string,
-  issues: IssueRecord[],
-  derived: Record<string, DerivedState>,
-): boolean {
-  const unmerged = epicChildStories(epicId, issues).filter(
-    (child) => derived[child.id]?.storyStatus !== "merged" && !child.merged,
-  );
-  return (
-    unmerged.length > 0 &&
-    unmerged.every((child) =>
-      isReadyToLandStory(child, derived[child.id], issues),
-    )
   );
 }
 
