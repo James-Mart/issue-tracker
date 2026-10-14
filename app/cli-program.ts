@@ -43,6 +43,7 @@ import { bindCliStdin, readCliFileArg } from "./cli-io.js";
 import { humanDone, requestHuman } from "./server/services/human-handoff.js";
 import { assertKind, registerKindGetSet } from "./cli-kind.js";
 import { registerBareIdOps, registerKindOps } from "./cli-ops.js";
+import { registerReviewStandardsCommands } from "./cli-review-standards.js";
 import { taskHeadCommit } from "./server/services/commit-sha.js";
 import { recordTaskCommit } from "./server/services/task-commit-record.js";
 import { refreshAgentModelSlugCatalog } from "./server/agent-model-slugs-sync.js";
@@ -340,6 +341,9 @@ function createIssueProgram(run: Run): Command {
     const kindCmd = registerKindGetSet(program, kind, run);
     registerKindAdd(kindCmd, kind, run);
     registerKindOps(kindCmd, kind, run);
+    if (kind === "review") {
+      registerReviewStandardsCommands(kindCmd, run);
+    }
     if (kind === "task") {
       kindCmd
         .command("add-commit")

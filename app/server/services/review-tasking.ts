@@ -4,6 +4,7 @@ import type {
   ReviewRecordView,
   ReviewSubmission,
   ReviewSubmissionView,
+  StandardsAssessment,
 } from "../schemas/review.js";
 import { parseRetryReviewSubmissionBody } from "../schemas/review.js";
 import type { AgentRunStatus } from "./agent-sdk.js";
@@ -116,6 +117,7 @@ function submissionBase(
       ? { conversationId: submission.conversationId }
       : {}),
     ...(submission.coordinatorResumed ? { coordinatorResumed: true as const } : {}),
+    ...(submission.standards ? { standards: submission.standards } : {}),
   };
 }
 
@@ -225,7 +227,10 @@ function replaceSubmission(
       throw new IssueError("not_found", `unknown submission "${submissionId}"`);
     }
     const submissions = current.submissions.slice();
-    submissions[index] = next;
+    const stored = current.submissions[index]!;
+    // A standards launch may attach its conversation between this snapshot
+    // and the lock. Tasking never edits standards, so keep the stored copy.
+    submissions[index] = stored.standards ? { ...next, standards: stored.standards } : next;
     return {
       ...current,
       updatedAt: new Date().toISOString(),
@@ -273,6 +278,7 @@ export async function submitReviewAsTasks(
   projectId: string,
   reviewId: string,
   summary: string | undefined,
+  standards?: StandardsAssessment,
 ): Promise<ReviewRecordView> {
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
@@ -288,6 +294,7 @@ export async function submitReviewAsTasks(
   const submission: ReviewSubmission = {
     ...(await newSubmissionFields(reviewId, summary, threadIds)),
     status: "tasking",
+    ...(standards ? { standards } : {}),
   };
 
   updateStoredReview(project, reviewId, (current) => {
@@ -571,7 +578,7 @@ export async function retryOpenReviewSubmissions(
 }
 
 /** The review a review-channel conversation is anchored to, if it still exists. */
-function reviewOfConversation(
+export function reviewOfConversation(
   meta: ConversationMeta,
   issues: Issue[],
 ): ReviewRecordView | undefined {

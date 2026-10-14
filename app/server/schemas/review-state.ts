@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { supportingDocRefSchema } from "./supporting-doc.js";
 
 const nonEmpty = z.string().min(1);
 
@@ -44,6 +45,39 @@ export const reviewPrSourceSchema = z
 
 export type ReviewPrSource = z.infer<typeof reviewPrSourceSchema>;
 
+export const standardsProposalSchema = z
+  .object({
+    id: nonEmpty,
+    section: nonEmpty,
+    before: z.string(),
+    after: z.string(),
+    rationale: nonEmpty,
+    threadIds: z.array(nonEmpty).min(1),
+    decision: z.enum(["accepted", "rejected"]).optional(),
+    editedAfter: z.string().optional(),
+  })
+  .strict();
+
+export const standardsAssessmentSchema = z
+  .object({
+    status: z.enum([
+      "assessing",
+      "assessFailed",
+      "ready",
+      "noGaps",
+      "applying",
+      "applyFailed",
+      "applied",
+    ]),
+    conversationId: nonEmpty.optional(),
+    doc: supportingDocRefSchema,
+    proposals: z.array(standardsProposalSchema),
+    error: nonEmpty.optional(),
+  })
+  .strict();
+
+export type StandardsAssessment = z.infer<typeof standardsAssessmentSchema>;
+
 const reviewSubmissionIdentity = {
   id: nonEmpty,
   at: nonEmpty,
@@ -51,6 +85,7 @@ const reviewSubmissionIdentity = {
   threadIds: z.array(nonEmpty).min(1),
   // Set when bring-in accepts the resume prompt. Absent means it was not accepted.
   coordinatorResumed: z.literal(true).optional(),
+  standards: standardsAssessmentSchema.optional(),
 };
 
 export const reviewSubmissionSchema = z.discriminatedUnion("status", [

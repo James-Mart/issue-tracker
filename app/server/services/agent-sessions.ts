@@ -45,6 +45,11 @@ import {
   classifyReviewTaskingRun,
   failReviewTaskingClassification,
 } from "./review-tasking.js";
+import {
+  classifyStandardsAssessmentRun,
+  failStandardsAssessmentClassification,
+  STANDARDS_ASSESSOR_ROLE,
+} from "./review-standards.js";
 import { publishPipelineRunEvent } from "./pipeline-runs-events.js";
 import {
   EventPipeline,
@@ -170,16 +175,21 @@ export { isRunLive } from "./run-live.js";
  * Build a session manager. Tests inject a fake {@link AgentSdk}; production
  * uses the real boundary singleton.
  */
-function conversationCwd(meta: {
+export function conversationWorkingDirectory(meta: {
   role?: string;
   issueId?: string;
   projectId: string;
 }): string {
-  if (meta.role !== REVIEW_QUESTION_ROLE) {
+  if (meta.role !== REVIEW_QUESTION_ROLE && meta.role !== STANDARDS_ASSESSOR_ROLE) {
     return requireProjectWorkspace(meta.projectId);
   }
   if (!meta.issueId) {
-    throw new IssueError("validation", "question researcher requires a review");
+    throw new IssueError(
+      "validation",
+      meta.role === STANDARDS_ASSESSOR_ROLE
+        ? "standards assessor requires a review"
+        : "question researcher requires a review",
+    );
   }
   return requireLiveReviewWorktree(meta.issueId);
 }
@@ -218,7 +228,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     await teardowns.get(conversationId);
 
     const meta = readConversationMeta(conversationId);
-    const cwd = conversationCwd(meta);
+    const cwd = conversationWorkingDirectory(meta);
     const model = resolveConversationModel(meta.model);
     const storeDir = conversationStoreDir(conversationId);
     if (!existsSync(storeDir)) {
@@ -649,19 +659,15 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
       if (!handedOff) {
         let classified = false;
+        const outcome = {
+          status: result.status,
+          errorMessage: result.error?.message,
+        };
         try {
-          classified = await classifyReviewTaskingRun(
-            conversationId,
-            {
-              status: result.status,
-              errorMessage: result.error?.message,
-            },
-            {
-              getActiveRun: (id) => sessions.get(id)?.turn?.run,
-              sendPrompt: (id, options) =>
-                sendPromptInternal(id, options, false),
-            },
-          );
+          classified = await classifyReviewTaskingRun(conversationId, outcome, {
+            getActiveRun: (id) => sessions.get(id)?.turn?.run,
+            sendPrompt: (id, options) => sendPromptInternal(id, options, false),
+          });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.error(
@@ -675,6 +681,28 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
               `review tasking failure was not recorded for conversation ${conversationId}`,
               markErr,
             );
+          }
+        }
+        if (!classified) {
+          try {
+            classified = classifyStandardsAssessmentRun(conversationId, outcome);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error(
+              `standards assessment classification failed for conversation ${conversationId}`,
+              err,
+            );
+            try {
+              classified = failStandardsAssessmentClassification(
+                conversationId,
+                message,
+              );
+            } catch (markErr) {
+              console.error(
+                `standards assessment failure was not recorded for conversation ${conversationId}`,
+                markErr,
+              );
+            }
           }
         }
         if (classified && runMeta.issueId) {

@@ -472,6 +472,12 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `^[A-Z_][A-Z0-9_]*$`, and the rest of the line is non-empty. Refuses a body
   that does not follow that format, naming the first bad item, and refuses
   when `review` is already `awaiting-human`. Prints the new comment id.
+- **`standards set`** (review only) —
+  `issue review standards set <reviewId> <submissionId> <file>` records
+  coding-standards proposals for a submission whose assessment is `assessing`.
+  `<file>` is JSON `{ proposals }` (`-` reads stdin). An empty list moves the
+  assessment to `noGaps`; any proposal moves it to `ready`. See
+  [Standards assessment](#standards-assessment).
 - **`human-done`** (story only) —
   `issue story human-done <storyId> [--note <text>]` posts a comment (`role`
   `human`, `type` `human-response`) with `replyTo` set to the latest
@@ -1449,6 +1455,35 @@ exists is `failed` without a marker.
 researcher conversation for that question and returns `204`. It refuses with
 `conflict` unless `researcherRun` is `failed`. Each researcher conversation is
 listed among the review's agent runs with role `issue-tracker-review-question`.
+
+<a id="standards-assessment"></a>
+
+**Standards assessment.** `POST /api/projects/:projectId/reviews/:reviewId/submissions`
+accepts `assessStandards: true` beside `destination` and `summary`. The review
+must have a Story source and the Project must have a `codingStandards` doc;
+otherwise the request is refused. The submission then records `standards`:
+`status` `assessing`, `proposals` `[]`, and `doc` copied from that Project ref
+(`{ type: "attachment", name }` or `{ type: "workspace", path }`). The server
+starts [`issue-tracker-standards-assessor`](agents/issue-tracker-standards-assessor.md)
+in a review-channel conversation on the review, working directory the review
+worktree, and stores that conversation id on `standards.conversationId`. The
+run starts alongside tasking, or alongside the new Idea's auto-plan, and does
+not wait on either. Its prompt carries the submission's frozen thread ids
+(resolved or still open), the summary, the snapshotted doc, and, for each
+anchored commit, the Task whose `commits` contain that sha, that Task's Story,
+the Story diff, and the commit diff.
+
+`issue review standards set <reviewId> <submissionId> <file>` reads
+`{ proposals }` from the file. Each proposal has `id`, `section`, `before`,
+`after`, `rationale`, and `threadIds`. `before` is empty for an addition and
+`after` is empty for a deletion. `rationale` is one line. `threadIds` are a
+subset of the submission's threads. The command moves `assessing` to `ready`,
+or to `noGaps` when `proposals` is empty. A run that ends while status is
+still `assessing` moves it to `assessFailed` and records `error`.
+`POST /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/retry`
+with an empty body starts a fresh assessor run from `assessFailed`. Each
+assessor conversation is listed among the review's agent runs with role
+`issue-tracker-standards-assessor`.
 
 Humans record `resolved`, `unresolved`, `dismissed`, `reopened`, or
 `converted`, with an optional reply `body`, via

@@ -5,9 +5,11 @@ import type { ReviewSubmission } from "./review-state.js";
 export {
   reviewMarksSchema,
   reviewSubmissionSchema,
+  standardsAssessmentSchema,
   type ReviewMarks,
   type ReviewPrSource,
   type ReviewSubmission,
+  type StandardsAssessment,
 } from "./review-state.js";
 
 const nonEmpty = z.string().min(1);
@@ -94,6 +96,7 @@ export const submitReviewBodySchema = z
   .object({
     destination: z.enum(REVIEW_SUBMIT_DESTINATIONS),
     summary: z.string().optional(),
+    assessStandards: z.boolean().optional(),
   })
   .strict();
 

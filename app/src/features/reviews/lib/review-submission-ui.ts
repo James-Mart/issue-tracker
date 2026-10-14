@@ -159,11 +159,15 @@ export function reviewSubmitHeader(input: {
 }
 
 export function submissionPollInterval(
-  submissions: readonly { status: string }[] | undefined,
+  submissions:
+    | readonly { status: string; standards?: { status: string } }[]
+    | undefined,
 ): number | false {
-  return submissions?.some((submission) => submission.status === "tasking")
-    ? REVIEW_SUBMISSION_POLL_MS
-    : false;
+  const pending = submissions?.some(
+    (submission) =>
+      submission.status === "tasking" || submission.standards?.status === "assessing",
+  );
+  return pending ? REVIEW_SUBMISSION_POLL_MS : false;
 }
 
 export type ConversationTimelineItem<T> =

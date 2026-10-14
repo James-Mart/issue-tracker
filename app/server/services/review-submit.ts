@@ -3,6 +3,7 @@ import {
   parseSubmitReviewBody,
   type ReviewRecordView,
   type ReviewSubmission,
+  type StandardsAssessment,
 } from "../schemas/review.js";
 import { submittableRootIds } from "../../src/features/reviews/lib/review-submittable.js";
 import { reviewThreadLocation } from "../../src/features/reviews/lib/review-thread-label.js";
@@ -16,6 +17,7 @@ import {
   NO_READY_THREADS_ERROR,
   submitReviewAsTasks,
 } from "./review-tasking.js";
+import { standardsAssessmentForSubmit } from "./review-standards.js";
 import { readReviewView, updateStoredReview } from "./reviews.js";
 import { appendThreadEvent } from "./thread-events.js";
 
@@ -41,10 +43,13 @@ export async function submitReview(
   const parsed = parseSubmitReviewBody(body);
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
   const summary = parsed.body.summary?.trim() || undefined;
+  const standards = parsed.body.assessStandards
+    ? standardsAssessmentForSubmit(projectId, reviewId)
+    : undefined;
   if (parsed.body.destination === "idea") {
-    return submitReviewAsIdea(projectId, reviewId, summary);
+    return submitReviewAsIdea(projectId, reviewId, summary, standards);
   }
-  return submitReviewAsTasks(projectId, reviewId, summary);
+  return submitReviewAsTasks(projectId, reviewId, summary, standards);
 }
 
 /**
@@ -121,6 +126,7 @@ export async function submitReviewAsIdea(
   projectId: string,
   reviewId: string,
   summary: string | undefined,
+  standards?: StandardsAssessment,
 ): Promise<ReviewRecordView> {
   const project = requireProject(projectId);
   const { issues } = readAll();
@@ -154,6 +160,7 @@ export async function submitReviewAsIdea(
     status: "done",
     taskIds: [],
     ideaId: idea.id,
+    ...(standards ? { standards } : {}),
   };
   updateStoredReview(project, reviewId, (current) => {
     assertNoTasking(current.submissions);

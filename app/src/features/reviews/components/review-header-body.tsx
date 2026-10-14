@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import type { ReviewCommits, ReviewPrSource, ReviewView } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { CommentGitHubIcon } from "@/features/issues/components/comments/comment-github-icon";
+import { useIssueDetailQuery } from "@/features/issues/api/queries";
 import { useReviewCommentThreads } from "../hooks/use-review-comments";
 import { issuePath } from "@/features/issues/lib/links";
 import { shortSha } from "@/lib/utils/short-sha";
@@ -18,6 +19,15 @@ import { ReviewSubmitActions } from "./review-submit-control";
 import { ReviewTipSyncNotice } from "./review-tip-sync-notice";
 
 const sourceLinkClass = "inline-flex items-center gap-1 hover:underline";
+
+/** Undefined while the Project is still loading, so the submit row stays hidden. */
+function useProjectHasCodingStandards(projectId: string): boolean | undefined {
+  const project = useIssueDetailQuery(projectId);
+  const issue = project.data;
+  if (!issue) return undefined;
+  if (issue.kind !== "project") return false;
+  return issue.supportingDocs?.codingStandards !== undefined;
+}
 
 function ReviewStorySourceLink({
   projectId,
@@ -94,6 +104,7 @@ export function ReviewHeaderBody({
   merged: boolean;
   onOpenThread?: (thread: CommentThread) => void;
 }) {
+  const hasCodingStandards = useProjectHasCodingStandards(projectId);
   const { threads, loaded } = useReviewCommentThreads(review?.id ?? "");
   const readyThreads = loaded
     ? submittableCommentThreads(threads, review?.submissions ?? [])
@@ -131,6 +142,7 @@ export function ReviewHeaderBody({
             onAcknowledgeEnd={() => setPendingThreadIds(undefined)}
             onRetryStart={setRetryingIds}
             onRetryEnd={() => setRetryingIds(undefined)}
+            hasCodingStandards={hasCodingStandards}
           />
         ) : null}
       </div>
