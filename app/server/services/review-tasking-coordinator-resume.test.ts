@@ -120,9 +120,6 @@ describe("coordinator resume once per submission", () => {
         coordinatorResumed: true,
       }),
     ]);
-    expect(prompts).toEqual([
-      `${implementingSessionMessage("e")}\n\n${resume}`,
-      resume,
-    ]);
+    expect(prompts).toEqual([implementingSessionMessage("e"), resume]);
   });
 });

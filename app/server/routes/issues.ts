@@ -75,6 +75,7 @@ import {
   removeStoryWorktree,
   setupStoryWorktree,
 } from "../services/worktree.js";
+import { enqueueWorkRoot } from "../services/enqueue-work-root.js";
 
 const DEFAULT_TITLE = "New conversation";
 
@@ -192,6 +193,13 @@ export function createIssuesRouter(
       }
       const { issues } = readAll();
       res.json({ workRoot: findPlanningWorkRoot(issueId, issues) });
+    }),
+  );
+
+  router.post(
+    "/:id/queue",
+    asyncRoute(async (req, res) => {
+      res.json(await enqueueWorkRoot(req.params.id, sessions));
     }),
   );
 

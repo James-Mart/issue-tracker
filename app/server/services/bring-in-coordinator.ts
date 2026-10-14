@@ -3,14 +3,19 @@ import {
   type ConversationMessageSessions,
 } from "./conversation-message.js";
 import { activeImplementingConversationId } from "./conversations.js";
-import { IssueError } from "./errors.js";
 import {
-  implementingResumePrompt,
-  implementingSessionMessage,
-  implementingSessionTitle,
-} from "./implementing-launch.js";
-import { startImplementingChannelSession } from "./implementing-session.js";
-import { readIssueOrThrow } from "./issues.js";
+  ENQUEUE_ALREADY_QUEUED,
+  ENQUEUE_HOLDS_SLOT,
+  enqueueWorkRoot,
+} from "./enqueue-work-root.js";
+import { IssueError } from "./errors.js";
+import { implementingResumePrompt } from "./implementing-launch.js";
+
+function enqueueReason(err: unknown): string | undefined {
+  if (!(err instanceof IssueError)) return undefined;
+  const reason = err.details?.reason;
+  return typeof reason === "string" ? reason : undefined;
+}
 
 async function deliverToCoordinator(
   conversationId: string,
@@ -27,29 +32,19 @@ async function deliverToCoordinator(
   }
 }
 
-async function startImplementingSession(
+async function messageSlotHolder(
   workRootId: string,
   message: string,
   sessions: ConversationMessageSessions,
 ): Promise<void> {
-  const root = readIssueOrThrow(workRootId);
-  if (root.kind !== "epic" && root.kind !== "story") {
+  const existing = activeImplementingConversationId(workRootId);
+  if (!existing) {
     throw new IssueError(
-      "validation",
-      `issue "${workRootId}" is not an implementing work root`,
+      "conflict",
+      `work root "${workRootId}" holds a slot without an implementing session`,
     );
   }
-  const projectId = root.partOf;
-  // A new session still opens on the implementing skill. The resume prompt follows.
-  await startImplementingChannelSession(
-    {
-      projectId,
-      issueId: workRootId,
-      title: implementingSessionTitle(root.title),
-      message: `${implementingSessionMessage(workRootId)}\n\n${message}`,
-    },
-    sessions,
-  );
+  await deliverToCoordinator(existing, message, sessions);
 }
 
 /** Resume the work root's implementing coordinator. */
@@ -62,9 +57,8 @@ export async function resumeCoordinator(
 
 /**
  * Bring the work root's coordinator in with a message.
- * Archived implementing conversations do not count. An idle coordinator gets
- * a new turn. A coordinator mid-turn is steered or queued the same way a
- * conversation message is.
+ * A root that holds a slot is messaged on its existing session. Any other
+ * root is queued; a queued start carries only the work-loop start message.
  */
 export async function bringInCoordinator(
   workRootId: string,
@@ -81,13 +75,15 @@ export async function bringInCoordinator(
     return;
   }
   try {
-    await startImplementingSession(workRootId, text, sessions);
+    await enqueueWorkRoot(workRootId, sessions);
   } catch (err) {
-    // This handoff or the work-queue launcher can create an active implementing
-    // session after the idle check. Deliver into that holder instead.
-    if (!(err instanceof IssueError) || err.code !== "conflict") throw err;
-    const holder = activeImplementingConversationId(workRootId);
-    if (!holder) throw err;
-    await deliverToCoordinator(holder, text, sessions);
+    const reason = enqueueReason(err);
+    if (reason === ENQUEUE_HOLDS_SLOT) {
+      await messageSlotHolder(workRootId, text, sessions);
+      return;
+    }
+    // Already waiting: the later start sends only the work-loop message.
+    if (reason === ENQUEUE_ALREADY_QUEUED) return;
+    throw err;
   }
 }

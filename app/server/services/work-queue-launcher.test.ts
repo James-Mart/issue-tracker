@@ -1,81 +1,16 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fakeLauncherSessions } from "./queue-launcher.test-helpers.js";
+import {
+  bindWorkQueueDisk,
+  fakeLauncherSessions,
+} from "./queue-launcher.test-helpers.js";
 
-const AT = "2026-07-09T14:00:00.000Z";
 let rootDir: string;
 let issuesDir: string;
-
-function writeIssue(id: string, body: Record<string, unknown>): void {
-  mkdirSync(join(issuesDir, id), { recursive: true });
-  writeFileSync(
-    join(issuesDir, id, "issue.json"),
-    JSON.stringify({ id, ...body }),
-  );
-}
-
-function readRaw(id: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(issuesDir, id, "issue.json"), "utf8"));
-}
-
-function seedProject(): void {
-  writeIssue("p", {
-    kind: "project",
-    title: "P",
-    order: 0,
-    workspace: "/tmp/repo",
-    maxImplementingRuns: 1,
-    createdAt: AT,
-    updatedAt: AT,
-  });
-}
-
-function seedEpic(
-  id: string,
-  order: number,
-  fields: Record<string, unknown> = {},
-): void {
-  writeIssue(id, {
-    kind: "epic",
-    title: id,
-    partOf: "p",
-    order,
-    ...fields,
-    createdAt: AT,
-    updatedAt: AT,
-  });
-}
-
-function seedStory(
-  id: string,
-  partOf: string,
-  order: number,
-  fields: Record<string, unknown> = {},
-): void {
-  writeIssue(id, {
-    kind: "story",
-    title: id,
-    partOf,
-    order,
-    ...fields,
-    createdAt: AT,
-    updatedAt: AT,
-  });
-}
-
-function seedTask(id: string, partOf: string, status: string): void {
-  writeIssue(id, {
-    kind: "task",
-    title: id,
-    partOf,
-    order: 0,
-    status,
-    createdAt: AT,
-    updatedAt: AT,
-  });
-}
+const disk = bindWorkQueueDisk();
+const { readRaw, seedProject, seedEpic, seedStory, seedTask } = disk;
 
 /** An `implementing` session on the root with no run, as a paused loop leaves it. */
 async function openIdleSession(rootId: string): Promise<string> {
@@ -99,6 +34,7 @@ beforeEach(() => {
   rootDir = mkdtempSync(join(tmpdir(), "issue-tracker-work-queue-launcher-"));
   issuesDir = join(rootDir, "issues");
   mkdirSync(issuesDir, { recursive: true });
+  disk.setDir(issuesDir);
   vi.resetModules();
   vi.stubEnv("ISSUES_DIR", issuesDir);
 });

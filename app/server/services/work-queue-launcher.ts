@@ -1,5 +1,8 @@
+import { isWorkRootFinished } from "../../src/features/issues/lib/derived.js";
 import type { Issue, IssuePatch } from "../schemas.js";
 import type { AgentSessions } from "./agent-sessions.js";
+import type { ConversationMessageSessions } from "./conversation-message.js";
+import { derive } from "./derive.js";
 import {
   subscribeFrames,
   type ConversationFrame,
@@ -93,7 +96,7 @@ async function noteAutoStartFailure(
 async function startQueuedRoot(
   root: WorkRoot,
   projectId: string,
-  sessions: AgentSessions,
+  sessions: ConversationMessageSessions,
 ): Promise<void> {
   await startImplementingChannelSession(
     {
@@ -109,7 +112,7 @@ async function startQueuedRoot(
 async function drainProject(
   project: Extract<Issue, { kind: "project" }>,
   snapshot: LauncherSnapshot,
-  sessions: AgentSessions,
+  sessions: ConversationMessageSessions,
 ): Promise<void> {
   const cap = project.maxImplementingRuns;
   while (slotHoldingRootIds(project.id, snapshot).size < cap) {
@@ -135,7 +138,9 @@ async function drainProject(
  * read when nothing is queued and no implementing session is open, and
  * otherwise derives at most once.
  */
-export async function runLauncherPass(sessions: AgentSessions): Promise<void> {
+export async function runLauncherPass(
+  sessions: ConversationMessageSessions,
+): Promise<void> {
   // No HTTP caller. Throwing is caught and written as auto-start failure,
   // which would mutate the copied queue, so guest mode skips the pass.
   if (guestRefusesAgentLaunch()) return;

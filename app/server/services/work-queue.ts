@@ -54,6 +54,8 @@ function nextQueuePosition(
  * in the queue (waiting, holding a slot, or joining in this same enqueue)
  * or its loop is finished (done, merged, or ready to land).
  */
+const NO_ROOTS_JOINING = new Set<string>();
+
 function blockerAllowsEnqueue(
   blockerId: string,
   byId: Map<string, Issue>,
@@ -67,6 +69,61 @@ function blockerAllowsEnqueue(
   if (blocker?.kind !== "epic" && blocker?.kind !== "story") return false;
   if (blocker.workQueuedAt || slotHolders.has(blocker.id)) return true;
   return isWorkRootFinished(blocker, issues, derived.byId);
+}
+
+/**
+ * First `blockedBy` root that is neither in the queue (waiting or holding a
+ * slot) nor finished (done, merged, or ready to land). Manual enqueue refuses
+ * that root; idea-archive enqueue leaves it unstamped.
+ */
+export function firstBlockingEnqueueBlocker(
+  root: WorkRoot,
+  issues: Issue[],
+  derived: ReturnType<typeof derive>,
+  byId: Map<string, Issue>,
+  slotHolders: Set<string>,
+): { id: string; title: string } | undefined {
+  const blockerIds = blockersOf(root);
+  for (const blockerId of blockerIds) {
+    if (
+      blockerAllowsEnqueue(
+        blockerId,
+        byId,
+        issues,
+        derived,
+        slotHolders,
+        NO_ROOTS_JOINING,
+      )
+    ) {
+      continue;
+    }
+    const blocker = byId.get(blockerId);
+    const title =
+      blocker?.kind === "epic" || blocker?.kind === "story"
+        ? blocker.title
+        : blockerId;
+    return { id: blockerId, title };
+  }
+  return undefined;
+}
+
+/** Append a root at the back of its Project's queue. */
+export function withQueueStamp(
+  root: WorkRoot,
+  issues: Issue[],
+  byId: Map<string, Issue>,
+  now: string,
+): WorkRoot {
+  const projectId = projectContaining(root, byId);
+  if (!projectId) {
+    throw new Error(`work root "${root.id}" has no project`);
+  }
+  return {
+    ...root,
+    workQueuedAt: now,
+    workQueuePosition: nextQueuePosition(projectId, issues, byId),
+    updatedAt: now,
+  };
 }
 
 function enqueueOrder(

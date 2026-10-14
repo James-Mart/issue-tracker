@@ -14,7 +14,6 @@ export type CockpitLaunchPending = {
 export type CockpitLaunchFault = {
   issueId: string;
   kind: CockpitLaunchKind;
-  lockHolderTitle?: string;
   status?: number;
   errorMessage?: string;
 };
@@ -48,7 +47,7 @@ export function cockpitLaunchFaultMessage(
   kind: CockpitLaunchKind,
 ): string {
   if (kind === "work") {
-    return `${title} — Work loop didn't start. Start work again.`;
+    return `${title} — Couldn't queue this work. Queue it again.`;
   }
   return `${title} — Planning session didn't start. Begin planning again.`;
 }

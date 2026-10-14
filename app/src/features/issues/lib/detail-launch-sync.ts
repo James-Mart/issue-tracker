@@ -85,24 +85,18 @@ export function launchTranscriptSession<T extends LaunchSessionCandidate>(
   return match;
 }
 
-/** Channel-attached fault after a rejected session-create. */
+/** Channel-attached fault after a rejected launch. */
 export function detailLaunchFaultCopy(fault: CockpitLaunchFault): {
   message: string;
   hint: string;
 } {
-  if (fault.lockHolderTitle != null && fault.status === 409) {
+  if (fault.kind === "work") {
     return {
-      message: `Session create rejected — implementing lock held by ${fault.lockHolderTitle} (409).`,
-      hint: "Start the work loop again.",
+      message: fault.errorMessage?.trim() || "Couldn't queue this work.",
+      hint: "Queue the work again.",
     };
   }
   const why = fault.errorMessage?.trim() || "the session was not created";
-  if (fault.kind === "work") {
-    return {
-      message: `Session create rejected — ${why}.`,
-      hint: "Start the work loop again.",
-    };
-  }
   return {
     message: `Session create rejected — ${why}.`,
     hint: "Start the planning session again.",

@@ -1,33 +1,24 @@
-import { Loader2, Play } from "lucide-react";
-import type {
-  ConversationChannel,
-  IssueKind,
-  IssueRecord,
-} from "@server/schemas";
+import { ListEnd, Loader2 } from "lucide-react";
+import type { IssueKind, IssueRecord } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
-import { useAgentModelsQuery } from "@/features/agents/api/queries";
 import { useSendConversationMessage } from "@/features/agents/api/mutations";
 import { useMemo } from "react";
 import { ApiError } from "@/lib/api/errors";
-import { useCreateChannelSession } from "../api/mutations";
+import { useEnqueueWorkRoot } from "../api/mutations";
 import { useChannelSessionsQuery } from "../api/queries";
 import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import { currentChannelSession } from "../api/channel-sessions";
-import { useConfirmChannelLiveRun } from "../hooks/use-confirm-channel-live-run";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   implementingLaunchCopy,
   implementingResumePrompt,
-  implementingSessionMessage,
-  implementingSessionModel,
-  implementingSessionTitle,
   isImplementingWorkRoot,
   type ImplementingWorkRoot,
 } from "@server/services/implementing-launch";
 import { overviewWorkLoopAction } from "../lib/overview-work-loop-action";
 import { issuesById } from "../lib/build-tree";
-import { leafTasksOf } from "../lib/derived";
+import { isWorkRootFinished, leafTasksOf } from "../lib/derived";
 import { WorkLoopOverviewControl } from "./work-loop-overview-control";
 
 type ImplementingWorkRootRecord = Extract<
@@ -35,191 +26,120 @@ type ImplementingWorkRootRecord = Extract<
   { kind: "epic" | "story" }
 >;
 
-export type ImplementingSessionStarted = {
-  id: string;
-  title: string;
-  model: string;
-};
-
-function implementingLockHolderTitle(err: unknown): string | undefined {
-  if (!(err instanceof ApiError) || err.status !== 409) return undefined;
-  const body = err.body;
-  if (!body || typeof body !== "object") return undefined;
-  const holderIssueTitle = (body as Record<string, unknown>).holderIssueTitle;
-  return typeof holderIssueTitle === "string" ? holderIssueTitle : undefined;
-}
-
-function isImplementingLockConflict(err: unknown): boolean {
-  return implementingLockHolderTitle(err) !== undefined;
-}
-
-function implementingLaunchFault(err: Error): {
-  lockHolderTitle?: string;
-  status?: number;
-  errorMessage: string;
-} {
-  const lockHolderTitle = implementingLockHolderTitle(err);
+function enqueueFault(err: Error): { status?: number; errorMessage: string } {
   return {
-    lockHolderTitle,
-    status: lockHolderTitle
-      ? 409
-      : err instanceof ApiError
-        ? err.status
-        : undefined,
+    status: err instanceof ApiError ? err.status : undefined,
     errorMessage: err.message,
   };
 }
 
-function ImplementingLaunchButton({
+function QueueWorkButton({
   issue,
-  channel,
-  variant,
   optimistic,
   testId,
-  onStarted,
 }: {
   issue: ImplementingWorkRootRecord;
-  channel: ConversationChannel;
-  variant: "primary" | "secondary" | "icon";
   optimistic?: boolean;
-  testId?: string;
-  onStarted: (session: ImplementingSessionStarted) => void;
+  testId: string;
 }) {
-  const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
-  const models = modelsData?.models ?? [];
   const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
-  const createSession = useCreateChannelSession(issue.id, channel, {
-    suppressToast: (err) =>
-      Boolean(optimistic) || isImplementingLockConflict(err),
-    onError: (err) => {
-      if (!optimistic) return;
-      failLaunch(issue.id, "work", implementingLaunchFault(err));
-    },
-  });
-  const {
-    confirmIfLiveRun,
-    awaitingConfirm,
-    confirming,
-    dialog,
-  } = useConfirmChannelLiveRun(issue.id, channel);
   const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
   const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
+  const abandonLaunch = useCockpitLaunchStore((s) => s.abandonLaunch);
   const pending = useCockpitLaunchStore((s) => s.pending);
+  const enqueue = useEnqueueWorkRoot(issue.id, {
+    onError: (err) => {
+      if (!optimistic) return;
+      failLaunch(issue.id, "work", enqueueFault(err));
+    },
+    onSuccess: (root) => {
+      if (!optimistic) return;
+      // A queued root did not start a session, so drop the optimistic starting state.
+      if ("workQueuedAt" in root && root.workQueuedAt) {
+        abandonLaunch(issue.id);
+        return;
+      }
+      ackLaunch(issue.id, "work");
+    },
+  });
   const launching = Boolean(optimistic) && pending?.issueId === issue.id;
-  const copy = implementingLaunchCopy();
-  const coordinatorModel = implementingSessionModel(models);
-  const blocked = awaitingConfirm || confirming;
-  const canStart =
-    Boolean(coordinatorModel) &&
-    !modelsLoading &&
-    !createSession.isPending &&
-    !blocked &&
-    !launching;
+  const busy = enqueue.isPending || launching;
 
-  const start = () => {
-    if (
-      !coordinatorModel ||
-      modelsLoading ||
-      createSession.isPending ||
-      blocked ||
-      launching
-    ) {
-      return;
-    }
-    const title = implementingSessionTitle(issue.title);
-    const model = coordinatorModel;
-    confirmIfLiveRun(() => {
-      if (optimistic) beginLaunch(issue.id, "work");
-      createSession.mutate(
-        {
-          title,
-          model,
-          message: implementingSessionMessage(issue.id),
-        },
-        {
-          onSuccess: ({ id }) => {
-            if (optimistic) {
-              ackLaunch(issue.id, "work", { id, title, model });
-            }
-            onStarted({ id, title, model });
-          },
-        },
-      );
-    });
+  const queue = () => {
+    if (busy) return;
+    if (optimistic) beginLaunch(issue.id, "work");
+    enqueue.mutate();
   };
 
-  const label =
-    variant === "secondary" ? "New run" : copy.actionLabel;
-
-  if (variant === "icon") {
-    if (modelsLoading || !coordinatorModel) return null;
-
-    return (
-      <>
-        <Button
-          type="button"
-          variant="default"
-          size="icon-sm"
-          title={launching ? "Starting work" : "Start work"}
-          aria-label={launching ? "Starting work" : "Start work"}
-          aria-busy={launching || undefined}
-          data-testid={
-            launching ? "flow-row-launch-pending" : "flow-row-start-work"
-          }
-          disabled={launching}
-          onClick={start}
-        >
-          {launching ? (
-            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
-          ) : (
-            <Play className="h-3.5 w-3.5" />
-          )}
-        </Button>
-        {dialog}
-      </>
-    );
-  }
-
   return (
-    <>
-      <Button
-        type="button"
-        variant={variant === "primary" ? "primary" : "secondary"}
-        size="sm"
-        disabled={!canStart}
-        data-testid={
-          testId ??
-          (variant === "secondary"
-            ? "implementing-new-run"
-            : "implementing-start-session")
-        }
-        onClick={start}
-      >
-        {createSession.isPending ? "Starting…" : label}
-      </Button>
-      {dialog}
-    </>
+    <Button
+      type="button"
+      variant="default"
+      size="icon-sm"
+      title={busy ? "Queuing" : "Queue"}
+      aria-label={busy ? "Queuing" : "Queue"}
+      aria-busy={busy || undefined}
+      data-testid={busy ? `${testId}-pending` : testId}
+      disabled={busy}
+      onClick={queue}
+    >
+      {busy ? (
+        <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
+      ) : (
+        <ListEnd className="h-3.5 w-3.5" />
+      )}
+    </Button>
   );
 }
 
-/** Icon-only implementing launch for Flow row steering. */
+function useWorkRootLaunchFacts(issueId: string) {
+  const { data: list } = useIssuesWithArchived(true);
+  const { data: sessions, isLoading: sessionsLoading } = useChannelSessionsQuery(
+    issueId,
+    "implementing",
+  );
+  return useMemo(() => {
+    const issues = list?.issues ?? [];
+    const byId = issuesById(issues);
+    const found = byId.get(issueId);
+    const record =
+      found?.kind === "epic" || found?.kind === "story" ? found : undefined;
+    const derived = list?.derived ?? {};
+    const currentSession = currentChannelSession(sessions ?? []);
+    const finished = record
+      ? isWorkRootFinished(record, issues, derived)
+      : false;
+    const holdsSlot =
+      record !== undefined &&
+      !record.archived &&
+      !finished &&
+      currentSession !== undefined;
+    const queued = Boolean(record?.workQueuedAt);
+    return {
+      list,
+      record,
+      sessionsLoading,
+      currentSession,
+      finished,
+      holdsSlot,
+      queued,
+      liveRun: derived[issueId]?.liveRun ?? false,
+    };
+  }, [issueId, list, sessions]);
+}
+
+/** Icon-only queue control for a Ready cockpit row. */
 export function ImplementingFlowRowLaunch({
   issue,
 }: {
   issue: ImplementingWorkRootRecord;
 }) {
   return (
-    <ImplementingLaunchButton
-      issue={issue}
-      channel="implementing"
-      variant="icon"
-      optimistic
-      onStarted={() => {}}
-    />
+    <QueueWorkButton issue={issue} optimistic testId="flow-row-queue" />
   );
 }
 
-/** Post-rail Overview control: start or resume the work loop from Overview. */
+/** Post-rail Overview control: queue, or resume a slot-holding coordinator. */
 export function ImplementingOverviewLaunch({
   issue,
   parentKind,
@@ -227,21 +147,9 @@ export function ImplementingOverviewLaunch({
   issue: ImplementingWorkRoot;
   parentKind?: IssueKind;
 }) {
-  const { data: list } = useIssuesWithArchived(true);
-  const { data: sessions, isLoading: sessionsLoading } = useChannelSessionsQuery(
-    issue.id,
-    "implementing",
-  );
-  const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
-  const models = modelsData?.models ?? [];
-  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
-  const createSession = useCreateChannelSession(issue.id, "implementing", {
-    suppressToast: (err) => isImplementingLockConflict(err),
-    onError: (err) => {
-      failLaunch(issue.id, "work", implementingLaunchFault(err));
-    },
-  });
+  const facts = useWorkRootLaunchFacts(issue.id);
   const sendMessage = useSendConversationMessage();
+  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
   const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
   const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
   const pending = useCockpitLaunchStore((s) => s.pending);
@@ -251,68 +159,36 @@ export function ImplementingOverviewLaunch({
     if (!isImplementingWorkRoot("implementing", issue, parentKind)) {
       return { action: "hidden" as const };
     }
-    const issues = list?.issues ?? [];
-    const byId = issuesById(issues);
-    const record = byId.get(issue.id);
-    if (!record) return { action: "hidden" as const };
-    const liveRun = list?.derived?.[issue.id]?.liveRun ?? false;
-    const currentSession = currentChannelSession(sessions ?? []);
+    if (!facts.record) return { action: "hidden" as const };
+    const issues = facts.list?.issues ?? [];
     return overviewWorkLoopAction({
-      liveRun,
-      leafTasks: leafTasksOf(record, issues),
-      currentSession,
+      liveRun: facts.liveRun,
+      leafTasks: leafTasksOf(facts.record, issues),
+      currentSession: facts.currentSession,
+      queued: facts.queued || Boolean(issue.workQueuedAt),
+      holdsSlot: facts.holdsSlot,
+      finished: facts.finished,
+      archived: Boolean(facts.record.archived),
     });
-  }, [issue, parentKind, list?.issues, list?.derived, sessions]);
+  }, [facts, issue, parentKind]);
 
-  if (
-    sessionsLoading ||
-    workLoopAction.action === "hidden"
-  ) {
+  if (facts.sessionsLoading || workLoopAction.action === "hidden") {
     return null;
   }
 
-  const coordinatorModel = implementingSessionModel(models);
-  const startPending =
-    workLoopAction.action === "start" &&
-    (createSession.isPending || launching);
-  const resumePending =
-    workLoopAction.action === "resume" &&
-    (sendMessage.isPending || launching);
-
-  const startWorkLoop = () => {
-    if (
-      !coordinatorModel ||
-      modelsLoading ||
-      createSession.isPending ||
-      launching
-    ) {
-      return;
-    }
-    const title = implementingSessionTitle(issue.title);
-    const model = coordinatorModel;
-    beginLaunch(issue.id, "work");
-    createSession.mutate(
-      {
-        title,
-        model,
-        message: implementingSessionMessage(issue.id),
-      },
-      {
-        onSuccess: ({ id }) => {
-          ackLaunch(issue.id, "work", { id, title, model });
-        },
-      },
+  if (workLoopAction.action === "queue") {
+    return (
+      <QueueWorkButton
+        issue={issue}
+        optimistic
+        testId="implementing-overview-queue"
+      />
     );
-  };
+  }
 
+  const resumePending = sendMessage.isPending || launching;
   const resumeWorkLoop = () => {
-    if (
-      workLoopAction.action !== "resume" ||
-      sendMessage.isPending ||
-      launching
-    ) {
-      return;
-    }
+    if (sendMessage.isPending || launching) return;
     const { resumeSession } = workLoopAction;
     beginLaunch(issue.id, "work", { resumeSession });
     sendMessage.mutate(
@@ -329,27 +205,14 @@ export function ImplementingOverviewLaunch({
           });
         },
         onError: (err) => {
-          failLaunch(issue.id, "work", implementingLaunchFault(err));
+          failLaunch(issue.id, "work", enqueueFault(err));
         },
       },
     );
   };
 
-  if (workLoopAction.action === "start") {
-    return (
-      <WorkLoopOverviewControl
-        mode="start"
-        actionTestId="implementing-overview-start-session"
-        disabled={!coordinatorModel || modelsLoading || startPending}
-        pending={startPending}
-        onAction={startWorkLoop}
-      />
-    );
-  }
-
   return (
     <WorkLoopOverviewControl
-      mode="resume"
       session={workLoopAction.resumeSession}
       actionTestId="implementing-overview-resume-session"
       disabled={resumePending}
@@ -359,54 +222,71 @@ export function ImplementingOverviewLaunch({
   );
 }
 
-/** Empty-state launch for an Epic or project-level Story. */
+function queueControlHidden(
+  facts: {
+    sessionsLoading: boolean;
+    finished: boolean;
+    queued: boolean;
+    holdsSlot: boolean;
+  },
+  issue: { workQueuedAt?: string; archived?: boolean },
+): boolean {
+  return (
+    facts.sessionsLoading ||
+    facts.finished ||
+    facts.queued ||
+    Boolean(issue.workQueuedAt) ||
+    facts.holdsSlot ||
+    Boolean(issue.archived)
+  );
+}
+
+/** Empty-state queue control for an Epic or project-level Story. */
 export function ImplementingChannelEmptyState({
   issue,
-  channel,
-  onStarted,
 }: {
   issue: ImplementingWorkRoot;
-  channel: ConversationChannel;
-  onStarted: (session: ImplementingSessionStarted) => void;
 }) {
+  const facts = useWorkRootLaunchFacts(issue.id);
   const copy = implementingLaunchCopy();
+  const queued = facts.queued || Boolean(issue.workQueuedAt);
+  const canQueue = !queueControlHidden(facts, issue);
 
   return (
     <ShellState
       className="border-0 bg-transparent px-4 py-8 shadow-none"
       eyebrow="Implementing"
-      title={copy.title}
-      detail={copy.detail}
+      title={queued ? "Waiting in the queue." : copy.title}
+      detail={
+        queued
+          ? "It starts when it is next and a slot is free."
+          : copy.detail
+      }
       action={
-        <ImplementingLaunchButton
-          issue={issue}
-          channel={channel}
-          variant="primary"
-          optimistic
-          onStarted={onStarted}
-        />
+        canQueue ? (
+          <QueueWorkButton
+            issue={issue}
+            optimistic
+            testId="implementing-queue"
+          />
+        ) : undefined
       }
     />
   );
 }
 
-/** Secondary header action once an implementing session exists. */
+/**
+ * Header queue control once sessions exist but the root is not in the queue
+ * and does not hold a slot. A slot-holder is messaged on its coordinator.
+ */
 export function ImplementingNewRunControl({
   issue,
-  channel,
-  onStarted,
 }: {
   issue: ImplementingWorkRoot;
-  channel: ConversationChannel;
-  onStarted: (session: ImplementingSessionStarted) => void;
 }) {
+  const facts = useWorkRootLaunchFacts(issue.id);
+  if (queueControlHidden(facts, issue)) return null;
   return (
-    <ImplementingLaunchButton
-      issue={issue}
-      channel={channel}
-      variant="secondary"
-      optimistic
-      onStarted={onStarted}
-    />
+    <QueueWorkButton issue={issue} optimistic testId="implementing-queue" />
   );
 }

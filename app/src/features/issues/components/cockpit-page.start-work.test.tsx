@@ -15,6 +15,7 @@ const mockState = vi.hoisted(() => ({
   issues: [] as IssueRecord[],
   derived: {} as Record<string, DerivedState>,
   hookOnError: undefined as ((err: Error) => void) | undefined,
+  hookOnSuccess: undefined as ((root: { id: string; workQueuedAt?: string }) => void) | undefined,
 }));
 
 vi.mock("../api/queries", () => ({
@@ -39,15 +40,22 @@ vi.mock("@/features/agents/api/queries", () => ({
 }));
 
 vi.mock("../api/mutations", () => ({
-  useCreateChannelSession: (
+  useEnqueueWorkRoot: (
     issueId: string,
-    channel: string,
-    options?: { onError?: (err: Error) => void },
+    options?: {
+      onError?: (err: Error) => void;
+      onSuccess?: (root: { id: string; workQueuedAt?: string }) => void;
+    },
   ) => ({
     mutate: (...args: unknown[]) => {
       mockState.hookOnError = options?.onError;
-      mutate(issueId, channel, ...args);
+      mockState.hookOnSuccess = options?.onSuccess;
+      mutate(issueId, ...args);
     },
+    isPending: false,
+  }),
+  useCreateChannelSession: () => ({
+    mutate: vi.fn(),
     isPending: false,
   }),
   useUpdateIssue: () => ({
@@ -133,13 +141,13 @@ function section(container: ParentNode, key: string): HTMLElement | null {
 }
 
 function mutateOptions(): {
-  onSuccess?: (result: { id: string }) => void;
+  onSuccess?: (result: { id: string; workQueuedAt?: string }) => void;
   onError?: (err: Error) => void;
 } {
-  const passed = mutate.mock.calls[0]?.[3] as
-    | { onSuccess?: (result: { id: string }) => void }
-    | undefined;
-  return { onSuccess: passed?.onSuccess, onError: mockState.hookOnError };
+  return {
+    onSuccess: mockState.hookOnSuccess,
+    onError: mockState.hookOnError,
+  };
 }
 
 afterEach(() => {
@@ -148,6 +156,7 @@ afterEach(() => {
   mockState.issues = [];
   mockState.derived = {};
   mockState.hookOnError = undefined;
+  mockState.hookOnSuccess = undefined;
   resetCockpitLaunchStore();
 });
 
@@ -167,7 +176,7 @@ describe("CockpitPage start work", () => {
     act(() => {
       (
         container.querySelector(
-          '[data-testid="flow-row-start-work"]',
+          '[data-testid="flow-row-queue"]',
         ) as HTMLButtonElement
       ).click();
     });
@@ -180,14 +189,14 @@ describe("CockpitPage start work", () => {
     expect(
       container.querySelector('[data-testid="flow-row-launch-fault"]')
         ?.textContent,
-    ).toBe("Auth hardening — Work loop didn't start. Start work again.");
+    ).toBe("Auth hardening — Couldn't queue this work. Queue it again.");
     expect(container.querySelector('[data-live="true"]')).toBeNull();
     expect(container.querySelector('[data-live="false"]')?.textContent).toContain(
       "all quiet",
     );
     expect(
       section(container, "ready")?.querySelectorAll(
-        '[data-testid="flow-row-start-work"]',
+        '[data-testid="flow-row-queue"]',
       ).length,
     ).toBe(2);
   });
@@ -205,7 +214,7 @@ describe("CockpitPage start work", () => {
     act(() => {
       (
         container.querySelector(
-          '[data-testid="flow-row-start-work"]',
+          '[data-testid="flow-row-queue"]',
         ) as HTMLButtonElement
       ).click();
     });
