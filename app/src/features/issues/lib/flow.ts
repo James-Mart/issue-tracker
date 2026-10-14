@@ -48,13 +48,33 @@ export function isWorkQueuedRoot(issue: IssueRecord): boolean {
   );
 }
 
+type QueueWorkFlowItem = FlowItem & {
+  issue: Extract<IssueRecord, { kind: "epic" | "story" }>;
+};
+
+function isQueueWorkRoot(item: FlowItem): item is QueueWorkFlowItem {
+  return item.issue.kind === "epic" || item.issue.kind === "story";
+}
+
+/** Running queue row: a slot-holding root with a live implementing turn. */
+export function isRunningQueueWorkFlowItem(
+  item: FlowItem,
+): item is QueueWorkFlowItem {
+  return item.queueStage === "running" && isQueueWorkRoot(item);
+}
+
+/** Paused queue row: a slot-holding root with no live implementing turn. */
+export function isPausedQueueWorkFlowItem(
+  item: FlowItem,
+): item is QueueWorkFlowItem {
+  return item.queueStage === "paused" && isQueueWorkRoot(item);
+}
+
 /** Waiting queue row: epic or project-level Story not holding a slot. */
 export function isWaitingQueueWorkFlowItem(
   item: FlowItem,
-): item is FlowItem & {
-  issue: Extract<IssueRecord, { kind: "epic" | "story" }>;
-} {
-  return item.queueStage === "waiting";
+): item is QueueWorkFlowItem {
+  return item.queueStage === "waiting" && isQueueWorkRoot(item);
 }
 
 /** Ready-bucket Epic or project-level Story eligible for cockpit start-work. */

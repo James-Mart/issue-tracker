@@ -4,12 +4,18 @@ import { Button } from "@/components/ui/button";
 import type { FlowItem } from "../lib/flow";
 import {
   isCapturedIdeaFlowItem,
+  isPausedQueueWorkFlowItem,
   isReadyWorkFlowItem,
+  isRunningQueueWorkFlowItem,
   isWaitingQueueWorkFlowItem,
 } from "../lib/flow";
 import { ImplementingFlowRowLaunch } from "./implementing-launch-control";
 import { PlanningFlowRowLaunch } from "./planning-launch-control";
 import { QueueDequeueControl } from "./queue-dequeue-control";
+import {
+  QueuePauseControl,
+  QueueResumeControl,
+} from "./queue-pause-resume-control";
 import { QueueDragHandle } from "./queue-reorder";
 
 /** Inline cockpit row actions scoped to what each flow bucket can perform. */
@@ -29,12 +35,16 @@ export function FlowRowActions({
     ? item.issue
     : undefined;
   const waitingWork = isWaitingQueueWorkFlowItem(item) ? item.issue : undefined;
+  const runningWork = isRunningQueueWorkFlowItem(item) ? item.issue : undefined;
+  const pausedWork = isPausedQueueWorkFlowItem(item) ? item.issue : undefined;
 
   return (
     <>
       {capturedIdea ? (
         <PlanningFlowRowLaunch issue={capturedIdea} gates={false} />
       ) : null}
+      {runningWork ? <QueuePauseControl issueId={runningWork.id} /> : null}
+      {pausedWork ? <QueueResumeControl issue={pausedWork} /> : null}
       {waitingWork ? (
         <>
           <QueueDragHandle

@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { ChannelSessionListItem } from "@server/schemas";
+import type { ChannelSessionListItem, IssuesResponse } from "@server/schemas";
 import {
   cancelConversationRun,
   updateConversation,
@@ -40,24 +40,85 @@ export function markChannelSessionActiveRun(
   );
 }
 
-/**
- * Keep every cached channel-sessions list in sync when a session's run state
- * changes (Stop, interject, SSE run frames). Issue-anchored sessions are
- * omitted from the Agents roster, so the roster invalidation alone is not enough.
- */
-export function patchChannelSessionActiveRunInCache(
+/** `issuesKeys.channelSessions` is `["issues", "channelSessions", issueId, channel]`. */
+function channelSessionsKeyParts(
+  key: readonly unknown[],
+): { issueId: string; channel: string } | undefined {
+  if (key[1] !== "channelSessions") return undefined;
+  const issueId = key[2];
+  const channel = key[3];
+  if (typeof issueId !== "string" || typeof channel !== "string") return undefined;
+  return { issueId, channel };
+}
+
+function eachCachedChannelSessionList(
   qc: QueryClient,
-  sessionId: string,
-  activeRun: boolean,
+  visit: (
+    key: readonly unknown[],
+    sessions: ChannelSessionListItem[],
+    parts: { issueId: string; channel: string },
+  ) => void,
 ): void {
   const entries = qc.getQueriesData<ChannelSessionListItem[]>({
     queryKey: [...issuesKeys.all, "channelSessions"],
   });
   for (const [key, sessions] of entries) {
-    if (!sessions?.some((session) => session.id === sessionId)) continue;
+    if (!sessions) continue;
+    const parts = channelSessionsKeyParts(key);
+    if (!parts) continue;
+    visit(key, sessions, parts);
+  }
+}
+
+/**
+ * Keep every cached channel-sessions list in sync when a session's run state
+ * changes (cancel, interject, SSE run frames). Issue-anchored sessions are
+ * omitted from the Agents roster, so the roster invalidation alone is not enough.
+ * Returns the issue id when the session is a non-archived implementing one.
+ */
+export function patchChannelSessionActiveRunInCache(
+  qc: QueryClient,
+  sessionId: string,
+  activeRun: boolean,
+): string | undefined {
+  let implementingIssueId: string | undefined;
+  eachCachedChannelSessionList(qc, (key, sessions, parts) => {
+    if (!sessions.some((session) => session.id === sessionId)) return;
     qc.setQueryData(
       key,
       markChannelSessionActiveRun(sessions, sessionId, activeRun),
     );
-  }
+    if (
+      parts.channel === "implementing" &&
+      sessions.some((session) => session.id === sessionId && !session.archived)
+    ) {
+      implementingIssueId = parts.issueId;
+    }
+  });
+  return implementingIssueId;
+}
+
+/**
+ * Flip `implementingLive` on cached issue lists so a queue row leaves or
+ * enters the running band before the next list refetch.
+ */
+export function patchIssueImplementingLive(
+  qc: QueryClient,
+  issueId: string,
+  live: boolean,
+): void {
+  qc.setQueriesData<IssuesResponse>({ queryKey: issuesKeys.list() }, (current) => {
+    const state = current?.derived[issueId];
+    if (!current || !state) return current;
+    const next = { ...state, implementingOpen: true };
+    if (live) next.implementingLive = true;
+    else delete next.implementingLive;
+    return {
+      ...current,
+      derived: {
+        ...current.derived,
+        [issueId]: next,
+      },
+    };
+  });
 }

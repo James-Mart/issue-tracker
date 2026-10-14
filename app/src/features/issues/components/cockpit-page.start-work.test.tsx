@@ -30,6 +30,21 @@ vi.mock("../api/queries", () => ({
     data: undefined,
     error: null,
   }),
+  useChannelSessionsQuery: () => ({
+    data: [],
+    isLoading: false,
+  }),
+}));
+
+vi.mock("@/features/agents/api/mutations", () => ({
+  useCancelConversationRun: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useSendConversationMessage: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/features/agents/api/queries", () => ({
