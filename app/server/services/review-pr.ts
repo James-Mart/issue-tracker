@@ -102,10 +102,7 @@ export async function fetchReviewPullHead(
   }
 }
 
-/**
- * Fetch `origin/<baseRef>`. A failed fetch leaves that remote-tracking ref
- * as it was; git does not delete it when the fetch cannot update it.
- */
+/** Fetch `origin/<baseRef>`. */
 async function fetchReviewPullBase(
   workspace: string,
   baseRef: string,

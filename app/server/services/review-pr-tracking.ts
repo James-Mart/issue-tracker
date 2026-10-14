@@ -122,13 +122,19 @@ async function followStoredReview(
   observation: PullRequestObservation,
   workspace: string,
 ): Promise<void> {
-  const { headMoved, baseMoved } = reviewPrObservationDelta(review.pr, observation);
-  if (headMoved || baseMoved) {
+  const { headMoved } = reviewPrObservationDelta(review.pr, observation);
+  try {
     await fetchReviewPullRefs(workspace, {
       number: review.pr.number,
       baseRef: observation.baseRef,
       ...(headMoved ? { headSha: observation.headSha } : {}),
     });
+  } catch (err) {
+    // Git keeps the prior remote-tracking ref on fetch failure; still record
+    // GitHub head/state/base so sync and refresh do not stall on network/git.
+    console.error(
+      `review ${review.id} pull ref fetch failed: ${failureMessage(err)}; leaving prior refs`,
+    );
   }
   const now = new Date().toISOString();
   const after = updateStoredReview(projectId, review.id, (current) =>

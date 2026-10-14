@@ -128,10 +128,36 @@ describe("trackReviewPullRequests", () => {
   afterEach(() => {
     if (repo) forceRemoveWorktree(repo, "p", "rev");
     setGhSpawnerForTests(null);
+    setGitWriteSpawnerForTests(null);
     vi.unstubAllEnvs();
     refreshStorePathsFromEnv();
     rmSync(dir, { recursive: true, force: true });
     if (repo) rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("fetches origin/<baseRef> on sync when head and base name are unchanged", async () => {
+    const bare = mkdtempSync(join(tmpdir(), "review-pr-tracking-bare-"));
+    git(bare, ["init", "--bare", "-b", "main"]);
+    git(repo, ["remote", "add", "origin", bare]);
+    git(repo, ["push", "-u", "origin", "main"]);
+    installFetchRecorder();
+    writeIssue("rev", {
+      kind: "review",
+      title: "External change",
+      partOf: "p",
+      archived: false,
+      marks: { all: {}, commits: {} },
+      submissions: [],
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+      pr: prSource(head),
+    });
+    stubGh(graphql("OPEN", head));
+    await trackReviewPullRequests("p", { matches: new Map(), facts: new Map() });
+    expect(readStored("rev")).toMatchObject({ pr: prSource(head) });
+    expect(fetches).toEqual([["fetch", "origin", "main"]]);
+    rmSync(bare, { recursive: true, force: true });
   });
 
   it("stores a base retarget and fetches origin/<new base> on sync", async () => {
