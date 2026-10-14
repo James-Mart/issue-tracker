@@ -11,6 +11,7 @@ import { create, readAll, readComments } from "./issues.js";
 import { requireProject } from "./require-project.js";
 import {
   assertNoTasking,
+  assertThreadsStillSubmittable,
   newSubmissionFields,
   NO_READY_THREADS_ERROR,
   submitReviewAsTasks,
@@ -154,11 +155,15 @@ export async function submitReviewAsIdea(
     taskIds: [],
     ideaId: idea.id,
   };
-  updateStoredReview(project, reviewId, (current) => ({
-    ...current,
-    updatedAt: submission.at,
-    submissions: [...current.submissions, submission],
-  }));
+  updateStoredReview(project, reviewId, (current) => {
+    assertNoTasking(current.submissions);
+    assertThreadsStillSubmittable(reviewId, current.submissions, threadIds);
+    return {
+      ...current,
+      updatedAt: submission.at,
+      submissions: [...current.submissions, submission],
+    };
+  });
 
   for (const threadId of threadIds) {
     await appendThreadEvent(reviewId, threadId, {

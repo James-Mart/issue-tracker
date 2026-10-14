@@ -77,6 +77,21 @@ function submittableThreadIds(
   return submittableRootIds(readComments(reviewId).threads, submissions);
 }
 
+/** Re-read under the store lock. Another submission can land after the first read. */
+export function assertThreadsStillSubmittable(
+  reviewId: string,
+  submissions: readonly ReviewSubmission[],
+  threadIds: readonly string[],
+): void {
+  const readyNow = new Set(submittableThreadIds(reviewId, submissions));
+  if (threadIds.some((id) => !readyNow.has(id))) {
+    throw new IssueError(
+      "conflict",
+      "ready threads changed before the submission was recorded",
+    );
+  }
+}
+
 function taskingPrompt(review: ReviewRecordView, threadIds: string[]): string {
   return [
     loadRoleBody(REVIEW_TASKER_ROLE),
@@ -278,13 +293,7 @@ export async function submitReviewAsTasks(
   updateStoredReview(project, reviewId, (current) => {
     assertStoryOpenForTasking(storyId);
     assertNoTasking(current.submissions);
-    const readyNow = new Set(submittableThreadIds(reviewId, current.submissions));
-    if (threadIds.some((id) => !readyNow.has(id))) {
-      throw new IssueError(
-        "conflict",
-        "ready threads changed before the submission was recorded",
-      );
-    }
+    assertThreadsStillSubmittable(reviewId, current.submissions, threadIds);
     return {
       ...current,
       updatedAt: submission.at,
