@@ -17,6 +17,10 @@ import { list, readAll, update } from "./issues.js";
 import { drainPlanQueue } from "./plan-queue-launcher.js";
 import { projectContaining } from "./subtree.js";
 import {
+  compareWorkQueuedAtThenId,
+  queueDeparturePatch,
+} from "./work-queue.js";
+import {
   finishedRootSessionIds,
   hasOpenImplementingSession,
   slotHoldingRootIds,
@@ -45,7 +49,14 @@ async function releaseFinishedSlots(snapshot: SlotSnapshot): Promise<void> {
   }
 }
 
-function oldestEligibleRoot(
+function queuePosition(root: WorkRoot): number {
+  if (root.workQueuePosition === undefined) {
+    throw new Error(`queued work root "${root.id}" has no workQueuePosition`);
+  }
+  return root.workQueuePosition;
+}
+
+function firstWaitingRoot(
   projectId: string,
   snapshot: LauncherSnapshot,
 ): WorkRoot | undefined {
@@ -59,7 +70,10 @@ function oldestEligibleRoot(
     if (!state || state.blocked || state.planNotFinal) continue;
     eligible.push(issue);
   }
-  eligible.sort((a, b) => a.workQueuedAt!.localeCompare(b.workQueuedAt!));
+  eligible.sort(
+    (a, b) =>
+      queuePosition(a) - queuePosition(b) || compareWorkQueuedAtThenId(a, b),
+  );
   return eligible[0];
 }
 
@@ -68,7 +82,7 @@ async function noteAutoStartFailure(
   message: string,
   clearOnly: boolean,
 ): Promise<void> {
-  const patch: IssuePatch = { workQueuedAt: null };
+  const patch: IssuePatch = queueDeparturePatch();
   if (!clearOnly) {
     patch.needsAttention = true;
     patch.attentionReason = `Auto-start failed: ${message}`;
@@ -99,7 +113,7 @@ async function drainProject(
 ): Promise<void> {
   const cap = project.maxImplementingRuns;
   while (slotHoldingRootIds(project.id, snapshot).size < cap) {
-    const root = oldestEligibleRoot(project.id, snapshot);
+    const root = firstWaitingRoot(project.id, snapshot);
     if (!root) return;
     snapshot.attempted.add(root.id);
     try {

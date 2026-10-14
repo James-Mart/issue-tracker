@@ -32,13 +32,17 @@ function seedProject(): void {
   });
 }
 
-function seedEpic(id: string, order: number, workQueuedAt?: string): void {
+function seedEpic(
+  id: string,
+  order: number,
+  fields: Record<string, unknown> = {},
+): void {
   writeIssue(id, {
     kind: "epic",
     title: id,
     partOf: "p",
     order,
-    ...(workQueuedAt ? { workQueuedAt } : {}),
+    ...fields,
     createdAt: AT,
     updatedAt: AT,
   });
@@ -116,8 +120,8 @@ async function loadConversations() {
 describe("implementing work-queue launcher", () => {
   it("starts the oldest queued root and holds the next when the cap is 1", async () => {
     seedProject();
-    seedEpic("older", 1, "2026-07-01T00:00:00.000Z");
-    seedEpic("newer", 2, "2026-07-02T00:00:00.000Z");
+    seedEpic("older", 1, { workQueuedAt: "2026-07-01T00:00:00.000Z" });
+    seedEpic("newer", 2, { workQueuedAt: "2026-07-02T00:00:00.000Z" });
     const { sessions, started } = fakeLauncherSessions();
     const { runLauncherPass } = await loadLauncher();
     const { listConversations } = await loadConversations();
@@ -131,7 +135,9 @@ describe("implementing work-queue launcher", () => {
     expect(metas[0]?.channel).toBe("implementing");
     expect(metas[0]?.title).toBe("Implement older");
     expect(readRaw("older").workQueuedAt).toBeUndefined();
+    expect(readRaw("older").workQueuePosition).toBeUndefined();
     expect(readRaw("newer").workQueuedAt).toBe("2026-07-02T00:00:00.000Z");
+    expect(readRaw("newer").workQueuePosition).toBe(2);
 
     await runLauncherPass(sessions);
     expect(started).toHaveLength(1);

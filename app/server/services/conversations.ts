@@ -60,7 +60,8 @@ import {
   GUEST_REFUSED_CHANNEL_SESSION,
   GUEST_REFUSED_CONVERSATION_PROMPT,
 } from "./guest-agent-launch.js";
-import { list, readIssueOrThrow } from "./issues.js";
+import { list, readIssueOrThrow, update } from "./issues.js";
+import { queueDeparturePatch } from "./work-queue.js";
 import { uniqueSlug } from "./slug.js";
 import { refuseIfNoFreeSlot } from "./work-slots.js";
 
@@ -360,12 +361,11 @@ function refuseIfImplementingWorkRootLocked(
   }
 }
 
-async function clearWorkQueuedAt(issueId: string): Promise<void> {
+async function clearWorkQueueFields(issueId: string): Promise<void> {
   const issue = readIssueOrThrow(issueId);
   if (issue.kind !== "epic" && issue.kind !== "story") return;
-  if (!issue.workQueuedAt) return;
-  const { update } = await import("./issues.js");
-  await update(issueId, { workQueuedAt: null });
+  if (!issue.workQueuedAt && issue.workQueuePosition === undefined) return;
+  await update(issueId, queueDeparturePatch());
 }
 
 /**
@@ -374,7 +374,7 @@ async function clearWorkQueuedAt(issueId: string): Promise<void> {
  * prompt event — one `serialize()` turn so concurrent POSTs cannot leave two
  * active sessions, and refused requests write nothing. An implementing session
  * needs a free slot in its Project unless the root already holds one, and
- * clears the work root's `workQueuedAt`.
+ * clears the work root's `workQueuedAt` and `workQueuePosition`.
  */
 export async function createIssueChannelSession(
   input: CreateIssueChannelSessionInput,
@@ -417,7 +417,7 @@ export async function createIssueChannelSession(
     return { meta, ...(initialPrompt ? { initialPrompt } : {}) };
   });
   if (input.channel === "implementing") {
-    await clearWorkQueuedAt(input.issueId.trim());
+    await clearWorkQueueFields(input.issueId.trim());
   }
   return created;
 }
