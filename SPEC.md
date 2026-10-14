@@ -671,7 +671,7 @@ Project — the common-to-every-kind fields plus:
 | `setupCommand` | string? | optional shell command line run inside a new worktree after creation |
 | `trunk` | string | default git ref for derived `mergeBase` when no `mergeBaseOverride` applies; defaults `main` (see [Project trunk](#project-trunk)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"` | Project default for derived policy; defaults `manual` (see [Project merge policy](#project-merge-policy)) |
-| `maxImplementingRuns` | int | how many implementing runs this Project may have in flight at once for automatic starts; integer ≥ 1; defaults `1` (see [Work queue](#work-queue)) |
+| `maxImplementingRuns` | int | how many work roots in this Project may hold an implementing slot at once; caps every implementing start, human or automatic; integer ≥ 1; defaults `1` (see [Work queue](#work-queue)) |
 | `autonomous` | boolean? | absent until set; when true, creating an Idea with a `stakeholder` queues auto-plan at creation (see [Auto-plan queue](#auto-plan-queue)); `autonomous` governs only auto-plan at creation — auto-start of implementation applies in every Project |
 | `labels` | `{ id, color, description? }[]`? | closed catalog of attachable labels; chip text is the kebab `id` (see [Project labels](#project-labels)) |
 | `supportingDocs` | `{ vision?, codingStandards?, designSystem?, gateRubric?, verification? }`? | optional pointers to vision / coding standards / design system / gate rubric / verification docs (see [Project supporting docs](#project-supporting-docs)) |
@@ -923,13 +923,17 @@ it. Idle (no active run) or archived sessions do not hold the lock.
 
 `workQueuedAt` (ISO string, optional) on an Epic or a project-level Story records that the work root is waiting to start. It is a system writer: `apply` preserves it, and the only manual write is `issue epic|story set <id> workQueuedAt --clear`, which dequeues the root. `issue epic|story get <id> workQueuedAt` reads it.
 
-`maxImplementingRuns` (integer ≥ 1, default `1`) is the per-Project cap on automatic implementing starts. Set and read it with `issue project get|set <id> maxImplementingRuns <n>`. The Project settings overview shows it as a number field. The cap never refuses a session a human starts; that run still counts toward the cap.
+`maxImplementingRuns` (integer ≥ 1, default `1`) is the per-Project cap on held slots, and it covers every implementing start, human or automatic. Set and read it with `issue project get|set <id> maxImplementingRuns <n>`. The Project settings overview shows it as a number field.
+
+**Slots.** A work root holds one of its Project's slots while it has a non-archived `implementing` session, is not archived, and is not finished. A Story is finished when merged or Ready to land; an Epic when done or when every unmerged child Story is Ready to land. A paused root keeps its slot. `createIssueChannelSession` refuses a new `implementing` session with `409` code `no-free-slot` while the Project's slot-holding roots number `maxImplementingRuns`, unless the work root already holds a slot. Lowering `maxImplementingRuns` below the held count stops nothing; no new start succeeds until the count is under the cap.
+
+**Release.** Each launcher pass first archives every non-archived `implementing` session on a finished work root, so the root holds no slot. Work appended later puts the root back in Ready, and its next start opens a fresh coordinator session.
 
 **Enqueue.** In the same batch as the archive flip and any code-gate merge-policy lowering: when an Idea with a `stakeholder` and without `executionGate: true` flips `archived` from false to true, stamp `workQueuedAt` with the current time on the work root of each derived `planRoots` id. The work root is the Epic that contains the plan root, or the project-level Story itself. Roots that already carry `workQueuedAt` are left unchanged.
 
 Creating an `implementing` session on a work root (`createIssueChannelSession`) clears that root's `workQueuedAt`.
 
-**Launcher.** The server process drains the queue on boot and on each issues watcher frame. For each Project it counts non-archived `implementing` sessions anchored in that Project that have an active run. While that count is below `maxImplementingRuns`, it starts the queued work root with the oldest `workQueuedAt` whose derived `blocked` and `planNotFinal` are both false. The start goes through `createIssueChannelSession` with channel `implementing` and the same title, model, and first prompt the implementing launch control sends. A `409` (that work root already has an active implementing run) only clears `workQueuedAt`. Any other failure clears `workQueuedAt` and sets `needsAttention` on the root with reason `Auto-start failed: <message>`.
+**Launcher.** The server process drains the queue on boot and on each issues watcher frame. For each Project, while its slot-holding roots number fewer than `maxImplementingRuns`, it starts the queued work root with the oldest `workQueuedAt` whose derived `blocked` and `planNotFinal` are both false. The start goes through `createIssueChannelSession` with channel `implementing` and the same title, model, and first prompt the implementing launch control sends. A `no-free-slot` refusal (another start took the last slot) leaves the root queued. Any other `409` (that work root already has an active implementing run) only clears `workQueuedAt`. Any other failure clears `workQueuedAt` and sets `needsAttention` on the root with reason `Auto-start failed: <message>`.
 
 ### Project trunk
 

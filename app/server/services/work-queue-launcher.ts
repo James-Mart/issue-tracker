@@ -1,10 +1,10 @@
-import type { Issue, IssuePatch, IssuesResponse } from "../schemas.js";
+import type { Issue, IssuePatch } from "../schemas.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import {
   subscribeFrames,
   type ConversationFrame,
 } from "./conversation-stream.js";
-import { listConversations } from "./conversations.js";
+import { updateMeta } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { guestRefusesAgentLaunch } from "./guest-agent-launch.js";
 import {
@@ -16,27 +16,15 @@ import { ISSUES_TOPIC, startIssueEventsWatcher } from "./issue-events.js";
 import { list, readAll, update } from "./issues.js";
 import { drainPlanQueue } from "./plan-queue-launcher.js";
 import { projectContaining } from "./subtree.js";
+import {
+  finishedRootSessionIds,
+  hasOpenImplementingSession,
+  slotHoldingRootIds,
+  type SlotSnapshot,
+  type WorkRoot,
+} from "./work-slots.js";
 
-type WorkRoot = Extract<Issue, { kind: "epic" | "story" }>;
-
-function countActiveImplementingRuns(
-  projectId: string,
-  sessions: AgentSessions,
-): number {
-  let count = 0;
-  for (const meta of listConversations()) {
-    if (meta.archived || meta.channel !== "implementing") continue;
-    if (meta.projectId !== projectId) continue;
-    if (sessions.getActiveRun(meta.id) === undefined) continue;
-    count += 1;
-  }
-  return count;
-}
-
-type LauncherSnapshot = {
-  issues: Issue[];
-  derived: IssuesResponse["derived"];
-  byId: Map<string, Issue>;
+type LauncherSnapshot = SlotSnapshot & {
   attempted: Set<string>;
 };
 
@@ -49,6 +37,12 @@ function hasQueuedWork(issues: Issue[]): boolean {
       ((issue.kind === "epic" || issue.kind === "story") &&
         Boolean(issue.workQueuedAt)),
   );
+}
+
+async function releaseFinishedSlots(snapshot: SlotSnapshot): Promise<void> {
+  for (const conversationId of finishedRootSessionIds(snapshot)) {
+    await updateMeta(conversationId, { archived: true });
+  }
 }
 
 function oldestEligibleRoot(
@@ -104,13 +98,15 @@ async function drainProject(
   sessions: AgentSessions,
 ): Promise<void> {
   const cap = project.maxImplementingRuns;
-  while (countActiveImplementingRuns(project.id, sessions) < cap) {
+  while (slotHoldingRootIds(project.id, snapshot).size < cap) {
     const root = oldestEligibleRoot(project.id, snapshot);
     if (!root) return;
     snapshot.attempted.add(root.id);
     try {
       await startQueuedRoot(root, project.id, sessions);
     } catch (err) {
+      // Another start took the last slot first; the root stays queued.
+      if (err instanceof IssueError && err.code === "no-free-slot") return;
       const message = err instanceof Error ? err.message : String(err);
       const conflict = err instanceof IssueError && err.status === 409;
       await noteAutoStartFailure(root.id, message, conflict);
@@ -119,15 +115,17 @@ async function drainProject(
 }
 
 /**
- * One launcher pass: drain queued work roots up to each Project's cap.
+ * One launcher pass: archive the sessions of finished work roots, then drain
+ * queued work roots while each Project has a free slot.
  * `list()` is synchronous and scans the whole store, so a pass bails on a raw
- * read when nothing is queued and otherwise derives at most once.
+ * read when nothing is queued and no implementing session is open, and
+ * otherwise derives at most once.
  */
 export async function runLauncherPass(sessions: AgentSessions): Promise<void> {
   // No HTTP caller. Throwing is caught and written as auto-start failure,
   // which would mutate the copied queue, so guest mode skips the pass.
   if (guestRefusesAgentLaunch()) return;
-  if (!hasQueuedWork(readAll().issues)) return;
+  if (!hasQueuedWork(readAll().issues) && !hasOpenImplementingSession()) return;
   await drainPlanQueue(sessions);
   const { issues, derived } = list();
   const snapshot: LauncherSnapshot = {
@@ -136,6 +134,7 @@ export async function runLauncherPass(sessions: AgentSessions): Promise<void> {
     byId: new Map(issues.map((issue) => [issue.id, issue])),
     attempted: new Set(),
   };
+  await releaseFinishedSlots(snapshot);
   const projects = issues.filter(
     (issue): issue is Extract<Issue, { kind: "project" }> =>
       issue.kind === "project",

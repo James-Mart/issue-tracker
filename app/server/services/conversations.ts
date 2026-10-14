@@ -60,8 +60,9 @@ import {
   GUEST_REFUSED_CHANNEL_SESSION,
   GUEST_REFUSED_CONVERSATION_PROMPT,
 } from "./guest-agent-launch.js";
-import { readIssueOrThrow } from "./issues.js";
+import { list, readIssueOrThrow } from "./issues.js";
 import { uniqueSlug } from "./slug.js";
+import { refuseIfNoFreeSlot } from "./work-slots.js";
 
 let writeChain: Promise<unknown> = Promise.resolve();
 
@@ -372,7 +373,8 @@ async function clearWorkQueuedAt(issueId: string): Promise<void> {
  * issue+channel, create the anchored session, and optionally persist the first
  * prompt event — one `serialize()` turn so concurrent POSTs cannot leave two
  * active sessions, and refused requests write nothing. An implementing session
- * also clears the work root's `workQueuedAt`.
+ * needs a free slot in its Project unless the root already holds one, and
+ * clears the work root's `workQueuedAt`.
  */
 export async function createIssueChannelSession(
   input: CreateIssueChannelSessionInput,
@@ -393,6 +395,9 @@ export async function createIssueChannelSession(
     // Refuse before any mutation.
     validateAnchor(issueId, input.channel);
     refuseIfImplementingWorkRootLocked(issueId, input.channel, sessions);
+    if (input.channel === "implementing") {
+      refuseIfNoFreeSlot(projectId, issueId, list());
+    }
 
     const now = new Date().toISOString();
     for (const existing of listIndexedConversationMetas()) {

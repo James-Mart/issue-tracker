@@ -32,16 +32,63 @@ function seedProject(): void {
   });
 }
 
-function seedEpic(id: string, order: number, workQueuedAt: string): void {
+function seedEpic(id: string, order: number, workQueuedAt?: string): void {
   writeIssue(id, {
     kind: "epic",
     title: id,
     partOf: "p",
     order,
-    workQueuedAt,
+    ...(workQueuedAt ? { workQueuedAt } : {}),
     createdAt: AT,
     updatedAt: AT,
   });
+}
+
+function seedStory(
+  id: string,
+  partOf: string,
+  order: number,
+  fields: Record<string, unknown> = {},
+): void {
+  writeIssue(id, {
+    kind: "story",
+    title: id,
+    partOf,
+    order,
+    ...fields,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+}
+
+function seedTask(id: string, partOf: string, status: string): void {
+  writeIssue(id, {
+    kind: "task",
+    title: id,
+    partOf,
+    order: 0,
+    status,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+}
+
+/** An `implementing` session on the root with no run, as a paused loop leaves it. */
+async function openIdleSession(rootId: string): Promise<string> {
+  const { createConversation } = await loadConversations();
+  const meta = await createConversation({
+    title: `Implement ${rootId}`,
+    projectId: "p",
+    model: "composer-2.5",
+    issueId: rootId,
+    channel: "implementing",
+  });
+  return meta.id;
+}
+
+async function archivedById(): Promise<Map<string, boolean>> {
+  const { listConversations } = await loadConversations();
+  return new Map(listConversations().map((meta) => [meta.id, meta.archived]));
 }
 
 beforeEach(() => {
@@ -90,4 +137,29 @@ describe("implementing work-queue launcher", () => {
     expect(started).toHaveLength(1);
   });
 
+  it("archives finished roots' sessions even when nothing is queued", async () => {
+    seedProject();
+    seedStory("merged-story", "p", 1, { merged: true });
+    seedStory("landing-story", "p", 2);
+    seedTask("landing-task", "landing-story", "done");
+    seedEpic("landed-epic", 3);
+    seedStory("landed-child", "landed-epic", 0, { merged: true });
+    seedEpic("open-epic", 4);
+    seedStory("open-child", "open-epic", 0);
+    seedTask("open-task", "open-child", "todo");
+    const finished = [
+      await openIdleSession("merged-story"),
+      await openIdleSession("landing-story"),
+      await openIdleSession("landed-epic"),
+    ];
+    const open = await openIdleSession("open-epic");
+    const { sessions } = fakeLauncherSessions();
+    const { runLauncherPass } = await loadLauncher();
+
+    await runLauncherPass(sessions);
+
+    const archived = await archivedById();
+    expect(finished.map((id) => archived.get(id))).toEqual([true, true, true]);
+    expect(archived.get(open)).toBe(false);
+  });
 });
