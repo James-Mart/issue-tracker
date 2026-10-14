@@ -31,14 +31,15 @@ export const PR_SYNC_CADENCE_MS = 5 * 60 * 1000;
 export const PR_SYNC_STORE_DEBOUNCE_MS = 500;
 
 /**
- * Result a pass step returns. `error` ends the pass. `facts` is cached
- * whenever reconcile succeeded, even if a later step errors.
+ * Result a pass step returns. `error` is reported at the end of the pass;
+ * later steps still run and are handed the result without it. `facts` is
+ * cached whenever reconcile succeeded, even if a later step errors.
  */
 export type PrSyncStepResult = Pick<PrReconcileResult, "error" | "matches"> & {
   facts?: PrReconcileResult["facts"];
 };
 
-/** A pass ends with a step result, or with only `error` when a step fails before it has one. */
+/** A pass ends with a step result, or with only `error` when a step fails before it has one, which stops the pass. */
 export type PrSyncPassResult =
   | PrSyncStepResult
   | { error: string; facts?: PrReconcileResult["facts"] };
@@ -79,8 +80,9 @@ export function prSyncStatus(projectId: string): ProjectPrSyncStatus {
 
 /**
  * One Project's sync pass. Reconcile runs first; registered steps follow in
- * order, each handed the previous result. A returned `error` or a throw
- * stops the pass. Passes for one Project queue behind the one already running.
+ * order, each handed the previous result. Step errors are joined into the
+ * pass error; a throw, or a step result with only `error`, stops the pass.
+ * Passes for one Project queue behind the one already running.
  */
 export function runSyncPass(projectId: string): Promise<PrSyncPassResult> {
   const previous = tails.get(projectId) ?? Promise.resolve();
@@ -177,11 +179,15 @@ async function executeSyncPass(projectId: string): Promise<PrSyncPassResult> {
     let result: PrSyncPassResult = reconciled;
     if (!reconciled.error) {
       let previous: PrSyncStepResult = reconciled;
+      const stepErrors: string[] = [];
       for (const step of [...steps]) {
         result = await step(projectId, previous);
-        if (result.error || !("matches" in result)) break;
-        previous = result;
+        if (result.error) stepErrors.push(result.error);
+        if (!("matches" in result)) break;
+        const { error: _error, ...passed } = result;
+        previous = passed;
       }
+      if (stepErrors.length > 0) result = { ...result, error: stepErrors.join("; ") };
       replacePrFactsCacheFromMap(projectId, result.facts ?? reconciled.facts);
     }
     if (result.error) {
