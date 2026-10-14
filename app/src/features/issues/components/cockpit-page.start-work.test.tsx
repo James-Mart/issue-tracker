@@ -58,6 +58,14 @@ vi.mock("../api/mutations", () => ({
     mutate: vi.fn(),
     isPending: false,
   }),
+  useDequeueWorkRoot: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useReorderQueuePosition: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
   useUpdateIssue: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn(),

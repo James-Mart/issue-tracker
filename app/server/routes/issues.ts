@@ -78,6 +78,7 @@ import {
 } from "../services/worktree.js";
 import { dequeueWorkRoot } from "../services/dequeue-work-root.js";
 import { enqueueWorkRoot } from "../services/enqueue-work-root.js";
+import { reorderQueuePosition } from "../services/reorder-queue-position.js";
 
 const DEFAULT_TITLE = "New conversation";
 
@@ -209,6 +210,17 @@ export function createIssuesRouter(
     "/:id/queue",
     asyncRoute(async (req, res) => {
       res.json(await dequeueWorkRoot(req.params.id));
+    }),
+  );
+
+  router.put(
+    "/:id/queue/position",
+    asyncRoute(async (req, res) => {
+      const index = (req.body as { index?: unknown } | undefined)?.index;
+      if (typeof index !== "number" || !Number.isInteger(index)) {
+        throw new IssueError("validation", "index must be an integer");
+      }
+      res.json(await reorderQueuePosition(req.params.id, index));
     }),
   );
 

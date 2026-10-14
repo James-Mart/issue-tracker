@@ -31,6 +31,10 @@ vi.mock("../api/mutations", () => ({
     mutate: vi.fn(),
     isPending: false,
   }),
+  useReorderQueuePosition: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
   useCreateChannelSession: () => ({
     mutate: vi.fn(),
     isPending: false,

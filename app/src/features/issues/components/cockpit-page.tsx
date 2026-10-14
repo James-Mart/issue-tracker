@@ -57,6 +57,8 @@ import {
 } from "./flow-buckets-sections";
 import { FlowRow } from "./flow-row";
 import { FlowRowActions } from "./flow-row-actions";
+import type { QueueRowChrome } from "../lib/queue-reorder";
+import { QueueBucketRow, QueueReorderProvider } from "./queue-reorder";
 
 const COCKPIT_MAIN_SECTION_KEYS: FlowBucketKey[] = FLOW_BUCKET_DEFS.map(
   (def) => def.key,
@@ -300,12 +302,18 @@ export function CockpitPage() {
     projects.every((project) => hiddenIds.includes(project.id));
 
   const flowRow = useCallback(
-    (item: FlowItem, projectId: string, projectTitle?: string) => (
+    (
+      item: FlowItem,
+      projectId: string,
+      projectTitle?: string,
+      queueChrome?: QueueRowChrome,
+    ) => (
       <FlowRow
         item={item}
         indexes={indexes}
         projectTitle={projectTitle}
         queueStage={item.queueStage}
+        queueChrome={queueChrome}
         launchFault={
           fault?.issueId === item.issue.id
             ? cockpitLaunchFaultMessage(item.issue.title, fault.kind)
@@ -334,9 +342,9 @@ export function CockpitPage() {
       previewLimit?: number,
       bucketKey?: FlowBucketKey,
     ) => {
-      const groups = groupFlowItemsByProject(items, byId, projectOrder);
       const queueBucket = bucketKey === "queue";
-      return (
+      const groups = groupFlowItemsByProject(items, byId, projectOrder);
+      const list = (
         <div className={cn("flex flex-col", compact ? "gap-2" : "gap-3")}>
           {groups.map((group) => (
             <div key={group.projectId}>
@@ -369,12 +377,24 @@ export function CockpitPage() {
                     />
                   );
                 }}
-                renderItem={(item) => flowRow(item, group.projectId)}
+                renderItem={(item) =>
+                  queueBucket ? (
+                    <QueueBucketRow
+                      item={item}
+                      projectId={group.projectId}
+                      render={flowRow}
+                    />
+                  ) : (
+                    flowRow(item, group.projectId)
+                  )
+                }
               />
             </div>
           ))}
         </div>
       );
+      if (!queueBucket) return list;
+      return <QueueReorderProvider items={items}>{list}</QueueReorderProvider>;
     },
     [byId, flowRow, indexes, projectOrder],
   );

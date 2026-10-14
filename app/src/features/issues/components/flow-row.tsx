@@ -14,6 +14,7 @@ import {
   isCapturedIdeaFlowItem,
 } from "../lib/flow";
 import { issueChannelPath } from "../lib/links";
+import type { QueueRowChrome } from "../lib/queue-reorder";
 import { formatTimeInQueue, type QueueStage } from "../lib/queue-view";
 import { issueRailNodeState } from "../lib/rail-state";
 
@@ -93,6 +94,8 @@ export interface FlowRowProps {
   projectTitle?: string;
   /** Queue row treatment. Absent on rows outside the queue. */
   queueStage?: QueueStage;
+  /** Waiting-row drag chrome. Absent when the row is not reorderable. */
+  queueChrome?: QueueRowChrome;
 }
 
 /**
@@ -109,6 +112,7 @@ export function FlowRow({
   drillInState,
   projectTitle,
   queueStage,
+  queueChrome,
 }: FlowRowProps) {
   const baseRailState = issueRailNodeState(item.issue, item.state, indexes);
   const railState =
@@ -177,8 +181,17 @@ export function FlowRow({
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div
+          data-queue-row={queueChrome?.rowId}
+          data-queue-project={queueChrome?.projectId}
+          data-queue-drop={queueChrome?.dropEdge}
+          data-queue-dragging={queueChrome?.dragging ? "true" : undefined}
           className={cn(
             "relative flex min-w-0 flex-1 flex-wrap items-start gap-2 rounded-lg border border-border bg-card px-3.5 py-[11px] shell:flex-nowrap shell:items-center",
+            queueChrome?.dragging && "opacity-50",
+            queueChrome?.dropEdge === "before" &&
+              "border-t-[hsl(var(--rail-lit))]",
+            queueChrome?.dropEdge === "after" &&
+              "border-b-[hsl(var(--rail-lit))]",
           )}
         >
           {drillInTo != null ? (

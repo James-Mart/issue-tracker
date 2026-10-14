@@ -39,6 +39,7 @@ import { useCommentEditStore } from "../store/use-comment-edit-store";
 import { useCommentOutboxStore } from "../store/use-comment-outbox-store";
 import { deletePartialPlanSessions } from "../lib/delete-partial-plan";
 import { parseRunsInFlightRefusal } from "../lib/restart-refusal";
+import { nextWaitingOrder, withWaitingOrder } from "../lib/queue-reorder";
 import { issuesKeys } from "./keys";
 
 function messageOf(err: unknown): string {
@@ -456,6 +457,50 @@ export function useEnqueueWorkRoot(
         queryKey: issuesKeys.channelSessions(issueId, "implementing"),
       });
     },
+  });
+}
+
+export interface QueuePositionResult {
+  /** Waiting root ids in this Project, in `workQueuePosition` order. */
+  order: string[];
+}
+
+export function useReorderQueuePosition() {
+  const qc = useQueryClient();
+  return useMutation<
+    QueuePositionResult,
+    Error,
+    { id: string; index: number; waitingIds: string[] },
+    { previous?: IssuesResponse }
+  >({
+    mutationFn: ({ id, index }) =>
+      request<QueuePositionResult>(
+        `/api/issues/${encodeURIComponent(id)}/queue/position`,
+        { method: "PUT", body: { index } },
+      ),
+    onMutate: async ({ id, index, waitingIds }) => {
+      await qc.cancelQueries({ queryKey: issuesKeys.list() });
+      const previous = qc.getQueryData<IssuesResponse>(issuesKeys.list());
+      const nextIds = nextWaitingOrder(waitingIds, id, index);
+      if (previous && nextIds) {
+        const issues = withWaitingOrder(previous.issues, nextIds);
+        // Null: the cached positions are inconsistent, or this index does not change them.
+        if (issues) {
+          qc.setQueryData<IssuesResponse>(issuesKeys.list(), {
+            ...previous,
+            issues,
+          });
+        }
+      }
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(issuesKeys.list(), context.previous);
+      }
+      toast.error(messageOf(err));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: issuesKeys.list() }),
   });
 }
 

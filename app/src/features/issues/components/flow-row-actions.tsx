@@ -10,6 +10,7 @@ import {
 import { ImplementingFlowRowLaunch } from "./implementing-launch-control";
 import { PlanningFlowRowLaunch } from "./planning-launch-control";
 import { QueueDequeueControl } from "./queue-dequeue-control";
+import { QueueDragHandle } from "./queue-reorder";
 
 /** Inline cockpit row actions scoped to what each flow bucket can perform. */
 export function FlowRowActions({
@@ -34,7 +35,15 @@ export function FlowRowActions({
       {capturedIdea ? (
         <PlanningFlowRowLaunch issue={capturedIdea} gates={false} />
       ) : null}
-      {waitingWork ? <QueueDequeueControl issue={waitingWork} /> : null}
+      {waitingWork ? (
+        <>
+          <QueueDragHandle
+            issueId={waitingWork.id}
+            projectId={waitingWork.partOf}
+          />
+          <QueueDequeueControl issue={waitingWork} />
+        </>
+      ) : null}
       {readyWork ? <ImplementingFlowRowLaunch issue={readyWork} /> : null}
       {prUrl ? (
         <Button asChild variant="default" size="icon-sm">
