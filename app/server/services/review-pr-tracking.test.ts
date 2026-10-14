@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,7 +16,6 @@ const PR_URL = "https://github.com/acme/widgets/pull/7";
 
 let dir: string;
 let repo: string;
-let bare: string;
 let head: string;
 
 function git(cwd: string, args: string[]): string {
@@ -54,6 +53,7 @@ function prSource(headSha: string, state?: "open" | "closed" | "merged") {
 function pullNode(
   state: "OPEN" | "CLOSED" | "MERGED",
   headRefOid: string,
+  baseRefName = "main",
 ): Record<string, unknown> {
   return {
     number: 7,
@@ -64,16 +64,34 @@ function pullNode(
     mergeStateStatus: "UNKNOWN",
     reviewDecision: null,
     headRefOid,
-    baseRefName: "main",
+    baseRefName,
     updatedAt: "2026-08-01T00:00:00Z",
     comments: { totalCount: 0, nodes: [] },
     commits: { nodes: [{ commit: { statusCheckRollup: null } }] },
   };
 }
 
-function graphql(state: "OPEN" | "CLOSED" | "MERGED", headRefOid: string): string {
+function graphql(
+  state: "OPEN" | "CLOSED" | "MERGED",
+  headRefOid: string,
+  baseRefName = "main",
+): string {
   return JSON.stringify({
-    data: { repository: { pr_7: pullNode(state, headRefOid) } },
+    data: { repository: { pr_7: pullNode(state, headRefOid, baseRefName) } },
+  });
+}
+
+const fetches: string[][] = [];
+
+function installFetchRecorder(): void {
+  fetches.length = 0;
+  setGitWriteSpawnerForTests((command, args, options) => {
+    if (args[0] === "fetch") fetches.push(args);
+    return spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
   });
 }
 
@@ -91,10 +109,6 @@ describe("trackReviewPullRequests", () => {
     git(repo, ["add", "file.txt"]);
     git(repo, ["commit", "-m", "base"]);
     head = git(repo, ["rev-parse", "HEAD"]);
-    bare = mkdtempSync(join(tmpdir(), "review-pr-tracking-bare-"));
-    git(bare, ["init", "--bare", "-b", "main"]);
-    git(repo, ["remote", "add", "origin", bare]);
-    git(repo, ["push", "-u", "origin", "main"]);
     vi.stubEnv("ISSUES_DIR", dir);
     vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", "");
     vi.stubEnv("ISSUE_TRACKER_GUEST", "");
@@ -118,7 +132,39 @@ describe("trackReviewPullRequests", () => {
     refreshStorePathsFromEnv();
     rmSync(dir, { recursive: true, force: true });
     if (repo) rmSync(repo, { recursive: true, force: true });
-    if (bare) rmSync(bare, { recursive: true, force: true });
+  });
+
+  it("stores a base retarget and fetches origin/<new base> on sync", async () => {
+    const bare = mkdtempSync(join(tmpdir(), "review-pr-tracking-bare-"));
+    git(bare, ["init", "--bare", "-b", "main"]);
+    git(repo, ["remote", "add", "origin", bare]);
+    git(repo, ["push", "-u", "origin", "main"]);
+    git(repo, ["checkout", "-b", "develop"]);
+    writeFileSync(join(repo, "develop.txt"), "on develop\n");
+    git(repo, ["add", "develop.txt"]);
+    git(repo, ["commit", "-m", "develop tip"]);
+    git(repo, ["push", "origin", "develop"]);
+    git(repo, ["checkout", "main"]);
+    installFetchRecorder();
+    writeIssue("rev", {
+      kind: "review",
+      title: "External change",
+      partOf: "p",
+      archived: false,
+      marks: { all: {}, commits: {} },
+      submissions: [],
+      order: 0,
+      createdAt: AT,
+      updatedAt: AT,
+      pr: prSource(head),
+    });
+    stubGh(graphql("OPEN", head, "develop"));
+    await trackReviewPullRequests("p", { matches: new Map(), facts: new Map() });
+    expect(readStored("rev")).toMatchObject({
+      pr: { ...prSource(head), baseRef: "develop" },
+    });
+    expect(fetches).toEqual([["fetch", "origin", "develop"]]);
+    rmSync(bare, { recursive: true, force: true });
   });
 
   it("archives a PR-only review when the pull request is merged or closed", async () => {

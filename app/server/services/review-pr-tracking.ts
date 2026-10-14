@@ -20,6 +20,7 @@ import { subtreeIds } from "./subtree.js";
 export type PullRequestObservation = {
   headSha: string;
   state: PrFacts["state"];
+  baseRef: string;
 };
 
 type ReviewWithPr = ReviewIssue & { pr: ReviewPrSource };
@@ -41,11 +42,23 @@ function storedStateChanged(
   return stored !== next;
 }
 
+function reviewPrObservationDelta(
+  pr: ReviewPrSource,
+  observation: PullRequestObservation,
+): { headMoved: boolean; stateChanged: boolean; baseMoved: boolean } {
+  return {
+    headMoved: pr.headSha !== observation.headSha,
+    stateChanged: storedStateChanged(pr.state, observation.state),
+    baseMoved: pr.baseRef !== observation.baseRef,
+  };
+}
+
 /**
- * Head, followed GitHub state, and PR-only archive for one observation.
- * Returns `review` when nothing changed. A review that has a Story keeps its
- * archive on that Story. Reopening stays open until GitHub's state changes
- * again.
+ * Head, GitHub base branch, followed GitHub state, and PR-only archive for one
+ * observation. Stores GitHub `baseRefName` when the base branch changes.
+ * Returns `review` when head, state, and base are all unchanged. A review that
+ * has a Story keeps its archive on that Story. Reopening stays open until
+ * GitHub's state changes again.
  */
 export function applyReviewPrObservation(
   review: ReviewIssue,
@@ -53,18 +66,21 @@ export function applyReviewPrObservation(
   now: string,
 ): ReviewIssue {
   if (!review.pr) return review;
-  const headMoved = review.pr.headSha !== observation.headSha;
-  const stateChanged = storedStateChanged(review.pr.state, observation.state);
+  const { headMoved, stateChanged, baseMoved } = reviewPrObservationDelta(
+    review.pr,
+    observation,
+  );
   const terminal = observation.state === "merged" || observation.state === "closed";
   const archive =
     review.story === undefined && !review.archived && terminal && stateChanged;
-  if (!headMoved && !stateChanged) return review;
+  if (!headMoved && !stateChanged && !baseMoved) return review;
   return {
     ...review,
     pr: {
       ...review.pr,
       ...(headMoved ? { headSha: observation.headSha } : {}),
       ...(stateChanged ? { state: observation.state } : {}),
+      ...(baseMoved ? { baseRef: observation.baseRef } : {}),
     },
     ...(archive ? { archived: true } : {}),
     updatedAt: now,
@@ -90,7 +106,14 @@ function observationFrom(
   if (remote.headRefOid.length === 0) {
     throw new IssueError("gh-failed", "gh returned a pull request with no head");
   }
-  return { headSha: remote.headRefOid, state: remote.state };
+  if (remote.baseRefName.length === 0) {
+    throw new IssueError("gh-failed", "gh returned a pull request with no base");
+  }
+  return {
+    headSha: remote.headRefOid,
+    state: remote.state,
+    baseRef: remote.baseRefName,
+  };
 }
 
 async function followStoredReview(
@@ -99,13 +122,14 @@ async function followStoredReview(
   observation: PullRequestObservation,
   workspace: string,
 ): Promise<void> {
-  await fetchReviewPullRefs(workspace, {
-    number: review.pr.number,
-    baseRef: review.pr.baseRef,
-    ...(review.pr.headSha !== observation.headSha
-      ? { headSha: observation.headSha }
-      : {}),
-  });
+  const { headMoved, baseMoved } = reviewPrObservationDelta(review.pr, observation);
+  if (headMoved || baseMoved) {
+    await fetchReviewPullRefs(workspace, {
+      number: review.pr.number,
+      baseRef: observation.baseRef,
+      ...(headMoved ? { headSha: observation.headSha } : {}),
+    });
+  }
   const now = new Date().toISOString();
   const after = updateStoredReview(projectId, review.id, (current) =>
     applyReviewPrObservation(current, observation, now),
@@ -114,7 +138,7 @@ async function followStoredReview(
     await applyReviewWorktreeTransition({ remove: [review.id], ensure: [] });
     return;
   }
-  if (review.pr.headSha !== observation.headSha && !after.archived) {
+  if (headMoved && !after.archived) {
     await syncReviewWorktree(review.id, "auto");
   }
 }
