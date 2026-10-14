@@ -63,6 +63,13 @@ export function isRunningQueueWorkFlowItem(
   return item.queueStage === "running" && isQueueWorkRoot(item);
 }
 
+/** Parked queue row: a root that left its slot and sits above the head. */
+export function isParkedQueueWorkFlowItem(
+  item: FlowItem,
+): item is QueueWorkFlowItem {
+  return item.queueStage === "parked" && isQueueWorkRoot(item);
+}
+
 /** Paused queue row: a slot-holding root with no live implementing turn. */
 export function isPausedQueueWorkFlowItem(
   item: FlowItem,
@@ -281,7 +288,7 @@ function recentlyMergedInstant(
 /**
  * Bucket Stories, Epics, and Ideas into planning / readyToLand / ready /
  * queue / blocked / recentlyMerged. Pure view-model — no I/O.
- * `queue` is the Project work queue: running, paused, and waiting roots,
+ * `queue` is the Project work queue: parked, running, paused, and waiting roots,
  * including queued roots that are blocked. Planning Ideas come first in
  * `planning`, then captured Ideas. Ready-to-land Stories (including
  * epic-children) go to `readyToLand`. `recentlyMerged` keeps project-level

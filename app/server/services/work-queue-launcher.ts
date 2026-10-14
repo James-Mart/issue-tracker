@@ -59,7 +59,12 @@ function queuePosition(root: WorkRoot): number {
 }
 
 function canStart(root: WorkRoot, snapshot: LauncherSnapshot): boolean {
-  if (!root.workQueuedAt || snapshot.attempted.has(root.id) || root.needsAttention) {
+  if (
+    !root.workQueuedAt ||
+    root.workParkedAt ||
+    snapshot.attempted.has(root.id) ||
+    root.needsAttention
+  ) {
     return false;
   }
   const state = snapshot.derived[root.id];
@@ -101,6 +106,7 @@ async function noteAutoStartFailure(
     const {
       workQueuedAt: _workQueuedAt,
       workQueuePosition: _workQueuePosition,
+      workParkedAt: _workParkedAt,
       ...cleared
     } = root;
     replaceSnapshotRoot(snapshot, cleared);

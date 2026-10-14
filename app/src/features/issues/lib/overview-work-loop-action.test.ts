@@ -45,6 +45,7 @@ describe("overviewWorkLoopAction", () => {
         currentSession: current,
         queued: false,
         holdsSlot: true,
+        parked: false,
         finished: false,
         archived: false,
       }),

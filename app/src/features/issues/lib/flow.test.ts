@@ -158,6 +158,8 @@ describe("flowBuckets", () => {
         needsAttention: true,
         attentionReason: "Auto-start failed: down",
       },
+      { ...epic("parked-later", "p"), workParkedAt: "2026-07-02T00:00:00.000Z" },
+      { ...epic("parked-earlier", "p"), workParkedAt: "2026-06-01T00:00:00.000Z" },
       { ...epic("paused", "p"), workQueuePosition: 4 },
       { ...epic("waiting-late", "p"), workQueuedAt: t0, workQueuePosition: 3 },
       { ...epic("waiting-early", "p"), workQueuedAt: t0, workQueuePosition: 1 },
@@ -168,6 +170,16 @@ describe("flowBuckets", () => {
       "blocked-queued": { blocked: true, epicStatus: "todo" },
       "blocked-out": { blocked: true, epicStatus: "todo" },
       running: { blocked: false, epicStatus: "in-progress", liveRun: true },
+      "parked-later": {
+        blocked: false,
+        epicStatus: "todo",
+        implementingOpen: true,
+      },
+      "parked-earlier": {
+        blocked: false,
+        epicStatus: "todo",
+        implementingOpen: true,
+      },
       paused: { blocked: false, epicStatus: "todo", implementingOpen: true },
       "waiting-late": { blocked: false, epicStatus: "todo" },
       "waiting-early": { blocked: false, epicStatus: "todo" },
@@ -178,6 +190,8 @@ describe("flowBuckets", () => {
     expect(ids(buckets.planning)).toEqual(["planning", "captured"]);
     expect(ids(buckets.blocked)).toEqual(["blocked-out"]);
     expect(ids(buckets.queue)).toEqual([
+      "parked-earlier",
+      "parked-later",
       "running",
       "paused",
       "waiting-early",

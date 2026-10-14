@@ -58,8 +58,9 @@ function countsAsOpenSlot(
 /**
  * Ids of the Project's work roots holding a slot.
  * A non-archived `implementing` session on a root that is neither archived
- * nor finished holds one. So does a still-queued root with `needsAttention`:
- * a failed start stays among the active slots until that flag is cleared.
+ * nor finished, and is not parked, holds one. So does a still-queued root
+ * with `needsAttention`: a failed start stays among the active slots until
+ * that flag is cleared. `workParkedAt` frees the slot while the session stays.
  */
 export function slotHoldingRootIds(
   projectId: string,
@@ -69,6 +70,7 @@ export function slotHoldingRootIds(
   const held = new Set<string>();
   for (const issue of issues) {
     if (issue.kind !== "epic" && issue.kind !== "story") continue;
+    if (issue.workParkedAt) continue;
     const queuedAttention = Boolean(issue.workQueuedAt) && issue.needsAttention;
     if (!openByRoot.has(issue.id) && !queuedAttention) continue;
     if (countsAsOpenSlot(issue, projectId, issues, derived, byId)) {
@@ -76,6 +78,20 @@ export function slotHoldingRootIds(
     }
   }
   return held;
+}
+
+/** True when a non-archived implementing session on `rootId` has a live turn. */
+export function implementingTurnIsLive(
+  rootId: string,
+  sessions: { getActiveRun(conversationId: string): unknown },
+): boolean {
+  return listIndexedConversationMetas().some(
+    (meta) =>
+      !meta.archived &&
+      meta.channel === "implementing" &&
+      meta.issueId === rootId &&
+      sessions.getActiveRun(meta.id) !== undefined,
+  );
 }
 
 /** Ids of non-archived `implementing` sessions on finished work roots. */

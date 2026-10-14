@@ -224,6 +224,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     if (detail.workQueuePosition !== undefined) {
       lines.push(`workQueuePosition: ${detail.workQueuePosition}`);
     }
+    if (detail.workParkedAt) lines.push(`workParkedAt: ${detail.workParkedAt}`);
   }
   if (
     (detail.kind === "epic" || detail.kind === "story" || detail.kind === "task") &&

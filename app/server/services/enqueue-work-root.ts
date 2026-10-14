@@ -58,7 +58,7 @@ export async function enqueueWorkRoot(
     if (isWorkRootFinished(root, issues, derived.byId)) {
       refuseWorkQueueConflict("finished", `work root "${root.title}" is finished`);
     }
-    if (root.workQueuedAt) {
+    if (root.workQueuedAt || root.workParkedAt) {
       refuseWorkQueueConflict(
         ENQUEUE_ALREADY_QUEUED,
         `work root "${root.title}" is already queued`,

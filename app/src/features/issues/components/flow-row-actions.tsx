@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { FlowItem } from "../lib/flow";
 import {
   isCapturedIdeaFlowItem,
+  isParkedQueueWorkFlowItem,
   isPausedQueueWorkFlowItem,
   isReadyWorkFlowItem,
   isRunningQueueWorkFlowItem,
@@ -12,6 +13,7 @@ import {
 import { ImplementingFlowRowLaunch } from "./implementing-launch-control";
 import { PlanningFlowRowLaunch } from "./planning-launch-control";
 import { QueueDequeueControl } from "./queue-dequeue-control";
+import { ParkedResumeControl, QueueParkControl } from "./queue-park-control";
 import {
   QueuePauseControl,
   QueueResumeControl,
@@ -37,6 +39,7 @@ export function FlowRowActions({
   const waitingWork = isWaitingQueueWorkFlowItem(item) ? item.issue : undefined;
   const runningWork = isRunningQueueWorkFlowItem(item) ? item.issue : undefined;
   const pausedWork = isPausedQueueWorkFlowItem(item) ? item.issue : undefined;
+  const parkedWork = isParkedQueueWorkFlowItem(item) ? item.issue : undefined;
 
   return (
     <>
@@ -44,7 +47,21 @@ export function FlowRowActions({
         <PlanningFlowRowLaunch issue={capturedIdea} gates={false} />
       ) : null}
       {runningWork ? <QueuePauseControl issueId={runningWork.id} /> : null}
-      {pausedWork ? <QueueResumeControl issue={pausedWork} /> : null}
+      {pausedWork ? (
+        <>
+          <QueueResumeControl issue={pausedWork} />
+          <QueueParkControl issueId={pausedWork.id} />
+        </>
+      ) : null}
+      {parkedWork ? (
+        <>
+          <ParkedResumeControl
+            issueId={parkedWork.id}
+            testId="flow-row-parked-resume"
+          />
+          <QueueDequeueControl issue={parkedWork} />
+        </>
+      ) : null}
       {waitingWork ? (
         <>
           <QueueDragHandle

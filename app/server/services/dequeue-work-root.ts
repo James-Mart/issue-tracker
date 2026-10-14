@@ -22,8 +22,8 @@ export const DEQUEUE_NOT_QUEUED = "not-queued";
 export const DEQUEUE_HOLDS_SLOT = "holds-slot";
 
 /**
- * Remove a waiting work root from its Project queue. Running and paused roots
- * (slot holders) are refused.
+ * Remove a waiting or parked work root from its Project queue. Running and
+ * paused roots (slot holders) are refused.
  */
 export async function dequeueWorkRoot(id: string): Promise<IssueDetail> {
   await serialize(() => {
@@ -41,7 +41,7 @@ export async function dequeueWorkRoot(id: string): Promise<IssueDetail> {
         `issue "${id}" is not an implementing work root`,
       );
     }
-    if (!root.workQueuedAt) {
+    if (!root.workQueuedAt && !root.workParkedAt) {
       refuseWorkQueueConflict(
         DEQUEUE_NOT_QUEUED,
         `work root "${root.title}" is not queued`,

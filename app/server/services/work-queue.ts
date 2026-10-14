@@ -26,16 +26,16 @@ export function compareWorkQueuedAtThenId(a: WorkRoot, b: WorkRoot): number {
   );
 }
 
-/** Clear both queue fields. A root leaves the queue only when both are gone. */
+/** Clear queue membership. A root leaves the queue when all three are gone. */
 export function queueDeparturePatch(): IssuePatch {
-  return { workQueuedAt: null, workQueuePosition: null };
+  return { workQueuedAt: null, workQueuePosition: null, workParkedAt: null };
 }
 
 function blockersOf(root: WorkRoot): string[] {
   return root.kind === "epic" ? root.blockedBy : [];
 }
 
-function nextQueuePosition(
+export function nextQueuePosition(
   projectId: string,
   issues: Issue[],
   byId: Map<string, Issue>,
@@ -72,7 +72,9 @@ function blockerAllowsEnqueue(
   if (queuedNow.has(blockerId)) return true;
   const blocker = byId.get(blockerId);
   if (blocker?.kind !== "epic" && blocker?.kind !== "story") return false;
-  if (blocker.workQueuedAt || slotHolders.has(blocker.id)) return true;
+  if (blocker.workQueuedAt || blocker.workParkedAt || slotHolders.has(blocker.id)) {
+    return true;
+  }
   return isWorkRootFinished(blocker, issues, derived.byId);
 }
 
@@ -209,7 +211,14 @@ export function planWorkQueueStamps(
   const candidates: WorkRoot[] = [];
   for (const rootId of planRoots) {
     const workRoot = workRootOf(rootId, byId);
-    if (!workRoot || workRoot.workQueuedAt || seen.has(workRoot.id)) continue;
+    if (
+      !workRoot ||
+      workRoot.workQueuedAt ||
+      workRoot.workParkedAt ||
+      seen.has(workRoot.id)
+    ) {
+      continue;
+    }
     seen.add(workRoot.id);
     candidates.push(workRoot);
   }

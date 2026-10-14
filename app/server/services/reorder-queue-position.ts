@@ -140,7 +140,7 @@ export async function reorderQueuePosition(
   });
 }
 
-function waitingRoots(
+export function waitingRoots(
   projectId: string,
   issues: Issue[],
   derived: ReturnType<typeof derive>["byId"],
@@ -192,7 +192,7 @@ function waitingPositions(waiting: WorkRoot[]): number[] {
  * First waiting root that would sit ahead of a root it is `blockedBy`.
  * Blockers that are not themselves waiting are already ahead of this band.
  */
-function firstWaitingOrderBlocker(
+export function firstWaitingOrderBlocker(
   ordered: WorkRoot[],
 ): { title: string } | undefined {
   const indexOf = new Map(ordered.map((root, place) => [root.id, place]));

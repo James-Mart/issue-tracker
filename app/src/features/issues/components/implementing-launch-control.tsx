@@ -19,6 +19,7 @@ import {
 import { overviewWorkLoopAction } from "../lib/overview-work-loop-action";
 import { issuesById } from "../lib/build-tree";
 import { isWorkRootFinished, leafTasksOf } from "../lib/derived";
+import { ParkedResumeControl } from "./queue-park-control";
 import { WorkLoopOverviewControl } from "./work-loop-overview-control";
 
 type ImplementingWorkRootRecord = Extract<
@@ -115,6 +116,7 @@ function useWorkRootLaunchFacts(issueId: string) {
       !finished &&
       currentSession !== undefined;
     const queued = Boolean(record?.workQueuedAt);
+    const parked = Boolean(record?.workParkedAt);
     return {
       list,
       record,
@@ -123,6 +125,7 @@ function useWorkRootLaunchFacts(issueId: string) {
       finished,
       holdsSlot,
       queued,
+      parked,
       liveRun: derived[issueId]?.liveRun ?? false,
     };
   }, [issueId, list, sessions]);
@@ -167,6 +170,7 @@ export function ImplementingOverviewLaunch({
       currentSession: facts.currentSession,
       queued: facts.queued || Boolean(issue.workQueuedAt),
       holdsSlot: facts.holdsSlot,
+      parked: facts.parked || Boolean(issue.workParkedAt),
       finished: facts.finished,
       archived: Boolean(facts.record.archived),
     });
@@ -174,6 +178,15 @@ export function ImplementingOverviewLaunch({
 
   if (facts.sessionsLoading || workLoopAction.action === "hidden") {
     return null;
+  }
+
+  if (workLoopAction.action === "unpark") {
+    return (
+      <ParkedResumeControl
+        issueId={issue.id}
+        testId="implementing-overview-parked-resume"
+      />
+    );
   }
 
   if (workLoopAction.action === "queue") {

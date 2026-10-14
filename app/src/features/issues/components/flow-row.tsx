@@ -118,7 +118,7 @@ export function FlowRow({
   const railState =
     queueStage === "running"
       ? "in-flight"
-      : queueStage === "waiting"
+      : queueStage === "waiting" || queueStage === "parked"
         ? "ready"
         : baseRailState;
   const live =
@@ -184,9 +184,11 @@ export function FlowRow({
           data-queue-row={queueChrome?.rowId}
           data-queue-project={queueChrome?.projectId}
           data-queue-drop={queueChrome?.dropEdge}
+          data-queue-stage={queueStage}
           data-queue-dragging={queueChrome?.dragging ? "true" : undefined}
           className={cn(
             "relative flex min-w-0 flex-1 flex-wrap items-start gap-2 rounded-lg border border-border bg-card px-3.5 py-[11px] shell:flex-nowrap shell:items-center",
+            queueStage === "parked" && "opacity-60",
             queueChrome?.dragging && "opacity-50",
             queueChrome?.dropEdge === "before" &&
               "border-t-[hsl(var(--rail-lit))]",
@@ -246,7 +248,15 @@ export function FlowRow({
                     {projectTitle}
                   </span>
                 ) : null}
-                <span className="cockpit-row-title font-medium text-foreground" title={item.issue.title}>
+                <span
+                  className={cn(
+                    "cockpit-row-title font-medium",
+                    queueStage === "parked"
+                      ? "text-muted-foreground"
+                      : "text-foreground",
+                  )}
+                  title={item.issue.title}
+                >
                   {item.issue.title}
                 </span>
                 {meta}

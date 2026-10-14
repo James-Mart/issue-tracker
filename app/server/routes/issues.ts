@@ -78,7 +78,9 @@ import {
 } from "../services/worktree.js";
 import { dequeueWorkRoot } from "../services/dequeue-work-root.js";
 import { enqueueWorkRoot } from "../services/enqueue-work-root.js";
+import { parkWorkRoot } from "../services/park-work-root.js";
 import { reorderQueuePosition } from "../services/reorder-queue-position.js";
+import { resumeParkedWorkRoot } from "../services/resume-work-root.js";
 
 const DEFAULT_TITLE = "New conversation";
 
@@ -210,6 +212,20 @@ export function createIssuesRouter(
     "/:id/queue",
     asyncRoute(async (req, res) => {
       res.json(await dequeueWorkRoot(req.params.id));
+    }),
+  );
+
+  router.post(
+    "/:id/queue/park",
+    asyncRoute(async (req, res) => {
+      res.json(await parkWorkRoot(req.params.id, sessions));
+    }),
+  );
+
+  router.post(
+    "/:id/queue/resume",
+    asyncRoute(async (req, res) => {
+      res.json(await resumeParkedWorkRoot(req.params.id, sessions));
     }),
   );
 

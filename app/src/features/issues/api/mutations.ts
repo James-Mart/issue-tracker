@@ -504,6 +504,41 @@ export function useReorderQueuePosition() {
   });
 }
 
+function useQueueMembershipMutation(
+  issueId: string,
+  path: "park" | "resume",
+) {
+  const qc = useQueryClient();
+  return useMutation<IssueDetail, Error, void>({
+    mutationFn: () =>
+      request<IssueDetail>(
+        `/api/issues/${encodeURIComponent(issueId)}/queue/${path}`,
+        { method: "POST" },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      qc.setQueryData(issuesKeys.detail(data.id), data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(issueId) });
+      qc.invalidateQueries({
+        queryKey: issuesKeys.channelSessions(issueId, "implementing"),
+      });
+    },
+  });
+}
+
+/** Park a paused root, freeing its implementing slot. */
+export function useParkWorkRoot(issueId: string) {
+  return useQueueMembershipMutation(issueId, "park");
+}
+
+/** Place a parked root first among waiting roots. */
+export function useResumeParkedWorkRoot(issueId: string) {
+  return useQueueMembershipMutation(issueId, "resume");
+}
+
 export function useDequeueWorkRoot(issueId: string) {
   const qc = useQueryClient();
   return useMutation<IssueDetail, Error, void>({

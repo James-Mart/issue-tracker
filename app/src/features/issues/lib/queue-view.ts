@@ -7,12 +7,13 @@ import {
 } from "./derived";
 import { formatElapsedCompact } from "./format-relative-updated-at";
 
-export type QueueStage = "running" | "paused" | "waiting";
+export type QueueStage = "parked" | "running" | "paused" | "waiting";
 
 const QUEUE_BAND: Record<QueueStage, number> = {
-  running: 0,
-  paused: 1,
-  waiting: 2,
+  parked: 0,
+  running: 1,
+  paused: 2,
+  waiting: 3,
 };
 
 type QueueItem = {
@@ -58,8 +59,8 @@ function activelyImplementing(
 
 /**
  * Where a work root sits in its Project queue.
- * Running and paused hold a slot. Waiting is queued and does not.
- * Null when the root is not in the queue.
+ * Parked is above the head and holds no slot. Running and paused hold a
+ * slot. Waiting is queued and does not. Null when the root is not in the queue.
  */
 export function queueStage(
   issue: IssueRecord,
@@ -70,6 +71,7 @@ export function queueStage(
 ): QueueStage | null {
   if (!isProjectWorkRoot(issue, byId) || issue.archived) return null;
   if (isWorkRootFinished(issue, issues, derived)) return null;
+  if (issue.workParkedAt) return "parked";
 
   const running = isRunning(state);
   const waiting =
@@ -101,11 +103,27 @@ function requireQueueStage(item: QueueItem): QueueStage {
   return item.queueStage;
 }
 
-/** Running, then paused, then waiting by `workQueuePosition`. */
+function parkedAt(issue: IssueRecord): string {
+  if (
+    (issue.kind === "epic" || issue.kind === "story") &&
+    issue.workParkedAt
+  ) {
+    return issue.workParkedAt;
+  }
+  throw new Error(`parked queue item "${issue.id}" has no workParkedAt`);
+}
+
+/** Parked, then running, then paused, then waiting by `workQueuePosition`. */
 export function compareQueueItems(a: QueueItem, b: QueueItem): number {
-  const band =
-    QUEUE_BAND[requireQueueStage(a)] - QUEUE_BAND[requireQueueStage(b)];
+  const stageA = requireQueueStage(a);
+  const stageB = requireQueueStage(b);
+  const band = QUEUE_BAND[stageA] - QUEUE_BAND[stageB];
   if (band !== 0) return band;
+  if (stageA === "parked") {
+    const parked = parkedAt(a.issue).localeCompare(parkedAt(b.issue));
+    if (parked !== 0) return parked;
+    return a.issue.id.localeCompare(b.issue.id);
+  }
   const position = queuePosition(a.issue) - queuePosition(b.issue);
   if (position !== 0) return position;
   return a.issue.id.localeCompare(b.issue.id);

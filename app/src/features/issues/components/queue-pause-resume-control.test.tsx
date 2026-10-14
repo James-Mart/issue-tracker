@@ -12,6 +12,8 @@ import { channelSessionListItem } from "../test/channel-session-list-item";
 import { FlowRowActions } from "./flow-row-actions";
 
 const sendMutate = vi.hoisted(() => vi.fn());
+const parkMutate = vi.hoisted(() => vi.fn());
+const resumeParkedMutate = vi.hoisted(() => vi.fn());
 const sessionState = vi.hoisted(() => ({
   sessions: [] as ChannelSessionListItem[],
   isLoading: false,
@@ -38,6 +40,11 @@ vi.mock("../api/queries", () => ({
 vi.mock("../api/mutations", () => ({
   useEnqueueWorkRoot: () => ({ mutate: vi.fn(), isPending: false }),
   useDequeueWorkRoot: () => ({ mutate: vi.fn(), isPending: false }),
+  useParkWorkRoot: () => ({ mutate: parkMutate, isPending: false }),
+  useResumeParkedWorkRoot: () => ({
+    mutate: resumeParkedMutate,
+    isPending: false,
+  }),
   useReorderQueuePosition: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateChannelSession: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateIssue: () => ({ mutate: vi.fn(), isPending: false }),
@@ -94,6 +101,8 @@ function mount(node: ReactNode): {
 afterEach(() => {
   document.body.innerHTML = "";
   sendMutate.mockReset();
+  parkMutate.mockReset();
+  resumeParkedMutate.mockReset();
   sessionState.sessions = [];
   sessionState.isLoading = false;
 });
@@ -140,5 +149,6 @@ describe("queue resume", () => {
       client.getQueryData<IssuesResponse>(issuesKeys.list())?.derived["ship-epic"]
         .implementingLive,
     ).toBe(true);
+    expect(container.querySelector('[data-testid="flow-row-park"]')).toBeTruthy();
   });
 });
