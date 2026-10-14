@@ -117,6 +117,21 @@ export function directionDir(
 }
 
 const MOCKUP_STACK_DIR = "mockup-stack";
+const SANDBOX_NPM_CACHE_DIR = ".npm";
+
+/** Sandbox install dirs and mockup-stack sit beside directions and are not direction ids. */
+function isDirectionName(name: string): boolean {
+  return (
+    name !== MOCKUP_STACK_DIR &&
+    name !== "node_modules" &&
+    !name.startsWith(".")
+  );
+}
+
+/** npm cache for the conversation sandbox. Hidden so direction walks skip it. */
+export function sandboxNpmCacheDir(scratch: string): string {
+  return join(scratch, SANDBOX_NPM_CACHE_DIR);
+}
 
 function mockupScratchRoot(conversationId: string): string {
   return join(conversationsDir, conversationId, "mockups");
@@ -157,16 +172,15 @@ function readMockupStackStateFile(path: string): MockupStackState | null {
   return parsed.data;
 }
 
-/** Lists direction directory names under the conversation scratch (excludes mockup-stack). */
+/** Lists direction directory names under the conversation scratch. */
 export function listDirectionIds(conversationId: string): string[] {
   const resolvedId = resolveMockupConversationId(conversationId);
   const scratch = join(conversationsDir, resolvedId, "mockups");
   if (!existsSync(scratch)) return [];
   return readdirSync(scratch)
     .filter((name) => {
-      if (name === MOCKUP_STACK_DIR) return false;
-      const entryPath = join(scratch, name);
-      return statSync(entryPath).isDirectory();
+      if (!isDirectionName(name)) return false;
+      return statSync(join(scratch, name)).isDirectory();
     })
     .sort();
 }
@@ -188,7 +202,7 @@ export function pruneDirections(
 
   const removed: string[] = [];
   for (const name of readdirSync(scratch)) {
-    if (name === keepDirectionId || name === MOCKUP_STACK_DIR) continue;
+    if (name === keepDirectionId || !isDirectionName(name)) continue;
     const entryPath = join(scratch, name);
     if (!statSync(entryPath).isDirectory()) continue;
     rmSync(entryPath, { recursive: true, force: true });
