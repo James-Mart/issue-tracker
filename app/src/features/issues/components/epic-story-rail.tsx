@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import { isArchived } from "@server/services/archived-visibility";
 import type { DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
 import { Rail, RailNode } from "@/components/ui/rail";
 import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
@@ -92,7 +93,7 @@ export function EpicStoryRail({
 }: {
   issue: Extract<IssueDetail, { kind: "epic" }>;
 }) {
-  const { data } = useIssuesWithArchived(true);
+  const { data } = useIssuesWithArchived(isArchived(issue));
   const issues = useMemo(() => data?.issues ?? [], [data?.issues]);
   if (!data) return null;
   return (
