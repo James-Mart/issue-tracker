@@ -421,7 +421,8 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
-  `issue detach <id> <name>`; see [Attachments](#attachments).
+  `issue detach <id> <name>`; `issue project attach <projectId> <file> --replace`
+  overwrites in place; see [Attachments](#attachments).
 
 ### Kind-scoped ops
 
@@ -1674,9 +1675,16 @@ bytes, and any name that is not a plain basename. No extension allowlist.
 **Unique names.** `putAttachment` stores under a collision-free basename: the
 requested basename when free, otherwise `{stem}-{n}{ext}` with the smallest
 `n ≥ 2` not already taken (stem + last extension). `putAttachment` never
-overwrites an existing file. Removal is explicit (`removeAttachment` /
-`issue <kind> detach` / `DELETE`). There is no rename verb —
-attach under the desired basename and detach the old name.
+overwrites an existing file.
+
+**Replace.** `replaceAttachment` overwrites bytes at the exact requested
+basename and refuses when that file is missing. `issue project attach
+<projectId> <file> --replace` and `POST /api/issues/:id/attachments?replace=true`
+(multipart `file`; basename = uploaded filename) call it. Replace does not
+change `supportingDocs` refs that already point at that attachment name.
+Removal is explicit (`removeAttachment` / `issue <kind> detach` / `DELETE`).
+There is no rename verb — attach under the desired basename and detach the
+old name, or use replace when overwriting in place.
 
 **GitHub export drafts.** Basenames matching `^github-export-.+\.md$` are
 reserved. Each file is YAML frontmatter with a required `title` string, then
@@ -1698,7 +1706,7 @@ basename. Any other name is refused; those stay create-only on `POST`.
 | method | path | behavior |
 | --- | --- | --- |
 | `GET` | `/api/issues/:id/attachments` | list metadata |
-| `POST` | `/api/issues/:id/attachments` | multipart `file` upload; requested name = basename of uploaded filename; on collision store under a unique name; response returns the stored name |
+| `POST` | `/api/issues/:id/attachments` | multipart `file` upload; requested name = basename of uploaded filename; on collision store under a unique name; `201` returns the stored name; `?replace=true` overwrites that exact basename and returns `200`, or `404` when missing |
 | `PUT` | `/api/issues/:id/attachments/:name` | raw `text/markdown` or `text/plain` body; overwrite only when `:name` matches `^github-export-.+\.md$`; `200` one `Attachment` |
 | `GET` | `/api/issues/:id/attachments/:name` | download bytes + `Content-Type` |
 | `DELETE` | `/api/issues/:id/attachments/:name` | remove one file |

@@ -20,7 +20,7 @@ import {
 import {
   getAttachment,
   listAttachments,
-  putAttachment,
+  postAttachment,
   removeAttachment,
 } from "../services/attachments.js";
 import {
@@ -299,8 +299,14 @@ export function createIssuesRouter(
         throw new IssueError("validation", "file is required");
       }
       const name = basename(file.originalname);
-      const meta = await putAttachment(req.params.id, name, file.buffer);
-      res.status(201).json(meta);
+      const replace = req.query.replace === "true";
+      const { meta, created } = await postAttachment(
+        req.params.id,
+        name,
+        file.buffer,
+        { replace },
+      );
+      res.status(created ? 201 : 200).json(meta);
     }),
   );
 

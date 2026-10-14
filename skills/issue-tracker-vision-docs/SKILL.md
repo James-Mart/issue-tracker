@@ -126,8 +126,8 @@ Reached on the standalone and auto-plan paths. Two mechanics, used by both:
 **Replace a doc's content**
 
 - **attachment `<name>`** — write the full new content to a temp file whose
-  basename is `<name>`, then `issue project detach <projectId> <name>` and
-  `issue project attach <projectId> <temp-file>`.
+  basename is `<name>`, then
+  `issue project attach <projectId> <temp-file> --replace`.
 - **workspace `<path>`** — overwrite the file at Project `Workspace:` joined
   with `<path>`, and tell the human it will not be committed for them.
 

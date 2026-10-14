@@ -104,6 +104,45 @@ function withAttachmentOp<T>(
   });
 }
 
+function attachmentNotFound(id: string, name: string): IssueError {
+  return new IssueError(
+    "not_found",
+    `attachment "${name}" not found on "${id}"`,
+  );
+}
+
+function requireExistingAttachmentFile(
+  dir: string,
+  id: string,
+  name: string,
+): string {
+  const path = join(dir, name);
+  let st;
+  try {
+    st = statSync(path);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      throw attachmentNotFound(id, name);
+    }
+    throw err;
+  }
+  if (!st.isFile()) {
+    throw attachmentNotFound(id, name);
+  }
+  return path;
+}
+
+function assertWritableAttachmentBytes(bytes: Uint8Array): void {
+  assertStoreWritable();
+  if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+    throw new IssueError(
+      "validation",
+      `attachment exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
+    );
+  }
+}
+
 /** List attachment metadata under `issues/<id>/attachments/`. */
 export function listAttachments(id: string): Attachment[] {
   requireAttachable(id);
@@ -117,13 +156,7 @@ export function getAttachment(
   name: string,
 ): Promise<AttachmentBytes> {
   return withAttachmentOp(id, name, (dir) => {
-    const path = join(dir, name);
-    if (!existsSync(path) || !statSync(path).isFile()) {
-      throw new IssueError(
-        "not_found",
-        `attachment "${name}" not found on "${id}"`,
-      );
-    }
+    const path = requireExistingAttachmentFile(dir, id, name);
     return {
       meta: toAttachment(dir, name),
       bytes: readFileSync(path),
@@ -138,13 +171,7 @@ export function putAttachment(
   bytes: Uint8Array,
 ): Promise<Attachment> {
   return withAttachmentOp(id, name, (dir) => {
-    assertStoreWritable();
-    if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-      throw new IssueError(
-        "validation",
-        `attachment exceeds ${MAX_ATTACHMENT_BYTES} byte limit`,
-      );
-    }
+    assertWritableAttachmentBytes(bytes);
     mkdirSync(dir, { recursive: true });
     const stored = uniqueAttachmentBasename(name, attachmentFilenames(dir));
     writeFileSync(join(dir, stored), bytes);
@@ -152,17 +179,41 @@ export function putAttachment(
   });
 }
 
+/** Overwrite an existing attachment at the exact basename; refuses when missing. */
+export function replaceAttachment(
+  id: string,
+  name: string,
+  bytes: Uint8Array,
+): Promise<Attachment> {
+  return withAttachmentOp(id, name, (dir) => {
+    assertWritableAttachmentBytes(bytes);
+    const path = requireExistingAttachmentFile(dir, id, name);
+    writeFileSync(path, bytes);
+    return toAttachment(dir, name);
+  });
+}
+
+/** Create or replace an attachment from one upload. */
+export function postAttachment(
+  id: string,
+  name: string,
+  bytes: Uint8Array,
+  opts?: { replace?: boolean },
+): Promise<{ meta: Attachment; created: boolean }> {
+  if (opts?.replace) {
+    return replaceAttachment(id, name, bytes).then((meta) => ({
+      meta,
+      created: false,
+    }));
+  }
+  return putAttachment(id, name, bytes).then((meta) => ({ meta, created: true }));
+}
+
 /** Delete one attachment file. */
 export function removeAttachment(id: string, name: string): Promise<void> {
   return withAttachmentOp(id, name, (dir) => {
     assertStoreWritable();
-    const path = join(dir, name);
-    if (!existsSync(path) || !statSync(path).isFile()) {
-      throw new IssueError(
-        "not_found",
-        `attachment "${name}" not found on "${id}"`,
-      );
-    }
+    const path = requireExistingAttachmentFile(dir, id, name);
     rmSync(path);
   });
 }

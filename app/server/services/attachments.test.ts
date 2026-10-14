@@ -60,13 +60,35 @@ async function loadAttachments() {
 
 describe("listAttachments / putAttachment / getAttachment / removeAttachment (guards)", () => {
   it("refuses unsafe basenames", async () => {
-    const { putAttachment, getAttachment, removeAttachment } =
+    const { putAttachment, getAttachment, removeAttachment, replaceAttachment } =
       await loadAttachments();
     const bytes = Buffer.from("x");
     for (const name of ["", "..", ".", "a/b", "a\\b", "a\0b", "../x"]) {
       await expect(putAttachment("c", name, bytes)).rejects.toThrow(/unsafe/i);
       await expect(getAttachment("c", name)).rejects.toThrow(/unsafe/i);
       await expect(removeAttachment("c", name)).rejects.toThrow(/unsafe/i);
+      await expect(replaceAttachment("c", name, bytes)).rejects.toThrow(
+        /unsafe/i,
+      );
     }
+  });
+});
+
+describe("replaceAttachment", () => {
+  it("overwrites at the exact basename and refuses when missing", async () => {
+    const { putAttachment, replaceAttachment, getAttachment } =
+      await loadAttachments();
+    await putAttachment("c", "doc.md", Buffer.from("v1"));
+    const replaced = await replaceAttachment("c", "doc.md", Buffer.from("v2"));
+    expect(replaced.name).toBe("doc.md");
+    expect(replaced.size).toBe(2);
+    const { bytes } = await getAttachment("c", "doc.md");
+    expect(bytes.toString()).toBe("v2");
+
+    await expect(
+      replaceAttachment("c", "missing.md", Buffer.from("x")),
+    ).rejects.toMatchObject({
+      code: "not_found",
+    });
   });
 });
