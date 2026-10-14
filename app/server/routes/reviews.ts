@@ -25,6 +25,7 @@ import {
   launchStandardsAssessment,
   launchSubmitAgents,
   retryStandardsAssessment,
+  setStandardsProposal,
   submissionNeedsStandardsLaunch,
 } from "../services/review-standards.js";
 import { submitReview } from "../services/review-submit.js";
@@ -319,6 +320,18 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
         submission && submissionNeedsStandardsLaunch(submission)
           ? launchStandardsAssessment(projectId, reviewId, submission.id, sessions)
           : Promise.resolve(),
+      );
+    }),
+  );
+
+  reviewsRouter.patch(
+    "/:reviewId/submissions/:submissionId/standards/proposals/:proposalId",
+    asyncRoute(async (req, res) => {
+      const { projectId, reviewId, submissionId, proposalId } = req.params;
+      await sendReview(
+        res,
+        projectId,
+        setStandardsProposal(projectId, reviewId, submissionId, proposalId, req.body),
       );
     }),
   );

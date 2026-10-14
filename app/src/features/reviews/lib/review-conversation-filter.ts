@@ -23,7 +23,11 @@ export type ConversationFilterCounts = Record<ConversationFilterKey, number>;
 type FilterableTimelineItem =
   | {
       kind: "thread";
-      thread: { kind: ThreadView["kind"]; state: ThreadView["state"] };
+      thread: {
+        kind: ThreadView["kind"];
+        state: ThreadView["state"];
+        root: { id: string };
+      };
     }
   | { kind: "submitted" };
 
@@ -112,12 +116,15 @@ export function conversationFilterCounts(
   return counts;
 }
 
+/** `keepThreadId` stays visible under any filter so a link to it lands. */
 export function filterConversationTimeline<T extends FilterableTimelineItem>(
   items: readonly T[],
   filter: ConversationFilter,
+  keepThreadId: string | null = null,
 ): T[] {
   return items.filter((item) => {
     if (item.kind === "submitted") return true;
+    if (item.thread.root.id === keepThreadId) return true;
     return filter[conversationThreadFilterKey(item.thread)];
   });
 }

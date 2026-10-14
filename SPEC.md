@@ -1485,6 +1485,14 @@ with an empty body starts a fresh assessor run from `assessFailed`. Each
 assessor conversation is listed among the review's agent runs with role
 `issue-tracker-standards-assessor`.
 
+`PATCH /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/proposals/:proposalId`
+with `{ decision?: "accepted" | "rejected" | null, editedAfter?: string | null }`
+records a human decision or an inline edit of `after` on one proposal and
+returns the review. At least one key is required; `null` clears that field and
+an absent key leaves it as stored. Setting one does not change the other. The
+request is refused unless the assessment is `ready`, and `editedAfter` is
+refused on a proposal whose `after` is empty.
+
 Humans record `resolved`, `unresolved`, `dismissed`, `reopened`, or
 `converted`, with an optional reply `body`, via
 `POST /api/issues/:reviewId/threads/:threadId/events` with

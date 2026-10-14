@@ -7,7 +7,10 @@ import type {
   ReviewSubmission,
   StandardsAssessment,
 } from "../schemas/review.js";
-import { parseRetryReviewSubmissionBody } from "../schemas/review.js";
+import {
+  parseRetryReviewSubmissionBody,
+  setStandardsProposalBodySchema,
+} from "../schemas/review.js";
 import { standardsProposalSchema } from "../schemas/review-state.js";
 import type { AgentRunStatus } from "./agent-sdk.js";
 import type { AgentSessions } from "./agent-sessions.js";
@@ -479,6 +482,54 @@ export function setReviewStandards(
     };
   });
   return status;
+}
+
+/** Record a human decision or inline edit on one proposal of a `ready` assessment. */
+export function setStandardsProposal(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  proposalId: string,
+  body: unknown,
+): ReviewRecordView {
+  const parsed = setStandardsProposalBodySchema.safeParse(body ?? {});
+  if (!parsed.success) {
+    throw new IssueError(
+      "validation",
+      formatZodError(parsed.error, "invalid standards proposal body"),
+    );
+  }
+  const { decision, editedAfter } = parsed.data;
+  return patchSubmission(projectId, reviewId, submissionId, (stored) => {
+    const standards = stored.standards;
+    if (!standards || standards.status !== "ready") {
+      throw new IssueError(
+        "validation",
+        `standards assessment is ${standards?.status ?? "absent"}`,
+      );
+    }
+    const index = standards.proposals.findIndex((item) => item.id === proposalId);
+    if (index < 0) {
+      throw new IssueError("not_found", `unknown proposal "${proposalId}"`);
+    }
+    const { decision: priorDecision, editedAfter: priorEdit, ...proposal } =
+      standards.proposals[index]!;
+    if (typeof editedAfter === "string" && proposal.after.length === 0) {
+      throw new IssueError(
+        "validation",
+        `proposal "${proposalId}" removes text and has no added text to edit`,
+      );
+    }
+    const nextDecision = decision === undefined ? priorDecision : decision;
+    const nextEdit = editedAfter === undefined ? priorEdit : editedAfter;
+    const proposals = standards.proposals.slice();
+    proposals[index] = {
+      ...proposal,
+      ...(nextDecision ? { decision: nextDecision } : {}),
+      ...(nextEdit ? { editedAfter: nextEdit } : {}),
+    };
+    return { ...stored, standards: { ...standards, proposals } };
+  });
 }
 
 /** Fresh assessor run from `assessFailed`. The route starts it. */

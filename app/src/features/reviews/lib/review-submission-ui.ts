@@ -57,7 +57,7 @@ function isPendingSubmit(submission: { at: string }): submission is PendingSubmi
   return submission.at === "pending";
 }
 
-function countLabel(count: number, singular: string, plural: string): string {
+export function countLabel(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 

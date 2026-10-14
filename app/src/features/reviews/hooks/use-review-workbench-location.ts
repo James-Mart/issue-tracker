@@ -20,11 +20,14 @@ export type DiffThreadReveal = {
 };
 
 /**
- * Active tab (`?tab=`), review scope (`?scope=`), and the Diff thread to
- * open (`?thread=`). A missing or unknown tab is rewritten to the resolved
- * tab. Scope rewrites once the Story's commit shas are known.
+ * Active tab (`?tab=`), review scope (`?scope=`), and the thread to open
+ * (`?thread=`). A missing, unknown, or hidden tab is rewritten to the
+ * resolved tab. Scope rewrites once the Story's commit shas are known.
  */
-export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefined): {
+export function useReviewWorkbenchLocation(
+  knownShas: readonly string[] | undefined,
+  tabs: readonly { key: ReviewWorkbenchTab }[],
+): {
   active: ReviewWorkbenchTab;
   setTab: (tab: ReviewWorkbenchTab) => void;
   scope: string;
@@ -35,6 +38,8 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
   markThreadRevealed: (reveal: DiffThreadReveal) => void;
   openThreadInDiff: (threadId: string, commitSha: string) => void;
   openThreadInConversation: (threadId: string) => void;
+  /** Search string for a link that opens a thread on the Conversation tab. */
+  conversationThreadSearch: (threadId: string) => string;
   openThread: (thread: CommentThread) => void;
   /** Move scope without dropping the Diff thread the workbench is opening. */
   retargetThreadScope: (scope: string) => void;
@@ -42,7 +47,7 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get("tab");
   const rawScope = searchParams.get("scope");
-  const active = resolveReviewWorkbenchTab(rawTab);
+  const active = resolveReviewWorkbenchTab(rawTab, tabs);
   const scope = resolveReviewScope(rawScope, knownShas);
   const threadId = readDiffThreadSearchParam(searchParams);
   const [threadRequest, setThreadRequest] = useState(0);
@@ -77,6 +82,11 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
   const openThreadInConversation = useCallback(
     (nextThreadId: string) => write("conversation", scope, nextThreadId),
     [scope, write],
+  );
+  const conversationThreadSearch = useCallback(
+    (nextThreadId: string) =>
+      `?${writeReviewWorkbenchSearch(searchParams, "conversation", scope, nextThreadId)}`,
+    [scope, searchParams],
   );
   const openThreadInDiff = useCallback(
     (nextThreadId: string, commitSha: string) => {
@@ -133,6 +143,7 @@ export function useReviewWorkbenchLocation(knownShas: readonly string[] | undefi
     markThreadRevealed: setRevealed,
     openThreadInDiff,
     openThreadInConversation,
+    conversationThreadSearch,
     openThread,
     retargetThreadScope,
   };

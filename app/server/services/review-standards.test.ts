@@ -9,6 +9,7 @@ import {
   seedReviewTasking,
   stubReviewTaskingSessions,
   useReviewTaskingStore,
+  writeReviewSubmissions,
   writeReviewTaskingIssue as writeIssue,
 } from "./review-tasking.test-fixtures.js";
 
@@ -155,5 +156,71 @@ describe("standards assessment at submit", () => {
         standardsAssessorDelegationId(started.standards!.conversationId!),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("standards proposal decisions and edits", () => {
+  useReviewTaskingStore("issue-tracker-review-standards-proposal-");
+
+  const proposal = (id: string, before: string, after: string) => ({
+    id,
+    section: "Implementation",
+    before,
+    after,
+    rationale: "Feedback flagged it.",
+    threadIds: ["th-1"],
+  });
+
+  function seedAssessment(status: string): void {
+    seedReviewTasking();
+    writeReviewSubmissions([
+      {
+        id: "sub-1",
+        at: AT,
+        status: "done",
+        taskIds: [],
+        threadIds: ["th-1"],
+        standards: {
+          status,
+          doc: { type: "attachment", name: "coding-standards.md" },
+          proposals: [
+            proposal("rewrite", "Be clear.", "Be clear and brief."),
+            proposal("delete", "Use globals.", ""),
+          ],
+        },
+      },
+    ]);
+  }
+
+  async function proposals() {
+    const { readReviewView } = await load();
+    return submission(readReviewView("p", REVIEW_ID)).standards!.proposals;
+  }
+
+  it("records a decision and an edit independently, and null clears each", async () => {
+    seedAssessment("ready");
+    const { setStandardsProposal } = await load();
+
+    setStandardsProposal("p", REVIEW_ID, "sub-1", "rewrite", { decision: "accepted" });
+    setStandardsProposal("p", REVIEW_ID, "sub-1", "rewrite", {
+      editedAfter: "Be clear, brief, and exact.",
+    });
+    expect((await proposals())[0]).toMatchObject({
+      decision: "accepted",
+      editedAfter: "Be clear, brief, and exact.",
+      after: "Be clear and brief.",
+    });
+
+    setStandardsProposal("p", REVIEW_ID, "sub-1", "rewrite", { decision: null });
+    expect((await proposals())[0]).not.toHaveProperty("decision");
+    expect((await proposals())[0]?.editedAfter).toBe("Be clear, brief, and exact.");
+
+    setStandardsProposal("p", REVIEW_ID, "sub-1", "rewrite", {
+      decision: "rejected",
+      editedAfter: null,
+    });
+    expect((await proposals())[0]).toMatchObject({ decision: "rejected" });
+    expect((await proposals())[0]).not.toHaveProperty("editedAfter");
+    expect((await proposals())[1]).not.toHaveProperty("decision");
   });
 });

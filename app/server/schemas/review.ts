@@ -129,6 +129,19 @@ export function parseRetryReviewSubmissionBody(
   return { ok: false, message: "retry body must be empty" };
 }
 
+/** `null` clears the field; an absent key leaves it as stored. */
+export const setStandardsProposalBodySchema = z
+  .object({
+    decision: z.enum(["accepted", "rejected"]).nullable().optional(),
+    editedAfter: nonEmpty.nullable().optional(),
+  })
+  .strict()
+  .refine((body) => body.decision !== undefined || body.editedAfter !== undefined, {
+    message: "set decision or editedAfter",
+  });
+
+export type SetStandardsProposalBody = z.infer<typeof setStandardsProposalBodySchema>;
+
 export type OpenReviewBodyParseResult =
   | { ok: true; body: OpenReviewBody }
   | { ok: false; message: string };

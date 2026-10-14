@@ -57,6 +57,7 @@ export function CommentThread({
   quoteSlot,
   quoteCommentId,
   reveal = false,
+  highlighted = false,
 }: {
   thread: CommentThreadData;
   /** Absent on a flat note: no Reply control. */
@@ -86,6 +87,8 @@ export function CommentThread({
   quoteCommentId?: string;
   /** Open a collapsed bar so a targeted comment's body is in the list. */
   reveal?: boolean;
+  /** The thread a link landed on. */
+  highlighted?: boolean;
 }) {
   const [expanded, setExpanded] = useState(reveal);
   useEffect(() => {
@@ -127,10 +130,12 @@ export function CommentThread({
       data-ready-to-task={thread.readyToTask ? "" : undefined}
       data-outdated={outdated ? "" : undefined}
       data-collapsed={collapsed ? "" : undefined}
+      data-highlighted={highlighted ? "" : undefined}
       className={cn(
         "flex min-w-0 flex-col rounded-md border border-border bg-card",
         collapsed ? "px-3 py-1.5" : "px-3 py-2",
         outdated && !outdatedBar && "opacity-70",
+        highlighted && "border-[hsl(var(--current))] ring-1 ring-[hsl(var(--current))]",
       )}
     >
       {showAnchorHeader && anchor ? (
