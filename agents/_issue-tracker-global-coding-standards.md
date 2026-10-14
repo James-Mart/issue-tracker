@@ -20,3 +20,14 @@ doesn't already show: what an interface does for a caller who won't read its
 body, or a constraint or reason the code can't express. Leave out narration of
 the lines it sits above, the history of the change, and arguments that the
 change is correct. Match the comment density and style of the surrounding code.
+
+## Naming
+
+Name a function for its intent — what it accomplishes for its caller — not
+its mechanism.
+
+## Extraction
+
+Extract a function to introduce a meaningful abstraction, not merely to reduce
+lines of code. Two passages share one function when they express the same
+concept.

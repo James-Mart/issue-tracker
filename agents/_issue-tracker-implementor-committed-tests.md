@@ -8,8 +8,11 @@ Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-committed-tests.md`
 
-- **N.** Count only tests you added this Task. Revising an existing test
-  because asserted behavior changed does not add to N.
+- **N.** A test is one behavior asserted: one setup or input and the outcome
+  checked for it. Count the tests you added this Task by behavior, however
+  many assertions check it and however the code groups them into cases or
+  files. Revising an existing test because asserted behavior changed does not
+  add to N.
 - **Cap.** Commit at most max(1, floor(N/10)) of those tests (stays 1 while
   N < 20, then 2 while N < 30, and so on), each meeting the keep bar below.
 - **Keep bar.** A kept test guards a critical seam.
@@ -24,5 +27,5 @@ Absolute path for this file (Read this exact path):
 - **Project `codingStandards`.** May narrow or clarify which tests are
   written or kept; it cannot widen the cap.
 
-Before **Record commit**, drop or revert unkept test files from the working
-tree so the staged tree matches this rule.
+Before **Record commit**, remove unkept tests from the working tree so the
+staged tree matches this rule.

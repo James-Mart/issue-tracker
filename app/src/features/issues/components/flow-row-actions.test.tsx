@@ -21,10 +21,22 @@ vi.mock("@/features/agents/api/queries", () => ({
 }));
 
 vi.mock("../api/mutations", () => ({
-  useCreateChannelSession: (issueId: string, channel: string) => ({
+  useEnqueueWorkRoot: (issueId: string) => ({
     mutate: (...args: unknown[]) => {
-      mutate(issueId, channel, ...args);
+      mutate(issueId, ...args);
     },
+    isPending: false,
+  }),
+  useDequeueWorkRoot: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useReorderQueuePosition: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useCreateChannelSession: () => ({
+    mutate: vi.fn(),
     isPending: false,
   }),
   useUpdateIssue: () => ({
@@ -97,8 +109,8 @@ afterEach(() => {
   resetCockpitLaunchStore();
 });
 
-describe("FlowRowActions start work", () => {
-  it("asks before starting when a session is mid-run", () => {
+describe("FlowRowActions queue", () => {
+  it("queues the ready root without opening a live-run dialog", () => {
     const item = flowItem(epic("ship-epic"), { blocked: false, epicStatus: "todo" });
     const renderActions = () => (
       <MemoryRouter initialEntries={["/"]}>
@@ -113,17 +125,14 @@ describe("FlowRowActions start work", () => {
     act(() => {
       (
         container.querySelector(
-          '[data-testid="flow-row-start-work"]',
+          '[data-testid="flow-row-queue"]',
         ) as HTMLButtonElement
       ).click();
     });
-    act(() => {
-      root.render(renderActions());
-    });
 
-    expect(mutate).not.toHaveBeenCalled();
+    expect(mutate).toHaveBeenCalledWith("ship-epic");
     expect(
       container.querySelector('[data-testid="channel-kill-live-run-dialog"]'),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 });

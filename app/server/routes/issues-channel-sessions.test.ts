@@ -294,7 +294,7 @@ describe("channel sessions HTTP API", () => {
     ]);
   });
 
-  it("allows a new implementing session once the holder run ends", async () => {
+  it("lets a paused root replace its session but refuses another root while it holds the only slot", async () => {
     writeIssue("other-epic", {
       kind: "epic",
       title: "Other epic",
@@ -327,7 +327,7 @@ describe("channel sessions HTTP API", () => {
     await sessions!.getActiveRun(holderId)!.wait();
     expect(sessions!.getActiveRun(holderId)).toBeUndefined();
 
-    const second = await fetch(
+    const refused = await fetch(
       `${baseUrl}/api/issues/other-epic/channels/implementing/sessions`,
       {
         method: "POST",
@@ -335,12 +335,30 @@ describe("channel sessions HTTP API", () => {
         body: JSON.stringify({ model: "composer-2.5", title: "Next" }),
       },
     );
-    expect(second.status).toBe(201);
-    const { id: nextId } = await second.json();
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: "Platform has no free implementing slot (maxImplementingRuns 1)",
+      code: "no-free-slot",
+    });
+    expect(await listSessions("other-epic", "implementing")).toEqual([]);
 
-    const listed = await listSessions("other-epic", "implementing");
-    expect(listed).toEqual([
-      expect.objectContaining({ id: nextId, archived: false, activeRun: false }),
-    ]);
+    const replaced = await fetch(
+      `${baseUrl}/api/issues/ship-it/channels/implementing/sessions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "composer-2.5", title: "Again" }),
+      },
+    );
+    expect(replaced.status).toBe(201);
+    const { id: replacementId } = await replaced.json();
+
+    const listed = await listSessions("ship-it", "implementing");
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: holderId, archived: true }),
+        expect.objectContaining({ id: replacementId, archived: false }),
+      ]),
+    );
   });
 });

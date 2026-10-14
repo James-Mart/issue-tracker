@@ -60,10 +60,10 @@ function emptyBuckets(
   overrides: Partial<FlowBuckets> = {},
 ): FlowBuckets {
   return {
-    awaitingPlanning: [],
+    planning: [],
     readyToLand: [],
     ready: [],
-    inFlight: [],
+    queue: [],
     blocked: [],
     recentlyMerged: [],
     ...overrides,
@@ -85,7 +85,7 @@ describe("partitionCockpitBuckets", () => {
     const partitioned = partitionCockpitBuckets(
       emptyBuckets({
         ready: [flagged, ready],
-        inFlight: [inFlight],
+        queue: [inFlight],
       }),
     );
 
@@ -95,7 +95,7 @@ describe("partitionCockpitBuckets", () => {
     expect(partitioned.buckets.ready.map((item) => item.issue.id)).toEqual([
       "ready",
     ]);
-    expect(partitioned.buckets.inFlight.map((item) => item.issue.id)).toEqual([
+    expect(partitioned.buckets.queue.map((item) => item.issue.id)).toEqual([
       "flight",
     ]);
   });
@@ -113,7 +113,7 @@ describe("partitionCockpitBuckets", () => {
     const partitioned = partitionCockpitBuckets(
       emptyBuckets({
         ready: [awaiting],
-        inFlight: [implementing],
+        queue: [implementing],
       }),
     );
 
@@ -121,7 +121,7 @@ describe("partitionCockpitBuckets", () => {
       "awaiting",
     ]);
     expect(partitioned.buckets.ready).toEqual([]);
-    expect(partitioned.buckets.inFlight.map((item) => item.issue.id)).toEqual([
+    expect(partitioned.buckets.queue.map((item) => item.issue.id)).toEqual([
       "implementing",
     ]);
   });

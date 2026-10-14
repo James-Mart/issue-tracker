@@ -215,7 +215,8 @@ export function buildReviewIssue(
   });
 }
 
-function pullRequestKey(url: string): string | undefined {
+/** `owner/repo#N`, case-folded, so two spellings of one pull request URL compare equal. */
+export function pullRequestKey(url: string): string | undefined {
   try {
     const parsed = parsePrUrl(url);
     return `${parsed.owner.toLowerCase()}/${parsed.repo.toLowerCase()}#${parsed.number}`;
@@ -224,9 +225,10 @@ function pullRequestKey(url: string): string | undefined {
   }
 }
 
-function storyForPullRequest(
+/** The Story in this Project whose `prUrl` is this pull request. */
+export function storyForPullRequest(
   projectId: string,
-  pr: ReviewPrSource,
+  pr: Pick<ReviewPrSource, "url">,
   issues: Issue[],
 ): Story | undefined {
   const key = pullRequestKey(pr.url);

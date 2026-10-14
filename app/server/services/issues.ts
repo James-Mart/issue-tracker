@@ -68,7 +68,10 @@ import {
 } from "./patch.js";
 import { validateCommitsPatch } from "./commit-sha.js";
 import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
-import { planWorkQueueStamps } from "./work-queue.js";
+import {
+  ensureWorkQueuePositionsBackfilled,
+  planWorkQueueStamps,
+} from "./work-queue.js";
 import {
   assertMergePolicyLattice,
   validateMergePolicyPatch,
@@ -211,6 +214,13 @@ export function ensureMigrations(): void {
   ensureReviewRecordsMigrated();
   ensureReviewThreadsMigrated();
   ensureGithubCommentsMigrated();
+  ensureWorkQueuePositionsMigrated();
+}
+
+function ensureWorkQueuePositionsMigrated(): void {
+  ensureWorkQueuePositionsBackfilled((issue) => {
+    persist(issue, serializeIssue(issue));
+  });
 }
 
 /** Every issue in the store, archived ones included. */
@@ -578,6 +588,7 @@ export function update(
 ): Promise<IssueDetail> {
   const refreshPrFacts = options?.refreshPrFacts !== false;
   return serialize(() => {
+    ensureWorkQueuePositionsMigrated();
     const existing = readIssueOrThrow(id);
     const { issues } = readAll();
 
@@ -604,14 +615,11 @@ export function update(
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);
-    if (
-      jsonPatch.workQueuedAt !== undefined &&
-      jsonPatch.workQueuedAt !== null
-    ) {
-      throw new IssueError(
-        "validation",
-        "workQueuedAt is system-written; clear it to dequeue",
-      );
+    for (const field of ["workQueuedAt", "workQueuePosition", "workParkedAt"] as const) {
+      const value = jsonPatch[field];
+      if (value !== undefined && value !== null) {
+        throw new IssueError("validation", `${field} is system-written`);
+      }
     }
     if (
       jsonPatch.planQueuedAt !== undefined &&

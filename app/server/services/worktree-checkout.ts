@@ -202,7 +202,8 @@ function runSetupCommand(
     const onData = (chunk: Buffer | string) => {
       if (settled || logFd === undefined) return;
       try {
-        writeSync(logFd, chunk);
+        if (typeof chunk === "string") writeSync(logFd, chunk);
+        else writeSync(logFd, chunk);
       } catch (err) {
         if (!beginSettle()) return;
         if (child.pid !== undefined) killProcessGroup(child.pid);

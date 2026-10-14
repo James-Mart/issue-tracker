@@ -37,7 +37,7 @@ import {
   buildTreeRowIndexes,
   type TreeRowIndexes,
 } from "../lib/tree-row-indexes";
-import { flowBuckets, type FlowItem } from "../lib/flow";
+import { flowBuckets, type FlowBuckets, type FlowItem } from "../lib/flow";
 import { issuePath, projectPath } from "../lib/links";
 import {
   cockpitLaunchFaultMessage,
@@ -50,11 +50,31 @@ import {
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import {
   FlowBucketsSections,
+  FLOW_BUCKET_DEFS,
   FlowPreviewedItems,
+  partitionCockpitBuckets,
   type FlowBucketKey,
 } from "./flow-buckets-sections";
 import { FlowRow } from "./flow-row";
 import { FlowRowActions } from "./flow-row-actions";
+import type { QueueRowChrome } from "../lib/queue-reorder";
+import { QueueBucketRow, QueueReorderProvider } from "./queue-reorder";
+
+const COCKPIT_MAIN_SECTION_KEYS: FlowBucketKey[] = FLOW_BUCKET_DEFS.map(
+  (def) => def.key,
+).filter((key) => key !== "queue");
+
+/** True when the non-queue cockpit column has a section to show. */
+function cockpitMainHasRows(buckets: FlowBuckets): boolean {
+  const { needsAttention, buckets: rest } = partitionCockpitBuckets(buckets);
+  if (needsAttention.length > 0) return true;
+  const mainKeys = COCKPIT_MAIN_SECTION_KEYS.filter(
+    (key): key is keyof FlowBuckets => key !== "needsAttention",
+  );
+  if (mainKeys.some((key) => rest[key].length > 0)) return true;
+  // Ready still renders its empty hint when unqueued blocked roots exist.
+  return buckets.blocked.length > 0;
+}
 
 function CockpitHeader({
   projects,
@@ -282,11 +302,18 @@ export function CockpitPage() {
     projects.every((project) => hiddenIds.includes(project.id));
 
   const flowRow = useCallback(
-    (item: FlowItem, projectId: string, projectTitle?: string) => (
+    (
+      item: FlowItem,
+      projectId: string,
+      projectTitle?: string,
+      queueChrome?: QueueRowChrome,
+    ) => (
       <FlowRow
         item={item}
         indexes={indexes}
         projectTitle={projectTitle}
+        queueStage={item.queueStage}
+        queueChrome={queueChrome}
         launchFault={
           fault?.issueId === item.issue.id
             ? cockpitLaunchFaultMessage(item.issue.title, fault.kind)
@@ -309,9 +336,15 @@ export function CockpitPage() {
   );
 
   const renderGroupedBucketItems = useCallback(
-    (items: FlowItem[], compact?: boolean, previewLimit?: number) => {
+    (
+      items: FlowItem[],
+      compact?: boolean,
+      previewLimit?: number,
+      bucketKey?: FlowBucketKey,
+    ) => {
+      const queueBucket = bucketKey === "queue";
       const groups = groupFlowItemsByProject(items, byId, projectOrder);
-      return (
+      const list = (
         <div className={cn("flex flex-col", compact ? "gap-2" : "gap-3")}>
           {groups.map((group) => (
             <div key={group.projectId}>
@@ -324,6 +357,11 @@ export function CockpitPage() {
                 indexes={indexes}
                 previewLimit={previewLimit}
                 asRail
+                liveItem={
+                  queueBucket
+                    ? (item) => item.queueStage === "running"
+                    : undefined
+                }
                 listClassName={compact ? "mt-1 gap-1" : "mt-1.5 gap-1"}
                 beforeItem={(item, index, visible) => {
                   const caption = readyToLandEpicCaption(
@@ -339,12 +377,24 @@ export function CockpitPage() {
                     />
                   );
                 }}
-                renderItem={(item) => flowRow(item, group.projectId)}
+                renderItem={(item) =>
+                  queueBucket ? (
+                    <QueueBucketRow
+                      item={item}
+                      projectId={group.projectId}
+                      render={flowRow}
+                    />
+                  ) : (
+                    flowRow(item, group.projectId)
+                  )
+                }
               />
             </div>
           ))}
         </div>
       );
+      if (!queueBucket) return list;
+      return <QueueReorderProvider items={items}>{list}</QueueReorderProvider>;
     },
     [byId, flowRow, indexes, projectOrder],
   );
@@ -382,7 +432,13 @@ export function CockpitPage() {
       columnClassName={COCKPIT_COLUMN_CLASS}
     >
       <PageShell>
-        <div className={COCKPIT_COLUMN_CLASS}>
+        <div
+          className={
+            buckets.queue.length > 0 && cockpitMainHasRows(buckets)
+              ? "mx-auto flex w-full min-w-0 max-w-[calc(2*var(--content-max)+2rem)] flex-col gap-5"
+              : COCKPIT_COLUMN_CLASS
+          }
+        >
           <CockpitHeader
             projects={projects}
             hiddenIds={hiddenIds}
@@ -419,6 +475,39 @@ export function CockpitPage() {
                 </Button>
               }
             />
+          ) : buckets.queue.length > 0 && cockpitMainHasRows(buckets) ? (
+            <div
+              data-testid="cockpit-split"
+              className="flex min-w-0 flex-col gap-5 shell:flex-row shell:items-start shell:gap-8"
+            >
+              <div
+                data-testid="cockpit-queue-pane"
+                className="min-w-0 w-full shell:order-2 shell:max-h-[calc(100svh-8rem)] shell:flex-1 shell:overflow-y-auto"
+              >
+                <FlowBucketsSections
+                  buckets={buckets}
+                  idPrefix="cockpit"
+                  keys={["queue"]}
+                  renderItems={renderGroupedBucketItems}
+                  collapsedSectionKeys={collapsedSectionKeys}
+                  onToggleSection={onToggleSection}
+                />
+              </div>
+              <div
+                data-testid="cockpit-main-pane"
+                className="min-w-0 w-full shell:order-1 shell:max-h-[calc(100svh-8rem)] shell:flex-1 shell:overflow-y-auto"
+              >
+                <FlowBucketsSections
+                  buckets={buckets}
+                  idPrefix="cockpit"
+                  keys={COCKPIT_MAIN_SECTION_KEYS}
+                  renderItems={renderGroupedBucketItems}
+                  renderRecentlyMergedItems={renderRecentlyMergedItems}
+                  collapsedSectionKeys={collapsedSectionKeys}
+                  onToggleSection={onToggleSection}
+                />
+              </div>
+            </div>
           ) : (
             <FlowBucketsSections
               buckets={buckets}

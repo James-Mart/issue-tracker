@@ -50,9 +50,17 @@ export function implementingLaunchCopy(): ImplementingLaunchCopy {
   return {
     title: "No implementing session.",
     detail:
-      "Start the work loop — the coordinator assigns models, spawns implementors and validators, and drives git until the stack is done. Watch and interject here.",
-    actionLabel: "Start work loop",
+      "Queue this work. It starts when it is next and a slot is free — the coordinator assigns models, spawns implementors and validators, and drives git until the stack is done. Watch and interject here.",
+    actionLabel: "Queue",
   };
+}
+
+/** Epic, or a Story whose parent is a Project. */
+export function isImplementingWorkRootIssue(
+  kind: string,
+  parentKind: string | undefined,
+): boolean {
+  return kind === "epic" || (kind === "story" && parentKind === "project");
 }
 
 /** True when this issue offers the implementing channel as a work root. */
@@ -62,6 +70,5 @@ export function isImplementingWorkRoot(
   parentKind?: string,
 ): issue is ImplementingWorkRoot {
   if (channel !== "implementing" || issue == null) return false;
-  if (issue.kind === "epic") return true;
-  return issue.kind === "story" && parentKind === "project";
+  return isImplementingWorkRootIssue(issue.kind, parentKind);
 }

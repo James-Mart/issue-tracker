@@ -31,7 +31,7 @@ findings in one array.
 
 **Read**
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-global-coding-standards.md`.
-Flag a comment the change adds or edits that departs from that include.
+Flag a line in the change that departs from that include.
 
 ### Project standards
 

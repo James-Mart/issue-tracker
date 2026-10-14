@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { ClearableKey, NullClearableObjectKey } from "../fields.js";
+import type {
+  ClearableKey,
+  NullClearableNumberKey,
+  NullClearableObjectKey,
+} from "../fields.js";
 import {
   LABEL_COLOR_RE,
   MERGE_POLICIES,
@@ -494,6 +498,8 @@ export const epicSchema = z.object({
   // Catalog id assignments (imperative; apply preserves).
   labels: assignmentLabelsSchema,
   workQueuedAt: z.string().optional(),
+  workQueuePosition: z.number().int().positive().optional(),
+  workParkedAt: z.string().optional(),
   ...mutableCommon,
   ...orderField,
   ...timestamps,
@@ -544,6 +550,8 @@ export const storySchema = z.object({
   retro: z.enum(RETRO_STATUSES).optional(),
   labels: assignmentLabelsSchema,
   workQueuedAt: z.string().optional(),
+  workQueuePosition: z.number().int().positive().optional(),
+  workParkedAt: z.string().optional(),
   ...mutableCommon,
   ...orderField,
   ...timestamps,
@@ -612,7 +620,12 @@ export type IssueFields = Omit<z.infer<typeof projectSchema>, "kind" | "labels">
 export type IssuePatch = Partial<
   Omit<
     IssueFields,
-    "id" | "createdAt" | "updatedAt" | ClearableKey | NullClearableObjectKey
+    | "id"
+    | "createdAt"
+    | "updatedAt"
+    | ClearableKey
+    | NullClearableObjectKey
+    | NullClearableNumberKey
   >
 > & {
   description?: string;
@@ -620,7 +633,8 @@ export type IssuePatch = Partial<
 } & Partial<Record<ClearableKey, string | null>> &
   Partial<{
     [K in NullClearableObjectKey]: NonNullable<IssueFields[K]> | null;
-  }>;
+  }> &
+  Partial<Record<NullClearableNumberKey, number | null>>;
 
 export type CreateInput = Pick<IssueFields, "title"> &
   Partial<
@@ -751,6 +765,10 @@ export interface DerivedState {
   ideaStatus?: IdeaStatus;
   /** True when any issue-anchored conversation on this issue is live. */
   liveRun?: boolean;
+  /** Non-archived `implementing` session on this issue. */
+  implementingOpen?: boolean;
+  /** That session has a live run. */
+  implementingLive?: boolean;
   /** True when a stored review still covers every done Task on the Story. */
   reviewCurrent?: boolean;
   /** Derived git fork-point ref (see resolveMergeBase). */

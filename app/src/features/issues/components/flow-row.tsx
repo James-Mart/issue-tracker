@@ -12,9 +12,10 @@ import type { TreeRowIndexes } from "../lib/tree-row-indexes";
 import {
   flowItemNeedsAttention,
   isCapturedIdeaFlowItem,
-  isWorkQueuedRoot,
 } from "../lib/flow";
 import { issueChannelPath } from "../lib/links";
+import type { QueueRowChrome } from "../lib/queue-reorder";
+import { formatTimeInQueue, type QueueStage } from "../lib/queue-view";
 import { issueRailNodeState } from "../lib/rail-state";
 
 function flowRowStatusChips(
@@ -40,12 +41,15 @@ function flowRowStatusChips(
     }
   }
 
-  if (isWorkQueuedRoot(item.issue)) {
-    chips.push({ variant: "todo", label: "Queued" });
-  }
-
   if (chips.length === 0) return undefined;
   return <AxisChips chips={chips} />;
+}
+
+function queueWait(
+  item: FlowItem,
+): string | undefined {
+  if (item.issue.kind !== "epic" && item.issue.kind !== "story") return undefined;
+  return item.issue.workQueuedAt;
 }
 
 function flowRowDrillInTo(
@@ -81,13 +85,17 @@ export interface FlowRowProps {
   indexes: TreeRowIndexes;
   avatar?: ReactNode;
   actions?: ReactNode;
-  /** Row-attached launch fault; retry is the restored Play control. */
+  /** Row-attached launch fault; retry is the restored queue control. */
   launchFault?: string;
   /** When set, the full row drills in here; actions stay outside the link. */
   to?: string;
   drillInState?: unknown;
   /** Project name shown on the row. Recently merged names each row's project. */
   projectTitle?: string;
+  /** Queue row treatment. Absent on rows outside the queue. */
+  queueStage?: QueueStage;
+  /** Waiting-row drag chrome. Absent when the row is not reorderable. */
+  queueChrome?: QueueRowChrome;
 }
 
 /**
@@ -103,10 +111,21 @@ export function FlowRow({
   to,
   drillInState,
   projectTitle,
+  queueStage,
+  queueChrome,
 }: FlowRowProps) {
-  const railState = issueRailNodeState(item.issue, item.state, indexes);
-  const live = railState === "in-flight" && !isWorkQueuedRoot(item.issue);
+  const baseRailState = issueRailNodeState(item.issue, item.state, indexes);
+  const railState =
+    queueStage === "running"
+      ? "in-flight"
+      : queueStage === "waiting" || queueStage === "parked"
+        ? "ready"
+        : baseRailState;
+  const live =
+    queueStage === "running" ||
+    (queueStage == null && baseRailState === "in-flight");
   const count = leafTaskProgressCount(item.issue, indexes);
+  const waitingSince = queueStage === "waiting" ? queueWait(item) : undefined;
   const drillInTo = flowRowDrillInTo(item, indexes, to);
   const chips = flowRowStatusChips(item, indexes);
   const attention = flowRowShowsAttentionTriangle(item);
@@ -116,7 +135,15 @@ export function FlowRow({
       <PlanningFlowRowGates issue={item.issue} />
     ) : null;
   const meta =
-    chips != null || attention || blocked || count != null ? (
+    waitingSince ? (
+      <time
+        dateTime={waitingSince}
+        data-testid="queue-time-in-queue"
+        className="font-mono text-xs tabular-nums text-muted-foreground"
+      >
+        {formatTimeInQueue(waitingSince)}
+      </time>
+    ) : chips != null || attention || blocked || count != null ? (
       <span className="cockpit-row-meta inline-flex items-center gap-1.5">
         {chips}
         {attention ? (
@@ -142,14 +169,31 @@ export function FlowRow({
   return (
     <RailNode
       state={railState}
-      edge={item.state?.blocked ? "dashed" : "solid"}
+      edge={
+        queueStage === "waiting"
+          ? "solid"
+          : item.state?.blocked
+            ? "dashed"
+            : "solid"
+      }
       glow={live}
       className="items-start py-1"
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div
+          data-queue-row={queueChrome?.rowId}
+          data-queue-project={queueChrome?.projectId}
+          data-queue-drop={queueChrome?.dropEdge}
+          data-queue-stage={queueStage}
+          data-queue-dragging={queueChrome?.dragging ? "true" : undefined}
           className={cn(
             "relative flex min-w-0 flex-1 flex-wrap items-start gap-2 rounded-lg border border-border bg-card px-3.5 py-[11px] shell:flex-nowrap shell:items-center",
+            queueStage === "parked" && "opacity-60",
+            queueChrome?.dragging && "opacity-50",
+            queueChrome?.dropEdge === "before" &&
+              "border-t-[hsl(var(--rail-lit))]",
+            queueChrome?.dropEdge === "after" &&
+              "border-b-[hsl(var(--rail-lit))]",
           )}
         >
           {drillInTo != null ? (
@@ -204,7 +248,15 @@ export function FlowRow({
                     {projectTitle}
                   </span>
                 ) : null}
-                <span className="cockpit-row-title font-medium text-foreground" title={item.issue.title}>
+                <span
+                  className={cn(
+                    "cockpit-row-title font-medium",
+                    queueStage === "parked"
+                      ? "text-muted-foreground"
+                      : "text-foreground",
+                  )}
+                  title={item.issue.title}
+                >
                   {item.issue.title}
                 </span>
                 {meta}

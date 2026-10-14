@@ -39,6 +39,7 @@ import { useCommentEditStore } from "../store/use-comment-edit-store";
 import { useCommentOutboxStore } from "../store/use-comment-outbox-store";
 import { deletePartialPlanSessions } from "../lib/delete-partial-plan";
 import { parseRunsInFlightRefusal } from "../lib/restart-refusal";
+import { nextWaitingOrder, withWaitingOrder } from "../lib/queue-reorder";
 import { issuesKeys } from "./keys";
 
 function messageOf(err: unknown): string {
@@ -421,6 +422,139 @@ export function useReorderBoardChild() {
       }),
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () => qc.invalidateQueries({ queryKey: issuesKeys.list() }),
+  });
+}
+
+export function useEnqueueWorkRoot(
+  issueId: string,
+  options?: {
+    suppressToast?: (err: Error) => boolean;
+    onError?: (err: Error) => void;
+    /** Called after enqueue succeeds, including if the control has unmounted. */
+    onSuccess?: (root: IssueDetail) => void;
+  },
+) {
+  const qc = useQueryClient();
+  return useMutation<IssueDetail, Error, void>({
+    mutationFn: () =>
+      request<IssueDetail>(
+        `/api/issues/${encodeURIComponent(issueId)}/queue`,
+        { method: "POST" },
+      ),
+    onError: (err) => {
+      options?.onError?.(err);
+      if (options?.suppressToast?.(err)) return;
+      toast.error(messageOf(err));
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(issuesKeys.detail(data.id), data);
+      options?.onSuccess?.(data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(issueId) });
+      qc.invalidateQueries({
+        queryKey: issuesKeys.channelSessions(issueId, "implementing"),
+      });
+    },
+  });
+}
+
+export interface QueuePositionResult {
+  /** Waiting root ids in this Project, in `workQueuePosition` order. */
+  order: string[];
+}
+
+export function useReorderQueuePosition() {
+  const qc = useQueryClient();
+  return useMutation<
+    QueuePositionResult,
+    Error,
+    { id: string; index: number; waitingIds: string[] },
+    { previous?: IssuesResponse }
+  >({
+    mutationFn: ({ id, index }) =>
+      request<QueuePositionResult>(
+        `/api/issues/${encodeURIComponent(id)}/queue/position`,
+        { method: "PUT", body: { index } },
+      ),
+    onMutate: async ({ id, index, waitingIds }) => {
+      await qc.cancelQueries({ queryKey: issuesKeys.list() });
+      const previous = qc.getQueryData<IssuesResponse>(issuesKeys.list());
+      const nextIds = nextWaitingOrder(waitingIds, id, index);
+      if (previous && nextIds) {
+        const issues = withWaitingOrder(previous.issues, nextIds);
+        // Null: the cached positions are inconsistent, or this index does not change them.
+        if (issues) {
+          qc.setQueryData<IssuesResponse>(issuesKeys.list(), {
+            ...previous,
+            issues,
+          });
+        }
+      }
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(issuesKeys.list(), context.previous);
+      }
+      toast.error(messageOf(err));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: issuesKeys.list() }),
+  });
+}
+
+function useQueueMembershipMutation(
+  issueId: string,
+  path: "park" | "resume",
+) {
+  const qc = useQueryClient();
+  return useMutation<IssueDetail, Error, void>({
+    mutationFn: () =>
+      request<IssueDetail>(
+        `/api/issues/${encodeURIComponent(issueId)}/queue/${path}`,
+        { method: "POST" },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      qc.setQueryData(issuesKeys.detail(data.id), data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(issueId) });
+      qc.invalidateQueries({
+        queryKey: issuesKeys.channelSessions(issueId, "implementing"),
+      });
+    },
+  });
+}
+
+/** Park a paused root, freeing its implementing slot. */
+export function useParkWorkRoot(issueId: string) {
+  return useQueueMembershipMutation(issueId, "park");
+}
+
+/** Place a parked root first among waiting roots. */
+export function useResumeParkedWorkRoot(issueId: string) {
+  return useQueueMembershipMutation(issueId, "resume");
+}
+
+export function useDequeueWorkRoot(issueId: string) {
+  const qc = useQueryClient();
+  return useMutation<IssueDetail, Error, void>({
+    mutationFn: () =>
+      request<IssueDetail>(
+        `/api/issues/${encodeURIComponent(issueId)}/queue`,
+        { method: "DELETE" },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      qc.setQueryData(issuesKeys.detail(data.id), data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(issueId) });
+    },
   });
 }
 

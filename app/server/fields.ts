@@ -45,6 +45,8 @@ export const EPIC_IMPERATIVE_ONLY_KEYS = [
   "labels",
   "sourceIdea",
   "workQueuedAt",
+  "workQueuePosition",
+  "workParkedAt",
 ] as const;
 
 export const EPIC_RUNTIME_OPTIONAL_KEYS = EPIC_IMPERATIVE_ONLY_KEYS;
@@ -72,6 +74,8 @@ export const STORY_IMPERATIVE_ONLY_KEYS = [
   "labels",
   "sourceIdea",
   "workQueuedAt",
+  "workQueuePosition",
+  "workParkedAt",
 ] as const;
 
 export const STORY_FIELD_KEYS = [
@@ -96,6 +100,8 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "labels",
   "sourceIdea",
   "workQueuedAt",
+  "workQueuePosition",
+  "workParkedAt",
 ] as const;
 
 // Imperative Idea fields `apply` preserves from disk.
@@ -155,6 +161,7 @@ export const CLEARABLE_KEYS = [
   "sourceIdea",
   "appendTo",
   "workQueuedAt",
+  "workParkedAt",
   "planQueuedAt",
 ] as const;
 
@@ -167,6 +174,11 @@ export const NULL_CLEARABLE_OBJECT_KEYS = [
 ] as const satisfies readonly (keyof IssueFields)[];
 
 export type NullClearableObjectKey = (typeof NULL_CLEARABLE_OBJECT_KEYS)[number];
+
+// Numeric mergeable keys cleared with `null` → field absent.
+export const NULL_CLEARABLE_NUMBER_KEYS = ["workQueuePosition"] as const;
+
+export type NullClearableNumberKey = (typeof NULL_CLEARABLE_NUMBER_KEYS)[number];
 
 // Mergeable patch keys cleared when patched with `false` (absent-until-true booleans).
 export const FALSE_CLEARS_KEYS = [
@@ -229,6 +241,8 @@ export const FIELD_LABELS = {
   maxImplementingRuns: "Max implementing runs",
   autonomous: "Autonomous",
   workQueuedAt: "Work queued",
+  workQueuePosition: "Queue position",
+  workParkedAt: "Parked",
   planQueuedAt: "Plan queued",
 } as const;
 

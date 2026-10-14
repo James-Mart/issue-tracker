@@ -88,7 +88,6 @@ export const EPIC_SET_FIELDS = {
   labels: { type: "array" },
   retro: { type: "enum", values: RETRO_STATUSES },
   description: { type: "description" },
-  workQueuedAt: { type: "clearOnly" },
 } as const satisfies Record<string, SetFieldSpec>;
 
 export const IDEA_SET_FIELDS = {
@@ -127,7 +126,6 @@ export const STORY_SET_FIELDS = {
   retro: { type: "enum", values: RETRO_STATUSES },
   labels: { type: "array" },
   description: { type: "description" },
-  workQueuedAt: { type: "clearOnly" },
 } as const satisfies Record<string, SetFieldSpec>;
 
 export const TASK_SET_FIELDS = {
@@ -212,6 +210,8 @@ export const EPIC_GET_FIELDS = {
   blocked: DERIVED,
   planNotFinal: DERIVED,
   workQueuedAt: STORED,
+  workQueuePosition: STORED,
+  workParkedAt: STORED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const IDEA_GET_FIELDS = {
@@ -273,6 +273,8 @@ export const STORY_GET_FIELDS = {
   mergeBaseRef: DERIVED,
   reviewId: DERIVED,
   workQueuedAt: STORED,
+  workQueuePosition: STORED,
+  workParkedAt: STORED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const TASK_GET_FIELDS = {

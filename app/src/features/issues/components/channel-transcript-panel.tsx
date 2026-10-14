@@ -321,11 +321,7 @@ function ChannelTranscriptBody({
         onStarted={onSessionStarted}
       />
     ) : implementingWorkRoot && projectId ? (
-      <ImplementingChannelEmptyState
-        issue={implementingWorkRoot}
-        channel={channel}
-        onStarted={onSessionStarted}
-      />
+      <ImplementingChannelEmptyState issue={implementingWorkRoot} />
     ) : (
       <ShellState
         className="border-0 bg-transparent px-4 py-8 shadow-none"
@@ -370,11 +366,7 @@ function ChannelTranscriptBody({
   ) : null;
   const implementingNewRun =
     implementingWorkRoot && projectId ? (
-      <ImplementingNewRunControl
-        issue={implementingWorkRoot}
-        channel={channel}
-        onStarted={onSessionStarted}
-      />
+      <ImplementingNewRunControl issue={implementingWorkRoot} />
     ) : null;
   const channelNewRun = planningNewRun ?? implementingNewRun;
   const retroControl =
@@ -446,6 +438,7 @@ function ChannelTranscriptBody({
         hideComposer={selectedSession.archived}
         composerDisabled={composerDisabled}
         composerDisabledPlaceholder={composerDisabledPlaceholder}
+        pauseCancel={channel === "implementing"}
         onBack={mobileBack?.onBack}
         backAriaLabel={mobileBack?.backAriaLabel}
         headerActions={mobileFullViewport ? overflowActions : undefined}

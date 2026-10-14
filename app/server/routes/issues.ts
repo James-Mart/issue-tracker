@@ -51,6 +51,7 @@ import {
 import { editComment } from "../services/comment-edit.js";
 import { enrichCommentsForRead } from "../services/researcher-runs.js";
 import {
+  clearWorkQueueFields,
   createIssueChannelSession,
   startConversationPrompt,
 } from "../services/conversations.js";
@@ -75,6 +76,11 @@ import {
   removeStoryWorktree,
   setupStoryWorktree,
 } from "../services/worktree.js";
+import { dequeueWorkRoot } from "../services/dequeue-work-root.js";
+import { enqueueWorkRoot } from "../services/enqueue-work-root.js";
+import { parkWorkRoot } from "../services/park-work-root.js";
+import { reorderQueuePosition } from "../services/reorder-queue-position.js";
+import { resumeParkedWorkRoot } from "../services/resume-work-root.js";
 
 const DEFAULT_TITLE = "New conversation";
 
@@ -196,6 +202,45 @@ export function createIssuesRouter(
   );
 
   router.post(
+    "/:id/queue",
+    asyncRoute(async (req, res) => {
+      res.json(await enqueueWorkRoot(req.params.id, sessions));
+    }),
+  );
+
+  router.delete(
+    "/:id/queue",
+    asyncRoute(async (req, res) => {
+      res.json(await dequeueWorkRoot(req.params.id));
+    }),
+  );
+
+  router.post(
+    "/:id/queue/park",
+    asyncRoute(async (req, res) => {
+      res.json(await parkWorkRoot(req.params.id, sessions));
+    }),
+  );
+
+  router.post(
+    "/:id/queue/resume",
+    asyncRoute(async (req, res) => {
+      res.json(await resumeParkedWorkRoot(req.params.id, sessions));
+    }),
+  );
+
+  router.put(
+    "/:id/queue/position",
+    asyncRoute(async (req, res) => {
+      const index = (req.body as { index?: unknown } | undefined)?.index;
+      if (typeof index !== "number" || !Number.isInteger(index)) {
+        throw new IssueError("validation", "index must be an integer");
+      }
+      res.json(await reorderQueuePosition(req.params.id, index));
+    }),
+  );
+
+  router.post(
     "/:id/channels/:channel/sessions",
     asyncRoute(async (req, res) => {
       const issueId = req.params.id;
@@ -244,6 +289,9 @@ export function createIssuesRouter(
         },
         sessions,
       );
+      if (channel === "implementing") {
+        await clearWorkQueueFields(issueId);
+      }
 
       // Run start is outside serialize: sendPrompt → updateMeta(agentId) would
       // deadlock if nested inside the conversations write chain.

@@ -219,11 +219,12 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   if (detail.kind === "epic" && detail.blockedBy.length > 0) {
     lines.push(`blockedBy: ${detail.blockedBy.join(", ")}`);
   }
-  if (
-    (detail.kind === "epic" || detail.kind === "story") &&
-    detail.workQueuedAt
-  ) {
-    lines.push(`workQueuedAt: ${detail.workQueuedAt}`);
+  if (detail.kind === "epic" || detail.kind === "story") {
+    if (detail.workQueuedAt) lines.push(`workQueuedAt: ${detail.workQueuedAt}`);
+    if (detail.workQueuePosition !== undefined) {
+      lines.push(`workQueuePosition: ${detail.workQueuePosition}`);
+    }
+    if (detail.workParkedAt) lines.push(`workParkedAt: ${detail.workParkedAt}`);
   }
   if (
     (detail.kind === "epic" || detail.kind === "story" || detail.kind === "task") &&
