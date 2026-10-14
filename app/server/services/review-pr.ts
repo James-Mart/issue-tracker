@@ -103,8 +103,32 @@ export async function fetchReviewPullHead(
 }
 
 /**
+ * Fetch `origin/<baseRef>`. A failed fetch leaves that remote-tracking ref
+ * as it was; git does not delete it when the fetch cannot update it.
+ */
+async function fetchReviewPullBase(
+  workspace: string,
+  baseRef: string,
+): Promise<void> {
+  await runGitWrite(["fetch", "origin", baseRef], workspace);
+}
+
+/**
+ * Fetch the remote base, then the pull head when `headSha` is set.
+ * Diff, commits, and progress reuse that base until the next call.
+ */
+export async function fetchReviewPullRefs(
+  workspace: string,
+  source: { number: number; baseRef: string; headSha?: string },
+): Promise<void> {
+  await fetchReviewPullBase(workspace, source.baseRef);
+  if (source.headSha === undefined) return;
+  await fetchReviewPullHead(workspace, source.number, source.headSha);
+}
+
+/**
  * Resolve `input` against the Project workspace's GitHub origin, then fetch
- * `refs/pull/<N>/head` so the head commit is in that workspace.
+ * `origin/<baseRef>` and `refs/pull/<N>/head` so that range is in the workspace.
  */
 export async function resolveReviewPr(
   projectId: string,
@@ -183,7 +207,11 @@ export async function resolveReviewPr(
     throw wrongRepository(label);
   }
 
-  await fetchReviewPullHead(workspace, view.data.number, view.data.headRefOid);
+  await fetchReviewPullRefs(workspace, {
+    number: view.data.number,
+    baseRef: view.data.baseRefName,
+    headSha: view.data.headRefOid,
+  });
   return {
     title: view.data.title,
     pr: {

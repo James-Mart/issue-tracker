@@ -10,7 +10,7 @@ import { IssueError } from "./errors.js";
 import { readAll } from "./issues.js";
 import type { PrSyncPassResult, PrSyncStepResult } from "./pr-sync-driver.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
-import { fetchReviewPullHead } from "./review-pr.js";
+import { fetchReviewPullRefs } from "./review-pr.js";
 import { applyReviewWorktreeTransition } from "./review-worktree.js";
 import { syncReviewWorktree } from "./review-worktree-sync.js";
 import { readReviewView, updateStoredReview } from "./reviews.js";
@@ -99,9 +99,13 @@ async function followStoredReview(
   observation: PullRequestObservation,
   workspace: string,
 ): Promise<void> {
-  if (review.pr.headSha !== observation.headSha) {
-    await fetchReviewPullHead(workspace, review.pr.number, observation.headSha);
-  }
+  await fetchReviewPullRefs(workspace, {
+    number: review.pr.number,
+    baseRef: review.pr.baseRef,
+    ...(review.pr.headSha !== observation.headSha
+      ? { headSha: observation.headSha }
+      : {}),
+  });
   const now = new Date().toISOString();
   const after = updateStoredReview(projectId, review.id, (current) =>
     applyReviewPrObservation(current, observation, now),

@@ -16,7 +16,7 @@ function diffTabScope(searchParams: URLSearchParams): string | null {
 /**
  * The review issue, its comments, commits, and (on the diff tab) the diff.
  * A Story source reads the Story range. A pull-request-only review reads
- * `baseRef...headSha` from the review.
+ * `origin/<baseRef>...<headSha>` from the review.
  */
 export function useReviewWorkbenchReads(projectId: string, reviewId: string) {
   const [searchParams] = useSearchParams();

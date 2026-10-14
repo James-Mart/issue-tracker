@@ -16,6 +16,7 @@ const PR_URL = "https://github.com/acme/widgets/pull/7";
 
 let dir: string;
 let repo: string;
+let bare: string;
 let head: string;
 
 function git(cwd: string, args: string[]): string {
@@ -90,6 +91,10 @@ describe("trackReviewPullRequests", () => {
     git(repo, ["add", "file.txt"]);
     git(repo, ["commit", "-m", "base"]);
     head = git(repo, ["rev-parse", "HEAD"]);
+    bare = mkdtempSync(join(tmpdir(), "review-pr-tracking-bare-"));
+    git(bare, ["init", "--bare", "-b", "main"]);
+    git(repo, ["remote", "add", "origin", bare]);
+    git(repo, ["push", "-u", "origin", "main"]);
     vi.stubEnv("ISSUES_DIR", dir);
     vi.stubEnv("ISSUE_TRACKER_STORE_READ_ONLY", "");
     vi.stubEnv("ISSUE_TRACKER_GUEST", "");
@@ -113,6 +118,7 @@ describe("trackReviewPullRequests", () => {
     refreshStorePathsFromEnv();
     rmSync(dir, { recursive: true, force: true });
     if (repo) rmSync(repo, { recursive: true, force: true });
+    if (bare) rmSync(bare, { recursive: true, force: true });
   });
 
   it("archives a PR-only review when the pull request is merged or closed", async () => {
